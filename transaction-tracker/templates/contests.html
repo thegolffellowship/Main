@@ -247,12 +247,19 @@
         .top-tab:hover { color: var(--text); }
         .top-tab.active { color: var(--primary); border-bottom-color: var(--primary); }
 
-        /* ── EVENTS leaderboard (ADMIN pilot, Kerry 2026-09-11) ── */
+        /* ── EVENTS leaderboard (ADMIN pilot, Kerry 2026-09-11) ──
+           toggles are CONNECTED segments (Kerry: "Connect the toggles
+           like in other places we do that. It will save on space") */
         .evlb-chips { display: flex; align-items: center; gap: 8px; margin: 1rem 0 0.5rem; flex-wrap: wrap; }
-        .evlb-chip { border: 1px solid var(--border, #E5E7EB); background: #fff; border-radius: 99px;
-            padding: 6px 14px; cursor: pointer; font: 700 12px/1 'Bitter', serif;
-            letter-spacing: 0.5px; color: #6B7280; text-transform: uppercase; }
-        .evlb-chip.active { background: #1B1B1B; border-color: #1B1B1B; color: #fff; }
+        .evlb-seg { display: inline-flex; border: 1px solid var(--border, #E5E7EB);
+            border-radius: 99px; overflow: hidden; background: #fff; }
+        .evlb-seg button { appearance: none; border: 0; border-left: 1px solid var(--border, #E5E7EB);
+            background: transparent; padding: 6px 14px; cursor: pointer;
+            font: 700 11px/1 'Bitter', serif; letter-spacing: 0.5px; color: #6B7280;
+            text-transform: uppercase; }
+        .evlb-seg button:first-child { border-left: 0; }
+        .evlb-seg button.active { background: #1B1B1B; color: #fff; }
+        .evlb-seg-sub button.active { background: var(--primary, #E87C3E); }
         .evlb-year { margin-left: auto; font: 700 11px/1 'Bitter', serif; color: #9CA3AF;
             letter-spacing: 1px; border: 1px dashed var(--border, #E5E7EB); border-radius: 99px; padding: 6px 12px; }
         .evlb-pilot { font-size: 11px; color: #9CA3AF; flex-basis: 100%; }
@@ -270,13 +277,10 @@
         .evlb-ev .pot .s { display: block; font: 600 10px/1.6 'Helvetica Neue', Arial, sans-serif;
             color: #9CA3AF; letter-spacing: 0.5px; }
         .evlb-body { border-top: 1px solid #F0EEE9; padding: 10px 14px 14px; }
-        .evlb-subtabs { display: flex; gap: 6px; margin-bottom: 10px; flex-wrap: wrap; }
-        .evlb-subtab { border: 1px solid var(--border, #E5E7EB); background: #fff; border-radius: 99px;
-            padding: 5px 12px; cursor: pointer; font: 700 11px/1 'Bitter', serif;
-            letter-spacing: 0.5px; color: #6B7280; text-transform: uppercase; }
-        .evlb-subtab.active { background: var(--primary, #E87C3E); border-color: var(--primary, #E87C3E); color: #fff; }
+        .evlb-subtabs { margin-bottom: 10px; }
         .evlb-scroll { overflow-x: auto; }
-        table.evlb-tbl { width: 100%; border-collapse: collapse; }
+        /* tables compress LEFT instead of filling the width (Kerry) */
+        table.evlb-tbl { width: auto; border-collapse: collapse; }
         .evlb-tbl th { text-align: left; font: 700 10px/1.6 'Bitter', serif; letter-spacing: 1px;
             color: #9CA3AF; text-transform: uppercase; padding: 4px 8px; border-bottom: 1px solid #F0EEE9; }
         .evlb-tbl td { padding: 6px 8px; font-size: 13px; border-bottom: 1px solid #F6F4F0; }
@@ -290,9 +294,27 @@
             padding: 2px 8px; font-size: 10px; font-weight: 700; margin-left: 6px; }
         .evlb-plr { cursor: pointer; }
         .evlb-card-row > td { background: #FAF9F7; }
-        .evlb-holes { border-collapse: collapse; font-size: 11px; margin: 6px 0; }
+        .evlb-holes { border-collapse: collapse; font-size: 11.5px; margin: 6px 0; }
         .evlb-holes td, .evlb-holes th { border: 1px solid #E5E1DA; padding: 2px 6px;
             text-align: center; min-width: 26px; }
+        .evlb-holes td.nm { text-align: left; white-space: nowrap; font-weight: 600; }
+        .evlb-holes tr.mute td { color: #9CA3AF; }
+        .evlb-holes tr.teamrow td { background: #F3F1EC; font-weight: 700; }
+        /* GG-style circled winning score (skins / counting team ball) */
+        .evlb-circ { display: inline-block; min-width: 17px; line-height: 17px;
+            border: 1.5px solid #1B1B1B; border-radius: 50%; font-weight: 700; }
+        .evlb-note { background: #FFF7ED; border: 1px solid #FED7AA; color: #9A3412;
+            border-radius: 8px; padding: 8px 12px; font-size: 12px; margin: 0 0 10px; }
+        details.evlb-team { border: 1px solid #F0EEE9; border-radius: 8px; margin-top: 6px; }
+        details.evlb-team > summary { list-style: none; cursor: pointer; display: flex;
+            align-items: center; gap: 10px; padding: 8px 10px; font-size: 13px; }
+        details.evlb-team > summary::-webkit-details-marker { display: none; }
+        .evlb-team .tchev { flex: none; color: #9CA3AF; font-size: 10px; transition: transform .15s; }
+        details.evlb-team[open] > summary .tchev { transform: rotate(90deg); }
+        .evlb-team .tm { flex: 1; min-width: 0; }
+        .evlb-team .tnet { font-weight: 700; font-variant-numeric: tabular-nums; }
+        .evlb-team .tpurse { color: #1B7F4B; font-weight: 700; font-variant-numeric: tabular-nums; }
+        .evlb-team-card { padding: 4px 10px 10px; }
         .section-hidden { display: none !important; }
 
         /* ── Sub-tabs (Points Race) ── */
@@ -1846,10 +1868,12 @@
              ratified Team · Net · Gross · Proxies IA, full-field board +
              money game combined, buyers highlighted, winners badged) ═══ -->
         <div id="section-events" class="section-hidden">
-            <div class="evlb-chips" id="evlb-chips">
-                <button class="evlb-chip active" data-ch="">All</button>
-                <button class="evlb-chip" data-ch="Austin">Austin</button>
-                <button class="evlb-chip" data-ch="San Antonio">San Antonio</button>
+            <div class="evlb-chips">
+                <div class="evlb-seg" id="evlb-chips">
+                    <button class="evlb-chip active" data-ch="">All</button>
+                    <button class="evlb-chip" data-ch="Austin">Austin</button>
+                    <button class="evlb-chip" data-ch="San Antonio">San Antonio</button>
+                </div>
                 <span class="evlb-year" id="evlb-year" title="Year selector arrives with historical records">2026</span>
                 <span class="evlb-pilot" id="evlb-pilot"></span>
             </div>
@@ -2161,6 +2185,7 @@
     <script src="/static/js/auth.js"></script>
     <script src="/static/js/tgf-standards.js?v={{ app_version }}"></script>
     <script src="/static/js/points-render.js?v={{ app_version }}"></script>
+    <script src="/static/js/scorecard-render.js?v={{ app_version }}"></script>
     <script>
     // ═══════════ Contests Page ═══════════
 
@@ -2524,8 +2549,10 @@
         return (won || []).map(w =>
             `<span class="evlb-won" title="${escapeHtml(w.detail || "")}">${escapeHtml(w.label)}${w.detail ? " · " + escapeHtml(w.detail) : ""} · ${evlbFmt(w.cents)}</span>`).join("");
     }
-    function evlbScoreRows(rows, kind) {
-        // kind: net | gross — rank within the section by that score
+    function evlbScoreRows(rows, kind, ncols) {
+        // kind: net | gross — rank within the section by that score.
+        // Handicapped games carry Index + Playing Handicap columns
+        // (Kerry 2026-09-11); the old "(4)" name parenthetical is gone.
         let rank = 0, shown = 0, last = null;
         return rows.map(r => {
             const score = kind === "net" ? r.net : r.gross;
@@ -2534,35 +2561,71 @@
             const tied = rows.filter(x => (kind === "net" ? x.net : x.gross) === score).length > 1 && score != null;
             return `<tr class="evlb-plr${r.buyer ? " buyer" : ""}" data-rid="${r.scoring_round_id || ""}">` +
                 `<td class="r">${score == null ? "" : (tied ? "T" : "") + rank}</td>` +
-                `<td>${escapeHtml(r.player_name)}${r.hcp != null ? ` <span style="color:#9CA3AF;font-size:11px;">(${r.hcp})</span>` : ""}` +
-                evlbWonChips(r.won) + `</td>` +
+                `<td>${escapeHtml(r.player_name)}${evlbWonChips(r.won)}</td>` +
+                (kind === "net"
+                    ? `<td class="r">${r.index != null ? Number(r.index).toFixed(1) : ""}</td>` +
+                      `<td class="r">${r.hcp ?? ""}</td>` : "") +
                 `<td class="r">${r.gross ?? ""}</td>` +
                 (kind === "net" ? `<td class="r"><b>${r.net ?? ""}</b></td>` : "") +
                 `<td class="r">${r.buyer ? '<span class="evlb-in">&#10003; IN</span>' : '<span class="evlb-notin">&#10007;</span>'}</td>` +
                 `</tr>`;
         }).join("");
     }
+    function evlbBand(label, ncols) {
+        return `<tr><td colspan="${ncols}" style="background:#1B1B1B;color:#fff;font:700 10px/1.7 'Bitter',serif;letter-spacing:1px;padding:4px 10px;">${escapeHtml(label)}</td></tr>`;
+    }
     function evlbSectioned(board, kind) {
-        const head = `<thead><tr><th>#</th><th>Player</th><th style="text-align:right;">Gross</th>` +
+        const ncols = kind === "net" ? 7 : 4;
+        const head = `<thead><tr><th>#</th><th>Player</th>` +
+            (kind === "net" ? `<th style="text-align:right;">Index</th><th style="text-align:right;" title="Playing Handicap">PH</th>` : "") +
+            `<th style="text-align:right;">Gross</th>` +
             (kind === "net" ? `<th style="text-align:right;">Net</th>` : "") +
             `<th style="text-align:right;">Buy-in</th></tr></thead>`;
         const bodyRows = (board || []).map(sec =>
-            (sec.label ? `<tr><td colspan="5" style="background:#1B1B1B;color:#fff;font:700 10px/1.7 'Bitter',serif;letter-spacing:1px;padding:4px 10px;">${escapeHtml(sec.label)}</td></tr>` : "") +
-            evlbScoreRows(sec.rows, kind)).join("");
+            (sec.label ? evlbBand(sec.label, ncols) : "") +
+            evlbScoreRows(sec.rows, kind, ncols)).join("");
         return bodyRows
             ? `<div class="evlb-scroll"><table class="evlb-tbl">${head}<tbody>${bodyRows}</tbody></table></div>`
             : '<p style="color:var(--text-muted);">No scores.</p>';
     }
+    // GG-style hole-by-hole grid rows from the payload's compact cards
+    function evlbHoleCells(d, rid, opts) {
+        const hs = {};
+        (d.cards[String(rid)] || []).forEach(h => { hs[h[0]] = h; });
+        return (d.hole_cols || []).map(n => {
+            const h = hs[n];
+            if (!h || h[1] == null) return "<td></td>";
+            let v = opts && opts.net ? h[1] - (h[2] || 0) : h[1];
+            const circ = opts && opts.circle && opts.circle(n, v, rid);
+            return `<td>${circ ? `<span class="evlb-circ">${v}</span>` : v}</td>`;
+        }).join("");
+    }
     function evlbEventHtml(d) {
         const tabs = [["team", "Team"], ["net", "Net"], ["gross", "Gross"],
-                      ["skins", "Skins"], ["points", "Points"], ["prox", "Proxies"]];
+                      ["skins", "Skins"], ["points", "MVP/Points"], ["prox", "Proxies"]];
+        const offNotes = (d.games_off || []).map(g =>
+            `<div class="evlb-note">${escapeHtml(g.note)}</div>`).join("");
+        // SKINS: GG-style overall chart — buyers per flight, hole-by-hole
+        // gross with winning skins circled; everyone NOT in skins listed
+        // below with their hole scores (Kerry 2026-09-11)
+        const holeHead = `<tr><th class="nm">Player</th>${(d.hole_cols || []).map(n => `<th>${n}</th>`).join("")}<th>Skins</th></tr>`;
+        const skinCircle = (n, v, rid) => ((d.skin_cells || {})[String(rid)] || []).includes(n);
         const skinsHtml = (d.skins_board || []).some(s => s.rows.length)
-            ? `<div class="evlb-scroll"><table class="evlb-tbl"><thead><tr><th>Player</th><th>Skins won</th></tr></thead><tbody>` +
+            ? offNotes + `<div class="evlb-scroll"><table class="evlb-holes"><thead>${holeHead}</thead><tbody>` +
               d.skins_board.map(sec =>
-                  (sec.label ? `<tr><td colspan="2" style="background:#1B1B1B;color:#fff;font:700 10px/1.7 'Bitter',serif;letter-spacing:1px;padding:4px 10px;">${escapeHtml(sec.label)}</td></tr>` : "") +
+                  (sec.label ? `<tr><td colspan="${(d.hole_cols || []).length + 2}" style="background:#1B1B1B;color:#fff;font:700 10px/1.7 'Bitter',serif;letter-spacing:1px;text-align:left;padding:4px 10px;">${escapeHtml(sec.label)}</td></tr>` : "") +
                   sec.rows.map(r =>
-                      `<tr class="evlb-plr buyer" data-rid="${r.scoring_round_id || ""}"><td>${escapeHtml(r.player_name)}</td>` +
-                      `<td>${evlbWonChips(r.won) || '<span style="color:#9CA3AF;">—</span>'}</td></tr>`).join("")).join("") +
+                      `<tr class="evlb-plr" data-rid="${r.scoring_round_id || ""}">` +
+                      `<td class="nm">${escapeHtml(r.player_name)}${evlbWonChips(r.won)}</td>` +
+                      evlbHoleCells(d, r.scoring_round_id, { circle: skinCircle }) +
+                      `<td><b>${(((d.skin_cells || {})[String(r.scoring_round_id)]) || []).length || ""}</b></td></tr>`).join("")).join("") +
+              ((d.skins_out || []).length
+                  ? `<tr><td colspan="${(d.hole_cols || []).length + 2}" style="background:#6B7280;color:#fff;font:700 10px/1.7 'Bitter',serif;text-align:left;letter-spacing:1px;padding:4px 10px;">NOT IN SKINS</td></tr>` +
+                    d.skins_out.map(r =>
+                        `<tr class="evlb-plr mute" data-rid="${r.scoring_round_id || ""}">` +
+                        `<td class="nm">${escapeHtml(r.player_name)}</td>` +
+                        evlbHoleCells(d, r.scoring_round_id, {}) + `<td></td></tr>`).join("")
+                  : "") +
               `</tbody></table></div>`
             : '<p style="color:var(--text-muted);">No skins buyers recorded.</p>';
         const pointsHtml = (d.points_board || []).length
@@ -2575,7 +2638,21 @@
                   `<td class="r">${r.buyer ? '<span class="evlb-in">&#10003;</span>' : ""}</td></tr>`).join("") +
               `</tbody></table></div>`
             : '<p style="color:var(--text-muted);">No scorecards yet.</p>';
-        const teamHtml = (d.team_board || []).length
+        // TEAM: every team, best-ball total, expandable to the GG-style
+        // team net scorecard (Kerry 2026-09-11: "Show all teams and
+        // allow expansion of each team")
+        const teamHtml = (d.teams || []).length
+            ? d.teams.map((t, ti) => {
+                const names = t.players.map(p => escapeHtml(p.player_name)).join(" &middot; ");
+                return `<details class="evlb-team" data-ti="${ti}">` +
+                    `<summary><span class="tchev">&#9654;</span>` +
+                    `<span style="min-width:26px;font-weight:700;">${escapeHtml(t.position || "")}</span>` +
+                    `<span class="tm">${names}</span>` +
+                    `<span class="tnet">${t.total_net ?? ""}</span>` +
+                    `<span class="tpurse">${t.purse != null ? "$" + Number(t.purse).toFixed(2) : ""}</span>` +
+                    `</summary><div class="evlb-team-card">${evlbTeamCard(d, t)}</div></details>`;
+            }).join("")
+            : (d.team_board || []).length
             ? `<div class="evlb-scroll"><table class="evlb-tbl"><thead><tr><th>Pos</th><th>Team</th><th style="text-align:right;">Purse</th></tr></thead><tbody>` +
               d.team_board.map(t =>
                   `<tr><td>${escapeHtml(t.position || "")}</td><td style="white-space:normal;">${escapeHtml(t.team)}</td>` +
@@ -2595,16 +2672,45 @@
         const panels = {
             team: teamHtml,
             net: evlbSectioned(d.net_board, "net"),
-            gross: evlbSectioned(d.gross_board, "gross"),
+            gross: offNotes + evlbSectioned(d.gross_board, "gross"),
             skins: skinsHtml, points: pointsHtml, prox: proxHtml,
         };
-        return `<div class="evlb-subtabs">` +
-            tabs.map(([k, l], i) =>
+        return `<div class="evlb-subtabs"><div class="evlb-seg evlb-seg-sub">` +
+            tabs.map(([k, l]) =>
                 `<button class="evlb-subtab${k === "net" ? " active" : ""}" data-sub="${k}">${l}</button>`).join("") +
-            `</div>` +
+            `</div></div>` +
             tabs.map(([k]) =>
                 `<div class="evlb-panel" data-panel="${k}"${k === "net" ? "" : " hidden"}>${panels[k]}</div>`).join("") +
-            `<p style="font-size:11px;color:#9CA3AF;margin:8px 0 0;">Tap a player for their scorecard. &#10003; IN = bought into that game &middot; dashed sections place non-buyers where their handicap would have flighted them.</p>`;
+            `<p style="font-size:11px;color:#9CA3AF;margin:8px 0 0;">Tap a player for their scorecard, or a team for its best-ball card. &#10003; IN = bought into that game &middot; non-buyers are placed in the flight their handicap would have flighted them.</p>`;
+    }
+    // GG-style team net card: each member's NET per hole, the counting
+    // (lowest) ball circled, TEAM best-ball row + total beneath
+    function evlbTeamCard(d, t) {
+        const cols = d.hole_cols || [];
+        if (!cols.length) return '<p style="color:var(--text-muted);">No hole data.</p>';
+        const netOf = (rid, n) => {
+            const h = (d.cards[String(rid)] || []).find(x => x[0] === n);
+            return (h && h[1] != null) ? h[1] - (h[2] || 0) : null;
+        };
+        const mins = {};
+        cols.forEach(n => {
+            const vals = t.players.map(p => netOf(p.scoring_round_id, n)).filter(v => v != null);
+            mins[n] = vals.length ? Math.min(...vals) : null;
+        });
+        const rows = t.players.map(p =>
+            `<tr class="evlb-plr" data-rid="${p.scoring_round_id || ""}"><td class="nm">${escapeHtml(p.player_name)}</td>` +
+            cols.map(n => {
+                const v = netOf(p.scoring_round_id, n);
+                if (v == null) return "<td></td>";
+                return `<td>${v === mins[n] ? `<span class="evlb-circ">${v}</span>` : v}</td>`;
+            }).join("") + `<td></td></tr>`).join("");
+        const teamTotal = cols.reduce((s, n) => s + (mins[n] ?? 0), 0);
+        const teamRow = `<tr class="teamrow"><td class="nm">TEAM (best ball)</td>` +
+            cols.map(n => `<td>${mins[n] ?? ""}</td>`).join("") +
+            `<td>${t.total_net ?? teamTotal}</td></tr>`;
+        return `<div class="evlb-scroll"><table class="evlb-holes"><thead>` +
+            `<tr><th class="nm">Net scores</th>${cols.map(n => `<th>${n}</th>`).join("")}<th>Tot</th></tr>` +
+            `</thead><tbody>${rows}${teamRow}</tbody></table></div>`;
     }
     function evlbWireEvent(body) {
         body.querySelectorAll(".evlb-subtab").forEach(btn =>
@@ -2628,13 +2734,15 @@
                     const res = await fetch("/api/scoring/scorecard/" + rid);
                     const c = await res.json();
                     if (!res.ok || c.error) throw new Error(c.error || res.statusText);
-                    const hs = c.holes || [];
-                    cardRow.firstElementChild.innerHTML = hs.length
-                        ? `<div class="evlb-scroll"><table class="evlb-holes"><tr><th>Hole</th>${hs.map(h => `<th>${h.hole_number}</th>`).join("")}<th>Tot</th></tr>` +
-                          `<tr><td>Par</td>${hs.map(h => `<td>${h.par ?? ""}</td>`).join("")}<td>${hs.reduce((s, h) => s + (h.par || 0), 0) || ""}</td></tr>` +
-                          `<tr><td><b>Score</b></td>${hs.map(h => `<td><b>${h.strokes ?? ""}</b>${"&bull;".repeat(h.strokes_received || 0)}</td>`).join("")}<td><b>${hs.reduce((s, h) => s + (h.strokes || 0), 0) || ""}</b></td></tr>` +
-                          `</table><span style="font-size:10.5px;color:#9CA3AF;">&bull; = handicap strokes received</span></div>`
-                        : "No hole detail on file for this round.";
+                    // THE universal card standard — same renderer as the
+                    // Handicaps + Points Race expands (Kerry 2026-09-11);
+                    // it renders only the nine(s) actually played
+                    cardRow.firstElementChild.innerHTML =
+                        `<div class="evlb-scroll">` +
+                        (window.tgfRenderScorecard
+                            ? window.tgfRenderScorecard(c)
+                            : "Scorecard renderer unavailable.") +
+                        `</div>`;
                 } catch (err) {
                     cardRow.firstElementChild.textContent = "Couldn't load the card (" + (err.message || err) + ").";
                 }

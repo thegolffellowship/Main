@@ -310,11 +310,21 @@ with db._connect(_db2) as _cn:
     db._ensure_gg_game_results_tables(_cn)
     db._ensure_gg_game_flights_tables(_cn)
     _cn.executescript("""
+CREATE TABLE IF NOT EXISTS event_pairings (id INTEGER PRIMARY KEY, event_id INT,
+  holes TEXT, group_num INT, slot_label TEXT, player_name TEXT, cart_pos INT);
+INSERT INTO event_pairings (event_id, holes, group_num, slot_label, player_name, cart_pos) VALUES
+ (50,'9',1,'A','Low Buyer',1),(50,'9',1,'B','High Buyer',2),
+ (50,'9',2,'A','Mid Nonbuyer',1),(50,'9',2,'B','Someone Guest',2);
 INSERT INTO scoring_rounds (id, customer_id, player_name, event_id, playing_handicap, gross, net)
 VALUES (101, 1, 'BUYER, Low', 50, 5, 40, 35),
        (102, 2, 'BUYER, High', 50, 20, 55, 35),
        (103, 3, 'NONBUYER, Mid', 50, 14, 50, 36),
        (104, NULL, 'GUEST, Someone', 50, NULL, 48, NULL);
+-- two holes of data: hole 10 (Low 4, High 6-1dot, Mid 5, Guest 5),
+-- hole 11 (Low 5, High 5-1dot, Mid 4, Guest 6)
+INSERT INTO scoring_holes (scoring_round_id, hole_number, strokes, strokes_received) VALUES
+ (101,10,4,0),(101,11,5,0),(102,10,6,1),(102,11,5,1),
+ (103,10,5,0),(103,11,4,0),(104,10,5,0),(104,11,6,0);
 INSERT INTO gg_game_flights (event_id, gg_tournament_id, game, flight_label, customer_id, player_name)
 VALUES (50, 't1', 'individual_net', 'Flight 1 (HCP <12.0)', 1, 'BUYER, Low'),
        (50, 't2', 'individual_net', 'Flight 2 (HCP 12.0+)', 2, 'BUYER, High'),
@@ -356,6 +366,33 @@ check("points board carries MVP money on the winner's row",
 check("team + proxies ride on their own boards",
       evd["team_board"][0]["team"] == "A + B + C + D"
       and evd["proxies"][0]["detail"] == "#7")
+# ── iteration 2 (Kerry 2026-09-11 feedback): all teams w/ best-ball
+#    totals, skins grid winners, index columns, inactive-game notice ──
+tm = evd["teams"]
+check("all teams built from the pairing groups (2 teams)",
+      len(tm) == 2, repr([(t["team_num"], t["total_net"]) for t in tm]))
+t1 = next(t for t in tm if t["team_num"] == 1)
+# team 1 best ball: hole 10 min(4, 6-1=5)=4; hole 11 min(5, 5-1=4)=4 → 8
+check("team best-ball net total (dots applied)",
+      t1["total_net"] == 8, t1["total_net"])
+t2 = next(t for t in tm if t["team_num"] == 2)
+# team 2: hole 10 min(5,5)=5; hole 11 min(4,6)=4 → 9 → team 1 ranks 1st
+check("teams ranked by best-ball total",
+      t1["position"] == "1" and t2["position"] == "2",
+      (t1["position"], t2["position"]))
+# skins (GROSS buyers only = cid 2): winner of both holes unopposed
+check("skin cells mark the buyer's winning holes",
+      evd["skin_cells"].get("102") == [10, 11], repr(evd["skin_cells"]))
+check("skins_out lists everyone NOT in skins",
+      {r["player_name"] for r in evd["skins_out"]}
+      == {"BUYER, Low", "NONBUYER, Mid", "GUEST, Someone"})
+check("cards + hole_cols feed the grids",
+      evd["hole_cols"] == [10, 11] and "101" in evd["cards"])
+check("Individual Gross inactive notice from the live matrix (16 on 9h)",
+      evd["games_off"] and evd["games_off"][0]["needed"] == 16
+      and "rolled into Skins" in evd["games_off"][0]["note"],
+      repr(evd["games_off"]))
+
 lst = db.get_events_leaderboard(db_path=_db2)
 check("pilot dial gates the event list (s9.99 not in seed)",
       lst["pilot"] and all(not e["item_name"].startswith("s9.99")

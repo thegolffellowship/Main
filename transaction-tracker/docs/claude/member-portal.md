@@ -504,3 +504,28 @@ obviously listed separately."
 - Also shipped: the admin dark nav gains a **Member View** link
   (`/member`, admin-nav class) — Kerry 2026-09-11: "give me a top
   level link to go directly to MEMBER VIEW."
+
+**Events leaderboard iteration 2 (v2.378.0, Kerry feedback 2026-09-11,
+same day):** (1) TEAM shows ALL teams — sourced from event_pairings
+groups (Team Net is Foursome v. Field; the closeout's FINAL GG pairing
+ingest makes those the played groups) with best-ball net totals
+computed from the hole cards, ranked with ties, GG purses attached by
+member-surname overlap; each team expands to a GG-style team card
+(members' net per hole, counting ball circled, TEAM row + total).
+NOTE: scoring_rounds has NO team column — the spotlight's
+_team_partners has been querying one that never existed and failing
+into its except (#452 shape); pairings are the team truth. (2) The
+chapter chips and game sub-tabs are CONNECTED segments. (3) Player
+drill-downs use tgfRenderScorecard (scorecard-render.js — the same
+card as the Handicaps/Points expands; renders only the nine(s)
+played). (4) Handicapped boards carry Index (9-hole index on 9-hole
+events) + Playing Handicap columns; the "(4)" name parenthetical is
+gone. (5) A game that didn't run is denoted up front: Individual
+Gross's activation threshold read from the LIVE matrix per 9/18, with
+the note that its pot rolled into Skins (games_off). (6) SKINS is a
+GG-style overall chart: buyers per flight hole-by-hole with winning
+skins circled (outright low gross within flight, computed from the
+cards), and everyone NOT in skins listed below with their hole
+scores. (7) POINTS tab is labeled MVP/Points. (8) Tables compress
+LEFT (width:auto) instead of filling the screen. Pilot dial expanded
+per Kerry: s9.22, a9.22, s9.21, a9.21, s18.10.

@@ -12747,7 +12747,9 @@ def _entry_to_pot_cents() -> int:
 #  member flip is a role-string change, not a data audit.
 # ═══════════════════════════════════════════════════════════════════
 
-_EVENTS_LEADERBOARD_SEED = ["s9.22", "a9.22"]   # this past Tuesday's pilot
+# pilot set (Kerry 2026-09-11, expanded same day: "add in Landa Park
+# and a9.21 and s9.21 as well") — production runs on the dial
+_EVENTS_LEADERBOARD_SEED = ["s9.22", "a9.22", "s9.21", "a9.21", "s18.10"]
 
 
 def _events_leaderboard_codes(db_path=None) -> list[str]:
@@ -12845,6 +12847,70 @@ def get_event_leaderboard(event_name: str,
                     p[dst] = sr[src]
             if sr["net"] is not None:
                 p["scoring_round_id"] = sr["id"]   # net row carries dots
+
+        # pairing groups ARE the teams (Team Net = Foursome v. Field;
+        # the closeout routine's FINAL GG pairing ingest makes these the
+        # groups that actually played). scoring_rounds carries no team
+        # column — the spotlight's team-partners lookup was querying one
+        # that never existed and failing into its except (#452 shape).
+        pairing_groups: dict = {}
+        try:
+            prows = conn.execute(
+                """SELECT group_num, player_name FROM event_pairings
+                   WHERE event_id = ? AND holes = ?
+                   ORDER BY group_num, cart_pos""",
+                (ev["id"], str(ev["holes"] or 18))).fetchall()
+            if not prows:
+                prows = conn.execute(
+                    """SELECT group_num, player_name FROM event_pairings
+                       WHERE event_id = ? ORDER BY group_num, cart_pos""",
+                    (ev["id"],)).fetchall()
+            for prw in prows:
+                pairing_groups.setdefault(prw["group_num"], []).append(
+                    prw["player_name"])
+        except sqlite3.OperationalError:
+            pairing_groups = {}
+
+        # current handicap INDEX per player (Kerry 2026-09-11: handicapped
+        # games show Index + Playing Handicap columns; 9-hole events show
+        # the 9-hole index = 18-hole ÷ 2, same convention as the spotlight)
+        indexes: dict = {}
+        try:
+            idx_by_name = {hp["player_name"]: hp["handicap_index_18"]
+                           for hp in get_all_handicap_players(db_path)
+                           if hp.get("handicap_index_18") is not None}
+            cids = [int(p["customer_id"]) for p in players.values()
+                    if p["customer_id"] is not None]
+            if cids:
+                ph = ",".join("?" for _ in cids)
+                for lr in conn.execute(
+                        f"SELECT customer_id, player_name FROM "
+                        f"handicap_player_links WHERE customer_id IN ({ph})",
+                        cids):
+                    v = idx_by_name.get(lr["player_name"])
+                    if v is not None and int(lr["customer_id"]) not in indexes:
+                        idx = v / 2 if (ev["holes"] or 18) == 9 else v
+                        indexes[int(lr["customer_id"])] = round(idx, 1)
+        except Exception:
+            logger.warning("event leaderboard index lookup failed",
+                           exc_info=True)
+
+        # per-round hole strokes (compact) — feeds the skins grid and the
+        # team best-ball cards client-side
+        cards: dict = {}
+        rids = {p["scoring_round_id"] for p in players.values()
+                if p["scoring_round_id"]}
+        if rids:
+            ph = ",".join("?" for _ in rids)
+            for hr in conn.execute(
+                    f"""SELECT scoring_round_id AS rid, hole_number,
+                               strokes, strokes_received
+                        FROM scoring_holes
+                        WHERE scoring_round_id IN ({ph})
+                        ORDER BY hole_number""", list(rids)):
+                cards.setdefault(hr["rid"], []).append(
+                    [hr["hole_number"], hr["strokes"],
+                     hr["strokes_received"] or 0])
 
         # bundle buyers (Games-tab eligibility rules)
         net_buyers = set(_event_game_buyers(
@@ -12947,6 +13013,7 @@ def get_event_leaderboard(event_name: str,
             "customer_id": cid,
             "scoring_round_id": p["scoring_round_id"],
             "gross": p["gross"], "net": p["net"], "hcp": p["hcp"],
+            "index": indexes.get(cid) if cid is not None else None,
             "buyer": cid in buyer_set if cid is not None else False,
             "won": _won_cats(cid, won_cats) if cid is not None else [],
         }
@@ -13043,6 +13110,136 @@ def get_event_leaderboard(event_name: str,
     points_rows.sort(key=lambda r: (r["net_pts"] is None,
                                     -(r["net_pts"] or 0)))
 
+    # ── ALL teams with best-ball totals + GG-style team cards (Kerry
+    # 2026-09-11: "Show all teams and allow expansion of each team to
+    # see the team net scorecard like on Golf Genius") — grouped by
+    # scoring_rounds.team_num; total = best NET ball per hole summed;
+    # GG's recorded purse attaches by member-surname overlap ──
+    hole_cols = sorted({h[0] for hs in cards.values() for h in hs})
+
+    def _player_holes(rid):
+        return {h[0]: (h[1], h[2]) for h in cards.get(rid, [])}
+
+    by_norm = {_normalize_player_name(p["player_name"]).lower(): p
+               for p in plist if p["player_name"]}
+    teams = []
+    for tn, names in sorted(pairing_groups.items(),
+                            key=lambda kv: str(kv[0])):
+        members, matched = [], 0
+        for nm in names:
+            p = by_norm.get(_normalize_player_name(nm).lower())
+            if p:
+                matched += 1
+                members.append({"player_name": p["player_name"],
+                                "customer_id": (int(p["customer_id"])
+                                                if p["customer_id"] is not None
+                                                else None),
+                                "scoring_round_id": p["scoring_round_id"]})
+            else:
+                # on the sheet but no card (no-show / blind-draw slot)
+                members.append({"player_name": nm, "customer_id": None,
+                                "scoring_round_id": None})
+        if not matched:
+            continue
+        total, any_hole = 0, False
+        for hn in hole_cols:
+            nets = []
+            for m in members:
+                if not m["scoring_round_id"]:
+                    continue
+                v = _player_holes(m["scoring_round_id"]).get(hn)
+                if v and v[0] is not None:
+                    nets.append(v[0] - (v[1] or 0))
+            if nets:
+                total += min(nets)
+                any_hole = True
+        teams.append({
+            "team_num": tn,
+            "players": members,
+            "total_net": total if any_hole else None,
+            "purse": None, "gg_position": None})
+    teams.sort(key=lambda t: (t["total_net"] is None, t["total_net"] or 0))
+    _last, _rank = object(), 0
+    for i, t in enumerate(teams, 1):
+        if t["total_net"] != _last:
+            _rank, _last = i, t["total_net"]
+        tied = (t["total_net"] is not None and sum(
+            1 for x in teams if x["total_net"] == t["total_net"]) > 1)
+        t["position"] = (("T" if tied else "") + str(_rank)
+                         if t["total_net"] is not None else "")
+
+    def _surnames(members):
+        out = set()
+        for m in members:
+            nm = m["player_name"] or ""
+            last_ = (nm.split(",")[0] if "," in nm
+                     else (nm.split()[-1] if nm.split() else ""))
+            if last_.strip():
+                out.add(last_.strip().lower())
+        return out
+
+    for gr in team_rows:
+        gs = (gr["team"] or "").lower()
+        best_t, best_n = None, 0
+        for t in teams:
+            n = sum(1 for s in _surnames(t["players"]) if s and s in gs)
+            if n > best_n:
+                best_n, best_t = n, t
+        if best_t is not None and best_n >= 2:
+            best_t["purse"] = gr["purse"]
+            best_t["gg_position"] = gr["position"]
+
+    # ── skins winning cells (outright low GROSS on a hole WITHIN the
+    # flight — the engine's rule) for the GG-style hole-by-hole grid ──
+    skin_cells: dict = {}
+    for sec in skins_board:
+        for hn in hole_cols:
+            best, who, tie = None, None, False
+            for r in sec["rows"]:
+                s = _player_holes(r["scoring_round_id"]).get(hn)
+                s = s[0] if s else None
+                if s is None:
+                    continue
+                if best is None or s < best:
+                    best, who, tie = s, r["scoring_round_id"], False
+                elif s == best:
+                    tie = True
+            if who is not None and not tie:
+                skin_cells.setdefault(who, []).append(hn)
+    skins_out = [{"player_name": p["player_name"],
+                  "customer_id": (int(p["customer_id"])
+                                  if p["customer_id"] is not None else None),
+                  "scoring_round_id": p["scoring_round_id"]}
+                 for p in plist
+                 if not (p["customer_id"] is not None
+                         and int(p["customer_id"]) in gross_buyers)]
+
+    # ── games that did NOT run, with the requirement from the LIVE
+    # matrix (Kerry 2026-09-11: denote immediately, per the 9/18
+    # standard, and say the pot rolled into skins) ──
+    games_off = []
+    try:
+        m9, m18 = _load_games_matrix(db_path=db_path)
+        mat = m9 if (ev["holes"] or 18) == 9 else m18
+        thr = None
+        for n in sorted(int(k) for k in mat.keys() if str(k).isdigit()):
+            row_ = mat.get(str(n)) or mat.get(n) or {}
+            if _matrix_num(row_.get("individualGross")) > 0:
+                thr = n
+                break
+        if thr is not None and len(gross_buyers) < thr:
+            games_off.append({
+                "game": "individual_gross", "label": "Individual Gross",
+                "needed": thr, "had": len(gross_buyers),
+                "note": (f"Individual Gross activates at {thr} GROSS "
+                         f"buy-ins on a {ev['holes']}-hole event — this "
+                         f"event had {len(gross_buyers)}, so its pot "
+                         f"rolled into Skins (the full GROSS pool paid "
+                         f"as skins).")})
+    except Exception:
+        logger.warning("event leaderboard matrix threshold failed",
+                       exc_info=True)
+
     return {
         "event": {"name": ev["item_name"], "date": ev["event_date"],
                   "course": ev["course"], "chapter": ev["chapter"],
@@ -13053,10 +13250,16 @@ def get_event_leaderboard(event_name: str,
         "net_board": net_board,
         "gross_board": gross_board,
         "skins_board": skins_board,
+        "skins_out": skins_out,
+        "skin_cells": {str(k): v for k, v in skin_cells.items()},
         "points_board": points_rows,
+        "teams": teams,
         "team_board": team_rows,
         "proxies": proxies,
         "hio": hio_rows,
+        "cards": {str(k): v for k, v in cards.items()},
+        "hole_cols": hole_cols,
+        "games_off": games_off,
         "n_net_buyers": len(net_buyers),
         "n_gross_buyers": len(gross_buyers),
     }
