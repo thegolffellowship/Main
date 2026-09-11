@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.371.9";
+window.TGF_VERSION = "2.371.10";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.371.10",
+    date: "2026-09-11",
+    changes: [
+      "Folded board rows expand properly (Kerry: 'Luke Youngs detail not showing though'). A row built from two GG member records fronted the first record's card, so the expansion fetched one record — and after Kerry merged the profiles in Golf Genius that card was empty. The folded row now fronts the record with the most rounds, and the expansion fetches EVERY record behind the row and rebuilds one GG-shaped table: Championship lines + the best N counted, GG's own 'not counted in standings' separator, the rest below. Works whether or not GG ever merges (Kerry: 'you definitely need to merge on your side even if they don't merge on GG'). scoring-race-detail accepts name:<fragment> to hit a board row by name.",
+    ],
+  },
   {
     version: "2.371.9",
     date: "2026-09-11",

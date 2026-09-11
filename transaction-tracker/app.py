@@ -10748,9 +10748,10 @@ def api_season_contest_points_race_detail():
         return jsonify(cached[1])
 
     try:
-        data = fetch_points_race_member_detail(
-            page_id=race["page_id"], member_card_id=card,
-            league_id=race["league_id"], host=race["host"])
+        # Folded rows (duplicate GG member records merged on our side)
+        # combine every record's lines into one GG-shaped table.
+        from email_parser.database import points_race_member_detail_combined
+        data = points_race_member_detail_combined(race_key, card)
         from email_parser.database import substitute_gg_tournament_names
         data["tables"] = substitute_gg_tournament_names(data["tables"])
     except Exception as e:

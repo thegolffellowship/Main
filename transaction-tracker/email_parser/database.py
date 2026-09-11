@@ -7795,6 +7795,11 @@ def _merge_duplicate_standings(rows: list, race: dict | None = None,
             out.append(dict(g[0]))
             continue
         base = dict(g[0])
+        # The record with the most rounds fronts the row (its card id is
+        # the one a single-card detail fetch should hit); the expansion
+        # itself combines every card via points_race_member_detail_combined.
+        dom = max(g, key=lambda x: (_n(x.get("tournaments")), _n(x.get("total_points"))))
+        base["member_card_id"] = dom.get("member_card_id")
         base["tournaments"] = sum(_n(x.get("tournaments")) for x in g)
         base["wins"] = sum(_n(x.get("wins")) for x in g)
         # A GG record's total is already "best N + championship" of ITS
@@ -7861,6 +7866,93 @@ def _merge_duplicate_standings(rows: list, race: dict | None = None,
                                   if leader is not None and isinstance(pts, (int, float)) else None)
         i = j + 1
     return out, merges
+
+
+def points_race_member_detail_combined(race_key: str, member_card_id: str,
+                                       db_path: str | Path | None = None) -> dict:
+    """The row-expansion payload for one board row. A plain row passes GG's
+    individual_info through. A FOLDED row (merged_from with 2+ GG records —
+    Kerry 2026-09-11: "you definitely need to merge on your side even if
+    they don't merge on GG") fetches every record's detail and rebuilds ONE
+    GG-shaped table: header, the counted lines (Championship always + best
+    N of the rest), GG's own separator sentence, then the rest — so the
+    page renders it exactly like a native row."""
+    from golf_genius_sync import fetch_points_race_member_detail
+    race = _GG_POINTS_RACES.get(race_key)
+    if not race:
+        raise ValueError(f"Unknown race {race_key!r}")
+    cards = [str(member_card_id)]
+    with _connect(db_path) as conn:
+        _ensure_gg_points_table(conn)
+        row = conn.execute(
+            """SELECT merged_from FROM gg_points_standings
+                WHERE race_key = ? AND member_card_id = ? LIMIT 1""",
+            (race_key, str(member_card_id))).fetchone()
+    if row and row["merged_from"]:
+        try:
+            src = json.loads(row["merged_from"])
+            recs = src.get("records") if isinstance(src, dict) else src
+            more = [str(r.get("member_card_id")) for r in (recs or [])
+                    if r.get("member_card_id")]
+            if len(more) > 1:
+                cards = list(dict.fromkeys(more))
+        except Exception:
+            pass
+    details = [fetch_points_race_member_detail(
+        page_id=race["page_id"], member_card_id=c,
+        league_id=race["league_id"], host=race["host"]) for c in cards]
+    if len(details) == 1:
+        out = details[0]
+        out["cards"] = cards
+        return out
+    return {"member_card_id": str(member_card_id), "cards": cards,
+            "headings": details[0].get("headings") or [],
+            "tables": [combine_member_detail_tables(
+                [d.get("tables") or [] for d in details], race.get("best_n"))],
+            "combined": True}
+
+
+def combine_member_detail_tables(table_sets: list, best_n: int | None) -> list:
+    """Rebuild GG's detail table across several member records. Data rows
+    are the 5-cell lines; a shared event (same Tournament + date) counts
+    once with its higher points. Counted = every Championship line + the
+    best N others; the rest go under GG's own separator sentence."""
+    header = None
+    rows: dict = {}
+    for tables in table_sets:
+        for t in tables:
+            if not t:
+                continue
+            if header is None and any("point" in str(h).lower() for h in t[0]):
+                header = list(t[0])
+            head = [str(h or "").strip().lower() for h in t[0]]
+            d_i = next((i for i, h in enumerate(head) if "date" in h), -1)
+            p_i = next((i for i, h in enumerate(head) if h == "pts" or "point" in h), -1)
+            t_i = next((i for i, h in enumerate(head) if "tournament" in h or "round" in h), 1)
+            if d_i == -1 or p_i == -1:
+                continue
+            for r in t[1:]:
+                if len(r) <= max(d_i, p_i):
+                    continue
+                try:
+                    pts = float(str(r[p_i]).replace(",", ""))
+                except ValueError:
+                    continue
+                key = (str(r[d_i]).strip(), str(r[t_i]).strip().lower() if t_i < len(r) else "")
+                if key not in rows or pts > rows[key][0]:
+                    rows[key] = (pts, list(r))
+    header = header or ["Event", "Tournament", "Awarded Date", "Position", "Points"]
+    ordered = sorted(rows.items(), key=lambda kv: -kv[1][0])
+    champ = [kv for kv in ordered if "championship" in kv[0][1]]
+    rest = [kv for kv in ordered if "championship" not in kv[0][1]]
+    n = best_n if best_n else len(rest)
+    counted = champ + rest[:n]
+    uncounted = rest[n:]
+    out = [header] + [kv[1][1] for kv in counted]
+    if uncounted:
+        out.append(["The following points are not counted in standings"])
+        out.extend(kv[1][1] for kv in uncounted)
+    return out
 
 
 def find_points_race_duplicates(db_path: str | Path | None = None) -> dict:

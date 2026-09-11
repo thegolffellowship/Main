@@ -228,6 +228,38 @@ rep = db.find_points_race_duplicates(db_path=p)
 check("pre-merge doubles are reported as unmerged", len(rep["unmerged"]) == 1
       and rep["unmerged"][0]["race_key"] == "austin_net" and len(rep["unmerged"][0]["rows"]) == 2, str(rep["unmerged"]))
 
+print("\n== 3b. folded row's detail combines every GG record ==")
+T_A = [[["Event", "Tournament", "Awarded Date", "Position", "Points"],
+        ["TGF Austin 2026", "a9.21 POINTS Net - AUSTIN Fall Net", "2026-09-01", "3", "9"],
+        ["TGF Austin 2026", "a9.22 POINTS Net - AUSTIN Fall Net", "2026-09-08", "T2", "8"]]]
+T_B = [[["Event", "Tournament", "Awarded Date", "Position", "Points"],
+        ["TGF San Antonio 2026", "s18.10 POINTS Net - Back - AUSTIN Fall Net", "2026-08-29", "3", "11"],
+        ["TGF San Antonio 2026", "s18.10 POINTS Net - Front - AUSTIN Fall Net", "2026-08-29", "T1", "9"],
+        ["TGF Austin 2026", "a9.22 POINTS Net - AUSTIN Fall Net", "2026-09-08", "T2", "8"]]]   # shared line
+comb = db.combine_member_detail_tables([T_A, T_B], 6)
+check("one table: header + 4 distinct lines (shared a9.22 once), all counted under best 6, no separator",
+      len(comb) == 5 and comb[0][1] == "Tournament" and [r[4] for r in comb[1:]] == ["11", "9", "9", "8"]
+      and not any(len(r) == 1 for r in comb), str(comb))
+comb3 = db.combine_member_detail_tables([T_A, T_B], 3)
+check("best 3 → separator after three lines, the 8 below it",
+      len(comb3) == 6 and len(comb3[4]) == 1 and "not counted" in comb3[4][0] and comb3[5][4] == "8", str(comb3))
+champ = db.combine_member_detail_tables([[[["Event", "Tournament", "Awarded Date", "Position", "Points"],
+        ["x", "2026 Austin Championship - POINTS Net", "2026-08-01", "14", "2"],
+        ["x", "a9.1 POINTS Net", "2026-03-17", "T2", "9"], ["x", "a9.2 POINTS Net", "2026-03-24", "T7", "7"]]]], 1)
+check("championship always counts, even at 2 pts", [r[4] for r in champ[1:3]] == ["2", "9"] and len(champ[3]) == 1, str(champ))
+# the folded snapshot row fronts the dominant record's card and combines on read
+with db._connect(p) as conn:
+    card = conn.execute("SELECT member_card_id FROM gg_points_standings WHERE race_key='austin_fall_net' "
+                        "AND customer_id=13").fetchone()[0]
+check("folded row fronts the dominant record's card (904: same rounds, more points)", card == "904", card)
+gg.fetch_points_race_member_detail = lambda page_id, member_card_id, league_id, host: {
+    "member_card_id": member_card_id, "headings": [], "tables": T_A if member_card_id == "904" else T_B}
+det = db.points_race_member_detail_combined("austin_fall_net", "904", db_path=p)
+check("combined detail fetched both cards and rebuilt one table", det.get("combined") and det["cards"] == ["904", "905"]
+      and len(det["tables"]) == 1 and len(det["tables"][0]) == 5, str(det.get("cards")))
+det1 = db.points_race_member_detail_combined("austin_fall_net", "901", db_path=p)
+check("a plain row passes GG's detail through", not det1.get("combined") and det1["cards"] == ["901"])
+
 print("\n== 4. scraper keeps both member card ids for a repeated name ==")
 html = ('<a data-member-card-id="904" class="x"> YOUNGS, Luke </a>'
         '<a data-member-card-id="903" class="x">MCCORMICK, Sam</a>'

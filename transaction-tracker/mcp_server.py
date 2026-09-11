@@ -3049,14 +3049,28 @@ def _scoring_dispatch(url: str, extract: str):
         if cmd == "scoring-race-detail":
             # "<race_key>|<member_card_id>" — GG's per-event points lines for one
             # member record (the row-expansion XHR), raw tables + our parse.
+            # "<race_key>|<member_card_id>" or "<race_key>|name:<fragment>" (the
+            # board row's card, resolved by name — exercises the folded path).
             _rk, _, _card = (arg or "").partition("|")
             _race = db._GG_POINTS_RACES.get(_rk.strip())
-            if not _race or not _card.strip().isdigit():
-                return json.dumps({"error": "usage: scoring-race-detail:<race_key>|<member_card_id>",
+            _card = _card.strip()
+            if _race and _card.lower().startswith("name:"):
+                with db._connect() as _c:
+                    _r = _c.execute("SELECT member_card_id, player_name, rank, total_points, merged_from "
+                                    "FROM gg_points_standings WHERE race_key = ? AND "
+                                    "LOWER(player_name) LIKE ? ORDER BY id LIMIT 1",
+                                    (_rk.strip(), f"%{_card[5:].strip().lower()}%")).fetchone()
+                if not _r:
+                    return json.dumps({"error": f"no row matching {_card[5:]!r} on {_rk}"})
+                _card = str(_r["member_card_id"] or "")
+                _row_info = dict(_r)
+            else:
+                _row_info = None
+            if not _race or not _card.isdigit():
+                return json.dumps({"error": "usage: scoring-race-detail:<race_key>|<member_card_id|name:<frag>>",
                                    "races": sorted(db._GG_POINTS_RACES)})
-            from golf_genius_sync import fetch_points_race_member_detail
-            _d = fetch_points_race_member_detail(page_id=_race["page_id"], member_card_id=_card.strip(),
-                                                 league_id=_race["league_id"], host=_race["host"])
+            _d = db.points_race_member_detail_combined(_rk.strip(), _card)
+            _d["row"] = _row_info
             _d["parsed_events"] = db._member_detail_events(_race, _card.strip())
             _d["best_n"] = _race.get("best_n")
             _d["best_n_total_of_parsed"] = (db._best_n_total(_d["parsed_events"], _race["best_n"])
