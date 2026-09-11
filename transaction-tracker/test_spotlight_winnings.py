@@ -37,20 +37,44 @@ def check(label, cond, detail=""):
 
 
 PAYOUTS = [
-    # 2026 event games — production spellings from the 2026-09-11 audit
-    {"category": "team_net", "amount": 12.0, "event_date": "2026-09-08"},
-    {"category": "ctp", "amount": 24.0, "event_date": "2026-09-08"},
-    {"category": "closest_to_pin", "amount": 19.0, "event_date": "2026-02-07"},
-    {"category": "skins", "amount": 39.0, "event_date": "2026-09-08"},
-    {"category": "skins", "amount": 15.6, "event_date": "2026-08-29"},
-    {"category": "individual_net", "amount": 67.5, "event_date": "2026-09-08"},
-    {"category": "individual_gross", "amount": 36.0, "event_date": "2026-08-29"},
-    {"category": "mvp", "amount": 30.0, "event_date": "2026-09-08"},
-    {"category": "tgf_mvp", "amount": 50.0, "event_date": "2026-09-08"},
+    # 2026 event games — production spellings + real description shapes
+    # from the 2026-09-11 audit (s9.22, s18.10)
+    {"category": "team_net", "amount": 12.0, "event_date": "2026-09-08",
+     "event_name": "s9.22 Silverhorn",
+     "description": "TEAM Net 1st (T) (team split)"},
+    # two CTP spellings, SAME event — one game row, bits accumulate
+    {"category": "ctp", "amount": 24.0, "event_date": "2026-09-08",
+     "event_name": "s9.22 Silverhorn",
+     "description": "CTP Closest to Pin #13"},
+    {"category": "closest_to_pin", "amount": 19.0,
+     "event_date": "2026-09-08", "event_name": "s9.22 Silverhorn",
+     "description": "CTP Closest to Pin #16"},
+    {"category": "skins", "amount": 39.0, "event_date": "2026-09-08",
+     "event_name": "s9.22 Silverhorn",
+     "description": "Skins Par on 17 (GG $)"},
+    {"category": "skins", "amount": 15.6, "event_date": "2026-08-29",
+     "event_name": "s18.10 FALL KICKOFF | Landa Park",
+     "description": "Skins HIGH Flight ×2 holes 2, 18"},
+    {"category": "individual_net", "amount": 67.5,
+     "event_date": "2026-09-08", "event_name": "s9.22 Silverhorn",
+     "description": "Ind Net LOW Flight 1st (T) (GG $)"},
+    {"category": "individual_gross", "amount": 36.0,
+     "event_date": "2026-08-29",
+     "event_name": "s18.10 FALL KICKOFF | Landa Park",
+     "description": "Ind Gross FLIGHT 3 | HDCP 12+ 1st (GG $)"},
+    {"category": "mvp", "amount": 30.0, "event_date": "2026-09-08",
+     "event_name": "s9.22 Silverhorn", "description": "City MVP"},
+    {"category": "tgf_mvp", "amount": 50.0, "event_date": "2026-09-08",
+     "event_name": "s9.22 Silverhorn",
+     "description": "TGF MVP (combined same-day pot)"},
     # season rows store display-string categories
-    {"category": "City Net", "amount": 200.0, "event_date": "2026-08-01"},
-    {"category": "Match Play", "amount": 100.0, "event_date": "2026-08-01"},
-    {"category": "monthly_points", "amount": 70.0, "event_date": "2026-06-30"},
+    {"category": "City Net", "amount": 200.0, "event_date": "2026-08-01",
+     "event_name": "SAN ANTONIO Net 2026",
+     "description": "SAN ANTONIO Net 2026 final standings — 2 place"},
+    {"category": "Match Play", "amount": 100.0, "event_date": "2026-08-01",
+     "event_name": "SAN ANTONIO MATCH PLAY 2026"},
+    {"category": "monthly_points", "amount": 70.0,
+     "event_date": "2026-06-30", "event_name": "JUNE Points 2026"},
     # a category nobody declared — must land in the catch_all bundle
     {"category": "mystery_game", "amount": 5.0, "event_date": "2026-05-01"},
     # a prior-year row (synthetic) — drives the per-year scoping
@@ -134,6 +158,41 @@ out3 = db._winnings_by_game([], db.SEED_WINNINGS_BUNDLES, 2026, None)
 check("no payouts still yields the current season at $0",
       out3["years"] == ["2026"]
       and all(b["total"] == 0 for b in out3["by_year"]["2026"]))
+
+# ── per-event drill-down (Kerry 2026-09-11 follow-up): each game row
+#    carries the events it was won in, with flight/place + amount ──
+ctp_g = ctp_rows[0]
+check("CTP: two rows in one event fold to ONE event line",
+      len(ctp_g["events"]) == 1 and ctp_g["events"][0]["total"] == 43.0,
+      repr(ctp_g["events"]))
+check("CTP event line accumulates both holes",
+      ctp_g["events"][0]["detail"] == "Hole 13 · Hole 16",
+      repr(ctp_g["events"][0]["detail"]))
+ind_net = next(g for g in y26["net"]["games"] if g["label"] == "Individual Net")
+check("Ind Net event carries tied place + flight",
+      ind_net["events"][0]["detail"] == "T1st Place · Low Flight",
+      repr(ind_net["events"][0]["detail"]))
+ind_gr = next(g for g in y26["gross"]["games"]
+              if g["label"] == "Individual Gross")
+check("Ind Gross event carries place + numeric flight",
+      ind_gr["events"][0]["detail"] == "1st Place · Flight 3",
+      repr(ind_gr["events"][0]["detail"]))
+sk = next(g for g in y26["gross"]["games"] if g["label"] == "Skins")
+check("Skins events sorted newest first",
+      [e["event_date"] for e in sk["events"]] == ["2026-09-08", "2026-08-29"],
+      repr([e["event_date"] for e in sk["events"]]))
+check("Skins flighted event carries holes + flight",
+      sk["events"][1]["detail"] == "Holes 2 & 18 · High Flight",
+      repr(sk["events"][1]["detail"]))
+cn = next(g for g in sea["games"] if g["label"] == "City Points Race")
+check("Season standings row carries the standings place",
+      cn["events"][0]["detail"] == "2nd Place | Season Standings",
+      repr(cn["events"][0]["detail"]))
+check("event names ride on the drill-down lines",
+      sk["events"][0]["event_name"] == "s9.22 Silverhorn")
+check("a row with no description still yields an event line",
+      next(g for g in sea["games"] if g["category"] == "mystery_game")
+      ["events"][0]["detail"] == "")
 
 # dial fallback: malformed JSON must fall back to the seed, not blank
 check("seed bundles well-formed",

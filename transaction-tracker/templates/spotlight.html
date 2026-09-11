@@ -230,6 +230,22 @@
         .spt-wbg-games { padding: 0 14px 10px 33px; }
         .spt-win-game .chip { flex: none; width: 8px; height: 8px; border-radius: 2px;
             align-self: center; }
+        /* third level (Kerry 2026-09-11 follow-up): a game row expands
+           to the events it was won in, with flight/place + amount */
+        details.spt-wbg-game > summary { list-style: none; cursor: pointer; user-select: none; }
+        details.spt-wbg-game > summary::-webkit-details-marker { display: none; }
+        .spt-win-game .gx { flex: none; font-size: 8px; color: #9CA3AF;
+            align-self: center; transition: transform 0.15s; }
+        details.spt-wbg-game[open] .gx { transform: rotate(90deg); }
+        .spt-wbg-evs { padding: 2px 0 6px 18px; }
+        .spt-wbg-ev { display: flex; align-items: baseline; gap: 10px; padding: 3px 0;
+            font: 500 11.5px/1.3 'Helvetica Neue', Arial, sans-serif; color: #6B7280; }
+        .spt-wbg-ev .mid { flex: 1; min-width: 0; }
+        .spt-wbg-ev .e { color: #374151; font-weight: 600;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .spt-wbg-ev .m { font-size: 10.5px; color: #9CA3AF; margin-top: 1px; }
+        .spt-wbg-ev .a { flex: none; font-weight: 700; color: #1B7F4B;
+            font-variant-numeric: tabular-nums; }
 
         .spt-note { font: 500 11px/1.5 'Helvetica Neue', Arial, sans-serif; color: #9CA3AF; padding: 2px 4px 4px; margin: 0; }
         /* CTA banner (Kerry 2026-07-13): same bar as the Leaderboard page */
@@ -484,14 +500,25 @@
                 if (!games.length) return `<div class="spt-bundle">${row}</div>`;
                 return `<details class="spt-bundle"><summary>${row}</summary>` +
                     `<div class="spt-wbg-games">` +
-                    games.map(g =>
-                        `<div class="spt-win-game"><span class="chip" style="background:${sptCatColor(g.category)};"></span>` +
-                        `<span class="g">${esc(g.label)} &middot; ${g.count} win${g.count === 1 ? "" : "s"}</span>` +
-                        `<span class="a">${fmtMoney(g.total)}</span></div>`).join("") +
+                    games.map(g => {
+                        const gRow =
+                            `<div class="spt-win-game"><span class="chip" style="background:${sptCatColor(g.category)};"></span>` +
+                            ((g.events || []).length ? `<span class="gx">&#9654;</span>` : "") +
+                            `<span class="g">${esc(g.label)} &middot; ${g.count} win${g.count === 1 ? "" : "s"}</span>` +
+                            `<span class="a">${fmtMoney(g.total)}</span></div>`;
+                        if (!(g.events || []).length) return gRow;
+                        const evs = g.events.map(ev =>
+                            `<div class="spt-wbg-ev"><div class="mid">` +
+                            `<div class="e">${esc(ev.event_name)}</div>` +
+                            `<div class="m">${[ev.event_date ? fmtDate(ev.event_date) : "", ev.detail].filter(Boolean).map(esc).join(" &middot; ")}</div>` +
+                            `</div><span class="a">${fmtMoney(ev.total)}</span></div>`).join("");
+                        return `<details class="spt-wbg-game"><summary>${gRow}</summary>` +
+                            `<div class="spt-wbg-evs">${evs}</div></details>`;
+                    }).join("") +
                     `</div></details>`;
             }).join("");
             return `<div><div class="spt-sec-head"><span class="t">Winnings by Game</span>` +
-                `<span class="s" style="color:var(--primary, #E87C3E);font-style:italic;">(Tap a bundle for the games)</span></div>` +
+                `<span class="s" style="color:var(--primary, #E87C3E);font-style:italic;">(Tap a bundle, then a game)</span></div>` +
                 `<div class="spt-panel">${bar}${rows}</div></div>`;
         }
 

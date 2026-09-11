@@ -441,3 +441,14 @@ bundle ("a zero GROSS row advertises the games you're not in").
   (`--cat-*` tokens, hex fallbacks matching tgf.html's CAT_COLORS).
   Bundle totals sum exactly to the payout total, so the panel
   self-audits against the Won tile in the all-time scope.
+
+**Per-event drill-down (v2.373.0, Kerry 2026-09-11 follow-up):** each
+game row inside a bundle is itself expandable to the EVENTS that game
+was won in — event name, date, flight/place detail, and the amount won
+there. Two payout rows in one event fold to one line with the bits
+accumulated ("Hole 13 · Hole 16"). The detail parsing (place with
+ties, holes, LOW/MID/HIGH or numeric flights, season-standings place)
+lives in `_payout_detail_bits`, extracted from `_friendly_game` so the
+Recent Winnings labels and this drill-down can never parse the same
+row differently. Payload: each game gains
+`events: [{event_name, event_date, total, detail}]`, newest first.

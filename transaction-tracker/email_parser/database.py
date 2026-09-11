@@ -12141,6 +12141,49 @@ _PAYOUT_CAT_LABELS = {
 }
 
 
+def _payout_detail_bits(cat: str, desc: str) -> list[str]:
+    """Human-readable bits parsed from one payout row's description —
+    place (with ties), holes, flight, season-standings place. Shared by
+    the spotlight's Recent Winnings labels (_friendly_game) and the
+    Winnings-by-Game per-event drill-down so the two surfaces can never
+    parse the same row differently."""
+    bits: list[str] = []
+    # "SAN ANTONIO Net 2026 final standings — 2 place" → "2nd Place |
+    # Season Standings" (season payout rows)
+    fs_ = re.search(r"final standings\s*[—\-]\s*(\d+)\s*place", desc, re.I)
+    if fs_:
+        n_ = int(fs_.group(1))
+        suf_ = ("th" if 10 <= n_ % 100 <= 13
+                else {1: "st", 2: "nd", 3: "rd"}.get(n_ % 10, "th"))
+        bits.append(f"{n_}{suf_} Place | Season Standings")
+    m = re.search(r"\b(\d+)(st|nd|rd|th)\b", desc)
+    tied = "(T)" in desc
+    if m and cat != "skins" and not fs_:
+        bits.append(f"{'T' if tied else ''}{m.group(1)}{m.group(2)} Place")
+    if cat == "skins":
+        hm = re.search(r"holes?\s+([\d,\s&]+)", desc, re.I)
+        cm = re.search(r"×\s*(\d+)", desc)
+        if hm:
+            _hl = [h for h in re.split(r"[\s,&]+", hm.group(1)) if h]
+            bits.append(("Hole " if len(_hl) == 1 else "Holes ")
+                        + (" & ".join(_hl) if len(_hl) <= 2
+                           else ", ".join(_hl[:-1]) + " & " + _hl[-1]))
+        elif cm:
+            n_ = int(cm.group(1))
+            bits.append(f"{n_} skin{'s' if n_ != 1 else ''}")
+    if cat in ("closest_to_pin", "ctp"):
+        pm = re.search(r"#\s*(\d+)", desc)
+        if pm:
+            bits.append(f"Hole {pm.group(1)}")
+    fm = re.search(r"\b(LOW|MID|HIGH)\b[\s-]*Flight", desc, re.I)
+    fn = re.search(r"Flight\s*(\d+)", desc, re.I)
+    if fm:
+        bits.append(f"{fm.group(1).title()} Flight")
+    elif fn:
+        bits.append(f"Flight {fn.group(1)}")
+    return bits
+
+
 # ── Winnings by Game (Kerry ratified 2026-09-11, improvements lane) ──
 # Bundle membership is RULES-AS-DATA (guiding principle 2): the live
 # grouping is the `spotlight_winnings_bundles` app setting; this seed is
@@ -12229,13 +12272,34 @@ def _winnings_by_game(payouts: list[dict], bundles: list[dict],
                     or cat.islower() else cat)
                 if label not in games:
                     games[label] = {"category": cat, "label": label,
-                                    "count": 0, "total": 0.0}
+                                    "count": 0, "total": 0.0,
+                                    "events": [], "_ev": {}}
                     order.append(label)
                 amt = p.get("amount") or 0
-                games[label]["count"] += 1
-                games[label]["total"] = round(games[label]["total"] + amt, 2)
+                g = games[label]
+                g["count"] += 1
+                g["total"] = round(g["total"] + amt, 2)
                 total = round(total + amt, 2)
+                # per-event drill-down (Kerry 2026-09-11 follow-up):
+                # which events this game was won in, with flight/place
+                ek = (p.get("event_name") or "", p.get("event_date") or "")
+                if ek not in g["_ev"]:
+                    g["_ev"][ek] = {"event_name": ek[0] or "Event",
+                                    "event_date": ek[1] or None,
+                                    "total": 0.0, "_bits": []}
+                    g["events"].append(g["_ev"][ek])
+                ev = g["_ev"][ek]
+                ev["total"] = round(ev["total"] + amt, 2)
+                for bit in _payout_detail_bits(cat, p.get("description") or ""):
+                    if bit not in ev["_bits"]:
+                        ev["_bits"].append(bit)
             rows = [games[k] for k in order]
+            for g in rows:
+                g.pop("_ev", None)
+                for ev in g["events"]:
+                    ev["detail"] = " · ".join(ev.pop("_bits"))
+                g["events"].sort(key=lambda e: e["event_date"] or "",
+                                 reverse=True)
             rows.sort(key=lambda g: -g["total"])
             entry = {"key": b["key"], "label": b.get("label") or b["key"],
                      "color": b.get("color") or "#475569",
@@ -12942,41 +13006,7 @@ def get_player_spotlight(customer_id: int,
             desc = p.get("description") or ""
             label = _PAYOUT_CAT_LABELS.get(cat) or (
                 cat.replace("_", " ").title() if cat else "Payout")
-            bits = []
-            # "SAN ANTONIO Net 2026 final standings — 2 place" (season
-            # payout rows) → "2nd Place | Season Standings"
-            fs_ = re.search(r"final standings\s*[—\-]\s*(\d+)\s*place",
-                            desc, re.I)
-            if fs_:
-                n_ = int(fs_.group(1))
-                suf_ = ("th" if 10 <= n_ % 100 <= 13
-                        else {1: "st", 2: "nd", 3: "rd"}.get(n_ % 10, "th"))
-                bits.append(f"{n_}{suf_} Place | Season Standings")
-            m = re.search(r"\b(\d+)(st|nd|rd|th)\b", desc)
-            tied = "(T)" in desc
-            if m and cat != "skins" and not fs_:
-                bits.append(f"{'T' if tied else ''}{m.group(1)}{m.group(2)} Place")
-            if cat == "skins":
-                hm = re.search(r"holes?\s+([\d,\s&]+)", desc, re.I)
-                cm = re.search(r"×\s*(\d+)", desc)
-                if hm:
-                    _hl = [h for h in re.split(r"[\s,&]+", hm.group(1)) if h]
-                    bits.append(("Hole " if len(_hl) == 1 else "Holes ")
-                                + (" & ".join(_hl) if len(_hl) <= 2
-                                   else ", ".join(_hl[:-1]) + " & " + _hl[-1]))
-                elif cm:
-                    n_ = int(cm.group(1))
-                    bits.append(f"{n_} skin{'s' if n_ != 1 else ''}")
-            if cat in ("closest_to_pin", "ctp"):
-                pm = re.search(r"#\s*(\d+)", desc)
-                if pm:
-                    bits.append(f"Hole {pm.group(1)}")
-            fm = re.search(r"\b(LOW|MID|HIGH)\b[\s-]*Flight", desc, re.I)
-            fn = re.search(r"Flight\s*(\d+)", desc, re.I)
-            if fm:
-                bits.append(f"{fm.group(1).title()} Flight")
-            elif fn:
-                bits.append(f"Flight {fn.group(1)}")
+            bits = _payout_detail_bits(cat, desc)
             if cat == "team_net" and partners:
                 _w = "w/ " + " & ".join(partners)
                 if bits:
