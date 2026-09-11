@@ -4878,6 +4878,15 @@ def _scoring_dispatch(url: str, extract: str):
             # Kerry's ratified course short names (2026-07-10) — one-shot
             # apply; /courses UI edits afterwards are never overwritten
             return json.dumps(db.apply_course_short_name_pins(), indent=2)
+        if cmd == "scoring-teamnet-parity":
+            # "<event>|<gg team-board v2tournaments url>" — computes the
+            # event's team-net totals under every plausible reading of
+            # 75%-off-lowest and diffs against GG's posted board (Kerry
+            # 2026-09-11: "Review where discrepancy is on GG and learn
+            # from it for our own uses"). Read-only.
+            _ev, _, _gurl = arg.partition("|")
+            return json.dumps(db.team_net_parity(_ev.strip(), _gurl.strip()),
+                              indent=2, default=str)
         if cmd == "scoring-payouts-unpaid":
             # Every non-paid payout group + the customer's recent Venmo
             # payout receipts (linked flag + amounts) for match diagnosis

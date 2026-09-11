@@ -12745,6 +12745,141 @@ def _recorded_payout_strip(race_key: str, race: dict | None,
     return strip
 
 
+def team_net_parity(event_name: str, gg_url: str = "",
+                    db_path: str | Path = DB_PATH) -> dict:
+    """LEARNING BRIDGE (Kerry 2026-09-11, verbatim: "Team Net is 75%
+    and Off Lowest in all field. Review where discrepancy is on GG and
+    learn from it for our own uses."). Computes the event's team-net
+    totals under every plausible reading of the 75% off-lowest rule —
+    rounding before/after the subtraction, off the lowest in the FIELD
+    vs in the TEAM, strokes disallowed on par 3s or not — from the real
+    imported cards, and diffs each against GG's posted TEAM Net board
+    (pass its v2tournaments URL), so the scheme the Tracker encodes is
+    the one PROVEN to reproduce GG, never a guess."""
+    from .handicap_calc import allocate_strokes
+    d = get_event_leaderboard(event_name, db_path=db_path)
+    if not d:
+        return {"error": "event not found"}
+    holes_by_rid: dict = {}
+    ph_by_rid: dict = {}
+    with _connect(db_path) as conn:
+        ev = conn.execute(
+            "SELECT id FROM events WHERE LOWER(item_name) = ?",
+            ((event_name or "").strip().lower(),)).fetchone()
+        for r in conn.execute(
+                """SELECT sr.id AS rid, sr.playing_handicap AS ph,
+                          sh.hole_number AS hn, sh.strokes,
+                          cth.par, cth.stroke_index AS si
+                   FROM scoring_rounds sr
+                   JOIN scoring_holes sh ON sh.scoring_round_id = sr.id
+                   LEFT JOIN course_tee_holes cth
+                     ON cth.tee_id = sr.tee_id
+                    AND cth.hole_number = sh.hole_number
+                   WHERE sr.event_id = ?
+                     AND COALESCE(sr.source, 'gg') NOT LIKE 'gg_history%'""",
+                (ev["id"],)):
+            if r["strokes"] is None:
+                continue
+            holes_by_rid.setdefault(r["rid"], {})[r["hn"]] = (
+                r["strokes"], r["par"], r["si"])
+            ph_by_rid[r["rid"]] = r["ph"]
+
+    def _rh(x):   # GG-style half-up
+        import math as _m
+        return int(_m.floor(x + 0.5))
+
+    teams = [t for t in (d.get("teams") or [])
+             if any(m["scoring_round_id"] in holes_by_rid
+                    for m in t["players"])]
+    field_phs = [ph_by_rid[m["scoring_round_id"]]
+                 for t in teams for m in t["players"]
+                 if m["scoring_round_id"] in ph_by_rid
+                 and ph_by_rid[m["scoring_round_id"]] is not None]
+    if not field_phs:
+        return {"error": "no playing handicaps on the cards"}
+    min_field = min(field_phs)
+
+    def _th(ph, scheme, min_team):
+        if ph is None:
+            return 0
+        base = min_field if scheme.endswith("field") else min_team
+        if scheme.startswith("prod"):    # round(.75*ph) - round(.75*base)
+            return _rh(0.75 * ph) - _rh(0.75 * base)
+        return _rh(0.75 * (ph - base))   # round(.75*(ph - base))
+
+    out_schemes: dict = {}
+    for scheme in ("prod_off_field", "diff_off_field",
+                   "prod_off_team", "diff_off_team"):
+        for par3_off in (True, False):
+            key = scheme + ("|no_par3" if par3_off else "|par3_ok")
+            totals = []
+            for t in teams:
+                mem = [m for m in t["players"]
+                       if m["scoring_round_id"] in holes_by_rid]
+                phs = [ph_by_rid.get(m["scoring_round_id"]) for m in mem]
+                phs = [p for p in phs if p is not None]
+                min_team = min(phs) if phs else 0
+                per_hole_best: dict = {}
+                for m in mem:
+                    hd = holes_by_rid[m["scoring_round_id"]]
+                    th = _th(ph_by_rid.get(m["scoring_round_id"]),
+                             scheme, min_team)
+                    eligible = {hn: v[2] for hn, v in hd.items()
+                                if v[2] is not None
+                                and not (par3_off and v[1] == 3)}
+                    alloc = allocate_strokes(int(th), eligible) \
+                        if eligible else {}
+                    for hn, (s, _p, _si) in hd.items():
+                        net = s - (alloc.get(hn) or 0)
+                        if (hn not in per_hole_best
+                                or net < per_hole_best[hn]):
+                            per_hole_best[hn] = net
+                totals.append({
+                    "team": " + ".join(m["player_name"]
+                                       for m in t["players"]),
+                    "total": sum(per_hole_best.values())})
+            out_schemes[key] = totals
+
+    gg_totals = []
+    if gg_url:
+        try:
+            from golf_genius_sync import (fetch_public_page,
+                                          parse_page_structure)
+            page = fetch_public_page(gg_url)
+            parsed = parse_page_structure(page["html"], gg_url)
+            for tbl in parsed.get("tables") or []:
+                for row in tbl:
+                    if len(row) >= 4 and re.match(r"^T?\d+$", str(row[0])):
+                        m_ = re.match(r"^\s*(\d+)", str(row[3]))
+                        if m_:
+                            gg_totals.append({"pos": row[0],
+                                              "team": row[1],
+                                              "total": int(m_.group(1))})
+        except Exception as e:
+            gg_totals = [{"error": str(e)}]
+
+    # score each scheme: how many teams' totals equal GG's (matched by
+    # surname overlap)
+    verdict = {}
+    if gg_totals and "error" not in gg_totals[0]:
+        for key, totals in out_schemes.items():
+            hits = 0
+            for t in totals:
+                ts = {p.split(",")[0].strip().lower() if "," in p
+                      else (p.split()[-1].lower() if p.split() else "")
+                      for p in t["team"].split(" + ")}
+                for g in gg_totals:
+                    gl = str(g["team"]).lower()
+                    if sum(1 for s in ts if s and s in gl) >= 2:
+                        if t["total"] == g["total"]:
+                            hits += 1
+                        break
+            verdict[key] = f"{hits}/{len(totals)} teams match GG"
+    return {"event": event_name, "min_field_ph": min_field,
+            "schemes": out_schemes, "gg_board": gg_totals,
+            "verdict": verdict}
+
+
 def _entry_to_pot_cents() -> int:
     try:
         from .season_payouts import ENTRY_TO_POT_CENTS
