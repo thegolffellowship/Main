@@ -8033,7 +8033,9 @@ def find_customer_duplicates(db_path: str | Path | None = None) -> dict:
                 return
             seen_groups.add(fs)
             profs = [profile(c) for c in sorted(fs)]
-            out[bucket].append({"key": key, "profiles": profs, "suggest_keep": suggest(profs)})
+            out[bucket].append({"key": key, "profiles": profs, "suggest_keep": suggest(profs),
+                                # already ruled two people (the same-name census list)
+                                "confirmed_distinct": fs in _KNOWN_DISTINCT_SAME_NAME})
 
         for d in conn.execute(
                 """SELECT LOWER(TRIM(first_name)) AS f, LOWER(TRIM(last_name)) AS l,

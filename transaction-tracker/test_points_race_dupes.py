@@ -295,6 +295,8 @@ check("email door finds Chris/Christopher Espinosa (the phone door sees the same
 esp = next(g for g in rep["same_email"] if g["key"] == "chris@x.com")
 check("suggest_keep = the active member with the items", esp["suggest_keep"] == 802
       and {pr["customer_id"] for pr in esp["profiles"]} == {801, 802}, str(esp))
+check("a pair already ruled distinct is flagged, not hidden, when another door finds it",
+      all(not g.get("confirmed_distinct") for b in ("same_name", "same_email", "same_phone") for g in rep[b]))
 check("a group is reported once even when two doors find it",
       sum(1 for b in ("same_name", "same_email", "same_phone") for g in rep[b]
           if {pr["customer_id"] for pr in g["profiles"]} == {801, 802}) == 1)

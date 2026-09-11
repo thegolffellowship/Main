@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.371.11";
+window.TGF_VERSION = "2.371.12";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.371.12",
+    date: "2026-09-11",
+    changes: [
+      "scoring-customer-dupes marks a pair already ruled two people (the same-name census list — the two Victor Arias profiles) as confirmed_distinct when the phone or email door surfaces it, instead of letting it read as a fresh duplicate.",
+    ],
+  },
   {
     version: "2.371.11",
     date: "2026-09-11",
