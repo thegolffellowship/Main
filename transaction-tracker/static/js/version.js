@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.383.1";
+window.TGF_VERSION = "2.384.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.384.0",
+    date: "2026-09-11",
+    changes: [
+      "OVERALL board money wins now color-code BY FLIGHT (Kerry: 'color code for skins per flight so in one have red and another green or blue... anybody who won money gets color-coded'): Flight 1 red, Flight 2 green, Flight 3 blue (then amber, violet). A tinted Net total = won Individual/All Net money in that flight; a tinted Gross total = won Individual Gross in that flight (when the game ran); a circled hole score = a skin won in that flight's pot. Hovering any colored mark names the game and flight; the legend renders swatches for exactly the flights that actually paid. Events with one flight (or unflighted games) paint red. MVP keeps its ratified purple on the Pts total.",
+      "Backend: overall rows carry each player's flight ORDINAL per game (net_flight / gross_flight / skins_flight — 1 = low flight, the same order the sectioned boards render, from the GG flight labels with handicap-placed non-buyers included), so the coloring is data, not guesswork.",
+    ],
+  },
   {
     version: "2.383.1",
     date: "2026-09-11",

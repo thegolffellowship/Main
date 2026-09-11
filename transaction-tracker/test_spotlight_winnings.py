@@ -462,6 +462,14 @@ check("overall rows do NOT identify buy-ins",
 check("overall rows carry hcp/pts for the table (index None w/o links)",
       "index" in o1 and o1["hcp"] == 5
       and o1["net_pts"] is not None, repr(o1))
+# flight ordinals for the per-flight win colors (Kerry 2026-09-11):
+# 1 = low flight in board order — cid1 sits in Flight 1 (HCP <12.0),
+# cid2 in Flight 2; the skins board has one labeled section (ALL) so
+# every placed player is ordinal 1
+check("flight ordinals ride on overall rows (net 1/2, skins 1)",
+      o1["net_flight"] == 1 and o2["net_flight"] == 2
+      and o2["skins_flight"] == 1,
+      (o1["net_flight"], o2["net_flight"], o2["skins_flight"]))
 
 lst = db.get_events_leaderboard(db_path=_db2)
 check("pilot dial gates the event list (s9.99 not in seed)",

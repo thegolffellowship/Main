@@ -13599,6 +13599,26 @@ def get_event_leaderboard(event_name: str,
     # are deliberately NOT identified on this view. Won = the player's
     # total recorded money for the event across ALL categories (team
     # shares, proxies and HIO included), from tgf_payouts.
+    # Win colors code by FLIGHT (Kerry, second pass: "color code for
+    # skins per flight... anybody who won money gets color-coded") —
+    # each row carries the player's flight ORDINAL per game (1 = low
+    # flight, same order the sectioned boards render) so the UI can
+    # paint flight 1 red, flight 2 green/blue, etc.
+    def _flight_ordinals(board):
+        out, ordn = {}, 0
+        for sec in board or []:
+            if not sec.get("label") or sec["label"] == "UNFLIGHTED":
+                continue
+            ordn += 1
+            for r_ in sec["rows"]:
+                if r_["customer_id"] is not None:
+                    out[int(r_["customer_id"])] = ordn
+        return out
+
+    _net_ord = _flight_ordinals(net_board)
+    _gross_ord = _flight_ordinals(gross_board)
+    _skins_ord = _flight_ordinals(skins_board)
+
     overall_rows = []
     for p in plist:
         cid = int(p["customer_id"]) if p["customer_id"] is not None else None
@@ -13615,6 +13635,9 @@ def get_event_leaderboard(event_name: str,
             "win_gross": "individual_gross" in cats,
             "win_skins": "skins" in cats,
             "win_mvp": bool(cats & {"mvp", "tgf_mvp"}),
+            "net_flight": _net_ord.get(cid) if cid is not None else None,
+            "gross_flight": _gross_ord.get(cid) if cid is not None else None,
+            "skins_flight": _skins_ord.get(cid) if cid is not None else None,
             "won_total": round(sum(w["cents"] for w in wlist) / 100.0, 2),
         })
     overall_rows.sort(key=lambda r: (r["net"] is None, r["net"] or 0,

@@ -312,14 +312,11 @@
         /* GG-style circled winning score (skins / counting team ball) */
         .evlb-circ { display: inline-block; min-width: 17px; line-height: 17px;
             border: 1.5px solid #1B1B1B; border-radius: 50%; font-weight: 700; }
-        /* OVERALL view (Kerry 2026-09-11): win highlights use the
-           ratified payout category colors (dashboard.css --cat-*) —
-           Ind Net green, Ind Gross amber, MVP purple, skins pink circles.
+        /* OVERALL view (Kerry 2026-09-11): money-win highlights color-
+           code by FLIGHT (inline styles from evlbFlightTint — flight 1
+           red, 2 green, 3 blue...); MVP keeps the ratified purple.
            No buy-in identification on this view by design. */
-        .evlb-circ.sk { border-color: var(--cat-skins, #BE185D); color: var(--cat-skins, #BE185D); }
-        .evlb-ovr td.w-net { background: rgba(21,128,61,.16); color: var(--cat-ind-net, #15803D); border-radius: 4px; }
-        .evlb-ovr td.w-net b { color: inherit; }
-        .evlb-ovr td.w-gross { background: rgba(180,83,9,.16); color: var(--cat-ind-gross, #B45309); font-weight: 700; border-radius: 4px; }
+        .evlb-ovr td b { color: inherit; }
         .evlb-ovr td.w-mvp { background: rgba(109,40,217,.14); color: var(--cat-mvp, #6D28D9); font-weight: 700; border-radius: 4px; }
         .evlb-ovr td.won, .evlb-ovr th.won { text-align: right; font-weight: 700;
             color: var(--money-green, #15803D); font-variant-numeric: tabular-nums; min-width: 58px; }
@@ -339,8 +336,6 @@
         .evlb-winline .amt { font-weight: 700; color: var(--money-green, #15803D); font-variant-numeric: tabular-nums; white-space: nowrap; }
         .evlb-legend { font-size: 11px; color: #6B7280; margin: 8px 0 0; white-space: normal; }
         .evlb-legend .lg { display: inline-block; padding: 1px 7px; border-radius: 4px; font-weight: 700; }
-        .evlb-legend .lg.w-net { background: rgba(21,128,61,.16); color: var(--cat-ind-net, #15803D); }
-        .evlb-legend .lg.w-gross { background: rgba(180,83,9,.16); color: var(--cat-ind-gross, #B45309); }
         .evlb-legend .lg.w-mvp { background: rgba(109,40,217,.14); color: var(--cat-mvp, #6D28D9); }
         .evlb-note { background: #FFF7ED; border: 1px solid #FED7AA; color: #9A3412;
             border-radius: 8px; padding: 8px 12px; font-size: 12px; margin: 0 0 10px; }
@@ -2672,17 +2667,33 @@
             return `<td>${circ ? `<span class="evlb-circ">${v}</span>` : v}</td>`;
         }).join("");
     }
+    // Money-win colors code by FLIGHT (Kerry 2026-09-11: "color code
+    // for skins per flight so in one have red and another green or
+    // blue... anybody who won money gets color-coded"): flight 1 red,
+    // flight 2 green, flight 3 blue, then amber/violet. A game with no
+    // flights (or an unresolved one) paints as flight 1.
+    const EVLB_FLIGHT_COLORS = ["#DC2626", "#15803D", "#2563EB", "#B45309", "#6D28D9"];
+    function evlbFlightColor(ord) {
+        return EVLB_FLIGHT_COLORS[(((ord || 1) - 1) % EVLB_FLIGHT_COLORS.length + EVLB_FLIGHT_COLORS.length) % EVLB_FLIGHT_COLORS.length];
+    }
+    function evlbFlightTint(ord) {
+        const c = evlbFlightColor(ord);
+        return `background:${c}26;color:${c};font-weight:700;border-radius:4px;`;
+    }
     // ONE overall row — module-level so the sortable headers can
     // re-render the tbody with the same markup the initial paint used
     function evlbOvrRowHtml(d, r) {
         const skinHoles = r.win_skins
             ? (((d.skin_cells || {})[String(r.scoring_round_id)]) || []) : [];
+        const skC = evlbFlightColor(r.skins_flight);
         const hs = {};
         (d.cards[String(r.scoring_round_id)] || []).forEach(h => { hs[h[0]] = h; });
         const holeCells = (d.hole_cols || []).map(n => {
             const h = hs[n];
             if (!h || h[1] == null) return "<td></td>";
-            return `<td>${skinHoles.includes(n) ? `<span class="evlb-circ sk">${h[1]}</span>` : h[1]}</td>`;
+            return `<td>${skinHoles.includes(n)
+                ? `<span class="evlb-circ" style="border-color:${skC};color:${skC};" title="skin — flight ${r.skins_flight || 1}">${h[1]}</span>`
+                : h[1]}</td>`;
         }).join("");
         return `<tr class="evlb-plr" data-rid="${r.scoring_round_id || ""}">` +
             `<td>${r._rank ?? ""}</td>` +
@@ -2690,8 +2701,8 @@
             `<td>${r.index != null ? Number(r.index).toFixed(1) : ""}</td>` +
             `<td>${r.hcp ?? ""}</td>` +
             holeCells +
-            `<td${r.win_gross ? ' class="w-gross" title="won Individual Gross"' : ""}>${r.gross ?? ""}</td>` +
-            `<td${r.win_net ? ' class="w-net" title="won Individual Net"' : ""}><b>${r.net ?? ""}</b></td>` +
+            `<td${r.win_gross ? ` style="${evlbFlightTint(r.gross_flight)}" title="won Individual Gross — flight ${r.gross_flight || 1}"` : ""}>${r.gross ?? ""}</td>` +
+            `<td${r.win_net ? ` style="${evlbFlightTint(r.net_flight)}" title="won Individual Net — flight ${r.net_flight || 1}"` : ""}><b>${r.net ?? ""}</b></td>` +
             `<td${r.win_mvp ? ' class="w-mvp" title="Event MVP"' : ""}>${r.net_pts ?? ""}</td>` +
             `<td class="won">${r.won_total > 0 ? "$" + Number(r.won_total).toFixed(2) : ""}</td></tr>`;
     }
@@ -2751,11 +2762,24 @@
               `<th data-k="pts" class="sortable">Pts</th><th data-k="won" class="won sortable">Won</th></tr></thead><tbody>` +
               ovRows.map(r => evlbOvrRowHtml(d, r)).join("") +
               `</tbody></table></div>` +
-              `<p class="evlb-legend"><span class="lg w-net">Net</span> won Individual Net &middot; ` +
-              `<span class="lg w-gross">Gross</span> won Individual Gross &middot; ` +
-              `<span class="lg"><span class="evlb-circ sk">4</span></span> skin won on that hole &middot; ` +
-              `<span class="lg w-mvp">Pts</span> Event MVP &middot; ` +
-              `<b>Won</b> = total collected for this event, all games (team &amp; proxies included). Tap a player for their scorecard.</p>`
+              (() => {
+                  // legend: flight colors actually present among the
+                  // money winners (min 1 so single-flight events still
+                  // explain the red)
+                  let maxF = 1;
+                  ovRows.forEach(r => {
+                      if (r.win_net) maxF = Math.max(maxF, r.net_flight || 1);
+                      if (r.win_gross) maxF = Math.max(maxF, r.gross_flight || 1);
+                      if (r.win_skins) maxF = Math.max(maxF, r.skins_flight || 1);
+                  });
+                  const sw = [];
+                  for (let f = 1; f <= maxF; f++)
+                      sw.push(`<span class="lg" style="${evlbFlightTint(f)}">Flight ${f}</span>`);
+                  return `<p class="evlb-legend">Money winners color-code by FLIGHT: ${sw.join(" ")} — ` +
+                      `a tinted <b>Net</b> or <b>Gross</b> total won that game in that flight; a circled hole score is a skin won in that flight &middot; ` +
+                      `<span class="lg w-mvp">Pts</span> Event MVP &middot; ` +
+                      `<b>Won</b> = total collected for this event, all games (team &amp; proxies included). Tap a player for their scorecard; tap a column header to sort and re-rank.</p>`;
+              })()
             : '<p style="color:var(--text-muted);">No scorecards yet.</p>';
         // SKINS: GG-style overall chart — buyers per flight, hole-by-hole
         // gross with winning skins circled; everyone NOT in skins listed
