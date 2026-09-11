@@ -197,6 +197,20 @@ check("Luke once, 37 pts, rank 1, merged_from set", len(lk) == 1 and lk[0]["tota
       and lk[0]["rank"] == "1" and lk[0]["merged_from"], str(lk))
 check("audit row written", audit and "YOUNGS, Luke x2" in audit[0], str(audit))
 
+print("\n== 2b. concluded races are never folded (Kerry 2026-09-11) ==")
+n2 = db.refresh_points_race_standings("austin_net", db_path=p)
+with db._connect(p) as conn:
+    lk2 = conn.execute("SELECT COUNT(*), SUM(merged_from IS NOT NULL) FROM gg_points_standings "
+                       "WHERE race_key='austin_net' AND customer_id=13").fetchone()
+check("austin_net (concluded) keeps GG's rows verbatim: Luke twice, nothing folded",
+      n2 == 9 and tuple(lk2) == (2, 0), str((n2, tuple(lk2))))
+rep0 = db.find_points_race_duplicates(db_path=p)
+check("the concluded double is reported, flagged report-only",
+      any(u["race_key"] == "austin_net" and u["folding"] is False and "concluded" in u["note"] for u in rep0["unmerged"]),
+      str(rep0["unmerged"]))
+with db._connect(p) as conn:
+    conn.execute("DELETE FROM gg_points_standings WHERE race_key='austin_net'"); conn.commit()
+
 print("\n== 3. duplicates report ==")
 rep = db.find_points_race_duplicates(db_path=p)
 check("merged fold reported with both GG cards + method", len(rep["merged"]) == 2

@@ -7458,6 +7458,7 @@ _GG_POINTS_RACES: dict = {
         "league_id": "514047",
         "page_id": "6201199",
         "best_n": 6,   # season standing = best N + Championship (scoring.md)
+        "fold_duplicates": True,   # ACTIVE race (Kerry 2026-09-11)
         "contest_type": "NET Points Race",
         "chapter": "San Antonio",
         "enroll_chapter": "San Antonio",
@@ -7469,6 +7470,7 @@ _GG_POINTS_RACES: dict = {
         "league_id": "514705",
         "page_id": "6201227",
         "best_n": 6,   # season standing = best N + Championship (scoring.md)
+        "fold_duplicates": True,   # ACTIVE race (Kerry 2026-09-11)
         "contest_type": "NET Points Race",
         "chapter": "Austin",
         "enroll_chapter": "Austin",
@@ -7899,6 +7901,10 @@ def find_points_race_duplicates(db_path: str | Path | None = None) -> dict:
             for k, g in by_key.items():
                 if len(g) > 1:
                     out["unmerged"].append({"race_key": rk, "key": list(k),
+                                            "folding": bool((_GG_POINTS_RACES.get(rk) or {}).get("fold_duplicates")),
+                                            "note": ("active race — fold on next refresh" if
+                                                     (_GG_POINTS_RACES.get(rk) or {}).get("fold_duplicates")
+                                                     else "concluded race — report only, Kerry decides"),
                                             "rows": [{kk: x[kk] for kk in
                                                       ("id", "rank", "player_name", "customer_id",
                                                        "tournaments", "total_points", "member_card_id")}
@@ -8073,10 +8079,17 @@ def refresh_points_race_standings(race_key: str,
                            ", ".join(unmatched[:12]))
         # One person = one row (Kerry 2026-09-11): GG can carry two member
         # records for one player; fold them here so every board that reads
-        # this snapshot (city races, cups, monthly, spotlight) agrees.
-        standings, merges = _merge_duplicate_standings(
-            standings, race=race,
-            detail_fetcher=lambda card: _member_detail_events(race, card))
+        # this snapshot agrees. ONLY on races flagged fold_duplicates — the
+        # active Fall races. Kerry, same day: "All previous spring/summer
+        # races are concluded and should not be touched unless see a
+        # discrepancy. And then you need to communicate to me before
+        # changing." Concluded boards stay GG's rows verbatim; their
+        # doubles are REPORTED by scoring-race-dupes, never folded.
+        merges = []
+        if race.get("fold_duplicates"):
+            standings, merges = _merge_duplicate_standings(
+                standings, race=race,
+                detail_fetcher=lambda card: _member_detail_events(race, card))
         for m in merges:
             logger.warning("GG points race %r: folded %d GG records for %s "
                            "(cards %s) -> %s pts / %s rounds [%s]", race_key,

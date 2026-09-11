@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.371.8";
+window.TGF_VERSION = "2.371.9";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.371.9",
+    date: "2026-09-11",
+    changes: [
+      "Standings fold scoped to the ACTIVE races only (Kerry: 'I'm only talking about reviewing currently active points races... Austin Fall and San Antonio Fall. All previous spring/summer races are concluded and should not be touched unless see a discrepancy. And then you need to communicate to me before changing.'). SA Fall Net and Austin Fall Net fold duplicate GG member records; SAN ANTONIO Net, AUSTIN Net and THE PLAYERS CUP are re-fetched as GG's own rows, verbatim, and their doubles appear in scoring-race-dupes as report-only for Kerry's call.",
+    ],
+  },
   {
     version: "2.371.8",
     date: "2026-09-11",
