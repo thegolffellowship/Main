@@ -12784,9 +12784,10 @@ def team_net_parity(event_name: str, gg_url: str = "",
                 r["strokes"], r["par"], r["si"])
             ph_by_rid[r["rid"]] = r["ph"]
 
-    def _rh(x):   # GG-style half-up
-        import math as _m
-        return int(_m.floor(x + 0.5))
+    import math as _m
+
+    def _round(x, mode):
+        return int(_m.floor(x + 0.5)) if mode == "half_up" else int(_m.floor(x))
 
     teams = [t for t in (d.get("teams") or [])
              if any(m["scoring_round_id"] in holes_by_rid
@@ -12799,46 +12800,54 @@ def team_net_parity(event_name: str, gg_url: str = "",
         return {"error": "no playing handicaps on the cards"}
     min_field = min(field_phs)
 
-    def _th(ph, scheme, min_team):
+    def _th(ph, scheme, min_team, rmode):
         if ph is None:
             return 0
         base = min_field if scheme.endswith("field") else min_team
         if scheme.startswith("prod"):    # round(.75*ph) - round(.75*base)
-            return _rh(0.75 * ph) - _rh(0.75 * base)
-        return _rh(0.75 * (ph - base))   # round(.75*(ph - base))
+            return _round(0.75 * ph, rmode) - _round(0.75 * base, rmode)
+        return _round(0.75 * (ph - base), rmode)
 
     out_schemes: dict = {}
     for scheme in ("prod_off_field", "diff_off_field",
                    "prod_off_team", "diff_off_team"):
         for par3_off in (True, False):
-            key = scheme + ("|no_par3" if par3_off else "|par3_ok")
-            totals = []
-            for t in teams:
-                mem = [m for m in t["players"]
-                       if m["scoring_round_id"] in holes_by_rid]
-                phs = [ph_by_rid.get(m["scoring_round_id"]) for m in mem]
-                phs = [p for p in phs if p is not None]
-                min_team = min(phs) if phs else 0
-                per_hole_best: dict = {}
-                for m in mem:
-                    hd = holes_by_rid[m["scoring_round_id"]]
-                    th = _th(ph_by_rid.get(m["scoring_round_id"]),
-                             scheme, min_team)
-                    eligible = {hn: v[2] for hn, v in hd.items()
-                                if v[2] is not None
-                                and not (par3_off and v[1] == 3)}
-                    alloc = allocate_strokes(int(th), eligible) \
-                        if eligible else {}
-                    for hn, (s, _p, _si) in hd.items():
-                        net = s - (alloc.get(hn) or 0)
-                        if (hn not in per_hole_best
-                                or net < per_hole_best[hn]):
-                            per_hole_best[hn] = net
-                totals.append({
-                    "team": " + ".join(m["player_name"]
-                                       for m in t["players"]),
-                    "total": sum(per_hole_best.values())})
-            out_schemes[key] = totals
+            for rmode in ("half_up", "floor"):
+                for cap3 in (True, False):
+                    key = (f"{scheme}|{'no_par3' if par3_off else 'par3_ok'}"
+                           f"|{rmode}|{'cap3' if cap3 else 'nocap'}")
+                    totals = []
+                    for t in teams:
+                        mem = [m for m in t["players"]
+                               if m["scoring_round_id"] in holes_by_rid]
+                        phs = [ph_by_rid.get(m["scoring_round_id"])
+                               for m in mem]
+                        phs = [p for p in phs if p is not None]
+                        min_team = min(phs) if phs else 0
+                        per_hole_best: dict = {}
+                        for m in mem:
+                            hd = holes_by_rid[m["scoring_round_id"]]
+                            th = _th(ph_by_rid.get(m["scoring_round_id"]),
+                                     scheme, min_team, rmode)
+                            eligible = {hn: v[2] for hn, v in hd.items()
+                                        if v[2] is not None
+                                        and not (par3_off and v[1] == 3)}
+                            alloc = (allocate_strokes(int(th), eligible)
+                                     if eligible else {})
+                            for hn, (s, p_, _si) in hd.items():
+                                # Max Triple: gross caps at par+3 before
+                                # pops (global standard, side-games.md)
+                                if cap3 and p_ is not None:
+                                    s = min(s, p_ + 3)
+                                net = s - (alloc.get(hn) or 0)
+                                if (hn not in per_hole_best
+                                        or net < per_hole_best[hn]):
+                                    per_hole_best[hn] = net
+                        totals.append({
+                            "team": " + ".join(m["player_name"]
+                                               for m in t["players"]),
+                            "total": sum(per_hole_best.values())})
+                    out_schemes[key] = totals
 
     gg_totals = []
     if gg_url:
@@ -12875,6 +12884,11 @@ def team_net_parity(event_name: str, gg_url: str = "",
                             hits += 1
                         break
             verdict[key] = f"{hits}/{len(totals)} teams match GG"
+    if verdict:
+        # keep the full verdict, but only ship totals for the best combos
+        best_n = max(int(v.split("/")[0]) for v in verdict.values())
+        out_schemes = {k: v for k, v in out_schemes.items()
+                       if verdict.get(k, "").startswith(f"{best_n}/")}
     return {"event": event_name, "min_field_ph": min_field,
             "schemes": out_schemes, "gg_board": gg_totals,
             "verdict": verdict}
