@@ -1772,6 +1772,9 @@ def _scoring_dispatch(url: str, extract: str):
       scoring-membership-terms-repair[:apply]  early renewals continue at the
                                    365 date (dry run default)
       scoring-membership-sync      terms → status reconcile now (manager comps)
+      scoring-race-dupes[:refresh]  one person = one row on every Season Contests
+                                   board (GG duplicate member records folded;
+                                   refresh re-fetches all races first)
       scoring-hcp-distribution     member handicap-index spread (18-hole equiv.)
       scoring-brevo-draft[:dry|review|apply]  Wednesday TGF Insider: fill the
                                    public recap template from the week's events;
@@ -3042,6 +3045,23 @@ def _scoring_dispatch(url: str, extract: str):
             _done = [i for i in _ids if db.dismiss_parse_warning(i)]
             _audit("scoring-parse-warning-dismiss", f"ids={_done} note={_note.strip()}")
             return json.dumps({"dismissed": _done, "note": _note.strip()}, indent=2)
+        if cmd == "scoring-race-dupes":
+            # "[refresh]" — one person = one row across every Season Contests
+            # board. refresh re-fetches every GG race first (write-time merge
+            # of duplicate GG member records), then reports what was folded,
+            # anything still doubled, and duplicate enrollments.
+            _refresh = (arg or "").strip().lower() == "refresh"
+            _done = {}
+            if _refresh:
+                for _rk in db._GG_POINTS_RACES:
+                    try:
+                        _done[_rk] = db.refresh_points_race_standings(_rk)
+                    except Exception as _exc:
+                        _done[_rk] = f"error: {_exc}"
+                _audit("scoring-race-dupes", f"refreshed={list(_done)}")
+            _res = db.find_points_race_duplicates()
+            _res["refreshed"] = _done
+            return json.dumps(_res, indent=2, default=str)
         if cmd == "scoring-hcp-distribution":
             # Spread of established handicap indexes across current members
             # (18-hole equivalents) — the "Am I good enough?" numbers.

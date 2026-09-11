@@ -702,6 +702,17 @@ def parse_page_structure(html: str, base_url: str) -> dict:
     }
 
 
+def _card_ids_by_name_ordered(html: str) -> dict:
+    """{display name: [member_card_id, ...] in page order}. Names that
+    appear twice keep BOTH ids, so duplicate GG member records stay
+    distinguishable downstream."""
+    out: dict = {}
+    for cid, name in re.findall(
+            r'data-member-card-id="(\d+)"[^>]*>\s*([^<]+?)\s*</a>', html):
+        out.setdefault(name.strip(), []).append(cid)
+    return out
+
+
 def fetch_season_points_race(page_id: str, league_id: str = "514047",
                              host: str = "tgf-sa.golfgenius.com") -> list:
     """Fetch and normalize a season_points_v2 widget (points race standings).
@@ -759,17 +770,17 @@ def fetch_season_points_race(page_id: str, league_id: str = "514047",
 
         # Player rows carry data-member-card-id on the expandable name link —
         # the key GG's individual_info endpoint needs for per-round detail
-        card_ids = dict(re.findall(
-            r'data-member-card-id="(\d+)"[^>]*>\s*([^<]+?)\s*</a>',
-            page["html"],
-        ))
-        card_by_name = {name: cid for cid, name in card_ids.items()}
+        # Two GG member records can share a display name (YOUNGS, Luke twice
+        # on Austin Fall Net, 2026-09-11) — a name→id dict kept only one id
+        # for both rows. Hand the ids out in page order instead.
+        card_queue = _card_ids_by_name_ordered(page["html"])
 
         rows = []
         for r in table[1:]:
             player = cell(r, "player")
             if not player:
                 continue
+            q = card_queue.get(player)
             rows.append({
                 "rank": cell(r, "rank"),
                 "prev_rank": cell(r, "prev_rank"),
@@ -779,7 +790,7 @@ def fetch_season_points_race(page_id: str, league_id: str = "514047",
                 "wins": _num(cell(r, "wins")),
                 "total_points": _num(cell(r, "points")),
                 "points_behind": _num(cell(r, "behind")),
-                "member_card_id": card_by_name.get(player),
+                "member_card_id": (q.pop(0) if q else None),
             })
         if rows:
             return rows

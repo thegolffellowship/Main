@@ -7674,6 +7674,141 @@ def _ensure_gg_points_table(conn: sqlite3.Connection) -> None:
             "ALTER TABLE gg_points_standings ADD COLUMN member_card_id TEXT")
     except sqlite3.OperationalError:
         pass
+    try:  # v2.371.5: GG duplicate member records merged at write time
+        conn.execute(
+            "ALTER TABLE gg_points_standings ADD COLUMN merged_from TEXT")
+    except sqlite3.OperationalError:
+        pass
+
+
+def _standings_dupe_key(row: dict) -> tuple:
+    """One person = one row. customer_id when resolved; otherwise the
+    normalised GG name ("YOUNGS, Luke" / "Youngs, Luke " collapse)."""
+    if row.get("customer_id"):
+        return ("cid", row["customer_id"])
+    return ("name", re.sub(r"\s+", " ", (row.get("player_name") or "")).strip().lower())
+
+
+def _merge_duplicate_standings(rows: list) -> tuple:
+    """Collapse GG duplicate member records inside one race snapshot.
+
+    Kerry 2026-09-11 (Austin Fall Net showed YOUNGS, Luke twice — T3 with
+    20 pts / 2 rounds AND 5th with 17 pts / 2 rounds, two member records
+    on the GG side): rows that resolve to the same customer (or, unresolved,
+    the same name) become ONE row — tournaments, wins and points summed,
+    the field re-ranked GG-style (competition ranking, "T" on ties),
+    points_behind recomputed from the new leader. Untouched races keep GG's
+    own rank / prev_rank / behind exactly. Returns (rows, merges) where
+    merges lists what was folded, for the audit trail and the report.
+    """
+    groups: dict = {}
+    order: list = []
+    for r in rows:
+        k = _standings_dupe_key(r)
+        if k not in groups:
+            groups[k] = []
+            order.append(k)
+        groups[k].append(r)
+    merges = []
+    if all(len(groups[k]) == 1 for k in order):
+        return rows, merges
+
+    def _n(v):
+        return v if isinstance(v, (int, float)) else 0
+
+    out = []
+    for k in order:
+        g = groups[k]
+        if len(g) == 1:
+            out.append(dict(g[0]))
+            continue
+        base = dict(g[0])
+        base["tournaments"] = sum(_n(x.get("tournaments")) for x in g)
+        base["wins"] = sum(_n(x.get("wins")) for x in g)
+        base["total_points"] = round(sum(_n(x.get("total_points")) for x in g), 2)
+        base["prev_rank"] = ""          # GG's arrows are per-record; unknown after a fold
+        base["merged_from"] = json.dumps([
+            {"player_name": x.get("player_name"), "member_card_id": x.get("member_card_id"),
+             "rank": x.get("rank"), "tournaments": x.get("tournaments"),
+             "total_points": x.get("total_points")} for x in g])
+        merges.append({"player_name": base.get("player_name"),
+                       "customer_id": base.get("customer_id"),
+                       "records": len(g),
+                       "member_card_ids": [x.get("member_card_id") for x in g],
+                       "tournaments": base["tournaments"],
+                       "total_points": base["total_points"]})
+        out.append(base)
+
+    # Re-rank the whole field (competition ranking, GG's "T" prefix).
+    out.sort(key=lambda r: -(r["total_points"] if isinstance(r.get("total_points"), (int, float)) else float("-inf")))
+    leader = out[0]["total_points"] if out and isinstance(out[0].get("total_points"), (int, float)) else None
+    i = 0
+    while i < len(out):
+        j = i
+        while j + 1 < len(out) and out[j + 1].get("total_points") == out[i].get("total_points"):
+            j += 1
+        label = f"T{i + 1}" if j > i else f"{i + 1}"
+        for r in out[i:j + 1]:
+            r["rank"] = label
+            pts = r.get("total_points")
+            r["points_behind"] = (round(leader - pts, 2)
+                                  if leader is not None and isinstance(pts, (int, float)) else None)
+        i = j + 1
+    return out, merges
+
+
+def find_points_race_duplicates(db_path: str | Path | None = None) -> dict:
+    """Every Season Contests board, one person = one row check.
+
+    Reports (a) snapshot rows in one race that share a customer (or an
+    unresolved name) — the pre-merge state, (b) rows already folded by the
+    write-time merge (merged_from set) so the GG-side duplicate member
+    records can be merged in Golf Genius, and (c) duplicate enrollments in
+    season_contests (same customer, contest_type, season).
+    """
+    out = {"unmerged": [], "merged": [], "enrollment_dupes": [], "races_checked": 0}
+    with _connect(db_path) as conn:
+        _ensure_gg_points_table(conn)
+        races = [r["race_key"] for r in conn.execute(
+            "SELECT DISTINCT race_key FROM gg_points_standings").fetchall()]
+        out["races_checked"] = len(races)
+        for rk in races:
+            rows = [dict(r) for r in conn.execute(
+                """SELECT id, rank, player_name, customer_id, tournaments, total_points,
+                          member_card_id, merged_from
+                     FROM gg_points_standings WHERE race_key = ? ORDER BY id""", (rk,))]
+            by_key: dict = {}
+            for r in rows:
+                by_key.setdefault(_standings_dupe_key(r), []).append(r)
+                if r.get("merged_from"):
+                    try:
+                        src = json.loads(r["merged_from"])
+                    except Exception:
+                        src = r["merged_from"]
+                    out["merged"].append({"race_key": rk, "player_name": r["player_name"],
+                                          "customer_id": r["customer_id"], "rank": r["rank"],
+                                          "tournaments": r["tournaments"],
+                                          "total_points": r["total_points"], "gg_records": src})
+            for k, g in by_key.items():
+                if len(g) > 1:
+                    out["unmerged"].append({"race_key": rk, "key": list(k),
+                                            "rows": [{kk: x[kk] for kk in
+                                                      ("id", "rank", "player_name", "customer_id",
+                                                       "tournaments", "total_points", "member_card_id")}
+                                                     for x in g]})
+        try:
+            for r in conn.execute(
+                    """SELECT customer_id, contest_type, COALESCE(season,'') AS season,
+                              COUNT(*) AS n, GROUP_CONCAT(id) AS ids,
+                              MIN(customer_name) AS customer_name
+                         FROM season_contests
+                        WHERE customer_id IS NOT NULL
+                        GROUP BY customer_id, contest_type, COALESCE(season,'')
+                       HAVING n > 1"""):
+                out["enrollment_dupes"].append(dict(r))
+        except sqlite3.OperationalError:
+            pass
+    return out
 
 
 def _resolve_gg_person(conn: sqlite3.Connection, raw_name: str,
@@ -7829,20 +7964,43 @@ def refresh_points_race_standings(race_key: str,
             logger.warning("GG points race %r: %d name(s) did not resolve to a "
                            "customer: %s", race_key, len(unmatched),
                            ", ".join(unmatched[:12]))
+        # One person = one row (Kerry 2026-09-11): GG can carry two member
+        # records for one player; fold them here so every board that reads
+        # this snapshot (city races, cups, monthly, spotlight) agrees.
+        standings, merges = _merge_duplicate_standings(standings)
+        for m in merges:
+            logger.warning("GG points race %r: folded %d GG records for %s "
+                           "(cards %s) -> %s pts / %s rounds", race_key,
+                           m["records"], m["player_name"], m["member_card_ids"],
+                           m["total_points"], m["tournaments"])
+            if (race_key.endswith("fall_net") and m["tournaments"]
+                    and m["tournaments"] > 6):
+                logger.warning("GG points race %r: %s now carries %d rounds — "
+                               "Fall Net counts the best 6, a summed fold may "
+                               "overstate until GG merges the records",
+                               race_key, m["player_name"], m["tournaments"])
         conn.execute("DELETE FROM gg_points_standings WHERE race_key = ?",
                      (race_key,))
         conn.executemany(
             """INSERT INTO gg_points_standings
                    (race_key, rank, prev_rank, player_name, customer_id,
                     affiliation, tournaments, wins, total_points,
-                    points_behind, member_card_id)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    points_behind, member_card_id, merged_from)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             [(race_key, r["rank"], r["prev_rank"], r["player_name"],
               r["customer_id"], r["affiliation"], r["tournaments"], r["wins"],
               r["total_points"], r["points_behind"],
-              r.get("member_card_id")) for r in standings],
+              r.get("member_card_id"), r.get("merged_from")) for r in standings],
         )
         conn.commit()
+        if merges:
+            try:
+                log_agent_action("gg-points-sync", "standings-duplicate-merge",
+                                 f"{race_key}: " + "; ".join(
+                                     f"{m['player_name']} x{m['records']} cards={m['member_card_ids']}"
+                                     for m in merges), db_path=db_path)
+            except Exception:
+                pass
     logger.info("GG points race %r: persisted %d standings rows",
                 race_key, len(standings))
     return len(standings)

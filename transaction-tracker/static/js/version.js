@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.371.4";
+window.TGF_VERSION = "2.371.5";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.371.5",
+    date: "2026-09-11",
+    changes: [
+      "Season Contests: one person = one row (Kerry: 'Why is there two Luke Youngs showing?'). Golf Genius carried two member records for him on Austin Fall Net; the Tracker mirrored the page row for row. Every GG points-race refresh now folds rows that resolve to the same customer — rounds, wins and points summed, the field re-ranked GG-style with T ties, points-behind recomputed, the source GG records kept on the row — so every board reading the snapshot (city races, both cups, Monthly, spotlight) agrees. The scraper keeps both member card ids when a name repeats. New bridge scoring-race-dupes[:refresh] re-fetches all races and reports folded rows (with the GG card ids to merge in Golf Genius), anything still doubled, and duplicate enrollments.",
+    ],
+  },
   {
     version: "2.371.4",
     date: "2026-09-11",

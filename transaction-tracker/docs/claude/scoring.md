@@ -493,6 +493,29 @@ game. The game definitions captured in side-games.md ARE that lock;
 GG cross-checks confirm our encoding matches the admin's current
 standard, but the standard is TGF's, not GG's.
 
+## One person = one row on the points boards (Kerry 2026-09-11, v2.371.5)
+
+Golf Genius can carry two member records for one player (Austin Fall
+Net showed YOUNGS, Luke twice: T3 with 20 pts / 2 rounds AND 5th with
+17 pts / 2 rounds). The snapshot used to mirror the page row for row.
+Now `refresh_points_race_standings` folds rows that resolve to one
+customer (or, unresolved, one normalised name) at write time:
+tournaments / wins / points summed, the field re-ranked GG-style
+(competition ranking, "T" on ties), `points_behind` recomputed from the
+new leader, `prev_rank` blanked on the folded row, and the source GG
+records kept in `gg_points_standings.merged_from` (JSON: name, card id,
+rank, rounds, points). Untouched races keep GG's own rank / arrows /
+behind exactly. Every reader of the snapshot (city races, Fellowship
+Cup, Players Cup, Monthly, spotlight, eligibility counts) inherits the
+fold. Caveat: Fall Net counts the best 6 — a folded player with more
+than 6 rounds is logged as a warning because a sum can overstate; the
+real fix is merging the member records in Golf Genius. The scraper
+also now keeps BOTH `member_card_id`s when a display name repeats (a
+name→id dict had collapsed them). Bridge `scoring-race-dupes[:refresh]`
+re-fetches every race and reports folded rows (with the GG card ids to
+merge), anything still doubled, and duplicate `season_contests`
+enrollments. Test: `test_points_race_dupes.py`.
+
 ## Points-race rank movement (v2.42.0)
 
 The season races (SAN ANTONIO Net / AUSTIN Net / THE PLAYERS CUP)
