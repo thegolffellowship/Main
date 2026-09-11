@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.378.1";
+window.TGF_VERSION = "2.378.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.378.2",
+    date: "2026-09-11",
+    changes: [
+      "Events leaderboard iteration 3 (Kerry's team-card review): a front-9 event no longer renders holes 1-18 — the grid's columns come only from holes actually played (GG cards carry empty rows for the unplayed nine). The team card and skins chart now build on THE card standard's metrics (same cell sizing, grid color and 110px name column as tgf-standards), so they column-align with the expanded player scorecards beneath them; the total column reads OUT or IN per the side played. The ball(s) that COUNTED for the team best-ball score are highlighted with a green fill — circles stay reserved for the standard's under-par mark and the skins chart's winning skins — and the winning team's row is highlighted in the team list.",
+    ],
+  },
   {
     version: "2.378.1",
     date: "2026-09-11",
