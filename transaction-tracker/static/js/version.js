@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.373.0";
+window.TGF_VERSION = "2.374.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.374.0",
+    date: "2026-09-11",
+    changes: [
+      "Winnings by Game drill-down (Kerry, same-day follow-up to v2.372.0): every game subtotal inside a bundle now expands to the EVENTS that game was won in — event name, date, flight and place, and the amount won there. Two payout rows in one event fold to one line with the details accumulated (CTP 'Hole 13 · Hole 16'); skins show their holes and flight ('Holes 2 & 18 · High Flight'); season rows show the standings place. The description parsing (place with ties, holes, LOW/MID/HIGH or numeric flights) moved to a shared _payout_detail_bits helper used by BOTH the Recent Winnings labels and this drill-down, so the two surfaces can never read the same payout row differently. Tests grew to 30 checks in test_spotlight_winnings.py.",
+    ],
+  },
   {
     version: "2.373.0",
     date: "2026-09-11",
