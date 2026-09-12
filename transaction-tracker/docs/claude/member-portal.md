@@ -641,6 +641,11 @@ legend shows only the flights that paid; MVP keeps the ratified
 purple. Backend: overall rows carry `net_flight` / `gross_flight` /
 `skins_flight` ordinals (`_flight_ordinals` over the sectioned
 boards — 1 = low flight, placed non-buyers included).
+v2.385.0: column order is # | Player | **G** | **N** | Idx | PH |
+holes… | Pts | Won — the two totals sit immediately after the name
+as one-letter columns (Kerry: "move both of those score columns all
+the way left"), so a phone reads name-and-score without scrolling
+the hole block; titles still spell them out.
 v2.384.1: sort headers carry NO arrow glyphs (they padded every
 numeric header and widened the column beneath it) — the ACTIVE
 sort column is its header cell filled TGF orange, which costs no

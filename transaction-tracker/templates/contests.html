@@ -2696,14 +2696,17 @@
                 ? `<span class="evlb-circ" style="border-color:${skC};color:${skC};" title="skin — flight ${r.skins_flight || 1}">${h[1]}</span>`
                 : h[1]}</td>`;
         }).join("");
+        // Column order (Kerry 2026-09-12): the two scores that matter —
+        // G(ross) and N(et) — sit immediately after the player name, left
+        // of everything else, so they read without scrolling the holes.
         return `<tr class="evlb-plr" data-rid="${r.scoring_round_id || ""}">` +
             `<td>${r._rank ?? ""}</td>` +
             `<td class="nm">${escapeHtml(r.player_name)}</td>` +
+            `<td${r.win_gross ? ` style="${evlbFlightTint(r.gross_flight)}" title="won Individual Gross — flight ${r.gross_flight || 1}"` : ""}>${r.gross ?? ""}</td>` +
+            `<td${r.win_net ? ` style="${evlbFlightTint(r.net_flight)}" title="won Individual Net — flight ${r.net_flight || 1}"` : ""}><b>${r.net ?? ""}</b></td>` +
             `<td>${r.index != null ? Number(r.index).toFixed(1) : ""}</td>` +
             `<td>${r.hcp ?? ""}</td>` +
             holeCells +
-            `<td${r.win_gross ? ` style="${evlbFlightTint(r.gross_flight)}" title="won Individual Gross — flight ${r.gross_flight || 1}"` : ""}>${r.gross ?? ""}</td>` +
-            `<td${r.win_net ? ` style="${evlbFlightTint(r.net_flight)}" title="won Individual Net — flight ${r.net_flight || 1}"` : ""}><b>${r.net ?? ""}</b></td>` +
             `<td${r.win_mvp ? ' class="w-mvp" title="Event MVP"' : ""}>${r.net_pts ?? ""}</td>` +
             `<td class="won">${r.won_total > 0 ? "$" + Number(r.won_total).toFixed(2) : ""}</td></tr>`;
     }
@@ -2756,10 +2759,11 @@
             ? (ovWinStrips ? `<div class="evlb-winbox">${ovWinStrips}</div>` : "") +
               `<div class="evlb-scroll"><table class="evlb-holes evlb-ovr"><thead>` +
               `<tr><th data-k="net" class="sortable">#</th><th data-k="player" class="nm sortable">Player</th>` +
+              `<th data-k="gross" class="sortable" title="Gross score">G</th>` +
+              `<th data-k="net" class="sortable asc" title="Net score">N</th>` +
               `<th data-k="index" class="sortable" title="Handicap Index">Idx</th>` +
               `<th data-k="hcp" class="sortable" title="Playing Handicap">PH</th>` +
               (d.hole_cols || []).map(n => `<th data-k="h:${n}" class="sortable">${n}</th>`).join("") +
-              `<th data-k="gross" class="sortable">Gross</th><th data-k="net" class="sortable asc">Net</th>` +
               `<th data-k="pts" class="sortable">Pts</th><th data-k="won" class="won sortable">Won</th></tr></thead><tbody>` +
               ovRows.map(r => evlbOvrRowHtml(d, r)).join("") +
               `</tbody></table></div>` +
@@ -2777,7 +2781,7 @@
                   for (let f = 1; f <= maxF; f++)
                       sw.push(`<span class="lg" style="${evlbFlightTint(f)}">Flight ${f}</span>`);
                   return `<p class="evlb-legend">Money winners color-code by FLIGHT: ${sw.join(" ")} — ` +
-                      `a tinted <b>Net</b> or <b>Gross</b> total won that game in that flight; a circled hole score is a skin won in that flight &middot; ` +
+                      `a tinted <b>N</b> (net) or <b>G</b> (gross) total won that game in that flight; a circled hole score is a skin won in that flight &middot; ` +
                       `<span class="lg w-mvp">Pts</span> Event MVP &middot; ` +
                       `<b>Won</b> = total collected for this event, all games (team &amp; proxies included). Tap a player for their scorecard; tap a column header to sort and re-rank.</p>`;
               })()

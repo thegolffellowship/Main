@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.384.1";
+window.TGF_VERSION = "2.385.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.385.0",
+    date: "2026-09-12",
+    changes: [
+      "OVERALL board column order (Kerry: 'Change gross to G and net to N and move both of those score columns all the way left'): the two totals that matter now sit immediately after the player name as one-letter columns \u2014 # | Player | G | N | Idx | PH | holes\u2026 | Pts | Won \u2014 so a phone reads name-and-score with no horizontal scrolling, and the full words stop padding two columns. Hovering G or N still names them (Gross score / Net score). The flight win tints, sorting and re-ranking all follow the columns unchanged; the legend now reads in the new letters.",
+    ],
+  },
   {
     version: "2.384.1",
     date: "2026-09-12",
