@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.371.12";
+window.TGF_VERSION = "2.371.13";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.371.13",
+    date: "2026-09-12",
+    changes: [
+      "Pairings walk keeps a foursome that contains a plain 'First Last' name. Golf Genius prints an unlinked or guest profile without the LAST, First comma (Zac Hammond at a18.5 Forest Creek), and the team-board parser treated that seat as unparseable and dropped the whole group — the WINNING team, 3 of 4 groups ingested. Plain two-to-four-word names are now accepted as seats; the customer resolver already handles both spellings.",
+    ],
+  },
   {
     version: "2.371.12",
     date: "2026-09-11",

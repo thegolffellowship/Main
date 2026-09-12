@@ -54411,6 +54411,13 @@ def _parse_teamnet_groups(tables: list) -> list:
                         seats.append(None)
                     elif "," in part and 4 < len(part) < 60:
                         seats.append(part)
+                    elif _PLAIN_NAME_RE.match(part) and 4 < len(part) < 60:
+                        # GG prints an unlinked / guest profile as plain
+                        # "First Last" (no comma). a18.5 Forest Creek
+                        # 2026-09-12: "Zac Hammond" dropped the whole
+                        # WINNING team from the pairings walk (3 of 4
+                        # groups). The resolver handles either spelling.
+                        seats.append(part)
                     else:
                         ok = False
                         break
@@ -54418,6 +54425,9 @@ def _parse_teamnet_groups(tables: list) -> list:
                     groups.append(seats)
                 break  # one group cell per row
     return groups
+
+
+_PLAIN_NAME_RE = re.compile(r"^[A-Za-z][A-Za-z'.\-]*(?: [A-Za-z][A-Za-z'.\-]*){1,3}$")
 
 
 def import_gg_teamnet_round(portal: str, round_id: str, apply: bool = False,
