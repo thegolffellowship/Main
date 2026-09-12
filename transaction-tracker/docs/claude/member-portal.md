@@ -641,6 +641,12 @@ legend shows only the flights that paid; MVP keeps the ratified
 purple. Backend: overall rows carry `net_flight` / `gross_flight` /
 `skins_flight` ordinals (`_flight_ordinals` over the sectioned
 boards — 1 = low flight, placed non-buyers included).
+v2.388.0 (SKINS board): count + money move LEFT of the holes —
+Player | Skins | Won | 1 2 3… — black rule right of Won, and the
+green $ badges beside names are retired (money lives in the Won
+column now). The `.bl`/`.br` group rules and the `.won` money
+column moved from `.evlb-ovr` to `.evlb-holes`, so EVERY board on
+the shared hole-grid standard inherits them.
 v2.387.0: the score block sits RIGHT of the last hole with a rule
 between gross and net — # | Player | Idx | PH | holes… | G ± | N ± |
 Pts | Won — and a **Hole by hole** checkbox above the board

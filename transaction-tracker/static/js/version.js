@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.387.5";
+window.TGF_VERSION = "2.388.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.388.0",
+    date: "2026-09-12",
+    changes: [
+      "SKINS board restructured (Kerry): the skins COUNT and the money move to the LEFT of the holes \u2014 Player | Skins | Won | 1 2 3\u2026 \u2014 with a black rule right of Won. The green '$' badges beside each name are retired; the money now sits in its own right-aligned Won column, the same treatment the OVERALL board uses, so the names stop being pushed off a phone screen by a chip and every dollar figure lines up in one place.",
+      "The group-rule (.bl/.br) and money-column (.won) styles moved from the OVERALL table to EVERY hole grid \u2014 the class fix, not the instance: any board built on the shared hole-grid standard now gets the same black column rules and green tabular money column without re-declaring them.",
+    ],
+  },
   {
     version: "2.387.5",
     date: "2026-09-12",

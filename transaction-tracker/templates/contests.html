@@ -324,8 +324,10 @@
            nth-child, because an expanded scorecard row is injected into
            the same tbody and would flip the parity of everything below
            it. Win tints are inline, so they always paint over both. */
-        .evlb-ovr td.bl, .evlb-ovr th.bl { border-left: 2px solid #1B1B1B; }
-        .evlb-ovr td.br, .evlb-ovr th.br { border-right: 2px solid #1B1B1B; }
+        /* group rules + the money column belong to EVERY hole grid, not
+           just OVERALL — the skins board uses the same Won column */
+        .evlb-holes td.bl, .evlb-holes th.bl { border-left: 2px solid #1B1B1B; }
+        .evlb-holes td.br, .evlb-holes th.br { border-right: 2px solid #1B1B1B; }
         .evlb-ovr tr.alt td { background: #F3F3F1; }
         .evlb-ovr td.tp { color: #6B7280; font-size: 0.72rem; }
         .evlb-ovr.no-holes .h { display: none; }
@@ -333,7 +335,7 @@
             font-size: 12px; color: #4B5563; margin: 0 0 6px; cursor: pointer;
             user-select: none; }
         .evlb-holetog input { accent-color: var(--primary, #E87C3E); cursor: pointer; }
-        .evlb-ovr td.won, .evlb-ovr th.won { text-align: right; font-weight: 700;
+        .evlb-holes td.won, .evlb-holes th.won { text-align: right; font-weight: 700;
             color: var(--money-green, #15803D); font-variant-numeric: tabular-nums; min-width: 58px; }
         /* OVERALL sortable headers (Kerry 2026-09-11: no arrow glyphs —
            they widened every numeric column; the ACTIVE sort column is
@@ -2832,7 +2834,13 @@
         // SKINS: GG-style overall chart — buyers per flight, hole-by-hole
         // gross with winning skins circled; everyone NOT in skins listed
         // below with their hole scores (Kerry 2026-09-11)
-        const holeHead = `<tr><th class="nm">Player</th>${(d.hole_cols || []).map(n => `<th>${n}</th>`).join("")}<th>Skins</th></tr>`;
+        // Kerry 2026-09-12: SKINS count and money move to the LEFT of the
+        // holes — Player | Skins | Won | 1 2 3… — with a black rule right
+        // of Won, and the green $ badges retired (the money now has its
+        // own column, same treatment as the OVERALL board's Won).
+        const holeHead = `<tr><th class="nm">Player</th><th>Skins</th>` +
+            `<th class="won br">Won</th>` +
+            (d.hole_cols || []).map(n => `<th>${n}</th>`).join("") + `</tr>`;
         const skinCircle = (n, v, rid) => ((d.skin_cells || {})[String(rid)] || []).includes(n);
         // buyers on top of each flight; everyone NOT in skins sits at
         // the BOTTOM of the flight their handicap places them, in grey
@@ -2840,13 +2848,16 @@
         const skinsHtml = (d.skins_board || []).some(s => (s.rows || []).some(r => r.buyer))
             ? offNotes + `<div class="evlb-scroll"><table class="evlb-holes"><thead>${holeHead}</thead><tbody>` +
               d.skins_board.map(sec =>
-                  (sec.label ? `<tr><td colspan="${(d.hole_cols || []).length + 2}" style="background:#1B1B1B;color:#fff;font:700 10px/1.7 'Bitter',serif;letter-spacing:1px;text-align:left;padding:4px 10px;">${escapeHtml(sec.label)}</td></tr>` : "") +
+                  (sec.label ? `<tr><td colspan="${(d.hole_cols || []).length + 3}" style="background:#1B1B1B;color:#fff;font:700 10px/1.7 'Bitter',serif;letter-spacing:1px;text-align:left;padding:4px 10px;">${escapeHtml(sec.label)}</td></tr>` : "") +
                   sec.rows.map(r => {
                       const won = ((d.skin_cells || {})[String(r.scoring_round_id)]) || [];
+                      const cash = (r.won || []).reduce((t, w) => t + (w.cents || 0), 0);
                       return `<tr class="evlb-plr${r.buyer ? "" : " mute"}" data-rid="${r.scoring_round_id || ""}">` +
-                          `<td class="nm">${escapeHtml(r.player_name)}${r.buyer ? evlbWonChips(r.won) : ""}</td>` +
+                          `<td class="nm">${escapeHtml(r.player_name)}</td>` +
+                          `<td>${r.buyer && won.length ? `<b>${won.length}</b>` : ""}</td>` +
+                          `<td class="won br">${cash > 0 ? "$" + (cash / 100).toFixed(2) : ""}</td>` +
                           evlbHoleCells(d, r.scoring_round_id, r.buyer ? { circle: skinCircle } : {}) +
-                          `<td>${r.buyer && won.length ? `<b>${won.length}</b>` : ""}</td></tr>`;
+                          `</tr>`;
                   }).join("")).join("") +
               `</tbody></table></div>`
             : '<p style="color:var(--text-muted);">No skins buyers recorded.</p>';
