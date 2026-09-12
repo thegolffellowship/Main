@@ -4915,6 +4915,8 @@ def _scoring_dispatch(url: str, extract: str):
                 "overall": [{
                     "player": r["player_name"], "net": r["net"],
                     "gross": r["gross"], "pts": r["net_pts"],
+                    "par": r["par"], "to_par": [r["to_par_gross"],
+                                                r["to_par_net"]],
                     "wins": "".join(c for c, f in (
                         ("N", r["win_net"]), ("G", r["win_gross"]),
                         ("S", r["win_skins"]), ("M", r["win_mvp"])) if f),
