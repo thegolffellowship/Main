@@ -641,6 +641,11 @@ legend shows only the flights that paid; MVP keeps the ratified
 purple. Backend: overall rows carry `net_flight` / `gross_flight` /
 `skins_flight` ordinals (`_flight_ordinals` over the sectioned
 boards — 1 = low flight, placed non-buyers included).
+v2.384.1: sort headers carry NO arrow glyphs (they padded every
+numeric header and widened the column beneath it) — the ACTIVE
+sort column is its header cell filled TGF orange, which costs no
+width; on load that mark sits on Net, the real default sort key,
+not on the derived # rank.
 v2.383.0/.1: every column SORTS (tap to sort, tap again to flip;
 Pts/Won open high-first; blanks sink), and the # column RE-RANKS
 against the sorted column (Kerry: "re-rank based on which column is
