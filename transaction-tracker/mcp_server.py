@@ -2948,6 +2948,38 @@ def _scoring_dispatch(url: str, extract: str):
                                "acct_category": (_cat if _cat and
                                                  _cat != "-" else None),
                                "saved": True})
+        if cmd == "scoring-lsc-freeze":
+            # Freeze the Lone Star Cup page onto the FINAL roster
+            # snapshot (Kerry 2026-09-11: "harden the LONE STAR CUP
+            # page teams into final rosters so it doesn't take so long
+            # to load"): runs the live projection once, stores it in
+            # the lsc_roster_final dial; the API then serves it
+            # instantly with live deposit badges. "clear" reverts to
+            # the live projection. Audited.
+            if arg.strip().lower() == "clear":
+                db.set_app_setting("lsc_roster_final", "")
+                db.log_agent_action("mcp-claude", "scoring-lsc-freeze",
+                                    "cleared — back to live projection")
+                return json.dumps({"frozen": False, "cleared": True})
+            res = db.freeze_lsc_final_roster()
+            db.log_agent_action("mcp-claude", "scoring-lsc-freeze",
+                                f"frozen at {res.get('frozen_at')}")
+            return json.dumps(res, indent=2)
+        if cmd == "scoring-expense-promote":
+            # "<expense_id>" — promote an expense_transactions row into
+            # the acct_transactions ledger via the standard
+            # promote_expense_to_ledger path (idempotent: an already-
+            # promoted row returns skipped). Exists because the
+            # classifier occasionally records an incoming payment
+            # without promoting it (Zelle arrivals under raw bank
+            # names, and one-off Venmo rows), leaving the money linked
+            # to an event but invisible to the ledger-driven event
+            # financials. Entity defaults to TGF. Audited.
+            _xid = int(arg.strip())
+            res = db.promote_expense_to_ledger(_xid, None, "TGF")
+            db.log_agent_action("mcp-claude", "scoring-expense-promote",
+                                f"expense {_xid} -> {res}")
+            return json.dumps(res, indent=2)
         if cmd == "scoring-setting-set":
             # "<key>|<value>" — write an app_settings dial ("stored as a
             # setting is our standard for everything" — Kerry).
@@ -3786,11 +3818,17 @@ def _scoring_dispatch(url: str, extract: str):
         if cmd == "scoring-games-import":
             # GG-recorded CTP / Longest Putt / HIO / TEAM Net winners;
             # same widget-url contract + time budget as scoring-mvp-import.
-            # "[rewalk][|event=<name>]" — event= attaches an unmapped
+            # "[rewalk[=N]][|event=<name>]" — event= attaches an unmapped
             # round's winners to the named calendar event (championship
-            # rounds carry no [sa]N.N code; v2.188.5)
+            # rounds carry no [sa]N.N code; v2.188.5). rewalk=N re-walks
+            # the newest N rounds (bare "rewalk" = 2; v2.381.0 backfill
+            # of GG team-board totals needs a deeper window)
             _p = [x.strip() for x in (arg or "").split("|") if x.strip()]
-            _rw = 2 if any(x.lower().startswith("rewalk") for x in _p) else 0
+            _rw = 0
+            for x in _p:
+                if x.lower().startswith("rewalk"):
+                    _m = re.search(r"=\s*(\d+)", x)
+                    _rw = min(int(_m.group(1)), 12) if _m else 2
             _fe = next((x[6:].strip() for x in _p
                         if x.lower().startswith("event=")), None)
             return json.dumps(db.import_gg_game_results(
@@ -4846,6 +4884,84 @@ def _scoring_dispatch(url: str, extract: str):
             # Kerry's ratified course short names (2026-07-10) — one-shot
             # apply; /courses UI edits afterwards are never overwritten
             return json.dumps(db.apply_course_short_name_pins(), indent=2)
+        if cmd == "scoring-teamnet-parity":
+            # "<event>|<gg team-board v2tournaments url>" — computes the
+            # event's team-net totals under every plausible reading of
+            # 75%-off-lowest and diffs against GG's posted board (Kerry
+            # 2026-09-11: "Review where discrepancy is on GG and learn
+            # from it for our own uses"). Read-only.
+            _ev, _, _gurl = arg.partition("|")
+            return json.dumps(db.team_net_parity(_ev.strip(), _gurl.strip()),
+                              indent=2, default=str)
+        if cmd == "scoring-event-board":
+            # "<event>" — compact read of the events-leaderboard TEAM
+            # board for vetting: per team the GG position, GG posted
+            # total (score of record), our reconstruction total, purse,
+            # official flag. Read-only (v2.381.0).
+            _d = db.get_event_leaderboard(arg.strip())
+            if not _d:
+                return json.dumps({"error": "event not found"})
+            return json.dumps({
+                "event": arg.strip(),
+                "teams": [{
+                    "team": " + ".join(p["player_name"]
+                                       for p in t["players"]),
+                    "position": t.get("position"),
+                    "gg_total": t.get("gg_total"),
+                    "reconstruction": t.get("total_net"),
+                    "purse": t.get("purse"),
+                    "official": t.get("official"),
+                } for t in (_d.get("teams") or [])],
+                "overall": [{
+                    "player": r["player_name"], "net": r["net"],
+                    "gross": r["gross"], "pts": r["net_pts"],
+                    "par": r["par"], "to_par": [r["to_par_gross"],
+                                                r["to_par_net"]],
+                    "wins": "".join(c for c, f in (
+                        ("N", r["win_net"]), ("G", r["win_gross"]),
+                        ("S", r["win_skins"]), ("M", r["win_mvp"])) if f),
+                    "won": r["won_total"],
+                } for r in (_d.get("overall_board") or [])],
+                "games_off": _d.get("games_off")}, indent=2, default=str)
+        if cmd == "scoring-ca-queue":
+            # CA QUEUE read (mailbox #473/#474): "[<section>[|<status>]]"
+            _sec, _, _st = arg.partition("|")
+            return json.dumps(db.list_ca_queue(_sec.strip(), _st.strip()),
+                              indent=2, default=str)
+        if cmd == "scoring-ca-queue-upsert":
+            # "<json item>" — {id?|title, section?, owner?, status?,
+            # blocked_on?, mailbox_ref?, note?, author?}; author stamps
+            # the notes log. Writes audited like every MCP write.
+            try:
+                _item = json.loads(arg)
+            except ValueError as exc:
+                return json.dumps({"error": f"bad JSON: {exc}"})
+            _who = str(_item.pop("author", "") or "bridge")
+            _res = db.upsert_ca_queue_item(_item, author=_who)
+            if _res.get("ok"):
+                _audit("ca_queue_upsert",
+                       f"[{_who}] {'created' if _res.get('created') else 'updated'} "
+                       f"queue item #{_res['id']}: {_item.get('title') or _item.get('id')}")
+            return json.dumps(_res, indent=2, default=str)
+        if cmd == "scoring-ca-queue-note":
+            # "<id>|<author>|<note>"
+            _id, _, _rest = arg.partition("|")
+            _who, _, _note = _rest.partition("|")
+            _res = db.note_ca_queue_item(int(_id.strip()), _note.strip(),
+                                         _who.strip() or "bridge")
+            if _res.get("ok"):
+                _audit("ca_queue_note",
+                       f"[{_who.strip()}] noted queue item #{_id.strip()}")
+            return json.dumps(_res, indent=2, default=str)
+        if cmd == "scoring-ca-queue-close":
+            # "<id>|<author>" — marks done (never deletes; #473 rule)
+            _id, _, _who = arg.partition("|")
+            _res = db.close_ca_queue_item(int(_id.strip()),
+                                          _who.strip() or "bridge")
+            if _res.get("ok"):
+                _audit("ca_queue_close",
+                       f"[{_who.strip()}] closed queue item #{_id.strip()}")
+            return json.dumps(_res, indent=2, default=str)
         if cmd == "scoring-payouts-unpaid":
             # Every non-paid payout group + the customer's recent Venmo
             # payout receipts (linked flag + amounts) for match diagnosis
@@ -5587,6 +5703,106 @@ def determine_tgf_mvp(event_name: str) -> str:
     """
     from email_parser.database import determine_tgf_mvp as _det
     return json.dumps(_det(event_name), indent=2, default=str)
+
+
+@mcp.tool()
+def list_ca_queue(section: str = "", status: str = "") -> str:
+    """CA QUEUE — the admin-only open-items checklist Kerry works in the
+    Tracker (mailbox #473/#474). Lists rows grouped by section in enum
+    order (kerry_decision, ca_owed, cc_build, finance_cleanup, followups,
+    parked, settled), each with status/owner/blocked_on/mailbox_ref and
+    the append-only notes log. DONE rows are kept, never deleted.
+
+    Args:
+        section: optional filter to one section (enum value)
+        status: optional filter — open | blocked | done
+    """
+    from email_parser import database as db
+    return json.dumps(db.list_ca_queue(section.strip(), status.strip()),
+                      indent=2, default=str)
+
+
+@mcp.tool()
+def upsert_ca_queue_item(title: str = "", item_id: int = 0,
+                         section: str = "", owner: str = "",
+                         status: str = "", blocked_on: str = "",
+                         mailbox_ref: str = "", note: str = "",
+                         author: str = "platform-claude") -> str:
+    """Create or update a CA QUEUE item (mailbox #473/#474).
+
+    Matches by item_id when given, else by EXACT title
+    (case-insensitive), else inserts a new row at the bottom of its
+    section. Only the fields you pass change. Setting status=done
+    stamps done_at/done_by; setting a done row back to open/blocked is
+    a REOPEN — done_at clears and the transition is logged so history
+    survives. Every call stamps the author on the notes log and the
+    agent action log.
+
+    Args:
+        title: one-line item title (required for a new row)
+        item_id: existing row id to update (0 = match by title/insert)
+        section: kerry_decision | ca_owed | cc_build | finance_cleanup |
+            followups | parked | settled
+        owner: kerry | ca | lane name (free text)
+        status: open | blocked | done
+        blocked_on: what it waits on (free text)
+        mailbox_ref: comma-separated mailbox post ids
+        note: optional note appended to the item's log
+        author: who is writing (stamps notes + audit)
+    """
+    from email_parser import database as db
+    item: dict = {}
+    if item_id:
+        item["id"] = item_id
+    for k, v in (("title", title), ("section", section), ("owner", owner),
+                 ("status", status), ("blocked_on", blocked_on),
+                 ("mailbox_ref", mailbox_ref), ("note", note)):
+        if v:
+            item[k] = v
+    res = db.upsert_ca_queue_item(item, author=author)
+    if res.get("ok"):
+        _audit("ca_queue_upsert",
+               f"[{author}] {'created' if res.get('created') else 'updated'} "
+               f"queue item #{res['id']}: {title or item_id}")
+    return json.dumps(res, indent=2, default=str)
+
+
+@mcp.tool()
+def note_ca_queue_item(item_id: int, note: str,
+                       author: str = "platform-claude") -> str:
+    """Append a note to a CA QUEUE item's append-only log
+    (author + timestamp, leads.notes_log shape). Never edits or
+    removes existing notes.
+
+    Args:
+        item_id: the queue row id
+        note: the note text
+        author: who is writing
+    """
+    from email_parser import database as db
+    res = db.note_ca_queue_item(item_id, note, author)
+    if res.get("ok"):
+        _audit("ca_queue_note", f"[{author}] noted queue item #{item_id}")
+    return json.dumps(res, indent=2, default=str)
+
+
+@mcp.tool()
+def close_ca_queue_item(item_id: int,
+                        author: str = "platform-claude") -> str:
+    """Mark a CA QUEUE item done. NEVER deletes — the row keeps its
+    history and collapses under the Done band with date + who
+    (mailbox #473 rule). Reopen later via upsert_ca_queue_item
+    with status=open.
+
+    Args:
+        item_id: the queue row id
+        author: who is closing (stamped as done_by)
+    """
+    from email_parser import database as db
+    res = db.close_ca_queue_item(item_id, author)
+    if res.get("ok"):
+        _audit("ca_queue_close", f"[{author}] closed queue item #{item_id}")
+    return json.dumps(res, indent=2, default=str)
 
 
 @mcp.tool()

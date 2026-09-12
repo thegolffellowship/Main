@@ -10169,6 +10169,27 @@ def api_season_contest_removals():
     return jsonify(removals)
 
 
+# ── EVENTS LEADERBOARD (Kerry 2026-09-11, improvements lane) ──
+# ADMIN-ONLY pilot until Kerry approves member exposure (rule 3b) —
+# the payloads are PII-free by design, so the member flip is changing
+# these two role strings to "member".
+@app.route("/api/events-leaderboard")
+@require_role("admin")
+def api_events_leaderboard():
+    from email_parser.database import get_events_leaderboard
+    return jsonify(get_events_leaderboard(
+        chapter=request.args.get("chapter") or None,
+        year=request.args.get("year") or None))
+
+
+@app.route("/api/events-leaderboard/event")
+@require_role("admin")
+def api_events_leaderboard_event():
+    from email_parser.database import get_event_leaderboard
+    d = get_event_leaderboard(request.args.get("name", ""))
+    return (jsonify(d), 200) if d else (jsonify({"error": "event not found"}), 404)
+
+
 @app.route("/api/season-contests/points-race")
 @require_role("member")
 def api_season_contest_points_race():
@@ -10261,9 +10282,15 @@ def api_fellowship_cup_projection():
 @require_role("member")
 def api_lone_star_cup():
     """LONE STAR CUP projected rosters + alternates pool (member LSC tab)."""
-    from email_parser.database import get_lone_star_cup_projection, get_app_setting
+    from email_parser.database import (get_lone_star_cup_projection,
+                                       get_lsc_final_roster, get_app_setting)
     try:
-        d = get_lone_star_cup_projection()
+        # FROZEN final roster first (Kerry 2026-09-11: "harden the LONE
+        # STAR CUP page teams into final rosters so it doesn't take so
+        # long to load") — the lsc_roster_final dial snapshot serves
+        # instantly with live deposit badges; clear the dial to fall
+        # back to the live projection.
+        d = get_lsc_final_roster() or get_lone_star_cup_projection()
         # Event banner (Kerry 2026-08-06): the lsc_event_info dial holds
         # {dates, venue, city} — one source for this tab AND the emails
         try:
@@ -10284,11 +10311,27 @@ def api_lone_star_cup():
                 # members") — invitation order is roster ops, not a
                 # member-facing standing.
                 ch.pop("alternates", None)
+                # MEMBER VIEW = Teams + Players + how they qualified,
+                # nothing else (Kerry 2026-09-11: "Only thing that
+                # should show on the members view is the Teams and
+                # Players and the left column denoting how they
+                # qualified"). Locks/secured chips and the
+                # projected/secured counts are roster-ops state — strip
+                # them so the renderer never draws them; the invitation-
+                # accepted suffix on the qualification line goes too.
+                ch.pop("n_projected", None)
+                ch.pop("n_secured", None)
+                for s in ch.get("seats", []):
+                    s["status"] = ""
+                    if s.get("earned_as"):
+                        s["earned_as"] = s["earned_as"].replace(
+                            " — invitation accepted", "")
             # Deposit amounts are financial data — staff eyes only
             d.pop("deposits", None)
             # Collapsed duplicate standings rows are a roster-ops
             # diagnostic, same tier as the alternates list
             d.pop("duplicate_rows", None)
+            d.pop("frozen_at", None)
         else:
             # Lodging tracker (Kerry 2026-08-19) — attached only for
             # staff sessions, so the public payload never carries it
@@ -10302,6 +10345,27 @@ def api_lone_star_cup():
     except Exception as e:
         logger.exception("Lone Star Cup projection failed")
         return jsonify({"error": f"Projection failed: {e}"}), 500
+
+
+@app.route("/api/events/<int:event_id>/oneoff-finance")
+@require_role("manager")
+def api_oneoff_finance(event_id):
+    """Per-player money picture for a ONE-OFF event (Kerry 2026-09-11):
+    chapter, paid to date, expected, balance due, lodging — for events
+    whose money arrives outside the store (Lone Star Cup, TGF
+    Championship, Hill Country Matches). Configured per event in the
+    oneoff_charges dial; an unconfigured event returns oneoff:false and
+    the Events page keeps its standard roster columns."""
+    from email_parser.database import get_oneoff_roster_finance
+    try:
+        d = get_oneoff_roster_finance(event_id)
+        if d is None:
+            return jsonify({"oneoff": False, "event_id": event_id})
+        d.update(oneoff=True, event_id=event_id)
+        return jsonify(d)
+    except Exception as e:
+        logger.exception("oneoff finance failed for event %s", event_id)
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/api/scoring/import", methods=["POST"])
@@ -11545,6 +11609,56 @@ def traffic_page():
     if session.get("role") != "admin":
         return redirect("/events")
     return render_template("traffic.html")
+
+
+# ── CA QUEUE (admin-only checklist — Kerry directed 2026-09-11,
+#    mailbox #473/#474). Kerry works it here; platform-claude maintains
+#    it through the MCP tools; lanes reach it through the bridges.
+#    Admin-only by Kerry's direction ("Admin view only") — no member or
+#    manager tier may ever see it.
+
+@app.route("/admin/ca-queue")
+def ca_queue_page():
+    if session.get("role") != "admin":
+        return redirect("/events")
+    return render_template("ca_queue.html")
+
+
+@app.route("/api/ca-queue")
+@require_role("admin")
+def api_ca_queue():
+    from email_parser.database import list_ca_queue
+    return jsonify(list_ca_queue(
+        (request.args.get("section") or "").strip(),
+        (request.args.get("status") or "").strip()))
+
+
+@app.route("/api/ca-queue/upsert", methods=["POST"])
+@require_role("admin")
+def api_ca_queue_upsert():
+    from email_parser.database import upsert_ca_queue_item
+    data = request.get_json(silent=True) or {}
+    return jsonify(upsert_ca_queue_item(data, author="kerry"))
+
+
+@app.route("/api/ca-queue/note", methods=["POST"])
+@require_role("admin")
+def api_ca_queue_note():
+    from email_parser.database import note_ca_queue_item
+    data = request.get_json(silent=True) or {}
+    return jsonify(note_ca_queue_item(
+        int(data.get("id") or 0), str(data.get("note") or ""), "kerry"))
+
+
+@app.route("/api/ca-queue/move", methods=["POST"])
+@require_role("admin")
+def api_ca_queue_move():
+    from email_parser.database import move_ca_queue_item
+    data = request.get_json(silent=True) or {}
+    pos = data.get("position")
+    return jsonify(move_ca_queue_item(
+        int(data.get("id") or 0), section=data.get("section") or None,
+        position=int(pos) if pos is not None else None, author="kerry"))
 
 
 # ── NEW LEADS QUEUE (v2.257.0, mailbox #352/#353 — Kerry-ratified) ──────

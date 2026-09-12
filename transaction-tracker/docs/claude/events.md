@@ -2001,3 +2001,89 @@ stops a slow fetch overwriting text typed in the meantime.
 A missing template (deleted, renamed past the `templateMatch`) still sets
 the audience — a correctly-addressed empty message, not a silently wrong
 one.
+
+## One-off event roster view (v2.373.0, Kerry 2026-09-11)
+
+For events whose money arrives OUTSIDE the store (Lone Star Cup, TGF
+Championship, Hill Country Matches), the standard roster columns say
+nothing useful. An event listed in the **`oneoff_charges` dial** gets a
+different ROSTER column set: CHAPTER (canonical customers.chapter),
+PAID to date (incoming expense_transactions rows pointed at the event —
+the scoring-expense-event bridge is how they get pointed; hover lists
+each payment with date + memo), BALANCE DUE (expected − paid), LODGING
+(from the event's lodging dial: bed · cost · paid/owes, Own plans, Not
+staying). Dial shape:
+
+    {"<event_id>": {"default": 250,               # expected per player
+                    "overrides": {"<cid>": 325},  # per-player expected
+                    "lodging_dial": "lsc_lodging"}}  # optional
+
+Kerry teaches what amounts mean as they come in → record them as
+overrides. A payment equal to the player's lodging `paid` amount counts
+as lodging, not golf. Backend `get_oneoff_roster_finance()` in
+database.py; route `GET /api/events/<id>/oneoff-finance` (manager+);
+frontend `ONEOFF_DETAIL_COLUMNS` in events.html (desktop + mobile).
+Unconfigured events keep the standard columns untouched.
+
+## Lone Star Cup page: final-roster freeze + member view (v2.373.0)
+
+- **Freeze**: bridge `scoring-lsc-freeze` snapshots the live projection
+  into the `lsc_roster_final` dial; `/api/season-contests/lone-star-cup`
+  then serves it instantly (no GG fetches) with deposit badges still
+  live via `lsc_deposit_scan()`. `scoring-lsc-freeze:clear` reverts.
+- **Member view = Teams + Players + qualification only** (Kerry
+  2026-09-11): the route strips — beyond the existing staff-only
+  deposits/lodging/alternates/declined — seat `status` (no locks),
+  `n_projected`/`n_secured` (plain player count in the header), and the
+  "— invitation accepted" suffix. Admin/manager views unchanged.
+
+## TGF Payouts page — season-contest placement + flighted cups (v2.375.0, Kerry 2026-09-11)
+
+- Year-prefixed cup accounts ("2026 PLAYERS CUP", "2026 FELLOWSHIP
+  CUP") list under the SEASON view, not EVENTS — `isContestAccount`
+  in tgf.html now allows a leading year before the cup name.
+- A flighted cup's Player Pot Summary renders grouped by flight in
+  order (1st Flight band → winner, then 2nd place …), detected from
+  the data: it activates only when EVERY golfer's payout rows carry
+  "<N>st Flight" in the description (the Players Cup is the only
+  flighted season contest today; a future one inherits the layout,
+  normal events never trigger it).
+
+## Points-race boards: season-YEAR enrollment scoping (v2.375.0)
+
+Kerry ruling 2026-09-11, verbatim: "Nothing from 2025 should influence
+2026 EXCEPT for included shirt fund from memberships starting Aug 1,
+2025." (The shirt fund lives in margin_ledger.lsc_fund_year —
+unaffected.) The boards' enrollment filter scoped fall-vs-main and
+chapter but never the YEAR; the 2025 historical order import added
+prior-season season_contests rows and the concluded Players Cup's
+projected-payout strip promptly advertised 27 entries ($1,080 pool,
+2nd place $80.19) against the 23-entry $920 actually collected and
+paid 2026-08-17 — which is how a paid-correct $68.31 looked like an
+underpayment. `get_points_race_standings` now also matches the race's
+season year (parsed from the race label, current year fallback), so
+prior-year enrollments never light pills or count in pots.
+
+## Concluded races LOCK to recorded payouts (v2.376.0)
+
+Kerry ruling 2026-09-11, verbatim: "Yes freeze concluded races to
+recorded payouts. Once it is completed and especially if it's paid
+out, it should lock and only have changes made to it by express
+direction and approval by me."
+
+- `_recorded_payout_strip(race_key, race, db_path)` (database.py):
+  when a race's `race_final` dial is set, its payout strip is rebuilt
+  from the tgf_payouts rows actually recorded — never recomputed from
+  live enrollments. Same shape as the projection (ladder/flights keys)
+  so every consumer renders unchanged, plus `locked: true`,
+  `recorded_event`, and per-customer `recorded_rows`.
+- Race → payout-event mapping: `race_payout_events` app setting
+  (JSON {race_key: tgf_events code}), seeded
+  (`_RACE_PAYOUT_EVENTS_SEED`), race label as last fallback. A final
+  race with NO recorded rows still shows the projection (payday
+  pending).
+- Wired into `get_points_race_standings` AND
+  `get_fellowship_cup_projection`; the CONTESTS boards badge the
+  ACTUAL recipients from `recorded_rows` (never re-split down
+  standings that moved since payday — the Hogue fold), and the strip
+  reads "FINAL · Pot $X · as paid".

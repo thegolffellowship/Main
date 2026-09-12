@@ -10087,6 +10087,22 @@ def get_points_race_standings(race_key: str,
             clauses.append("COALESCE(season, '') LIKE '%Fall'")
         else:
             clauses.append("COALESCE(season, '') NOT LIKE '%Fall'")
+        # Season-YEAR scoping (Kerry ruling 2026-09-11, verbatim:
+        # "Nothing from 2025 should influence 2026 EXCEPT for included
+        # shirt fund from memberships starting Aug 1, 2025." — the LSC
+        # shirt-fund accrual lives in margin_ledger.lsc_fund_year and is
+        # unaffected here). The fall/main split above was the whole
+        # filter while season_contests held one year of data; the 2025
+        # historical order import added prior-year rows and the Players
+        # Cup pot projection promptly advertised 27 entries ($1,080,
+        # 2nd-place $80.19) against the 23-entry $920 actually collected
+        # and paid on 2026-08-17. A board counts ONLY its own season's
+        # year — parsed from the race label, current year as fallback.
+        _ym = re.search(r"20\d\d", race.get("label") or "")
+        _race_year = _ym.group(0) if _ym else str(today_central().year)
+        clauses.append(
+            "(COALESCE(season,'') LIKE ? OR COALESCE(season,'') = '')")
+        params.append(f"%{_race_year}%")
         if race.get("enroll_chapter"):
             clauses.append("(chapter = ? OR chapter IS NULL OR chapter = '')")
             params.append(race["enroll_chapter"])
@@ -10340,17 +10356,25 @@ def get_points_race_standings(race_key: str,
     from . import season_payouts as _sp
     _n_pot = (sum(1 for r in out_rows if r["enrolled"])
               + len(enrolled_not_ranked))
+    _final_flag = _points_race_final(race_key, db_path=db_path)
     if race.get("enroll_season") == "fall":
         # Fall payout ladder isn't ratified yet (rule 3b — money): the
         # boards show standings + buy-in pills, but no projected payout
         # strip until Kerry confirms the fall structure.
         projected_payouts = None
     else:
+        # A FINAL race LOCKS its strip to the recorded payouts (Kerry
+        # 2026-09-11: "freeze concluded races to recorded payouts") —
+        # recomputing from live enrollments is how the concluded cup
+        # advertised a phantom pool. Falls back to the projection only
+        # while no payout rows exist yet.
         projected_payouts = (
-            _sp.players_cup_payouts(_n_pot) if race.get("flights")
-            else _sp.city_net_payouts(_n_pot))
-
-    _final_flag = _points_race_final(race_key, db_path=db_path)
+            _recorded_payout_strip(race_key, race, db_path)
+            if _final_flag else None)
+        if projected_payouts is None:
+            projected_payouts = (
+                _sp.players_cup_payouts(_n_pot) if race.get("flights")
+                else _sp.city_net_payouts(_n_pot))
     return {
         "race_key": race_key,
         "label": race["label"],
@@ -10780,6 +10804,10 @@ def get_fellowship_cup_projection(force_refresh: bool = False,
     # (gg_points_race_final['fellowship_cup']); champions are the
     # top-ranked ENROLLED row(s), same eligibility as the money.
     _cup_final = _points_race_final("fellowship_cup", db_path=db_path)
+    # FINAL cup locks to the recorded payouts (Kerry 2026-09-11 — same
+    # freeze as the races; see _recorded_payout_strip)
+    _cup_locked = (_recorded_payout_strip("fellowship_cup", None, db_path)
+                   if _cup_final else None)
     return {
         "label": "THE FELLOWSHIP CUP",
         "reset_official": _points_reset_official(db_path=db_path),
@@ -10789,7 +10817,7 @@ def get_fellowship_cup_projection(force_refresh: bool = False,
         "n_players": len(combined),
         "n_enrolled": cup_n,
         "per_race": per_race,
-        "projected_payouts": _sp.fellowship_cup_payouts(cup_n),
+        "projected_payouts": _cup_locked or _sp.fellowship_cup_payouts(cup_n),
         "fetched_at": max(fetched) if fetched else None,
         "gg_error": "; ".join(errors) or None,
         # Live-championship signal for the Cup tab's badge + 60s poll —
@@ -10873,6 +10901,264 @@ def _dedupe_stream_by_cid(cands: list, chapter: str | None = None,
     # collapsed duplicate improved a place mid-list.
     out.sort(key=lambda c: c["place"])
     return out
+
+
+def lsc_deposit_scan(db_path: str | Path = DB_PATH) -> dict:
+    """LSC deposit tracker (extracted from the projection, v2.371.14).
+
+    Incoming venmo/zelle rows >= lsc_deposit_min since lsc_deposit_since,
+    attached to customer_ids (overrides dial for rows the classifier
+    couldn't resolve; exclude dial for look-alikes that aren't deposits).
+    Returns {cid: {"amount": float, "txns": [{id, amount, date, source}]}}.
+    Empty dict on any failure — deposit badges are never worth a 500.
+    """
+    deposits: dict = {}
+    try:
+        dep_since = get_app_setting("lsc_deposit_since",
+                                    db_path=db_path) or "2026-08-16"
+        dep_min = float(get_app_setting("lsc_deposit_min",
+                                        db_path=db_path) or 100)
+        try:
+            _ov = json.loads(get_app_setting("lsc_deposit_overrides",
+                                             db_path=db_path) or "{}")
+            oid_to_cid = {int(e): int(cid) for cid, eids in _ov.items()
+                          for e in (eids if isinstance(eids, list)
+                                    else [eids])}
+        except Exception:
+            oid_to_cid = {}
+        try:
+            dep_exclude = {int(x) for x in json.loads(
+                get_app_setting("lsc_deposit_exclude",
+                                db_path=db_path) or "[]")}
+        except Exception:
+            dep_exclude = set()
+        with _connect(db_path) as conn:
+            for r in conn.execute(
+                    """SELECT id, merchant, amount, transaction_date,
+                              source_type, customer_id
+                       FROM expense_transactions
+                       WHERE transaction_type = 'received'
+                         AND source_type IN ('venmo', 'zelle')
+                         AND COALESCE(review_status, '') != 'ignored'
+                         AND transaction_date >= ?
+                         AND amount >= ?""", (dep_since, dep_min)):
+                if r["id"] in dep_exclude:
+                    continue
+                cid = oid_to_cid.get(r["id"]) or r["customer_id"]
+                if not cid:
+                    try:
+                        cid = _resolve_scoring_player(
+                            conn, r["merchant"] or "")
+                    except Exception:
+                        cid = None
+                if not cid:
+                    continue
+                d = deposits.setdefault(
+                    int(cid), {"amount": 0.0, "txns": []})
+                d["amount"] = round(d["amount"] + (r["amount"] or 0), 2)
+                d["txns"].append({"id": r["id"], "amount": r["amount"],
+                                  "date": r["transaction_date"],
+                                  "source": r["source_type"]})
+    except Exception:
+        deposits = {}
+    return deposits
+
+
+def freeze_lsc_final_roster(db_path: str | Path = DB_PATH) -> dict:
+    """HARDEN the Lone Star Cup page (Kerry 2026-09-11: "harden the
+    LONE STAR CUP page teams into final rosters so it doesn't take so
+    long to load").
+
+    Runs the live projection ONCE and stores its chapters (seats +
+    alternates + declined) in the lsc_roster_final dial. From then on
+    the API serves the frozen roster instantly — no GG fetches — while
+    deposits stay LIVE via lsc_deposit_scan. Clear the dial (bridge
+    scoring-lsc-freeze:clear) to fall back to the live projection.
+    """
+    d = get_lone_star_cup_projection(db_path=db_path)
+    chapters = d.get("chapters", [])
+    # Captain seats (Kerry 2026-09-11, second ruling): the seat LABEL
+    # shows how the player qualified ("AUSTIN NET · 2", "SA NET · 1")
+    # and captaincy becomes a FLAG the renderer sets apart visually
+    # (tinted row + CAPTAIN chip). The engine's captain pick stands —
+    # Jenkins via cascade in Austin, Callaway as SA NET Champion.
+    _CH_ABBR = {"san antonio": "SA", "austin": "AUSTIN"}
+    for ch in chapters:
+        abbr = _CH_ABBR.get((ch.get("chapter") or "").lower(),
+                            (ch.get("chapter") or "").upper())
+        for s in ch.get("seats", []):
+            if s.get("seat") == "CAPTAIN":
+                s["captain"] = True
+                ea = s.get("earned_as") or ""
+                # Champion first — "2026 San Antonio NET Champion"
+                # starts with the YEAR, and a bare digit match turned
+                # Callaway's label into "SA NET · 2026". A place is an
+                # ORDINAL ("2nd in Austin NET"), nothing else.
+                if "Champion" in ea:
+                    place = "1"
+                else:
+                    m = re.match(r"(\d+)(?:st|nd|rd|th)\b", ea)
+                    place = m.group(1) if m else None
+                s["seat"] = (f"{abbr} NET"
+                             + (f" · {place}" if place else ""))
+                s["note"] = "City NET final standings — team captain"
+    frozen = {
+        "frozen_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "season": d.get("season"),
+        "chapters": chapters,
+        "rules_note": "Final rosters.",
+    }
+    set_app_setting("lsc_roster_final", json.dumps(frozen), db_path=db_path)
+    return {"frozen": True, "frozen_at": frozen["frozen_at"],
+            "chapters": [{"chapter": c.get("chapter"),
+                          "seats": len(c.get("seats") or [])}
+                         for c in frozen["chapters"]],
+            "gg_error": d.get("gg_error")}
+
+
+def get_lsc_final_roster(db_path: str | Path = DB_PATH) -> dict | None:
+    """The frozen final roster from the lsc_roster_final dial, shaped
+    like get_lone_star_cup_projection()'s payload (deposits recomputed
+    live so new payments keep appearing). None when not frozen."""
+    try:
+        raw = get_app_setting("lsc_roster_final", db_path=db_path)
+        if not raw:
+            return None
+        frozen = json.loads(raw)
+        if not isinstance(frozen, dict) or not frozen.get("chapters"):
+            return None
+    except Exception:
+        return None
+    return {
+        "season": frozen.get("season"),
+        "chapters": frozen.get("chapters", []),
+        "deposits": {str(k): v for k, v in
+                     lsc_deposit_scan(db_path=db_path).items()},
+        "duplicate_rows": [],
+        "rules_note": frozen.get("rules_note") or "Final rosters.",
+        "roster_final": True,
+        "frozen_at": frozen.get("frozen_at"),
+        "gg_error": None,
+    }
+
+
+def get_oneoff_roster_finance(event_id: int,
+                              db_path: str | Path = DB_PATH) -> dict | None:
+    """Per-player money picture for a ONE-OFF event (Kerry 2026-09-11:
+    the Lone Star Cup / TGF Championship / Hill Country Matches class,
+    where money arrives by Venmo/Zelle instead of store orders and the
+    standard roster columns say nothing useful).
+
+    Config lives in the `oneoff_charges` dial (rules-as-data):
+      {"<event_id>": {"default": 250,              # expected per player
+                      "overrides": {"<cid>": 325}, # per-player expected
+                      "lodging_dial": "lsc_lodging"}}  # optional
+    An event with no entry is NOT a one-off event -> returns None, and
+    the Events page keeps its standard columns.
+
+    Payments = incoming expense_transactions rows pointed at this event
+    (the scoring-expense-event bridge is how they get pointed). Chapter
+    is the canonical customers.chapter (rule 6).
+
+    Returns {"config": {...}, "players": {"<cid>": {chapter, paid,
+    payments:[{id, date, amount, memo}], expected, balance,
+    lodging: {unit, cost, paid, own, out} | None}}}.
+    """
+    try:
+        cfgs = json.loads(get_app_setting("oneoff_charges",
+                                          db_path=db_path) or "{}")
+        cfg = cfgs.get(str(event_id))
+    except Exception:
+        cfg = None
+    if not isinstance(cfg, dict):
+        return None
+    default_expected = float(cfg.get("default") or 0)
+    overrides = {}
+    try:
+        overrides = {int(k): float(v)
+                     for k, v in (cfg.get("overrides") or {}).items()}
+    except Exception:
+        overrides = {}
+
+    # Lodging map from the named dial (the lsc_lodging shape)
+    lodging_by_cid: dict = {}
+    if cfg.get("lodging_dial"):
+        try:
+            lcfg = json.loads(get_app_setting(cfg["lodging_dial"],
+                                              db_path=db_path) or "{}")
+            unit_names = {u.get("id"): u.get("name")
+                          for u in (lcfg.get("units") or [])}
+            for cid_s, p in (lcfg.get("players") or {}).items():
+                try:
+                    lodging_by_cid[int(cid_s)] = {
+                        "unit": unit_names.get(p.get("unit"))
+                                or p.get("unit"),
+                        "cost": p.get("cost"),
+                        "paid": p.get("paid"),
+                        "own": bool(p.get("own")),
+                        "out": bool(p.get("out")),
+                        "note": p.get("note"),
+                    }
+                except Exception:
+                    continue
+        except Exception:
+            lodging_by_cid = {}
+
+    players: dict = {}
+    with _connect(db_path) as conn:
+        # Everyone registered on the event (active + placeholders)
+        regs = conn.execute(
+            """SELECT DISTINCT i.customer_id, c.chapter
+               FROM items i LEFT JOIN customers c
+                    ON c.customer_id = i.customer_id
+               WHERE i.event_id = ? AND i.customer_id IS NOT NULL
+                 AND COALESCE(i.transaction_status, 'active')
+                     NOT IN ('credited', 'refunded', 'transferred')""",
+            (event_id,)).fetchall()
+        for r in regs:
+            players[int(r["customer_id"])] = {
+                "chapter": r["chapter"],
+                "paid": 0.0, "payments": [],
+                "expected": overrides.get(int(r["customer_id"]),
+                                          default_expected),
+                "lodging": lodging_by_cid.get(int(r["customer_id"])),
+            }
+        # Incoming money pointed at this event
+        for r in conn.execute(
+                """SELECT id, customer_id, amount, transaction_date,
+                          notes, merchant
+                   FROM expense_transactions
+                   WHERE event_id = ? AND transaction_type = 'received'
+                     AND COALESCE(review_status, '') != 'ignored'""",
+                (event_id,)):
+            cid = r["customer_id"]
+            if not cid:
+                continue
+            p = players.setdefault(int(cid), {
+                "chapter": None, "paid": 0.0, "payments": [],
+                "expected": overrides.get(int(cid), default_expected),
+                "lodging": lodging_by_cid.get(int(cid)),
+            })
+            amt = float(r["amount"] or 0)
+            # Lodging money stays in the LODGING column, not PAID:
+            # when the lodging dial shows this player paid, subtract
+            # their lodging-paid amount once from the golf tally if a
+            # single combined payment covered both. Simpler and safer:
+            # a payment equal to the player's lodging 'paid' amount is
+            # lodging, not golf.
+            lodge = lodging_by_cid.get(int(cid))
+            if lodge and lodge.get("paid") and amt == float(lodge["paid"]):
+                continue
+            p["paid"] = round(p["paid"] + amt, 2)
+            p["payments"].append({
+                "id": r["id"], "date": r["transaction_date"],
+                "amount": amt, "memo": r["notes"] or "",
+            })
+    for p in players.values():
+        p["balance"] = round((p["expected"] or 0) - p["paid"], 2)
+    return {"config": {"default": default_expected,
+                       "lodging_dial": cfg.get("lodging_dial")},
+            "players": {str(k): v for k, v in players.items()}}
 
 
 def get_lone_star_cup_projection(db_path: str | Path = DB_PATH,
@@ -10999,55 +11285,10 @@ def get_lone_star_cup_projection(db_path: str | Path = DB_PATH,
     #                           $121.77 and Hamilton's $122 are Match
     #                           Play finals money, not LSC deposits)
     # STAFF-ONLY payload: the route strips `deposits` for non-staff.
-    lsc_deposits: dict = {}
-    try:
-        dep_since = get_app_setting("lsc_deposit_since",
-                                    db_path=db_path) or "2026-08-16"
-        dep_min = float(get_app_setting("lsc_deposit_min",
-                                        db_path=db_path) or 100)
-        try:
-            _ov = json.loads(get_app_setting("lsc_deposit_overrides",
-                                             db_path=db_path) or "{}")
-            oid_to_cid = {int(e): int(cid) for cid, eids in _ov.items()
-                          for e in (eids if isinstance(eids, list)
-                                    else [eids])}
-        except Exception:
-            oid_to_cid = {}
-        try:
-            dep_exclude = {int(x) for x in json.loads(
-                get_app_setting("lsc_deposit_exclude",
-                                db_path=db_path) or "[]")}
-        except Exception:
-            dep_exclude = set()
-        with _connect(db_path) as conn:
-            for r in conn.execute(
-                    """SELECT id, merchant, amount, transaction_date,
-                              source_type, customer_id
-                       FROM expense_transactions
-                       WHERE transaction_type = 'received'
-                         AND source_type IN ('venmo', 'zelle')
-                         AND COALESCE(review_status, '') != 'ignored'
-                         AND transaction_date >= ?
-                         AND amount >= ?""", (dep_since, dep_min)):
-                if r["id"] in dep_exclude:
-                    continue
-                cid = oid_to_cid.get(r["id"]) or r["customer_id"]
-                if not cid:
-                    try:
-                        cid = _resolve_scoring_player(
-                            conn, r["merchant"] or "")
-                    except Exception:
-                        cid = None
-                if not cid:
-                    continue
-                d = lsc_deposits.setdefault(
-                    int(cid), {"amount": 0.0, "txns": []})
-                d["amount"] = round(d["amount"] + (r["amount"] or 0), 2)
-                d["txns"].append({"id": r["id"], "amount": r["amount"],
-                                  "date": r["transaction_date"],
-                                  "source": r["source_type"]})
-    except Exception:
-        lsc_deposits = {}
+    # Extracted to lsc_deposit_scan (v2.371.14) so the frozen final
+    # roster keeps serving LIVE deposit badges without re-running the
+    # whole projection.
+    lsc_deposits = lsc_deposit_scan(db_path=db_path)
 
     # BONUS seats (Kerry 2026-08-19): each team carries 2 bonus spots
     # reserved for members of the FORMER TGF chapters (DFW & Houston).
@@ -12141,6 +12382,1534 @@ _PAYOUT_CAT_LABELS = {
 }
 
 
+def _payout_detail_bits(cat: str, desc: str) -> list[str]:
+    """Human-readable bits parsed from one payout row's description —
+    place (with ties), holes, flight, season-standings place. Shared by
+    the spotlight's Recent Winnings labels (_friendly_game) and the
+    Winnings-by-Game per-event drill-down so the two surfaces can never
+    parse the same row differently."""
+    bits: list[str] = []
+    tied = "(T)" in desc
+    # "<N>st Flight <M>nd [place]" / "<N>st Flight winner" — the cup and
+    # championship-close rows put the FLIGHT ordinal first ("Players Cup
+    # — 1st Flight 2nd place" = Flight 1, 2nd place). The generic
+    # place/flight regexes below would read that as 1st place in Flight
+    # 2 — Kerry caught the inversion on Jeff Young's Players Cup line
+    # (2026-09-11), so this shape is handled first and returns.
+    of_ = re.search(r"\b(\d+)(?:st|nd|rd|th)\s+Flight\b"
+                    r"(?:\s+(?:(\d+)(st|nd|rd|th)(?:\s+place)?|(winner)))?",
+                    desc, re.I)
+    if of_:
+        if "champion" in desc.lower():
+            bits.append("Champion")
+        if of_.group(2):
+            bits.append(f"{'T' if tied else ''}"
+                        f"{of_.group(2)}{of_.group(3).lower()} Place")
+        elif of_.group(4):
+            bits.append(f"{'T' if tied else ''}1st Place")
+        bits.append(f"Flight {of_.group(1)}")
+        return bits
+    # "SAN ANTONIO Net 2026 final standings — 2 place" → "2nd Place |
+    # Season Standings" (season payout rows)
+    fs_ = re.search(r"final standings\s*[—\-]\s*(\d+)\s*place", desc, re.I)
+    if fs_:
+        n_ = int(fs_.group(1))
+        suf_ = ("th" if 10 <= n_ % 100 <= 13
+                else {1: "st", 2: "nd", 3: "rd"}.get(n_ % 10, "th"))
+        bits.append(f"{n_}{suf_} Place | Season Standings")
+    m = re.search(r"\b(\d+)(st|nd|rd|th)\b", desc)
+    tied = "(T)" in desc
+    if m and cat != "skins" and not fs_:
+        bits.append(f"{'T' if tied else ''}{m.group(1)}{m.group(2)} Place")
+    if cat == "skins":
+        hm = re.search(r"holes?\s+([\d,\s&]+)", desc, re.I)
+        cm = re.search(r"×\s*(\d+)", desc)
+        if hm:
+            _hl = [h for h in re.split(r"[\s,&]+", hm.group(1)) if h]
+            bits.append(("Hole " if len(_hl) == 1 else "Holes ")
+                        + (" & ".join(_hl) if len(_hl) <= 2
+                           else ", ".join(_hl[:-1]) + " & " + _hl[-1]))
+        elif cm:
+            n_ = int(cm.group(1))
+            bits.append(f"{n_} skin{'s' if n_ != 1 else ''}")
+    if cat in ("closest_to_pin", "ctp"):
+        pm = re.search(r"#\s*(\d+)", desc)
+        if pm:
+            bits.append(f"Hole {pm.group(1)}")
+    fm = re.search(r"\b(LOW|MID|HIGH)\b[\s-]*Flight", desc, re.I)
+    fn = re.search(r"Flight\s*(\d+)", desc, re.I)
+    if fm:
+        bits.append(f"{fm.group(1).title()} Flight")
+    elif fn:
+        bits.append(f"Flight {fn.group(1)}")
+    return bits
+
+
+# ── Winnings by Game (Kerry ratified 2026-09-11, improvements lane) ──
+# Bundle membership is RULES-AS-DATA (guiding principle 2): the live
+# grouping is the `spotlight_winnings_bundles` app setting; this seed is
+# the fallback and the shape of record. Categories listed here are the
+# PRODUCTION spellings audited 2026-09-11 (rows use `ctp`, older maps
+# also say `closest_to_pin` — both are listed so aggregation never
+# depends on one spelling). A bundle flagged catch_all collects any
+# category no bundle names, so a future game type still displays
+# instead of silently vanishing (protect the class, not the instance).
+# buyin: which counter is shown next to the bundle — 'net'/'gross'
+# (bundle purchases), 'events' (entries — included games ride on entry),
+# 'contests' (season-contest enrollments).
+SEED_WINNINGS_BUNDLES = [
+    {"key": "net", "label": "NET Games", "color": "#15803D",
+     "buyin": "net", "buyin_noun": "buy-in",
+     "categories": ["individual_net", "mvp", "tgf_mvp"]},
+    {"key": "gross", "label": "GROSS Games", "color": "#B45309",
+     "buyin": "gross", "buyin_noun": "buy-in",
+     "categories": ["skins", "individual_gross"]},
+    {"key": "included", "label": "Included Games", "color": "#1D4ED8",
+     "buyin": "events", "buyin_noun": "event",
+     "categories": ["team_net", "ctp", "closest_to_pin",
+                    "longest_putt", "hole_in_one"]},
+    {"key": "season", "label": "Season Contests", "color": "#C2410C",
+     "buyin": "contests", "buyin_noun": "contest", "catch_all": True,
+     "categories": ["monthly_points", "City Net", "City Gross",
+                    "Match Play", "Match Play Pool",
+                    "Fellowship Cup", "Players Cup"]},
+]
+
+
+def get_winnings_bundles(db_path: str | Path | None = None) -> list[dict]:
+    """The live winnings-bundle definition: app_settings
+    `spotlight_winnings_bundles` (JSON list, same shape as the seed),
+    falling back to SEED_WINNINGS_BUNDLES. Malformed JSON falls back
+    rather than blanking the member page."""
+    try:
+        raw = get_app_setting("spotlight_winnings_bundles", db_path=db_path)
+        if raw:
+            parsed = json.loads(raw)
+            if isinstance(parsed, list) and all(
+                    isinstance(b, dict) and b.get("key") and
+                    isinstance(b.get("categories"), list) for b in parsed):
+                return parsed
+    except Exception as e:
+        logger.warning("spotlight_winnings_bundles unreadable, using seed: %s", e)
+    return [dict(b) for b in SEED_WINNINGS_BUNDLES]
+
+
+def _winnings_by_game(payouts: list[dict], bundles: list[dict],
+                      current_year: int,
+                      buyin_counts: dict | None = None) -> dict:
+    """Pure aggregation for the spotlight Winnings-by-Game panel.
+
+    payouts: get_customer_winnings()['payouts'] rows (category, amount,
+    event_date). Scopes are PER CALENDAR YEAR plus all_time (Kerry
+    2026-09-11: SEASON offers a toggle per year the member has data;
+    all data is 2026 today so that is the only year that appears;
+    default landing is the current season). Every bundle shows even at
+    $0 — a zero GROSS row advertises the games you're not in. PII-free:
+    categories, labels, counts and dollars only."""
+    cat_to_bundle: dict = {}
+    catch_all = None
+    for b in bundles:
+        if b.get("catch_all") and catch_all is None:
+            catch_all = b["key"]
+        for c in b.get("categories", []):
+            cat_to_bundle.setdefault(c, b["key"])
+    if catch_all is None:
+        catch_all = bundles[-1]["key"] if bundles else "other"
+
+    def build(scope_payouts, scope_key):
+        out = []
+        for b in bundles:
+            games: dict = {}
+            order: list = []
+            total = 0.0
+            for p in scope_payouts:
+                cat = (p.get("category") or "other")
+                if cat_to_bundle.get(cat, catch_all) != b["key"]:
+                    continue
+                # ctp/closest_to_pin are one game with two production
+                # spellings — merge on the display label
+                label = _PAYOUT_CAT_LABELS.get(cat) or (
+                    cat.replace("_", " ").title() if "_" in cat
+                    or cat.islower() else cat)
+                if label not in games:
+                    games[label] = {"category": cat, "label": label,
+                                    "count": 0, "total": 0.0,
+                                    "events": [], "_ev": {}}
+                    order.append(label)
+                amt = p.get("amount") or 0
+                g = games[label]
+                g["count"] += 1
+                g["total"] = round(g["total"] + amt, 2)
+                total = round(total + amt, 2)
+                # per-event drill-down (Kerry 2026-09-11 follow-up):
+                # which events this game was won in, with flight/place
+                ek = (p.get("event_name") or "", p.get("event_date") or "")
+                if ek not in g["_ev"]:
+                    g["_ev"][ek] = {"event_name": ek[0] or "Event",
+                                    "event_date": ek[1] or None,
+                                    "total": 0.0, "_bits": []}
+                    g["events"].append(g["_ev"][ek])
+                ev = g["_ev"][ek]
+                ev["total"] = round(ev["total"] + amt, 2)
+                for bit in _payout_detail_bits(cat, p.get("description") or ""):
+                    if bit not in ev["_bits"]:
+                        ev["_bits"].append(bit)
+            rows = [games[k] for k in order]
+            for g in rows:
+                g.pop("_ev", None)
+                for ev in g["events"]:
+                    ev["detail"] = " · ".join(ev.pop("_bits"))
+                g["events"].sort(key=lambda e: e["event_date"] or "",
+                                 reverse=True)
+            rows.sort(key=lambda g: -g["total"])
+            entry = {"key": b["key"], "label": b.get("label") or b["key"],
+                     "color": b.get("color") or "#475569",
+                     "buyin_noun": b.get("buyin_noun") or "buy-in",
+                     "total": total, "games": rows, "buyins": None}
+            if buyin_counts:
+                src = (buyin_counts.get("all_time", {})
+                       if scope_key == "all_time"
+                       else buyin_counts.get("years", {}).get(scope_key, {}))
+                entry["buyins"] = src.get(b.get("buyin"), 0)
+            out.append(entry)
+        return out
+
+    years = {str(p.get("event_date"))[:4] for p in payouts
+             if p.get("event_date")}
+    years |= set((buyin_counts or {}).get("years", {}).keys())
+    years.add(str(current_year))
+    years = sorted((y for y in years if re.fullmatch(r"20\d\d", y)),
+                   reverse=True)
+    by_year = {y: build([p for p in payouts
+                         if str(p.get("event_date") or "").startswith(y)], y)
+               for y in years}
+    return {"current_year": current_year, "years": years,
+            "by_year": by_year, "all_time": build(payouts, "all_time")}
+
+
+def _spotlight_buyin_counts(conn, customer_id: int) -> dict:
+    """Per-customer buy-in counters for the Winnings-by-Game bundles:
+    {'all_time': {net, gross, events, contests},
+     'years': {'2026': {...}, ...}}. Mirrors the Games-tab eligibility
+    statuses (_event_game_buyers): credited/refunded/transferred/
+    rsvp_only parents are out; child add-on payments upgrade the
+    parent's bundle; a wd row keeps a bundle only if that bundle wasn't
+    credited back."""
+    keys = ("net", "gross", "events", "contests")
+    counts = {"all_time": {k: 0 for k in keys}, "years": {}}
+
+    def bump(key, year):
+        counts["all_time"][key] += 1
+        if year:
+            counts["years"].setdefault(
+                year, {k: 0 for k in keys})[key] += 1
+
+    rows = [dict(r) for r in conn.execute(
+        """SELECT i.id, i.parent_item_id, i.side_games,
+                  COALESCE(i.transaction_status,'active') AS ts,
+                  i.wd_credits, e.event_date
+             FROM items i JOIN events e ON e.id = i.event_id
+            WHERE i.customer_id = ?""", (customer_id,)).fetchall()]
+    parents = [r for r in rows if not r["parent_item_id"]
+               and r["ts"] not in ("credited", "refunded",
+                                   "transferred", "rsvp_only")]
+    kids: dict = {}
+    if parents:
+        ph = ",".join("?" for _ in parents)
+        for k in conn.execute(
+                f"SELECT parent_item_id, side_games FROM items "
+                f"WHERE parent_item_id IN ({ph})",
+                [r["id"] for r in parents]).fetchall():
+            kids.setdefault(int(k["parent_item_id"]), []).append(
+                k["side_games"])
+
+    def _yr(text):
+        m = re.search(r"20\d\d", str(text or ""))
+        return m.group(0) if m else None
+
+    for r in parents:
+        year = _yr(r["event_date"])
+        bump("events", year)
+        types = {_classify_side_games_type(r["side_games"])}
+        for sg in kids.get(int(r["id"]), []):
+            types.add(_classify_side_games_type(sg))
+        has = {"net": ("NET" in types or "BOTH" in types),
+               "gross": ("GROSS" in types or "BOTH" in types)}
+        if r["ts"] == "wd":
+            try:
+                wd = json.loads(r["wd_credits"] or "{}")
+            except (TypeError, ValueError):
+                wd = {}
+            if "net_games" in wd:
+                has["net"] = False
+            if "gross_games" in wd:
+                has["gross"] = False
+        for k in ("net", "gross"):
+            if has[k]:
+                bump(k, year)
+
+    for c in conn.execute(
+            "SELECT season FROM season_contests WHERE customer_id = ?",
+            (customer_id,)).fetchall():
+        bump("contests", _yr(c["season"]))
+    return counts
+
+
+# ── Concluded races LOCK to recorded payouts (Kerry ruling 2026-09-11,
+# verbatim: "Yes freeze concluded races to recorded payouts. Once it is
+# completed and especially if it's paid out, it should lock and only
+# have changes made to it by express direction and approval by me.") ──
+# The race_payout_events app setting (JSON {race_key: tgf_events code})
+# overrides this seed; the race label is the last fallback.
+_RACE_PAYOUT_EVENTS_SEED = {
+    "players_cup_gross": "2026 PLAYERS CUP",
+    "san_antonio_net": "SAN ANTONIO Net 2026",
+    "austin_net": "AUSTIN Net 2026",
+    "fellowship_cup": "2026 FELLOWSHIP CUP",
+}
+
+
+def _recorded_payout_strip(race_key: str, race: dict | None,
+                           db_path=None) -> dict | None:
+    """The payout strip for a FINAL race, rebuilt from the tgf_payouts
+    rows actually recorded (and paid) — never recomputed from live
+    enrollments, which is how the concluded Players Cup advertised a
+    phantom $1,080 pool after the 2025 historical import. Keeps the
+    projected_payouts shape (kind ladder/flights + pot/champion/flight
+    or amounts_cents) so every consumer renders unchanged, adds
+    locked=True and per-customer recorded_rows so the boards can badge
+    the ACTUAL recipients instead of re-splitting money down standings
+    that may have moved since payday (the Hogue fold). Returns None
+    when no recorded rows exist — the strip then recomputes as before."""
+    code = None
+    try:
+        raw = get_app_setting("race_payout_events", db_path=db_path)
+        if raw:
+            code = (json.loads(raw) or {}).get(race_key)
+    except Exception:
+        code = None
+    candidates = [c for c in (code, _RACE_PAYOUT_EVENTS_SEED.get(race_key),
+                              (race or {}).get("label")) if c]
+    with _connect(db_path) as conn:
+        ev = None
+        for c in candidates:
+            ev = conn.execute(
+                """SELECT id, code FROM tgf_events
+                   WHERE LOWER(TRIM(code)) = ? OR LOWER(TRIM(name)) = ?""",
+                (c.strip().lower(), c.strip().lower())).fetchone()
+            if ev:
+                break
+        if not ev:
+            return None
+        rows = [dict(r) for r in conn.execute(
+            """SELECT customer_id, amount, COALESCE(description,'') AS d
+               FROM tgf_payouts WHERE event_id = ?""", (ev["id"],))]
+    if not rows:
+        return None
+    cents = [round((r["amount"] or 0) * 100) for r in rows]
+    pot = sum(cents)
+    by_cust: dict = {}
+    for r, c in zip(rows, cents):
+        if r["customer_id"] is not None:
+            by_cust[int(r["customer_id"])] = (
+                by_cust.get(int(r["customer_id"]), 0) + c)
+    strip: dict = {
+        "locked": True, "pot_cents": pot,
+        "recorded_event": ev["code"],
+        "n_basis": round(pot / _entry_to_pot_cents()) or None,
+        "recorded_rows": [{"customer_id": k, "amount_cents": v}
+                          for k, v in by_cust.items()],
+    }
+    if race and race.get("flights"):
+        # "winner" rows are flight firsts ("2nd Flight winner" is a
+        # FIRST — the ordinal is the flight); everything else is a
+        # lower place row
+        firsts = [c for r, c in zip(rows, cents)
+                  if "winner" in r["d"].lower()
+                  and "champion" not in r["d"].lower()]
+        seconds = [c for r, c in zip(rows, cents)
+                   if "winner" not in r["d"].lower()
+                   and "champion" not in r["d"].lower()]
+        champ = [c for r, c in zip(rows, cents)
+                 if "champion" in r["d"].lower()]
+        first = max(firsts) if firsts else 0
+        second = max(seconds) if seconds else 0
+        strip.update({"kind": "flights",
+                      "champion_cents": (champ[0] - first) if champ else 0,
+                      "flight_first_cents": first,
+                      "flight_second_cents": second,
+                      "flight_pot_cents": first + second})
+    else:
+        strip["kind"] = "ladder"
+        strip["amounts_cents"] = sorted(cents, reverse=True)
+    return strip
+
+
+def team_net_parity(event_name: str, gg_url: str = "",
+                    db_path: str | Path = DB_PATH) -> dict:
+    """LEARNING BRIDGE (Kerry 2026-09-11, verbatim: "Team Net is 75%
+    and Off Lowest in all field. Review where discrepancy is on GG and
+    learn from it for our own uses."). Computes the event's team-net
+    totals under every plausible reading of the 75% off-lowest rule —
+    rounding before/after the subtraction, off the lowest in the FIELD
+    vs in the TEAM, strokes disallowed on par 3s or not — from the real
+    imported cards, and diffs each against GG's posted TEAM Net board
+    (pass its v2tournaments URL), so the scheme the Tracker encodes is
+    the one PROVEN to reproduce GG, never a guess."""
+    from .handicap_calc import allocate_strokes
+    d = get_event_leaderboard(event_name, db_path=db_path)
+    if not d:
+        return {"error": "event not found"}
+    holes_by_rid: dict = {}
+    ph_by_rid: dict = {}
+    with _connect(db_path) as conn:
+        ev = conn.execute(
+            "SELECT id FROM events WHERE LOWER(item_name) = ?",
+            ((event_name or "").strip().lower(),)).fetchone()
+        for r in conn.execute(
+                """SELECT sr.id AS rid, sr.playing_handicap AS ph,
+                          sh.hole_number AS hn, sh.strokes,
+                          cth.par, cth.stroke_index AS si
+                   FROM scoring_rounds sr
+                   JOIN scoring_holes sh ON sh.scoring_round_id = sr.id
+                   LEFT JOIN course_tee_holes cth
+                     ON cth.tee_id = sr.tee_id
+                    AND cth.hole_number = sh.hole_number
+                   WHERE sr.event_id = ?
+                     AND COALESCE(sr.source, 'gg') NOT LIKE 'gg_history%'""",
+                (ev["id"],)):
+            if r["strokes"] is None:
+                continue
+            holes_by_rid.setdefault(r["rid"], {})[r["hn"]] = (
+                r["strokes"], r["par"], r["si"])
+            ph_by_rid[r["rid"]] = r["ph"]
+
+    import math as _m
+
+    def _round(x, mode):
+        return int(_m.floor(x + 0.5)) if mode == "half_up" else int(_m.floor(x))
+
+    teams = [t for t in (d.get("teams") or [])
+             if any(m["scoring_round_id"] in holes_by_rid
+                    for m in t["players"])]
+    field_phs = [ph_by_rid[m["scoring_round_id"]]
+                 for t in teams for m in t["players"]
+                 if m["scoring_round_id"] in ph_by_rid
+                 and ph_by_rid[m["scoring_round_id"]] is not None]
+    if not field_phs:
+        return {"error": "no playing handicaps on the cards"}
+    min_field = min(field_phs)
+
+    def _th(ph, scheme, min_team, rmode):
+        if ph is None:
+            return 0
+        base = min_field if scheme.endswith("field") else min_team
+        if scheme.startswith("prod"):    # round(.75*ph) - round(.75*base)
+            return _round(0.75 * ph, rmode) - _round(0.75 * base, rmode)
+        return _round(0.75 * (ph - base), rmode)
+
+    out_schemes: dict = {}
+    for scheme in ("prod_off_field", "diff_off_field",
+                   "prod_off_team", "diff_off_team"):
+        for par3_off in (True, False):
+            for rmode in ("half_up", "floor"):
+                for cap3 in (True, False):
+                    key = (f"{scheme}|{'no_par3' if par3_off else 'par3_ok'}"
+                           f"|{rmode}|{'cap3' if cap3 else 'nocap'}")
+                    totals = []
+                    for t in teams:
+                        mem = [m for m in t["players"]
+                               if m["scoring_round_id"] in holes_by_rid]
+                        phs = [ph_by_rid.get(m["scoring_round_id"])
+                               for m in mem]
+                        phs = [p for p in phs if p is not None]
+                        min_team = min(phs) if phs else 0
+                        per_hole_best: dict = {}
+                        for m in mem:
+                            hd = holes_by_rid[m["scoring_round_id"]]
+                            th = _th(ph_by_rid.get(m["scoring_round_id"]),
+                                     scheme, min_team, rmode)
+                            eligible = {hn: v[2] for hn, v in hd.items()
+                                        if v[2] is not None
+                                        and not (par3_off and v[1] == 3)}
+                            alloc = (allocate_strokes(int(th), eligible)
+                                     if eligible else {})
+                            for hn, (s, p_, _si) in hd.items():
+                                # Max Triple: gross caps at par+3 before
+                                # pops (global standard, side-games.md)
+                                if cap3 and p_ is not None:
+                                    s = min(s, p_ + 3)
+                                net = s - (alloc.get(hn) or 0)
+                                if (hn not in per_hole_best
+                                        or net < per_hole_best[hn]):
+                                    per_hole_best[hn] = net
+                        totals.append({
+                            "team": " + ".join(m["player_name"]
+                                               for m in t["players"]),
+                            "total": sum(per_hole_best.values())})
+                    out_schemes[key] = totals
+
+    gg_totals, gg_players = [], []
+    if gg_url:
+        try:
+            from golf_genius_sync import (fetch_public_page,
+                                          parse_page_structure,
+                                          parse_tournament_aggregates,
+                                          parse_scorecard_details,
+                                          _unwrap_js_strings)
+            page = fetch_public_page(gg_url)
+            parsed = parse_page_structure(page["html"], gg_url)
+            for tbl in parsed.get("tables") or []:
+                for row in tbl:
+                    if len(row) >= 4 and re.match(r"^T?\d+$", str(row[0])):
+                        m_ = re.match(r"^\s*(\d+)", str(row[3]))
+                        if m_:
+                            gg_totals.append({"pos": row[0],
+                                              "team": row[1],
+                                              "total": int(m_.group(1))})
+            # the details fragments are the GROUND TRUTH: each player's
+            # TEAM-game playing handicap + per-hole dots as GG allocated
+            # them — read the rule straight off instead of inferring it
+            from urllib.parse import urlparse as _up
+            base = f"https://{_up(gg_url).netloc}"
+            for agg in parse_tournament_aggregates(page["html"])[:12]:
+                fp = fetch_public_page(
+                    f"{base}/tournaments2/details/{agg}", xhr=True)
+                frag = _unwrap_js_strings(fp["html"]) or fp["html"]
+                det = parse_scorecard_details(frag)
+                for pl in det.get("players") or []:
+                    gg_players.append({
+                        "player": pl.get("player_name"),
+                        "gg_team_ph": pl.get("playing_handicap"),
+                        "dots": {h: (v or {}).get("dots")
+                                 for h, v in (pl.get("holes") or {}).items()
+                                 if (v or {}).get("dots")}})
+        except Exception as e:
+            gg_totals = gg_totals or [{"error": str(e)}]
+            gg_players = [{"error": str(e)}]
+
+    # score each scheme: how many teams' totals equal GG's (matched by
+    # surname overlap)
+    verdict = {}
+    if gg_totals and "error" not in gg_totals[0]:
+        for key, totals in out_schemes.items():
+            hits = 0
+            for t in totals:
+                ts = {p.split(",")[0].strip().lower() if "," in p
+                      else (p.split()[-1].lower() if p.split() else "")
+                      for p in t["team"].split(" + ")}
+                for g in gg_totals:
+                    gl = str(g["team"]).lower()
+                    if sum(1 for s in ts if s and s in gl) >= 2:
+                        if t["total"] == g["total"]:
+                            hits += 1
+                        break
+            verdict[key] = f"{hits}/{len(totals)} teams match GG"
+    if verdict:
+        # keep the full verdict, but only ship totals for the best combos
+        best_n = max(int(v.split("/")[0]) for v in verdict.values())
+        out_schemes = {k: v for k, v in out_schemes.items()
+                       if verdict.get(k, "").startswith(f"{best_n}/")}
+    return {"event": event_name, "min_field_ph": min_field,
+            "schemes": out_schemes, "gg_board": gg_totals,
+            "gg_players": gg_players,
+            "our_ph": {m["player_name"]: ph_by_rid.get(m["scoring_round_id"])
+                       for t in teams for m in t["players"]
+                       if m["scoring_round_id"] in ph_by_rid},
+            "verdict": verdict}
+
+
+# ═══════════════════════════════════════════════════════════════════
+#  CA QUEUE (Kerry directed 2026-09-11 — mailbox #473 spec, #474 shape)
+#
+#  The admin-only interactive open-items checklist: Kerry works it,
+#  platform-claude maintains it over MCP, every lane can reach it via
+#  bridges. Kerry verbatim: "Let's create a checklist in the Tracker
+#  that I can interact with and be able to always keep track of as a
+#  standard. You update it whenever is necessary. Admin view only."
+#  DONE rows never delete (collapse under a Done band); REOPEN keeps
+#  history in the append-only notes log.
+# ═══════════════════════════════════════════════════════════════════
+
+CA_QUEUE_SECTIONS = ("kerry_decision", "ca_owed", "cc_build",
+                     "finance_cleanup", "followups", "parked", "settled")
+_CA_QUEUE_STATUSES = ("open", "blocked", "done")
+
+
+def _ensure_ca_queue(conn: sqlite3.Connection) -> None:
+    conn.execute("""CREATE TABLE IF NOT EXISTS ca_queue (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        title       TEXT NOT NULL,
+        section     TEXT NOT NULL DEFAULT 'followups',
+        owner       TEXT,
+        status      TEXT NOT NULL DEFAULT 'open',
+        blocked_on  TEXT,
+        mailbox_ref TEXT,
+        notes_log   TEXT,
+        sort_order  INTEGER NOT NULL DEFAULT 0,
+        created_at  TEXT DEFAULT (datetime('now')),
+        updated_at  TEXT DEFAULT (datetime('now')),
+        done_at     TEXT,
+        done_by     TEXT)""")
+
+
+def _ca_queue_row(r) -> dict:
+    out = dict(r)
+    try:
+        out["notes_log"] = json.loads(out.get("notes_log") or "[]")
+    except (TypeError, ValueError):
+        out["notes_log"] = []
+    return out
+
+
+def _ca_queue_note(conn, item_id: int, note: str, author: str) -> None:
+    row = conn.execute("SELECT notes_log FROM ca_queue WHERE id = ?",
+                       (item_id,)).fetchone()
+    try:
+        log = json.loads((row["notes_log"] if row else None) or "[]")
+    except (TypeError, ValueError):
+        log = []
+    log.append({"at": datetime.utcnow().strftime("%Y-%m-%d %H:%M"),
+                "author": (author or "unknown")[:60],
+                "note": (note or "")[:2000]})
+    conn.execute("UPDATE ca_queue SET notes_log = ?, "
+                 "updated_at = datetime('now') WHERE id = ?",
+                 (json.dumps(log), item_id))
+
+
+def list_ca_queue(section: str = "", status: str = "",
+                  db_path: str | Path = DB_PATH) -> dict:
+    with _connect(db_path) as conn:
+        _ensure_ca_queue(conn)
+        clauses, params = [], []
+        if section:
+            clauses.append("section = ?")
+            params.append(section)
+        if status:
+            clauses.append("status = ?")
+            params.append(status)
+        where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
+        rows = [_ca_queue_row(r) for r in conn.execute(
+            f"""SELECT * FROM ca_queue {where}
+                ORDER BY CASE section
+                    {' '.join(f"WHEN '{s}' THEN {i}" for i, s in enumerate(CA_QUEUE_SECTIONS))}
+                    ELSE 99 END, sort_order, id""", params)]
+    return {"sections": list(CA_QUEUE_SECTIONS), "items": rows,
+            "n_open": sum(1 for r in rows if r["status"] != "done"),
+            "n_done": sum(1 for r in rows if r["status"] == "done")}
+
+
+def upsert_ca_queue_item(item: dict, author: str = "",
+                         db_path: str | Path = DB_PATH) -> dict:
+    """Create or update a queue row. Matches by id, else EXACT title
+    (case-insensitive), else inserts. Only known fields apply; section
+    and status are validated. status→done stamps done_at/done_by;
+    done→open/blocked is a REOPEN: done_at clears and the transition is
+    logged so history survives (mailbox #473 rule)."""
+    fields = {k: item.get(k) for k in
+              ("title", "section", "owner", "status", "blocked_on",
+               "mailbox_ref", "sort_order") if k in item}
+    if "section" in fields and fields["section"] not in CA_QUEUE_SECTIONS:
+        return {"error": f"section must be one of {CA_QUEUE_SECTIONS}"}
+    if "status" in fields and fields["status"] not in _CA_QUEUE_STATUSES:
+        return {"error": f"status must be one of {_CA_QUEUE_STATUSES}"}
+    with _connect(db_path) as conn:
+        _ensure_ca_queue(conn)
+        row = None
+        if item.get("id"):
+            row = conn.execute("SELECT * FROM ca_queue WHERE id = ?",
+                               (int(item["id"]),)).fetchone()
+            if not row:
+                return {"error": f"no ca_queue row id {item['id']}"}
+        elif fields.get("title"):
+            row = conn.execute(
+                "SELECT * FROM ca_queue WHERE LOWER(TRIM(title)) = ?",
+                (fields["title"].strip().lower(),)).fetchone()
+        if row is None:
+            if not fields.get("title"):
+                return {"error": "a new item needs a title"}
+            sec = fields.get("section") or "followups"
+            nxt = conn.execute(
+                "SELECT COALESCE(MAX(sort_order), 0) + 1 AS n "
+                "FROM ca_queue WHERE section = ?", (sec,)).fetchone()["n"]
+            cur = conn.execute(
+                """INSERT INTO ca_queue
+                       (title, section, owner, status, blocked_on,
+                        mailbox_ref, sort_order, notes_log)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, '[]')""",
+                (fields["title"].strip(), sec,
+                 fields.get("owner"), fields.get("status") or "open",
+                 fields.get("blocked_on"), fields.get("mailbox_ref"),
+                 fields.get("sort_order") or nxt))
+            new_id = cur.lastrowid
+            if author:
+                _ca_queue_note(conn, new_id, "created", author)
+            if item.get("note"):
+                _ca_queue_note(conn, new_id, str(item["note"]),
+                               author or "unknown")
+            conn.commit()
+            return {"ok": True, "id": new_id, "created": True}
+        # update path
+        rid = row["id"]
+        sets, params = [], []
+        for k, v in fields.items():
+            sets.append(f"{k} = ?")
+            params.append(v.strip() if isinstance(v, str) else v)
+        new_status = fields.get("status")
+        if new_status == "done" and row["status"] != "done":
+            sets += ["done_at = datetime('now')", "done_by = ?"]
+            params.append(author or "unknown")
+        elif new_status in ("open", "blocked") and row["status"] == "done":
+            sets += ["done_at = NULL", "done_by = NULL"]
+            _ca_queue_note(conn, rid,
+                           f"reopened (was done {row['done_at']} by "
+                           f"{row['done_by']})", author or "unknown")
+        if sets:
+            sets.append("updated_at = datetime('now')")
+            conn.execute(f"UPDATE ca_queue SET {', '.join(sets)} "
+                         f"WHERE id = ?", params + [rid])
+        if item.get("note"):
+            _ca_queue_note(conn, rid, str(item["note"]), author or "unknown")
+        conn.commit()
+        return {"ok": True, "id": rid, "created": False}
+
+
+def note_ca_queue_item(item_id: int, note: str, author: str,
+                       db_path: str | Path = DB_PATH) -> dict:
+    with _connect(db_path) as conn:
+        _ensure_ca_queue(conn)
+        if not conn.execute("SELECT 1 FROM ca_queue WHERE id = ?",
+                            (int(item_id),)).fetchone():
+            return {"error": f"no ca_queue row id {item_id}"}
+        _ca_queue_note(conn, int(item_id), note, author)
+        conn.commit()
+    return {"ok": True, "id": int(item_id)}
+
+
+def close_ca_queue_item(item_id: int, author: str,
+                        db_path: str | Path = DB_PATH) -> dict:
+    return upsert_ca_queue_item({"id": int(item_id), "status": "done"},
+                                author=author, db_path=db_path)
+
+
+def move_ca_queue_item(item_id: int, section: str | None = None,
+                       position: int | None = None, author: str = "",
+                       db_path: str | Path = DB_PATH) -> dict:
+    """Move a row to another section and/or position (1-based) within
+    its section; the section's rows renumber densely."""
+    with _connect(db_path) as conn:
+        _ensure_ca_queue(conn)
+        row = conn.execute("SELECT * FROM ca_queue WHERE id = ?",
+                           (int(item_id),)).fetchone()
+        if not row:
+            return {"error": f"no ca_queue row id {item_id}"}
+        sec = section or row["section"]
+        if sec not in CA_QUEUE_SECTIONS:
+            return {"error": f"section must be one of {CA_QUEUE_SECTIONS}"}
+        ids = [r["id"] for r in conn.execute(
+            "SELECT id FROM ca_queue WHERE section = ? AND id != ? "
+            "ORDER BY sort_order, id", (sec, row["id"]))]
+        pos = (len(ids) + 1 if position is None
+               else max(1, min(int(position), len(ids) + 1)))
+        ids.insert(pos - 1, row["id"])
+        for i, rid in enumerate(ids, 1):
+            conn.execute("UPDATE ca_queue SET sort_order = ?, "
+                         "section = CASE WHEN id = ? THEN ? ELSE section END "
+                         "WHERE id = ?", (i, row["id"], sec, rid))
+        conn.execute("UPDATE ca_queue SET updated_at = datetime('now') "
+                     "WHERE id = ?", (row["id"],))
+        conn.commit()
+    return {"ok": True, "id": int(item_id), "section": sec, "position": pos}
+
+
+def _entry_to_pot_cents() -> int:
+    try:
+        from .season_payouts import ENTRY_TO_POT_CENTS
+        return ENTRY_TO_POT_CENTS or 4000
+    except Exception:
+        return 4000
+
+
+# ═══════════════════════════════════════════════════════════════════
+#  EVENTS LEADERBOARD (Kerry directed 2026-09-11, improvements lane)
+#
+#  A per-event results surface for the LEADERBOARD page: list of played
+#  events (newest first, chapter-filterable), each expanding to its
+#  games in the ratified leaderboard IA (Team · Net · Gross · Proxies,
+#  side-games.md "Leaderboard IA"), with the FULL-FIELD board and the
+#  buy-in money game COMBINED into one table — every player's score,
+#  buyers highlighted, money winners badged (the season-boards pattern)
+#  — condensing GG's stacked game lists into one view. Player rows
+#  drill down to the hole-by-hole card (/api/scoring/scorecard, already
+#  member-tier).
+#
+#  ADMIN-ONLY pilot until Kerry approves member exposure (rule 3b).
+#  Which events appear is a dial: events_leaderboard_events (JSON list
+#  of event-code prefixes; empty list = every event with scorecards).
+#  PII-free by design (names, scores, dollars only) so the eventual
+#  member flip is a role-string change, not a data audit.
+# ═══════════════════════════════════════════════════════════════════
+
+# pilot set (Kerry 2026-09-11, expanded same day: "add in Landa Park
+# and a9.21 and s9.21 as well") — production runs on the dial
+_EVENTS_LEADERBOARD_SEED = ["s9.22", "a9.22", "s9.21", "a9.21", "s18.10"]
+
+
+def _events_leaderboard_codes(db_path=None) -> list[str]:
+    try:
+        raw = get_app_setting("events_leaderboard_events", db_path=db_path)
+        if raw is not None and raw.strip() != "":
+            parsed = json.loads(raw)
+            if isinstance(parsed, list):
+                return [str(c) for c in parsed]
+    except Exception as e:
+        logger.warning("events_leaderboard_events unreadable: %s", e)
+    return list(_EVENTS_LEADERBOARD_SEED)
+
+
+def get_events_leaderboard(chapter: str | None = None,
+                           year: str | None = None,
+                           db_path: str | Path = DB_PATH) -> dict:
+    """The EVENTS tab's list: played events (have scorecards), newest
+    first. chapter filters exactly; year is the future year-selector
+    hook (matches event_date's year)."""
+    codes = _events_leaderboard_codes(db_path)
+    with _connect(db_path) as conn:
+        _ensure_scoring_tables(conn)
+        rows = [dict(r) for r in conn.execute(
+            """SELECT e.id, e.item_name, e.event_date, e.course, e.chapter,
+                      COUNT(DISTINCT COALESCE(sr.customer_id,
+                                              'n:' || sr.player_name)) AS field
+               FROM events e
+               JOIN scoring_rounds sr ON sr.event_id = e.id
+               WHERE COALESCE(sr.source, 'gg') NOT LIKE 'gg_history%'
+               GROUP BY e.id
+               ORDER BY e.event_date DESC, e.id DESC""")]
+        if codes:
+            low = [c.strip().lower() for c in codes if c and c.strip()]
+            rows = [r for r in rows
+                    if any((r["item_name"] or "").lower().startswith(c)
+                           for c in low)]
+        if chapter:
+            # joint events (chapter "TGF"/national/blank — Landa Park)
+            # show under BOTH chapters (Kerry 2026-09-11)
+            rows = [r for r in rows
+                    if (r["chapter"] or "").lower() == chapter.lower()
+                    or (r["chapter"] or "").lower() in ("tgf", "national", "")]
+        years = sorted({str(r["event_date"] or "")[:4]
+                        for r in rows if r["event_date"]}, reverse=True)
+        if year:
+            rows = [r for r in rows
+                    if str(r["event_date"] or "").startswith(str(year))]
+        for r in rows:
+            pot = conn.execute(
+                """SELECT ROUND(COALESCE(SUM(p.amount), 0), 2) AS t
+                   FROM tgf_payouts p JOIN tgf_events te ON te.id = p.event_id
+                   WHERE LOWER(TRIM(te.code)) = ?""",
+                ((r["item_name"] or "").strip().lower(),)).fetchone()
+            r["pot"] = pot["t"] if pot else 0
+    return {"events": rows, "years": years,
+            "pilot": bool(codes), "pilot_codes": codes}
+
+
+def get_event_leaderboard(event_name: str,
+                          db_path: str | Path = DB_PATH) -> dict | None:
+    """One event's combined boards for the EVENTS leaderboard tab."""
+    with _connect(db_path) as conn:
+        _ensure_scoring_tables(conn)
+        ev = conn.execute(
+            """SELECT id, item_name, event_date, course, chapter, format
+               FROM events WHERE LOWER(item_name) = ?""",
+            ((event_name or "").strip().lower(),)).fetchone()
+        if not ev:
+            return None
+        ev = dict(ev)
+        ev["holes"] = _event_holes_type(ev["item_name"], ev["format"])
+
+        # one merged row per player: scoring_rounds carries one row per
+        # imported GG board (the ALL Gross row has net/hcp NULL) — same
+        # merge rule as the shadow-game engine (v2.188.9)
+        players: dict = {}
+        order: list = []
+        for sr in conn.execute(
+                """SELECT id, customer_id, player_name, playing_handicap,
+                          gross, net
+                   FROM scoring_rounds
+                   WHERE event_id = ?
+                     AND COALESCE(source, 'gg') NOT LIKE 'gg_history%'
+                   ORDER BY id""", (ev["id"],)):
+            k = (int(sr["customer_id"]) if sr["customer_id"] is not None
+                 else "n:" + (sr["player_name"] or "").strip().lower())
+            if k not in players:
+                players[k] = {"customer_id": sr["customer_id"],
+                              "player_name": sr["player_name"],
+                              "scoring_round_id": sr["id"],
+                              "gross": None, "net": None, "hcp": None}
+                order.append(k)
+            p = players[k]
+            for src, dst in (("gross", "gross"), ("net", "net"),
+                             ("playing_handicap", "hcp")):
+                if p[dst] is None and sr[src] is not None:
+                    p[dst] = sr[src]
+            if sr["net"] is not None:
+                p["scoring_round_id"] = sr["id"]   # net row carries dots
+
+        # pairing groups ARE the teams (Team Net = Foursome v. Field;
+        # the closeout routine's FINAL GG pairing ingest makes these the
+        # groups that actually played). scoring_rounds carries no team
+        # column — the spotlight's team-partners lookup was querying one
+        # that never existed and failing into its except (#452 shape).
+        pairing_groups: dict = {}
+        try:
+            prows = conn.execute(
+                """SELECT group_num, cart_pos, player_name FROM event_pairings
+                   WHERE event_id = ? AND holes = ?
+                   ORDER BY group_num, cart_pos""",
+                (ev["id"], str(ev["holes"] or 18))).fetchall()
+            if not prows:
+                prows = conn.execute(
+                    """SELECT group_num, cart_pos, player_name
+                       FROM event_pairings
+                       WHERE event_id = ? ORDER BY group_num, cart_pos""",
+                    (ev["id"],)).fetchall()
+            for prw in prows:
+                pairing_groups.setdefault(prw["group_num"], []).append(
+                    (prw["cart_pos"], prw["player_name"]))
+        except sqlite3.OperationalError:
+            pairing_groups = {}
+
+        # current handicap INDEX per player (Kerry 2026-09-11: handicapped
+        # games show Index + Playing Handicap columns; 9-hole events show
+        # the 9-hole index = 18-hole ÷ 2, same convention as the spotlight)
+        indexes: dict = {}
+        try:
+            idx_by_name = {hp["player_name"]: hp["handicap_index_18"]
+                           for hp in get_all_handicap_players(db_path)
+                           if hp.get("handicap_index_18") is not None}
+            cids = [int(p["customer_id"]) for p in players.values()
+                    if p["customer_id"] is not None]
+            if cids:
+                ph = ",".join("?" for _ in cids)
+                for lr in conn.execute(
+                        f"SELECT customer_id, player_name FROM "
+                        f"handicap_player_links WHERE customer_id IN ({ph})",
+                        cids):
+                    v = idx_by_name.get(lr["player_name"])
+                    if v is not None and int(lr["customer_id"]) not in indexes:
+                        idx = v / 2 if (ev["holes"] or 18) == 9 else v
+                        indexes[int(lr["customer_id"])] = round(idx, 1)
+        except Exception:
+            logger.warning("event leaderboard index lookup failed",
+                           exc_info=True)
+
+        # per-round hole strokes (compact) — feeds the skins grid and the
+        # team best-ball cards client-side
+        cards: dict = {}
+        rids = {p["scoring_round_id"] for p in players.values()
+                if p["scoring_round_id"]}
+        if rids:
+            ph = ",".join("?" for _ in rids)
+            for hr in conn.execute(
+                    f"""SELECT scoring_round_id AS rid, hole_number,
+                               strokes, strokes_received
+                        FROM scoring_holes
+                        WHERE scoring_round_id IN ({ph})
+                        ORDER BY hole_number""", list(rids)):
+                cards.setdefault(hr["rid"], []).append(
+                    [hr["hole_number"], hr["strokes"],
+                     hr["strokes_received"] or 0])
+
+        # PAR for the holes each player actually played — feeds the
+        # OVERALL board's to-par columns (Kerry 2026-09-12: "Add
+        # relationship to par column right of both Gross and Net").
+        # Summed over holes with a real stroke so it matches the gross
+        # the board shows; NULL when the tee has no par data (blank
+        # cell rather than a wrong number).
+        par_by_rid: dict = {}
+        if rids:
+            ph = ",".join("?" for _ in rids)
+            for pr_ in conn.execute(
+                    f"""SELECT sh.scoring_round_id AS rid,
+                                SUM(cth.par) AS par,
+                                COUNT(cth.par) AS n_par,
+                                COUNT(sh.strokes) AS n_holes
+                         FROM scoring_holes sh
+                         JOIN scoring_rounds sr ON sr.id = sh.scoring_round_id
+                         LEFT JOIN course_tee_holes cth
+                           ON cth.tee_id = sr.tee_id
+                          AND cth.hole_number = sh.hole_number
+                        WHERE sh.scoring_round_id IN ({ph})
+                          AND sh.strokes IS NOT NULL
+                        GROUP BY sh.scoring_round_id""", list(rids)):
+                # every played hole must have a par or the total is a lie
+                if pr_["n_par"] and pr_["n_par"] == pr_["n_holes"]:
+                    par_by_rid[pr_["rid"]] = pr_["par"]
+
+        # bundle buyers (Games-tab eligibility rules)
+        net_buyers = set(_event_game_buyers(
+            conn, ev["item_name"], "NET")["buyers"].keys())
+        gross_buyers = set(_event_game_buyers(
+            conn, ev["item_name"], "GROSS")["buyers"].keys())
+        # the Games-tab player counts are what keyed the matrix when the
+        # GG games were set up (Kerry 2026-09-11: "should be checking
+        # against Tracker EVENT / GAMES which should also be helping
+        # determine which games are being played") — use THEM for game
+        # activation and team type, not the scorecard field size
+        try:
+            game_counts = _event_player_counts(conn, ev["item_name"])
+        except Exception:
+            game_counts = {}
+
+        # per-game flight membership (GG labels only — never derived)
+        flights: dict = {}
+        for fr in conn.execute(
+                """SELECT game, flight_label, customer_id
+                   FROM gg_game_flights WHERE event_id = ?""", (ev["id"],)):
+            if fr["customer_id"] is not None:
+                flights.setdefault(fr["game"], {})[
+                    int(fr["customer_id"])] = fr["flight_label"]
+
+        # recorded money, per customer, with the shared friendly bits
+        won: dict = {}
+        for pr in conn.execute(
+                """SELECT p.customer_id, p.category, p.amount,
+                          LTRIM(REPLACE(COALESCE(p.description, ''),
+                                        'auto: ', '')) AS d
+                   FROM tgf_payouts p
+                   JOIN tgf_events te ON te.id = p.event_id
+                   WHERE LOWER(TRIM(te.code)) = ?
+                   ORDER BY p.amount DESC""",
+                ((ev["item_name"] or "").strip().lower(),)):
+            if pr["customer_id"] is None:
+                continue
+            cat = pr["category"] or "other"
+            label = _PAYOUT_CAT_LABELS.get(cat) or cat.replace(
+                "_", " ").title()
+            won.setdefault(int(pr["customer_id"]), []).append({
+                "category": cat, "label": label,
+                "cents": round((pr["amount"] or 0) * 100),
+                "detail": " · ".join(_payout_detail_bits(cat, pr["d"]))})
+
+        # GG-recorded team + proxy boards
+        team_rows, proxies, hio_rows = [], [], []
+        for gr in conn.execute(
+                """SELECT game, game_label, player_name, is_team, position,
+                          detail, purse, customer_id
+                   FROM gg_game_results WHERE event_id = ?
+                   ORDER BY game, id""", (ev["id"],)):
+            g = dict(gr)
+            if g["game"] in ("team_net", "team_net_board") and g["is_team"]:
+                # gg_total = GG's posted board total (rides in detail as
+                # "total:N", v2.381.0) — the score of record. team_net =
+                # winner rows (real purses); team_net_board = the rest of
+                # the recorded standings ($0 rows the payout assembly
+                # must never see).
+                _tm = re.search(r"total:(-?\d+)", g["detail"] or "")
+                team_rows.append({"position": g["position"],
+                                  "team": g["player_name"],
+                                  "purse": (g["purse"] if g["game"] ==
+                                            "team_net" else None),
+                                  "gg_total": (int(_tm.group(1))
+                                               if _tm else None)})
+            elif g["game"] in ("ctp", "longest_putt"):
+                proxies.append({"game": g["game"],
+                                "label": g["game_label"] or (
+                                    "Longest Putt" if g["game"] ==
+                                    "longest_putt" else "Closest to Pin"),
+                                "player": g["player_name"],
+                                "detail": g["detail"],
+                                "purse": g["purse"]})
+            elif g["game"] == "hio":
+                hio_rows.append({"player": g["player_name"],
+                                 "detail": g["detail"],
+                                 "purse": g["purse"]})
+
+        # stableford points, both tables, from the imported holes through
+        # the formula layer — one bulk read, keyed by scoring_round_id
+        # (the POINTS board = MVP merged with the points games, Kerry
+        # 2026-09-11: "MVP with Points")
+        pts: dict = {}
+        try:
+            formulas = get_scoring_formulas(db_path)
+            for hr in conn.execute(
+                    """SELECT sr.id AS rid, sh.strokes, sh.strokes_received,
+                              cth.par
+                       FROM scoring_rounds sr
+                       JOIN scoring_holes sh ON sh.scoring_round_id = sr.id
+                       LEFT JOIN course_tee_holes cth
+                         ON cth.tee_id = sr.tee_id
+                        AND cth.hole_number = sh.hole_number
+                       WHERE sr.event_id = ?
+                         AND COALESCE(sr.source, 'gg') NOT LIKE 'gg_history%'""",
+                    (ev["id"],)):
+                d = compute_hole_derivations(hr["par"], hr["strokes"],
+                                             hr["strokes_received"] or 0,
+                                             formulas)
+                a = pts.setdefault(hr["rid"], {"net": 0, "gross": 0})
+                if d.get("stableford_net") is not None:
+                    a["net"] += d["stableford_net"]
+                if d.get("stableford_gross") is not None:
+                    a["gross"] += d["stableford_gross"]
+        except Exception:
+            logger.warning("event leaderboard points failed", exc_info=True)
+
+    def _won_cats(cid, cats):
+        return [w for w in won.get(cid, []) if w["category"] in cats]
+
+    def _row(p, buyer_set, won_cats):
+        cid = p["customer_id"]
+        cid = int(cid) if cid is not None else None
+        return {
+            "player_name": p["player_name"],
+            "customer_id": cid,
+            "scoring_round_id": p["scoring_round_id"],
+            "gross": p["gross"], "net": p["net"], "hcp": p["hcp"],
+            "index": indexes.get(cid) if cid is not None else None,
+            "buyer": cid in buyer_set if cid is not None else False,
+            "won": _won_cats(cid, won_cats) if cid is not None else [],
+        }
+
+    def _flight_sections(rows, fmap):
+        """Flight-SECTIONED board (Kerry 2026-09-11): buyers keep their
+        GG flight label (gg_game_flights, never derived); every other
+        player is PLACED into the flight their handicap would have put
+        them in ("Place non-flighted members... in the flights they
+        would have been in") — the boundaries come from the labeled
+        members' playing handicaps, midpoint between adjacent flights,
+        never hardcoded. Placed rows carry assigned=True so the UI can
+        show a dashed pill."""
+        by_label: dict = {}
+        for r in rows:
+            lab = (fmap.get(r["customer_id"])
+                   if r["customer_id"] is not None else None)
+            if lab:
+                by_label.setdefault(lab, []).append(r["hcp"])
+        if not by_label:
+            return [{"label": None, "rows": rows}]
+        stats = []
+        for lab, hcps in by_label.items():
+            known = [h for h in hcps if h is not None]
+            stats.append((lab,
+                          (sum(known) / len(known)) if known else 0.0,
+                          min(known) if known else 0.0,
+                          max(known) if known else 0.0))
+        stats.sort(key=lambda s: s[1])            # low flight first
+        bounds = [(a[3] + b[2]) / 2.0 for a, b in zip(stats, stats[1:])]
+        out = [{"label": s[0], "rows": []} for s in stats]
+        overflow = {"label": "UNFLIGHTED", "rows": []}
+        for r in rows:
+            cid = r["customer_id"]
+            lab = fmap.get(cid) if cid is not None else None
+            if lab:
+                idx = next(i for i, s in enumerate(stats) if s[0] == lab)
+                out[idx]["rows"].append(r)
+                continue
+            if r["hcp"] is None:
+                overflow["rows"].append(dict(r, assigned=True))
+                continue
+            idx = 0
+            for i, b in enumerate(bounds):
+                if r["hcp"] > b:
+                    idx = i + 1
+            out[idx]["rows"].append(dict(r, assigned=True))
+        if overflow["rows"]:
+            out.append(overflow)
+        return out
+
+    plist = [players[k] for k in order]
+
+    # NET = All Net merged with Individual Net (whole field, buyers
+    # highlighted), flight-sectioned per the event
+    net_rows = [_row(p, net_buyers, ("individual_net",)) for p in plist]
+    net_rows.sort(key=lambda r: (r["net"] is None, r["net"] or 0,
+                                 r["gross"] or 0))
+    net_board = _flight_sections(net_rows, flights.get("individual_net", {}))
+
+    # GROSS = All Gross merged with Individual Gross, flight-sectioned
+    gross_rows = [_row(p, gross_buyers, ("individual_gross",))
+                  for p in plist]
+    gross_rows.sort(key=lambda r: (r["gross"] is None, r["gross"] or 0))
+    gross_board = _flight_sections(gross_rows,
+                                   flights.get("individual_gross", {}))
+
+    # SKINS = the skins chart's roster: buyers in their flights on top;
+    # everyone NOT in skins is PLACED into the flight their handicap
+    # would have put them in, at the BOTTOM of the flight in grey
+    # (Kerry 2026-09-11, second pass — replaces the flat NOT IN SKINS
+    # block). The competition itself stays buyers-only.
+    skins_rows = [dict(_row(p, gross_buyers, ("skins",))) for p in plist]
+    skins_rows.sort(key=lambda r: (
+        not r["buyer"],
+        -(sum(w["cents"] for w in r["won"])) if r["buyer"] else 0,
+        (r["player_name"] or "").lower()))
+    skins_board = _flight_sections(skins_rows, flights.get("skins", {}))
+
+    # POINTS = the points games merged with MVP: net + gross stableford
+    # for the whole field, MVP-eligible (NET-bundle) buyers highlighted,
+    # City/TGF MVP money badged
+    points_rows = []
+    for p in plist:
+        cid = int(p["customer_id"]) if p["customer_id"] is not None else None
+        a = pts.get(p["scoring_round_id"]) or {}
+        points_rows.append({
+            "player_name": p["player_name"], "customer_id": cid,
+            "scoring_round_id": p["scoring_round_id"],
+            "net_pts": a.get("net"), "gross_pts": a.get("gross"),
+            "net": p["net"], "gross": p["gross"],
+            "buyer": cid in net_buyers if cid is not None else False,
+            "won": _won_cats(cid, ("mvp", "tgf_mvp")) if cid is not None
+                   else [],
+        })
+    points_rows.sort(key=lambda r: (r["net_pts"] is None,
+                                    -(r["net_pts"] or 0)))
+
+    # Points ties STAY ties (T# on the board — the races don't
+    # tiebreak); only Event MVP is tiebroken, per Kerry's ratified
+    # chain: 1. Net Score, 2. Gross Score, 3. Split Pot. The TOP tied
+    # group orders by that chain so the MVP winner shows first, and
+    # every tied MVP-eligible buyer carries a note saying how the
+    # chain decided (Kerry 2026-09-11: "Robert won the 2nd tiebreaker
+    # and should be shown 1st with notes for each").
+    def _chain_key(r):
+        return (r["net"] if r["net"] is not None else 999,
+                r["gross"] if r["gross"] is not None else 999)
+
+    def _sc(v):
+        if v is None:
+            return "—"
+        try:
+            return str(int(v)) if float(v).is_integer() else str(v)
+        except (TypeError, ValueError):
+            return str(v)
+
+    regrouped, seen_top = [], False
+    i = 0
+    while i < len(points_rows):
+        j = i + 1
+        while (j < len(points_rows)
+               and points_rows[j]["net_pts"] == points_rows[i]["net_pts"]):
+            j += 1
+        grp = points_rows[i:j]
+        buyers_g = sorted([r for r in grp if r["buyer"]], key=_chain_key)
+        others_g = sorted([r for r in grp if not r["buyer"]],
+                          key=_chain_key)
+        if (not seen_top and grp[0]["net_pts"] is not None
+                and len(grp) > 1 and len(buyers_g) >= 2):
+            w = buyers_g[0]
+            same_net = [r for r in buyers_g if r["net"] == w["net"]]
+            if len(same_net) == 1:
+                w["mvp_note"] = f"MVP tiebreak 1 — low Net ({_sc(w['net'])})"
+            else:
+                same_gross = [r for r in same_net
+                              if r["gross"] == w["gross"]]
+                if len(same_gross) == 1:
+                    w["mvp_note"] = (f"MVP tiebreak 2 — low Gross "
+                                     f"({_sc(w['gross'])})")
+                else:
+                    for r in same_gross:
+                        r["mvp_note"] = "MVP tiebreak 3 — split pot"
+            for r in buyers_g:
+                if not r.get("mvp_note"):
+                    r["mvp_note"] = (f"MVP tiebreak: Net {_sc(r['net'])} · "
+                                     f"Gross {_sc(r['gross'])}")
+        if grp[0]["net_pts"] is not None:
+            seen_top = True
+        regrouped.extend(buyers_g + others_g)
+        i = j
+    points_rows = regrouped
+
+    # ── OVERALL (Kerry 2026-09-11): ONE whole-field table combining
+    # every player's scores. Wins highlight by category color — Ind Net
+    # on the Net total, Ind Gross on the Gross total, MVP on the Points
+    # total, Skins on the winning hole cells (skin_cells) — and buy-ins
+    # are deliberately NOT identified on this view. Won = the player's
+    # total recorded money for the event across ALL categories (team
+    # shares, proxies and HIO included), from tgf_payouts.
+    # Win colors code by FLIGHT (Kerry, second pass: "color code for
+    # skins per flight... anybody who won money gets color-coded") —
+    # each row carries the player's flight ORDINAL per game (1 = low
+    # flight, same order the sectioned boards render) so the UI can
+    # paint flight 1 red, flight 2 green/blue, etc.
+    def _flight_ordinals(board):
+        out, ordn = {}, 0
+        for sec in board or []:
+            if not sec.get("label") or sec["label"] == "UNFLIGHTED":
+                continue
+            ordn += 1
+            for r_ in sec["rows"]:
+                if r_["customer_id"] is not None:
+                    out[int(r_["customer_id"])] = ordn
+        return out
+
+    _net_ord = _flight_ordinals(net_board)
+    _gross_ord = _flight_ordinals(gross_board)
+    _skins_ord = _flight_ordinals(skins_board)
+
+    overall_rows = []
+    for p in plist:
+        cid = int(p["customer_id"]) if p["customer_id"] is not None else None
+        a = pts.get(p["scoring_round_id"]) or {}
+        wlist = won.get(cid, []) if cid is not None else []
+        cats = {w["category"] for w in wlist}
+        overall_rows.append({
+            "player_name": p["player_name"], "customer_id": cid,
+            "scoring_round_id": p["scoring_round_id"],
+            "index": indexes.get(cid) if cid is not None else None,
+            "hcp": p["hcp"], "gross": p["gross"], "net": p["net"],
+            "par": par_by_rid.get(p["scoring_round_id"]),
+            "to_par_gross": (
+                p["gross"] - par_by_rid[p["scoring_round_id"]]
+                if p["gross"] is not None
+                and p["scoring_round_id"] in par_by_rid else None),
+            "to_par_net": (
+                p["net"] - par_by_rid[p["scoring_round_id"]]
+                if p["net"] is not None
+                and p["scoring_round_id"] in par_by_rid else None),
+            "net_pts": a.get("net"),
+            "win_net": "individual_net" in cats,
+            "win_gross": "individual_gross" in cats,
+            "win_skins": "skins" in cats,
+            "win_mvp": bool(cats & {"mvp", "tgf_mvp"}),
+            "net_flight": _net_ord.get(cid) if cid is not None else None,
+            "gross_flight": _gross_ord.get(cid) if cid is not None else None,
+            "skins_flight": _skins_ord.get(cid) if cid is not None else None,
+            "won_total": round(sum(w["cents"] for w in wlist) / 100.0, 2),
+        })
+    overall_rows.sort(key=lambda r: (r["net"] is None, r["net"] or 0,
+                                     r["gross"] or 0))
+
+    # ── ALL teams with best-ball totals + GG-style team cards (Kerry
+    # 2026-09-11: "Show all teams and allow expansion of each team to
+    # see the team net scorecard like on Golf Genius") — grouped by
+    # scoring_rounds.team_num; total = best NET ball per hole summed;
+    # GG's recorded purse attaches by member-surname overlap ──
+    # only holes actually PLAYED (GG cards can carry empty rows for the
+    # unplayed nine — a front-9 event must not render 10-18, Kerry
+    # 2026-09-11)
+    hole_cols = sorted({h[0] for hs in cards.values() for h in hs
+                        if h[1] is not None})
+
+    def _player_holes(rid):
+        return {h[0]: (h[1], h[2]) for h in cards.get(rid, [])}
+
+    by_norm = {_normalize_player_name(p["player_name"]).lower(): p
+               for p in plist if p["player_name"]}
+    # Below 16 players the matrix runs CART Net — 2-man cart teams, not
+    # foursomes (side-games spec; the s9.21/a9.21 boards are cart events)
+    _n_players = (game_counts or {}).get("players") or len(plist)
+    _team_type = ""
+    try:
+        _m9, _m18 = _load_games_matrix(db_path=db_path)
+        _mat = _m9 if (ev["holes"] or 18) == 9 else _m18
+        _mrow = _mat.get(str(_n_players)) or _mat.get(_n_players) or {}
+        _team_type = str(_mrow.get("teamType") or "")
+    except Exception:
+        pass
+    _cart_mode = "cart" in _team_type.lower() or (
+        not _team_type and _n_players < 16)
+    _groups: dict = {}
+    for tn, slots in pairing_groups.items():
+        if _cart_mode:
+            for cp, nm in slots:
+                _groups.setdefault((tn, "a" if (cp or 1) <= 2 else "b"),
+                                   []).append(nm)
+        else:
+            _groups[tn] = [nm for _, nm in slots]
+    teams = []
+    for tn, names in sorted(_groups.items(), key=lambda kv: str(kv[0])):
+        members, matched = [], 0
+        for nm in names:
+            p = by_norm.get(_normalize_player_name(nm).lower())
+            if p:
+                matched += 1
+                members.append({"player_name": p["player_name"],
+                                "customer_id": (int(p["customer_id"])
+                                                if p["customer_id"] is not None
+                                                else None),
+                                "scoring_round_id": p["scoring_round_id"]})
+            else:
+                # on the sheet but no card (no-show / blind-draw slot)
+                members.append({"player_name": nm, "customer_id": None,
+                                "scoring_round_id": None})
+        if not matched:
+            continue
+        total, any_hole = 0, False
+        for hn in hole_cols:
+            nets = []
+            for m in members:
+                if not m["scoring_round_id"]:
+                    continue
+                v = _player_holes(m["scoring_round_id"]).get(hn)
+                if v and v[0] is not None:
+                    nets.append(v[0] - (v[1] or 0))
+            if nets:
+                total += min(nets)
+                any_hole = True
+        teams.append({
+            "team_num": (f"{tn[0]}{tn[1]}" if isinstance(tn, tuple)
+                         else tn),
+            "players": members,
+            "total_net": total if any_hole else None,
+            "purse": None, "gg_position": None, "gg_total": None})
+
+    def _member_hits(members, gs):
+        # Count MEMBERS found in GG's team string — full "LAST, First"
+        # match preferred, surname fallback. Counting per member (not a
+        # surname SET) matters: a team carrying two same-surname players
+        # (a married couple in one cart) collapsed to one surname hit
+        # and could miss the foursome threshold entirely.
+        hits = 0
+        for m in members:
+            nm = (m["player_name"] or "").strip().lower()
+            if not nm or nm.startswith("bl["):
+                continue
+            last_ = (nm.split(",")[0].strip() if "," in nm
+                     else (nm.split()[-1] if nm.split() else ""))
+            # surname on a word boundary only — bare substring let
+            # "buyer" hit inside "nonBUYER" and cross-matched teams
+            if nm in gs or (last_ and re.search(
+                    r"(?<![a-z'])" + re.escape(last_) + r"(?![a-z'])", gs)):
+                hits += 1
+        return hits
+
+    _min_match = 1 if _cart_mode else 2
+    for gr in team_rows:
+        gs = (gr["team"] or "").lower()
+        best_t, best_n = None, 0
+        for t in teams:
+            n = _member_hits(t["players"], gs)
+            if n > best_n:
+                best_n, best_t = n, t
+        if best_t is not None and best_n >= _min_match:
+            if gr["purse"] is not None:
+                best_t["purse"] = gr["purse"]
+            best_t["gg_position"] = gr["position"]
+            if gr.get("gg_total") is not None:
+                best_t["gg_total"] = gr["gg_total"]
+            # blind-draw slots ride on the GG team string ("Bl[LAST,
+            # First]" — Kerry 2026-09-11: "Make sure to show blinds as
+            # well"): show them on the team, card duplicated from the
+            # drawn player's own round (that is GG's mechanism). A team
+            # can match BOTH its winner row and its board row (v2.381.0)
+            # — never append the same blind slot twice.
+            _have = {p["player_name"] for p in best_t["players"]}
+            for bm in re.findall(r"Bl\[([^\]]+)\]", gr["team"] or ""):
+                if f"Bl[{bm}]" in _have:
+                    continue
+                src = by_norm.get(_normalize_player_name(bm).lower())
+                best_t["players"].append({
+                    "player_name": f"Bl[{bm}]",
+                    "customer_id": None,
+                    "scoring_round_id": (src or {}).get("scoring_round_id"),
+                    "blind": True})
+
+    # GG's recorded Team Net result is OFFICIAL — our best-ball total
+    # is a reconstruction from the ALL Net card's own dots (100%
+    # individual allowance), NOT the ratified Team Net allocation (75%,
+    # off lowest), so it can disagree with GG and must never out-rank
+    # the recorded result (Kerry 2026-09-11: the s9.21 $80 winner
+    # showed 2nd; s9.22's GG tie at T1 split 30/31 here). Recorded
+    # teams rank first by GG position; the rest follow by our total,
+    # unranked.
+    def _gg_pos_num(t):
+        m_ = re.search(r"\d+", str(t.get("gg_position") or ""))
+        return int(m_.group(0)) if m_ else None
+
+    any_gg = any(_gg_pos_num(t) is not None for t in teams)
+    if any_gg:
+        teams.sort(key=lambda t: (
+            0 if _gg_pos_num(t) is not None else 1,
+            _gg_pos_num(t) or 0,
+            t["total_net"] is None, t["total_net"] or 0))
+        for t in teams:
+            t["official"] = _gg_pos_num(t) is not None
+            t["position"] = t["gg_position"] if t["official"] else ""
+    else:
+        teams.sort(key=lambda t: (t["total_net"] is None,
+                                  t["total_net"] or 0))
+        _last, _rank = object(), 0
+        for i, t in enumerate(teams, 1):
+            if t["total_net"] != _last:
+                _rank, _last = i, t["total_net"]
+            tied = (t["total_net"] is not None and sum(
+                1 for x in teams if x["total_net"] == t["total_net"]) > 1)
+            t["position"] = (("T" if tied else "") + str(_rank)
+                             if t["total_net"] is not None else "")
+            t["official"] = False
+
+    # ── skins winning cells (outright low GROSS on a hole WITHIN the
+    # flight — the engine's rule) for the GG-style hole-by-hole grid ──
+    skin_cells: dict = {}
+    for sec in skins_board:
+        for hn in hole_cols:
+            best, who, tie = None, None, False
+            for r in sec["rows"]:
+                if not r["buyer"]:
+                    continue   # placed non-buyers never contest a skin
+                s = _player_holes(r["scoring_round_id"]).get(hn)
+                s = s[0] if s else None
+                if s is None:
+                    continue
+                if best is None or s < best:
+                    best, who, tie = s, r["scoring_round_id"], False
+                elif s == best:
+                    tie = True
+            if who is not None and not tie:
+                skin_cells.setdefault(who, []).append(hn)
+    # ── games that did NOT run, with the requirement from the LIVE
+    # matrix (Kerry 2026-09-11: denote immediately, per the 9/18
+    # standard, and say the pot rolled into skins) ──
+    games_off = []
+    try:
+        m9, m18 = _load_games_matrix(db_path=db_path)
+        mat = m9 if (ev["holes"] or 18) == 9 else m18
+        thr = None
+        for n in sorted(int(k) for k in mat.keys() if str(k).isdigit()):
+            row_ = mat.get(str(n)) or mat.get(n) or {}
+            if _matrix_num(row_.get("individualGross")) > 0:
+                thr = n
+                break
+        _n_gross = (game_counts or {}).get("gross")
+        if _n_gross is None:
+            _n_gross = len(gross_buyers)
+        if thr is not None and _n_gross < thr:
+            games_off.append({
+                "game": "individual_gross", "label": "Individual Gross",
+                "needed": thr, "had": _n_gross,
+                "note": (f"Individual Gross activates at {thr} GROSS "
+                         f"buy-ins on a {ev['holes']}-hole event — this "
+                         f"event had {_n_gross}, so its pot "
+                         f"rolled into Skins (the full GROSS pool paid "
+                         f"as skins).")})
+    except Exception:
+        logger.warning("event leaderboard matrix threshold failed",
+                       exc_info=True)
+
+    return {
+        "event": {"name": ev["item_name"], "date": ev["event_date"],
+                  "course": ev["course"], "chapter": ev["chapter"],
+                  "holes": ev["holes"]},
+        "field": len(plist),
+        "pot": round(sum(w["cents"] for ws in won.values()
+                         for w in ws) / 100.0, 2),
+        "overall_board": overall_rows,
+        "net_board": net_board,
+        "gross_board": gross_board,
+        "skins_board": skins_board,
+        "skin_cells": {str(k): v for k, v in skin_cells.items()},
+        "points_board": points_rows,
+        "teams": teams,
+        "team_board": team_rows,
+        "proxies": proxies,
+        "hio": hio_rows,
+        "cards": {str(k): v for k, v in cards.items()},
+        "hole_cols": hole_cols,
+        "games_off": games_off,
+        "n_net_buyers": len(net_buyers),
+        "n_gross_buyers": len(gross_buyers),
+    }
+
+
 # Spotlight shares the expensive, customer-INDEPENDENT reads (each
 # race's live board, the cup and LSC projections) across profile views
 # for a short TTL — clicking through players re-ran get_points_race_live
@@ -12200,7 +13969,8 @@ def get_player_spotlight(customer_id: int,
         # standings' "tournaments" column, so guests/non-enrolled players
         # showed 0-1 (Beam 0 vs 2 rounds; Decareaux 1 vs 5).
         from .timezone_utils import today_central
-        _season_start = f"{today_central().year}-01-01"
+        season_year = today_central().year
+        _season_start = f"{season_year}-01-01"
         _ev = conn.execute(
             """SELECT COUNT(DISTINCT COALESCE(event_id, 'd:' || COALESCE(round_date, '?'))) AS n
                FROM scoring_rounds
@@ -12208,6 +13978,27 @@ def get_player_spotlight(customer_id: int,
                  AND COALESCE(source, 'gg') NOT LIKE 'gg_history%'""",
             (customer_id, _season_start)).fetchone()
         events_played_rounds = (_ev["n"] or 0) if _ev else 0
+        # per-year twins for the SEASON (per year) | ALL-TIME toggle —
+        # identical to the season row while scorecards only reach back
+        # to 2026; diverges when historical records land
+        events_played_by_year = {
+            r["y"]: r["n"] or 0 for r in conn.execute(
+                """SELECT substr(round_date, 1, 4) AS y,
+                          COUNT(DISTINCT COALESCE(event_id, 'd:' || COALESCE(round_date, '?'))) AS n
+                   FROM scoring_rounds
+                   WHERE customer_id = ? AND round_date IS NOT NULL
+                     AND COALESCE(source, 'gg') NOT LIKE 'gg_history%'
+                   GROUP BY substr(round_date, 1, 4)""",
+                (customer_id,)).fetchall() if r["y"]}
+        events_played_rounds_all = sum(events_played_by_year.values())
+
+        # Winnings-by-Game buy-in counters (needs this conn; the winnings
+        # aggregation itself runs after the payouts read below)
+        try:
+            wbg_buyins = _spotlight_buyin_counts(conn, customer_id)
+        except Exception:
+            logger.warning("spotlight buy-in counts failed", exc_info=True)
+            wbg_buyins = None
 
         # current handicap index via handicap_player_links (canonical path)
         idx18 = None
@@ -12688,7 +14479,7 @@ def get_player_spotlight(customer_id: int,
     # game carries a FRIENDLY label ("Individual Net — 1st Place | Low
     # Flight") — the raw category/description read like gobbledygook
     # (Kerry, same day).
-    total_winnings, recent_payouts, recent_events = 0, [], []
+    total_winnings, recent_payouts, recent_events, w = 0, [], [], None
     try:
         w = get_customer_winnings(name, db_path=db_path,
                                   customer_id=customer_id)
@@ -12731,41 +14522,7 @@ def get_player_spotlight(customer_id: int,
             desc = p.get("description") or ""
             label = _PAYOUT_CAT_LABELS.get(cat) or (
                 cat.replace("_", " ").title() if cat else "Payout")
-            bits = []
-            # "SAN ANTONIO Net 2026 final standings — 2 place" (season
-            # payout rows) → "2nd Place | Season Standings"
-            fs_ = re.search(r"final standings\s*[—\-]\s*(\d+)\s*place",
-                            desc, re.I)
-            if fs_:
-                n_ = int(fs_.group(1))
-                suf_ = ("th" if 10 <= n_ % 100 <= 13
-                        else {1: "st", 2: "nd", 3: "rd"}.get(n_ % 10, "th"))
-                bits.append(f"{n_}{suf_} Place | Season Standings")
-            m = re.search(r"\b(\d+)(st|nd|rd|th)\b", desc)
-            tied = "(T)" in desc
-            if m and cat != "skins" and not fs_:
-                bits.append(f"{'T' if tied else ''}{m.group(1)}{m.group(2)} Place")
-            if cat == "skins":
-                hm = re.search(r"holes?\s+([\d,\s&]+)", desc, re.I)
-                cm = re.search(r"×\s*(\d+)", desc)
-                if hm:
-                    _hl = [h for h in re.split(r"[\s,&]+", hm.group(1)) if h]
-                    bits.append(("Hole " if len(_hl) == 1 else "Holes ")
-                                + (" & ".join(_hl) if len(_hl) <= 2
-                                   else ", ".join(_hl[:-1]) + " & " + _hl[-1]))
-                elif cm:
-                    n_ = int(cm.group(1))
-                    bits.append(f"{n_} skin{'s' if n_ != 1 else ''}")
-            if cat in ("closest_to_pin", "ctp"):
-                pm = re.search(r"#\s*(\d+)", desc)
-                if pm:
-                    bits.append(f"Hole {pm.group(1)}")
-            fm = re.search(r"\b(LOW|MID|HIGH)\b[\s-]*Flight", desc, re.I)
-            fn = re.search(r"Flight\s*(\d+)", desc, re.I)
-            if fm:
-                bits.append(f"{fm.group(1).title()} Flight")
-            elif fn:
-                bits.append(f"Flight {fn.group(1)}")
+            bits = _payout_detail_bits(cat, desc)
             if cat == "team_net" and partners:
                 _w = "w/ " + " & ".join(partners)
                 if bits:
@@ -12810,6 +14567,46 @@ def get_player_spotlight(customer_id: int,
     except Exception as e:
         errors.append(f"winnings: {e}")
 
+    # ── winnings by game / bundle (Kerry ratified 2026-09-11) ──
+    # Both scopes ship in one payload so the page-level SEASON | ALL-TIME
+    # toggle is a client-side flip with no second fetch.
+    winnings_by_game = None
+    try:
+        winnings_by_game = _winnings_by_game(
+            (w.get("payouts") or []) if w else [],
+            get_winnings_bundles(db_path), season_year, wbg_buyins)
+    except Exception as e:
+        errors.append(f"winnings by game: {e}")
+
+    # Scoped stat-strip values (the page-level toggle drives the whole
+    # strip, Kerry 2026-09-11): one entry per year with data + all_time.
+    # The live-board "tournaments" floor applies to the CURRENT year
+    # (and all-time, which can only be >= it) — live boards are this
+    # season's by definition.
+    def _races_n(rows):
+        return len({(e["contest_type"], e["season"]) for e in rows})
+
+    _yr = str(season_year)
+    _wbg_years = (winnings_by_game or {}).get("years") or [_yr]
+    stats_scoped = {"years": {}, "all_time": {
+        "events_played": max(events_played_rounds_all, events_played),
+        "races_entered": _races_n(enrollments),
+        "total_winnings": total_winnings,
+    }}
+    for y in _wbg_years:
+        ep = events_played_by_year.get(y, 0)
+        if y == _yr:
+            ep = max(ep, events_played_rounds, events_played)
+        stats_scoped["years"][y] = {
+            "events_played": ep,
+            "races_entered": _races_n(
+                [e for e in enrollments if y in str(e["season"] or "")]),
+            "total_winnings": (
+                round(sum(b["total"]
+                          for b in winnings_by_game["by_year"][y]), 2)
+                if winnings_by_game else (total_winnings if y == _yr else 0)),
+        }
+
     return {
         "customer_id": customer_id,
         "name": name,
@@ -12828,6 +14625,10 @@ def get_player_spotlight(customer_id: int,
                                   for e in enrollments}),
             "total_winnings": total_winnings,
         },
+        # SEASON | ALL-TIME page toggle (Kerry 2026-09-11): the strip
+        # reads from here; legacy "stats" stays for older clients.
+        "stats_scoped": stats_scoped,
+        "winnings_by_game": winnings_by_game,
         "scoring": scoring,
         "races": races,
         "race_pots": race_pots,
@@ -14239,16 +16040,22 @@ def _split_board_sections(table: list) -> list[tuple]:
     return sections
 
 
-def _game_winners_from_table(table: list) -> list[dict]:
+def _game_winners_from_table(table: list, winners_only: bool = True) -> list[dict]:
     """Winner rows from a GG game-result board table.
 
-    Returns [{player, chapter, position, detail, purse, is_team, section}].
-    Winners = rows with purse > 0; if no purse column/values, rows at
-    position 1 (incl. "T1" ties) — evaluated PER SECTION, since flighted
-    boards (Ind Net / Ind Gross) pack every flight into one table and
-    each flight has its own winner. Blank/notice rows (len mismatch)
-    skip. Unsectioned tables (CTP / Team Net / proxies) parse exactly as
-    before, with section = None.
+    Returns [{player, chapter, position, detail, purse, is_team, section,
+    total}]. Winners = rows with purse > 0; if no purse column/values,
+    rows at position 1 (incl. "T1" ties) — evaluated PER SECTION, since
+    flighted boards (Ind Net / Ind Gross) pack every flight into one
+    table and each flight has its own winner. Blank/notice rows (len
+    mismatch) skip. Unsectioned tables (CTP / Team Net / proxies) parse
+    exactly as before, with section = None.
+
+    total (v2.381.0, Kerry: show GG's posted totals, not our
+    reconstruction): the board's Total column ("TotalNet", "30 (-/30)")
+    as an int when present. winners_only=False returns EVERY positioned
+    row — the whole standings, $0 teams included — so the events
+    leaderboard can display the full recorded Team Net board.
     """
     if not table or not table[0]:
         return []
@@ -14269,6 +16076,7 @@ def _game_winners_from_table(table: list) -> list[dict]:
         player_i = col("player", "foursome", "team", "twosome", "cart")
         purse_i = col("purse")
         detail_i = col("detail")
+        total_i = col("total")
         if player_i < 0:
             continue
         is_team = 1 if "player" not in head[player_i] else 0
@@ -14282,6 +16090,10 @@ def _game_winners_from_table(table: list) -> list[dict]:
             m = re.search(r"\s+TGF\s+([A-Za-z .'-]+)$", raw)
             chapter = m.group(1).strip() if m else None
             name = raw[:m.start()].strip() if m else raw
+            tot = None
+            if total_i > -1:
+                tm = re.match(r"^\s*(-?\d+)", str(r[total_i] or ""))
+                tot = int(tm.group(1)) if tm else None
             rows.append({
                 "player": name, "chapter": chapter,
                 "position": (r[pos_i] or "").strip() if pos_i > -1 else "",
@@ -14289,7 +16101,11 @@ def _game_winners_from_table(table: list) -> list[dict]:
                 "purse": _parse_money(r[purse_i]) if purse_i > -1 else 0.0,
                 "is_team": is_team,
                 "section": section,
+                "total": tot,
             })
+        if not winners_only:
+            winners.extend([r for r in rows if r["position"]])
+            continue
         sec_winners = [r for r in rows if r["purse"] > 0]
         if not sec_winners:
             sec_winners = [r for r in rows
@@ -14494,9 +16310,53 @@ def import_gg_game_results(widget_url: str, db_path: str | Path = DB_PATH,
                          w["position"],
                          # Flighted boards: the section label (LOW Flight /
                          # FLIGHT 2 | HDCP 6 - 12) rides in detail so the
-                         # payout description can name the flight.
-                         w["detail"] or w.get("section"), w["purse"]))
+                         # payout description can name the flight. Team
+                         # rows: GG's posted board total rides here
+                         # instead (v2.381.0 — the recorded score of
+                         # record, so boards never show our best-ball
+                         # reconstruction against GG's positions).
+                         w["detail"] or w.get("section")
+                         or (f"total:{w['total']}" if w["is_team"]
+                             and w.get("total") is not None else None),
+                         w["purse"]))
                     result["winners_recorded"] += 1
+                # FULL TEAM BOARD (v2.381.0, Kerry: "do 1 first" — show
+                # GG's posted totals): the Team Net board publishes EVERY
+                # team's position + total, not just winners, and GG's
+                # ordering is the record (our reconstruction mis-ordered
+                # s9.22's non-winners). Store non-winner teams under game
+                # 'team_net_board' so the payout assembly (which reads
+                # game='team_net' only) NEVER sees a $0 row — storing $0
+                # teams as team_net would let the matrix-fallback pool
+                # invent place money GG didn't record. Winner teams keep
+                # their game='team_net' row (the board insert lands on
+                # the same (tid, player_name) key and only refreshes
+                # position/detail/purse — game is not in the upsert).
+                board_names: list = []
+                if game == "team_net" and any(w["is_team"] for w in fresh):
+                    board: list = []
+                    for table in tstruct.get("tables") or []:
+                        board.extend(r for r in _game_winners_from_table(
+                            table, winners_only=False) if r["is_team"])
+                    for b in board:
+                        board_names.append(b["player"])
+                        conn.execute(
+                            """INSERT INTO gg_game_results
+                                   (event_id, event_code, gg_round_id,
+                                    gg_tournament_id, game, game_label,
+                                    customer_id, player_name, is_team,
+                                    chapter, position, detail, purse)
+                               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                               ON CONFLICT (gg_tournament_id, player_name)
+                               DO UPDATE SET purse = excluded.purse,
+                                             position = excluded.position,
+                                             detail = excluded.detail""",
+                            (ev_id, ev_code, rid, tid, "team_net_board",
+                             text, None, b["player"], 1, b["chapter"],
+                             b["position"],
+                             (f"total:{b['total']}"
+                              if b.get("total") is not None else None),
+                             b["purse"]))
                 # REPLACE semantics per tournament (v2.126.3): drop rows a
                 # previous walk stored that are NOT in the current winner
                 # set. A walk during a live round captures transient
@@ -14504,7 +16364,7 @@ def import_gg_game_results(widget_url: str, db_path: str | Path = DB_PATH,
                 # upserted the real winners but left the stale rows — the
                 # a9.18/s18.8 phantom Team Net "ties".
                 if fresh:
-                    names = [w["player"] for w in fresh]
+                    names = [w["player"] for w in fresh] + board_names
                     ph = ",".join("?" * len(names))
                     stale = conn.execute(
                         f"DELETE FROM gg_game_results WHERE gg_tournament_id"
