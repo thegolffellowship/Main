@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.387.2";
+window.TGF_VERSION = "2.387.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.387.3",
+    date: "2026-09-12",
+    changes: [
+      "docs: Forest Creek per-nine ratings of record (all five tees, Kerry-read from the GG tee editor 2026-09-12) and a standing per-nine table in handicaps.md so a closeout on a known 18-hole course never asks for the numbers twice. a18.5 Forest Creek handicaps posted: 32 rounds / 16 players. Handoff §3j updated (the $2,270 Chase charge was reversed same day).",
+    ],
+  },
   {
     version: "2.387.2",
     date: "2026-09-12",

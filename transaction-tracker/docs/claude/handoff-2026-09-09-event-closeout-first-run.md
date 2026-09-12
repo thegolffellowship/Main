@@ -376,11 +376,17 @@ aliased, then 823 folded into 818 (payout, ledger row, standings row,
 card all re-pointed) BEFORE pairings were written. Canonical = the
 customer's own store spelling, per the Donovan precedent.
 
-NOT done: Phase 3 — 18-hole events post as two nines and need per-nine
-rating/slope from GG course setup for Blue (3447), White (3448) and
-Red(L) (3462); the Tracker's July 9-hole tee rows (Blue 35.9/133, White
-35.2/125, Red(L) 34.1/121) are ONE nine only. Held for Kerry's numbers.
-3.3 / 3.4 follow it. Recap draft:
+Phase 3 posted 3:14 PM after Kerry read the per-nine numbers off the
+GG tee editor (screenshots of all five tees): 32 handicap_rounds, 16
+players, 0 skipped — Blue 3447 F 35.9/133 B 36.3/131, White 3448 F
+35.2/125 B 35.2/125, Red(L) 3462 F 34.1/121 B 34.4/120 (now in
+handicaps.md "Per-nine ratings of record" so Forest Creek never asks
+again). The Chase $2,270.00 was charged AND reversed the same day
+(Kerry's screenshot) — nets to zero, only the $1,818.60 stands; a
+separate $200.00 ALAMO CITY GOLF TRAIL alert on 9/11 is not tied to an
+event yet. 3.3 (By Event card send) and 3.4 (GG upload) are Kerry's;
+`scoring-message-log:handicap-card` showed no 9/12 sends at 3:14 PM.
+Recap draft:
 `docs/claude/recaps/2026-09-12-a18.5-forest-creek.{txt,html}` — three
 Kerry blanks (fellowship, tee times, the Luke-not-bought-in line).
 

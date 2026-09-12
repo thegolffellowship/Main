@@ -657,6 +657,36 @@ Rules of record:
   TGF AUSTIN CHAMPIONSHIP (Falconhead — Blue F 36.4/130 B 36.1/136,
   White F 35.1/121 B 34.8/126, Red F 33.2/116 B 33.2/119; 16 players /
   32 rounds). All numbers Kerry-read from GG course setup.
+- **Posted 2026-09-12**: a18.5 FOREST CREEK (Forest Creek Golf Club —
+  Blue 3447 F 35.9/133 B 36.3/131, White 3448 F 35.2/125 B 35.2/125,
+  Red(L) 3462 F 34.1/121 B 34.4/120; 16 players / 32 rounds). Kerry also
+  read Gold F 37.2/140 B 37.6/137 and Green F 34.3/119 B 34.2/121 — no
+  tee_id yet (nobody played them); the per-nine JSON is a paste-in:
+  `{"3447":{"front":[35.9,133],"back":[36.3,131]},"3448":{"front":[35.2,125],
+  "back":[35.2,125]},"3462":{"front":[34.1,121],"back":[34.4,120]}}`.
+
+### Per-nine ratings of record (do not ask Kerry twice)
+
+Every 18-hole course TGF plays, once its numbers have been read off GG,
+lives here until the ratings live in `course_tees` (OPEN — schema, rule
+3b). A closeout on one of these courses reuses the row; a NEW course is
+the only time to ask.
+
+| Course | Tee (tee_id) | Front (R/S) | Back (R/S) | 18 (R/S) | Read |
+|---|---|---|---|---|---|
+| Forest Creek GC | Blue (3447) | 35.9/133 | 36.3/131 | 72.2/132 | 2026-09-12 |
+| Forest Creek GC | White (3448) | 35.2/125 | 35.2/125 | 70.4/125 | 2026-09-12 |
+| Forest Creek GC | Green (—) | 34.3/119 | 34.2/121 | 68.5/120 | 2026-09-12 |
+| Forest Creek GC | Red (L) (3462) | 34.1/121 | 34.4/120 | 68.5/121 | 2026-09-12 |
+| Forest Creek GC | Gold (—) | 37.2/140 | 37.6/137 | 74.8/139 | 2026-09-12 |
+| The Quarry | Gold | 34.2/117 | 35.6/128 | — | 2026-08-03 |
+| The Quarry | Blue | 32.5/103 | 34.2/115 | —/113 | 2026-08-03 |
+| The Quarry | Red | 31.3/103 | 32.3/98 | — | 2026-08-03 |
+| The Quarry | Red (L) | 34.1/119 | 35.0/121 | — | 2026-08-03 |
+| Falconhead | Blue | 36.4/130 | 36.1/136 | — | 2026-08-03 |
+| Falconhead | White | 35.1/121 | 34.8/126 | — | 2026-08-03 |
+| Falconhead | Red | 33.2/116 | 33.2/119 | — | 2026-08-03 |
+| Vaaler Creek | (see `_VAALER_PER_NINE` in database.py) | | | | 2026-07-18 |
 
 
 ## Cards excluded from handicaps (v2.368.0, Kerry 2026-09-10)
