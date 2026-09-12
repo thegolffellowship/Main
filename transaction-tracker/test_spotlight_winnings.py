@@ -462,6 +462,18 @@ check("overall rows do NOT identify buy-ins",
 check("overall rows carry hcp/pts for the table (index None w/o links)",
       "index" in o1 and o1["hcp"] == 5
       and o1["net_pts"] is not None, repr(o1))
+# to-par columns (Kerry 2026-09-12): par summed over the holes actually
+# played (fixture: holes 10+11, par 4+4 = 8), so to-par = score - par.
+# A round whose played holes lack par data gets None, never a wrong number.
+check("to-par computed off the played holes' par",
+      o1["par"] == 8 and o1["to_par_gross"] == 40 - 8
+      and o1["to_par_net"] == 35 - 8,
+      (o1["par"], o1["to_par_gross"], o1["to_par_net"]))
+_guest = next(r for r in ovr if r["player_name"] == "GUEST, Someone")
+check("no net score -> no net to-par (gross to-par still shown)",
+      _guest["to_par_net"] is None and _guest["to_par_gross"] == 48 - 8,
+      (_guest["to_par_gross"], _guest["to_par_net"]))
+
 # flight ordinals for the per-flight win colors (Kerry 2026-09-11):
 # 1 = low flight in board order — cid1 sits in Flight 1 (HCP <12.0),
 # cid2 in Flight 2; the skins board has one labeled section (ALL) so

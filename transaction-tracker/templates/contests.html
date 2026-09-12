@@ -317,7 +317,17 @@
            red, 2 green, 3 blue...); MVP keeps the ratified purple.
            No buy-in identification on this view by design. */
         .evlb-ovr td b { color: inherit; }
-        .evlb-ovr td.w-mvp { background: rgba(109,40,217,.14); color: var(--cat-mvp, #6D28D9); font-weight: 700; border-radius: 4px; }
+        /* Kerry 2026-09-12: black rules bracket each column GROUP (the
+           G/N score block, the handicap block, Pts) so the eye lands on
+           the right number, and every other row carries a light grey
+           wash. The zebra lives on a render-time .alt class, not CSS
+           nth-child, because an expanded scorecard row is injected into
+           the same tbody and would flip the parity of everything below
+           it. Win tints are inline, so they always paint over both. */
+        .evlb-ovr td.bl, .evlb-ovr th.bl { border-left: 2px solid #1B1B1B; }
+        .evlb-ovr td.br, .evlb-ovr th.br { border-right: 2px solid #1B1B1B; }
+        .evlb-ovr tr.alt td { background: #F3F3F1; }
+        .evlb-ovr td.tp { color: #6B7280; font-size: 0.72rem; }
         .evlb-ovr td.won, .evlb-ovr th.won { text-align: right; font-weight: 700;
             color: var(--money-green, #15803D); font-variant-numeric: tabular-nums; min-width: 58px; }
         /* OVERALL sortable headers (Kerry 2026-09-11: no arrow glyphs —
@@ -2681,9 +2691,18 @@
         const c = evlbFlightColor(ord);
         return `background:${c}26;color:${c};font-weight:700;border-radius:4px;`;
     }
+    // ± to par, golf-style: E at par, otherwise signed
+    function evlbToPar(v) {
+        if (v == null) return "";
+        return v === 0 ? "E" : (v > 0 ? "+" + v : String(v));
+    }
+    const EVLB_MVP_TINT = "background:rgba(109,40,217,.14);color:#6D28D9;font-weight:700;border-radius:4px;";
     // ONE overall row — module-level so the sortable headers can
-    // re-render the tbody with the same markup the initial paint used
-    function evlbOvrRowHtml(d, r) {
+    // re-render the tbody with the same markup the initial paint used.
+    // `i` drives the zebra stripe: striping by render index (not CSS
+    // nth-child) because expanded scorecard rows are injected into the
+    // same tbody and would flip the parity of every row below them.
+    function evlbOvrRowHtml(d, r, i) {
         const skinHoles = r.win_skins
             ? (((d.skin_cells || {})[String(r.scoring_round_id)]) || []) : [];
         const skC = evlbFlightColor(r.skins_flight);
@@ -2699,15 +2718,24 @@
         // Column order (Kerry 2026-09-12): the two scores that matter —
         // G(ross) and N(et) — sit immediately after the player name, left
         // of everything else, so they read without scrolling the holes.
-        return `<tr class="evlb-plr" data-rid="${r.scoring_round_id || ""}">` +
+        // a win tints BOTH the score and its to-par cell — they read as
+        // one result. Tints are inline so the zebra stripe can never
+        // paint over them.
+        const gT = r.win_gross ? evlbFlightTint(r.gross_flight) : "";
+        const nT = r.win_net ? evlbFlightTint(r.net_flight) : "";
+        const gTitle = r.win_gross ? ` title="won Individual Gross — flight ${r.gross_flight || 1}"` : "";
+        const nTitle = r.win_net ? ` title="won Individual Net — flight ${r.net_flight || 1}"` : "";
+        return `<tr class="evlb-plr${i % 2 ? " alt" : ""}" data-rid="${r.scoring_round_id || ""}">` +
             `<td>${r._rank ?? ""}</td>` +
             `<td class="nm">${escapeHtml(r.player_name)}</td>` +
-            `<td${r.win_gross ? ` style="${evlbFlightTint(r.gross_flight)}" title="won Individual Gross — flight ${r.gross_flight || 1}"` : ""}>${r.gross ?? ""}</td>` +
-            `<td${r.win_net ? ` style="${evlbFlightTint(r.net_flight)}" title="won Individual Net — flight ${r.net_flight || 1}"` : ""}><b>${r.net ?? ""}</b></td>` +
-            `<td>${r.index != null ? Number(r.index).toFixed(1) : ""}</td>` +
-            `<td>${r.hcp ?? ""}</td>` +
+            `<td class="bl" style="${gT}"${gTitle}>${r.gross ?? ""}</td>` +
+            `<td class="tp" style="${gT}"${gTitle}>${evlbToPar(r.to_par_gross)}</td>` +
+            `<td style="${nT}"${nTitle}><b>${r.net ?? ""}</b></td>` +
+            `<td class="tp br" style="${nT}"${nTitle}>${evlbToPar(r.to_par_net)}</td>` +
+            `<td class="bl">${r.index != null ? Number(r.index).toFixed(1) : ""}</td>` +
+            `<td class="br">${r.hcp ?? ""}</td>` +
             holeCells +
-            `<td${r.win_mvp ? ' class="w-mvp" title="Event MVP"' : ""}>${r.net_pts ?? ""}</td>` +
+            `<td class="bl br" style="${r.win_mvp ? EVLB_MVP_TINT : ""}"${r.win_mvp ? ' title="Event MVP"' : ""}>${r.net_pts ?? ""}</td>` +
             `<td class="won">${r.won_total > 0 ? "$" + Number(r.won_total).toFixed(2) : ""}</td></tr>`;
     }
     function evlbEventHtml(d) {
@@ -2759,13 +2787,15 @@
             ? (ovWinStrips ? `<div class="evlb-winbox">${ovWinStrips}</div>` : "") +
               `<div class="evlb-scroll"><table class="evlb-holes evlb-ovr"><thead>` +
               `<tr><th data-k="net" class="sortable">#</th><th data-k="player" class="nm sortable">Player</th>` +
-              `<th data-k="gross" class="sortable" title="Gross score">G</th>` +
+              `<th data-k="gross" class="sortable bl" title="Gross score">G</th>` +
+              `<th data-k="tpg" class="sortable" title="Gross to par">&plusmn;</th>` +
               `<th data-k="net" class="sortable asc" title="Net score">N</th>` +
-              `<th data-k="index" class="sortable" title="Handicap Index">Idx</th>` +
-              `<th data-k="hcp" class="sortable" title="Playing Handicap">PH</th>` +
+              `<th data-k="tpn" class="sortable br" title="Net to par">&plusmn;</th>` +
+              `<th data-k="index" class="sortable bl" title="Handicap Index">Idx</th>` +
+              `<th data-k="hcp" class="sortable br" title="Playing Handicap">PH</th>` +
               (d.hole_cols || []).map(n => `<th data-k="h:${n}" class="sortable">${n}</th>`).join("") +
-              `<th data-k="pts" class="sortable">Pts</th><th data-k="won" class="won sortable">Won</th></tr></thead><tbody>` +
-              ovRows.map(r => evlbOvrRowHtml(d, r)).join("") +
+              `<th data-k="pts" class="sortable bl br">Pts</th><th data-k="won" class="won sortable">Won</th></tr></thead><tbody>` +
+              ovRows.map((r, i) => evlbOvrRowHtml(d, r, i)).join("") +
               `</tbody></table></div>` +
               (() => {
                   // legend: flight colors actually present among the
@@ -2952,6 +2982,8 @@
                 if (k === "hcp") return r.hcp;
                 if (k === "gross") return r.gross;
                 if (k === "net") return r.net;
+                if (k === "tpg") return r.to_par_gross;
+                if (k === "tpn") return r.to_par_net;
                 if (k === "pts") return r.net_pts;
                 if (k === "won") return r.won_total > 0 ? r.won_total : null;
                 if (k.startsWith("h:")) {
@@ -2989,7 +3021,7 @@
                         r._rank = (tied ? "T" : "") + rank;
                     });
                     ovT.querySelector("tbody").innerHTML =
-                        rows.map(r => evlbOvrRowHtml(d, r)).join("");
+                        rows.map((r, i) => evlbOvrRowHtml(d, r, i)).join("");
                     ovT.querySelectorAll("th[data-k]").forEach(h2 =>
                         h2.classList.remove("asc", "desc"));
                     th.classList.add(curDir === 1 ? "asc" : "desc");

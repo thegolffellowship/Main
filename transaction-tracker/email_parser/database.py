@@ -13319,6 +13319,32 @@ def get_event_leaderboard(event_name: str,
                     [hr["hole_number"], hr["strokes"],
                      hr["strokes_received"] or 0])
 
+        # PAR for the holes each player actually played — feeds the
+        # OVERALL board's to-par columns (Kerry 2026-09-12: "Add
+        # relationship to par column right of both Gross and Net").
+        # Summed over holes with a real stroke so it matches the gross
+        # the board shows; NULL when the tee has no par data (blank
+        # cell rather than a wrong number).
+        par_by_rid: dict = {}
+        if rids:
+            ph = ",".join("?" for _ in rids)
+            for pr_ in conn.execute(
+                    f"""SELECT sh.scoring_round_id AS rid,
+                                SUM(cth.par) AS par,
+                                COUNT(cth.par) AS n_par,
+                                COUNT(sh.strokes) AS n_holes
+                         FROM scoring_holes sh
+                         JOIN scoring_rounds sr ON sr.id = sh.scoring_round_id
+                         LEFT JOIN course_tee_holes cth
+                           ON cth.tee_id = sr.tee_id
+                          AND cth.hole_number = sh.hole_number
+                        WHERE sh.scoring_round_id IN ({ph})
+                          AND sh.strokes IS NOT NULL
+                        GROUP BY sh.scoring_round_id""", list(rids)):
+                # every played hole must have a par or the total is a lie
+                if pr_["n_par"] and pr_["n_par"] == pr_["n_holes"]:
+                    par_by_rid[pr_["rid"]] = pr_["par"]
+
         # bundle buyers (Games-tab eligibility rules)
         net_buyers = set(_event_game_buyers(
             conn, ev["item_name"], "NET")["buyers"].keys())
@@ -13630,6 +13656,15 @@ def get_event_leaderboard(event_name: str,
             "scoring_round_id": p["scoring_round_id"],
             "index": indexes.get(cid) if cid is not None else None,
             "hcp": p["hcp"], "gross": p["gross"], "net": p["net"],
+            "par": par_by_rid.get(p["scoring_round_id"]),
+            "to_par_gross": (
+                p["gross"] - par_by_rid[p["scoring_round_id"]]
+                if p["gross"] is not None
+                and p["scoring_round_id"] in par_by_rid else None),
+            "to_par_net": (
+                p["net"] - par_by_rid[p["scoring_round_id"]]
+                if p["net"] is not None
+                and p["scoring_round_id"] in par_by_rid else None),
             "net_pts": a.get("net"),
             "win_net": "individual_net" in cats,
             "win_gross": "individual_gross" in cats,

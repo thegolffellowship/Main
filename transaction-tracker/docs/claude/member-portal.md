@@ -641,6 +641,17 @@ legend shows only the flights that paid; MVP keeps the ratified
 purple. Backend: overall rows carry `net_flight` / `gross_flight` /
 `skins_flight` ordinals (`_flight_ordinals` over the sectioned
 boards — 1 = low flight, placed non-buyers included).
+v2.386.0: a TO-PAR column sits beside each score — # | Player | G |
+± | N | ± | Idx | PH | holes… | Pts | Won — golf-style (E / +n /
+−n). `par_by_rid` sums par over the holes actually PLAYED off the
+player's own tee and only when EVERY played hole has par data, so a
+gap renders blank instead of a wrong number (`par`, `to_par_gross`,
+`to_par_net` on each overall row). Black rules bracket the column
+GROUPS (score block, Idx/PH, Pts) via `.bl`/`.br`, and every other
+row carries a grey wash from a render-time `.alt` class — NOT CSS
+nth-child, because the injected scorecard row would flip parity for
+everything below it. Win tints are inline so they always beat the
+stripe, and a win tints the score AND its ± together.
 v2.385.0: column order is # | Player | **G** | **N** | Idx | PH |
 holes… | Pts | Won — the two totals sit immediately after the name
 as one-letter columns (Kerry: "move both of those score columns all

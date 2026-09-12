@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.385.0";
+window.TGF_VERSION = "2.386.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.386.0",
+    date: "2026-09-12",
+    changes: [
+      "OVERALL board gains a TO-PAR column beside each score (Kerry: 'Add relationship to par column right of both Gross and Net'): # | Player | G | \u00b1 | N | \u00b1 | Idx | PH | holes\u2026 | Pts | Won, rendered golf-style (E at par, otherwise signed). Par is summed from the holes the player actually played off their own tee, and a round whose played holes lack par data shows blank rather than a wrong number \u2014 the to-par cell is never guessed. Both \u00b1 columns sort like every other column, and a win tints the score AND its to-par cell together so the pair reads as one result.",
+      "Column GROUPS are now bracketed by black rules \u2014 the G/\u00b1/N/\u00b1 score block, the Idx/PH handicap block, and Pts \u2014 so the eye lands on the right number in a wide table, and every other row carries a light grey wash. The stripe is assigned at render time rather than by CSS nth-child, because an expanded scorecard row is injected into the same tbody and would otherwise flip the parity of every row beneath it; win tints are inline so they always paint over the stripe.",
+    ],
+  },
   {
     version: "2.385.0",
     date: "2026-09-12",
