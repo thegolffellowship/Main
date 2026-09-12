@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.384.0";
+window.TGF_VERSION = "2.384.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.384.1",
+    date: "2026-09-12",
+    changes: [
+      "OVERALL board sort headers lost their arrow glyphs (Kerry: 'Remove the little symbols next to the whole numbers so that it reduces the whole columns. Just highlight the cell in Orange') — the \u2195/\u2191/\u2193 marks were padding every numeric header and widening the whole column beneath it. The ACTIVE sort column is now simply its header cell filled TGF orange, which costs no width at all. On load that mark sits on Net (the board's default sort), not on # — the rank column is derived from whatever is sorted, so the highlight names the real sort key.",
+    ],
+  },
   {
     version: "2.384.0",
     date: "2026-09-11",

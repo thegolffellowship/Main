@@ -320,11 +320,12 @@
         .evlb-ovr td.w-mvp { background: rgba(109,40,217,.14); color: var(--cat-mvp, #6D28D9); font-weight: 700; border-radius: 4px; }
         .evlb-ovr td.won, .evlb-ovr th.won { text-align: right; font-weight: 700;
             color: var(--money-green, #15803D); font-variant-numeric: tabular-nums; min-width: 58px; }
-        /* OVERALL sortable headers */
+        /* OVERALL sortable headers (Kerry 2026-09-11: no arrow glyphs —
+           they widened every numeric column; the ACTIVE sort column is
+           simply its header cell in TGF orange) */
         .evlb-ovr th.sortable { cursor: pointer; user-select: none; }
-        .evlb-ovr th.sortable::after { content: " \2195"; opacity: 0.3; font-size: 9px; }
-        .evlb-ovr th.sortable.asc::after { content: " \2191"; opacity: 1; }
-        .evlb-ovr th.sortable.desc::after { content: " \2193"; opacity: 1; }
+        .evlb-ovr th.sortable.asc, .evlb-ovr th.sortable.desc {
+            background: var(--primary, #E87C3E); color: #1B1B1B; }
         /* OVERALL winner strips (Team Net + proxies above the board) */
         .evlb-winbox { margin: 0 0 10px; display: grid; gap: 4px; }
         .evlb-winline { display: flex; align-items: baseline; gap: 10px; font-size: 12.5px;
@@ -2754,11 +2755,11 @@
         const overallHtml = ovRows.length
             ? (ovWinStrips ? `<div class="evlb-winbox">${ovWinStrips}</div>` : "") +
               `<div class="evlb-scroll"><table class="evlb-holes evlb-ovr"><thead>` +
-              `<tr><th data-k="net" class="sortable asc">#</th><th data-k="player" class="nm sortable">Player</th>` +
+              `<tr><th data-k="net" class="sortable">#</th><th data-k="player" class="nm sortable">Player</th>` +
               `<th data-k="index" class="sortable" title="Handicap Index">Idx</th>` +
               `<th data-k="hcp" class="sortable" title="Playing Handicap">PH</th>` +
               (d.hole_cols || []).map(n => `<th data-k="h:${n}" class="sortable">${n}</th>`).join("") +
-              `<th data-k="gross" class="sortable">Gross</th><th data-k="net" class="sortable">Net</th>` +
+              `<th data-k="gross" class="sortable">Gross</th><th data-k="net" class="sortable asc">Net</th>` +
               `<th data-k="pts" class="sortable">Pts</th><th data-k="won" class="won sortable">Won</th></tr></thead><tbody>` +
               ovRows.map(r => evlbOvrRowHtml(d, r)).join("") +
               `</tbody></table></div>` +
