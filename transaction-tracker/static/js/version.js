@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.387.1";
+window.TGF_VERSION = "2.387.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.387.2",
+    date: "2026-09-12",
+    changes: [
+      "scoring-customer-merge:<source>|<target>[|apply] — the Customers-page merge, reachable from a closeout session: dry run shows both profiles and every table that still points at the source; apply re-points them all and removes the source row (audited). First use: the GG spelling 'Hightower, Geoffery' minted a second profile for first-timer Geoff Hightower on a18.5 Forest Creek.",
+    ],
+  },
   {
     version: "2.387.1",
     date: "2026-09-12",

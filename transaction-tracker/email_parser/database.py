@@ -7977,6 +7977,37 @@ def member_caps_name(name: str | None) -> str:
     return f"{last_caps}, {first}"
 
 
+def customer_merge_preview(source_cid: int, target_cid: int,
+                           db_path: str | Path | None = None) -> dict:
+    """What a merge of source INTO target would move: both profiles and
+    the per-table reference counts on the source. Read-only."""
+    out = {"source": None, "target": None, "source_refs": {}, "ok": False}
+    with _connect(db_path) as conn:
+        for key, cid in (("source", source_cid), ("target", target_cid)):
+            c = conn.execute(
+                """SELECT customer_id, first_name, last_name, chapter, current_player_status, created_at
+                     FROM customers WHERE customer_id = ?""", (cid,)).fetchone()
+            if c:
+                d = dict(c)
+                d["name"] = f"{(c['first_name'] or '').strip()} {(c['last_name'] or '').strip()}".strip()
+                d["emails"] = [r[0] for r in conn.execute(
+                    "SELECT email FROM customer_emails WHERE customer_id = ?", (cid,))]
+                d["items"] = conn.execute("SELECT COUNT(*) FROM items WHERE customer_id = ?",
+                                          (cid,)).fetchone()[0]
+                out[key] = d
+        if out["source"]:
+            for table, col in _CUSTOMER_FK_COLUMNS:
+                try:
+                    n = conn.execute(f"SELECT COUNT(*) FROM {table} WHERE {col} = ?",
+                                     (source_cid,)).fetchone()[0]
+                except sqlite3.OperationalError:
+                    continue
+                if n:
+                    out["source_refs"][f"{table}.{col}"] = n
+    out["ok"] = bool(out["source"] and out["target"] and source_cid != target_cid)
+    return out
+
+
 def find_customer_duplicates(db_path: str | Path | None = None) -> dict:
     """Potential duplicate customer profiles, REPORT ONLY (a merge is
     Kerry's call — merge_customers is the tool). Three doors: the same

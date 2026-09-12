@@ -1772,6 +1772,8 @@ def _scoring_dispatch(url: str, extract: str):
       scoring-membership-terms-repair[:apply]  early renewals continue at the
                                    365 date (dry run default)
       scoring-membership-sync      terms → status reconcile now (manager comps)
+      scoring-customer-merge:<src_cid>|<dst_cid>[|apply]  fold one profile into
+                                   another (dry run shows both + the refs moved)
       scoring-customer-dupes       potential duplicate customer profiles (name /
                                    email / phone), report only
       scoring-race-detail:<race_key>|<card>  one GG member record's per-event lines
@@ -3080,6 +3082,28 @@ def _scoring_dispatch(url: str, extract: str):
             _done = [i for i in _ids if db.dismiss_parse_warning(i)]
             _audit("scoring-parse-warning-dismiss", f"ids={_done} note={_note.strip()}")
             return json.dumps({"dismissed": _done, "note": _note.strip()}, indent=2)
+        if cmd == "scoring-customer-merge":
+            # "<source_cid>|<target_cid>[|apply]" — fold one customer profile
+            # INTO another (every FK re-pointed, source row deleted). Dry run
+            # by default. Kerry 2026-09-11: "you definitely need to merge on
+            # your side" — a GG spelling that minted a second profile
+            # (Hightower, Geoffery → Geoff Hightower, a18.5) is the class.
+            _p = [x.strip() for x in (arg or "").split("|")]
+            if len(_p) < 2 or not _p[0].isdigit() or not _p[1].isdigit():
+                return json.dumps({"error": "usage: scoring-customer-merge:<source_cid>|<target_cid>[|apply]"})
+            _src, _dst = int(_p[0]), int(_p[1])
+            _apply = len(_p) > 2 and _p[2].lower() == "apply"
+            _pv = db.customer_merge_preview(_src, _dst)
+            if not _pv["ok"]:
+                return json.dumps({"error": "both ids must exist and differ", "preview": _pv}, indent=2, default=str)
+            if not _apply:
+                _pv["applied"] = False
+                return json.dumps(_pv, indent=2, default=str)
+            _res = db.merge_customers(_pv["source"]["name"], _pv["target"]["name"],
+                                      source_customer_id=_src, target_customer_id=_dst)
+            _audit("scoring-customer-merge", f"{_src} ({_pv['source']['name']}) -> {_dst} "
+                   f"({_pv['target']['name']}) refs={_pv['source_refs']}")
+            return json.dumps({"applied": True, "preview": _pv, "result": _res}, indent=2, default=str)
         if cmd == "scoring-customer-dupes":
             # Potential duplicate customer profiles — same name / email /
             # phone — REPORT ONLY; merging is Kerry's call (merge_customers).
