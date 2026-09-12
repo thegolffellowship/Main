@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.387.3";
+window.TGF_VERSION = "2.387.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.387.4",
+    date: "2026-09-12",
+    changes: [
+      "Season Contests sub-tabs: LONE STAR CUP now sits left of MATCH PLAY (Kerry 2026-09-12) — the Cup is the live October headline, Match Play the smaller draw, and on a phone the Cup tab was scrolled off the right edge.",
+    ],
+  },
   {
     version: "2.387.3",
     date: "2026-09-12",
