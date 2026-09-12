@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.387.4";
+window.TGF_VERSION = "2.387.5";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.387.5",
+    date: "2026-09-12",
+    changes: [
+      "Expense review: marking an expense 'ignored' AFTER it reached the ledger now reverses its acct_transactions row (status 'reversed', reason noted) instead of re-syncing it — the Chase feed alerts on charges only, so a charge the issuer reversed the same day (LS Forest Creek $2,270.00 on 9/12, beside the real $1,818.60 bill) stayed booked as a real expense. patch_acct_row also accepts status 'reversed' for ledger rows with no expense behind them. Test: test_expense_ignored_reverses_ledger.py.",
+      "Season Contests → EVENTS leaderboard: a18.5 Forest Creek added to the events_leaderboard_events dial (Kerry 2026-09-12).",
+    ],
+  },
   {
     version: "2.387.4",
     date: "2026-09-12",

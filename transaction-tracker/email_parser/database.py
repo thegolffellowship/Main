@@ -44273,14 +44273,34 @@ def patch_expense_row(expense_id: int, fields: dict,
         # PENDING informational receipt must not create a phantom ledger
         # row — a $27,060 tournament-flyer receipt briefly booked as a real
         # expense this way.
-        if (exp.get("review_status") in ("approved", "corrected")
+        reversed_acct = None
+        if (fields.get("review_status") == "ignored"
+                and exp.get("acct_transaction_id")):
+            # Dismissing an expense that already reached the ledger
+            # (v2.387.5, Kerry 2026-09-12 "Mark exp ignored"): the Chase
+            # feed alerts on CHARGES only, so a charge the card issuer
+            # reversed the same day (LS Forest Creek $2,270.00, 9/12)
+            # stays booked forever unless the ledger row goes with it.
+            # 'reversed' is the ledger's own status for that (aggregates
+            # exclude reversed rows); re-syncing would resurrect it.
+            reversed_acct = int(exp["acct_transaction_id"])
+            conn.execute(
+                "UPDATE acct_transactions SET status = 'reversed', "
+                "notes = COALESCE(notes || ' · ', '') || ?, "
+                "updated_at = datetime('now') WHERE id = ?",
+                (f"reversed — expense {expense_id} marked ignored"
+                 + (f": {fields['append_note']}" if fields.get("append_note") else ""),
+                 reversed_acct))
+        elif (exp.get("review_status") in ("approved", "corrected")
                 or exp.get("acct_transaction_id")):
             _sync_expense_ledger_entry(conn, exp)
         conn.commit()
         return {"patched": sorted(k for k in fields),
+                "ledger_row_reversed": reversed_acct,
                 "expense": dict(conn.execute(
                     "SELECT id, merchant, amount, category, transaction_type, "
-                    "event_name, customer_id, notes, acct_transaction_id "
+                    "event_name, customer_id, notes, review_status, "
+                    "acct_transaction_id "
                     "FROM expense_transactions WHERE id = ?",
                     (expense_id,)).fetchone())}
 
@@ -44378,11 +44398,18 @@ def patch_acct_row(acct_id: int, fields: dict,
         # loser -> status='merged' + merged_into_id, aggregates exclude it.
         if fields.get("status"):
             new_status = str(fields["status"]).strip().lower()
-            if new_status not in ("active", "merged"):
+            if new_status not in ("active", "merged", "reversed"):
                 return {"error": f"invalid status {new_status!r} "
-                                 "(active|merged only)"}
+                                 "(active|merged|reversed only)"}
             merged_into = fields.get("merged_into_id")
-            if new_status == "merged":
+            if new_status == "reversed":
+                # A charge the issuer reversed / a statement line that
+                # never settled (v2.387.5). Same exclusion as merged,
+                # no survivor to point at. 'active' reverses it.
+                conn.execute(
+                    "UPDATE acct_transactions SET status = 'reversed', "
+                    "updated_at = datetime('now') WHERE id = ?", (acct_id,))
+            elif new_status == "merged":
                 if not merged_into:
                     return {"error": "status=merged requires merged_into_id"}
                 # Survivor may be 'reconciled' too (v2.149.18): the bank
