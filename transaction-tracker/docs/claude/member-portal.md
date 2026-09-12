@@ -641,6 +641,14 @@ legend shows only the flights that paid; MVP keeps the ratified
 purple. Backend: overall rows carry `net_flight` / `gross_flight` /
 `skins_flight` ordinals (`_flight_ordinals` over the sectioned
 boards — 1 = low flight, placed non-buyers included).
+v2.387.0: the score block sits RIGHT of the last hole with a rule
+between gross and net — # | Player | Idx | PH | holes… | G ± | N ± |
+Pts | Won — and a **Hole by hole** checkbox above the board
+collapses the hole columns (module-level `evlbShowHoles`, CSS class
+`.evlb-ovr.no-holes .h`). Columns are HIDDEN, never removed, so
+sorting / re-ranking / tap-for-scorecard survive the toggle; the
+choice carries across events in a session and every open OVERALL
+table follows it.
 v2.386.0: a TO-PAR column sits beside each score — # | Player | G |
 ± | N | ± | Idx | PH | holes… | Pts | Won — golf-style (E / +n /
 −n). `par_by_rid` sums par over the holes actually PLAYED off the

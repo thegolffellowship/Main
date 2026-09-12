@@ -328,6 +328,11 @@
         .evlb-ovr td.br, .evlb-ovr th.br { border-right: 2px solid #1B1B1B; }
         .evlb-ovr tr.alt td { background: #F3F3F1; }
         .evlb-ovr td.tp { color: #6B7280; font-size: 0.72rem; }
+        .evlb-ovr.no-holes .h { display: none; }
+        .evlb-holetog { display: inline-flex; align-items: center; gap: 6px;
+            font-size: 12px; color: #4B5563; margin: 0 0 6px; cursor: pointer;
+            user-select: none; }
+        .evlb-holetog input { accent-color: var(--primary, #E87C3E); cursor: pointer; }
         .evlb-ovr td.won, .evlb-ovr th.won { text-align: right; font-weight: 700;
             color: var(--money-green, #15803D); font-variant-numeric: tabular-nums; min-width: 58px; }
         /* OVERALL sortable headers (Kerry 2026-09-11: no arrow glyphs —
@@ -2563,6 +2568,12 @@
     // hole-by-hole card.
     let evlbLoaded = false, evlbChapter = "";
     const EVLB_LOADED_EVENTS = {};
+    // OVERALL hole-by-hole toggle (Kerry 2026-09-12: "maybe a check box
+    // to show or not show hole by hole"). Module-level so the choice
+    // carries to every event opened in this session — hole columns are
+    // hidden by CSS class, never removed, so sorting and the scorecard
+    // expansion keep working untouched.
+    let evlbShowHoles = true;
     function evlbFmt(c) { return "$" + (c / 100).toFixed(2).replace(/\.00$/, ""); }
     function evlbDate(s) {
         if (!s) return "";
@@ -2710,8 +2721,8 @@
         (d.cards[String(r.scoring_round_id)] || []).forEach(h => { hs[h[0]] = h; });
         const holeCells = (d.hole_cols || []).map(n => {
             const h = hs[n];
-            if (!h || h[1] == null) return "<td></td>";
-            return `<td>${skinHoles.includes(n)
+            if (!h || h[1] == null) return '<td class="h"></td>';
+            return `<td class="h">${skinHoles.includes(n)
                 ? `<span class="evlb-circ" style="border-color:${skC};color:${skC};" title="skin — flight ${r.skins_flight || 1}">${h[1]}</span>`
                 : h[1]}</td>`;
         }).join("");
@@ -2728,13 +2739,13 @@
         return `<tr class="evlb-plr${i % 2 ? " alt" : ""}" data-rid="${r.scoring_round_id || ""}">` +
             `<td>${r._rank ?? ""}</td>` +
             `<td class="nm">${escapeHtml(r.player_name)}</td>` +
-            `<td class="bl" style="${gT}"${gTitle}>${r.gross ?? ""}</td>` +
-            `<td class="tp" style="${gT}"${gTitle}>${evlbToPar(r.to_par_gross)}</td>` +
-            `<td style="${nT}"${nTitle}><b>${r.net ?? ""}</b></td>` +
-            `<td class="tp br" style="${nT}"${nTitle}>${evlbToPar(r.to_par_net)}</td>` +
             `<td class="bl">${r.index != null ? Number(r.index).toFixed(1) : ""}</td>` +
             `<td class="br">${r.hcp ?? ""}</td>` +
             holeCells +
+            `<td class="bl" style="${gT}"${gTitle}>${r.gross ?? ""}</td>` +
+            `<td class="tp" style="${gT}"${gTitle}>${evlbToPar(r.to_par_gross)}</td>` +
+            `<td class="bl" style="${nT}"${nTitle}><b>${r.net ?? ""}</b></td>` +
+            `<td class="tp br" style="${nT}"${nTitle}>${evlbToPar(r.to_par_net)}</td>` +
             `<td class="bl br" style="${r.win_mvp ? EVLB_MVP_TINT : ""}"${r.win_mvp ? ' title="Event MVP"' : ""}>${r.net_pts ?? ""}</td>` +
             `<td class="won">${r.won_total > 0 ? "$" + Number(r.won_total).toFixed(2) : ""}</td></tr>`;
     }
@@ -2785,15 +2796,16 @@
         const ovWinStrips = ovTeamWins.concat(ovProxWins).join("");
         const overallHtml = ovRows.length
             ? (ovWinStrips ? `<div class="evlb-winbox">${ovWinStrips}</div>` : "") +
-              `<div class="evlb-scroll"><table class="evlb-holes evlb-ovr"><thead>` +
+              `<label class="evlb-holetog"><input type="checkbox" data-ovr-holes${evlbShowHoles ? " checked" : ""}> Hole by hole</label>` +
+              `<div class="evlb-scroll"><table class="evlb-holes evlb-ovr${evlbShowHoles ? "" : " no-holes"}"><thead>` +
               `<tr><th data-k="net" class="sortable">#</th><th data-k="player" class="nm sortable">Player</th>` +
-              `<th data-k="gross" class="sortable bl" title="Gross score">G</th>` +
-              `<th data-k="tpg" class="sortable" title="Gross to par">&plusmn;</th>` +
-              `<th data-k="net" class="sortable asc" title="Net score">N</th>` +
-              `<th data-k="tpn" class="sortable br" title="Net to par">&plusmn;</th>` +
               `<th data-k="index" class="sortable bl" title="Handicap Index">Idx</th>` +
               `<th data-k="hcp" class="sortable br" title="Playing Handicap">PH</th>` +
-              (d.hole_cols || []).map(n => `<th data-k="h:${n}" class="sortable">${n}</th>`).join("") +
+              (d.hole_cols || []).map(n => `<th data-k="h:${n}" class="sortable h">${n}</th>`).join("") +
+              `<th data-k="gross" class="sortable bl" title="Gross score">G</th>` +
+              `<th data-k="tpg" class="sortable" title="Gross to par">&plusmn;</th>` +
+              `<th data-k="net" class="sortable asc bl" title="Net score">N</th>` +
+              `<th data-k="tpn" class="sortable br" title="Net to par">&plusmn;</th>` +
               `<th data-k="pts" class="sortable bl br">Pts</th><th data-k="won" class="won sortable">Won</th></tr></thead><tbody>` +
               ovRows.map((r, i) => evlbOvrRowHtml(d, r, i)).join("") +
               `</tbody></table></div>` +
@@ -3027,6 +3039,16 @@
                     th.classList.add(curDir === 1 ? "asc" : "desc");
                 }));
         }
+        body.querySelectorAll("input[data-ovr-holes]").forEach(cb =>
+            cb.addEventListener("change", () => {
+                evlbShowHoles = cb.checked;
+                // every OVERALL table already on the page follows, so
+                // two open events never disagree
+                document.querySelectorAll("table.evlb-ovr").forEach(t =>
+                    t.classList.toggle("no-holes", !evlbShowHoles));
+                document.querySelectorAll("input[data-ovr-holes]").forEach(o =>
+                    { o.checked = evlbShowHoles; });
+            }));
         // Player-row scorecard expansion — DELEGATED so rows re-rendered
         // by a sort (or any future re-paint) keep the behavior
         body.addEventListener("click", async (e) => {

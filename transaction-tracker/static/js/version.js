@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.386.0";
+window.TGF_VERSION = "2.387.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.387.0",
+    date: "2026-09-12",
+    changes: [
+      "OVERALL board: the score block moved BACK to the right of the last hole and gained a rule between gross and net (Kerry) \u2014 # | Player | Idx | PH | holes\u2026 | G \u00b1 | N \u00b1 | Pts | Won, so the card reads left-to-right the way a scorecard does and the two results are separated, not run together.",
+      "NEW 'Hole by hole' checkbox above the board (Kerry: 'maybe a check box to show or not show hole by hole'): unticking it collapses the hole columns so the whole event fits a phone screen \u2014 name, handicaps, both scores with their to-par, points and money, no scrolling. The columns are HIDDEN by CSS class, never removed, so sorting, re-ranking and tap-for-scorecard keep working through the toggle; the choice carries to every event opened in the same session, and any other event already expanded on the page follows it so two boards never disagree.",
+    ],
+  },
   {
     version: "2.386.0",
     date: "2026-09-12",
