@@ -641,6 +641,26 @@ legend shows only the flights that paid; MVP keeps the ratified
 purple. Backend: overall rows carry `net_flight` / `gross_flight` /
 `skins_flight` ordinals (`_flight_ordinals` over the sectioned
 boards — 1 = low flight, placed non-buyers included).
+**v2.389.0 — ONE board for every tab.** Kerry 2026-09-13: "everything
+except for Closest to Pins to follow the Overall layout so that moving
+from button to button is just a reordering of that leaderboard with the
+highlighting and organization of the other leaderboards." Overall /
+Team / Net / Gross / Skins / MVP-Points all render through
+`evlbStdBoard(d, board)`: same columns, same flight-colored win tints,
+same sort + re-rank + hole toggle + tap-for-scorecard. A tab supplies
+only `sections` (bands) and `sort`:
+  - net / gross / skins → flight bands off the sectioned boards
+  - team → one band per team (position · players · GG total · purse),
+    band tap opens the best-ball card (`teamBands` + `teams` on the board)
+  - overall / points → single unbanded section; points keeps mvp_note
+`gameCol` relabels ONE slot (Pts → Skins count) so the column COUNT is
+constant across tabs. Rank runs WITHIN a band; sorting sorts within
+bands rather than flattening them. Boards register in `EVLB_BOARDS` by
+`data-board` id so the sort handler re-renders without refetching.
+Winner strips (Team Net + CTP/HIO) moved BELOW the Overall board.
+Deleted with the refactor: evlbWonChips / evlbScoreRows / evlbBand /
+evlbSectioned / evlbHoleCells. Guard: `test_events_board.js` renders
+every tab headless from the live template.
 v2.388.0 (SKINS board): count + money move LEFT of the holes —
 Player | Skins | Won | 1 2 3… — black rule right of Won, and the
 green $ badges beside names are retired (money lives in the Won

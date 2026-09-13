@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.388.0";
+window.TGF_VERSION = "2.389.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.389.0",
+    date: "2026-09-13",
+    changes: [
+      "ONE leaderboard for every event tab (Kerry: 'everything except for Closest to Pins to follow the Overall layout so that moving from button to button is just a reordering of that leaderboard with the highlighting and organization of the other leaderboards'). Overall, Team, Net, Gross, Skins and MVP/Points now render the SAME table \u2014 identical columns, identical win colors, identical sort / re-rank / hole-toggle / tap-for-scorecard. What a tab changes is its BANDS and its ORDER: Net and Gross band by flight, Skins bands by skins flight, Team bands by team (position, players, the recorded Golf Genius total and the purse), Overall and MVP/Points run unbanded. Proxies keeps its own shape, as asked.",
+      "The one column that changes meaning is the Pts slot \u2014 it reads 'Skins' (count of skins won) on the skins tab \u2014 so the column COUNT never moves from tab to tab and the table never reflows when you switch. Rank runs WITHIN a band, the way a flighted board should, and sorting any column re-sorts inside each band rather than flattening the flights away.",
+      "Team Net and Closest-to-Pin winner strips moved from ABOVE the Overall leaderboard to BELOW it (Kerry), so the board itself is the first thing on screen. The team best-ball card didn't get lost in the move: tapping a team BAND on the Team tab opens it, exactly where the old expandable team row used to be.",
+      "Housekeeping the refactor allowed: the five per-board renderers that fed the old one-off tables (evlbWonChips / evlbScoreRows / evlbBand / evlbSectioned / evlbHoleCells) are deleted rather than left behind to drift. New regression guard test_events_board.js renders every tab headless out of the live template and asserts the columns stay identical, the bands appear, rank restarts per band, and the win highlights survive a re-sort.",
+    ],
+  },
   {
     version: "2.388.0",
     date: "2026-09-12",
