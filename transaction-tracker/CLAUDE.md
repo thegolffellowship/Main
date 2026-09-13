@@ -522,7 +522,14 @@ use). Chapter semantic layer: `--chapter-austin #BF5700` (white text),
 `--chapter-sa #D3DDE4` (dark text, alt `--chapter-sa-alt #8FA8B8`),
 `--chapter-national #374151` — applied to the Events/Handicaps chapter pills.
 PWA `theme-color` metas + manifest are TGF orange. Do not reintroduce royal
-blue for interactive/CTA states. EXCEPTION (v2.49.2, Kerry): HYPERLINKS keep
+blue for interactive/CTA states. **BOUGHT IN is one green app-wide
+(v2.395.0, Kerry 2026-09-13: "Same green as points race but ins for
+events"):** `--buyin-green #bbf7d0` / `--buyin-green-text #15803D` /
+`--buyin-grey #FAFAFA`. Green means bought in and nothing else (the
+ratified rule behind the v2.198 standings recolor); non-buyers are the
+grey, never a paler green. Read the TOKEN — the Points Races standings
+and the EVENTS leaderboard both do, and `test_events_board.js` fails any
+new surface that hard-codes the hex instead. EXCEPTION (v2.49.2, Kerry): HYPERLINKS keep
 the universal hyperlink blue — `--link #2563eb` / `--link-hover #1d4ed8` on
 `.cell-link` (and the already-blue participation links). Table-row text that
 is not a hyperlink, a badge, or an action is plain black.

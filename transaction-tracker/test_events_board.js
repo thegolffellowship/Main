@@ -149,6 +149,29 @@ ck('_buyer is lifted off the game board row, not the overall row',
    && !('_buyer' in d.overall_board[0]),
    JSON.stringify(boards.net.sections.map(x=>x.rows.map(r=>r._buyer))));
 
+console.log('== ONE green for BOUGHT IN, app-wide ==');
+{
+  const css = fs.readFileSync(require('path').join(__dirname,'static/css/dashboard.css'),'utf8');
+  ck('--buyin-green is a defined token', /--buyin-green:\s*#bbf7d0/i.test(css));
+  ck('--buyin-grey is a defined token', /--buyin-grey:\s*#/i.test(css));
+  ck('the leaderboard buy-in row reads the token, not a private hex',
+     /\.evlb-plr\.bought td \{ background: var\(--buyin-green/.test(src));
+  ck('the leaderboard non-buyer row reads the grey token',
+     /\.evlb-plr\.nobuy td \{ background: var\(--buyin-grey/.test(src));
+  ck('the points-race standings rows read the same token',
+     (src.match(/background:var\(--buyin-green,#bbf7d0\);/g)||[]).length >= 4,
+     (src.match(/background:var\(--buyin-green,#bbf7d0\);/g)||[]).length);
+  // every buy-in USE goes through the token. The one bare #BBF7D0 left
+  // in the page is .lsc-dep:hover — a hover shade on a deposit badge,
+  // not a buy-in signal — so it is named here rather than silently
+  // allowed by a loose regex.
+  const bare = (src.match(/^.*#bbf7d0.*$/gim)||[])
+    .filter(l => !l.includes('var(--buyin-green'));
+  ck('every buy-in use goes through the token (only .lsc-dep:hover is bare)',
+     bare.length === 1 && /\.lsc-dep:hover/.test(bare[0]),
+     bare.join(' || '));
+}
+
 console.log('== POPS on the hole scores (Kerry 2026-09-13) ==');
 ck('one stroke received renders one dot',
    /<td class="h"><span class="evlb-pops">\u25CF<\/span>5<\/td>/.test(htmls.overall),

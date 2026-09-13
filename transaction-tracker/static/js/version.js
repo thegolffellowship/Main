@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.394.0";
+window.TGF_VERSION = "2.395.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.395.0",
+    date: "2026-09-13",
+    changes: [
+      "ONE green for BOUGHT IN, app-wide (Kerry: 'Same green as points race but ins for events'). The events leaderboard\u2019s buy-in rows were a paler mint of my own choosing; they now use #bbf7d0, the exact green the Points Races standings have used for bought-in rows since the ratified rule that green means bought in and nothing else. Walking between the two boards no longer means reading two different greens for the same fact.",
+      "Rather than copy the hex a third time, it is now a token \u2014 --buyin-green / --buyin-green-text / --buyin-grey in dashboard.css \u2014 and BOTH surfaces read it: the leaderboard rows and legend swatches, the Points Races standings rows, and the two \u2018currently bought in\u2019 count chips. Change the green once and every surface that means bought-in follows.",
+      "Guarded so it cannot drift back: the test now asserts the tokens exist, that the leaderboard and points-race rows read them, and that no buy-in use anywhere in the page hard-codes the hex. The single remaining bare #BBF7D0 is .lsc-dep:hover \u2014 a hover shade on a deposit badge, not a buy-in signal \u2014 and the test names that exception explicitly instead of letting a loose rule wave it through.",
+      "Non-buyers keep the light grey rather than a paler green, so the two states never read as degrees of the same thing.",
+    ],
+  },
   {
     version: "2.394.0",
     date: "2026-09-13",

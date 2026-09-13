@@ -321,8 +321,8 @@
            2026-09-13): green row = bought into THAT game, light grey =
            did not. Backgrounds only — the inline win tints on the score
            cells still paint over the top, which is the point. */
-        .evlb-ovr tr.evlb-plr.bought td { background: #ECFDF3; }
-        .evlb-ovr tr.evlb-plr.nobuy td { background: #FAFAFA; color: #9CA3AF; }
+        .evlb-ovr tr.evlb-plr.bought td { background: var(--buyin-green, #bbf7d0); }
+        .evlb-ovr tr.evlb-plr.nobuy td { background: var(--buyin-grey, #FAFAFA); color: #9CA3AF; }
         .evlb-ovr tr.evlb-plr.nobuy td.nm { color: #6B7280; }
         /* PAR row under the hole numbers (Kerry 2026-09-13) — a
            reference band between the black header and the data */
@@ -3120,8 +3120,8 @@
             const head = (game === "points" || game === "team") ? "" : swatches;
             // the bundle tabs also say who paid to be in this game
             const buy = EVLB_BUYIN_GAMES.includes(game)
-                ? `<span class="lg" style="background:#ECFDF3;color:#166534;">bought in</span> ` +
-                  `<span class="lg" style="background:#FAFAFA;color:#9CA3AF;">not in</span> this game &middot; `
+                ? `<span class="lg" style="background:var(--buyin-green,#bbf7d0);color:var(--buyin-green-text,#15803D);">bought in</span> ` +
+                  `<span class="lg" style="background:var(--buyin-grey,#FAFAFA);color:#9CA3AF;">not in</span> this game &middot; `
                 : "";
             return `<p class="evlb-legend">${head}${buy}${what} &middot; ` +
                 `<b>Won</b> = ${money} money only &mdash; OVERALL shows everything collected at this event.${tail}</p>`;
@@ -7505,7 +7505,7 @@
         const prStaff = userRole === "admin" || userRole === "manager";
         // lead phrase wears the same green as the bought-in rows (Kerry)
         const prLead = d.n_players
-            ? `<span style="background:#bbf7d0;color:#14532D;padding:2px 9px;border-radius:6px;font-weight:600;">${d.n_enrolled} of ${d.n_players} currently bought in</span>`
+            ? `<span style="background:var(--buyin-green,#bbf7d0);color:#14532D;padding:2px 9px;border-radius:6px;font-weight:600;">${d.n_enrolled} of ${d.n_players} currently bought in</span>`
             : escapeHtml(`No standings yet for ${d.label}`);
         $("pr-summary").innerHTML = prLead
             + (!prStaff ? "" : escapeHtml(
@@ -7653,7 +7653,7 @@
         const rowHtml = r => {
             const bg = (r.customer_id && champIds.has(r.customer_id))
                      ? "background:#FDE68A;"   // champion's gold row (Kerry 2026-08-16)
-                     : r.enrolled ? "background:#bbf7d0;"
+                     : r.enrolled ? "background:var(--buyin-green,#bbf7d0);"
                      : (r.customer_id ? "" : "background:#fffbeb;");
             const badge = r.enrolled
                 ? `<span style="color:#15803d;font-weight:700;" title="Bought in">&#10003;${compact ? "" : " IN"}</span>`
@@ -7995,7 +7995,7 @@
         const pr = Object.values(d.per_race || {});
         const cupStaff = userRole === "admin" || userRole === "manager";
         const cupLead = d.n_enrolled
-            ? `<span style="background:#bbf7d0;color:#14532D;padding:2px 9px;border-radius:6px;font-weight:600;">${d.n_enrolled} currently bought in</span>`
+            ? `<span style="background:var(--buyin-green,#bbf7d0);color:#14532D;padding:2px 9px;border-radius:6px;font-weight:600;">${d.n_enrolled} currently bought in</span>`
             : escapeHtml(`${d.n_players} eligible players`);
         $("pr-summary").innerHTML = cupLead
             + (!cupStaff ? "" : escapeHtml(
@@ -8047,7 +8047,7 @@
         const rows = d.standings.map(r => {
             const bg = (r.customer_id && fcChampIds.has(r.customer_id))
                      ? "background:#FDE68A;"   // champion's gold row (Kerry 2026-08-16)
-                     : r.enrolled ? "background:#bbf7d0;"
+                     : r.enrolled ? "background:var(--buyin-green,#bbf7d0);"
                      : (r.customer_id ? "" : "background:#fffbeb;");
             const hcp = r.handicap_index != null
                 ? ` <span style="color:var(--text-muted);font-size:0.82em;">(${r.handicap_index.toFixed(1)})</span>` : "";

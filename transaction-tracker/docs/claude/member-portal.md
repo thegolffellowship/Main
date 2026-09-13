@@ -641,6 +641,23 @@ legend shows only the flights that paid; MVP keeps the ratified
 purple. Backend: overall rows carry `net_flight` / `gross_flight` /
 `skins_flight` ordinals (`_flight_ordinals` over the sectioned
 boards — 1 = low flight, placed non-buyers included).
+**v2.395.0 — ONE green for BOUGHT IN.** Kerry 2026-09-13: "Same green
+as points race but ins for events." The leaderboard's v2.393.0 buy-in
+wash was a paler mint picked locally; it now uses **`#bbf7d0`**, the
+green the Points Races standings have used for enrolled rows since the
+ratified rule that *green means bought in and nothing else*.
+  - It is a **token**, not a third copy of the hex: `--buyin-green`,
+    `--buyin-green-text`, `--buyin-grey` in `dashboard.css`. Read by the
+    leaderboard rows + legend swatches, the Points Races standings rows
+    (both boards), and the two "currently bought in" count chips.
+  - **Guarded:** `test_events_board.js` asserts the tokens exist, that
+    both surfaces read them, and that no buy-in use hard-codes the hex.
+    The one bare `#BBF7D0` left in `contests.html` is `.lsc-dep:hover`
+    (a hover shade on a deposit badge, not a buy-in signal) and the test
+    names that exception rather than allowing it through a loose rule.
+  - Non-buyers keep the light grey — never a paler green — so the two
+    states don't read as degrees of one thing.
+
 **v2.394.0 — PTS row per player, and POPS on every hole score.** Kerry
 2026-09-13: "MVP/POINTS need to show a row for each player that shows
 points. Also need to show pops on each hole score per standard."
