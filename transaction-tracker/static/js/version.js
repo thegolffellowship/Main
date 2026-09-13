@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.395.0";
+window.TGF_VERSION = "2.395.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.395.1",
+    date: "2026-09-13",
+    changes: [
+      "POPS on the leaderboard hole cells are half their previous size (Kerry) \u2014 0.28em instead of 0.55em, so at the board\u2019s 0.8rem type they draw at roughly 3.5px instead of 7px. The leaderboard packs eighteen hole columns where the scorecard grid packs nine, so the dots shrink to stay a marker rather than read as a second number in the cell. The universal scorecard keeps the standard size on its own card, where there is room for it.",
+    ],
+  },
   {
     version: "2.395.0",
     date: "2026-09-13",
