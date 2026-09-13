@@ -358,6 +358,8 @@
         .evlb-ovr tr.alt td { background: #F3F3F1; }
         .evlb-ovr td.tp { color: #6B7280; font-size: 0.72rem; }
         .evlb-ovr.no-holes .h { display: none; }
+        /* handicap columns, hidden by default (Kerry 2026-09-13) */
+        .evlb-ovr.no-hcp .hc { display: none; }
         /* a BAND row — a flight on Net/Gross/Skins, a team on Team */
         .evlb-holes tr.evlb-band td { background: #1B1B1B; color: #fff; text-align: left;
             font: 700 10px/1.7 'Bitter', serif; letter-spacing: 1px; padding: 4px 10px;
@@ -2609,7 +2611,6 @@
     // carries to every event opened in this session — hole columns are
     // hidden by CSS class, never removed, so sorting and the scorecard
     // expansion keep working untouched.
-    let evlbShowHoles = true;
     function evlbFmt(c) { return "$" + (c / 100).toFixed(2).replace(/\.00$/, ""); }
     function evlbDate(s) {
         if (!s) return "";
@@ -2679,6 +2680,11 @@
     // flight 2 green, flight 3 blue, then amber/violet. A game with no
     // flights (or an unresolved one) paints as flight 1.
     const EVLB_FLIGHT_COLORS = ["#DC2626", "#15803D", "#2563EB", "#B45309", "#6D28D9"];
+    let evlbShowHoles = true;
+    // handicap columns (Idx + PH) start HIDDEN (Kerry 2026-09-13:
+    // "make the default not show them") — they are reference, not
+    // result, and they cost two columns on a phone
+    let evlbShowHcp = false;
     function evlbFlightColor(ord) {
         return EVLB_FLIGHT_COLORS[(((ord || 1) - 1) % EVLB_FLIGHT_COLORS.length + EVLB_FLIGHT_COLORS.length) % EVLB_FLIGHT_COLORS.length];
     }
@@ -2833,8 +2839,8 @@
             `<td class="nm">${escapeHtml(r.player_name)}` +
             (r._note ? `<div style="font-size:10.5px;color:#9CA3AF;white-space:normal;">${escapeHtml(r._note)}</div>` : "") +
             `</td>` +
-            `<td class="bl">${r.index != null ? Number(r.index).toFixed(1) : ""}</td>` +
-            `<td class="br">${r.hcp ?? ""}</td>` +
+            `<td class="bl hc">${r.index != null ? Number(r.index).toFixed(1) : ""}</td>` +
+            `<td class="br hc">${r.hcp ?? ""}</td>` +
             holeCells +
             `<td class="bl" style="${gT}"${gTitle}>${r.gross ?? ""}</td>` +
             `<td class="tp" style="${gT}"${gTitle}>${evlbToPar(r.to_par_gross)}</td>` +
@@ -2859,7 +2865,7 @@
         if (!cols.some(n => hp[String(n)] != null)) return "";
         return `<tr class="evlb-ptsrow">` +
             `<td></td><td class="nm">PTS</td>` +
-            `<td class="bl"></td><td class="br"></td>` +
+            `<td class="bl hc"></td><td class="br hc"></td>` +
             cols.map(n => `<td class="h">${hp[String(n)] ?? ""}</td>`).join("") +
             `<td class="bl"></td><td class="tp"></td>` +
             `<td class="bl"></td><td class="tp br"></td>` +
@@ -2896,7 +2902,7 @@
         return `<tr class="teamrow">` +
             `<td>${escapeHtml(t.position || "")}</td>` +
             `<td class="nm">TEAM NET${off ? ' <span style="font-weight:400;color:#9CA3AF;">(holes ' + recon + ')</span>' : ""}</td>` +
-            `<td class="bl"></td><td class="br"></td>` +
+            `<td class="bl hc"></td><td class="br hc"></td>` +
             cols.map(n => `<td class="h">${mins[n] ?? ""}</td>`).join("") +
             `<td class="bl"></td><td class="tp"></td>` +
             `<td class="bl" title="${ttl}"><b>${shown}</b></td>` +
@@ -2995,7 +3001,7 @@
         const tot = cols.every(n => hp[String(n)] != null)
             ? cols.reduce((s2, n) => s2 + hp[String(n)], 0) : "";
         return `<tr class="evlb-parrow"><td></td><td class="nm">PAR</td>` +
-            `<td class="bl"></td><td class="br"></td>` +
+            `<td class="bl hc"></td><td class="br hc"></td>` +
             cols.map(n => `<td class="h">${hp[String(n)] ?? ""}</td>`).join("") +
             `<td class="bl">${tot}</td><td class="tp"></td>` +
             `<td class="bl">${tot}</td><td class="tp br"></td>` +
@@ -3015,10 +3021,11 @@
         const active = k => (dflt !== "keep" && k === dflt) ? " asc" : "";
         return (note || "") +
             `<label class="evlb-holetog"><input type="checkbox" data-ovr-holes${evlbShowHoles ? " checked" : ""}> Hole by hole</label>` +
-            `<div class="evlb-scroll"><table class="evlb-holes evlb-ovr${evlbShowHoles ? "" : " no-holes"}" data-board="${id}"><thead>` +
+            `<label class="evlb-holetog"><input type="checkbox" data-ovr-hcp${evlbShowHcp ? " checked" : ""}> Handicaps</label>` +
+            `<div class="evlb-scroll"><table class="evlb-holes evlb-ovr${evlbShowHoles ? "" : " no-holes"}${evlbShowHcp ? "" : " no-hcp"}" data-board="${id}"><thead>` +
             `<tr><th data-k="net" class="sortable">#</th><th data-k="player" class="nm sortable">Player</th>` +
-            `<th data-k="index" class="sortable bl" title="Handicap Index">Idx</th>` +
-            `<th data-k="hcp" class="sortable br" title="Playing Handicap">PH</th>` +
+            `<th data-k="index" class="sortable bl hc" title="Handicap Index">Idx</th>` +
+            `<th data-k="hcp" class="sortable br hc" title="Playing Handicap">PH</th>` +
             (d.hole_cols || []).map(n => `<th data-k="h:${n}" class="sortable h">${n}</th>`).join("") +
             `<th data-k="gross" class="sortable bl${active("gross")}" title="Gross score">G</th>` +
             `<th data-k="tpg" class="sortable" title="Gross to par">&plusmn;</th>` +
@@ -3348,6 +3355,14 @@
                     t.classList.toggle("no-holes", !evlbShowHoles));
                 document.querySelectorAll("input[data-ovr-holes]").forEach(o =>
                     { o.checked = evlbShowHoles; });
+            }));
+        body.querySelectorAll("input[data-ovr-hcp]").forEach(cb =>
+            cb.addEventListener("change", () => {
+                evlbShowHcp = cb.checked;
+                document.querySelectorAll("table.evlb-ovr").forEach(t =>
+                    t.classList.toggle("no-hcp", !evlbShowHcp));
+                document.querySelectorAll("input[data-ovr-hcp]").forEach(o =>
+                    { o.checked = evlbShowHcp; });
             }));
         // Player-row scorecard expansion — DELEGATED so rows re-rendered
         // by a sort (or any future re-paint) keep the behavior

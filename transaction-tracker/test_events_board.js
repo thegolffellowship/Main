@@ -5,8 +5,9 @@ const lines = src.split('\n');
 const a = lines.findIndex(l => l.startsWith('    const EVLB_FLIGHT_COLORS'));
 const b = lines.findIndex(l => l.startsWith('    function evlbEventHtml(d) {'));
 if (a < 0 || b < 0) throw new Error('renderer region not found');
-const code = 'let evlbShowHoles = true;\n'
-  + 'const escapeHtml = s => String(s ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;");\n'
+// the view-state defaults come from the PAGE (they live in the sliced
+// region) — the harness must not re-declare them or it tests its own
+const code = 'const escapeHtml = s => String(s ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;");\n'
   + lines.slice(a, b).join('\n')
   + '\nglobalThis.EVLB_BOARDS = EVLB_BOARDS;'
   + '\nglobalThis.evlbStdBoard = evlbStdBoard;'
@@ -148,6 +149,35 @@ ck('_buyer is lifted off the game board row, not the overall row',
    && boards.net.sections[1].rows[1]._buyer === false
    && !('_buyer' in d.overall_board[0]),
    JSON.stringify(boards.net.sections.map(x=>x.rows.map(r=>r._buyer))));
+
+console.log('== handicap columns toggle, default OFF ==');
+for (const k of Object.keys(boards)) {
+  ck(`${k}: has the Handicaps checkbox`, /data-ovr-hcp/.test(htmls[k]));
+  ck(`${k}: starts with the handicap columns hidden`,
+     /class="evlb-holes evlb-ovr[^"]*\bno-hcp\b/.test(htmls[k]),
+     (htmls[k].match(/class="evlb-holes evlb-ovr[^"]*"/)||[])[0]);
+  ck(`${k}: the Handicaps box is unchecked by default`,
+     /data-ovr-hcp>/.test(htmls[k]));
+}
+ck('the Idx + PH headers carry the hc class',
+   /data-k="index" class="sortable bl hc"/.test(htmls.overall)
+   && /data-k="hcp" class="sortable br hc"/.test(htmls.overall));
+ck('the player row Idx + PH cells carry it too',
+   /<td class="bl hc">5\.5<\/td><td class="br hc">6<\/td>/.test(htmls.overall),
+   (htmls.overall.match(/<td class="bl hc">[^<]*<\/td><td class="br hc">[^<]*<\/td>/)||[])[0]);
+ck('the PAR / PTS / TEAM NET filler cells carry it, so nothing is left behind',
+   /<tr class="evlb-parrow">[\s\S]*?<td class="bl hc"><\/td><td class="br hc"><\/td>/.test(htmls.overall)
+   && /<tr class="teamrow">[\s\S]*?<td class="bl hc"><\/td><td class="br hc"><\/td>/.test(htmls.team)
+   && /<tr class="evlb-ptsrow">[\s\S]*?<td class="bl hc"><\/td><td class="br hc"><\/td>/.test(htmls.points));
+ck('the columns are HIDDEN, not removed, so sorting them still works',
+   /data-k="index"/.test(htmls.overall) && /data-k="hcp"/.test(htmls.overall));
+ck('hiding handicaps does not change the column count',
+   colCount(htmls.overall) === base, colCount(htmls.overall));
+{
+  const css = fs.readFileSync(require('path').join(__dirname,'templates/contests.html'),'utf8');
+  ck('the no-hcp rule hides exactly the hc cells',
+     /\.evlb-ovr\.no-hcp \.hc \{ display: none; \}/.test(css));
+}
 
 console.log('== ONE green for BOUGHT IN, app-wide ==');
 {

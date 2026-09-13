@@ -641,6 +641,26 @@ legend shows only the flights that paid; MVP keeps the ratified
 purple. Backend: overall rows carry `net_flight` / `gross_flight` /
 `skins_flight` ordinals (`_flight_ordinals` over the sectioned
 boards — 1 = low flight, placed non-buyers included).
+**v2.396.0 — Handicaps column toggle, default OFF.** Kerry 2026-09-13:
+"Give me a checkbox to show the handicap columns or not and make the
+default not show them." A **Handicaps** checkbox sits beside **Hole by
+hole**; `evlbShowHcp` starts `false`, so every board opens with Idx + PH
+hidden and two more columns of phone width for the scores.
+  - Same mechanism as the hole toggle: cells carry `.hc`, the table
+    carries `no-hcp`, and `.evlb-ovr.no-hcp .hc { display:none }` hides
+    them. **Hidden, never removed** — sorting by Idx/PH survives, the
+    column count is identical across tabs, and the `.bl`/`.br` rules stay
+    on the right cells. The PAR, PTS and TEAM NET rows carry `.hc` on
+    those two slots too, so no filler is stranded.
+  - Flipping it updates every leaderboard open on the page and every copy
+    of the checkbox, matching the hole-toggle convention.
+  - **`evlbShowHoles` / `evlbShowHcp` moved into the renderer region** so
+    `test_events_board.js` runs the app's real defaults. The harness had
+    been declaring `evlbShowHoles = true` itself — asserting against its
+    own default would have let a changed default ship unnoticed, the same
+    gap as the stale row-mapping copy (v2.393.0).
+Guard: twenty-four checks.
+
 **v2.395.0 — ONE green for BOUGHT IN.** Kerry 2026-09-13: "Same green
 as points race but ins for events." The leaderboard's v2.393.0 buy-in
 wash was a paler mint picked locally; it now uses **`#bbf7d0`**, the

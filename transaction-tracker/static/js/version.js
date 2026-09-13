@@ -1,5 +1,16 @@
-window.TGF_VERSION = "2.395.1";
+window.TGF_VERSION = "2.396.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.396.0",
+    date: "2026-09-13",
+    changes: [
+      "A <b>Handicaps</b> checkbox beside Hole by hole shows or hides the Idx and PH columns, and it starts OFF (Kerry). Handicaps are reference, not result \u2014 they explain a net score rather than being one \u2014 so the board opens on the scores and gives back two columns of phone width, with the handicaps one tap away.",
+      "Like the hole columns, they are HIDDEN rather than removed: the cells stay in the DOM, so sorting by Idx or PH still works the moment you show them again, the column count never changes between tabs, and the black column rules stay attached to the right cells. The PAR, PTS and TEAM NET rows carry the same class in those two slots, so nothing is left stranded in a column that isn\u2019t there.",
+      "The toggle follows the Hole-by-hole convention exactly \u2014 flipping it updates every leaderboard already open on the page and every copy of the checkbox, so two expanded events can never disagree about what is on screen.",
+      "The two view-state flags moved into the renderer region so the headless guard runs the app\u2019s real defaults instead of declaring its own. The harness had been asserting against a default it set itself, which would have let a changed default ship unnoticed \u2014 the same class of gap as the stale row-mapping copy fixed in v2.393.0.",
+      "Twenty-four new checks: the checkbox and hidden-by-default state on all six tabs, the hc class on the headers, player cells and all three filler rows, that the columns are hidden rather than removed, that the count is unchanged, and that the CSS rule exists. 131 checks total.",
+    ],
+  },
   {
     version: "2.395.1",
     date: "2026-09-13",
