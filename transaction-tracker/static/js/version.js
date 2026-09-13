@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.396.0";
+window.TGF_VERSION = "2.397.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.397.0",
+    date: "2026-09-13",
+    changes: [
+      "The <b>Won</b> column moves from the far right to straight after the player\u2019s name (Kerry). The money is what the board is for, so it now reads without scrolling past eighteen hole columns to reach it \u2014 on a phone it was the one number you had to go looking for. A black rule closes it off from whatever sits to its right, so it still reads as its own thing rather than running into the handicaps.",
+      "Every row type moved with it in one pass \u2014 the player row, the PAR row, the PTS row and the TEAM NET row \u2014 so no row is left with its money in the old slot and a hole where the new one should be. The header, the sort key and the column count are unchanged: tapping Won still sorts and re-ranks by money exactly as before.",
+      "Fifteen new checks nail the position down rather than trusting it: header order is # | Player | Won, the money cell is the third cell on every one of the four row types, Won is no longer last, the team purse is still in the team row\u2019s money cell, each row has exactly one money cell, and the column count did not change. 146 checks total.",
+    ],
+  },
   {
     version: "2.396.0",
     date: "2026-09-13",

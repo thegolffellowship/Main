@@ -2839,6 +2839,7 @@
             `<td class="nm">${escapeHtml(r.player_name)}` +
             (r._note ? `<div style="font-size:10.5px;color:#9CA3AF;white-space:normal;">${escapeHtml(r._note)}</div>` : "") +
             `</td>` +
+            `<td class="won br">${money > 0 ? "$" + Number(money).toFixed(2) : ""}</td>` +
             `<td class="bl hc">${r.index != null ? Number(r.index).toFixed(1) : ""}</td>` +
             `<td class="br hc">${r.hcp ?? ""}</td>` +
             holeCells +
@@ -2848,7 +2849,7 @@
             `<td class="tp br" style="${nT}"${nTitle}>${evlbToPar(r.to_par_net)}</td>` +
             (gameCol === false ? "" :
                 `<td class="bl br" style="${gvTint ? EVLB_MVP_TINT : ""}"${gvTint ? ' title="Event MVP"' : ""}>${gv ?? ""}</td>`) +
-            `<td class="won">${money > 0 ? "$" + Number(money).toFixed(2) : ""}</td></tr>`;
+            `</tr>`;
     }
     // ── per-player POINTS row (Kerry 2026-09-13: "MVP/POINTS need to
     //    show a row for each player that shows points"). On the
@@ -2865,12 +2866,13 @@
         if (!cols.some(n => hp[String(n)] != null)) return "";
         return `<tr class="evlb-ptsrow">` +
             `<td></td><td class="nm">PTS</td>` +
+            `<td class="won br"></td>` +
             `<td class="bl hc"></td><td class="br hc"></td>` +
             cols.map(n => `<td class="h">${hp[String(n)] ?? ""}</td>`).join("") +
             `<td class="bl"></td><td class="tp"></td>` +
             `<td class="bl"></td><td class="tp br"></td>` +
             (gameCol === false ? "" : `<td class="bl br">${r.net_pts ?? ""}</td>`) +
-            `<td class="won"></td></tr>`;
+            `</tr>`;
     }
     // ── TEAM TOTAL row (Kerry 2026-09-13: "The team Net needs to show
     //    a team total row that shows what their team score for each
@@ -2902,13 +2904,14 @@
         return `<tr class="teamrow">` +
             `<td>${escapeHtml(t.position || "")}</td>` +
             `<td class="nm">TEAM NET${off ? ' <span style="font-weight:400;color:#9CA3AF;">(holes ' + recon + ')</span>' : ""}</td>` +
+            `<td class="won br" title="the team's whole purse">${money > 0 ? "$" + Number(money).toFixed(2) : ""}</td>` +
             `<td class="bl hc"></td><td class="br hc"></td>` +
             cols.map(n => `<td class="h">${mins[n] ?? ""}</td>`).join("") +
             `<td class="bl"></td><td class="tp"></td>` +
             `<td class="bl" title="${ttl}"><b>${shown}</b></td>` +
             `<td class="tp br">${par ? evlbToPar(shown - par) : ""}</td>` +
             (gameCol === false ? "" : `<td class="bl br"></td>`) +
-            `<td class="won" title="the team's whole purse">${money > 0 ? "$" + Number(money).toFixed(2) : ""}</td></tr>`;
+            `</tr>`;
     }
     // ── THE standard board (Kerry 2026-09-13): one table shape for
     //    every tab but Proxies. Bands + order come from the caller; the
@@ -3001,12 +3004,13 @@
         const tot = cols.every(n => hp[String(n)] != null)
             ? cols.reduce((s2, n) => s2 + hp[String(n)], 0) : "";
         return `<tr class="evlb-parrow"><td></td><td class="nm">PAR</td>` +
+            `<td class="won br"></td>` +
             `<td class="bl hc"></td><td class="br hc"></td>` +
             cols.map(n => `<td class="h">${hp[String(n)] ?? ""}</td>`).join("") +
             `<td class="bl">${tot}</td><td class="tp"></td>` +
             `<td class="bl">${tot}</td><td class="tp br"></td>` +
             (gameCol === false ? "" : `<td class="bl br"></td>`) +
-            `<td class="won"></td></tr>`;
+            `</tr>`;
     }
     function evlbStdBoard(d, board, note) {
         if (!board.sections.length || !board.sections.some(s => s.rows.length))
@@ -3024,6 +3028,9 @@
             `<label class="evlb-holetog"><input type="checkbox" data-ovr-hcp${evlbShowHcp ? " checked" : ""}> Handicaps</label>` +
             `<div class="evlb-scroll"><table class="evlb-holes evlb-ovr${evlbShowHoles ? "" : " no-holes"}${evlbShowHcp ? "" : " no-hcp"}" data-board="${id}"><thead>` +
             `<tr><th data-k="net" class="sortable">#</th><th data-k="player" class="nm sortable">Player</th>` +
+            // Won sits right of the name (Kerry 2026-09-13) — the money
+            // is the point of the board, so it reads without scrolling
+            `<th data-k="won" class="won sortable br">Won</th>` +
             `<th data-k="index" class="sortable bl hc" title="Handicap Index">Idx</th>` +
             `<th data-k="hcp" class="sortable br hc" title="Playing Handicap">PH</th>` +
             (d.hole_cols || []).map(n => `<th data-k="h:${n}" class="sortable h">${n}</th>`).join("") +
@@ -3033,7 +3040,7 @@
             `<th data-k="tpn" class="sortable br" title="Net to par">&plusmn;</th>` +
             (board.gameCol === false ? "" :
                 `<th data-k="gamecol" class="sortable bl br${active("gamecol")}">${escapeHtml(gl)}</th>`) +
-            `<th data-k="won" class="won sortable">Won</th></tr>` +
+            `</tr>` +
             evlbParRow(d, board.gameCol) + `</thead>` +
             `<tbody>${evlbBoardBody(id)}</tbody></table></div>`;
     }

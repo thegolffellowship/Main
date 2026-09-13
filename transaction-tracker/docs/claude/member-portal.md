@@ -641,6 +641,19 @@ legend shows only the flights that paid; MVP keeps the ratified
 purple. Backend: overall rows carry `net_flight` / `gross_flight` /
 `skins_flight` ordinals (`_flight_ordinals` over the sectioned
 boards — 1 = low flight, placed non-buyers included).
+**v2.397.0 — Won moves next to the name.** Kerry 2026-09-13: "Move WON
+column right after names column." Column order is now
+`# | Player | Won | Idx | PH | holes… | G ± | N ± | [Pts]`. The money was
+the one number you had to scroll eighteen hole columns to reach on a
+phone. `.won` keeps a `br` rule so it still closes as its own group.
+All FOUR row builders moved in one pass — `evlbOvrRowHtml`,
+`evlbParRow`, `evlbPtsRowHtml`, `evlbTeamTotalRow` — so no row keeps its
+money in the old slot. Header, `data-k="won"` sort key and column count
+are unchanged; tapping Won still sorts and re-ranks by money.
+Guard: fifteen checks pinning the position (header order, third cell on
+every row type, not last, team purse intact, exactly one money cell per
+row, unchanged column count).
+
 **v2.396.0 — Handicaps column toggle, default OFF.** Kerry 2026-09-13:
 "Give me a checkbox to show the handicap columns or not and make the
 default not show them." A **Handicaps** checkbox sits beside **Hole by

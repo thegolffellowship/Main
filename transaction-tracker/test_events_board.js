@@ -150,6 +150,33 @@ ck('_buyer is lifted off the game board row, not the overall row',
    && !('_buyer' in d.overall_board[0]),
    JSON.stringify(boards.net.sections.map(x=>x.rows.map(r=>r._buyer))));
 
+console.log('== WON sits right of the name (Kerry 2026-09-13) ==');
+{
+  const heads = [...htmls.overall.matchAll(/<th [^>]*>([^<]*)<\/th>/g)].map(m=>m[1]);
+  ck('header order is # | Player | Won | ...',
+     heads[0]==='#' && heads[1]==='Player' && heads[2]==='Won', heads.slice(0,5).join(' | '));
+  ck('Won is no longer the last column', heads[heads.length-1] !== 'Won', heads[heads.length-1]);
+  const nth = (row, n) => ((row||'').match(/<td[^>]*>/g)||[])[n] || '';
+  const plr = (htmls.overall.match(/<tr class="evlb-plr[\s\S]*?<\/tr>/)||[''])[0];
+  ck('player row: the money cell is third, straight after the name',
+     /class="won br"/.test(nth(plr, 2)), nth(plr, 2));
+  ck('player row still carries the money itself', /\$135\.50/.test(plr));
+  for (const [label, row] of [
+      ['PAR', (htmls.overall.match(/<tr class="evlb-parrow">[\s\S]*?<\/tr>/)||[''])[0]],
+      ['PTS', (htmls.points.match(/<tr class="evlb-ptsrow">[\s\S]*?<\/tr>/)||[''])[0]],
+      ['TEAM NET', (htmls.team.match(/<tr class="teamrow">[\s\S]*?<\/tr>/)||[''])[0]]])
+    ck(`${label} row keeps its slot in the same place`,
+       /class="won[^"]*br"/.test(nth(row, 2)), nth(row, 2));
+  ck('the team purse is still in the TEAM NET money cell',
+     /class="won br"[^>]*>\$224\.00</.test(htmls.team),
+     (htmls.team.match(/class="won[^"]*"[^>]*>[^<]*</)||[])[0]);
+  for (const k of Object.keys(boards))
+    ck(`${k}: exactly one money cell per row`,
+       ((htmls[k].match(/<tr class="evlb-plr[\s\S]*?<\/tr>/)||[''])[0]
+         .match(/class="won/g)||[]).length === 1);
+  ck('column count unchanged by the move', colCount(htmls.overall) === base, colCount(htmls.overall));
+}
+
 console.log('== handicap columns toggle, default OFF ==');
 for (const k of Object.keys(boards)) {
   ck(`${k}: has the Handicaps checkbox`, /data-ovr-hcp/.test(htmls[k]));
