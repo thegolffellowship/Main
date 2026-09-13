@@ -641,6 +641,26 @@ legend shows only the flights that paid; MVP keeps the ratified
 purple. Backend: overall rows carry `net_flight` / `gross_flight` /
 `skins_flight` ordinals (`_flight_ordinals` over the sectioned
 boards — 1 = low flight, placed non-buyers included).
+**v2.392.0 — PAR row under the hole numbers.** Kerry 2026-09-13: "Add
+a par row below the hole numbers for all leaderboards." `evlbParRow(d,
+gameCol)` emits a second THEAD row on every standard board, and
+`evlbTeamCard` carries the same line in its own column shape so tapping a
+team doesn't lose it. In the THEAD it survives re-sorts and hides with
+the holes (`td.h` under `.evlb-ovr.no-holes .h`). Total par sits under
+BOTH the G and N columns — par is the reference for gross and net alike.
+  - **`hole_par` (new payload key).** Par is a property of the HOLE but
+    is stored per TEE (`course_tee_holes.par`), and a course can carry a
+    different par on a forward tee. `get_event_leaderboard` gathers the
+    distinct pars across the tees actually in play on the event and
+    publishes a hole ONLY when they agree. A hole where they disagree is
+    absent → renders blank; the total par stays blank until every hole
+    has one. Same rule the to-par totals follow: a gap shows nothing
+    rather than a wrong number.
+  - No par data at all → no PAR row, rather than a row of blanks.
+  - `scoring-event-board` returns `hole_par` for outside verification.
+Guard: fourteen checks in `test_events_board.js`; `hole_par` asserted in
+`test_spotlight_winnings.py`.
+
 **v2.391.0 — TEAM NET total row.** Kerry 2026-09-13: "The team Net
 needs to show a team total row that shows what their team score for each
 hole was, and team total and total money won." Each team band on the

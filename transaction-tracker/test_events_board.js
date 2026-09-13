@@ -21,6 +21,9 @@ const mk = (rid, name, g, n, pts, opts={}) => Object.assign({
   net_flight:1, gross_flight:1, skins_flight:1, won_total:0, won_by_cat:{} }, opts);
 const d = {
   hole_cols:[1,2,3,4,5,6,7,8,9],
+  // par per hole for the header's PAR row; hole 7 is deliberately
+  // ABSENT — the tees disagreed there, so it must render blank
+  hole_par:{"1":4,"2":4,"3":3,"4":5,"5":4,"6":4,"8":4,"9":5},
   cards:{ 1:[[1,4,0],[2,5,0]], 2:[[1,5,0]], 3:[[1,6,0]], 4:[[1,4,0]] },
   skin_cells:{ "2":[1] },
   overall_board:[
@@ -110,6 +113,34 @@ ck('net tab shows only the $79.50 net money', /\$79\.50/.test(htmls.net) && !/\$
 ck('team tab shows only the $56.00 team money', /\$56\.00/.test(htmls.team) && !/\$135\.50/.test(htmls.team));
 ck('skins tab shows only the $39.00 skins money', /\$39\.00/.test(htmls.skins) && !/\$135\.50/.test(htmls.skins));
 ck('gross tab pays nobody (no gross game)', !/\$/.test(htmls.gross.replace(/<thead[\s\S]*?<\/thead>/,'')));
+
+console.log('== PAR row under the hole numbers (Kerry 2026-09-13) ==');
+for (const k of Object.keys(boards))
+  ck(`${k}: has a PAR row in the thead`,
+     /<thead>[\s\S]*?<tr class="evlb-parrow">[\s\S]*?<\/thead>/.test(htmls[k]));
+const prow = (htmls.overall.match(/<tr class="evlb-parrow">[\s\S]*?<\/tr>/)||[''])[0];
+ck('PAR row is labelled', /<td class="nm">PAR<\/td>/.test(prow), prow);
+ck('PAR row carries each hole par', /<td class="h">4<\/td><td class="h">4<\/td><td class="h">3<\/td>/.test(prow), prow);
+ck('a hole whose tees disagree renders BLANK, not a guess',
+   (prow.match(/<td class="h"><\/td>/g)||[]).length === 1, prow);
+ck('total par blank while any hole par is missing',
+   !/>33</.test(prow) && !/>36</.test(prow), prow);
+ck('PAR row has the same column count as a player row',
+   (prow.match(/<td/g)||[]).length
+   === ((htmls.overall.match(/<tr class="evlb-plr[\s\S]*?<\/tr>/)||[''])[0].match(/<td/g)||[]).length,
+   (prow.match(/<td/g)||[]).length);
+ck('PAR hole cells carry .h so the hole toggle hides them',
+   (prow.match(/class="h"/g)||[]).length === 9, prow);
+// complete par data -> the total appears under BOTH score columns
+const dFull = Object.assign({}, d, {hole_par:Object.assign({}, d.hole_par, {"7":3})});
+const fullPar = (evlbStdBoard(dFull, {sections:[{label:null,rows:d.overall_board}],sort:'net'})
+  .match(/<tr class="evlb-parrow">[\s\S]*?<\/tr>/)||[''])[0];
+ck('complete par data totals to 36 under G and N',
+   (fullPar.match(/>36</g)||[]).length === 2, fullPar);
+// no par data at all -> no row rather than a row of blanks
+const dNoPar = Object.assign({}, d, {hole_par:{}});
+ck('no par data -> no PAR row at all',
+   !/evlb-parrow/.test(evlbStdBoard(dNoPar, {sections:[{label:null,rows:d.overall_board}],sort:'net'})));
 
 console.log('== TEAM NET total row (Kerry 2026-09-13) ==');
 const trow = (htmls.team.match(/<tr class="teamrow">[\s\S]*?<\/tr>/) || [''])[0];

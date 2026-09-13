@@ -13376,6 +13376,34 @@ def get_event_leaderboard(event_name: str,
                 if pr_["n_par"] and pr_["n_par"] == pr_["n_holes"]:
                     par_by_rid[pr_["rid"]] = pr_["par"]
 
+        # PAR PER HOLE for the board headers (Kerry 2026-09-13: "Add a
+        # par row below the hole numbers for all leaderboards"). Par is
+        # a property of the HOLE, but it is stored per TEE, and a course
+        # can carry a different par for a forward tee. So: gather the
+        # distinct pars across the tees actually in play on this event
+        # and publish a hole's par ONLY when they agree. A hole where
+        # the tees disagree renders blank rather than asserting one
+        # tee's par over another's — same rule as the to-par totals.
+        hole_par: dict = {}
+        if rids:
+            ph = ",".join("?" for _ in rids)
+            seen: dict = {}
+            for hp in conn.execute(
+                    f"""SELECT DISTINCT sh.hole_number AS hn,
+                                        cth.par AS par
+                         FROM scoring_holes sh
+                         JOIN scoring_rounds sr ON sr.id = sh.scoring_round_id
+                         JOIN course_tee_holes cth
+                           ON cth.tee_id = sr.tee_id
+                          AND cth.hole_number = sh.hole_number
+                        WHERE sh.scoring_round_id IN ({ph})
+                          AND sh.strokes IS NOT NULL
+                          AND cth.par IS NOT NULL""", list(rids)):
+                seen.setdefault(hp["hn"], set()).add(hp["par"])
+            for hn_, pars_ in seen.items():
+                if len(pars_) == 1:
+                    hole_par[hn_] = next(iter(pars_))
+
         # bundle buyers (Games-tab eligibility rules)
         net_buyers = set(_event_game_buyers(
             conn, ev["item_name"], "NET")["buyers"].keys())
@@ -13944,6 +13972,9 @@ def get_event_leaderboard(event_name: str,
         "hio": hio_rows,
         "cards": {str(k): v for k, v in cards.items()},
         "hole_cols": hole_cols,
+        # par per hole for the board header's PAR row (v2.392.0) —
+        # only holes whose tees agree on a par appear here
+        "hole_par": {str(k): v for k, v in hole_par.items()},
         "games_off": games_off,
         "n_net_buyers": len(net_buyers),
         "n_gross_buyers": len(gross_buyers),

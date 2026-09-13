@@ -1,5 +1,16 @@
-window.TGF_VERSION = "2.391.0";
+window.TGF_VERSION = "2.392.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.392.0",
+    date: "2026-09-13",
+    changes: [
+      "PAR row under the hole numbers on every leaderboard (Kerry: 'Add a par row below the hole numbers for all leaderboards'). Overall, Team, Net, Gross, Skins and MVP/Points all carry it, and so does the team best-ball card, so tapping a team never loses the par line the board above it shows. It lives in the table header, which means it stays put while the rows re-sort and it disappears with the holes when the Hole-by-hole box is unchecked.",
+      "Total par sits under BOTH the G and N columns, since par is the reference for gross and net alike \u2014 a 38 gross against a 36 par now reads without arithmetic.",
+      "Par is a property of the hole but it is STORED per tee, and a course can carry a different par on a forward tee. The new hole_par payload therefore publishes a hole's par only where every tee in play on that event agrees; a hole where they disagree renders blank rather than asserting one tee's par over another's, and the total par stays blank until every hole has one. Same rule the to-par columns already follow \u2014 a gap shows nothing instead of a wrong number.",
+      "A board with no par data at all grows no PAR row rather than a row of empty cells.",
+      "Fourteen new checks in test_events_board.js cover the row on all six tabs, the blank-on-disagreement rule, the blank total, the matching column count, the hole-toggle class, and the complete-data total; test_spotlight_winnings.py asserts hole_par comes out of the leaderboard query. The scoring-event-board bridge returns hole_par so the pars can be vetted from outside the page.",
+    ],
+  },
   {
     version: "2.391.0",
     date: "2026-09-13",

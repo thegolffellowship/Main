@@ -4949,6 +4949,9 @@ def _scoring_dispatch(url: str, extract: str):
                     # column shows; must sum back to "won"
                     "by_cat": r.get("won_by_cat"),
                 } for r in (_d.get("overall_board") or [])],
+                # par per hole for the boards' PAR row (v2.392.0) —
+                # only holes whose tees agree on a par appear
+                "hole_par": _d.get("hole_par"),
                 "games_off": _d.get("games_off")}, indent=2, default=str)
         if cmd == "scoring-ca-queue":
             # CA QUEUE read (mailbox #473/#474): "[<section>[|<status>]]"

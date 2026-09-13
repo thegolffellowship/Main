@@ -434,6 +434,10 @@ check("everyone NOT in skins is placed on the board (grey rows)",
       == {"BUYER, Low", "NONBUYER, Mid", "GUEST, Someone"})
 check("cards + hole_cols feed the grids",
       evd["hole_cols"] == [10, 11] and "101" in evd["cards"])
+# PAR row (Kerry 2026-09-13): par per HOLE for the board headers,
+# published only where the tees in play agree
+check("hole_par carries the per-hole par for the header row",
+      evd["hole_par"] == {"10": 4, "11": 4}, repr(evd.get("hole_par")))
 check("Individual Gross inactive notice from the live matrix (16 on 9h)",
       evd["games_off"] and evd["games_off"][0]["needed"] == 16
       and "rolled into Skins" in evd["games_off"][0]["note"],

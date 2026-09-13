@@ -307,6 +307,12 @@
         .evlb-holes tr.mute td { color: #9CA3AF; }
         .evlb-holes tr.teamrow td { background: #F3F1EC; font-weight: 700;
             border-top: 2px solid #1B1B1B; }
+        /* PAR row under the hole numbers (Kerry 2026-09-13) — a
+           reference band between the black header and the data */
+        .evlb-holes thead tr.evlb-parrow td { background: #F3F1EC;
+            color: #475569; font-weight: 700; font-size: 0.72rem;
+            border-bottom: 2px solid #1B1B1B; }
+        .evlb-holes thead tr.evlb-parrow td.nm { text-align: left; }
         /* the counting ball(s) behind the team best-ball score */
         .evlb-holes td.count { background: #DCFCE7; font-weight: 700; }
         /* GG-style circled winning score (skins / counting team ball) */
@@ -2880,6 +2886,28 @@
         });
         return html;
     }
+    // ── PAR row (Kerry 2026-09-13: "Add a par row below the hole
+    //    numbers for all leaderboards"). Lives in the THEAD so it stays
+    //    with the hole numbers and disappears with them when the
+    //    hole-by-hole toggle is off. A hole whose tees disagree on par
+    //    is published as nothing by the server and renders blank here,
+    //    rather than asserting one tee's par over another's. Total par
+    //    sits under BOTH score columns, since it is the reference for
+    //    gross and net alike.
+    function evlbParRow(d, gameCol) {
+        const hp = d.hole_par || {};
+        const cols = d.hole_cols || [];
+        if (!cols.some(n => hp[String(n)] != null)) return "";
+        const tot = cols.every(n => hp[String(n)] != null)
+            ? cols.reduce((s2, n) => s2 + hp[String(n)], 0) : "";
+        return `<tr class="evlb-parrow"><td></td><td class="nm">PAR</td>` +
+            `<td class="bl"></td><td class="br"></td>` +
+            cols.map(n => `<td class="h">${hp[String(n)] ?? ""}</td>`).join("") +
+            `<td class="bl">${tot}</td><td class="tp"></td>` +
+            `<td class="bl">${tot}</td><td class="tp br"></td>` +
+            (gameCol === false ? "" : `<td class="bl br"></td>`) +
+            `<td class="won"></td></tr>`;
+    }
     function evlbStdBoard(d, board, note) {
         if (!board.sections.length || !board.sections.some(s => s.rows.length))
             return '<p style="color:var(--text-muted);">No scores yet.</p>';
@@ -2904,7 +2932,8 @@
             `<th data-k="tpn" class="sortable br" title="Net to par">&plusmn;</th>` +
             (board.gameCol === false ? "" :
                 `<th data-k="gamecol" class="sortable bl br${active("gamecol")}">${escapeHtml(gl)}</th>`) +
-            `<th data-k="won" class="won sortable">Won</th></tr></thead>` +
+            `<th data-k="won" class="won sortable">Won</th></tr>` +
+            evlbParRow(d, board.gameCol) + `</thead>` +
             `<tbody>${evlbBoardBody(id)}</tbody></table></div>`;
     }
     function evlbEventHtml(d) {
@@ -3155,8 +3184,19 @@
         const ggNote = (t.gg_total != null && t.gg_total !== teamTotal)
             ? ` &middot; GG recorded team total: <b>${t.gg_total}</b> (official 75% off-lowest allowance; this card shows each player's own-card net)`
             : "";
+        // the same PAR reference the boards carry, in the card's own
+        // column shape (Kerry 2026-09-13) — tapping a team must not
+        // lose the par line the board above it shows
+        const hp = d.hole_par || {};
+        const parRow = cols.some(n => hp[String(n)] != null)
+            ? `<tr class="evlb-parrow"><td class="nm">PAR</td>` +
+              cols.map(n => `<td>${hp[String(n)] ?? ""}</td>`).join("") +
+              `<td>${cols.every(n => hp[String(n)] != null)
+                  ? cols.reduce((s2, n) => s2 + hp[String(n)], 0) : ""}</td></tr>`
+            : "";
         return `<div class="evlb-scroll"><table class="evlb-holes"><thead>` +
             `<tr><th class="nm">NET SCORES</th>${cols.map(n => `<th>${n}</th>`).join("")}<th>${nineLbl}</th></tr>` +
+            parRow +
             `</thead><tbody>${rows}${teamRow}</tbody></table>` +
             `<span style="font-size:10.5px;color:#9CA3AF;">Highlighted = the ball that counted for the team score${ggNote}</span></div>`;
     }
