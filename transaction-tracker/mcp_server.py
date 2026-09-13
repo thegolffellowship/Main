@@ -4945,6 +4945,9 @@ def _scoring_dispatch(url: str, extract: str):
                         ("N", r["win_net"]), ("G", r["win_gross"]),
                         ("S", r["win_skins"]), ("M", r["win_mvp"])) if f),
                     "won": r["won_total"],
+                    # per-GAME money (v2.390.0) — what each tab's Won
+                    # column shows; must sum back to "won"
+                    "by_cat": r.get("won_by_cat"),
                 } for r in (_d.get("overall_board") or [])],
                 "games_off": _d.get("games_off")}, indent=2, default=str)
         if cmd == "scoring-ca-queue":

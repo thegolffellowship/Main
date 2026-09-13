@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.390.0";
+window.TGF_VERSION = "2.390.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.390.1",
+    date: "2026-09-13",
+    changes: [
+      "The scoring-event-board bridge now returns each player's per-game money (by_cat) alongside the event total, so the per-tab Won columns can be vetted from outside the page \u2014 the check that the tab figures sum back to the OVERALL figure no longer requires an admin browser session.",
+    ],
+  },
   {
     version: "2.390.0",
     date: "2026-09-13",
