@@ -641,6 +641,29 @@ legend shows only the flights that paid; MVP keeps the ratified
 purple. Backend: overall rows carry `net_flight` / `gross_flight` /
 `skins_flight` ordinals (`_flight_ordinals` over the sectioned
 boards — 1 = low flight, placed non-buyers included).
+**v2.394.0 — PTS row per player, and POPS on every hole score.** Kerry
+2026-09-13: "MVP/POINTS need to show a row for each player that shows
+points. Also need to show pops on each hole score per standard."
+  - **`evlbPtsRowHtml(d, r, gameCol)`** emits a `tr.evlb-ptsrow` under
+    each player on the MVP/Points tab only: the NET stableford points
+    that score earned on every hole, plus the Pts total repeated in the
+    Pts column. Source is the new **`hole_pts`** payload key — the SAME
+    `compute_hole_derivations` pass the `net_pts` total is summed from,
+    captured per hole instead of only accumulated, so the row and the
+    column cannot drift. No points data for a round → no row.
+  - **`evlbPops(sr)`** renders strokes received as filled dots pinned to
+    the hole cell's top-right (`span.evlb-pops`, `td.h{position:relative}`)
+    — the same treatment `scorecard-render.js` `strokeDots` has always
+    used. On every tab, including the Team tab's NET cells, where the
+    dots are the record of why net differs from gross. The PAR row and
+    the TEAM NET row carry none.
+  - **Scorecard expansion anchor.** The delegated handler now inserts the
+    card after the player's PTS row when one is present (`host`), not
+    after the score row. Inserting between them would orphan the points
+    row from its score — the same injected-detail-row hazard that made
+    CSS `nth-child` zebra striping unusable here.
+Guard: twenty checks in `test_events_board.js` (101 total).
+
 **v2.393.0 — buy-in coloring on the NET/GROSS bundle tabs.** Kerry
 2026-09-13: "Any Net Bundle and Gross bundle games should still show who
 bought in and didn't buy in with the green coloring for the rows and

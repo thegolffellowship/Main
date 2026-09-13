@@ -26,7 +26,11 @@ const d = {
   // par per hole for the header's PAR row; hole 7 is deliberately
   // ABSENT — the tees disagreed there, so it must render blank
   hole_par:{"1":4,"2":4,"3":3,"4":5,"5":4,"6":4,"8":4,"9":5},
-  cards:{ 1:[[1,4,0],[2,5,0]], 2:[[1,5,0]], 3:[[1,6,0]], 4:[[1,4,0]] },
+  // net stableford points per hole -> the MVP/Points tab's PTS row
+  hole_pts:{"1":{"1":2,"2":1},"2":{"1":1},"3":{"1":3}},
+  // [hole, gross, strokes_received] — rid 1 pops on hole 2, rid 3 gets
+  // two on hole 1, so the dot rendering is exercised at 0/1/2 strokes
+  cards:{ 1:[[1,4,0],[2,5,1]], 2:[[1,5,0]], 3:[[1,6,2]], 4:[[1,4,0]] },
   skin_cells:{ "2":[1] },
   overall_board:[
     // won_total is the whole event; won_by_cat is what each game paid,
@@ -145,6 +149,41 @@ ck('_buyer is lifted off the game board row, not the overall row',
    && !('_buyer' in d.overall_board[0]),
    JSON.stringify(boards.net.sections.map(x=>x.rows.map(r=>r._buyer))));
 
+console.log('== POPS on the hole scores (Kerry 2026-09-13) ==');
+ck('one stroke received renders one dot',
+   /<td class="h"><span class="evlb-pops">\u25CF<\/span>5<\/td>/.test(htmls.overall),
+   (htmls.overall.match(/evlb-pops[^<]*<\/span>./g)||[]).join('|'));
+ck('two strokes render two dots',
+   /<span class="evlb-pops">\u25CF\u25CF<\/span>6/.test(htmls.overall));
+ck('no stroke received renders no dots on that cell',
+   /<td class="h">4<\/td>/.test(htmls.overall));
+for (const k of Object.keys(boards))
+  ck(`${k}: pops show on the hole scores`, /evlb-pops/.test(htmls[k]));
+ck('the team tab keeps the dots on its NET cells',
+   /class="h[^"]*"[^>]*><span class="evlb-pops">/.test(htmls.team), '');
+ck('PAR row carries no pops',
+   !/evlb-pops/.test((htmls.overall.match(/<tr class="evlb-parrow">[\s\S]*?<\/tr>/)||[''])[0]));
+
+console.log('== PTS row per player on MVP/Points (Kerry 2026-09-13) ==');
+const ptsRows = htmls.points.match(/<tr class="evlb-ptsrow">[\s\S]*?<\/tr>/g) || [];
+ck('every player with points gets a PTS row', ptsRows.length === 3, ptsRows.length);
+ck('PTS row is labelled', /<td class="nm">PTS<\/td>/.test(ptsRows[0] || ''), ptsRows[0]);
+ck('PTS row carries the per-hole points (2 then 1)',
+   /<td class="h">2<\/td><td class="h">1<\/td>/.test(ptsRows[0] || ''), ptsRows[0]);
+ck('PTS row repeats the total under the Pts column',
+   />11<\/td>/.test(ptsRows[0] || ''), ptsRows[0]);
+ck('PTS row has the same column count as a player row',
+   ((ptsRows[0]||'').match(/<td/g)||[]).length
+   === ((htmls.points.match(/<tr class="evlb-plr[\s\S]*?<\/tr>/)||[''])[0].match(/<td/g)||[]).length,
+   ((ptsRows[0]||'').match(/<td/g)||[]).length);
+ck('PTS hole cells carry .h so the hole toggle hides them',
+   ((ptsRows[0]||'').match(/class="h"/g)||[]).length === 9);
+ck('PTS row is not tappable as a player row', !/evlb-plr/.test(ptsRows[0] || 'evlb-plr'));
+ck('a player with no points data grows no PTS row',
+   ptsRows.length === Object.keys(d.hole_pts).length);
+ck('only the MVP/Points tab grows PTS rows',
+   ['overall','net','gross','skins','team'].every(k => !/evlb-ptsrow/.test(htmls[k])));
+
 console.log('== PAR row under the hole numbers (Kerry 2026-09-13) ==');
 for (const k of Object.keys(boards))
   ck(`${k}: has a PAR row in the thead`,
@@ -176,12 +215,14 @@ ck('no par data -> no PAR row at all',
 console.log('== TEAM NET total row (Kerry 2026-09-13) ==');
 const trow = (htmls.team.match(/<tr class="teamrow">[\s\S]*?<\/tr>/) || [''])[0];
 ck('team band closes with a TEAM NET row', /TEAM NET/.test(trow), trow.slice(0,120));
-ck('team row carries the per-hole best ball (4 then 5)',
-   /<td class="h">4<\/td><td class="h">5<\/td>/.test(trow), trow);
+// rid 1 pops on hole 2, so its net there is 4 — the best ball follows
+// the STROKES RECEIVED, not the gross
+ck('team row carries the per-hole best ball (4 then 4, net of the pop)',
+   /<td class="h">4<\/td><td class="h">4<\/td>/.test(trow), trow);
 ck('team row shows GG posted total as the score of record',
    /<b>59<\/b>/.test(trow), trow);
 ck('reconstruction disclosed when it differs from GG',
-   /\(holes 9\)/.test(trow), trow);
+   /\(holes 8\)/.test(trow), trow);
 ck('team row shows the WHOLE purse, not a share', /\$224\.00/.test(trow), trow);
 ck('team row to-par computed off team par', />\+23</.test(trow), trow);
 ck('team row is not tappable as a player row', !/evlb-plr/.test(trow));

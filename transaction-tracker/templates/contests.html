@@ -307,6 +307,16 @@
         .evlb-holes tr.mute td { color: #9CA3AF; }
         .evlb-holes tr.teamrow td { background: #F3F1EC; font-weight: 700;
             border-top: 2px solid #1B1B1B; }
+        /* POPS — strokes received on the hole, house standard: dots
+           pinned to the cell corner, never displacing the number */
+        .evlb-holes td.h { position: relative; }
+        .evlb-pops { position: absolute; top: 0; right: 1px; font-size: 0.55em;
+            line-height: 1.4; color: #334155; letter-spacing: -0.5px; }
+        /* per-player POINTS row on the MVP/Points tab (Kerry 2026-09-13) */
+        .evlb-ovr tr.evlb-ptsrow td { background: #FAF7FF; color: #6D28D9;
+            font-size: 0.72rem; font-weight: 700; border-top: none; }
+        .evlb-ovr tr.evlb-ptsrow td.nm { text-align: right; font-weight: 600;
+            color: #9CA3AF; font-size: 0.66rem; letter-spacing: .04em; }
         /* BUY-IN status on the NET/GROSS bundle tabs (Kerry
            2026-09-13): green row = bought into THAT game, light grey =
            did not. Backgrounds only — the inline win tints on the score
@@ -2733,6 +2743,16 @@
     //    expandable card and the Team tab's total row (Kerry
     //    2026-09-13). Two surfaces showing the same team score must
     //    never be able to compute it two ways.
+    // ── POPS on a hole score, the house standard (Kerry 2026-09-13:
+    //    "show pops on each hole score per standard"). Same treatment as
+    //    scorecard-render.js: filled dots pinned to the cell's top-right
+    //    corner so they never displace the number. One dot per stroke
+    //    received on that hole.
+    function evlbPops(sr) {
+        const n = Math.abs(sr || 0);
+        if (!n) return "";
+        return `<span class="evlb-pops">${(sr > 0 ? "\u25CF" : "\u25CB").repeat(n)}</span>`;
+    }
     function evlbNetOf(d, rid, n) {
         const h = ((d.cards || {})[String(rid)] || []).find(x => x[0] === n);
         return (h && h[1] != null) ? h[1] - (h[2] || 0) : null;
@@ -2765,18 +2785,21 @@
         // against the numbers above it. The ball that counted for the
         // team is marked the same way the best-ball card marks it.
         const holeCells = (d.hole_cols || []).map(n => {
+            const hh = hs[n];
+            const pops = evlbPops(hh ? hh[2] : 0);
             if (netMins) {
                 const v = evlbNetOf(d, r.scoring_round_id, n);
                 if (v == null) return '<td class="h"></td>';
                 const ct = v === netMins[n];
+                // the net cell already spent the pops, so the dots stay
+                // on it as the record of WHY it differs from gross
                 return `<td class="h${ct ? " count" : ""}"${
-                    ct ? ' title="the ball that counted for the team"' : ""}>${v}</td>`;
+                    ct ? ' title="the ball that counted for the team"' : ""}>${pops}${v}</td>`;
             }
-            const h = hs[n];
-            if (!h || h[1] == null) return '<td class="h"></td>';
-            return `<td class="h">${skinHoles.includes(n)
-                ? `<span class="evlb-circ" style="border-color:${skC};color:${skC};" title="skin — flight ${r.skins_flight || 1}">${h[1]}</span>`
-                : h[1]}</td>`;
+            if (!hh || hh[1] == null) return '<td class="h"></td>';
+            return `<td class="h">${pops}${skinHoles.includes(n)
+                ? `<span class="evlb-circ" style="border-color:${skC};color:${skC};" title="skin — flight ${r.skins_flight || 1}">${hh[1]}</span>`
+                : hh[1]}</td>`;
         }).join("");
         // Column order (Kerry 2026-09-12): the two scores that matter —
         // G(ross) and N(et) — sit immediately after the player name, left
@@ -2816,6 +2839,28 @@
             (gameCol === false ? "" :
                 `<td class="bl br" style="${gvTint ? EVLB_MVP_TINT : ""}"${gvTint ? ' title="Event MVP"' : ""}>${gv ?? ""}</td>`) +
             `<td class="won">${money > 0 ? "$" + Number(money).toFixed(2) : ""}</td></tr>`;
+    }
+    // ── per-player POINTS row (Kerry 2026-09-13: "MVP/POINTS need to
+    //    show a row for each player that shows points"). On the
+    //    MVP/Points tab each player's score row is followed by the NET
+    //    stableford points that score earned on every hole, summing to
+    //    the Pts column beside it — the board stops being a score board
+    //    with a points column and becomes a points board. Built from
+    //    hole_pts, the SAME derivation the Pts total comes from, so the
+    //    row and the column cannot disagree.
+    function evlbPtsRowHtml(d, r, gameCol) {
+        const hp = (d.hole_pts || {})[String(r.scoring_round_id)];
+        if (!hp) return "";
+        const cols = d.hole_cols || [];
+        if (!cols.some(n => hp[String(n)] != null)) return "";
+        return `<tr class="evlb-ptsrow">` +
+            `<td></td><td class="nm">PTS</td>` +
+            `<td class="bl"></td><td class="br"></td>` +
+            cols.map(n => `<td class="h">${hp[String(n)] ?? ""}</td>`).join("") +
+            `<td class="bl"></td><td class="tp"></td>` +
+            `<td class="bl"></td><td class="tp br"></td>` +
+            (gameCol === false ? "" : `<td class="bl br">${r.net_pts ?? ""}</td>`) +
+            `<td class="won"></td></tr>`;
     }
     // ── TEAM TOTAL row (Kerry 2026-09-13: "The team Net needs to show
     //    a team total row that shows what their team score for each
@@ -2924,6 +2969,8 @@
             const mins = tm ? evlbTeamMins(d, tm) : null;
             rows.forEach(r => {
                 html += evlbOvrRowHtml(d, r, i++, board.gameCol, game, mins);
+                if (game === "points")
+                    html += evlbPtsRowHtml(d, r, board.gameCol);
             });
             if (tm) html += evlbTeamTotalRow(d, tm, mins, board.gameCol);
         });
@@ -3060,7 +3107,7 @@
                 net: `a tinted <b>N</b> total won Individual Net in that flight`,
                 gross: `a tinted <b>G</b> total won Individual Gross in that flight`,
                 skins: `a circled hole score is a skin won in that flight`,
-                points: `<span class="lg w-mvp">Pts</span> marks the Event MVP`,
+                points: `<span class="lg w-mvp">Pts</span> marks the Event MVP, and a <b>PTS</b> row under each player shows the NET points that score earned on every hole`,
                 team: `hole scores are NET, the green cell is the ball that counted, and the TEAM NET row closes each band with the team's holes, total and whole purse`,
             }[game] || "";
             const money = {
@@ -3193,7 +3240,7 @@
             `</div></div>` +
             tabs.map(([k]) =>
                 `<div class="evlb-panel" data-panel="${k}"${k === "overall" ? "" : " hidden"}>${panels[k]}</div>`).join("") +
-            `<p style="font-size:11px;color:#9CA3AF;margin:8px 0 0;">Tap a player for their scorecard, or a team for its best-ball card. On the Net, Gross, Skins and MVP/Points tabs a <b>green</b> row bought into that game and a <b>grey</b> row did not &mdash; non-buyers are placed in the flight their handicap would have flighted them.</p>`;
+            `<p style="font-size:11px;color:#9CA3AF;margin:8px 0 0;">Tap a player for their scorecard, or a team for its best-ball card. On the Net, Gross, Skins and MVP/Points tabs a <b>green</b> row bought into that game and a <b>grey</b> row did not &mdash; non-buyers are placed in the flight their handicap would have flighted them. Dots in the corner of a hole are the strokes received there.</p>`;
     }
     // Team net card in THE card standard's family: each member's NET
     // per hole, the ball(s) that COUNTED for the team score highlighted
@@ -3306,13 +3353,19 @@
             {
                 const rid = tr.dataset.rid;
                 if (!rid) return;
-                const nxt = tr.nextElementSibling;
+                // the MVP/Points tab injects a PTS row under each player
+                // (v2.394.0) — the card has to open BELOW it or it
+                // orphans the points row from the score it belongs to
+                const host = (tr.nextElementSibling
+                    && tr.nextElementSibling.classList.contains("evlb-ptsrow"))
+                    ? tr.nextElementSibling : tr;
+                const nxt = host.nextElementSibling;
                 if (nxt && nxt.classList.contains("evlb-card-row")) { nxt.remove(); return; }
                 const cardRow = document.createElement("tr");
                 cardRow.className = "evlb-card-row";
                 const cols = tr.children.length;
                 cardRow.innerHTML = `<td colspan="${cols}" style="white-space:normal;">Loading card&hellip;</td>`;
-                tr.after(cardRow);
+                host.after(cardRow);
                 try {
                     const res = await fetch("/api/scoring/scorecard/" + rid);
                     const c = await res.json();

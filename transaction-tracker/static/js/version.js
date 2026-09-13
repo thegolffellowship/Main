@@ -1,5 +1,16 @@
-window.TGF_VERSION = "2.393.0";
+window.TGF_VERSION = "2.394.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.394.0",
+    date: "2026-09-13",
+    changes: [
+      "MVP/Points now shows the POINTS, not just a points column (Kerry: 'MVP/POINTS need to show a row for each player that shows points'). Every player\u2019s score row is followed by a PTS row carrying the NET stableford points that score earned on each hole, totalling to the Pts column beside it. The board stops being a score board with a points column on the end and becomes a points board.",
+      "The per-hole points come from hole_pts \u2014 the SAME derivation the Pts total is summed from, captured per hole instead of only accumulated \u2014 so the row and the column cannot drift apart. A player with no points data grows no PTS row rather than a row of blanks.",
+      "POPS on every hole score, to the house standard (Kerry: 'show pops on each hole score per standard'). Strokes received on a hole render as filled dots pinned to the cell\u2019s top-right corner, exactly as scorecard-render.js has always drawn them \u2014 one dot per stroke, never displacing the number. They appear on every tab, including the Team tab\u2019s net cells, where they are the record of WHY the net differs from the gross.",
+      "Opening a player\u2019s scorecard on the MVP/Points tab now anchors the card BELOW that player\u2019s PTS row. Inserting it directly after the score row \u2014 which is what the handler did \u2014 would have pushed the points row underneath the card and orphaned it from the score it belongs to.",
+      "Twenty new checks: the dots at zero, one and two strokes, on all six tabs and on the team\u2019s net cells, with the PAR row correctly carrying none; and the PTS row\u2019s label, per-hole values, repeated total, matching column count, hole-toggle class, non-tappability, and absence from every other tab. 101 checks total, both suites pass.",
+    ],
+  },
   {
     version: "2.393.0",
     date: "2026-09-13",

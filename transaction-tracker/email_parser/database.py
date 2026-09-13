@@ -13488,11 +13488,16 @@ def get_event_leaderboard(event_name: str,
         # (the POINTS board = MVP merged with the points games, Kerry
         # 2026-09-11: "MVP with Points")
         pts: dict = {}
+        # per-HOLE net points too (Kerry 2026-09-13: the MVP/Points board
+        # needs "a row for each player that shows points") — same
+        # derivation, captured per hole instead of only summed, so the
+        # hole row and the Pts column can never disagree
+        hole_pts: dict = {}
         try:
             formulas = get_scoring_formulas(db_path)
             for hr in conn.execute(
-                    """SELECT sr.id AS rid, sh.strokes, sh.strokes_received,
-                              cth.par
+                    """SELECT sr.id AS rid, sh.hole_number, sh.strokes,
+                              sh.strokes_received, cth.par
                        FROM scoring_rounds sr
                        JOIN scoring_holes sh ON sh.scoring_round_id = sr.id
                        LEFT JOIN course_tee_holes cth
@@ -13507,6 +13512,8 @@ def get_event_leaderboard(event_name: str,
                 a = pts.setdefault(hr["rid"], {"net": 0, "gross": 0})
                 if d.get("stableford_net") is not None:
                     a["net"] += d["stableford_net"]
+                    hole_pts.setdefault(hr["rid"], {})[
+                        hr["hole_number"]] = d["stableford_net"]
                 if d.get("stableford_gross") is not None:
                     a["gross"] += d["stableford_gross"]
         except Exception:
@@ -13975,6 +13982,10 @@ def get_event_leaderboard(event_name: str,
         # par per hole for the board header's PAR row (v2.392.0) —
         # only holes whose tees agree on a par appear here
         "hole_par": {str(k): v for k, v in hole_par.items()},
+        # net stableford points per hole for the MVP/Points board's
+        # per-player points row (v2.394.0)
+        "hole_pts": {str(k): {str(h): v for h, v in hs.items()}
+                     for k, hs in hole_pts.items()},
         "games_off": games_off,
         "n_net_buyers": len(net_buyers),
         "n_gross_buyers": len(gross_buyers),
