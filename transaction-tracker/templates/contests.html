@@ -2687,7 +2687,25 @@
     // `i` drives the zebra stripe: striping by render index (not CSS
     // nth-child) because expanded scorecard rows are injected into the
     // same tbody and would flip the parity of every row below them.
-    function evlbOvrRowHtml(d, r, i, gameCol, game) {
+    // ── the team's per-hole best ball, computed ONCE and shared by the
+    //    expandable card and the Team tab's total row (Kerry
+    //    2026-09-13). Two surfaces showing the same team score must
+    //    never be able to compute it two ways.
+    function evlbNetOf(d, rid, n) {
+        const h = ((d.cards || {})[String(rid)] || []).find(x => x[0] === n);
+        return (h && h[1] != null) ? h[1] - (h[2] || 0) : null;
+    }
+    function evlbTeamMins(d, t) {
+        const mins = {};
+        (d.hole_cols || []).forEach(n => {
+            const vals = (t.players || [])
+                .map(p => evlbNetOf(d, p.scoring_round_id, n))
+                .filter(v => v != null);
+            mins[n] = vals.length ? Math.min(...vals) : null;
+        });
+        return mins;
+    }
+    function evlbOvrRowHtml(d, r, i, gameCol, game, netMins) {
         // a game tab lights up ONLY its own game
         const shN = (!game || game === "net") && r.win_net;
         const shG = (!game || game === "gross") && r.win_gross;
@@ -2699,7 +2717,19 @@
         const skC = evlbFlightColor(r.skins_flight);
         const hs = {};
         (d.cards[String(r.scoring_round_id)] || []).forEach(h => { hs[h[0]] = h; });
+        // TEAM tab (Kerry 2026-09-13): the hole cells carry each
+        // player's NET hole score, not gross — Team Net is played in
+        // net, and the team total row underneath has to be checkable
+        // against the numbers above it. The ball that counted for the
+        // team is marked the same way the best-ball card marks it.
         const holeCells = (d.hole_cols || []).map(n => {
+            if (netMins) {
+                const v = evlbNetOf(d, r.scoring_round_id, n);
+                if (v == null) return '<td class="h"></td>';
+                const ct = v === netMins[n];
+                return `<td class="h${ct ? " count" : ""}"${
+                    ct ? ' title="the ball that counted for the team"' : ""}>${v}</td>`;
+            }
             const h = hs[n];
             if (!h || h[1] == null) return '<td class="h"></td>';
             return `<td class="h">${skinHoles.includes(n)
@@ -2737,6 +2767,44 @@
             (gameCol === false ? "" :
                 `<td class="bl br" style="${gvTint ? EVLB_MVP_TINT : ""}"${gvTint ? ' title="Event MVP"' : ""}>${gv ?? ""}</td>`) +
             `<td class="won">${money > 0 ? "$" + Number(money).toFixed(2) : ""}</td></tr>`;
+    }
+    // ── TEAM TOTAL row (Kerry 2026-09-13: "The team Net needs to show
+    //    a team total row that shows what their team score for each
+    //    hole was, and team total and total money won"). Sits at the
+    //    foot of each team band, in the SAME columns as the player rows
+    //    above it: the best net ball per hole, the team total, and the
+    //    team's whole purse (not one player's share).
+    function evlbTeamTotalRow(d, t, mins, gameCol) {
+        const cols = d.hole_cols || [];
+        const recon = cols.reduce((s2, n) => s2 + (mins[n] ?? 0), 0);
+        // GG's posted total is the score of record (v2.381.0). Our
+        // per-hole reconstruction uses each player's OWN-card net
+        // (individual allowance) while the official game plays 75%
+        // off-lowest, so the holes need not sum to it — show GG's
+        // number and say where ours landed rather than letting the two
+        // disagree silently.
+        const off = t.gg_total != null && t.gg_total !== recon;
+        const shown = t.gg_total != null ? t.gg_total : recon;
+        const ttl = t.gg_total != null
+            ? `GG posted team total${off ? " — best ball of the players' own-card nets sums to " + recon : ""}`
+            : "best ball of the players' own-card nets";
+        // par over the holes the team actually played
+        const par = Math.max(0, ...(t.players || []).map(p => {
+            const b = (d.overall_board || []).find(
+                r => String(r.scoring_round_id) === String(p.scoring_round_id));
+            return (b && b.par != null) ? b.par : 0;
+        }));
+        const money = t.purse != null ? t.purse : 0;
+        return `<tr class="teamrow">` +
+            `<td>${escapeHtml(t.position || "")}</td>` +
+            `<td class="nm">TEAM NET${off ? ' <span style="font-weight:400;color:#9CA3AF;">(holes ' + recon + ')</span>' : ""}</td>` +
+            `<td class="bl"></td><td class="br"></td>` +
+            cols.map(n => `<td class="h">${mins[n] ?? ""}</td>`).join("") +
+            `<td class="bl"></td><td class="tp"></td>` +
+            `<td class="bl" title="${ttl}"><b>${shown}</b></td>` +
+            `<td class="tp br">${par ? evlbToPar(shown - par) : ""}</td>` +
+            (gameCol === false ? "" : `<td class="bl br"></td>`) +
+            `<td class="won" title="the team's whole purse">${money > 0 ? "$" + Number(money).toFixed(2) : ""}</td></tr>`;
     }
     // ── THE standard board (Kerry 2026-09-13): one table shape for
     //    every tab but Proxies. Bands + order come from the caller; the
@@ -2802,7 +2870,13 @@
                 html += `<tr class="evlb-band"${board.teamBands ? ` data-team="${si}"` : ""}>` +
                     `<td colspan="${ncols}">${board.teamBands ? '<span class="tchev">&#9654;</span> ' : ""}${escapeHtml(sec.label)}</td></tr>`;
             }
-            rows.forEach(r => { html += evlbOvrRowHtml(d, r, i++, board.gameCol, game); });
+            // a team band renders in NET and closes with its total row
+            const tm = board.teamBands ? (board.teams || [])[si] : null;
+            const mins = tm ? evlbTeamMins(d, tm) : null;
+            rows.forEach(r => {
+                html += evlbOvrRowHtml(d, r, i++, board.gameCol, game, mins);
+            });
+            if (tm) html += evlbTeamTotalRow(d, tm, mins, board.gameCol);
         });
         return html;
     }
@@ -2922,12 +2996,15 @@
                 gross: `a tinted <b>G</b> total won Individual Gross in that flight`,
                 skins: `a circled hole score is a skin won in that flight`,
                 points: `<span class="lg w-mvp">Pts</span> marks the Event MVP`,
-                team: `the position, posted total and purse are on each team band`,
+                team: `hole scores are NET, the green cell is the ball that counted, and the TEAM NET row closes each band with the team's holes, total and whole purse`,
             }[game] || "";
             const money = {
                 net: "Individual Net", gross: "Individual Gross", skins: "Skins",
                 points: "MVP", team: "Team Net",
             }[game] || "this game";
+            if (game === "team")
+                return `<p class="evlb-legend">${what} &middot; a player row's <b>Won</b> is that player's share; ` +
+                    `the TEAM NET row shows the whole purse &mdash; OVERALL shows everything collected at this event.${tail}</p>`;
             const head = (game === "points" || game === "team") ? "" : swatches;
             return `<p class="evlb-legend">${head}${what} &middot; ` +
                 `<b>Won</b> = ${money} money only &mdash; OVERALL shows everything collected at this event.${tail}</p>`;
@@ -2961,11 +3038,13 @@
             team: {
                 game: "team",
                 gameCol: false,
+                teams: d.teams || [],
+                // the band names the team; the TEAM NET row at the foot
+                // of the band carries the per-hole score, the total and
+                // the purse, so those numbers are stated ONCE
                 sections: (d.teams || []).map(t => ({
                     label: `${t.position ? t.position + " · " : ""}` +
-                        `${t.players.map(p => p.player_name).join(" · ")}` +
-                        `${t.gg_total != null ? "  —  " + t.gg_total : ""}` +
-                        `${t.purse != null && t.purse > 0 ? "  ·  $" + Number(t.purse).toFixed(2) : ""}`,
+                        `${t.players.map(p => p.player_name).join(" · ")}`,
                     rows: (t.players || []).map(x => ovOf(x)).filter(Boolean),
                 })).filter(sec => sec.rows.length),
                 sort: "keep",
@@ -3027,7 +3106,8 @@
             team: (d.teams || []).length
                 ? evlbStdBoard(d, Object.assign({ teamBands: true, teams: d.teams }, boards.team),
                     `<div class="evlb-note" style="background:#F8FAFC;border-color:#E2E8F0;color:#475569;">` +
-                    `Bands are the teams, in the recorded Golf Genius order — position, players, the posted team total and the purse. ` +
+                    `Bands are the teams, in the recorded Golf Genius order. Hole scores here are NET — the currency of Team Net — and the green cell is the ball that counted. ` +
+                    `Each band closes with a <b>TEAM NET</b> row: the team's score on every hole, the team total, and the team's whole purse. ` +
                     `Tap a band for the best-ball card, a player for their own scorecard.</div>`)
                     + evlbLegendFor("team")
                 : teamHtml,
@@ -3055,15 +3135,8 @@
         const cols = d.hole_cols || [];
         if (!cols.length) return '<p style="color:var(--text-muted);">No hole data.</p>';
         const nineLbl = cols.length > 9 ? "TOT" : (cols[0] >= 10 ? "IN" : "OUT");
-        const netOf = (rid, n) => {
-            const h = (d.cards[String(rid)] || []).find(x => x[0] === n);
-            return (h && h[1] != null) ? h[1] - (h[2] || 0) : null;
-        };
-        const mins = {};
-        cols.forEach(n => {
-            const vals = t.players.map(p => netOf(p.scoring_round_id, n)).filter(v => v != null);
-            mins[n] = vals.length ? Math.min(...vals) : null;
-        });
+        const netOf = (rid, n) => evlbNetOf(d, rid, n);
+        const mins = evlbTeamMins(d, t);
         const rows = t.players.map(p =>
             `<tr class="evlb-plr" data-rid="${p.scoring_round_id || ""}"><td class="nm">${escapeHtml(p.player_name)}</td>` +
             cols.map(n => {

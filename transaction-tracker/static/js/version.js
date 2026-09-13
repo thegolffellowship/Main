@@ -1,5 +1,16 @@
-window.TGF_VERSION = "2.390.1";
+window.TGF_VERSION = "2.391.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.391.0",
+    date: "2026-09-13",
+    changes: [
+      "TEAM NET total row (Kerry: 'The team Net needs to show a team total row that shows what their team score for each hole was, and team total and total money won'). Every team band on the Team tab now closes with a TEAM NET row in the SAME columns as the players above it \u2014 the team's score on each hole, the team total, its relationship to par, and the team's WHOLE purse rather than one player's share.",
+      "The Team tab's hole cells switch from GROSS to NET, and the ball that counted for the team is shaded green on the player's own row. Team Net is played in net, so a team total row sitting under gross hole scores could not be checked against the numbers above it; now it can be read straight down the column. Every other tab keeps gross hole scores.",
+      "Where our per-hole reconstruction and Golf Genius disagree, the row says so instead of picking one quietly: the total shown is GG's posted number (the score of record), with our best-ball-of-own-card-nets sum printed beside the label and named in the cell's tooltip. The official game plays a 75%-off-lowest allowance while each player's card carries their individual allowance, so the two legitimately differ until the team per-player nets are imported (CA Queue item #1).",
+      "The per-hole best ball is now computed by ONE shared function used by both the expandable best-ball card and the new row \u2014 two surfaces showing the same team score can no longer compute it two ways. The team band label drops the total and purse it used to repeat, since the row now states them once.",
+      "test_events_board.js extended with eleven checks on the new row: the per-hole best ball, GG's total as the score of record, the reconstruction disclosure, the whole purse, to-par, matching column count, net hole cells with the counting ball marked, and that no other tab grows a team row.",
+    ],
+  },
   {
     version: "2.390.1",
     date: "2026-09-13",

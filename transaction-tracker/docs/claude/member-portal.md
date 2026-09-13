@@ -641,6 +641,32 @@ legend shows only the flights that paid; MVP keeps the ratified
 purple. Backend: overall rows carry `net_flight` / `gross_flight` /
 `skins_flight` ordinals (`_flight_ordinals` over the sectioned
 boards — 1 = low flight, placed non-buyers included).
+**v2.391.0 — TEAM NET total row.** Kerry 2026-09-13: "The team Net
+needs to show a team total row that shows what their team score for each
+hole was, and team total and total money won." Each team band on the
+Team tab closes with `evlbTeamTotalRow(d, t, mins, gameCol)` — same
+columns as the player rows: position, `TEAM NET`, the best net ball on
+every hole, the team total, its to-par, and the team's WHOLE purse
+(`t.purse`, not a player's share).
+  - **The Team tab renders hole cells in NET, not gross** (`netMins`
+    passed into `evlbOvrRowHtml`), and shades the counting ball
+    (`td.h.count`). A team total row under gross hole scores cannot be
+    checked against the numbers above it; in net it reads straight down
+    the column. Every other tab keeps gross.
+  - **GG vs our reconstruction.** The total shown is `t.gg_total` (score
+    of record, v2.381.0); when our best-ball-of-own-card-nets sum
+    differs it is printed beside the label as `(holes N)` and named in
+    the cell tooltip. The official game plays 75% off-lowest while each
+    player's card carries their individual allowance — they legitimately
+    differ until the team per-player nets are imported (CA Queue item #1).
+  - **One computation, two surfaces.** `evlbNetOf` + `evlbTeamMins` are
+    now shared by `evlbTeamCard` (the expandable best-ball card) and the
+    new row, so the same team score can never be computed two ways. Both
+    live in the renderer region above `evlbEventHtml` so the headless
+    guard can reach them.
+  - The team BAND label drops the total and purse it used to repeat.
+Guard: eleven new checks in `test_events_board.js`.
+
 **v2.390.0 — each tab shows only ITS OWN game.** Kerry 2026-09-13:
 "Only want results, winnings and colors per tab games except for
 overall." v2.389.0 unified the SHAPE; this scopes the CONTENT. Each

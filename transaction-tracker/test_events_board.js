@@ -111,6 +111,29 @@ ck('team tab shows only the $56.00 team money', /\$56\.00/.test(htmls.team) && !
 ck('skins tab shows only the $39.00 skins money', /\$39\.00/.test(htmls.skins) && !/\$135\.50/.test(htmls.skins));
 ck('gross tab pays nobody (no gross game)', !/\$/.test(htmls.gross.replace(/<thead[\s\S]*?<\/thead>/,'')));
 
+console.log('== TEAM NET total row (Kerry 2026-09-13) ==');
+const trow = (htmls.team.match(/<tr class="teamrow">[\s\S]*?<\/tr>/) || [''])[0];
+ck('team band closes with a TEAM NET row', /TEAM NET/.test(trow), trow.slice(0,120));
+ck('team row carries the per-hole best ball (4 then 5)',
+   /<td class="h">4<\/td><td class="h">5<\/td>/.test(trow), trow);
+ck('team row shows GG posted total as the score of record',
+   /<b>59<\/b>/.test(trow), trow);
+ck('reconstruction disclosed when it differs from GG',
+   /\(holes 9\)/.test(trow), trow);
+ck('team row shows the WHOLE purse, not a share', /\$224\.00/.test(trow), trow);
+ck('team row to-par computed off team par', />\+23</.test(trow), trow);
+ck('team row is not tappable as a player row', !/evlb-plr/.test(trow));
+ck('team row has the same column count as a player row',
+   (trow.match(/<td/g)||[]).length
+   === ((htmls.team.match(/<tr class="evlb-plr[\s\S]*?<\/tr>/)||[''])[0].match(/<td/g)||[]).length,
+   (trow.match(/<td/g)||[]).length);
+ck('team tab hole cells are NET, with the counting ball marked',
+   /class="h count"/.test(htmls.team));
+ck('other tabs keep GROSS hole cells (no counting marks)',
+   !/class="h count"/.test(htmls.overall) && !/class="h count"/.test(htmls.net));
+ck('only the team tab grows a teamrow',
+   ['overall','net','gross','skins','points'].every(k => !/teamrow/.test(htmls[k])));
+
 console.log('== sorting re-ranks within bands ==');
 const nid = Object.keys(EVLB_BOARDS).find(id=>EVLB_BOARDS[id].board===boards.net);
 EVLB_BOARDS[nid].sortKey='won'; EVLB_BOARDS[nid].sortDir=-1;
