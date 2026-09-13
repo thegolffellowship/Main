@@ -307,6 +307,13 @@
         .evlb-holes tr.mute td { color: #9CA3AF; }
         .evlb-holes tr.teamrow td { background: #F3F1EC; font-weight: 700;
             border-top: 2px solid #1B1B1B; }
+        /* BUY-IN status on the NET/GROSS bundle tabs (Kerry
+           2026-09-13): green row = bought into THAT game, light grey =
+           did not. Backgrounds only — the inline win tints on the score
+           cells still paint over the top, which is the point. */
+        .evlb-ovr tr.evlb-plr.bought td { background: #ECFDF3; }
+        .evlb-ovr tr.evlb-plr.nobuy td { background: #FAFAFA; color: #9CA3AF; }
+        .evlb-ovr tr.evlb-plr.nobuy td.nm { color: #6B7280; }
         /* PAR row under the hole numbers (Kerry 2026-09-13) — a
            reference band between the black header and the data */
         .evlb-holes thead tr.evlb-parrow td { background: #F3F1EC;
@@ -2683,6 +2690,35 @@
         points: ["mvp", "tgf_mvp"],
         team: ["team_net"],
     };
+    // ── every board's rows resolve back to the SAME overall row, so a
+    //    player carries identical numbers and highlights on every tab.
+    //    Buy-in status travels on the GAME board's own row (`buyer`) and
+    //    is lifted onto the copy as `_buyer` — the overall row itself
+    //    never carries it, because OVERALL deliberately does not identify
+    //    who bought in (Kerry 2026-09-11) while the NET- and GROSS-bundle
+    //    tabs must (Kerry 2026-09-13). One set of numbers, both rules.
+    //    These live out here rather than inside evlbEventHtml so the
+    //    headless guard runs the REAL mapping, not a copy of it — a
+    //    duplicated copy is exactly what went stale before.
+    function evlbOvOf(ovIx, x, note) {
+        const base = x && ovIx[String(x.scoring_round_id)];
+        if (!base) return null;
+        const extra = {};
+        if (note) extra._note = note;
+        if (typeof x.buyer === "boolean") extra._buyer = x.buyer;
+        return Object.keys(extra).length
+            ? Object.assign({}, base, extra) : base;
+    }
+    function evlbSecsFrom(ovIx, board) {
+        return (board || []).map(sec => ({
+            label: sec.label,
+            rows: (sec.rows || []).map(x => evlbOvOf(ovIx, x)).filter(Boolean),
+        })).filter(sec => sec.rows.length);
+    }
+    // the NET and GROSS bundles are the games a player BUYS INTO; Team
+    // Net and the proxies come with the entry, so they have no buy-in
+    // to show (Kerry 2026-09-13)
+    const EVLB_BUYIN_GAMES = ["net", "gross", "skins", "points"];
     function evlbGameMoney(r, game) {
         if (!game) return r.won_total;          // OVERALL = everything
         const by = r.won_by_cat || {};
@@ -2758,7 +2794,14 @@
         // changes from tab to tab.
         const gv = (gameCol && gameCol.value) ? gameCol.value(d, r) : r.net_pts;
         const gvTint = (!gameCol || gameCol.key !== "skins") && shM;
-        return `<tr class="evlb-plr${i % 2 ? " alt" : ""}" data-rid="${r.scoring_round_id || ""}">` +
+        // On a NET- or GROSS-bundle tab the row itself says whether the
+        // player bought into THAT game: green in, grey out. That
+        // replaces the zebra stripe there — two competing washes on one
+        // row reads as neither. OVERALL and Team keep the stripe and
+        // never identify buy-ins.
+        const bi = EVLB_BUYIN_GAMES.includes(game) && typeof r._buyer === "boolean"
+            ? (r._buyer ? " bought" : " nobuy") : (i % 2 ? " alt" : "");
+        return `<tr class="evlb-plr${bi}" data-rid="${r.scoring_round_id || ""}">` +
             `<td>${r._rank ?? ""}</td>` +
             `<td class="nm">${escapeHtml(r.player_name)}` +
             (r._note ? `<div style="font-size:10.5px;color:#9CA3AF;white-space:normal;">${escapeHtml(r._note)}</div>` : "") +
@@ -2963,15 +3006,8 @@
         ovRows.forEach(r => { if (r.scoring_round_id != null) ovIx[String(r.scoring_round_id)] = r; });
         // every board's rows resolve back to the SAME overall row, so a
         // player carries identical numbers and highlights on every tab
-        const ovOf = (x, note) => {
-            const base = x && ovIx[String(x.scoring_round_id)];
-            if (!base) return null;
-            return note ? Object.assign({}, base, { _note: note }) : base;
-        };
-        const secsFrom = board => (board || []).map(sec => ({
-            label: sec.label,
-            rows: (sec.rows || []).map(x => ovOf(x)).filter(Boolean),
-        })).filter(sec => sec.rows.length);
+        const ovOf = (x, note) => evlbOvOf(ovIx, x, note);
+        const secsFrom = board => evlbSecsFrom(ovIx, board);
         const skinsCount = (dd, r) => {
             const n = ((dd.skin_cells || {})[String(r.scoring_round_id)] || []).length;
             return n || "";
@@ -3035,7 +3071,12 @@
                 return `<p class="evlb-legend">${what} &middot; a player row's <b>Won</b> is that player's share; ` +
                     `the TEAM NET row shows the whole purse &mdash; OVERALL shows everything collected at this event.${tail}</p>`;
             const head = (game === "points" || game === "team") ? "" : swatches;
-            return `<p class="evlb-legend">${head}${what} &middot; ` +
+            // the bundle tabs also say who paid to be in this game
+            const buy = EVLB_BUYIN_GAMES.includes(game)
+                ? `<span class="lg" style="background:#ECFDF3;color:#166534;">bought in</span> ` +
+                  `<span class="lg" style="background:#FAFAFA;color:#9CA3AF;">not in</span> this game &middot; `
+                : "";
+            return `<p class="evlb-legend">${head}${buy}${what} &middot; ` +
                 `<b>Won</b> = ${money} money only &mdash; OVERALL shows everything collected at this event.${tail}</p>`;
         };
         const ovLegend = evlbLegendFor(null);
@@ -3152,7 +3193,7 @@
             `</div></div>` +
             tabs.map(([k]) =>
                 `<div class="evlb-panel" data-panel="${k}"${k === "overall" ? "" : " hidden"}>${panels[k]}</div>`).join("") +
-            `<p style="font-size:11px;color:#9CA3AF;margin:8px 0 0;">Tap a player for their scorecard, or a team for its best-ball card. &#10003; IN = bought into that game &middot; non-buyers are placed in the flight their handicap would have flighted them.</p>`;
+            `<p style="font-size:11px;color:#9CA3AF;margin:8px 0 0;">Tap a player for their scorecard, or a team for its best-ball card. On the Net, Gross, Skins and MVP/Points tabs a <b>green</b> row bought into that game and a <b>grey</b> row did not &mdash; non-buyers are placed in the flight their handicap would have flighted them.</p>`;
     }
     // Team net card in THE card standard's family: each member's NET
     // per hole, the ball(s) that COUNTED for the team score highlighted

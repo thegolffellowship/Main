@@ -1,5 +1,16 @@
-window.TGF_VERSION = "2.392.0";
+window.TGF_VERSION = "2.393.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.393.0",
+    date: "2026-09-13",
+    changes: [
+      "Buy-in status is back on the bundle tabs (Kerry: 'Any Net Bundle and Gross bundle games should still show who bought in and didn\u2019t buy in with the green coloring for the rows and lighter grey for those who didn\u2019t buy in'). Net, Gross, Skins and MVP/Points now wash each row green when that player bought into THAT game and light grey when they did not \u2014 the detail the v2.389.0 unification had flattened away. Team Net and the proxies come with the entry, so they have no buy-in to show, and OVERALL still deliberately does not identify anyone's buy-ins.",
+      "The buy-in wash REPLACES the zebra stripe on those four tabs rather than stacking with it \u2014 two competing washes on one row read as neither. The inline flight-colored win tints still paint over the top of both, so a winner is never hidden by the row color underneath.",
+      "Buy-in rides on the GAME board's own row and is lifted onto the shared copy as _buyer; the overall row never carries it. That is what lets both of Kerry's rules hold at once \u2014 'don't identify buy-ins on OVERALL' and 'do identify them on the bundle games' \u2014 from one set of numbers rather than two.",
+      "The row-mapping helpers (evlbOvOf / evlbSecsFrom) moved out of the event renderer so the headless guard exercises the REAL mapping instead of its own copy. The copy had already gone stale once and hidden a genuine behavior change; a test that reimplements the thing it is testing is not a test.",
+      "The page footnote stops advertising the '\u2713 IN' column that the unification removed and now describes the green/grey rows; each bundle tab's legend carries the same two swatches.",
+    ],
+  },
   {
     version: "2.392.0",
     date: "2026-09-13",

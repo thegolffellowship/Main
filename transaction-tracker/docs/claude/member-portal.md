@@ -641,6 +641,35 @@ legend shows only the flights that paid; MVP keeps the ratified
 purple. Backend: overall rows carry `net_flight` / `gross_flight` /
 `skins_flight` ordinals (`_flight_ordinals` over the sectioned
 boards — 1 = low flight, placed non-buyers included).
+**v2.393.0 — buy-in coloring on the NET/GROSS bundle tabs.** Kerry
+2026-09-13: "Any Net Bundle and Gross bundle games should still show who
+bought in and didn't buy in with the green coloring for the rows and
+lighter grey for those who didn't buy in." `EVLB_BUYIN_GAMES =
+["net","gross","skins","points"]` — the games a player BUYS INTO. On
+those four tabs each row washes green (`tr.bought`, `#ECFDF3`) when the
+player bought into THAT game and light grey (`tr.nobuy`, `#FAFAFA` +
+muted text) when they did not.
+  - **The wash REPLACES the zebra stripe** on those tabs (the `alt`
+    class is not applied) — two competing washes on one row read as
+    neither. Inline flight win tints still paint over both.
+  - **Team Net and the proxies come with the entry**, so they have no
+    buy-in to show; OVERALL still deliberately identifies nobody's
+    buy-ins (Kerry 2026-09-11).
+  - **How both rules hold at once.** `buyer` rides on the GAME board's
+    own row (`net_board` / `gross_board` / `skins_board` /
+    `points_board`, all built by `_row(p, <bundle>_buyers, …)`), and
+    `evlbOvOf` lifts it onto the shared copy as `_buyer`. The overall
+    row itself never carries it — one set of numbers, both rules, no
+    payload change.
+  - **`evlbOvOf` / `evlbSecsFrom` moved out of `evlbEventHtml`** into the
+    renderer region so `test_events_board.js` exercises the REAL mapping.
+    Its private copy had already gone stale once (the team-band tap
+    target) and hidden a genuine change: a test that reimplements the
+    thing it tests is not a test.
+  - The page footnote no longer advertises the removed "✓ IN" column.
+Guard: sixteen checks — the wash on all four bundle tabs, the stripe
+standing down, OVERALL and Team staying clean, and the `_buyer` lift.
+
 **v2.392.0 — PAR row under the hole numbers.** Kerry 2026-09-13: "Add
 a par row below the hole numbers for all leaderboards." `evlbParRow(d,
 gameCol)` emits a second THEAD row on every standard board, and

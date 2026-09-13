@@ -10,7 +10,9 @@ const code = 'let evlbShowHoles = true;\n'
   + lines.slice(a, b).join('\n')
   + '\nglobalThis.EVLB_BOARDS = EVLB_BOARDS;'
   + '\nglobalThis.evlbStdBoard = evlbStdBoard;'
-  + '\nglobalThis.evlbBoardBody = evlbBoardBody;';
+  + '\nglobalThis.evlbBoardBody = evlbBoardBody;'
+  + '\nglobalThis.evlbOvOf = evlbOvOf;'
+  + '\nglobalThis.evlbSecsFrom = evlbSecsFrom;';
 eval(code);
 
 // synthetic event: 4 players, 2 flights, 9 holes
@@ -38,16 +40,24 @@ const d = {
     mk(4,'PLAIN, Nobody',45,40,5),
   ],
 };
-d.net_board=[{label:'LOW Flight',rows:[d.overall_board[0],d.overall_board[1]]},
-             {label:'HIGH Flight',rows:[d.overall_board[2],d.overall_board[3]]}];
+// the per-GAME boards carry `buyer`; the OVERALL board deliberately
+// does not, which is what keeps both of Kerry's rules true at once
+const withBuyer = (r, b) => Object.assign({}, r, {buyer:b});
+d.net_board=[{label:'LOW Flight',rows:[withBuyer(d.overall_board[0],true),
+                                       withBuyer(d.overall_board[1],true)]},
+             {label:'HIGH Flight',rows:[withBuyer(d.overall_board[2],true),
+                                        withBuyer(d.overall_board[3],false)]}];
 d.gross_board=d.net_board;
 d.skins_board=d.net_board;
-d.points_board=d.overall_board.map(r=>Object.assign({},r,{mvp_note:r.win_mvp?'MVP tiebreak 2 — low Gross (42)':null}));
+d.points_board=d.overall_board.map(r=>Object.assign({},r,{buyer:!!r.win_mvp,
+  mvp_note:r.win_mvp?'MVP tiebreak 2 — low Gross (42)':null}));
 d.teams=[{position:'1',gg_total:59,purse:224,players:[d.overall_board[0],d.overall_board[1]]}];
 
+// use the PAGE's own row mapping, not a copy of it — a copy went stale
+// once already (the team-band tap target) and hid a real behavior change
 const ovIx={}; d.overall_board.forEach(r=>{ovIx[String(r.scoring_round_id)]=r;});
-const ovOf=(x,note)=>{const b=x&&ovIx[String(x.scoring_round_id)];return b?(note?Object.assign({},b,{_note:note}):b):null;};
-const secsFrom=b=>(b||[]).map(s=>({label:s.label,rows:(s.rows||[]).map(x=>ovOf(x)).filter(Boolean)})).filter(s=>s.rows.length);
+const ovOf=(x,note)=>evlbOvOf(ovIx,x,note);
+const secsFrom=b=>evlbSecsFrom(ovIx,b);
 const skinsCount=(dd,r)=>((dd.skin_cells||{})[String(r.scoring_round_id)]||[]).length||"";
 
 // mirrors the page's boards object: `game` scopes a tab to its own
@@ -113,6 +123,27 @@ ck('net tab shows only the $79.50 net money', /\$79\.50/.test(htmls.net) && !/\$
 ck('team tab shows only the $56.00 team money', /\$56\.00/.test(htmls.team) && !/\$135\.50/.test(htmls.team));
 ck('skins tab shows only the $39.00 skins money', /\$39\.00/.test(htmls.skins) && !/\$135\.50/.test(htmls.skins));
 ck('gross tab pays nobody (no gross game)', !/\$/.test(htmls.gross.replace(/<thead[\s\S]*?<\/thead>/,'')));
+
+console.log('== buy-in coloring on the NET/GROSS bundle tabs ==');
+for (const k of ['net','gross','skins','points']) {
+  ck(`${k}: buyers get a green row`, /class="evlb-plr bought"/.test(htmls[k]));
+  ck(`${k}: non-buyers get a grey row`, /class="evlb-plr nobuy"/.test(htmls[k]));
+  ck(`${k}: zebra stripe steps aside for the buy-in wash`,
+     !/class="evlb-plr alt"/.test(htmls[k]));
+}
+ck('OVERALL never identifies buy-ins',
+   !/bought|nobuy/.test(htmls.overall) && /class="evlb-plr alt"/.test(htmls.overall));
+ck('TEAM never identifies buy-ins (entry includes it)',
+   !/bought|nobuy/.test(htmls.team));
+ck('the overall payload rows carry no buy-in flag at all',
+   d.overall_board.every(r => !('buyer' in r) && !('_buyer' in r)));
+// the mapping itself: _buyer rides only on rows that came off a GAME
+// board, never on the shared overall row it copies from
+ck('_buyer is lifted off the game board row, not the overall row',
+   boards.net.sections[0].rows[0]._buyer === true
+   && boards.net.sections[1].rows[1]._buyer === false
+   && !('_buyer' in d.overall_board[0]),
+   JSON.stringify(boards.net.sections.map(x=>x.rows.map(r=>r._buyer))));
 
 console.log('== PAR row under the hole numbers (Kerry 2026-09-13) ==');
 for (const k of Object.keys(boards))
