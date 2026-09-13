@@ -2665,13 +2665,36 @@
         return v === 0 ? "E" : (v > 0 ? "+" + v : String(v));
     }
     const EVLB_MVP_TINT = "background:rgba(109,40,217,.14);color:#6D28D9;font-weight:700;border-radius:4px;";
+    // Per-tab scoping (Kerry 2026-09-13: "Only want results, winnings
+    // and colors per tab games except for overall"). A game tab shows
+    // ONLY its own game's highlight and ONLY its own game's money;
+    // OVERALL (game = null) keeps every highlight and the whole-event
+    // total. The payout categories each tab owns:
+    const EVLB_GAME_CATS = {
+        net: ["individual_net"],
+        gross: ["individual_gross"],
+        skins: ["skins"],
+        points: ["mvp", "tgf_mvp"],
+        team: ["team_net"],
+    };
+    function evlbGameMoney(r, game) {
+        if (!game) return r.won_total;          // OVERALL = everything
+        const by = r.won_by_cat || {};
+        return (EVLB_GAME_CATS[game] || []).reduce((t, c) => t + (by[c] || 0), 0);
+    }
     // ONE overall row — module-level so the sortable headers can
     // re-render the tbody with the same markup the initial paint used.
     // `i` drives the zebra stripe: striping by render index (not CSS
     // nth-child) because expanded scorecard rows are injected into the
     // same tbody and would flip the parity of every row below them.
-    function evlbOvrRowHtml(d, r, i, gameCol) {
-        const skinHoles = r.win_skins
+    function evlbOvrRowHtml(d, r, i, gameCol, game) {
+        // a game tab lights up ONLY its own game
+        const shN = (!game || game === "net") && r.win_net;
+        const shG = (!game || game === "gross") && r.win_gross;
+        const shS = (!game || game === "skins") && r.win_skins;
+        const shM = (!game || game === "points") && r.win_mvp;
+        const money = evlbGameMoney(r, game);
+        const skinHoles = shS
             ? (((d.skin_cells || {})[String(r.scoring_round_id)]) || []) : [];
         const skC = evlbFlightColor(r.skins_flight);
         const hs = {};
@@ -2689,16 +2712,16 @@
         // a win tints BOTH the score and its to-par cell — they read as
         // one result. Tints are inline so the zebra stripe can never
         // paint over them.
-        const gT = r.win_gross ? evlbFlightTint(r.gross_flight) : "";
-        const nT = r.win_net ? evlbFlightTint(r.net_flight) : "";
-        const gTitle = r.win_gross ? ` title="won Individual Gross — flight ${r.gross_flight || 1}"` : "";
-        const nTitle = r.win_net ? ` title="won Individual Net — flight ${r.net_flight || 1}"` : "";
+        const gT = shG ? evlbFlightTint(r.gross_flight) : "";
+        const nT = shN ? evlbFlightTint(r.net_flight) : "";
+        const gTitle = shG ? ` title="won Individual Gross — flight ${r.gross_flight || 1}"` : "";
+        const nTitle = shN ? ` title="won Individual Net — flight ${r.net_flight || 1}"` : "";
         // The GAME column (Kerry 2026-09-13: every board is the same
         // table re-ordered) — one slot that means Pts on most boards and
         // Skins count on the skins board, so the column COUNT never
         // changes from tab to tab.
         const gv = (gameCol && gameCol.value) ? gameCol.value(d, r) : r.net_pts;
-        const gvTint = (!gameCol || gameCol.key !== "skins") && r.win_mvp;
+        const gvTint = (!gameCol || gameCol.key !== "skins") && shM;
         return `<tr class="evlb-plr${i % 2 ? " alt" : ""}" data-rid="${r.scoring_round_id || ""}">` +
             `<td>${r._rank ?? ""}</td>` +
             `<td class="nm">${escapeHtml(r.player_name)}` +
@@ -2711,8 +2734,9 @@
             `<td class="tp" style="${gT}"${gTitle}>${evlbToPar(r.to_par_gross)}</td>` +
             `<td class="bl" style="${nT}"${nTitle}><b>${r.net ?? ""}</b></td>` +
             `<td class="tp br" style="${nT}"${nTitle}>${evlbToPar(r.to_par_net)}</td>` +
-            `<td class="bl br" style="${gvTint ? EVLB_MVP_TINT : ""}"${gvTint ? ' title="Event MVP"' : ""}>${gv ?? ""}</td>` +
-            `<td class="won">${r.won_total > 0 ? "$" + Number(r.won_total).toFixed(2) : ""}</td></tr>`;
+            (gameCol === false ? "" :
+                `<td class="bl br" style="${gvTint ? EVLB_MVP_TINT : ""}"${gvTint ? ' title="Event MVP"' : ""}>${gv ?? ""}</td>`) +
+            `<td class="won">${money > 0 ? "$" + Number(money).toFixed(2) : ""}</td></tr>`;
     }
     // ── THE standard board (Kerry 2026-09-13): one table shape for
     //    every tab but Proxies. Bands + order come from the caller; the
@@ -2720,7 +2744,7 @@
     //    sortable headers can re-render without re-fetching anything.
     const EVLB_BOARDS = {};
     let EVLB_BOARD_SEQ = 0;
-    function evlbBoardVal(d, r, k, gameCol) {
+    function evlbBoardVal(d, r, k, gameCol, game) {
         if (k === "player") return (r.player_name || "").toLowerCase();
         if (k === "index") return r.index;
         if (k === "hcp") return r.hcp;
@@ -2728,7 +2752,7 @@
         if (k === "net") return r.net;
         if (k === "tpg") return r.to_par_gross;
         if (k === "tpn") return r.to_par_net;
-        if (k === "won") return r.won_total > 0 ? r.won_total : null;
+        if (k === "won") { const m = evlbGameMoney(r, game); return m > 0 ? m : null; }
         if (k === "gamecol") {
             const v = gameCol && gameCol.value ? gameCol.value(d, r) : r.net_pts;
             return (v === "" || v == null) ? null : v;
@@ -2742,14 +2766,14 @@
     }
     // rank runs WITHIN a band — a flighted board ranks per flight, the
     // way every other TGF board does
-    function evlbRankBand(d, rows, k, gameCol) {
+    function evlbRankBand(d, rows, k, gameCol, game) {
         let shown = 0, rank = 0, last = null, first = true;
         rows.forEach(r => {
-            const v = evlbBoardVal(d, r, k, gameCol);
+            const v = evlbBoardVal(d, r, k, gameCol, game);
             if (v == null) { r._rank = ""; return; }
             shown++;
             if (first || v !== last) { rank = shown; last = v; first = false; }
-            const tied = rows.filter(x => evlbBoardVal(d, x, k, gameCol) === v).length > 1;
+            const tied = rows.filter(x => evlbBoardVal(d, x, k, gameCol, game) === v).length > 1;
             r._rank = (tied ? "T" : "") + rank;
         });
     }
@@ -2757,12 +2781,13 @@
         const st = EVLB_BOARDS[id];
         if (!st) return "";
         const { d, board, sortKey, sortDir } = st;
-        const ncols = 9 + (d.hole_cols || []).length;
+        const game = board.game || null;
+        const ncols = (board.gameCol === false ? 8 : 9) + (d.hole_cols || []).length;
         let i = 0, html = "";
         board.sections.forEach((sec, si) => {
             const rows = sortKey === "keep" ? sec.rows.slice() : sec.rows.slice().sort((a, b) => {
-                const va = evlbBoardVal(d, a, sortKey, board.gameCol);
-                const vb = evlbBoardVal(d, b, sortKey, board.gameCol);
+                const va = evlbBoardVal(d, a, sortKey, board.gameCol, game);
+                const vb = evlbBoardVal(d, b, sortKey, board.gameCol, game);
                 if (va == null && vb == null) return 0;
                 if (va == null) return 1;
                 if (vb == null) return -1;
@@ -2771,13 +2796,13 @@
             if (sortKey === "keep") {
                 rows.forEach((r, ri) => { r._rank = String(ri + 1); });
             } else {
-                evlbRankBand(d, rows, sortKey, board.gameCol);
+                evlbRankBand(d, rows, sortKey, board.gameCol, game);
             }
             if (sec.label) {
                 html += `<tr class="evlb-band"${board.teamBands ? ` data-team="${si}"` : ""}>` +
                     `<td colspan="${ncols}">${board.teamBands ? '<span class="tchev">&#9654;</span> ' : ""}${escapeHtml(sec.label)}</td></tr>`;
             }
-            rows.forEach(r => { html += evlbOvrRowHtml(d, r, i++, board.gameCol); });
+            rows.forEach(r => { html += evlbOvrRowHtml(d, r, i++, board.gameCol, game); });
         });
         return html;
     }
@@ -2803,7 +2828,8 @@
             `<th data-k="tpg" class="sortable" title="Gross to par">&plusmn;</th>` +
             `<th data-k="net" class="sortable bl${active("net")}" title="Net score">N</th>` +
             `<th data-k="tpn" class="sortable br" title="Net to par">&plusmn;</th>` +
-            `<th data-k="gamecol" class="sortable bl br${active("gamecol")}">${escapeHtml(gl)}</th>` +
+            (board.gameCol === false ? "" :
+                `<th data-k="gamecol" class="sortable bl br${active("gamecol")}">${escapeHtml(gl)}</th>`) +
             `<th data-k="won" class="won sortable">Won</th></tr></thead>` +
             `<tbody>${evlbBoardBody(id)}</tbody></table></div>`;
     }
@@ -2866,29 +2892,62 @@
                 `<span class="amt">${p.purse != null ? "$" + Number(p.purse).toFixed(2) : ""}</span></div>`));
         const ovWinStrips = ovTeamWins.concat(ovProxWins).join("");
 
-        const ovLegend = (() => {
+        // One legend builder for every tab. OVERALL describes all the
+        // games; a game tab describes ONLY its own (Kerry 2026-09-13:
+        // "Only want results, winnings and colors per tab games except
+        // for overall") so the colors and the Won column are never read
+        // as meaning something they don't on that tab.
+        const evlbLegendFor = (game) => {
             let maxF = 1;
             ovRows.forEach(r => {
-                if (r.win_net) maxF = Math.max(maxF, r.net_flight || 1);
-                if (r.win_gross) maxF = Math.max(maxF, r.gross_flight || 1);
-                if (r.win_skins) maxF = Math.max(maxF, r.skins_flight || 1);
+                if ((!game || game === "net") && r.win_net)
+                    maxF = Math.max(maxF, r.net_flight || 1);
+                if ((!game || game === "gross") && r.win_gross)
+                    maxF = Math.max(maxF, r.gross_flight || 1);
+                if ((!game || game === "skins") && r.win_skins)
+                    maxF = Math.max(maxF, r.skins_flight || 1);
             });
             const sw = [];
             for (let f = 1; f <= maxF; f++)
                 sw.push(`<span class="lg" style="${evlbFlightTint(f)}">Flight ${f}</span>`);
-            return `<p class="evlb-legend">Money winners color-code by FLIGHT: ${sw.join(" ")} — ` +
-                `a tinted <b>N</b> (net) or <b>G</b> (gross) total won that game in that flight; a circled hole score is a skin won in that flight &middot; ` +
-                `<span class="lg w-mvp">Pts</span> Event MVP &middot; ` +
-                `<b>Won</b> = total collected for this event, all games (team &amp; proxies included). Tap a player for their scorecard; tap a column header to sort and re-rank.</p>`;
-        })();
+            const swatches = `Money winners color-code by FLIGHT: ${sw.join(" ")} &mdash; `;
+            const tail = ` Tap a player for their scorecard; tap a column header to sort and re-rank.`;
+            if (!game)
+                return `<p class="evlb-legend">${swatches}` +
+                    `a tinted <b>N</b> (net) or <b>G</b> (gross) total won that game in that flight; a circled hole score is a skin won in that flight &middot; ` +
+                    `<span class="lg w-mvp">Pts</span> Event MVP &middot; ` +
+                    `<b>Won</b> = total collected for this event, all games (team &amp; proxies included).${tail}</p>`;
+            const what = {
+                net: `a tinted <b>N</b> total won Individual Net in that flight`,
+                gross: `a tinted <b>G</b> total won Individual Gross in that flight`,
+                skins: `a circled hole score is a skin won in that flight`,
+                points: `<span class="lg w-mvp">Pts</span> marks the Event MVP`,
+                team: `the position, posted total and purse are on each team band`,
+            }[game] || "";
+            const money = {
+                net: "Individual Net", gross: "Individual Gross", skins: "Skins",
+                points: "MVP", team: "Team Net",
+            }[game] || "this game";
+            const head = (game === "points" || game === "team") ? "" : swatches;
+            return `<p class="evlb-legend">${head}${what} &middot; ` +
+                `<b>Won</b> = ${money} money only &mdash; OVERALL shows everything collected at this event.${tail}</p>`;
+        };
+        const ovLegend = evlbLegendFor(null);
 
         // every tab: the same table, different bands + order
+        // Per-tab scoping (Kerry 2026-09-13: "Only want results,
+        // winnings and colors per tab games except for overall").
+        // `game` tells the renderer which game this tab OWNS: only that
+        // game's win colors light up and the Won column shows only that
+        // game's money. OVERALL has no `game`, so it keeps everything.
+        // The Pts column is the MVP game's result, so it only appears on
+        // OVERALL and POINTS; Skins owns its own count column.
         const boards = {
             overall: { sections: [{ label: null, rows: ovRows }], sort: "net" },
-            net: { sections: secsFrom(d.net_board), sort: "net" },
-            gross: { sections: secsFrom(d.gross_board), sort: "gross" },
+            net: { sections: secsFrom(d.net_board), sort: "net", game: "net", gameCol: false },
+            gross: { sections: secsFrom(d.gross_board), sort: "gross", game: "gross", gameCol: false },
             skins: {
-                sections: secsFrom(d.skins_board), sort: "gamecol",
+                sections: secsFrom(d.skins_board), sort: "gamecol", game: "skins",
                 gameCol: { key: "skins", label: "Skins", value: skinsCount },
             },
             points: {
@@ -2897,8 +2956,11 @@
                     rows: (d.points_board || []).map(x => ovOf(x, x.mvp_note)).filter(Boolean),
                 }],
                 sort: "keep",
+                game: "points",
             },
             team: {
+                game: "team",
+                gameCol: false,
                 sections: (d.teams || []).map(t => ({
                     label: `${t.position ? t.position + " · " : ""}` +
                         `${t.players.map(p => p.player_name).join(" · ")}` +
@@ -2967,11 +3029,12 @@
                     `<div class="evlb-note" style="background:#F8FAFC;border-color:#E2E8F0;color:#475569;">` +
                     `Bands are the teams, in the recorded Golf Genius order — position, players, the posted team total and the purse. ` +
                     `Tap a band for the best-ball card, a player for their own scorecard.</div>`)
+                    + evlbLegendFor("team")
                 : teamHtml,
-            net: evlbStdBoard(d, boards.net),
-            gross: evlbStdBoard(d, boards.gross, offNotes),
-            skins: evlbStdBoard(d, boards.skins, offNotes),
-            points: evlbStdBoard(d, boards.points),
+            net: evlbStdBoard(d, boards.net) + evlbLegendFor("net"),
+            gross: evlbStdBoard(d, boards.gross, offNotes) + evlbLegendFor("gross"),
+            skins: evlbStdBoard(d, boards.skins, offNotes) + evlbLegendFor("skins"),
+            points: evlbStdBoard(d, boards.points) + evlbLegendFor("points"),
             prox: proxHtml,
         };
         return `<div class="evlb-subtabs"><div class="evlb-seg evlb-seg-sub">` +

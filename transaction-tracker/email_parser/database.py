@@ -13682,6 +13682,10 @@ def get_event_leaderboard(event_name: str,
         a = pts.get(p["scoring_round_id"]) or {}
         wlist = won.get(cid, []) if cid is not None else []
         cats = {w["category"] for w in wlist}
+        _cat_money: dict = {}
+        for _w in wlist:
+            _cat_money[_w["category"]] = round(
+                _cat_money.get(_w["category"], 0.0) + _w["cents"] / 100.0, 2)
         overall_rows.append({
             "player_name": p["player_name"], "customer_id": cid,
             "scoring_round_id": p["scoring_round_id"],
@@ -13705,6 +13709,11 @@ def get_event_leaderboard(event_name: str,
             "gross_flight": _gross_ord.get(cid) if cid is not None else None,
             "skins_flight": _skins_ord.get(cid) if cid is not None else None,
             "won_total": round(sum(w["cents"] for w in wlist) / 100.0, 2),
+            # money split by CATEGORY so a per-game tab can show only
+            # that game's winnings (Kerry 2026-09-13: "Only want
+            # results, winnings and colors per tab games except for
+            # overall") — OVERALL keeps the whole-event won_total.
+            "won_by_cat": _cat_money,
         })
     overall_rows.sort(key=lambda r: (r["net"] is None, r["net"] or 0,
                                      r["gross"] or 0))

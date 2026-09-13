@@ -1,5 +1,16 @@
-window.TGF_VERSION = "2.389.0";
+window.TGF_VERSION = "2.390.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.390.0",
+    date: "2026-09-13",
+    changes: [
+      "Each game tab now shows only ITS OWN game (Kerry: 'Only want results, winnings and colors per tab games except for overall'). On the Net tab only net winners are tinted; Gross only gross; Skins only the circled skins; MVP/Points only the MVP mark; Team shows no other game's color at all. OVERALL is the one board that still lights up everything at once, which is what makes it the whole-event picture.",
+      "The Won column follows the same rule \u2014 it is now that TAB's money, not the event's. A player who took $79.50 in Individual Net and $56.00 in Team Net reads $79.50 on the Net tab, $56.00 on the Team tab, and the full $135.50 only on OVERALL. The per-category split comes from the payout rows themselves (new won_by_cat on each overall row), so the tab totals always sum back to the OVERALL total \u2014 no second source of truth to drift.",
+      "The Pts column is the MVP game's result, so it only appears where it belongs: OVERALL and MVP/Points keep it, Skins keeps its own Skins count in that slot, and Net / Gross / Team drop it and run one column narrower. That is a deliberate step back from v2.389.0's identical-column-count rule \u2014 a column showing another game's score is exactly what Kerry asked to remove.",
+      "Every tab now carries its own one-line legend naming what is highlighted there and stating that Won is that game's money only, with a pointer to OVERALL for everything collected. The all-games legend stays on OVERALL, where it is true.",
+      "test_events_board.js extended to guard the scoping in both directions \u2014 each tab lights up its own game AND does not light up the others \u2014 plus the per-tab money figures; test_spotlight_winnings.py asserts won_by_cat splits the event money by game and sums back to won_total.",
+    ],
+  },
   {
     version: "2.389.0",
     date: "2026-09-13",

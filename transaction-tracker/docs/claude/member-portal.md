@@ -641,6 +641,37 @@ legend shows only the flights that paid; MVP keeps the ratified
 purple. Backend: overall rows carry `net_flight` / `gross_flight` /
 `skins_flight` ordinals (`_flight_ordinals` over the sectioned
 boards — 1 = low flight, placed non-buyers included).
+**v2.390.0 — each tab shows only ITS OWN game.** Kerry 2026-09-13:
+"Only want results, winnings and colors per tab games except for
+overall." v2.389.0 unified the SHAPE; this scopes the CONTENT. Each
+board entry carries a `game` key (`net` / `gross` / `skins` / `points`
+/ `team`); OVERALL deliberately has none.
+  - **Colors.** `evlbOvrRowHtml(d, r, i, gameCol, game)` gates every
+    highlight through `shN` / `shG` / `shS` / `shM` — a tab tints only
+    its own game's result. Skins circles only render on Skins and
+    Overall; the MVP tint only on MVP/Points and Overall.
+  - **Money.** Each overall row now carries `won_by_cat` (per payout
+    CATEGORY, built in `get_event_leaderboard` alongside `won_total`).
+    `evlbGameMoney(r, game)` sums the categories in `EVLB_GAME_CATS`
+    (net→`individual_net`, gross→`individual_gross`, skins→`skins`,
+    points→`mvp`+`tgf_mvp`, team→`team_net`) so the Won column is THAT
+    TAB's money; OVERALL alone shows `won_total`. One source of truth —
+    the tab figures always sum back to the Overall figure. The `won`
+    sort key follows the same per-tab value.
+  - **The Pts column** is the MVP game's result, so `gameCol: false` on
+    net / gross / team drops the slot entirely; those three tabs run one
+    column narrower than Overall / Points / Skins. This knowingly relaxes
+    v2.389.0's constant-column-count rule — a column carrying another
+    game's score is precisely what Kerry asked to remove.
+  - **Legend.** `evlbLegendFor(game)` builds one legend per tab: the
+    all-games legend stays on OVERALL; a game tab names only what IS
+    highlighted there and states that Won is that game's money, pointing
+    at OVERALL for the whole event.
+Guards: `test_events_board.js` asserts each tab lights up its own game
+AND not the others, plus the per-tab money figures and the column-count
+split; `test_spotlight_winnings.py` asserts `won_by_cat` splits the
+money by game and sums back to `won_total`.
+
 **v2.389.0 — ONE board for every tab.** Kerry 2026-09-13: "everything
 except for Closest to Pins to follow the Overall layout so that moving
 from button to button is just a reordering of that leaderboard with the

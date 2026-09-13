@@ -456,6 +456,16 @@ check("win flags: cid2 won skins only", o2["win_skins"]
 check("Won column = total event money across ALL categories",
       o1["won_total"] == 93.0 and o2["won_total"] == 19.5,
       (o1["won_total"], o2["won_total"]))
+# per-CATEGORY money so a game tab can show only its own winnings
+# (Kerry 2026-09-13: "Only want results, winnings and colors per tab
+# games except for overall") — OVERALL still sums won_total
+check("won_by_cat splits the event money by game",
+      o1["won_by_cat"] == {"individual_net": 63.0, "mvp": 30.0}
+      and o2["won_by_cat"] == {"skins": 19.5},
+      (o1["won_by_cat"], o2["won_by_cat"]))
+check("won_by_cat sums back to won_total",
+      round(sum(o1["won_by_cat"].values()), 2) == o1["won_total"],
+      (o1["won_by_cat"], o1["won_total"]))
 check("overall rows do NOT identify buy-ins",
       all("buyer" not in r and "won" not in r for r in ovr),
       repr(sorted(ovr[0].keys())))
