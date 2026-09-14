@@ -14,7 +14,8 @@ const code = 'const escapeHtml = s => String(s ?? "").replace(/&/g,"&amp;").repl
   + '\nglobalThis.evlbBoardBody = evlbBoardBody;'
   + '\nglobalThis.evlbOvOf = evlbOvOf;'
   + '\nglobalThis.evlbSecsFrom = evlbSecsFrom;'
-  + '\nglobalThis.evlbOverallSort = evlbOverallSort;';
+  + '\nglobalThis.evlbOverallSort = evlbOverallSort;'
+  + '\nglobalThis.evlbColCount = evlbColCount;';
 eval(code);
 
 // synthetic event: 4 players, 2 flights, 9 holes
@@ -107,6 +108,18 @@ ck('points keeps Pts in that slot', /class="sortable bl br[^"]*">Pts</.test(html
 ck('net has no Pts column', !/>Pts</.test(htmls.net));
 for (const k of Object.keys(boards))
   ck(`${k}: has the hole-by-hole toggle`, htmls[k].includes('data-ovr-holes'));
+
+console.log('== the flight band reaches the right edge (Kerry 2026-09-14) ==');
+for (const k of Object.keys(boards)) {
+  const ths = (htmls[k].match(/<th /g)||[]).length;
+  ck(`${k}: the column count matches the real header`,
+     evlbColCount(d, boards[k]) === ths, `count ${evlbColCount(d, boards[k])} vs ${ths} <th>`);
+  const span = (htmls[k].match(/<tr class="evlb-band"[^>]*>\s*<td colspan="(\d+)"/)||[])[1];
+  if (span) ck(`${k}: the band spans every column, edge to edge`,
+               Number(span) === ths, `colspan ${span} vs ${ths} <th>`);
+}
+ck('a flighted board actually has bands to span',
+   /<tr class="evlb-band"/.test(htmls.net));
 
 console.log('== bands + order ==');
 ck('net board carries both flight bands',

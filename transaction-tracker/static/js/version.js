@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.404.0";
+window.TGF_VERSION = "2.405.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.405.0",
+    date: "2026-09-14",
+    changes: [
+      "The flight band now runs the full width of the board (Kerry: \u2018Extend flight row background color to right edge of scoreboard\u2019). It was one column short on every flighted board \u2014 Net, Gross, Skins and Team \u2014 so the black Flight header stopped just before the last to-par column and left a white notch at the right edge.",
+      "The cause was a hand-maintained column count that had drifted from the header it is supposed to describe. It is now derived in one function from the same flags the header is built from, and \u2014 more to the point \u2014 the test asserts that count equals the REAL number of header cells on every tab, and that each band\u2019s colspan equals it too. An off-by-one here has no symptom except a band that stops short, which is precisely the kind of thing that survives for months; now it cannot.",
+    ],
+  },
   {
     version: "2.404.0",
     date: "2026-09-14",

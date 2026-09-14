@@ -2992,14 +2992,28 @@
             r._rank = (tied ? "T" : "") + rank;
         });
     }
+    // ── How many columns a board actually has. The flight BAND spans
+    //    this, and it was one short — which is exactly what Kerry saw:
+    //    "Extend flight row background color to right edge of
+    //    scoreboard" (2026-09-14). The band stopped before the last
+    //    to-par column on every flighted board.
+    //
+    //    Ten fixed columns: # | Player | Won | Idx | PH | G | ± | N | ± |
+    //    Pts — less the ones this board drops — plus the holes. The guard
+    //    asserts this equals the real <th> count on every tab, because an
+    //    off-by-one here has no symptom except a band that stops short.
+    function evlbColCount(d, board) {
+        return 10
+            - (board.gameCol === false ? 1 : 0)
+            - (board.grossCol === false ? 2 : 0)
+            + ((d.hole_cols || []).length);
+    }
     function evlbBoardBody(id) {
         const st = EVLB_BOARDS[id];
         if (!st) return "";
         const { d, board, sortKey, sortDir } = st;
         const game = board.game || null;
-        const ncols = (board.gameCol === false ? 8 : 9)
-            - (board.grossCol === false ? 2 : 0)
-            + (d.hole_cols || []).length;
+        const ncols = evlbColCount(d, board);
         let i = 0, html = "";
         board.sections.forEach((sec, si) => {
             const rows = sortKey === "keep" ? sec.rows.slice() : sec.rows.slice().sort((a, b) => {
