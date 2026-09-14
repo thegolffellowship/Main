@@ -13536,7 +13536,36 @@ def get_event_leaderboard(event_name: str,
             "won": _won_cats(cid, won_cats) if cid is not None else [],
         }
 
+    def _label_bounds(labels):
+        """Boundaries read off the flight LABELS, low flight first, or
+        None when they don't all state one.
+
+        The cut points are the FLOORS of every band after the first:
+        "Flight 1 (HCP <12.0)" + "Flight 2 (HCP 12.0+)" -> [12.0], and
+        "<8.0" + "8.0-15.9" + "16.0+" -> [8.0, 16.0]. The labels are the
+        flight DEFINITION; a midpoint derived from whoever happened to
+        buy in is only a guess at it, and a bad one when a flight holds
+        few buyers (Kerry 2026-09-14: a skins Flight 1 of three scratch
+        players put the line at ~3 and swept every mid-handicap
+        non-buyer into Flight 2)."""
+        import re as _re
+        if len(labels) < 2:
+            return None
+        cuts = []
+        for lab in labels[1:]:
+            txt = str(lab or "")
+            m = (_re.search(r"(\d+(?:\.\d+)?)\s*(?:\+|and up|or (?:more|higher))",
+                            txt, _re.I)
+                 or _re.search(r"(\d+(?:\.\d+)?)\s*(?:-|\u2013|to)\s*\d+(?:\.\d+)?",
+                               txt))
+            if not m:
+                return None
+            cuts.append(float(m.group(1)))
+        # a clean ladder only: strictly ascending, or we don't trust it
+        return cuts if all(a < b for a, b in zip(cuts, cuts[1:])) else None
+
     def _flight_sections(rows, fmap):
+
         """Flight-SECTIONED board (Kerry 2026-09-11): buyers keep their
         GG flight label (gg_game_flights, never derived); every other
         player is PLACED into the flight their handicap would have put
@@ -13561,7 +13590,18 @@ def get_event_leaderboard(event_name: str,
                           min(known) if known else 0.0,
                           max(known) if known else 0.0))
         stats.sort(key=lambda s: s[1])            # low flight first
-        bounds = [(a[3] + b[2]) / 2.0 for a, b in zip(stats, stats[1:])]
+        # PREFER THE BOUNDARY THE LABEL STATES (Kerry 2026-09-14: "In
+        # SKINS, players aren't being flighted where they would have
+        # been"). A label like "Flight 1 (HCP <12.0)" / "Flight 2 (HCP
+        # 12.0+)" says where the line is; deriving a midpoint from the
+        # buyers present instead put the line at ~3 on a skins board
+        # whose Flight 1 happened to hold only three scratch players,
+        # so every mid-handicap non-buyer fell into Flight 2. The
+        # midpoint stays as the fallback for labels that carry no
+        # number ("LOW FLIGHT" / "HIGH FLIGHT").
+        label_bounds = _label_bounds([s[0] for s in stats])
+        bounds = label_bounds if label_bounds is not None else [
+            (a[3] + b[2]) / 2.0 for a, b in zip(stats, stats[1:])]
         out = [{"label": s[0], "rows": []} for s in stats]
         overflow = {"label": "UNFLIGHTED", "rows": []}
         for r in rows:

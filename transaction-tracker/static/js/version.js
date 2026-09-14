@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.407.0";
+window.TGF_VERSION = "2.408.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.408.0",
+    date: "2026-09-14",
+    changes: [
+      "A <b>Show All Players</b> checkbox on the four buy-in tabs \u2014 Net, Gross, Skins and MVP/Points (Kerry). Unchecked, the board shows the people actually in the game; checked, everyone comes back. Overall and Team don\u2019t get one: nobody buys into the overall picture, and Team Net comes with the entry.",
+      "Ticking it RE-RENDERS rather than hiding rows in CSS, because the # column ranks within a flight \u2014 a CSS hide would have left gaps like 1, 3, 6 and the board would read as broken rather than filtered. A flight left with no buyers drops its band along with its rows.",
+      "FLIGHT PLACEMENT NOW READS THE LABEL (Kerry: \u2018In SKINS, players aren\u2019t being flighted where they would have been like I requested\u2019). Non-buyers were being placed against a boundary derived from whoever happened to buy in \u2014 and on a skins board whose Flight 1 held three scratch players, that put the line at about 3, sweeping every mid-handicap non-buyer into Flight 2. The boundary now comes from the flight\u2019s own label (\u2018Flight 2 (HCP 12.0+)\u2019 \u2192 12.0), which is the actual definition of the band. Labels carrying no number, or that don\u2019t form a clean ascending ladder, still fall back to the derived midpoint rather than being half-trusted.",
+      "Worth knowing, because it is visible on s9.22: Golf Genius\u2019s own Flight 2 for that skins game contains buyers whose handicap is below the 12.0 its label states. Buyers always keep the flight GG recorded \u2014 we never re-flight a paid result \u2014 so where GG\u2019s assignment and GG\u2019s label disagree, a placed non-buyer can sit in a different band than a buyer with a similar handicap. That is GG\u2019s inconsistency showing through, not ours.",
+    ],
+  },
   {
     version: "2.407.0",
     date: "2026-09-14",

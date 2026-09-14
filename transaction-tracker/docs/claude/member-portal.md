@@ -641,6 +641,25 @@ legend shows only the flights that paid; MVP keeps the ratified
 purple. Backend: overall rows carry `net_flight` / `gross_flight` /
 `skins_flight` ordinals (`_flight_ordinals` over the sectioned
 boards — 1 = low flight, placed non-buyers included).
+**v2.408.0 — Show All Players, and flights read their own label.**
+  - **`evlbShowAll`** (default `false`) + a `data-ovr-all` checkbox on the
+    four `EVLB_BUYIN_GAMES` tabs only. `evlbBoardBody` filters
+    `r._buyer !== false` and **re-renders** — not CSS — because `#` ranks
+    within a band, so hiding rows in CSS would leave gaps (1, 3, 6). An
+    emptied section drops its band too.
+  - **`_label_bounds(labels)`** in `get_event_leaderboard`: flight
+    boundaries come from the LABELS (`"Flight 2 (HCP 12.0+)"` → 12.0;
+    cut points are the floors of every band after the first), falling
+    back to the buyer-derived midpoint only when the labels carry no
+    number or don't form an ascending ladder. Kerry 2026-09-14: the
+    derived midpoint put a skins line at ~3 because Flight 1 held three
+    scratch buyers, sweeping mid-handicap non-buyers into Flight 2.
+  - **Known upstream inconsistency:** GG's recorded Flight 2 on s9.22
+    skins contains buyers below its own stated 12.0 line. Buyers keep
+    the flight GG recorded (a paid result is never re-flighted), so a
+    PLACED non-buyer can land in a different band than a buyer of
+    similar handicap. Ours is consistent with the label; GG's is not.
+
 **v2.406.0 — one currency per tab; holes closed on landing; pin to top.**
 Kerry 2026-09-14, four asks in one wave.
   - **TEAM hole cells are GROSS again** with pops marked; the green cell

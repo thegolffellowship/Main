@@ -2766,6 +2766,11 @@
     // again, so two open events never disagree about what is on screen.
     let evlbShowHoles = true;
     let evlbHolesTouched = false;
+    // Show All Players (Kerry 2026-09-14) — on the NET/GROSS bundle tabs
+    // only, because only those games have a buy-in to be out of. OFF by
+    // default: the board opens on the people actually in the game, and
+    // the box invites you to bring the rest back in.
+    let evlbShowAll = false;
     const evlbHolesFor = board => evlbHolesTouched
         ? evlbShowHoles : (board && board.game) == null;
     // handicap columns (Idx + PH) start HIDDEN (Kerry 2026-09-13:
@@ -3106,9 +3111,17 @@
         const { d, board, sortKey, sortDir } = st;
         const game = board.game || null;
         const ncols = evlbColCount(d, board);
+        // Hiding non-buyers RE-RENDERS rather than hiding rows in CSS:
+        // the # column ranks within the band, so a CSS hide would leave
+        // gaps in the numbering (1, 3, 6…) and the board would read as
+        // broken rather than filtered.
+        const buyersOnly = !evlbShowAll && EVLB_BUYIN_GAMES.includes(game);
         let i = 0, html = "";
         board.sections.forEach((sec, si) => {
-            const rows = sortKey === "keep" ? sec.rows.slice() : sec.rows.slice().sort((a, b) => {
+            const src = buyersOnly
+                ? sec.rows.filter(r => r._buyer !== false) : sec.rows;
+            if (!src.length) return;      // an emptied flight drops its band too
+            const rows = sortKey === "keep" ? src.slice() : src.slice().sort((a, b) => {
                 const va = evlbBoardVal(d, a, sortKey, board.gameCol, game);
                 const vb = evlbBoardVal(d, b, sortKey, board.gameCol, game);
                 if (va != null && vb != null && va !== vb)
@@ -3201,6 +3214,9 @@
         return (note || "") +
             `<label class="evlb-holetog"><input type="checkbox" data-ovr-holes${showHoles ? " checked" : ""}> Hole by hole</label>` +
             `<label class="evlb-holetog"><input type="checkbox" data-ovr-hcp${evlbShowHcp ? " checked" : ""}> Handicaps</label>` +
+            (EVLB_BUYIN_GAMES.includes(board.game || null)
+                ? `<label class="evlb-holetog"><input type="checkbox" data-ovr-all${evlbShowAll ? " checked" : ""}> Show All Players</label>`
+                : "") +
             `<div class="evlb-scroll"><table class="evlb-holes evlb-ovr${showHoles ? "" : " no-holes"}${evlbShowHcp ? "" : " no-hcp"}" data-board="${id}"><thead>` +
             `<tr><th data-k="${board.netCol === false ? "gross" : "net"}" class="sortable">#</th>` +
             `<th data-k="player" class="nm sortable">Player</th>` +
@@ -3584,6 +3600,18 @@
                     t.classList.toggle("no-holes", !evlbShowHoles));
                 document.querySelectorAll("input[data-ovr-holes]").forEach(o =>
                     { o.checked = evlbShowHoles; });
+            }));
+        body.querySelectorAll("input[data-ovr-all]").forEach(cb =>
+            cb.addEventListener("change", () => {
+                evlbShowAll = cb.checked;
+                // every board on the page re-renders, so the ranks are
+                // right on all of them and two open events agree
+                document.querySelectorAll("table.evlb-ovr[data-board]").forEach(t => {
+                    const tb = t.querySelector("tbody");
+                    if (tb) tb.innerHTML = evlbBoardBody(t.dataset.board);
+                });
+                document.querySelectorAll("input[data-ovr-all]").forEach(o =>
+                    { o.checked = evlbShowAll; });
             }));
         body.querySelectorAll("input[data-ovr-hcp]").forEach(cb =>
             cb.addEventListener("change", () => {

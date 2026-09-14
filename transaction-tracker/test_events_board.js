@@ -15,7 +15,9 @@ const code = 'const escapeHtml = s => String(s ?? "").replace(/&/g,"&amp;").repl
   + '\nglobalThis.evlbOvOf = evlbOvOf;'
   + '\nglobalThis.evlbSecsFrom = evlbSecsFrom;'
   + '\nglobalThis.evlbOverallSort = evlbOverallSort;'
-  + '\nglobalThis.evlbColCount = evlbColCount;';
+  + '\nglobalThis.evlbColCount = evlbColCount;'
+  // a setter, not a copy: the test flips the PAGE's own flag
+  + '\nglobalThis.evlbSetShowAll = v => { evlbShowAll = v; };';
 eval(code);
 
 // synthetic event: 4 players, 2 flights, 9 holes
@@ -93,6 +95,13 @@ const ck=(l,c,dt='')=>{ if(c) console.log('  PASS  '+l); else { console.log('  F
 const colCount = h => (h.match(/<th /g)||[]).length;
 const htmls = {};
 for (const k of Object.keys(boards)) htmls[k] = evlbStdBoard(d, boards[k]);
+// the same boards with "Show All Players" ON — most of the older
+// assertions are about what a NON-buyer row looks like, which only
+// exists in that state now (Kerry 2026-09-14)
+evlbSetShowAll(true);
+const htmlsAll = {};
+for (const k of Object.keys(boards)) htmlsAll[k] = evlbStdBoard(d, boards[k]);
+evlbSetShowAll(false);
 
 console.log('== every tab is the same table ==');
 const base = colCount(htmls.overall);
@@ -135,7 +144,9 @@ ck('team bands are tappable', htmls.team.includes('data-team="0"'));
 ck('points keeps the MVP tiebreak note', htmls.points.includes('MVP tiebreak 2'));
 
 console.log('== rank runs within a band ==');
+evlbSetShowAll(true);
 const bodyNet = evlbBoardBody(Object.keys(EVLB_BOARDS).find(id=>EVLB_BOARDS[id].board===boards.net));
+evlbSetShowAll(false);
 const ranks = [...bodyNet.matchAll(/<tr class="evlb-plr[^"]*"[^>]*>\s*<td>([^<]*)<\/td>/g)].map(m=>m[1]);
 ck('each flight restarts at 1', JSON.stringify(ranks) === JSON.stringify(['1','2','1','2']), JSON.stringify(ranks));
 
@@ -163,7 +174,9 @@ ck('gross tab pays nobody (no gross game)', !/\$/.test(htmls.gross.replace(/<the
 console.log('== buy-in coloring on the NET/GROSS bundle tabs ==');
 for (const k of ['net','gross','skins','points']) {
   ck(`${k}: buyers get a green row`, /class="evlb-plr bought"/.test(htmls[k]));
-  ck(`${k}: non-buyers get a grey row`, /class="evlb-plr nobuy"/.test(htmls[k]));
+  ck(`${k}: non-buyers get a grey row once Show All is on`,
+     /class="evlb-plr nobuy"/.test(htmlsAll[k]));
+  ck(`${k}: and are hidden by default`, !/class="evlb-plr nobuy"/.test(htmls[k]));
   ck(`${k}: zebra stripe steps aside for the buy-in wash`,
      !/class="evlb-plr alt"/.test(htmls[k]));
 }
@@ -336,7 +349,7 @@ ck('PAR row carries no pops',
    !/evlb-pops/.test((htmls.overall.match(/<tr class="evlb-parrow">[\s\S]*?<\/tr>/)||[''])[0]));
 
 console.log('== PTS row per player on MVP/Points (Kerry 2026-09-13) ==');
-const ptsRows = htmls.points.match(/<tr class="evlb-ptsrow">[\s\S]*?<\/tr>/g) || [];
+const ptsRows = htmlsAll.points.match(/<tr class="evlb-ptsrow">[\s\S]*?<\/tr>/g) || [];
 ck('every player with points gets a PTS row', ptsRows.length === 3, ptsRows.length);
 ck('PTS row is labelled', /<td class="nm">PTS<\/td>/.test(ptsRows[0] || ''), ptsRows[0]);
 ck('PTS row carries the per-hole points (2 then 1)',
@@ -356,7 +369,7 @@ ck('PTS row is not tappable as a player row', !/evlb-plr/.test(ptsRows[0] || 'ev
 ck('a player with no points data grows no PTS row',
    ptsRows.length === Object.keys(d.hole_pts).length);
 ck('only the MVP/Points tab grows PTS rows',
-   ['overall','net','gross','skins','team'].every(k => !/evlb-ptsrow/.test(htmls[k])));
+   ['overall','net','gross','skins','team'].every(k => !/evlb-ptsrow/.test(htmlsAll[k])));
 
 console.log('== PAR row under the hole numbers (Kerry 2026-09-13) ==');
 for (const k of Object.keys(boards))
@@ -385,6 +398,33 @@ ck('complete par data totals to 36 under G and N',
 const dNoPar = Object.assign({}, d, {hole_par:{}});
 ck('no par data -> no PAR row at all',
    !/evlb-parrow/.test(evlbStdBoard(dNoPar, {sections:[{label:null,rows:d.overall_board}],sort:'net'})));
+
+console.log('== Show All Players (Kerry 2026-09-14) ==');
+for (const k of ['net','gross','skins','points']) {
+  ck(`${k}: has the Show All Players box`, /data-ovr-all/.test(htmls[k]));
+  ck(`${k}: it starts UNCHECKED, so the board opens on the buyers`,
+     /data-ovr-all>/.test(htmls[k]));
+  ck(`${k}: buyers are never hidden`, /class="evlb-plr bought"/.test(htmls[k]));
+}
+ck('OVERALL has no such box — nobody buys into the overall picture',
+   !/data-ovr-all/.test(htmls.overall));
+ck('TEAM has none either — the entry covers it',
+   !/data-ovr-all/.test(htmls.team));
+ck('the label reads "Show All Players"', /data-ovr-all[^>]*> Show All Players/.test(htmls.net));
+{
+  // ranks re-run over what is ON SCREEN — a CSS hide would have left
+  // gaps like 1, 3, 6 and the board would read as broken, not filtered
+  const ranksOf = h => [...h.matchAll(/<tr class="evlb-plr[^"]*"[^>]*>\s*<td>([^<]*)<\/td>/g)].map(m => m[1]);
+  const shown = ranksOf(htmls.net).filter(Boolean);
+  ck('hiding non-buyers re-ranks; no gaps left behind',
+     JSON.stringify(shown) === JSON.stringify(['1','2','1']), JSON.stringify(shown));
+  ck('a flight emptied of buyers drops its band too',
+     (htmls.net.match(/class="evlb-band"/g)||[]).length
+     <= (htmlsAll.net.match(/class="evlb-band"/g)||[]).length);
+  ck('turning it on brings everyone back',
+     ranksOf(htmlsAll.net).length > shown.length,
+     `${ranksOf(htmlsAll.net).length} vs ${shown.length}`);
+}
 
 console.log('== MVP badges under the name on OVERALL (Kerry 2026-09-14) ==');
 ck('the MVP winner gets a TGF MVP badge', /evlb-mvpbadge[^>]*>TGF MVP</.test(htmls.overall),
