@@ -1736,6 +1736,7 @@
 
     function closeAllMenus() {
         document.querySelectorAll(".ld-menu").forEach(m => m.style.display = "none");
+        if (window.tgfOverlayDrop) window.tgfOverlayDrop();
     }
     function toggleMenu(id) {
         const el = document.getElementById(id);
@@ -1743,6 +1744,10 @@
         const open = el.style.display === "block";
         closeAllMenus();
         el.style.display = open ? "none" : "block";
+        // a dropdown must paint above everything, and z-index alone
+        // cannot climb out of a positioned ancestor's stacking context
+        // (Kerry 2026-09-14) — auth.js lifts those while it is open
+        if (window.tgfOverlayLift && !open) window.tgfOverlayLift(el);
     }
     // Tapping Text / Call / Note used to leave the menu sitting over the
     // next card with no way to dismiss it (Kerry 2026-09-05: "it should

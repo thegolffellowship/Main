@@ -2125,9 +2125,12 @@
                 <label style="display:block; margin-bottom:0.75rem;">
                     <span style="font-weight:600; font-size:0.82rem;">Audience</span>
                     <select id="compose-audience" class="modal-input" style="margin-top:0.3rem;">
+                        <!-- RSVP Only leads: chasing the unpaid is the
+                             most common reason this composer is opened
+                             (Kerry 2026-09-14) -->
+                        <option value="rsvp_only">RSVP Only (Unpaid)</option>
                         <option value="all">All Registered</option>
                         <option value="playing">Playing (RSVP Confirmed)</option>
-                        <option value="rsvp_only">RSVP Only (Unpaid)</option>
                         <option value="net">NET Players</option>
                         <option value="gross">GROSS Players</option>
                         <option value="both">BOTH (Net + Gross)</option>
@@ -2182,6 +2185,7 @@
                         <button type="button" class="btn btn-secondary compose-var-btn" data-var="manager_name" style="font-size:0.7rem; padding:0.15rem 0.4rem;" title="Chapter manager's name, from the chapter_managers setting">{manager_name}</button>
                         <button type="button" class="btn btn-secondary compose-var-btn" data-var="manager_phone" style="font-size:0.7rem; padding:0.15rem 0.4rem;" title="Chapter manager's cell, from the chapter_managers setting">{manager_phone}</button>
                         <button type="button" class="btn btn-secondary compose-var-btn" data-var="event_url" style="font-size:0.7rem; padding:0.15rem 0.4rem;" title="The event's store registration link (Edit Event → Registration link). Refused when the event has no verified link or has already been played.">{event_url}</button>
+                        <button type="button" class="btn btn-secondary compose-var-btn" data-var="pay_button" style="font-size:0.7rem; padding:0.15rem 0.4rem;" title="The registration link as a tappable orange button. Same link as {event_url} and the same rule: refused when the event has no verified link or has already been played.">{pay_button}</button>
                         <button type="button" class="btn btn-secondary compose-var-btn" data-var="fellowship_spot" style="font-size:0.7rem; padding:0.15rem 0.4rem;" title="Where the group meets after this event (Edit Event → Fellowship spot). Refused while blank.">{fellowship_spot}</button>
                     </div>
                     <textarea id="compose-body" class="modal-input" rows="8" style="margin-top:0.2rem; font-family:inherit; resize:vertical;" placeholder="Type your message here. Leave a blank line between paragraphs; wrap **words in stars** to bold them. Use the buttons above to insert personalization tags."></textarea>
@@ -8249,12 +8253,20 @@
             m.classList.remove('menu-floating');
             m.style.top = m.style.left = m.style.minWidth = '';
         });
+        if (window.tgfOverlayDrop) window.tgfOverlayDrop();
     }
 
     function evOpenActionsMenu(btn) {
         const menu = btn.nextElementSibling;
         if (!menu || !menu.classList.contains('ev-actions-menu')) return;
         evCloseActionsMenus();
+        // The registrations table pins its ACTIONS column
+        // (position:sticky + z-index), so this menu lives inside a
+        // stacking context it cannot z-index its way out of — the rows
+        // below painted straight over it (Kerry 2026-09-14). Lift the
+        // ancestors that form the context for as long as the menu is
+        // open; evCloseActionsMenus puts them back.
+        if (window.tgfOverlayLift) window.tgfOverlayLift(menu);
         // Measure with the menu laid out but still invisible to the user.
         menu.classList.add('menu-floating');
         menu.style.visibility = 'hidden';
@@ -10003,6 +10015,7 @@
     // who are on the roster but not in any group. Picking one seats them.
     function closePairingPicker() {
         document.querySelectorAll('.pairing-pick-menu').forEach(m => m.remove());
+        if (window.tgfOverlayDrop) window.tgfOverlayDrop();
     }
 
     function openPairingPicker(anchor, players, holes, onPick) {
@@ -10308,13 +10321,19 @@
         if (!tplSelect) return;
         const cur = tplSelect.value;
         tplSelect.innerHTML = '<option value="">Custom Message</option>';
-        composeTemplates.forEach(t => {
-            if (t.channel === "sms") return; // skip SMS-only templates
-            const opt = document.createElement("option");
-            opt.value = t.id;
-            opt.textContent = t.name + (t.is_system ? " (built-in)" : "");
-            tplSelect.appendChild(opt);
-        });
+        // Payment Reminder leads the list (Kerry 2026-09-14) — it pairs
+        // with the RSVP Only audience that now leads the other dropdown,
+        // so the most common send is two defaults away instead of two
+        // scrolls. Everything else keeps the order the server sent.
+        const _emailTpls = composeTemplates.filter(t => t.channel !== "sms");
+        const _isPay = t => /^payment reminder$/i.test((t.name || "").trim());
+        [..._emailTpls.filter(_isPay), ..._emailTpls.filter(t => !_isPay(t))]
+            .forEach(t => {
+                const opt = document.createElement("option");
+                opt.value = t.id;
+                opt.textContent = t.name + (t.is_system ? " (built-in)" : "");
+                tplSelect.appendChild(opt);
+            });
         if (cur) tplSelect.value = cur;
     }
 
@@ -10782,7 +10801,7 @@
         const KNOWN_VARS = ["player_name", "event_name", "event_date",
                             "course", "chapter",
                             "manager_name", "manager_phone", "event_url",
-                            "fellowship_spot"];
+                            "pay_button", "fellowship_spot"];
         const blanks = [];
         (subject + "\n" + body).replace(/\[[A-Z][A-Z0-9 _/-]{2,}\]/g,
             m => { if (!blanks.includes(m)) blanks.push(m); return m; });

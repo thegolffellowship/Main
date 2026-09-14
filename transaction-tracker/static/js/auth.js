@@ -248,6 +248,48 @@ async function initAuth() {
 }
 
 // Sticky offsets — runs on every page that loads auth.js, regardless of initAuth()
+// ── Dropdowns must paint above everything (Kerry 2026-09-14: "All
+//    dropdowns should always be above everything").
+//
+// A high z-index is NOT enough. z-index only ranks an element against
+// its siblings INSIDE the nearest ancestor that creates a stacking
+// context — and `position: sticky` with a z-index creates one. The
+// Events registrations table pins its ACTIONS column
+// (`td:last-child { position: sticky; z-index: 2 }`), so every row's
+// actions cell is its own stacking context. A menu opened inside one
+// of them is sealed in at z-index 2 no matter what it asks for, and the
+// identical cells of the rows BELOW — later in DOM order, same z-index
+// — paint straight over it. `position: fixed` does not escape either:
+// a fixed element still paints inside the stacking context it lives in.
+//
+// The only reliable fix without moving the node (moving it would strip
+// the delegated click handlers the menu items depend on) is to raise
+// the ancestors that form those contexts while the menu is open, then
+// put them back. Call tgfOverlayLift(el) when you open an overlay; it
+// returns nothing — call tgfOverlayDrop() when you close it.
+const _TGF_LIFTED = [];
+const _TGF_LIFT_Z = "9001";
+window.tgfOverlayLift = function (el) {
+    window.tgfOverlayDrop();
+    if (!el) return;
+    for (let n = el.parentElement; n && n !== document.body; n = n.parentElement) {
+        let cs;
+        try { cs = getComputedStyle(n); } catch (e) { break; }
+        // only positioned ancestors with a real z-index form a context
+        // we have to climb out of; everything else is transparent to
+        // stacking and is left alone
+        if (cs.position !== "static" && cs.zIndex !== "auto") {
+            _TGF_LIFTED.push([n, n.style.zIndex]);
+            n.style.zIndex = _TGF_LIFT_Z;
+        }
+    }
+};
+window.tgfOverlayDrop = function () {
+    while (_TGF_LIFTED.length) {
+        const [n, z] = _TGF_LIFTED.pop();
+        n.style.zIndex = z;
+    }
+};
 function _setStickyOffsets() {
     const hdr = document.querySelector("header");
     const nav = document.querySelector(".tab-nav");

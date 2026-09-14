@@ -4148,7 +4148,8 @@ def init_db(db_path: str | Path | None = None) -> None:
                 "<p>Hi {player_name},</p>"
                 "<p>This is a friendly reminder that we have you down for "
                 "<strong>{event_name}</strong>, but we haven't received your payment yet.</p>"
-                "<p>Please complete your registration at your earliest convenience.</p>"
+                "<p>You can take care of it right here:</p>"
+                "{pay_button}"
                 "<p>Thanks,<br>The Golf Fellowship</p>",
                 None,
             ),
@@ -41110,6 +41111,20 @@ def set_app_setting(key: str, value: str, db_path: str | Path | None = None) -> 
 # whenever you change a system template's wording — never edit in place,
 # or the old version stops being recognised as unedited.
 _PRIOR_SYSTEM_TEMPLATE_BODIES = {
+    # v2.399.0: the payment link becomes a tappable button (Kerry
+    # 2026-09-14: "Can you work the payment link in as a button for these
+    # messages?"). The seed only INSERTS by name, so without listing the
+    # shipped body here the live row would keep the old wording forever
+    # and the feature would never reach the person who asked for it —
+    # the backfill rule. Kerry-edited copy still wins: the update only
+    # fires when the stored body is verbatim one of ours.
+    "Payment Reminder": {
+        "<p>Hi {player_name},</p>"
+        "<p>This is a friendly reminder that we have you down for "
+        "<strong>{event_name}</strong>, but we haven't received your payment yet.</p>"
+        "<p>Please complete your registration at your earliest convenience.</p>"
+        "<p>Thanks,<br>The Golf Fellowship</p>",
+    },
     # v2.344.0 → v2.345.0: Kerry trimmed the second paragraph to one line
     # and added the chapter manager's name and cell.
     "Fellowship \u2014 Where We're Meeting": {

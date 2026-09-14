@@ -1,5 +1,16 @@
-window.TGF_VERSION = "2.398.1";
+window.TGF_VERSION = "2.399.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.399.0",
+    date: "2026-09-14",
+    changes: [
+      "DROPDOWNS NOW PAINT ABOVE EVERYTHING (Kerry: \u2018See how the actions dropdown is behind the action buttons below. All dropdowns should always be above everything.\u2019). The registrations table pins its ACTIONS column, and a pinned cell with a z-index creates its own stacking context \u2014 so a menu opened inside one was sealed in at the cell\u2019s level no matter how high its own z-index went, and the identical cells of the rows BELOW painted straight over it. position:fixed did not escape either, which is why the earlier \u2018lift it out of the table\u2019 fix held everywhere except here.",
+      "The fix is a shared auth.js helper, tgfOverlayLift / tgfOverlayDrop, that raises the ancestors forming those contexts while a menu is open and puts them back on close \u2014 rather than moving the menu into the body, which would have stripped the click handlers its items depend on. Wired into the Events actions menus, the pairings open-seat picker and the Lead Center row menus, so the rule holds for every dropdown that sits inside a table, not just the one that was reported.",
+      "PAYMENT LINK AS A BUTTON in Message Players (Kerry). New {pay_button} variable renders the event\u2019s store registration link as a tappable TGF-orange button, inline-styled so it survives every mail client. It carries the SAME refusal rule as {event_url} \u2014 a message asking for it will not send when the event has no verified link or has already been played, so a button that looks live can never reach a member pointing at a dead page.",
+      "The built-in Payment Reminder now uses it (\u2018You can take care of it right here:\u2019 + the button). The seed only ever INSERTS by name, so the shipped body is also recorded as a prior version \u2014 which means the LIVE template actually picks the button up instead of the change reaching only fresh deployments. A Payment Reminder Kerry has edited himself is left exactly as he wrote it.",
+      "RSVP Only (Unpaid) moves to the top of the Audience list and Payment Reminder to the top of the Template list (Kerry), so the most common send \u2014 chasing the unpaid \u2014 is two defaults rather than two scrolls.",
+    ],
+  },
   {
     version: "2.398.1",
     date: "2026-09-14",

@@ -7772,7 +7772,8 @@ def api_send_messages():
     # The store registration link, only while it is usable: verified (or
     # hand-typed) and the event not yet played. event_links.py owns the
     # rule; a past event's link is "expired", never deleted.
-    from email_parser.event_links import event_url_for_message
+    from email_parser.event_links import (event_url_for_message,
+                                          pay_button_html)
     _event_url, _event_url_problem = event_url_for_message(event_info or None)
     event_vars = {
         "event_name": event_name,
@@ -7782,6 +7783,9 @@ def api_send_messages():
         "manager_name": _mgr["name"],
         "manager_phone": _mgr["phone"],
         "event_url": _event_url,
+        # the same link as a tappable button (Kerry 2026-09-14) — blank
+        # whenever the link is blank, so the guard below catches both
+        "pay_button": pay_button_html(_event_url),
         # Where the group meets after THIS event — per event, not per
         # chapter (Kerry 2026-09-09). Blank = the send below refuses.
         "fellowship_spot": (event_info.get("fellowship_spot") or "").strip(),
@@ -7803,11 +7807,12 @@ def api_send_messages():
             "variable out of the message."}), 400
     # Same class of check for the registration link: a message that
     # carries {event_url} must not go out with a blank OR a dead link.
-    if "{event_url}" in (subject_tpl + body_tpl) and not _event_url:
-        return jsonify({"error":
-            f"{{event_url}} cannot be sent: {_event_url_problem}. "
-            "Verify the link in Edit Event, or take the variable out "
-            "of the message."}), 400
+    for _lv in ("event_url", "pay_button"):
+        if ("{%s}" % _lv) in (subject_tpl + body_tpl) and not _event_url:
+            return jsonify({"error":
+                f"{{{_lv}}} cannot be sent: {_event_url_problem}. "
+                "Verify the link in Edit Event, or take the variable out "
+                "of the message."}), 400
     if "{fellowship_spot}" in (subject_tpl + body_tpl) and not event_vars["fellowship_spot"]:
         return jsonify({"error":
             f"No fellowship spot is set for {event_name} — "
@@ -8074,8 +8079,15 @@ def api_preview_message():
     variables["manager_phone"] = _pmgr["phone"] or "(no number on file)"
     # The composer passes the event's usable link (or nothing); the
     # preview names the gap the send guard would refuse on.
-    variables["event_url"] = (data.get("event_url") or "").strip() \
-        or "(no registration link on file)"
+    _purl = (data.get("event_url") or "").strip()
+    variables["event_url"] = _purl or "(no registration link on file)"
+    # the preview shows the real button when the link is usable, and
+    # names the same gap the send guard refuses on when it is not
+    from email_parser.event_links import pay_button_html as _pbh
+    variables["pay_button"] = _pbh(_purl) or (
+        '<p style="margin:12px 0;color:#b91c1c;font-weight:600;">'
+        '(no registration link on file &mdash; this message cannot be '
+        'sent with a payment button)</p>')
     variables["fellowship_spot"] = (data.get("fellowship_spot") or "").strip() \
         or "(no fellowship spot set for this event)"
 

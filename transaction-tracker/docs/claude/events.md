@@ -2087,3 +2087,34 @@ direction and approval by me."
   ACTUAL recipients from `recorded_rows` (never re-split down
   standings that moved since payday — the Hogue fold), and the strip
   reads "FINAL · Pot $X · as paid".
+
+
+## Message Players — {pay_button} (v2.399.0)
+
+Kerry 2026-09-14: "Can you work the payment link in as a button for these
+messages? Also, move RSVP Only (unpaid) to top of Audience selection and
+Payment Reminder (built-in) to top of Template selector."
+
+- **`{pay_button}`** renders the event's store registration link as a
+  TGF-orange call-to-action button. Built by `pay_button_html(url)` in
+  `email_parser/event_links.py` — inline styles only, because every mail
+  client strips `<style>`. One builder, used by both the send path
+  (`event_vars["pay_button"]`) and the preview route.
+- **Same refusal rule as `{event_url}`**, because it is the same link: the
+  send returns 400 when the event has no verified link or has already been
+  played. The guard now loops over both variables rather than naming one,
+  so a third link variable inherits it. A button that looks live must never
+  reach a member pointing at a dead page. The preview substitutes a red
+  "(no registration link on file…)" line in that case, so the composer
+  shows the same gap the send refuses on.
+- The built-in **Payment Reminder** body uses it. The seed only INSERTS by
+  name, so the previously shipped body is also listed in
+  `_PRIOR_SYSTEM_TEMPLATE_BODIES` — that is what lets the LIVE row pick the
+  button up instead of the change reaching only fresh deployments (the
+  backfill rule). A body Kerry has edited in the UI is left untouched:
+  the update fires only when the stored body is verbatim one of ours.
+- Ordering: **RSVP Only (Unpaid)** leads the Audience select and
+  **Payment Reminder** leads the Template select (client-side sort in
+  `populateTemplateDropdown`, so the server's list is unchanged).
+- `KNOWN_VARS` in the composer's pre-send blank guard includes
+  `pay_button` — an unknown `{tag}` still blocks the send.

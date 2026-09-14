@@ -570,6 +570,30 @@ tgf import preview + `.tgf-scroll`, test_center `.tc-scroll`, gg_history
 `.ggh-scroll`, points-render.js `.pr-scroll`) — new wide tables must follow
 the same pattern.
 
+## Global CSS gotcha: z-index cannot escape a stacking context (IMPORTANT)
+
+**Kerry 2026-09-14: "All dropdowns should always be above everything."**
+A dropdown that renders inside a table can be painted over by the rows
+BELOW it, no matter how high its z-index. `z-index` only ranks an element
+against its siblings inside the nearest ancestor that *creates a stacking
+context* — and `position: sticky` (or relative/absolute/fixed) **with a
+z-index** creates one. `.registrants-table td:last-child` pins the ACTIONS
+column at `z-index: 2`, so every row's actions cell is its own context: a
+menu inside one is sealed in at level 2, and the next row's identical cell
+(later in DOM order, same level) wins. **`position: fixed` does not escape
+it either** — a fixed element still paints inside the context it lives in,
+which is why the v2.336.0 "measured fixed layer" fix held everywhere
+except here.
+
+**Use `window.tgfOverlayLift(el)` / `window.tgfOverlayDrop()` (auth.js,
+app-wide).** Lift raises every positioned-with-z-index ancestor while the
+overlay is open and drop restores them. Do NOT "fix" this by moving the
+menu into `document.body` — the menu items rely on handlers delegated
+from their container, and reparenting silently breaks them. Wired into
+the Events actions menus + pairings open-seat picker (`templates/events.html`)
+and the Lead Center row menus (`templates/leads.html`); any NEW dropdown
+that can render inside a table must call it too.
+
 ## Jinja gotcha in inline CSS (IMPORTANT)
 
 Flask templates are parsed by Jinja2, which treats `{#` as the start of a comment and `#}` as the end. **CSS rules that pack `{` directly against `#`** (e.g. `@media(max-width:900px){#some-id{...}}`) will crash template rendering with `TemplateSyntaxError: Missing end of comment tag` and the global 500 handler returns `{"error":"Internal server error"}`.
