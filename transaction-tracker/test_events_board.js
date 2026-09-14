@@ -66,16 +66,24 @@ const ovOf=(x,note)=>evlbOvOf(ovIx,x,note);
 const secsFrom=b=>evlbSecsFrom(ovIx,b);
 const skinsCount=(dd,r)=>((dd.skin_cells||{})[String(r.scoring_round_id)]||[]).length||"";
 
-// mirrors the page's boards object: `game` scopes a tab to its own
-// results/money/colors; gameCol:false drops the Pts slot on the tabs
-// whose own result isn't points
+// KNOWN LIMITATION, stated rather than hidden: this mirrors the page's
+// `boards` object by hand, because the real one is built inside
+// evlbEventHtml from a live payload and cannot be reached from here.
+// It is the last duplicated thing in this harness and it HAS gone stale
+// before (v2.389.0 team bands, v2.393.0 buy-in flags, v2.402.0/v2.403.0
+// grossCol). When you add a board flag, add it HERE in the same commit —
+// a silent pass on this file is not proof the page agrees with it.
+//
+// `game` scopes a tab to its own results/money/colors; gameCol:false
+// drops the Pts slot on tabs whose own result isn't points; grossCol:
+// false drops the G + to-par pair on TEAM, which is played in net.
 const boards={
   overall:{sections:[{label:null,rows:d.overall_board}],sort:'net'},
   net:{sections:secsFrom(d.net_board),sort:'net',game:'net',gameCol:false},
   gross:{sections:secsFrom(d.gross_board),sort:'gross',game:'gross',gameCol:false},
   skins:{sections:secsFrom(d.skins_board),sort:'gamecol',game:'skins',gameCol:{key:'skins',label:'Skins',value:skinsCount}},
   points:{sections:[{label:null,rows:d.points_board.map(x=>ovOf(x,x.mvp_note)).filter(Boolean)}],sort:'keep',game:'points'},
-  team:{teamBands:true,teams:d.teams,game:'team',gameCol:false,sections:d.teams.map(t=>({label:`${t.position} · total ${t.gg_total}`,rows:t.players.map(x=>ovOf(x)).filter(Boolean)})),sort:'keep'},
+  team:{teamBands:true,teams:d.teams,game:'team',gameCol:false,grossCol:false,sections:d.teams.map(t=>({label:`${t.position} · total ${t.gg_total}`,rows:t.players.map(x=>ovOf(x)).filter(Boolean)})),sort:'keep'},
 };
 
 let fails=0;
@@ -89,8 +97,11 @@ console.log('== every tab is the same table ==');
 const base = colCount(htmls.overall);
 for (const k of ['overall','skins','points'])
   ck(`${k}: identical column count (${base})`, colCount(htmls[k]) === base, colCount(htmls[k]));
-for (const k of ['net','gross','team'])
+for (const k of ['net','gross'])
   ck(`${k}: drops the Pts slot, one column narrower`, colCount(htmls[k]) === base - 1, colCount(htmls[k]));
+// TEAM drops Pts AND the gross pair (Kerry 2026-09-14) — three narrower
+ck('team: drops Pts and the gross pair, three columns narrower',
+   colCount(htmls.team) === base - 3, colCount(htmls.team));
 ck('skins relabels the game column to Skins', /class="sortable bl br[^"]*">Skins</.test(htmls.skins), '');
 ck('points keeps Pts in that slot', /class="sortable bl br[^"]*">Pts</.test(htmls.points));
 ck('net has no Pts column', !/>Pts</.test(htmls.net));
@@ -170,8 +181,9 @@ console.log('== boards size to content, columns to a standard (Kerry 2026-09-14)
   ck('G / N / Pts / to-par all read the SAME score token',
      /td\.sc[\s\S]{0,200}?td\.tp[\s\S]{0,200}?td\.gc[\s\S]{0,160}?width: var\(--evlb-score-w\)/.test(css));
   for (const k of Object.keys(boards)) {
-    ck(`${k}: gross + net carry the score class`,
-       ((htmls[k].match(/class="bl sc"/g)||[]).length >= 2), '');
+    const want = k === 'team' ? 1 : 2;   // team shows net only
+    ck(`${k}: the score cells carry the score class`,
+       ((htmls[k].match(/class="bl sc"/g)||[]).length >= want), '');
     ck(`${k}: hole cells carry the hole class`, /<td class="h[ "]/.test(htmls[k]));
   }
   ck('the Pts column carries the score class too',
@@ -350,6 +362,27 @@ ck('complete par data totals to 36 under G and N',
 const dNoPar = Object.assign({}, d, {hole_par:{}});
 ck('no par data -> no PAR row at all',
    !/evlb-parrow/.test(evlbStdBoard(dNoPar, {sections:[{label:null,rows:d.overall_board}],sort:'net'})));
+
+console.log('== TEAM speaks NET only (Kerry 2026-09-14) ==');
+ck('team header has no G column', !/data-k="gross"/.test(htmls.team), '');
+ck('team header has no gross to-par column', !/data-k="tpg"/.test(htmls.team), '');
+ck('team KEEPS the net score and its to-par',
+   /data-k="net"/.test(htmls.team) && /data-k="tpn"/.test(htmls.team));
+ck('no gross totals leak into the team player rows',
+   ((htmls.team.match(/<tr class="evlb-plr[\s\S]*?<\/tr>/)||[''])[0]
+     .match(/class="bl sc"/g)||[]).length === 1);
+ck('the PAR row loses the gross total too, so the header still lines up',
+   ((htmls.team.match(/<tr class="evlb-parrow">[\s\S]*?<\/tr>/)||[''])[0]
+     .match(/class="bl sc"/g)||[]).length === 1);
+ck('every row type on TEAM has the same cell count',
+   (() => {
+     const rows = [/\<tr class="evlb-parrow">[\s\S]*?<\/tr>/, /<tr class="evlb-plr[\s\S]*?<\/tr>/,
+                   /<tr class="teamrow">[\s\S]*?<\/tr>/]
+       .map(re => ((htmls.team.match(re)||[''])[0].match(/<td/g)||[]).length);
+     return rows.every(n => n === rows[0]) && rows[0] > 0;
+   })(), '');
+ck('every OTHER tab still shows gross', ['overall','net','gross','skins','points']
+   .every(k => /data-k="gross"/.test(htmls[k])));
 
 console.log('== TEAM NET total row (Kerry 2026-09-13) ==');
 const trow = (htmls.team.match(/<tr class="teamrow">[\s\S]*?<\/tr>/) || [''])[0];

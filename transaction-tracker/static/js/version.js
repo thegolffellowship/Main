@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.403.0";
+window.TGF_VERSION = "2.404.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.404.0",
+    date: "2026-09-14",
+    changes: [
+      "The TEAM tab drops the Gross score and its to-par column (Kerry). Team Net is played in net, the hole cells on that tab are already net, and a gross total sitting beside them is another game\u2019s number \u2014 the same reasoning that took the Pts column off this tab in v2.390.0. TEAM now speaks one currency end to end; every other tab keeps its gross.",
+      "The pair is dropped by a board flag rather than by editing one table, so the header, the PAR row, the player rows and the TEAM NET row all lose it together. A new check asserts every row type on the tab ends up with the SAME cell count \u2014 dropping a column from three builders out of four is the failure this guards against, and it would show up as a quietly shifted grid rather than an error.",
+      "The test harness\u2019s copy of the board config went stale again on this change \u2014 the fourth time. It now carries a note naming that copy as the last duplicated thing in the file, listing the four times it has drifted, and saying plainly that a pass there is not proof the page agrees.",
+    ],
+  },
   {
     version: "2.403.0",
     date: "2026-09-14",

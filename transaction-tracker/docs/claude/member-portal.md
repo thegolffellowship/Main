@@ -641,6 +641,22 @@ legend shows only the flights that paid; MVP keeps the ratified
 purple. Backend: overall rows carry `net_flight` / `gross_flight` /
 `skins_flight` ordinals (`_flight_ordinals` over the sectioned
 boards — 1 = low flight, placed non-buyers included).
+**v2.404.0 — TEAM speaks NET only.** Kerry 2026-09-14: "Remove GROSS
+score columns from TEAM." A new board flag `grossCol: false` drops the
+`G` + gross-to-par pair; the team board sets it. Team Net is played in
+net, the tab's hole cells are already net (v2.391.0), and a gross total
+beside them is another game's number — the same reasoning as `gameCol:
+false` in v2.390.0. Every other tab keeps gross.
+The flag is read by the header AND all four row builders
+(`evlbOvrRowHtml` / `evlbParRow` / `evlbPtsRowHtml` / `evlbTeamTotalRow`)
+plus the band `colspan`, so nothing can lose the pair in three places
+out of four. Guard asserts every row type on TEAM ends with the same
+cell count, and that the other five tabs still carry `data-k="gross"`.
+
+**v2.403.0 — black frame + centred Won.** `border: 2px solid #1B1B1B` on
+`.evlb-holes` (same weight as the `.bl`/`.br` group rules, so frame and
+rules read as one drawing); `.won` centres header and money together.
+
 **v2.402.0 — boards size to content; column widths are a standard.**
 Kerry 2026-09-14: "Change all scoreboard leaderboard views to adjust
 left, not align full. Should only be as wide as it needs to be. Hole
