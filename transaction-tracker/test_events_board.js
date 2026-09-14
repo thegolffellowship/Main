@@ -151,6 +151,28 @@ ck('_buyer is lifted off the game board row, not the overall row',
    && !('_buyer' in d.overall_board[0]),
    JSON.stringify(boards.net.sections.map(x=>x.rows.map(r=>r._buyer))));
 
+console.log('== boards size to content, columns to a standard (Kerry 2026-09-14) ==');
+{
+  const css = fs.readFileSync(require('path').join(__dirname,'templates/contests.html'),'utf8');
+  ck('the board is width:auto, not stretched by the global table rule',
+     /\.evlb-holes \{[^}]*width: auto/.test(css));
+  ck('one hole width token, one score width token',
+     /--evlb-hole-w:\s*\d+px/.test(css) && /--evlb-score-w:\s*\d+px/.test(css));
+  ck('hole cells read the hole token',
+     /td\.h[^{]*\{[\s\S]{0,140}?width: var\(--evlb-hole-w\)/.test(css));
+  ck('G / N / Pts / to-par all read the SAME score token',
+     /td\.sc[\s\S]{0,200}?td\.tp[\s\S]{0,200}?td\.gc[\s\S]{0,160}?width: var\(--evlb-score-w\)/.test(css));
+  for (const k of Object.keys(boards)) {
+    ck(`${k}: gross + net carry the score class`,
+       ((htmls[k].match(/class="bl sc"/g)||[]).length >= 2), '');
+    ck(`${k}: hole cells carry the hole class`, /<td class="h[ "]/.test(htmls[k]));
+  }
+  ck('the Pts column carries the score class too',
+     /class="bl br gc"/.test(htmls.overall));
+  ck('net/gross/team drop the Pts slot entirely, so none to size',
+     !/class="bl br gc"/.test(htmls.net) && !/class="bl br gc"/.test(htmls.team));
+}
+
 console.log("== OVERALL's default order: money once paid, points until then ==");
 ck('a completed event (pot recorded) lands on the money',
    evlbOverallSort({pot: 1220}) === 'won', evlbOverallSort({pot: 1220}));
@@ -167,7 +189,7 @@ ck('a missing pot is treated as not yet paid, not as an error',
      /data-k="won" class="won sortable br asc"/.test(paid),
      (paid.match(/data-k="won"[^>]*/)||[])[0]);
   ck('unpaid event: the Pts header carries it instead',
-     /data-k="gamecol" class="sortable bl br asc"/.test(unpaid)
+     /data-k="gamecol" class="sortable bl br gc asc"/.test(unpaid)
      && !/data-k="won" class="won sortable br asc"/.test(unpaid),
      (unpaid.match(/data-k="gamecol"[^>]*/)||[])[0]);
   const rank = h => [...h.matchAll(/<tr class="evlb-plr[^"]*"[^>]*>\s*<td>([^<]*)<\/td>\s*<td class="nm">([^<]*)/g)]

@@ -297,7 +297,26 @@
         /* hole grids share THE card standard's metrics (tgf-standards
            TGF_CARD_STYLE: 2px 6px cells, 2em min-width, #e2e8f0 grid,
            0.8rem) so they column-align with the expanded player cards */
-        .evlb-holes { border-collapse: collapse; font-size: 0.8rem; margin: 6px 0; }
+        /* Boards size to their CONTENT and sit left, rather than being
+           stretched across the page by the global `table { width: 100% }`
+           (Kerry 2026-09-14: "adjust left, not align full ... should only
+           be as wide as it needs to be"). Same call he made for
+           .evlb-tbl above, now applied to every scoreboard.
+
+           Column widths are a STANDARD, not per-table guesswork: every
+           hole is --evlb-hole-w and every score-block column (G, ±, N, ±,
+           Pts) is --evlb-score-w, so the grid stays even whatever the
+           numbers are and two boards never disagree about a column. */
+        .evlb-holes { --evlb-hole-w: 30px; --evlb-score-w: 38px;
+            width: auto; border-collapse: collapse; font-size: 0.8rem; margin: 6px 0; }
+        .evlb-holes td.h, .evlb-holes th.h {
+            width: var(--evlb-hole-w); min-width: var(--evlb-hole-w);
+            max-width: var(--evlb-hole-w); }
+        .evlb-holes td.sc, .evlb-holes th.sc,
+        .evlb-holes td.tp, .evlb-holes th.tp,
+        .evlb-holes td.gc, .evlb-holes th.gc {
+            width: var(--evlb-score-w); min-width: var(--evlb-score-w);
+            max-width: var(--evlb-score-w); }
         .evlb-holes td, .evlb-holes th { border: 1px solid #e2e8f0; padding: 2px 6px;
             text-align: center; min-width: 2em; white-space: nowrap; }
         .evlb-holes th { background: #1B1B1B; color: #fff; font-weight: 700; }
@@ -2855,12 +2874,12 @@
             `<td class="bl hc">${r.index != null ? Number(r.index).toFixed(1) : ""}</td>` +
             `<td class="br hc">${r.hcp ?? ""}</td>` +
             holeCells +
-            `<td class="bl" style="${gT}"${gTitle}>${r.gross ?? ""}</td>` +
+            `<td class="bl sc" style="${gT}"${gTitle}>${r.gross ?? ""}</td>` +
             `<td class="tp" style="${gT}"${gTitle}>${evlbToPar(r.to_par_gross)}</td>` +
-            `<td class="bl" style="${nT}"${nTitle}><b>${r.net ?? ""}</b></td>` +
+            `<td class="bl sc" style="${nT}"${nTitle}><b>${r.net ?? ""}</b></td>` +
             `<td class="tp br" style="${nT}"${nTitle}>${evlbToPar(r.to_par_net)}</td>` +
             (gameCol === false ? "" :
-                `<td class="bl br" style="${gvTint ? EVLB_MVP_TINT : ""}"${gvTint ? ' title="Event MVP"' : ""}>${gv ?? ""}</td>`) +
+                `<td class="bl br gc" style="${gvTint ? EVLB_MVP_TINT : ""}"${gvTint ? ' title="Event MVP"' : ""}>${gv ?? ""}</td>`) +
             `</tr>`;
     }
     // ── per-player POINTS row (Kerry 2026-09-13: "MVP/POINTS need to
@@ -2881,9 +2900,9 @@
             `<td class="won br"></td>` +
             `<td class="bl hc"></td><td class="br hc"></td>` +
             cols.map(n => `<td class="h">${hp[String(n)] ?? ""}</td>`).join("") +
-            `<td class="bl"></td><td class="tp"></td>` +
-            `<td class="bl"></td><td class="tp br"></td>` +
-            (gameCol === false ? "" : `<td class="bl br">${r.net_pts ?? ""}</td>`) +
+            `<td class="bl sc"></td><td class="tp"></td>` +
+            `<td class="bl sc"></td><td class="tp br"></td>` +
+            (gameCol === false ? "" : `<td class="bl br gc">${r.net_pts ?? ""}</td>`) +
             `</tr>`;
     }
     // ── TEAM TOTAL row (Kerry 2026-09-13: "The team Net needs to show
@@ -2919,10 +2938,10 @@
             `<td class="won br" title="the team's whole purse">${money > 0 ? "$" + Number(money).toFixed(2) : ""}</td>` +
             `<td class="bl hc"></td><td class="br hc"></td>` +
             cols.map(n => `<td class="h">${mins[n] ?? ""}</td>`).join("") +
-            `<td class="bl"></td><td class="tp"></td>` +
-            `<td class="bl" title="${ttl}"><b>${shown}</b></td>` +
+            `<td class="bl sc"></td><td class="tp"></td>` +
+            `<td class="bl sc" title="${ttl}"><b>${shown}</b></td>` +
             `<td class="tp br">${par ? evlbToPar(shown - par) : ""}</td>` +
-            (gameCol === false ? "" : `<td class="bl br"></td>`) +
+            (gameCol === false ? "" : `<td class="bl br gc"></td>`) +
             `</tr>`;
     }
     // ── THE standard board (Kerry 2026-09-13): one table shape for
@@ -3019,9 +3038,9 @@
             `<td class="won br"></td>` +
             `<td class="bl hc"></td><td class="br hc"></td>` +
             cols.map(n => `<td class="h">${hp[String(n)] ?? ""}</td>`).join("") +
-            `<td class="bl">${tot}</td><td class="tp"></td>` +
-            `<td class="bl">${tot}</td><td class="tp br"></td>` +
-            (gameCol === false ? "" : `<td class="bl br"></td>`) +
+            `<td class="bl sc">${tot}</td><td class="tp"></td>` +
+            `<td class="bl sc">${tot}</td><td class="tp br"></td>` +
+            (gameCol === false ? "" : `<td class="bl br gc"></td>`) +
             `</tr>`;
     }
     function evlbStdBoard(d, board, note) {
@@ -3046,12 +3065,12 @@
             `<th data-k="index" class="sortable bl hc" title="Handicap Index">Idx</th>` +
             `<th data-k="hcp" class="sortable br hc" title="Playing Handicap">PH</th>` +
             (d.hole_cols || []).map(n => `<th data-k="h:${n}" class="sortable h">${n}</th>`).join("") +
-            `<th data-k="gross" class="sortable bl${active("gross")}" title="Gross score">G</th>` +
-            `<th data-k="tpg" class="sortable" title="Gross to par">&plusmn;</th>` +
-            `<th data-k="net" class="sortable bl${active("net")}" title="Net score">N</th>` +
-            `<th data-k="tpn" class="sortable br" title="Net to par">&plusmn;</th>` +
+            `<th data-k="gross" class="sortable bl sc${active("gross")}" title="Gross score">G</th>` +
+            `<th data-k="tpg" class="sortable tp" title="Gross to par">&plusmn;</th>` +
+            `<th data-k="net" class="sortable bl sc${active("net")}" title="Net score">N</th>` +
+            `<th data-k="tpn" class="sortable tp br" title="Net to par">&plusmn;</th>` +
             (board.gameCol === false ? "" :
-                `<th data-k="gamecol" class="sortable bl br${active("gamecol")}">${escapeHtml(gl)}</th>`) +
+                `<th data-k="gamecol" class="sortable bl br gc${active("gamecol")}">${escapeHtml(gl)}</th>`) +
             `</tr>` +
             evlbParRow(d, board.gameCol) + `</thead>` +
             `<tbody>${evlbBoardBody(id)}</tbody></table></div>`;
@@ -3288,13 +3307,13 @@
             `<tr class="evlb-plr" data-rid="${p.scoring_round_id || ""}"><td class="nm">${escapeHtml(p.player_name)}</td>` +
             cols.map(n => {
                 const v = netOf(p.scoring_round_id, n);
-                if (v == null) return "<td></td>";
-                return `<td${v === mins[n] ? ' class="count"' : ""}>${v}</td>`;
-            }).join("") + `<td></td></tr>`).join("");
+                if (v == null) return '<td class="h"></td>';
+                return `<td class="h${v === mins[n] ? " count" : ""}">${v}</td>`;
+            }).join("") + `<td class="sc"></td></tr>`).join("");
         const teamTotal = cols.reduce((s, n) => s + (mins[n] ?? 0), 0);
         const teamRow = `<tr class="teamrow"><td class="nm">TEAM (best ball)</td>` +
-            cols.map(n => `<td>${mins[n] ?? ""}</td>`).join("") +
-            `<td>${teamTotal}</td></tr>`;
+            cols.map(n => `<td class="h">${mins[n] ?? ""}</td>`).join("") +
+            `<td class="sc">${teamTotal}</td></tr>`;
         // The card's per-hole nets come from each player's OWN card
         // (individual allowance), so its sum can differ from GG's
         // recorded team total (75% off-lowest) — say so rather than
@@ -3308,12 +3327,12 @@
         const hp = d.hole_par || {};
         const parRow = cols.some(n => hp[String(n)] != null)
             ? `<tr class="evlb-parrow"><td class="nm">PAR</td>` +
-              cols.map(n => `<td>${hp[String(n)] ?? ""}</td>`).join("") +
-              `<td>${cols.every(n => hp[String(n)] != null)
+              cols.map(n => `<td class="h">${hp[String(n)] ?? ""}</td>`).join("") +
+              `<td class="sc">${cols.every(n => hp[String(n)] != null)
                   ? cols.reduce((s2, n) => s2 + hp[String(n)], 0) : ""}</td></tr>`
             : "";
         return `<div class="evlb-scroll"><table class="evlb-holes"><thead>` +
-            `<tr><th class="nm">NET SCORES</th>${cols.map(n => `<th>${n}</th>`).join("")}<th>${nineLbl}</th></tr>` +
+            `<tr><th class="nm">NET SCORES</th>${cols.map(n => `<th class="h">${n}</th>`).join("")}<th class="sc">${nineLbl}</th></tr>` +
             parRow +
             `</thead><tbody>${rows}${teamRow}</tbody></table>` +
             `<span style="font-size:10.5px;color:#9CA3AF;">Highlighted = the ball that counted for the team score${ggNote}</span></div>`;

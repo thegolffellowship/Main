@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.401.0";
+window.TGF_VERSION = "2.402.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.402.0",
+    date: "2026-09-14",
+    changes: [
+      "Every scoreboard now sizes to its CONTENT and sits left instead of being stretched across the page (Kerry: \u2018adjust left, not align full \u2026 should only be as wide as it needs to be\u2019). The app\u2019s global `table { width: 100% }` was pulling the Player and Won columns out to absurd widths to fill the row; the boards opt out of it, the same call Kerry already made for the team/proxy tables.",
+      "Column widths are now a STANDARD rather than whatever the numbers happened to need: one token sets every hole column and a second sets every score-block column \u2014 Gross, its \u00b1, Net, its \u00b1, and Pts. The grid stays even whatever is in it, a +13 no longer makes its column wider than an E two rows down, and two boards can never disagree about how wide a hole is.",
+      "The team best-ball card reads the same two tokens instead of carrying its own sizes, so tapping a team does not change the width of a hole. Change the standard in one place and every board and card follows.",
+      "Eighteen new checks pin it down: the board is width:auto, both tokens exist, hole cells read the hole token, and G / \u00b1 / N / \u00b1 / Pts all read the SAME score token \u2014 on all six tabs.",
+    ],
+  },
   {
     version: "2.401.0",
     date: "2026-09-14",

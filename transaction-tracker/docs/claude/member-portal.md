@@ -641,6 +641,26 @@ legend shows only the flights that paid; MVP keeps the ratified
 purple. Backend: overall rows carry `net_flight` / `gross_flight` /
 `skins_flight` ordinals (`_flight_ordinals` over the sectioned
 boards — 1 = low flight, placed non-buyers included).
+**v2.402.0 — boards size to content; column widths are a standard.**
+Kerry 2026-09-14: "Change all scoreboard leaderboard views to adjust
+left, not align full. Should only be as wide as it needs to be. Hole
+columns should be set at a standard width. Same for Gross, Net & Pts
+columns."
+  - `.evlb-holes { width: auto }` opts every board out of dashboard.css's
+    global `table { width: 100% }`, which had been stretching Player and
+    Won to fill the row. Same call already made for `.evlb-tbl`.
+  - **Two tokens on `.evlb-holes`**: `--evlb-hole-w` (30px) for every hole
+    column, `--evlb-score-w` (38px) for the whole score block — `td.sc`
+    (G and N), `td.tp` (both ±) and `td.gc` (Pts). Widths are declared by
+    CLASS, so all four row builders and the header stay in step.
+  - `evlbTeamCard` reads the same two tokens rather than carrying its own
+    sizes: tapping a team cannot change how wide a hole is.
+Guard: eighteen checks (width:auto, both tokens, hole cells on the hole
+token, G/±/N/±/Pts on the same score token, across all six tabs).
+
+**v2.401.0 — nav order + labels.** Queue / Members (pill) / Admin / Two
+Man Tour; see CLAUDE.md and `test_shell_nav.js`.
+
 **v2.398.0 — OVERALL's default order follows the event's state.** Kerry
 2026-09-14: "Set won money order as default landing for overall if event
 is completed. If not base it on points." `evlbOverallSort(d)` returns
