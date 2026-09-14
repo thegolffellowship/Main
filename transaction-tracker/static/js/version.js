@@ -1,5 +1,459 @@
-window.TGF_VERSION = "2.371.1";
+window.TGF_VERSION = "2.398.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.398.1",
+    date: "2026-09-14",
+    changes: [
+      "Docs only: docs/claude/facebook-events.md — the Facebook Event description standard Kerry revived (May 2026 s9.10 copy), with where each fact comes from (event row times/link/1st-timer price, sold registrations for member and add-on prices, Guest = Member + $10 on a 9) and the 2026-09-15 Quarry / Avery Ranch figures.",
+    ],
+  },
+  {
+    version: "2.398.0",
+    date: "2026-09-14",
+    changes: [
+      "OVERALL now opens in the order that matters for where the event actually is (Kerry: \u2018Set won money order as default landing for overall if event is completed. If not base it on points\u2019). An event whose payouts are recorded lands sorted by <b>Won</b>, biggest cheque first; an event that has not been paid out yet lands sorted by <b>Pts</b>, most first. Either way the # column re-ranks to match, and the active column carries the orange header fill so it is obvious what you are looking at.",
+      "The completion test is the event\u2019s recorded POT rather than a date or a status flag, because the pot is the thing that makes a money sort meaningful \u2014 before closeout there are no payouts to rank by, and points are the live standing. The board therefore flips itself the moment an event is closed out, with nothing to remember to set.",
+      "A missing pot is read as \u2018not paid yet\u2019 rather than throwing, so an event still being built opens on points instead of an empty board.",
+      "The rule lives in its own function so the headless guard tests the real one: seven new checks cover both branches, the header fill on each, and the actual row order and ranking that comes out \u2014 money-first with unpaid players unranked, or points-first. 153 checks total.",
+    ],
+  },
+  {
+    version: "2.397.0",
+    date: "2026-09-13",
+    changes: [
+      "The <b>Won</b> column moves from the far right to straight after the player\u2019s name (Kerry). The money is what the board is for, so it now reads without scrolling past eighteen hole columns to reach it \u2014 on a phone it was the one number you had to go looking for. A black rule closes it off from whatever sits to its right, so it still reads as its own thing rather than running into the handicaps.",
+      "Every row type moved with it in one pass \u2014 the player row, the PAR row, the PTS row and the TEAM NET row \u2014 so no row is left with its money in the old slot and a hole where the new one should be. The header, the sort key and the column count are unchanged: tapping Won still sorts and re-ranks by money exactly as before.",
+      "Fifteen new checks nail the position down rather than trusting it: header order is # | Player | Won, the money cell is the third cell on every one of the four row types, Won is no longer last, the team purse is still in the team row\u2019s money cell, each row has exactly one money cell, and the column count did not change. 146 checks total.",
+    ],
+  },
+  {
+    version: "2.396.0",
+    date: "2026-09-13",
+    changes: [
+      "A <b>Handicaps</b> checkbox beside Hole by hole shows or hides the Idx and PH columns, and it starts OFF (Kerry). Handicaps are reference, not result \u2014 they explain a net score rather than being one \u2014 so the board opens on the scores and gives back two columns of phone width, with the handicaps one tap away.",
+      "Like the hole columns, they are HIDDEN rather than removed: the cells stay in the DOM, so sorting by Idx or PH still works the moment you show them again, the column count never changes between tabs, and the black column rules stay attached to the right cells. The PAR, PTS and TEAM NET rows carry the same class in those two slots, so nothing is left stranded in a column that isn\u2019t there.",
+      "The toggle follows the Hole-by-hole convention exactly \u2014 flipping it updates every leaderboard already open on the page and every copy of the checkbox, so two expanded events can never disagree about what is on screen.",
+      "The two view-state flags moved into the renderer region so the headless guard runs the app\u2019s real defaults instead of declaring its own. The harness had been asserting against a default it set itself, which would have let a changed default ship unnoticed \u2014 the same class of gap as the stale row-mapping copy fixed in v2.393.0.",
+      "Twenty-four new checks: the checkbox and hidden-by-default state on all six tabs, the hc class on the headers, player cells and all three filler rows, that the columns are hidden rather than removed, that the count is unchanged, and that the CSS rule exists. 131 checks total.",
+    ],
+  },
+  {
+    version: "2.395.1",
+    date: "2026-09-13",
+    changes: [
+      "POPS on the leaderboard hole cells are half their previous size (Kerry) \u2014 0.28em instead of 0.55em, so at the board\u2019s 0.8rem type they draw at roughly 3.5px instead of 7px. The leaderboard packs eighteen hole columns where the scorecard grid packs nine, so the dots shrink to stay a marker rather than read as a second number in the cell. The universal scorecard keeps the standard size on its own card, where there is room for it.",
+    ],
+  },
+  {
+    version: "2.395.0",
+    date: "2026-09-13",
+    changes: [
+      "ONE green for BOUGHT IN, app-wide (Kerry: 'Same green as points race but ins for events'). The events leaderboard\u2019s buy-in rows were a paler mint of my own choosing; they now use #bbf7d0, the exact green the Points Races standings have used for bought-in rows since the ratified rule that green means bought in and nothing else. Walking between the two boards no longer means reading two different greens for the same fact.",
+      "Rather than copy the hex a third time, it is now a token \u2014 --buyin-green / --buyin-green-text / --buyin-grey in dashboard.css \u2014 and BOTH surfaces read it: the leaderboard rows and legend swatches, the Points Races standings rows, and the two \u2018currently bought in\u2019 count chips. Change the green once and every surface that means bought-in follows.",
+      "Guarded so it cannot drift back: the test now asserts the tokens exist, that the leaderboard and points-race rows read them, and that no buy-in use anywhere in the page hard-codes the hex. The single remaining bare #BBF7D0 is .lsc-dep:hover \u2014 a hover shade on a deposit badge, not a buy-in signal \u2014 and the test names that exception explicitly instead of letting a loose rule wave it through.",
+      "Non-buyers keep the light grey rather than a paler green, so the two states never read as degrees of the same thing.",
+    ],
+  },
+  {
+    version: "2.394.0",
+    date: "2026-09-13",
+    changes: [
+      "MVP/Points now shows the POINTS, not just a points column (Kerry: 'MVP/POINTS need to show a row for each player that shows points'). Every player\u2019s score row is followed by a PTS row carrying the NET stableford points that score earned on each hole, totalling to the Pts column beside it. The board stops being a score board with a points column on the end and becomes a points board.",
+      "The per-hole points come from hole_pts \u2014 the SAME derivation the Pts total is summed from, captured per hole instead of only accumulated \u2014 so the row and the column cannot drift apart. A player with no points data grows no PTS row rather than a row of blanks.",
+      "POPS on every hole score, to the house standard (Kerry: 'show pops on each hole score per standard'). Strokes received on a hole render as filled dots pinned to the cell\u2019s top-right corner, exactly as scorecard-render.js has always drawn them \u2014 one dot per stroke, never displacing the number. They appear on every tab, including the Team tab\u2019s net cells, where they are the record of WHY the net differs from the gross.",
+      "Opening a player\u2019s scorecard on the MVP/Points tab now anchors the card BELOW that player\u2019s PTS row. Inserting it directly after the score row \u2014 which is what the handler did \u2014 would have pushed the points row underneath the card and orphaned it from the score it belongs to.",
+      "Twenty new checks: the dots at zero, one and two strokes, on all six tabs and on the team\u2019s net cells, with the PAR row correctly carrying none; and the PTS row\u2019s label, per-hole values, repeated total, matching column count, hole-toggle class, non-tappability, and absence from every other tab. 101 checks total, both suites pass.",
+    ],
+  },
+  {
+    version: "2.393.0",
+    date: "2026-09-13",
+    changes: [
+      "Buy-in status is back on the bundle tabs (Kerry: 'Any Net Bundle and Gross bundle games should still show who bought in and didn\u2019t buy in with the green coloring for the rows and lighter grey for those who didn\u2019t buy in'). Net, Gross, Skins and MVP/Points now wash each row green when that player bought into THAT game and light grey when they did not \u2014 the detail the v2.389.0 unification had flattened away. Team Net and the proxies come with the entry, so they have no buy-in to show, and OVERALL still deliberately does not identify anyone's buy-ins.",
+      "The buy-in wash REPLACES the zebra stripe on those four tabs rather than stacking with it \u2014 two competing washes on one row read as neither. The inline flight-colored win tints still paint over the top of both, so a winner is never hidden by the row color underneath.",
+      "Buy-in rides on the GAME board's own row and is lifted onto the shared copy as _buyer; the overall row never carries it. That is what lets both of Kerry's rules hold at once \u2014 'don't identify buy-ins on OVERALL' and 'do identify them on the bundle games' \u2014 from one set of numbers rather than two.",
+      "The row-mapping helpers (evlbOvOf / evlbSecsFrom) moved out of the event renderer so the headless guard exercises the REAL mapping instead of its own copy. The copy had already gone stale once and hidden a genuine behavior change; a test that reimplements the thing it is testing is not a test.",
+      "The page footnote stops advertising the '\u2713 IN' column that the unification removed and now describes the green/grey rows; each bundle tab's legend carries the same two swatches.",
+    ],
+  },
+  {
+    version: "2.392.0",
+    date: "2026-09-13",
+    changes: [
+      "PAR row under the hole numbers on every leaderboard (Kerry: 'Add a par row below the hole numbers for all leaderboards'). Overall, Team, Net, Gross, Skins and MVP/Points all carry it, and so does the team best-ball card, so tapping a team never loses the par line the board above it shows. It lives in the table header, which means it stays put while the rows re-sort and it disappears with the holes when the Hole-by-hole box is unchecked.",
+      "Total par sits under BOTH the G and N columns, since par is the reference for gross and net alike \u2014 a 38 gross against a 36 par now reads without arithmetic.",
+      "Par is a property of the hole but it is STORED per tee, and a course can carry a different par on a forward tee. The new hole_par payload therefore publishes a hole's par only where every tee in play on that event agrees; a hole where they disagree renders blank rather than asserting one tee's par over another's, and the total par stays blank until every hole has one. Same rule the to-par columns already follow \u2014 a gap shows nothing instead of a wrong number.",
+      "A board with no par data at all grows no PAR row rather than a row of empty cells.",
+      "Fourteen new checks in test_events_board.js cover the row on all six tabs, the blank-on-disagreement rule, the blank total, the matching column count, the hole-toggle class, and the complete-data total; test_spotlight_winnings.py asserts hole_par comes out of the leaderboard query. The scoring-event-board bridge returns hole_par so the pars can be vetted from outside the page.",
+    ],
+  },
+  {
+    version: "2.391.0",
+    date: "2026-09-13",
+    changes: [
+      "TEAM NET total row (Kerry: 'The team Net needs to show a team total row that shows what their team score for each hole was, and team total and total money won'). Every team band on the Team tab now closes with a TEAM NET row in the SAME columns as the players above it \u2014 the team's score on each hole, the team total, its relationship to par, and the team's WHOLE purse rather than one player's share.",
+      "The Team tab's hole cells switch from GROSS to NET, and the ball that counted for the team is shaded green on the player's own row. Team Net is played in net, so a team total row sitting under gross hole scores could not be checked against the numbers above it; now it can be read straight down the column. Every other tab keeps gross hole scores.",
+      "Where our per-hole reconstruction and Golf Genius disagree, the row says so instead of picking one quietly: the total shown is GG's posted number (the score of record), with our best-ball-of-own-card-nets sum printed beside the label and named in the cell's tooltip. The official game plays a 75%-off-lowest allowance while each player's card carries their individual allowance, so the two legitimately differ until the team per-player nets are imported (CA Queue item #1).",
+      "The per-hole best ball is now computed by ONE shared function used by both the expandable best-ball card and the new row \u2014 two surfaces showing the same team score can no longer compute it two ways. The team band label drops the total and purse it used to repeat, since the row now states them once.",
+      "test_events_board.js extended with eleven checks on the new row: the per-hole best ball, GG's total as the score of record, the reconstruction disclosure, the whole purse, to-par, matching column count, net hole cells with the counting ball marked, and that no other tab grows a team row.",
+    ],
+  },
+  {
+    version: "2.390.1",
+    date: "2026-09-13",
+    changes: [
+      "The scoring-event-board bridge now returns each player's per-game money (by_cat) alongside the event total, so the per-tab Won columns can be vetted from outside the page \u2014 the check that the tab figures sum back to the OVERALL figure no longer requires an admin browser session.",
+    ],
+  },
+  {
+    version: "2.390.0",
+    date: "2026-09-13",
+    changes: [
+      "Each game tab now shows only ITS OWN game (Kerry: 'Only want results, winnings and colors per tab games except for overall'). On the Net tab only net winners are tinted; Gross only gross; Skins only the circled skins; MVP/Points only the MVP mark; Team shows no other game's color at all. OVERALL is the one board that still lights up everything at once, which is what makes it the whole-event picture.",
+      "The Won column follows the same rule \u2014 it is now that TAB's money, not the event's. A player who took $79.50 in Individual Net and $56.00 in Team Net reads $79.50 on the Net tab, $56.00 on the Team tab, and the full $135.50 only on OVERALL. The per-category split comes from the payout rows themselves (new won_by_cat on each overall row), so the tab totals always sum back to the OVERALL total \u2014 no second source of truth to drift.",
+      "The Pts column is the MVP game's result, so it only appears where it belongs: OVERALL and MVP/Points keep it, Skins keeps its own Skins count in that slot, and Net / Gross / Team drop it and run one column narrower. That is a deliberate step back from v2.389.0's identical-column-count rule \u2014 a column showing another game's score is exactly what Kerry asked to remove.",
+      "Every tab now carries its own one-line legend naming what is highlighted there and stating that Won is that game's money only, with a pointer to OVERALL for everything collected. The all-games legend stays on OVERALL, where it is true.",
+      "test_events_board.js extended to guard the scoping in both directions \u2014 each tab lights up its own game AND does not light up the others \u2014 plus the per-tab money figures; test_spotlight_winnings.py asserts won_by_cat splits the event money by game and sums back to won_total.",
+    ],
+  },
+  {
+    version: "2.389.0",
+    date: "2026-09-13",
+    changes: [
+      "ONE leaderboard for every event tab (Kerry: 'everything except for Closest to Pins to follow the Overall layout so that moving from button to button is just a reordering of that leaderboard with the highlighting and organization of the other leaderboards'). Overall, Team, Net, Gross, Skins and MVP/Points now render the SAME table \u2014 identical columns, identical win colors, identical sort / re-rank / hole-toggle / tap-for-scorecard. What a tab changes is its BANDS and its ORDER: Net and Gross band by flight, Skins bands by skins flight, Team bands by team (position, players, the recorded Golf Genius total and the purse), Overall and MVP/Points run unbanded. Proxies keeps its own shape, as asked.",
+      "The one column that changes meaning is the Pts slot \u2014 it reads 'Skins' (count of skins won) on the skins tab \u2014 so the column COUNT never moves from tab to tab and the table never reflows when you switch. Rank runs WITHIN a band, the way a flighted board should, and sorting any column re-sorts inside each band rather than flattening the flights away.",
+      "Team Net and Closest-to-Pin winner strips moved from ABOVE the Overall leaderboard to BELOW it (Kerry), so the board itself is the first thing on screen. The team best-ball card didn't get lost in the move: tapping a team BAND on the Team tab opens it, exactly where the old expandable team row used to be.",
+      "Housekeeping the refactor allowed: the five per-board renderers that fed the old one-off tables (evlbWonChips / evlbScoreRows / evlbBand / evlbSectioned / evlbHoleCells) are deleted rather than left behind to drift. New regression guard test_events_board.js renders every tab headless out of the live template and asserts the columns stay identical, the bands appear, rank restarts per band, and the win highlights survive a re-sort.",
+    ],
+  },
+  {
+    version: "2.388.0",
+    date: "2026-09-12",
+    changes: [
+      "SKINS board restructured (Kerry): the skins COUNT and the money move to the LEFT of the holes \u2014 Player | Skins | Won | 1 2 3\u2026 \u2014 with a black rule right of Won. The green '$' badges beside each name are retired; the money now sits in its own right-aligned Won column, the same treatment the OVERALL board uses, so the names stop being pushed off a phone screen by a chip and every dollar figure lines up in one place.",
+      "The group-rule (.bl/.br) and money-column (.won) styles moved from the OVERALL table to EVERY hole grid \u2014 the class fix, not the instance: any board built on the shared hole-grid standard now gets the same black column rules and green tabular money column without re-declaring them.",
+    ],
+  },
+  {
+    version: "2.387.5",
+    date: "2026-09-12",
+    changes: [
+      "Expense review: marking an expense 'ignored' AFTER it reached the ledger now reverses its acct_transactions row (status 'reversed', reason noted) instead of re-syncing it — the Chase feed alerts on charges only, so a charge the issuer reversed the same day (LS Forest Creek $2,270.00 on 9/12, beside the real $1,818.60 bill) stayed booked as a real expense. patch_acct_row also accepts status 'reversed' for ledger rows with no expense behind them. Test: test_expense_ignored_reverses_ledger.py.",
+      "Season Contests → EVENTS leaderboard: a18.5 Forest Creek added to the events_leaderboard_events dial (Kerry 2026-09-12).",
+    ],
+  },
+  {
+    version: "2.387.4",
+    date: "2026-09-12",
+    changes: [
+      "Season Contests sub-tabs: LONE STAR CUP now sits left of MATCH PLAY (Kerry 2026-09-12) — the Cup is the live October headline, Match Play the smaller draw, and on a phone the Cup tab was scrolled off the right edge.",
+    ],
+  },
+  {
+    version: "2.387.3",
+    date: "2026-09-12",
+    changes: [
+      "docs: Forest Creek per-nine ratings of record (all five tees, Kerry-read from the GG tee editor 2026-09-12) and a standing per-nine table in handicaps.md so a closeout on a known 18-hole course never asks for the numbers twice. a18.5 Forest Creek handicaps posted: 32 rounds / 16 players. Handoff §3j updated (the $2,270 Chase charge was reversed same day).",
+    ],
+  },
+  {
+    version: "2.387.2",
+    date: "2026-09-12",
+    changes: [
+      "scoring-customer-merge:<source>|<target>[|apply] — the Customers-page merge, reachable from a closeout session: dry run shows both profiles and every table that still points at the source; apply re-points them all and removes the source row (audited). First use: the GG spelling 'Hightower, Geoffery' minted a second profile for first-timer Geoff Hightower on a18.5 Forest Creek.",
+    ],
+  },
+  {
+    version: "2.387.1",
+    date: "2026-09-12",
+    changes: [
+      "Pairings walk keeps a foursome that contains a plain 'First Last' name. Golf Genius prints an unlinked or guest profile without the LAST, First comma (Zac Hammond at a18.5 Forest Creek), and the team-board parser treated that seat as unparseable and dropped the whole group — the WINNING team, 3 of 4 groups ingested. Plain two-to-four-word names are now accepted as seats; the customer resolver already handles both spellings.",
+    ],
+  },
+  {
+    version: "2.387.0",
+    date: "2026-09-12",
+    changes: [
+      "OVERALL board: the score block moved BACK to the right of the last hole and gained a rule between gross and net (Kerry) \u2014 # | Player | Idx | PH | holes\u2026 | G \u00b1 | N \u00b1 | Pts | Won, so the card reads left-to-right the way a scorecard does and the two results are separated, not run together.",
+      "NEW 'Hole by hole' checkbox above the board (Kerry: 'maybe a check box to show or not show hole by hole'): unticking it collapses the hole columns so the whole event fits a phone screen \u2014 name, handicaps, both scores with their to-par, points and money, no scrolling. The columns are HIDDEN by CSS class, never removed, so sorting, re-ranking and tap-for-scorecard keep working through the toggle; the choice carries to every event opened in the same session, and any other event already expanded on the page follows it so two boards never disagree.",
+    ],
+  },
+  {
+    version: "2.386.0",
+    date: "2026-09-12",
+    changes: [
+      "OVERALL board gains a TO-PAR column beside each score (Kerry: 'Add relationship to par column right of both Gross and Net'): # | Player | G | \u00b1 | N | \u00b1 | Idx | PH | holes\u2026 | Pts | Won, rendered golf-style (E at par, otherwise signed). Par is summed from the holes the player actually played off their own tee, and a round whose played holes lack par data shows blank rather than a wrong number \u2014 the to-par cell is never guessed. Both \u00b1 columns sort like every other column, and a win tints the score AND its to-par cell together so the pair reads as one result.",
+      "Column GROUPS are now bracketed by black rules \u2014 the G/\u00b1/N/\u00b1 score block, the Idx/PH handicap block, and Pts \u2014 so the eye lands on the right number in a wide table, and every other row carries a light grey wash. The stripe is assigned at render time rather than by CSS nth-child, because an expanded scorecard row is injected into the same tbody and would otherwise flip the parity of every row beneath it; win tints are inline so they always paint over the stripe.",
+    ],
+  },
+  {
+    version: "2.385.0",
+    date: "2026-09-12",
+    changes: [
+      "OVERALL board column order (Kerry: 'Change gross to G and net to N and move both of those score columns all the way left'): the two totals that matter now sit immediately after the player name as one-letter columns \u2014 # | Player | G | N | Idx | PH | holes\u2026 | Pts | Won \u2014 so a phone reads name-and-score with no horizontal scrolling, and the full words stop padding two columns. Hovering G or N still names them (Gross score / Net score). The flight win tints, sorting and re-ranking all follow the columns unchanged; the legend now reads in the new letters.",
+    ],
+  },
+  {
+    version: "2.384.1",
+    date: "2026-09-12",
+    changes: [
+      "OVERALL board sort headers lost their arrow glyphs (Kerry: 'Remove the little symbols next to the whole numbers so that it reduces the whole columns. Just highlight the cell in Orange') — the \u2195/\u2191/\u2193 marks were padding every numeric header and widening the whole column beneath it. The ACTIVE sort column is now simply its header cell filled TGF orange, which costs no width at all. On load that mark sits on Net (the board's default sort), not on # — the rank column is derived from whatever is sorted, so the highlight names the real sort key.",
+    ],
+  },
+  {
+    version: "2.384.0",
+    date: "2026-09-11",
+    changes: [
+      "OVERALL board money wins now color-code BY FLIGHT (Kerry: 'color code for skins per flight so in one have red and another green or blue... anybody who won money gets color-coded'): Flight 1 red, Flight 2 green, Flight 3 blue (then amber, violet). A tinted Net total = won Individual/All Net money in that flight; a tinted Gross total = won Individual Gross in that flight (when the game ran); a circled hole score = a skin won in that flight's pot. Hovering any colored mark names the game and flight; the legend renders swatches for exactly the flights that actually paid. Events with one flight (or unflighted games) paint red. MVP keeps its ratified purple on the Pts total.",
+      "Backend: overall rows carry each player's flight ORDINAL per game (net_flight / gross_flight / skins_flight — 1 = low flight, the same order the sectioned boards render, from the GG flight labels with handicap-placed non-buyers included), so the coloring is data, not guesswork.",
+    ],
+  },
+  {
+    version: "2.383.1",
+    date: "2026-09-11",
+    changes: [
+      "OVERALL board # column now RE-RANKS by whichever column is sorted (Kerry: 'How about you re-rank based on which column is tapped?') — tap Won and #1 is the night's biggest winner, tap Gross and #1 is low gross, tap a hole and #1 is the low score on that hole. Ties on the sorted value show T#; players with no value in that column rank blank and sit at the bottom. Replaces v2.383.0's travel-with-the-player net rank.",
+    ],
+  },
+  {
+    version: "2.383.0",
+    date: "2026-09-11",
+    changes: [
+      "OVERALL board columns SORT (Kerry: 'Allow columns to sort'): tap any header — #, Player, Idx, PH, every hole, Gross, Net, Pts, Won — to sort by it; tap again to flip direction (Pts and Won open high-first since higher is better; blanks always sink to the bottom). The # column is the net-standings rank and TRAVELS with the player, so a re-sorted table still shows everyone's finishing position. Arrows on the headers show the active sort.",
+      "Under the hood the player-row scorecard expansion moved from per-row listeners to ONE delegated click handler on the event body — the class fix, not the instance: rows re-rendered by a sort (or any future re-paint of any board) keep their tap-for-scorecard behavior without rebinding.",
+    ],
+  },
+  {
+    version: "2.382.1",
+    date: "2026-09-11",
+    changes: [
+      "OVERALL view now shows EVERYTHING (Kerry: 'list team winners and closest to pin winners above that leaderboard separately so that the OVERALL board shows everything'): winner strips render above the board — the winning Team Net team(s) with position, members, recorded total and purse (team-net blue), and every proxy winner (Closest to Pin, Longest Putt, plus any Hole-in-One) with hole detail and purse (CTP teal) — so the one default view carries the individual board AND the games that don't live in a player row.",
+    ],
+  },
+  {
+    version: "2.382.0",
+    date: "2026-09-11",
+    changes: [
+      "Events leaderboard OVERALL view (Kerry directed) — the new default subtab: the whole field in ONE table (rank by net · Player · Idx · PH · hole-by-hole gross · Gross · Net · Pts · Won). Wins highlight by the ratified payout category colors: an Individual Net win tints the player's Net total green, an Individual Gross win tints the Gross total amber, Event MVP tints the Pts total purple, and each winning skin circles that hole's score in pink — a legend under the table explains every mark. Buy-ins are deliberately NOT identified on this view (Kerry: 'Don't identify those who bought in'): no checkmarks, no buyer highlighting, no per-category chips — just the win colors and the Won column, which shows the player's TOTAL recorded money for the event across ALL games (team shares, proxies and hole-in-one included). Tapping any player expands their full scorecard in the universal card standard.",
+      "Backend: overall_board in get_event_leaderboard (win flags from the event's recorded payouts by category; won_total from all tgf_payouts rows); the scoring-event-board bridge now returns the overall summary too (wins coded N/G/S/M) so the view can be vetted without a login. Tests: 8 new checks incl. 'overall rows do NOT identify buy-ins' asserted on the payload shape itself.",
+    ],
+  },
+  {
+    version: "2.381.0",
+    date: "2026-09-11",
+    changes: [
+      "Events leaderboard TEAM board now shows GG'S POSTED TOTALS — the score of record — instead of our best-ball reconstruction (Kerry, on seeing s9.22's T1/T1 rendered 30 vs 31: the recorded tie IS a tie, both teams posted 30; our reconstruction from own-card dots cannot reproduce the 75% off-lowest team math and even mis-ordered the non-winners — GG had WADE's team 5th at 34, we showed them 3rd at 31). The games-results walk now captures the ENTIRE Team Net board: winner rows keep their game='team_net' entry and gain the posted total; non-winner teams (positions, totals, $0 purses) store under game='team_net_board', which the payout assembly NEVER reads — storing $0 teams as team_net would have let the matrix-fallback pool invent place money GG didn't record. The board note now reads 'Positions, totals and purses are the recorded Golf Genius result'; a team's expanded best-ball card keeps our per-hole reconstruction and says plainly when its sum differs from GG's recorded total and why.",
+      "Team-to-GG matching hardened by what the test fixture caught: surname matching used a SET, so a team with two same-surname players (a married couple in one cart) collapsed to one hit and could miss the foursome threshold; and bare substring matching let 'buyer' hit inside 'nonBUYER' and cross-match teams. Now counts per MEMBER — full 'LAST, First' match preferred, surname on a word boundary as fallback. Blind-draw slots guard against double-append now that a team can match both its winner row and its board row.",
+      "Bridge scoring-games-import accepts rewalk=N (newest N rounds, cap 12) so the team-board totals backfill can reach the pilot events; new read-only bridge scoring-event-board:<event> returns the TEAM board compactly (GG position/total, our reconstruction, purse, official flag) for vetting without an admin login.",
+    ],
+  },
+  {
+    version: "2.380.1",
+    date: "2026-09-11",
+    changes: [
+      "CA Queue fix caught in the live bridge verification: an inline note passed with a brand-NEW item was silently dropped — upsert only appended notes on the update path, so a row could be born without the context it arrived with. Inserts now append the note right after the 'created' stamp (test added). Also corrected the bridge syntax in docs: the list command's first separator is the dispatch colon — scoring-ca-queue:<section>[|<status>] — not a pipe.",
+    ],
+  },
+  {
+    version: "2.380.0",
+    date: "2026-09-11",
+    changes: [
+      "CA QUEUE (Kerry: 'Let's create a checklist in the Tracker that I can interact with and be able to always keep track of as a standard. You update it whenever is necessary. Admin view only.') — a new admin-only interactive open-items checklist at /admin/ca-queue (shell nav link 'CA Queue', desktop + drawer). Sections render as bands in a fixed order (Kerry decisions owed · CA owed · CC build · finance cleanup · follow-ups · parked · settled); a checkbox marks an item DONE — it moves to the collapsed Done band with the date and who, and is NEVER deleted; a row tap expands its append-only notes log plus add-note, mark-blocked, move-between-sections, and reorder controls. Reopening a done item clears the done stamp and logs 'reopened (was done <date> by <who>)' so history survives.",
+      "The queue is jointly maintained: Kerry works the page; platform-claude maintains it from claude.ai through four new MCP tools (list_ca_queue, upsert_ca_queue_item — matches by id, else exact title, else inserts — note_ca_queue_item, close_ca_queue_item), every write stamped with its author in the notes log AND the agent action log; tracker-claude lanes reach the same functions through bridges (scoring-ca-queue, scoring-ca-queue-upsert, scoring-ca-queue-note, scoring-ca-queue-close). This replaces the open-items lists scattered across mailbox digests, handoff docs, and the Project Files markdown queue — the Tracker becomes the record (mailbox #473/#474). Tests: test_ca_queue.py, 32 checks. Docs: docs/claude/ca-queue.md.",
+    ],
+  },
+  {
+    version: "2.379.1",
+    date: "2026-09-11",
+    changes: [
+      "Team Net math LEARNED FROM GG (Kerry: 'Review where discrepancy is on GG and learn from it for our own uses'). New read-only bridge scoring-teamnet-parity:<event>|<gg url> computes every plausible reading of 75%-off-lowest from our cards AND reads GG's ground truth — the team tournament's per-player fragments with each player's TEAM-game handicap and dots. Proven on s9.22: team PH = 75% of the player's UNROUNDED course handicap minus the field's lowest unrounded CH, rounded half-up, CAPPED at the TGF max (18 on nines — DelCarmen's 18 is unreachable any other way); strokes allocate over ALL holes by stroke index (max 2 pops) and dots landing on par 3s are REMOVED, not reallocated (Anthis: TH 8 → 7 dots). Exact reproduction from stored data alone is impossible — we keep the ROUNDED net-game handicap and its ±0.5 flips players by a stroke — so the board stays ranked by GG's recorded result; importing the team tournament's per-player nets (the clean fix) is a schema addition awaiting Kerry's ratification.",
+      "Blind draws now show on teams (Kerry: 'Make sure to show blinds as well'): Bl[...] slots parsed from GG's recorded team string, rendered as team members with the drawn player's own card — GG's mechanism, ours to display. Team Net has NO tiebreakers (Kerry): tied teams split the pot — the recorded T#s and split purses are exactly what the board shows.",
+    ],
+  },
+  {
+    version: "2.379.0",
+    date: "2026-09-11",
+    changes: [
+      "Events leaderboard TEAM board is now GG-OFFICIAL (Kerry: 'Something is wrong here' — the s9.21 $80 winner showed 2nd, and s9.22's recorded T1 tie split into 30/31). Root cause: our best-ball total reconstructs from each player's OWN card dots (100% individual allowance) while the real Team Net game plays 75% OFF-LOWEST, and events under 16 players run CART Net (2-man cart teams), not foursomes. Fix: GG's recorded positions and purses rank the board (the money of record; recorded teams first, the rest follow by reconstruction total, unranked), team grouping splits into cart pairs when the matrix row's teamType says CART, and the panel says plainly that the total is a reconstruction. Native engine-scored Team Net (live_scoring.game_team_net with the ratified allowance) is the untether program's job.",
+      "Game activation reads the Tracker's EVENT/GAMES counts (Kerry: 'should be checking against Tracker EVENT / GAMES which should also be helping determine which games are being played') — _event_player_counts (the Games-tab mirror) supplies the player count that picks the matrix row and the GROSS buyer count that judges Individual Gross activation, replacing the scorecard field size.",
+      "MVP/Points board: points ties STAY ties, shown as T# (the races never tiebreak); only Event MVP tiebreaks, per Kerry's ratified chain verbatim — '1. Net Score 2. Gross Score 3. Split Pot.' The top tied group orders by that chain so the MVP winner shows first (Robert won tiebreaker 2 on gross at Landa), and every tied MVP-eligible buyer carries a note saying how the chain decided.",
+      "Joint events (chapter TGF/national — Landa Park) now list under BOTH the Austin and San Antonio chapter filters.",
+    ],
+  },
+  {
+    version: "2.378.3",
+    date: "2026-09-11",
+    changes: [
+      "Skins chart: the flat NOT IN SKINS block is gone — everyone who didn't buy skins is now PLACED into the skins flight their handicap index would have put them in, at the BOTTOM of that flight in grey (Kerry: 'put them in the flights they would have been at the bottom in grey based on their handicap indexes for that event'). Buyers stay on top of each flight with their winning skins circled and counts shown; placed rows never contest a skin.",
+    ],
+  },
+  {
+    version: "2.378.2",
+    date: "2026-09-11",
+    changes: [
+      "Events leaderboard iteration 3 (Kerry's team-card review): a front-9 event no longer renders holes 1-18 — the grid's columns come only from holes actually played (GG cards carry empty rows for the unplayed nine). The team card and skins chart now build on THE card standard's metrics (same cell sizing, grid color and 110px name column as tgf-standards), so they column-align with the expanded player scorecards beneath them; the total column reads OUT or IN per the side played. The ball(s) that COUNTED for the team best-ball score are highlighted with a green fill — circles stay reserved for the standard's under-par mark and the skins chart's winning skins — and the winning team's row is highlighted in the team list.",
+    ],
+  },
+  {
+    version: "2.378.1",
+    date: "2026-09-11",
+    changes: [
+      "Captain seat label parses the PLACE as an ordinal only ('2nd in...'), never a bare number \u2014 '2026 San Antonio NET Champion' starts with the year and had frozen Callaway's label as 'SA NET \u00b7 2026'; Champion now maps to \u00b7 1 before any digit is read. Re-frozen: SA NET \u00b7 1 Callaway, AUSTIN NET \u00b7 2 Jenkins, both chipped CAPTAIN.",
+    ],
+  },
+  {
+    version: "2.378.0",
+    date: "2026-09-11",
+    changes: [
+      "Events leaderboard iteration 2 (Kerry's review of the pilot, all eight notes): TEAM now shows EVERY team — the event's pairing groups (Team Net is Foursome v. Field; the closeout's final GG pairing ingest makes those the played groups) with best-ball net totals computed from the hole cards, ranked with ties and GG's recorded purses attached — and each team expands to a GG-style team net card with the counting ball circled. Found along the way: scoring_rounds has no team column at all, so the spotlight's team-partners lookup ('w/ Smith & Jones') has been silently failing into its except since it shipped — pairings are the team truth (the #452 lesson again: a check whose only failure mode is toward 'nothing here').",
+      "SKINS is now the GG-style overall chart: bought-in players per flight, hole-by-hole gross with winning skins circled (outright low gross within the flight, computed from the cards), and everyone NOT in skins listed below with their hole scores. Handicapped boards carry INDEX (9-hole index on 9-hole events) and PLAYING HANDICAP columns and the '(4)' name parenthetical is gone. A game that didn't run is denoted up front — Individual Gross's activation read from the LIVE matrix per the 9/18 standard, with the note that its remaining pot rolled into Skins.",
+      "Player scorecard expands now use THE universal card standard (tgfRenderScorecard — pixel-identical to the Handicaps and Points Race drill-downs; 9-hole events render only the nine played). The chapter chips and the game sub-tabs are CONNECTED segmented controls; tables compress LEFT instead of filling the screen; POINTS is relabeled MVP/Points. Pilot dial widened per Kerry to s9.22, a9.22, s9.21, a9.21 and s18.10 FALL KICKOFF (set on production).",    ],
+  },
+  {
+    version: "2.377.2",
+    date: "2026-09-11",
+    changes: [
+      "LSC captains as a CHIP (Kerry, correcting v2.377.1: 'AUSTIN NET - 2 is correct and should be shown, but also highlight Matt JENKINS as CAPTAIN. Same for Rob Callaway as SA NET - 1 — Captains need to be set apart visually'). The freeze now labels every captain seat by qualification (AUSTIN NET · 2, SA NET · 1) and stamps captain:true; the renderer keeps the tinted captain row and adds a chapter-colored CAPTAIN chip next to the name (burnt orange Austin, slate SA). Visible to members too — captaincy is roster identity, not ops.",
+    ],
+  },
+  {
+    version: "2.377.1",
+    date: "2026-09-11",
+    changes: [
+      "LSC page final-roster polish (Kerry 2026-09-11): captaincy is NOT inherited \u2014 a CAPTAIN seat filled by cascade (the champion declined) is relabeled in the freeze by how the player actually qualified ('AUSTIN NET \u00b7 2' for Matt Jenkins; Rob Callaway keeps CAPTAIN as the 2026 San Antonio NET Champion). The Lock/Pool legend is removed ('we're not using it'), and when the roster is frozen the header badge flips from 'Projected Rosters \u00b7 Live from today's standings' to a green 'Final Rosters', the intro paragraph stops talking about projections, and the alternates-pool footnote hides.",
+    ],
+  },
+  {
+    version: "2.377.0",
+    date: "2026-09-11",
+    changes: [
+      "EVENTS leaderboard, ADMIN PILOT (Kerry 2026-09-11 — stays admin-only until he approves member exposure): a new EVENTS tab left of Points Races on the LEADERBOARD page. ALL | AUSTIN | SAN ANTONIO chips (lands on ALL; the year chip is the future year-selector hook), played events newest first, each expanding to its games in the ratified Team · Net · Gross · Skins · Points · Proxies IA. Kerry's merge rules applied verbatim: Individual Net merges with All Net and Individual Gross with All Gross (whole field on one board, flight-SECTIONED per the event, buyers highlighted green with a ✓ IN pill and their game money badged); MVP merges with POINTS (net + gross Stableford for the whole field from the formula layer, MVP money on the winners' rows); Team Net and Skins have their own boards (Skins shows only bought-in players in their flights); CTP/Longest Putt/HIO list separately under Proxies. Non-buyers are PLACED into the flight their handicap would have flighted them, boundaries derived from the labeled members' handicaps, never hardcoded; no-handicap rows land in an UNFLIGHTED band. Tapping any player row opens their hole-by-hole card with handicap dots. Pilot scope is the events_leaderboard_events dial, seeded to this past Tuesday (s9.22 Silverhorn + a9.22 ShadowGlen); empty it to show every event with scorecards.",
+      "Admin dark nav gains a Member View link straight to the pinless /member experience (Kerry: 'give me a top level link to go directly to MEMBER VIEW') — desktop links and the mobile drawer, admin role only.",
+    ],
+  },
+  {
+    version: "2.376.0",
+    date: "2026-09-11",
+    changes: [
+      "Concluded races LOCK to recorded payouts (Kerry ratified, verbatim: 'Yes freeze concluded races to recorded payouts. Once it is completed and especially if it's paid out, it should lock and only have changes made to it by express direction and approval by me.'). A race whose race_final dial is set rebuilds its payout strip from the tgf_payouts rows actually recorded — never recomputed from live enrollments (the mechanism behind the phantom $1,080 Players Cup pool). Same payload shape plus locked/recorded_rows; the CONTESTS boards now badge the ACTUAL recipients by customer_id instead of re-splitting money down standings that may have moved since payday, and the strip reads 'FINAL · Pot $X · as paid'. Applies to the city races, the Players Cup AND the Fellowship Cup; race→payout-event mapping is the race_payout_events dial (seeded), race label fallback; a final race with no recorded rows yet keeps the projection. Tests: 41 checks in test_spotlight_winnings.py.",
+    ],
+  },
+  {
+    version: "2.375.0",
+    date: "2026-09-11",
+    changes: [
+      "Jeff Young's Players Cup vet (Kerry: '1st Place Flight 2 is incorrect... he was in flight 1... and won $80.19'). VERDICT: the payout row and the money were RIGHT ($68.31 = 2nd place, Flight 1 on the $920 / 23-entry pool actually collected and paid 2026-08-17); TWO display defects made it look wrong. (1) The detail parser read 'Players Cup — 1st Flight 2nd place' as 1st place in Flight 2 — cup rows put the flight ordinal FIRST; a dedicated ordinal-flight branch in _payout_detail_bits now handles that shape (incl. 'Champion & 1st Flight winner') for both the spotlight drill-down and Recent Winnings labels. (2) The $80.19 Kerry compared against is the live board's projected-payout strip, inflated to a phantom 27-entry / $1,080 pool by four season-2025 enrollments (Fieber, Stich, Lieck, Henderson) the historical order import added — the boards' enrollment filter scoped fall-vs-main and chapter but never the YEAR.",
+      "Season-YEAR enrollment scoping on every points-race board, per Kerry's ruling (verbatim): 'Nothing from 2025 should influence 2026 EXCEPT for included shirt fund from memberships starting Aug 1, 2025.' get_points_race_standings now also matches the race's season year (parsed from the race label, current-year fallback), so prior-year season_contests rows never light buy-in pills, count in pots, or move projected payouts. The LSC shirt-fund Aug-2025 accrual (margin_ledger.lsc_fund_year) is untouched.",
+      "TGF Payouts page: year-prefixed cup accounts ('2026 PLAYERS CUP', '2026 FELLOWSHIP CUP') now list under SEASON, not EVENTS (isContestAccount allows a leading year). A flighted cup's Player Pot Summary renders grouped by flight in order — 1st Flight band, winner then 2nd place — activated by the data (every row carrying '<N>st Flight'), so the Players Cup is grouped today and any future flighted cup inherits it while normal events never trigger it.",
+    ],
+  },
+  {
+    version: "2.374.0",
+    date: "2026-09-11",
+    changes: [
+      "Winnings by Game drill-down (Kerry, same-day follow-up to v2.372.0): every game subtotal inside a bundle now expands to the EVENTS that game was won in — event name, date, flight and place, and the amount won there. Two payout rows in one event fold to one line with the details accumulated (CTP 'Hole 13 · Hole 16'); skins show their holes and flight ('Holes 2 & 18 · High Flight'); season rows show the standings place. The description parsing (place with ties, holes, LOW/MID/HIGH or numeric flights) moved to a shared _payout_detail_bits helper used by BOTH the Recent Winnings labels and this drill-down, so the two surfaces can never read the same payout row differently. Tests grew to 30 checks in test_spotlight_winnings.py.",    ],
+  },
+  {
+    version: "2.373.0",
+    date: "2026-09-11",
+    changes: [
+      "ONE-OFF EVENT roster view (Kerry: 'Columns for this need to adjust to useful columns for this event' — Lone Star Cup / TGF Championship / Hill Country Matches class). An event listed in the new oneoff_charges dial swaps the roster's Holes/Games/Fall/Tee/Status/Order/Price columns for CHAPTER, PAID (to date, hover lists every Venmo/Zelle with date + memo), BALANCE DUE (expected − paid; expected is the dial's per-event default with per-player overrides Kerry teaches as amounts come in; PAID ✓ when settled), and LODGING (bed · cost · paid/owes, Own plans, Not staying — read from the event's lodging dial). Data from the new /api/events/<id>/oneoff-finance (manager+), payments = incoming expense rows pointed at the event; a payment equal to the player's lodging-paid amount counts as lodging, not golf. Mobile cards follow the same field set. Unconfigured events are untouched.",
+      "LONE STAR CUP page HARDENED into final rosters (Kerry: 'so it doesn't take so long to load'): bridge scoring-lsc-freeze runs the live projection once and snapshots it into the lsc_roster_final dial; the API then serves instantly (no GG fetches) with deposit badges still LIVE via the extracted lsc_deposit_scan(). scoring-lsc-freeze:clear reverts to the live projection; staff see a frozen-at breadcrumb, and team headers read FINAL.",
+      "LSC MEMBER VIEW stripped to Teams + Players + how they qualified (Kerry: 'Locks, Housing, Deposits, Next Players Up, Lodging, Staying, Own Arrangements, Declined should not be showing in member view'): the member payload now also drops seat status (no locks), the projected/secured counts (header shows a plain player count), and the '— invitation accepted' suffix; deposits/lodging/alternates/declined were already staff-only. Admin and manager views unchanged.",
+    ],
+  },
+  {
+    version: "2.372.0",
+    date: "2026-09-11",
+    changes: [
+      "Player Spotlight shows WINNINGS BY GAME (Kerry ratified 2026-09-11, improvements lane): one row per bundle — NET Games (Ind Net + City/TGF MVP), GROSS Games (Skins + Ind Gross), Included Games (Team Net, CTP/Longest Putt, Hole-in-One), Season Contests — each expanding to per-game rows with win counts and totals in the admin payout category colors, over a proportional split bar. Zero-dollar bundles still render with the member's buy-in count next to each bundle (a $0 GROSS row advertises the games you're not entered in). Bundle membership is rules-as-data: the spotlight_winnings_bundles app setting (seed SEED_WINNINGS_BUNDLES), with a catch-all bundle so an unmapped category can never silently vanish; production rows spelling CTP as 'ctp' and legacy 'closest_to_pin' merge into one game row.",
+      "Page-level SEASON | ALL-TIME toggle under the spotlight name header flips the whole page — the Events/Contests/Won stat strip and Winnings by Game together (stats_scoped + winnings_by_game ship both scopes in one payload, so a flip is a re-render, not a re-fetch). SEASON grows a pill per calendar year the member has data (2026 only today); default landing is the current season; ALL-TIME carries the note that historical records will be added in the future. PII-free throughout, member tier unchanged. Tests: test_spotlight_winnings.py.",
+    ],
+  },
+  {
+    version: "2.371.13",
+    date: "2026-09-11",
+    changes: [
+      "New audited bridge scoring-expense-promote:<expense_id> — runs the standard promote_expense_to_ledger path (idempotent) for incoming payments the classifier recorded but never promoted: Barstow's Venmo $150 and the Gus Vasquez / Chuck Fehlis Zelle $150s (raw bank names) were linked to the Lone Star Cup at the expense level but invisible to the ledger-driven event Financial tab. Promote + the v2.371.4 category cascade puts all three in the cup's external revenue.",
+    ],
+  },
+  {
+    version: "2.371.12",
+    date: "2026-09-11",
+    changes: [
+      "scoring-customer-dupes marks a pair already ruled two people (the same-name census list — the two Victor Arias profiles) as confirmed_distinct when the phone or email door surfaces it, instead of letting it read as a fresh duplicate.",
+    ],
+  },
+  {
+    version: "2.371.11",
+    date: "2026-09-11",
+    changes: [
+      "Season Contests boards: a member's last name shows in caps the way Golf Genius prints its own members (Kerry: 'When someone becomes a member (like Chris Espinosa) his last name should show all caps when appropriate'). The Tracker's membership truth decides, so a member who joined through a GG guest profile reads ESPINOSA, Christopher here even while GG still shows Espinosa; prefixes keep GG's shape (McCRARY, DelCARMEN). Guests unchanged.",
+      "scoring-customer-dupes: potential duplicate customer profiles by same name, same email, or same phone — each group with status, emails, phones, purchases, rounds and a suggested keep. Report only; merging stays a human call.",
+    ],
+  },
+  {
+    version: "2.371.10",
+    date: "2026-09-11",
+    changes: [
+      "Folded board rows expand properly (Kerry: 'Luke Youngs detail not showing though'). A row built from two GG member records fronted the first record's card, so the expansion fetched one record — and after Kerry merged the profiles in Golf Genius that card was empty. The folded row now fronts the record with the most rounds, and the expansion fetches EVERY record behind the row and rebuilds one GG-shaped table: Championship lines + the best N counted, GG's own 'not counted in standings' separator, the rest below. Works whether or not GG ever merges (Kerry: 'you definitely need to merge on your side even if they don't merge on GG'). scoring-race-detail accepts name:<fragment> to hit a board row by name.",
+    ],
+  },
+  {
+    version: "2.371.9",
+    date: "2026-09-11",
+    changes: [
+      "Standings fold scoped to the ACTIVE races only (Kerry: 'I'm only talking about reviewing currently active points races... Austin Fall and San Antonio Fall. All previous spring/summer races are concluded and should not be touched unless see a discrepancy. And then you need to communicate to me before changing.'). SA Fall Net and Austin Fall Net fold duplicate GG member records; SAN ANTONIO Net, AUSTIN Net and THE PLAYERS CUP are re-fetched as GG's own rows, verbatim, and their doubles appear in scoring-race-dupes as report-only for Kerry's call.",
+    ],
+  },
+  {
+    version: "2.371.8",
+    date: "2026-09-11",
+    changes: [
+      "Standings fold reconciled with GG's own count. The per-event detail names the event in its Tournament column (the Event column is the league), and two rounds can share a date — Hill Country Matches R1/R2, Kickoff Front/Back — so the earlier parse collapsed them and came out under GG. Keyed on the Tournament column and honouring GG's 'not counted in standings' separator, best 10 + Championship over Jay Hogue's single record now reproduces GG's 116 exactly; the fold across his two records is computed the same way. Verified against the live table via scoring-race-detail.",
+    ],
+  },
+  {
+    version: "2.371.7",
+    date: "2026-09-11",
+    changes: [
+      "Standings fold guard: the first best-N fold on production came out BELOW the larger GG record's own total (Jay Hogue, Austin Net: derived 108 vs GG's 116), which is impossible if the detail was read the way GG counts it. A folded total can never be under the dominant record's total, so the fold now keeps that total whenever the derivation falls short (method max(guard)) and logs the disagreement. Diagnostic bridge scoring-race-detail:<race>|<card> returns one member record's raw GG per-event tables plus our parse, to reconcile the count.",
+    ],
+  },
+  {
+    version: "2.371.6",
+    date: "2026-09-11",
+    changes: [
+      "Season Contests fold, corrected within the hour: the season races and The Players Cup count a player's best 10 events (+ Championship) and the Fall races the best 6, so adding two GG records' totals overstated once the combined rounds passed N (Jay Hogue on Austin Net read 124 instead of his real best-10). The fold now re-derives the total over the union of both records' per-event lines from GG's row-expansion detail, championship always counted, a shared event counted once; if GG detail is down it takes the dominant record's total, never the sum. The method rides on the row (sum / best_10 / best_6 / max) and in scoring-race-dupes.",
+    ],
+  },
+  {
+    version: "2.371.5",
+    date: "2026-09-11",
+    changes: [
+      "Season Contests: one person = one row (Kerry: 'Why is there two Luke Youngs showing?'). Golf Genius carried two member records for him on Austin Fall Net; the Tracker mirrored the page row for row. Every GG points-race refresh now folds rows that resolve to the same customer — rounds, wins and points summed, the field re-ranked GG-style with T ties, points-behind recomputed, the source GG records kept on the row — so every board reading the snapshot (city races, both cups, Monthly, spotlight) agrees. The scraper keeps both member card ids when a name repeats. New bridge scoring-race-dupes[:refresh] re-fetches all races and reports folded rows (with the GG card ids to merge in Golf Genius), anything still doubled, and duplicate enrollments.",    ],
+  },
+  {
+    version: "2.371.4",
+    date: "2026-09-11",
+    changes: [
+      "scoring-expense-event now cascades to the ledger (Kerry: 'the events page for these need to account for the deposits'): when the re-pointed expense row was promoted into acct_transactions, the same event_name is written onto that ledger row, and an optional third segment sets its category ('addon' = external revenue; '-' leaves it). get_event_financial_summary aggregates the LEDGER by event_name + category, so the v2.371.2 re-point linked the Lone Star Cup deposits to the event without making them visible to its Financial tab — this closes that gap for the 24 cup payments and any future outside-the-store money.",
+    ],
+  },
+  {
+    version: "2.371.3",
+    date: "2026-09-11",
+    changes: [
+      "Auto payment reminders learn an exclusion dial (payment_reminder_exclude_events, JSON list of event ids) after the 9/11 6 AM run mass-mailed the Lone Star Cup roster: the cup's 27 RSVP placeholder rows exist to track the roster while the money is collected OUTSIDE the store (Venmo deposits already in the ledger), so 'RSVP placeholder' does not mean 'hasn't paid' there. Dial set to [3329, 3330] (LONE STAR CUP + LSC PRACTICE ROUND); every other event's reminder behavior is unchanged.",
+    ],
+  },
+  {
+    version: "2.371.2",
+    date: "2026-09-10",
+    changes: [
+      "New audited bridge scoring-expense-event:<expense_id>|<event_id|none> — re-points an expense_transactions row at the right event (id + name together). Built for the Lone Star Cup money wave: the Venmo classifier guesses an event from the payer's recent activity, so cup payments landed on Forest Creek (Cannon $325) and the SA Championship (McCrary/Youngs $150 deposits) instead of the new LONE STAR CUP | The Hideout event (3329, Oct 10-11, Brownwood; practice round 3330 Fri 10/9 at $110). Roster of 28 registered on the event; Hideout pricing set at $90/day + tax per Kerry.",
+    ],
+  },
   {
     version: "2.371.1",
     date: "2026-09-10",

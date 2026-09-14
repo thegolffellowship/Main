@@ -116,7 +116,13 @@ email_uid / account_id / review_status (validated to
 pending/approved/corrected/**ignored** — 'ignored' is the schema's
 dismissal state; v2.149.13 briefly said 'rejected', which the CHECK
 constraint would refuse) + append_note; promotes to the ledger only when
-approved/corrected or already promoted. `scoring-acct-patch` →
+approved/corrected or already promoted. **review_status='ignored' on an
+expense that already reached the ledger REVERSES its acct_transactions
+row (status='reversed', note appended) instead of re-syncing it
+(v2.387.5)** — the Chase feed alerts on charges only, so an issuer
+reversal never arrives on its own (LS Forest Creek $2,270.00 charged and
+reversed 2026-09-12; Kerry: "Mark exp ignored"). `patch_acct_row` also
+takes status 'reversed' for rows with no expense backing. `scoring-acct-patch` →
 `patch_acct_row(id, fields)` — entity/category (auto-registered) /
 event / append_note applied to the row's splits, plus **status 'merged'
 + merged_into_id** (soft-delete, same convention as Duplicate Detective)

@@ -3037,6 +3037,9 @@
     }
 
     function renderRegistrantsMobile(registrants, ev) {
+        // One-off finance kick for the mobile path too — same lazy
+        // fetch + re-render as the desktop detail panel.
+        if (oneoffFinance[ev.id] === undefined) loadOneoffFinance(ev.id);
         const overrides = allRsvpOverrides[ev.item_name] || {};
         const emailOverrides = allRsvpEmailOverrides[ev.item_name] || {};
         // Full event list INCLUDING child +PAY rows — the callers pass a
@@ -3151,7 +3154,31 @@
                 isManualEmailUid, txStatus,
             }).map(_playerActionBtnHtml).join(' ');
 
-            const fields = [
+            // ONE-OFF event mobile fields (Kerry 2026-09-11): the money
+            // picture replaces the order-centric fields.
+            const _mFp = oneoffPlayerFin(ev.id, r);
+            const fields = _mFp ? [
+                ["Chapter", _mFp.chapter || "\u2014"],
+                ["HCP", (() => {
+                    const lh = r.customer ? handicapIndexMap[(r.customer || "").toLowerCase()] : undefined;
+                    if (lh === undefined) return r.handicap || "\u2014";
+                    return showHcp18Only ? lh.index_18.toFixed(1) : (lh.index_9.toFixed(1) + 'N');
+                })()],
+                ["Paid", _mFp.paid ? `$${(+_mFp.paid).toFixed(2)}` : "\u2014"],
+                ["Balance Due", _mFp.expected == null ? "\u2014"
+                    : (_mFp.balance <= 0.005 ? "PAID \u2713"
+                        : `$${(+_mFp.balance).toFixed(2)}`)],
+                ["Lodging", (() => {
+                    const lg = _mFp.lodging;
+                    if (!lg) return "\u2014";
+                    if (lg.own) return "Own plans";
+                    if (lg.out) return "Not staying";
+                    const cost = lg.cost != null ? ` \u00b7 $${+lg.cost}` : "";
+                    const paidFull = lg.cost && (lg.paid || 0) >= lg.cost;
+                    return `${lg.unit || "bed TBD"}${cost}${paidFull ? " \u2713" : (lg.cost ? " (owes)" : "")}`;
+                })()],
+                ["Notes", r.notes || "\u2014"],
+            ] : [
                 ["Order Date", r.order_date || "\u2014"],
                 ["Price", stripPriceSuffix(r.item_price) || "\u2014"],
                 ["HCP", (() => {
@@ -3912,12 +3939,50 @@
         { key: "actions", label: "Actions", default: true },
     ];
 
+    // ONE-OFF EVENT roster columns (Kerry 2026-09-11: "Columns for this
+    // need to adjust to useful columns for this event" — Lone Star Cup,
+    // TGF Championship, Hill Country Matches). An event becomes one-off
+    // by having an entry in the oneoff_charges dial; the roster then
+    // swaps Holes/Games/Fall/Tee/Status/Order/Price for Chapter, Paid
+    // to date, Balance Due, and Lodging, all served by
+    // /api/events/<id>/oneoff-finance.
+    const ONEOFF_DETAIL_COLUMNS = [
+        { key: "rsvp", label: "", default: true },
+        { key: "customer", label: "Customer", default: true },
+        { key: "oo_chapter", label: "Chapter", default: true },
+        { key: "handicap", label: "HCP", default: true },
+        { key: "oo_paid", label: "Paid", default: true },
+        { key: "oo_balance", label: "Balance Due", default: true },
+        { key: "oo_lodging", label: "Lodging", default: true },
+        { key: "actions", label: "Actions", default: true },
+    ];
+    // event_id -> oneoff-finance payload ({oneoff:false} when the event
+    // isn't configured; null while the fetch is in flight)
+    const oneoffFinance = {};
+    function loadOneoffFinance(evId) {
+        if (oneoffFinance[evId] !== undefined) return;
+        oneoffFinance[evId] = null;
+        fetch(`/api/events/${evId}/oneoff-finance`)
+            .then(r => r.ok ? r.json() : { oneoff: false })
+            .then(d => {
+                oneoffFinance[evId] = (d && d.oneoff) ? d : { oneoff: false };
+                if (oneoffFinance[evId].oneoff) renderEvents();
+            })
+            .catch(() => { oneoffFinance[evId] = { oneoff: false }; });
+    }
+    function oneoffPlayerFin(evId, r) {
+        const d = oneoffFinance[evId];
+        if (!d || !d.oneoff || !r.customer_id) return null;
+        return (d.players || {})[String(r.customer_id)] || null;
+    }
+
     // Column alignment (Kerry 2026-08-31): data centered from HCP on,
     // Price right-aligned like accounting.
     const COL_ALIGN = { handicap: "center", holes: "center",
         side_games: "center", fall_race: "center", tee_choice: "center",
         user_status: "center", order_date: "center", item_price: "right",
-        actions: "center" };
+        actions: "center", oo_chapter: "center", oo_paid: "right",
+        oo_balance: "right", oo_lodging: "center" };
     // "2026-08-30" → "8/30" (2-digit year appended only when it isn't
     // the current year).
     function fmtShortDate(d) {
@@ -7250,6 +7315,16 @@
 
         const activeFilter = eventGameFilter[ev.id] || null;
 
+        // ONE-OFF EVENT view state (Kerry 2026-09-11): lazily fetch the
+        // per-player finance payload the first time the event expands;
+        // when it lands (and the event is configured one-off in the
+        // oneoff_charges dial) renderEvents() re-renders with the
+        // one-off column set.
+        if (oneoffFinance[ev.id] === undefined) loadOneoffFinance(ev.id);
+        const ooFin = (oneoffFinance[ev.id] && oneoffFinance[ev.id].oneoff)
+            ? oneoffFinance[ev.id] : null;
+        const DCOLS = ooFin ? ONEOFF_DETAIL_COLUMNS : DETAIL_COLUMNS;
+
         // Count RSVP stats
         const playingRsvps = rsvps.filter(r => r.response === 'PLAYING');
         const matchedItemIds = new Set(rsvps.filter(r => r.matched_item_id).map(r => r.matched_item_id));
@@ -7497,14 +7572,14 @@
         html += '<div class="column-toggle-wrapper">';
         html += '<button class="column-toggle-btn detail-col-toggle-btn" style="font-size:0.75rem; padding:0.3rem 0.6rem;">Columns &#9662;</button>';
         html += '<div class="column-toggle-dropdown detail-col-dropdown">';
-        html += DETAIL_COLUMNS.filter(c => c.key !== "rsvp").map(c => {
+        html += DCOLS.filter(c => c.key !== "rsvp").map(c => {
             const checked = detailVisibleColumns[c.key] !== false ? "checked" : "";
             return `<label><input type="checkbox" data-detail-col="${c.key}" ${checked}> ${c.label}</label>`;
         }).join("");
         html += '</div></div></div>';
 
         html += '<table class="registrants-table"><thead><tr>';
-        DETAIL_COLUMNS.forEach(c => {
+        DCOLS.forEach(c => {
             const vis = detailVisibleColumns[c.key] !== false;
             if (c.key === "rsvp") {
                 html += '<th class="rsvp-col" title="RSVP Status"></th>';
@@ -7601,7 +7676,7 @@
             const rowClass = rowClasses.length ? ` class="${rowClasses.join(' ')}"` : '';
             html += `<tr${rowClass} ${hasExtraInfo ? `data-expand-player="${r.id}"` : ''}>`;
 
-            DETAIL_COLUMNS.forEach(c => {
+            DCOLS.forEach(c => {
                 const vis = detailVisibleColumns[c.key] !== false;
                 const _ustat = (_cleanStatus(r.user_status) || '').toUpperCase();
                 const isGuestRow = _ustat === 'GUEST';
@@ -7862,6 +7937,54 @@
                     html += `<td class="fall-col" style="${style}">${inFallRace(r)
                         ? '<span style="color:#059669;font-weight:700;">YES</span>'
                         : '<span style="color:#9CA3AF;">\u2014</span>'}</td>`;
+                } else if (c.key === "oo_chapter") {
+                    const fp = oneoffPlayerFin(ev.id, r);
+                    const chp = (fp && fp.chapter) || "";
+                    const abbr = /austin/i.test(chp) ? "ATX"
+                        : /san antonio/i.test(chp) ? "SA"
+                        : /houston/i.test(chp) ? "HOU"
+                        : /dfw/i.test(chp) ? "DFW" : chp;
+                    html += `<td style="${style}" title="${escapeHtml(chp)}">${escapeHtml(abbr || "\u2014")}</td>`;
+                } else if (c.key === "oo_paid") {
+                    // Paid to date = incoming Venmo/Zelle pointed at this
+                    // event for this player (the golf money \u2014 lodging
+                    // shares live in the LODGING column). Hover lists
+                    // every payment with date + memo.
+                    const fp = oneoffPlayerFin(ev.id, r);
+                    if (!fp || !fp.paid) {
+                        html += `<td style="${style}; color:#9CA3AF;">\u2014</td>`;
+                    } else {
+                        const tip = (fp.payments || []).map(p =>
+                            `${fmtShortDate(p.date)}: $${(+p.amount).toFixed(2)}${p.memo ? ` (${p.memo})` : ""}`).join("\n");
+                        html += `<td style="${style}; font-weight:600; font-variant-numeric:tabular-nums; color:#059669;" title="${escapeHtml(tip)}">$${(+fp.paid).toFixed(2)}</td>`;
+                    }
+                } else if (c.key === "oo_balance") {
+                    // Balance Due = expected (oneoff_charges dial:
+                    // default per player, per-player overrides as Kerry
+                    // teaches what each amount means) minus paid.
+                    const fp = oneoffPlayerFin(ev.id, r);
+                    if (!fp || fp.expected == null) {
+                        html += `<td style="${style}; color:#9CA3AF;">\u2014</td>`;
+                    } else if (fp.balance <= 0.005) {
+                        html += `<td style="${style}; color:#059669; font-weight:700;" title="Expected $${(+fp.expected).toFixed(2)} \u2014 paid in full">PAID &#10003;</td>`;
+                    } else {
+                        html += `<td style="${style}; font-weight:700; font-variant-numeric:tabular-nums; color:${fp.paid ? '#b45309' : '#dc2626'};" title="Expected $${(+fp.expected).toFixed(2)}, paid $${(+fp.paid).toFixed(2)}">$${(+fp.balance).toFixed(2)}</td>`;
+                    }
+                } else if (c.key === "oo_lodging") {
+                    const fp = oneoffPlayerFin(ev.id, r);
+                    const lg = fp && fp.lodging;
+                    if (!lg) {
+                        html += `<td style="${style}; color:#9CA3AF;">\u2014</td>`;
+                    } else if (lg.own || lg.out) {
+                        html += `<td style="${style}; color:#6B7280;" title="${escapeHtml(lg.note || '')}">${lg.own ? "Own plans" : "Not staying"}</td>`;
+                    } else {
+                        const cost = lg.cost != null ? `$${+lg.cost}` : "";
+                        const paidFull = lg.cost && (lg.paid || 0) >= lg.cost;
+                        const pay = paidFull
+                            ? ' <span style="color:#059669;font-weight:700;">&#10003;</span>'
+                            : (lg.cost ? ` <span style="color:#dc2626;font-weight:700;" title="Owes ${cost} for lodging">owes</span>` : "");
+                        html += `<td style="${style}" title="${escapeHtml(lg.note || '')}">${escapeHtml(lg.unit || "bed TBD")}${cost ? ` \u00b7 ${cost}` : ""}${pay}</td>`;
+                    }
                 } else {
                     html += `<td style="${style}">${escapeHtml(r[c.key] || "\u2014")}</td>`;
                 }
@@ -7869,7 +7992,7 @@
             html += '</tr>';
             // Expandable detail row for notes/partner/fellowship
             if (hasExtraInfo) {
-                const colCount = DETAIL_COLUMNS.filter(c => detailVisibleColumns[c.key] !== false).length;
+                const colCount = DCOLS.filter(c => detailVisibleColumns[c.key] !== false).length;
                 html += `<tr class="player-expand-row" data-expand-for="${r.id}"><td colspan="${colCount + 1}" style="padding:0;">`;
                 html += '<div class="player-detail-panel">';
                 // Contact first — left of any transaction info (Kerry 2026-08-31)
@@ -7899,7 +8022,7 @@
                 const payLabel = isRefundRow ? "-PAY" : "+PAY";
                 const payColor = isRefundRow ? "#dc2626" : "#059669";
                 html += `<tr class="child-payment-row" style="background:${childBg};${childSt !== 'active' ? 'opacity:0.6;' : ''}">`;
-                DETAIL_COLUMNS.forEach(c => {
+                DCOLS.forEach(c => {
                     const vis = detailVisibleColumns[c.key] !== false;
                     const style = (vis ? '' : 'display:none;') + 'font-size:0.78rem;color:#6b7280;'
                         + (COL_ALIGN[c.key] ? `text-align:${COL_ALIGN[c.key]};` : '');

@@ -1772,6 +1772,14 @@ def _scoring_dispatch(url: str, extract: str):
       scoring-membership-terms-repair[:apply]  early renewals continue at the
                                    365 date (dry run default)
       scoring-membership-sync      terms → status reconcile now (manager comps)
+      scoring-customer-merge:<src_cid>|<dst_cid>[|apply]  fold one profile into
+                                   another (dry run shows both + the refs moved)
+      scoring-customer-dupes       potential duplicate customer profiles (name /
+                                   email / phone), report only
+      scoring-race-detail:<race_key>|<card>  one GG member record's per-event lines
+      scoring-race-dupes[:refresh]  one person = one row on every Season Contests
+                                   board (GG duplicate member records folded;
+                                   refresh re-fetches all races first)
       scoring-hcp-distribution     member handicap-index spread (18-hole equiv.)
       scoring-brevo-draft[:dry|review|apply]  Wednesday TGF Insider: fill the
                                    public recap template from the week's events;
@@ -2865,6 +2873,115 @@ def _scoring_dispatch(url: str, extract: str):
             # no-ops with an error note until HUBSPOT_TOKEN is set).
             from email_parser.leads import check_new_leads
             return json.dumps(check_new_leads(), indent=2, default=str)
+        if cmd == "scoring-expense-event":
+            # "<expense_id>|<event_id or none>[|<acct_category or ->]" —
+            # re-point an expense_transactions row at the right event (the
+            # Venmo classifier guesses an event from context and gets
+            # one-off payments wrong: LSC cup money landing on whatever
+            # event the payer last played). event_name follows event_id so
+            # the expense review UI and event financials agree. When the
+            # expense row was promoted into the ledger
+            # (acct_transaction_id), the SAME event_name cascades onto
+            # that acct_transactions row — get_event_financial_summary
+            # aggregates the ledger by event_name + category, so without
+            # the cascade the money is linked but invisible to the event's
+            # Financial tab. A third segment sets the acct row's category
+            # too ('addon' puts venmo income in external revenue; '-' or
+            # absent leaves category untouched). Audited.
+            _p = arg.split("|", 2)
+            if len(_p) < 2 or not _p[0].strip():
+                return json.dumps({"error":
+                                   "need <expense_id>|<event_id|none>"
+                                   "[|<category|->]"})
+            _cat = (_p[2].strip() if len(_p) > 2 else "")
+            _eid = _p[1].strip().lower()
+            with db._connect() as conn:
+                row = conn.execute(
+                    "SELECT id, merchant, amount, event_id, event_name, "
+                    "acct_transaction_id "
+                    "FROM expense_transactions WHERE id = ?",
+                    (int(_p[0].strip()),)).fetchone()
+                if not row:
+                    return json.dumps({"error":
+                                       f"expense {_p[0].strip()} not found"})
+                if _eid in ("none", "null", ""):
+                    new_id, new_name = None, None
+                else:
+                    ev = conn.execute(
+                        "SELECT id, item_name FROM events WHERE id = ?",
+                        (int(_eid),)).fetchone()
+                    if not ev:
+                        return json.dumps({"error":
+                                           f"event {_eid} not found"})
+                    new_id, new_name = ev["id"], ev["item_name"]
+                conn.execute(
+                    "UPDATE expense_transactions "
+                    "SET event_id = ?, event_name = ? WHERE id = ?",
+                    (new_id, new_name, row["id"]))
+                acct_id = row["acct_transaction_id"]
+                acct_updated = False
+                if acct_id:
+                    if _cat and _cat != "-":
+                        conn.execute(
+                            "UPDATE acct_transactions "
+                            "SET event_name = ?, category = ? "
+                            "WHERE id = ?",
+                            (new_name, _cat, acct_id))
+                    else:
+                        conn.execute(
+                            "UPDATE acct_transactions "
+                            "SET event_name = ? WHERE id = ?",
+                            (new_name, acct_id))
+                    acct_updated = True
+                conn.commit()
+            db.log_agent_action(
+                "mcp-claude", "scoring-expense-event",
+                f"expense {row['id']} ({row['merchant']} "
+                f"${row['amount']}): event {row['event_id']} "
+                f"-> {new_id}")
+            return json.dumps({"expense_id": row["id"],
+                               "merchant": row["merchant"],
+                               "amount": row["amount"],
+                               "old_event_id": row["event_id"],
+                               "new_event_id": new_id,
+                               "new_event_name": new_name,
+                               "acct_transaction_id": acct_id,
+                               "acct_updated": acct_updated,
+                               "acct_category": (_cat if _cat and
+                                                 _cat != "-" else None),
+                               "saved": True})
+        if cmd == "scoring-lsc-freeze":
+            # Freeze the Lone Star Cup page onto the FINAL roster
+            # snapshot (Kerry 2026-09-11: "harden the LONE STAR CUP
+            # page teams into final rosters so it doesn't take so long
+            # to load"): runs the live projection once, stores it in
+            # the lsc_roster_final dial; the API then serves it
+            # instantly with live deposit badges. "clear" reverts to
+            # the live projection. Audited.
+            if arg.strip().lower() == "clear":
+                db.set_app_setting("lsc_roster_final", "")
+                db.log_agent_action("mcp-claude", "scoring-lsc-freeze",
+                                    "cleared — back to live projection")
+                return json.dumps({"frozen": False, "cleared": True})
+            res = db.freeze_lsc_final_roster()
+            db.log_agent_action("mcp-claude", "scoring-lsc-freeze",
+                                f"frozen at {res.get('frozen_at')}")
+            return json.dumps(res, indent=2)
+        if cmd == "scoring-expense-promote":
+            # "<expense_id>" — promote an expense_transactions row into
+            # the acct_transactions ledger via the standard
+            # promote_expense_to_ledger path (idempotent: an already-
+            # promoted row returns skipped). Exists because the
+            # classifier occasionally records an incoming payment
+            # without promoting it (Zelle arrivals under raw bank
+            # names, and one-off Venmo rows), leaving the money linked
+            # to an event but invisible to the ledger-driven event
+            # financials. Entity defaults to TGF. Audited.
+            _xid = int(arg.strip())
+            res = db.promote_expense_to_ledger(_xid, None, "TGF")
+            db.log_agent_action("mcp-claude", "scoring-expense-promote",
+                                f"expense {_xid} -> {res}")
+            return json.dumps(res, indent=2)
         if cmd == "scoring-setting-set":
             # "<key>|<value>" — write an app_settings dial ("stored as a
             # setting is our standard for everything" — Kerry).
@@ -2965,6 +3082,79 @@ def _scoring_dispatch(url: str, extract: str):
             _done = [i for i in _ids if db.dismiss_parse_warning(i)]
             _audit("scoring-parse-warning-dismiss", f"ids={_done} note={_note.strip()}")
             return json.dumps({"dismissed": _done, "note": _note.strip()}, indent=2)
+        if cmd == "scoring-customer-merge":
+            # "<source_cid>|<target_cid>[|apply]" — fold one customer profile
+            # INTO another (every FK re-pointed, source row deleted). Dry run
+            # by default. Kerry 2026-09-11: "you definitely need to merge on
+            # your side" — a GG spelling that minted a second profile
+            # (Hightower, Geoffery → Geoff Hightower, a18.5) is the class.
+            _p = [x.strip() for x in (arg or "").split("|")]
+            if len(_p) < 2 or not _p[0].isdigit() or not _p[1].isdigit():
+                return json.dumps({"error": "usage: scoring-customer-merge:<source_cid>|<target_cid>[|apply]"})
+            _src, _dst = int(_p[0]), int(_p[1])
+            _apply = len(_p) > 2 and _p[2].lower() == "apply"
+            _pv = db.customer_merge_preview(_src, _dst)
+            if not _pv["ok"]:
+                return json.dumps({"error": "both ids must exist and differ", "preview": _pv}, indent=2, default=str)
+            if not _apply:
+                _pv["applied"] = False
+                return json.dumps(_pv, indent=2, default=str)
+            _res = db.merge_customers(_pv["source"]["name"], _pv["target"]["name"],
+                                      source_customer_id=_src, target_customer_id=_dst)
+            _audit("scoring-customer-merge", f"{_src} ({_pv['source']['name']}) -> {_dst} "
+                   f"({_pv['target']['name']}) refs={_pv['source_refs']}")
+            return json.dumps({"applied": True, "preview": _pv, "result": _res}, indent=2, default=str)
+        if cmd == "scoring-customer-dupes":
+            # Potential duplicate customer profiles — same name / email /
+            # phone — REPORT ONLY; merging is Kerry's call (merge_customers).
+            return json.dumps(db.find_customer_duplicates(), indent=2, default=str)
+        if cmd == "scoring-race-detail":
+            # "<race_key>|<member_card_id>" — GG's per-event points lines for one
+            # member record (the row-expansion XHR), raw tables + our parse.
+            # "<race_key>|<member_card_id>" or "<race_key>|name:<fragment>" (the
+            # board row's card, resolved by name — exercises the folded path).
+            _rk, _, _card = (arg or "").partition("|")
+            _race = db._GG_POINTS_RACES.get(_rk.strip())
+            _card = _card.strip()
+            if _race and _card.lower().startswith("name:"):
+                with db._connect() as _c:
+                    _r = _c.execute("SELECT member_card_id, player_name, rank, total_points, merged_from "
+                                    "FROM gg_points_standings WHERE race_key = ? AND "
+                                    "LOWER(player_name) LIKE ? ORDER BY id LIMIT 1",
+                                    (_rk.strip(), f"%{_card[5:].strip().lower()}%")).fetchone()
+                if not _r:
+                    return json.dumps({"error": f"no row matching {_card[5:]!r} on {_rk}"})
+                _card = str(_r["member_card_id"] or "")
+                _row_info = dict(_r)
+            else:
+                _row_info = None
+            if not _race or not _card.isdigit():
+                return json.dumps({"error": "usage: scoring-race-detail:<race_key>|<member_card_id|name:<frag>>",
+                                   "races": sorted(db._GG_POINTS_RACES)})
+            _d = db.points_race_member_detail_combined(_rk.strip(), _card)
+            _d["row"] = _row_info
+            _d["parsed_events"] = db._member_detail_events(_race, _card.strip())
+            _d["best_n"] = _race.get("best_n")
+            _d["best_n_total_of_parsed"] = (db._best_n_total(_d["parsed_events"], _race["best_n"])
+                                            if _race.get("best_n") else None)
+            return json.dumps(_d, indent=2, default=str)
+        if cmd == "scoring-race-dupes":
+            # "[refresh]" — one person = one row across every Season Contests
+            # board. refresh re-fetches every GG race first (write-time merge
+            # of duplicate GG member records), then reports what was folded,
+            # anything still doubled, and duplicate enrollments.
+            _refresh = (arg or "").strip().lower() == "refresh"
+            _done = {}
+            if _refresh:
+                for _rk in db._GG_POINTS_RACES:
+                    try:
+                        _done[_rk] = db.refresh_points_race_standings(_rk)
+                    except Exception as _exc:
+                        _done[_rk] = f"error: {_exc}"
+                _audit("scoring-race-dupes", f"refreshed={list(_done)}")
+            _res = db.find_points_race_duplicates()
+            _res["refreshed"] = _done
+            return json.dumps(_res, indent=2, default=str)
         if cmd == "scoring-hcp-distribution":
             # Spread of established handicap indexes across current members
             # (18-hole equivalents) — the "Am I good enough?" numbers.
@@ -3652,11 +3842,17 @@ def _scoring_dispatch(url: str, extract: str):
         if cmd == "scoring-games-import":
             # GG-recorded CTP / Longest Putt / HIO / TEAM Net winners;
             # same widget-url contract + time budget as scoring-mvp-import.
-            # "[rewalk][|event=<name>]" — event= attaches an unmapped
+            # "[rewalk[=N]][|event=<name>]" — event= attaches an unmapped
             # round's winners to the named calendar event (championship
-            # rounds carry no [sa]N.N code; v2.188.5)
+            # rounds carry no [sa]N.N code; v2.188.5). rewalk=N re-walks
+            # the newest N rounds (bare "rewalk" = 2; v2.381.0 backfill
+            # of GG team-board totals needs a deeper window)
             _p = [x.strip() for x in (arg or "").split("|") if x.strip()]
-            _rw = 2 if any(x.lower().startswith("rewalk") for x in _p) else 0
+            _rw = 0
+            for x in _p:
+                if x.lower().startswith("rewalk"):
+                    _m = re.search(r"=\s*(\d+)", x)
+                    _rw = min(int(_m.group(1)), 12) if _m else 2
             _fe = next((x[6:].strip() for x in _p
                         if x.lower().startswith("event=")), None)
             return json.dumps(db.import_gg_game_results(
@@ -4712,6 +4908,90 @@ def _scoring_dispatch(url: str, extract: str):
             # Kerry's ratified course short names (2026-07-10) — one-shot
             # apply; /courses UI edits afterwards are never overwritten
             return json.dumps(db.apply_course_short_name_pins(), indent=2)
+        if cmd == "scoring-teamnet-parity":
+            # "<event>|<gg team-board v2tournaments url>" — computes the
+            # event's team-net totals under every plausible reading of
+            # 75%-off-lowest and diffs against GG's posted board (Kerry
+            # 2026-09-11: "Review where discrepancy is on GG and learn
+            # from it for our own uses"). Read-only.
+            _ev, _, _gurl = arg.partition("|")
+            return json.dumps(db.team_net_parity(_ev.strip(), _gurl.strip()),
+                              indent=2, default=str)
+        if cmd == "scoring-event-board":
+            # "<event>" — compact read of the events-leaderboard TEAM
+            # board for vetting: per team the GG position, GG posted
+            # total (score of record), our reconstruction total, purse,
+            # official flag. Read-only (v2.381.0).
+            _d = db.get_event_leaderboard(arg.strip())
+            if not _d:
+                return json.dumps({"error": "event not found"})
+            return json.dumps({
+                "event": arg.strip(),
+                "teams": [{
+                    "team": " + ".join(p["player_name"]
+                                       for p in t["players"]),
+                    "position": t.get("position"),
+                    "gg_total": t.get("gg_total"),
+                    "reconstruction": t.get("total_net"),
+                    "purse": t.get("purse"),
+                    "official": t.get("official"),
+                } for t in (_d.get("teams") or [])],
+                "overall": [{
+                    "player": r["player_name"], "net": r["net"],
+                    "gross": r["gross"], "pts": r["net_pts"],
+                    "par": r["par"], "to_par": [r["to_par_gross"],
+                                                r["to_par_net"]],
+                    "wins": "".join(c for c, f in (
+                        ("N", r["win_net"]), ("G", r["win_gross"]),
+                        ("S", r["win_skins"]), ("M", r["win_mvp"])) if f),
+                    "won": r["won_total"],
+                    # per-GAME money (v2.390.0) — what each tab's Won
+                    # column shows; must sum back to "won"
+                    "by_cat": r.get("won_by_cat"),
+                } for r in (_d.get("overall_board") or [])],
+                # par per hole for the boards' PAR row (v2.392.0) —
+                # only holes whose tees agree on a par appear
+                "hole_par": _d.get("hole_par"),
+                "games_off": _d.get("games_off")}, indent=2, default=str)
+        if cmd == "scoring-ca-queue":
+            # CA QUEUE read (mailbox #473/#474): "[<section>[|<status>]]"
+            _sec, _, _st = arg.partition("|")
+            return json.dumps(db.list_ca_queue(_sec.strip(), _st.strip()),
+                              indent=2, default=str)
+        if cmd == "scoring-ca-queue-upsert":
+            # "<json item>" — {id?|title, section?, owner?, status?,
+            # blocked_on?, mailbox_ref?, note?, author?}; author stamps
+            # the notes log. Writes audited like every MCP write.
+            try:
+                _item = json.loads(arg)
+            except ValueError as exc:
+                return json.dumps({"error": f"bad JSON: {exc}"})
+            _who = str(_item.pop("author", "") or "bridge")
+            _res = db.upsert_ca_queue_item(_item, author=_who)
+            if _res.get("ok"):
+                _audit("ca_queue_upsert",
+                       f"[{_who}] {'created' if _res.get('created') else 'updated'} "
+                       f"queue item #{_res['id']}: {_item.get('title') or _item.get('id')}")
+            return json.dumps(_res, indent=2, default=str)
+        if cmd == "scoring-ca-queue-note":
+            # "<id>|<author>|<note>"
+            _id, _, _rest = arg.partition("|")
+            _who, _, _note = _rest.partition("|")
+            _res = db.note_ca_queue_item(int(_id.strip()), _note.strip(),
+                                         _who.strip() or "bridge")
+            if _res.get("ok"):
+                _audit("ca_queue_note",
+                       f"[{_who.strip()}] noted queue item #{_id.strip()}")
+            return json.dumps(_res, indent=2, default=str)
+        if cmd == "scoring-ca-queue-close":
+            # "<id>|<author>" — marks done (never deletes; #473 rule)
+            _id, _, _who = arg.partition("|")
+            _res = db.close_ca_queue_item(int(_id.strip()),
+                                          _who.strip() or "bridge")
+            if _res.get("ok"):
+                _audit("ca_queue_close",
+                       f"[{_who.strip()}] closed queue item #{_id.strip()}")
+            return json.dumps(_res, indent=2, default=str)
         if cmd == "scoring-payouts-unpaid":
             # Every non-paid payout group + the customer's recent Venmo
             # payout receipts (linked flag + amounts) for match diagnosis
@@ -5453,6 +5733,106 @@ def determine_tgf_mvp(event_name: str) -> str:
     """
     from email_parser.database import determine_tgf_mvp as _det
     return json.dumps(_det(event_name), indent=2, default=str)
+
+
+@mcp.tool()
+def list_ca_queue(section: str = "", status: str = "") -> str:
+    """CA QUEUE — the admin-only open-items checklist Kerry works in the
+    Tracker (mailbox #473/#474). Lists rows grouped by section in enum
+    order (kerry_decision, ca_owed, cc_build, finance_cleanup, followups,
+    parked, settled), each with status/owner/blocked_on/mailbox_ref and
+    the append-only notes log. DONE rows are kept, never deleted.
+
+    Args:
+        section: optional filter to one section (enum value)
+        status: optional filter — open | blocked | done
+    """
+    from email_parser import database as db
+    return json.dumps(db.list_ca_queue(section.strip(), status.strip()),
+                      indent=2, default=str)
+
+
+@mcp.tool()
+def upsert_ca_queue_item(title: str = "", item_id: int = 0,
+                         section: str = "", owner: str = "",
+                         status: str = "", blocked_on: str = "",
+                         mailbox_ref: str = "", note: str = "",
+                         author: str = "platform-claude") -> str:
+    """Create or update a CA QUEUE item (mailbox #473/#474).
+
+    Matches by item_id when given, else by EXACT title
+    (case-insensitive), else inserts a new row at the bottom of its
+    section. Only the fields you pass change. Setting status=done
+    stamps done_at/done_by; setting a done row back to open/blocked is
+    a REOPEN — done_at clears and the transition is logged so history
+    survives. Every call stamps the author on the notes log and the
+    agent action log.
+
+    Args:
+        title: one-line item title (required for a new row)
+        item_id: existing row id to update (0 = match by title/insert)
+        section: kerry_decision | ca_owed | cc_build | finance_cleanup |
+            followups | parked | settled
+        owner: kerry | ca | lane name (free text)
+        status: open | blocked | done
+        blocked_on: what it waits on (free text)
+        mailbox_ref: comma-separated mailbox post ids
+        note: optional note appended to the item's log
+        author: who is writing (stamps notes + audit)
+    """
+    from email_parser import database as db
+    item: dict = {}
+    if item_id:
+        item["id"] = item_id
+    for k, v in (("title", title), ("section", section), ("owner", owner),
+                 ("status", status), ("blocked_on", blocked_on),
+                 ("mailbox_ref", mailbox_ref), ("note", note)):
+        if v:
+            item[k] = v
+    res = db.upsert_ca_queue_item(item, author=author)
+    if res.get("ok"):
+        _audit("ca_queue_upsert",
+               f"[{author}] {'created' if res.get('created') else 'updated'} "
+               f"queue item #{res['id']}: {title or item_id}")
+    return json.dumps(res, indent=2, default=str)
+
+
+@mcp.tool()
+def note_ca_queue_item(item_id: int, note: str,
+                       author: str = "platform-claude") -> str:
+    """Append a note to a CA QUEUE item's append-only log
+    (author + timestamp, leads.notes_log shape). Never edits or
+    removes existing notes.
+
+    Args:
+        item_id: the queue row id
+        note: the note text
+        author: who is writing
+    """
+    from email_parser import database as db
+    res = db.note_ca_queue_item(item_id, note, author)
+    if res.get("ok"):
+        _audit("ca_queue_note", f"[{author}] noted queue item #{item_id}")
+    return json.dumps(res, indent=2, default=str)
+
+
+@mcp.tool()
+def close_ca_queue_item(item_id: int,
+                        author: str = "platform-claude") -> str:
+    """Mark a CA QUEUE item done. NEVER deletes — the row keeps its
+    history and collapses under the Done band with date + who
+    (mailbox #473 rule). Reopen later via upsert_ca_queue_item
+    with status=open.
+
+    Args:
+        item_id: the queue row id
+        author: who is closing (stamped as done_by)
+    """
+    from email_parser import database as db
+    res = db.close_ca_queue_item(item_id, author)
+    if res.get("ok"):
+        _audit("ca_queue_close", f"[{author}] closed queue item #{item_id}")
+    return json.dumps(res, indent=2, default=str)
 
 
 @mcp.tool()

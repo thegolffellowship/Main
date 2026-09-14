@@ -353,6 +353,43 @@ ruling: WEEKLY stays; opens/click trends are the metric, not unsubs
 (event-recaps.md). Next: read #18 at +24h; first unattended draft Wed
 2026-09-16 13:00 UTC (highlight rotation → Hole-In-One pot).
 
+### 3j. Second live run — a18.5 FOREST CREEK (Sat 2026-09-12, Austin, 18 holes)
+
+Kerry 2:29 PM: "Forest Creek is ready for close out." Field 16 = 16
+cards (no dupes); parity all_ok on Youngs + Cloer; GG boards: Ind Net,
+Skins (8 winners), Team Net (winner $128 + 3 board rows); NO CTP board.
+MVP import recorded Youngs; determine_tgf_mvp agrees (22 pts). 15 payout
+rows auto-recorded, all PENDING $492.01. Financial summary verified,
+coverage 100, course_fees 1,818.60 = 16 × 113.66 — but Chase carries TWO
+Forest Creek alerts on 9/12 ($1,818.60 AND $2,270.00): the #428 class,
+flagged to Kerry, not patched. Contests sync enrolled 0. HIO pot 3,351
+after tonight.
+
+Two fixes shipped mid-run: (1) v2.387.1 — the team-board pairings
+parser dropped a whole foursome when a seat was a plain "First Last"
+(GG's unlinked/guest print; Zac Hammond) — the WINNING team, 3 of 4
+groups; plain names are now seats. Pairings applied after the fix: 4
+groups, 16 rows, 24 pairs. (2) v2.387.2 — `scoring-customer-merge`
+bridge (dry run + audited apply): the GG spelling "Hightower, Geoffery"
+had minted customer 823 alongside the registrant Geoff Hightower (818);
+aliased, then 823 folded into 818 (payout, ledger row, standings row,
+card all re-pointed) BEFORE pairings were written. Canonical = the
+customer's own store spelling, per the Donovan precedent.
+
+Phase 3 posted 3:14 PM after Kerry read the per-nine numbers off the
+GG tee editor (screenshots of all five tees): 32 handicap_rounds, 16
+players, 0 skipped — Blue 3447 F 35.9/133 B 36.3/131, White 3448 F
+35.2/125 B 35.2/125, Red(L) 3462 F 34.1/121 B 34.4/120 (now in
+handicaps.md "Per-nine ratings of record" so Forest Creek never asks
+again). The Chase $2,270.00 was charged AND reversed the same day
+(Kerry's screenshot) — nets to zero, only the $1,818.60 stands; a
+separate $200.00 ALAMO CITY GOLF TRAIL alert on 9/11 is not tied to an
+event yet. 3.3 (By Event card send) and 3.4 (GG upload) are Kerry's;
+`scoring-message-log:handicap-card` showed no 9/12 sends at 3:14 PM.
+Recap draft:
+`docs/claude/recaps/2026-09-12-a18.5-forest-creek.{txt,html}` — three
+Kerry blanks (fellowship, tee times, the Luke-not-bought-in line).
+
 ## 4. NOT done, and why
 
 - **Wednesday-AM TGF Insider auto-draft (mailbox #453).** BUILT in

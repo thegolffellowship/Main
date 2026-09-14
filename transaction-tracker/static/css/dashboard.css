@@ -52,6 +52,15 @@
     --cat-mvp: #6D28D9;
     --cat-tgf-mvp: #C2410C;
     --cat-ctp: #0F766E;
+    /* BOUGHT IN — one green for buy-in status app-wide (Kerry
+       2026-09-13: "Same green as points race but ins for events").
+       Green means bought in and nothing else; the points-race
+       standings rows set the precedent, the events leaderboard now
+       shares the token so a third surface cannot invent a fourth
+       green. Non-buyers are a lighter grey, never a paler green. */
+    --buyin-green: #bbf7d0;
+    --buyin-green-text: #15803D;
+    --buyin-grey: #FAFAFA;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }

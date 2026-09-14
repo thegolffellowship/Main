@@ -388,3 +388,536 @@ folds into PAST CONTESTS under its season year; THE FELLOWSHIP CUP's
 `final` now reads the `gg_points_race_final` dial (it was hardcoded
 False — the dial already said 2026-08-16). Rows inside PAST CONTESTS
 render no status badges (Kerry: the section says COMPLETED already).
+
+## Winnings by Game + SEASON | ALL-TIME scope (v2.372.0, Kerry ratified 2026-09-11)
+
+Kerry (improvements lane, verbatim ask): *"show members how much
+they've won in each specific game type. Like Team Net total, or
+Individual Net, or Skins, and also per each bundle like NET Games or
+GROSS Games."* Ratified as Option A — bundle-first rows that expand to
+per-game rows — plus three rulings during build: the scope toggle sits
+at the TOP under the name header and flips the whole page (stat strip
+AND the new panel), SEASON offers a pill per calendar year the member
+has data (only 2026 today; default landing = current season), and
+zero-dollar bundles still render, with buy-in counts next to every
+bundle ("a zero GROSS row advertises the games you're not in").
+
+- **Bundles are rules-as-data**: app_settings
+  `spotlight_winnings_bundles` (JSON, same shape as
+  `SEED_WINNINGS_BUNDLES` in database.py) maps bundle → categories +
+  label + color + which buy-in counter shows (`net`/`gross` = bundle
+  purchases, `events` = entries, `contests` = enrollments). Seed:
+  NET Games = individual_net + mvp + tgf_mvp · GROSS Games = skins +
+  individual_gross · Included Games = team_net + ctp/closest_to_pin +
+  longest_putt + hole_in_one · Season Contests (catch_all) =
+  monthly_points + the season display-string categories ("City Net",
+  "Match Play", "Fellowship Cup", "Players Cup"...). A category no
+  bundle names lands in the catch_all bundle — a future game type can
+  never silently vanish. Production spelling note (2026-09-11 audit):
+  payout rows use `ctp`, older maps say `closest_to_pin` — both are
+  seeded and they merge into ONE "Closest to Pin" game row.
+- **Payload** (`get_player_spotlight`): `winnings_by_game =
+  {current_year, years[], by_year{year: [bundle...]}, all_time:
+  [bundle...]}` where bundle = {key,label,color,buyin_noun,buyins,
+  total,games:[{category,label,count,total}]}; plus `stats_scoped =
+  {years{year: {events_played,races_entered,total_winnings}},
+  all_time{...}}`. Both scopes ship at once — the toggle is a client
+  re-render, no second fetch. PII-free (labels, counts, dollars), so
+  the member tier serves it unchanged. Helpers: `_winnings_by_game`
+  (pure — tested in `test_spotlight_winnings.py`),
+  `_spotlight_buyin_counts` (mirrors `_event_game_buyers` eligibility:
+  credited/refunded/transferred/rsvp_only out, child add-ons upgrade
+  the parent, wd keeps only un-credited bundles),
+  `get_winnings_bundles` (dial with seed fallback).
+- **UI** (spotlight.html): toggle pills under the hero card
+  (SEASON <year> | ALL-TIME; per-year pills appear once 2+ years
+  exist); ALL-TIME shows the note "historical records will be added in
+  the future"; stat strip reads the scoped values. WINNINGS BY GAME
+  panel sits between SCORING and Recent Winnings: a proportional
+  color-split bar, then one row per bundle (color dot, buy-in count +
+  win count, green total; $0 in gray, no chevron when no wins) using
+  the SAME details/summary expand pattern as Recent Winnings; game
+  rows carry a chip in the admin payout category colors
+  (`--cat-*` tokens, hex fallbacks matching tgf.html's CAT_COLORS).
+  Bundle totals sum exactly to the payout total, so the panel
+  self-audits against the Won tile in the all-time scope.
+
+**Per-event drill-down (v2.373.0, Kerry 2026-09-11 follow-up):** each
+game row inside a bundle is itself expandable to the EVENTS that game
+was won in — event name, date, flight/place detail, and the amount won
+there. Two payout rows in one event fold to one line with the bits
+accumulated ("Hole 13 · Hole 16"). The detail parsing (place with
+ties, holes, LOW/MID/HIGH or numeric flights, season-standings place)
+lives in `_payout_detail_bits`, extracted from `_friendly_game` so the
+Recent Winnings labels and this drill-down can never parse the same
+row differently. Payload: each game gains
+`events: [{event_name, event_date, total, detail}]`, newest first.
+
+**Detail-parse fix (v2.375.0, Kerry 2026-09-11):** cup rows put the
+FLIGHT ordinal first ("Players Cup — 1st Flight 2nd place" = Flight 1,
+2nd place); the shared `_payout_detail_bits` read that as 1st place in
+Flight 2 (caught on Jeff Young's spotlight line). An ordinal-flight
+branch now handles that shape (incl. "Champion & 1st Flight winner"
+and the championship-close "4th Flight 2nd" form) before the generic
+place/flight regexes.
+
+## EVENTS leaderboard on the LEADERBOARD page (v2.377.0 — ADMIN PILOT, Kerry directed 2026-09-11)
+
+Kerry's ask (improvements lane): an EVENTS tab LEFT of Points Races —
+ALL | AUSTIN | SAN ANTONIO chips (lands ALL; year selector arrives
+with historical records) — listing played events newest first, each
+expanding to its games "like Golf Genius's leaderboard but condensed",
+with drill-down to individual players. His merge rules (2026-09-11,
+verbatim intent): "Only merge Individual Net with All Net, Individual
+Gross with All Gross, and MVP with Points. Maintain flights for the
+Net and Gross per the event. Place non-flighted members... in the
+flights they would have been in if they'd have played. Highlight those
+that did buy in. Team Net has it's own. Skins has it's own, and only
+needs to show the players bought in and the flights. Closest to Pins
+obviously listed separately."
+
+- **ADMIN-ONLY until Kerry approves** (rule 3b): the tab carries
+  `admin-only` (applyRole reveals; member pages CSS-backstop it), both
+  routes are `@require_role("admin")` — the member flip is two role
+  strings + removing the class. Payloads are PII-free by design.
+- **Pilot scope is a dial**: `events_leaderboard_events` (JSON list of
+  event-code prefixes; seed s9.22 + a9.22 — this past Tuesday; empty
+  list = every event with scorecards).
+- **Boards per event** (the ratified leaderboard IA, side-games.md):
+  TEAM (gg_game_results rows) · NET (whole field, flight-SECTIONED;
+  buyers green + ✓ IN; Ind Net money badged) · GROSS (same shape) ·
+  SKINS (bought-in players only, in skins flights, skins won badged) ·
+  POINTS (net + gross Stableford from the formula layer, MVP-eligible
+  buyers highlighted, City/TGF MVP money badged) · PROXIES (CTP /
+  Longest Putt / HIO). Non-buyers are PLACED into the flight their
+  handicap would have flighted them (boundaries derived from the
+  labeled members' playing handicaps — `_flight_sections`, marked
+  `assigned` for a dashed treatment); no-handicap rows land in an
+  UNFLIGHTED band.
+- **Player drill-down**: tapping a row fetches
+  `/api/scoring/scorecard/<id>` (already member-tier) and renders the
+  hole-by-hole grid with handicap dots.
+- Backend: `get_events_leaderboard` / `get_event_leaderboard`
+  (database.py); routes `/api/events-leaderboard[/event]` (app.py).
+- **Future (Kerry)**: Player Spotlight winnings drill-down event lines
+  deep-link to these event records; year selector.
+- Also shipped: the admin dark nav gains a **Member View** link
+  (`/member`, admin-nav class) — Kerry 2026-09-11: "give me a top
+  level link to go directly to MEMBER VIEW."
+
+**Events leaderboard iteration 2 (v2.378.0, Kerry feedback 2026-09-11,
+same day):** (1) TEAM shows ALL teams — sourced from event_pairings
+groups (Team Net is Foursome v. Field; the closeout's FINAL GG pairing
+ingest makes those the played groups) with best-ball net totals
+computed from the hole cards, ranked with ties, GG purses attached by
+member-surname overlap; each team expands to a GG-style team card
+(members' net per hole, counting ball circled, TEAM row + total).
+NOTE: scoring_rounds has NO team column — the spotlight's
+_team_partners has been querying one that never existed and failing
+into its except (#452 shape); pairings are the team truth. (2) The
+chapter chips and game sub-tabs are CONNECTED segments. (3) Player
+drill-downs use tgfRenderScorecard (scorecard-render.js — the same
+card as the Handicaps/Points expands; renders only the nine(s)
+played). (4) Handicapped boards carry Index (9-hole index on 9-hole
+events) + Playing Handicap columns; the "(4)" name parenthetical is
+gone. (5) A game that didn't run is denoted up front: Individual
+Gross's activation threshold read from the LIVE matrix per 9/18, with
+the note that its pot rolled into Skins (games_off). (6) SKINS is a
+GG-style overall chart: buyers per flight hole-by-hole with winning
+skins circled (outright low gross within flight, computed from the
+cards), and everyone NOT in skins listed below with their hole
+scores. (7) POINTS tab is labeled MVP/Points. (8) Tables compress
+LEFT (width:auto) instead of filling the screen. Pilot dial expanded
+per Kerry: s9.22, a9.22, s9.21, a9.21, s18.10.
+
+**Events leaderboard iteration 3 (v2.378.2, Kerry 2026-09-11):**
+hole columns come only from holes actually PLAYED (GG cards carry
+empty rows for the unplayed nine — a front-9 event was rendering
+1-18); the team card and skins chart adopt THE card standard's metrics
+(2px/6px cells, 2em min-width, #e2e8f0 grid, 110px name column) so
+they column-align with the expanded player cards; the ball(s) that
+COUNTED for the team best-ball score are highlighted (green fill —
+circles stay reserved for the standard's under-par mark and the skins
+chart's winning skins); the winning team's row is highlighted in the
+team list; the nine's total column reads OUT/IN per the side played.
+
+**Skins placement pass (v2.378.3, Kerry 2026-09-11):** the flat NOT
+IN SKINS block is gone — everyone not in skins is PLACED into the
+skins flight their handicap would have put them in, at the BOTTOM of
+that flight in grey (same boundary derivation as the other boards);
+buyers stay on top with the circles and skins counts, and placed rows
+never contest a skin. `skins_out` removed from the payload.
+
+**Events leaderboard iteration 4 (v2.379.0, Kerry 2026-09-11):**
+- **MVP/Points ties**: points ties STAY ties (T# on the board — the
+  races never tiebreak); only Event MVP tiebreaks, per Kerry's
+  ratified chain (verbatim): "1. Net Score 2. Gross Score 3. Split
+  Pot." The top tied group orders by that chain so the MVP winner
+  shows first, and every tied MVP-eligible buyer carries a note
+  saying how the chain decided ("MVP tiebreak 2 — low Gross (36)").
+- **TEAM board is GG-official**: our best-ball total is a
+  reconstruction from each player's OWN card dots (100% individual
+  allowance) while the real Team Net game plays 75% OFF-LOWEST — so
+  the reconstruction can disagree with the recorded result (s9.21's
+  $80 winner showed 2nd; s9.22's GG T1 tie split 30/31 here).
+  Recorded GG positions + purses now rank the board; unrecorded teams
+  follow by reconstruction total, unranked; the panel says which is
+  which. Native engine-scored Team Net (live_scoring.py's
+  game_team_net with the ratified allowance) is the proper fix and
+  belongs to the untether program.
+- **CART Net events**: below 16 players the matrix runs 2-man cart
+  teams — team grouping now splits each pairing group into cart pairs
+  (cart_pos 1-2 / 3-4) when the matrix row's teamType says CART (or
+  N<16 fallback).
+- **Joint events** (chapter TGF/national — Landa Park) list under
+  BOTH chapter filters.
+- **Game activation keys off the Tracker's EVENT/GAMES counts** (Kerry:
+  "should be checking against Tracker EVENT / GAMES which should also
+  be helping determine which games are being played") —
+  `_event_player_counts` (the Games-tab mirror) supplies the player
+  count that picks the matrix row (team type) and the GROSS buyer
+  count that judges Individual Gross activation, not the scorecard
+  field size. The Star Ranch team-game override was a one-off with no
+  standing dial; if per-event game overrides become a pattern they
+  should land as a dial the leaderboard reads too.
+
+**Events leaderboard iteration 5 (v2.381.0, Kerry 2026-09-11 —
+"Both, but do 1 first"): TEAM board shows GG's POSTED TOTALS.**
+- The games-results walk (`import_gg_game_results`) now captures the
+  ENTIRE Team Net board, not just winners: `_game_winners_from_table`
+  grew a `total` field (parsed from GG's "TotalNet" column, "30
+  (-/30)") and a `winners_only=False` mode returning every positioned
+  row. Winner teams keep their `game='team_net'` row (the posted total
+  rides in `detail` as `total:N`); non-winner teams store under
+  **`game='team_net_board'`** — a key the payout assembly NEVER reads,
+  because storing $0 teams as `team_net` would let the matrix-fallback
+  pool invent place money GG didn't record (the v2.126.3 phantom-ties
+  class).
+- `get_event_leaderboard` reads both keys: every team gets
+  `gg_position` + `gg_total`; the board ranks and scores by the
+  recorded result end to end (GG even ordered s9.22's non-winners
+  differently than our reconstruction — WADE's team 5th at 34 vs our
+  3rd at 31). Reconstruction totals appear only for a team GG posted
+  no total for (muted, titled), and inside the expanded best-ball card,
+  which notes when its own-card sum differs from the recorded total
+  and why (75% off-lowest).
+- Matching hardened: per-MEMBER hits (full "LAST, First" preferred,
+  surname on a WORD BOUNDARY as fallback) — the surname-set approach
+  collapsed same-surname teammates (married couple in one cart) below
+  the foursome threshold, and bare substring let "buyer" hit inside
+  "nonBUYER". Blind-draw append is idempotent (a team can match its
+  winner row AND its board row).
+- Bridges: `scoring-games-import` takes `rewalk=N` (≤12) for the
+  backfill; `scoring-event-board:<event>` is a read-only compact TEAM
+  board vet (GG pos/total, reconstruction, purse, official).
+
+**Events leaderboard iteration 6 (v2.382.0, Kerry 2026-09-11):
+OVERALL view — the new default subtab.** One whole-field table
+(rank-by-net · Player · Idx · PH · hole-by-hole gross · Gross · Net ·
+Pts · Won) combining every player's scores. Wins highlight by the
+RATIFIED payout category colors (`--cat-*` in dashboard.css): Ind Net
+win tints the Net total green, Ind Gross the Gross total amber, Event
+MVP the Pts total purple, and winning skins circle their hole cells
+pink (`.evlb-circ.sk`); a legend explains each. **Buy-ins are
+deliberately NOT identified on this view** (Kerry: "Don't identify
+those who bought in") — rows carry no buyer flag or won-chips at all,
+only the win highlights and the **Won** column = the player's total
+recorded money for the event across ALL games (team shares, proxies,
+HIO included), from tgf_payouts. Rows expand to the universal
+scorecard (same `tr.evlb-plr[data-rid]` delegation). Backend:
+`overall_board` in `get_event_leaderboard`; the
+`scoring-event-board:<event>` bridge now also returns the overall
+summary (wins coded N/G/S/M + won) for no-login vetting.
+v2.382.1: winner STRIPS render above the board — the winning Team Net
+team(s) (position, members, recorded total, purse; team-net blue) and
+every proxy winner (CTP / Longest Putt / HIO; teal) — so the default
+view carries the games that don't live in a player row ("the OVERALL
+board shows everything").
+v2.384.0: money wins color-code BY FLIGHT (Kerry: "anybody who won
+money gets color-coded") — flight 1 red, 2 green, 3 blue (+amber,
+violet; `EVLB_FLIGHT_COLORS`/`evlbFlightTint`): tinted Net/Gross
+totals and flight-colored skins circles, tooltips name game + flight,
+legend shows only the flights that paid; MVP keeps the ratified
+purple. Backend: overall rows carry `net_flight` / `gross_flight` /
+`skins_flight` ordinals (`_flight_ordinals` over the sectioned
+boards — 1 = low flight, placed non-buyers included).
+**v2.398.0 — OVERALL's default order follows the event's state.** Kerry
+2026-09-14: "Set won money order as default landing for overall if event
+is completed. If not base it on points." `evlbOverallSort(d)` returns
+`"won"` when `d.pot > 0` and `"gamecol"` (the Pts column on OVERALL)
+otherwise; both sort descending and the # column re-ranks to match.
+  - **The completion test is the recorded POT**, not a date or status
+    flag — the pot is what makes a money sort meaningful. Before
+    closeout there are no payouts to rank by and points are the live
+    standing, so the board flips itself when an event is closed out with
+    nothing to remember to set.
+  - A missing `pot` reads as not-yet-paid rather than throwing.
+  - The Won `<th>` gained `${active("won")}` so the orange active-sort
+    fill lands on it when it is the default.
+  - Lives in its own function in the renderer region so the headless
+    guard tests the real rule, not a copy.
+Guard: seven checks — both branches, the header fill on each, and the
+resulting row order/ranking (money-first with unpaid players unranked;
+points-first otherwise).
+
+**v2.397.0 — Won moves next to the name.** Kerry 2026-09-13: "Move WON
+column right after names column." Column order is now
+`# | Player | Won | Idx | PH | holes… | G ± | N ± | [Pts]`. The money was
+the one number you had to scroll eighteen hole columns to reach on a
+phone. `.won` keeps a `br` rule so it still closes as its own group.
+All FOUR row builders moved in one pass — `evlbOvrRowHtml`,
+`evlbParRow`, `evlbPtsRowHtml`, `evlbTeamTotalRow` — so no row keeps its
+money in the old slot. Header, `data-k="won"` sort key and column count
+are unchanged; tapping Won still sorts and re-ranks by money.
+Guard: fifteen checks pinning the position (header order, third cell on
+every row type, not last, team purse intact, exactly one money cell per
+row, unchanged column count).
+
+**v2.396.0 — Handicaps column toggle, default OFF.** Kerry 2026-09-13:
+"Give me a checkbox to show the handicap columns or not and make the
+default not show them." A **Handicaps** checkbox sits beside **Hole by
+hole**; `evlbShowHcp` starts `false`, so every board opens with Idx + PH
+hidden and two more columns of phone width for the scores.
+  - Same mechanism as the hole toggle: cells carry `.hc`, the table
+    carries `no-hcp`, and `.evlb-ovr.no-hcp .hc { display:none }` hides
+    them. **Hidden, never removed** — sorting by Idx/PH survives, the
+    column count is identical across tabs, and the `.bl`/`.br` rules stay
+    on the right cells. The PAR, PTS and TEAM NET rows carry `.hc` on
+    those two slots too, so no filler is stranded.
+  - Flipping it updates every leaderboard open on the page and every copy
+    of the checkbox, matching the hole-toggle convention.
+  - **`evlbShowHoles` / `evlbShowHcp` moved into the renderer region** so
+    `test_events_board.js` runs the app's real defaults. The harness had
+    been declaring `evlbShowHoles = true` itself — asserting against its
+    own default would have let a changed default ship unnoticed, the same
+    gap as the stale row-mapping copy (v2.393.0).
+Guard: twenty-four checks.
+
+**v2.395.0 — ONE green for BOUGHT IN.** Kerry 2026-09-13: "Same green
+as points race but ins for events." The leaderboard's v2.393.0 buy-in
+wash was a paler mint picked locally; it now uses **`#bbf7d0`**, the
+green the Points Races standings have used for enrolled rows since the
+ratified rule that *green means bought in and nothing else*.
+  - It is a **token**, not a third copy of the hex: `--buyin-green`,
+    `--buyin-green-text`, `--buyin-grey` in `dashboard.css`. Read by the
+    leaderboard rows + legend swatches, the Points Races standings rows
+    (both boards), and the two "currently bought in" count chips.
+  - **Guarded:** `test_events_board.js` asserts the tokens exist, that
+    both surfaces read them, and that no buy-in use hard-codes the hex.
+    The one bare `#BBF7D0` left in `contests.html` is `.lsc-dep:hover`
+    (a hover shade on a deposit badge, not a buy-in signal) and the test
+    names that exception rather than allowing it through a loose rule.
+  - Non-buyers keep the light grey — never a paler green — so the two
+    states don't read as degrees of one thing.
+
+**v2.394.0 — PTS row per player, and POPS on every hole score.** Kerry
+2026-09-13: "MVP/POINTS need to show a row for each player that shows
+points. Also need to show pops on each hole score per standard."
+  - **`evlbPtsRowHtml(d, r, gameCol)`** emits a `tr.evlb-ptsrow` under
+    each player on the MVP/Points tab only: the NET stableford points
+    that score earned on every hole, plus the Pts total repeated in the
+    Pts column. Source is the new **`hole_pts`** payload key — the SAME
+    `compute_hole_derivations` pass the `net_pts` total is summed from,
+    captured per hole instead of only accumulated, so the row and the
+    column cannot drift. No points data for a round → no row.
+  - **`evlbPops(sr)`** renders strokes received as filled dots pinned to
+    the hole cell's top-right (`span.evlb-pops`, `td.h{position:relative}`)
+    — the same treatment `scorecard-render.js` `strokeDots` has always
+    used. On every tab, including the Team tab's NET cells, where the
+    dots are the record of why net differs from gross. The PAR row and
+    the TEAM NET row carry none.
+  - **Scorecard expansion anchor.** The delegated handler now inserts the
+    card after the player's PTS row when one is present (`host`), not
+    after the score row. Inserting between them would orphan the points
+    row from its score — the same injected-detail-row hazard that made
+    CSS `nth-child` zebra striping unusable here.
+Guard: twenty checks in `test_events_board.js` (101 total).
+
+**v2.393.0 — buy-in coloring on the NET/GROSS bundle tabs.** Kerry
+2026-09-13: "Any Net Bundle and Gross bundle games should still show who
+bought in and didn't buy in with the green coloring for the rows and
+lighter grey for those who didn't buy in." `EVLB_BUYIN_GAMES =
+["net","gross","skins","points"]` — the games a player BUYS INTO. On
+those four tabs each row washes green (`tr.bought`, `#ECFDF3`) when the
+player bought into THAT game and light grey (`tr.nobuy`, `#FAFAFA` +
+muted text) when they did not.
+  - **The wash REPLACES the zebra stripe** on those tabs (the `alt`
+    class is not applied) — two competing washes on one row read as
+    neither. Inline flight win tints still paint over both.
+  - **Team Net and the proxies come with the entry**, so they have no
+    buy-in to show; OVERALL still deliberately identifies nobody's
+    buy-ins (Kerry 2026-09-11).
+  - **How both rules hold at once.** `buyer` rides on the GAME board's
+    own row (`net_board` / `gross_board` / `skins_board` /
+    `points_board`, all built by `_row(p, <bundle>_buyers, …)`), and
+    `evlbOvOf` lifts it onto the shared copy as `_buyer`. The overall
+    row itself never carries it — one set of numbers, both rules, no
+    payload change.
+  - **`evlbOvOf` / `evlbSecsFrom` moved out of `evlbEventHtml`** into the
+    renderer region so `test_events_board.js` exercises the REAL mapping.
+    Its private copy had already gone stale once (the team-band tap
+    target) and hidden a genuine change: a test that reimplements the
+    thing it tests is not a test.
+  - The page footnote no longer advertises the removed "✓ IN" column.
+Guard: sixteen checks — the wash on all four bundle tabs, the stripe
+standing down, OVERALL and Team staying clean, and the `_buyer` lift.
+
+**v2.392.0 — PAR row under the hole numbers.** Kerry 2026-09-13: "Add
+a par row below the hole numbers for all leaderboards." `evlbParRow(d,
+gameCol)` emits a second THEAD row on every standard board, and
+`evlbTeamCard` carries the same line in its own column shape so tapping a
+team doesn't lose it. In the THEAD it survives re-sorts and hides with
+the holes (`td.h` under `.evlb-ovr.no-holes .h`). Total par sits under
+BOTH the G and N columns — par is the reference for gross and net alike.
+  - **`hole_par` (new payload key).** Par is a property of the HOLE but
+    is stored per TEE (`course_tee_holes.par`), and a course can carry a
+    different par on a forward tee. `get_event_leaderboard` gathers the
+    distinct pars across the tees actually in play on the event and
+    publishes a hole ONLY when they agree. A hole where they disagree is
+    absent → renders blank; the total par stays blank until every hole
+    has one. Same rule the to-par totals follow: a gap shows nothing
+    rather than a wrong number.
+  - No par data at all → no PAR row, rather than a row of blanks.
+  - `scoring-event-board` returns `hole_par` for outside verification.
+Guard: fourteen checks in `test_events_board.js`; `hole_par` asserted in
+`test_spotlight_winnings.py`.
+
+**v2.391.0 — TEAM NET total row.** Kerry 2026-09-13: "The team Net
+needs to show a team total row that shows what their team score for each
+hole was, and team total and total money won." Each team band on the
+Team tab closes with `evlbTeamTotalRow(d, t, mins, gameCol)` — same
+columns as the player rows: position, `TEAM NET`, the best net ball on
+every hole, the team total, its to-par, and the team's WHOLE purse
+(`t.purse`, not a player's share).
+  - **The Team tab renders hole cells in NET, not gross** (`netMins`
+    passed into `evlbOvrRowHtml`), and shades the counting ball
+    (`td.h.count`). A team total row under gross hole scores cannot be
+    checked against the numbers above it; in net it reads straight down
+    the column. Every other tab keeps gross.
+  - **GG vs our reconstruction.** The total shown is `t.gg_total` (score
+    of record, v2.381.0); when our best-ball-of-own-card-nets sum
+    differs it is printed beside the label as `(holes N)` and named in
+    the cell tooltip. The official game plays 75% off-lowest while each
+    player's card carries their individual allowance — they legitimately
+    differ until the team per-player nets are imported (CA Queue item #1).
+  - **One computation, two surfaces.** `evlbNetOf` + `evlbTeamMins` are
+    now shared by `evlbTeamCard` (the expandable best-ball card) and the
+    new row, so the same team score can never be computed two ways. Both
+    live in the renderer region above `evlbEventHtml` so the headless
+    guard can reach them.
+  - The team BAND label drops the total and purse it used to repeat.
+Guard: eleven new checks in `test_events_board.js`.
+
+**v2.390.0 — each tab shows only ITS OWN game.** Kerry 2026-09-13:
+"Only want results, winnings and colors per tab games except for
+overall." v2.389.0 unified the SHAPE; this scopes the CONTENT. Each
+board entry carries a `game` key (`net` / `gross` / `skins` / `points`
+/ `team`); OVERALL deliberately has none.
+  - **Colors.** `evlbOvrRowHtml(d, r, i, gameCol, game)` gates every
+    highlight through `shN` / `shG` / `shS` / `shM` — a tab tints only
+    its own game's result. Skins circles only render on Skins and
+    Overall; the MVP tint only on MVP/Points and Overall.
+  - **Money.** Each overall row now carries `won_by_cat` (per payout
+    CATEGORY, built in `get_event_leaderboard` alongside `won_total`).
+    `evlbGameMoney(r, game)` sums the categories in `EVLB_GAME_CATS`
+    (net→`individual_net`, gross→`individual_gross`, skins→`skins`,
+    points→`mvp`+`tgf_mvp`, team→`team_net`) so the Won column is THAT
+    TAB's money; OVERALL alone shows `won_total`. One source of truth —
+    the tab figures always sum back to the Overall figure. The `won`
+    sort key follows the same per-tab value.
+  - **The Pts column** is the MVP game's result, so `gameCol: false` on
+    net / gross / team drops the slot entirely; those three tabs run one
+    column narrower than Overall / Points / Skins. This knowingly relaxes
+    v2.389.0's constant-column-count rule — a column carrying another
+    game's score is precisely what Kerry asked to remove.
+  - **Legend.** `evlbLegendFor(game)` builds one legend per tab: the
+    all-games legend stays on OVERALL; a game tab names only what IS
+    highlighted there and states that Won is that game's money, pointing
+    at OVERALL for the whole event.
+Guards: `test_events_board.js` asserts each tab lights up its own game
+AND not the others, plus the per-tab money figures and the column-count
+split; `test_spotlight_winnings.py` asserts `won_by_cat` splits the
+money by game and sums back to `won_total`.
+
+**v2.389.0 — ONE board for every tab.** Kerry 2026-09-13: "everything
+except for Closest to Pins to follow the Overall layout so that moving
+from button to button is just a reordering of that leaderboard with the
+highlighting and organization of the other leaderboards." Overall /
+Team / Net / Gross / Skins / MVP-Points all render through
+`evlbStdBoard(d, board)`: same columns, same flight-colored win tints,
+same sort + re-rank + hole toggle + tap-for-scorecard. A tab supplies
+only `sections` (bands) and `sort`:
+  - net / gross / skins → flight bands off the sectioned boards
+  - team → one band per team (position · players · GG total · purse),
+    band tap opens the best-ball card (`teamBands` + `teams` on the board)
+  - overall / points → single unbanded section; points keeps mvp_note
+`gameCol` relabels ONE slot (Pts → Skins count) so the column COUNT is
+constant across tabs. Rank runs WITHIN a band; sorting sorts within
+bands rather than flattening them. Boards register in `EVLB_BOARDS` by
+`data-board` id so the sort handler re-renders without refetching.
+Winner strips (Team Net + CTP/HIO) moved BELOW the Overall board.
+Deleted with the refactor: evlbWonChips / evlbScoreRows / evlbBand /
+evlbSectioned / evlbHoleCells. Guard: `test_events_board.js` renders
+every tab headless from the live template.
+v2.388.0 (SKINS board): count + money move LEFT of the holes —
+Player | Skins | Won | 1 2 3… — black rule right of Won, and the
+green $ badges beside names are retired (money lives in the Won
+column now). The `.bl`/`.br` group rules and the `.won` money
+column moved from `.evlb-ovr` to `.evlb-holes`, so EVERY board on
+the shared hole-grid standard inherits them.
+v2.387.0: the score block sits RIGHT of the last hole with a rule
+between gross and net — # | Player | Idx | PH | holes… | G ± | N ± |
+Pts | Won — and a **Hole by hole** checkbox above the board
+collapses the hole columns (module-level `evlbShowHoles`, CSS class
+`.evlb-ovr.no-holes .h`). Columns are HIDDEN, never removed, so
+sorting / re-ranking / tap-for-scorecard survive the toggle; the
+choice carries across events in a session and every open OVERALL
+table follows it.
+v2.386.0: a TO-PAR column sits beside each score — # | Player | G |
+± | N | ± | Idx | PH | holes… | Pts | Won — golf-style (E / +n /
+−n). `par_by_rid` sums par over the holes actually PLAYED off the
+player's own tee and only when EVERY played hole has par data, so a
+gap renders blank instead of a wrong number (`par`, `to_par_gross`,
+`to_par_net` on each overall row). Black rules bracket the column
+GROUPS (score block, Idx/PH, Pts) via `.bl`/`.br`, and every other
+row carries a grey wash from a render-time `.alt` class — NOT CSS
+nth-child, because the injected scorecard row would flip parity for
+everything below it. Win tints are inline so they always beat the
+stripe, and a win tints the score AND its ± together.
+v2.385.0: column order is # | Player | **G** | **N** | Idx | PH |
+holes… | Pts | Won — the two totals sit immediately after the name
+as one-letter columns (Kerry: "move both of those score columns all
+the way left"), so a phone reads name-and-score without scrolling
+the hole block; titles still spell them out.
+v2.384.1: sort headers carry NO arrow glyphs (they padded every
+numeric header and widened the column beneath it) — the ACTIVE
+sort column is its header cell filled TGF orange, which costs no
+width; on load that mark sits on Net, the real default sort key,
+not on the derived # rank.
+v2.383.0/.1: every column SORTS (tap to sort, tap again to flip;
+Pts/Won open high-first; blanks sink), and the # column RE-RANKS
+against the sorted column (Kerry: "re-rank based on which column is
+tapped") — T# on tied values, blank rank for players with no value
+there. Row expansion became ONE delegated click handler on the event
+body (`evlbWireEvent`) so sorted re-renders keep tap-for-scorecard;
+the overall row template is module-level (`evlbOvrRowHtml`) shared by
+initial paint and re-sorts.
+
+**Team Net scoring — LEARNED FROM GG (parity bridge, 2026-09-11):**
+`scoring-teamnet-parity:<event>|<gg v2tournaments url>` computes every
+plausible reading of 75%-off-lowest from our cards AND reads GG's
+ground truth (the team tournament's per-player detail fragments: each
+player's TEAM-game handicap + dots). s9.22 findings, proven from GG's
+own dots: team PH = 75% × (UNROUNDED course handicap − lowest
+unrounded CH in field), rounded half-up, CAPPED at the TGF max
+(18 on nines — DelCarmen's 18 is unreachable any other way);
+allocation over ALL holes by stroke index (max 2 pops), then dots on
+par 3s are REMOVED, not reallocated (Anthis: TH 8 → 7 dots).
+EXACT reproduction from our stored data is impossible: we keep the
+ROUNDED net-game PH, and its ±0.5 flips several players by a stroke.
+The clean fix is importing the TEAM tournament per-player nets the
+way ALL Net imports (GG fragments carry the exact THs/dots) — a
+schema addition awaiting Kerry's rule-3b ratification. Until then the
+board stays GG-official-ranked. Blind-draw slots now render on teams
+(parsed from the GG team string's "Bl[...]", card duplicated from the
+drawn player's round — GG's own mechanism).

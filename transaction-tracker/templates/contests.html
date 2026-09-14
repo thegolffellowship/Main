@@ -246,6 +246,164 @@
         }
         .top-tab:hover { color: var(--text); }
         .top-tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+
+        /* ── EVENTS leaderboard (ADMIN pilot, Kerry 2026-09-11) ──
+           toggles are CONNECTED segments (Kerry: "Connect the toggles
+           like in other places we do that. It will save on space") */
+        .evlb-chips { display: flex; align-items: center; gap: 8px; margin: 1rem 0 0.5rem; flex-wrap: wrap; }
+        .evlb-seg { display: inline-flex; border: 1px solid var(--border, #E5E7EB);
+            border-radius: 99px; overflow: hidden; background: #fff; }
+        .evlb-seg button { appearance: none; border: 0; border-left: 1px solid var(--border, #E5E7EB);
+            background: transparent; padding: 6px 14px; cursor: pointer;
+            font: 700 11px/1 'Bitter', serif; letter-spacing: 0.5px; color: #6B7280;
+            text-transform: uppercase; }
+        .evlb-seg button:first-child { border-left: 0; }
+        .evlb-seg button.active { background: #1B1B1B; color: #fff; }
+        .evlb-seg-sub button.active { background: var(--primary, #E87C3E); }
+        .evlb-year { margin-left: auto; font: 700 11px/1 'Bitter', serif; color: #9CA3AF;
+            letter-spacing: 1px; border: 1px dashed var(--border, #E5E7EB); border-radius: 99px; padding: 6px 12px; }
+        .evlb-pilot { font-size: 11px; color: #9CA3AF; flex-basis: 100%; }
+        details.evlb-ev { border: 1px solid var(--border, #E5E7EB); border-radius: 10px;
+            background: #fff; margin-top: 0.7rem; overflow: hidden; }
+        details.evlb-ev > summary { list-style: none; cursor: pointer; display: flex;
+            align-items: center; gap: 12px; padding: 12px 14px; }
+        details.evlb-ev > summary::-webkit-details-marker { display: none; }
+        .evlb-ev .chev { flex: none; transition: transform .15s; color: #9CA3AF; font-size: 11px; }
+        details.evlb-ev[open] > summary .chev { transform: rotate(90deg); }
+        .evlb-ev .nm { font: 700 15px/1.2 'Bitter', serif; color: #1B1B1B; }
+        .evlb-ev .meta { font-size: 12px; color: #6B7280; margin-top: 2px; }
+        .evlb-ev .pot { margin-left: auto; text-align: right; font: 700 15px/1 'Bitter', serif;
+            color: #1B7F4B; font-variant-numeric: tabular-nums; }
+        .evlb-ev .pot .s { display: block; font: 600 10px/1.6 'Helvetica Neue', Arial, sans-serif;
+            color: #9CA3AF; letter-spacing: 0.5px; }
+        .evlb-body { border-top: 1px solid #F0EEE9; padding: 10px 14px 14px; }
+        .evlb-subtabs { margin-bottom: 10px; }
+        .evlb-scroll { overflow-x: auto; }
+        /* tables compress LEFT instead of filling the width (Kerry) */
+        table.evlb-tbl { width: auto; border-collapse: collapse; }
+        .evlb-tbl th { text-align: left; font: 700 10px/1.6 'Bitter', serif; letter-spacing: 1px;
+            color: #9CA3AF; text-transform: uppercase; padding: 4px 8px; border-bottom: 1px solid #F0EEE9; }
+        .evlb-tbl td { padding: 6px 8px; font-size: 13px; border-bottom: 1px solid #F6F4F0; }
+        .evlb-tbl tr.buyer > td { background: #E9F7EE; }
+        .evlb-tbl td.r { text-align: right; font-variant-numeric: tabular-nums; }
+        .evlb-in { font-size: 10px; font-weight: 700; color: #166534; }
+        .evlb-notin { font-size: 10px; font-weight: 700; color: #B91C1C; }
+        .evlb-won { display: inline-block; background: #DCFCE7; color: #166534; border-radius: 99px;
+            padding: 2px 8px; font-size: 11px; font-weight: 700; margin-left: 6px; white-space: nowrap; }
+        .evlb-flight { display: inline-block; background: #EEF2FF; color: #4338CA; border-radius: 99px;
+            padding: 2px 8px; font-size: 10px; font-weight: 700; margin-left: 6px; }
+        .evlb-plr { cursor: pointer; }
+        .evlb-card-row > td { background: #FAF9F7; }
+        /* hole grids share THE card standard's metrics (tgf-standards
+           TGF_CARD_STYLE: 2px 6px cells, 2em min-width, #e2e8f0 grid,
+           0.8rem) so they column-align with the expanded player cards */
+        .evlb-holes { border-collapse: collapse; font-size: 0.8rem; margin: 6px 0; }
+        .evlb-holes td, .evlb-holes th { border: 1px solid #e2e8f0; padding: 2px 6px;
+            text-align: center; min-width: 2em; white-space: nowrap; }
+        .evlb-holes th { background: #1B1B1B; color: #fff; font-weight: 700; }
+        .evlb-holes td.nm, .evlb-holes th.nm { text-align: left; min-width: 110px;
+            font-weight: 600; color: #475569; }
+        .evlb-holes th.nm { color: #fff; }
+        .evlb-holes tr.mute td { color: #9CA3AF; }
+        .evlb-holes tr.teamrow td { background: #F3F1EC; font-weight: 700;
+            border-top: 2px solid #1B1B1B; }
+        /* POPS — strokes received on the hole, house standard: dots
+           pinned to the cell corner, never displacing the number */
+        .evlb-holes td.h { position: relative; }
+        /* half the standard's 0.55em (Kerry 2026-09-13) — the leaderboard
+           packs 18 hole columns where the scorecard grid packs nine, so
+           the dots shrink to stay a marker rather than a second number.
+           scorecard-render.js keeps the standard size on its own card. */
+        .evlb-pops { position: absolute; top: 0; right: 1px; font-size: 0.28em;
+            line-height: 1.4; color: #334155; letter-spacing: -0.2px; }
+        /* per-player POINTS row on the MVP/Points tab (Kerry 2026-09-13) */
+        .evlb-ovr tr.evlb-ptsrow td { background: #FAF7FF; color: #6D28D9;
+            font-size: 0.72rem; font-weight: 700; border-top: none; }
+        .evlb-ovr tr.evlb-ptsrow td.nm { text-align: right; font-weight: 600;
+            color: #9CA3AF; font-size: 0.66rem; letter-spacing: .04em; }
+        /* BUY-IN status on the NET/GROSS bundle tabs (Kerry
+           2026-09-13): green row = bought into THAT game, light grey =
+           did not. Backgrounds only — the inline win tints on the score
+           cells still paint over the top, which is the point. */
+        .evlb-ovr tr.evlb-plr.bought td { background: var(--buyin-green, #bbf7d0); }
+        .evlb-ovr tr.evlb-plr.nobuy td { background: var(--buyin-grey, #FAFAFA); color: #9CA3AF; }
+        .evlb-ovr tr.evlb-plr.nobuy td.nm { color: #6B7280; }
+        /* PAR row under the hole numbers (Kerry 2026-09-13) — a
+           reference band between the black header and the data */
+        .evlb-holes thead tr.evlb-parrow td { background: #F3F1EC;
+            color: #475569; font-weight: 700; font-size: 0.72rem;
+            border-bottom: 2px solid #1B1B1B; }
+        .evlb-holes thead tr.evlb-parrow td.nm { text-align: left; }
+        /* the counting ball(s) behind the team best-ball score */
+        .evlb-holes td.count { background: #DCFCE7; font-weight: 700; }
+        /* GG-style circled winning score (skins / counting team ball) */
+        .evlb-circ { display: inline-block; min-width: 17px; line-height: 17px;
+            border: 1.5px solid #1B1B1B; border-radius: 50%; font-weight: 700; }
+        /* OVERALL view (Kerry 2026-09-11): money-win highlights color-
+           code by FLIGHT (inline styles from evlbFlightTint — flight 1
+           red, 2 green, 3 blue...); MVP keeps the ratified purple.
+           No buy-in identification on this view by design. */
+        .evlb-ovr td b { color: inherit; }
+        /* Kerry 2026-09-12: black rules bracket each column GROUP (the
+           G/N score block, the handicap block, Pts) so the eye lands on
+           the right number, and every other row carries a light grey
+           wash. The zebra lives on a render-time .alt class, not CSS
+           nth-child, because an expanded scorecard row is injected into
+           the same tbody and would flip the parity of everything below
+           it. Win tints are inline, so they always paint over both. */
+        /* group rules + the money column belong to EVERY hole grid, not
+           just OVERALL — the skins board uses the same Won column */
+        .evlb-holes td.bl, .evlb-holes th.bl { border-left: 2px solid #1B1B1B; }
+        .evlb-holes td.br, .evlb-holes th.br { border-right: 2px solid #1B1B1B; }
+        .evlb-ovr tr.alt td { background: #F3F3F1; }
+        .evlb-ovr td.tp { color: #6B7280; font-size: 0.72rem; }
+        .evlb-ovr.no-holes .h { display: none; }
+        /* handicap columns, hidden by default (Kerry 2026-09-13) */
+        .evlb-ovr.no-hcp .hc { display: none; }
+        /* a BAND row — a flight on Net/Gross/Skins, a team on Team */
+        .evlb-holes tr.evlb-band td { background: #1B1B1B; color: #fff; text-align: left;
+            font: 700 10px/1.7 'Bitter', serif; letter-spacing: 1px; padding: 4px 10px;
+            white-space: normal; }
+        .evlb-holes tr.evlb-band[data-team] td { cursor: pointer; }
+        .evlb-holes tr.evlb-band .tchev { font-size: 8px; opacity: .8; }
+        .evlb-holetog { display: inline-flex; align-items: center; gap: 6px;
+            font-size: 12px; color: #4B5563; margin: 0 0 6px; cursor: pointer;
+            user-select: none; }
+        .evlb-holetog input { accent-color: var(--primary, #E87C3E); cursor: pointer; }
+        .evlb-holes td.won, .evlb-holes th.won { text-align: right; font-weight: 700;
+            color: var(--money-green, #15803D); font-variant-numeric: tabular-nums; min-width: 58px; }
+        /* OVERALL sortable headers (Kerry 2026-09-11: no arrow glyphs —
+           they widened every numeric column; the ACTIVE sort column is
+           simply its header cell in TGF orange) */
+        .evlb-ovr th.sortable { cursor: pointer; user-select: none; }
+        .evlb-ovr th.sortable.asc, .evlb-ovr th.sortable.desc {
+            background: var(--primary, #E87C3E); color: #1B1B1B; }
+        /* OVERALL winner strips (Team Net + proxies above the board) */
+        .evlb-winbox { margin: 0 0 10px; display: grid; gap: 4px; }
+        .evlb-winline { display: flex; align-items: baseline; gap: 10px; font-size: 12.5px;
+            padding: 5px 10px; border-radius: 8px; background: #FAFAF8; border: 1px solid #F0EEE9; }
+        .evlb-winline .cat { font: 700 9.5px/1.4 'Bitter', serif; letter-spacing: 1px; white-space: nowrap; }
+        .evlb-winline.team .cat { color: var(--cat-team-net, #1D4ED8); }
+        .evlb-winline.ctp .cat { color: var(--cat-ctp, #0F766E); }
+        .evlb-winline .who { flex: 1; min-width: 0; white-space: normal; }
+        .evlb-winline .amt { font-weight: 700; color: var(--money-green, #15803D); font-variant-numeric: tabular-nums; white-space: nowrap; }
+        .evlb-legend { font-size: 11px; color: #6B7280; margin: 8px 0 0; white-space: normal; }
+        .evlb-legend .lg { display: inline-block; padding: 1px 7px; border-radius: 4px; font-weight: 700; }
+        .evlb-legend .lg.w-mvp { background: rgba(109,40,217,.14); color: var(--cat-mvp, #6D28D9); }
+        .evlb-note { background: #FFF7ED; border: 1px solid #FED7AA; color: #9A3412;
+            border-radius: 8px; padding: 8px 12px; font-size: 12px; margin: 0 0 10px; }
+        details.evlb-team { border: 1px solid #F0EEE9; border-radius: 8px; margin-top: 6px; }
+        details.evlb-team > summary { list-style: none; cursor: pointer; display: flex;
+            align-items: center; gap: 10px; padding: 8px 10px; font-size: 13px; }
+        details.evlb-team > summary::-webkit-details-marker { display: none; }
+        details.evlb-team.win > summary { background: #E9F7EE; }
+        details.evlb-team.win > summary .tm { font-weight: 700; }
+        .evlb-team .tchev { flex: none; color: #9CA3AF; font-size: 10px; transition: transform .15s; }
+        details.evlb-team[open] > summary .tchev { transform: rotate(90deg); }
+        .evlb-team .tm { flex: 1; min-width: 0; }
+        .evlb-team .tnet { font-weight: 700; font-variant-numeric: tabular-nums; }
+        .evlb-team .tpurse { color: #1B7F4B; font-weight: 700; font-variant-numeric: tabular-nums; }
+        .evlb-team-card { padding: 4px 10px 10px; }
         .section-hidden { display: none !important; }
 
         /* ── Sub-tabs (Points Race) ── */
@@ -1395,6 +1553,14 @@
         .lsc-seat-label { flex: 0 0 112px; font: 700 9.5px/1.45 'Bitter', serif; letter-spacing: 0.8px; color: #6B7280; text-transform: uppercase; }
         .lsc-seat.captain { background: #FCF6EF; }
         .lsc-seat.captain .lsc-seat-label { color: #BF5700; }
+        /* CAPTAIN chip (Kerry 2026-09-11: "Captains need to be set apart
+           visually" — the seat label shows how they qualified, the chip
+           carries the title). Chapter-colored like the card bands. */
+        .lsc-cap-chip { display: inline-block; margin-left: 8px;
+            padding: 1px 8px; border-radius: 9px; font-size: 0.62rem;
+            font-weight: 800; letter-spacing: 0.06em; background: #BF5700;
+            color: #fff; vertical-align: 2px; }
+        .lsc-card.sa .lsc-cap-chip { background: #4B6274; }
         .lsc-player { font-size: 14px; color: #1B1B1B; font-weight: 600; }
         /* Qualification sub-detail folds behind a chevron (Kerry
            2026-08-17: "provide chevrons that are collapsed hiding the
@@ -1596,9 +1762,14 @@
              which clips absolutely-positioned children (v2.57.6 iOS fix) -->
         <div class="top-tabs-wrap">
             <div class="top-tabs">
+                {# EVENTS leaderboard (Kerry 2026-09-11) — ADMIN-ONLY pilot
+                   until he approves member exposure; applyRole reveals it,
+                   the member-page CSS backstop keeps it off /member #}
+                <button class="top-tab admin-only" data-top="events" style="display:none;">Events</button>
                 <button class="top-tab active" data-top="points-race">Points Races</button>
-                <button class="top-tab" data-top="match-play">Match Play</button>
+                {# Lone Star Cup sits LEFT of Match Play (Kerry 2026-09-12) #}
                 <button class="top-tab" data-top="lone-star-cup">Lone Star Cup</button>
+                <button class="top-tab" data-top="match-play">Match Play</button>
                 <button class="top-tab manager-only" data-top="enrollment">Enrollment</button>
             </div>
         </div>
@@ -1790,6 +1961,23 @@
         </div>
 
         <!-- ═══════════ POINTS RACE ═══════════ -->
+        <!-- ═══════════ EVENTS LEADERBOARD (Kerry 2026-09-11 — ADMIN pilot;
+             list of played events, each expanding to its games in the
+             ratified Team · Net · Gross · Proxies IA, full-field board +
+             money game combined, buyers highlighted, winners badged) ═══ -->
+        <div id="section-events" class="section-hidden">
+            <div class="evlb-chips">
+                <div class="evlb-seg" id="evlb-chips">
+                    <button class="evlb-chip active" data-ch="">All</button>
+                    <button class="evlb-chip" data-ch="Austin">Austin</button>
+                    <button class="evlb-chip" data-ch="San Antonio">San Antonio</button>
+                </div>
+                <span class="evlb-year" id="evlb-year" title="Year selector arrives with historical records">2026</span>
+                <span class="evlb-pilot" id="evlb-pilot"></span>
+            </div>
+            <div id="evlb-list"><p style="color:var(--text-muted);margin-top:1rem;">Loading events&hellip;</p></div>
+        </div>
+
         <div id="section-points-race">
             <div class="pr-section">
                 <!-- L3 race selector (contests-handicaps-071026 view 1a/1e):
@@ -1884,21 +2072,21 @@
                 <!-- HIW left, badges right (Kerry 2026-08-06) -->
                 <div style="margin-top:0.7rem; display:flex; align-items:center; gap:0.6rem; flex-wrap:wrap;">
                     <button id="lsc-hiw-btn" class="pr-hiw-link" type="button">How It Works</button>
-                    <span class="lsc-chip" style="margin-left:auto;">&#9679;&nbsp;Projected Rosters &middot; Live from today's standings</span>
+                    <!-- Status chip: static default reads PROJECTED; lscLoad
+                         flips it to FINAL ROSTERS when the payload carries
+                         roster_final (Kerry 2026-09-11: "Should have FINAL
+                         ROSTERS badge now") -->
+                    <span class="lsc-chip" id="lsc-status-chip" style="margin-left:auto;">&#9679;&nbsp;Projected Rosters &middot; Live from today's standings</span>
                 </div>
-                <p class="lsc-intro">Austin vs San Antonio — each chapter fields a
+                <p class="lsc-intro" id="lsc-intro-p">Austin vs San Antonio — each chapter fields a
                 12-player team earned through the season's contests. Rosters are
                 decided after the City and TGF Championships; until then, every
                 seat below is projected live from the current standings, just
                 like the projected payouts.</p>
-                <div id="lsc-rosters"><p style="color:var(--text-muted);margin-top:1rem;">Loading projected rosters&hellip;</p></div>
-                <div class="lsc-legend">
-                    <span class="li"><span class="ic"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M8 10V7a4 4 0 0 1 8 0v3" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/><path fill="currentColor" fill-rule="evenodd" d="M6.2 10h11.6c1.2 0 2.2 1 2.2 2.2v7.6c0 1.2-1 2.2-2.2 2.2H6.2C5 22 4 21 4 19.8v-7.6C4 11 5 10 6.2 10zm5.8 3.2a1.9 1.9 0 0 0-1 3.5V19a1 1 0 0 0 2 0v-2.3a1.9 1.9 0 0 0-1-3.5z"/></svg></span>
-                        <span><b>Lock</b> &mdash; the seat is SECURED: the champion is declared or the result is final, and standings moves can no longer change it.</span></span>
-                    <span class="li"><span class="lsc-pool-chip" style="margin-left:0;">Pool</span>
-                        <span><b>Pool</b> &mdash; the seat is projected to fill from the Alternates Pool (next player up) because a qualifier holds a better seat or a spot is open.</span></span>
-                </div>
-                <p class="lsc-foot">Only bought-in players hold seats. If you
+                <div id="lsc-rosters"><p style="color:var(--text-muted);margin-top:1rem;">Loading rosters&hellip;</p></div>
+                <!-- Lock/Pool legend removed (Kerry 2026-09-11: "No need for
+                     that legend below since we're not using it") -->
+                <p class="lsc-foot" id="lsc-foot-p">Only bought-in players hold seats. If you
                 qualify in more than one contest you take the seat where you
                 placed higher, and the seat you free up goes to the next player up
                 from the alternates pool. Alternates are ranked by how high you
@@ -2095,6 +2283,7 @@
     <script src="/static/js/auth.js"></script>
     <script src="/static/js/tgf-standards.js?v={{ app_version }}"></script>
     <script src="/static/js/points-render.js?v={{ app_version }}"></script>
+    <script src="/static/js/scorecard-render.js?v={{ app_version }}"></script>
     <script>
     // ═══════════ Contests Page ═══════════
 
@@ -2152,6 +2341,24 @@
             const res = await fetch("/api/season-contests/lone-star-cup");
             const d = await res.json();
             if (!res.ok || d.error) throw new Error(d.error || res.statusText);
+            // FINAL ROSTERS state (Kerry 2026-09-11): once the roster is
+            // frozen the badge and intro stop talking about projections.
+            if (d.roster_final) {
+                const chip = $("lsc-status-chip");
+                if (chip) {
+                    chip.innerHTML = "&#9679;&nbsp;Final Rosters";
+                    chip.style.background = "#DCFCE7";
+                    chip.style.color = "#166534";
+                    chip.style.borderColor = "#86EFAC";
+                }
+                const ip = $("lsc-intro-p");
+                if (ip) ip.textContent = "Austin vs San Antonio — each " +
+                    "chapter fields a team earned through the season's " +
+                    "contests. These are the final rosters for the weekend " +
+                    "at The Hideout.";
+                const fp = $("lsc-foot-p");
+                if (fp) fp.style.display = "none";
+            }
             const lscEv = d.event_info;
             // banner IS the section header (Kerry 2026-08-06) — the title
             // and icon are static; JS fills the date/venue from the dial
@@ -2206,7 +2413,11 @@
                 // and every bonus row carries the .bonus tint.
                 let bonusHead = false;
                 const seats = ch.seats.map(seat => {
-                    const cap = /CAPTAIN/.test(seat.seat || "");
+                    // Captaincy is a FLAG since the final-roster freeze
+                    // (Kerry 2026-09-11: seat label shows how they
+                    // qualified, captains set apart visually) — the
+                    // regex keeps live-projection payloads working.
+                    const cap = seat.captain === true || /CAPTAIN/.test(seat.seat || "");
                     const bonus = /^DFW\/HOUSTON/.test(seat.seat || "");
                     // SECURED (Kerry 2026-08-01, idea 5): a declared-final
                     // City NET champion's captaincy is settled, not
@@ -2224,6 +2435,7 @@
                         // (Kerry, same day) — the pool origin still
                         // reads in the folded qualification line.
                         who = `<span class="lsc-player">${escapeHtml(prNiceName(seat.player_name))}` +
+                              (cap ? '<span class="lsc-cap-chip">CAPTAIN</span>' : '') +
                               depBadge(seat.customer_id) +
                               `<span class="lsc-earn">${escapeHtml(seat.earned_as || "")}</span></span>`;
                     } else {
@@ -2260,7 +2472,18 @@
                 const cls = /austin/i.test(ch.chapter || "") ? "austin" : "sa";
                 return `<div class="lsc-col">` +
                        `<div class="lsc-card ${cls}">` +
-                       `<div class="lsc-card-head">Team ${escapeHtml((ch.chapter || "").toUpperCase())}<span>${ch.n_projected} of ${ch.n_seats || 12} projected${ch.n_secured ? ` &middot; ${ch.n_secured} secured` : ""}</span></div>` +
+                       `<div class="lsc-card-head">Team ${escapeHtml((ch.chapter || "").toUpperCase())}<span>${
+                           // Member payload carries no projected/secured
+                           // counts (Kerry 2026-09-11: member view is
+                           // Teams + Players + qualification only) —
+                           // plain player count there; ops counts for
+                           // staff, or FINAL once the roster is frozen.
+                           ch.n_projected == null
+                               ? `${(ch.seats || []).length} players`
+                               : (d.roster_final
+                                   ? `FINAL &middot; ${(ch.seats || []).length} players`
+                                   : `${ch.n_projected} of ${ch.n_seats || 12} projected${ch.n_secured ? ` &middot; ${ch.n_secured} secured` : ""}`)
+                       }</span></div>` +
                        seats +
                        `</div>` +
                        // Alternates are STAFF-ONLY (Kerry 2026-08-24:
@@ -2360,6 +2583,11 @@
                        ).join("") + `</div>`;
             })() + (d.gg_error
                 ? `<p style="color:var(--text-muted);font-size:12px;margin-top:0.5rem;">Standings feed note: ${escapeHtml(d.gg_error)}</p>`
+                : "") + (d.frozen_at
+                // Staff-only breadcrumb (frozen_at is stripped from
+                // member payloads): the page is serving the hardened
+                // final-roster snapshot, not the live projection.
+                ? `<p style="color:var(--text-muted);font-size:12px;margin-top:0.5rem;">Final roster snapshot (frozen ${escapeHtml(d.frozen_at)}) &mdash; deposits stay live; ask Claude to re-freeze after a roster change (scoring-lsc-freeze).</p>`
                 : "");
             // chevron fold: tap a seat row to reveal how they qualified
             box.querySelectorAll(".lsc-seat.has-earn").forEach(el =>
@@ -2370,6 +2598,836 @@
         }
     }
 
+    // ═══════════ EVENTS LEADERBOARD (ADMIN pilot, Kerry 2026-09-11) ═══
+    // List of played events → expand to the ratified game IA
+    // (Team · Net · Gross · Skins · Points · Proxies): full-field
+    // boards merged with their money game, flight-sectioned, buyers
+    // highlighted, winners badged; player rows drill to the
+    // hole-by-hole card.
+    let evlbLoaded = false, evlbChapter = "";
+    const EVLB_LOADED_EVENTS = {};
+    // OVERALL hole-by-hole toggle (Kerry 2026-09-12: "maybe a check box
+    // to show or not show hole by hole"). Module-level so the choice
+    // carries to every event opened in this session — hole columns are
+    // hidden by CSS class, never removed, so sorting and the scorecard
+    // expansion keep working untouched.
+    function evlbFmt(c) { return "$" + (c / 100).toFixed(2).replace(/\.00$/, ""); }
+    function evlbDate(s) {
+        if (!s) return "";
+        const d = new Date(s + "T12:00:00");
+        return isNaN(d) ? s : d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+    }
+    async function evlbLoad(force) {
+        const box = $("evlb-list");
+        if (evlbLoaded && !force) return;
+        evlbLoaded = true;
+        box.innerHTML = '<p style="color:var(--text-muted);margin-top:1rem;">Loading events&hellip;</p>';
+        try {
+            const res = await fetch("/api/events-leaderboard" +
+                (evlbChapter ? "?chapter=" + encodeURIComponent(evlbChapter) : ""));
+            const d = await res.json();
+            if (!res.ok || d.error) throw new Error(d.error || res.statusText);
+            $("evlb-pilot").textContent = d.pilot
+                ? "Pilot: showing " + (d.pilot_codes || []).join(", ") + " (events_leaderboard_events dial)" : "";
+            if (!(d.events || []).length) {
+                box.innerHTML = '<p style="color:var(--text-muted);margin-top:1rem;">No played events here yet.</p>';
+                return;
+            }
+            box.innerHTML = d.events.map(ev => {
+                const ch = ev.chapter === "Austin"
+                    ? '<span class="chip-austin" style="background:var(--chapter-austin,#BF5700);color:#fff;border-radius:99px;padding:2px 8px;font-size:10px;font-weight:700;">AUSTIN</span>'
+                    : ev.chapter === "San Antonio"
+                    ? '<span style="background:var(--chapter-sa,#D3DDE4);color:#1B1B1B;border-radius:99px;padding:2px 8px;font-size:10px;font-weight:700;">SAN ANTONIO</span>' : "";
+                return `<details class="evlb-ev" data-ev="${escapeHtml(ev.item_name)}">` +
+                    `<summary><span class="chev">&#9654;</span>` +
+                    `<div><div class="nm">${escapeHtml(ev.item_name)}</div>` +
+                    `<div class="meta">${evlbDate(ev.event_date)}${ev.course ? " &middot; " + escapeHtml(ev.course) : ""} &middot; ${ev.field} players ${ch}</div></div>` +
+                    `<div class="pot">$${(ev.pot || 0).toFixed(2)}<span class="s">POT</span></div>` +
+                    `</summary><div class="evlb-body"><p style="color:var(--text-muted);">Loading&hellip;</p></div></details>`;
+            }).join("");
+            box.querySelectorAll("details.evlb-ev").forEach(el => {
+                el.addEventListener("toggle", () => {
+                    if (el.open) evlbLoadEvent(el);
+                });
+            });
+        } catch (err) {
+            evlbLoaded = false;
+            box.innerHTML = `<p style="color:var(--text-muted);margin-top:1rem;">Couldn't load events (${escapeHtml(err.message || String(err))}).</p>`;
+        }
+    }
+    async function evlbLoadEvent(el) {
+        const name = el.dataset.ev;
+        const body = el.querySelector(".evlb-body");
+        if (EVLB_LOADED_EVENTS[name]) return;
+        EVLB_LOADED_EVENTS[name] = true;
+        try {
+            const res = await fetch("/api/events-leaderboard/event?name=" + encodeURIComponent(name));
+            const d = await res.json();
+            if (!res.ok || d.error) throw new Error(d.error || res.statusText);
+            body.innerHTML = evlbEventHtml(d);
+            evlbWireEvent(body, d);
+        } catch (err) {
+            EVLB_LOADED_EVENTS[name] = false;
+            body.innerHTML = `<p style="color:var(--text-muted);">Couldn't load this event (${escapeHtml(err.message || String(err))}).</p>`;
+        }
+    }
+    // (v2.389.0 removed evlbWonChips / evlbScoreRows / evlbBand /
+    //  evlbSectioned / evlbHoleCells — every tab renders through
+    //  evlbStdBoard now, so the per-board renderers they fed are gone.)
+    // Money-win colors code by FLIGHT (Kerry 2026-09-11: "color code
+    // for skins per flight so in one have red and another green or
+    // blue... anybody who won money gets color-coded"): flight 1 red,
+    // flight 2 green, flight 3 blue, then amber/violet. A game with no
+    // flights (or an unresolved one) paints as flight 1.
+    const EVLB_FLIGHT_COLORS = ["#DC2626", "#15803D", "#2563EB", "#B45309", "#6D28D9"];
+    let evlbShowHoles = true;
+    // handicap columns (Idx + PH) start HIDDEN (Kerry 2026-09-13:
+    // "make the default not show them") — they are reference, not
+    // result, and they cost two columns on a phone
+    let evlbShowHcp = false;
+    function evlbFlightColor(ord) {
+        return EVLB_FLIGHT_COLORS[(((ord || 1) - 1) % EVLB_FLIGHT_COLORS.length + EVLB_FLIGHT_COLORS.length) % EVLB_FLIGHT_COLORS.length];
+    }
+    function evlbFlightTint(ord) {
+        const c = evlbFlightColor(ord);
+        return `background:${c}26;color:${c};font-weight:700;border-radius:4px;`;
+    }
+    // ± to par, golf-style: E at par, otherwise signed
+    function evlbToPar(v) {
+        if (v == null) return "";
+        return v === 0 ? "E" : (v > 0 ? "+" + v : String(v));
+    }
+    const EVLB_MVP_TINT = "background:rgba(109,40,217,.14);color:#6D28D9;font-weight:700;border-radius:4px;";
+    // Per-tab scoping (Kerry 2026-09-13: "Only want results, winnings
+    // and colors per tab games except for overall"). A game tab shows
+    // ONLY its own game's highlight and ONLY its own game's money;
+    // OVERALL (game = null) keeps every highlight and the whole-event
+    // total. The payout categories each tab owns:
+    const EVLB_GAME_CATS = {
+        net: ["individual_net"],
+        gross: ["individual_gross"],
+        skins: ["skins"],
+        points: ["mvp", "tgf_mvp"],
+        team: ["team_net"],
+    };
+    // ── every board's rows resolve back to the SAME overall row, so a
+    //    player carries identical numbers and highlights on every tab.
+    //    Buy-in status travels on the GAME board's own row (`buyer`) and
+    //    is lifted onto the copy as `_buyer` — the overall row itself
+    //    never carries it, because OVERALL deliberately does not identify
+    //    who bought in (Kerry 2026-09-11) while the NET- and GROSS-bundle
+    //    tabs must (Kerry 2026-09-13). One set of numbers, both rules.
+    //    These live out here rather than inside evlbEventHtml so the
+    //    headless guard runs the REAL mapping, not a copy of it — a
+    //    duplicated copy is exactly what went stale before.
+    function evlbOvOf(ovIx, x, note) {
+        const base = x && ovIx[String(x.scoring_round_id)];
+        if (!base) return null;
+        const extra = {};
+        if (note) extra._note = note;
+        if (typeof x.buyer === "boolean") extra._buyer = x.buyer;
+        return Object.keys(extra).length
+            ? Object.assign({}, base, extra) : base;
+    }
+    function evlbSecsFrom(ovIx, board) {
+        return (board || []).map(sec => ({
+            label: sec.label,
+            rows: (sec.rows || []).map(x => evlbOvOf(ovIx, x)).filter(Boolean),
+        })).filter(sec => sec.rows.length);
+    }
+    // ── OVERALL's default order (Kerry 2026-09-14: "Set won money
+    //    order as default landing for overall if event is completed. If
+    //    not base it on points"). `pot` is the money actually RECORDED
+    //    against the event, so it is both the completion signal and the
+    //    thing that makes a money sort meaningful: before closeout there
+    //    are no payouts to rank by, and points are the live standing.
+    //    "gamecol" is the Pts column on OVERALL. Both land descending.
+    function evlbOverallSort(d) {
+        return (d && (d.pot || 0) > 0) ? "won" : "gamecol";
+    }
+    // the NET and GROSS bundles are the games a player BUYS INTO; Team
+    // Net and the proxies come with the entry, so they have no buy-in
+    // to show (Kerry 2026-09-13)
+    const EVLB_BUYIN_GAMES = ["net", "gross", "skins", "points"];
+    function evlbGameMoney(r, game) {
+        if (!game) return r.won_total;          // OVERALL = everything
+        const by = r.won_by_cat || {};
+        return (EVLB_GAME_CATS[game] || []).reduce((t, c) => t + (by[c] || 0), 0);
+    }
+    // ONE overall row — module-level so the sortable headers can
+    // re-render the tbody with the same markup the initial paint used.
+    // `i` drives the zebra stripe: striping by render index (not CSS
+    // nth-child) because expanded scorecard rows are injected into the
+    // same tbody and would flip the parity of every row below them.
+    // ── the team's per-hole best ball, computed ONCE and shared by the
+    //    expandable card and the Team tab's total row (Kerry
+    //    2026-09-13). Two surfaces showing the same team score must
+    //    never be able to compute it two ways.
+    // ── POPS on a hole score, the house standard (Kerry 2026-09-13:
+    //    "show pops on each hole score per standard"). Same treatment as
+    //    scorecard-render.js: filled dots pinned to the cell's top-right
+    //    corner so they never displace the number. One dot per stroke
+    //    received on that hole.
+    function evlbPops(sr) {
+        const n = Math.abs(sr || 0);
+        if (!n) return "";
+        return `<span class="evlb-pops">${(sr > 0 ? "\u25CF" : "\u25CB").repeat(n)}</span>`;
+    }
+    function evlbNetOf(d, rid, n) {
+        const h = ((d.cards || {})[String(rid)] || []).find(x => x[0] === n);
+        return (h && h[1] != null) ? h[1] - (h[2] || 0) : null;
+    }
+    function evlbTeamMins(d, t) {
+        const mins = {};
+        (d.hole_cols || []).forEach(n => {
+            const vals = (t.players || [])
+                .map(p => evlbNetOf(d, p.scoring_round_id, n))
+                .filter(v => v != null);
+            mins[n] = vals.length ? Math.min(...vals) : null;
+        });
+        return mins;
+    }
+    function evlbOvrRowHtml(d, r, i, gameCol, game, netMins) {
+        // a game tab lights up ONLY its own game
+        const shN = (!game || game === "net") && r.win_net;
+        const shG = (!game || game === "gross") && r.win_gross;
+        const shS = (!game || game === "skins") && r.win_skins;
+        const shM = (!game || game === "points") && r.win_mvp;
+        const money = evlbGameMoney(r, game);
+        const skinHoles = shS
+            ? (((d.skin_cells || {})[String(r.scoring_round_id)]) || []) : [];
+        const skC = evlbFlightColor(r.skins_flight);
+        const hs = {};
+        (d.cards[String(r.scoring_round_id)] || []).forEach(h => { hs[h[0]] = h; });
+        // TEAM tab (Kerry 2026-09-13): the hole cells carry each
+        // player's NET hole score, not gross — Team Net is played in
+        // net, and the team total row underneath has to be checkable
+        // against the numbers above it. The ball that counted for the
+        // team is marked the same way the best-ball card marks it.
+        const holeCells = (d.hole_cols || []).map(n => {
+            const hh = hs[n];
+            const pops = evlbPops(hh ? hh[2] : 0);
+            if (netMins) {
+                const v = evlbNetOf(d, r.scoring_round_id, n);
+                if (v == null) return '<td class="h"></td>';
+                const ct = v === netMins[n];
+                // the net cell already spent the pops, so the dots stay
+                // on it as the record of WHY it differs from gross
+                return `<td class="h${ct ? " count" : ""}"${
+                    ct ? ' title="the ball that counted for the team"' : ""}>${pops}${v}</td>`;
+            }
+            if (!hh || hh[1] == null) return '<td class="h"></td>';
+            return `<td class="h">${pops}${skinHoles.includes(n)
+                ? `<span class="evlb-circ" style="border-color:${skC};color:${skC};" title="skin — flight ${r.skins_flight || 1}">${hh[1]}</span>`
+                : hh[1]}</td>`;
+        }).join("");
+        // Column order (Kerry 2026-09-12): the two scores that matter —
+        // G(ross) and N(et) — sit immediately after the player name, left
+        // of everything else, so they read without scrolling the holes.
+        // a win tints BOTH the score and its to-par cell — they read as
+        // one result. Tints are inline so the zebra stripe can never
+        // paint over them.
+        const gT = shG ? evlbFlightTint(r.gross_flight) : "";
+        const nT = shN ? evlbFlightTint(r.net_flight) : "";
+        const gTitle = shG ? ` title="won Individual Gross — flight ${r.gross_flight || 1}"` : "";
+        const nTitle = shN ? ` title="won Individual Net — flight ${r.net_flight || 1}"` : "";
+        // The GAME column (Kerry 2026-09-13: every board is the same
+        // table re-ordered) — one slot that means Pts on most boards and
+        // Skins count on the skins board, so the column COUNT never
+        // changes from tab to tab.
+        const gv = (gameCol && gameCol.value) ? gameCol.value(d, r) : r.net_pts;
+        const gvTint = (!gameCol || gameCol.key !== "skins") && shM;
+        // On a NET- or GROSS-bundle tab the row itself says whether the
+        // player bought into THAT game: green in, grey out. That
+        // replaces the zebra stripe there — two competing washes on one
+        // row reads as neither. OVERALL and Team keep the stripe and
+        // never identify buy-ins.
+        const bi = EVLB_BUYIN_GAMES.includes(game) && typeof r._buyer === "boolean"
+            ? (r._buyer ? " bought" : " nobuy") : (i % 2 ? " alt" : "");
+        return `<tr class="evlb-plr${bi}" data-rid="${r.scoring_round_id || ""}">` +
+            `<td>${r._rank ?? ""}</td>` +
+            `<td class="nm">${escapeHtml(r.player_name)}` +
+            (r._note ? `<div style="font-size:10.5px;color:#9CA3AF;white-space:normal;">${escapeHtml(r._note)}</div>` : "") +
+            `</td>` +
+            `<td class="won br">${money > 0 ? "$" + Number(money).toFixed(2) : ""}</td>` +
+            `<td class="bl hc">${r.index != null ? Number(r.index).toFixed(1) : ""}</td>` +
+            `<td class="br hc">${r.hcp ?? ""}</td>` +
+            holeCells +
+            `<td class="bl" style="${gT}"${gTitle}>${r.gross ?? ""}</td>` +
+            `<td class="tp" style="${gT}"${gTitle}>${evlbToPar(r.to_par_gross)}</td>` +
+            `<td class="bl" style="${nT}"${nTitle}><b>${r.net ?? ""}</b></td>` +
+            `<td class="tp br" style="${nT}"${nTitle}>${evlbToPar(r.to_par_net)}</td>` +
+            (gameCol === false ? "" :
+                `<td class="bl br" style="${gvTint ? EVLB_MVP_TINT : ""}"${gvTint ? ' title="Event MVP"' : ""}>${gv ?? ""}</td>`) +
+            `</tr>`;
+    }
+    // ── per-player POINTS row (Kerry 2026-09-13: "MVP/POINTS need to
+    //    show a row for each player that shows points"). On the
+    //    MVP/Points tab each player's score row is followed by the NET
+    //    stableford points that score earned on every hole, summing to
+    //    the Pts column beside it — the board stops being a score board
+    //    with a points column and becomes a points board. Built from
+    //    hole_pts, the SAME derivation the Pts total comes from, so the
+    //    row and the column cannot disagree.
+    function evlbPtsRowHtml(d, r, gameCol) {
+        const hp = (d.hole_pts || {})[String(r.scoring_round_id)];
+        if (!hp) return "";
+        const cols = d.hole_cols || [];
+        if (!cols.some(n => hp[String(n)] != null)) return "";
+        return `<tr class="evlb-ptsrow">` +
+            `<td></td><td class="nm">PTS</td>` +
+            `<td class="won br"></td>` +
+            `<td class="bl hc"></td><td class="br hc"></td>` +
+            cols.map(n => `<td class="h">${hp[String(n)] ?? ""}</td>`).join("") +
+            `<td class="bl"></td><td class="tp"></td>` +
+            `<td class="bl"></td><td class="tp br"></td>` +
+            (gameCol === false ? "" : `<td class="bl br">${r.net_pts ?? ""}</td>`) +
+            `</tr>`;
+    }
+    // ── TEAM TOTAL row (Kerry 2026-09-13: "The team Net needs to show
+    //    a team total row that shows what their team score for each
+    //    hole was, and team total and total money won"). Sits at the
+    //    foot of each team band, in the SAME columns as the player rows
+    //    above it: the best net ball per hole, the team total, and the
+    //    team's whole purse (not one player's share).
+    function evlbTeamTotalRow(d, t, mins, gameCol) {
+        const cols = d.hole_cols || [];
+        const recon = cols.reduce((s2, n) => s2 + (mins[n] ?? 0), 0);
+        // GG's posted total is the score of record (v2.381.0). Our
+        // per-hole reconstruction uses each player's OWN-card net
+        // (individual allowance) while the official game plays 75%
+        // off-lowest, so the holes need not sum to it — show GG's
+        // number and say where ours landed rather than letting the two
+        // disagree silently.
+        const off = t.gg_total != null && t.gg_total !== recon;
+        const shown = t.gg_total != null ? t.gg_total : recon;
+        const ttl = t.gg_total != null
+            ? `GG posted team total${off ? " — best ball of the players' own-card nets sums to " + recon : ""}`
+            : "best ball of the players' own-card nets";
+        // par over the holes the team actually played
+        const par = Math.max(0, ...(t.players || []).map(p => {
+            const b = (d.overall_board || []).find(
+                r => String(r.scoring_round_id) === String(p.scoring_round_id));
+            return (b && b.par != null) ? b.par : 0;
+        }));
+        const money = t.purse != null ? t.purse : 0;
+        return `<tr class="teamrow">` +
+            `<td>${escapeHtml(t.position || "")}</td>` +
+            `<td class="nm">TEAM NET${off ? ' <span style="font-weight:400;color:#9CA3AF;">(holes ' + recon + ')</span>' : ""}</td>` +
+            `<td class="won br" title="the team's whole purse">${money > 0 ? "$" + Number(money).toFixed(2) : ""}</td>` +
+            `<td class="bl hc"></td><td class="br hc"></td>` +
+            cols.map(n => `<td class="h">${mins[n] ?? ""}</td>`).join("") +
+            `<td class="bl"></td><td class="tp"></td>` +
+            `<td class="bl" title="${ttl}"><b>${shown}</b></td>` +
+            `<td class="tp br">${par ? evlbToPar(shown - par) : ""}</td>` +
+            (gameCol === false ? "" : `<td class="bl br"></td>`) +
+            `</tr>`;
+    }
+    // ── THE standard board (Kerry 2026-09-13): one table shape for
+    //    every tab but Proxies. Bands + order come from the caller; the
+    //    Pts slot can be relabelled per board. Registered by id so the
+    //    sortable headers can re-render without re-fetching anything.
+    const EVLB_BOARDS = {};
+    let EVLB_BOARD_SEQ = 0;
+    function evlbBoardVal(d, r, k, gameCol, game) {
+        if (k === "player") return (r.player_name || "").toLowerCase();
+        if (k === "index") return r.index;
+        if (k === "hcp") return r.hcp;
+        if (k === "gross") return r.gross;
+        if (k === "net") return r.net;
+        if (k === "tpg") return r.to_par_gross;
+        if (k === "tpn") return r.to_par_net;
+        if (k === "won") { const m = evlbGameMoney(r, game); return m > 0 ? m : null; }
+        if (k === "gamecol") {
+            const v = gameCol && gameCol.value ? gameCol.value(d, r) : r.net_pts;
+            return (v === "" || v == null) ? null : v;
+        }
+        if (k.startsWith("h:")) {
+            const n = +k.slice(2);
+            const h = (d.cards[String(r.scoring_round_id)] || []).find(x => x[0] === n);
+            return h && h[1] != null ? h[1] : null;
+        }
+        return null;
+    }
+    // rank runs WITHIN a band — a flighted board ranks per flight, the
+    // way every other TGF board does
+    function evlbRankBand(d, rows, k, gameCol, game) {
+        let shown = 0, rank = 0, last = null, first = true;
+        rows.forEach(r => {
+            const v = evlbBoardVal(d, r, k, gameCol, game);
+            if (v == null) { r._rank = ""; return; }
+            shown++;
+            if (first || v !== last) { rank = shown; last = v; first = false; }
+            const tied = rows.filter(x => evlbBoardVal(d, x, k, gameCol, game) === v).length > 1;
+            r._rank = (tied ? "T" : "") + rank;
+        });
+    }
+    function evlbBoardBody(id) {
+        const st = EVLB_BOARDS[id];
+        if (!st) return "";
+        const { d, board, sortKey, sortDir } = st;
+        const game = board.game || null;
+        const ncols = (board.gameCol === false ? 8 : 9) + (d.hole_cols || []).length;
+        let i = 0, html = "";
+        board.sections.forEach((sec, si) => {
+            const rows = sortKey === "keep" ? sec.rows.slice() : sec.rows.slice().sort((a, b) => {
+                const va = evlbBoardVal(d, a, sortKey, board.gameCol, game);
+                const vb = evlbBoardVal(d, b, sortKey, board.gameCol, game);
+                if (va == null && vb == null) return 0;
+                if (va == null) return 1;
+                if (vb == null) return -1;
+                return (va < vb ? -1 : va > vb ? 1 : 0) * sortDir;
+            });
+            if (sortKey === "keep") {
+                rows.forEach((r, ri) => { r._rank = String(ri + 1); });
+            } else {
+                evlbRankBand(d, rows, sortKey, board.gameCol, game);
+            }
+            if (sec.label) {
+                html += `<tr class="evlb-band"${board.teamBands ? ` data-team="${si}"` : ""}>` +
+                    `<td colspan="${ncols}">${board.teamBands ? '<span class="tchev">&#9654;</span> ' : ""}${escapeHtml(sec.label)}</td></tr>`;
+            }
+            // a team band renders in NET and closes with its total row
+            const tm = board.teamBands ? (board.teams || [])[si] : null;
+            const mins = tm ? evlbTeamMins(d, tm) : null;
+            rows.forEach(r => {
+                html += evlbOvrRowHtml(d, r, i++, board.gameCol, game, mins);
+                if (game === "points")
+                    html += evlbPtsRowHtml(d, r, board.gameCol);
+            });
+            if (tm) html += evlbTeamTotalRow(d, tm, mins, board.gameCol);
+        });
+        return html;
+    }
+    // ── PAR row (Kerry 2026-09-13: "Add a par row below the hole
+    //    numbers for all leaderboards"). Lives in the THEAD so it stays
+    //    with the hole numbers and disappears with them when the
+    //    hole-by-hole toggle is off. A hole whose tees disagree on par
+    //    is published as nothing by the server and renders blank here,
+    //    rather than asserting one tee's par over another's. Total par
+    //    sits under BOTH score columns, since it is the reference for
+    //    gross and net alike.
+    function evlbParRow(d, gameCol) {
+        const hp = d.hole_par || {};
+        const cols = d.hole_cols || [];
+        if (!cols.some(n => hp[String(n)] != null)) return "";
+        const tot = cols.every(n => hp[String(n)] != null)
+            ? cols.reduce((s2, n) => s2 + hp[String(n)], 0) : "";
+        return `<tr class="evlb-parrow"><td></td><td class="nm">PAR</td>` +
+            `<td class="won br"></td>` +
+            `<td class="bl hc"></td><td class="br hc"></td>` +
+            cols.map(n => `<td class="h">${hp[String(n)] ?? ""}</td>`).join("") +
+            `<td class="bl">${tot}</td><td class="tp"></td>` +
+            `<td class="bl">${tot}</td><td class="tp br"></td>` +
+            (gameCol === false ? "" : `<td class="bl br"></td>`) +
+            `</tr>`;
+    }
+    function evlbStdBoard(d, board, note) {
+        if (!board.sections.length || !board.sections.some(s => s.rows.length))
+            return '<p style="color:var(--text-muted);">No scores yet.</p>';
+        const id = "evb" + (++EVLB_BOARD_SEQ);
+        const dflt = board.sort || "net";
+        EVLB_BOARDS[id] = {
+            d, board, sortKey: dflt,
+            sortDir: (dflt === "gamecol" || dflt === "won") ? -1 : 1,
+        };
+        const gl = (board.gameCol && board.gameCol.label) || "Pts";
+        const active = k => (dflt !== "keep" && k === dflt) ? " asc" : "";
+        return (note || "") +
+            `<label class="evlb-holetog"><input type="checkbox" data-ovr-holes${evlbShowHoles ? " checked" : ""}> Hole by hole</label>` +
+            `<label class="evlb-holetog"><input type="checkbox" data-ovr-hcp${evlbShowHcp ? " checked" : ""}> Handicaps</label>` +
+            `<div class="evlb-scroll"><table class="evlb-holes evlb-ovr${evlbShowHoles ? "" : " no-holes"}${evlbShowHcp ? "" : " no-hcp"}" data-board="${id}"><thead>` +
+            `<tr><th data-k="net" class="sortable">#</th><th data-k="player" class="nm sortable">Player</th>` +
+            // Won sits right of the name (Kerry 2026-09-13) — the money
+            // is the point of the board, so it reads without scrolling
+            `<th data-k="won" class="won sortable br${active("won")}">Won</th>` +
+            `<th data-k="index" class="sortable bl hc" title="Handicap Index">Idx</th>` +
+            `<th data-k="hcp" class="sortable br hc" title="Playing Handicap">PH</th>` +
+            (d.hole_cols || []).map(n => `<th data-k="h:${n}" class="sortable h">${n}</th>`).join("") +
+            `<th data-k="gross" class="sortable bl${active("gross")}" title="Gross score">G</th>` +
+            `<th data-k="tpg" class="sortable" title="Gross to par">&plusmn;</th>` +
+            `<th data-k="net" class="sortable bl${active("net")}" title="Net score">N</th>` +
+            `<th data-k="tpn" class="sortable br" title="Net to par">&plusmn;</th>` +
+            (board.gameCol === false ? "" :
+                `<th data-k="gamecol" class="sortable bl br${active("gamecol")}">${escapeHtml(gl)}</th>`) +
+            `</tr>` +
+            evlbParRow(d, board.gameCol) + `</thead>` +
+            `<tbody>${evlbBoardBody(id)}</tbody></table></div>`;
+    }
+    function evlbEventHtml(d) {
+        const tabs = [["overall", "Overall"], ["team", "Team"], ["net", "Net"],
+                      ["gross", "Gross"], ["skins", "Skins"],
+                      ["points", "MVP/Points"], ["prox", "Proxies"]];
+        const offNotes = (d.games_off || []).map(g =>
+            `<div class="evlb-note">${escapeHtml(g.note)}</div>`).join("");
+        // OVERALL (Kerry 2026-09-11): the whole field in ONE table —
+        // hole-by-hole gross plus totals. Wins highlight by the ratified
+        // category colors (Net total green, Gross total amber, MVP on
+        // the Pts total purple, winning skins circled pink on the hole
+        // cells). Buy-ins are deliberately NOT identified here. Won =
+        // total collected for the event across ALL games. Rows expand
+        // to the universal scorecard.
+        // ── ONE leaderboard shape for EVERY tab but Proxies (Kerry
+        //    2026-09-13: "everything except for Closest to Pins to
+        //    follow the Overall layout so that moving from button to
+        //    button is just a reordering of that leaderboard with the
+        //    highlighting and organization of the other leaderboards").
+        //    Same columns, same win colors, same sort / re-rank / tap-
+        //    to-expand everywhere. What a tab changes is its BANDS and
+        //    its ORDER; one column slot changes meaning (Pts vs Skins)
+        //    so the column COUNT never moves from tab to tab.
+        const ovRows = d.overall_board || [];
+        const ovIx = {};
+        ovRows.forEach(r => { if (r.scoring_round_id != null) ovIx[String(r.scoring_round_id)] = r; });
+        // every board's rows resolve back to the SAME overall row, so a
+        // player carries identical numbers and highlights on every tab
+        const ovOf = (x, note) => evlbOvOf(ovIx, x, note);
+        const secsFrom = board => evlbSecsFrom(ovIx, board);
+        const skinsCount = (dd, r) => {
+            const n = ((dd.skin_cells || {})[String(r.scoring_round_id)] || []).length;
+            return n || "";
+        };
+
+        // Winner strips — the games that don't live in a player row.
+        // Kerry 2026-09-13: these sit BELOW the leaderboard now.
+        const ovTeamWins = (d.teams || []).filter(t => t.purse != null && t.purse > 0)
+            .map(t => `<div class="evlb-winline team"><span class="cat">TEAM NET</span>` +
+                `<span class="who">${t.position ? escapeHtml(t.position) + " · " : ""}` +
+                `${t.players.map(p => escapeHtml(p.player_name)).join(" · ")}` +
+                `${t.gg_total != null ? ` · <b>${t.gg_total}</b>` : ""}</span>` +
+                `<span class="amt">$${Number(t.purse).toFixed(2)}</span></div>`);
+        const ovProxWins = (d.proxies || [])
+            .map(p => `<div class="evlb-winline ctp"><span class="cat">${escapeHtml((p.label || "Closest to Pin").toUpperCase())}</span>` +
+                `<span class="who">${escapeHtml(p.player || "")}${p.detail ? " · " + escapeHtml(p.detail) : ""}</span>` +
+                `<span class="amt">${p.purse != null ? "$" + Number(p.purse).toFixed(2) : ""}</span></div>`)
+            .concat((d.hio || []).map(p =>
+                `<div class="evlb-winline ctp"><span class="cat">HOLE-IN-ONE</span>` +
+                `<span class="who">${escapeHtml(p.player || "")}${p.detail ? " · " + escapeHtml(p.detail) : ""}</span>` +
+                `<span class="amt">${p.purse != null ? "$" + Number(p.purse).toFixed(2) : ""}</span></div>`));
+        const ovWinStrips = ovTeamWins.concat(ovProxWins).join("");
+
+        // One legend builder for every tab. OVERALL describes all the
+        // games; a game tab describes ONLY its own (Kerry 2026-09-13:
+        // "Only want results, winnings and colors per tab games except
+        // for overall") so the colors and the Won column are never read
+        // as meaning something they don't on that tab.
+        const evlbLegendFor = (game) => {
+            let maxF = 1;
+            ovRows.forEach(r => {
+                if ((!game || game === "net") && r.win_net)
+                    maxF = Math.max(maxF, r.net_flight || 1);
+                if ((!game || game === "gross") && r.win_gross)
+                    maxF = Math.max(maxF, r.gross_flight || 1);
+                if ((!game || game === "skins") && r.win_skins)
+                    maxF = Math.max(maxF, r.skins_flight || 1);
+            });
+            const sw = [];
+            for (let f = 1; f <= maxF; f++)
+                sw.push(`<span class="lg" style="${evlbFlightTint(f)}">Flight ${f}</span>`);
+            const swatches = `Money winners color-code by FLIGHT: ${sw.join(" ")} &mdash; `;
+            const tail = ` Tap a player for their scorecard; tap a column header to sort and re-rank.`;
+            if (!game)
+                return `<p class="evlb-legend">${swatches}` +
+                    `a tinted <b>N</b> (net) or <b>G</b> (gross) total won that game in that flight; a circled hole score is a skin won in that flight &middot; ` +
+                    `<span class="lg w-mvp">Pts</span> Event MVP &middot; ` +
+                    `<b>Won</b> = total collected for this event, all games (team &amp; proxies included).${tail}</p>`;
+            const what = {
+                net: `a tinted <b>N</b> total won Individual Net in that flight`,
+                gross: `a tinted <b>G</b> total won Individual Gross in that flight`,
+                skins: `a circled hole score is a skin won in that flight`,
+                points: `<span class="lg w-mvp">Pts</span> marks the Event MVP, and a <b>PTS</b> row under each player shows the NET points that score earned on every hole`,
+                team: `hole scores are NET, the green cell is the ball that counted, and the TEAM NET row closes each band with the team's holes, total and whole purse`,
+            }[game] || "";
+            const money = {
+                net: "Individual Net", gross: "Individual Gross", skins: "Skins",
+                points: "MVP", team: "Team Net",
+            }[game] || "this game";
+            if (game === "team")
+                return `<p class="evlb-legend">${what} &middot; a player row's <b>Won</b> is that player's share; ` +
+                    `the TEAM NET row shows the whole purse &mdash; OVERALL shows everything collected at this event.${tail}</p>`;
+            const head = (game === "points" || game === "team") ? "" : swatches;
+            // the bundle tabs also say who paid to be in this game
+            const buy = EVLB_BUYIN_GAMES.includes(game)
+                ? `<span class="lg" style="background:var(--buyin-green,#bbf7d0);color:var(--buyin-green-text,#15803D);">bought in</span> ` +
+                  `<span class="lg" style="background:var(--buyin-grey,#FAFAFA);color:#9CA3AF;">not in</span> this game &middot; `
+                : "";
+            return `<p class="evlb-legend">${head}${buy}${what} &middot; ` +
+                `<b>Won</b> = ${money} money only &mdash; OVERALL shows everything collected at this event.${tail}</p>`;
+        };
+        const ovLegend = evlbLegendFor(null);
+
+        // every tab: the same table, different bands + order
+        // Per-tab scoping (Kerry 2026-09-13: "Only want results,
+        // winnings and colors per tab games except for overall").
+        // `game` tells the renderer which game this tab OWNS: only that
+        // game's win colors light up and the Won column shows only that
+        // game's money. OVERALL has no `game`, so it keeps everything.
+        // The Pts column is the MVP game's result, so it only appears on
+        // OVERALL and POINTS; Skins owns its own count column.
+        const boards = {
+            overall: { sections: [{ label: null, rows: ovRows }], sort: evlbOverallSort(d) },
+            net: { sections: secsFrom(d.net_board), sort: "net", game: "net", gameCol: false },
+            gross: { sections: secsFrom(d.gross_board), sort: "gross", game: "gross", gameCol: false },
+            skins: {
+                sections: secsFrom(d.skins_board), sort: "gamecol", game: "skins",
+                gameCol: { key: "skins", label: "Skins", value: skinsCount },
+            },
+            points: {
+                sections: [{
+                    label: null,
+                    rows: (d.points_board || []).map(x => ovOf(x, x.mvp_note)).filter(Boolean),
+                }],
+                sort: "keep",
+                game: "points",
+            },
+            team: {
+                game: "team",
+                gameCol: false,
+                teams: d.teams || [],
+                // the band names the team; the TEAM NET row at the foot
+                // of the band carries the per-hole score, the total and
+                // the purse, so those numbers are stated ONCE
+                sections: (d.teams || []).map(t => ({
+                    label: `${t.position ? t.position + " · " : ""}` +
+                        `${t.players.map(p => p.player_name).join(" · ")}`,
+                    rows: (t.players || []).map(x => ovOf(x)).filter(Boolean),
+                })).filter(sec => sec.rows.length),
+                sort: "keep",
+            },
+        };
+        // SKINS: GG-style overall chart — buyers per flight, hole-by-hole
+        // gross with winning skins circled; everyone NOT in skins listed
+        // below with their hole scores (Kerry 2026-09-11)
+        // TEAM: every team, best-ball total, expandable to the GG-style
+        // team net scorecard (Kerry 2026-09-11: "Show all teams and
+        // allow expansion of each team")
+        const anyGGTotal = (d.teams || []).some(t => t.gg_total != null);
+        const teamHtml = (d.teams || []).length
+            ? (anyGGTotal
+                ? `<div class="evlb-note" style="background:#F8FAFC;border-color:#E2E8F0;color:#475569;">Positions, totals and purses are the recorded Golf Genius result — the official Team Net game (75% off-lowest allowance), the score and money of record.</div>`
+                : `<div class="evlb-note" style="background:#F8FAFC;border-color:#E2E8F0;color:#475569;">Positions and purses are the recorded Golf Genius result (the money of record). The total shown is our best-ball reconstruction from each player's own card — the official Team Net game plays a 75% off-lowest allowance, so the two can differ.</div>`) +
+              d.teams.map((t, ti) => {
+                const names = t.players.map(p => escapeHtml(p.player_name)).join(" &middot; ");
+                const win = /^T?1$/.test(t.position || "");
+                // GG's posted board total is the score of record; a team
+                // GG didn't post (shouldn't happen on a walked board)
+                // falls back to our reconstruction, shown muted.
+                const tot = t.gg_total != null
+                    ? `<span class="tnet">${t.gg_total}</span>`
+                    : `<span class="tnet"${anyGGTotal ? ' style="color:#9CA3AF;font-style:italic;" title="our reconstruction — GG posted no total for this team"' : ""}>${t.total_net ?? ""}</span>`;
+                return `<details class="evlb-team${win ? " win" : ""}" data-ti="${ti}">` +
+                    `<summary><span class="tchev">&#9654;</span>` +
+                    `<span style="min-width:26px;font-weight:700;">${escapeHtml(t.position || "")}</span>` +
+                    `<span class="tm">${names}</span>` +
+                    tot +
+                    `<span class="tpurse">${t.purse != null ? "$" + Number(t.purse).toFixed(2) : ""}</span>` +
+                    `</summary><div class="evlb-team-card">${evlbTeamCard(d, t)}</div></details>`;
+            }).join("")
+            : (d.team_board || []).length
+            ? `<div class="evlb-scroll"><table class="evlb-tbl"><thead><tr><th>Pos</th><th>Team</th><th style="text-align:right;">Total</th><th style="text-align:right;">Purse</th></tr></thead><tbody>` +
+              d.team_board.map(t =>
+                  `<tr><td>${escapeHtml(t.position || "")}</td><td style="white-space:normal;">${escapeHtml(t.team)}</td>` +
+                  `<td class="r">${t.gg_total ?? ""}</td>` +
+                  `<td class="r">${t.purse != null ? "$" + Number(t.purse).toFixed(2) : ""}</td></tr>`).join("") +
+              `</tbody></table></div>`
+            : '<p style="color:var(--text-muted);">Team results not recorded yet.</p>';
+        const proxHtml = ((d.proxies || []).length || (d.hio || []).length)
+            ? `<div class="evlb-scroll"><table class="evlb-tbl"><thead><tr><th>Contest</th><th>Winner</th><th>Detail</th><th style="text-align:right;">$</th></tr></thead><tbody>` +
+              (d.proxies || []).map(p =>
+                  `<tr><td>${escapeHtml(p.label || "")}</td><td>${escapeHtml(p.player || "")}</td>` +
+                  `<td>${escapeHtml(p.detail || "")}</td><td class="r">${p.purse != null ? "$" + Number(p.purse).toFixed(2) : ""}</td></tr>`).join("") +
+              (d.hio || []).map(p =>
+                  `<tr><td>Hole-in-One</td><td>${escapeHtml(p.player || "")}</td>` +
+                  `<td>${escapeHtml(p.detail || "")}</td><td class="r">${p.purse != null ? "$" + Number(p.purse).toFixed(2) : ""}</td></tr>`).join("") +
+              `</tbody></table></div>`
+            : '<p style="color:var(--text-muted);">No proxies recorded yet.</p>';
+        // Every tab is the SAME board re-ordered (Kerry 2026-09-13);
+        // only Proxies keeps its own shape. The Team Net + CTP winner
+        // strips sit BELOW the OVERALL leaderboard now, not above it.
+        const stripsBelow = ovWinStrips
+            ? `<div class="evlb-winbox" style="margin:12px 0 0;">${ovWinStrips}</div>` : "";
+        const panels = {
+            overall: evlbStdBoard(d, boards.overall) + ovLegend + stripsBelow,
+            team: (d.teams || []).length
+                ? evlbStdBoard(d, Object.assign({ teamBands: true, teams: d.teams }, boards.team),
+                    `<div class="evlb-note" style="background:#F8FAFC;border-color:#E2E8F0;color:#475569;">` +
+                    `Bands are the teams, in the recorded Golf Genius order. Hole scores here are NET — the currency of Team Net — and the green cell is the ball that counted. ` +
+                    `Each band closes with a <b>TEAM NET</b> row: the team's score on every hole, the team total, and the team's whole purse. ` +
+                    `Tap a band for the best-ball card, a player for their own scorecard.</div>`)
+                    + evlbLegendFor("team")
+                : teamHtml,
+            net: evlbStdBoard(d, boards.net) + evlbLegendFor("net"),
+            gross: evlbStdBoard(d, boards.gross, offNotes) + evlbLegendFor("gross"),
+            skins: evlbStdBoard(d, boards.skins, offNotes) + evlbLegendFor("skins"),
+            points: evlbStdBoard(d, boards.points) + evlbLegendFor("points"),
+            prox: proxHtml,
+        };
+        return `<div class="evlb-subtabs"><div class="evlb-seg evlb-seg-sub">` +
+            tabs.map(([k, l]) =>
+                `<button class="evlb-subtab${k === "overall" ? " active" : ""}" data-sub="${k}">${l}</button>`).join("") +
+            `</div></div>` +
+            tabs.map(([k]) =>
+                `<div class="evlb-panel" data-panel="${k}"${k === "overall" ? "" : " hidden"}>${panels[k]}</div>`).join("") +
+            `<p style="font-size:11px;color:#9CA3AF;margin:8px 0 0;">Tap a player for their scorecard, or a team for its best-ball card. On the Net, Gross, Skins and MVP/Points tabs a <b>green</b> row bought into that game and a <b>grey</b> row did not &mdash; non-buyers are placed in the flight their handicap would have flighted them. Dots in the corner of a hole are the strokes received there.</p>`;
+    }
+    // Team net card in THE card standard's family: each member's NET
+    // per hole, the ball(s) that COUNTED for the team score highlighted
+    // (Kerry 2026-09-11: "Highlight the player scores that were used
+    // for the Team net score"), TEAM best-ball row beneath. Columns
+    // share the standard's metrics so the expanded player card beneath
+    // lines up.
+    function evlbTeamCard(d, t) {
+        const cols = d.hole_cols || [];
+        if (!cols.length) return '<p style="color:var(--text-muted);">No hole data.</p>';
+        const nineLbl = cols.length > 9 ? "TOT" : (cols[0] >= 10 ? "IN" : "OUT");
+        const netOf = (rid, n) => evlbNetOf(d, rid, n);
+        const mins = evlbTeamMins(d, t);
+        const rows = t.players.map(p =>
+            `<tr class="evlb-plr" data-rid="${p.scoring_round_id || ""}"><td class="nm">${escapeHtml(p.player_name)}</td>` +
+            cols.map(n => {
+                const v = netOf(p.scoring_round_id, n);
+                if (v == null) return "<td></td>";
+                return `<td${v === mins[n] ? ' class="count"' : ""}>${v}</td>`;
+            }).join("") + `<td></td></tr>`).join("");
+        const teamTotal = cols.reduce((s, n) => s + (mins[n] ?? 0), 0);
+        const teamRow = `<tr class="teamrow"><td class="nm">TEAM (best ball)</td>` +
+            cols.map(n => `<td>${mins[n] ?? ""}</td>`).join("") +
+            `<td>${teamTotal}</td></tr>`;
+        // The card's per-hole nets come from each player's OWN card
+        // (individual allowance), so its sum can differ from GG's
+        // recorded team total (75% off-lowest) — say so rather than
+        // letting the two numbers silently disagree.
+        const ggNote = (t.gg_total != null && t.gg_total !== teamTotal)
+            ? ` &middot; GG recorded team total: <b>${t.gg_total}</b> (official 75% off-lowest allowance; this card shows each player's own-card net)`
+            : "";
+        // the same PAR reference the boards carry, in the card's own
+        // column shape (Kerry 2026-09-13) — tapping a team must not
+        // lose the par line the board above it shows
+        const hp = d.hole_par || {};
+        const parRow = cols.some(n => hp[String(n)] != null)
+            ? `<tr class="evlb-parrow"><td class="nm">PAR</td>` +
+              cols.map(n => `<td>${hp[String(n)] ?? ""}</td>`).join("") +
+              `<td>${cols.every(n => hp[String(n)] != null)
+                  ? cols.reduce((s2, n) => s2 + hp[String(n)], 0) : ""}</td></tr>`
+            : "";
+        return `<div class="evlb-scroll"><table class="evlb-holes"><thead>` +
+            `<tr><th class="nm">NET SCORES</th>${cols.map(n => `<th>${n}</th>`).join("")}<th>${nineLbl}</th></tr>` +
+            parRow +
+            `</thead><tbody>${rows}${teamRow}</tbody></table>` +
+            `<span style="font-size:10.5px;color:#9CA3AF;">Highlighted = the ball that counted for the team score${ggNote}</span></div>`;
+    }
+    function evlbWireEvent(body, d) {
+        body.querySelectorAll(".evlb-subtab").forEach(btn =>
+            btn.addEventListener("click", () => {
+                body.querySelectorAll(".evlb-subtab").forEach(b => b.classList.toggle("active", b === btn));
+                body.querySelectorAll(".evlb-panel").forEach(p =>
+                    p.hidden = p.dataset.panel !== btn.dataset.sub);
+            }));
+        // OVERALL column sorting (Kerry 2026-09-11: "Allow columns to
+        // sort") — every header sorts; second tap flips direction; the
+        // net-rank travels with the player. Rows re-render from the
+        // shared row template; expansion keeps working because the
+        // scorecard click is DELEGATED on the body (below), not bound
+        // per row.
+        // Column sorting — one handler for EVERY standard board on the
+        // page (Kerry 2026-09-13: every tab is the same table). Sorting
+        // happens WITHIN each band so a flighted board keeps its
+        // flights, and the # column re-ranks against the tapped column.
+        body.querySelectorAll("table.evlb-ovr[data-board]").forEach(tbl => {
+            const st = EVLB_BOARDS[tbl.dataset.board];
+            if (!st) return;
+            tbl.querySelectorAll("th[data-k]").forEach(th =>
+                th.addEventListener("click", () => {
+                    const k = th.dataset.k;
+                    const deft = (k === "gamecol" || k === "won") ? -1 : 1;
+                    st.sortDir = k === st.sortKey ? -st.sortDir : deft;
+                    st.sortKey = k;
+                    tbl.querySelector("tbody").innerHTML = evlbBoardBody(tbl.dataset.board);
+                    tbl.querySelectorAll("th[data-k]").forEach(h2 =>
+                        h2.classList.remove("asc", "desc"));
+                    th.classList.add(st.sortDir === 1 ? "asc" : "desc");
+                }));
+        });
+        // TEAM board: a band IS a team — tap it for the best-ball card
+        body.addEventListener("click", (e) => {
+            const band = e.target.closest("tr.evlb-band[data-team]");
+            if (!band || !body.contains(band)) return;
+            const st = EVLB_BOARDS[(band.closest("table[data-board]") || {}).dataset?.board];
+            const team = st && (st.board.teams || [])[+band.dataset.team];
+            if (!team) return;
+            const nxt = band.nextElementSibling;
+            if (nxt && nxt.classList.contains("evlb-card-row")) { nxt.remove(); return; }
+            const row = document.createElement("tr");
+            row.className = "evlb-card-row";
+            row.innerHTML = `<td colspan="${band.firstElementChild.colSpan}" style="white-space:normal;">` +
+                evlbTeamCard(st.d, team) + `</td>`;
+            band.after(row);
+        });
+        body.querySelectorAll("input[data-ovr-holes]").forEach(cb =>
+            cb.addEventListener("change", () => {
+                evlbShowHoles = cb.checked;
+                // every OVERALL table already on the page follows, so
+                // two open events never disagree
+                document.querySelectorAll("table.evlb-ovr").forEach(t =>
+                    t.classList.toggle("no-holes", !evlbShowHoles));
+                document.querySelectorAll("input[data-ovr-holes]").forEach(o =>
+                    { o.checked = evlbShowHoles; });
+            }));
+        body.querySelectorAll("input[data-ovr-hcp]").forEach(cb =>
+            cb.addEventListener("change", () => {
+                evlbShowHcp = cb.checked;
+                document.querySelectorAll("table.evlb-ovr").forEach(t =>
+                    t.classList.toggle("no-hcp", !evlbShowHcp));
+                document.querySelectorAll("input[data-ovr-hcp]").forEach(o =>
+                    { o.checked = evlbShowHcp; });
+            }));
+        // Player-row scorecard expansion — DELEGATED so rows re-rendered
+        // by a sort (or any future re-paint) keep the behavior
+        body.addEventListener("click", async (e) => {
+            const tr = e.target.closest("tr.evlb-plr[data-rid]");
+            if (!tr || !body.contains(tr)) return;
+            {
+                const rid = tr.dataset.rid;
+                if (!rid) return;
+                // the MVP/Points tab injects a PTS row under each player
+                // (v2.394.0) — the card has to open BELOW it or it
+                // orphans the points row from the score it belongs to
+                const host = (tr.nextElementSibling
+                    && tr.nextElementSibling.classList.contains("evlb-ptsrow"))
+                    ? tr.nextElementSibling : tr;
+                const nxt = host.nextElementSibling;
+                if (nxt && nxt.classList.contains("evlb-card-row")) { nxt.remove(); return; }
+                const cardRow = document.createElement("tr");
+                cardRow.className = "evlb-card-row";
+                const cols = tr.children.length;
+                cardRow.innerHTML = `<td colspan="${cols}" style="white-space:normal;">Loading card&hellip;</td>`;
+                host.after(cardRow);
+                try {
+                    const res = await fetch("/api/scoring/scorecard/" + rid);
+                    const c = await res.json();
+                    if (!res.ok || c.error) throw new Error(c.error || res.statusText);
+                    // THE universal card standard — same renderer as the
+                    // Handicaps + Points Race expands (Kerry 2026-09-11);
+                    // it renders only the nine(s) actually played
+                    cardRow.firstElementChild.innerHTML =
+                        `<div class="evlb-scroll">` +
+                        (window.tgfRenderScorecard
+                            ? window.tgfRenderScorecard(c)
+                            : "Scorecard renderer unavailable.") +
+                        `</div>`;
+                } catch (err) {
+                    cardRow.firstElementChild.textContent = "Couldn't load the card (" + (err.message || err) + ").";
+                }
+            }
+        });
+    }
+    $$("#evlb-chips .evlb-chip").forEach(btn =>
+        btn.addEventListener("click", () => {
+            $$("#evlb-chips .evlb-chip").forEach(b => b.classList.toggle("active", b === btn));
+            evlbChapter = btn.dataset.ch;
+            evlbLoad(true);
+        }));
+
     $$(".top-tab").forEach(btn => {
         btn.addEventListener("click", (e) => {
             const top = btn.dataset.top;
@@ -2379,11 +3437,12 @@
             const wasActive = btn.classList.contains("active");
             $$(".top-tab").forEach(b => b.classList.remove("active"));
             btn.classList.add("active");
-            ["match-play", "points-race", "enrollment", "lone-star-cup"].forEach(k => {
+            ["events", "match-play", "points-race", "enrollment", "lone-star-cup"].forEach(k => {
                 $("section-" + k).classList.toggle("section-hidden", k !== top);
             });
             if (top === "enrollment") enrAutoLoad();
             if (top === "lone-star-cup") lscLoad();
+            if (top === "events") evlbLoad();
             try {
                 if (top === "match-play") {
                     // Keep the active Match Play sub-panel in the link
@@ -2393,6 +3452,7 @@
                 }
                 else if (top === "enrollment") history.replaceState(null, "", "#tab=enr");
                 else if (top === "lone-star-cup") history.replaceState(null, "", "#tab=lsc");
+                else if (top === "events") history.replaceState(null, "", "#tab=events");
                 else {
                     const activeRace = (document.querySelector(".sub-tab[data-pr].active") || {}).dataset?.pr || "tfc";
                     history.replaceState(null, "", "#race=" + activeRace);
@@ -6284,7 +7344,7 @@
         if (!el) return;
         if (!pp || !pp.pot_cents) { el.innerHTML = ""; return; }
         const chips = [(prRaceFinal
-                ? `<span class="pr-pot" style="background:#166534;color:#fff;">&#127937; FINAL &middot; Pot ${prFmtMoney(pp.pot_cents)}</span>`
+                ? `<span class="pr-pot" style="background:#166534;color:#fff;">&#127937; FINAL &middot; Pot ${prFmtMoney(pp.pot_cents)}${pp.locked ? " &middot; as paid" : ""}</span>`
                 : `<span class="pr-pot">Pot ${prFmtMoney(pp.pot_cents)}</span>`)];
         if (pp.kind === "ladder") {
             pp.amounts_cents.forEach((c, i) =>
@@ -6330,6 +7390,24 @@
         (d.standings || []).forEach(r => { delete r._pay; delete r._payTitle; });
         const pp = d.projected_payouts;
         if (!pp || !d.standings) return;
+        // A LOCKED strip (final race, payouts recorded — Kerry
+        // 2026-09-11: "freeze concluded races to recorded payouts")
+        // badges the ACTUAL recipients by customer_id; never re-split
+        // money down standings that may have moved since payday.
+        if (pp.recorded_rows && pp.recorded_rows.length) {
+            const byCid = {};
+            pp.recorded_rows.forEach(x => {
+                if (x.customer_id != null)
+                    byCid[x.customer_id] = (byCid[x.customer_id] || 0) + x.amount_cents;
+            });
+            d.standings.forEach(r => {
+                if (r.customer_id != null && byCid[r.customer_id]) {
+                    r._pay = byCid[r.customer_id];
+                    r._payTitle = "Recorded payout (as paid)";
+                }
+            });
+            return;
+        }
         const enrolled = d.standings.filter(r => r.enrolled);
         if (pp.kind === "ladder") {
             prSplitDown(enrolled, pp.amounts_cents, "place money");
@@ -6463,7 +7541,7 @@
         const prStaff = userRole === "admin" || userRole === "manager";
         // lead phrase wears the same green as the bought-in rows (Kerry)
         const prLead = d.n_players
-            ? `<span style="background:#bbf7d0;color:#14532D;padding:2px 9px;border-radius:6px;font-weight:600;">${d.n_enrolled} of ${d.n_players} currently bought in</span>`
+            ? `<span style="background:var(--buyin-green,#bbf7d0);color:#14532D;padding:2px 9px;border-radius:6px;font-weight:600;">${d.n_enrolled} of ${d.n_players} currently bought in</span>`
             : escapeHtml(`No standings yet for ${d.label}`);
         $("pr-summary").innerHTML = prLead
             + (!prStaff ? "" : escapeHtml(
@@ -6611,7 +7689,7 @@
         const rowHtml = r => {
             const bg = (r.customer_id && champIds.has(r.customer_id))
                      ? "background:#FDE68A;"   // champion's gold row (Kerry 2026-08-16)
-                     : r.enrolled ? "background:#bbf7d0;"
+                     : r.enrolled ? "background:var(--buyin-green,#bbf7d0);"
                      : (r.customer_id ? "" : "background:#fffbeb;");
             const badge = r.enrolled
                 ? `<span style="color:#15803d;font-weight:700;" title="Bought in">&#10003;${compact ? "" : " IN"}</span>`
@@ -6619,8 +7697,8 @@
                     ? `<span style="color:#b91c1c;font-weight:600;" title="Not bought in">&#10007;${compact ? "" : " Not in"}</span>`
                     : `<span style="color:#b45309;font-weight:600;" title="No matching tracker profile — check name/aliases">?${compact ? "" : " Unmatched"}</span>`);
             const nameCell = (r.customer_id && !window.MEMBER_MODE)
-                ? `<a href="/customers?cid=${r.customer_id}" class="cell-link">${escapeHtml(r.player_name)}</a>`
-                : escapeHtml(r.player_name);
+                ? `<a href="/customers?cid=${r.customer_id}" class="cell-link">${escapeHtml(r.display_name || r.player_name)}</a>`
+                : escapeHtml(r.display_name || r.player_name);
             const expandable = !!(r.member_card_id || r.customer_id);
             const chevron = expandable
                 ? ' <span class="pr-chevron tgf-exp" title="Round-by-round points & imported scorecards">&#9654;</span>'
@@ -6953,7 +8031,7 @@
         const pr = Object.values(d.per_race || {});
         const cupStaff = userRole === "admin" || userRole === "manager";
         const cupLead = d.n_enrolled
-            ? `<span style="background:#bbf7d0;color:#14532D;padding:2px 9px;border-radius:6px;font-weight:600;">${d.n_enrolled} currently bought in</span>`
+            ? `<span style="background:var(--buyin-green,#bbf7d0);color:#14532D;padding:2px 9px;border-radius:6px;font-weight:600;">${d.n_enrolled} currently bought in</span>`
             : escapeHtml(`${d.n_players} eligible players`);
         $("pr-summary").innerHTML = cupLead
             + (!cupStaff ? "" : escapeHtml(
@@ -7005,13 +8083,13 @@
         const rows = d.standings.map(r => {
             const bg = (r.customer_id && fcChampIds.has(r.customer_id))
                      ? "background:#FDE68A;"   // champion's gold row (Kerry 2026-08-16)
-                     : r.enrolled ? "background:#bbf7d0;"
+                     : r.enrolled ? "background:var(--buyin-green,#bbf7d0);"
                      : (r.customer_id ? "" : "background:#fffbeb;");
             const hcp = r.handicap_index != null
                 ? ` <span style="color:var(--text-muted);font-size:0.82em;">(${r.handicap_index.toFixed(1)})</span>` : "";
             const nameCell = (r.customer_id && !window.MEMBER_MODE)
-                ? `<a href="/customers?cid=${r.customer_id}" class="cell-link">${escapeHtml(r.player_name)}</a>`
-                : escapeHtml(r.player_name);
+                ? `<a href="/customers?cid=${r.customer_id}" class="cell-link">${escapeHtml(r.display_name || r.player_name)}</a>`
+                : escapeHtml(r.display_name || r.player_name);
             // The CITY RANK links to that player's row on their chapter's
             // city race board — centered + pulsed, same as the Spotlight
             // deep links (Kerry 2026-08-03).
@@ -7215,8 +8293,8 @@
             // the monthly table itself is TGF-wide, so pick the race by chapter
             const race = r.chapter === "Austin" ? "austin_net" : "san_antonio_net";
             const name = (r.customer_id && !window.MEMBER_MODE)
-                ? `<a href="/customers?cid=${r.customer_id}" class="cell-link">${escapeHtml(r.player_name)}</a>`
-                : escapeHtml(r.player_name);
+                ? `<a href="/customers?cid=${r.customer_id}" class="cell-link">${escapeHtml(r.display_name || r.player_name)}</a>`
+                : escapeHtml(r.display_name || r.player_name);
             const chevron = r.customer_id
                 ? ' <span class="pr-chevron tgf-exp" title="This month&#39;s rounds & scorecards">&#9654;</span>'
                 : '';

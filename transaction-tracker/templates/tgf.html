@@ -1412,7 +1412,10 @@
         function isContestAccount(ev) {
             const c = (ev.code || "").trim();
             return /^(january|february|march|april|may|june|july|august|september|october|november|december)\s+points/i.test(c)
-                || /^(fellowship\s+cup|match\s+play|players\s+cup)/i.test(c)
+                // year-prefixed cup accounts ("2026 PLAYERS CUP") belong
+                // under SEASON too (Kerry 2026-09-11) — the old anchored
+                // pattern only matched a cup name at position 0
+                || /^(?:\d{4}\s+)?(fellowship\s+cup|match\s+play|players\s+cup)/i.test(c)
                 // Season-contest FINAL payout accounts (Kerry 2026-08-02:
                 // "The top four should be under SEASON, not EVENTS") —
                 // chapter-prefixed codes like "SAN ANTONIO Net 2026" /
@@ -1622,11 +1625,45 @@
                 return '<div class="empty-state"><p>No payouts recorded for this event</p></div>';
             }
 
+            // Flighted-cup layout (Kerry 2026-09-11): when every golfer's
+            // rows carry "<N>st Flight" (the Players Cup shape — the only
+            // flighted season contest), the summary renders grouped by
+            // flight in order, winner before 2nd, instead of one flat
+            // money-sorted list. Detected from the data, so any future
+            // flighted cup gets it and normal events never do.
+            const flightOf = g => {
+                for (const p of (g.items || [])) {
+                    const m = /(\d+)(?:st|nd|rd|th)\s+Flight/i.exec(p.description || "");
+                    if (m) return parseInt(m[1], 10);
+                }
+                return null;
+            };
+            const flighted = golferList.length > 1 &&
+                golferList.every(g => flightOf(g) != null);
+            let list = golferList;
+            if (flighted) {
+                list = [...golferList].sort((a, b) =>
+                    (flightOf(a) - flightOf(b)) || (b.total - a.total));
+            }
+            const ordSuf = n => (n % 100 >= 11 && n % 100 <= 13) ? "th"
+                : ({ 1: "st", 2: "nd", 3: "rd" }[n % 10] || "th");
+
             let rows = "";
-            golferList.forEach((g, idx) => {
+            let lastBand = null, flightRank = 0;
+            list.forEach((g, idx) => {
+                if (flighted) {
+                    const fn = flightOf(g);
+                    const band = `${fn}${ordSuf(fn).toUpperCase()} FLIGHT`;
+                    if (band !== lastBand) {
+                        rows += `<tr class="flight-band"><td colspan="5" style="background:#1B1B1B;color:#fff;font:700 10px/1.7 'Bitter',serif;letter-spacing:1px;padding:4px 10px;">${band}</td></tr>`;
+                        lastBand = band;
+                        flightRank = 0;
+                    }
+                    flightRank++;
+                }
                 rows += `
                     <tr class="golfer-row" data-gid="${g.golfer_id}">
-                        <td class="rank-col tgf-hide-mobile">${idx + 1}</td>
+                        <td class="rank-col tgf-hide-mobile">${flighted ? flightRank : idx + 1}</td>
                         <td>${g.name}</td>
                         <td class="right tgf-hide-mobile">${g.items.length}</td>
                         <td class="right total-amount">${fmt(g.total)}</td>
