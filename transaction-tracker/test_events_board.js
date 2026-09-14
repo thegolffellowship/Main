@@ -13,7 +13,8 @@ const code = 'const escapeHtml = s => String(s ?? "").replace(/&/g,"&amp;").repl
   + '\nglobalThis.evlbStdBoard = evlbStdBoard;'
   + '\nglobalThis.evlbBoardBody = evlbBoardBody;'
   + '\nglobalThis.evlbOvOf = evlbOvOf;'
-  + '\nglobalThis.evlbSecsFrom = evlbSecsFrom;';
+  + '\nglobalThis.evlbSecsFrom = evlbSecsFrom;'
+  + '\nglobalThis.evlbOverallSort = evlbOverallSort;';
 eval(code);
 
 // synthetic event: 4 players, 2 flights, 9 holes
@@ -149,6 +150,35 @@ ck('_buyer is lifted off the game board row, not the overall row',
    && boards.net.sections[1].rows[1]._buyer === false
    && !('_buyer' in d.overall_board[0]),
    JSON.stringify(boards.net.sections.map(x=>x.rows.map(r=>r._buyer))));
+
+console.log("== OVERALL's default order: money once paid, points until then ==");
+ck('a completed event (pot recorded) lands on the money',
+   evlbOverallSort({pot: 1220}) === 'won', evlbOverallSort({pot: 1220}));
+ck('an event with no payouts yet lands on points',
+   evlbOverallSort({pot: 0}) === 'gamecol', evlbOverallSort({pot: 0}));
+ck('a missing pot is treated as not yet paid, not as an error',
+   evlbOverallSort({}) === 'gamecol' && evlbOverallSort() === 'gamecol');
+{
+  const paid = evlbStdBoard(Object.assign({}, d, {pot: 500}),
+    {sections:[{label:null,rows:d.overall_board}], sort: evlbOverallSort({pot:500})});
+  const unpaid = evlbStdBoard(Object.assign({}, d, {pot: 0}),
+    {sections:[{label:null,rows:d.overall_board}], sort: evlbOverallSort({pot:0})});
+  ck('paid event: the Won header carries the active-sort fill',
+     /data-k="won" class="won sortable br asc"/.test(paid),
+     (paid.match(/data-k="won"[^>]*/)||[])[0]);
+  ck('unpaid event: the Pts header carries it instead',
+     /data-k="gamecol" class="sortable bl br asc"/.test(unpaid)
+     && !/data-k="won" class="won sortable br asc"/.test(unpaid),
+     (unpaid.match(/data-k="gamecol"[^>]*/)||[])[0]);
+  const rank = h => [...h.matchAll(/<tr class="evlb-plr[^"]*"[^>]*>\s*<td>([^<]*)<\/td>\s*<td class="nm">([^<]*)/g)]
+      .map(m => m[1] + ':' + m[2]);
+  ck('paid event ranks by money, biggest first, unpaid players unranked',
+     rank(paid)[0] === '1:LOW, Player' && rank(paid)[1] === '2:SKIN, Winner'
+     && rank(paid)[3] === ':PLAIN, Nobody', rank(paid).join(' | '));
+  ck('unpaid event ranks by points, most first',
+     rank(unpaid)[0] === '1:MVP, Guy' && rank(unpaid)[1] === '2:LOW, Player',
+     rank(unpaid).join(' | '));
+}
 
 console.log('== WON sits right of the name (Kerry 2026-09-13) ==');
 {

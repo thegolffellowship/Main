@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.397.0";
+window.TGF_VERSION = "2.398.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.398.0",
+    date: "2026-09-14",
+    changes: [
+      "OVERALL now opens in the order that matters for where the event actually is (Kerry: \u2018Set won money order as default landing for overall if event is completed. If not base it on points\u2019). An event whose payouts are recorded lands sorted by <b>Won</b>, biggest cheque first; an event that has not been paid out yet lands sorted by <b>Pts</b>, most first. Either way the # column re-ranks to match, and the active column carries the orange header fill so it is obvious what you are looking at.",
+      "The completion test is the event\u2019s recorded POT rather than a date or a status flag, because the pot is the thing that makes a money sort meaningful \u2014 before closeout there are no payouts to rank by, and points are the live standing. The board therefore flips itself the moment an event is closed out, with nothing to remember to set.",
+      "A missing pot is read as \u2018not paid yet\u2019 rather than throwing, so an event still being built opens on points instead of an empty board.",
+      "The rule lives in its own function so the headless guard tests the real one: seven new checks cover both branches, the header fill on each, and the actual row order and ranking that comes out \u2014 money-first with unpaid players unranked, or points-first. 153 checks total.",
+    ],
+  },
   {
     version: "2.397.0",
     date: "2026-09-13",

@@ -2735,6 +2735,16 @@
             rows: (sec.rows || []).map(x => evlbOvOf(ovIx, x)).filter(Boolean),
         })).filter(sec => sec.rows.length);
     }
+    // ── OVERALL's default order (Kerry 2026-09-14: "Set won money
+    //    order as default landing for overall if event is completed. If
+    //    not base it on points"). `pot` is the money actually RECORDED
+    //    against the event, so it is both the completion signal and the
+    //    thing that makes a money sort meaningful: before closeout there
+    //    are no payouts to rank by, and points are the live standing.
+    //    "gamecol" is the Pts column on OVERALL. Both land descending.
+    function evlbOverallSort(d) {
+        return (d && (d.pot || 0) > 0) ? "won" : "gamecol";
+    }
     // the NET and GROSS bundles are the games a player BUYS INTO; Team
     // Net and the proxies come with the entry, so they have no buy-in
     // to show (Kerry 2026-09-13)
@@ -3030,7 +3040,7 @@
             `<tr><th data-k="net" class="sortable">#</th><th data-k="player" class="nm sortable">Player</th>` +
             // Won sits right of the name (Kerry 2026-09-13) — the money
             // is the point of the board, so it reads without scrolling
-            `<th data-k="won" class="won sortable br">Won</th>` +
+            `<th data-k="won" class="won sortable br${active("won")}">Won</th>` +
             `<th data-k="index" class="sortable bl hc" title="Handicap Index">Idx</th>` +
             `<th data-k="hcp" class="sortable br hc" title="Playing Handicap">PH</th>` +
             (d.hole_cols || []).map(n => `<th data-k="h:${n}" class="sortable h">${n}</th>`).join("") +
@@ -3155,7 +3165,7 @@
         // The Pts column is the MVP game's result, so it only appears on
         // OVERALL and POINTS; Skins owns its own count column.
         const boards = {
-            overall: { sections: [{ label: null, rows: ovRows }], sort: "net" },
+            overall: { sections: [{ label: null, rows: ovRows }], sort: evlbOverallSort(d) },
             net: { sections: secsFrom(d.net_board), sort: "net", game: "net", gameCol: false },
             gross: { sections: secsFrom(d.gross_board), sort: "gross", game: "gross", gameCol: false },
             skins: {

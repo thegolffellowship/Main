@@ -641,6 +641,25 @@ legend shows only the flights that paid; MVP keeps the ratified
 purple. Backend: overall rows carry `net_flight` / `gross_flight` /
 `skins_flight` ordinals (`_flight_ordinals` over the sectioned
 boards — 1 = low flight, placed non-buyers included).
+**v2.398.0 — OVERALL's default order follows the event's state.** Kerry
+2026-09-14: "Set won money order as default landing for overall if event
+is completed. If not base it on points." `evlbOverallSort(d)` returns
+`"won"` when `d.pot > 0` and `"gamecol"` (the Pts column on OVERALL)
+otherwise; both sort descending and the # column re-ranks to match.
+  - **The completion test is the recorded POT**, not a date or status
+    flag — the pot is what makes a money sort meaningful. Before
+    closeout there are no payouts to rank by and points are the live
+    standing, so the board flips itself when an event is closed out with
+    nothing to remember to set.
+  - A missing `pot` reads as not-yet-paid rather than throwing.
+  - The Won `<th>` gained `${active("won")}` so the orange active-sort
+    fill lands on it when it is the default.
+  - Lives in its own function in the renderer region so the headless
+    guard tests the real rule, not a copy.
+Guard: seven checks — both branches, the header fill on each, and the
+resulting row order/ranking (money-first with unpaid players unranked;
+points-first otherwise).
+
 **v2.397.0 — Won moves next to the name.** Kerry 2026-09-13: "Move WON
 column right after names column." Column order is now
 `# | Player | Won | Idx | PH | holes… | G ± | N ± | [Pts]`. The money was
