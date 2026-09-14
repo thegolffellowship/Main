@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.406.0";
+window.TGF_VERSION = "2.407.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.407.0",
+    date: "2026-09-14",
+    changes: [
+      "Hole by hole now lands OPEN on OVERALL and CLOSED on every game tab (Kerry: \u2018OVERALL view is only one that should actually show Hole by Hole on landing\u2019) \u2014 correcting v2.406.0, which closed all six. The moment the box is touched it goes back to being one shared choice, so two open events can never disagree about what is on screen.",
+      "Players who did not buy in now settle where they WOULD have fallen (Kerry). They were already being placed into the right flight by handicap, but a tie in the sorted column left them heaped at the bottom of it; ties now fall back to the score the board is about \u2014 gross on Gross and Skins, net elsewhere \u2014 so a non-buyer sits among the buyers at their own score. The skins count also stopped being an empty string when zero, which was making that column sort as text.",
+      "The expanded scorecard\u2019s holes line up with the board\u2019s holes (Kerry: \u2018Hard to read if it\u2019s not\u2019). The card MEASURES the row it dropped out of \u2014 the distance to the first hole cell \u2014 and takes the board\u2019s own hole-width token, rather than assuming a width; the left block is content-sized, so there is no constant that could be right. Scoped to the leaderboard, so the universal scorecard renderer is unchanged everywhere else it is used.",
+      "OVERALL carries EVENT MVP and TGF MVP badges under the player\u2019s name (Kerry), in the Player Spotlight\u2019s badge shape and the ratified payout-category colours \u2014 City MVP purple, TGF MVP burnt orange, the same meaning those colours carry on every money surface. They read off what the player was actually PAID under, so a badge can never claim an award nobody was paid for.",
+    ],
+  },
   {
     version: "2.406.0",
     date: "2026-09-14",

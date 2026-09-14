@@ -386,6 +386,28 @@ const dNoPar = Object.assign({}, d, {hole_par:{}});
 ck('no par data -> no PAR row at all',
    !/evlb-parrow/.test(evlbStdBoard(dNoPar, {sections:[{label:null,rows:d.overall_board}],sort:'net'})));
 
+console.log('== MVP badges under the name on OVERALL (Kerry 2026-09-14) ==');
+ck('the MVP winner gets a TGF MVP badge', /evlb-mvpbadge[^>]*>TGF MVP</.test(htmls.overall),
+   (htmls.overall.match(/evlb-mvpbadge[^<]*<\/span>/g)||[]).join('|'));
+ck('a player with no MVP money gets none',
+   ((htmls.overall.match(/evlb-mvpbadges/g)||[]).length === 1));
+ck('badges are OVERALL only, not repeated on the game tabs',
+   ['net','gross','skins','points','team'].every(k => !/evlb-mvpbadge/.test(htmls[k])));
+ck('the badge reads off won_by_cat, so it cannot claim an unpaid award',
+   /by\.tgf_mvp/.test(src) && /by\.mvp/.test(src));
+ck('badges use the ratified category colours',
+   /--cat-mvp/.test(src) && /--cat-tgf-mvp/.test(src));
+
+console.log('== the expanded card lines up with the board (Kerry 2026-09-14) ==');
+ck('the card measures the board rather than assuming a width',
+   /firstHole\.getBoundingClientRect\(\)\.left[\s\S]{0,120}playerRow\.getBoundingClientRect\(\)\.left/.test(src));
+ck('it reuses the board\'s own hole-width token',
+   /getPropertyValue\("--evlb-hole-w"\)/.test(src));
+ck('the alignment CSS is scoped to the leaderboard card',
+   /\.evlb-card-align table\.evlb-aligned/.test(src));
+ck('so the shared scorecard renderer is untouched elsewhere',
+   !/tgfRenderScorecard[\s\S]{0,200}--evlb-hole-w/.test(src));
+
 console.log('== an opened event pins to the top (Kerry 2026-09-14) ==');
 {
   const src2 = fs.readFileSync(require('path').join(__dirname,'templates/contests.html'),'utf8');
@@ -402,12 +424,21 @@ console.log('== an opened event pins to the top (Kerry 2026-09-14) ==');
 console.log('== holes start CLOSED, and the PTS rows ride with them ==');
 {
   const css = fs.readFileSync(require('path').join(__dirname,'templates/contests.html'),'utf8');
-  ck('hole-by-hole starts unselected', /let evlbShowHoles = false;/.test(css));
-  for (const k of Object.keys(boards))
+  // Kerry 2026-09-14: "OVERALL view is only one that should actually
+  // show Hole by Hole on landing" — per BOARD, until the box is touched
+  ck('OVERALL lands with the hole grid open',
+     !/class="evlb-holes evlb-ovr[^"]*\bno-holes\b/.test(htmls.overall),
+     (htmls.overall.match(/class="evlb-holes evlb-ovr[^"]*"/)||[])[0]);
+  ck('OVERALL\'s Hole-by-hole box is checked to match',
+     /data-ovr-holes checked>/.test(htmls.overall));
+  for (const k of ['net','gross','skins','points','team'])
     ck(`${k}: lands with the hole columns closed`,
        /class="evlb-holes evlb-ovr[^"]*\bno-holes\b/.test(htmls[k]),
        (htmls[k].match(/class="evlb-holes evlb-ovr[^"]*"/)||[])[0]);
-  ck('the Hole-by-hole box is unchecked to match', /data-ovr-holes>/.test(htmls.overall));
+  ck('a game tab\'s box is unchecked to match', /data-ovr-holes>/.test(htmls.net));
+  ck('touching the box makes it ONE shared choice again',
+     /evlbHolesTouched = true;/.test(css)
+     && /evlbHolesTouched\s*\?\s*evlbShowHoles/.test(css));
   ck('the PTS rows hide with the holes rather than being re-rendered',
      /\.evlb-ovr\.no-holes tr\.evlb-ptsrow \{ display: none; \}/.test(css));
   ck('but the PTS rows are still IN the DOM, so the checkbox brings them back',
