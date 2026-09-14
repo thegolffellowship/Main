@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.399.0";
+window.TGF_VERSION = "2.400.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.400.0",
+    date: "2026-09-14",
+    changes: [
+      "SEASON CONTESTS is now LEADERBOARD in the manager/admin nav (Kerry). Members have called that page the Leaderboard since 2026-07-14; the two sides now use the same word for the same page, which matters most when Kerry is looking at Member View and the real nav side by side. The desktop link, the mobile drawer, the mobile bar title and the kill-switch fallback header all follow \u2014 tapping \u2018Leaderboard\u2019 can never land on a page headed \u2018Season Contests\u2019.",
+      "The orange \u2018ENTER SEASON CONTESTS\u2019 call-to-action keeps its name on purpose. That button is the paid buy-in, not the board \u2014 renaming it would advertise standings where it actually sells entries. Flagged here rather than changed silently.",
+      "The desktop link also drops the responsive split that hid the word \u2018Contests\u2019 on a narrow bar; one word needs no abbreviating, so the label now reads the same at every width.",
+    ],
+  },
   {
     version: "2.399.0",
     date: "2026-09-14",

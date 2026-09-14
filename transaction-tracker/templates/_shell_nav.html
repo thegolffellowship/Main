@@ -48,7 +48,12 @@
     <span class="shell-mobile-title">{{ SHELL_TITLE or "" }}</span>
     <nav class="shell-nav-links" id="shell-nav-links">
         <a href="/events" class="{{ 'active' if SHELL_ACTIVE == 'events' else '' }}">Events</a>
-        <a href="/contests" class="{{ 'active' if SHELL_ACTIVE == 'contests' else '' }}">Season<span class="nav-label-full"> Contests</span></a>
+        {# Kerry 2026-09-14: "Change SEASON CONTESTS to LEADERBOARD" — the
+           manager/admin nav now uses the same word the member nav has used
+           since 2026-07-14, so the same page is called the same thing on
+           both sides. The "Enter Season Contests" CTA keeps its name: that
+           one is the paid signup, a different thing from the board. #}
+        <a href="/contests" class="{{ 'active' if SHELL_ACTIVE == 'contests' else '' }}">Leaderboard</a>
         <a href="/handicaps" class="{{ 'active' if SHELL_ACTIVE == 'handicaps' else '' }}">Handicaps</a>
         <a href="/transactions" class="{{ 'active' if SHELL_ACTIVE == 'transactions' else '' }}">Transactions</a>
         <a href="/customers" class="{{ 'active' if SHELL_ACTIVE == 'customers' else '' }}">Customers</a>
@@ -83,7 +88,7 @@
     </div>
     <nav class="shell-drawer-nav" id="shell-drawer-nav">
         <a href="/events" class="{{ 'active' if SHELL_ACTIVE == 'events' else '' }}">Events</a>
-        <a href="/contests" class="{{ 'active' if SHELL_ACTIVE == 'contests' else '' }}">Season Contests</a>
+        <a href="/contests" class="{{ 'active' if SHELL_ACTIVE == 'contests' else '' }}">Leaderboard</a>
         <a href="/handicaps" class="{{ 'active' if SHELL_ACTIVE == 'handicaps' else '' }}">Handicaps</a>
         <a href="/transactions" class="{{ 'active' if SHELL_ACTIVE == 'transactions' else '' }}">Transactions</a>
         <a href="/customers" class="{{ 'active' if SHELL_ACTIVE == 'customers' else '' }}">Customers</a>

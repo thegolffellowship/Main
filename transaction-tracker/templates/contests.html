@@ -1700,13 +1700,15 @@
 </head>
 <body>
     {% if shell_v2 %}
-    {% set SHELL_TITLE = 'Season Contests' %}{% set SHELL_ACTIVE = 'contests' %}
+    {# The mobile bar follows the nav label (Kerry 2026-09-14) — tapping
+       "Leaderboard" must not land on a page headed "Season Contests". #}
+    {% set SHELL_TITLE = 'Leaderboard' %}{% set SHELL_ACTIVE = 'contests' %}
     {% include '_shell_nav.html' %}
     {% else %}
     <header>
         <div class="header-content">
             <h1>TGF Transaction Tracker</h1>
-            <p class="subtitle">Season Contests</p>
+            <p class="subtitle">Leaderboard</p>
             {% if member_mode %}
             <span class="version-link" id="version-badge">v2.0.0</span>
             {% else %}
