@@ -558,6 +558,17 @@ FOLLOW-UPS DUE / SNOOZED bars, due-first-then-snoozed inside NO
 RESPONSE, INTERESTED bar, bar due count, due chip. The 2026-09-07
 outcome-over-reminder rule holds by construction now.
 
+## Round eleven (2026-09-14): Facebook event posts revived
+
+Kerry: *"I'm going to get back to posting upcoming events as Facebook
+events … any pub is better than no pub."* No standard existed in the
+repo or OneDrive (searched); the May s9.10 Brackenridge copy he pasted
+is now `docs/claude/facebook-events.md` with the fact sources. The
+store is blocked from this environment's proxy, so prices came from
+the events' own registrations and the Tracker's pricing rule. Two
+descriptions delivered (s9.23 The Quarry, a9.23 Avery Ranch). Candidate
+build: `scoring-fb-event:<event>` bridge.
+
 ## Kerry decisions this lane is waiting on
 
 - ~~The three prices the table does not know~~ — RESOLVED v2.355.0:
