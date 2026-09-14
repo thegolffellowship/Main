@@ -43,7 +43,24 @@ header.shell-nav {
     color: #d4af37; border-left-color: #d4af37;
     background: rgba(212,175,55,.08);
 }
+/* MEMBERS (Kerry 2026-09-14) — a doorway out of the Tracker into the
+   pinless member app, so it gets a pill like Two Man Tour. Neutral light
+   rather than a brand colour: TGF orange means admin, the gold means Two
+   Man Tour, and green now means bought-in app-wide. */
+.shell-nav-links a.shell-members-pill {
+    background: #E2E2E2; color: #1B1B1B; border-radius: 9999px;
+    padding: 8px 14px 7px; border-bottom: none; transition: background .15s;
+}
+.shell-nav-links a.shell-members-pill:hover { background: #ffffff; color: #1B1B1B; }
 .shell-nav-right { display: flex; align-items: center; gap: 14px; }
+/* Two Man Tour sits in the right-hand group now, after Admin */
+.shell-nav-right a.shell-tmt-pill {
+    background: #d4af37; color: #14100a; border-radius: 9999px;
+    padding: 8px 14px 7px; text-decoration: none;
+    font: 700 10px/1 'Bitter', serif; letter-spacing: 1.5px;
+    text-transform: uppercase; transition: background .15s;
+}
+.shell-nav-right a.shell-tmt-pill:hover { background: #e6c964; color: #14100a; }
 .shell-admin-link { text-decoration: none; }
 .shell-admin-pill {
     display: inline-block; height: 32px; line-height: 32px; padding: 0 16px;

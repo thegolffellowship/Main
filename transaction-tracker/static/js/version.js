@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.400.0";
+window.TGF_VERSION = "2.401.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.401.0",
+    date: "2026-09-14",
+    changes: [
+      "Nav tidy-up (Kerry): CA QUEUE is now QUEUE, MEMBER VIEW is now MEMBERS and reads as a button, MEMBERS sits after QUEUE, and TWO MAN TOUR moves to the right of ADMIN. Desktop row and mobile drawer carry the same order and the same words.",
+      "MEMBERS gets a pill because it is a DOORWAY OUT of the Tracker into the member-facing app \u2014 the same reason Two Man Tour has one. It is a neutral light pill rather than a brand colour: TGF orange already means Admin, the gold already means Two Man Tour, and green now means bought-in app-wide, so a fourth meaning would have collided with one of them.",
+      "A trap this nearly walked into, worth knowing: auth.js reveals admin-only links by walking the nav LINK containers, and .shell-nav-right is not one of them \u2014 so simply moving Two Man Tour next to ADMIN would have hidden it from admins permanently. shell.js gated that group by naming the Admin link specifically; it now gates by the admin-nav CLASS, so this pill and the next one moved there are covered without anyone remembering to.",
+      "New test_shell_nav.js pins the whole thing down \u2014 the labels, the order in both the desktop row and the drawer, the pill and its colour, and specifically that the right-hand group is gated by class rather than by a link name. Fourteen checks.",
+    ],
+  },
   {
     version: "2.400.0",
     date: "2026-09-14",

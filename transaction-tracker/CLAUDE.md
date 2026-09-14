@@ -484,7 +484,18 @@ on mobile — **ops never go in the drawer**; one global dropdown pattern
 (`.shell-menu`). auth.js drives role gating for shell links
 (`.shell-nav-links a`, `.shell-drawer-nav a`) and calls
 `window.shellApplyRole`. Official TGF icon marks: `static/tgf-icon.svg`
-+ `static/tgf-icon-white.svg`. shell.js also provides **pull-to-refresh**
++ `static/tgf-icon-white.svg`. **Nav order + labels (Kerry 2026-09-14):**
+… Leads | Payouts | **Queue** | **Members** (pill) | **Admin** (pill) |
+**Two Man Tour** (pill) | Log Out — desktop row and mobile drawer alike;
+guard `test_shell_nav.js`. Pills mark DOORWAYS OUT of the Tracker
+(Members → the pinless member app, Two Man Tour → the sibling brand) plus
+Admin; each is a different colour because orange means Admin, gold means
+Two Man Tour, and green means bought-in. **Anything admin-only placed in
+`.shell-nav-right` must be gated in `shell.js` `shellApplyRole` — auth.js's
+`updateNavForRole` walks only `.tab-nav a, .shell-nav-links a,
+.shell-drawer-nav a`, so a link moved into that group is invisible to
+admins unless shell.js covers it** (it now selects `.shell-nav-right
+.admin-nav` by class, not by link name). shell.js also provides **pull-to-refresh**
 (v2.82.0): app-wide, but gated to the iOS installed PWA
 (`navigator.standalone`) where the native gesture is absent — a mobile
 browser and Android already have native PTR, so custom PTR there would

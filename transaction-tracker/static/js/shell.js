@@ -96,13 +96,18 @@
         if (!nav) return;
         // view-only sees 3 sections → inline tabs, no drawer (rule 2)
         nav.classList.toggle("shell-inline", role === "view-only");
-        // Desktop ADMIN pill links to /accounting. It sits in
-        // .shell-nav-right (outside auth.js's nav-link selectors), so we
-        // gate it here; for admins it REPLACES the redundant role badge
-        // on desktop (mobile keeps the badge in the bar — the drawer's
-        // Admin row is the mobile route in).
-        const adminLink = nav.querySelector(".shell-admin-link");
-        if (adminLink) adminLink.style.display = (role === "admin") ? "" : "none";
+        // Everything admin-only in .shell-nav-right sits OUTSIDE auth.js's
+        // nav-link selectors (".tab-nav a, .shell-nav-links a,
+        // .shell-drawer-nav a"), so it is gated here. Select by the
+        // admin-nav CLASS rather than naming one link: Two Man Tour moved
+        // into this group (Kerry 2026-09-14) and a selector that named
+        // only .shell-admin-link would have left it invisible to admins
+        // forever. The desktop ADMIN pill links to /accounting and for
+        // admins REPLACES the redundant role badge (mobile keeps the badge
+        // in the bar — the drawer's Admin row is the mobile route in).
+        nav.querySelectorAll(".shell-nav-right .admin-nav").forEach(el => {
+            el.style.display = (role === "admin") ? "" : "none";
+        });
         const badge = $("role-badge");
         if (badge) badge.classList.toggle("shell-badge-desktop-hide", role === "admin");
         // Sync the drawer's role pill from the canonical #role-badge
