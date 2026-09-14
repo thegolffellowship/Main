@@ -641,6 +641,28 @@ legend shows only the flights that paid; MVP keeps the ratified
 purple. Backend: overall rows carry `net_flight` / `gross_flight` /
 `skins_flight` ordinals (`_flight_ordinals` over the sectioned
 boards — 1 = low flight, placed non-buyers included).
+**v2.406.0 — one currency per tab; holes closed on landing; pin to top.**
+Kerry 2026-09-14, four asks in one wave.
+  - **TEAM hole cells are GROSS again** with pops marked; the green cell
+    is the one whose NET was the best ball, and the tooltip spells out
+    `gross − pops = net`. (Reverses the v2.391.0 net-cells call, which was
+    flagged reversible at the time.) The TEAM NET row still carries net.
+  - **`netCol: false`** joins `grossCol`/`gameCol` as a board flag: GROSS
+    drops the N pair, MVP/POINTS drops the G pair, TEAM already dropped
+    G. On a board with no N, the `#` header sorts by `gross`.
+  - **`gameColAfterWon: true`** on SKINS puts the count right of Won.
+    OVERALL/POINTS keep Pts at the end.
+  - **`evlbShowHoles` now starts `false`.** `.evlb-ovr.no-holes
+    tr.evlb-ptsrow { display:none }` rides the PTS rows with the holes
+    (CSS, not a re-render, so the checkbox brings them back), and the PTS
+    row's Pts slot is now EMPTY — the total is on the player row above.
+  - **`evlbPinToTop(el)`** scrolls an opened event card to the top, using
+    the MEASURED sticky header + tab-nav height, targeting the card's top
+    edge (stable while the body loads in below it).
+All five row builders now take `gameCol / grossCol / netCol / afterWon`;
+`evlbColCount` subtracts each. Guard: every row type on GROSS, POINTS and
+TEAM must end with the same cell count. 226 checks.
+
 **v2.404.0 — TEAM speaks NET only.** Kerry 2026-09-14: "Remove GROSS
 score columns from TEAM." A new board flag `grossCol: false` drops the
 `G` + gross-to-par pair; the team board sets it. Team Net is played in

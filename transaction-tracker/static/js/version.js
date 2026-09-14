@@ -1,5 +1,16 @@
-window.TGF_VERSION = "2.405.0";
+window.TGF_VERSION = "2.406.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.406.0",
+    date: "2026-09-14",
+    changes: [
+      "TEAM hole cells go back to GROSS with the pops marked (Kerry: \u2018show gross scores for each players hole scores. The pops then will signify what was subtracted to produce the net score used for team score on that hole\u2019). The column reads gross, the dots say what came off it, the green cell is the one whose NET was the team\u2019s best ball, and the TEAM NET row below carries that net. Each cell\u2019s tooltip spells the arithmetic out \u2014 \u20185 \u2212 1 = net 4\u2019 \u2014 so the chain from a player\u2019s gross to the team\u2019s score is readable without doing it in your head.",
+      "Every tab now shows only the score its own game is played in. GROSS drops the Net column and its to-par; MVP/POINTS drops the Gross column and its to-par; TEAM already dropped Gross. On a board with no Net column the # column re-ranks by gross rather than by a column that isn\u2019t there any more.",
+      "The SKINS count moves to sit directly right of WON (Kerry). Skins won and skins money are the same fact twice, so they now read together instead of at opposite ends of the board. OVERALL and MVP/POINTS keep Pts at the end.",
+      "Boards land with HOLE BY HOLE unselected (Kerry) \u2014 totals first, the hole grid one tap away. The per-player PTS rows ride with that checkbox, since a hole-by-hole breakdown has nothing to say while the holes are hidden; they stay in the page so the box brings them straight back. When they are showing, the Pts total is no longer repeated on them \u2014 it is already on the player\u2019s own row directly above.",
+      "Opening an event pins it to the top of the screen (Kerry). The scroll targets the card\u2019s top edge rather than its body, because the body loads a moment later and grows downward \u2014 the top edge doesn\u2019t move, so the landing place is the same either way. The offset is measured from the sticky header and tab bar rather than hard-coded, since their height changes with role and viewport.",
+    ],
+  },
   {
     version: "2.405.0",
     date: "2026-09-14",

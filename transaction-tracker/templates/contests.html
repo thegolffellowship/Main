@@ -384,6 +384,11 @@
         .evlb-ovr.no-holes .h { display: none; }
         /* handicap columns, hidden by default (Kerry 2026-09-13) */
         .evlb-ovr.no-hcp .hc { display: none; }
+        /* The per-player PTS row exists to break the Pts total out hole
+           by hole, so it has nothing to say while the holes are hidden
+           (Kerry 2026-09-14). CSS rather than a re-render, so the
+           checkbox brings it straight back. */
+        .evlb-ovr.no-holes tr.evlb-ptsrow { display: none; }
         /* a BAND row — a flight on Net/Gross/Skins, a team on Team */
         .evlb-holes tr.evlb-band td { background: #1B1B1B; color: #fff; text-align: left;
             font: 700 10px/1.7 'Bitter', serif; letter-spacing: 1px; padding: 4px 10px;
@@ -2676,13 +2681,33 @@
             }).join("");
             box.querySelectorAll("details.evlb-ev").forEach(el => {
                 el.addEventListener("toggle", () => {
-                    if (el.open) evlbLoadEvent(el);
+                    if (!el.open) return;
+                    evlbLoadEvent(el);
+                    evlbPinToTop(el);
                 });
             });
         } catch (err) {
             evlbLoaded = false;
             box.innerHTML = `<p style="color:var(--text-muted);margin-top:1rem;">Couldn't load events (${escapeHtml(err.message || String(err))}).</p>`;
         }
+    }
+    // ── An opened event pins to the top of the screen (Kerry
+    //    2026-09-14: "When event is expanded, it should pin to the top of
+    //    the viewable screen"). Scroll to the CARD'S TOP, not the body's
+    //    — the body loads async and grows afterwards, but the top edge
+    //    doesn't move, so the landing place is stable either way. The
+    //    offset comes from the sticky chrome's measured height rather
+    //    than a hard-coded number, because the header's height changes
+    //    with role and viewport (the same reason auth.js measures it).
+    function evlbPinToTop(el) {
+        requestAnimationFrame(() => {
+            const hdr = document.querySelector("header");
+            const nav = document.querySelector(".tab-nav");
+            const pad = (hdr ? hdr.offsetHeight : 0)
+                      + (nav ? nav.offsetHeight : 0) + 8;
+            const y = el.getBoundingClientRect().top + window.scrollY - pad;
+            window.scrollTo({ top: Math.max(0, y), behavior: "smooth" });
+        });
     }
     async function evlbLoadEvent(el) {
         const name = el.dataset.ev;
@@ -2709,7 +2734,10 @@
     // flight 2 green, flight 3 blue, then amber/violet. A game with no
     // flights (or an unresolved one) paints as flight 1.
     const EVLB_FLIGHT_COLORS = ["#DC2626", "#15803D", "#2563EB", "#B45309", "#6D28D9"];
-    let evlbShowHoles = true;
+    // Boards land CLOSED (Kerry 2026-09-14: hole-by-hole unselected
+    // "should be initial landing view") — the totals first, the hole
+    // grid one tap away. The per-player PTS rows ride with it.
+    let evlbShowHoles = false;
     // handicap columns (Idx + PH) start HIDDEN (Kerry 2026-09-13:
     // "make the default not show them") — they are reference, not
     // result, and they cost two columns on a phone
@@ -2816,7 +2844,7 @@
         });
         return mins;
     }
-    function evlbOvrRowHtml(d, r, i, gameCol, game, netMins, grossCol) {
+    function evlbOvrRowHtml(d, r, i, gameCol, game, netMins, grossCol, netCol, afterWon) {
         // a game tab lights up ONLY its own game
         const shN = (!game || game === "net") && r.win_net;
         const shG = (!game || game === "gross") && r.win_gross;
@@ -2828,22 +2856,23 @@
         const skC = evlbFlightColor(r.skins_flight);
         const hs = {};
         (d.cards[String(r.scoring_round_id)] || []).forEach(h => { hs[h[0]] = h; });
-        // TEAM tab (Kerry 2026-09-13): the hole cells carry each
-        // player's NET hole score, not gross — Team Net is played in
-        // net, and the team total row underneath has to be checkable
-        // against the numbers above it. The ball that counted for the
-        // team is marked the same way the best-ball card marks it.
+        // TEAM tab: player rows show each player's GROSS on the hole and
+        // the POPS they got there (Kerry 2026-09-14: "show gross scores
+        // for each players hole scores. The pops then will signify what
+        // was subtracted to produce the net score used for team score on
+        // that hole"). So the column reads gross, the dots say what came
+        // off it, and the green cell is the one whose NET was the team's
+        // best ball — which is the number on the TEAM NET row below.
         const holeCells = (d.hole_cols || []).map(n => {
             const hh = hs[n];
             const pops = evlbPops(hh ? hh[2] : 0);
             if (netMins) {
-                const v = evlbNetOf(d, r.scoring_round_id, n);
-                if (v == null) return '<td class="h"></td>';
-                const ct = v === netMins[n];
-                // the net cell already spent the pops, so the dots stay
-                // on it as the record of WHY it differs from gross
-                return `<td class="h${ct ? " count" : ""}"${
-                    ct ? ' title="the ball that counted for the team"' : ""}>${pops}${v}</td>`;
+                if (!hh || hh[1] == null) return '<td class="h"></td>';
+                const net = hh[1] - (hh[2] || 0);
+                const ct = net === netMins[n];
+                return `<td class="h${ct ? " count" : ""}" title="${
+                    hh[1]}${(hh[2] || 0) ? " \u2212 " + (hh[2]) + " = net " + net : " (no stroke)"
+                }${ct ? " \u2014 the ball that counted for the team" : ""}">${pops}${hh[1]}</td>`;
             }
             if (!hh || hh[1] == null) return '<td class="h"></td>';
             return `<td class="h">${pops}${skinHoles.includes(n)
@@ -2866,6 +2895,8 @@
         // changes from tab to tab.
         const gv = (gameCol && gameCol.value) ? gameCol.value(d, r) : r.net_pts;
         const gvTint = (!gameCol || gameCol.key !== "skins") && shM;
+        const gcTd = gameCol === false ? "" :
+            `<td class="bl br gc" style="${gvTint ? EVLB_MVP_TINT : ""}"${gvTint ? ' title="Event MVP"' : ""}>${gv ?? ""}</td>`;
         // On a NET- or GROSS-bundle tab the row itself says whether the
         // player bought into THAT game: green in, grey out. That
         // replaces the zebra stripe there — two competing washes on one
@@ -2879,16 +2910,17 @@
             (r._note ? `<div style="font-size:10.5px;color:#9CA3AF;white-space:normal;">${escapeHtml(r._note)}</div>` : "") +
             `</td>` +
             `<td class="won br">${money > 0 ? "$" + Number(money).toFixed(2) : ""}</td>` +
+            (afterWon ? gcTd : "") +
             `<td class="bl hc">${r.index != null ? Number(r.index).toFixed(1) : ""}</td>` +
             `<td class="br hc">${r.hcp ?? ""}</td>` +
             holeCells +
             (grossCol === false ? "" :
                 `<td class="bl sc" style="${gT}"${gTitle}>${r.gross ?? ""}</td>` +
                 `<td class="tp" style="${gT}"${gTitle}>${evlbToPar(r.to_par_gross)}</td>`) +
-            `<td class="bl sc" style="${nT}"${nTitle}><b>${r.net ?? ""}</b></td>` +
-            `<td class="tp br" style="${nT}"${nTitle}>${evlbToPar(r.to_par_net)}</td>` +
-            (gameCol === false ? "" :
-                `<td class="bl br gc" style="${gvTint ? EVLB_MVP_TINT : ""}"${gvTint ? ' title="Event MVP"' : ""}>${gv ?? ""}</td>`) +
+            (netCol === false ? "" :
+                `<td class="bl sc" style="${nT}"${nTitle}><b>${r.net ?? ""}</b></td>` +
+                `<td class="tp br" style="${nT}"${nTitle}>${evlbToPar(r.to_par_net)}</td>`) +
+            (afterWon ? "" : gcTd) +
             `</tr>`;
     }
     // ── per-player POINTS row (Kerry 2026-09-13: "MVP/POINTS need to
@@ -2899,19 +2931,25 @@
     //    with a points column and becomes a points board. Built from
     //    hole_pts, the SAME derivation the Pts total comes from, so the
     //    row and the column cannot disagree.
-    function evlbPtsRowHtml(d, r, gameCol, grossCol) {
+    function evlbPtsRowHtml(d, r, gameCol, grossCol, netCol, afterWon) {
         const hp = (d.hole_pts || {})[String(r.scoring_round_id)];
         if (!hp) return "";
         const cols = d.hole_cols || [];
         if (!cols.some(n => hp[String(n)] != null)) return "";
+        // The total is already on the player's own row directly above —
+        // repeating it on the PTS row says the same thing twice (Kerry
+        // 2026-09-14: "remove the total on that row in lieu of the total
+        // already being in the main row").
+        const gcPts = gameCol === false ? "" : `<td class="bl br gc"></td>`;
         return `<tr class="evlb-ptsrow">` +
             `<td></td><td class="nm">PTS</td>` +
             `<td class="won br"></td>` +
+            (afterWon ? gcPts : "") +
             `<td class="bl hc"></td><td class="br hc"></td>` +
             cols.map(n => `<td class="h">${hp[String(n)] ?? ""}</td>`).join("") +
             (grossCol === false ? "" : `<td class="bl sc"></td><td class="tp"></td>`) +
-            `<td class="bl sc"></td><td class="tp br"></td>` +
-            (gameCol === false ? "" : `<td class="bl br gc">${r.net_pts ?? ""}</td>`) +
+            (netCol === false ? "" : `<td class="bl sc"></td><td class="tp br"></td>`) +
+            (afterWon ? "" : gcPts) +
             `</tr>`;
     }
     // ── TEAM TOTAL row (Kerry 2026-09-13: "The team Net needs to show
@@ -2920,7 +2958,8 @@
     //    foot of each team band, in the SAME columns as the player rows
     //    above it: the best net ball per hole, the team total, and the
     //    team's whole purse (not one player's share).
-    function evlbTeamTotalRow(d, t, mins, gameCol, grossCol) {
+    function evlbTeamTotalRow(d, t, mins, gameCol, grossCol, netCol, afterWon) {
+        const gcTeam = gameCol === false ? "" : `<td class="bl br gc"></td>`;
         const cols = d.hole_cols || [];
         const recon = cols.reduce((s2, n) => s2 + (mins[n] ?? 0), 0);
         // GG's posted total is the score of record (v2.381.0). Our
@@ -2945,12 +2984,14 @@
             `<td>${escapeHtml(t.position || "")}</td>` +
             `<td class="nm">TEAM NET${off ? ' <span style="font-weight:400;color:#9CA3AF;">(holes ' + recon + ')</span>' : ""}</td>` +
             `<td class="won br" title="the team's whole purse">${money > 0 ? "$" + Number(money).toFixed(2) : ""}</td>` +
+            (afterWon ? gcTeam : "") +
             `<td class="bl hc"></td><td class="br hc"></td>` +
             cols.map(n => `<td class="h">${mins[n] ?? ""}</td>`).join("") +
             (grossCol === false ? "" : `<td class="bl sc"></td><td class="tp"></td>`) +
-            `<td class="bl sc" title="${ttl}"><b>${shown}</b></td>` +
-            `<td class="tp br">${par ? evlbToPar(shown - par) : ""}</td>` +
-            (gameCol === false ? "" : `<td class="bl br gc"></td>`) +
+            (netCol === false ? "" :
+                `<td class="bl sc" title="${ttl}"><b>${shown}</b></td>` +
+                `<td class="tp br">${par ? evlbToPar(shown - par) : ""}</td>`) +
+            (afterWon ? "" : gcTeam) +
             `</tr>`;
     }
     // ── THE standard board (Kerry 2026-09-13): one table shape for
@@ -3006,6 +3047,7 @@
         return 10
             - (board.gameCol === false ? 1 : 0)
             - (board.grossCol === false ? 2 : 0)
+            - (board.netCol === false ? 2 : 0)
             + ((d.hole_cols || []).length);
     }
     function evlbBoardBody(id) {
@@ -3038,12 +3080,15 @@
             const mins = tm ? evlbTeamMins(d, tm) : null;
             rows.forEach(r => {
                 html += evlbOvrRowHtml(d, r, i++, board.gameCol, game, mins,
-                                       board.grossCol);
+                                       board.grossCol, board.netCol,
+                                       board.gameColAfterWon);
                 if (game === "points")
-                    html += evlbPtsRowHtml(d, r, board.gameCol, board.grossCol);
+                    html += evlbPtsRowHtml(d, r, board.gameCol, board.grossCol,
+                                           board.netCol, board.gameColAfterWon);
             });
             if (tm) html += evlbTeamTotalRow(d, tm, mins, board.gameCol,
-                                             board.grossCol);
+                                             board.grossCol, board.netCol,
+                                             board.gameColAfterWon);
         });
         return html;
     }
@@ -3055,7 +3100,8 @@
     //    rather than asserting one tee's par over another's. Total par
     //    sits under BOTH score columns, since it is the reference for
     //    gross and net alike.
-    function evlbParRow(d, gameCol, grossCol) {
+    function evlbParRow(d, gameCol, grossCol, netCol, afterWon) {
+        const gcEmpty = gameCol === false ? "" : `<td class="bl br gc"></td>`;
         const hp = d.hole_par || {};
         const cols = d.hole_cols || [];
         if (!cols.some(n => hp[String(n)] != null)) return "";
@@ -3063,12 +3109,14 @@
             ? cols.reduce((s2, n) => s2 + hp[String(n)], 0) : "";
         return `<tr class="evlb-parrow"><td></td><td class="nm">PAR</td>` +
             `<td class="won br"></td>` +
+            (afterWon ? gcEmpty : "") +
             `<td class="bl hc"></td><td class="br hc"></td>` +
             cols.map(n => `<td class="h">${hp[String(n)] ?? ""}</td>`).join("") +
             (grossCol === false ? "" :
                 `<td class="bl sc">${tot}</td><td class="tp"></td>`) +
-            `<td class="bl sc">${tot}</td><td class="tp br"></td>` +
-            (gameCol === false ? "" : `<td class="bl br gc"></td>`) +
+            (netCol === false ? "" :
+                `<td class="bl sc">${tot}</td><td class="tp br"></td>`) +
+            (afterWon ? "" : gcEmpty) +
             `</tr>`;
     }
     function evlbStdBoard(d, board, note) {
@@ -3082,26 +3130,34 @@
         };
         const gl = (board.gameCol && board.gameCol.label) || "Pts";
         const active = k => (dflt !== "keep" && k === dflt) ? " asc" : "";
+        // The game column normally closes the board. On SKINS it sits
+        // straight after Won (Kerry 2026-09-14: "Move SKINS Column right
+        // of WON column on SKINS view") — skins won and skins money
+        // belong side by side, they are the same fact twice.
+        const gcTh = board.gameCol === false ? "" :
+            `<th data-k="gamecol" class="sortable bl br gc${active("gamecol")}">${escapeHtml(gl)}</th>`;
         return (note || "") +
             `<label class="evlb-holetog"><input type="checkbox" data-ovr-holes${evlbShowHoles ? " checked" : ""}> Hole by hole</label>` +
             `<label class="evlb-holetog"><input type="checkbox" data-ovr-hcp${evlbShowHcp ? " checked" : ""}> Handicaps</label>` +
             `<div class="evlb-scroll"><table class="evlb-holes evlb-ovr${evlbShowHoles ? "" : " no-holes"}${evlbShowHcp ? "" : " no-hcp"}" data-board="${id}"><thead>` +
-            `<tr><th data-k="net" class="sortable">#</th><th data-k="player" class="nm sortable">Player</th>` +
+            `<tr><th data-k="${board.netCol === false ? "gross" : "net"}" class="sortable">#</th>` +
+            `<th data-k="player" class="nm sortable">Player</th>` +
             // Won sits right of the name (Kerry 2026-09-13) — the money
             // is the point of the board, so it reads without scrolling
             `<th data-k="won" class="won sortable br${active("won")}">Won</th>` +
+            (board.gameColAfterWon ? gcTh : "") +
             `<th data-k="index" class="sortable bl hc" title="Handicap Index">Idx</th>` +
             `<th data-k="hcp" class="sortable br hc" title="Playing Handicap">PH</th>` +
             (d.hole_cols || []).map(n => `<th data-k="h:${n}" class="sortable h">${n}</th>`).join("") +
             (board.grossCol === false ? "" :
                 `<th data-k="gross" class="sortable bl sc${active("gross")}" title="Gross score">G</th>` +
                 `<th data-k="tpg" class="sortable tp" title="Gross to par">&plusmn;</th>`) +
-            `<th data-k="net" class="sortable bl sc${active("net")}" title="Net score">N</th>` +
-            `<th data-k="tpn" class="sortable tp br" title="Net to par">&plusmn;</th>` +
-            (board.gameCol === false ? "" :
-                `<th data-k="gamecol" class="sortable bl br gc${active("gamecol")}">${escapeHtml(gl)}</th>`) +
+            (board.netCol === false ? "" :
+                `<th data-k="net" class="sortable bl sc${active("net")}" title="Net score">N</th>` +
+                `<th data-k="tpn" class="sortable tp br" title="Net to par">&plusmn;</th>`) +
+            (board.gameColAfterWon ? "" : gcTh) +
             `</tr>` +
-            evlbParRow(d, board.gameCol, board.grossCol) + `</thead>` +
+            evlbParRow(d, board.gameCol, board.grossCol, board.netCol, board.gameColAfterWon) + `</thead>` +
             `<tbody>${evlbBoardBody(id)}</tbody></table></div>`;
     }
     function evlbEventHtml(d) {
@@ -3186,7 +3242,7 @@
                 gross: `a tinted <b>G</b> total won Individual Gross in that flight`,
                 skins: `a circled hole score is a skin won in that flight`,
                 points: `<span class="lg w-mvp">Pts</span> marks the Event MVP, and a <b>PTS</b> row under each player shows the NET points that score earned on every hole`,
-                team: `hole scores are NET, the green cell is the ball that counted, and the TEAM NET row closes each band with the team's holes, total and whole purse`,
+                team: `hole scores are each player's GROSS with their pops marked — gross less pops is the net the team played, and the green cell is the ball that counted; the TEAM NET row closes each band with the team's holes, total and whole purse`,
             }[game] || "";
             const money = {
                 net: "Individual Net", gross: "Individual Gross", skins: "Skins",
@@ -3217,10 +3273,17 @@
         const boards = {
             overall: { sections: [{ label: null, rows: ovRows }], sort: evlbOverallSort(d) },
             net: { sections: secsFrom(d.net_board), sort: "net", game: "net", gameCol: false },
-            gross: { sections: secsFrom(d.gross_board), sort: "gross", game: "gross", gameCol: false },
+            // Individual Gross is played in GROSS, so a net total beside
+            // it is another game's number (Kerry 2026-09-14: "Remove Net
+            // scores column from GROSS view") — the mirror of the gross
+            // pair coming off TEAM. The # column sorts by gross here.
+            gross: { sections: secsFrom(d.gross_board), sort: "gross", game: "gross",
+                     gameCol: false, netCol: false },
             skins: {
                 sections: secsFrom(d.skins_board), sort: "gamecol", game: "skins",
                 gameCol: { key: "skins", label: "Skins", value: skinsCount },
+                // skins won sits beside skins money (Kerry 2026-09-14)
+                gameColAfterWon: true,
             },
             points: {
                 sections: [{
@@ -3229,6 +3292,10 @@
                 }],
                 sort: "keep",
                 game: "points",
+                // Points is played off NET stableford, so a gross total
+                // beside it is another game's number (Kerry 2026-09-14),
+                // the same call as gross off TEAM and net off GROSS.
+                grossCol: false,
             },
             team: {
                 game: "team",
@@ -3307,7 +3374,7 @@
             team: (d.teams || []).length
                 ? evlbStdBoard(d, Object.assign({ teamBands: true, teams: d.teams }, boards.team),
                     `<div class="evlb-note" style="background:#F8FAFC;border-color:#E2E8F0;color:#475569;">` +
-                    `Bands are the teams, in the recorded Golf Genius order. Hole scores here are NET — the currency of Team Net — and the green cell is the ball that counted. ` +
+                    `Bands are the teams, in the recorded Golf Genius order. Hole scores are each player's GROSS with their pops marked; take the pops off and you have the net the team played — the green cell is the ball that counted. ` +
                     `Each band closes with a <b>TEAM NET</b> row: the team's score on every hole, the team total, and the team's whole purse. ` +
                     `Tap a band for the best-ball card, a player for their own scorecard.</div>`)
                     + evlbLegendFor("team")
