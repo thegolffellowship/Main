@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.402.0";
+window.TGF_VERSION = "2.403.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.403.0",
+    date: "2026-09-14",
+    changes: [
+      "A black frame around every scoreboard (Kerry), at the same 2px weight as the rules that already bracket the column groups inside it \u2014 so the frame and the internal rules read as one drawing rather than two ideas. It sits on the shared .evlb-holes class, so the six board tabs and the team best-ball card all get it from one line.",
+      "WON now centres in its column \u2014 the header and the money together (Kerry). Centring the label on its own would have left \u2018WON\u2019 floating over a right-aligned column of figures, which is the thing the request was trying to fix.",
+    ],
+  },
   {
     version: "2.402.0",
     date: "2026-09-14",

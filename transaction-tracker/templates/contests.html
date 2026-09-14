@@ -308,7 +308,12 @@
            Pts) is --evlb-score-w, so the grid stays even whatever the
            numbers are and two boards never disagree about a column. */
         .evlb-holes { --evlb-hole-w: 30px; --evlb-score-w: 38px;
-            width: auto; border-collapse: collapse; font-size: 0.8rem; margin: 6px 0; }
+            width: auto; border-collapse: collapse; font-size: 0.8rem; margin: 6px 0;
+            /* a black frame around the whole board (Kerry 2026-09-14),
+               matching the 2px rules that already bracket the column
+               groups inside it — one weight, so the frame and the
+               internal rules read as the same drawing */
+            border: 2px solid #1B1B1B; }
         .evlb-holes td.h, .evlb-holes th.h {
             width: var(--evlb-hole-w); min-width: var(--evlb-hole-w);
             max-width: var(--evlb-hole-w); }
@@ -389,7 +394,10 @@
             font-size: 12px; color: #4B5563; margin: 0 0 6px; cursor: pointer;
             user-select: none; }
         .evlb-holetog input { accent-color: var(--primary, #E87C3E); cursor: pointer; }
-        .evlb-holes td.won, .evlb-holes th.won { text-align: right; font-weight: 700;
+        /* Kerry 2026-09-14: "Center WON in column". Header AND money move
+           together — centring the label alone would leave it sitting over
+           a right-aligned column of figures. */
+        .evlb-holes td.won, .evlb-holes th.won { text-align: center; font-weight: 700;
             color: var(--money-green, #15803D); font-variant-numeric: tabular-nums; min-width: 58px; }
         /* OVERALL sortable headers (Kerry 2026-09-11: no arrow glyphs —
            they widened every numeric column; the ACTIVE sort column is

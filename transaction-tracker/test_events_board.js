@@ -156,6 +156,13 @@ console.log('== boards size to content, columns to a standard (Kerry 2026-09-14)
   const css = fs.readFileSync(require('path').join(__dirname,'templates/contests.html'),'utf8');
   ck('the board is width:auto, not stretched by the global table rule',
      /\.evlb-holes \{[^}]*width: auto/.test(css));
+  ck('every scoreboard carries a black frame (Kerry 2026-09-14)',
+     /\.evlb-holes \{[^}]*border: 2px solid #1B1B1B/.test(css));
+  ck('the frame is the same weight as the internal group rules',
+     /\.evlb-holes \{[^}]*border: 2px solid #1B1B1B/.test(css)
+     && /td\.bl[^{]*\{[^}]*border-left: 2px solid #1B1B1B/.test(css));
+  ck('Won is centred, header and money alike',
+     /td\.won, \.evlb-holes th\.won \{ text-align: center/.test(css));
   ck('one hole width token, one score width token',
      /--evlb-hole-w:\s*\d+px/.test(css) && /--evlb-score-w:\s*\d+px/.test(css));
   ck('hole cells read the hole token',
