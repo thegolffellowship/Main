@@ -329,6 +329,10 @@
         .evlb-holes td, .evlb-holes th { border: 1px solid #e2e8f0; padding: 2px 6px;
             text-align: center; min-width: 2em; white-space: nowrap; }
         .evlb-holes th { background: #1B1B1B; color: #fff; font-weight: 700; }
+        /* Tee swatch, right-justified in the name cell (Kerry). */
+        .evlb-tee-dot { display: inline-block; width: 9px; height: 9px;
+            border-radius: 50%; margin-left: 7px; float: right;
+            margin-top: 4px; }
         .evlb-holes td.nm, .evlb-holes th.nm { text-align: left; min-width: 110px;
             font-weight: 600; color: #475569; }
         .evlb-holes th.nm { color: #fff; }
@@ -2758,6 +2762,24 @@
         d._moneyHeld = true;
     }
 
+    // TEE COLOUR AS A DOT (Kerry 2026-09-15: "Show a simple colored
+    // circle right justified in name cells that corresponds to player's
+    // tees"). One board mixes three tees and the number alone does not
+    // say so. The colour is the COURSE's own tee colour, the same map
+    // the starter sheet prints, so the two can never disagree. Rendered
+    // in the ONE shared name cell rather than per tab.
+    let EVLB_TEES = {};
+    function evlbTeeDot(r) {
+        const t = (r && r.customer_id != null && EVLB_TEES["c:" + r.customer_id])
+            || (r && r.player_name && EVLB_TEES["n:" + String(r.player_name).trim().toLowerCase()]);
+        if (!t || !t.color) return "";
+        // A white or very pale tee needs an outline or it is invisible.
+        const pale = /^#(f|e)/i.test(t.color);
+        return `<span class="evlb-tee-dot" title="${escapeHtml(t.tee_name || "")}`
+            + `${t.band ? " (" + escapeHtml(t.band) + ")" : ""}" `
+            + `style="background:${t.color};${pale ? "box-shadow:inset 0 0 0 1px #9CA3AF;" : ""}"></span>`;
+    }
+
     function evlbMoneyNotice(d) {
         if (!d || !d._moneyHeld) return "";
         const mins = d.money_hold_minutes || 10;
@@ -2803,6 +2825,7 @@
             // winner stated confidently, and the number is what a member
             // remembers, not the caveat. The board still ranks and the
             // scores still read live.
+            EVLB_TEES = d.tee_by_player || {};
             if (d.money_visible === false) evlbBlankMoney(d);
             body.innerHTML = evlbEventHtml(d);
             evlbWireEvent(body, d);
@@ -3021,7 +3044,7 @@
             ? (r._buyer ? " bought" : " nobuy") : (i % 2 ? " alt" : "");
         return `<tr class="evlb-plr${bi}" data-rid="${r.scoring_round_id || ""}">` +
             `<td>${r._rank ?? ""}</td>` +
-            `<td class="nm">${escapeHtml(r.player_name)}` +
+            `<td class="nm">${escapeHtml(r.player_name)}${evlbTeeDot(r)}` +
             (game ? "" : evlbMvpBadges(r)) +
             (r._note ? `<div style="font-size:10.5px;color:#9CA3AF;white-space:normal;">${escapeHtml(r._note)}</div>` : "") +
             `</td>` +
@@ -3412,13 +3435,23 @@
         // OVERALL and POINTS; Skins owns its own count column.
         const boards = {
             overall: { sections: [{ label: null, rows: ovRows }], sort: evlbOverallSort(d) },
-            net: { sections: secsFrom(d.net_board), sort: "net", game: "net", gameCol: false },
+            // MID-ROUND THE TOTAL IS MEANINGLESS (Kerry 2026-09-15:
+            // "Order Net and Gross by associated +/- column during
+            // event"). Three holes in, 13 strokes leads a board over
+            // somebody who has played nine — the ± column is the only
+            // comparable number until every card is in. Once the field
+            // is complete the board goes back to the total, which is
+            // what settles the money.
+            net: { sections: secsFrom(d.net_board),
+                   sort: d.field_complete === false ? "tpn" : "net",
+                   game: "net", gameCol: false },
             // Individual Gross is played in GROSS, so a net total beside
             // it is another game's number (Kerry 2026-09-14: "Remove Net
             // scores column from GROSS view") — the mirror of the gross
             // pair coming off TEAM. The # column sorts by gross here.
-            gross: { sections: secsFrom(d.gross_board), sort: "gross", game: "gross",
-                     gameCol: false, netCol: false },
+            gross: { sections: secsFrom(d.gross_board),
+                     sort: d.field_complete === false ? "tpg" : "gross",
+                     game: "gross", gameCol: false, netCol: false },
             skins: {
                 sections: secsFrom(d.skins_board), sort: "gamecol", game: "skins",
                 gameCol: { key: "skins", label: "Skins", value: skinsCount },
@@ -3546,7 +3579,7 @@
         const netOf = (rid, n) => evlbNetOf(d, rid, n);
         const mins = evlbTeamMins(d, t);
         const rows = t.players.map(p =>
-            `<tr class="evlb-plr" data-rid="${p.scoring_round_id || ""}"><td class="nm">${escapeHtml(p.player_name)}</td>` +
+            `<tr class="evlb-plr" data-rid="${p.scoring_round_id || ""}"><td class="nm">${escapeHtml(p.player_name)}${evlbTeeDot(p)}</td>` +
             cols.map(n => {
                 const v = netOf(p.scoring_round_id, n);
                 if (v == null) return '<td class="h"></td>';

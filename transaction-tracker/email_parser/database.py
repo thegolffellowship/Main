@@ -13607,6 +13607,38 @@ def get_event_leaderboard(event_name: str,
             "SELECT MAX(imported_at) AS t FROM scoring_rounds WHERE event_id = ?",
             (ev["id"],)).fetchone()
         last_score_at = (_last["t"] if _last else None) or None
+        # WHICH TEE EACH PLAYER IS ON, as a colour (Kerry 2026-09-15:
+        # "Show a simple colored circle right justified in name cells
+        # that corresponds to player's tees"). A net board mixes three
+        # tees and the number alone does not say so; the swatch does, at
+        # a glance, without a column. The colour is the COURSE's own tee
+        # colour (event_tee_legend, the same map the starter sheet
+        # prints), and the band comes from the saved sheet — so the
+        # leaderboard and the sheet can never disagree.
+        _evc = conn.execute("SELECT * FROM events WHERE id = ?",
+                            (ev["id"],)).fetchone()
+        tee_legend, tee_by_player = [], {}
+        try:
+            tee_legend = event_tee_legend(conn, ev["id"], dict(_evc) if _evc else {})
+            _by_band = {t["band"]: t for t in tee_legend}
+            for _h, _groups in (get_event_pairings(ev["id"], db_path=db_path)
+                                or {}).items():
+                for _g in _groups:
+                    for _pl in (_g.get("players") or []):
+                        _t = _by_band.get(_pl.get("tee_choice"))
+                        if not _t:
+                            continue
+                        _rec = {"band": _pl.get("tee_choice"),
+                                "tee_name": _t.get("tee_name"),
+                                "color": _t.get("color")}
+                        if _pl.get("customer_id"):
+                            tee_by_player[f"c:{_pl['customer_id']}"] = _rec
+                        if _pl.get("name"):
+                            tee_by_player["n:" + _pl["name"].strip().lower()] = _rec
+        except Exception:
+            logger.exception("Non-fatal: tee colours unavailable for event %s",
+                             ev["id"])
+
         money_visible, money_at, money_reason = True, None, None
         field_state = _event_field_complete(conn, ev["id"], ev["holes"])
         if not field_state["complete"]:
@@ -14369,6 +14401,8 @@ def get_event_leaderboard(event_name: str,
         "event": {"name": ev["item_name"], "date": ev["event_date"],
                   "course": ev["course"], "chapter": ev["chapter"],
                   "holes": ev["holes"]},
+        "tee_by_player": tee_by_player,
+        "tee_legend": tee_legend,
         "money_visible": money_visible,
         "money_at": money_at,
         "money_reason": money_reason,

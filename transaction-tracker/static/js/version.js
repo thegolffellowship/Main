@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.439.0";
+window.TGF_VERSION = "2.440.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.440.0",
+    date: "2026-09-15",
+    changes: [
+      "TEE COLOUR AS A DOT IN THE NAME CELL (Kerry: \u2018Show a simple colored circle right justified in name cells that corresponds to player\u2019s tees\u2019). One board mixes three tees and the number alone never says so. The swatch is the COURSE\u2019S own tee colour \u2014 the same `event_tee_legend` map the starter sheet prints \u2014 and the band comes from the saved sheet, so the leaderboard and the sheet can never disagree about which tee someone played. Drawn in the ONE shared name cell, so it appears on every tab at once; hovering names the tee. A pale tee gets a ring or it would be invisible.",
+      "NET AND GROSS ORDER BY \u00b1 WHILE THE ROUND IS IN PLAY (Kerry: \u2018Order Net and Gross by associated +/- column during event\u2019). Three holes in, 13 strokes leads the board over somebody who has played nine \u2014 the total is not a comparable number until every card is in, and the \u00b1 column is. The boards switch back to the total the moment the field is complete, which is also the moment the money posts. Same one fact driving both.",
+    ],
+  },
   {
     version: "2.439.0",
     date: "2026-09-15",
