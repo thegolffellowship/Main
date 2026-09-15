@@ -6140,7 +6140,7 @@
                     const rosterNames = (state.event_players || [])
                         .map(p => p.name)
                         .filter(n => n && n !== r.requester)
-                        .sort((a, b) => a.localeCompare(b));
+                        .sort(byLastName);
                     html += `<select class="request-match-select" data-ev-id="${ev.id}" data-requester="${escapeHtml(r.requester)}" title="No roster match — pick who this request meant" style="font-size:0.72rem;padding:0.1rem 0.2rem;max-width:10rem;border:1px solid var(--border);border-radius:9px;color:var(--text-muted);">
                         <option value="">no roster match &mdash; fix&hellip;</option>
                         ${rosterNames.map(n => rosterOptionHtml(state, n)).join('')}
@@ -6152,7 +6152,7 @@
                     // is honored. Amber picker links the intended one.
                     html += `<select class="request-match-select" data-ev-id="${ev.id}" data-requester="${escapeHtml(r.requester)}" title="Request names ${r.candidates.length} rostered players (&quot;${escapeHtml(r.request_text)}&quot;) — only one partner is honored. Link the intended one; honor the extras with manual moves after Generate." style="font-size:0.72rem;padding:0.1rem 0.2rem;max-width:10rem;border:1px solid #f59e0b;border-radius:9px;color:#b45309;font-weight:700;">
                         <option value="">${r.candidates.length} names &mdash; link one&hellip;</option>
-                        ${r.candidates.map(n => rosterOptionHtml(state, n, n === r.partner ? ' (current)' : '')).join('')}
+                        ${[...r.candidates].sort(byLastName).map(n => rosterOptionHtml(state, n, n === r.partner ? ' (current)' : '')).join('')}
                     </select>`;
                 }
                 // Where the request CAME from, when it wasn't typed at
@@ -6201,7 +6201,7 @@
             // offered — an existing request is edited on its own row.
             const allPlayerNames = (state.event_players || [])
                 .map(p => p.name).filter(Boolean)
-                .sort((a, b) => a.localeCompare(b));
+                .sort(byLastName);
             const haveReq = new Set(state.requests.map(r => r.requester));
             const canAdd = allPlayerNames.filter(n => !haveReq.has(n));
             if (canAdd.length && allPlayerNames.length > 1) {
@@ -10096,6 +10096,17 @@
         return roster.some(p => p.rsvp_only && pairPersonKey(p.name) === k);
     }
 
+    // Every roster NAME LIST on the pairings panel — request dropdowns,
+    // the open-seat picker, the Unassigned panel — orders by LAST name
+    // (Kerry 2026-09-15: "Order name lists by last name"). The roster
+    // arrives first-name-ordered from the server (ORDER BY customer);
+    // lastNameSortKey is the same key the Roster tab and Add Payment use.
+    function byLastName(a, b) {
+        const an = typeof a === 'string' ? a : (a && a.name) || '';
+        const bn = typeof b === 'string' ? b : (b && b.name) || '';
+        return lastNameSortKey(an).localeCompare(lastNameSortKey(bn));
+    }
+
     // One <option> for a roster name in the request dropdowns. An
     // RSVP-only player is listed like everyone else but SAYS so: the
     // text carries the marker because <option> styling is not honoured
@@ -10128,7 +10139,8 @@
             seen.add(k);
             out.push(p);
         });
-        return out;
+        // Unassigned panel and the open-seat picker read this list.
+        return out.sort(byLastName);
     }
 
     function renderUnassignedPlayers(ev, state) {

@@ -112,6 +112,16 @@ check("every request dropdown renders its names through rosterOptionHtml (" + (h
 check("no request dropdown still builds a bare <option> from a roster name",
     !/(rosterNames|canAdd|allPlayerNames)\.map\(n => `<option value="\$\{escapeHtml\(n\)\}">/.test(html));
 
+console.log("\nName lists order by LAST name (v2.411.0)");
+check("byLastName keys through lastNameSortKey",
+    /function byLastName\(a, b\)[\s\S]{0,300}lastNameSortKey\(an\)\.localeCompare\(lastNameSortKey\(bn\)\)/.test(html));
+check("no roster name list still sorts by plain localeCompare",
+    !/(rosterNames|allPlayerNames)[\s\S]{0,200}\.sort\(\(a, b\) => a\.localeCompare\(b\)\)/.test(html));
+check("request dropdowns, candidates, and the unassigned list all use it (" + (html.match(/sort\(byLastName\)/g) || []).length + " uses)",
+    (html.match(/sort\(byLastName\)/g) || []).length >= 4);
+check("getUnassigned returns last-name order (feeds the picker and the panel)",
+    /return out\.sort\(byLastName\);\s*\}/.test(html));
+
 console.log("");
 if (failures) { console.log(failures + " FAILURE(S)"); process.exit(1); }
 console.log("All pairings-roster assertions passed.");

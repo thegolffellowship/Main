@@ -1047,6 +1047,13 @@ sheet without a payment" by identity, and drives the seated-card
 requester and partner) with an amber `· RSVP` text marker — text, because
 `<option>` styling is not honoured on every browser.
 
+**Every name list orders by LAST name (v2.411.0, Kerry: "Order name
+lists by last name").** `byLastName` keys through `lastNameSortKey` (the
+Roster tab's suffix-aware key) and is applied to the request dropdowns,
+the multi-name candidates, and `getUnassigned` (which feeds the Unassigned
+panel and the open-seat picker). The server roster is first-name ordered
+(`ORDER BY i.customer`); the page, not the server, owns display order.
+
 ## Menus inside tables (v2.342.0)
 
 > *"Can't read options in actions drop down menu."*

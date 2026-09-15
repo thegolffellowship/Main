@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.410.0";
+window.TGF_VERSION = "2.411.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.411.0",
+    date: "2026-09-15",
+    changes: [
+      "Every name list on the PAIRINGS tab orders by LAST name (Kerry: \u2018Order name lists by last name\u2019): the add-a-request player and partner dropdowns, the no-match and multi-name fix pickers, the open-seat picker and the Unassigned panel. They were first-name order, which is how the roster arrives from the server and not how anyone looks a golfer up. Same last-name key the Roster tab already uses, suffix-aware (Jr, III).",
+    ],
+  },
   {
     version: "2.410.0",
     date: "2026-09-15",
