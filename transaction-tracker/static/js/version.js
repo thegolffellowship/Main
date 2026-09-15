@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.421.0";
+window.TGF_VERSION = "2.422.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.422.0",
+    date: "2026-09-15",
+    changes: [
+      "HISTORY LINE UNDER EVERY NAME ON THE PAIRING CARDS (Kerry, after the s9.23 count report: \u2018I had no idea about the Group 5 repeats! Can we provide this info as a row underneath each name in a foursome that also has a check box to show Pairing History Count (History)?\u2019). Under each seat, the other players in that group by surname with the number of rounds together this year INCLUDING tonight \u2014 1 means tonight is the first time. Two and three read amber, four and up read red, and a group carrying a repeat gets a \u21bb chip on its header so it cannot hide behind four ordinary looking names. A History checkbox beside Points turns the whole thing on and off, default ON, remembered per browser.",
+      "The numbers recompute IN THE PAGE as you swap, drag and bullpen players \u2014 the /pairings GET ships the roster's prior counts once (`roster_pair_counts`) and the card adds tonight's +1, the same way the pace chip already works. Prior counts come from the one query the generator itself uses, so a card and a generated sheet can never disagree about who has played with whom: Golf Genius is the record of what was PLAYED, and the event never counts against itself.",
+    ],
+  },
   {
     version: "2.421.0",
     date: "2026-09-15",

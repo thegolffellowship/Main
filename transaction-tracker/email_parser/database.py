@@ -56107,34 +56107,72 @@ def get_pairing_history_counts(year: int | None = None, db_path=None,
     being generated FOR is never its own history. The generator always
     passes it.
     """
+    with _connect(db_path) as conn:
+        return _pair_counts_from_conn(conn, year=year,
+                                      exclude_event_id=exclude_event_id)
+
+
+def _pair_counts_from_conn(conn, year: int | None = None,
+                           exclude_event_id: int | None = None) -> dict:
+    """The pair-count query itself, on a connection the caller already
+    holds. `get_pairing_history_counts` (generator) and the /pairings GET
+    (the History line on the cards) both read THIS — one set of rules
+    about what counts, so the sheet and the card can never disagree.
+    The docstring above is the contract."""
     if year is None:
         year = today_central().year
     year_start = f"{year}-01-01"
     year_end = f"{year}-12-31"
     today = today_central_str()
-
-    with _connect(db_path) as conn:
-        _ensure_pairing_tables(conn)
-        rows = conn.execute(
-            """
-            SELECT player_a, player_b, COUNT(*) as cnt
-            FROM pairing_history ph
-            WHERE event_date BETWEEN ? AND ?
-              AND (? IS NULL OR ph.event_id IS NULL OR ph.event_id <> ?)
-              AND ph.event_date < ?                  -- played, not planned
-              AND COALESCE(ph.source, 'app') <> 'app'  -- GG is the record
-            GROUP BY player_a, player_b
-            """,
-            (year_start, year_end, exclude_event_id, exclude_event_id,
-             today),
-        ).fetchall()
-
+    _ensure_pairing_tables(conn)
+    rows = conn.execute(
+        """
+        SELECT player_a, player_b, COUNT(*) as cnt
+        FROM pairing_history ph
+        WHERE event_date BETWEEN ? AND ?
+          AND (? IS NULL OR ph.event_id IS NULL OR ph.event_id <> ?)
+          AND ph.event_date < ?                  -- played, not planned
+          AND COALESCE(ph.source, 'app') <> 'app'  -- GG is the record
+        GROUP BY player_a, player_b
+        """,
+        (year_start, year_end, exclude_event_id, exclude_event_id, today),
+    ).fetchall()
     counts: dict = {}
     for r in rows:
         a, b = _pair_key_name(r["player_a"]), _pair_key_name(r["player_b"])
         key = (min(a, b), max(a, b))
         counts[key] = counts.get(key, 0) + r["cnt"]
     return counts
+
+
+def roster_pair_counts(conn, event_id: int, names,
+                       year: int | None = None) -> dict:
+    """Prior play counts BETWEEN the players on one event's roster, as
+    `{"a|b": n}` on normalized names, non-zero only.
+
+    Kerry 2026-09-15, after the s9.23 count report: "I had no idea about
+    the Group 5 repeats ... provide this info as a row underneath each
+    name in a foursome." The card has to keep telling the truth while he
+    drags players around, so the page gets the whole roster's counts once
+    and does the arithmetic itself — the same thing `groupPaceOf` does
+    for the pace chip. Only pairs with history are sent (~a few dozen);
+    a missing key means they have never played together, which the page
+    renders as tonight's 1.
+    """
+    keys = [_pair_key_name(n) for n in names if n]
+    want = set(k for k in keys if k)
+    if not want:
+        return {}
+    year = year or int((conn.execute(
+        "SELECT event_date FROM events WHERE id = ?",
+        (event_id,)).fetchone() or {"event_date": ""})["event_date"][:4]
+        or today_central().year)
+    out = {}
+    for (a, b), n in _pair_counts_from_conn(
+            conn, year=year, exclude_event_id=event_id).items():
+        if n and a in want and b in want:
+            out[f"{a}|{b}"] = n
+    return out
 
 
 def pairing_counts_report(event_id: int, year: int | None = None,

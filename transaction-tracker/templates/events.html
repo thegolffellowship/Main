@@ -440,6 +440,28 @@
         .pairing-cart-dot {
             width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
         }
+        /* HISTORY line under a name (Kerry 2026-09-15: "provide this info
+           as a row underneath each name in a foursome"). The wrap is put
+           on a MODIFIER, not on .pairing-player-row itself — every other
+           child is flex-shrink:0, so a blanket flex-wrap would drop the
+           handicap or the tee onto a second line on a narrow card. */
+        .pairing-player-row.has-hist { flex-wrap: wrap; row-gap: 0.1rem; }
+        .pairing-hist-row {
+            flex: 0 0 100%; padding-left: 1.05rem; margin-bottom: 0.1rem;
+            font-size: 0.68rem; color: var(--muted); line-height: 1.25;
+            font-variant-numeric: tabular-nums;
+            /* Same promise the name makes: never wrap, clip instead. */
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        .pairing-hist-row .ph-item { margin-right: 0.5rem; }
+        /* Twice is worth a look, four times is the Group 5 problem. */
+        .pairing-hist-row .ph-rep { color: #b45309; font-weight: 700; }
+        .pairing-hist-row .ph-hot { color: #b91c1c; font-weight: 700; }
+        .pairing-repeat-chip {
+            float: right; margin-right: 0.5rem; font-weight: 700;
+            color: #7f1d1d; background: #fecaca; border-radius: 999px;
+            padding: 0 0.4rem; font-size: 0.72rem;
+        }
         .pairing-player-name {
             flex: 1; font-weight: 500; min-width: 0;
             /* Kerry 2026-09-15: "Nothing should make names wrap." The
@@ -5681,6 +5703,13 @@
                 // preference, not a sheet property, so it is remembered
                 // per browser rather than per event.
                 showPointsCol: pairingsPointsPref(),
+                // History line under each name + the repeat chip on the
+                // group header (Kerry 2026-09-15). Same kind of viewing
+                // preference as the points column. `pairCounts` is the
+                // roster's PRIOR counts from the server; tonight's +1 is
+                // added at render time by pairPlayedTotal.
+                showHistoryRow: pairingsHistoryPref(),
+                pairCounts: {},
                 // Undo/redo of GROUP edits (Kerry 2026-07-31). Snapshots of
                 // {groups_9, groups_18} with a cursor; `hist[histIdx]` is
                 // always what is on screen.
@@ -6083,6 +6112,14 @@
                 Points
             </label>`;
         }
+
+        // History row toggle (Kerry 2026-09-15). Always offered — a
+        // roster with no history at all still answers the question, it
+        // just answers "1" everywhere.
+        html += `<label class="pairings-toggle-label" style="cursor:pointer;display:flex;align-items:center;gap:0.35rem;font-size:0.82rem;" title="Show, under each name, how many times they have played with the others in their group this year (including tonight)">
+            <input type="checkbox" data-ev-id="${ev.id}" data-pairings-history="${ev.id}" ${state.showHistoryRow ? 'checked' : ''} style="cursor:pointer;">
+            History
+        </label>`;
 
         // Seed/lock toggle
         html += `<button class="pairings-seed-toggle" data-ev-id="${ev.id}" title="Pre-assign players to specific slots before generating">${state.showSeeds ? '&#x25B2; Locks' : '&#x25BC; Locks'}</button>`;
@@ -6496,7 +6533,20 @@
             const paceChip = livePace != null
                 ? `<span style="float:right;font-weight:600;opacity:0.9;" title="Group pace — average member rating, 1 slow &rarr; 3 fast (staging only). Recomputes as you swap/move players.">&#x23F1; ${livePace}</span>`
                 : '';
-            html += `<div class="pairing-group-header" data-slot-edit data-ev-id="${ev.id}" data-holes="${holes}" data-group-num="${grp.group_num}" title="Click to change this group's hole assignment">${escapeHtml(grp.slot_label)}${paceChip}</div>`;
+            // Repeat chip: the worst pair in this group, so a group that
+            // has been together before cannot hide behind four ordinary
+            // looking names (Kerry 2026-09-15: "I had no idea about the
+            // Group 5 repeats"). Rides with the History checkbox.
+            let repeatChip = '';
+            if (state.showHistoryRow) {
+                const rep = groupRepeatMax(state, grp);
+                if (rep.max >= 2) {
+                    repeatChip = `<span class="pairing-repeat-chip" title="${
+                        escapeHtml(rep.pair ? rep.pair.join(' + ') : '')} have played together ${
+                        rep.max - 1} time${rep.max - 1 === 1 ? '' : 's'} this year — tonight makes ${rep.max}">&#x21BB; ${rep.max}</span>`;
+                }
+            }
+            html += `<div class="pairing-group-header" data-slot-edit data-ev-id="${ev.id}" data-holes="${holes}" data-group-num="${grp.group_num}" title="Click to change this group's hole assignment">${escapeHtml(grp.slot_label)}${paceChip}${repeatChip}</div>`;
 
             // Render every seat: occupied rows + clickable open slots
             // (Kerry, 2026-07-08: open spots in short groups must be usable
@@ -6599,7 +6649,9 @@
                                     : (b === 'firsttimer' ? '1ST TIMER' : 'GUEST')));
                     }
                 }
-                html += `<div class="pairing-player-row${bandCls}${isSelectedPlayer || isSelectedPair ? ' pairings-selected' : ''}"
+                const histHtml = (state.showHistoryRow && player.name)
+                    ? pairHistoryRowHtml(state, grp, player) : '';
+                html += `<div class="pairing-player-row${bandCls}${histHtml ? ' has-hist' : ''}${isSelectedPlayer || isSelectedPair ? ' pairings-selected' : ''}"
                     ${player.name ? 'draggable="true"' : ''}
                     ${bandTitle ? ` title="${escapeHtml(bandTitle)}"` : ''}
                     data-ev-id="${ev.id}" data-holes="${holes}" data-group-num="${grp.group_num}" data-cart-pos="${player.cart_pos}">`;
@@ -6651,6 +6703,9 @@
                 if (player.name) {
                     html += `<button type="button" class="pairing-unseat" data-unseat data-ev-id="${ev.id}" data-holes="${holes}" data-group-num="${grp.group_num}" data-cart-pos="${player.cart_pos}" title="Remove from this group (moves to Unassigned)" aria-label="Remove ${escapeHtml(player.name)} from this group">&#x2715;</button>`;
                 }
+                // LAST in the row: flex-basis 100% puts it on its own
+                // line under the name, leaving the X on line one.
+                html += histHtml;
                 html += '</div>';
             }
 
@@ -6693,6 +6748,7 @@
             state._modeSeeded = true;
             state.standingsPoints = data.standings_points || {};
             state.standingsEnrolled = data.standings_enrolled || {};
+            state.pairCounts = data.pair_counts || {};
             state.isDirty = false;
             state.loaded = true;
             seedPairHistory(state);   // undo starts from what was saved
@@ -9262,6 +9318,7 @@
             state.mpNotes = data.mp_notes || [];
             if (data.standings_points) state.standingsPoints = data.standings_points;
             if (data.standings_enrolled) state.standingsEnrolled = data.standings_enrolled;
+            if (data.pair_counts) state.pairCounts = data.pair_counts;
             state.isDirty = true;
             state.swapMode = null; state.selection = null;
             state.loaded = true;
@@ -9525,6 +9582,16 @@
             pointsChk.addEventListener('change', e => {
                 state.showPointsCol = pointsChk.checked;
                 pairingsPointsPref(pointsChk.checked);
+                rerenderDetail(container, ev);
+            });
+        }
+
+        // History row toggle (Kerry 2026-09-15) — re-render, remember.
+        const histChk = container.querySelector(`[data-pairings-history="${ev.id}"]`);
+        if (histChk) {
+            histChk.addEventListener('change', e => {
+                state.showHistoryRow = histChk.checked;
+                pairingsHistoryPref(histChk.checked);
                 rerenderDetail(container, ev);
             });
         }
@@ -10230,6 +10297,80 @@
             localStorage.setItem('tgf_pairings_points_col', v ? '1' : '0');
         } catch (e) { /* storage blocked — session-only */ }
         return v === undefined ? true : !!v;
+    }
+
+    // History row under each name (Kerry 2026-09-15, after the s9.23
+    // count report: "I had no idea about the Group 5 repeats"). Default
+    // ON — the whole point is that a repeat should be impossible to miss
+    // while you are dragging players around. Remembered per browser.
+    function pairingsHistoryPref(v) {
+        try {
+            if (v === undefined) {
+                const raw = localStorage.getItem('tgf_pairings_history_row');
+                return raw === null ? true : raw === '1';
+            }
+            localStorage.setItem('tgf_pairings_history_row', v ? '1' : '0');
+        } catch (e) { /* storage blocked — session-only */ }
+        return v === undefined ? true : !!v;
+    }
+
+    // Times these two have played together THIS YEAR INCLUDING TONIGHT.
+    // The server ships prior counts for the roster (`pair_counts`) and
+    // the page adds tonight's 1, so the number stays right through every
+    // swap, drag and bullpen trip without a round trip.
+    // JS twin of database._pair_key_name — collapsed whitespace,
+    // lowercase, NOTHING else. pairPersonKey is a different key
+    // ("surname|first-initial") built for the stale-player banner, and
+    // it would miss every count here AND collide with the "|" separator.
+    function pairCountKey(name) {
+        return String(name || '').trim().replace(/\s+/g, ' ').toLowerCase();
+    }
+
+    function pairPlayedTotal(state, a, b) {
+        const ka = pairCountKey(a), kb = pairCountKey(b);
+        if (!ka || !kb) return 1;
+        const key = ka < kb ? `${ka}|${kb}` : `${kb}|${ka}`;
+        return (Number((state.pairCounts || {})[key]) || 0) + 1;
+    }
+
+    // Surname alone — the line has to hold three names and three numbers
+    // without wrapping. Suffixes are dropped so "Wade Lewis Jr" reads
+    // "Lewis".
+    const _PH_SUFFIX = /^(jr|sr|ii|iii|iv|v)\.?$/i;
+    function pairShortName(name) {
+        const parts = String(name || '').trim().split(/\s+/).filter(Boolean);
+        while (parts.length > 1 && _PH_SUFFIX.test(parts[parts.length - 1])) parts.pop();
+        return parts.length ? parts[parts.length - 1] : '';
+    }
+
+    // The HISTORY line for one seat: every OTHER player in the group, in
+    // seat order, with the count. Returns '' for a group of one.
+    function pairHistoryRowHtml(state, grp, player) {
+        const mates = (grp.players || [])
+            .filter(p => p && p.name && p.name !== player.name)
+            .sort((a, b) => (a.cart_pos || 0) - (b.cart_pos || 0));
+        if (!mates.length) return '';
+        const bits = mates.map(m => {
+            const n = pairPlayedTotal(state, player.name, m.name);
+            const cls = n >= 4 ? ' ph-hot' : (n >= 2 ? ' ph-rep' : '');
+            return `<span class="ph-item${cls}">${escapeHtml(pairShortName(m.name))} ${n}</span>`;
+        }).join('');
+        return `<div class="pairing-hist-row" title="Rounds together in ${
+            new Date().getFullYear()} including tonight — 1 means this is the first">${bits}</div>`;
+    }
+
+    // Worst repeat in a group, for the header chip. 1 = nobody in this
+    // group has played together before.
+    function groupRepeatMax(state, grp) {
+        const names = (grp.players || []).map(p => p && p.name).filter(Boolean);
+        let worst = 1, pair = null;
+        for (let i = 0; i < names.length; i++) {
+            for (let j = i + 1; j < names.length; j++) {
+                const n = pairPlayedTotal(state, names[i], names[j]);
+                if (n > worst) { worst = n; pair = [names[i], names[j]]; }
+            }
+        }
+        return {max: worst, pair: pair};
     }
 
     function byLastName(a, b) {

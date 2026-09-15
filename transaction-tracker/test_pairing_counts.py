@@ -100,5 +100,18 @@ check("…carrying the roster's own marks", _pp["Morris Allen"]["is_first_timer"
 check("the text rendering names the event and the year", "s9.23 The Quarry" in rep["text"] and "2026" in rep["text"])
 check("a second run is stable (read-only)", db.pairing_counts_report(EV, db_path=tmp)["n_repeat_pairs"] == 1)
 
+print("\n== the roster's counts, as the cards get them ==")
+rc = db.roster_pair_counts(c, EV, ["Daniel South", "Larry Anthis", "Morris Allen", "Jose Mejia"])
+check("keyed 'a|b' on normalized names, PRIOR counts only (tonight is the page's +1)",
+      rc.get("daniel south|larry anthis") == 2, str(rc))
+check("pairs with no history are left out, not sent as 0",
+      "jose mejia|morris allen" not in rc and "morris allen|jose mejia" not in rc, str(rc))
+check("a player off this roster is never shipped",
+      all("richard palacios" not in k for k in rc), str(rc))
+check("the app-saved plan and this event's own rows stay out",
+      "daniel south|morris allen" not in rc and "larry anthis|morris allen" not in rc, str(rc))
+_rc2 = db.roster_pair_counts(c, EV, [])
+check("an empty roster asks nothing of the database", _rc2 == {})
+
 print("\nALL PASSED" if not F else f"\n{len(F)} FAILED: {F}")
 sys.exit(1 if F else 0)

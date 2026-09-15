@@ -1252,3 +1252,33 @@ per group: every pair with `prior` / `total` / `rode`, a `per_player` line
 `text` — the same report as a plain-text block for a print-out. Bridge:
 `scoring-pairings-counts:<event_id>[|<year>]` via `probe_golf_genius`.
 Guard: `test_pairing_counts.py`.
+
+## History line on the cards (v2.422.0)
+
+Kerry 2026-09-15, reading the first count report: "I had no idea about
+the Group 5 repeats! Can we provide this info as a row underneath each
+name in a foursome that also has a check box to show Pairing History
+Count (History)? I probably shouldn't have tweaked these pairings that
+much that put them together."
+
+Under every seated name, the OTHER players in that group in cart order,
+surname + rounds together this year INCLUDING tonight (1 = first time).
+Colour: 1 muted, 2–3 amber (`.ph-rep`), 4+ red (`.ph-hot`). The group
+header carries a `↻ N` chip naming the worst pair when any pair in the
+group is above 1. A **History** checkbox sits with Partner Requests and
+Points; default ON, remembered in `tgf_pairings_history_row`.
+
+**It recomputes locally.** The `/pairings` GET ships `pair_counts` for
+the roster (`roster_pair_counts` → `_pair_counts_from_conn`, non-zero
+pairs only, keyed `"a|b"` on `_pair_key_name`); `pairPlayedTotal` adds
+tonight's +1 at render time, so a swap or a bullpen trip updates every
+number without a round trip — the pattern `groupPaceOf` already uses.
+`get_pairing_history_counts` (the generator) reads the SAME
+`_pair_counts_from_conn`, so the card and the sheet can never disagree.
+
+Two traps pinned by `test_pairings_roster.js`: the client key is
+`pairCountKey` (the `_pair_key_name` twin), **not** `pairPersonKey`
+(surname|initial — wrong grain, and its "|" collides with the key
+separator); and `flex-wrap` lives on a `.has-hist` MODIFIER, because
+wrapping `.pairing-player-row` itself would drop the handicap or the tee
+onto a second line on a narrow card.

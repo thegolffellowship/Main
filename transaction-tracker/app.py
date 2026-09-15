@@ -5196,11 +5196,27 @@ def api_get_pairings(event_id):
         except Exception:
             logger.exception("Standings points lookup failed for event %d "
                              "(non-fatal)", event_id)
+        # Prior-play counts between the people on THIS roster, so the
+        # History line under each name recomputes locally as the manager
+        # swaps and drags (Kerry 2026-09-15: "provide this info as a row
+        # underneath each name in a foursome").
+        pair_counts = {}
+        try:
+            _hconn = db.get_connection()
+            try:
+                pair_counts = db.roster_pair_counts(
+                    _hconn, event_id, [d.get("name") for d in event_players])
+            finally:
+                _hconn.close()
+        except Exception:
+            logger.exception("Pair-count lookup failed for event %d "
+                             "(non-fatal)", event_id)
         return jsonify({
             "pairings": pairings,
             "slots_9": slots_9,
             "slots_18": slots_18,
             "event_players": event_players,
+            "pair_counts": pair_counts,
             "mp_matches": mp_matches,
             "partner_requests": partner_requests,
             "standings_points": standings_points,

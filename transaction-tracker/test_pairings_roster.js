@@ -190,6 +190,44 @@ check("no wheel mark — seats 1 and 3 drive by definition", !/driverMarkHtml|pa
 check("names never wrap on the sheet",
     /\.pairing-player-name \{[^}]*white-space: nowrap; overflow: hidden; text-overflow: ellipsis;/.test(html)
     && /minmax\(340px, 1fr\)/.test(html));
+// ── History row under each name (Kerry 2026-09-15, after the s9.23
+//    count report: "I had no idea about the Group 5 repeats ... provide
+//    this info as a row underneath each name in a foursome that also has
+//    a check box to show Pairing History Count (History)").
+check("a History checkbox sits with the other pairing toggles",
+    /data-pairings-history=\"\$\{ev\.id\}\"/.test(html) && />\s*History\s*</.test(html));
+check("it re-renders and is remembered per browser",
+    /const histChk = [\s\S]{0,320}pairingsHistoryPref\(histChk\.checked\);[\s\S]{0,80}rerenderDetail/.test(html)
+    && /localStorage\.getItem\('tgf_pairings_history_row'\)/.test(html));
+check("default ON — a repeat should be impossible to miss",
+    /function pairingsHistoryPref\(v\) \{[\s\S]{0,240}raw === null \? true : raw === '1'/.test(html));
+check("the count key is the server's _pair_key_name twin, not pairPersonKey",
+    /function pairCountKey\(name\) \{\s*return String\(name \|\| ''\)\.trim\(\)\.replace\(\/\\s\+\/g, ' '\)\.toLowerCase\(\);/.test(html)
+    && /function pairPlayedTotal\(state, a, b\) \{\s*const ka = pairCountKey\(a\), kb = pairCountKey\(b\);/.test(html));
+check("tonight is the +1 on top of the server's prior counts",
+    /\(Number\(\(state\.pairCounts \|\| \{\}\)\[key\]\) \|\| 0\) \+ 1/.test(html));
+check("the roster's prior counts land in state from the GET and from Generate",
+    (html.match(/state\.pairCounts = data\.pair_counts \|\| \{\}/g) || []).length >= 1
+    && /if \(data\.pair_counts\) state\.pairCounts = data\.pair_counts;/.test(html));
+check("the line lists the OTHER seats in cart order, surname + count",
+    /function pairHistoryRowHtml\(state, grp, player\)[\s\S]{0,420}p\.name !== player\.name[\s\S]{0,200}cart_pos/.test(html));
+check("2+ is amber, 4+ is red",
+    /n >= 4 \? ' ph-hot' : \(n >= 2 \? ' ph-rep' : ''\)/.test(html)
+    && /\.ph-rep \{ color: #b45309/.test(html) && /\.ph-hot \{ color: #b91c1c/.test(html));
+check("the line wraps to its own row without breaking the rest of the row",
+    /\.pairing-player-row\.has-hist \{ flex-wrap: wrap;/.test(html)
+    && /\.pairing-hist-row \{\s*flex: 0 0 100%;/.test(html));
+check("…and it never wraps itself — clipped like the name",
+    /\.pairing-hist-row \{[^}]*white-space: nowrap; overflow: hidden; text-overflow: ellipsis;/.test(html));
+check("the line renders LAST so the X stays on line one",
+    /pairing-unseat[\s\S]{0,900}html \+= histHtml;\s*html \+= '<\/div>';/.test(html)
+    && html.indexOf("html += histHtml;") > html.indexOf('class="pairing-unseat"'));
+check("a group carrying a repeat is chipped on its header",
+    /function groupRepeatMax\(state, grp\)/.test(html)
+    && /if \(rep\.max >= 2\)/.test(html)
+    && /\$\{escapeHtml\(grp\.slot_label\)\}\$\{paceChip\}\$\{repeatChip\}/.test(html));
+check("the chip only shows while History is on", /if \(state\.showHistoryRow\) \{\s*const rep = groupRepeatMax/.test(html));
+
 const cust = fs.readFileSync("templates/customers.html", "utf8");
 check("Customers page offers AMB / CAPT / BACK chips beside pace, both layouts",
     (cust.match(/renderRoleChips\(c\)/g) || []).length >= 2
