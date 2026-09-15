@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.438.0";
+window.TGF_VERSION = "2.438.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.438.1",
+    date: "2026-09-15",
+    changes: [
+      "A blind Kerry has ALREADY entered straight into Golf Genius now counts against the open seats instead of being drawn over. The backfill reads those out of the team string with no seat attached \u2014 which slot each covers is unknowable and does not matter; how many seats are already accounted for is what matters. They consume open seats in sheet order and only the remainder get a new pick, so tonight\u2019s draw asks for one name (Will Wallace\u2019s seat), not three.",
+    ],
+  },
   {
     version: "2.438.0",
     date: "2026-09-15",

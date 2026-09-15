@@ -55728,7 +55728,23 @@ def draw_event_blinds(event_id: int, dry_run: bool = True, redraw: bool = False,
         taken = {b["customer_id"] for hs in existing.values()
                  for seats in hs.values() for b in seats
                  if b["customer_id"] is not None}
-        drawn, open_seats, unfilled = [], 0, []
+        # Blinds ALREADY recorded for this event with no seat against them
+        # — the ones Kerry entered straight into Golf Genius, read back out
+        # of the team string. We cannot know which slot each one covers,
+        # and it does not matter: what matters is how many open seats are
+        # already accounted for. They consume seats in sheet order, and
+        # only the remainder get a new pick.
+        loose = [dict(r) for r in conn.execute(
+            """SELECT b.customer_id, b.source,
+                      COALESCE(NULLIF(TRIM(COALESCE(cu.first_name,'') || ' ' ||
+                                           COALESCE(cu.last_name,'')), ''),
+                               b.player_name) AS name
+                 FROM blind_draws b
+                 LEFT JOIN customers cu ON cu.customer_id = b.customer_id
+                WHERE b.event_id = ? AND b.group_num IS NULL
+                ORDER BY b.id""", (event_id,)).fetchall()]
+        taken |= {r["customer_id"] for r in loose if r["customer_id"] is not None}
+        drawn, open_seats, unfilled, covered = [], 0, [], []
         for holes, groups in sorted(pairings.items()):
             for g in sorted(groups, key=lambda x: x["group_num"]):
                 seated = {p.get("cart_pos") for p in (g.get("players") or [])}
@@ -55739,6 +55755,13 @@ def draw_event_blinds(event_id: int, dry_run: bool = True, redraw: bool = False,
                     if pos in seated or pos in have:
                         continue
                     open_seats += 1
+                    if loose:
+                        already = loose.pop(0)
+                        covered.append({"holes": holes,
+                                        "group_num": g["group_num"],
+                                        "slot_label": g.get("slot_label"),
+                                        "cart_pos": pos, **already})
+                        continue
                     cands = [e for e in pool["eligible"]
                              if e["customer_id"] not in taken
                              and e["customer_id"] not in here]
@@ -55779,6 +55802,7 @@ def draw_event_blinds(event_id: int, dry_run: bool = True, redraw: bool = False,
     return {"event_id": event_id, "event": ev.get("item_name"),
             "dry_run": bool(dry_run), "team_size": size,
             "open_seats": open_seats, "drawn": drawn, "unfilled": unfilled,
+            "covered_by_existing": covered,
             "eligible": len(pool["eligible"]),
             "excluded": pool["excluded"],
             "already_drawn": [b for hs in existing.values()

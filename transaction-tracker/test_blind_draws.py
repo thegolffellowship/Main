@@ -201,6 +201,20 @@ check("the next event's blind is NOT someone who has already been one",
 check("…and the draw says what it counted",
       all(d["blinds_ytd"] == 0 for d in res2["drawn"]), str(res2["drawn"]))
 
+print("\n== a blind already entered in Golf Genius covers a seat ==")
+c.execute("INSERT INTO blind_draws (event_id, event_date, player_name, "
+          "customer_id, slot_key, source) VALUES (?, ?, 'YOUNGS, Pat', 8, "
+          "'gg:youngs|p', 'gg')", (EV2, TODAY)); c.commit()
+res3 = db.draw_event_blinds(EV2, dry_run=True, db_path=tmp)
+check("the seat Kerry already filled in GG is not drawn again",
+      len(res3["drawn"]) == 0 and len(res3["covered_by_existing"]) == 1,
+      str(res3["drawn"]) + str(res3["covered_by_existing"]))
+check("…and it says who covers it",
+      res3["covered_by_existing"][0]["name"] == "Pat Youngs",
+      str(res3["covered_by_existing"]))
+c.execute("DELETE FROM blind_draws WHERE event_id = ? AND source = 'gg'", (EV2,))
+c.commit()
+
 print("\n== the draw is reproducible ==")
 again = db.draw_event_blinds(EV2, dry_run=True, db_path=tmp)
 check("running it twice names the same player",

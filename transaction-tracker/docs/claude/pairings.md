@@ -1697,3 +1697,8 @@ than assumed: **team size 4**; **field-only** eligibility; **one blind per
 person per event**; **calendar-year** counting across both chapters; and
 the fact that our draw is a **proposal Kerry enters into GG** — the money
 still follows GG's recorded team string, so nothing pays off this table.
+
+**Blinds already entered in GG (v2.438.1).** The backfill reads them out
+of the team string with no seat attached — which slot each one covers is
+unknowable, and does not matter. They consume open seats in sheet order
+and only the remainder get a new pick, reported as `covered_by_existing`.
