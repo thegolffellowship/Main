@@ -55376,6 +55376,7 @@ def event_flights_report(event_id: int, db_path=None) -> dict | None:
         "year": (ev.get("event_date") or "")[:4],
         "games": games,
         "index_basis": "18-hole TGF index (twice the nine-hole index)",
+        "file_stub": print_file_stub(ev),
     }
 
 
@@ -55491,7 +55492,60 @@ def event_proximity_report(event_id: int, db_path=None) -> dict | None:
         "nine": nine, "holes_key": "18" if is18 else "9",
         "slots": slots, "par3_found": len(par3),
         "contests": contests, "notes": notes,
+        "file_stub": print_file_stub(ev),
     }
+
+
+# Downloaded print files are named the way Kerry already names the Golf
+# Genius ones (2026-09-15): [YY]-[chapter acronym][holes]-[event number]-
+# [file type] — 26-s9-23-StarterSheet, 26-a18-6-CartSigns,
+# 25-s9-1-Proxies, 27-a9-12-DivisionsFlights. The stub comes off the
+# EVENT NAME, which already carries the chapter letter, the holes and
+# the sequence number ("s9.23 The Quarry"); the year comes off the event
+# date, so a file sorts with its season.
+# NOT _EVENT_CODE_RE — that name is already taken further down the file
+# and the later binding wins at import, which silently hands this one a
+# one-group pattern.
+_PRINT_EVENT_CODE_RE = re.compile(r"^\s*([sa])\s*(\d+)\s*\.\s*(\d+)", re.I)
+
+
+def print_file_stub(event: dict) -> str:
+    """"26-s9-23" for s9.23 The Quarry on 2026-09-15. A sheet appends its
+    own file type. Falls back to a slug of the name rather than inventing
+    a code, so a download is never named after an event it is not."""
+    ev = event or {}
+    yy = str(ev.get("event_date") or "")[2:4]
+    m = _PRINT_EVENT_CODE_RE.match(str(ev.get("item_name") or ""))
+    if m:
+        chap, holes, num = m.group(1).lower(), m.group(2), str(int(m.group(3)))
+        code = f"{chap}{holes}-{num}"
+    else:
+        # No event code in the name (the championship, a one-off). A bare
+        # chapter letter would name every such file the same, so use the
+        # NAME instead — long, but never wrong about which event it is.
+        code = re.sub(r"[^A-Za-z0-9]+", "-",
+                      str(ev.get("item_name") or "event")).strip("-")[:40] or "event"
+    return f"{yy}-{code}" if yy else code
+
+
+_NAME_SUFFIXES = {"jr", "jr.", "sr", "sr.", "ii", "iii", "iv", "v"}
+
+
+def _cart_sign_name(name: str) -> str:
+    """"Daniel SOUTH" — given name as written, SURNAME in caps.
+
+    Golf Genius's cart-sign convention, kept because it is doing real
+    work: on a windshield at ten feet the surname is what a player scans
+    for, and the caps carry it. A suffix rides with the surname."""
+    parts = " ".join((name or "").split()).split(" ")
+    if len(parts) < 2:
+        return (name or "").upper()
+    tail = []
+    while len(parts) > 1 and parts[-1].lower().strip(".") in {
+            s.strip(".") for s in _NAME_SUFFIXES}:
+        tail.insert(0, parts.pop())
+    last = parts.pop()
+    return " ".join(parts + [last.upper()] + [t.upper() for t in tail])
 
 
 def get_event_print_pack(event_id: int, db_path=None) -> dict | None:
@@ -55524,6 +55578,8 @@ def get_event_print_pack(event_id: int, db_path=None) -> dict | None:
         for g in (pairings.get(holes) or []):
             players = sorted(g.get("players") or [],
                              key=lambda p: p.get("cart_pos") or 0)
+            for pl in players:
+                pl["cart_name"] = _cart_sign_name(pl.get("name"))
             groups.append({
                 "holes": holes,
                 "group_num": g.get("group_num"),
@@ -55549,6 +55605,16 @@ def get_event_print_pack(event_id: int, db_path=None) -> dict | None:
     if _start:
         start_label = (f"Shotgun {_start}" if _st == "Shotgun"
                        else f"First tee {_start}")
+    # GG's cart sign says "5:00 PM | Hole 1A" — one line telling a player
+    # WHEN and WHERE. Composed here rather than in the template: on a
+    # tee-time event the slot label already IS the time, so repeating the
+    # clock would print "8:10a | Hole 8:10a".
+    _shotgun = _st.lower().startswith("shotgun")
+    for g in groups:
+        short = re.sub(r"^HOLE\s+", "", g["slot_label"], flags=re.I)
+        g["start_line"] = (f"{_start} | Hole {short}"
+                           if (_shotgun and _start) else short)
+
     _st18 = (ev.get("start_type_18") or "").strip()
     _start18 = _clock(ev.get("start_time_18"))
     start_label_18 = None
@@ -55601,6 +55667,9 @@ def get_event_print_pack(event_id: int, db_path=None) -> dict | None:
             "start_time": ev.get("start_time"),
             "start_label": start_label,
             "start_label_18": start_label_18,
+            "start_clock": _start,
+            "start_clock_18": _start18,
+            "file_stub": print_file_stub(ev),
         },
         "groups": groups,
         "group_count": len(groups),

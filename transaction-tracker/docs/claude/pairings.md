@@ -1394,3 +1394,40 @@ simply not printed.
 
 Both read live through `scoring-event-report:<event_id>|flights|proximity`.
 Guard: `test_event_reports.py`.
+
+## Cart Signs + print file naming (v2.429.0)
+
+Kerry 2026-09-15: "Cart Signs need to be redone to match more of our
+current GG cart signs but with our standards."
+
+**The GG shape, kept:** letter portrait, TWO signs to a page, each one
+two enormous names over a single line saying when and where. **TGF
+standards, brought:** the official mark on every sign, Bitter 54px names
+that never wrap, the body-padding print contract, no box around a sign
+and a hairline across the middle of the sheet where it is cut (the
+standard the proximity markers set the same afternoon). Surnames print in
+CAPS with the given name as written (`_cart_sign_name`) — GG's convention,
+kept because at ten feet the surname is what a player scans for.
+**Dropped:** GG's event-id line (addresses their system) and the old
+green/blue cart pills (`#0b6` / `#06c` were never in the palette).
+
+`get_event_print_pack` composes `group.start_line` server-side —
+`"5:00 PM | Hole 1A"` on a shotgun, the slot label alone on a tee-time
+event, where the slot already IS the time and "Hole 8:10a" would be
+nonsense.
+
+**Download naming (Kerry's convention, 2026-09-15):**
+`[YY]-[chapter acronym][holes]-[event number]-[file type]` —
+`26-s9-23-StarterSheet`, `26-a18-6-CartSigns`, `25-s9-1-Proxies`,
+`27-a9-12-DivisionsFlights`. `print_file_stub(event)` builds the
+`26-s9-23` part off the EVENT NAME (which already carries chapter letter,
+holes and sequence) plus the year from the event date; each sheet appends
+its own file type in `<title>`, which is also what Save-as-PDF proposes.
+An event with no code in its name is named after the event, never after a
+bare chapter letter. NB the constant is `_PRINT_EVENT_CODE_RE`: plain
+`_EVENT_CODE_RE` is taken later in the same file and the later binding
+wins at import.
+
+**Starter Sheet:** the ALPHABETICAL names use the same size and weight as
+the foursome names, declared once (`.prow .pname, .arow .an`) so the two
+cannot drift.

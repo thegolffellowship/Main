@@ -244,5 +244,74 @@ ev_html = open("templates/events.html", encoding="utf-8").read()
 check("both sit with the other PAIRINGS print buttons",
       "/divisions-flights','_blank')" in ev_html and "/proximity-markers','_blank')" in ev_html)
 
+print("\n== downloaded files are named the way Kerry names them ==")
+# Kerry 2026-09-15: "[YY]-[chapter acronym][event type]-[event type
+# number]-[file type]" — 26-s9-23-StarterSheet, 26-a18-6-CartSigns,
+# 25-s9-1-Proxies, 27-a9-12-DivisionsFlights, 24-s18-11-Scorecards.
+for _nm, _dt, _want in (
+        ("s9.23 The Quarry", "2026-09-15", "26-s9-23"),
+        ("a18.6 ShadowGlen", "2026-05-02", "26-a18-6"),
+        ("s9.1 Silverhorn", "2025-01-14", "25-s9-1"),
+        ("a9.12 Grey Rock", "2027-07-09", "27-a9-12"),
+        ("s18.11 Cedar Creek", "2024-09-19", "24-s18-11")):
+    _got = db.print_file_stub({"item_name": _nm, "event_date": _dt, "chapter": "San Antonio"})
+    check(f"{_nm} -> {_want}", _got == _want, _got)
+check("an event with no code is named after itself, not after a bare chapter letter",
+      db.print_file_stub({"item_name": "2026 TGF CHAMPIONSHIP", "event_date": "2026-08-14",
+                          "chapter": "Austin"}) == "26-2026-TGF-CHAMPIONSHIP")
+check("the stub rides on every print payload",
+      db.event_proximity_report(EV, db_path=tmp)["file_stub"] == "26-s9-23"
+      and db.event_flights_report(EV, db_path=tmp)["file_stub"] == "26-s9-23"
+      and db.get_event_print_pack(EV, db_path=tmp)["event"]["file_stub"] == "26-s9-23")
+for _t, _f in (("cart_signs", "CartSigns"), ("starter_sheet", "StarterSheet"),
+               ("proximity_markers", "Proxies"), ("divisions_flights", "DivisionsFlights")):
+    _src = open(f"templates/{_t}.html", encoding="utf-8").read()
+    check(f"{_t} titles itself <stub>-{_f}", f"}}-{_f}</title>" in _src, _src.split(chr(10))[5])
+
+print("\n== cart signs: the Golf Genius shape, TGF standards ==")
+_cs = open("templates/cart_signs.html", encoding="utf-8").read()
+check("two signs to a page, cut down the middle",
+      "grid-template-rows: 1fr 1fr" in _cs and ".page::after {" in _cs
+      and "top: 50%" in _cs and "border-top: 1px solid" in _cs)
+check("no box around a sign", "border: 2px solid #111" not in _cs)
+check("the names are the sign — Bitter, huge, never wrapping",
+      '.nm {' in _cs and "font-size: 54px" in _cs and "white-space: nowrap" in _cs)
+check("surnames print in caps, given names as written",
+      db._cart_sign_name("Daniel South") == "Daniel SOUTH"
+      and db._cart_sign_name("Paul Reed III") == "Paul REED III")
+check("one line says when and where, like the Golf Genius sign",
+      "{{ s.g.start_line or s.g.slot_label }}" in _cs)
+_pk = db.get_event_print_pack(EV, db_path=tmp)
+check("…composed server-side so a tee-time event never reads 'Hole 8:10a'",
+      all(("| Hole " in g["start_line"]) == (str(_pk["event"].get("start_type") or "").lower().startswith("shotgun"))
+          for g in _pk["groups"]) if _pk["groups"] else True)
+check("the off-palette cart pills are gone", "#0b6" not in _cs and "#06c" not in _cs)
+check("the TGF mark is on every sign", _cs.count("/static/tgf-logo-r.svg") >= 1)
+# Test the RENDERED sign, not the source — the source mentions GGID in
+# the comment that explains why it is gone.
+from jinja2 import Environment, FileSystemLoader  # noqa: E402
+_env = Environment(loader=FileSystemLoader("templates"))
+_pk2 = db.get_event_print_pack(EV, db_path=tmp)
+_pk2["groups"] = [{"holes": "9", "group_num": 1, "slot_label": "1A",
+                   "start_line": "5:00 PM | Hole 1A",
+                   "carts": [{"label": "A", "players": [
+                       {"name": "Daniel South", "cart_name": "Daniel SOUTH"},
+                       {"name": "Morris Allen", "cart_name": "Morris ALLEN"}]}]}]
+_out = _env.get_template("cart_signs.html").render(pack=_pk2)
+check("the Golf Genius GGID line is not carried over", "GGID" not in _out)
+check("the rendered sign carries the names in caps and the when/where line",
+      "Daniel SOUTH" in _out and "5:00 PM | Hole 1A" in _out)
+check("…and titles the download 26-s9-23-CartSigns",
+      "<title>26-s9-23-CartSigns</title>" in _out
+      and '"26-s9-23-CartSigns"' in _out)
+
+print("\n== starter sheet: one name treatment ==")
+_ss = open("templates/starter_sheet.html", encoding="utf-8").read()
+check("the alphabetical name reads exactly like the foursome name",
+      ".prow .pname, .arow .an { font-size: 11.5px; font-weight: 600; }" in _ss)
+check("…declared once, not twice, so the two cannot drift",
+      _ss.count("font-weight: 600;") >= 1
+      and ".prow .pname { flex: 1; min-width: 0; }" in _ss)
+
 print("\nALL PASSED" if not F else f"\n{len(F)} FAILED: {F}")
 sys.exit(1 if F else 0)

@@ -3,56 +3,74 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Cart Signs — {{ pack.event.item_name }}</title>
+  <title>{{ pack.event.file_stub }}-CartSigns</title>
   <link href="https://fonts.googleapis.com/css2?family=Bitter:wght@600;700&display=swap" rel="stylesheet">
   <style>
     * { box-sizing: border-box; }
+    /* Golf Genius's cart sign, in TGF's standards (Kerry 2026-09-15:
+       "Cart Signs need to be redone to match more of our current GG cart
+       signs but with our standards"). GG's shape: letter portrait, TWO
+       signs to a page, each one two enormous names over a single line
+       saying when and where. What we keep from GG is that shape; what we
+       bring is the mark, Bitter, and the print contract every other TGF
+       sheet uses — margin in body padding, never @page, because the
+       browser's own Margins setting overrides @page. Their event-id line
+       is dropped: it addresses their system, not ours. */
+    @page { size: letter portrait; margin: 0; }
+    html, body, .sign { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     body {
-      margin: 0; padding: 20px;
+      margin: 0; padding: 20px; background: #EFEFEC; color: #111;
       font-family: "Helvetica Neue", Arial, system-ui, sans-serif;
-      color: #111; background: #f3f3f3;
     }
     .toolbar { margin-bottom: 14px; }
     .toolbar button {
       font: inherit; padding: 8px 16px; border: 0; border-radius: 999px;
       background: #E87C3E; color: #fff; font-weight: 600; cursor: pointer;
     }
-    .cards { display: flex; flex-direction: column; gap: 16px; align-items: center; }
-    .card {
-      width: 7.2in; height: 4.6in; background: #fff; border: 2px solid #111;
-      border-radius: 10px; padding: 22px 28px; display: flex; flex-direction: column;
-      justify-content: space-between; page-break-inside: avoid;
+    .page {
+      width: 8.5in; height: 11in; padding: 0.4in; margin: 0 auto 24px;
+      background: #fff; border: 1px solid #C9C9C4; box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+      display: grid; grid-template-rows: 1fr 1fr; gap: 0.5in;
+      position: relative;
     }
-    .card-top { display: flex; justify-content: space-between; align-items: flex-start; }
-    .evt { font-family: "Bitter", Georgia, serif; font-weight: 700; font-size: 20px; }
-    .evt .course { display: block; font-family: "Helvetica Neue", sans-serif; font-weight: 400; font-size: 13px; color: #555; margin-top: 2px; }
-    .date { text-align: right; font-size: 13px; color: #555; }
-    .slot-row { display: flex; align-items: baseline; gap: 14px; }
-    .slot { font-family: "Bitter", Georgia, serif; font-weight: 700; font-size: 40px; }
-    .grp { font-size: 15px; color: #666; }
-    .cart-badge {
-      display: inline-block; font-weight: 700; font-size: 15px; color: #fff;
-      padding: 3px 12px; border-radius: 999px;
+    /* No box around a sign (the standard set on the proximity markers
+       the same afternoon) — a hairline across the middle of the SHEET,
+       which is where the paper gets cut. */
+    .page::after {
+      content: ""; position: absolute; top: 50%; left: 0.3in; right: 0.3in;
+      border-top: 1px solid #9CA3AF;
     }
-    .cart-A { background: #0b6; }
-    .cart-B { background: #06c; }
-    .players { display: flex; flex-direction: column; gap: 6px; }
-    .players .pl {
-      font-family: "Bitter", Georgia, serif; font-weight: 700; font-size: 30px;
-      line-height: 1.1; border-bottom: 1px dashed #ccc; padding-bottom: 4px;
+    .sign {
+      display: flex; flex-direction: column; align-items: center;
+      justify-content: center; text-align: center; padding: 6px 10px;
     }
-    .foot { font-size: 11px; color: #999; }
-    .empty { color: #999; padding: 40px; text-align: center; font-style: italic; }
+    .sign-logo { width: 82px; height: 82px; display: block; margin: 0 auto 10px; }
+    /* The two names are the sign. Everything else is a caption. */
+    .names { width: 100%; }
+    .nm {
+      font-family: "Bitter", Georgia, serif; font-weight: 700;
+      font-size: 54px; line-height: 1.14; white-space: nowrap;
+      overflow: hidden; text-overflow: ellipsis;
+    }
+    .start {
+      font-family: "Bitter", Georgia, serif; font-weight: 700;
+      font-size: 36px; margin-top: 16px; padding-top: 13px;
+      border-top: 2px solid #111; width: 78%;
+      font-variant-numeric: tabular-nums;
+    }
+    .sign-foot {
+      font-family: "Bitter", Georgia, serif; font-weight: 600;
+      font-size: 13px; color: #444; margin-top: 11px;
+    }
+    .empty { width: 8.5in; margin: 0 auto; padding: 40px; background: #fff;
+             border: 1px solid #C9C9C4; color: #666; text-align: center; font-style: italic; }
     @media print {
-      /* Margin lives in the body, not @page — @page margins are the one
-         thing the browser's own Margins setting overrides, which is how
-         the starter sheet came to print edge to edge (Kerry 2026-09-08). */
-      body { padding: 0.4in; background: #fff; }
+      body { padding: 0; background: #fff; }
       .noprint { display: none !important; }
-      .cards { gap: 0; }
-      .card { border-radius: 0; margin: 0 auto; page-break-after: always; }
+      .page { width: auto; height: auto; min-height: 10.2in; margin: 0; border: 0;
+              box-shadow: none; padding: 0.4in; page-break-after: always; }
+      .page:last-child { page-break-after: auto; }
     }
-    @page { size: letter portrait; margin: 0; }
   </style>
 </head>
 <body>
@@ -61,44 +79,42 @@
             onclick="location.href = '/events?event={{ pack.event.id }}&view=pairings';">&#8592; Back</button>
     <button onclick="window.print()">Print Cart Signs</button>
     <button class="pdf" style="font:inherit;padding:8px 16px;border:0;border-radius:999px;background:#1B1B1B;color:#fff;font-weight:600;cursor:pointer;margin-left:8px;" onclick="downloadPdf()">&#8681; Download PDF</button>
-    <span style="color:#666;font-size:13px;margin-left:10px;">One card per cart · fold and place on the cart.</span>
+    <span style="color:#666;font-size:13px;margin-left:10px;">Two signs per page &middot; cut along the centre line.</span>
   </div>
 
   {% if not pack.groups %}
     <div class="empty">No pairings saved for this event yet. Generate &amp; save pairings first.</div>
   {% else %}
-  <div class="cards">
-    {% for g in pack.groups %}
-      {% for cart in g.carts %}
-      <div class="card">
-        <div class="card-top">
-          <div class="evt">{{ pack.event.item_name }}<span class="course">{{ pack.event.course or "" }}</span></div>
-          <div class="date">
-            {{ pack.event.event_date or "" }}<br>
-            <span class="cart-badge cart-{{ cart.label }}">Cart {{ cart.label }}</span>
-          </div>
-        </div>
-        <div class="slot-row">
-          <div class="slot">{{ g.slot_label }}</div>
-          <div class="grp">Group {{ g.group_num }}{% if g.holes == '18' %} · 18{% endif %}</div>
-        </div>
-        <div class="players">
-          {% for p in cart.players %}
-            <div class="pl">{{ p.name }}</div>
+    {% set signs = [] %}
+    {% for g in pack.groups %}{% for cart in g.carts %}
+      {% set _ = signs.append({'g': g, 'cart': cart}) %}
+    {% endfor %}{% endfor %}
+    {% for pair in signs|batch(2) %}
+    <div class="page">
+      {% for s in pair %}
+      <div class="sign">
+        <img class="sign-logo" src="/static/tgf-logo-r.svg" alt="The Golf Fellowship">
+        <div class="names">
+          {% for p in s.cart.players %}
+            <div class="nm">{{ p.cart_name or p.name }}</div>
           {% endfor %}
         </div>
-        <div class="foot">The Golf Fellowship{% if pack.event.chapter %} · {{ pack.event.chapter }}{% endif %}</div>
+        <div class="start">{{ s.g.start_line or s.g.slot_label }}</div>
+        <div class="sign-foot">
+          {{ pack.event.item_name }}{% if pack.event.course %} &middot; {{ pack.event.course }}{% endif %}
+          {%- if pack.event.event_date %} &middot; {{ pack.event.event_date }}{% endif %}
+        </div>
       </div>
       {% endfor %}
+    </div>
     {% endfor %}
-  </div>
   {% endif %}
   <script>
     // Same print pipeline, with the file pre-named so "Save as PDF"
     // does not propose the URL (Kerry 2026-09-08).
     function downloadPdf() {
       var was = document.title;
-      document.title = {{ ((pack.event.item_name or "Cart Signs") ~ " Cart Signs " ~ (pack.event.event_date or "")) | trim | tojson }};
+      document.title = {{ (pack.event.file_stub ~ "-CartSigns") | tojson }};
       window.addEventListener("afterprint", function once() {
         document.title = was;
         window.removeEventListener("afterprint", once);

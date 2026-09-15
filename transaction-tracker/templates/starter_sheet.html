@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Starter Sheet — {{ pack.event.item_name }}</title>
+  <title>{{ pack.event.file_stub }}-StarterSheet</title>
   <link href="https://fonts.googleapis.com/css2?family=Bitter:wght@600;700&display=swap" rel="stylesheet">
   <style>
     * { box-sizing: border-box; }
@@ -90,7 +90,7 @@
        carts readable as two carts without another column of letters
        (Kerry 2026-09-08). */
     .prow.is-b { background: #efefef; }
-    .prow .pname { flex: 1; font-weight: 600; min-width: 0; }
+    .prow .pname { flex: 1; min-width: 0; }
     .prow .tee { color: #444; width: 42px; text-align: right; white-space: nowrap; }
     .prow .idx { color: #444; width: 30px; text-align: right;
                  font-variant-numeric: tabular-nums; white-space: nowrap; }
@@ -116,6 +116,12 @@
             font-size: 11px; padding: 2px 0; border-bottom: 1px dotted #ccc;
             break-inside: avoid; }
     .arow .an { flex: 1; min-width: 0; }
+    /* ONE name treatment for both lists (Kerry 2026-09-15: "For
+       ALPHABETICAL, make the name font the same size and type as the
+       foursomes above"). Declared once, so a player reads the same in
+       the group box and in the list he looks himself up in, and the two
+       cannot drift apart later. */
+    .prow .pname, .arow .an { font-size: 11.5px; font-weight: 600; }
     .arow .atee { color: #444; width: 40px; text-align: right;
                   white-space: nowrap; }
     .arow .aidx { color: #444; width: 26px; text-align: right;
@@ -232,7 +238,7 @@
     // event and date instead of the URL, then put the title back.
     function downloadPdf() {
       var was = document.title;
-      document.title = {{ ((pack.event.item_name or "Starter Sheet") ~ " " ~ (pack.event.event_date or "")) | trim | tojson }};
+      document.title = {{ (pack.event.file_stub ~ "-StarterSheet") | tojson }};
       window.addEventListener("afterprint", function once() {
         document.title = was;
         window.removeEventListener("afterprint", once);

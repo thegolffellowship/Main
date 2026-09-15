@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.428.0";
+window.TGF_VERSION = "2.429.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.429.0",
+    date: "2026-09-15",
+    changes: [
+      "CART SIGNS REBUILT ON THE GOLF GENIUS SHAPE, IN TGF STANDARDS (Kerry: \u2018Cart Signs need to be redone to match more of our current GG cart signs but with our standards\u2019). What we keep from GG is the shape that works on a windshield: letter portrait, TWO signs to a page, two enormous names over one line saying WHEN and WHERE. What we bring is ours \u2014 the official mark on every sign, Bitter at 54px for the names, and the print contract every other TGF sheet uses. Surnames set in caps with the given name as written (Daniel SOUTH), because at ten feet the surname is what a player scans for. No box around a sign; a hairline across the middle of the sheet where it gets cut, the same standard the proximity markers set. GG\u2019s event-id line is dropped \u2014 it addresses their system, not ours \u2014 and so are the old green and blue cart pills, which were never in the TGF palette.",
+      "The when/where line is composed server-side, so a TEE-TIME event never prints \u20188:10a | Hole 8:10a\u2019: on a shotgun it reads \u20185:00 PM | Hole 1A\u2019, on tee times the slot already IS the time.",
+      "DOWNLOADS ARE NAMED THE WAY KERRY NAMES THEM (his convention, given today): [YY]-[chapter acronym][holes]-[event number]-[file type], so s9.23 The Quarry saves as 26-s9-23-CartSigns, and a18.6 as 26-a18-6-CartSigns. All four print sheets \u2014 Starter Sheet, Cart Signs, Proxies, Divisions & Flights \u2014 title themselves that way, which is also what Save-as-PDF proposes. An event with no code in its name (the championship) is named after the event rather than a bare chapter letter.",
+      "Starter Sheet: the ALPHABETICAL list now reads in the same size and weight as the names in the foursomes above it (Kerry). One declaration covers both lists, so a player reads the same in the group box and in the list he looks himself up in.",
+    ],
+  },
   {
     version: "2.428.0",
     date: "2026-09-15",
