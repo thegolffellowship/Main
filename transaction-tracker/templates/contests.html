@@ -347,15 +347,17 @@
             color: #4B5563; }
         .evlb-teekey-item { display: inline-flex; align-items: center; gap: 5px;
             white-space: nowrap; }
-        .evlb-teekey .evlb-tee-dot { float: none; margin: 0; }
+        .evlb-teekey .evlb-tee-dot { margin: 0; }
         .evlb-tee-dot.ring { box-shadow: 0 0 0 1.5px #fff, 0 0 0 3px #6B7280; }
         @media (max-width: 720px) {
             .evlb-teekey { margin-left: 0; width: 100%; }
         }
         /* Tee swatch, right-justified in the name cell (Kerry). */
         .evlb-tee-dot { display: inline-block; width: 9px; height: 9px;
-            border-radius: 50%; margin-left: 7px; float: right;
-            margin-top: 4px; }
+            border-radius: 50%; margin-left: 7px; vertical-align: middle; }
+        /* In a board's name cell the swatch is right-justified (Kerry
+           2026-09-15); everywhere else it sits beside the name. */
+        .evlb-tee-dot.right { float: right; margin-top: 4px; }
         .evlb-holes td.nm, .evlb-holes th.nm { text-align: left; min-width: 110px;
             font-weight: 600; color: #475569; }
         .evlb-holes th.nm { color: #fff; }
@@ -2808,6 +2810,16 @@
     // say so. The colour is the COURSE's own tee colour, the same map
     // the starter sheet prints, so the two can never disagree. Rendered
     // in the ONE shared name cell rather than per tab.
+    /** "PALACIOS, Richard" -> "richard palacios"; a plain name is just
+     *  lowercased. The boards mix both spellings. */
+    function evlbFlipName(nm) {
+        const s2 = String(nm || "").trim();
+        if (!s2.includes(",")) return s2.toLowerCase();
+        const [last, first] = s2.split(",");
+        return ((first || "").trim() + " " + (last || "").trim())
+            .trim().toLowerCase();
+    }
+
     // The key to the dots (Kerry 2026-09-15: "Need to show legend up
     // top for TEE colors. Right of the check boxes on the same row on
     // desktop. move to row below if narrow or on mobile."). A swatch
@@ -2826,14 +2838,24 @@
                     + `${escapeHtml(t.tee_name || t.band || "")}</span>`;
             }).join("") + `</div>`;
     }
-    let EVLB_TEES = {};
-    function evlbTeeDot(r) {
-        const t = (r && r.customer_id != null && EVLB_TEES["c:" + r.customer_id])
-            || (r && r.player_name && EVLB_TEES["n:" + String(r.player_name).trim().toLowerCase()]);
+    // KEYED OFF THE EVENT'S OWN PAYLOAD, never a page-level global
+    // (Kerry 2026-09-15: "Tee color circles need to persist in all
+    // views"). A single global belongs to whichever event loaded LAST —
+    // open two events and the first one's names stopped matching, so its
+    // dots quietly vanished. Every caller already holds its own `d`.
+    function evlbTeeDot(d, r, place) {
+        const map = (d && d.tee_by_player) || {};
+        const t = (r && r.customer_id != null && map["c:" + r.customer_id])
+            || (r && r.player_name && map["n:" + String(r.player_name).trim().toLowerCase()])
+            // A GG board name is "LAST, First"; the sheet's is "First
+            // Last". Try the flip before giving up, or every board that
+            // carries GG spelling loses its dots.
+            || (r && r.player_name && map["n:" + evlbFlipName(r.player_name)]);
         if (!t || !t.color) return "";
         // A white or very pale tee needs an outline or it is invisible.
         const pale = /^#(f|e)/i.test(t.color);
-        return `<span class="evlb-tee-dot${t.ring ? " ring" : ""}" title="${escapeHtml(t.tee_name || "")}`
+        return `<span class="evlb-tee-dot${place === "right" ? " right" : ""}`
+            + `${t.ring ? " ring" : ""}" title="${escapeHtml(t.tee_name || "")}`
             + `${t.band ? " (" + escapeHtml(t.band) + ")" : ""}" `
             + `style="background:${t.color};${pale ? "box-shadow:inset 0 0 0 1px #9CA3AF;" : ""}"></span>`;
     }
@@ -2883,7 +2905,6 @@
             // winner stated confidently, and the number is what a member
             // remembers, not the caveat. The board still ranks and the
             // scores still read live.
-            EVLB_TEES = d.tee_by_player || {};
             if (d.money_visible === false) evlbBlankMoney(d);
             body.innerHTML = evlbEventHtml(d);
             evlbWireEvent(body, d);
@@ -3113,7 +3134,7 @@
             ? (r._buyer ? " bought" : " nobuy") : (i % 2 ? " alt" : "");
         return `<tr class="evlb-plr${bi}" data-rid="${r.scoring_round_id || ""}">` +
             `<td>${r._rank ?? ""}</td>` +
-            `<td class="nm">${escapeHtml(r.player_name)}${evlbTeeDot(r)}` +
+            `<td class="nm">${escapeHtml(r.player_name)}${evlbTeeDot(d, r, "right")}` +
             (game ? "" : evlbMvpBadges(r)) +
             (r._note ? `<div style="font-size:10.5px;color:#9CA3AF;white-space:normal;">${escapeHtml(r._note)}</div>` : "") +
             `</td>` +
@@ -3596,7 +3617,8 @@
                 ? `<div class="evlb-note" style="background:#F8FAFC;border-color:#E2E8F0;color:#475569;">Positions, totals and purses are the recorded Golf Genius result — the official Team Net game (75% off-lowest allowance), the score and money of record.</div>`
                 : `<div class="evlb-note" style="background:#F8FAFC;border-color:#E2E8F0;color:#475569;">Positions and purses are the recorded Golf Genius result (the money of record). The total shown is our best-ball reconstruction from each player's own card — the official Team Net game plays a 75% off-lowest allowance, so the two can differ.</div>`) +
               d.teams.map((t, ti) => {
-                const names = t.players.map(p => escapeHtml(p.player_name)).join(" &middot; ");
+                const names = t.players.map(p =>
+                    escapeHtml(p.player_name) + evlbTeeDot(d, p)).join(" &middot; ");
                 const win = /^T?1$/.test(t.position || "");
                 // GG's posted board total is the score of record; a team
                 // GG didn't post (shouldn't happen on a walked board)
@@ -3623,10 +3645,12 @@
         const proxHtml = ((d.proxies || []).length || (d.hio || []).length)
             ? `<div class="evlb-scroll"><table class="evlb-tbl"><thead><tr><th>Contest</th><th>Winner</th><th>Detail</th><th style="text-align:right;">$</th></tr></thead><tbody>` +
               (d.proxies || []).map(p =>
-                  `<tr><td>${escapeHtml(p.label || "")}</td><td>${escapeHtml(p.player || "")}</td>` +
+                  `<tr><td>${escapeHtml(p.label || "")}</td><td>${escapeHtml(p.player || "")}` +
+                  evlbTeeDot(d, { player_name: p.player }) + `</td>` +
                   `<td>${escapeHtml(p.detail || "")}</td><td class="r">${p.purse != null ? "$" + Number(p.purse).toFixed(2) : ""}</td></tr>`).join("") +
               (d.hio || []).map(p =>
-                  `<tr><td>Hole-in-One</td><td>${escapeHtml(p.player || "")}</td>` +
+                  `<tr><td>Hole-in-One</td><td>${escapeHtml(p.player || "")}` +
+                  evlbTeeDot(d, { player_name: p.player }) + `</td>` +
                   `<td>${escapeHtml(p.detail || "")}</td><td class="r">${p.purse != null ? "$" + Number(p.purse).toFixed(2) : ""}</td></tr>`).join("") +
               `</tbody></table></div>`
             : '<p style="color:var(--text-muted);">No proxies recorded yet.</p>';
@@ -3672,7 +3696,7 @@
         const netOf = (rid, n) => evlbNetOf(d, rid, n);
         const mins = evlbTeamMins(d, t);
         const rows = t.players.map(p =>
-            `<tr class="evlb-plr" data-rid="${p.scoring_round_id || ""}"><td class="nm">${escapeHtml(p.player_name)}${evlbTeeDot(p)}</td>` +
+            `<tr class="evlb-plr" data-rid="${p.scoring_round_id || ""}"><td class="nm">${escapeHtml(p.player_name)}${evlbTeeDot(d, p, "right")}</td>` +
             cols.map(n => {
                 const v = netOf(p.scoring_round_id, n);
                 if (v == null) return '<td class="h"></td>';
@@ -3720,6 +3744,14 @@
             const firstHole = playerRow.querySelector("td.h");
             const cards = cardRow.querySelectorAll("table");
             if (!firstHole || !cards.length) return;
+            // A hole cell that is HIDDEN (the hole-by-hole toggle off,
+            // which also hides it in the row we are measuring) reports a
+            // zero rect, and a zero lead collapses the card's label
+            // column to nothing — "GROSS SCORE" then prints on top of
+            // hole 1. No ruler, no alignment: the card renders at its
+            // natural width, which is correct on its own terms.
+            const hr = firstHole.getBoundingClientRect();
+            if (!hr.width) return;
             // Measure from the CARD'S OWN left edge, not the row's
             // (Kerry 2026-09-15: "not aligning perfectly"). The card
             // sits inside a full-width <td> that carries its own
@@ -3811,10 +3843,11 @@
                         if (!res.ok || c.error) throw new Error(c.error || res.statusText);
                         return `<div class="evlb-team-pcard">`
                             + `<div class="evlb-team-pname">${escapeHtml(p.player_name || "")}`
+                            + evlbTeeDot(st.d, p)
                             + (p.team_hcp != null
                                 ? `<span class="evlb-team-ph">team hcp ${p.team_hcp}</span>` : "")
                             + `</div>`
-                            + `<div class="evlb-scroll evlb-card-align">`
+                            + `<div class="evlb-scroll">`
                             + (window.tgfRenderScorecard
                                 ? window.tgfRenderScorecard(c)
                                 : "Scorecard renderer unavailable.")
@@ -3826,16 +3859,12 @@
                             + `(${escapeHtml(err.message || String(err))}).</p></div>`;
                     }
                 }));
+                // NOT column-aligned to the board. These are whole
+                // scorecards — par, yards, stroke index, two points rows
+                // — stacked one per player, and forcing them onto the
+                // board's hole grid squashed the label column until
+                // "GROSS SCORE" ran over hole 1. They read as cards.
                 row.firstElementChild.innerHTML = cards.join("");
-                // Line the stacked cards up with the band's own hole
-                // columns, using a player row from this very team as
-                // the ruler (a band row is one colspan cell and has no
-                // hole cells of its own to measure).
-                const ref = row.nextElementSibling
-                    && row.nextElementSibling.classList.contains("evlb-plr")
-                    ? row.nextElementSibling
-                    : band.closest("table").querySelector("tr.evlb-plr");
-                if (ref) evlbAlignCard(ref, row);
             } catch (err) {
                 row.firstElementChild.textContent =
                     "Couldn't load the cards (" + (err.message || err) + ").";

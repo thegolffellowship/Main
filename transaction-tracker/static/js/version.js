@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.444.0";
+window.TGF_VERSION = "2.445.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.445.0",
+    date: "2026-09-15",
+    changes: [
+      "THE TEAM CHEVRON\u2019S CARDS READ AS CARDS AGAIN (Kerry: \u2018Not good. Fix\u2019). Stacking whole scorecards \u2014 par, yards, stroke index, two points rows \u2014 and then forcing them onto the board\u2019s hole grid squashed the label column until \u2018GROSS SCORE\u2019 printed on top of hole 1. They are not row expansions; they render at their natural width.",
+      "And the alignment that DOES apply \u2014 a card opened under one player\u2019s row \u2014 now refuses to run off a hidden ruler. With hole-by-hole switched off the cell it measures reports a zero rect, and a zero lead collapsed the label column the same way. No ruler, no alignment.",
+      "Tee dots persist across views (Kerry: \u2018Tee color circles need to persist in all views\u2019). They hung off ONE page-level map, which belonged to whichever event loaded last \u2014 open two events and the first one\u2019s dots quietly vanished. Every board now reads its own event\u2019s map, matches GG\u2019s \u2018LAST, First\u2019 spelling as well as the sheet\u2019s, and the swatch also appears on the team list, the team cards, proxies and hole-in-one.",
+    ],
+  },
   {
     version: "2.444.0",
     date: "2026-09-15",
