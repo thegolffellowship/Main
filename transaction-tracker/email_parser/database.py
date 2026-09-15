@@ -1392,6 +1392,46 @@ def _seed_pace_ratings(conn: sqlite3.Connection) -> None:
         logger.info("Pace ratings seed: applied %d rating(s)", seeded)
 
 
+# Kerry 2026-09-15 (moved here from a Horizon session): "Why are Dan
+# Stich and Jeff Rideout ranked 1's on pace? ... Dan should not be a 1.
+# He's at least a 2. Make Jeff a 2 as well." Neither is in the ratified
+# seed above; both carry an explicit 1 with source 'manager' — a tap. An
+# explicit 2 is a real ruling (see set_customer_pace_rating), so this
+# writes 2/'manager' exactly as the Customers page one-tap editor would.
+_PACE_RULINGS_2026_09_15 = {298: 2, 6: 2}     # Dan Stich, Jeff Rideout
+
+
+def _repair_pace_rulings_2026_09_15(conn: sqlite3.Connection) -> int:
+    """ONE-SHOT: apply Kerry's 2026-09-15 pace rulings, then never again —
+    a later tap on the Customers page must not be undone by the next
+    deploy. Guarded by an app_settings flag; only a current 1 is changed,
+    so a value Kerry has already corrected is left alone. Returns rows
+    changed."""
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS app_settings (
+               key TEXT PRIMARY KEY, value TEXT NOT NULL,
+               updated_at TEXT DEFAULT (datetime('now')))""")
+    flag = "pace_rulings_2026_09_15_applied"
+    if conn.execute("SELECT 1 FROM app_settings WHERE key = ?",
+                    (flag,)).fetchone():
+        return 0
+    changed = 0
+    for cid, rating in _PACE_RULINGS_2026_09_15.items():
+        cur = conn.execute(
+            """UPDATE customers
+               SET pace_rating = ?, pace_rating_source = 'manager'
+               WHERE customer_id = ? AND pace_rating = 1""",
+            (rating, cid))
+        changed += cur.rowcount
+    conn.execute(
+        "INSERT INTO app_settings (key, value, updated_at) "
+        "VALUES (?, ?, datetime('now'))", (flag, str(changed)))
+    conn.commit()
+    if changed:
+        logger.info("Pace rulings 2026-09-15: %d rating(s) set to 2", changed)
+    return changed
+
+
 def _repair_massey_attribution(conn: sqlite3.Connection) -> None:
     """Re-attribute William Massey's orders corrupted by a bad customer merge.
 
@@ -4378,6 +4418,11 @@ def init_db(db_path: str | Path | None = None) -> None:
             _seed_pace_ratings(conn)
         except Exception as e:
             logger.warning("Pace ratings seed failed: %s", e)
+        # One-shot pace rulings (Kerry 2026-09-15): Stich + Rideout -> 2
+        try:
+            _repair_pace_rulings_2026_09_15(conn)
+        except Exception as e:
+            logger.warning("Pace rulings 2026-09-15 failed: %s", e)
 
         # Always-run repair: merge twin Crystal Falls events 3267 → 3263
         # (Kerry 2026-07-14: same May 30 event, renamed mid-registration)

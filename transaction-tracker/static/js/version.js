@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.414.0";
+window.TGF_VERSION = "2.415.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.415.0",
+    date: "2026-09-15",
+    changes: [
+      "Pace rulings (Kerry: \u2018Dan should not be a 1. He\u2019s at least a 2. Make Jeff a 2 as well\u2019): Dan Stich and Jeff Rideout are set to pace 2. Neither was in the ratified July seed \u2014 both carried an explicit 1 from a tap \u2014 so this writes an explicit 2 exactly as the Customers page one-tap editor would, once, and never again: a later tap is never undone by a deploy.",
+    ],
+  },
   {
     version: "2.414.0",
     date: "2026-09-15",
