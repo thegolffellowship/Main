@@ -13471,6 +13471,10 @@ def get_events_leaderboard(chapter: str | None = None,
     codes = _events_leaderboard_codes(db_path)
     with _connect(db_path) as conn:
         _ensure_scoring_tables(conn)
+        try:
+            _money_hold = int(_setting_via(conn, "leaderboard_money_hold_minutes") or 10)
+        except (TypeError, ValueError):
+            _money_hold = 10
         rows = [dict(r) for r in conn.execute(
             """SELECT e.id, e.item_name, e.event_date, e.course, e.chapter,
                       COUNT(DISTINCT COALESCE(sr.customer_id,
@@ -13503,6 +13507,23 @@ def get_events_leaderboard(chapter: str | None = None,
                    WHERE LOWER(TRIM(te.code)) = ?""",
                 ((r["item_name"] or "").strip().lower(),)).fetchone()
             r["pot"] = pot["t"] if pot else 0
+            # Same hold as the board (Kerry 2026-09-15): no dollar shows
+            # until 10 minutes after the last score was posted.
+            _lr = conn.execute(
+                "SELECT MAX(imported_at) AS t FROM scoring_rounds WHERE event_id = ?",
+                (r["id"],)).fetchone()
+            r["last_score_at"] = (_lr["t"] if _lr else None) or None
+            r["money_visible"] = True
+            if r["last_score_at"] and _money_hold > 0:
+                try:
+                    _rt = datetime.strptime(str(r["last_score_at"])[:19],
+                                            "%Y-%m-%d %H:%M:%S") + timedelta(minutes=_money_hold)
+                    r["money_visible"] = datetime.utcnow() >= _rt
+                    r["money_at"] = _rt.strftime("%Y-%m-%d %H:%M:%S")
+                except (ValueError, TypeError):
+                    pass
+            if not r["money_visible"]:
+                r["pot"] = 0
     return {"events": rows, "years": years,
             "pilot": bool(codes), "pilot_codes": codes}
 
@@ -13520,6 +13541,31 @@ def get_event_leaderboard(event_name: str,
             return None
         ev = dict(ev)
         ev["holes"] = _event_holes_type(ev["item_name"], ev["format"])
+
+        # MONEY WAITS FOR THE FIELD (Kerry 2026-09-15: "Winnings should
+        # not show until 10 minutes after last score is posted"). Half a
+        # field posted is a wrong winner stated confidently, and a member
+        # reading $126 beside their name mid-round will remember the
+        # number, not the caveat. `imported_at` is stamped every time a
+        # round is written, so it IS "when scores were last posted"; the
+        # hold is a dial.
+        try:
+            _hold = int(_setting_via(conn, "leaderboard_money_hold_minutes") or 10)
+        except (TypeError, ValueError):
+            _hold = 10
+        _last = conn.execute(
+            "SELECT MAX(imported_at) AS t FROM scoring_rounds WHERE event_id = ?",
+            (ev["id"],)).fetchone()
+        last_score_at = (_last["t"] if _last else None) or None
+        money_visible, money_at = True, None
+        if last_score_at and _hold > 0:
+            try:
+                _t = datetime.strptime(str(last_score_at)[:19], "%Y-%m-%d %H:%M:%S")
+                _ready = _t + timedelta(minutes=_hold)
+                money_visible = datetime.utcnow() >= _ready
+                money_at = _ready.strftime("%Y-%m-%d %H:%M:%S")
+            except (ValueError, TypeError):
+                money_visible = True
 
         # one merged row per player: scoring_rounds carries one row per
         # imported GG board (the ALL Gross row has net/hcp NULL) — same
@@ -14268,6 +14314,10 @@ def get_event_leaderboard(event_name: str,
         "event": {"name": ev["item_name"], "date": ev["event_date"],
                   "course": ev["course"], "chapter": ev["chapter"],
                   "holes": ev["holes"]},
+        "money_visible": money_visible,
+        "money_at": money_at,
+        "money_hold_minutes": _hold,
+        "last_score_at": last_score_at,
         "field": len(plist),
         "pot": round(sum(w["cents"] for ws in won.values()
                          for w in ws) / 100.0, 2),

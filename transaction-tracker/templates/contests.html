@@ -2705,7 +2705,9 @@
                     `<summary><span class="chev tgf-exp">&#9654;</span>` +
                     `<div><div class="nm">${escapeHtml(ev.item_name)}</div>` +
                     `<div class="meta">${evlbDate(ev.event_date)}${ev.course ? " &middot; " + escapeHtml(ev.course) : ""} &middot; ${ev.field} players ${ch}</div></div>` +
-                    `<div class="pot">$${(ev.pot || 0).toFixed(2)}<span class="s">POT</span></div>` +
+                    (ev.money_visible === false
+                        ? `<div class="pot" style="color:var(--text-muted);font-size:11px;font-weight:600;">IN PLAY<span class="s">POT PENDING</span></div>`
+                        : `<div class="pot">$${(ev.pot || 0).toFixed(2)}<span class="s">POT</span></div>`) +
                     `</summary><div class="evlb-body"><p style="color:var(--text-muted);">Loading&hellip;</p></div></details>`;
             }).join("");
             box.querySelectorAll("details.evlb-ev").forEach(el => {
@@ -2738,6 +2740,33 @@
             window.scrollTo({ top: Math.max(0, y), behavior: "smooth" });
         });
     }
+    // Strip every dollar off a board that is still in play, and leave a
+    // line saying when the money posts.
+    function evlbBlankMoney(d) {
+        (d.overall_board || []).forEach(r => { r.won_total = 0; r.won_by_cat = {}; r.won = []; });
+        ["net_board", "gross_board", "skins_board", "points_board", "team_board"].forEach(k => {
+            (d[k] || []).forEach(r => {
+                if (r && typeof r === "object") {
+                    r.won_total = 0; r.won_by_cat = {}; r.won = [];
+                    (r.rows || []).forEach(x => { x.won_total = 0; x.won_by_cat = {}; x.won = []; });
+                }
+            });
+        });
+        (d.proxies || []).forEach(p => { p.won_total = 0; p.amount = 0; p.won = []; });
+        (d.hio || []).forEach(p => { p.won_total = 0; p.amount = 0; p.won = []; });
+        d.pot = 0;
+        d._moneyHeld = true;
+    }
+
+    function evlbMoneyNotice(d) {
+        if (!d || !d._moneyHeld) return "";
+        const mins = d.money_hold_minutes || 10;
+        return `<div style="margin:0 0 8px;padding:7px 10px;border:1px solid #FCD34D;background:#FFFBEB;border-radius:6px;font-size:12px;color:#92400E;">
+            <strong>Round in play &mdash; winnings are not posted yet.</strong>
+            Money shows ${mins} minutes after the last score is posted, so a half-posted
+            field can never name the wrong winner. Scores below are live.</div>`;
+    }
+
     async function evlbLoadEvent(el) {
         const name = el.dataset.ev;
         const body = el.querySelector(".evlb-body");
@@ -2747,6 +2776,14 @@
             const res = await fetch("/api/events-leaderboard/event?name=" + encodeURIComponent(name));
             const d = await res.json();
             if (!res.ok || d.error) throw new Error(d.error || res.statusText);
+            // MONEY WAITS FOR THE FIELD (Kerry 2026-09-15: "Winnings
+            // should not show until 10 minutes after last score is
+            // posted"). Blanked HERE, once, rather than in each of the
+            // seven boards that read it: half a field posted is a wrong
+            // winner stated confidently, and the number is what a member
+            // remembers, not the caveat. The board still ranks and the
+            // scores still read live.
+            if (d.money_visible === false) evlbBlankMoney(d);
             body.innerHTML = evlbEventHtml(d);
             evlbWireEvent(body, d);
         } catch (err) {
@@ -3246,7 +3283,7 @@
         const tabs = [["overall", "Overall"], ["team", "Team"], ["net", "Net"],
                       ["gross", "Gross"], ["skins", "Skins"],
                       ["points", "MVP/Points"], ["prox", "Proxies"]];
-        const offNotes = (d.games_off || []).map(g =>
+        const offNotes = evlbMoneyNotice(d) + (d.games_off || []).map(g =>
             `<div class="evlb-note">${escapeHtml(g.note)}</div>`).join("");
         // OVERALL (Kerry 2026-09-11): the whole field in ONE table —
         // hole-by-hole gross plus totals. Wins highlight by the ratified

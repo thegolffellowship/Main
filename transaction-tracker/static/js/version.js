@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.435.0";
+window.TGF_VERSION = "2.436.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.436.0",
+    date: "2026-09-15",
+    changes: [
+      "WINNINGS WAIT FOR THE FIELD (Kerry: \u2018Winnings should not show until 10 minutes after last score is posted\u2019). Half a field posted is a wrong winner stated confidently, and the number is what a member remembers, not the caveat. Every dollar on the EVENTS leaderboard \u2014 the pot on the event row, the WON column, per-game money, proxies, hole-in-one \u2014 is withheld until 10 minutes after the last score was written for that event, with a line above the boards saying so and when it posts. Scores stay live throughout; only the money waits. The hold is a dial (`leaderboard_money_hold_minutes`), and the page blanks the boards in ONE place rather than in each of the seven that read money.",
+    ],
+  },
   {
     version: "2.435.0",
     date: "2026-09-15",

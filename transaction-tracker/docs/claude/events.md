@@ -2118,3 +2118,24 @@ Payment Reminder (built-in) to top of Template selector."
   `populateTemplateDropdown`, so the server's list is unchanged).
 - `KNOWN_VARS` in the composer's pre-send blank guard includes
   `pay_button` — an unknown `{tag}` still blocks the send.
+
+## Winnings wait for the field (v2.436.0)
+
+Kerry 2026-09-15, watching the s9.23 board mid-round with two cards in:
+"Winnings should not show until 10 minutes after last score is posted."
+Half a field posted is a wrong winner stated confidently, and the dollar
+figure is what a member remembers, not the caveat beside it.
+
+`get_event_leaderboard` and `get_events_leaderboard` both compute
+`money_visible` from `MAX(scoring_rounds.imported_at)` for the event plus
+`leaderboard_money_hold_minutes` (default 10). `imported_at` is stamped
+every time a round is written, so it IS "when scores were last posted".
+While held: the list row reads IN PLAY / POT PENDING instead of a pot,
+and the board's money is blanked client-side by `evlbBlankMoney` — ONE
+place, not in each of the seven boards that read money — with
+`evlbMoneyNotice` above the tabs saying when it posts. Scores stay live.
+
+NB the clock runs off the IMPORT, and the Golf Genius scorecard import is
+manual (`import_gg_scorecards` / the `scoring-import` bridge). Nothing
+polls GG on a timer, so "how often does the leaderboard update" is "when
+someone runs the import".

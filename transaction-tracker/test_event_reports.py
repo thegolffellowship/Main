@@ -490,5 +490,34 @@ check("the cart sign is 15% larger (Kerry)",
       "font-size: 62px" in _cs2 and "font-size: 41px" in _cs2
       and "width: 94px; height: 94px" in _cs2)
 
+print("\n== winnings wait for the field ==")
+# Kerry 2026-09-15: "Winnings should not show until 10 minutes after
+# last score is posted."
+db._ensure_gg_game_flights_tables(_c2)
+db._ensure_gg_game_results_tables(_c2)
+_c2.execute("INSERT INTO scoring_rounds (customer_id, player_name, event_id, round_date, holes_played, imported_at) "
+            "VALUES (301, 'Pat Youngs', 990, '2026-09-15', 9, datetime('now'))")
+_c2.commit()
+_lb = db.get_event_leaderboard("s9.99 Test Links", db_path=_t2)
+check("a score posted just now holds the money", _lb["money_visible"] is False, str(_lb.get("last_score_at")))
+check("…and says when it will post", bool(_lb["money_at"]) and _lb["money_hold_minutes"] == 10)
+_c2.execute("UPDATE scoring_rounds SET imported_at = datetime('now', '-11 minutes') WHERE event_id = 990")
+_c2.commit()
+check("eleven minutes later the money is released",
+      db.get_event_leaderboard("s9.99 Test Links", db_path=_t2)["money_visible"] is True)
+db.set_app_setting("leaderboard_money_hold_minutes", "30", db_path=_t2)
+check("the hold is a dial, not a constant",
+      db.get_event_leaderboard("s9.99 Test Links", db_path=_t2)["money_visible"] is False)
+db.set_app_setting("leaderboard_money_hold_minutes", "10", db_path=_t2)
+_cts = open("templates/contests.html", encoding="utf-8").read()
+check("the page blanks every board's money in ONE place, not seven",
+      "function evlbBlankMoney(d)" in _cts
+      and "if (d.money_visible === false) evlbBlankMoney(d);" in _cts)
+check("…and says why, above the boards",
+      "Round in play &mdash; winnings are not posted yet." in _cts
+      and "evlbMoneyNotice(d) +" in _cts)
+check("the event list hides the pot while play is on",
+      'ev.money_visible === false' in _cts and "POT PENDING" in _cts)
+
 print("\nALL PASSED" if not F else f"\n{len(F)} FAILED: {F}")
 sys.exit(1 if F else 0)
