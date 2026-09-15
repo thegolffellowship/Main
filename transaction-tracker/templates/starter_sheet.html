@@ -158,6 +158,8 @@
 
     .empty { color: #999; padding: 40px; text-align: center; font-style: italic; }
     .foot { margin-top: 14px; font-size: 9.5px; color: #888; }
+    .foot .fnote { margin-bottom: 2px; }
+    .foot .fnote.warn { color: #B45309; font-style: italic; }
     @media print {
       .noprint { display: none !important; }
       .groups { grid-template-columns: repeat(3, 1fr); }
@@ -286,12 +288,13 @@
   {% endif %}
 
   <div class="foot">
-    <strong>IDX</strong> = TGF handicap index{% if pack.holes_key == '9' %} (9-hole){% endif %}.
-    &nbsp; <strong>PH</strong> = playing handicap at 100%, computed from that index and the tee played
-    {%- if pack.ph_basis %} ({{ pack.ph_basis }}){% endif %}.
-    &nbsp; <strong>TEAM</strong> = the Team Net handicap{% if pack.team_basis %} ({{ pack.team_basis }}){% endif %}.
-    {%- if pack.ph_note %} &nbsp; <em>{{ pack.ph_note }}</em>{% endif %}
-    &nbsp; The Golf Fellowship.
+    {# One note per ROW (Kerry 2026-09-15) — a run-on paragraph that
+       wraps where the column happens to end is not a key. #}
+    <div class="fnote"><strong>IDX</strong> &mdash; TGF handicap index{% if pack.holes_key == '9' %} (9-hole){% endif %}.</div>
+    <div class="fnote"><strong>PH</strong> &mdash; playing handicap at 100%, from that index and the tee played{% if pack.ph_basis %} ({{ pack.ph_basis }}){% endif %}.</div>
+    <div class="fnote"><strong>TEAM</strong> &mdash; Team Net handicap{% if pack.team_basis %}: {{ pack.team_basis }}{% endif %}.</div>
+    {% if pack.ph_note %}<div class="fnote warn">{{ pack.ph_note }}</div>{% endif %}
+    <div class="fnote">The Golf Fellowship{% if pack.chapter %} &middot; {{ pack.chapter }}{% endif %}.</div>
   </div>
   </div><!-- /.sheet -->
   <script>

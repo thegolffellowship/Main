@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.434.0";
+window.TGF_VERSION = "2.435.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.435.0",
+    date: "2026-09-15",
+    changes: [
+      "TEAM NET ALLOWANCE FOLLOWS THE BALL COUNT, which is what the rules already said (Kerry: \u2018Team Net is not 100%. It is 85% for tonight\u2019s two ball net. It is 75% for normal one ball net. Needs to follow our rules and adjust to the games we play.\u2019). The ladder was ratified 2026-07-05 and is in side-games.md: Best 1 \u2192 75%, Best 2 \u2192 85%, Best 3 and 4 \u2192 100%. An event now carries its own `team_ball_count`; the default is Best 1 at 75%, and the sheet prints the GAME as well as the percentage \u2014 \u2018Best 2 net balls, 85% of PH, off the lowest in the group\u2019 \u2014 so a wrong dial reads as a wrong sentence. A manager override still wins and says on the sheet that it is an override. My 100% was a guess where a ratified rule already existed.",
+      "THE OPEN EVENT ROW ACTUALLY PINS NOW (Kerry: \u2018Open event is not moving it to the top to pin\u2019). The row was sticky against the wrong thing: the events table sits in an `overflow-x: auto` wrapper, and a box that scrolls on one axis counts as the scroll container on both, so the row stuck to a wrapper that never scrolls vertically. The wrapper goes `overflow: visible` while a row is open AND the table already fits, never when it would clip a wide table; opening also brings the row up under the nav, since pinning only helps once you are level with it.",
+      "Cart-sign names SHRINK to fit instead of clipping (Kerry: \u2018If names are longer, shrink to adjust rather than wrapping\u2019) \u2014 stepped down from 62px, floor 34px, re-fitted after the webfont loads and again before printing, because a name that fits in the fallback can overflow in Bitter.",
+      "Starter-sheet notes are one per ROW rather than a run-on paragraph (Kerry), and the PAIRINGS legend carries the \u2691 pennant that marks a requested pair as not a repeat.",
+    ],
+  },
   {
     version: "2.434.0",
     date: "2026-09-15",

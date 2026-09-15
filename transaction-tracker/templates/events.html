@@ -4044,6 +4044,23 @@
             const nav = document.querySelector(".tab-nav");
             const top = (h ? h.offsetHeight : 0) + (nav ? nav.offsetHeight : 0);
             document.documentElement.style.setProperty("--ev-sticky-top", top + "px");
+            // WHY THE PIN DID NOTHING (Kerry 2026-09-15: "Open event is
+            // not moving it to the top to pin"): .events-table-wrapper
+            // is `overflow-x: auto`, and a box that scrolls on ONE axis
+            // scrolls on both as far as sticky is concerned — so the row
+            // stuck to the wrapper, which never scrolls vertically,
+            // instead of to the page. The wrapper goes `overflow:
+            // visible` while a row is open, but only when the table
+            // already fits, because otherwise a wide table would be
+            // clipped by the global body overflow with no way to reach
+            // its right-hand side.
+            const wrap = document.querySelector(".events-table-wrapper");
+            const table = wrap && wrap.querySelector("table");
+            if (wrap && table) {
+                const fits = table.scrollWidth <= wrap.clientWidth + 1;
+                wrap.classList.toggle("ev-pin-ok",
+                                      fits && expandedEventId !== null);
+            }
         } catch (e) { /* the CSS fallback stands */ }
     }
     window.addEventListener("resize", setEventStickyTop);
@@ -6603,6 +6620,11 @@
         // (Kerry 2026-09-15: "Add the new symbols for Captain, Ambassador
         // and 1Y to the legend above"). Rendering the real badge rather
         // than a copy means the legend can never drift from the card.
+        // The pennant a requested pair carries on its history line
+        // (Kerry 2026-09-15: "Add flag icon to legend on PAIRINGS").
+        const flagLegend = `<span style="display:inline-flex;align-items:center;gap:0.3rem;">
+            <span style="font-size:0.72rem;color:var(--muted);">&#x2691;</span>
+            REQUESTED PAIR &mdash; NOT A REPEAT</span>`;
         const roleLegend = [
             ['role-capt', 'C', 'GROUP CAPTAIN'],
             ['role-amb', 'A', 'AMBASSADOR'],
@@ -6612,7 +6634,7 @@
                 <span class="pairing-role-badge ${cls}">${mark}</span>
                 ${escapeHtml(txt)}</span>`).join('');
         if (bandLegend || roleLegend) {
-            html += `<div style="display:flex;gap:0.9rem;flex-wrap:wrap;align-items:center;font-size:0.72rem;color:var(--text-muted);padding:0.15rem 0 0.35rem;">${bandLegend}${roleLegend}</div>`;
+            html += `<div style="display:flex;gap:0.9rem;flex-wrap:wrap;align-items:center;font-size:0.72rem;color:var(--text-muted);padding:0.15rem 0 0.35rem;">${bandLegend}${roleLegend}${state.showHistoryRow ? flagLegend : ''}</div>`;
         }
 
         // name -> customer_id, from BOTH sources, built once. Powers the
@@ -8484,6 +8506,21 @@
         expandedEventId = eventId;
         rememberEventOpen(eventId);
         setEventStickyTop();
+        // Bring the row itself under the nav straight away — pinning
+        // only helps once you are level with it.
+        setTimeout(() => {
+            try {
+                const row = document.querySelector(
+                    `.event-row-clickable[data-id="${eventId}"]`);
+                if (!row) return;
+                const off = parseInt(getComputedStyle(document.documentElement)
+                    .getPropertyValue("--ev-sticky-top")) || 96;
+                const y = row.getBoundingClientRect().top + window.scrollY - off - 4;
+                if (Math.abs(window.scrollY - y) > 8) {
+                    window.scrollTo({top: Math.max(0, y), behavior: "smooth"});
+                }
+            } catch (e) { /* not fatal */ }
+        }, 60);
         const ev = allEvents.find(e => e.id === eventId);
 
         // Fetch RSVPs first (needed for both desktop and mobile)

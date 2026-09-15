@@ -54951,6 +54951,12 @@ def _ensure_pairing_tables(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE event_pairings ADD COLUMN customer_id INTEGER")
     except sqlite3.OperationalError:
         pass
+    # Which Team Net is being played (1 = Best 1 ball, 2 = Best 2, ...).
+    # The allowance follows it — TEAM_ALLOWANCE_BY_BALLS.
+    try:
+        conn.execute("ALTER TABLE events ADD COLUMN team_ball_count INTEGER")
+    except sqlite3.OperationalError:
+        pass
     _migrate_pairing_history_rounds(conn)
     # Manager-suppressed partner requests (Kerry 2026-07-21): a row here
     # means the generator ignores that requester's partner_request for
@@ -55550,6 +55556,56 @@ _TEE_ORDER_RE = re.compile(r"^\s*(\d+)\s*[-–]\s*")
 # tee. Stated for 18; a nine is half of it.
 UNDER_50_YARDS_18 = (6300, 6800)
 
+# TEAM NET allowance follows the BALL COUNT, the standard USGA
+# recommendation, ratified 2026-07-05 (side-games.md "Variant rules"):
+# Best 1 -> 75%, Best 2 -> 85%, Best 3 -> 100%, Best 4 -> 100%, with a
+# standard rotation every other event between Best 1 and Best 2 and a
+# manager override. Kerry 2026-09-15: "Team Net is not 100%. It is 85%
+# for tonight's two ball net. It is 75% for normal one ball net. Needs
+# to follow our rules and adjust to the games we play."
+TEAM_ALLOWANCE_BY_BALLS = {1: 0.75, 2: 0.85, 3: 1.00, 4: 1.00}
+TEAM_BALLS_DEFAULT = 1                      # the normal one-ball net
+
+
+def event_team_net_dial(conn, ev: dict) -> tuple[int, float, str]:
+    """(balls, allowance, printable basis) for this event's Team Net.
+
+    Order: the EVENT's own ball count, then the `team_net_balls` default,
+    then Best 1. `team_net_allowance` remains an explicit escape hatch
+    for a one-off that does not follow the ladder; when it is set it
+    wins and the sheet says the percentage came from an override."""
+    balls = None
+    try:
+        balls = ev.get("team_ball_count")
+    except AttributeError:
+        balls = None
+    if balls in (None, ""):
+        try:
+            balls = _setting_via(conn, "team_net_balls")
+        except Exception:
+            balls = None
+    try:
+        balls = int(balls)
+    except (TypeError, ValueError):
+        balls = TEAM_BALLS_DEFAULT
+    balls = balls if balls in TEAM_ALLOWANCE_BY_BALLS else TEAM_BALLS_DEFAULT
+    allowance = TEAM_ALLOWANCE_BY_BALLS[balls]
+    override = None
+    try:
+        override = _setting_via(conn, "team_net_allowance")
+    except Exception:
+        override = None
+    if override not in (None, ""):
+        try:
+            allowance = float(override)
+            return balls, allowance, (f"manager override {round(allowance * 100)}% "
+                                      f"of PH, off the lowest in the group")
+        except (TypeError, ValueError):
+            pass
+    return balls, allowance, (f"Best {balls} net ball{'' if balls == 1 else 's'}, "
+                              f"{round(allowance * 100)}% of PH, off the lowest "
+                              f"in the group")
+
 
 def _tee_color_for(tee_name: str) -> str | None:
     low = " ".join((tee_name or "").split()).lower()
@@ -55738,10 +55794,7 @@ def get_event_print_pack(event_id: int, db_path=None) -> dict | None:
         ev = dict(ev)
         tee_legend = event_tee_legend(conn, event_id, ev)
         tee_rows, ph_basis, ph_note = _event_tee_rows(conn, ev, tee_legend)
-        try:
-            team_allowance = float(_setting_via(conn, "team_net_allowance") or 1.0)
-        except (TypeError, ValueError):
-            team_allowance = 1.0
+        team_balls, team_allowance, team_basis = event_team_net_dial(conn, ev)
     idx_map = _handicap_index_18_by_customer(db_path)
     pairings = get_event_pairings(event_id, db_path=db_path)
 
@@ -55906,8 +55959,8 @@ def get_event_print_pack(event_id: int, db_path=None) -> dict | None:
         "tee_colors": {t["band"]: t["color"] for t in tee_legend},
         "ph_basis": ph_basis,
         "ph_note": ph_note,
-        "team_basis": (f"{round(team_allowance * 100)}% of PH, off the "
-                       f"lowest in the group"),
+        "team_basis": team_basis,
+        "team_balls": team_balls,
         "holes_key": "18" if _event_holes_type(
             ev.get("item_name"), ev.get("format")) == 18 else "9",
         "alpha": alpha,

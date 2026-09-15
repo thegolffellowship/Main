@@ -616,6 +616,11 @@ tr.txn-highlight {
    and published as --ev-sticky-top, because both change height by role
    and by window width. Cells take an explicit background: a sticky row
    over a scrolling table is transparent otherwise. */
+/* Sticky only bites when the row's scrolling ancestor is the PAGE. The
+   events wrapper is overflow-x: auto, which makes it the scroll
+   container on both axes — see setEventStickyTop() for the toggle that
+   releases it while a row is open and the table already fits. */
+.events-table-wrapper.ev-pin-ok { overflow: visible; }
 .event-row-clickable.expanded {
     position: sticky;
     top: var(--ev-sticky-top, 96px);

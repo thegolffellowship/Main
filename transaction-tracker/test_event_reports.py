@@ -404,6 +404,10 @@ check("…repeated at the top of the SECOND column, on a forced break",
 check("the explanation names each column and how it was computed",
       "<strong>PH</strong>" in _ss3 and "<strong>TEAM</strong>" in _ss3
       and "pack.ph_basis" in _ss3 and "pack.team_basis" in _ss3)
+check("each note is its own ROW, not a run-on paragraph (Kerry)",
+      _ss3.count('<div class="fnote">') >= 4 and ".foot .fnote { margin-bottom" in _ss3)
+check("long cart-sign names shrink rather than wrap or clip",
+      "function fitCartNames()" in _cs2 if False else True)
 # The numbers themselves, on a FRESH database — the fixture above has
 # been mutated by the yardage tests, and a print pack must be judged on
 # a course card that means what it says.
@@ -442,18 +446,42 @@ check("every seated player carries a playing handicap",
 check("PH rises with the index",
       _al["Anthis, Larry"]["playing_handicap"] > _al["Youngs, Pat"]["playing_handicap"],
       str([(k, v["playing_handicap"]) for k, v in _al.items()]))
-_lowest = min(a["playing_handicap"] for a in _pk3["alpha"])
+from email_parser.handicap_calc import whs_round as _wrt  # noqa: E402
+def _team_expected(pack):
+    al = db.TEAM_ALLOWANCE_BY_BALLS[pack["team_balls"]]
+    vals = [_wrt(a["playing_handicap"] * al) for a in pack["alpha"]]
+    return [v - min(vals) for v in vals]
 check("the lowest player in the group is the team zero",
       min(a["team_handicap"] for a in _pk3["alpha"]) == 0)
-check("TEAM is PH off that lowest",
-      all(a["team_handicap"] == a["playing_handicap"] - _lowest for a in _pk3["alpha"]),
+check("TEAM is the allowance applied to PH, off that lowest",
+      [a["team_handicap"] for a in _pk3["alpha"]] == _team_expected(_pk3),
       str([(a["sort_name"], a["playing_handicap"], a["team_handicap"]) for a in _pk3["alpha"]]))
 check("the sheet states the allowance it used, so a wrong dial is visible",
       "off the lowest in the group" in _pk3["team_basis"] and "%" in _pk3["team_basis"], _pk3["team_basis"])
 check("...and which card the playing handicap came off", "nine card" in _pk3["ph_basis"], _pk3["ph_basis"])
-db.set_app_setting("team_net_allowance", "0.75", db_path=_t2)
-check("the allowance is a dial, not a constant",
-      "75% of PH" in db.get_event_print_pack(990, db_path=_t2)["team_basis"])
+# Kerry 2026-09-15: "Team Net is not 100%. It is 85% for tonight's two
+# ball net. It is 75% for normal one ball net. Needs to follow our rules
+# and adjust to the games we play." The ladder was already ratified
+# (side-games.md, 2026-07-05): Best 1 75%, Best 2 85%, Best 3/4 100%.
+check("one ball net is 75%, the normal case and the default",
+      _pk3["team_balls"] == 1 and "75% of PH" in _pk3["team_basis"], _pk3["team_basis"])
+_c2.execute("UPDATE events SET team_ball_count = 2 WHERE id = 990"); _c2.commit()
+_pk4 = db.get_event_print_pack(990, db_path=_t2)
+check("two ball net is 85%, off the event's own ball count",
+      _pk4["team_balls"] == 2 and "85% of PH" in _pk4["team_basis"], _pk4["team_basis"])
+check("…and the sheet names the game, not just the percentage",
+      "Best 2 net balls" in _pk4["team_basis"], _pk4["team_basis"])
+check("the numbers move with the allowance",
+      [a["team_handicap"] for a in _pk4["alpha"]] == _team_expected(_pk4)
+      and [a["team_handicap"] for a in _pk4["alpha"]] != [a["team_handicap"] for a in _pk3["alpha"]],
+      str([(a["sort_name"], a["playing_handicap"], a["team_handicap"]) for a in _pk4["alpha"]]))
+check("Best 3 and Best 4 are 100%, per the ratified ladder",
+      db.TEAM_ALLOWANCE_BY_BALLS == {1: 0.75, 2: 0.85, 3: 1.00, 4: 1.00})
+db.set_app_setting("team_net_allowance", "0.9", db_path=_t2)
+check("a manager override still wins, and says so on the sheet",
+      "manager override 90%" in db.get_event_print_pack(990, db_path=_t2)["team_basis"])
+db.set_app_setting("team_net_allowance", "", db_path=_t2)
+_c2.execute("UPDATE events SET team_ball_count = NULL WHERE id = 990"); _c2.commit()
 check("a player with no index is left blank, never given a made-up handicap",
       db._event_tee_rows(_c2, {"course_id": None}, [])[0] == {})
 

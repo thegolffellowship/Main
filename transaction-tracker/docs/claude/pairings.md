@@ -1538,9 +1538,18 @@ column headings and explanations below."
   nine a rating belongs to; the middle rating is used and `ph_note` says
   so on the sheet. Fix by labelling the cards, not by guessing.
 
-**Open for Kerry:** the team allowance for a regular event. 100% is the
-default the sheet currently prints; Cedar Creek's ratified dial was 75%
-off lowest.
+**The allowance follows the BALL COUNT** (Kerry 2026-09-15: "It is 85%
+for tonight's two ball net. It is 75% for normal one ball net. Needs to
+follow our rules and adjust to the games we play."). The ladder was
+already ratified 2026-07-05 (side-games.md, "Variant rules"):
+`TEAM_ALLOWANCE_BY_BALLS` = Best 1 → 75%, Best 2 → 85%, Best 3 → 100%,
+Best 4 → 100%, with the standard rotation every other event between Best
+1 and Best 2. `events.team_ball_count` carries it per event (additive
+column); `team_net_balls` is the default, `team_net_allowance` a manager
+override that wins and is LABELLED as an override on the sheet.
+`event_team_net_dial(conn, ev)` returns (balls, allowance, printable
+basis) and the sheet prints the GAME, not just the percentage, so a wrong
+dial reads as a wrong sentence.
 
 ## The open event row pins under the navs (v2.434.0)
 
@@ -1550,6 +1559,15 @@ can see the event row." `.event-row-clickable.expanded` is
 header + `.tab-nav` and re-measured on resize (both change height by role
 and window width). Cells take an explicit background — a sticky row over
 a scrolling table is transparent otherwise.
+
+**Why the first attempt did nothing:** `.events-table-wrapper` is
+`overflow-x: auto`, and a box that scrolls on one axis is the scroll
+container on BOTH as far as `position: sticky` is concerned — so the row
+stuck to a wrapper that never scrolls vertically. `setEventStickyTop`
+toggles `.ev-pin-ok` (`overflow: visible`) on the wrapper while a row is
+open and ONLY when the table already fits, because releasing it on a wide
+table would let the global `body { overflow-x: clip }` cut off columns
+with no way to reach them. Opening also scrolls the row up under the nav.
 
 **Chevrons:** the events and customers row arrows now use the house
 values (TGF orange, ▶, 0.75rem) to match `.tgf-exp`. `/me` and Money Flow

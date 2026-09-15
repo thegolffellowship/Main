@@ -47,10 +47,14 @@
     .sign-logo { width: 94px; height: 94px; display: block; margin: 0 auto 10px; }
     /* The two names are the sign. Everything else is a caption. */
     .names { width: 100%; }
+    /* A long name SHRINKS to fit rather than wrapping or clipping
+       (Kerry 2026-09-15: "If names are longer, shrink to adjust rather
+       than wrapping"). The size is set per line by the script below;
+       this is the starting point and the floor is 34px. */
     .nm {
       font-family: "Bitter", Georgia, serif; font-weight: 700;
       font-size: 62px; line-height: 1.12; white-space: nowrap;
-      overflow: hidden; text-overflow: ellipsis;
+      overflow: hidden;
     }
     .start {
       font-family: "Bitter", Georgia, serif; font-weight: 700;
@@ -110,6 +114,28 @@
     {% endfor %}
   {% endif %}
   <script>
+    // FIT EACH NAME TO ITS SIGN (Kerry 2026-09-15). Step the size down
+    // until the line fits its box, never below 34px — at which point it
+    // is a genuinely enormous name and clipping is the lesser evil.
+    // Runs after the webfont lands, because Bitter and the fallback
+    // measure differently and a name that fits in Georgia can overflow
+    // in Bitter.
+    function fitCartNames() {
+      document.querySelectorAll(".nm").forEach(function (el) {
+        var size = 62;
+        el.style.fontSize = size + "px";
+        while (el.scrollWidth > el.clientWidth && size > 34) {
+          size -= 1;
+          el.style.fontSize = size + "px";
+        }
+      });
+    }
+    if (document.fonts && document.fonts.ready) {
+      document.fonts.ready.then(fitCartNames);
+    }
+    window.addEventListener("load", fitCartNames);
+    window.addEventListener("beforeprint", fitCartNames);
+
     // Same print pipeline, with the file pre-named so "Save as PDF"
     // does not propose the URL (Kerry 2026-09-08).
     function downloadPdf() {
