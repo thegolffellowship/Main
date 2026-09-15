@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.442.0";
+window.TGF_VERSION = "2.443.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.443.0",
+    date: "2026-09-15",
+    changes: [
+      "PH ON THE TEAM TAB IS THE TEAM HANDICAP (Kerry: \u2018For team/cart net, PH should show their team/cart net handicap for that game, not the 100% PH\u2019). It was showing the full playing handicap, which is not the number that played in this game \u2014 Team and Cart Net run the ratified allowance off the LOWEST in the team, and those are the strokes the best-ball actually used. Computed with the same dial and the same shape as the starter sheet, so the sheet a player held on the first tee and the board they read afterwards carry one number. Hovering says which allowance it used.",
+      "THE TEAM CHEVRON NOW OPENS EACH PLAYER\u2019S OWN CARD (Kerry: \u2018The Team chevron should not do what it\u2019s doing. It should expand each player in the group to see their cards. The current expansion is just showing the same thing.\u2019) \u2014 and he was right: the band already lists every player\u2019s holes with the counting ball highlighted and closes with the TEAM NET row, so expanding to a best-ball grid restated what was on screen. What you could NOT see was a player\u2019s scorecard \u2014 par, yards, stroke index, the pops, the nine\u2019s totals. That is what it opens now, one per member, through the same universal renderer every other expand uses.",
+      "Expanded cards line up (Kerry: \u2018not aligning perfectly\u2019). The lead column was measured from the ROW\u2019s left edge, but the card sits inside a cell carrying its own padding \u2014 so every hole column landed a few pixels right of the one above it. Measured from the card\u2019s own edge now, and applied to every card in a stack.",
+    ],
+  },
   {
     version: "2.442.0",
     date: "2026-09-15",

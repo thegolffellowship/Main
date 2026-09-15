@@ -13640,6 +13640,21 @@ def get_event_leaderboard(event_name: str,
             logger.exception("Non-fatal: tee colours unavailable for event %s",
                              ev["id"])
 
+        # The TEAM tab's PH column is the TEAM handicap, not the 100%
+        # playing handicap (Kerry 2026-09-15: "For team/cart net, PH
+        # should show their team/cart net handicap for that game, not
+        # the 100% PH"). Same dial and same shape as the starter sheet —
+        # the ratified allowance ladder, off the LOWEST in the team — so
+        # the sheet a player held on the first tee and the board they
+        # read afterwards carry the same number.
+        try:
+            _tb, team_allowance, team_basis = event_team_net_dial(
+                conn, dict(_evc) if _evc else ev)
+        except Exception:
+            logger.exception("Non-fatal: team allowance unavailable for %s",
+                             ev["id"])
+            _tb, team_allowance, team_basis = 1, 1.0, ""
+
         money_visible, money_at, money_reason = True, None, None
         field_state = _event_field_complete(conn, ev["id"], ev["holes"])
         if not field_state["complete"]:
@@ -14251,11 +14266,12 @@ def get_event_leaderboard(event_name: str,
                                 "customer_id": (int(p["customer_id"])
                                                 if p["customer_id"] is not None
                                                 else None),
-                                "scoring_round_id": p["scoring_round_id"]})
+                                "scoring_round_id": p["scoring_round_id"],
+                                "hcp": p["hcp"]})
             else:
                 # on the sheet but no card (no-show / blind-draw slot)
                 members.append({"player_name": nm, "customer_id": None,
-                                "scoring_round_id": None})
+                                "scoring_round_id": None, "hcp": None})
         if not matched:
             continue
         total, any_hole = 0, False
@@ -14270,6 +14286,19 @@ def get_event_leaderboard(event_name: str,
             if nets:
                 total += min(nets)
                 any_hole = True
+        # TEAM handicap: each player's PH at the event's team allowance,
+        # then off the LOWEST in the team — the ratified shape, the same
+        # one the starter sheet prints.
+        try:
+            from email_parser.handicap_calc import whs_round as _wr
+            _raw = [(m, _wr((m["hcp"] or 0) * team_allowance))
+                    for m in members if m.get("hcp") is not None]
+            if _raw:
+                _low = min(v for _m, v in _raw)
+                for _m, v in _raw:
+                    _m["team_hcp"] = v - _low
+        except Exception:
+            logger.exception("Non-fatal: team handicaps unavailable")
         teams.append({
             "team_num": (f"{tn[0]}{tn[1]}" if isinstance(tn, tuple)
                          else tn),
@@ -14414,6 +14443,8 @@ def get_event_leaderboard(event_name: str,
         "event": {"name": ev["item_name"], "date": ev["event_date"],
                   "course": ev["course"], "chapter": ev["chapter"],
                   "holes": ev["holes"]},
+        "team_allowance": team_allowance,
+        "team_basis": team_basis,
         "tee_by_player": tee_by_player,
         "tee_legend": tee_legend,
         "money_visible": money_visible,

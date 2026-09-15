@@ -329,6 +329,13 @@
         .evlb-holes td, .evlb-holes th { border: 1px solid #e2e8f0; padding: 2px 6px;
             text-align: center; min-width: 2em; white-space: nowrap; }
         .evlb-holes th { background: #1B1B1B; color: #fff; font-weight: 700; }
+        /* TEAM chevron: one card per player, stacked and labelled. */
+        .evlb-team-pcard { margin: 0 0 10px; }
+        .evlb-team-pcard:last-child { margin-bottom: 0; }
+        .evlb-team-pname { font: 700 13px/1.2 'Bitter', serif; color: #1B1B1B;
+            margin: 0 0 4px; display: flex; align-items: baseline; gap: 8px; }
+        .evlb-team-ph { font: 400 11px/1.2 system-ui, sans-serif;
+            color: var(--text-muted); font-variant-numeric: tabular-nums; }
         /* Tee swatch, right-justified in the name cell (Kerry). */
         .evlb-tee-dot { display: inline-block; width: 9px; height: 9px;
             border-radius: 50%; margin-left: 7px; float: right;
@@ -3079,7 +3086,9 @@
             `<td class="won br">${money > 0 ? "$" + Number(money).toFixed(2) : ""}</td>` +
             (afterWon ? gcTd : "") +
             `<td class="bl hc">${r.index != null ? Number(r.index).toFixed(1) : ""}</td>` +
-            `<td class="br hc">${r.hcp ?? ""}</td>` +
+            `<td class="br hc"${game === "team" && r._teamHcp != null
+                ? ` title="Team handicap — ${escapeHtml(d.team_basis || "the event's team allowance")}"` : ""}>${
+                game === "team" && r._teamHcp != null ? r._teamHcp : (r.hcp ?? "")}</td>` +
             holeCells +
             (grossCol === false ? "" :
                 `<td class="bl sc" style="${gT}"${gTitle}>${r.gross ?? ""}</td>` +
@@ -3514,7 +3523,18 @@
                 sections: (d.teams || []).map(t => ({
                     label: `${t.position ? t.position + " · " : ""}` +
                         `${t.players.map(p => p.player_name).join(" · ")}`,
-                    rows: (t.players || []).map(x => ovOf(x)).filter(Boolean),
+                    // PH on this tab is the TEAM handicap (Kerry
+                    // 2026-09-15: "For team/cart net, PH should show
+                    // their team/cart net handicap for that game, not
+                    // the 100% PH") — the strokes that actually played
+                    // in THIS game, carried through as an extra so the
+                    // shared row renderer stays one function.
+                    rows: (t.players || []).map(x => {
+                        const base = ovOf(x);
+                        return (base && x.team_hcp != null)
+                            ? Object.assign({}, base, { _teamHcp: x.team_hcp })
+                            : base;
+                    }).filter(Boolean),
                 })).filter(sec => sec.rows.length),
                 sort: "keep",
             },
@@ -3653,16 +3673,27 @@
     function evlbAlignCard(playerRow, cardRow) {
         requestAnimationFrame(() => {
             const firstHole = playerRow.querySelector("td.h");
-            const card = cardRow.querySelector("table");
-            if (!firstHole || !card) return;
-            const lead = firstHole.getBoundingClientRect().left
-                       - playerRow.getBoundingClientRect().left;
+            const cards = cardRow.querySelectorAll("table");
+            if (!firstHole || !cards.length) return;
+            // Measure from the CARD'S OWN left edge, not the row's
+            // (Kerry 2026-09-15: "not aligning perfectly"). The card
+            // sits inside a full-width <td> that carries its own
+            // padding, so a lead measured from the row was short by
+            // exactly that padding and every hole column landed a few
+            // pixels right of the one above it. The card's own rect
+            // already includes whatever inset it is sitting in, and it
+            // does not move when the first column is resized, so it is
+            // the stable thing to measure against.
             const w = getComputedStyle(playerRow.closest("table"))
                 .getPropertyValue("--evlb-hole-w").trim() || "30px";
-            card.style.setProperty("--evlb-card-lead",
-                                   Math.max(0, Math.round(lead)) + "px");
-            card.style.setProperty("--evlb-hole-w", w);
-            card.classList.add("evlb-aligned");
+            cards.forEach(card => {
+                const lead = firstHole.getBoundingClientRect().left
+                           - card.getBoundingClientRect().left;
+                card.style.setProperty("--evlb-card-lead",
+                                       Math.max(0, Math.round(lead)) + "px");
+                card.style.setProperty("--evlb-hole-w", w);
+                card.classList.add("evlb-aligned");
+            });
         });
     }
     function evlbWireEvent(body, d) {
@@ -3697,8 +3728,18 @@
                     th.classList.add(st.sortDir === 1 ? "asc" : "desc");
                 }));
         });
-        // TEAM board: a band IS a team — tap it for the best-ball card
-        body.addEventListener("click", (e) => {
+        // TEAM board: a band IS a team — tap it for EVERY PLAYER'S OWN
+        // CARD (Kerry 2026-09-15: "The Team chevron should not do what
+        // it's doing. It should expand each player in the group to see
+        // their cards. The current expansion is just showing the same
+        // thing."). He is right: the band already lists each player's
+        // holes with the counting ball highlighted and closes with the
+        // TEAM NET row, so expanding to a best-ball grid restated it.
+        // The thing you cannot see from the band is a player's actual
+        // scorecard — pars, strokes received, the nine's totals — so
+        // that is what the chevron opens, one per member, through the
+        // same universal renderer every other expand uses.
+        body.addEventListener("click", async (e) => {
             const band = e.target.closest("tr.evlb-band[data-team]");
             if (!band || !body.contains(band)) return;
             const st = EVLB_BOARDS[(band.closest("table[data-board]") || {}).dataset?.board];
@@ -3708,9 +3749,52 @@
             if (nxt && nxt.classList.contains("evlb-card-row")) { nxt.remove(); return; }
             const row = document.createElement("tr");
             row.className = "evlb-card-row";
-            row.innerHTML = `<td colspan="${band.firstElementChild.colSpan}" style="white-space:normal;">` +
-                evlbTeamCard(st.d, team) + `</td>`;
+            const span = band.firstElementChild.colSpan;
+            row.innerHTML = `<td colspan="${span}" style="white-space:normal;">Loading cards&hellip;</td>`;
             band.after(row);
+            const members = (team.players || []).filter(p => p.scoring_round_id);
+            if (!members.length) {
+                row.firstElementChild.textContent =
+                    "No cards for this team yet.";
+                return;
+            }
+            try {
+                const cards = await Promise.all(members.map(async p => {
+                    try {
+                        const res = await fetch("/api/scoring/scorecard/" + p.scoring_round_id);
+                        const c = await res.json();
+                        if (!res.ok || c.error) throw new Error(c.error || res.statusText);
+                        return `<div class="evlb-team-pcard">`
+                            + `<div class="evlb-team-pname">${escapeHtml(p.player_name || "")}`
+                            + (p.team_hcp != null
+                                ? `<span class="evlb-team-ph">team hcp ${p.team_hcp}</span>` : "")
+                            + `</div>`
+                            + `<div class="evlb-scroll evlb-card-align">`
+                            + (window.tgfRenderScorecard
+                                ? window.tgfRenderScorecard(c)
+                                : "Scorecard renderer unavailable.")
+                            + `</div></div>`;
+                    } catch (err) {
+                        return `<div class="evlb-team-pcard"><div class="evlb-team-pname">`
+                            + `${escapeHtml(p.player_name || "")}</div>`
+                            + `<p style="color:var(--text-muted);">Couldn't load this card `
+                            + `(${escapeHtml(err.message || String(err))}).</p></div>`;
+                    }
+                }));
+                row.firstElementChild.innerHTML = cards.join("");
+                // Line the stacked cards up with the band's own hole
+                // columns, using a player row from this very team as
+                // the ruler (a band row is one colspan cell and has no
+                // hole cells of its own to measure).
+                const ref = row.nextElementSibling
+                    && row.nextElementSibling.classList.contains("evlb-plr")
+                    ? row.nextElementSibling
+                    : band.closest("table").querySelector("tr.evlb-plr");
+                if (ref) evlbAlignCard(ref, row);
+            } catch (err) {
+                row.firstElementChild.textContent =
+                    "Couldn't load the cards (" + (err.message || err) + ").";
+            }
         });
         body.querySelectorAll("input[data-ovr-holes]").forEach(cb =>
             cb.addEventListener("change", () => {
