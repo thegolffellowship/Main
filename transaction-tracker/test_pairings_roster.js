@@ -228,6 +228,14 @@ check("a group carrying a repeat is chipped on its header",
     && /\$\{escapeHtml\(grp\.slot_label\)\}\$\{paceChip\}\$\{repeatChip\}/.test(html));
 check("the chip only shows while History is on", /if \(state\.showHistoryRow\) \{\s*const rep = groupRepeatMax/.test(html));
 
+// ── The sheet is linked to the PERSON (Kerry 2026-09-15: "It needs to
+//    be directly linked in PAIRINGS to the ROSTER and Customer ID so it
+//    changes immediately if customer profile is changed").
+check("the roster row is found by customer_id first, name only as fallback",
+    /function rosterEntry\(state, name, cid\) \{[\s\S]{0,320}Number\(x\.customer_id\) === Number\(cid\)/.test(html));
+check("the seated card passes the sheet's customer_id to that lookup",
+    /rosterEntry\(state, player\.name, player\.customer_id\)/.test(html));
+
 const cust = fs.readFileSync("templates/customers.html", "utf8");
 check("Customers page offers AMB / CAPT / BACK chips beside pace, both layouts",
     (cust.match(/renderRoleChips\(c\)/g) || []).length >= 2

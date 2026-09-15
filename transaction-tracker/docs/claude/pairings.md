@@ -1282,3 +1282,33 @@ Two traps pinned by `test_pairings_roster.js`: the client key is
 separator); and `flex-wrap` lives on a `.has-hist` MODIFIER, because
 wrapping `.pairing-player-row` itself would drop the handicap or the tee
 onto a second line on a narrow card.
+
+## The sheet is linked to the person (v2.423.0)
+
+Kerry 2026-09-15: "I updated a Customer name and alias Jose to Joe Mejia.
+It updated on the ROSTER but not in the pairings. It needs to be directly
+linked in PAIRINGS to the ROSTER and Customer ID so it changes immediately
+if customer profile is changed."
+
+`event_pairings.player_name` was a snapshot taken at save time. The rename
+moved the roster and left the sheet reading "Jose Mejia", which then
+missed every name-keyed lookup downstream — the handicap cell fell to a
+dash, the role badges vanished, the band went with them. ONE root cause,
+four symptoms, and exactly what guiding principle 6 exists to prevent.
+
+- `event_pairings.customer_id` (additive column, `_ensure_pairing_tables`).
+- `save_event_pairings` stores it: the id the page sent, else
+  `_pairing_cid_for_name` (canonical first+last, then a NAME alias
+  carrying an id; `merged` profiles excluded).
+- `get_event_pairings` serves the CURRENT canonical name through the id
+  and ships `customer_id` with every seat.
+- `_backfill_customer_id_on_event_pairings` fills NULLs — scoped to the
+  event on every read, whole-table on boot. A name nobody owns (a Golf
+  Genius guest) stays as typed and is retried next time, in case the
+  profile is created later.
+- The page's `rosterEntry(state, name, cid)` matches by id first.
+- `_roster_handicap_index_map` keys on the canonical customer name via
+  `handicap_player_links.customer_id`, because that table's
+  `customer_name` is its own stale snapshot.
+
+Guard: `test_pairings_identity.py`.

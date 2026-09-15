@@ -4576,6 +4576,18 @@ def init_db(db_path: str | Path | None = None) -> None:
         except Exception as e:
             logger.warning("Mejia identity repair failed: %s", e)
 
+        # Saved tee sheets carry the PERSON, not a name string (Kerry
+        # 2026-09-15). Every sheet saved before the column existed is
+        # linked here; rows whose name matches nobody are retried on the
+        # next boot, in case the player is created later.
+        try:
+            _ensure_pairing_tables(conn)
+            _n = _backfill_customer_id_on_event_pairings(conn)
+            if _n:
+                logger.info("event_pairings: linked %d row(s) to a customer_id", _n)
+        except Exception as e:
+            logger.warning("event_pairings customer_id backfill failed: %s", e)
+
         # Always-run repair: merge twin Crystal Falls events 3267 → 3263
         # (Kerry 2026-07-14: same May 30 event, renamed mid-registration)
         try:
@@ -54656,7 +54668,10 @@ def _roster_handicap_index_map(conn) -> dict:
     try:
         rows = conn.execute(
             """
-                    SELECT l.customer_name, p.handicap_index
+                    SELECT COALESCE(NULLIF(TRIM(COALESCE(cu.first_name,'') || ' ' ||
+                                                COALESCE(cu.last_name,'')), ''),
+                                    l.customer_name) AS customer_name,
+                           p.handicap_index
                     FROM (
                         SELECT player_name,
                                AVG(differential) as handicap_index
@@ -54674,6 +54689,7 @@ def _roster_handicap_index_map(conn) -> dict:
                         GROUP BY player_name
                     ) p
                     JOIN handicap_player_links l ON l.player_name = p.player_name
+                    LEFT JOIN customers cu ON cu.customer_id = l.customer_id
                     WHERE l.customer_name IS NOT NULL
             """
         ).fetchall()
@@ -54923,6 +54939,18 @@ def _ensure_pairing_tables(conn: sqlite3.Connection) -> None:
             conn.execute(f"ALTER TABLE pairing_history ADD COLUMN {col} {decl}")
         except sqlite3.OperationalError:
             pass  # already added
+    # THE SHEET IS LINKED TO THE PERSON, not to a name string (Kerry
+    # 2026-09-15: "I updated a Customer name and alias Jose to Joe Mejia.
+    # It updated on the ROSTER but not in the pairings. It needs to be
+    # directly linked in PAIRINGS to the ROSTER and Customer ID so it
+    # changes immediately if customer profile is changed."). Guiding
+    # principle 6. `player_name` stays as the display snapshot and the
+    # fallback for a name that matches nobody (a GG guest); the id is
+    # what the read resolves through.
+    try:
+        conn.execute("ALTER TABLE event_pairings ADD COLUMN customer_id INTEGER")
+    except sqlite3.OperationalError:
+        pass
     _migrate_pairing_history_rounds(conn)
     # Manager-suppressed partner requests (Kerry 2026-07-21): a row here
     # means the generator ignores that requester's partner_request for
@@ -54979,22 +55007,91 @@ def _ensure_pairing_tables(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
+def _pairing_cid_for_name(conn, name: str) -> int | None:
+    """customer_id for a name on a tee sheet: the canonical
+    first+last, else a NAME alias that carries an id. Returns None for a
+    name nobody owns (a Golf Genius guest), which is left as typed."""
+    nm = " ".join((name or "").split())
+    if not nm:
+        return None
+    row = conn.execute(
+        """SELECT customer_id FROM customers
+            WHERE TRIM(COALESCE(first_name,'') || ' ' || COALESCE(last_name,'')) = ?
+              COLLATE NOCASE
+              AND COALESCE(account_status,'active') <> 'merged'
+            ORDER BY customer_id LIMIT 1""", (nm,)).fetchone()
+    if row:
+        return row["customer_id"]
+    try:
+        row = conn.execute(
+            """SELECT customer_id FROM customer_aliases
+                WHERE alias_type = 'name' AND alias_value = ? COLLATE NOCASE
+                  AND customer_id IS NOT NULL
+                ORDER BY id LIMIT 1""", (nm,)).fetchone()
+    except sqlite3.OperationalError:
+        row = None
+    return row["customer_id"] if row else None
+
+
+def _backfill_customer_id_on_event_pairings(conn, event_id: int | None = None) -> int:
+    """Fill `event_pairings.customer_id` wherever it is NULL, by name.
+    Scoped to one event on a read, whole-table on boot. Idempotent: a
+    row whose name matches nobody is simply left alone and retried next
+    time (the player may be created later)."""
+    try:
+        q = ("SELECT id, player_name FROM event_pairings WHERE customer_id IS NULL"
+             + (" AND event_id = ?" if event_id else ""))
+        rows = conn.execute(q, (event_id,) if event_id else ()).fetchall()
+    except sqlite3.OperationalError:
+        return 0
+    n = 0
+    for r in rows:
+        cid = _pairing_cid_for_name(conn, r["player_name"])
+        if cid:
+            conn.execute("UPDATE event_pairings SET customer_id = ? WHERE id = ?",
+                         (cid, r["id"]))
+            n += 1
+    return n
+
+
 def get_event_pairings(event_id: int, db_path=None) -> dict:
     """Return saved pairings for an event keyed by holes ('9' / '18').
 
     Each value is a list of groups:
         [{"group_num": int, "slot_label": str, "players": [...]}, ...]
-    Players: {"name", "cart_pos", "tee_choice", "handicap_index"}
+    Players: {"name", "customer_id", "cart_pos", "tee_choice",
+              "handicap_index"}
+
+    THE NAME COMES FROM THE CUSTOMER, not from the saved row (Kerry
+    2026-09-15: "It needs to be directly linked in PAIRINGS to the ROSTER
+    and Customer ID so it changes immediately if customer profile is
+    changed"). `event_pairings.player_name` is the snapshot taken when
+    the sheet was saved; renaming Jose Mejia to Joe changed the roster
+    and left the sheet reading Jose, which then failed every name-keyed
+    lookup downstream — his handicap fell to a dash and his badges went
+    with it. Rows are resolved through `customer_id`, back-filled here
+    for sheets saved before the column existed, and only a name that
+    belongs to nobody is served as typed.
     """
     with _connect(db_path) as conn:
         _ensure_pairing_tables(conn)
+        try:
+            if _backfill_customer_id_on_event_pairings(conn, event_id):
+                conn.commit()
+        except Exception:
+            logger.exception("event_pairings customer_id backfill failed "
+                             "for event %s (non-fatal)", event_id)
         rows = conn.execute(
             """
-            SELECT holes, group_num, slot_label, player_name,
-                   cart_pos, tee_choice, handicap_index
-            FROM event_pairings
-            WHERE event_id = ?
-            ORDER BY holes, group_num, cart_pos
+            SELECT ep.holes, ep.group_num, ep.slot_label, ep.cart_pos,
+                   ep.tee_choice, ep.handicap_index, ep.customer_id,
+                   COALESCE(NULLIF(TRIM(COALESCE(c.first_name,'') || ' ' ||
+                                        COALESCE(c.last_name,'')), ''),
+                            ep.player_name) AS player_name
+            FROM event_pairings ep
+            LEFT JOIN customers c ON c.customer_id = ep.customer_id
+            WHERE ep.event_id = ?
+            ORDER BY ep.holes, ep.group_num, ep.cart_pos
             """,
             (event_id,),
         ).fetchall()
@@ -55026,6 +55123,7 @@ def get_event_pairings(event_id: int, db_path=None) -> dict:
             hi = hcp_map.get((r["player_name"] or "").lower())
         grp["players"].append({
             "name": r["player_name"],
+            "customer_id": r["customer_id"],
             "cart_pos": r["cart_pos"],
             "tee_choice": r["tee_choice"],
             "handicap_index": hi,
@@ -55323,17 +55421,21 @@ def save_event_pairings(event_id: int, groups_by_holes: dict, db_path=None) -> N
                 group_num = grp["group_num"]
                 slot_label = grp["slot_label"]
                 for p in grp["players"]:
+                    # Save the PERSON, not just the name they had today.
+                    _cid = p.get("customer_id") or _pairing_cid_for_name(
+                        conn, p.get("name"))
                     conn.execute(
                         """
                         INSERT OR REPLACE INTO event_pairings
                             (event_id, holes, group_num, slot_label, player_name,
-                             cart_pos, tee_choice, handicap_index)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                             cart_pos, tee_choice, handicap_index, customer_id)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                         """,
                         (
                             event_id, holes, group_num, slot_label,
                             p["name"], p["cart_pos"],
                             p.get("tee_choice"), p.get("handicap_index"),
+                            _cid,
                         ),
                     )
 

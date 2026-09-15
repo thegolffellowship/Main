@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.422.0";
+window.TGF_VERSION = "2.423.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.423.0",
+    date: "2026-09-15",
+    changes: [
+      "PAIRINGS ARE LINKED TO THE PERSON, NOT TO A NAME STRING (Kerry: \u2018I updated a Customer name and alias Jose to Joe Mejia. It updated on the ROSTER but not in the pairings. It needs to be directly linked in PAIRINGS to the ROSTER and Customer ID so it changes immediately if customer profile is changed\u2019). `event_pairings.player_name` was a snapshot taken when the sheet was saved, so the rename moved the roster and left the sheet reading Jose \u2014 which then missed every name-keyed lookup downstream: his handicap fell to a dash and his badges went with it. One root cause, four symptoms. The table now carries `customer_id`, saves resolve it, and reads serve the CURRENT canonical name through it. Guiding principle 6.",
+      "Sheets saved before the column existed are linked on the next read and on boot, by canonical name then by NAME alias, and written back; a row whose name belongs to nobody (a Golf Genius guest) stays as typed and is retried later. The page matches a seated player to his roster row by customer_id first, name second, so the badges, bands, points and handicap follow the person. The handicap index map is keyed on the canonical customer name too \u2014 `handicap_player_links.customer_name` is its own stale snapshot, and a rename used to orphan the number.",
+    ],
+  },
   {
     version: "2.422.0",
     date: "2026-09-15",

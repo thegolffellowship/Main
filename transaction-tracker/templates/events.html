@@ -5939,11 +5939,23 @@
         return true;
     }
 
-    function rosterEntry(state, name) {
+    // Roster row for a seated player. The customer_id wins when the
+    // sheet carries one (Kerry 2026-09-15: "It needs to be directly
+    // linked in PAIRINGS to the ROSTER and Customer ID so it changes
+    // immediately if customer profile is changed") — a rename then moves
+    // the badges, the handicap and the bands with the person instead of
+    // stranding them on the old spelling. Name is the fallback, for a
+    // Golf Genius guest who has no profile.
+    function rosterEntry(state, name, cid) {
+        if (cid) {
+            const byId = (state.event_players || []).find(
+                x => x && x.customer_id && Number(x.customer_id) === Number(cid));
+            if (byId) return byId;
+        }
         if (!name) return null;
-        const k = String(name).trim().replace(/\s+/g, ' ').toLowerCase();
+        const k = pairCountKey(name);
         return (state.event_players || []).find(
-            x => String(x.name || '').trim().replace(/\s+/g, ' ').toLowerCase() === k) || null;
+            x => pairCountKey(x.name) === k) || null;
     }
 
     function standingsBand(state, name) {
@@ -6597,7 +6609,8 @@
                 // handicapIndexMap is the same feed the roster reads and
                 // carries source='starting'; it is consulted ONLY as a
                 // fallback so no existing displayed number changes.
-                const _rEnt = player.name ? rosterEntry(state, player.name) : null;
+                const _rEnt = (player.name || player.customer_id)
+                    ? rosterEntry(state, player.name, player.customer_id) : null;
                 // customer_id can come from EITHER source: event_players
                 // (GET /pairings) or the registrations already loaded for
                 // this event.
