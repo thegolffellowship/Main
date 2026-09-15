@@ -117,9 +117,14 @@ matters too, not just the foursome.
     first-year member (`is_new`) never drives; otherwise the more
     experienced player (`experience` = order rows on file) takes the
     wheel. `is_new` = joined as a NEW MEMBER this year (earliest
-    `customer_memberships.started_at` in the event's year) — Kerry:
-    "NEW should only apply to people who've joined as NEW members this
-    year"; guests and long-standing members are not new. Card tags are
+    `customer_memberships.started_at` in the event's year) AND no
+    handicap round before that year (`handicap_rounds` via
+    `handicap_player_links.customer_id`) — Kerry: "NEW should only apply
+    to people who've joined as NEW members this year" and "If they have
+    handicap records before 2026 then remove the 1Y" (membership rows
+    were backfilled in 2026 for many long-standing members, so the
+    membership start alone over-tagged; v2.419.0). Guests and
+    long-standing members are not new. Card tags are
     single letters: **C** captain, **A** ambassador, green **1Y**
     first-year member; names never wrap (nowrap + ellipsis, grid minimum
     340px). Rule 7 is built alongside (`_spread_leaders`:

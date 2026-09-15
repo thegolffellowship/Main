@@ -129,6 +129,17 @@ check("a paid row is not badged",
 ids = {r["name"]: r["customer_id"] for r in db._event_roster_players(conn, 1)}
 check("_event_roster_players carries the RSVP player's customer_id", ids.get("Carl Rsvp") == 3, str(ids))
 
+print("\n== 1Y = first-year member with NO handicap history before the event year ==")
+conn.execute("INSERT INTO customer_memberships (customer_id, started_at, expires_at, source) VALUES (1, '2026-03-01', '2027-03-01', 'backfill')")
+conn.execute("INSERT INTO customer_memberships (customer_id, started_at, expires_at, source) VALUES (2, '2026-05-01', '2027-05-01', 'renewal')")
+conn.execute("INSERT INTO handicap_player_links (player_name, customer_name, customer_id) VALUES ('Bob Paid', 'Bob Paid', 2)")
+conn.execute("INSERT INTO handicap_rounds (player_name, round_date, adjusted_score, rating, slope, differential) VALUES ('Bob Paid', '2025-06-01', 40, 34.5, 120, 5.0)")
+conn.commit()
+rows = {r["name"]: r for r in db._event_roster_rows(conn, 1)}
+check("a 2026 membership with rounds only in 2026 is 1Y (Alan)", rows["Alan Paid"]["is_new"] is True, str(rows["Alan Paid"].get("first_round")))
+check("a 2026 membership row but a 2025 handicap round is NOT 1Y (Bob)", rows["Bob Paid"]["is_new"] is False)
+check("no membership at all is not 1Y (Fay, RSVP-only order)", rows["Fay Zero"]["is_new"] is False)
+
 print("\n== one handicap-index lookup ==")
 hmap = db._roster_handicap_index_map(conn)
 check("the shared map reads the linked history (Alan: avg of 4.0 and 6.0)", hmap.get("alan paid") == 5.0, str(hmap))

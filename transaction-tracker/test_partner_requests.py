@@ -67,6 +67,10 @@ conn.executescript("""
    event_name TEXT, status TEXT);
  CREATE TABLE customer_memberships (id INTEGER PRIMARY KEY, customer_id INTEGER,
    started_at TEXT);
+ CREATE TABLE handicap_rounds (id INTEGER PRIMARY KEY, player_name TEXT, round_date TEXT,
+   differential REAL);
+ CREATE TABLE handicap_player_links (player_name TEXT PRIMARY KEY, customer_name TEXT,
+   customer_id INTEGER);
  CREATE TABLE customer_aliases (id INTEGER PRIMARY KEY, customer_id INTEGER,
    customer_name TEXT, alias_type TEXT, alias_value TEXT);
 """)

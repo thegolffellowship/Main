@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.418.0";
+window.TGF_VERSION = "2.419.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.419.0",
+    date: "2026-09-15",
+    changes: [
+      "The OFFICIAL full round logo is in the repo (Kerry: \u2018Try one of these logos \u2026 We need to save these to the repository for use\u2019). The .ai, .eps and .pdf sources live under static/brand/; the PDF was converted to a clean vector SVG and a 576px PNG at static/tgf-logo-r.svg / .png, replacing the v2.418.0 rebuild. The Starter Sheet already reads that path, so it now prints the real artwork.",
+      "1Y is tighter (Kerry: \u2018There\u2019s a ton of them there that shouldn\u2019t have 1Y. If they have handicap records before 2026 then remove the 1Y\u2019). Membership rows were backfilled in 2026 for many long-standing members, so a 2026 membership start alone tagged half the field. A player with any handicap round before the event\u2019s year is not new, whatever their membership row says.",
+    ],
+  },
   {
     version: "2.418.0",
     date: "2026-09-15",

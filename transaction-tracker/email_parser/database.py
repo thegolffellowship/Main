@@ -57541,6 +57541,9 @@ def _event_rsvp_only_players(conn, event_id: int) -> list[dict]:
                     "SELECT current_player_status, ambassador, group_captain, "
                     "solo_back_ok, (SELECT MIN(started_at) FROM customer_memberships "
                     "WHERE customer_id = c.customer_id) AS first_member_start, "
+                    "(SELECT MIN(hr.round_date) FROM handicap_rounds hr "
+                    " JOIN handicap_player_links l ON l.player_name = hr.player_name "
+                    " WHERE l.customer_id = c.customer_id) AS first_round, "
                     "(SELECT COUNT(*) FROM items WHERE customer_id = "
                     "c.customer_id) AS n_orders "
                     "FROM customers c WHERE c.customer_id = ?", (cid,)).fetchone()
@@ -57548,7 +57551,7 @@ def _event_rsvp_only_players(conn, event_id: int) -> list[dict]:
                     cps = crow["current_player_status"]
                     roles = {k: crow[k] for k in ("ambassador", "group_captain",
                                                   "solo_back_ok", "first_member_start",
-                                                  "n_orders")}
+                                                  "first_round", "n_orders")}
             except sqlite3.OperationalError:
                 cps = None
         received = r.get("received_at") or None
@@ -57596,6 +57599,9 @@ def _event_roster_rows(conn, event_id: int) -> list[dict]:
                         c.ambassador, c.group_captain, c.solo_back_ok,
                         (SELECT MIN(m.started_at) FROM customer_memberships m
                           WHERE m.customer_id = i.customer_id) AS first_member_start,
+                        (SELECT MIN(hr.round_date) FROM handicap_rounds hr
+                           JOIN handicap_player_links l ON l.player_name = hr.player_name
+                          WHERE l.customer_id = i.customer_id) AS first_round,
                         (SELECT COUNT(*) FROM items i3
                           WHERE i3.customer_id = i.customer_id) AS n_orders
         FROM events e
@@ -57650,7 +57656,14 @@ def _decorate_roster_roles(d: dict, ev_year: str | None) -> None:
     for flag in PLAYER_ROLE_FLAGS:
         d[flag] = bool(d.get(flag))
     first = (d.get("first_member_start") or "")[:4]
-    d["is_new"] = bool(first) and bool(ev_year) and first == ev_year
+    # Kerry 2026-09-15: "If they have handicap records before 2026 then
+    # remove the 1Y." Membership rows were backfilled in 2026 for many
+    # long-standing members, so the earliest membership start alone
+    # tagged half the field; a handicap round before the event's year is
+    # proof they were playing before it.
+    played_before = (d.get("first_round") or "")[:4]
+    d["is_new"] = (bool(first) and bool(ev_year) and first == ev_year
+                   and not (played_before and played_before < ev_year))
     d["experience"] = int(d.get("n_orders") or 0)
 
 

@@ -484,7 +484,11 @@ on mobile — **ops never go in the drawer**; one global dropdown pattern
 (`.shell-menu`). auth.js drives role gating for shell links
 (`.shell-nav-links a`, `.shell-drawer-nav a`) and calls
 `window.shellApplyRole`. Official TGF icon marks: `static/tgf-icon.svg`
-+ `static/tgf-icon-white.svg`. **Nav order + labels (Kerry 2026-09-14):**
++ `static/tgf-icon-white.svg`. **Official FULL round logo (v2.419.0):**
+`static/tgf-logo-r.svg` (vector, converted from Kerry's PDF) +
+`static/tgf-logo-r.png` (576px); the .ai / .eps / .pdf sources are in
+`static/brand/`. Print sheets (Starter Sheet) read the SVG — reference
+that one path, never copy the artwork. **Nav order + labels (Kerry 2026-09-14):**
 … Leads | Payouts | **Queue** | **Members** (pill) | **Admin** (pill) |
 **Two Man Tour** (pill) | Log Out — desktop row and mobile drawer alike;
 guard `test_shell_nav.js`. Pills mark DOORWAYS OUT of the Tracker
