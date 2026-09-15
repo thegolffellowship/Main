@@ -1475,9 +1475,17 @@ assignments according to our course info. With a legend up above the
 foursomes"). `event_tee_legend(conn, event_id, ev)` reads
 `course_tees.tee_name`, which carries BOTH the colour word and the club's
 own tee ORDER (`"1 - Gold Tee"`, `"2 - Blue Tee"`, `"3 - Red Tee"`,
-`"3 - Red (L) Tee"` — how Golf Genius numbers them). Bands map onto that
-order longest-first: `<50` → tee 1, `50-64` → tee 2, `65+` → tee 3,
-`Forward` → the ladies' tee if the card has one, else the most forward.
+`"3 - Red (L) Tee"` — how Golf Genius numbers them). **Kerry 2026-09-15, correcting an earlier reading:** "Forward tee is NOT
+under 50. That is the back tee selected each time based on our yardage
+parameters for under 50 tees to be 6300-6800 yards for 18."
+(`UNDER_50_YARDS_18`.) So `<50` is the BACK tee chosen by LENGTH: the
+men's tee whose 18-hole yardage lands inside the band, else the longest
+on the card (The Quarry's Gold is 6128 and still wins). `50-64` and `65+`
+step down from there by yardage, the club's tee-order prefix breaking
+ties and standing in whenever a card carries no yardage. `Forward` is its
+own tee — the ladies' tee where the card has one, else the shortest —
+never the under-50 one. A nine-hole row doubles (a rating under 50 is a
+nine-hole rating) so every tee is judged on one ruler.
 The chip takes that colour in the group boxes and the alpha list; the
 legend prints the tee NAME beside each swatch. A band landing on a colour
 already used gets `ring: True` so 65+ Red and Forward Red (L) are never
@@ -1489,3 +1497,17 @@ rather than on the first tee. If Kerry corrects it, make the mapping data
 (`app_settings`, per course) rather than editing the derivation.
 
 Guard: `test_event_reports.py`.
+
+## The events page remembers where you were (v2.432.0)
+
+Kerry 2026-09-15: "When I refresh from an open state under an event, can
+you make it so it stays on that open state? Frustrating when it refreshes
+to closed state each time." The open event id and its tab live in
+`sessionStorage.tgf_events_open` — session, not local: this is where you
+are right now, not a preference, so a new browser tab starts clean.
+`rememberEventOpen` writes on expand and on every tab switch and CLEARS
+on collapse, so a refresh never re-opens a row that was just closed. The
+restore runs once a load (`_openRestored`) and stands down for an
+incoming `?event=` / `?item=` deep link. Restoring onto PAIRINGS loads the
+sheet the same way clicking the tab does. `applyDetailView` is the one
+place the four panel flags are set.

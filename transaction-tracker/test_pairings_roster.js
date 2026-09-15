@@ -296,6 +296,23 @@ check("a Re-check roster control sits on the panel, in both states",
 check("the control names who arrived rather than silently redrawing",
     /pairings-roster-refresh[\s\S]{0,900}New on the roster: /.test(html));
 
+// ── A REFRESH KEEPS THE ROW OPEN (Kerry 2026-09-15: "When I refresh
+//    from an open state under an event, can you make it so it stays on
+//    that open state? Frustrating when it refreshes to closed state each
+//    time.").
+check("the open row and its tab are remembered in sessionStorage",
+    /function rememberEventOpen\(evId, val\)[\s\S]{0,420}sessionStorage\.setItem\("tgf_events_open"/.test(html)
+    && /sessionStorage\.removeItem\("tgf_events_open"\)/.test(html));
+check("closing the row forgets it, so a refresh never re-opens what was just closed",
+    /if \(wasExpanded\) \{\s*rememberEventOpen\(null\);/.test(html));
+check("the restore runs once a load and never fights a deep link",
+    /if \(!evParam && !itemParam && !_openRestored && expandedEventId === null\) \{\s*_openRestored = true;/.test(html));
+check("the tab flags are set in ONE place, used by the toggle and the restore",
+    /function applyDetailView\(evId, val\) \{[\s\S]{0,320}payoutsOpenForEvent\[evId\] = val === "4";/.test(html)
+    && (html.match(/applyDetailView\(/g) || []).length >= 4);
+check("restoring onto PAIRINGS loads the sheet, the way clicking the tab does",
+    /mem\.view === "2"[\s\S]{0,260}await loadPairings\(mem\.id\);/.test(html));
+
 const cust = fs.readFileSync("templates/customers.html", "utf8");
 check("Customers page offers AMB / CAPT / BACK chips beside pace, both layouts",
     (cust.match(/renderRoleChips\(c\)/g) || []).length >= 2

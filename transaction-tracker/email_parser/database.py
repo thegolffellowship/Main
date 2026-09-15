@@ -55543,6 +55543,12 @@ _TEE_COLOR_WORDS = {
     "pink": "#BE185D", "jade": "#047857", "burgundy": "#7F1D1D",
 }
 _TEE_ORDER_RE = re.compile(r"^\s*(\d+)\s*[-–]\s*")
+# KERRY 2026-09-15, correcting me: "Forward tee is NOT under 50. That is
+# the back tee selected each time based on our yardage parameters for
+# under 50 tees to be 6300-6800 yards for 18." So the <50 band is the
+# BACK tee, chosen by LENGTH, and Forward is a separate, most-forward
+# tee. Stated for 18; a nine is half of it.
+UNDER_50_YARDS_18 = (6300, 6800)
 
 
 def _tee_color_for(tee_name: str) -> str | None:
@@ -55572,29 +55578,47 @@ def event_tee_legend(conn, event_id: int, ev: dict) -> list:
         return []
     try:
         rows = [dict(r) for r in conn.execute(
-            "SELECT tee_name, rating, slope FROM course_tees WHERE course_id = ?",
-            (cid,)).fetchall()]
+            "SELECT tee_name, rating, slope, yardage_total "
+            "FROM course_tees WHERE course_id = ?", (cid,)).fetchall()]
     except sqlite3.OperationalError:
         return []
-    by_order: dict = {}
+    # One entry per NAMED tee, carrying its longest 18-hole equivalent.
+    # A course card holds several rows per tee (front nine, back nine,
+    # the 18); a rating under 50 is a NINE-hole rating, so that row's
+    # yardage doubles to compare like with like.
+    tees: dict = {}
     for r in rows:
         nm = " ".join((r.get("tee_name") or "").split())
         m = _TEE_ORDER_RE.match(nm)
-        if not m:
+        label = _TEE_ORDER_RE.sub("", nm).strip() if m else nm
+        if not label:
             continue
-        n = int(m.group(1))
-        label = _TEE_ORDER_RE.sub("", nm).strip()
-        ladies = bool(re.search(r"\((?:l|lady|ladies)\)", label, re.I))
-        by_order.setdefault(n, {"men": None, "ladies": None})
-        key = "ladies" if ladies else "men"
-        if not by_order[n][key]:
-            by_order[n][key] = label
-    if not by_order:
+        order = int(m.group(1)) if m else 99
+        yds = r.get("yardage_total") or 0
+        rating = r.get("rating") or 0
+        y18 = (yds if rating >= 50 else yds * 2) or 0
+        t = tees.setdefault(label, {
+            "label": label, "order": order, "y18": 0,
+            "ladies": bool(re.search(r"\((?:l|lady|ladies)\)", label, re.I))})
+        t["order"] = min(t["order"], order)
+        t["y18"] = max(t["y18"], y18)
+    if not tees:
         return []
-    order = sorted(by_order)
-    mens = [by_order[n]["men"] for n in order if by_order[n]["men"]]
-    forward = next((by_order[n]["ladies"] for n in reversed(order)
-                    if by_order[n]["ladies"]), None) or (mens[-1] if mens else None)
+    mens_t = [t for t in tees.values() if not t["ladies"]]
+    ladies_t = [t for t in tees.values() if t["ladies"]]
+    # Longest first. Yardage is the ruler Kerry named; the club's own tee
+    # ORDER is the tiebreak, and the whole ranking when a card carries no
+    # yardage at all.
+    mens_t.sort(key=lambda t: (-(t["y18"] or 0), t["order"]))
+    lo, hi = UNDER_50_YARDS_18
+    in_band = [t for t in mens_t if t["y18"] and lo <= t["y18"] <= hi]
+    back = in_band[0] if in_band else (mens_t[0] if mens_t else None)
+    # Everything at or below the back tee, in order, feeds the older bands.
+    rest = [t for t in mens_t if t is not back]
+    mens = [back["label"]] + [t["label"] for t in rest] if back else []
+    ladies_t.sort(key=lambda t: (-(t["y18"] or 0), t["order"]))
+    forward = (ladies_t[0]["label"] if ladies_t
+               else (mens[-1] if mens else None))
     picks = {"<50": mens[0] if mens else None,
              "50-64": mens[1] if len(mens) > 1 else (mens[0] if mens else None),
              "65+": mens[2] if len(mens) > 2 else (mens[-1] if mens else None),

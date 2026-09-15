@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.431.0";
+window.TGF_VERSION = "2.432.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.432.0",
+    date: "2026-09-15",
+    changes: [
+      "THE UNDER-50 TEE IS THE BACK TEE, CHOSEN BY LENGTH (Kerry, correcting me: \u2018Forward tee is NOT under 50. That is the back tee selected each time based on our yardage parameters for under 50 tees to be 6300-6800 yards for 18\u2019). The tee legend now picks the <50 tee as the men\u2019s tee that lands INSIDE 6300\u20136800 yards for 18, not simply the longest on the card; the older bands step down from there, and Forward is its own tee \u2014 the ladies\u2019 tee where the card has one \u2014 never the under-50 one. A course whose longest tee is under 6300 (The Quarry\u2019s Gold at 6128) still gets its back tee rather than none. A nine-hole card doubles so it is judged on the same ruler.",
+      "A REFRESH KEEPS THE ROW OPEN (Kerry: \u2018When I refresh from an open state under an event, can you make it so it stays on that open state? Frustrating when it refreshes to closed state each time.\u2019). The open event and the tab it was on are remembered for the browser tab\u2019s session and restored on load \u2014 once per load, never fighting an incoming deep link, and never re-opening a row that was just closed. Restoring onto PAIRINGS loads the sheet exactly as clicking the tab does. The four panel flags are now set in one place, used by both the toggle and the restore.",
+    ],
+  },
   {
     version: "2.431.0",
     date: "2026-09-15",

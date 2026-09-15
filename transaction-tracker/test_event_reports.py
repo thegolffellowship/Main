@@ -339,7 +339,7 @@ for _tid, _nm in ((11, "1 - Gold Tee"), (12, "2 - Blue Tee"), (13, "3 - Red Tee"
 c.commit()
 _leg = db.event_tee_legend(c, EV, {"course_id": COURSE})
 _by = {t["band"]: t for t in _leg}
-check("the club's own tee ORDER drives the bands, longest first",
+check("bands run longest tee first",
       [_by[b]["tee_name"] for b in ("<50", "50-64", "65+")] == ["Gold Tee", "Blue Tee", "Red Tee"], str(_leg))
 check("Forward takes the ladies' tee when the card has one",
       _by["Forward"]["tee_name"] == "Red (L) Tee", str(_by.get("Forward")))
@@ -349,6 +349,31 @@ check("the colour is read out of the tee NAME",
 check("two bands on the same paint are never two identical swatches",
       _by["Forward"]["color"] == _by["65+"]["color"] and _by["Forward"]["ring"] is True
       and _by["65+"]["ring"] is False)
+# Kerry 2026-09-15, correcting me: "Forward tee is NOT under 50. That is
+# the back tee selected each time based on our yardage parameters for
+# under 50 tees to be 6300-6800 yards for 18."
+c.execute("UPDATE course_tees SET yardage_total = 7100, rating = 74.0 WHERE tee_name = '1 - Gold Tee'")
+c.execute("UPDATE course_tees SET yardage_total = 6500, rating = 71.0 WHERE tee_name = '2 - Blue Tee'")
+c.execute("UPDATE course_tees SET yardage_total = 6000, rating = 68.0 WHERE tee_name = '3 - Red Tee'")
+c.execute("UPDATE course_tees SET yardage_total = 5200, rating = 70.0 WHERE tee_name = '3 - Red (L) Tee'")
+c.commit()
+_b2 = {t["band"]: t for t in db.event_tee_legend(c, EV, {"course_id": COURSE})}
+check("the <50 tee is the one INSIDE 6300-6800, not simply the longest",
+      _b2["<50"]["tee_name"] == "Blue Tee", str(_b2.get("<50")))
+check("…and the older bands step down from there",
+      [_b2[b]["tee_name"] for b in ("50-64", "65+")] == ["Gold Tee", "Red Tee"], str(_b2))
+check("Forward is its own tee, never the under-50 one",
+      _b2["Forward"]["tee_name"] == "Red (L) Tee" and _b2["Forward"]["tee_name"] != _b2["<50"]["tee_name"])
+# Nothing in band -> the longest men's tee, rather than no answer.
+c.execute("UPDATE course_tees SET yardage_total = 5800 WHERE tee_name = '2 - Blue Tee'")
+c.execute("UPDATE course_tees SET yardage_total = 6128 WHERE tee_name = '1 - Gold Tee'")
+c.commit()
+_b3 = {t["band"]: t for t in db.event_tee_legend(c, EV, {"course_id": COURSE})}
+check("a course whose longest tee is under 6300 still gets its back tee",
+      _b3["<50"]["tee_name"] == "Gold Tee", str(_b3.get("<50")))
+check("a nine-hole card doubles to be judged on the same ruler",
+      db.UNDER_50_YARDS_18 == (6300, 6800))
+
 check("no course card -> no legend, rather than invented colours",
       db.event_tee_legend(c, EV, {"course_id": None}) == [])
 check("the legend and the lookup both ride on the print pack",

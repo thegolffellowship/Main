@@ -2331,6 +2331,7 @@
     let allRsvpEmailOverrides = {};  // keyed by event_name → {email: status}
     let handicapIndexMap = {};  // keyed by lowercase customer_name → {index_9, index_18}
     let expandedEventId = null;
+    let _openRestored = false;      // the refresh-restore fires once a load
     let rsvpCreditMap = {};  // keyed by event_name → { customerName: creditInfo }
     let apCustomerNames = [];  // Add Player name typeahead pool (mobile-safe)
     let gamesOpenForEvent = {};  // keyed by event id → true if games panel is open
@@ -3956,9 +3957,30 @@
             const byId = allEvents.find(e => String(e.id) === String(evParam));
             if (byId) {
                 if (params.get("view") === "pairings") {
-                    pairingsOpenForEvent[byId.id] = true;
+                    applyDetailView(byId.id, "2");
                 }
+                _openRestored = true;
                 toggleEventDetail(byId.id);
+                return;
+            }
+        }
+        // Plain refresh with a row open: put it back, on the same tab
+        // (Kerry 2026-09-15). Once per page load, never fighting a deep
+        // link, and never re-opening a row the manager just closed.
+        if (!evParam && !itemParam && !_openRestored && expandedEventId === null) {
+            _openRestored = true;
+            const mem = readEventOpen();
+            if (mem && mem.id != null && allEvents.some(e => e.id === mem.id)) {
+                applyDetailView(mem.id, mem.view);
+                toggleEventDetail(mem.id).then(async () => {
+                    if (mem.view === "2") {
+                        const st = getPairingsState(mem.id);
+                        if (!st.loaded) await loadPairings(mem.id);
+                        const c = document.getElementById(`detail-content-${mem.id}`);
+                        const ev2 = allEvents.find(e => e.id === mem.id);
+                        if (c && ev2) rerenderDetail(c, ev2);
+                    }
+                });
                 return;
             }
         }
@@ -3988,6 +4010,44 @@
                 toggleEventDetail(fullMatch.id);
             }
         }
+    }
+
+    // ── Which event is open, and on which tab, ACROSS A REFRESH ──────
+    //    Kerry 2026-09-15: "When I refresh from an open state under an
+    //    event, can you make it so it stays on that open state?
+    //    Frustrating when it refreshes to closed state each time."
+    //    sessionStorage, not local: this is where you are right now, not
+    //    a preference, so a new tab starts clean.
+    const DETAIL_VIEWS = {"1": "games", "2": "pairings", "3": "financial", "4": "payouts"};
+
+    function applyDetailView(evId, val) {
+        gamesOpenForEvent[evId] = val === "1";
+        pairingsOpenForEvent[evId] = val === "2";
+        financialOpenForEvent[evId] = val === "3";
+        payoutsOpenForEvent[evId] = val === "4";
+    }
+
+    function currentDetailView(evId) {
+        if (gamesOpenForEvent[evId]) return "1";
+        if (pairingsOpenForEvent[evId]) return "2";
+        if (financialOpenForEvent[evId]) return "3";
+        if (payoutsOpenForEvent[evId]) return "4";
+        return "0";
+    }
+
+    function rememberEventOpen(evId, val) {
+        try {
+            if (evId == null) sessionStorage.removeItem("tgf_events_open");
+            else sessionStorage.setItem("tgf_events_open",
+                JSON.stringify({id: evId, view: val || currentDetailView(evId)}));
+        } catch (e) { /* storage blocked — the refresh just won't restore */ }
+    }
+
+    function readEventOpen() {
+        try {
+            const raw = sessionStorage.getItem("tgf_events_open");
+            return raw ? JSON.parse(raw) : null;
+        } catch (e) { return null; }
     }
 
     // Track per-event game filter: null = all, "NET", "GROSS", "NO GAMES"
@@ -8401,12 +8461,14 @@
 
         // If clicking the same row, just collapse
         if (wasExpanded) {
+            rememberEventOpen(null);
             renderEventsMobile(getFilteredSortedEvents());
             return;
         }
 
         // Expand the clicked row
         expandedEventId = eventId;
+        rememberEventOpen(eventId);
         const ev = allEvents.find(e => e.id === eventId);
 
         // Fetch RSVPs first (needed for both desktop and mobile)
@@ -8558,10 +8620,8 @@
             badge.addEventListener("click", async (e) => {
                 e.stopPropagation();
                 const val = badge.dataset.toggleGames;
-                gamesOpenForEvent[ev.id] = val === "1";
-                pairingsOpenForEvent[ev.id] = val === "2";
-                financialOpenForEvent[ev.id] = val === "3";
-                payoutsOpenForEvent[ev.id] = val === "4";
+                applyDetailView(ev.id, val);
+                rememberEventOpen(ev.id, val);
                 rerenderDetail(container, ev);
                 // Load the saved sheet on first open; on every RE-open
                 // re-read the roster, so a player added on the ROSTER tab
