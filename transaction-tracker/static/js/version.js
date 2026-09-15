@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.432.0";
+window.TGF_VERSION = "2.433.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.433.0",
+    date: "2026-09-15",
+    changes: [
+      "THE LEADERBOARD CHEVRONS ARE ORANGE AGAIN (Kerry: \u2018Standard chevron is supposed to be orange\u2019). The EVENTS tab set its own grey at its own size on three rules \u2014 exactly what the house standard forbids in as many words: \u2018Do NOT restyle arrows per-page \u2014 change the look HERE\u2019 (`.tgf-exp` in dashboard.css, TGF orange at 0.75rem, ratified 2026-08-06/08-14). The event rows, the team bands and the hole bands now carry `.tgf-exp` and keep only their layout and rotate hooks. Two pages still use a different glyph and colour (`/me` and Money Flow, both on \u25b8 rather than \u25b6); they are flagged, not silently rewritten mid-event.",
+      "The EVENTS leaderboard dial is now readable and settable from any session: `scoring-leaderboard-events[:add=s9.23,a9.23|set=\u2026|clear]`. It answers with which codes already have scorecards and which are still WAITING for them \u2014 the list only shows an event once its scorecards are imported, so adding a code the morning of is half the job.",
+    ],
+  },
   {
     version: "2.432.0",
     date: "2026-09-15",

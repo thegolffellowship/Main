@@ -1746,6 +1746,7 @@ def _scoring_dispatch(url: str, extract: str):
       scoring-fee-splits-repair[:apply]  pro-rate multi-item orders' fee rows by price (dry by default)
       scoring-margin-rebook[:<since>[|apply]]  recompute allocations >= since so margin carries the fee spread
       scoring-margin-gaps[:<limit>]  pre-cutover events: booked vs residual-would-book, with reasons (measure-only)
+      scoring-leaderboard-events[:add=<codes>|set=<codes>|clear]  the EVENTS leaderboard dial (admin pilot); reports which codes still await scorecards
       scoring-event-report:<event_id>|flights|proximity  the two PAIRINGS printables as data (Divisions & Flights / CTP markers)
       scoring-pairings-counts:<event_id>[|<year>]  saved sheet scored against played history: times each pair has played together this year INCLUDING this event
       scoring-liabilities          payouts owed, credits held, LSC shirt fund by Cup year, HIO pot, tax reserve by month
@@ -2529,6 +2530,48 @@ def _scoring_dispatch(url: str, extract: str):
             _yr = int(_parts[1]) if len(_parts) > 1 else None
             return json.dumps(db.pairing_counts_report(int(_parts[0]), year=_yr),
                               indent=2, default=str)
+        if cmd == "scoring-leaderboard-events":
+            # The EVENTS leaderboard's dial (admin-only pilot). No arg
+            # reads it; "add=<codes>" appends; "set=<codes>" replaces;
+            # "clear" empties it (= every event with scorecards).
+            # An event only APPEARS once it has scorecards imported.
+            import json as _j
+            from email_parser.database import (
+                _events_leaderboard_codes, get_app_setting, set_app_setting)
+            cur = _events_leaderboard_codes()
+            a = arg.strip()
+            if a:
+                if a.lower() == "clear":
+                    new_codes = []
+                else:
+                    verb, _, rest = a.partition("=")
+                    codes = [c.strip() for c in rest.split(",") if c.strip()]
+                    if verb.strip().lower() == "add":
+                        new_codes = list(cur) + [c for c in codes if c not in cur]
+                    elif verb.strip().lower() == "set":
+                        new_codes = codes
+                    else:
+                        return _j.dumps({"error": "usage: scoring-leaderboard-"
+                                                  "events[:add=a,b|set=a,b|clear]",
+                                         "current": cur})
+                set_app_setting("events_leaderboard_events", _j.dumps(new_codes))
+                db.log_agent_action("mcp-claude", "scoring-leaderboard-events",
+                                    f"{cur} -> {new_codes}")
+                cur = new_codes
+            with db.get_connection() as _c:
+                played = {r["code"] for r in _c.execute(
+                    "SELECT LOWER(SUBSTR(e.item_name, 1, INSTR(e.item_name || ' ', ' ') - 1)) "
+                    "AS code FROM events e JOIN scoring_rounds sr ON sr.event_id = e.id "
+                    "GROUP BY e.id")}
+            return _j.dumps({
+                "codes": cur,
+                "with_scorecards": sorted(c for c in cur
+                                          if c.strip().lower() in played),
+                "awaiting_scorecards": sorted(c for c in cur
+                                              if c.strip().lower() not in played),
+                "note": "an event appears on the EVENTS tab only once its "
+                        "scorecards are imported (scoring_rounds).",
+            }, indent=2)
         if cmd == "scoring-event-report":
             # The two PAIRINGS printables as data, for checking a sheet
             # without a browser. "scoring-event-report:<event_id>|flights"

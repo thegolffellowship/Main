@@ -268,7 +268,11 @@
         details.evlb-ev > summary { list-style: none; cursor: pointer; display: flex;
             align-items: center; gap: 12px; padding: 12px 14px; }
         details.evlb-ev > summary::-webkit-details-marker { display: none; }
-        .evlb-ev .chev { flex: none; transition: transform .15s; color: #9CA3AF; font-size: 11px; }
+        /* Colour and size come from .tgf-exp (dashboard.css) — the house
+           expand arrow, TGF orange (Kerry 2026-09-15: "Standard chevron
+           is supposed to be orange"). Only layout and the rotate hook
+           live here. */
+        .evlb-ev .chev { flex: none; }
         details.evlb-ev[open] > summary .chev { transform: rotate(90deg); }
         .evlb-ev .nm { font: 700 15px/1.2 'Bitter', serif; color: #1B1B1B; }
         .evlb-ev .meta { font-size: 12px; color: #6B7280; margin-top: 2px; }
@@ -419,7 +423,7 @@
             font: 700 10px/1.7 'Bitter', serif; letter-spacing: 1px; padding: 4px 10px;
             white-space: normal; }
         .evlb-holes tr.evlb-band[data-team] td { cursor: pointer; }
-        .evlb-holes tr.evlb-band .tchev { font-size: 8px; opacity: .8; }
+        .evlb-holes tr.evlb-band .tchev { opacity: .9; }
         .evlb-holetog { display: inline-flex; align-items: center; gap: 6px;
             font-size: 12px; color: #4B5563; margin: 0 0 6px; cursor: pointer;
             user-select: none; }
@@ -455,7 +459,7 @@
         details.evlb-team > summary::-webkit-details-marker { display: none; }
         details.evlb-team.win > summary { background: #E9F7EE; }
         details.evlb-team.win > summary .tm { font-weight: 700; }
-        .evlb-team .tchev { flex: none; color: #9CA3AF; font-size: 10px; transition: transform .15s; }
+        .evlb-team .tchev { flex: none; }
         details.evlb-team[open] > summary .tchev { transform: rotate(90deg); }
         .evlb-team .tm { flex: 1; min-width: 0; }
         .evlb-team .tnet { font-weight: 700; font-variant-numeric: tabular-nums; }
@@ -2698,7 +2702,7 @@
                     : ev.chapter === "San Antonio"
                     ? '<span style="background:var(--chapter-sa,#D3DDE4);color:#1B1B1B;border-radius:99px;padding:2px 8px;font-size:10px;font-weight:700;">SAN ANTONIO</span>' : "";
                 return `<details class="evlb-ev" data-ev="${escapeHtml(ev.item_name)}">` +
-                    `<summary><span class="chev">&#9654;</span>` +
+                    `<summary><span class="chev tgf-exp">&#9654;</span>` +
                     `<div><div class="nm">${escapeHtml(ev.item_name)}</div>` +
                     `<div class="meta">${evlbDate(ev.event_date)}${ev.course ? " &middot; " + escapeHtml(ev.course) : ""} &middot; ${ev.field} players ${ch}</div></div>` +
                     `<div class="pot">$${(ev.pot || 0).toFixed(2)}<span class="s">POT</span></div>` +
@@ -3147,7 +3151,7 @@
             }
             if (sec.label) {
                 html += `<tr class="evlb-band"${board.teamBands ? ` data-team="${si}"` : ""}>` +
-                    `<td colspan="${ncols}">${board.teamBands ? '<span class="tchev">&#9654;</span> ' : ""}${escapeHtml(sec.label)}</td></tr>`;
+                    `<td colspan="${ncols}">${board.teamBands ? '<span class="tchev tgf-exp">&#9654;</span> ' : ""}${escapeHtml(sec.label)}</td></tr>`;
             }
             // a team band renders in NET and closes with its total row
             const tm = board.teamBands ? (board.teams || [])[si] : null;
@@ -3418,7 +3422,7 @@
                     ? `<span class="tnet">${t.gg_total}</span>`
                     : `<span class="tnet"${anyGGTotal ? ' style="color:#9CA3AF;font-style:italic;" title="our reconstruction — GG posted no total for this team"' : ""}>${t.total_net ?? ""}</span>`;
                 return `<details class="evlb-team${win ? " win" : ""}" data-ti="${ti}">` +
-                    `<summary><span class="tchev">&#9654;</span>` +
+                    `<summary><span class="tchev tgf-exp">&#9654;</span>` +
                     `<span style="min-width:26px;font-weight:700;">${escapeHtml(t.position || "")}</span>` +
                     `<span class="tm">${names}</span>` +
                     tot +
