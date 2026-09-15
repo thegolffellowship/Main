@@ -5664,6 +5664,11 @@
                 slots_9: [], slots_18: [],
                 isDirty: false, loaded: false,
                 mode: 'random', protectPartners: true,
+                // Points column on the cards (Kerry 2026-09-15: "Give me a
+                // checkbox to hide the points column"). A viewing
+                // preference, not a sheet property, so it is remembered
+                // per browser rather than per event.
+                showPointsCol: pairingsPointsPref(),
                 // Undo/redo of GROUP edits (Kerry 2026-07-31). Snapshots of
                 // {groups_9, groups_18} with a cursor; `hist[histIdx]` is
                 // always what is on screen.
@@ -6049,6 +6054,16 @@
             </label>`;
         }
 
+        // Points column toggle (Kerry 2026-09-15). Offered whenever the
+        // race has points to show; unchecked hides the column only —
+        // the standings ORDER and the colour bands are untouched.
+        if (state.standingsPoints && Object.keys(state.standingsPoints).length > 0) {
+            html += `<label class="pairings-toggle-label" style="cursor:pointer;display:flex;align-items:center;gap:0.35rem;font-size:0.82rem;">
+                <input type="checkbox" data-ev-id="${ev.id}" data-pairings-points="${ev.id}" ${state.showPointsCol ? 'checked' : ''} style="cursor:pointer;">
+                Points
+            </label>`;
+        }
+
         // Seed/lock toggle
         html += `<button class="pairings-seed-toggle" data-ev-id="${ev.id}" title="Pre-assign players to specific slots before generating">${state.showSeeds ? '&#x25B2; Locks' : '&#x25BC; Locks'}</button>`;
 
@@ -6411,10 +6426,14 @@
         // which made the column disappear from a saved standings sheet
         // (Kerry 2026-07-31, "I don't see the points"); and knowing who is
         // in the race is useful on a Random sheet too.
-        const showPoints = state.standingsPoints
+        const havePoints = state.standingsPoints
             && Object.keys(state.standingsPoints).length > 0;
+        // The column can be hidden (Kerry 2026-09-15); the bands stay,
+        // because knowing who is in the race is a different fact from
+        // how many points they have.
+        const showPoints = havePoints && state.showPointsCol !== false;
         const showBands = (state.standingsEnrolled
-            && Object.keys(state.standingsEnrolled).length > 0) || showPoints;
+            && Object.keys(state.standingsEnrolled).length > 0) || havePoints;
         const _raceOpt = (state.raceOptions || []).find(
             o => o.race_key === (state.raceKey || (o.is_default ? o.race_key : null)));
         const raceLabel = (_raceOpt && _raceOpt.label) || 'points race';
@@ -9479,6 +9498,16 @@
             });
         }
 
+        // Points column toggle (Kerry 2026-09-15) — re-render, remember.
+        const pointsChk = container.querySelector(`[data-pairings-points="${ev.id}"]`);
+        if (pointsChk) {
+            pointsChk.addEventListener('change', e => {
+                state.showPointsCol = pointsChk.checked;
+                pairingsPointsPref(pointsChk.checked);
+                rerenderDetail(container, ev);
+            });
+        }
+
         // Seed/lock toggle
         container.querySelectorAll('.pairings-seed-toggle').forEach(btn => {
             btn.addEventListener('click', e => {
@@ -10168,6 +10197,20 @@
     // (Kerry 2026-09-15: "Order name lists by last name"). The roster
     // arrives first-name-ordered from the server (ORDER BY customer);
     // lastNameSortKey is the same key the Roster tab and Add Payment use.
+    // Remembered per browser (a viewing preference, like the leaderboard's
+    // Hole-by-hole box). Read with no argument; write with a boolean.
+    // Default ON — the column has always shown when the race has points.
+    function pairingsPointsPref(v) {
+        try {
+            if (v === undefined) {
+                const raw = localStorage.getItem('tgf_pairings_points_col');
+                return raw === null ? true : raw === '1';
+            }
+            localStorage.setItem('tgf_pairings_points_col', v ? '1' : '0');
+        } catch (e) { /* storage blocked — session-only */ }
+        return v === undefined ? true : !!v;
+    }
+
     function byLastName(a, b) {
         const an = typeof a === 'string' ? a : (a && a.name) || '';
         const bn = typeof b === 'string' ? b : (b && b.name) || '';

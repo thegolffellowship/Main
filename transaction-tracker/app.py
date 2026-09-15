@@ -5061,11 +5061,16 @@ def api_get_pairings(event_id):
         # so the panel, the generator and the request matcher all see the
         # same people (Kerry 2026-09-15: "assign RSVP only's to groups
         # and requests"). Rows carry `rsvp_only` for the badge.
-        from email_parser.database import _event_roster_rows, _pair_key_name
+        from email_parser.database import (
+            _event_roster_rows, _pair_key_name, _roster_handicap_index_map)
         _pconn = get_connection()
         try:
             _seen_keys = set()
             player_rows = []
+            # The index rides on the roster row so a player seated FROM
+            # Unassigned (picker, move, drag) keeps it — the same map the
+            # generator and the saved sheet read (Kerry 2026-09-15).
+            _hcp = _roster_handicap_index_map(_pconn)
             for _r in _event_roster_rows(_pconn, event_id):
                 _k = _pair_key_name(_r["name"])
                 if not _k or _k in _seen_keys:
@@ -5079,6 +5084,7 @@ def api_get_pairings(event_id):
                     "user_status": _r.get("user_status"),
                     "customer_id": _r.get("customer_id"),
                     "rsvp_only": bool(_r.get("rsvp_only")),
+                    "handicap_index": _hcp.get((_r["name"] or "").lower()),
                 })
         finally:
             _pconn.close()

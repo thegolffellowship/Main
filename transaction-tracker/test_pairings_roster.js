@@ -164,6 +164,19 @@ check("the X is red and quiet until hovered",
     /\.pairing-unseat \{[^}]*color: #b91c1c;[^}]*opacity: 0\.35;/.test(html)
     && /\.pairing-player-row:hover \.pairing-unseat \{ opacity: 0\.85; \}/.test(html));
 
+console.log("\nPoints column checkbox (v2.414.0)");
+check("a Points checkbox is offered when the race has points",
+    /data-pairings-points="\$\{ev\.id\}" \$\{state\.showPointsCol \? 'checked' : ''\}/.test(html)
+    && /if \(state\.standingsPoints && Object\.keys\(state\.standingsPoints\)\.length > 0\) \{\s*html \+= `<label class="pairings-toggle-label"/.test(html));
+check("unchecked hides the column but keeps the bands",
+    /const showPoints = havePoints && state\.showPointsCol !== false;/.test(html)
+    && /\|\| havePoints;/.test(html));
+check("the choice is remembered per browser and re-renders",
+    /state\.showPointsCol = pointsChk\.checked;\s*pairingsPointsPref\(pointsChk\.checked\);\s*rerenderDetail\(container, ev\);/.test(html)
+    && /localStorage\.getItem\('tgf_pairings_points_col'\)/.test(html));
+check("default is ON when nothing is stored",
+    /return raw === null \? true : raw === '1';/.test(html));
+
 console.log("");
 if (failures) { console.log(failures + " FAILURE(S)"); process.exit(1); }
 console.log("All pairings-roster assertions passed.");

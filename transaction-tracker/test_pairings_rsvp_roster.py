@@ -93,6 +93,12 @@ for uid, pname, email, resp, at, mid, cid in rsvps:
         " received_at, matched_item_id, customer_id) VALUES (?,?,?,?,?,?,?,?)",
         (uid, pname, email, EV if uid != "r9" else "s9.98 Cancelled", resp, at, mid, cid))
 conn.execute("INSERT INTO rsvp_email_overrides (player_email, event_name, status) VALUES ('gus@x.com', ?, 'not_playing')", (EV,))
+# A handicap history for Alan so the index rides on his roster row
+# (v2.414.0: a player seated FROM Unassigned must keep his index).
+conn.execute("INSERT INTO handicap_player_links (player_name, customer_name, customer_id) VALUES ('Alan Paid', 'Alan Paid', 1)")
+for i, d in enumerate((4.0, 6.0)):
+    conn.execute("INSERT INTO handicap_rounds (player_name, round_date, adjusted_score, rating, slope, differential) "
+                 "VALUES ('Alan Paid', date('now', ?), 40, 34.5, 120, ?)", (f'-{i+1} days', d))
 conn.commit()
 
 print("\n== derivation mirrors the Players tab ==")
@@ -122,6 +128,11 @@ check("a paid row is not badged",
       next(r for r in roster if r["name"] == "Alan Paid")["rsvp_only"] is False)
 ids = {r["name"]: r["customer_id"] for r in db._event_roster_players(conn, 1)}
 check("_event_roster_players carries the RSVP player's customer_id", ids.get("Carl Rsvp") == 3, str(ids))
+
+print("\n== one handicap-index lookup ==")
+hmap = db._roster_handicap_index_map(conn)
+check("the shared map reads the linked history (Alan: avg of 4.0 and 6.0)", hmap.get("alan paid") == 5.0, str(hmap))
+check("unlinked players are simply absent", "bob paid" not in hmap)
 conn.close()
 
 print("\n== partner requests resolve to RSVP-only players ==")
@@ -156,6 +167,8 @@ try:
     grp_of = {p["name"]: i for i, g in enumerate(out.get("9", [])) for p in g["players"] if p.get("name")}
     check("Alan's request for Carl is honored", grp_of.get("Alan Paid") == grp_of.get("Carl Rsvp"), str(grp_of))
     check("Bob's manual match to Ivan is honored", grp_of.get("Bob Paid") == grp_of.get("Ivan"), str(grp_of))
+    alan = next(p for g in out.get("9", []) for p in g["players"] if p.get("name") == "Alan Paid")
+    check("the generator seats Alan with the same index the map holds", alan.get("handicap_index") == 5.0, str(alan))
 except Exception as e:  # noqa: BLE001
     import traceback; traceback.print_exc()
     check("generate_event_pairings ran on the fixture", False, repr(e))

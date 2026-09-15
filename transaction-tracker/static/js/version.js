@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.413.0";
+window.TGF_VERSION = "2.414.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.414.0",
+    date: "2026-09-15",
+    changes: [
+      "A player seated FROM the bullpen keeps their handicap (Kerry: \u2018Why isn\u2019t Adam Baker\u2019s handicap showing?\u2019 after X-ing him out and picking him back in). The roster rows the Unassigned panel and picker are built from never carried an index \u2014 only the generator and the saved sheet looked one up, each with its own copy of the query \u2014 so anyone moved out of Unassigned arrived with a dash. The index now rides on every roster row, from ONE lookup all three surfaces share, so Unassigned and the picker show it too.",
+      "A <b>Points</b> checkbox beside Partner Requests hides the points column on the pairing cards (Kerry: \u2018Give me a checkbox to hide the points column\u2019). It appears whenever the race has points to show, defaults on, and is remembered per browser. Unchecking hides the numbers only \u2014 the colour bands and a STANDINGS order are untouched.",
+    ],
+  },
   {
     version: "2.413.0",
     date: "2026-09-15",

@@ -1060,6 +1060,31 @@ The open-seat picker and the Unassigned panel read "Last, First" too
 (v2.413.0); seated cards keep "First Last"; `data-unassigned-name` and the
 picker's pick object carry the raw name.
 
+## One handicap-index lookup (v2.414.0, Kerry 2026-09-15)
+
+> *"Why isn't Adam Baker's handicap showing?"* — after X → bullpen → pick.
+
+`_roster_handicap_index_map(conn)` — `{customer_name.lower(): index}`,
+AVG of the last ≤20 differentials in 12 months via `handicap_player_links`
+— is THE index the pairings surface shows. Three readers: the saved-sheet
+enrichment in `get_event_pairings`, the generator's `hcp_map`, and the
+`/pairings` GET, which now puts `handicap_index` on every `event_players`
+row. Before, the roster rows carried no index at all, so a player seated
+from Unassigned (`_movePlayer` copies `found.handicap_index`) arrived with
+"—" while the generator's own seating had one; the generator and the
+saved sheet each had a private copy of the query. Never add a fourth.
+
+## Points column checkbox (v2.414.0)
+
+> *"Give me a checkbox to hide the points column."*
+
+`state.showPointsCol` (seeded from `pairingsPointsPref()`, localStorage
+`tgf_pairings_points_col`, default ON) gates only the `showPoints`
+column; `showBands` still reads `havePoints`, so hiding the numbers never
+hides who is in the race. The box renders beside Partner Requests only
+when `standingsPoints` is non-empty. A browser preference, not a sheet
+property — it is not saved with the pairings.
+
 ## Slots are sized by the roster (v2.413.0, Kerry 2026-09-15)
 
 > *"Why aren't holes being assigned to the foursomes?"*

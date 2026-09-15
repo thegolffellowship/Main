@@ -54327,6 +54327,46 @@ def _nine_side(event: dict) -> str:
     return "Back" if side == "Back" else "Front"
 
 
+def _roster_handicap_index_map(conn) -> dict:
+    """{customer_name.lower(): handicap_index} for every linked player —
+    AVG of the last ≤20 differentials in 12 months via
+    handicap_player_links. THE index the pairings surface shows, in one
+    place: saved-sheet enrichment, the generator, and the /pairings GET's
+    event_players all read it (Kerry 2026-09-15: "Why isn't Adam Baker's
+    handicap showing?" — a player moved out of Unassigned lost his index
+    because the roster rows never carried one; the generator and the
+    saved sheet each had their own copy of this query and Unassigned had
+    none). Returns {} if the handicap tables are absent."""
+    try:
+        rows = conn.execute(
+            """
+                    SELECT l.customer_name, p.handicap_index
+                    FROM (
+                        SELECT player_name,
+                               AVG(differential) as handicap_index
+                        FROM (
+                            SELECT player_name, differential,
+                                   ROW_NUMBER() OVER (
+                                       PARTITION BY player_name
+                                       ORDER BY round_date DESC, id DESC
+                                   ) as rn
+                            FROM handicap_rounds
+                            WHERE differential IS NOT NULL
+                              AND round_date >= date('now', '-12 months')
+                        )
+                        WHERE rn <= 20
+                        GROUP BY player_name
+                    ) p
+                    JOIN handicap_player_links l ON l.player_name = p.player_name
+                    WHERE l.customer_name IS NOT NULL
+            """
+        ).fetchall()
+    except sqlite3.OperationalError:
+        return {}
+    return {(r["customer_name"] or "").lower(): r["handicap_index"]
+            for r in rows if r["customer_name"]}
+
+
 def _pairing_time_slots(event: dict, holes: str, needed: int = 0) -> list[str]:
     """Compute ordered slot labels for a given holes type (9 or 18).
 
@@ -54652,34 +54692,7 @@ def get_event_pairings(event_id: int, db_path=None) -> dict:
         # snapshot of what the import/save provided.
         hcp_map: dict = {}
         if any(r["handicap_index"] is None for r in rows):
-            try:
-                hcp_rows = conn.execute(
-                    """
-                    SELECT l.customer_name, p.handicap_index
-                    FROM (
-                        SELECT player_name,
-                               AVG(differential) as handicap_index
-                        FROM (
-                            SELECT player_name, differential,
-                                   ROW_NUMBER() OVER (
-                                       PARTITION BY player_name
-                                       ORDER BY round_date DESC, id DESC
-                                   ) as rn
-                            FROM handicap_rounds
-                            WHERE differential IS NOT NULL
-                              AND round_date >= date('now', '-12 months')
-                        )
-                        WHERE rn <= 20
-                        GROUP BY player_name
-                    ) p
-                    JOIN handicap_player_links l ON l.player_name = p.player_name
-                    WHERE l.customer_name IS NOT NULL
-                    """
-                ).fetchall()
-                hcp_map = {r["customer_name"].lower(): r["handicap_index"]
-                           for r in hcp_rows}
-            except Exception:
-                hcp_map = {}
+            hcp_map = _roster_handicap_index_map(conn)
 
     result: dict = {}
     for r in rows:
@@ -57737,30 +57750,7 @@ def generate_event_pairings(
                 it["partner_request"] = None
 
         # ── Handicap index map ────────────────────────────────────────
-        hcp_rows = conn.execute(
-            """
-            SELECT l.customer_name, p.handicap_index
-            FROM (
-                SELECT player_name,
-                       AVG(differential) as handicap_index
-                FROM (
-                    SELECT player_name, differential,
-                           ROW_NUMBER() OVER (
-                               PARTITION BY player_name
-                               ORDER BY round_date DESC, id DESC
-                           ) as rn
-                    FROM handicap_rounds
-                    WHERE differential IS NOT NULL
-                      AND round_date >= date('now', '-12 months')
-                )
-                WHERE rn <= 20
-                GROUP BY player_name
-            ) p
-            JOIN handicap_player_links l ON l.player_name = p.player_name
-            WHERE l.customer_name IS NOT NULL
-            """
-        ).fetchall()
-        hcp_map = {r["customer_name"].lower(): r["handicap_index"] for r in hcp_rows}
+        hcp_map = _roster_handicap_index_map(conn)
 
         # ── Pace map for STAGING (task #23) ───────────────────────────
         # Keyed by the roster's own name via customer_id (rule 6 — also
