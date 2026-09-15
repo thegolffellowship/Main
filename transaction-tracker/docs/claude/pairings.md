@@ -1431,3 +1431,30 @@ wins at import.
 **Starter Sheet:** the ALPHABETICAL names use the same size and weight as
 the foursome names, declared once (`.prow .pname, .arow .an`) so the two
 cannot drift.
+
+## Late signups and the bullpen (v2.430.0)
+
+Kerry 2026-09-15: "Just had a late signup... Justin Guerrero. He's not
+showing up as in the bullpen though." His order was active on the event
+inside a minute (item 2881, `event_id` 3302). The PAIRINGS panel loaded
+its roster ONCE — `if (val === "2" && !state.loaded) loadPairings(...)` —
+and nothing ever re-read it, while `getUnassigned` is computed from that
+roster. The stale-player banner right above was armed the OTHER way
+(seated, no longer on the roster): the class was protected in one
+direction only.
+
+- `refreshPairingsRoster(evId)` re-reads `/api/events/<id>/pairings` and
+  copies **only** the roster side — `event_players`, requests, MP
+  matches, standings, `pair_counts` — plus the lookups that hang off it
+  (`_paceMap`, `_reqPairs`). **It never touches groups**: a manager may
+  be mid-edit on an unsaved sheet, and losing that to a background
+  refresh is worse than a missing name.
+- Every RE-open of the tab refreshes; the first open still loads the
+  saved sheet.
+- A **Re-check roster** control sits on the bullpen for when the panel
+  never closed, and names anyone new instead of silently redrawing.
+- The bullpen no longer returns '' when everyone is seated — it reads
+  "Everyone on the roster is seated (N)" and keeps the control, because
+  that is the moment a manager hunting a late signup needs it.
+
+Guard: `test_pairings_roster.js`.

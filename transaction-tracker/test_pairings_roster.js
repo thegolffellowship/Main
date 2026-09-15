@@ -275,6 +275,27 @@ check("the role marks show even when the standings bands do not",
     /const bandLegend = !showBands \? '' :/.test(html)
     && /if \(bandLegend \|\| roleLegend\) \{/.test(html));
 
+// ── A LATE SIGNUP REACHES THE BULLPEN (Kerry 2026-09-15: "Just had a
+//    late signup... Justin Guerrero. He's not showing up as in the
+//    bullpen though."). The panel read the roster once, on first open,
+//    and nothing re-read it — the stale-player banner was armed only the
+//    other way round (seated, no longer on the roster).
+check("there is a roster-only refresh that never touches the groups",
+    /async function refreshPairingsRoster\(evId\)[\s\S]{0,900}state\.event_players = data\.event_players \|\| \[\];/.test(html)
+    && !/function refreshPairingsRoster[\s\S]{0,900}state\.groups_9 =/.test(html));
+check("it rebuilds the lookups that hang off the roster",
+    /refreshPairingsRoster[\s\S]{0,900}state\._paceMap = null;[\s\S]{0,300}state\._reqPairs = null;[\s\S]{0,300}state\.pairCounts = data\.pair_counts/.test(html));
+check("re-opening the PAIRINGS tab re-reads the roster; first open still loads the sheet",
+    /if \(!getPairingsState\(ev\.id\)\.loaded\) \{\s*await loadPairings\(ev\.id\);\s*\} else \{\s*await refreshPairingsRoster\(ev\.id\);/.test(html));
+check("the bullpen no longer disappears when everyone is seated",
+    /Everyone on the roster is seated/.test(html)
+    && !/const unassigned = getUnassigned\(state\);\s*if \(!unassigned\.length\) return '';/.test(html));
+check("a Re-check roster control sits on the panel, in both states",
+    (html.match(/\$\{refreshBtn\}/g) || []).length >= 2
+    && /class="pairings-roster-refresh"/.test(html));
+check("the control names who arrived rather than silently redrawing",
+    /pairings-roster-refresh[\s\S]{0,900}New on the roster: /.test(html));
+
 const cust = fs.readFileSync("templates/customers.html", "utf8");
 check("Customers page offers AMB / CAPT / BACK chips beside pace, both layouts",
     (cust.match(/renderRoleChips\(c\)/g) || []).length >= 2

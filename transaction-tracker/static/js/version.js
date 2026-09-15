@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.429.0";
+window.TGF_VERSION = "2.430.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.430.0",
+    date: "2026-09-15",
+    changes: [
+      "A LATE SIGNUP NOW REACHES THE BULLPEN (Kerry: \u2018Just had a late signup... Justin Guerrero. He\u2019s not showing up as in the bullpen though.\u2019). His order was on the roster and in the database within a minute; the PAIRINGS panel simply never re-read it. The panel loaded its roster ONCE, the first time it was opened, and nothing refreshed it \u2014 and Unassigned is computed from that roster. The stale-player banner beside it was armed the other way round, flagging someone SEATED who had come off the roster, which is the same armed-in-one-direction mistake CLAUDE.md warns about.",
+      "Re-opening the PAIRINGS tab now re-reads the roster, and a \u2018Re-check roster\u2019 control sits on the bullpen itself for when the panel never closed. Both use a roster-ONLY refresh that never touches the groups: a manager may be mid-edit with an unsaved sheet, and losing that to a background refresh would be worse than a missing name. A refresh that turns up new players names them rather than silently redrawing.",
+      "The bullpen also stops disappearing when everyone is seated. It now reads \u2018Everyone on the roster is seated (22)\u2019 and keeps the re-check control, because that is exactly the moment a manager hunting a late signup needs it \u2014 no panel meant no answer and nowhere to click.",
+    ],
+  },
   {
     version: "2.429.0",
     date: "2026-09-15",

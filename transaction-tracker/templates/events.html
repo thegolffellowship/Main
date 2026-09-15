@@ -6753,6 +6753,38 @@
         return html;
     }
 
+    // ROSTER-ONLY REFRESH (Kerry 2026-09-15: "Just had a late signup...
+    // Justin Guerrero. He's not showing up as in the bullpen though.").
+    // The panel loaded its roster once, when it was first opened, and
+    // nothing re-read it — so an order that arrived afterwards was on the
+    // ROSTER tab and in the database but not in `state.event_players`,
+    // which is what Unassigned is computed from. The stale-player banner
+    // was armed the OTHER way (seated, no longer on the roster), the same
+    // one-direction mistake CLAUDE.md warns about.
+    //
+    // This re-reads the same endpoint and copies ONLY the roster side.
+    // Groups are never touched: a manager may be mid-edit with an unsaved
+    // sheet, and losing that to a background refresh would be far worse
+    // than a missing name. Returns the new roster size, or null on error.
+    async function refreshPairingsRoster(evId) {
+        try {
+            const res = await fetch(`/api/events/${evId}/pairings`);
+            const data = await res.json();
+            const state = getPairingsState(evId);
+            state.event_players = data.event_players || [];
+            state._paceMap = null;          // rebuilt from the fresh roster
+            state.requests = data.partner_requests || [];
+            state._reqPairs = null;
+            state.mpMatches = data.mp_matches || [];
+            state.standingsPoints = data.standings_points || {};
+            state.standingsEnrolled = data.standings_enrolled || {};
+            state.pairCounts = data.pair_counts || {};
+            return state.event_players.length;
+        } catch (e) {
+            return null;
+        }
+    }
+
     async function loadPairings(evId) {
         try {
             const res = await fetch(`/api/events/${evId}/pairings`);
@@ -8531,9 +8563,16 @@
                 financialOpenForEvent[ev.id] = val === "3";
                 payoutsOpenForEvent[ev.id] = val === "4";
                 rerenderDetail(container, ev);
-                // Load saved pairings on first open
-                if (val === "2" && !getPairingsState(ev.id).loaded) {
-                    await loadPairings(ev.id);
+                // Load the saved sheet on first open; on every RE-open
+                // re-read the roster, so a player added on the ROSTER tab
+                // a moment ago is in the bullpen when you come back
+                // (Kerry 2026-09-15, the Justin Guerrero late signup).
+                if (val === "2") {
+                    if (!getPairingsState(ev.id).loaded) {
+                        await loadPairings(ev.id);
+                    } else {
+                        await refreshPairingsRoster(ev.id);
+                    }
                     rerenderDetail(container, ev);
                 }
             });
@@ -9620,6 +9659,28 @@
             });
         }
 
+        // Re-check roster (Kerry 2026-09-15) — roster only, never groups.
+        container.querySelectorAll('.pairings-roster-refresh').forEach(btn => {
+            btn.addEventListener('click', async e => {
+                e.stopPropagation();
+                const was = btn.textContent;
+                btn.textContent = 'Checking…'; btn.disabled = true;
+                const before = new Set(getUnassigned(getPairingsState(ev.id))
+                    .map(p => pairPersonKey(p.name)));
+                const n = await refreshPairingsRoster(ev.id);
+                const state = getPairingsState(ev.id);
+                const added = getUnassigned(state)
+                    .filter(p => !before.has(pairPersonKey(p.name)));
+                rerenderDetail(container, ev);
+                if (n === null) {
+                    alert('Could not re-read the roster. Check the connection and try again.');
+                } else if (added.length) {
+                    alert('New on the roster: ' + added.map(p => p.name).join(', ')
+                          + '\n\nThey are in the bullpen now — click a name, then an open seat.');
+                }
+            });
+        });
+
         // History row toggle (Kerry 2026-09-15) — re-render, remember.
         const histChk = container.querySelector(`[data-pairings-history="${ev.id}"]`);
         if (histChk) {
@@ -10507,9 +10568,22 @@
     function renderUnassignedPlayers(ev, state) {
         if (!state.loaded) return '';
         const unassigned = getUnassigned(state);
-        if (!unassigned.length) return '';
+        const rosterN = (state.event_players || []).length
+            + (state.rosterExtra || []).length;
+        // The panel STAYS when everyone is seated (Kerry 2026-09-15). It
+        // used to vanish, which is exactly the moment a manager looking
+        // for a late signup needs it: no panel meant no answer and
+        // nowhere to click. Empty, it says so and offers a re-read.
+        const refreshBtn = `<button type="button" class="pairings-roster-refresh"
+            data-ev-id="${ev.id}" title="Re-read the roster from the server — use after a late signup"
+            style="margin-left:0.6rem;padding:1px 9px;border:1px solid var(--border);border-radius:999px;background:#fff;color:var(--text-body);font-size:0.72rem;font-weight:600;cursor:pointer;">&#8635; Re-check roster</button>`;
+        if (!unassigned.length) {
+            if (!rosterN) return '';
+            return `<div style="margin-top:1rem;font-size:0.78rem;color:var(--text-muted);padding:0.4rem 0 0.3rem;">
+                Everyone on the roster is seated (${rosterN}).${refreshBtn}</div>`;
+        }
         let html = `<div style="margin-top:1rem;">`;
-        html += `<div style="font-weight:700;font-size:0.78rem;letter-spacing:0.06em;color:#d97706;padding:0.4rem 0 0.3rem;">&#9888; UNASSIGNED (${unassigned.length}) &mdash; Click player then a group to place</div>`;
+        html += `<div style="font-weight:700;font-size:0.78rem;letter-spacing:0.06em;color:#d97706;padding:0.4rem 0 0.3rem;">&#9888; UNASSIGNED (${unassigned.length}) &mdash; Click player then a group to place${refreshBtn}</div>`;
         html += '<div style="display:flex;flex-wrap:wrap;gap:0.4rem;">';
         unassigned.forEach(player => {
             const isSelected = state.swapMode === 'move' && state.selection &&
