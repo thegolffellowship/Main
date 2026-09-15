@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.412.0";
+window.TGF_VERSION = "2.413.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.413.0",
+    date: "2026-09-15",
+    changes: [
+      "HOLES ARE DEALT EVEN WHEN EDIT EVENT HAS NO GROUP COUNT (Kerry: \u2018why aren\u2019t holes being assigned to the foursomes?\u2019). Slot labels came only from the event\u2019s tee-time count, and with that at zero the sheet read \u2018Group 1, Group 2 \u2026\u2019 even on a shotgun with a start time. The roster now sizes the sheet: a shotgun deals 1A / 1B / 2A \u2026, tee times deal clock slots from the start time, and only an event with neither falls back to \u2018Group N\u2019. A typed count still wins.",
+      "The foursomes wrap to the WINDOW, not the table (Kerry: \u2018Make the foursomes wrap to window width so I can always see them\u2019). The detail panel lives inside the events table, which scrolls sideways on a narrow or zoomed window, so a third column of groups was sitting off-screen. The panel is now capped at the table wrapper\u2019s visible width and sticks to the left edge while the row scrolls.",
+      "The open-seat picker and the Unassigned panel read \u2018Last, First\u2019 like the request dropdowns (Kerry: \u2018flip the picker and unassigned panel too\u2019). Seated cards keep \u2018First Last\u2019.",
+      "A red \u2715 on every seated player sends them to the bullpen (Kerry: \u2018a simple red X to be able to put them in the bullpen for unassigned players\u2019). The seat opens, the player reappears under UNASSIGNED, and like every other edit it is unsaved until Save \u2014 Undo brings them straight back.",
+    ],
+  },
   {
     version: "2.412.0",
     date: "2026-09-15",

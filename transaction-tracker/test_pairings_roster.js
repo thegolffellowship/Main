@@ -141,6 +141,29 @@ check("rosterOptionHtml displays through displayName but keeps the raw name as t
         /value="Victor Arias III">Arias, Victor III<\/option>/.test(b), b);
 })();
 
+console.log("\nPicker + Unassigned read Last, First; foursomes wrap to the window (v2.413.0)");
+check("open-seat picker entries display through displayName",
+    /class="pairing-pick-item"[\s\S]{0,120}\$\{escapeHtml\(displayName\(p\.name\)\)\}/.test(html));
+check("Unassigned panel names display through displayName, raw name kept on data-unassigned-name",
+    /data-unassigned-name="\$\{escapeHtml\(player\.name\)\}"[\s\S]{0,500}\$\{escapeHtml\(displayName\(player\.name\)\)\}/.test(html));
+check("seated cards still read First Last",
+    /data-cart-pos="\$\{player\.cart_pos\}">`;[\s\S]{0,200}\$\{escapeHtml\(player\.name \|\| '\u2014'\)\}/.test(html));
+check("detail panel is capped at the wrapper's visible width and sticks left",
+    /\.event-detail-content \{[^}]*max-width: var\(--ev-detail-w, 100%\);[^}]*position: sticky; left: 0;/.test(html));
+check("a ResizeObserver on the table wrapper publishes --ev-detail-w",
+    /querySelector\('\.events-table-wrapper'\)[\s\S]{0,300}setProperty\('--ev-detail-w', wrap\.clientWidth \+ 'px'\)[\s\S]{0,120}new ResizeObserver\(set\)\.observe\(wrap\)/.test(html));
+
+console.log("\nBullpen X (v2.413.0)");
+check("every seated row carries an unseat button keyed by holes/group/cart",
+    /class="pairing-unseat" data-unseat data-ev-id="\$\{ev\.id\}" data-holes="\$\{holes\}" data-group-num="\$\{grp\.group_num\}" data-cart-pos="\$\{player\.cart_pos\}"/.test(html));
+check("the handler splices the player out, dirties the sheet and records history",
+    /\[data-unseat\]'\)\.forEach\(btn =>[\s\S]{0,900}grp\.players\.splice\(idx, 1\);[\s\S]{0,120}state\.isDirty = true;[\s\S]{0,160}commitPairHistory\(state\);/.test(html));
+check("the X cannot start a drag of the row",
+    /btn\.addEventListener\('dragstart', e => \{ e\.preventDefault\(\); e\.stopPropagation\(\); \}\)/.test(html));
+check("the X is red and quiet until hovered",
+    /\.pairing-unseat \{[^}]*color: #b91c1c;[^}]*opacity: 0\.35;/.test(html)
+    && /\.pairing-player-row:hover \.pairing-unseat \{ opacity: 0\.85; \}/.test(html));
+
 console.log("");
 if (failures) { console.log(failures + " FAILURE(S)"); process.exit(1); }
 console.log("All pairings-roster assertions passed.");

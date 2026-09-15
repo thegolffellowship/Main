@@ -377,6 +377,20 @@
         @media (max-width: 720px) {
             .pairings-groups-grid { grid-template-columns: 1fr; }
         }
+        /* The detail panel lives in a <td colspan> of the events table,
+           whose columns are nowrap — so on a narrow or zoomed window the
+           TABLE is wider than the viewport and the wrapper scrolls
+           sideways. auto-fit then reflows the foursomes to the table's
+           width, not the window's, and the third column sits off-screen
+           (Kerry 2026-09-15: "Make the foursomes wrap to window width so
+           I can always see them"). --ev-detail-w is the wrapper's visible
+           width, set by a ResizeObserver; sticky-left keeps the panel in
+           view when the table row IS scrolled. */
+        .event-detail-content {
+            max-width: var(--ev-detail-w, 100%);
+            box-sizing: border-box;
+            position: sticky; left: 0;
+        }
         .pairing-group-card {
             border: 1px solid var(--border); border-radius: 8px;
             overflow: hidden; background: var(--bg);
@@ -472,6 +486,16 @@
         }
         .roster-hcp-prelim:hover { background: #ffedd5; border-color: #fb923c; }
         .pairing-tee { font-size: 0.72rem; color: var(--text-muted); width: 2.6rem; text-align: center; flex-shrink: 0; }
+        /* The bullpen X: quiet until the row is hovered, red on hover of
+           the X itself, never the row's drag/select target. */
+        .pairing-unseat {
+            flex-shrink: 0; margin-left: 0.15rem; width: 1.35rem; height: 1.35rem;
+            border: 1px solid transparent; border-radius: 9999px; background: none;
+            color: #b91c1c; opacity: 0.35; font-size: 0.72rem; line-height: 1;
+            cursor: pointer; padding: 0; transition: opacity .12s, background .12s;
+        }
+        .pairing-player-row:hover .pairing-unseat { opacity: 0.85; }
+        .pairing-unseat:hover { opacity: 1; background: #fee2e2; border-color: #fca5a5; }
         /* Drag-and-drop: a player can be dragged onto any group, and the
            rail that appears says what releasing does — including adding a
            5th, which is the manager-intent gate for an oversized group
@@ -2636,6 +2660,18 @@
     // sits at its natural size, packed LEFT (Kerry 2026-09-04: "Allow
     // all columns to align left") instead of being stretched apart by
     // the table's width:100%.
+    // Publishes the events-table wrapper's VISIBLE width as --ev-detail-w
+    // so expanded detail panels (pairings foursomes, roster, games) wrap
+    // to the window instead of to the wider, sideways-scrolling table.
+    (function watchDetailWidth() {
+        const wrap = document.querySelector('.events-table-wrapper');
+        if (!wrap) return;
+        const set = () => wrap.style.setProperty('--ev-detail-w', wrap.clientWidth + 'px');
+        if (window.ResizeObserver) new ResizeObserver(set).observe(wrap);
+        else window.addEventListener('resize', set);
+        set();
+    })();
+
     function evColspan() {
         return visibleEvColumns().length + 1;
     }
@@ -6568,6 +6604,13 @@
                 if (player.name) {
                     html += paceBadge(state, player.name);
                 }
+                // Unseat into the bullpen (Kerry 2026-09-15: "a simple
+                // red X to be able to put them in the 'bullpen' for
+                // unassigned players"). Unsaved like every other edit on
+                // the sheet — Undo brings them back, Save makes it real.
+                if (player.name) {
+                    html += `<button type="button" class="pairing-unseat" data-unseat data-ev-id="${ev.id}" data-holes="${holes}" data-group-num="${grp.group_num}" data-cart-pos="${player.cart_pos}" title="Remove from this group (moves to Unassigned)" aria-label="Remove ${escapeHtml(player.name)} from this group">&#x2715;</button>`;
+                }
                 html += '</div>';
             }
 
@@ -9992,6 +10035,30 @@
             });
         });
 
+        // Bullpen X: unseat one player (Kerry 2026-09-15). The seat is
+        // left open — the row's cart_pos gap is what "— open —" renders
+        // from — and getUnassigned lists the player again on the next
+        // render because they are on the roster and no longer seated.
+        container.querySelectorAll('[data-unseat]').forEach(btn => {
+            btn.addEventListener('click', e => {
+                e.stopPropagation();
+                e.preventDefault();
+                const grp = _findGroup(state, btn.dataset.holes, Number(btn.dataset.groupNum));
+                if (!grp) return;
+                const idx = grp.players.findIndex(p => p.cart_pos === Number(btn.dataset.cartPos));
+                if (idx === -1) return;
+                grp.players.splice(idx, 1);
+                state.isDirty = true;
+                state.swapMode = null; state.selection = null;
+                commitPairHistory(state);
+                rerenderDetail(container, ev);
+            });
+            // A row is draggable; the X must not start a drag or bubble
+            // the mousedown into the row's select handler.
+            btn.addEventListener('mousedown', e => e.stopPropagation());
+            btn.addEventListener('dragstart', e => { e.preventDefault(); e.stopPropagation(); });
+        });
+
         // Unassigned player row click (move mode only)
         container.querySelectorAll('[data-unassigned-name]').forEach(row => {
             row.addEventListener('click', e => {
@@ -10041,7 +10108,7 @@
                 const mismatch = ph && holes && ph !== String(holes)
                     ? ` <span style="color:#b45309;font-weight:700;">${escapeHtml(ph)}h</span>` : '';
                 inner += `<button type="button" class="pairing-pick-item" data-pick-idx="${i}">`
-                    + `<span>${escapeHtml(p.name)}${p.rsvp_only ? ' <span style="color:#d97706;font-size:0.7rem;font-weight:700;">RSVP</span>' : ''}${mismatch}</span>`
+                    + `<span>${escapeHtml(displayName(p.name))}${p.rsvp_only ? ' <span style="color:#d97706;font-size:0.7rem;font-weight:700;">RSVP</span>' : ''}${mismatch}</span>`
                     + `<span class="pairing-pick-meta">${hcp} &middot; ${tee}</span></button>`;
             });
         }
@@ -10163,7 +10230,11 @@
                 style="background:${isSelected ? '' : '#fffbeb'};border:1px solid #fcd34d;border-radius:6px;cursor:pointer;min-width:180px;"
                 data-ev-id="${ev.id}" data-unassigned-name="${escapeHtml(player.name)}">`;
             html += `<span class="pairing-cart-dot" style="background:#f59e0b;"></span>`;
-            html += `<span class="pairing-player-name">${escapeHtml(player.name || '—')}</span>`;
+            // "Last, First" like the request dropdowns (Kerry 2026-09-15:
+            // "flip the picker and unassigned panel too"); the seated
+            // cards keep "First Last". data-unassigned-name above stays
+            // the raw roster name — that is what _movePlayer seats.
+            html += `<span class="pairing-player-name">${escapeHtml(displayName(player.name))}</span>`;
             if (player.rsvp_only) {
                 html += '<span class="pairing-rsvp-badge" title="RSVP&#39;d in Golf Genius — no order on file yet">RSVP</span>';
             }

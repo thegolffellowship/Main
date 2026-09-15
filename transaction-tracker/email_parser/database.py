@@ -54327,11 +54327,20 @@ def _nine_side(event: dict) -> str:
     return "Back" if side == "Back" else "Front"
 
 
-def _pairing_time_slots(event: dict, holes: str) -> list[str]:
+def _pairing_time_slots(event: dict, holes: str, needed: int = 0) -> list[str]:
     """Compute ordered slot labels for a given holes type (9 or 18).
 
     For tee-time events returns formatted clock strings ("8:00 AM", …).
     For shotgun events returns hole identifiers ("1A", "1B", "2A", …).
+
+    `needed` is how many groups the ROSTER makes (Kerry 2026-09-15: "why
+    aren't holes being assigned to the foursomes?"). The event's own
+    tee_time_count is the manager's number and wins when set; when it is
+    0 — the common case, nobody types a group count into Edit Event —
+    the roster's count is used instead, so a shotgun event still deals
+    1A / 1B / 2A … and a tee-time event with a start time still deals
+    clock slots. Only an event with no start type AND no start time
+    falls back to "Group N".
     """
     combo = (event.get("format") or "").strip() == "9/18 Combo"
     if combo and holes == "18":
@@ -54346,6 +54355,8 @@ def _pairing_time_slots(event: dict, holes: str) -> list[str]:
     interval = event.get("tee_time_interval") or 10
     count = int(count)
     interval = int(interval)
+    if count <= 0:
+        count = max(0, int(needed or 0))
 
     if count == 0:
         return []
@@ -54374,6 +54385,17 @@ def _pairing_time_slots(event: dict, holes: str) -> list[str]:
         label = t.strftime("%I:%M %p").lstrip("0") or "12:00 AM"
         slots.append(label)
     return slots
+
+
+def _pairing_groups_needed(n_players: int, max_group: int = 4,
+                           seeded_slots: int = 0, saved_groups: int = 0) -> int:
+    """How many slots a sheet needs: enough for every player at the
+    group ceiling, and never fewer than the seeds or the saved sheet
+    already occupy."""
+    n = int(n_players or 0)
+    per = max(1, int(max_group or 4))
+    by_roster = (n + per - 1) // per
+    return max(by_roster, int(seeded_slots or 0), int(saved_groups or 0))
 
 
 def _migrate_pairing_history_rounds(conn: sqlite3.Connection) -> bool:
@@ -57826,10 +57848,6 @@ def generate_event_pairings(
                         "ABCD groups were built without them.")
         valid_mp_pairs = []
 
-    # ── Generate slots ────────────────────────────────────────────────
-    slots_9 = _pairing_time_slots(ev, "9")
-    slots_18 = _pairing_time_slots(ev, "18")
-
     # ── Seed map: holes → {slot_index: {cart_pos: name}} ─────────────
     seed_map: dict[str, dict[int, dict[int, str]]] = {"9": {}, "18": {}}
     seeded_players: dict[str, set] = {"9": set(), "18": set()}
@@ -57841,6 +57859,16 @@ def generate_event_pairings(
         for sp in s.get("players", []):
             seed_map[h][si][sp["cart_pos"]] = sp["name"]
             seeded_players[h].add(sp["name"])
+
+    # ── Generate slots ────────────────────────────────────────────────
+    # Sized by the ROSTER when Edit Event carries no group count, so the
+    # foursomes get holes / tee times instead of "Group N" (Kerry
+    # 2026-09-15). A typed count still wins inside _pairing_time_slots.
+    def _needed(h, player_items):
+        top_seed = (max(seed_map[h]) + 1) if seed_map[h] else 0
+        return _pairing_groups_needed(len(player_items), max_group, top_seed)
+    slots_9 = _pairing_time_slots(ev, "9", needed=_needed("9", nines))
+    slots_18 = _pairing_time_slots(ev, "18", needed=_needed("18", eighteens))
 
     result: dict = {}
     # {normalized name | customer_id -> season points} for the chosen race,

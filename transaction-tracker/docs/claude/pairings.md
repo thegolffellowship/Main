@@ -1056,6 +1056,52 @@ panel and the open-seat picker). The server roster is first-name ordered
 The dropdown TEXT is `displayName(name)` — "Last, First", suffix-aware
 (v2.412.0); the `<option>` VALUE stays the raw roster name because that is
 what `set_partner_request_match` resolves.
+The open-seat picker and the Unassigned panel read "Last, First" too
+(v2.413.0); seated cards keep "First Last"; `data-unassigned-name` and the
+picker's pick object carry the raw name.
+
+## Slots are sized by the roster (v2.413.0, Kerry 2026-09-15)
+
+> *"Why aren't holes being assigned to the foursomes?"*
+
+`_pairing_time_slots(event, holes, needed=0)`: the event's
+`tee_time_count` is the manager's number and wins when set; when it is 0
+(nobody types a group count into Edit Event) the ROSTER's count is used —
+`_pairing_groups_needed(n_players, max_group, seeded_slots, saved_groups)`
+— so a shotgun still deals `1A 1B 2A …`, tee times with a start time deal
+clock slots, and only an event with neither falls back to `Group N`. The
+generator passes its per-holes roster + top seed index; the `/pairings`
+GET passes the roster split by normalised holes + the saved sheet's group
+count, so the seed picker and the saved sheet offer the same holes.
+Guard: `test_pairing_slots.py`.
+
+## Bullpen X (v2.413.0)
+
+> *"Need the ability to remove a player. Maybe just a simple red X to be
+> able to put them in the 'bullpen' for unassigned players."*
+
+Every seated row renders `.pairing-unseat` (`data-unseat`, keyed by
+holes / group_num / cart_pos). The handler splices the player out of the
+group's `players`, leaves the `cart_pos` gap (that is what `— open —`
+renders from), dirties the sheet, commits history and re-renders;
+`getUnassigned` lists the player again because they are on the roster and
+no longer seated. Purely client state until Save, like every other sheet
+edit — the server-side `remove_player_from_pairings` (used when a
+registration is credited/WD'd) is a different thing and untouched.
+
+## Detail panel wraps to the window (v2.413.0)
+
+> *"Make the foursomes wrap to window width so I can always see them."*
+
+The detail panel renders inside `.event-detail-row > td` of a nowrap
+table inside `.events-table-wrapper { overflow-x: auto }`; on a narrow or
+zoomed window the table is wider than the viewport, `auto-fit` reflows the
+foursomes to the TABLE width, and the third column sits off-screen. A
+`ResizeObserver` on the wrapper publishes its `clientWidth` as
+`--ev-detail-w`; `.event-detail-content` is `max-width: var(--ev-detail-w)`
+and `position: sticky; left: 0`, so the panel is always window-wide and
+stays in view when the row itself is scrolled.
+
 
 ## Menus inside tables (v2.342.0)
 

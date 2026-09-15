@@ -5055,8 +5055,6 @@ def api_get_pairings(event_id):
             return jsonify({"error": "Event not found"}), 404
         ev = dict(ev)
         pairings = get_event_pairings(event_id)
-        slots_9 = _pairing_time_slots(ev, "9")
-        slots_18 = _pairing_time_slots(ev, "18")
         # Current player list — used by UI to detect unassigned players.
         # THE roster (`_event_roster_rows`): active order rows PLUS the
         # PLAYING Golf Genius RSVPs with no order, one entry per person,
@@ -5084,6 +5082,23 @@ def api_get_pairings(event_id):
                 })
         finally:
             _pconn.close()
+        # Slot labels sized by the roster when Edit Event carries no group
+        # count (Kerry 2026-09-15: "why aren't holes being assigned to
+        # the foursomes?") — the same rule the generator applies, so the
+        # seed picker and the saved sheet offer the same holes.
+        from email_parser.database import _pairing_groups_needed
+        _fmt = (ev.get("format") or "").strip()
+        _default_h = "18" if _fmt in ("18 Holes", "27 Holes") else "9"
+        def _h_of(p):
+            h = str(p.get("holes") or "").strip()
+            return h if h in ("9", "18") else _default_h
+        _max_group = 5 if int(ev.get("allow_fivesomes") or 0) else 4
+        _n9 = sum(1 for p in player_rows if _h_of(p) == "9")
+        _n18 = sum(1 for p in player_rows if _h_of(p) == "18")
+        slots_9 = _pairing_time_slots(ev, "9", needed=_pairing_groups_needed(
+            _n9, _max_group, saved_groups=len(pairings.get("9") or [])))
+        slots_18 = _pairing_time_slots(ev, "18", needed=_pairing_groups_needed(
+            _n18, _max_group, saved_groups=len(pairings.get("18") or [])))
         # Player TIER for the pairing-card colour bands: 'member' |
         # 'alumni' | 'guest', from derive_member_financial_status_bulk —
         # the same D1 truth Player Rankings chips with, so a FORMER member
