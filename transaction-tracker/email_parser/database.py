@@ -55319,22 +55319,36 @@ def event_flights_report(event_id: int, db_path=None) -> dict | None:
         if min_buyers is not None and n < min_buyers:
             entry["active"] = False
             entry["inactive_reason"] = (
-                f"{label} activates at {min_buyers} buyers on an "
-                f"{holes_key}-hole event; {n} bought in.")
+                f"{label} activates at {min_buyers} buyers on "
+                f"{'an 18' if holes_key == '18' else 'a 9'}-hole event; "
+                f"{n} bought in.")
             games.append(entry)
             continue
         plan = _ls.flight_plan(field, count, game=game)
         entry["mode"] = plan["mode"]
         entry["notes"] = list(plan.get("notes") or [])
         fl = plan["flights"]
+        # A label states the RULE, not the field. On a FIXED-BAND game the
+        # rule is the configured edge — Skins flight 1 is "<12.0" even when
+        # the lowest player above the line happens to be 12.4, because a
+        # 12.1 reading "<12.4" would place himself in the wrong flight.
+        # Only when a merge has changed the shape does the label fall back
+        # to describing the field.
+        edges = None
+        if (plan["mode"] == "fixed_bands"
+                and plan["effective_count"] == plan["requested_count"]):
+            edges = list((_ls.SEED_FLIGHT_CONFIG.get("bands") or {}).get(str(count)) or [])
+            if len(edges) != len(fl) - 1:
+                edges = None
         for i, f in enumerate(fl):
-            # GG's own label shape: the break is the NEXT flight's floor,
-            # so a reader can place themselves without the roster.
-            nxt = fl[i + 1]["min_index"] if i + 1 < len(fl) else None
+            nxt = (edges[i] if edges is not None and i < len(edges)
+                   else (fl[i + 1]["min_index"] if i + 1 < len(fl) else None))
+            prev = (edges[i - 1] if edges is not None and i > 0
+                    else f["min_index"])
             if nxt is not None:
                 band = f"HCP <{nxt:.1f}"
             elif len(fl) > 1:
-                band = f"HCP {f['min_index']:.1f}+"
+                band = f"HCP {prev:.1f}+"
             else:
                 band = "All handicaps"
             entry["flights"].append({

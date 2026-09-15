@@ -1352,8 +1352,11 @@ each from its own owner:
   13/13, skins 8/8 — which is why the report does not re-litigate it.
 
 Flight labels name the break the way GG does (`Flight 1 (HCP <12.0)` /
-`Flight 2 (HCP 12.0+)`), taken from the NEXT flight's floor so a reader
-can place themselves. Indexes are the 18-hole index of RECORD (the WHS
+`Flight 2 (HCP 12.0+)`). A label states the RULE: on a fixed-band game it
+quotes the configured edge, because a 12.1 reading "<12.4" (the field's
+lowest player above the line) would place himself in the wrong flight.
+Equal-size flights quote the cut actually made — there is no band — and a
+ladder shortened by a merge falls back to the field. Indexes are the 18-hole index of RECORD (the WHS
 computation doubled), resolved **by customer_id**
 (`_handicap_index_18_by_customer`) — `ls_flight_lab` resolves by name and
 lost Jeff Rideout on s9.23. A plus handicap prints `+1.4`. A game under

@@ -128,6 +128,9 @@ check("Individual Gross is REPORTED as not running, not faked",
 check("…and it prints no flights", g["individual_gross"]["flights"] == [])
 check("Skins below 8 buyers runs as one flight, not two",
       g["skins"]["active"] and len(g["skins"]["flights"]) == 1, str(g["skins"]["flights"]))
+check("the inactive line reads 'a 9-hole event', not 'an 9-hole event'",
+      "a 9-hole event" in (g["individual_gross"]["inactive_reason"] or ""),
+      str(g["individual_gross"]["inactive_reason"]))
 check("the index basis is stated on the sheet", "18-hole" in rep["index_basis"], rep["index_basis"])
 
 # A buyer with no rounds cannot be flighted and must be named, not hidden.
@@ -140,6 +143,29 @@ gn = {x["game"]: x for x in rep4["games"]}["individual_net"]
 check("a buyer with no index is listed apart, never dropped into a flight",
       [u["sort_name"] for u in gn["unflighted"]] == ["RIDEOUT, Jeff"], str(gn["unflighted"]))
 check("…and he still counts as a buyer", gn["buyers"] == 13, str(gn["buyers"]))
+
+print("\n== a fixed-band label states the RULE, not the field ==")
+# 8 GROSS buyers -> Skins runs 2 fixed bands at <12.0. Nobody sits
+# between 12.0 and 12.4, and the label must still say 12.0: a player at
+# 12.1 reading "<12.4" would place himself in the wrong flight.
+for i in range(3, 8):
+    cid = 300 + i
+    f, l, t = "Gross", f"Buyer{i}", 12.4 + i
+    c.execute("INSERT INTO customers (customer_id, first_name, last_name, chapter, account_status) VALUES (?, ?, ?, 'San Antonio', 'active')", (cid, f, l))
+    c.execute("INSERT INTO handicap_player_links (player_name, customer_name, customer_id) VALUES (?, ?, ?)", (f"{l}, {f}", f"{f} {l}", cid))
+    for _d in (10, 20, 30):
+        c.execute("INSERT INTO handicap_rounds (player_name, round_date, adjusted_score, rating, slope, differential) "
+                  "VALUES (?, date('now', ?), 45, 34.5, 120, ?)", (f"{l}, {f}", f"-{_d} days", t / 2.0 + 2.0))
+    c.execute("INSERT INTO items (id, email_uid, merchant, customer, customer_id, item_name, order_date, transaction_status, event_id, side_games, user_status) "
+              "VALUES (?, ?, 'The Golf Fellowship', ?, ?, 's9.23 The Quarry', '2026-09-10', 'active', ?, 'NET & GROSS', 'MEMBER')",
+              (810 + i, f"u{810+i}", f"{f} {l}", cid, EV))
+c.commit()
+_sk = {x["game"]: x for x in db.event_flights_report(EV, db_path=tmp)["games"]}["skins"]
+check("skins now runs two flights", len(_sk["flights"]) == 2, str(_sk["buyers"]))
+check("the band label is the configured 12.0, not the field's 12.4",
+      _sk["flights"][0]["name"] == "Flight 1 (HCP <12.0)", _sk["flights"][0]["name"])
+check("…and the upper flight names the same edge",
+      _sk["flights"][1]["name"] == "Flight 2 (HCP 12.0+)", _sk["flights"][1]["name"])
 
 print("\n== the sheets carry the logo ==")
 for t in ("divisions_flights.html", "proximity_markers.html"):

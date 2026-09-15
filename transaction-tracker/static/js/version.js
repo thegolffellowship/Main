@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.425.0";
+window.TGF_VERSION = "2.425.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.425.1",
+    date: "2026-09-15",
+    changes: [
+      "A FLIGHT LABEL STATES THE RULE, NOT THE FIELD. On a fixed-band game the label now reads the configured edge \u2014 Skins flight 1 is \u2018HCP <12.0\u2019 even when the lowest player above the line happens to be 12.4 \u2014 because a 12.1 reading \u2018<12.4\u2019 would place himself in the wrong flight. Verified against the live s9.23 sheet, where the field label and the rule label differed. Equal-size flights (Individual Net) still describe the cut that was actually made, since there is no band to quote, and a merged ladder falls back to the field.",
+    ],
+  },
   {
     version: "2.425.0",
     date: "2026-09-15",
