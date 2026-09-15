@@ -131,6 +131,19 @@ matters too, not just the foursome.
     a leaderless group takes a captain/ambassador from a group holding
     two, cheapest history, never breaking rule 12).
 
+14. **First-timers ride with an ambassador (Kerry-ratified 2026-09-15,
+    v2.420.0).** "1st Timers also need to be paired up (carted) with an
+    Ambassador of the same tees whenever possible." `is_first_timer` =
+    order label `1ST TIMER` or profile status `first_timer`. Composition:
+    `_pair_first_timers_with_ambassadors` gives every group holding a
+    first-timer an ambassador by the cheapest history swap that keeps
+    rule 12, a tee mismatch costing as much as a once-played repeat so a
+    same-tee ambassador wins whenever one is free; never strips a group
+    of the only ambassador riding with ITS first-timer; no candidate → a
+    note. Seating: `_arrange_group_seats` (weight 10) puts the first-timer
+    in the ambassador's cart; the driver rule (13) then seats the
+    ambassador at the wheel.
+
 **Role flags** (`customers.ambassador / group_captain / solo_back_ok`,
 seeded by `_PLAYER_ROLE_SEED` fill-only-if-NULL; one-tap chips AMB /
 CAPT / BACK on the Customers page write an explicit 0/1 via

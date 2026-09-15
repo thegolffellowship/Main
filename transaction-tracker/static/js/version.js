@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.419.0";
+window.TGF_VERSION = "2.420.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.420.0",
+    date: "2026-09-15",
+    changes: [
+      "ONE PERSON, ONE PROFILE across a lead, a Golf Genius RSVP and an order (Kerry: \u2018Jose Mejia should have removed/merged with the Joe Mejia RSVP\u2019). A Facebook lead had made \u2018Joe Mejia\u2019 with one email; the same man bought as \u2018Jose Mejia\u2019 with another, and the order minted a second profile. Order-time matching now has a PHONE + SURNAME rung \u2014 one customer with the same ten digits and last name is that person, and the new email is filed on them \u2014 and RSVPs match orders by customer id, not only by the email typed. The two Mejia profiles are merged (canonical Jose, Joe kept as an alias) and his RSVP is bound to his order.",
+      "PAIRINGS RULE 14 (Kerry: \u20181st Timers also need to be paired up (carted) with an Ambassador of the same tees whenever possible\u2019). Every group holding a first-timer gets an ambassador, a same-tee one preferred, by the cheapest history swap that keeps rule 12; in the cart the first-timer rides beside the ambassador. No free ambassador leaves a note on the sheet.",
+    ],
+  },
   {
     version: "2.419.0",
     date: "2026-09-15",

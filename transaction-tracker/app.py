@@ -5108,6 +5108,7 @@ def api_get_pairings(event_id):
                     "group_captain": bool(_r.get("group_captain")),
                     "solo_back_ok": bool(_r.get("solo_back_ok")),
                     "is_new": bool(_r.get("is_new")),
+                    "is_first_timer": bool(_r.get("is_first_timer")),
                 })
         finally:
             _pconn.close()

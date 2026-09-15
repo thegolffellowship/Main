@@ -1305,3 +1305,29 @@ only purchases in the year, so every lead was invisible until a first
 order. `customers.created_at` in the target year now counts as activity
 (the list query ships `created_at` + `acquisition_source`). Guard:
 `test_customers_filter.js`.
+
+## One person across a lead, an RSVP and an order (v2.420.0)
+
+Kerry 2026-09-15: "Jose Mejia should have removed/merged with the Joe
+Mejia RSVP." The Facebook lead created 729 "Joe Mejia" (jmejiasat@yahoo.com,
+703-309-8234); his GoDaddy order for s9.23 arrived as "Jose Mejia" with
+jmejiasat@mac.com and minted 824. Same phone, same man. Two rungs were
+missing and are now in:
+
+- **`_resolve_or_create_customer` — PHONE + SURNAME** (`_lookup_customer_by_phone_surname`):
+  after every email/name rung misses and before creating, ONE customer
+  whose stored phone has the same ten digits (`_phone_digits`) and the
+  same last name is that person; the new email is filed on them
+  (`customer_emails`, label `godaddy-phone-match`, `is_golf_genius = 0`
+  — the `idx_customer_emails_gg` UNIQUE index allows one GG email per
+  customer) so the next order matches by email. Two customers on one
+  phone (a household) → ambiguous → create, as before.
+- **`match_rsvp_to_item` — IDENTITY (Strategy 1c, rule 6):** the RSVP
+  email resolves to a `customer_id`; an active item on the event with
+  that id is the match, whatever email he typed at checkout.
+
+**One-shot repair** `_repair_mejia_identity`: merges 824 → 729 via
+`merge_customers`, canonical first name Jose (GoDaddy + GG say Jose; the
+lead form said Joe → alias "Joe Mejia"), both emails on 729, his PLAYING
+RSVP bound to the order by the identity rung; `app_settings` flag so it
+runs once. Guard: `test_customer_identity.py` (full `init_db` schema).

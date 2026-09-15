@@ -102,6 +102,25 @@ check("…and the new player still does not drive", seats3.index("Will") == 3, s
 check("no captains/newbies passed -> old behaviour unchanged",
       db._arrange_group_seats(["A", "B", "C", "D"], set(), set(), {}) == ["A", "B", "C", "D"])
 
+print("\n== rule 14: a 1st timer rides with an ambassador, same tee when possible ==")
+tee14 = {"Will": "50-64", "Mike": "65+", "Rob": "50-64", "Gus": "50-64", "Scott": "50-64", "Kerry": "<50", "Luke": "<50", "Adam": "<50"}
+g14 = [["Will", "Mike", "Rob", "Adam"], ["Gus", "Scott", "Kerry", "Luke"]]
+out, notes = db._pair_first_timers_with_ambassadors(g14, ambassadors={"Gus", "Scott", "Luke"}, first_timers={"Will"},
+                                                   tee_map=tee14, locked=set(), pair_counts=NOH, solo_ok={"Kerry"})
+wg = next(x for x in out if "Will" in x)
+check("Will's group now holds an ambassador", any(n in ("Gus", "Scott", "Luke") for n in wg), str(out))
+check("…a SAME-TEE one (50-64), not Luke on <50", "Luke" not in wg, str(out))
+check("the donor group keeps its ambassadors and rule 12 holds", all(db._lone_back_offender(x, tee14, {"kerry"}) is None for x in out), str(out))
+out2, notes2 = db._pair_first_timers_with_ambassadors([["Will", "Mike", "Rob", "Adam"], ["Kerry", "Luke", "Dan", "Pat"]],
+                                                      ambassadors=set(), first_timers={"Will"}, tee_map=tee14,
+                                                      locked=set(), pair_counts=NOH, solo_ok={"Kerry"})
+check("no ambassador on the sheet -> left alone with a note", out2[0] == ["Will", "Mike", "Rob", "Adam"] and notes2 and "Will" in notes2[0], str(notes2))
+seats14 = db._arrange_group_seats(["Will", "Mike", "Rob", "Gus"], set(), set(), tee14,
+                                  ambassadors={"Gus"}, first_timers={"Will"}, experience=exp)
+def c14(n): return 0 if seats14.index(n) < 2 else 1
+check("in the cart: the first-timer rides with the ambassador", c14("Will") == c14("Gus"), str(seats14))
+check("…and the ambassador drives (more experienced)", seats14.index("Gus") in (0, 2) and seats14.index("Will") in (1, 3), str(seats14))
+
 print("\n== flags: seed fill-only-if-NULL, tap writes explicit ==")
 conn = sqlite3.connect(":memory:"); conn.row_factory = sqlite3.Row
 conn.executescript("""

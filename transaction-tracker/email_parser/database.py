@@ -1512,6 +1512,68 @@ def _repair_pace_rulings_2026_09_15(conn: sqlite3.Connection) -> int:
     return changed
 
 
+def _repair_mejia_identity(conn: sqlite3.Connection, db_path=None) -> int:
+    """ONE-SHOT (Kerry 2026-09-15: "Jose Mejia should have removed/merged
+    with the Joe Mejia RSVP"). The Facebook lead made customer 729 "Joe
+    Mejia" (jmejiasat@yahoo.com, 703-309-8234); his GoDaddy order for
+    s9.23 The Quarry arrived as "Jose Mejia" with jmejiasat@mac.com and
+    minted customer 824. Same phone, same man. Merge 824 → 729, make the
+    canonical first name Jose (GoDaddy and Golf Genius both say Jose; the
+    lead form said Joe → alias), then re-run the RSVP match so his GG RSVP
+    binds to the order. Guarded by an app_settings flag."""
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS app_settings (
+               key TEXT PRIMARY KEY, value TEXT NOT NULL,
+               updated_at TEXT DEFAULT (datetime('now')))""")
+    flag = "mejia_identity_2026_09_15_applied"
+    if conn.execute("SELECT 1 FROM app_settings WHERE key = ?", (flag,)).fetchone():
+        return 0
+    CANON, DUP = 729, 824
+    canon = conn.execute("SELECT customer_id, first_name, last_name FROM customers "
+                         "WHERE customer_id = ?", (CANON,)).fetchone()
+    if not canon or (canon["last_name"] or "").strip().lower() != "mejia":
+        logger.warning("Mejia repair: canonical %d missing or not Mejia — skipping", CANON)
+        return 0
+    done = 0
+    dup = conn.execute("SELECT customer_id, first_name, last_name FROM customers "
+                       "WHERE customer_id = ?", (DUP,)).fetchone()
+    if dup and (dup["last_name"] or "").strip().lower() == "mejia":
+        conn.commit()      # merge_customers opens its own connection
+        try:
+            merge_customers("Jose Mejia", "Jose Mejia", db_path=db_path,
+                            source_customer_id=DUP, target_customer_id=CANON)
+            done += 1
+            logger.info("Mejia repair: merged customer %d -> %d", DUP, CANON)
+        except ValueError as e:
+            logger.warning("Mejia repair: merge failed: %s", e)
+    conn.execute("UPDATE customers SET first_name = 'Jose' WHERE customer_id = ?", (CANON,))
+    if not conn.execute(
+            "SELECT 1 FROM customer_aliases WHERE alias_type = 'name' "
+            "AND LOWER(alias_value) = 'joe mejia'").fetchone():
+        conn.execute(
+            "INSERT OR IGNORE INTO customer_aliases (customer_name, alias_value, alias_type, customer_id) "
+            "VALUES ('Jose Mejia', 'Joe Mejia', 'name', ?)", (CANON,))
+    conn.execute(
+        "INSERT OR IGNORE INTO customer_emails (customer_id, email, is_primary, label) "
+        "VALUES (?, 'jmejiasat@mac.com', 0, 'merged')", (CANON,))
+    # Bind his GG RSVP to the order by identity (Strategy 1c above).
+    for r in conn.execute(
+            "SELECT id, matched_event, player_email, player_name FROM rsvps "
+            "WHERE customer_id = ? AND matched_item_id IS NULL "
+            "AND response = 'PLAYING'", (CANON,)).fetchall():
+        conn.commit()
+        mid = match_rsvp_to_item(r["player_email"], r["player_name"],
+                                 r["matched_event"], db_path=db_path)
+        if mid:
+            conn.execute("UPDATE rsvps SET matched_item_id = ? WHERE id = ?", (mid, r["id"]))
+            done += 1
+    conn.execute("INSERT INTO app_settings (key, value, updated_at) VALUES (?, ?, datetime('now'))",
+                 (flag, str(done)))
+    conn.commit()
+    logger.info("Mejia repair: %d step(s) applied", done)
+    return done
+
+
 def _repair_massey_attribution(conn: sqlite3.Connection) -> None:
     """Re-attribute William Massey's orders corrupted by a bad customer merge.
 
@@ -4508,6 +4570,11 @@ def init_db(db_path: str | Path | None = None) -> None:
             _seed_player_roles(conn)
         except Exception as e:
             logger.warning("Player role seed failed: %s", e)
+        # One-shot identity repair (Kerry 2026-09-15): Jose/Joe Mejia
+        try:
+            _repair_mejia_identity(conn, db_path)
+        except Exception as e:
+            logger.warning("Mejia identity repair failed: %s", e)
 
         # Always-run repair: merge twin Crystal Falls events 3267 → 3263
         # (Kerry 2026-07-14: same May 30 event, renamed mid-registration)
@@ -6663,6 +6730,36 @@ def _emit_unlinked_partner_warning(
         logger.debug("Failed to insert UNLINKED_PARTNER warning for %r", customer_name)
 
 
+def _phone_digits(phone) -> str:
+    """Ten US digits or '' — the comparison key for phone identity."""
+    d = re.sub(r"\D", "", str(phone or ""))
+    if len(d) == 11 and d.startswith("1"):
+        d = d[1:]
+    return d if len(d) == 10 else ""
+
+
+def _lookup_customer_by_phone_surname(conn: sqlite3.Connection,
+                                      phone, last_name) -> int | None:
+    """The ONE customer whose stored phone has the same ten digits and
+    whose last name matches, else None (no phone, no surname, no match,
+    or more than one — a household sharing a phone is two people)."""
+    digits = _phone_digits(phone)
+    last = (last_name or "").strip().lower()
+    if not digits or not last:
+        return None
+    try:
+        rows = conn.execute(
+            """SELECT customer_id, phone FROM customers
+               WHERE phone IS NOT NULL AND phone != ''
+                 AND LOWER(TRIM(last_name)) = ?
+                 AND COALESCE(account_status, 'active') != 'merged'""",
+            (last,)).fetchall()
+    except sqlite3.OperationalError:
+        return None
+    hits = [r["customer_id"] for r in rows if _phone_digits(r["phone"]) == digits]
+    return hits[0] if len(hits) == 1 else None
+
+
 def _resolve_or_create_customer(
     conn: sqlite3.Connection,
     customer_name: str | None,
@@ -6719,6 +6816,30 @@ def _resolve_or_create_customer(
             return None
         first = first or parts[0]
         last = last or parts[-1]
+
+    # 3b. PHONE + SURNAME (Kerry 2026-09-15, the Joe/Jose Mejia case): a
+    # Facebook lead arrives as "Joe Mejia" with one email and a phone; the
+    # same man buys as "Jose Mejia" with a DIFFERENT email. Neither the
+    # email rungs nor the exact-name rung can see that, so the order minted
+    # a second profile. The phone is the same person's phone. A UNIQUE
+    # customer whose phone digits and last name both match is that
+    # person; the new email is filed on them so the next order matches
+    # by email like everyone else. Ambiguous (two customers) → fall
+    # through and create, as before.
+    cid = _lookup_customer_by_phone_surname(conn, phone, last)
+    if cid is not None:
+        if customer_email and customer_email.strip():
+            try:
+                conn.execute(
+                    """INSERT OR IGNORE INTO customer_emails
+                           (customer_id, email, is_primary, is_golf_genius, label)
+                       VALUES (?, ?, 0, 0, 'godaddy-phone-match')""",
+                    (cid, customer_email.strip()))
+            except Exception as e:
+                logger.warning("Phone-match email file failed for cid %d: %s", cid, e)
+        logger.info("Customer %r resolved by phone + surname to customer_id=%d "
+                    "(email %r filed)", customer_name, cid, customer_email)
+        return cid
 
     # 4. Wrap creation in try/except — never block a transaction save
     try:
@@ -30213,6 +30334,29 @@ def match_rsvp_to_item(player_email: str | None, player_name: str | None,
                          AND item_name COLLATE NOCASE IN ({placeholders})
                          AND COALESCE(transaction_status, 'active') = 'active'""",
                     [alias_customer["customer_name"]] + name_list,
+                ).fetchone()
+                if row:
+                    return row["id"]
+
+        # Strategy 1c: IDENTITY (rule 6, Kerry 2026-09-15 — the Mejia case).
+        # The RSVP email resolves to a customer_id; an active item on this
+        # event carrying the same customer_id is the same person, whatever
+        # email he typed at checkout. This is what lets a lead-created
+        # profile, a GG RSVP under one email and a GoDaddy order under
+        # another all meet on one row.
+        if player_email:
+            cid_row = conn.execute(
+                """SELECT customer_id FROM customer_emails
+                   WHERE LOWER(email) = LOWER(?) AND customer_id IS NOT NULL
+                   LIMIT 1""", (player_email,)).fetchone()
+            if cid_row:
+                row = conn.execute(
+                    f"""SELECT id FROM items
+                       WHERE customer_id = ?
+                         AND item_name COLLATE NOCASE IN ({placeholders})
+                         AND COALESCE(transaction_status, 'active') = 'active'
+                       ORDER BY id DESC LIMIT 1""",
+                    [cid_row["customer_id"]] + name_list,
                 ).fetchone()
                 if row:
                     return row["id"]
@@ -57665,6 +57809,11 @@ def _decorate_roster_roles(d: dict, ev_year: str | None) -> None:
     d["is_new"] = (bool(first) and bool(ev_year) and first == ev_year
                    and not (played_before and played_before < ev_year))
     d["experience"] = int(d.get("n_orders") or 0)
+    # Rule 14 (Kerry 2026-09-15): a 1ST TIMER rides with an ambassador.
+    # The order label OR the profile status says so.
+    us = str(d.get("user_status") or "").strip().upper()
+    d["is_first_timer"] = us.startswith("1ST") or (
+        str(d.get("current_player_status") or "").strip().lower() == "first_timer")
 
 
 def _event_roster_players(conn, event_id: int) -> list[dict]:
@@ -58276,6 +58425,14 @@ def generate_event_pairings(
         groups_players, _sp_notes = _spread_leaders(
             groups_players, leaders, locked_names, pair_counts, tee_map, solo_ok)
         mp_notes.extend(_sp_notes)
+        ambassadors = {p["customer"] for p in player_items
+                       if p.get("customer") and p.get("ambassador")}
+        first_timers = {p["customer"] for p in player_items
+                        if p.get("customer") and p.get("is_first_timer")}
+        groups_players, _ft_notes = _pair_first_timers_with_ambassadors(
+            groups_players, ambassadors, first_timers, tee_map,
+            locked_names, pair_counts, solo_ok)
+        mp_notes.extend(_ft_notes)
 
         # Seat order within a settled group (foursomes already decided —
         # this only decides who RIDES with whom): every group runs the
@@ -58290,7 +58447,9 @@ def generate_event_pairings(
             return _arrange_group_seats(names, mp_opponents,
                                         partner_adj, tee_map,
                                         captains=captains, newbies=newbies,
-                                        experience=experience)
+                                        experience=experience,
+                                        ambassadors=ambassadors,
+                                        first_timers=first_timers)
 
         is_shotgun = (ev.get("start_type" if holes == "9" else "start_type_18") == "Shotgun")
 
@@ -58677,11 +58836,84 @@ def _spread_leaders(groups: list[list[str]], leaders: set, locked: set,
     return groups, notes
 
 
+def _pair_first_timers_with_ambassadors(groups: list[list[str]], ambassadors: set,
+                                        first_timers: set, tee_map: dict,
+                                        locked: set, pair_counts: dict,
+                                        solo_ok: set
+                                        ) -> tuple[list[list[str]], list[str]]:
+    """Pairings rule 14 (Kerry-ratified 2026-09-15): "1st Timers also need
+    to be paired up (carted) with an Ambassador of the same tees whenever
+    possible." Composition half: every group holding a first-timer gets
+    an ambassador, by the cheapest history swap that keeps rule 12, with
+    a same-tee ambassador preferred (a tee mismatch costs as much as a
+    once-played repeat, so history still breaks ties). Never moves a
+    locked player, never strips a group of the only ambassador riding
+    with ITS first-timer. The seating half lives in _arrange_group_seats.
+    """
+    notes: list[str] = []
+    groups = [list(g) for g in groups]
+    amb = {_pair_key_name(n) for n in ambassadors}
+    ft = {_pair_key_name(n) for n in first_timers}
+    lockk = {_pair_key_name(n) for n in locked}
+    sok = {_pair_key_name(n) for n in solo_ok}
+
+    def _tee(n):
+        return str(tee_map.get(n) or "").strip().lower()
+
+    def _n_amb(g):
+        return sum(1 for n in g if _pair_key_name(n) in amb)
+
+    def _has_ft(g):
+        return any(_pair_key_name(n) in ft for n in g)
+
+    for _ in range(len(groups)):
+        gi = next((i for i, g in enumerate(groups)
+                   if _has_ft(g) and _n_amb(g) == 0), None)
+        if gi is None:
+            break
+        ft_tees = {_tee(n) for n in groups[gi] if _pair_key_name(n) in ft}
+        best = None
+        for hj, h in enumerate(groups):
+            if hj == gi:
+                continue
+            spare = _n_amb(h) - (1 if _has_ft(h) else 0)
+            if spare < 1:
+                continue
+            for xi, x in enumerate(h):
+                if _pair_key_name(x) not in amb or _pair_key_name(x) in lockk:
+                    continue
+                for yi, y in enumerate(groups[gi]):
+                    yk = _pair_key_name(y)
+                    if yk in lockk or yk in ft or yk in amb:
+                        continue
+                    g2 = list(groups[gi]); h2 = list(h)
+                    g2[yi], h2[xi] = x, y
+                    if _lone_back_offender(g2, tee_map, sok) or _lone_back_offender(h2, tee_map, sok):
+                        continue
+                    base = _group_score(groups[gi], pair_counts) + _group_score(h, pair_counts)
+                    cost = _group_score(g2, pair_counts) + _group_score(h2, pair_counts) - base
+                    if _tee(x) and _tee(x) not in ft_tees:
+                        cost += 1001      # same tee "whenever possible"
+                    if best is None or cost < best[0]:
+                        best = (cost, hj, g2, h2)
+        if best is None:
+            who = ", ".join(n for n in groups[gi] if _pair_key_name(n) in ft)
+            notes.append(f"{who}: no ambassador free to ride with a 1st timer "
+                         "(requests, matches and locks kept).")
+            ft.difference_update(_pair_key_name(n) for n in groups[gi])
+            continue
+        _, hj, g2, h2 = best
+        groups[gi], groups[hj] = g2, h2
+    return groups, notes
+
+
 def _arrange_group_seats(names: list[str], mp_opponents: set,
                          partner_adj: set, tee_map: dict,
                          captains: set | None = None,
                          newbies: set | None = None,
-                         experience: dict | None = None) -> list[str]:
+                         experience: dict | None = None,
+                         ambassadors: set | None = None,
+                         first_timers: set | None = None) -> list[str]:
     """Seat order for a settled group — foursomes are already decided;
     this only decides who RIDES with whom. Carts are seats 1&2 and 3&4
     (Kerry's cart-pair ruling).
@@ -58707,6 +58939,8 @@ def _arrange_group_seats(names: list[str], mp_opponents: set,
     captains = {_pair_key_name(n) for n in (captains or set())}
     newbies = {_pair_key_name(n) for n in (newbies or set())}
     experience = experience or {}
+    ambassadors = {_pair_key_name(n) for n in (ambassadors or set())}
+    first_timers = {_pair_key_name(n) for n in (first_timers or set())}
 
     def _cart(idx: int) -> int:
         return 0 if idx < 2 else 1
@@ -58742,6 +58976,16 @@ def _arrange_group_seats(names: list[str], mp_opponents: set,
             if not any(_cart(k) == _cart(ni) and keys[perm[k]] in captains
                        for k in range(len(perm)) if k != ni):
                 cost += 10
+        # Rule 14 seating half: a first-timer shares a cart with an
+        # ambassador when the group has one (weight 10, same as the
+        # captain-with-newest tie; the tee term below prefers a same-tee
+        # ambassador among equals).
+        for i in range(len(perm)):
+            if keys[perm[i]] in first_timers and keys[perm[i]] not in ambassadors:
+                if any(keys[perm[k]] in ambassadors for k in range(len(perm)) if k != i) and \
+                   not any(_cart(k) == _cart(i) and keys[perm[k]] in ambassadors
+                           for k in range(len(perm)) if k != i):
+                    cost += 10
         if best_cost is None or cost < best_cost:
             best, best_cost = list(perm), cost
         if best_cost == 0:
