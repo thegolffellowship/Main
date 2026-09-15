@@ -1326,3 +1326,50 @@ four symptoms, and exactly what guiding principle 6 exists to prevent.
   `customer_name` is its own stale snapshot.
 
 Guard: `test_pairings_identity.py`.
+
+## PAIRINGS reports: Divisions & Flights, Proximity Markers (v2.425.0)
+
+Kerry 2026-09-15, with the two Golf Genius originals attached: "Let's add
+to our Reports in our PAIRINGS tab. Create a Divisions & Flights report
+(per ROSTER buy ins, GAMES matrix, and flighting standards) and Proximity
+Markers per GAMES setup and course identification of par 3s. Add logos to
+these two. Divisions & Flights should produce all on one page for NET,
+SKINS, and GROSS as applicable."
+
+**Divisions & Flights** — `/events/<id>/divisions-flights`,
+`event_flights_report`, `templates/divisions_flights.html`. Three inputs,
+each from its own owner:
+
+- **Buy-ins**: `_event_game_buyers` (the Games-tab eligibility rules —
+  credited / refunded / transferred / rsvp_only out, child add-on rows
+  merged). NET buyers drive Individual Net; GROSS buyers drive Skins and
+  Individual Gross.
+- **Flight count**: the live games matrix (`SEED_LIVE_SCORING_CONFIG`
+  `flight_bands` / `min_buyers` via `_bands_lookup`).
+- **The cut**: `live_scoring.flight_plan` with `SEED_FLIGHT_CONFIG`, each
+  game in the mode its config names (net `equal_size`, skins and gross
+  `fixed_bands`). That pairing reproduced GG exactly on s9.23 — net
+  13/13, skins 8/8 — which is why the report does not re-litigate it.
+
+Flight labels name the break the way GG does (`Flight 1 (HCP <12.0)` /
+`Flight 2 (HCP 12.0+)`), taken from the NEXT flight's floor so a reader
+can place themselves. Indexes are the 18-hole index of RECORD (the WHS
+computation doubled), resolved **by customer_id**
+(`_handicap_index_18_by_customer`) — `ls_flight_lab` resolves by name and
+lost Jeff Rideout on s9.23. A plus handicap prints `+1.4`. A game under
+its threshold prints its REASON, not invented flights; a buyer with no
+index is named under the flights, never folded into one.
+
+**Proximity Markers** — `/events/<id>/proximity-markers`,
+`event_proximity_report`, `templates/proximity_markers.html`. The
+ratified CTP rule (side-games.md): flat entry for every player, **max 2
+CTPs per nine**, winner-take-all; more par-3s than slots → the SHORTEST
+are taken; fewer → each leftover entry becomes a **Longest Putt on the
+last hole**. Par-3s come from `_course_hole_table` (every tee on the
+course; par by agreement, yardage averaged and used only to rank length),
+narrowed to the nine in play. A Back nine stored as holes 1-9 falls back
+with a warning on the sheet. No hole card → nothing printed and the
+reason said.
+
+Both read live through `scoring-event-report:<event_id>|flights|proximity`.
+Guard: `test_event_reports.py`.

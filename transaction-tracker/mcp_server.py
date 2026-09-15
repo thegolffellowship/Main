@@ -1746,6 +1746,7 @@ def _scoring_dispatch(url: str, extract: str):
       scoring-fee-splits-repair[:apply]  pro-rate multi-item orders' fee rows by price (dry by default)
       scoring-margin-rebook[:<since>[|apply]]  recompute allocations >= since so margin carries the fee spread
       scoring-margin-gaps[:<limit>]  pre-cutover events: booked vs residual-would-book, with reasons (measure-only)
+      scoring-event-report:<event_id>|flights|proximity  the two PAIRINGS printables as data (Divisions & Flights / CTP markers)
       scoring-pairings-counts:<event_id>[|<year>]  saved sheet scored against played history: times each pair has played together this year INCLUDING this event
       scoring-liabilities          payouts owed, credits held, LSC shirt fund by Cup year, HIO pot, tax reserve by month
       scoring-membership-gap[:apply]  the membership gap group: booked vs today's decomposition by price/type/contests; apply rebooks membership rows only
@@ -2528,6 +2529,17 @@ def _scoring_dispatch(url: str, extract: str):
             _yr = int(_parts[1]) if len(_parts) > 1 else None
             return json.dumps(db.pairing_counts_report(int(_parts[0]), year=_yr),
                               indent=2, default=str)
+        if cmd == "scoring-event-report":
+            # The two PAIRINGS printables as data, for checking a sheet
+            # without a browser. "scoring-event-report:<event_id>|flights"
+            # or "|proximity". Read-only.
+            _p = [x.strip() for x in arg.split("|") if x.strip()]
+            if len(_p) < 2 or _p[1] not in ("flights", "proximity"):
+                return json.dumps({"error": "usage: scoring-event-report:"
+                                            "<event_id>|flights|proximity"})
+            _fn = (db.event_flights_report if _p[1] == "flights"
+                   else db.event_proximity_report)
+            return json.dumps(_fn(int(_p[0])), indent=2, default=str)
         if cmd == "scoring-liabilities":
             # What TGF is holding for someone else or has earmarked:
             # prize payouts owed, credits held, LSC shirt fund by Cup

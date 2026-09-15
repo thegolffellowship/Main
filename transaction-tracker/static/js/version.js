@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.424.0";
+window.TGF_VERSION = "2.425.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.425.0",
+    date: "2026-09-15",
+    changes: [
+      "TWO NEW PAIRINGS REPORTS, built from our own data instead of printed out of Golf Genius (Kerry: \u2018Create a Divisions & Flights report (per ROSTER buy ins, GAMES matrix, and flighting standards) and Proximity Markers per GAMES setup and course identification of par 3s. Add logos to these two\u2019). Both carry the official full logo and print with the Starter Sheet\u2019s margin contract.",
+      "DIVISIONS & FLIGHTS \u2014 NET, Skins and Gross on ONE page. Buy-ins come from the roster (the Games-tab eligibility rules, so credited, refunded and RSVP-only rows are out), the flight COUNT from the live games matrix, and the CUT from the ratified flighting standard: flight on the raw 18-hole TGF index, a break is the floor of the upper flight so 12.0 goes UP, equal indexes never split, thin flights merge. Each game runs the mode its config names, which reproduced Golf Genius exactly on s9.23 (net 13 of 13, skins 8 of 8). A game below its activation threshold is REPORTED as not running with the reason \u2014 Individual Gross needs 16 buyers on a nine \u2014 rather than printing invented flights, and a buyer with no index on file is listed by name instead of being dropped into a flight he did not earn. Indexes resolve by customer_id, so a player whose handicap link spells him differently is no longer lost.",
+      "PROXIMITY MARKERS \u2014 one tee sheet per contest, landscape, two to a page. Par 3s come from the COURSE card across every tee on file, narrowed to the nine being played; the games rule then applies as ratified: max two Closest-to-the-Pin per nine, the SHORTEST par 3s when there are more than slots, and a leftover entry becomes a Longest Putt on the last hole. No hole card on file prints nothing and says why, because a marker on the wrong tee is worse than no marker.",
+    ],
+  },
   {
     version: "2.424.0",
     date: "2026-09-15",

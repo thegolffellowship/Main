@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Proximity Markers — {{ rep.event_name }}</title>
+  <link href="https://fonts.googleapis.com/css2?family=Bitter:wght@600;700&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; }
+    /* Landscape, two markers to a page — the shape the course staff
+       already know from the Golf Genius original. Margin in padding, not
+       in @page, so the browser's Margins setting cannot flatten it. */
+    @page { size: letter landscape; margin: 0; }
+    html, body, .mk-title { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    body {
+      margin: 0; padding: 0; background: #EFEFEC; color: #111;
+      font-family: "Helvetica Neue", Arial, system-ui, sans-serif; font-size: 12px;
+    }
+    .page {
+      width: 11in; height: 8.5in; padding: 0.4in; margin: 0 auto 24px; background: #fff;
+      border: 1px solid #C9C9C4; box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+      display: grid; grid-template-columns: 1fr 1fr; gap: 0.4in;
+    }
+    .mk { border: 2px solid #111; border-radius: 6px; padding: 14px 16px;
+          display: flex; flex-direction: column; }
+    .mk-head { display: flex; align-items: center; gap: 12px; border-bottom: 2px solid #111;
+               padding-bottom: 8px; }
+    .mk-logo { width: 58px; height: 58px; flex-shrink: 0; display: block; }
+    .mk-course { font-family: "Bitter", Georgia, serif; font-weight: 700; font-size: 15px;
+                 line-height: 1.15; text-transform: uppercase; }
+    .mk-event { font-size: 11.5px; color: #444; margin-top: 3px; }
+    .mk-title {
+      font-family: "Bitter", Georgia, serif; font-weight: 700; font-size: 26px;
+      text-align: center; margin: 14px 0 4px; line-height: 1.1;
+    }
+    .mk-sub { text-align: center; font-size: 11.5px; color: #6B7280; margin-bottom: 10px; }
+    .lines { flex: 1; display: flex; flex-direction: column; justify-content: flex-start; }
+    .line { display: flex; align-items: flex-end; gap: 8px; padding: 0 0 2px; margin-bottom: 9px;
+            border-bottom: 1.5px solid #111; }
+    .line .num { font-weight: 700; width: 18px; flex-shrink: 0; font-size: 13px; }
+    .line .rule { flex: 1; height: 17px; }
+    .mk-foot { font-size: 9.5px; color: #9CA3AF; text-align: center; margin-top: 4px; }
+    @media print {
+      body { background: #fff; }
+      .page { width: auto; height: auto; min-height: 7.7in; margin: 0; border: 0;
+              box-shadow: none; padding: 0.4in; page-break-after: always; }
+      .page:last-child { page-break-after: auto; }
+    }
+    .empty { width: 8.5in; margin: 24px auto; padding: 24px; background: #fff;
+             border: 1px solid #C9C9C4; font-size: 13px; }
+  </style>
+</head>
+<body>
+{% if not rep.contests %}
+  <div class="empty">
+    <strong>No proximity markers to print.</strong>
+    <ul>{% for n in rep.notes %}<li>{{ n }}</li>{% endfor %}</ul>
+  </div>
+{% endif %}
+{% for pair in rep.contests|batch(2) %}
+<div class="page">
+  {% for c in pair %}
+  <div class="mk">
+    <div class="mk-head">
+      <img class="mk-logo" src="/static/tgf-logo-r.svg" alt="The Golf Fellowship">
+      <div>
+        <div class="mk-course">{{ rep.course_name }}</div>
+        <div class="mk-event">{{ rep.event_name }}{% if rep.event_date %} &middot; {{ rep.event_date }}{% endif %}</div>
+      </div>
+    </div>
+    <div class="mk-title">{{ c.title }}</div>
+    <div class="mk-sub">
+      {% if c.kind == 'ctp' %}Par 3{% if c.yardage %} &middot; {{ c.yardage }} yards{% endif %}
+      &middot; closest to the hole wins{% else %}Longest made putt wins{% endif %}
+    </div>
+    <div class="lines">
+      {% for i in range(1, 9) %}
+      <div class="line"><span class="num">{{ i }}.</span><span class="rule"></span></div>
+      {% endfor %}
+    </div>
+    <div class="mk-foot">Write your name only if you are inside the marker. Move the marker to your ball.</div>
+  </div>
+  {% endfor %}
+</div>
+{% endfor %}
+</body>
+</html>

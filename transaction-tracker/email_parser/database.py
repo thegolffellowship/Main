@@ -55223,6 +55223,263 @@ def remove_player_from_pairings(event_id: int, player_name: str,
             "groups": detail}
 
 
+# ── PAIRINGS REPORTS: Divisions & Flights, Proximity Markers ─────────
+#    Kerry 2026-09-15 (with the two Golf Genius originals): "Let's add to
+#    our Reports in our PAIRINGS tab. Create a Divisions & Flights report
+#    (per ROSTER buy ins, GAMES matrix, and flighting standards) and
+#    Proximity Markers per GAMES setup and course identification of par
+#    3s. Add logos to these two. Divisions & Flights should produce all
+#    on one page for NET, SKINS, and GROSS as applicable."
+
+_FLIGHT_REPORT_GAMES = (
+    # (game key, printed label, buyer kind)
+    ("individual_net", "Individual Net", "NET"),
+    ("skins", "Skins", "GROSS"),
+    ("individual_gross", "Individual Gross", "GROSS"),
+)
+
+
+def _index_text(idx) -> str:
+    """Golf's own notation for a plus handicap: -1.4 prints as +1.4."""
+    if idx is None:
+        return "—"
+    return f"+{abs(idx):.1f}" if idx < 0 else f"{idx:.1f}"
+
+
+def _sort_name(name: str) -> str:
+    """LAST, First — how a division sheet is read."""
+    parts = " ".join((name or "").split()).split(" ")
+    if len(parts) < 2:
+        return (name or "").upper()
+    return f"{parts[-1].upper()}, {' '.join(parts[:-1])}"
+
+
+def _handicap_index_18_by_customer(db_path=None) -> dict:
+    """{customer_id: 18-hole TGF index} — the index of RECORD (WHS
+    computation, doubled per Kerry's 2026-07-30 ruling that the 18-hole
+    TGF handicap is simply twice the nine). Keyed by customer_id, not by
+    name: `ls_flight_lab` resolves by name and loses anyone whose
+    handicap link spells them differently (Jeff Rideout on s9.23), which
+    is the same stale-name class as the pairings rename."""
+    out = {}
+    for p in get_all_handicap_players(db_path):
+        cid = p.get("customer_id")
+        if cid and p.get("handicap_index_18") is not None:
+            out[int(cid)] = p["handicap_index_18"]
+    return out
+
+
+def event_flights_report(event_id: int, db_path=None) -> dict | None:
+    """Divisions & Flights for one event — NET, SKINS and GROSS together.
+
+    Buy-ins come from the ROSTER (`_event_game_buyers`, the Games-tab
+    eligibility rules), the flight COUNT from the live games matrix, and
+    the CUT from the ratified flighting standard (`live_scoring
+    .flight_plan` with `SEED_FLIGHT_CONFIG`: flight on the raw 18-hole
+    TGF index, breaks are floors for the upper flight so 12.0 goes UP,
+    equal indexes never split, thin flights merge). Each game uses the
+    mode its config names — Individual Net equal_size, Skins and
+    Individual Gross fixed bands — which is what reproduced Golf Genius
+    exactly on s9.23 (net 13/13, skins 8/8).
+
+    A game below its activation threshold is REPORTED as not running,
+    with the reason. Players with no index are listed apart rather than
+    dropped into a flight they did not earn."""
+    from . import live_scoring as _ls
+    with _connect(db_path) as conn:
+        ev = conn.execute("SELECT * FROM events WHERE id = ?", (event_id,)).fetchone()
+        if not ev:
+            return None
+        ev = dict(ev)
+        buyers_by_kind = {
+            k: _event_game_buyers(conn, ev["item_name"], k)
+            for k in ("NET", "GROSS")
+        }
+    idx18 = _handicap_index_18_by_customer(db_path)
+    holes_key = "18" if _event_holes_type(ev["item_name"],
+                                          ev.get("format")) == 18 else "9"
+    games = []
+    for game, label, kind in _FLIGHT_REPORT_GAMES:
+        buyers = buyers_by_kind[kind]["buyers"]
+        field = [{"key": str(cid), "customer_id": cid, "name": nm,
+                  "index": idx18.get(int(cid))}
+                 for cid, nm in buyers.items()]
+        n = len(field)
+        gcfg = (_ls.SEED_LIVE_SCORING_CONFIG["games"].get(game) or {})
+        count = _ls._bands_lookup((gcfg.get("flight_bands") or {}).get(holes_key), n, 1)
+        min_buyers = (gcfg.get("min_buyers") or {}).get(holes_key)
+        entry = {"game": game, "label": label, "kind": kind, "buyers": n,
+                 "flights": [], "unflighted": [], "notes": [], "active": True,
+                 "inactive_reason": None}
+        if n == 0:
+            entry["active"] = False
+            entry["inactive_reason"] = f"Nobody bought into {kind} games."
+            games.append(entry)
+            continue
+        if min_buyers is not None and n < min_buyers:
+            entry["active"] = False
+            entry["inactive_reason"] = (
+                f"{label} activates at {min_buyers} buyers on an "
+                f"{holes_key}-hole event; {n} bought in.")
+            games.append(entry)
+            continue
+        plan = _ls.flight_plan(field, count, game=game)
+        entry["mode"] = plan["mode"]
+        entry["notes"] = list(plan.get("notes") or [])
+        fl = plan["flights"]
+        for i, f in enumerate(fl):
+            # GG's own label shape: the break is the NEXT flight's floor,
+            # so a reader can place themselves without the roster.
+            nxt = fl[i + 1]["min_index"] if i + 1 < len(fl) else None
+            if nxt is not None:
+                band = f"HCP <{nxt:.1f}"
+            elif len(fl) > 1:
+                band = f"HCP {f['min_index']:.1f}+"
+            else:
+                band = "All handicaps"
+            entry["flights"].append({
+                "name": f"Flight {f['flight']} ({band})",
+                "players": f["players"],
+                "members": [{"name": m["name"],
+                             "sort_name": _sort_name(m["name"]),
+                             "index": m["index"],
+                             "index_text": _index_text(m["index"])}
+                            for m in f["members"]],
+            })
+        entry["unflighted"] = [{"name": u["name"],
+                                "sort_name": _sort_name(u["name"]),
+                                "index_text": "—"}
+                               for u in sorted(plan.get("unflighted") or [],
+                                               key=lambda x: _sort_name(x["name"]))]
+        games.append(entry)
+    return {
+        "event": ev,
+        "event_name": ev.get("item_name"),
+        "event_date": ev.get("event_date"),
+        "chapter": ev.get("chapter"),
+        "course": ev.get("course"),
+        "holes_key": holes_key,
+        "year": (ev.get("event_date") or "")[:4],
+        "games": games,
+        "index_basis": "18-hole TGF index (twice the nine-hole index)",
+    }
+
+
+def _course_hole_table(conn, course_id: int) -> dict:
+    """{hole_number: {"par": int, "yardage": int|None}} for a course.
+
+    Pars and yardages accrete per TEE from scorecard imports, so this
+    reads across every tee on the course: par is the value the tees
+    agree on (they do — par is a property of the hole), yardage is the
+    average, which is only used to rank par-3s by length."""
+    rows = conn.execute(
+        """SELECT cth.hole_number, cth.par, cth.yardage
+             FROM course_tee_holes cth
+             JOIN course_tees ct ON ct.tee_id = cth.tee_id
+            WHERE ct.course_id = ? AND cth.par IS NOT NULL""",
+        (course_id,)).fetchall()
+    acc: dict = {}
+    for r in rows:
+        h = acc.setdefault(int(r["hole_number"]), {"pars": {}, "yards": []})
+        h["pars"][r["par"]] = h["pars"].get(r["par"], 0) + 1
+        if r["yardage"]:
+            h["yards"].append(int(r["yardage"]))
+    out = {}
+    for hole, v in acc.items():
+        par = max(v["pars"], key=v["pars"].get)
+        out[hole] = {"par": int(par),
+                     "yardage": (round(sum(v["yards"]) / len(v["yards"]))
+                                 if v["yards"] else None)}
+    return out
+
+
+def event_proximity_report(event_id: int, db_path=None) -> dict | None:
+    """Closest-to-the-Pin marker sheets, one per contest.
+
+    THE RULE (side-games.md, ratified): Closest to Pin is a flat $2 (9h)
+    / $4 (18h) entry for every player, **max 2 CTPs per nine**, winner-
+    take-all each. More par-3s than slots → take the SHORTEST par-3s.
+    Fewer par-3s than slots → each leftover dollar becomes a LONGEST PUTT
+    contest on the last hole.
+
+    Par-3s are identified from the COURSE (`course_tee_holes` across the
+    course's tees), narrowed to the nine actually being played. If the
+    course carries no hole data the report says so and prints nothing —
+    a marker at the wrong tee is worse than no marker."""
+    with _connect(db_path) as conn:
+        ev = conn.execute("SELECT * FROM events WHERE id = ?", (event_id,)).fetchone()
+        if not ev:
+            return None
+        ev = dict(ev)
+        holes_tbl = {}
+        course_row = None
+        if ev.get("course_id"):
+            course_row = conn.execute(
+                "SELECT course_id, name, short_name FROM courses WHERE course_id = ?",
+                (ev["course_id"],)).fetchone()
+            holes_tbl = _course_hole_table(conn, ev["course_id"])
+    is18 = _event_holes_type(ev["item_name"], ev.get("format")) == 18
+    nine = (ev.get("nine_side") or "Front").strip().title()
+    slots = 4 if is18 else 2                     # max 2 per nine
+    notes = []
+
+    # Which hole numbers are in play. A nine-hole tee that was imported
+    # as holes 1-9 is still the nine that was played, so a Back-nine
+    # event with no 10-18 rows falls back to 1-9 and says so.
+    if is18:
+        want = [h for h in sorted(holes_tbl) if 1 <= h <= 18]
+    elif nine == "Back":
+        want = [h for h in sorted(holes_tbl) if 10 <= h <= 18]
+        if not want:
+            want = [h for h in sorted(holes_tbl) if 1 <= h <= 9]
+            if want:
+                notes.append("The course card is stored as holes 1-9, so the "
+                             "BACK nine is numbered 1-9 here — check the hole "
+                             "numbers against the scorecard before printing.")
+    else:
+        want = [h for h in sorted(holes_tbl) if 1 <= h <= 9]
+
+    par3 = [{"hole": h, "yardage": holes_tbl[h]["yardage"]}
+            for h in want if holes_tbl[h]["par"] == 3]
+    if not holes_tbl:
+        notes.append("No hole-by-hole card on file for this course, so the "
+                     "par-3s cannot be identified. Import a scorecard for "
+                     "the course and reprint.")
+    contests = []
+    # Shortest first when there are more par-3s than slots (ratified);
+    # then back into hole order for printing.
+    chosen = sorted(par3, key=lambda x: (x["yardage"] is None,
+                                         x["yardage"] or 0))[:slots]
+    if len(par3) > slots:
+        notes.append(f"{len(par3)} par-3s for {slots} CTP slot(s) — the "
+                     f"shortest were taken, per the games rule.")
+    for c in sorted(chosen, key=lambda x: x["hole"]):
+        contests.append({"kind": "ctp", "hole": c["hole"],
+                         "yardage": c["yardage"],
+                         "title": f"Closest to the Pin - Hole {c['hole']}"})
+    leftover = slots - len(chosen)
+    if leftover > 0 and want:
+        last = want[-1]
+        for _ in range(leftover):
+            contests.append({"kind": "longest_putt", "hole": last,
+                             "yardage": None,
+                             "title": f"Longest Putt - Hole {last}"})
+        notes.append(f"{len(chosen)} par-3(s) for {slots} slot(s) — the "
+                     f"remaining entry becomes a Longest Putt on the last "
+                     f"hole ({last}), per the games rule.")
+    return {
+        "event": ev,
+        "event_name": ev.get("item_name"),
+        "event_date": ev.get("event_date"),
+        "chapter": ev.get("chapter"),
+        "course_name": ((course_row["name"] if course_row else None)
+                        or ev.get("course") or ""),
+        "nine": nine, "holes_key": "18" if is18 else "9",
+        "slots": slots, "par3_found": len(par3),
+        "contests": contests, "notes": notes,
+    }
+
+
 def get_event_print_pack(event_id: int, db_path=None) -> dict | None:
     """Assemble the data for the Starter Sheet + Cart Signs printables (B5).
 

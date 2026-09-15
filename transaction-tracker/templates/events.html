@@ -6190,6 +6190,12 @@
                 // Printables read the SAVED pairings — only offer when clean.
                 html += `<button class="pairings-action-btn" onclick="window.open('/events/${ev.id}/starter-sheet','_blank')" title="Print starter sheet">&#x1F5A8; Starter Sheet</button>`;
                 html += `<button class="pairings-action-btn" onclick="window.open('/events/${ev.id}/cart-signs','_blank')" title="Print cart signs">&#x1F5A8; Cart Signs</button>`;
+                // Kerry 2026-09-15: "Let's add to our Reports in our
+                // PAIRINGS tab" — the two Golf Genius sheets he still
+                // prints from GG, now built from our own roster, games
+                // matrix and course card.
+                html += `<button class="pairings-action-btn" onclick="window.open('/events/${ev.id}/divisions-flights','_blank')" title="Print Divisions &amp; Flights — NET, Skins and Gross on one page">&#x1F5A8; Divisions &amp; Flights</button>`;
+                html += `<button class="pairings-action-btn" onclick="window.open('/events/${ev.id}/proximity-markers','_blank')" title="Print Closest-to-the-Pin markers for the par 3s">&#x1F5A8; Proximity</button>`;
             }
         }
         html += '</div>'; // .pairings-actions

@@ -5049,6 +5049,32 @@ def starter_sheet_page(event_id):
     return render_template("starter_sheet.html", pack=pack)
 
 
+@app.route("/events/<int:event_id>/divisions-flights")
+@require_role("manager")
+def divisions_flights_page(event_id):
+    """Print-optimized Divisions & Flights — NET, SKINS and GROSS on one
+    page, from the roster's buy-ins, the games matrix and the ratified
+    flighting standard (Kerry 2026-09-15)."""
+    from email_parser.database import event_flights_report
+    rep = event_flights_report(event_id)
+    if not rep:
+        return "Event not found", 404
+    return render_template("divisions_flights.html", rep=rep)
+
+
+@app.route("/events/<int:event_id>/proximity-markers")
+@require_role("manager")
+def proximity_markers_page(event_id):
+    """Print-optimized Closest-to-the-Pin markers, one per contest, from
+    the games setup (max 2 CTPs per nine, shortest par-3s, leftover slot
+    becomes a Longest Putt) and the course's own par-3s."""
+    from email_parser.database import event_proximity_report
+    rep = event_proximity_report(event_id)
+    if not rep:
+        return "Event not found", 404
+    return render_template("proximity_markers.html", rep=rep)
+
+
 @app.route("/events/<int:event_id>/cart-signs")
 @require_role("manager")
 def cart_signs_page(event_id):
