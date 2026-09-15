@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.416.1";
+window.TGF_VERSION = "2.417.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.417.0",
+    date: "2026-09-15",
+    changes: [
+      "Pairing cards: names never wrap (Kerry: \u2018Nothing should make names wrap\u2019). The role tags are single letters now \u2014 C for captain, A for ambassador, a green 1Y for a first-year member \u2014 the card minimum is wider, and a name that still cannot fit is clipped rather than broken one letter per line. The wheel mark is gone: seats 1 and 3 drive by definition.",
+      "1Y means joined as a NEW MEMBER this year (earliest membership start in the event\u2019s year). Guests and long-standing members are not new; v2.416.0 had been calling anyone without an order before this year new, which tagged nearly the whole field.",
+      "The captain takes SEAT 1 (Kerry: \u2018Captains should be moved to seat 1 in group along with their request in seat 2 if partnered\u2019). Their partner rides in seat 2 when they have one; otherwise the newest player does.",
+    ],
+  },
   {
     version: "2.416.1",
     date: "2026-09-15",

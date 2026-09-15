@@ -57538,15 +57538,15 @@ def _event_rsvp_only_players(conn, event_id: int) -> list[dict]:
             try:
                 crow = conn.execute(
                     "SELECT current_player_status, ambassador, group_captain, "
-                    "solo_back_ok, (SELECT MIN(order_date) FROM items "
-                    "WHERE customer_id = c.customer_id) AS first_order, "
+                    "solo_back_ok, (SELECT MIN(started_at) FROM customer_memberships "
+                    "WHERE customer_id = c.customer_id) AS first_member_start, "
                     "(SELECT COUNT(*) FROM items WHERE customer_id = "
                     "c.customer_id) AS n_orders "
                     "FROM customers c WHERE c.customer_id = ?", (cid,)).fetchone()
                 if crow:
                     cps = crow["current_player_status"]
                     roles = {k: crow[k] for k in ("ambassador", "group_captain",
-                                                  "solo_back_ok", "first_order",
+                                                  "solo_back_ok", "first_member_start",
                                                   "n_orders")}
             except sqlite3.OperationalError:
                 cps = None
@@ -57593,8 +57593,8 @@ def _event_roster_rows(conn, event_id: int) -> list[dict]:
                         i.transaction_status,
                         c.current_player_status, c.pace_rating,
                         c.ambassador, c.group_captain, c.solo_back_ok,
-                        (SELECT MIN(i2.order_date) FROM items i2
-                          WHERE i2.customer_id = i.customer_id) AS first_order,
+                        (SELECT MIN(m.started_at) FROM customer_memberships m
+                          WHERE m.customer_id = i.customer_id) AS first_member_start,
                         (SELECT COUNT(*) FROM items i3
                           WHERE i3.customer_id = i.customer_id) AS n_orders
         FROM events e
@@ -57640,14 +57640,16 @@ def _event_roster_rows(conn, event_id: int) -> list[dict]:
 
 def _decorate_roster_roles(d: dict, ev_year: str | None) -> None:
     """Rules 12/13 inputs on a roster row (Kerry-ratified 2026-09-15):
-    the three flags as plain booleans, `is_new` = FIRST SEASON (no order
-    before the event's year — a GG-RSVP-only player with no order at all
-    counts as new), and `experience` = order rows on file, the tiebreak
-    for who drives when no captain is in the cart."""
+    the three flags as plain booleans, `is_new` = joined as a NEW MEMBER
+    this year (Kerry: "NEW should only apply to people who've joined as
+    NEW members this year" — earliest customer_memberships.started_at in
+    the event's year; guests and long-standing members are not new), and
+    `experience` = order rows on file, the tiebreak for who drives when
+    no captain is in the cart."""
     for flag in PLAYER_ROLE_FLAGS:
         d[flag] = bool(d.get(flag))
-    first = (d.get("first_order") or "")[:4]
-    d["is_new"] = (not first) or (bool(ev_year) and first >= ev_year)
+    first = (d.get("first_member_start") or "")[:4]
+    d["is_new"] = bool(first) and bool(ev_year) and first == ev_year
     d["experience"] = int(d.get("n_orders") or 0)
 
 
@@ -58738,6 +58740,14 @@ def _arrange_group_seats(names: list[str], mp_opponents: set,
         return (1 if k in captains else 0,
                 0 if k in newbies else 1,
                 experience.get(k, 0))
+    # The captain takes SEAT 1 (Kerry 2026-09-15: "Captains should be
+    # moved to seat 1 in group along with their request in seat 2 if
+    # partnered"): their cart becomes seats 1-2 — the partner (weight
+    # 100 above) or the newest player (weight 10) is already beside them.
+    if has_capt and len(best) == 4:
+        top = max(best, key=_rank)
+        if best.index(top) >= 2:
+            best = best[2:] + best[:2]
     for i, j in ((0, 1), (2, 3)):
         if j < len(best) and _rank(best[j]) > _rank(best[i]):
             best[i], best[j] = best[j], best[i]

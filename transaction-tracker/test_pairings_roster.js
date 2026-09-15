@@ -180,11 +180,16 @@ check("default is ON when nothing is stored",
 console.log("\nRoles on the sheet (v2.416.0)");
 check("badges read the roster row by identity",
     /function rosterFlags\(state, name\)[\s\S]{0,200}pairPersonKey\(p\.name\) === k/.test(html));
-check("CAPT / AMB / NEW badges follow the seated name and the unassigned name",
-    /html \+= driverMarkHtml\(grp, player\);\s*html \+= `<span class="pairing-player-name">\$\{escapeHtml\(player\.name \|\| '\u2014'\)\}<\/span>`;\s*if \(player\.name\) html \+= roleBadgesHtml\(state, player\.name\);/.test(html)
+check("C / A / 1Y badges follow the seated name and the unassigned name",
+    /<span class="pairing-player-name">\$\{escapeHtml\(player\.name \|\| '\u2014'\)\}<\/span>`;\s*if \(player\.name\) html \+= roleBadgesHtml\(state, player\.name\);/.test(html)
     && /displayName\(player\.name\)\)\}<\/span>`;\s*if \(player\.name\) html \+= roleBadgesHtml\(state, player\.name\);/.test(html));
-check("the driver mark sits on seats 1 and 3 only when the cart has a passenger",
-    /if \(cp !== 1 && cp !== 3\) return '';[\s\S]{0,160}Number\(p\.cart_pos\) === cp \+ 1 && p\.name/.test(html));
+check("badges are single letters: C, A, and a green 1Y",
+    />C<\/span>'/.test(html) && />A<\/span>'/.test(html) && />1Y<\/span>'/.test(html)
+    && /\.pairing-role-badge\.role-new \{ background: var\(--buyin-green/.test(html));
+check("no wheel mark — seats 1 and 3 drive by definition", !/driverMarkHtml|pairing-driver/.test(html));
+check("names never wrap on the sheet",
+    /\.pairing-player-name \{[^}]*white-space: nowrap; overflow: hidden; text-overflow: ellipsis;/.test(html)
+    && /minmax\(340px, 1fr\)/.test(html));
 const cust = fs.readFileSync("templates/customers.html", "utf8");
 check("Customers page offers AMB / CAPT / BACK chips beside pace, both layouts",
     (cust.match(/renderRoleChips\(c\)/g) || []).length >= 2

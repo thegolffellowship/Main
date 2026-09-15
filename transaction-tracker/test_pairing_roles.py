@@ -91,6 +91,14 @@ seats2 = db._arrange_group_seats(["Will", "Mike", "Rob", "Gus"], set(), adj, {},
 def cart2(n): return 0 if seats2.index(n) < 2 else 1
 check("a partner request outranks captain-with-newest", cart2("Will") == cart2("Rob"), str(seats2))
 check("…and the new player still does not drive", seats2.index("Will") in (1, 3), str(seats2))
+check("the captain takes SEAT 1", seats.index("Gus") == 0, str(seats))
+check("…with the newest beside them in seat 2 when unpartnered", seats.index("Will") == 1, str(seats))
+# captain partnered: the partner rides in seat 2, the newest goes to the other cart
+adjc = {frozenset((db._pair_key_name("Gus"), db._pair_key_name("Rob")))}
+seats3 = db._arrange_group_seats(["Will", "Mike", "Rob", "Gus"], set(), adjc, {},
+                                 captains={"Gus"}, newbies={"Will"}, experience=exp)
+check("a partnered captain sits in seat 1 with their request in seat 2", seats3[:2] == ["Gus", "Rob"], str(seats3))
+check("…and the new player still does not drive", seats3.index("Will") == 3, str(seats3))
 check("no captains/newbies passed -> old behaviour unchanged",
       db._arrange_group_seats(["A", "B", "C", "D"], set(), set(), {}) == ["A", "B", "C", "D"])
 

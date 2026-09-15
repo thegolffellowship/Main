@@ -371,7 +371,7 @@
                columns with full names — 330px only fit two, and 220px
                (the original) truncated almost every name to "Kerry Nie…".
                A long name wraps to a second line rather than being cut. */
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
             margin-top: 0.25rem;
         }
         @media (max-width: 720px) {
@@ -442,9 +442,13 @@
         }
         .pairing-player-name {
             flex: 1; font-weight: 500; min-width: 0;
-            /* Full names, not "Kerry Nie…" — the card is sized to fit
-               them; a genuinely long one wraps rather than being cut. */
-            white-space: normal; overflow-wrap: anywhere;
+            /* Kerry 2026-09-15: "Nothing should make names wrap." The
+               card is sized to fit a full name (grid minimum below); the
+               badges are single letters; and if a name still cannot fit
+               it is clipped with an ellipsis rather than broken across
+               lines — v2.416.0's CAPT/AMB/NEW tags had "Mary Wade"
+               wrapping one letter per line. */
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
         }
         .pairing-points {
             font-size: 0.72rem; font-weight: 700; color: #0f766e;
@@ -487,13 +491,13 @@
         .roster-hcp-prelim:hover { background: #ffedd5; border-color: #fb923c; }
         .pairing-tee { font-size: 0.72rem; color: var(--text-muted); width: 2.6rem; text-align: center; flex-shrink: 0; }
         .pairing-role-badge {
-            flex-shrink: 0; font: 700 8.5px/1 'Bitter', serif; letter-spacing: 0.08em;
-            padding: 2px 5px; border-radius: 9999px; margin-left: 0.15rem;
+            flex-shrink: 0; font: 700 8.5px/1 'Bitter', serif; letter-spacing: 0.04em;
+            padding: 2px 4px; border-radius: 9999px; margin-left: 0.1rem; min-width: 1.1rem;
+            text-align: center;
         }
         .pairing-role-badge.role-capt { background: #1B1B1B; color: #fff; }
         .pairing-role-badge.role-amb { background: #DBEAFE; color: #1E40AF; }
-        .pairing-role-badge.role-new { background: #FEF3C7; color: #92400E; }
-        .pairing-driver { display: inline-flex; color: #374151; flex-shrink: 0; margin-right: -0.1rem; }
+        .pairing-role-badge.role-new { background: var(--buyin-green, #bbf7d0); color: var(--buyin-green-text, #166534); }
         /* The bullpen X: quiet until the row is hovered, red on hover of
            the X itself, never the row's drag/select target. */
         .pairing-unseat {
@@ -6592,7 +6596,6 @@
                     ${bandTitle ? ` title="${escapeHtml(bandTitle)}"` : ''}
                     data-ev-id="${ev.id}" data-holes="${holes}" data-group-num="${grp.group_num}" data-cart-pos="${player.cart_pos}">`;
                 html += `<span class="pairing-cart-dot" style="background:${cartDot};"></span>`;
-                html += driverMarkHtml(grp, player);
                 html += `<span class="pairing-player-name">${escapeHtml(player.name || '—')}</span>`;
                 if (player.name) html += roleBadgesHtml(state, player.name);
                 // A seated RSVP-only player keeps the badge the Unassigned
@@ -10252,23 +10255,17 @@
     // CAPT / AMB / NEW tags after a name on the sheet. Kerry-ratified
     // 2026-09-15: the captain drives and rides with the newest player,
     // so the manager needs to SEE who is which at a glance.
+    // Single-letter badges (Kerry 2026-09-15: "Captain badge can be C.
+    // Ambassador badge can be A … green badge with 1Y"): C = group
+    // captain (seat 1), A = ambassador, 1Y = joined as a new member this
+    // year. Seats 1 and 3 drive by definition — no wheel mark.
     function roleBadgesHtml(state, name) {
         const f = rosterFlags(state, name);
         let h = '';
-        if (f.group_captain) h += '<span class="pairing-role-badge role-capt" title="Group captain — drives, rides with the newest player">CAPT</span>';
-        if (f.ambassador) h += '<span class="pairing-role-badge role-amb" title="Ambassador">AMB</span>';
-        if (f.is_new) h += '<span class="pairing-role-badge role-new" title="First season — never drives">NEW</span>';
+        if (f.group_captain) h += '<span class="pairing-role-badge role-capt" title="Group captain — seat 1, rides with their request or the newest player">C</span>';
+        if (f.ambassador) h += '<span class="pairing-role-badge role-amb" title="Ambassador">A</span>';
+        if (f.is_new) h += '<span class="pairing-role-badge role-new" title="First-year member — never drives">1Y</span>';
         return h;
-    }
-    // Seats 1 and 3 drive (carts are 1&2 and 3&4). Marked only when the
-    // cart actually has a passenger.
-    function driverMarkHtml(grp, player) {
-        const cp = Number(player.cart_pos);
-        if (cp !== 1 && cp !== 3) return '';
-        const mate = (grp.players || []).some(p => Number(p.cart_pos) === cp + 1 && p.name);
-        if (!mate) return '';
-        return '<span class="pairing-driver" title="Driver\u2019s seat">'
-            + '<svg viewBox="0 0 16 16" width="11" height="11" aria-hidden="true"><circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="8" cy="8" r="2" fill="currentColor"/><path d="M8 10v4.5M2 8h4M10 8h4" stroke="currentColor" stroke-width="1.6"/></svg></span>';
     }
 
     function getUnassigned(state) {

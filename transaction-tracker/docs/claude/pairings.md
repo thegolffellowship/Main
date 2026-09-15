@@ -108,12 +108,21 @@ matters too, not just the foursome.
     history first (rule 3 is the tiebreak, not the veto). No legal swap
     → a note on the sheet, manager decides. `<50` detection is strict
     (`_is_back_tee`); Kerry: "This only applies to the <50s."
-13. **Driver's seat (Kerry-ratified 2026-09-15, v2.416.0).** Seats 1 and
-    3 drive. A `group_captain` rides with the NEWEST player in the group
-    (weight 10 in `_arrange_group_seats`: below a request, above a tee
-    match) and drives; a first-season player (`is_new`) never drives;
-    otherwise the more experienced player (`experience` = order rows on
-    file) takes the wheel. Rule 7 is built alongside (`_spread_leaders`:
+13. **Driver's seat (Kerry-ratified 2026-09-15, v2.416.0; v2.417.0).**
+    Seats 1 and 3 drive — no wheel mark, it is implied. The
+    `group_captain` takes SEAT 1 with their partner request in seat 2 if
+    partnered, else the NEWEST player beside them (weights 100 / 10 in
+    `_arrange_group_seats`: below Match Play, above a tee match; the
+    captain's cart is rotated to seats 1-2 after the permutation). A
+    first-year member (`is_new`) never drives; otherwise the more
+    experienced player (`experience` = order rows on file) takes the
+    wheel. `is_new` = joined as a NEW MEMBER this year (earliest
+    `customer_memberships.started_at` in the event's year) — Kerry:
+    "NEW should only apply to people who've joined as NEW members this
+    year"; guests and long-standing members are not new. Card tags are
+    single letters: **C** captain, **A** ambassador, green **1Y**
+    first-year member; names never wrap (nowrap + ellipsis, grid minimum
+    340px). Rule 7 is built alongside (`_spread_leaders`:
     a leaderless group takes a captain/ambassador from a group holding
     two, cheapest history, never breaking rule 12).
 

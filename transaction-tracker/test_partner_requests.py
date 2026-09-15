@@ -65,6 +65,8 @@ conn.executescript("""
    matched_item_id INTEGER, customer_id INTEGER);
  CREATE TABLE rsvp_email_overrides (id INTEGER PRIMARY KEY, player_email TEXT,
    event_name TEXT, status TEXT);
+ CREATE TABLE customer_memberships (id INTEGER PRIMARY KEY, customer_id INTEGER,
+   started_at TEXT);
  CREATE TABLE customer_aliases (id INTEGER PRIMARY KEY, customer_id INTEGER,
    customer_name TEXT, alias_type TEXT, alias_value TEXT);
 """)
