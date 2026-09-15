@@ -1534,9 +1534,21 @@ column headings and explanations below."
   Creek (#502/#507). Allowance is the `team_net_allowance` dial, default
   100%. **The sheet prints the allowance and the card it used**
   (`team_basis`, `ph_basis`), so a wrong dial shows on the page.
-- Where a course card stores every nine as holes 1-9 it cannot say which
-  nine a rating belongs to; the middle rating is used and `ph_note` says
-  so on the sheet. Fix by labelling the cards, not by guessing.
+- **Which nine a tee row belongs to is DERIVED, never guessed**
+  (v2.437.0). Kerry 2026-09-15: "That 'The course card...' note WILL NOT
+  fly. We can never do that. We need to get the calculations right."
+  `label_course_tee_nines(conn, course_id)` writes `course_tees.nine`
+  ('front' / 'back' / 'full') by matching each nine-hole row's own hole
+  YARDAGES against the 18-hole row of the same tee, then against the
+  18's two halves by total, with the ratings corroborating (front + back
+  = the eighteen). A nine that has been re-rated (same yardage, two
+  ratings) is labelled correctly and `_event_tee_rows` picks whichever
+  row OUR imported rounds were actually played off — that is the rating
+  the course uses today. Verified on The Quarry against the live GG card:
+  Gold 34.2/2873 front, 35.6/3255 back, 34.0/2873 front (re-rated), 69.8
+  full. **A tee that cannot be resolved prints NO playing handicap** and
+  the sheet says to import the 18-hole scorecard. Bridge:
+  `scoring-tee-nines[:<course_id>]`.
 
 **The allowance follows the BALL COUNT** (Kerry 2026-09-15: "It is 85%
 for tonight's two ball net. It is 75% for normal one ball net. Needs to

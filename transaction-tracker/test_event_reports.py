@@ -519,5 +519,54 @@ check("…and says why, above the boards",
 check("the event list hides the pot while play is on",
       'ev.money_visible === false' in _cts and "POT PENDING" in _cts)
 
+print("\n== which nine is which, from the data ==")
+# Kerry 2026-09-15: "That 'The course card...' note WILL NOT fly. We can
+# never do that. We need to get the calculations right." The 18-hole
+# card's own yardages say which nine a nine-hole row is.
+_t3 = os.path.join(tempfile.mkdtemp(prefix="tgf-nine-"), "t.db")
+with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+    db.init_db(_t3)
+_c3 = sqlite3.connect(_t3); _c3.row_factory = sqlite3.Row
+_c3.execute("INSERT INTO courses (course_id, name, status) VALUES (800, 'Quarry Test', 'active')")
+_F = [361, 423, 136, 292, 514, 324, 374, 142, 307]     # 2873
+_B = [430, 335, 186, 330, 401, 479, 220, 350, 524]     # 3255
+for _tid, _rt, _sl, _yd in ((109, 34.2, 117, 2873), (592, 35.6, 128, 3255),
+                            (2281, 34.0, 123, 2873), (7827, 69.8, 123, 6128)):
+    _c3.execute("INSERT INTO course_tees (tee_id, course_id, tee_name, rating, slope, yardage_total) "
+                "VALUES (?, 800, '1 - Gold Tee', ?, ?, ?)", (_tid, _rt, _sl, _yd))
+for _i, _y in enumerate(_F + _B, start=1):
+    _c3.execute("INSERT INTO course_tee_holes (tee_id, hole_number, par, yardage, stroke_index) VALUES (7827, ?, 4, ?, ?)", (_i, _y, _i))
+for _i, _y in enumerate(_F, start=1):
+    for _t in (109, 2281):
+        _c3.execute("INSERT INTO course_tee_holes (tee_id, hole_number, par, yardage, stroke_index) VALUES (?, ?, 4, ?, ?)", (_t, _i, _y, _i))
+for _i, _y in enumerate(_B, start=1):
+    _c3.execute("INSERT INTO course_tee_holes (tee_id, hole_number, par, yardage, stroke_index) VALUES (592, ?, 4, ?, ?)", (_i, _y, _i))
+_c3.commit()
+_res = db.label_course_tee_nines(_c3, 800)
+_nine = {d["tee_id"]: d["nine"] for d in _res["decided"]}
+check("the front nine is identified by its own yardages", _nine.get(109) == "front", str(_nine))
+check("the back nine too", _nine.get(592) == "back", str(_nine))
+check("a RE-RATED front nine is still the front nine", _nine.get(2281) == "front", str(_nine))
+check("the 18-hole row is marked full", _nine.get(7827) == "full", str(_nine))
+check("nothing is left to a guess", _res["n_unresolved"] == 0, str(_res["unresolved"]))
+check("running it twice changes nothing",
+      db.label_course_tee_nines(_c3, 800)["n_unresolved"] == 0)
+# No 18-hole card -> UNRESOLVED, and the sheet must print no PH at all.
+_c3.execute("DELETE FROM course_tee_holes WHERE tee_id = 7827")
+_c3.execute("DELETE FROM course_tees WHERE tee_id = 7827")
+_c3.execute("UPDATE course_tees SET nine = NULL WHERE course_id = 800")
+_c3.commit()
+_res2 = db.label_course_tee_nines(_c3, 800)
+check("with no 18-hole card the nines are left UNRESOLVED, never guessed",
+      _res2["n_unresolved"] == 3, str(_res2))
+_c3.execute("INSERT INTO events (id, item_name, event_date, chapter, course_id, status, format, nine_side) "
+            "VALUES (880, 's9.98 Quarry Test', '2026-09-15', 'San Antonio', 800, 'active', '9 Holes', 'Front')")
+_c3.commit()
+_rows, _basis, _note = db._event_tee_rows(_c3, {"course_id": 800, "item_name": "s9.98 Quarry Test",
+                                                "format": "9 Holes", "nine_side": "Front"},
+                                          [{"band": "<50", "tee_name": "Gold Tee", "color": "#B8860B", "ring": False}])
+check("an unresolved tee yields NO playing handicap rather than a caveat",
+      _rows == {} and "middle rating" not in _note and "Import the 18-hole" in _note, _note)
+
 print("\nALL PASSED" if not F else f"\n{len(F)} FAILED: {F}")
 sys.exit(1 if F else 0)

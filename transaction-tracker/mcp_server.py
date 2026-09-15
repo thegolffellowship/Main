@@ -1747,6 +1747,7 @@ def _scoring_dispatch(url: str, extract: str):
       scoring-margin-rebook[:<since>[|apply]]  recompute allocations >= since so margin carries the fee spread
       scoring-margin-gaps[:<limit>]  pre-cutover events: booked vs residual-would-book, with reasons (measure-only)
       scoring-leaderboard-events[:add=<codes>|set=<codes>|clear]  the EVENTS leaderboard dial (admin pilot); reports which codes still await scorecards
+      scoring-tee-nines[:<course_id>]  label each course tee row front/back/full from the 18-hole card's yardages; reports what it could not decide
       scoring-event-report:<event_id>|flights|proximity  the two PAIRINGS printables as data (Divisions & Flights / CTP markers)
       scoring-pairings-counts:<event_id>[|<year>]  saved sheet scored against played history: times each pair has played together this year INCLUDING this event
       scoring-liabilities          payouts owed, credits held, LSC shirt fund by Cup year, HIO pot, tax reserve by month
@@ -2572,6 +2573,22 @@ def _scoring_dispatch(url: str, extract: str):
                 "note": "an event appears on the EVENTS tab only once its "
                         "scorecards are imported (scoring_rounds).",
             }, indent=2)
+        if cmd == "scoring-tee-nines":
+            # Label every course_tees row front/back/full from the data
+            # (the 18-hole card's own yardages, then the ratings). Says
+            # what it could NOT decide and why. arg = optional course_id.
+            import json as _j
+            _cidarg = arg.strip()
+            _c = db.get_connection()
+            try:
+                _res = db.label_course_tee_nines(
+                    _c, int(_cidarg) if _cidarg.isdigit() else None)
+            finally:
+                _c.close()
+            db.log_agent_action("mcp-claude", "scoring-tee-nines",
+                                f"decided={_res['n_decided']} "
+                                f"unresolved={_res['n_unresolved']}")
+            return _j.dumps(_res, indent=2, default=str)
         if cmd == "scoring-event-report":
             # The two PAIRINGS printables as data, for checking a sheet
             # without a browser. "scoring-event-report:<event_id>|flights"

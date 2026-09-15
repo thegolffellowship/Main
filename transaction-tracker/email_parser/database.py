@@ -55763,6 +55763,140 @@ def _cart_sign_name(name: str) -> str:
     return " ".join(parts + [last.upper()] + [t.upper() for t in tail])
 
 
+def label_course_tee_nines(conn, course_id: int | None = None) -> dict:
+    """Say which NINE each course_tees row belongs to, from the data.
+
+    Kerry 2026-09-15: "That 'The course card...' note WILL NOT fly. We can
+    never do that. We need to get the calculations right." He is right: a
+    printed handicap that might be off a stroke is worse than no number.
+
+    Golf Genius files a nine-hole round's card as its own tee row, named
+    the same as the eighteen and numbered holes 1-9 either way, so a
+    course accumulates several rows per tee with nothing on them saying
+    front or back. But the ANSWER IS IN THE DATA: the eighteen-hole row
+    of the same tee carries holes 1-18 with their yardages, so a nine's
+    own yardages match one half of it and not the other. Where there is
+    no eighteen to match against, the RATINGS settle it — front + back
+    equals the eighteen-hole rating.
+
+    Writes `course_tees.nine` ('front' | 'back' | 'full'); returns what
+    it decided and, for anything it could not, why. Idempotent."""
+    try:
+        conn.execute("ALTER TABLE course_tees ADD COLUMN nine TEXT")
+    except sqlite3.OperationalError:
+        pass
+    where, args = "", []
+    if course_id:
+        where, args = " WHERE ct.course_id = ?", [course_id]
+    rows = [dict(r) for r in conn.execute(
+        "SELECT ct.tee_id, ct.course_id, ct.tee_name, ct.rating, ct.slope, "
+        "ct.yardage_total, ct.nine FROM course_tees ct" + where, args).fetchall()]
+    holes: dict = {}
+    for h in conn.execute(
+            "SELECT cth.tee_id, cth.hole_number, cth.yardage FROM course_tee_holes cth"
+            + (" JOIN course_tees ct ON ct.tee_id = cth.tee_id" + where if course_id else ""),
+            args).fetchall():
+        holes.setdefault(h["tee_id"], {})[int(h["hole_number"])] = h["yardage"]
+
+    def _key(r):
+        return (r["course_id"], _TEE_ORDER_RE.sub("", " ".join(
+            (r["tee_name"] or "").split())).strip().lower())
+
+    groups: dict = {}
+    for r in rows:
+        groups.setdefault(_key(r), []).append(r)
+
+    decided, unresolved = [], []
+    for key, grp in groups.items():
+        full = [r for r in grp if (r["rating"] or 0) >= 50]
+        nines = [r for r in grp if (r["rating"] or 0) < 50]
+        for r in full:
+            r["_nine"] = "full"
+        anchor = full[0] if full else None
+        ah = holes.get(anchor["tee_id"], {}) if anchor else {}
+        front_y = [ah.get(i) for i in range(1, 10)]
+        back_y = [ah.get(i) for i in range(10, 19)]
+        have_anchor = all(y for y in front_y) and all(y for y in back_y)
+        for r in nines:
+            hy = [holes.get(r["tee_id"], {}).get(i) for i in range(1, 10)]
+            if have_anchor and all(y for y in hy):
+                if hy == front_y:
+                    r["_nine"] = "front"; continue
+                if hy == back_y:
+                    r["_nine"] = "back"; continue
+                # Same nine re-rated: fall through to the totals below.
+            tot = r["yardage_total"] or (sum(y for y in hy if y) or 0)
+            if have_anchor and tot:
+                fsum, bsum = sum(front_y), sum(back_y)
+                if tot == fsum and tot != bsum:
+                    r["_nine"] = "front"; continue
+                if tot == bsum and tot != fsum:
+                    r["_nine"] = "back"; continue
+        # A tee is commonly RE-RATED, so the same nine appears twice at
+        # the same yardage. Group what is left by yardage and match the
+        # groups to the 18's own two halves; the ratings then corroborate
+        # (front + back = the eighteen). Anything still unsettled stays
+        # unsettled — no coin flips on a number that decides money.
+        undone = [r for r in nines if not r.get("_nine")]
+        if undone and have_anchor:
+            fsum, bsum = sum(front_y), sum(back_y)
+            by_yards: dict = {}
+            for r in undone:
+                y = r["yardage_total"] or sum(
+                    v for v in (holes.get(r["tee_id"], {}) or {}).values() if v)
+                if y:
+                    by_yards.setdefault(int(y), []).append(r)
+            for y, grp_r in by_yards.items():
+                if y == fsum and y != bsum:
+                    for r in grp_r:
+                        r["_nine"] = "front"
+                elif y == bsum and y != fsum:
+                    for r in grp_r:
+                        r["_nine"] = "back"
+            # Two groups that ADD to the 18 but match neither half
+            # exactly (a re-measured card): the ratings still decide.
+            left = [r for r in undone if not r.get("_nine")]
+            if len(by_yards) == 2 and left and anchor and anchor["rating"]:
+                (ya, ga), (yb, gb) = sorted(by_yards.items())
+                if anchor["yardage_total"] and ya + yb == anchor["yardage_total"]:
+                    best = None
+                    for ra in ga:
+                        for rb in gb:
+                            if ra["rating"] and rb["rating"] and abs(
+                                    (ra["rating"] + rb["rating"]) - anchor["rating"]) <= 0.15:
+                                best = (ra, rb)
+                    if best:
+                        # Front is the half whose yardage matches the 18's
+                        # front; with no hole data that is unknowable, so
+                        # only proceed when the sums differ from each other
+                        # and one of them equals fsum.
+                        fa = ya if ya == fsum else (yb if yb == fsum else None)
+                        if fa is not None:
+                            for r in ga:
+                                r["_nine"] = "front" if ya == fa else "back"
+                            for r in gb:
+                                r["_nine"] = "front" if yb == fa else "back"
+        for r in grp:
+            if r.get("_nine"):
+                if r["nine"] != r["_nine"]:
+                    conn.execute("UPDATE course_tees SET nine = ? WHERE tee_id = ?",
+                                 (r["_nine"], r["tee_id"]))
+                decided.append({"tee_id": r["tee_id"], "course_id": r["course_id"],
+                                "tee_name": r["tee_name"], "rating": r["rating"],
+                                "yards": r["yardage_total"], "nine": r["_nine"]})
+            else:
+                unresolved.append({"tee_id": r["tee_id"], "course_id": r["course_id"],
+                                   "tee_name": r["tee_name"], "rating": r["rating"],
+                                   "yards": r["yardage_total"],
+                                   "why": ("no 18-hole row of this tee to match against"
+                                           if not anchor else
+                                           "yardages match neither nine and the ratings "
+                                           "do not add up to the 18")})
+    conn.commit()
+    return {"decided": decided, "unresolved": unresolved,
+            "n_decided": len(decided), "n_unresolved": len(unresolved)}
+
+
 def _event_tee_rows(conn, ev: dict, legend: list) -> tuple[dict, str, str]:
     """Per BAND, the concrete tee row the playing handicap is computed on:
     {band: {"slope", "rating", "par", "tee_name"}}, plus a one-line basis
@@ -55781,11 +55915,21 @@ def _event_tee_rows(conn, ev: dict, legend: list) -> tuple[dict, str, str]:
     is18 = _event_holes_type(ev.get("item_name"), ev.get("format")) == 18
     nine = (ev.get("nine_side") or "Front").strip().lower()
     try:
+        label_course_tee_nines(conn, cid)      # cheap, idempotent, self-healing
         rows = [dict(r) for r in conn.execute(
-            "SELECT tee_id, tee_name, slope, rating FROM course_tees "
+            "SELECT tee_id, tee_name, slope, rating, nine FROM course_tees "
             "WHERE course_id = ?", (cid,)).fetchall()]
     except sqlite3.OperationalError:
         return {}, "", "No course card on file, so no playing handicap could be computed."
+    used_tees: dict = {}
+    try:
+        for r in conn.execute(
+                "SELECT sr.tee_id, COUNT(*) AS n FROM scoring_rounds sr "
+                "WHERE sr.course_id = ? AND sr.tee_id IS NOT NULL GROUP BY sr.tee_id",
+                (cid,)).fetchall():
+            used_tees[r["tee_id"]] = r["n"]
+    except sqlite3.OperationalError:
+        used_tees = {}
     holes_by_tee: dict = {}
     for r in conn.execute(
             "SELECT cth.tee_id, cth.hole_number, cth.par FROM course_tee_holes cth "
@@ -55804,26 +55948,43 @@ def _event_tee_rows(conn, ev: dict, legend: list) -> tuple[dict, str, str]:
         if not cands:
             continue
         pick = None
-        if not is18:
-            want = set(range(10, 19)) if nine == "back" else set(range(1, 10))
-            exact = [r for r in cands
-                     if set(holes_by_tee.get(r["tee_id"], {})) & want
-                     and not (set(holes_by_tee.get(r["tee_id"], {})) - want)]
+        if is18:
+            pick = cands[0]
+        else:
+            # The nine is a LABEL now (label_course_tee_nines), derived
+            # from the 18-hole card's own yardages. Kerry 2026-09-15:
+            # "We need to get the calculations right" - so an unlabelled
+            # card yields NO playing handicap rather than a plausible one
+            # with a caveat under it.
+            want = "back" if nine == "back" else "front"
+            exact = [r for r in cands if (r.get("nine") or "") == want]
             if len(exact) == 1:
                 pick = exact[0]
-            elif len(cands) > 1:
+            elif len(exact) > 1:
+                # A nine gets RE-RATED, so one nine can have several rows.
+                # The one Golf Genius actually assigns is the one our own
+                # imported rounds were played off; that is the rating the
+                # course is using today. Nothing imported yet -> the
+                # original row, not the newest guess.
+                pick = sorted(exact, key=lambda r: (
+                    -(used_tees.get(r["tee_id"], 0)), r["tee_id"]))[0]
+            elif len(cands) == 1 and not cands[0].get("nine"):
+                pick = cands[0]        # one card, nothing to confuse it with
+            else:
                 ambiguous = True
-        if pick is None:
-            pick = sorted(cands, key=lambda r: r["rating"])[len(cands) // 2]
+                continue
         pars = holes_by_tee.get(pick["tee_id"], {})
         par = sum(p for p in pars.values() if p) or (72 if is18 else 36)
         out[entry["band"]] = {"tee_name": entry["tee_name"], "slope": pick["slope"],
                               "rating": pick["rating"], "par": par}
     basis = ("18-hole card" if is18
              else f"{'back' if nine == 'back' else 'front'} nine card")
-    note = ("The course card stores every nine as holes 1-9, so it cannot say "
-            "which nine each rating belongs to — the middle rating was used. "
-            "Check PH against the card before it decides money."
+    # No guessing: a tee whose nine could not be established prints no
+    # playing handicap at all, and the sheet names the gap rather than
+    # pretending to a number (Kerry 2026-09-15).
+    note = ("No playing handicap for some tees - this course's card does not "
+            "say which nine those ratings belong to. Import the 18-hole "
+            "scorecard for the course and reprint."
             if ambiguous else "")
     return out, basis, note
 

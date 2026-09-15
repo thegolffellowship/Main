@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.436.0";
+window.TGF_VERSION = "2.437.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.437.0",
+    date: "2026-09-15",
+    changes: [
+      "WHICH NINE IS WHICH, FROM THE DATA (Kerry: \u2018That \u201cThe course card\u2026\u201d note WILL NOT fly. We can never do that. We need to get the calculations right.\u2019 He is right \u2014 a printed handicap that might be a stroke off is worse than no number). Golf Genius files a nine-hole round\u2019s card as its own tee row, named like the eighteen and numbered 1-9 either way, so a course accumulates several rows per tee with nothing saying front or back. The ANSWER WAS ALREADY IN THE DATA: the eighteen-hole row of the same tee carries holes 1-18 with their yardages, so a nine\u2019s own yardages match one half of it and not the other. `label_course_tee_nines` writes `course_tees.nine`, handles a nine that has been RE-RATED (same yardage, two ratings) and corroborates with the ratings, since front + back equals the eighteen. Proven on The Quarry: Gold 34.2/2873 front, 35.6/3255 back, 34.0/2873 front re-rated, 69.8 full \u2014 matching the live Golf Genius card exactly.",
+      "The starter sheet now picks the tee row OUR OWN imported rounds were played off when a nine carries more than one rating, because that is the rating the course is using today. And the caveat is gone: a tee whose nine cannot be established prints NO playing handicap and the sheet names the gap \u2014 import the 18-hole scorecard and reprint \u2014 rather than printing a number it is not sure of.",
+      "Run it anywhere with `scoring-tee-nines[:<course_id>]`, which reports every row it labelled and everything it could not, with the reason.",
+    ],
+  },
   {
     version: "2.436.0",
     date: "2026-09-15",
