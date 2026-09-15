@@ -313,6 +313,20 @@ check("the tab flags are set in ONE place, used by the toggle and the restore",
 check("restoring onto PAIRINGS loads the sheet, the way clicking the tab does",
     /mem\.view === "2"[\s\S]{0,260}await loadPairings\(mem\.id\);/.test(html));
 
+// ── The open row pins under the navs (Kerry 2026-09-15: "When I open an
+//    event, pin to top but under any header navs so I can see the event
+//    row"), and the events chevron is the house orange.
+const dcss = fs.readFileSync("static/css/dashboard.css", "utf8");
+check("the open event row is sticky under a measured offset",
+    /\.event-row-clickable\.expanded \{\s*position: sticky;\s*top: var\(--ev-sticky-top/.test(dcss)
+    && /\.event-row-clickable\.expanded td \{[\s\S]{0,120}background:/.test(dcss));
+check("the offset is measured from the real header AND tab bar, and re-measured on resize",
+    /function setEventStickyTop\(\)[\s\S]{0,420}querySelector\("header"\)[\s\S]{0,200}querySelector\("\.tab-nav"\)[\s\S]{0,220}--ev-sticky-top/.test(html)
+    && /window\.addEventListener\("resize", setEventStickyTop\)/.test(html));
+check("the events row chevron is the house orange triangle, not grey",
+    /\.event-row-clickable td:first-child::before \{[\s\S]{0,260}color: var\(--primary/.test(dcss)
+    && !/content: "▸"/.test(dcss));
+
 const cust = fs.readFileSync("templates/customers.html", "utf8");
 check("Customers page offers AMB / CAPT / BACK chips beside pace, both layouts",
     (cust.match(/renderRoleChips\(c\)/g) || []).length >= 2

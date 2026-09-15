@@ -1511,3 +1511,46 @@ restore runs once a load (`_openRestored`) and stands down for an
 incoming `?event=` / `?item=` deep link. Restoring onto PAIRINGS loads the
 sheet the same way clicking the tab does. `applyDetailView` is the one
 place the four panel flags are set.
+
+## Starter Sheet columns: PH and TEAM (v2.434.0)
+
+Kerry 2026-09-15: "Remove A/Bs from page altogether. Not necessary. Let's
+DO show 100% Playing Handicap for players in ALPHABETICAL after TGF
+Index. Then show Team Net Handicap in the next column. We'll need to add
+column headings and explanations below."
+
+- **A/B gone**, along with `.cart-A`/`.cart-B` (`#0b6` / `#06c`, never in
+  the palette).
+- **ALPHABETICAL** = PLAYER · TEE · IDX · PH · TEAM · HOLE. The heading
+  row is repeated at the top of the second column on a forced
+  `break-before: column` at the midpoint, so a column can never be read
+  under its neighbour's labels.
+- **PH** = `handicap_calc.playing_handicap` at 100% from OUR index and
+  the tee that player's BAND plays (`_event_tee_rows`). A nine-hole card
+  takes the nine-hole index (half the 18). Same chain Task #16
+  parity-proved against GG.
+- **TEAM** = `whs_round(PH × allowance)` minus the LOWEST such value in
+  the player's own GROUP — the off-lowest shape CA ratified for Cedar
+  Creek (#502/#507). Allowance is the `team_net_allowance` dial, default
+  100%. **The sheet prints the allowance and the card it used**
+  (`team_basis`, `ph_basis`), so a wrong dial shows on the page.
+- Where a course card stores every nine as holes 1-9 it cannot say which
+  nine a rating belongs to; the middle rating is used and `ph_note` says
+  so on the sheet. Fix by labelling the cards, not by guessing.
+
+**Open for Kerry:** the team allowance for a regular event. 100% is the
+default the sheet currently prints; Cedar Creek's ratified dial was 75%
+off lowest.
+
+## The open event row pins under the navs (v2.434.0)
+
+Kerry: "When I open an event, pin to top but under any header navs so I
+can see the event row." `.event-row-clickable.expanded` is
+`position: sticky` at `--ev-sticky-top`, measured in JS from the real
+header + `.tab-nav` and re-measured on resize (both change height by role
+and window width). Cells take an explicit background — a sticky row over
+a scrolling table is transparent otherwise.
+
+**Chevrons:** the events and customers row arrows now use the house
+values (TGF orange, ▶, 0.75rem) to match `.tgf-exp`. `/me` and Money Flow
+still carry their own grey ▸ and are the remaining offenders.

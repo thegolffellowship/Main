@@ -113,9 +113,6 @@
     .prow .tee { color: #444; width: 42px; text-align: right; white-space: nowrap; }
     .prow .idx { color: #444; width: 30px; text-align: right;
                  font-variant-numeric: tabular-nums; white-space: nowrap; }
-    .prow .cart { width: 12px; text-align: center; font-weight: 700; }
-    .cart-A { color: #0b6; }
-    .cart-B { color: #06c; }
 
     /* ALPHA LIST — for the player who walks up knowing only their name. */
     .alpha-head {
@@ -145,6 +142,17 @@
                   white-space: nowrap; }
     .arow .aidx { color: #444; width: 26px; text-align: right;
                   font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .arow .aph, .arow .atn { width: 24px; text-align: right; color: #111;
+                             font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .arow .atn { color: #444; }
+    /* The heading row is the same grid as the data, so a column can
+       never be labelled with its neighbour's name. */
+    .arow.ahead { border-bottom: 1.5px solid #111; padding-bottom: 3px;
+                  font-family: "Bitter", Georgia, serif; font-weight: 700;
+                  font-size: 8.5px; letter-spacing: 0.06em; color: #444;
+                  break-inside: avoid; }
+    .arow.ahead span { color: #444; font-weight: 700; }
+    .arow.ahead.colbreak { break-before: column; -webkit-column-break-before: column; }
     .arow .as { font-family: "Bitter", Georgia, serif; font-weight: 700;
                 width: 30px; text-align: right; white-space: nowrap; }
 
@@ -239,7 +247,6 @@
             <span class="tee{% if pack.tee_colors.get(p.tee_choice) %} tee-hot{% endif %}"
                   {% if pack.tee_colors.get(p.tee_choice) %}style="color:{{ pack.tee_colors.get(p.tee_choice) }};"{% endif %}>{{ p.tee_choice or "—" }}</span>
             <span class="idx">{% if p.handicap_index is not none %}{{ "%.1f"|format(p.handicap_index) }}{% else %}—{% endif %}</span>
-            <span class="cart {% if (p.cart_pos or 0) in [1,2] %}cart-A{% else %}cart-B{% endif %}">{% if (p.cart_pos or 0) in [1,2] %}A{% else %}B{% endif %}</span>
           </div>
         {% endfor %}
       </div>
@@ -249,13 +256,29 @@
   <div class="alpha-head">
     ALPHABETICAL <span>{{ pack.player_count }} PLAYER{{ "" if pack.player_count == 1 else "S" }}</span>
   </div>
+  {% set _ahead %}
+      <span class="an">PLAYER</span>
+      <span class="atee">TEE</span>
+      <span class="aidx">IDX</span>
+      <span class="aph">PH</span>
+      <span class="atn">TEAM</span>
+      <span class="as">HOLE</span>
+  {% endset %}
+  {% set _mid = (pack.alpha|length + 1) // 2 %}
   <div class="alpha">
+    <div class="arow ahead">{{ _ahead }}</div>
     {% for a in pack.alpha %}
+      {# The list reads DOWN then across, so the second column needs its
+         own headings — and the break is forced here so the header can
+         never end up mid-column (Kerry 2026-09-15). #}
+      {% if loop.index0 == _mid %}<div class="arow ahead colbreak">{{ _ahead }}</div>{% endif %}
       <div class="arow">
         <span class="an">{{ a.sort_name }}</span>
         <span class="atee{% if pack.tee_colors.get(a.tee_choice) %} tee-hot{% endif %}"
               {% if pack.tee_colors.get(a.tee_choice) %}style="color:{{ pack.tee_colors.get(a.tee_choice) }};"{% endif %}>{{ a.tee_choice or "—" }}</span>
         <span class="aidx">{% if a.handicap_index is not none %}{{ "%.1f"|format(a.handicap_index) }}{% else %}—{% endif %}</span>
+        <span class="aph">{% if a.playing_handicap is not none %}{{ a.playing_handicap }}{% else %}&mdash;{% endif %}</span>
+        <span class="atn">{% if a.team_handicap is not none %}{{ a.team_handicap }}{% else %}&mdash;{% endif %}</span>
         <span class="as">{{ a.slot_short }}</span>
       </div>
     {% endfor %}
@@ -263,7 +286,12 @@
   {% endif %}
 
   <div class="foot">
-    Cart A = seats 1&amp;2 · Cart B = seats 3&amp;4. &nbsp; Idx = 9-hole handicap index carried by pairings (not the playing handicap). &nbsp; The Golf Fellowship.
+    <strong>IDX</strong> = TGF handicap index{% if pack.holes_key == '9' %} (9-hole){% endif %}.
+    &nbsp; <strong>PH</strong> = playing handicap at 100%, computed from that index and the tee played
+    {%- if pack.ph_basis %} ({{ pack.ph_basis }}){% endif %}.
+    &nbsp; <strong>TEAM</strong> = the Team Net handicap{% if pack.team_basis %} ({{ pack.team_basis }}){% endif %}.
+    {%- if pack.ph_note %} &nbsp; <em>{{ pack.ph_note }}</em>{% endif %}
+    &nbsp; The Golf Fellowship.
   </div>
   </div><!-- /.sheet -->
   <script>

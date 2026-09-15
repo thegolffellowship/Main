@@ -1,5 +1,16 @@
-window.TGF_VERSION = "2.433.0";
+window.TGF_VERSION = "2.434.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.434.0",
+    date: "2026-09-15",
+    changes: [
+      "STARTER SHEET: cart letters OUT, handicaps IN (Kerry: \u2018Remove A/Bs from page altogether. Not necessary. Let\u2019s DO show 100% Playing Handicap for players in ALPHABETICAL after TGF Index. Then show Team Net Handicap in the next column. We\u2019ll need to add column headings and explanations below.\u2019). The A/B column and its two off-palette colours are gone. ALPHABETICAL now reads PLAYER \u00b7 TEE \u00b7 IDX \u00b7 PH \u00b7 TEAM \u00b7 HOLE, with the headings repeated at the top of the SECOND column on a forced break so a column can never be read under its neighbour\u2019s labels, and an explanation under the sheet naming each one.",
+      "PH is the playing handicap at 100%, computed from OUR index and the tee that player\u2019s BAND plays, through the same handicap_calc chain Task #16 parity-proved against Golf Genius \u2014 a nine-hole card takes the nine-hole index. TEAM is that number at the event\u2019s team allowance, off the LOWEST in the player\u2019s own group, the shape CA ratified for Cedar Creek. The allowance is a dial (`team_net_allowance`, default 100%) and the SHEET PRINTS which allowance and which course card it used, so a wrong dial is visible rather than silent. Where a course card stores every nine as holes 1-9 and cannot say which nine a rating belongs to, the sheet says that too.",
+      "CART SIGNS 15% LARGER throughout (Kerry), names at 62px, still never wrapping \u2014 \u2018Christopher ESPINOSA\u2019 measured clear.",
+      "THE OPEN EVENT ROW PINS under the header and tab bar so it stays in view while you work its panel (Kerry: \u2018pin to top but under any header navs so I can see the event row\u2019). The offset is measured from the real header and tab bar and re-measured on resize, because both change height by role and window width.",
+      "The events and customers row arrows are the house orange triangle (Kerry: \u2018Standard chevron is supposed to be orange\u2019) \u2014 they were a grey \u25b8 of their own, the third and fourth surfaces this pass to be quietly off the ratified standard.",
+    ],
+  },
   {
     version: "2.433.0",
     date: "2026-09-15",

@@ -55657,6 +55657,71 @@ def _cart_sign_name(name: str) -> str:
     return " ".join(parts + [last.upper()] + [t.upper() for t in tail])
 
 
+def _event_tee_rows(conn, ev: dict, legend: list) -> tuple[dict, str, str]:
+    """Per BAND, the concrete tee row the playing handicap is computed on:
+    {band: {"slope", "rating", "par", "tee_name"}}, plus a one-line basis
+    and any caveat the sheet should print.
+
+    A course card carries several rows per named tee — the front nine, the
+    back nine, the 18 — and a rating under 50 IS a nine-hole rating. Where
+    the card's hole numbers tell the nines apart (1-9 vs 10-18) the right
+    one is used; where every nine-hole row is stored as holes 1-9, which
+    is common, they are indistinguishable and the MIDDLE rating is taken
+    and SAID SO on the sheet, because a silently wrong rating is a
+    silently wrong handicap."""
+    cid = ev.get("course_id")
+    if not cid or not legend:
+        return {}, "", "No course card on file, so no playing handicap could be computed."
+    is18 = _event_holes_type(ev.get("item_name"), ev.get("format")) == 18
+    nine = (ev.get("nine_side") or "Front").strip().lower()
+    try:
+        rows = [dict(r) for r in conn.execute(
+            "SELECT tee_id, tee_name, slope, rating FROM course_tees "
+            "WHERE course_id = ?", (cid,)).fetchall()]
+    except sqlite3.OperationalError:
+        return {}, "", "No course card on file, so no playing handicap could be computed."
+    holes_by_tee: dict = {}
+    for r in conn.execute(
+            "SELECT cth.tee_id, cth.hole_number, cth.par FROM course_tee_holes cth "
+            "JOIN course_tees ct ON ct.tee_id = cth.tee_id WHERE ct.course_id = ?",
+            (cid,)).fetchall():
+        holes_by_tee.setdefault(r["tee_id"], {})[int(r["hole_number"])] = r["par"]
+
+    def _label(nm):
+        return _TEE_ORDER_RE.sub("", " ".join((nm or "").split())).strip()
+
+    out, ambiguous = {}, False
+    for entry in legend:
+        cands = [r for r in rows if _label(r["tee_name"]) == entry["tee_name"]
+                 and r["slope"] and r["rating"] is not None
+                 and ((r["rating"] >= 50) == is18)]
+        if not cands:
+            continue
+        pick = None
+        if not is18:
+            want = set(range(10, 19)) if nine == "back" else set(range(1, 10))
+            exact = [r for r in cands
+                     if set(holes_by_tee.get(r["tee_id"], {})) & want
+                     and not (set(holes_by_tee.get(r["tee_id"], {})) - want)]
+            if len(exact) == 1:
+                pick = exact[0]
+            elif len(cands) > 1:
+                ambiguous = True
+        if pick is None:
+            pick = sorted(cands, key=lambda r: r["rating"])[len(cands) // 2]
+        pars = holes_by_tee.get(pick["tee_id"], {})
+        par = sum(p for p in pars.values() if p) or (72 if is18 else 36)
+        out[entry["band"]] = {"tee_name": entry["tee_name"], "slope": pick["slope"],
+                              "rating": pick["rating"], "par": par}
+    basis = ("18-hole card" if is18
+             else f"{'back' if nine == 'back' else 'front'} nine card")
+    note = ("The course card stores every nine as holes 1-9, so it cannot say "
+            "which nine each rating belongs to — the middle rating was used. "
+            "Check PH against the card before it decides money."
+            if ambiguous else "")
+    return out, basis, note
+
+
 def get_event_print_pack(event_id: int, db_path=None) -> dict | None:
     """Assemble the data for the Starter Sheet + Cart Signs printables (B5).
 
@@ -55672,6 +55737,12 @@ def get_event_print_pack(event_id: int, db_path=None) -> dict | None:
             return None
         ev = dict(ev)
         tee_legend = event_tee_legend(conn, event_id, ev)
+        tee_rows, ph_basis, ph_note = _event_tee_rows(conn, ev, tee_legend)
+        try:
+            team_allowance = float(_setting_via(conn, "team_net_allowance") or 1.0)
+        except (TypeError, ValueError):
+            team_allowance = 1.0
+    idx_map = _handicap_index_18_by_customer(db_path)
     pairings = get_event_pairings(event_id, db_path=db_path)
 
     def _carts(players: list) -> list:
@@ -55742,6 +55813,42 @@ def get_event_print_pack(event_id: int, db_path=None) -> dict | None:
         start_label_18 = (f"Shotgun {_start18}" if _st18 == "Shotgun"
                           else f"First tee {_start18}")
 
+    # PLAYING HANDICAP at 100%, and the TEAM NET handicap off it (Kerry
+    # 2026-09-15: "Let's DO show 100% Playing Handicap for players in
+    # ALPHABETICAL after TGF Index. Then show Team Net Handicap in the
+    # next column."). PH comes from OUR index and the tee that player's
+    # BAND plays, through handicap_calc — the same chain Task #16
+    # parity-proved against Golf Genius. TEAM is that number at the
+    # event's team allowance, off the LOWEST in the player's own group,
+    # which is the shape CA ratified for Cedar Creek (#502/#507). The
+    # allowance is a dial (`team_net_allowance`, default 100%) and the
+    # sheet PRINTS which one it used, so a wrong dial is visible.
+    from email_parser.handicap_calc import playing_handicap as _ph_fn, whs_round as _wr
+    ph_by_name: dict = {}
+    for g in groups:
+        for p in g["players"]:
+            cid = p.get("customer_id")
+            tee = tee_rows.get((p.get("tee_choice") or "").strip())
+            idx = idx_map.get(int(cid)) if cid else None
+            if idx is None or not tee:
+                continue
+            # A nine-hole card takes the nine-hole index (half the 18).
+            idx_scoped = idx if (tee["rating"] or 0) >= 50 else round(idx / 2.0, 1)
+            try:
+                p["playing_handicap"] = _ph_fn(idx_scoped, tee["slope"],
+                                               tee["rating"], tee["par"])
+            except Exception:
+                continue
+            ph_by_name[_pair_key_name(p.get("name"))] = p["playing_handicap"]
+    for g in groups:
+        raw = [(p, _wr((p.get("playing_handicap") or 0) * team_allowance))
+               for p in g["players"] if p.get("playing_handicap") is not None]
+        if not raw:
+            continue
+        low = min(v for _p, v in raw)
+        for p, v in raw:
+            p["team_handicap"] = v - low
+
     # ALPHA LIST (Kerry 2026-09-08): the starter's other job is answering
     # "where am I?" for a player who walks up knowing only their own
     # name. Same rows as the groups, sorted by SURNAME — built here so
@@ -55756,6 +55863,8 @@ def get_event_print_pack(event_id: int, db_path=None) -> dict | None:
             last = parts[-1] if parts else nm
             first = " ".join(parts[:-1]) if len(parts) > 1 else ""
             alpha.append({
+                "playing_handicap": p.get("playing_handicap"),
+                "team_handicap": p.get("team_handicap"),
                 "name": nm,
                 "sort_name": f"{last}, {first}".strip().strip(","),
                 "slot_label": g["slot_label"],
@@ -55795,6 +55904,12 @@ def get_event_print_pack(event_id: int, db_path=None) -> dict | None:
         "group_count": len(groups),
         "tee_legend": tee_legend,
         "tee_colors": {t["band"]: t["color"] for t in tee_legend},
+        "ph_basis": ph_basis,
+        "ph_note": ph_note,
+        "team_basis": (f"{round(team_allowance * 100)}% of PH, off the "
+                       f"lowest in the group"),
+        "holes_key": "18" if _event_holes_type(
+            ev.get("item_name"), ev.get("format")) == 18 else "9",
         "alpha": alpha,
         "player_count": len(alpha),
     }

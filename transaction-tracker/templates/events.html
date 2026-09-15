@@ -4035,6 +4035,20 @@
         return "0";
     }
 
+    // Where the open row must stop: under the sticky header AND the
+    // sticky tab bar, both of which change height with role and window
+    // width (Kerry 2026-09-15: "pin to top but under any header navs").
+    function setEventStickyTop() {
+        try {
+            const h = document.querySelector("header");
+            const nav = document.querySelector(".tab-nav");
+            const top = (h ? h.offsetHeight : 0) + (nav ? nav.offsetHeight : 0);
+            document.documentElement.style.setProperty("--ev-sticky-top", top + "px");
+        } catch (e) { /* the CSS fallback stands */ }
+    }
+    window.addEventListener("resize", setEventStickyTop);
+    window.addEventListener("load", setEventStickyTop);
+
     function rememberEventOpen(evId, val) {
         try {
             if (evId == null) sessionStorage.removeItem("tgf_events_open");
@@ -8469,6 +8483,7 @@
         // Expand the clicked row
         expandedEventId = eventId;
         rememberEventOpen(eventId);
+        setEventStickyTop();
         const ev = allEvents.find(e => e.id === eventId);
 
         // Fetch RSVPs first (needed for both desktop and mobile)

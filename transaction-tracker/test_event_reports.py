@@ -275,7 +275,7 @@ check("two signs to a page, cut down the middle",
       and "top: 50%" in _cs and "border-top: 1px solid" in _cs)
 check("no box around a sign", "border: 2px solid #111" not in _cs)
 check("the names are the sign — Bitter, huge, never wrapping",
-      '.nm {' in _cs and "font-size: 54px" in _cs and "white-space: nowrap" in _cs)
+      '.nm {' in _cs and "font-size: 62px" in _cs and "white-space: nowrap" in _cs)
 check("surnames print in caps, given names as written",
       db._cart_sign_name("Daniel South") == "Daniel SOUTH"
       and db._cart_sign_name("Paul Reed III") == "Paul REED III")
@@ -387,6 +387,80 @@ check("the legend and the coloured tees survive the printer",
       ".tee-legend, .tee-legend .sw," in _ss2 and ".tee-hot {" in _ss2)
 check("the group header names the hole and the time",
       '<span class="slot">{{ g.start_line or g.slot_label }}</span>' in _ss2)
+
+print("\n== starter sheet: A/B out, PH and TEAM in ==")
+# Kerry 2026-09-15: "Remove A/Bs from page altogether. Not necessary.
+# Let's DO show 100% Playing Handicap for players in ALPHABETICAL after
+# TGF Index. Then show Team Net Handicap in the next column. We'll need
+# to add column headings and explanations below."
+_ss3 = open("templates/starter_sheet.html", encoding="utf-8").read()
+check("the cart letters are gone from the sheet entirely",
+      "cart-A" not in _ss3 and "cart-B" not in _ss3 and "Cart A =" not in _ss3)
+check("the alphabetical list has column headings",
+      '<span class="aidx">IDX</span>' in _ss3 and '<span class="aph">PH</span>' in _ss3
+      and '<span class="atn">TEAM</span>' in _ss3)
+check("…repeated at the top of the SECOND column, on a forced break",
+      "loop.index0 == _mid" in _ss3 and ".arow.ahead.colbreak { break-before: column;" in _ss3)
+check("the explanation names each column and how it was computed",
+      "<strong>PH</strong>" in _ss3 and "<strong>TEAM</strong>" in _ss3
+      and "pack.ph_basis" in _ss3 and "pack.team_basis" in _ss3)
+# The numbers themselves, on a FRESH database — the fixture above has
+# been mutated by the yardage tests, and a print pack must be judged on
+# a course card that means what it says.
+_t2 = os.path.join(tempfile.mkdtemp(prefix="tgf-ph-"), "t.db")
+with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+    db.init_db(_t2)
+_c2 = sqlite3.connect(_t2); _c2.row_factory = sqlite3.Row
+_c2.execute("INSERT INTO courses (course_id, name, status) VALUES (900, 'Test Links', 'active')")
+_c2.execute("INSERT INTO events (id, item_name, event_date, chapter, course, course_id, status, format, nine_side, start_type, start_time) "
+            "VALUES (990, 's9.99 Test Links', '2026-09-15', 'San Antonio', 'Test Links', 900, 'active', '9 Holes', 'Front', 'Shotgun', '17:00')")
+for _tid, _nm, _sl, _rt, _yd in ((901, '1 - Gold Tee', 117, 34.2, 3255),
+                                 (902, '2 - Blue Tee', 112, 33.0, 2978),
+                                 (903, '3 - Red Tee', 105, 31.4, 2354)):
+    _c2.execute("INSERT INTO course_tees (tee_id, course_id, tee_name, slope, rating, yardage_total) VALUES (?, 900, ?, ?, ?, ?)",
+                (_tid, _nm, _sl, _rt, _yd))
+    for _h in range(1, 10):
+        _c2.execute("INSERT INTO course_tee_holes (tee_id, hole_number, par, yardage, stroke_index) VALUES (?, ?, 4, 300, ?)", (_tid, _h, _h))
+db._ensure_pairing_tables(_c2)
+for _i, (_cid, _f, _l, _tee, _idx18) in enumerate((
+        (301, "Pat", "Youngs", "50-64", 3.6),
+        (302, "Larry", "Anthis", "50-64", 24.6),
+        (303, "Gus", "Vasquez", "50-64", 17.2))):
+    _c2.execute("INSERT INTO customers (customer_id, first_name, last_name, chapter, account_status) VALUES (?, ?, ?, 'San Antonio', 'active')", (_cid, _f, _l))
+    _c2.execute("INSERT INTO handicap_player_links (player_name, customer_name, customer_id) VALUES (?, ?, ?)", (f"{_l}, {_f}", f"{_f} {_l}", _cid))
+    for _d in (10, 20, 30):
+        _c2.execute("INSERT INTO handicap_rounds (player_name, round_date, adjusted_score, rating, slope, differential) "
+                    "VALUES (?, date('now', ?), 45, 34.5, 120, ?)", (f"{_l}, {_f}", f"-{_d} days", _idx18 / 2.0 + 2.0))
+    _c2.execute("INSERT INTO event_pairings (event_id, holes, group_num, slot_label, player_name, cart_pos, tee_choice, customer_id) "
+                "VALUES (990, '9', 1, '1A', ?, ?, ?, ?)", (f"{_f} {_l}", _i + 1, _tee, _cid))
+_c2.commit()
+_pk3 = db.get_event_print_pack(990, db_path=_t2)
+_al = {a["sort_name"]: a for a in _pk3["alpha"]}
+check("every seated player carries a playing handicap",
+      all(a["playing_handicap"] is not None for a in _pk3["alpha"]),
+      str([(a["sort_name"], a["playing_handicap"]) for a in _pk3["alpha"]]))
+check("PH rises with the index",
+      _al["Anthis, Larry"]["playing_handicap"] > _al["Youngs, Pat"]["playing_handicap"],
+      str([(k, v["playing_handicap"]) for k, v in _al.items()]))
+_lowest = min(a["playing_handicap"] for a in _pk3["alpha"])
+check("the lowest player in the group is the team zero",
+      min(a["team_handicap"] for a in _pk3["alpha"]) == 0)
+check("TEAM is PH off that lowest",
+      all(a["team_handicap"] == a["playing_handicap"] - _lowest for a in _pk3["alpha"]),
+      str([(a["sort_name"], a["playing_handicap"], a["team_handicap"]) for a in _pk3["alpha"]]))
+check("the sheet states the allowance it used, so a wrong dial is visible",
+      "off the lowest in the group" in _pk3["team_basis"] and "%" in _pk3["team_basis"], _pk3["team_basis"])
+check("...and which card the playing handicap came off", "nine card" in _pk3["ph_basis"], _pk3["ph_basis"])
+db.set_app_setting("team_net_allowance", "0.75", db_path=_t2)
+check("the allowance is a dial, not a constant",
+      "75% of PH" in db.get_event_print_pack(990, db_path=_t2)["team_basis"])
+check("a player with no index is left blank, never given a made-up handicap",
+      db._event_tee_rows(_c2, {"course_id": None}, [])[0] == {})
+
+_cs2 = open("templates/cart_signs.html", encoding="utf-8").read()
+check("the cart sign is 15% larger (Kerry)",
+      "font-size: 62px" in _cs2 and "font-size: 41px" in _cs2
+      and "width: 94px; height: 94px" in _cs2)
 
 print("\nALL PASSED" if not F else f"\n{len(F)} FAILED: {F}")
 sys.exit(1 if F else 0)

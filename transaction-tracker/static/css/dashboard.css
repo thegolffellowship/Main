@@ -593,18 +593,37 @@ tr.txn-highlight {
     position: relative;
     padding-left: 1.5rem;
 }
+/* The house expand arrow, same glyph, colour and size as .tgf-exp above
+   (Kerry 2026-09-15: "Standard chevron is supposed to be orange"). This
+   one is a ::before, so it cannot take the class — it takes the values. */
 .event-row-clickable td:first-child::before {
-    content: "▸";
+    content: "\25B6";
     position: absolute;
     left: 0.5rem;
     top: 50%;
     transform: translateY(-50%);
-    color: var(--text-muted);
+    color: var(--primary, #E87C3E);
     font-size: 0.75rem;
+    line-height: 1;
     transition: transform 0.15s;
 }
 .event-row-clickable.expanded td:first-child::before {
     transform: translateY(-50%) rotate(90deg);
+}
+/* THE OPEN ROW PINS UNDER THE NAV (Kerry 2026-09-15: "When I open an
+   event, pin to top but under any header navs so I can see the event
+   row"). The offset is measured in JS from the real header + tab bar
+   and published as --ev-sticky-top, because both change height by role
+   and by window width. Cells take an explicit background: a sticky row
+   over a scrolling table is transparent otherwise. */
+.event-row-clickable.expanded {
+    position: sticky;
+    top: var(--ev-sticky-top, 96px);
+    z-index: 3;
+}
+.event-row-clickable.expanded td {
+    background: var(--surface, #fff);
+    box-shadow: inset 0 -1px 0 var(--border, #E5E7EB);
 }
 .event-detail-row {
     display: none;
@@ -690,14 +709,17 @@ tr.txn-highlight {
     position: relative;
     padding-left: 1.5rem;
 }
+/* Same house arrow as the events table and .tgf-exp (Kerry 2026-09-15).
+   A ::before cannot take the class, so it takes the values. */
 .cust-row-clickable td:first-child::before {
-    content: "▸";
+    content: "\25B6";
     position: absolute;
     left: 0.5rem;
     top: 50%;
     transform: translateY(-50%);
-    color: var(--text-muted);
+    color: var(--primary, #E87C3E);
     font-size: 0.75rem;
+    line-height: 1;
     transition: transform 0.15s;
 }
 .cust-row-clickable.expanded td:first-child::before {
