@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.427.0";
+window.TGF_VERSION = "2.428.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.428.0",
+    date: "2026-09-15",
+    changes: [
+      "MARKER CARDS LOSE THE BOX AND GAIN A CUT LINE (Kerry: \u2018remove the border and add a thin cut line down center\u2019). The 2px rule around each card is gone; a hairline now runs down the middle of the SHEET, which is the only line that matters once these are printed \u2014 it is where the paper gets cut. It is marked print-exact so it cannot be dropped as decoration.",
+      "With the box gone the card breathes into the space it used to take: the logo is up to 100px, and both footer lines are up to 15.5px, still one size for the pair. The eight name lines pay for it \u2014 they take whatever height is left, so a larger footer simply tightens them, which is what Kerry asked for.",
+    ],
+  },
   {
     version: "2.427.0",
     date: "2026-09-15",

@@ -180,8 +180,8 @@ for t in ("divisions_flights.html", "proximity_markers.html"):
 # Fellowship's event in larger red letters on top of those notes. Also,
 # 'Ball must be on the green.'"
 _mk = open("templates/proximity_markers.html", encoding="utf-8").read()
-check("the logo is centred and half again as big (58 -> 87px)",
-      "width: 87px; height: 87px; display: block; margin: 0 auto" in _mk)
+check("the logo is centred and larger than the first print (58 -> 100px)",
+      "width: 100px; height: 100px; display: block; margin: 0 auto" in _mk)
 check("course and date sit directly under the logo, centred",
       ".mk-head { text-align: center;" in _mk
       and _mk.index('class="mk-logo"') < _mk.index('class="mk-course"') < _mk.index('class="mk-event"'))
@@ -194,10 +194,24 @@ check("the red line names who the contest is for, above the notes",
       and ".mk-warn {" in _mk and "color: #B91C1C" in _mk
       and _mk.index('class="mk-warn"') < _mk.index('class="mk-notes"'))
 check("...and it prints red rather than dropping to grey",
-      ".mk-title, .mk-warn { -webkit-print-color-adjust: exact" in _mk)
+      ".mk-title, .mk-warn {" in _mk and "print-color-adjust: exact" in _mk)
+# Kerry 2026-09-15, second pass: "remove the border and add a thin cut
+# line down center ... make notes at bottom slightly larger and shrink
+# line spacing slightly to accommodate. Make logo slightly bigger."
+check("no box around a card",
+      ".mk { padding:" in _mk and "border: 2px solid #111; border-radius: 6px" not in _mk)
+check("a hairline runs down the middle of the SHEET, where it gets cut",
+      ".page::after {" in _mk and "left: 50%" in _mk and "border-left: 1px solid" in _mk
+      and ".page { " not in _mk.split(".page::after")[0].split("position: relative;")[-1])
+check("the cut line prints rather than being dropped as decoration",
+      ".page, .mk-title, .mk-warn {" in _mk and "print-color-adjust: exact" in _mk)
+check("the footer pair is larger, and still one size for both lines",
+      _mk.count("font-size: 15.5px") == 2)
+check("the name lines give the space back", "margin-bottom: 7px;" in _mk and "padding-bottom: 2px;" in _mk)
+
 check("the bottom line is the green rule ALONE, at the same size as the red line",
       "Ball must be on the green." in _mk
-      and "font-size: 14px; color: #111" in _mk
+      and "font-size: 15.5px; color: #111" in _mk
       and "inside the marker" not in _mk, "marker mechanics should be gone")
 # House type (Kerry 2026-09-15: "We need to use more of our standard
 # fonts"). The ratified rule, mailbox #44: Bitter for headings, nav/CTA

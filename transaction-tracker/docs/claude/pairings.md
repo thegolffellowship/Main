@@ -1374,14 +1374,16 @@ narrowed to the nine in play. A Back nine stored as holes 1-9 falls back
 with a warning on the sheet. No hole card → nothing printed and the
 reason said.
 
-**The marker card** (Kerry 2026-09-15, after the first print): logo
-centred at 87px with the course and date stacked directly under it; the
+**The marker card** (Kerry 2026-09-15, after the first print): NO border
+around a card — a hairline down the centre of the sheet instead, marked
+print-exact, because the only line that matters on a printed sheet is
+where it gets cut; logo centred at 100px with the course and date stacked directly under it; the
 eight name lines each take an equal share of the remaining height so they
 fill the card; no par/yardage/closest-wins subline (obvious, and the
 yardage is wrong on its face when the field plays several tees); the
 footer leads with **"Only for participants of The Golf Fellowship's
 event"** in red (marked print-exact so it does not fall back to grey),
-over one rule at the SAME SIZE: "Ball must be on the green." Who may
+over one rule at the SAME SIZE (15.5px): "Ball must be on the green." Who may
 claim and what makes a claim valid are the only two things a tee sign has
 to say (v2.427.0). **Type** follows the ratified rule (mailbox #44):
 Bitter for the course line, the eyebrow, the title and both footer lines;
