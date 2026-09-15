@@ -456,6 +456,8 @@
         .pairing-hist-row .ph-item { margin-right: 0.5rem; }
         /* Twice is worth a look, four times is the Group 5 problem. */
         .pairing-hist-row .ph-rep { color: #b45309; font-weight: 700; }
+        /* A requested pair is a decision, not a repeat (Kerry 2026-09-15). */
+        .pairing-hist-row .ph-req { color: var(--muted); font-weight: 400; }
         .pairing-hist-row .ph-hot { color: #b91c1c; font-weight: 700; }
         .pairing-repeat-chip {
             float: right; margin-right: 0.5rem; font-weight: 700;
@@ -6507,18 +6509,30 @@
             o => o.race_key === (state.raceKey || (o.is_default ? o.race_key : null)));
         const raceLabel = (_raceOpt && _raceOpt.label) || 'points race';
 
-        if (showBands) {
-            const legend = [
-                ['in', `IN ${raceLabel.toUpperCase()}`],
-                ['notin', 'MEMBER, NOT IN'],
-                ['alumni', 'ALUMNI'],
-                ['guest', 'GUEST'],
-                ['firsttimer', '1ST TIMER'],
-            ].map(([k, txt]) =>
-                `<span style="display:inline-flex;align-items:center;gap:0.3rem;">
-                    <span style="width:11px;height:11px;border-radius:3px;background:${PAIR_BANDS[k].bg || '#fff'};border:1px solid ${PAIR_BANDS[k].dot};"></span>
-                    ${escapeHtml(txt)}</span>`).join('');
-            html += `<div style="display:flex;gap:0.9rem;flex-wrap:wrap;align-items:center;font-size:0.72rem;color:var(--text-muted);padding:0.15rem 0 0.35rem;">${legend}</div>`;
+        const bandLegend = !showBands ? '' : [
+            ['in', `IN ${raceLabel.toUpperCase()}`],
+            ['notin', 'MEMBER, NOT IN'],
+            ['alumni', 'ALUMNI'],
+            ['guest', 'GUEST'],
+            ['firsttimer', '1ST TIMER'],
+        ].map(([k, txt]) =>
+            `<span style="display:inline-flex;align-items:center;gap:0.3rem;">
+                <span style="width:11px;height:11px;border-radius:3px;background:${PAIR_BANDS[k].bg || '#fff'};border:1px solid ${PAIR_BANDS[k].dot};"></span>
+                ${escapeHtml(txt)}</span>`).join('');
+        // The three role marks, in the SAME badge markup the cards use
+        // (Kerry 2026-09-15: "Add the new symbols for Captain, Ambassador
+        // and 1Y to the legend above"). Rendering the real badge rather
+        // than a copy means the legend can never drift from the card.
+        const roleLegend = [
+            ['role-capt', 'C', 'GROUP CAPTAIN'],
+            ['role-amb', 'A', 'AMBASSADOR'],
+            ['role-new', '1Y', 'FIRST-YEAR MEMBER'],
+        ].map(([cls, mark, txt]) =>
+            `<span style="display:inline-flex;align-items:center;gap:0.3rem;">
+                <span class="pairing-role-badge ${cls}">${mark}</span>
+                ${escapeHtml(txt)}</span>`).join('');
+        if (bandLegend || roleLegend) {
+            html += `<div style="display:flex;gap:0.9rem;flex-wrap:wrap;align-items:center;font-size:0.72rem;color:var(--text-muted);padding:0.15rem 0 0.35rem;">${bandLegend}${roleLegend}</div>`;
         }
 
         // name -> customer_id, from BOTH sources, built once. Powers the
@@ -6746,6 +6760,7 @@
             state._paceMap = null;  // rebuild pace lookup from fresh roster
             state.mpMatches = data.mp_matches || [];
             state.requests = data.partner_requests || [];
+            state._reqPairs = null;      // rebuilt on the next history line
             // AUTHORITATIVE seed for the pairing method: this response is
             // fetched when the panel opens, so it can't be stale the way
             // the events-list payload can (Kerry 2026-07-31 — the reason
@@ -10356,6 +10371,29 @@
         return parts.length ? parts[parts.length - 1] : '';
     }
 
+    // Requested pairs, normalized both ways, built once per render pass.
+    // Kerry 2026-09-15: "any requests should be exempted from the repeat
+    // flag." A partner request is a DECISION, and rule 3 already ranks
+    // below it — flagging Palacios + Anthis at 16 as a problem is the
+    // report arguing with an instruction the manager gave it. The count
+    // still shows; it just stops shouting.
+    function requestedPairSet(state) {
+        const out = new Set();
+        (state.requests || []).forEach(r => {
+            if (!r || !r.partner || r.suppressed) return;
+            const a = pairCountKey(r.requester), b = pairCountKey(r.partner);
+            if (!a || !b) return;
+            out.add(a < b ? `${a}|${b}` : `${b}|${a}`);
+        });
+        return out;
+    }
+
+    function pairIsRequested(state, a, b) {
+        if (!state._reqPairs) state._reqPairs = requestedPairSet(state);
+        const ka = pairCountKey(a), kb = pairCountKey(b);
+        return state._reqPairs.has(ka < kb ? `${ka}|${kb}` : `${kb}|${ka}`);
+    }
+
     // The HISTORY line for one seat: every OTHER player in the group, in
     // seat order, with the count. Returns '' for a group of one.
     function pairHistoryRowHtml(state, grp, player) {
@@ -10365,11 +10403,15 @@
         if (!mates.length) return '';
         const bits = mates.map(m => {
             const n = pairPlayedTotal(state, player.name, m.name);
-            const cls = n >= 4 ? ' ph-hot' : (n >= 2 ? ' ph-rep' : '');
-            return `<span class="ph-item${cls}">${escapeHtml(pairShortName(m.name))} ${n}</span>`;
+            const req = pairIsRequested(state, player.name, m.name);
+            const cls = req ? ' ph-req' : (n >= 4 ? ' ph-hot' : (n >= 2 ? ' ph-rep' : ''));
+            const t = req
+                ? `${m.name} — requested partner, exempt from the repeat flag (${n} together this year)`
+                : `${m.name} — ${n} round${n === 1 ? '' : 's'} together this year including tonight`;
+            return `<span class="ph-item${cls}" title="${escapeHtml(t)}">${
+                escapeHtml(pairShortName(m.name))} ${n}${req ? '&#x2691;' : ''}</span>`;
         }).join('');
-        return `<div class="pairing-hist-row" title="Rounds together in ${
-            new Date().getFullYear()} including tonight — 1 means this is the first">${bits}</div>`;
+        return `<div class="pairing-hist-row">${bits}</div>`;
     }
 
     // Worst repeat in a group, for the header chip. 1 = nobody in this
@@ -10379,6 +10421,7 @@
         let worst = 1, pair = null;
         for (let i = 0; i < names.length; i++) {
             for (let j = i + 1; j < names.length; j++) {
+                if (pairIsRequested(state, names[i], names[j])) continue;
                 const n = pairPlayedTotal(state, names[i], names[j]);
                 if (n > worst) { worst = n; pair = [names[i], names[j]]; }
             }

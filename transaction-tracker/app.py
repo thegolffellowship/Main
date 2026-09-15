@@ -5202,9 +5202,10 @@ def api_get_pairings(event_id):
         # underneath each name in a foursome").
         pair_counts = {}
         try:
-            _hconn = db.get_connection()
+            from email_parser.database import roster_pair_counts
+            _hconn = get_connection()
             try:
-                pair_counts = db.roster_pair_counts(
+                pair_counts = roster_pair_counts(
                     _hconn, event_id, [d.get("name") for d in event_players])
             finally:
                 _hconn.close()

@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.423.0";
+window.TGF_VERSION = "2.424.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.424.0",
+    date: "2026-09-15",
+    changes: [
+      "THE HISTORY COUNTS NOW ACTUALLY ARRIVE (Kerry: \u2018This looks good, but actual counts aren\u2019t showing\u2019 \u2014 every pair read 1). The pairings GET called `db.get_connection()`, but `db` is not a bound name in app.py: the NameError went straight into a non-fatal except and the roster\u2019s prior counts shipped as an empty map, so the page had nothing to add tonight\u2019s +1 to. Fixed to the real imports, and `test_pairings_roster.js` now fails on ANY module-qualified `db.` call in app.py, because a silent except is exactly how this hid.",
+      "REQUESTED PAIRS ARE EXEMPT FROM THE REPEAT FLAG (Kerry: \u2018Yes, any requests should be exempted from the repeat flag\u2019). A partner request is a decision the manager already made, and rule 3 ranks below it \u2014 flagging Palacios + Anthis at 16 was the report arguing with its own instruction. A requested pair keeps its count, marked with a pennant, but reads muted instead of amber or red and never drives the group\u2019s \u21bb chip. Suppressed requests do not count as requests.",
+      "The legend above the cards now carries the three role marks \u2014 C group captain, A ambassador, 1Y first-year member (Kerry: \u2018Add the new symbols for Captain, Ambassador and 1Y to the legend above\u2019). It renders the card\u2019s own badge markup rather than a copy, so the legend can never drift from what is on the cards, and it shows even on a sheet with no standings bands.",
+    ],
+  },
   {
     version: "2.423.0",
     date: "2026-09-15",

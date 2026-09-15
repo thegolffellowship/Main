@@ -1268,6 +1268,20 @@ header carries a `↻ N` chip naming the worst pair when any pair in the
 group is above 1. A **History** checkbox sits with Partner Requests and
 Points; default ON, remembered in `tgf_pairings_history_row`.
 
+**Requested pairs are exempt from the repeat flag** (Kerry 2026-09-15:
+"any requests should be exempted from the repeat flag"). A partner
+request is a decision the manager already made and rule 3 ranks below it,
+so a requested pair keeps its count (marked with a pennant) but reads
+muted and never drives the group chip. A SUPPRESSED request is not a
+request. The legend above the cards carries the C / A / 1Y marks in the
+card's own badge markup.
+
+**The counts have to arrive.** v2.422.0 shipped with every pair reading
+1: the GET called `db.get_connection()` and `db` is not a bound name in
+app.py, so the NameError went into a non-fatal `except` and the map
+shipped empty. `test_pairings_roster.js` fails on any module-qualified
+`db.` call in app.py — a silent except is how this hid.
+
 **It recomputes locally.** The `/pairings` GET ships `pair_counts` for
 the roster (`roster_pair_counts` → `_pair_counts_from_conn`, non-zero
 pairs only, keyed `"a|b"` on `_pair_key_name`); `pairPlayedTotal` adds

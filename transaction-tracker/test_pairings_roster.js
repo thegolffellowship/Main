@@ -236,6 +236,45 @@ check("the roster row is found by customer_id first, name only as fallback",
 check("the seated card passes the sheet's customer_id to that lookup",
     /rosterEntry\(state, player\.name, player\.customer_id\)/.test(html));
 
+// ── The counts have to actually ARRIVE (Kerry 2026-09-15: "This looks
+//    good, but actual counts aren't showing"). The GET called
+//    db.get_connection(), but `db` is not a bound name in app.py — the
+//    NameError went straight into a non-fatal except and every pair
+//    silently read 1. No module-qualified `db.` call may exist there.
+const appPy = fs.readFileSync("app.py", "utf8");
+check("app.py never calls a `db.` module that it does not import",
+    /^\s*(import email_parser\.database as db|from email_parser import database as db)\b/m.test(appPy)
+    || !/(^|[^_.\w])db\.[a-z_]+\(/m.test(appPy),
+    (appPy.match(/(^|[^_.\w])db\.[a-z_]+\(/) || [""])[0]);
+check("the pairings GET ships the roster's counts through a real import",
+    /from email_parser\.database import roster_pair_counts[\s\S]{0,200}pair_counts = roster_pair_counts\(/.test(appPy)
+    && /"pair_counts": pair_counts,/.test(appPy));
+
+// ── Requested pairs are exempt from the repeat flag (Kerry 2026-09-15:
+//    "Yes, any requests should be exempted from the repeat flag").
+check("a requested pair is built from the request list, both orders",
+    /function requestedPairSet\(state\)[\s\S]{0,420}r\.partner[\s\S]{0,240}a < b \? `\$\{a\}\|\$\{b\}` : `\$\{b\}\|\$\{a\}`/.test(html));
+check("a suppressed request does not count as a request",
+    /if \(!r \|\| !r\.partner \|\| r\.suppressed\) return;/.test(html));
+check("a requested pair is never coloured as a repeat",
+    /const cls = req \? ' ph-req' : \(n >= 4 \? ' ph-hot' : \(n >= 2 \? ' ph-rep' : ''\)\);/.test(html)
+    && /\.ph-req \{ color: var\(--muted\)/.test(html));
+check("…and never drives the group's repeat chip",
+    /if \(pairIsRequested\(state, names\[i\], names\[j\]\)\) continue;/.test(html));
+check("the count itself still shows for a requested pair",
+    /\$\{n\}\$\{req \? '&#x2691;' : ''\}/.test(html));
+check("the request cache is dropped when the request list is replaced",
+    /state\.requests = data\.partner_requests \|\| \[\];\s*state\._reqPairs = null;/.test(html));
+
+// ── Legend carries the role marks (Kerry 2026-09-15: "Add the new
+//    symbols for Captain, Ambassador and 1Y to the legend above").
+check("the legend shows C, A and 1Y in the card's own badge markup",
+    /\['role-capt', 'C', 'GROUP CAPTAIN'\][\s\S]{0,160}\['role-new', '1Y', 'FIRST-YEAR MEMBER'\]/.test(html)
+    && /<span class="pairing-role-badge \$\{cls\}">\$\{mark\}<\/span>/.test(html));
+check("the role marks show even when the standings bands do not",
+    /const bandLegend = !showBands \? '' :/.test(html)
+    && /if \(bandLegend \|\| roleLegend\) \{/.test(html));
+
 const cust = fs.readFileSync("templates/customers.html", "utf8");
 check("Customers page offers AMB / CAPT / BACK chips beside pace, both layouts",
     (cust.match(/renderRoleChips\(c\)/g) || []).length >= 2
