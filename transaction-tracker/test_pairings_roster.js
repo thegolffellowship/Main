@@ -96,6 +96,22 @@ check("every actions menu goes through the shared open/close pair",
 check("a fixed menu is closed by scrolling rather than left stranded",
     /if \(document\.querySelector\('\.ev-actions-menu\.menu-floating'\)\) evCloseActionsMenus\(\)/.test(html));
 
+console.log("\nRSVP-only players are first-class (v2.410.0)");
+// The server now folds GG RSVPs into event_players with rsvp_only:true;
+// the page must SAY so wherever a roster name is offered.
+check("isRsvpOnlyPlayer answers by identity (pairPersonKey), over both roster sources",
+    /function isRsvpOnlyPlayer\(state, name\)[\s\S]{0,400}pairPersonKey\(p\.name\) === k/.test(html)
+    && /const roster = \[\.\.\.\(state\.event_players \|\| \[\]\), \.\.\.\(state\.rosterExtra \|\| \[\]\)\];[\s\S]{0,80}return roster\.some\(p => p\.rsvp_only/.test(html));
+check("a seated RSVP-only player keeps the badge on the card",
+    /isRsvpOnlyPlayer\(state, player\.name\)\) \{\s*html \+= '<span class="pairing-rsvp-badge"/.test(html));
+check("rosterOptionHtml marks an RSVP entry in TEXT, not only in colour",
+    /function rosterOptionHtml\(state, name, suffix\)[\s\S]{0,500}\\u00b7 RSVP/.test(html));
+const selects = ["request-match-select", "data-request-add-requester", "data-request-add-partner"];
+check("every request dropdown renders its names through rosterOptionHtml (" + (html.match(/rosterOptionHtml\(state, n/g) || []).length + " uses)",
+    (html.match(/rosterOptionHtml\(state, n/g) || []).length >= 4);
+check("no request dropdown still builds a bare <option> from a roster name",
+    !/(rosterNames|canAdd|allPlayerNames)\.map\(n => `<option value="\$\{escapeHtml\(n\)\}">/.test(html));
+
 console.log("");
 if (failures) { console.log(failures + " FAILURE(S)"); process.exit(1); }
 console.log("All pairings-roster assertions passed.");

@@ -543,6 +543,18 @@ header into two rows between 561px and 1479px (brand + right-hand pills on
 row 1, links on row 2; member shell: brand + CTA, then the three tabs) —
 above 1480px the single row is unchanged.
 
+## Pairings roster: ONE builder (v2.410.0)
+
+`_event_roster_rows(conn, event_id)` is the only source of "who is on
+this event's tee sheet": active order rows plus PLAYING Golf Genius RSVPs
+with no order (`_event_rsvp_only_players`, mirroring the Players tab's
+`unmatchedPlaying` rule for rule). The `/pairings` GET, the generator, the
+partner-request list and the match validator ALL read it — never write a
+fifth `events → aliases → items` roster query. Rows carry `rsvp_only`
+(both GG RSVPs and $0 `rsvp_only` order rows); the page badges and marks
+them wherever a roster name appears. Guard: `test_pairings_rsvp_roster.py`.
+Details: `docs/claude/pairings.md`.
+
 ## Standard color palette (v2.49.0)
 
 Kerry's ratified brand palette lives as CSS vars in `static/css/dashboard.css`

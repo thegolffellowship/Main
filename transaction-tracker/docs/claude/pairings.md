@@ -1006,6 +1006,47 @@ behaviour — empty seats were drop targets only, reachable via Move mode
 plus a click in the Unassigned panel at the bottom of the page — is
 unchanged when something IS already selected.
 
+## RSVP-only players are first-class (v2.410.0, Kerry 2026-09-15)
+
+> *"I need the ability to assign RSVP only's to groups and requests. Need
+> them to run in pairings."* / *"Need to show RSVPs in this list, but
+> highlighted as such."*
+
+**The roster is built once, on the server.** `_event_roster_rows(conn,
+event_id)` in `database.py` is THE pairings roster: one row per active
+order row (statuses in `PAIRING_INACTIVE_STATUSES` excluded) plus one per
+PLAYING Golf Genius RSVP with no order, from
+`_event_rsvp_only_players`. Every consumer reads it — `GET
+/api/events/<id>/pairings` (`event_players`), `generate_event_pairings`,
+`get_event_partner_requests`, and `_event_roster_players` (the
+manual-match / add-request validator). They used to be four copies of the
+same SQL, and the GG RSVPs were only merged in on the page
+(`rosterExtra`), which is exactly why Generate could not deal them and a
+request naming one could not resolve.
+
+**The derivation mirrors the Players tab rule for rule** (events.html
+`unmatchedPlaying`, "Frontend dedup"): a PLAYING RSVP is OUT when it is
+matched to an active item whose email agrees, when its email is overridden
+to `not_playing`, or when its email or resolved name belongs to an active
+registrant; everything else PLAYING is IN under its resolved name (the
+customers row via `customer_id`, else the player card by email, else the
+RSVP's own name). Cancelled/postponed events contribute nobody. Rows carry
+`rsvp_only: true` — also set on `rsvp_only` ORDER rows (the shop's $0
+RSVP-only item), since both are "playing, not paid". An RSVP's
+`received_at` is its `order_date`/`created_at`, so it takes its honest
+place in the first-come request order. `test_pairings_rsvp_roster.py`
+pins the derivation and that all four consumers agree, on the full
+`init_db` schema.
+
+**The page keeps `rosterExtra`** (the client-derived synthetic rows) as a
+belt-and-braces merge; `getUnassigned` dedupes by `pairPersonKey` with
+the server row first. `isRsvpOnlyPlayer(state, name)` answers "on the
+sheet without a payment" by identity, and drives the seated-card
+`pairing-rsvp-badge` and `rosterOptionHtml`, which renders every roster
+`<option>` in the request dropdowns (fix, multi-name link, add-request
+requester and partner) with an amber `· RSVP` text marker — text, because
+`<option>` styling is not honoured on every browser.
+
 ## Menus inside tables (v2.342.0)
 
 > *"Can't read options in actions drop down menu."*

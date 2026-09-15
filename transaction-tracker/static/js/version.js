@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.409.0";
+window.TGF_VERSION = "2.410.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.410.0",
+    date: "2026-09-15",
+    changes: [
+      "RSVP-only players are now FIRST-CLASS in pairings (Kerry: \u2018I need the ability to assign RSVP only\u2019s to groups and requests. Need them to run in pairings\u2019). Generate deals them into groups, a partner request naming one resolves, they can be picked as either side of an added request, and the manual-match fix accepts them. Before, they could only be seated by hand after the fact.",
+      "They are listed everywhere a roster name appears \u2014 the request dropdowns, the open-seat picker, the Unassigned panel and the seated card \u2014 and say so: an amber \u00b7 RSVP marker on the dropdown entry, the RSVP badge on the card. The manager is looking at a sheet that includes people who have not paid, and the sheet says which ones.",
+      "The roster is now built ONCE on the server and every consumer reads it: the pairings panel, the generator, the request list and the match validator. It used to be four separate copies of the same query, and the Golf Genius RSVPs were only ever merged in on the page, which is exactly why Generate could not see them. Both kinds of RSVP-only player are covered: a $0 RSVP-only order and a Golf Genius RSVP with no order at all.",
+    ],
+  },
   {
     version: "2.409.0",
     date: "2026-09-15",

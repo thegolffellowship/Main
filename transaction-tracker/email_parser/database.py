@@ -34049,66 +34049,73 @@ def get_rsvps_for_event(event_name: str, db_path: str | Path | None = None) -> l
     by matching on player_email, and flags whether a player card was found.
     """
     with _connect(db_path) as conn:
-        rows = conn.execute(
-            """SELECT r1.*
-               FROM rsvps r1
-               INNER JOIN (
-                   SELECT player_email, MAX(received_at) AS max_date
-                   FROM rsvps
-                   WHERE matched_event = ?
-                     AND player_email IS NOT NULL AND player_email != ''
-                   GROUP BY player_email
-               ) r2 ON r1.player_email = r2.player_email AND r1.received_at = r2.max_date
-               WHERE r1.matched_event = ?
-               ORDER BY r1.player_name ASC""",
-            (event_name, event_name),
-        ).fetchall()
+        return _rsvps_for_event(conn, event_name)
 
-        # Resolve full names. Prefer the customers table via customer_id FK
-        # (authoritative for RSVP-only players who never bought a ticket);
-        # fall back to items.customer by email; last fall back to player_name.
-        results = []
-        for r in rows:
-            rsvp = dict(r)
-            rsvp["resolved_name"] = rsvp.get("player_name")
-            rsvp["has_player_card"] = False
-            rsvp["customer_status"] = None
-            cid = rsvp.get("customer_id")
-            if cid:
-                cust = conn.execute(
-                    """SELECT TRIM(COALESCE(c.first_name,'') || ' ' || COALESCE(c.last_name,'')) AS full_name,
-                              c.current_player_status,
-                              EXISTS(SELECT 1 FROM customer_roles r
-                                     WHERE r.customer_id = c.customer_id
-                                       AND r.role_type IN ('manager','owner','admin')) AS is_staff
-                       FROM customers c WHERE c.customer_id = ?""",
-                    (cid,),
-                ).fetchone()
-                if cust:
-                    if cust["full_name"]:
-                        rsvp["resolved_name"] = cust["full_name"]
-                    if cust["is_staff"]:
-                        rsvp["customer_status"] = "MANAGER"
-                    elif cust["current_player_status"] == "active_member":
-                        rsvp["customer_status"] = "MEMBER"
-                    elif cust["current_player_status"] == "member_plus":
-                        rsvp["customer_status"] = "MEMBER+"
-            email = (rsvp.get("player_email") or "").strip().lower()
-            if email:
-                card = conn.execute(
-                    """SELECT customer FROM items
-                       WHERE LOWER(customer_email) = ?
-                         AND customer IS NOT NULL AND customer != ''
-                       ORDER BY order_date DESC LIMIT 1""",
-                    (email,),
-                ).fetchone()
-                if card:
-                    if not cid:
-                        rsvp["resolved_name"] = card["customer"]
-                    rsvp["has_player_card"] = True
-            results.append(rsvp)
 
-        return results
+def _rsvps_for_event(conn: sqlite3.Connection, event_name: str) -> list[dict]:
+    """Body of get_rsvps_for_event on a caller-supplied connection, so the
+    pairings roster (`_event_rsvp_only_players`) can read the same resolved
+    RSVP list inside its own transaction instead of re-deriving it."""
+    rows = conn.execute(
+        """SELECT r1.*
+           FROM rsvps r1
+           INNER JOIN (
+               SELECT player_email, MAX(received_at) AS max_date
+               FROM rsvps
+               WHERE matched_event = ?
+                 AND player_email IS NOT NULL AND player_email != ''
+               GROUP BY player_email
+           ) r2 ON r1.player_email = r2.player_email AND r1.received_at = r2.max_date
+           WHERE r1.matched_event = ?
+           ORDER BY r1.player_name ASC""",
+        (event_name, event_name),
+    ).fetchall()
+
+    # Resolve full names. Prefer the customers table via customer_id FK
+    # (authoritative for RSVP-only players who never bought a ticket);
+    # fall back to items.customer by email; last fall back to player_name.
+    results = []
+    for r in rows:
+        rsvp = dict(r)
+        rsvp["resolved_name"] = rsvp.get("player_name")
+        rsvp["has_player_card"] = False
+        rsvp["customer_status"] = None
+        cid = rsvp.get("customer_id")
+        if cid:
+            cust = conn.execute(
+                """SELECT TRIM(COALESCE(c.first_name,'') || ' ' || COALESCE(c.last_name,'')) AS full_name,
+                          c.current_player_status,
+                          EXISTS(SELECT 1 FROM customer_roles r
+                                 WHERE r.customer_id = c.customer_id
+                                   AND r.role_type IN ('manager','owner','admin')) AS is_staff
+                   FROM customers c WHERE c.customer_id = ?""",
+                (cid,),
+            ).fetchone()
+            if cust:
+                if cust["full_name"]:
+                    rsvp["resolved_name"] = cust["full_name"]
+                if cust["is_staff"]:
+                    rsvp["customer_status"] = "MANAGER"
+                elif cust["current_player_status"] == "active_member":
+                    rsvp["customer_status"] = "MEMBER"
+                elif cust["current_player_status"] == "member_plus":
+                    rsvp["customer_status"] = "MEMBER+"
+        email = (rsvp.get("player_email") or "").strip().lower()
+        if email:
+            card = conn.execute(
+                """SELECT customer FROM items
+                   WHERE LOWER(customer_email) = ?
+                     AND customer IS NOT NULL AND customer != ''
+                   ORDER BY order_date DESC LIMIT 1""",
+                (email,),
+            ).fetchone()
+            if card:
+                if not cid:
+                    rsvp["resolved_name"] = card["customer"]
+                rsvp["has_player_card"] = True
+        results.append(rsvp)
+
+    return results
 
 
 def get_all_rsvps_bulk(db_path: str | Path | None = None) -> dict:
@@ -55205,8 +55212,6 @@ def get_event_partner_requests(event_id: int, db_path=None) -> dict:
     too (matched=false) so the manager can see intent the generator
     can't act on.
     """
-    INACTIVE = ("credited", "refunded", "transferred", "wd")
-    ph = ",".join("?" * len(INACTIVE))
     with _connect(db_path) as conn:
         _ensure_pairing_tables(conn)
         # A very old events table may predate the column; a missing
@@ -55219,28 +55224,10 @@ def get_event_partner_requests(event_id: int, db_path=None) -> dict:
         except sqlite3.OperationalError:
             group_max = 4
         group_word = "fivesome" if group_max == 5 else "foursome"
-        rows = conn.execute(
-            f"""
-            SELECT DISTINCT i.customer, i.customer_id, i.holes,
-                            i.partner_request, i.id, i.order_date,
-                            i.created_at, i.notes, i.order_id,
-                            i.customer_email, i.user_status,
-                            c.current_player_status
-            FROM events e
-            LEFT JOIN event_aliases ea ON ea.canonical_event_name = e.item_name
-            JOIN items i ON (
-                i.item_name = e.item_name COLLATE NOCASE
-                OR i.item_name = ea.alias_name COLLATE NOCASE
-                OR i.event_id = e.id
-            )
-            LEFT JOIN customers c ON c.customer_id = i.customer_id
-            WHERE e.id = ?
-              AND COALESCE(i.transaction_status, 'active') NOT IN ({ph})
-              AND i.parent_item_id IS NULL
-            ORDER BY i.customer COLLATE NOCASE
-            """,
-            (event_id, *INACTIVE),
-        ).fetchall()
+        # THE roster, GG-RSVP-only players included, so a request naming
+        # one resolves and one can be added as a requester (Kerry
+        # 2026-09-15). Same rows the generator deals from.
+        rows = _event_roster_rows(conn, event_id)
         suppressed = {_pair_key_name(r["requester_name"]) for r in conn.execute(
             "SELECT requester_name FROM pairing_request_suppressions "
             "WHERE event_id = ?", (event_id,)).fetchall()}
@@ -57288,14 +57275,41 @@ def get_pairing_staging_rules(db_path=None) -> dict:
     return rules
 
 
-def _event_roster_players(conn, event_id: int) -> list[dict]:
-    """Active registrants for an event: name + customer_id (rule 6).
-    Same events → aliases → items join the generator uses."""
-    INACTIVE = ("credited", "refunded", "transferred", "wd")
-    ph = ",".join("?" * len(INACTIVE))
-    rows = conn.execute(
+PAIRING_INACTIVE_STATUSES = ("credited", "refunded", "transferred", "wd")
+
+
+def _event_rsvp_only_players(conn, event_id: int) -> list[dict]:
+    """PLAYING Golf Genius RSVPs on this event with NO active order row —
+    the people the Events tab renders as synthetic `gg_rsvp` rows.
+
+    Kerry 2026-09-15: "I need the ability to assign RSVP only's to groups
+    and requests. Need them to run in pairings." Until now these players
+    reached the pairings panel only through a CLIENT-side merge
+    (`rosterExtra`), so a manager could seat one by hand but Generate
+    never dealt them, a partner request naming one could not resolve, and
+    the manual-match validator refused them. The roster is built here,
+    once, on the server, and every consumer reads it.
+
+    The rules are the Players tab's `unmatchedPlaying` derivation, rule
+    for rule (events.html, "Frontend dedup"): an RSVP is OUT when it is
+    matched to an active item whose email agrees, when its email is
+    overridden to not_playing, when its email or resolved name belongs to
+    an active registrant, or — with no resolved name — when a registrant's
+    name starts with its first name. Everything else PLAYING is IN.
+    Cancelled/postponed events return nobody, as the page does.
+    """
+    ev = conn.execute(
+        "SELECT id, item_name, status FROM events WHERE id = ?",
+        (event_id,)).fetchone()
+    if not ev or not ev["item_name"]:
+        return []
+    if (ev["status"] or "active") != "active":
+        return []
+    event_name = ev["item_name"]
+    ph = ",".join("?" * len(PAIRING_INACTIVE_STATUSES))
+    active = conn.execute(
         f"""
-        SELECT DISTINCT i.customer AS name, i.customer_id
+        SELECT i.id, i.customer, i.customer_email
         FROM events e
         LEFT JOIN event_aliases ea ON ea.canonical_event_name = e.item_name
         JOIN items i ON (
@@ -57305,11 +57319,148 @@ def _event_roster_players(conn, event_id: int) -> list[dict]:
         )
         WHERE e.id = ?
           AND COALESCE(i.transaction_status, 'active') NOT IN ({ph})
-          AND i.parent_item_id IS NULL
         """,
-        (event_id, *INACTIVE),
+        (event_id, *PAIRING_INACTIVE_STATUSES),
     ).fetchall()
-    return [dict(r) for r in rows if r["name"]]
+    active_ids = {r["id"] for r in active}
+    item_email = {r["id"]: (r["customer_email"] or "").strip().lower()
+                  for r in active}
+    reg_emails = {(r["customer_email"] or "").strip().lower()
+                  for r in active if (r["customer_email"] or "").strip()}
+    reg_names = {(r["customer"] or "").strip().lower()
+                 for r in active if (r["customer"] or "").strip()}
+    try:
+        overrides = {(r["player_email"] or "").strip().lower(): r["status"]
+                     for r in conn.execute(
+                         "SELECT player_email, status FROM rsvp_email_overrides "
+                         "WHERE event_name = ?", (event_name,)).fetchall()}
+    except sqlite3.OperationalError:
+        overrides = {}
+    out: list[dict] = []
+    seen: set = set()
+    for r in _rsvps_for_event(conn, event_name):
+        if (r.get("response") or "").upper() != "PLAYING":
+            continue
+        email = (r.get("player_email") or "").strip().lower()
+        mid = r.get("matched_item_id")
+        if mid and mid in active_ids:
+            ie = item_email.get(mid, "")
+            if not (email and ie and email != ie):
+                continue          # a real match — the circle sits on that row
+        if email and overrides.get(email) == "not_playing":
+            continue
+        if email and email in reg_emails:
+            continue
+        resolved = (r.get("resolved_name") or "").strip()
+        first = (r.get("player_name") or "").strip()
+        if resolved and resolved.lower() in reg_names:
+            continue
+        if not resolved and first and any(
+                n.startswith(first.lower()) for n in reg_names):
+            continue
+        name = resolved or first
+        if not name or name.lower() == "unknown":
+            continue
+        key = _pair_key_name(name)
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        cps = None
+        cid = r.get("customer_id")
+        if cid:
+            try:
+                crow = conn.execute(
+                    "SELECT current_player_status FROM customers "
+                    "WHERE customer_id = ?", (cid,)).fetchone()
+                cps = crow["current_player_status"] if crow else None
+            except sqlite3.OperationalError:
+                cps = None
+        received = r.get("received_at") or None
+        out.append({
+            "name": name, "customer": name,
+            "customer_id": cid, "customer_email": email or None,
+            "holes": "", "tee_choice": None, "user_status": "",
+            "current_player_status": cps, "pace_rating": None,
+            "partner_request": None, "id": None,
+            # An RSVP is a signup: its arrival time is its place in the
+            # first-come request order, exactly like an order row.
+            "order_date": (received or "")[:10] or None,
+            "created_at": received, "notes": None, "order_id": None,
+            "transaction_status": "gg_rsvp", "rsvp_only": True,
+            "rsvp_id": r.get("id"),
+        })
+    return out
+
+
+def _event_roster_rows(conn, event_id: int) -> list[dict]:
+    """THE pairings roster: one row per active order row plus one per
+    PLAYING GG RSVP with no order (`_event_rsvp_only_players`). Every
+    consumer — the /pairings GET, the generator, the partner-request
+    list and the manual-match validator — reads this and nothing else,
+    so they can never disagree about who is playing (Kerry 2026-09-15).
+
+    Rows are NOT deduped by player here: the generator and the request
+    list want the EARLIEST row per player after sorting by signup time,
+    so they dedupe themselves; `_event_roster_players` dedupes for the
+    callers that only want identities. Both `name` and `customer` carry
+    the display name. `rsvp_only` is True for the GG-RSVP rows AND for
+    `rsvp_only` order rows (the shop's $0 RSVP-only item), which are
+    both "playing, not paid".
+    """
+    ph = ",".join("?" * len(PAIRING_INACTIVE_STATUSES))
+    rows = conn.execute(
+        f"""
+        SELECT DISTINCT i.customer, i.customer_id, i.holes, i.tee_choice,
+                        i.partner_request, i.id, i.order_date,
+                        i.created_at, i.notes, i.order_id,
+                        i.customer_email, i.user_status,
+                        i.transaction_status,
+                        c.current_player_status, c.pace_rating
+        FROM events e
+        LEFT JOIN event_aliases ea ON ea.canonical_event_name = e.item_name
+        JOIN items i ON (
+            i.item_name = e.item_name COLLATE NOCASE
+            OR i.item_name = ea.alias_name COLLATE NOCASE
+            OR i.event_id = e.id
+        )
+        LEFT JOIN customers c ON c.customer_id = i.customer_id
+        WHERE e.id = ?
+          AND COALESCE(i.transaction_status, 'active') NOT IN ({ph})
+          AND i.parent_item_id IS NULL
+        ORDER BY i.customer COLLATE NOCASE
+        """,
+        (event_id, *PAIRING_INACTIVE_STATUSES),
+    ).fetchall()
+    out: list[dict] = []
+    keys: set = set()
+    for r in rows:
+        d = dict(r)
+        if not (d.get("customer") or "").strip():
+            continue
+        d["name"] = d["customer"]
+        d["rsvp_only"] = (d.get("transaction_status") or "active") == "rsvp_only"
+        out.append(d)
+        keys.add(_pair_key_name(d["customer"]))
+    for d in _event_rsvp_only_players(conn, event_id):
+        if _pair_key_name(d["name"]) in keys:
+            continue
+        out.append(d)
+    return out
+
+
+def _event_roster_players(conn, event_id: int) -> list[dict]:
+    """Roster identities for an event: name + customer_id (rule 6), one
+    per player, GG-RSVP-only players included. Reads `_event_roster_rows`."""
+    seen: set = set()
+    out: list[dict] = []
+    for r in _event_roster_rows(conn, event_id):
+        k = _pair_key_name(r["name"])
+        if not k or k in seen:
+            continue
+        seen.add(k)
+        out.append({"name": r["name"], "customer_id": r.get("customer_id"),
+                    "rsvp_only": bool(r.get("rsvp_only"))})
+    return out
 
 
 def detect_match_play_pairings(event_id: int, db_path=None) -> dict:
@@ -57503,32 +57654,13 @@ def generate_event_pairings(
         is_combo = fmt == "9/18 Combo"
 
         # ── Active players for this event ─────────────────────────────
-        # Start from events → aliases → items (mirrors get_all_events join order)
-        INACTIVE = ("credited", "refunded", "transferred", "wd")
+        # THE roster (`_event_roster_rows`): active order rows plus the
+        # PLAYING GG RSVPs that have no order, so RSVP-only players are
+        # dealt like everyone else (Kerry 2026-09-15). Same list the
+        # /pairings GET, the request panel and the match validator read.
+        INACTIVE = PAIRING_INACTIVE_STATUSES
         ph = ",".join("?" * len(INACTIVE))
-        items = conn.execute(
-            f"""
-            SELECT DISTINCT i.customer, i.holes, i.tee_choice,
-                            i.partner_request, i.id, i.order_date,
-                            i.created_at, i.notes, i.order_id,
-                            i.customer_email, i.customer_id,
-                            i.user_status, c.current_player_status
-            FROM events e
-            LEFT JOIN event_aliases ea ON ea.canonical_event_name = e.item_name
-            JOIN items i ON (
-                i.item_name = e.item_name COLLATE NOCASE
-                OR i.item_name = ea.alias_name COLLATE NOCASE
-                OR i.event_id = e.id
-            )
-            LEFT JOIN customers c ON c.customer_id = i.customer_id
-            WHERE e.id = ?
-              AND COALESCE(i.transaction_status, 'active') NOT IN ({ph})
-              AND i.parent_item_id IS NULL
-            ORDER BY i.customer COLLATE NOCASE
-            """,
-            (event_id, *INACTIVE),
-        ).fetchall()
-        items = [dict(r) for r in items]
+        items = _event_roster_rows(conn, event_id)
 
         # ── Signup-order priority (Kerry 2026-07-21) ──────────────────
         # Requests are honored FIRST-COME: sort the roster by when each

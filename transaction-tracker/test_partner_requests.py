@@ -46,15 +46,24 @@ db._PARTNER_IDENTITY_CACHE.update({"at": 0.0, "map": {}})
 tmp = os.path.join(tempfile.mkdtemp(prefix="tgf-pr-"), "t.db")
 conn = sqlite3.connect(tmp)
 conn.executescript("""
- CREATE TABLE events (id INTEGER PRIMARY KEY, item_name TEXT, chapter TEXT);
+ CREATE TABLE events (id INTEGER PRIMARY KEY, item_name TEXT, chapter TEXT,
+   status TEXT);
  CREATE TABLE event_aliases (alias_name TEXT, canonical_event_name TEXT);
  CREATE TABLE items (id INTEGER PRIMARY KEY, customer TEXT, customer_id INTEGER,
-   item_name TEXT, holes TEXT, partner_request TEXT, order_date TEXT,
-   created_at TEXT, notes TEXT, transaction_status TEXT, parent_item_id INTEGER,
-   event_id INTEGER, order_id TEXT, customer_email TEXT, user_status TEXT);
+   item_name TEXT, holes TEXT, tee_choice TEXT, partner_request TEXT,
+   order_date TEXT, created_at TEXT, notes TEXT, transaction_status TEXT,
+   parent_item_id INTEGER, event_id INTEGER, order_id TEXT,
+   customer_email TEXT, user_status TEXT);
  CREATE TABLE customers (customer_id INTEGER PRIMARY KEY, first_name TEXT,
    last_name TEXT, company_name TEXT, account_status TEXT,
-   current_player_status TEXT);
+   current_player_status TEXT, pace_rating INTEGER);
+ -- The roster now folds in PLAYING GG RSVPs (test_pairings_rsvp_roster.py);
+ -- this fixture has none, but the tables must exist to be read.
+ CREATE TABLE rsvps (id INTEGER PRIMARY KEY, email_uid TEXT, player_name TEXT,
+   player_email TEXT, matched_event TEXT, response TEXT, received_at TEXT,
+   matched_item_id INTEGER, customer_id INTEGER);
+ CREATE TABLE rsvp_email_overrides (id INTEGER PRIMARY KEY, player_email TEXT,
+   event_name TEXT, status TEXT);
  CREATE TABLE customer_aliases (id INTEGER PRIMARY KEY, customer_id INTEGER,
    customer_name TEXT, alias_type TEXT, alias_value TEXT);
 """)

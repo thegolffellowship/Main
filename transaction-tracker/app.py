@@ -5057,28 +5057,31 @@ def api_get_pairings(event_id):
         pairings = get_event_pairings(event_id)
         slots_9 = _pairing_time_slots(ev, "9")
         slots_18 = _pairing_time_slots(ev, "18")
-        # Current active player list — used by UI to detect unassigned players
-        INACTIVE = ("credited", "refunded", "transferred", "wd")
-        ph = ",".join("?" * len(INACTIVE))
+        # Current player list — used by UI to detect unassigned players.
+        # THE roster (`_event_roster_rows`): active order rows PLUS the
+        # PLAYING Golf Genius RSVPs with no order, one entry per person,
+        # so the panel, the generator and the request matcher all see the
+        # same people (Kerry 2026-09-15: "assign RSVP only's to groups
+        # and requests"). Rows carry `rsvp_only` for the badge.
+        from email_parser.database import _event_roster_rows, _pair_key_name
         _pconn = get_connection()
         try:
-            player_rows = _pconn.execute(f"""
-                SELECT DISTINCT i.customer AS name, i.holes, i.tee_choice,
-                                c.pace_rating, c.current_player_status,
-                                i.user_status, i.customer_id
-                FROM events e
-                LEFT JOIN event_aliases ea ON ea.canonical_event_name = e.item_name
-                JOIN items i ON (
-                    i.item_name = e.item_name COLLATE NOCASE
-                    OR i.item_name = ea.alias_name COLLATE NOCASE
-                    OR i.event_id = e.id
-                )
-                LEFT JOIN customers c ON c.customer_id = i.customer_id
-                WHERE e.id = ?
-                  AND COALESCE(i.transaction_status,'active') NOT IN ({ph})
-                  AND i.parent_item_id IS NULL
-                ORDER BY i.customer COLLATE NOCASE
-            """, (event_id, *INACTIVE)).fetchall()
+            _seen_keys = set()
+            player_rows = []
+            for _r in _event_roster_rows(_pconn, event_id):
+                _k = _pair_key_name(_r["name"])
+                if not _k or _k in _seen_keys:
+                    continue
+                _seen_keys.add(_k)
+                player_rows.append({
+                    "name": _r["name"], "holes": _r.get("holes"),
+                    "tee_choice": _r.get("tee_choice"),
+                    "pace_rating": _r.get("pace_rating"),
+                    "current_player_status": _r.get("current_player_status"),
+                    "user_status": _r.get("user_status"),
+                    "customer_id": _r.get("customer_id"),
+                    "rsvp_only": bool(_r.get("rsvp_only")),
+                })
         finally:
             _pconn.close()
         # Player TIER for the pairing-card colour bands: 'member' |

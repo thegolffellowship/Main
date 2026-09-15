@@ -6143,7 +6143,7 @@
                         .sort((a, b) => a.localeCompare(b));
                     html += `<select class="request-match-select" data-ev-id="${ev.id}" data-requester="${escapeHtml(r.requester)}" title="No roster match — pick who this request meant" style="font-size:0.72rem;padding:0.1rem 0.2rem;max-width:10rem;border:1px solid var(--border);border-radius:9px;color:var(--text-muted);">
                         <option value="">no roster match &mdash; fix&hellip;</option>
-                        ${rosterNames.map(n => `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join('')}
+                        ${rosterNames.map(n => rosterOptionHtml(state, n)).join('')}
                     </select>`;
                 } else if (r.manual) {
                     html += `<button class="pairings-action-btn" data-ev-id="${ev.id}" data-request-match-clear="1" data-requester="${escapeHtml(r.requester)}" title="Manually linked by manager (signup text: &quot;${escapeHtml(r.request_text)}&quot;) — click to clear" style="font-size:0.72rem;padding:0 0.4rem;color:#6d28d9;border:1px solid #6d28d9;border-radius:9px;">&#x270E; manual &#x2715;</button>`;
@@ -6152,7 +6152,7 @@
                     // is honored. Amber picker links the intended one.
                     html += `<select class="request-match-select" data-ev-id="${ev.id}" data-requester="${escapeHtml(r.requester)}" title="Request names ${r.candidates.length} rostered players (&quot;${escapeHtml(r.request_text)}&quot;) — only one partner is honored. Link the intended one; honor the extras with manual moves after Generate." style="font-size:0.72rem;padding:0.1rem 0.2rem;max-width:10rem;border:1px solid #f59e0b;border-radius:9px;color:#b45309;font-weight:700;">
                         <option value="">${r.candidates.length} names &mdash; link one&hellip;</option>
-                        ${r.candidates.map(n => `<option value="${escapeHtml(n)}">${escapeHtml(n)}${n === r.partner ? ' (current)' : ''}</option>`).join('')}
+                        ${r.candidates.map(n => rosterOptionHtml(state, n, n === r.partner ? ' (current)' : '')).join('')}
                     </select>`;
                 }
                 // Where the request CAME from, when it wasn't typed at
@@ -6209,12 +6209,12 @@
                     <span style="font-size:0.78rem;font-weight:600;color:var(--text-muted);">&#x2795; Add a request:</span>
                     <select data-request-add-requester="${ev.id}" style="font-size:0.78rem;padding:0.15rem 0.25rem;max-width:11rem;border:1px solid var(--border);border-radius:9px;">
                         <option value="">player&hellip;</option>
-                        ${canAdd.map(n => `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join('')}
+                        ${canAdd.map(n => rosterOptionHtml(state, n)).join('')}
                     </select>
                     <span style="font-size:0.85rem;color:var(--text-muted);">&rarr;</span>
                     <select data-request-add-partner="${ev.id}" style="font-size:0.78rem;padding:0.15rem 0.25rem;max-width:11rem;border:1px solid var(--border);border-radius:9px;">
                         <option value="">wants to play with&hellip;</option>
-                        ${allPlayerNames.map(n => `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join('')}
+                        ${allPlayerNames.map(n => rosterOptionHtml(state, n)).join('')}
                     </select>
                     <button class="pairings-action-btn" data-ev-id="${ev.id}" data-request-add="1" title="Adds the request at this player's signup position — it takes its honest place in the priority order rather than jumping the queue." style="font-size:0.78rem;padding:0.15rem 0.6rem;font-weight:700;">Add</button>
                 </div>`;
@@ -6530,6 +6530,12 @@
                     data-ev-id="${ev.id}" data-holes="${holes}" data-group-num="${grp.group_num}" data-cart-pos="${player.cart_pos}">`;
                 html += `<span class="pairing-cart-dot" style="background:${cartDot};"></span>`;
                 html += `<span class="pairing-player-name">${escapeHtml(player.name || '—')}</span>`;
+                // A seated RSVP-only player keeps the badge the Unassigned
+                // panel gave them: the manager is looking at a sheet that
+                // includes people who have not paid (Kerry 2026-09-15).
+                if (player.name && isRsvpOnlyPlayer(state, player.name)) {
+                    html += '<span class="pairing-rsvp-badge" title="RSVP&#39;d, no payment on file">RSVP</span>';
+                }
                 const mpOpp = mpOpponentInGroup(state, grp, player);
                 if (mpOpp) {
                     html += `<span class="pairing-mp-badge" title="Match Play vs ${escapeHtml(mpOpp)}">&#x2694;&#xFE0F; MP</span>`;
@@ -10078,6 +10084,27 @@
 
     function _findPlayer(grp, cartPos) {
         return grp.players.find(p => p.cart_pos === cartPos);
+    }
+
+    // Roster lookup by identity (pairPersonKey, not string equality):
+    // is this player on the sheet without a payment? The server marks
+    // both GG-RSVP-only rows and $0 rsvp_only order rows.
+    function isRsvpOnlyPlayer(state, name) {
+        const k = pairPersonKey(name);
+        if (!k) return false;
+        const roster = [...(state.event_players || []), ...(state.rosterExtra || [])];
+        return roster.some(p => p.rsvp_only && pairPersonKey(p.name) === k);
+    }
+
+    // One <option> for a roster name in the request dropdowns. An
+    // RSVP-only player is listed like everyone else but SAYS so: the
+    // text carries the marker because <option> styling is not honoured
+    // on every browser, and the amber colour rides along where it is
+    // (Kerry 2026-09-15: "show RSVPs in this list, but highlighted").
+    function rosterOptionHtml(state, name, suffix) {
+        const rsvp = isRsvpOnlyPlayer(state, name);
+        return `<option value="${escapeHtml(name)}"${rsvp ? ' class="opt-rsvp-only" style="color:#b45309;font-weight:700;"' : ''}>`
+            + `${escapeHtml(name)}${rsvp ? ' \u00b7 RSVP' : ''}${suffix || ''}</option>`;
     }
 
     function getUnassigned(state) {
