@@ -3002,7 +3002,18 @@
         // a game tab lights up ONLY its own game
         const shN = (!game || game === "net") && r.win_net;
         const shG = (!game || game === "gross") && r.win_gross;
-        const shS = (!game || game === "skins") && r.win_skins;
+        // SKINS CIRCLE LIVE, even provisionally (Kerry 2026-09-15:
+        // "Circle skins, even though the event is still going and even
+        // if they're temporary. Of course, remove circle if someone else
+        // covers them."). It used to key off r.win_skins — the RECORDED
+        // payout category — which does not exist until the event is
+        // closed out, so mid-round the Skins column counted skins the
+        // board refused to circle. `skin_cells` is the live computation
+        // and already drops a hole the moment it is tied, so a covered
+        // skin un-circles itself on the next import.
+        const shS = (!game || game === "skins")
+            && (r.win_skins
+                || ((d.skin_cells || {})[String(r.scoring_round_id)] || []).length > 0);
         const shM = (!game || game === "points") && r.win_mvp;
         const money = evlbGameMoney(r, game);
         const skinHoles = shS
@@ -3030,7 +3041,7 @@
             }
             if (!hh || hh[1] == null) return '<td class="h"></td>';
             return `<td class="h">${pops}${skinHoles.includes(n)
-                ? `<span class="evlb-circ" style="border-color:${skC};color:${skC};" title="skin — flight ${r.skins_flight || 1}">${hh[1]}</span>`
+                ? `<span class="evlb-circ" style="border-color:${skC};color:${skC};" title="${d.field_complete === false ? "skin so far" : "skin"} — flight ${r.skins_flight || 1}${d.field_complete === false ? " (provisional until every card is in)" : ""}">${hh[1]}</span>`
                 : hh[1]}</td>`;
         }).join("");
         // Column order (Kerry 2026-09-12): the two scores that matter —

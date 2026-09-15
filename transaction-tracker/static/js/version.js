@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.441.0";
+window.TGF_VERSION = "2.442.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.442.0",
+    date: "2026-09-15",
+    changes: [
+      "SKINS CIRCLE WHILE THE ROUND IS STILL GOING (Kerry: \u2018Circle skins, even though the event is still going and even if they\u2019re temporary. Of course, remove circle if someone else covers them.\u2019). The circle keyed off the RECORDED payout category, which does not exist until the event is closed out \u2014 so mid-round the SKINS column counted two skins beside a name the board flatly refused to circle. It now draws from the live computation, which already drops a hole the moment a second player matches it: a covered skin un-circles itself on the next import, with no special case for it. While the field is incomplete the tooltip says \u2018skin so far \u2014 provisional until every card is in\u2019.",
+    ],
+  },
   {
     version: "2.441.0",
     date: "2026-09-15",
