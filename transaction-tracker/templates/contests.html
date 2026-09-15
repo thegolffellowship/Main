@@ -2831,10 +2831,13 @@
         if (!legend.length) return "";
         return `<div class="evlb-teekey" aria-label="Tee colours">` +
             legend.map(t => {
-                const pale = /^#(f|e)/i.test(t.color || "");
+                // "For white tees, make it just a black outline with a white
+        // center" (Kerry 2026-09-15). Any near-white colour takes the
+        // outline, or the swatch disappears into the page.
+        const pale = /^#(f|e)/i.test(t.color || "");
                 return `<span class="evlb-teekey-item" title="${escapeHtml(t.band || "")}">`
                     + `<span class="evlb-tee-dot${t.ring ? " ring" : ""}" `
-                    + `style="background:${t.color};${pale ? "box-shadow:inset 0 0 0 1px #9CA3AF;" : ""}"></span>`
+                    + `style="background:${t.color};${pale ? "box-shadow:inset 0 0 0 1.5px #1B1B1B;" : ""}"></span>`
                     + `${escapeHtml(t.tee_name || t.band || "")}</span>`;
             }).join("") + `</div>`;
     }
@@ -2857,7 +2860,7 @@
         return `<span class="evlb-tee-dot${place === "right" ? " right" : ""}`
             + `${t.ring ? " ring" : ""}" title="${escapeHtml(t.tee_name || "")}`
             + `${t.band ? " (" + escapeHtml(t.band) + ")" : ""}" `
-            + `style="background:${t.color};${pale ? "box-shadow:inset 0 0 0 1px #9CA3AF;" : ""}"></span>`;
+            + `style="background:${t.color};${pale ? "box-shadow:inset 0 0 0 1.5px #1B1B1B;" : ""}"></span>`;
     }
 
     function evlbMoneyNotice(d) {

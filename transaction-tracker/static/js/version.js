@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.446.0";
+window.TGF_VERSION = "2.447.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.447.0",
+    date: "2026-09-15",
+    changes: [
+      "GOLF GENIUS IS POLLED ON A TIMER NOW (Kerry: \u2018Looks like leaderboards have stopped updating\u2019 \u2014 they had not stopped; nothing had ever started them. The scorecard import ran when somebody asked it to, which is why the boards went quiet an hour after the last manual pull). Every 5 minutes the app re-imports today\u2019s cards, but ONLY for an event that has started and does not yet have every hole for every player \u2014 the same test the money hold uses \u2014 so a finished round stops being polled by itself and nothing hammers GG for a board nobody is watching. `scoring-live-poll[:force]` runs the same sweep on demand, and reports why it skipped an event rather than going quiet.",
+      "THE CLUB\u2019S OWN TEE NUMBER IS THE BAND MAPPING (Kerry: \u20181 - <50, 2 - 50-64, 3 - 65+, 3 (L) or 4 (L) - Forward (Ladies)\u2019). Golf Genius numbers the tees the way the club rates them, so the number IS the answer; the 6300-6800 yardage rule stays only as the fallback for a card that carries no numbers. Tee 0 is the tips, which TGF does not play.",
+      "COURSE CARDS CAN BE LOADED, NOT INFERRED. Kerry sent the Avery Ranch, Cedar Creek and Forest Creek cards \u2014 every tee\u2019s 18-hole rating and slope, its front and back ratings and slopes, and every hole\u2019s yardage, par and stroke index. `scoring-course-card:<course>[|apply]` writes them as three rows per tee (the 18, the front, the back with its real hole numbers 10-18), reusing any existing row so posted rounds keep their tee. A tee whose nines are rated identically is one row labelled \u2018both\u2019, because there is nothing to tell two such rows apart and either nine plays off those numbers. With a card loaded, `label_course_tee_nines` has nothing left to infer.",
+      "White tees print white (Kerry: \u2018For white tees, make it just a black outline with a white center\u2019). The swatch was grey so that it would show at all; a black outline does that job properly, and the chip\u2019s INK goes black separately \u2014 white text on white paper is nothing.",
+    ],
+  },
   {
     version: "2.446.0",
     date: "2026-09-15",

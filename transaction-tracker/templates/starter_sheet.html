@@ -231,8 +231,10 @@
     <span class="tl-lab">TEES</span>
     {% for t in pack.tee_legend %}
       <span class="tl">
-        <span class="sw" style="{% if t.ring %}border:2.5px solid {{ t.color }};background:#fff;{% else %}background:{{ t.color }};{% endif %}"></span>
-        <span class="band" style="color:{{ t.color }};">{{ t.band }}</span>
+        {# A WHITE tee prints as a black outline round white (Kerry
+           2026-09-15) — a white square on white paper is nothing. #}
+        <span class="sw" style="{% if t.ring %}border:2.5px solid {{ t.color }};background:#fff;{% elif t.color|lower in ['#ffffff', '#fff'] %}border:1.5px solid #1B1B1B;background:#fff;{% else %}background:{{ t.color }};{% endif %}"></span>
+        <span class="band" style="color:{% if t.color|lower in ['#ffffff', '#fff'] %}#1B1B1B{% else %}{{ t.color }}{% endif %};">{{ t.band }}</span>
         <span class="tn">{{ t.tee_name }}</span>
       </span>
     {% endfor %}

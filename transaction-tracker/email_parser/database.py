@@ -56330,7 +56330,10 @@ def print_file_stub(event: dict) -> str:
 TEE_BANDS = ("<50", "50-64", "65+", "Forward")
 _TEE_COLOR_WORDS = {
     "black": "#111111", "gold": "#B8860B", "blue": "#1D4ED8",
-    "white": "#6B7280", "green": "#15803D", "red": "#B91C1C",
+    # White is white (Kerry 2026-09-15: "For white tees, make it just a
+    # black outline with a white center"). It was grey so a swatch would
+    # show at all; the outline does that job properly.
+    "white": "#FFFFFF", "green": "#15803D", "red": "#B91C1C",
     "silver": "#64748B", "gray": "#6B7280", "grey": "#6B7280",
     "yellow": "#CA8A04", "orange": "#C2410C", "purple": "#7E22CE",
     "copper": "#B45309", "bronze": "#92400E", "maroon": "#7F1D1D",
@@ -56468,6 +56471,31 @@ def event_tee_legend(conn, event_id: int, ev: dict) -> list:
              "50-64": mens[1] if len(mens) > 1 else (mens[0] if mens else None),
              "65+": mens[2] if len(mens) > 2 else (mens[-1] if mens else None),
              "Forward": forward}
+
+    # THE CLUB'S OWN TEE NUMBER IS THE MAPPING (Kerry 2026-09-15, stating
+    # it plainly: "1 - <50 / 2 - 50-64 / 3 - 65+ / 3 (L) - Forward
+    # (Ladies), OR 4 (L) - Forward (Ladies)"). Golf Genius numbers the
+    # tees the way the club rates them, so the number IS the answer and
+    # the yardage rule above is only the fallback for a card that
+    # carries no numbers. Tee 0 is the tips, which TGF does not play.
+    by_order: dict = {}
+    for t in tees.values():
+        if t["order"] == 99:
+            continue
+        key = (t["order"], t["ladies"])
+        # a duplicate number keeps the LONGEST (a re-rated box)
+        cur = by_order.get(key)
+        if cur is None or (t["y18"] or 0) > (cur["y18"] or 0):
+            by_order[key] = t
+    numbered = {n: t for (n, lad), t in by_order.items() if not lad}
+    ladies_numbered = [t for (n, lad), t in sorted(by_order.items()) if lad]
+    if numbered:
+        for band, num in (("<50", 1), ("50-64", 2), ("65+", 3)):
+            t = numbered.get(num)
+            if t:
+                picks[band] = t["label"]
+        if ladies_numbered:
+            picks["Forward"] = ladies_numbered[-1]["label"]
     out, seen = [], set()
     for band in TEE_BANDS:
         nm = picks.get(band)
@@ -56500,6 +56528,195 @@ def _cart_sign_name(name: str) -> str:
         tail.insert(0, parts.pop())
     last = parts.pop()
     return " ".join(parts + [last.upper()] + [t.upper() for t in tail])
+
+
+def poll_live_events(force: bool = False, db_path=None) -> dict:
+    """Re-import today's scorecards from Golf Genius while a round is live.
+
+    Kerry 2026-09-15: "Poll GG on a timer, just like we were doing for
+    Match Play. I want to see it working live." — and later, when the
+    boards went quiet an hour after the last manual pull, "Looks like
+    leaderboards have stopped updating." They had not stopped; nothing
+    had ever started them. The scorecard import ran when somebody asked
+    it to.
+
+    WHEN IT POLLS. Only events dated TODAY, only after their start time,
+    and only until the field is COMPLETE — the same "every hole for every
+    player" test the money hold uses. A finished round stops being polled
+    by itself, so this never hammers Golf Genius for a board nobody is
+    watching. `force=True` ignores the completeness test (for a card
+    corrected after the fact).
+
+    It reports what it did per event, including why it skipped one, so a
+    quiet board is diagnosable instead of mysterious.
+    """
+    today = datetime.now().strftime("%Y-%m-%d")
+    out = {"checked": [], "imported": [], "skipped": [], "ran_at": today}
+    with _connect(db_path) as conn:
+        evs = [dict(r) for r in conn.execute(
+            """SELECT id, item_name, chapter, format, event_date,
+                      start_time, start_time_18
+                 FROM events WHERE event_date = ?""", (today,))]
+        for ev in evs:
+            code_m = _PRINT_EVENT_CODE_RE.match(ev["item_name"] or "")
+            code = (code_m.group(0).strip().replace(" ", "")
+                    if code_m else None)
+            portal = {"san antonio": "sa", "austin": "austin"}.get(
+                (ev.get("chapter") or "").strip().lower())
+            state = {"event": ev["item_name"], "event_id": ev["id"],
+                     "code": code, "portal": portal}
+            out["checked"].append(state)
+            if not code or not portal:
+                state["skipped"] = "no event code or chapter portal"
+                out["skipped"].append(state)
+                continue
+            if not _event_started(ev):
+                state["skipped"] = "has not started"
+                out["skipped"].append(state)
+                continue
+            fc = _event_field_complete(
+                conn, ev["id"], _event_holes_type(ev["item_name"], ev.get("format")))
+            state["field"] = fc["field"]
+            state["pending"] = len(fc["pending"])
+            if fc["complete"] and not force:
+                state["skipped"] = "every card is in"
+                out["skipped"].append(state)
+                continue
+            out["imported"].append(state)
+    # Imports open their own connections — never inside the read above.
+    for state in out["imported"]:
+        try:
+            res = import_event_scorecards_by_code(
+                _gg_results_widget(state["portal"]), state["code"])
+            state["result"] = {b.get("board"): {
+                "imported": b.get("imported"), "replaced": b.get("replaced")}
+                for b in (res.get("boards") or [])}
+        except Exception as e:
+            logger.exception("Live poll failed for %s (non-fatal)",
+                             state["event"])
+            state["error"] = str(e)
+    return out
+
+
+def import_course_card(key: str, dry_run: bool = True, db_path=None) -> dict:
+    """Load a club's own course card into `course_tees` + `course_tee_holes`.
+
+    Kerry has been sending these screen by screen since he ruled out
+    guessing ("That 'The course card...' note WILL NOT fly. We can never
+    do that. We need to get the calculations right."). Each card gives,
+    per tee: the 18-hole rating/slope, the FRONT and BACK rating/slope,
+    and every hole's yardage, par and stroke index. That is everything a
+    playing handicap needs and everything `label_course_tee_nines` was
+    having to infer — so with a card loaded, nothing is inferred.
+
+    Three rows per tee: the 18 (`nine='full'`, holes 1-18), the front
+    (`nine='front'`, holes 1-9) and the back (`nine='back'`, holes
+    10-18, numbered as they are actually played). An EXISTING row that
+    matches on (name, slope, rating) is reused and filled in, never
+    duplicated — the rounds already posted against it keep their tee.
+
+    Cards live in `email_parser/course_cards.py`, in the repo, so they
+    can be diffed and re-applied rather than living in a chat.
+    """
+    from .course_cards import COURSE_CARDS
+    card = COURSE_CARDS.get((key or "").strip().lower())
+    if not card:
+        return {"error": f"no card for '{key}'",
+                "known": sorted({c["course"] for c in COURSE_CARDS.values()})}
+    out = {"course": card["course"], "course_id": card["course_id"],
+           "dry_run": bool(dry_run), "rows": [], "holes_written": 0}
+    with _connect(db_path) as conn:
+        _ensure_scoring_tables(conn)
+        try:
+            conn.execute("ALTER TABLE course_tees ADD COLUMN nine TEXT")
+        except sqlite3.OperationalError:
+            pass
+        cid = card["course_id"]
+        for tee in card["tees"]:
+            spans = (
+                ("full", tee["r18"], tee["s18"], list(range(1, 19)), 0),
+                ("front", tee["front"][0], tee["front"][1], list(range(1, 10)), 0),
+                ("back", tee["back"][0], tee["back"][1], list(range(10, 19)), 9),
+            )
+            for nine, rating, slope, holes, off in spans:
+                yards = [tee["yards"][h - 1] for h in
+                         (holes if nine != "back" else range(10, 19))]
+                total = sum(yards)
+                # A tee whose FRONT and BACK carry the same rating and
+                # slope (Forest Creek's White: 35.2/125 both ways) can
+                # only ever be ONE row — the table is unique on
+                # (course, tee, slope, rating) and there is nothing to
+                # tell two such rows apart. It is labelled 'both' and
+                # carries all eighteen holes, which is the truth: either
+                # nine plays off those numbers.
+                if (nine == "back" and tee["front"] == tee["back"]):
+                    prior = conn.execute(
+                        """SELECT tee_id FROM course_tees
+                            WHERE course_id = ? AND tee_name = ?
+                              AND slope = ? AND rating = ?""",
+                        (cid, tee["name"], slope, rating)).fetchone()
+                    if prior and not dry_run:
+                        conn.execute(
+                            "UPDATE course_tees SET nine = 'both' "
+                            "WHERE tee_id = ?", (prior["tee_id"],))
+                        for h in range(10, 19):
+                            conn.execute(
+                                """INSERT OR REPLACE INTO course_tee_holes
+                                       (tee_id, hole_number, par, yardage,
+                                        stroke_index)
+                                   VALUES (?, ?, ?, ?, ?)""",
+                                (prior["tee_id"], h, tee["par"][h - 1],
+                                 tee["yards"][h - 1], tee["si"][h - 1]))
+                    out["rows"].append({
+                        "tee_name": tee["name"], "nine": "both",
+                        "rating": rating, "slope": slope,
+                        "yardage_total": total,
+                        "tee_id": prior["tee_id"] if prior else None,
+                        "action": "merged into the front row — this tee's "
+                                  "nines are rated identically",
+                        "holes": 9 if not dry_run else 0})
+                    out["holes_written"] += 0 if dry_run else 9
+                    continue
+                row = conn.execute(
+                    """SELECT tee_id FROM course_tees
+                        WHERE course_id = ? AND tee_name = ?
+                          AND slope = ? AND rating = ?""",
+                    (cid, tee["name"], slope, rating)).fetchone()
+                action = "existing"
+                tee_id = row["tee_id"] if row else None
+                if tee_id is None:
+                    action = "new"
+                    if not dry_run:
+                        cur = conn.execute(
+                            """INSERT INTO course_tees
+                                   (course_id, tee_name, slope, rating,
+                                    yardage_total, nine)
+                               VALUES (?, ?, ?, ?, ?, ?)""",
+                            (cid, tee["name"], slope, rating, total, nine))
+                        tee_id = cur.lastrowid
+                elif not dry_run:
+                    conn.execute(
+                        "UPDATE course_tees SET yardage_total = ?, nine = ? "
+                        "WHERE tee_id = ?", (total, nine, tee_id))
+                n_holes = 0
+                if not dry_run and tee_id is not None:
+                    for h in holes:
+                        conn.execute(
+                            """INSERT OR REPLACE INTO course_tee_holes
+                                   (tee_id, hole_number, par, yardage,
+                                    stroke_index)
+                               VALUES (?, ?, ?, ?, ?)""",
+                            (tee_id, h, tee["par"][h - 1],
+                             tee["yards"][h - 1], tee["si"][h - 1]))
+                        n_holes += 1
+                out["holes_written"] += n_holes
+                out["rows"].append({
+                    "tee_name": tee["name"], "nine": nine, "rating": rating,
+                    "slope": slope, "yardage_total": total,
+                    "tee_id": tee_id, "action": action, "holes": n_holes})
+        if not dry_run:
+            conn.commit()
+    return out
 
 
 def label_course_tee_nines(conn, course_id: int | None = None) -> dict:
@@ -56696,7 +56913,8 @@ def _event_tee_rows(conn, ev: dict, legend: list) -> tuple[dict, str, str]:
             # card yields NO playing handicap rather than a plausible one
             # with a caveat under it.
             want = "back" if nine == "back" else "front"
-            exact = [r for r in cands if (r.get("nine") or "") == want]
+            exact = [r for r in cands
+                     if (r.get("nine") or "") in (want, "both")]
             if len(exact) == 1:
                 pick = exact[0]
             elif len(exact) > 1:
@@ -56912,7 +57130,13 @@ def get_event_print_pack(event_id: int, db_path=None) -> dict | None:
         "groups": groups,
         "group_count": len(groups),
         "tee_legend": tee_legend,
-        "tee_colors": {t["band"]: t["color"] for t in tee_legend},
+        # The swatch colour and the INK colour are not the same thing:
+        # a white tee's chip must print black or it prints nothing
+        # (Kerry 2026-09-15).
+        "tee_colors": {t["band"]: (
+            "#1B1B1B" if (t["color"] or "").lower() in ("#ffffff", "#fff")
+            else t["color"]) for t in tee_legend},
+        "tee_swatches": {t["band"]: t["color"] for t in tee_legend},
         "ph_basis": ph_basis,
         "ph_note": ph_note,
         "team_basis": team_basis,

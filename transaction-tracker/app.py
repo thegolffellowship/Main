@@ -1614,6 +1614,40 @@ def start_scheduler():
         )
         logger.info("Auto pairings grab scheduled daily at 03:20 US/Central")
 
+    # ── LIVE SCORING POLL (Kerry 2026-09-15: "Poll GG on a timer, just
+    # like we were doing for Match Play. I want to see it working live",
+    # and then, an hour after the last manual pull, "Looks like
+    # leaderboards have stopped updating"). They had not stopped;
+    # nothing had ever started them. Every 5 minutes, and only for an
+    # event that is dated today, has started, and does not yet have every
+    # hole for every player — a finished round stops being polled by
+    # itself. Disable with AUTO_LIVE_POLL=0; interval via
+    # LIVE_POLL_MINUTES.
+    def auto_live_poll_job():
+        from email_parser.database import poll_live_events
+        try:
+            res = poll_live_events()
+            if res.get("imported"):
+                logger.info("Live poll: %s",
+                            [(s.get("event"), s.get("result") or s.get("error"))
+                             for s in res["imported"]])
+        except Exception:
+            logger.exception("Live scoring poll failed (non-fatal)")
+
+    if os.getenv("AUTO_LIVE_POLL", "1") != "0":
+        _lp_min = max(2, int(os.getenv("LIVE_POLL_MINUTES", "5") or 5))
+        scheduler.add_job(
+            auto_live_poll_job,
+            "interval",
+            minutes=_lp_min,
+            id="auto_live_poll",
+            replace_existing=True,
+            max_instances=1,
+            coalesce=True,
+            misfire_grace_time=120,
+        )
+        logger.info("Live scoring poll scheduled every %d minutes", _lp_min)
+
     # ── Nightly RSVP match audit (Kerry 2026-07-15) ──────────────────
     # Belt-and-braces sweep behind the per-ingest and on-open audits:
     # clear email-mismatched matches + rematch across upcoming events.

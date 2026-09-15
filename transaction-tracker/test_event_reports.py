@@ -349,21 +349,33 @@ check("the colour is read out of the tee NAME",
 check("two bands on the same paint are never two identical swatches",
       _by["Forward"]["color"] == _by["65+"]["color"] and _by["Forward"]["ring"] is True
       and _by["65+"]["ring"] is False)
-# Kerry 2026-09-15, correcting me: "Forward tee is NOT under 50. That is
-# the back tee selected each time based on our yardage parameters for
-# under 50 tees to be 6300-6800 yards for 18."
+# THE CLUB'S OWN TEE NUMBER IS THE MAPPING (Kerry 2026-09-15, stating it
+# plainly: "1 - <50 / 2 - 50-64 / 3 - 65+ / 3 (L) - Forward (Ladies), OR
+# 4 (L) - Forward (Ladies)"). Yardage no longer decides where a numbered
+# card is concerned — reshuffling the yardages must NOT move the bands.
 c.execute("UPDATE course_tees SET yardage_total = 7100, rating = 74.0 WHERE tee_name = '1 - Gold Tee'")
 c.execute("UPDATE course_tees SET yardage_total = 6500, rating = 71.0 WHERE tee_name = '2 - Blue Tee'")
 c.execute("UPDATE course_tees SET yardage_total = 6000, rating = 68.0 WHERE tee_name = '3 - Red Tee'")
 c.execute("UPDATE course_tees SET yardage_total = 5200, rating = 70.0 WHERE tee_name = '3 - Red (L) Tee'")
 c.commit()
 _b2 = {t["band"]: t for t in db.event_tee_legend(c, EV, {"course_id": COURSE})}
-check("the <50 tee is the one INSIDE 6300-6800, not simply the longest",
-      _b2["<50"]["tee_name"] == "Blue Tee", str(_b2.get("<50")))
-check("…and the older bands step down from there",
-      [_b2[b]["tee_name"] for b in ("50-64", "65+")] == ["Gold Tee", "Red Tee"], str(_b2))
-check("Forward is its own tee, never the under-50 one",
+check("tee 1 is the under-50 tee whatever the yardages say",
+      _b2["<50"]["tee_name"] == "Gold Tee", str(_b2.get("<50")))
+check("…tee 2 is 50-64 and tee 3 is 65+",
+      [_b2[b]["tee_name"] for b in ("50-64", "65+")] == ["Blue Tee", "Red Tee"], str(_b2))
+check("the ladies' number is Forward, never the under-50 one",
       _b2["Forward"]["tee_name"] == "Red (L) Tee" and _b2["Forward"]["tee_name"] != _b2["<50"]["tee_name"])
+# A card with NO tee numbers falls back to the yardage rule.
+c.execute("UPDATE course_tees SET tee_name = REPLACE(REPLACE(REPLACE(REPLACE("
+          "tee_name, '1 - ', ''), '2 - ', ''), '3 - ', ''), '4 - ', '')")
+c.commit()
+_b2b = {t["band"]: t for t in db.event_tee_legend(c, EV, {"course_id": COURSE})}
+check("with no numbers on the card, the <50 tee is the one INSIDE 6300-6800",
+      _b2b["<50"]["tee_name"] == "Blue Tee", str(_b2b.get("<50")))
+c.execute("UPDATE course_tees SET tee_name = '1 - ' || tee_name WHERE tee_name = 'Gold Tee'")
+c.execute("UPDATE course_tees SET tee_name = '2 - ' || tee_name WHERE tee_name = 'Blue Tee'")
+c.execute("UPDATE course_tees SET tee_name = '3 - ' || tee_name WHERE tee_name IN ('Red Tee', 'Red (L) Tee')")
+c.commit()
 # Nothing in band -> the longest men's tee, rather than no answer.
 c.execute("UPDATE course_tees SET yardage_total = 5800 WHERE tee_name = '2 - Blue Tee'")
 c.execute("UPDATE course_tees SET yardage_total = 6128 WHERE tee_name = '1 - Gold Tee'")
@@ -500,6 +512,25 @@ _c2.execute("INSERT INTO scoring_rounds (customer_id, player_name, event_id, rou
 _c2.commit()
 _lb = db.get_event_leaderboard("s9.99 Test Links", db_path=_t2)
 check("a score posted just now holds the money", _lb["money_visible"] is False, str(_lb.get("last_score_at")))
+# EVERY HOLE FOR EVERY PLAYER FIRST (Kerry 2026-09-15, mid-round: "Not
+# all scores are in. Every hole must be accounted for every player").
+# The round above has a player with no holes on the card at all, so the
+# clock is not even the reason yet.
+check("…and the reason is the missing cards, not the clock",
+      _lb["money_reason"] == "scores" and _lb["field_complete"] is False,
+      str(_lb.get("money_reason")))
+check("…naming who is short", _lb["scores_pending_total"] >= 1
+      and _lb["scores_pending"][0]["player"] == "Pat Youngs",
+      str(_lb.get("scores_pending")))
+_rid = _c2.execute("SELECT id FROM scoring_rounds WHERE event_id = 990").fetchone()[0]
+for _h in range(1, 10):
+    _c2.execute("INSERT OR REPLACE INTO scoring_holes (scoring_round_id, hole_number, strokes) "
+                "VALUES (?, ?, 4)", (_rid, _h))
+_c2.commit()
+_lb = db.get_event_leaderboard("s9.99 Test Links", db_path=_t2)
+check("with every hole in, the CLOCK becomes the reason",
+      _lb["money_visible"] is False and _lb["money_reason"] == "hold"
+      and _lb["field_complete"] is True, str(_lb.get("money_reason")))
 check("…and says when it will post", bool(_lb["money_at"]) and _lb["money_hold_minutes"] == 10)
 _c2.execute("UPDATE scoring_rounds SET imported_at = datetime('now', '-11 minutes') WHERE event_id = 990")
 _c2.commit()

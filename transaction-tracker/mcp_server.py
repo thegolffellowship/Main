@@ -1826,6 +1826,12 @@ def _scoring_dispatch(url: str, extract: str):
                                    the saved pairings + re-seat the group
                                    per the TGF adjustment standard (a
                                    started event leaves the seat OPEN)
+      scoring-live-poll[:force]    re-import today's live scorecards now
+                                   (the same sweep the 5-minute timer runs)
+      scoring-course-card:<course>[|apply]  load a club's own course card
+                                   (ratings, slopes, per-hole par /
+                                   yardage / stroke index, front+back)
+                                   from email_parser/course_cards.py
       scoring-blinds:<event>[|draw|apply|clear]  BLIND draws for the open
                                    seats: no arg = pool + current draw,
                                    draw = preview, apply = write, clear =
@@ -4745,6 +4751,20 @@ def _scoring_dispatch(url: str, extract: str):
             # plus the 75% onboarding-rule validation.
             return json.dumps(db.ghin_comparison_analysis(),
                               indent=2, default=str)
+        if cmd == "scoring-live-poll":
+            # The same sweep the timer runs, on demand. "force" ignores
+            # the every-card-is-in test.
+            return json.dumps(db.poll_live_events(
+                force=(arg.strip().lower() == "force")), indent=2, default=str)
+        if cmd == "scoring-course-card":
+            # "<course>[|apply]" — load the club's own card (Kerry sent
+            # Avery Ranch, Cedar Creek and Forest Creek 2026-09-15). Dry
+            # run by default: it reports every row it would write, what
+            # it would reuse and what it would create.
+            _c, _, _m = arg.partition("|")
+            return json.dumps(db.import_course_card(
+                _c.strip(), dry_run=(_m.strip().lower() != "apply")),
+                indent=2, default=str)
         if cmd == "scoring-blinds":
             # "<event>[|draw|apply|clear]" — BLIND draws for the open
             # seats on a saved sheet (Kerry 2026-09-15). Default and
