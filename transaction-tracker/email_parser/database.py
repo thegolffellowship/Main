@@ -13620,8 +13620,59 @@ def get_event_leaderboard(event_name: str,
                             (ev["id"],)).fetchone()
         tee_legend, tee_by_player = [], {}
         try:
-            tee_legend = event_tee_legend(conn, ev["id"], dict(_evc) if _evc else {})
-            _by_band = {t["band"]: t for t in tee_legend}
+            # THE TEE EACH PLAYER ACTUALLY PLAYED comes first. The saved
+            # sheet's BAND (<50 / 50-64 / 65+ / Forward) is how we assign
+            # a tee in advance, but an imported Golf Genius tee sheet
+            # carries no band at all — which is why Avery Ranch showed no
+            # dots while The Quarry did (Kerry 2026-09-15: "Do we not
+            # have tee colors for the other courses on the leaderboard?").
+            # `scoring_rounds.tee_id` is the tee of record for a played
+            # round, so the board reads that and falls back to the band.
+            played = [dict(r) for r in conn.execute(
+                """SELECT sr.customer_id, sr.player_name, ct.tee_name
+                     FROM scoring_rounds sr
+                     JOIN course_tees ct ON ct.tee_id = sr.tee_id
+                    WHERE sr.event_id = ?
+                      AND COALESCE(sr.source, 'gg') NOT LIKE 'gg_history%'""",
+                (ev["id"],))]
+            _seen_color: dict = {}
+            _lbl_of: dict = {}
+            for r in played:
+                raw = " ".join((r["tee_name"] or "").split())
+                m = _TEE_ORDER_RE.match(raw)
+                label = _TEE_ORDER_RE.sub("", raw).strip() if m else raw
+                if not label:
+                    continue
+                _lbl_of[r["tee_name"]] = (label, int(m.group(1)) if m else 99)
+            for label, order in _lbl_of.values():
+                col = _tee_color_for(label)
+                _seen_color.setdefault(col, []).append(label)
+            for label, order in sorted(set(_lbl_of.values()),
+                                       key=lambda t: (t[1], t[0])):
+                col = _tee_color_for(label)
+                tee_legend.append({
+                    "band": None, "tee_name": label, "color": col,
+                    # two tees sharing a colour (a ladies' rating of the
+                    # same one) — ringed, the starter sheet's convention
+                    "ring": len(set(_seen_color.get(col) or [])) > 1
+                            and bool(re.search(r"\((?:l|lady|ladies)\)",
+                                               label, re.I))})
+            _leg_by_label = {t["tee_name"]: t for t in tee_legend}
+            for r in played:
+                lbl = _lbl_of.get(r["tee_name"])
+                _t = _leg_by_label.get(lbl[0]) if lbl else None
+                if not _t:
+                    continue
+                if r["customer_id"] is not None:
+                    tee_by_player[f"c:{r['customer_id']}"] = _t
+                if r["player_name"]:
+                    tee_by_player["n:" + r["player_name"].strip().lower()] = _t
+
+            # The BAND legend fills the gaps — a player with no imported
+            # round yet, and the whole legend when nothing is imported.
+            band_legend = event_tee_legend(conn, ev["id"],
+                                           dict(_evc) if _evc else {})
+            _by_band = {t["band"]: t for t in band_legend}
             for _h, _groups in (get_event_pairings(ev["id"], db_path=db_path)
                                 or {}).items():
                 for _g in _groups:
@@ -13632,14 +13683,17 @@ def get_event_leaderboard(event_name: str,
                         _rec = {"band": _pl.get("tee_choice"),
                                 "tee_name": _t.get("tee_name"),
                                 "color": _t.get("color"),
-                                # two tees sharing a colour (a ladies'
-                                # rating of the same one) — ringed, the
-                                # starter sheet's own convention
                                 "ring": bool(_t.get("ring"))}
-                        if _pl.get("customer_id"):
-                            tee_by_player[f"c:{_pl['customer_id']}"] = _rec
-                        if _pl.get("name"):
-                            tee_by_player["n:" + _pl["name"].strip().lower()] = _rec
+                        _ck = (f"c:{_pl['customer_id']}"
+                               if _pl.get("customer_id") else None)
+                        _nk = ("n:" + _pl["name"].strip().lower()
+                               if _pl.get("name") else None)
+                        if _ck and _ck not in tee_by_player:
+                            tee_by_player[_ck] = _rec
+                        if _nk and _nk not in tee_by_player:
+                            tee_by_player[_nk] = _rec
+            if not tee_legend:
+                tee_legend = band_legend
         except Exception:
             logger.exception("Non-fatal: tee colours unavailable for event %s",
                              ev["id"])

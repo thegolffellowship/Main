@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.445.0";
+window.TGF_VERSION = "2.446.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.446.0",
+    date: "2026-09-15",
+    changes: [
+      "TEE DOTS NOW COME FROM THE TEE ACTUALLY PLAYED (Kerry: \u2018Do we not have tee colors for the other courses on the leaderboard?\u2019). The Quarry had dots and Avery Ranch had none, and the difference was not the course: a SHOTGUN sheet we built carries each player\u2019s band, and an imported Golf Genius TEE-TIME sheet carries no band at all. `scoring_rounds.tee_id` is the tee of record for a played round, so the board reads that first and falls back to the sheet\u2019s band for anyone not yet imported. The key lists the tees actually in play, in the club\u2019s own tee order.",
+      "The tee key right-aligns with the board\u2019s right-most column (Kerry: \u2018Right align tee legend with right most column\u2019). The table is narrower than the panel, so pushing the key right parked it against the panel edge instead. It is measured off the table now, and re-measured whenever a toggle changes the table\u2019s width.",
+    ],
+  },
   {
     version: "2.445.0",
     date: "2026-09-15",

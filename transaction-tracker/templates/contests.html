@@ -3790,6 +3790,23 @@
         // page (Kerry 2026-09-13: every tab is the same table). Sorting
         // happens WITHIN each band so a flighted board keeps its
         // flights, and the # column re-ranks against the tapped column.
+        // The key lines up with the RIGHT-MOST COLUMN (Kerry 2026-09-15:
+        // "Right align tee legend with right most column"). The board is
+        // narrower than the panel, so `margin-left:auto` alone parked the
+        // key against the panel edge, a long way right of the table it
+        // belongs to. Measured from the table and re-measured whenever
+        // its width can change.
+        const fitKeys = () => body.querySelectorAll("table.evlb-ovr[data-board]")
+            .forEach(tbl => {
+                const wrap = tbl.closest(".evlb-scroll");
+                const row = wrap && wrap.previousElementSibling;
+                if (!row || !row.classList.contains("evlb-togrow")) return;
+                const w = Math.min(tbl.offsetWidth, wrap.clientWidth);
+                row.style.maxWidth = w > 0 ? w + "px" : "";
+            });
+        requestAnimationFrame(fitKeys);
+        window.addEventListener("resize", fitKeys);
+        body._evlbFitKeys = fitKeys;
         body.querySelectorAll("table.evlb-ovr[data-board]").forEach(tbl => {
             const st = EVLB_BOARDS[tbl.dataset.board];
             if (!st) return;
@@ -3880,6 +3897,8 @@
                     t.classList.toggle("no-holes", !evlbShowHoles));
                 document.querySelectorAll("input[data-ovr-holes]").forEach(o =>
                     { o.checked = evlbShowHoles; });
+                document.querySelectorAll(".evlb-body").forEach(b =>
+                    b._evlbFitKeys && requestAnimationFrame(b._evlbFitKeys));
             }));
         body.querySelectorAll("input[data-ovr-all]").forEach(cb =>
             cb.addEventListener("change", () => {
@@ -3892,6 +3911,8 @@
                 });
                 document.querySelectorAll("input[data-ovr-all]").forEach(o =>
                     { o.checked = evlbShowAll; });
+                document.querySelectorAll(".evlb-body").forEach(b =>
+                    b._evlbFitKeys && requestAnimationFrame(b._evlbFitKeys));
             }));
         body.querySelectorAll("input[data-ovr-hcp]").forEach(cb =>
             cb.addEventListener("change", () => {
@@ -3900,6 +3921,8 @@
                     t.classList.toggle("no-hcp", !evlbShowHcp));
                 document.querySelectorAll("input[data-ovr-hcp]").forEach(o =>
                     { o.checked = evlbShowHcp; });
+                document.querySelectorAll(".evlb-body").forEach(b =>
+                    b._evlbFitKeys && requestAnimationFrame(b._evlbFitKeys));
             }));
         // Player-row scorecard expansion — DELEGATED so rows re-rendered
         // by a sort (or any future re-paint) keep the behavior
