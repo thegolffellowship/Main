@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.443.0";
+window.TGF_VERSION = "2.444.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.444.0",
+    date: "2026-09-15",
+    changes: [
+      "TEE COLOUR KEY ABOVE THE BOARD (Kerry: \u2018Need to show legend up top for TEE colors. Right of the check boxes on the same row on desktop. move to row below if narrow or on mobile.\u2019). A swatch with no key is decoration. The key names each tee in the course\u2019s own colours \u2014 the same list the starter sheet prints, including the RING that marks two tees sharing a colour, so the ladies\u2019 rating of the red tee is never mistaken for the red \u2014 and it sits right of the toggles, dropping to its own line when the row cannot hold both.",
+      "The skins count header is \u2018#\u2019 (Kerry: \u2018SKINS not fitting in cell header. Maybe should just be #\u2019). The column is one tap under a tab that already says SKINS, so the word was paying for itself twice and losing; the full label rides on the tooltip.",
+    ],
+  },
   {
     version: "2.443.0",
     date: "2026-09-15",

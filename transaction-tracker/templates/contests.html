@@ -336,6 +336,22 @@
             margin: 0 0 4px; display: flex; align-items: baseline; gap: 8px; }
         .evlb-team-ph { font: 400 11px/1.2 system-ui, sans-serif;
             color: var(--text-muted); font-variant-numeric: tabular-nums; }
+        /* Toggles left, tee key right; the key drops to its own line
+           when the row cannot hold both (Kerry 2026-09-15). */
+        .evlb-togrow { display: flex; flex-wrap: wrap; align-items: center;
+            gap: 4px 16px; margin: 0 0 6px; }
+        .evlb-togs { display: flex; flex-wrap: wrap; align-items: center;
+            gap: 4px 14px; }
+        .evlb-teekey { display: flex; flex-wrap: wrap; align-items: center;
+            gap: 4px 12px; margin-left: auto; font-size: 11.5px;
+            color: #4B5563; }
+        .evlb-teekey-item { display: inline-flex; align-items: center; gap: 5px;
+            white-space: nowrap; }
+        .evlb-teekey .evlb-tee-dot { float: none; margin: 0; }
+        .evlb-tee-dot.ring { box-shadow: 0 0 0 1.5px #fff, 0 0 0 3px #6B7280; }
+        @media (max-width: 720px) {
+            .evlb-teekey { margin-left: 0; width: 100%; }
+        }
         /* Tee swatch, right-justified in the name cell (Kerry). */
         .evlb-tee-dot { display: inline-block; width: 9px; height: 9px;
             border-radius: 50%; margin-left: 7px; float: right;
@@ -436,7 +452,7 @@
         .evlb-holes tr.evlb-band[data-team] td { cursor: pointer; }
         .evlb-holes tr.evlb-band .tchev { opacity: .9; }
         .evlb-holetog { display: inline-flex; align-items: center; gap: 6px;
-            font-size: 12px; color: #4B5563; margin: 0 0 6px; cursor: pointer;
+            font-size: 12px; color: #4B5563; margin: 0; cursor: pointer;
             user-select: none; }
         .evlb-holetog input { accent-color: var(--primary, #E87C3E); cursor: pointer; }
         /* Kerry 2026-09-14: "Center WON in column". Header AND money move
@@ -2792,6 +2808,24 @@
     // say so. The colour is the COURSE's own tee colour, the same map
     // the starter sheet prints, so the two can never disagree. Rendered
     // in the ONE shared name cell rather than per tab.
+    // The key to the dots (Kerry 2026-09-15: "Need to show legend up
+    // top for TEE colors. Right of the check boxes on the same row on
+    // desktop. move to row below if narrow or on mobile."). A swatch
+    // with no key is decoration; the same course colours and the same
+    // "duplicate colour gets a ring" rule as the starter sheet's legend,
+    // so the two pages read identically.
+    function evlbTeeLegend(d) {
+        const legend = (d && d.tee_legend) || [];
+        if (!legend.length) return "";
+        return `<div class="evlb-teekey" aria-label="Tee colours">` +
+            legend.map(t => {
+                const pale = /^#(f|e)/i.test(t.color || "");
+                return `<span class="evlb-teekey-item" title="${escapeHtml(t.band || "")}">`
+                    + `<span class="evlb-tee-dot${t.ring ? " ring" : ""}" `
+                    + `style="background:${t.color};${pale ? "box-shadow:inset 0 0 0 1px #9CA3AF;" : ""}"></span>`
+                    + `${escapeHtml(t.tee_name || t.band || "")}</span>`;
+            }).join("") + `</div>`;
+    }
     let EVLB_TEES = {};
     function evlbTeeDot(r) {
         const t = (r && r.customer_id != null && EVLB_TEES["c:" + r.customer_id])
@@ -2799,7 +2833,7 @@
         if (!t || !t.color) return "";
         // A white or very pale tee needs an outline or it is invisible.
         const pale = /^#(f|e)/i.test(t.color);
-        return `<span class="evlb-tee-dot" title="${escapeHtml(t.tee_name || "")}`
+        return `<span class="evlb-tee-dot${t.ring ? " ring" : ""}" title="${escapeHtml(t.tee_name || "")}`
             + `${t.band ? " (" + escapeHtml(t.band) + ")" : ""}" `
             + `style="background:${t.color};${pale ? "box-shadow:inset 0 0 0 1px #9CA3AF;" : ""}"></span>`;
     }
@@ -3330,14 +3364,19 @@
         // of WON column on SKINS view") — skins won and skins money
         // belong side by side, they are the same fact twice.
         const gcTh = board.gameCol === false ? "" :
-            `<th data-k="gamecol" class="sortable bl br gc${active("gamecol")}">${escapeHtml(gl)}</th>`;
+            `<th data-k="gamecol" class="sortable bl br gc${active("gamecol")}"`
+            + ` title="${escapeHtml((board.gameCol && board.gameCol.title) || gl)}"`
+            + `>${escapeHtml(gl)}</th>`;
         const showHoles = evlbHolesFor(board);
         return (note || "") +
+            `<div class="evlb-togrow">` +
+            `<div class="evlb-togs">` +
             `<label class="evlb-holetog"><input type="checkbox" data-ovr-holes${showHoles ? " checked" : ""}> Hole by hole</label>` +
             `<label class="evlb-holetog"><input type="checkbox" data-ovr-hcp${evlbShowHcp ? " checked" : ""}> Handicaps</label>` +
             (EVLB_BUYIN_GAMES.includes(board.game || null)
                 ? `<label class="evlb-holetog"><input type="checkbox" data-ovr-all${evlbShowAll ? " checked" : ""}> Show All Players</label>`
                 : "") +
+            `</div>` + evlbTeeLegend(d) + `</div>` +
             `<div class="evlb-scroll"><table class="evlb-holes evlb-ovr${showHoles ? "" : " no-holes"}${evlbShowHcp ? "" : " no-hcp"}" data-board="${id}"><thead>` +
             `<tr><th data-k="${board.netCol === false ? "gross" : "net"}" class="sortable">#</th>` +
             `<th data-k="player" class="nm sortable">Player</th>` +
@@ -3491,7 +3530,13 @@
                      game: "gross", gameCol: false, netCol: false },
             skins: {
                 sections: secsFrom(d.skins_board), sort: "gamecol", game: "skins",
-                gameCol: { key: "skins", label: "Skins", value: skinsCount },
+                // "SKINS not fitting in cell header. Maybe should just
+                // be '#'" (Kerry 2026-09-15) — the column is one tap
+                // under a tab that already says SKINS, so the word was
+                // paying for itself twice and losing. The full label
+                // rides on the tooltip.
+                gameCol: { key: "skins", label: "#", title: "Skins won",
+                           value: skinsCount },
                 // skins won sits beside skins money (Kerry 2026-09-14)
                 gameColAfterWon: true,
             },

@@ -13631,7 +13631,11 @@ def get_event_leaderboard(event_name: str,
                             continue
                         _rec = {"band": _pl.get("tee_choice"),
                                 "tee_name": _t.get("tee_name"),
-                                "color": _t.get("color")}
+                                "color": _t.get("color"),
+                                # two tees sharing a colour (a ladies'
+                                # rating of the same one) — ringed, the
+                                # starter sheet's own convention
+                                "ring": bool(_t.get("ring"))}
                         if _pl.get("customer_id"):
                             tee_by_player[f"c:{_pl['customer_id']}"] = _rec
                         if _pl.get("name"):
