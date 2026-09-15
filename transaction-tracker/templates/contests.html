@@ -1495,7 +1495,7 @@
         }
         #pr-table-container .enrollment-table.pr-compact th { font-size: 9px; padding: 8px 6px 6px; }
         #pr-table-container .enrollment-table.pr-compact td { padding: 8px 6px; font-size: 12.5px; }
-        @media (max-width: 768px) {
+        @media (max-width: 560px) {
             .cmp-body { padding: 0.75rem 1rem; }
             .pool-card-body { grid-template-columns: 1fr; }
             .pool-members { border-right: none; border-bottom: 1px solid var(--border); }
@@ -1706,7 +1706,7 @@
         .lsc-lodge-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; padding: 8px 14px 6px; background: #FBFAF8; border-top: 1px solid #E5E7EB; font: 700 10px/1.3 'Bitter', serif; letter-spacing: 1px; color: #1B1B1B; text-transform: uppercase; }
         .lsc-lodge-head span { color: #6B7280; font-weight: 600; letter-spacing: 0.4px; }
         .lsc-foot { margin-top: 0.9rem; font-size: 12px; line-height: 1.55; color: #9CA3AF; }
-        @media (max-width: 768px) {
+        @media (max-width: 560px) {
             .lsc-grid { grid-template-columns: 1fr; }
             .standings-section h4.lsc-title { font-size: 1.22rem; }
             .lsc-seat-label { flex-basis: 90px; }
@@ -2336,7 +2336,7 @@
         .manager-only, .admin-only { display: none !important; }
         /* Members pick the chapter from the MATCH PLAY tab menu on phones —
            the whole chapter/season line goes (staff keep the season input) */
-        @media (max-width: 768px) { .cmp-chapter-bar { display: none; } }
+        @media (max-width: 560px) { .cmp-chapter-bar { display: none; } }
     </style>{% endif %}
     <script src="/static/js/version.js"></script>
     <script src="/static/js/auth.js"></script>
@@ -3674,7 +3674,7 @@
             const top = btn.dataset.top;
             // Mobile (Kerry, 2026-07-10): tapping POINTS RACES drops the
             // race menu straight from the tab — no separate selector row.
-            const mobile = window.matchMedia && window.matchMedia("(max-width: 768px)").matches;
+            const mobile = window.matchMedia && window.matchMedia("(max-width: 560px)").matches;
             const wasActive = btn.classList.contains("active");
             $$(".top-tab").forEach(b => b.classList.remove("active"));
             btn.classList.add("active");

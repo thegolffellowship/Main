@@ -524,6 +524,25 @@ exceptions. **Admin table density is the app-wide default**: global
 ratified TGF-console density ("functional, not all this beautiful white
 space"). Pages with their own table CSS keep their local values.
 
+## The ONE mobile breakpoint is 560px (v2.409.0)
+
+**Kerry 2026-09-15: "Don't go to mobile view on desktop until the window
+gets much narrower."** Every "is this a phone?" decision — the shell's
+drawer + mobile bar, `mobile-card-list` vs table, the ⋯ Actions sheet,
+handicaps/customers/events/tgf/contests mobile branches, `course-label.js`
+short names — is `(max-width: 560px)` in CSS, `matchMedia("(max-width:
+560px)")` or `innerWidth <= 560` in JS, and desktop-only blocks pair at
+`(min-width: 561px)`. It used to be 768 in ~45 places across twenty files
+and had drifted (leads.html decided at 720 while its CSS decided at 768).
+**Never introduce a second number for this decision**; `test_breakpoint.js`
+fails on any 768/769 media query, matchMedia or innerWidth test. Widths
+that are NOT layout-mode switches (640px scorecard/points density, 700/720/
+760px grid collapses, 900px split panes) are cosmetic and stay as they are.
+Because the desktop layout now runs down to 561px, `shell.css` wraps the
+header into two rows between 561px and 1479px (brand + right-hand pills on
+row 1, links on row 2; member shell: brand + CTA, then the three tabs) —
+above 1480px the single row is unchanged.
+
 ## Standard color palette (v2.49.0)
 
 Kerry's ratified brand palette lives as CSS vars in `static/css/dashboard.css`

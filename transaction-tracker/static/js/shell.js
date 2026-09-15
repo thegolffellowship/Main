@@ -59,7 +59,7 @@
 
     // Move [data-sheet] ops into the sheet on mobile, back on desktop.
     // Elements keep their ids so page handlers stay bound.
-    const mq = window.matchMedia("(max-width: 768px)");
+    const mq = window.matchMedia("(max-width: 560px)");
     let sheetItems = null; // captured once, in original order
     function placeOps() {
         if (!opsRow || !sheetBody) return;

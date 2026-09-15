@@ -11,7 +11,7 @@
 (function (w) {
     // Trim course boilerplate on narrow screens; full name on desktop.
     function shortCourse(n) {
-        if (!(w.matchMedia && w.matchMedia('(max-width: 768px)').matches)) return n;
+        if (!(w.matchMedia && w.matchMedia('(max-width: 560px)').matches)) return n;
         let out = String(n || '').trim()
             .replace(/^\s*(the\s+)?(club|course)\s+at\s+/i, '')
             .replace(/^\s*hyatt\s+(regency\s+)?/i, '');

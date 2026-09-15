@@ -83,7 +83,7 @@
         .rounds-table .diff-good { color: #16a34a; font-weight: 600; }
         /* Phones: kill the desktop min-widths + padding so DATE hugs COURSE
            (Kerry, 2026-07-10 — "date to course space is massive") */
-        @media (max-width: 768px) {
+        @media (max-width: 560px) {
             .rounds-table th, .rounds-table td { padding: 5px 6px; }
             .rounds-table .date-col   { min-width: 0; padding-right: 6px; }
             .rounds-table .course-col { min-width: 0; padding-right: 6px; }
@@ -117,7 +117,7 @@
 
         /* ── Mobile handicap card list ─────────────────────────────── */
         .hcp-mobile-list { display: none; }
-        @media (max-width: 768px) { .hcp-mobile-list { display: block; } }
+        @media (max-width: 560px) { .hcp-mobile-list { display: block; } }
         .hcp-mobile-card {
             background: #fff; border: 1px solid #e2e8f0; border-radius: 10px;
             margin-bottom: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.07);
@@ -1000,7 +1000,7 @@
         if (!match) return;
         const nm = match.player_name;
         const id = safeid(nm);
-        const mobile = window.matchMedia && window.matchMedia('(max-width: 768px)').matches;
+        const mobile = window.matchMedia && window.matchMedia('(max-width: 560px)').matches;
         if (mobile) {
             const top = document.getElementById(`m-top-${id}`);
             if (!top) return;
@@ -1037,7 +1037,7 @@
     /** Mobile course names drop venue boilerplate — mirrors
         derive_course_short_name() in database.py; keep in sync. */
     function shortCourse(n) {
-        if (!(window.matchMedia && window.matchMedia('(max-width: 768px)').matches)) return n;
+        if (!(window.matchMedia && window.matchMedia('(max-width: 560px)').matches)) return n;
         let out = String(n || '').trim()
             .replace(/^\s*(the\s+)?(club|course)\s+at\s+/i, '')
             .replace(/^\s*hyatt\s+(regency\s+)?/i, '');
@@ -1052,7 +1052,7 @@
         (Kerry, 2026-07-10). Evaluated per render so rotation follows. */
     function fmtRoundDate(d) {
         if (!d) return d;
-        const mobile = window.matchMedia && window.matchMedia('(max-width: 768px)').matches;
+        const mobile = window.matchMedia && window.matchMedia('(max-width: 560px)').matches;
         if (!mobile) return d;
         const m = /^\d{4}-0?(\d+)-0?(\d+)/.exec(String(d));
         return m ? `${m[1]}/${m[2]}` : d;
@@ -1477,7 +1477,7 @@
         // the nine this record covers (Kerry 2026-07-14: the TGF system
         // is every-9-holes; the full 18 belongs on player scoring
         // records, not here).
-        const noteFs = (window.matchMedia && matchMedia('(max-width: 768px)').matches)
+        const noteFs = (window.matchMedia && matchMedia('(max-width: 560px)').matches)
             ? '0.68em' : '0.8em';
         const note = nine
             ? `<div style="font-size:${noteFs};color:#475569;margin-bottom:6px;">
@@ -1546,7 +1546,7 @@
         const MEMBER = !!window.MEMBER_MODE;
         // Phones shorten the member headers and DROP the Counting column
         // entirely (Kerry, 2026-07-10 — the green row already says it)
-        const HMOB = window.matchMedia && window.matchMedia('(max-width: 768px)').matches;
+        const HMOB = window.matchMedia && window.matchMedia('(max-width: 560px)').matches;
         const HM = HMOB
             ? { diff: 'Diff', run: 'Index' }
             : { diff: 'Differential', run: 'Running Index' };

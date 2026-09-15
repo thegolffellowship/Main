@@ -151,7 +151,7 @@
         .ev-chapter-row .ev-tab.active[data-ev-chapter="Austin"] { background: var(--chapter-austin, #BF5700); border-color: var(--chapter-austin, #BF5700); color: #fff; }
         .ev-chapter-row .ev-tab.active[data-ev-chapter="San Antonio"] { background: var(--chapter-sa, #D3DDE4); border-color: var(--chapter-sa-alt, #8FA8B8); color: #1B1B1B; }
         /* PAYOUTS panel: drop Registered + Games columns on phones (Kerry, 2026-07-08) */
-        @media (max-width: 768px) {
+        @media (max-width: 560px) {
             .payout-hide-mobile { display: none; }
             .payout-breakdown-inner { padding: 0.4rem 0.5rem 0.6rem 0.75rem !important; }
         }
@@ -675,7 +675,7 @@
             background: #f1f5f9;
         }
         /* Mobile: hide events table column toggle */
-        @media (max-width: 768px) {
+        @media (max-width: 560px) {
             .column-toggle-wrapper { display: none; }
             .event-summary .stat-card { min-width: 0; }
             .event-summary { gap: 0.25rem; }
@@ -4981,7 +4981,7 @@
     };
     const PAYOUT_CAT_LABELS_SHORT = { individual_net: "Ind Net", individual_gross: "Ind Gross", closest_to_pin: "CTP" };
     function payoutCatBadge(cat) {
-        const mobile = window.innerWidth <= 768;
+        const mobile = window.innerWidth <= 560;
         const label = (mobile && PAYOUT_CAT_LABELS_SHORT[cat]) || PAYOUT_CAT_LABELS[cat] || cat;
         const c = PAYOUT_CAT_COLORS[cat] || "#f1f5f9;color:#475569";
         return `<span style="display:inline-block;padding:1px 8px;border-radius:99px;font-size:0.72rem;font-weight:600;background:${c};">${escapeHtml(label)}</span>`;

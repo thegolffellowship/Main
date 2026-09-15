@@ -87,7 +87,7 @@ header.shell-nav {
 }
 /* Admin role: the ADMIN pill (a real /accounting link) replaces the
    role badge on desktop; mobile keeps the badge (drawer row is the link) */
-@media (min-width: 769px) {
+@media (min-width: 561px) {
     .shell-nav .role-badge.shell-badge-desktop-hide { display: none !important; }
 }
 .shell-logout {
@@ -178,7 +178,7 @@ header.shell-nav {
 .shell-cta-sheet a:hover { background: var(--primary-hover, #D06B2E); color: #fff; }
 .shell-cta-sheet a + a { background: #fff; color: #1B1B1B; border: 2px solid #1B1B1B; }
 .shell-cta-sheet a + a:hover { background: #F3F2EF; color: #1B1B1B; }
-@media (min-width: 769px) {
+@media (min-width: 561px) {
     .shell-cta-pill { display: inline-block; }
     /* Desktop member: nav pill carries the CTA; hide the banner row
        (v2.57.6: the row sits OUTSIDE main now — full-width banner) */
@@ -255,8 +255,29 @@ header.shell-nav {
     font: 700 11px/1 'Bitter', serif; letter-spacing: 1.5px; text-transform: uppercase;
 }
 
+/* ── Mid-width desktop: two-row nav, never the drawer ─────────────
+   Kerry 2026-09-15: "Don't go to mobile view on desktop until the
+   window gets much narrower." The drawer + mobile bar now start at
+   560px (the ONE breakpoint, see CLAUDE.md), not 768px. Between 561px
+   and ~1480px the single-row admin nav no longer fits (brand ≈200px +
+   nine links ≈850px + Admin/Two Man Tour/Log Out ≈340px), so the header
+   wraps: row 1 = brand + right-hand pills, row 2 = the links, which
+   wrap again inside their own row when the window is narrower still.
+   Above 1480px nothing changes. The member shell wraps the same way
+   (brand + CTA on row 1, the three tabs on row 2). */
+@media (min-width: 561px) and (max-width: 1479px) {
+    header.shell-nav { flex-wrap: wrap; row-gap: 2px; padding: 8px 20px 6px; }
+    .shell-nav .shell-brand, .shell-nav-right, .shell-cta-pill { flex: 0 0 auto; }
+    .shell-nav-right, .shell-cta-pill { margin-left: auto; }
+    .shell-nav-links, .shell-member .shell-member-tabs {
+        order: 3; flex: 1 1 100%; margin-left: 0;
+        flex-wrap: wrap; gap: 4px 20px; padding: 4px 0 2px;
+    }
+    .shell-member .shell-member-tabs { gap: 4px 24px; }
+}
+
 /* ── Responsive: mobile bar ──────────────────────────────────── */
-@media (max-width: 768px) {
+@media (max-width: 560px) {
     header.shell-nav {
         min-height: 56px; padding: 0 12px; gap: 10px;
         flex-direction: row; flex-wrap: nowrap; align-items: center;
@@ -289,7 +310,7 @@ header.shell-nav {
     .shell-ops [data-sheet] { display: none !important; }
     .shell-ops .shell-ops-divider { display: none; }
 }
-@media (min-width: 769px) {
+@media (min-width: 561px) {
     .shell-scrim, .shell-drawer, .shell-sheet, .shell-sheet-scrim { display: none !important; }
 }
 

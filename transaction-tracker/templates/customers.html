@@ -2453,7 +2453,7 @@
             // dates to M/D so the six columns pack close together and the
             // scroll is short (Kerry 2026-07-19). Desktop keeps its roomier
             // layout with right-aligned numerics.
-            const isMobile = !!(window.matchMedia && window.matchMedia('(max-width: 768px)').matches);
+            const isMobile = !!(window.matchMedia && window.matchMedia('(max-width: 560px)').matches);
             const pad = isMobile ? '0.25rem 0.4rem' : '0.3rem 0.6rem';
             const alignNum = isMobile ? 'left' : 'right';
             const alignCtr = isMobile ? 'left' : 'center';
@@ -4468,7 +4468,7 @@
                         requestAnimationFrame(() => {
                             const mobileCard = document.querySelector(`.mobile-card[data-cust-name="${escapeHtml(match.name)}"]`);
                             const desktopRow = document.querySelector(`.cust-row-clickable[data-name="${escapeHtml(match.name)}"]`);
-                            if (mobileCard && window.innerWidth <= 768) {
+                            if (mobileCard && window.innerWidth <= 560) {
                                 mobileCard.scrollIntoView({ behavior: "smooth", block: "center" });
                             } else if (desktopRow) {
                                 desktopRow.classList.add("expanded");

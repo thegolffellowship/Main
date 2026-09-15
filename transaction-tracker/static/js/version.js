@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.408.0";
+window.TGF_VERSION = "2.409.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.409.0",
+    date: "2026-09-15",
+    changes: [
+      "ONE mobile breakpoint, and it is lower (Kerry: \u2018Don\u2019t go to mobile view on desktop until the window gets much narrower\u2019). The hamburger, the drawer, the card lists and the \u22ef Actions sheet now start at 560px instead of 768px, so a zoomed-in or half-screen desktop window keeps the desktop layout. Phones are untouched \u2014 every phone in portrait is well under 560px.",
+      "The number lived in about forty-five places \u2014 media queries, matchMedia() calls and innerWidth checks across twenty files \u2014 and had already drifted (Leads decided \u2018mobile\u2019 at 720px while its own CSS decided at 768px). All of them now say 560, and a guard (test_breakpoint.js) fails the build if a 768 comes back.",
+      "Between 561px and about 1480px the admin nav no longer fits on one line, so instead of overflowing off the right edge it wraps: brand and the Admin / Two Man Tour / Log Out pills on row one, the page links on row two. The member shell does the same with its three tabs. Above 1480px nothing changes.",
+    ],
+  },
   {
     version: "2.408.0",
     date: "2026-09-14",
