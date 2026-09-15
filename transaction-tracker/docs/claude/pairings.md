@@ -124,7 +124,7 @@ CAPT / BACK on the Customers page write an explicit 0/1 via
 and `experience` (`_decorate_roster_roles`); the /pairings GET passes them
 to the page for the CAPT / AMB / NEW badges and the driver mark. Kerry's
 seed lists: ambassadors South, M. Wade, Marroquin, Mazanec, Anthis, Young,
-Callaway, Barna, J. Wade, Cloer, Straiton, Niester, Campos (+ Vasquez per
+Callaway, Barna, J. Wade, Cloer, Straiton, Niester, Rolando Campos (+ Vasquez per
 his words); captains South, M. Wade, Young, Callaway, Baker, Sharitz,
 Wicker, Barna, J. Wade, Cloer, Straiton, Niester, Freund (+ Vasquez); OK
 alone back Young, Niester, Mazanec, Baker. Guard: `test_pairing_roles.py`.

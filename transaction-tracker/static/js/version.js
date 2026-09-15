@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.416.0";
+window.TGF_VERSION = "2.416.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.416.1",
+    date: "2026-09-15",
+    changes: [
+      "Ambassador seed: Rolando Campos (the customer row's spelling) \u2014 the v2.416.0 seed looked for \u2018Roland\u2019 and matched nobody.",
+    ],
+  },
   {
     version: "2.416.0",
     date: "2026-09-15",

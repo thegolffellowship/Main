@@ -1371,7 +1371,8 @@ _PLAYER_ROLE_SEED = {
         "Daniel South", "Mary Wade", "Scott Marroquin", "Luke Mazanec",
         "Larry Anthis", "Jeff Young", "Rob Callaway", "Kelly Barna",
         "John Wade", "Neal Cloer", "Robert Straiton", "Kerry Niester",
-        "Roland Campos", "Gus Vasquez"],
+        # Kerry typed "Roland"; the customer row is "Rolando Campos" (296)
+        "Rolando Campos", "Gus Vasquez"],
     "group_captain": [
         "Daniel South", "Mary Wade", "Jeff Young", "Rob Callaway",
         "Adam Baker", "Don Sharitz", "Fred Wicker", "Kelly Barna",
