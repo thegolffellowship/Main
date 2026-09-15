@@ -27150,6 +27150,7 @@ def get_all_customers(db_path=None) -> list[dict]:
                    c.ambassador, c.group_captain, c.solo_back_ok,
                    c.payment_method,
                    c.payment_handle,
+                   c.created_at, c.acquisition_source,
                    c.updated_at,
                    ce.email   AS primary_email,
                    ce.label   AS email_label

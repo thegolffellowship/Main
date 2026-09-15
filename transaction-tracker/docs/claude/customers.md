@@ -1293,3 +1293,15 @@ now skips any item that already has a term (`source_item_id`);
 `scoring-membership-terms-dedupe[:apply]` removes duplicates (first term
 per item wins) and re-runs the sync. Lesson for the class: an
 idempotency key must be the SOURCE identity, never a derived value.
+
+## The year filter counts a created row as activity (v2.418.0)
+
+Kerry 2026-09-15: "I thought Leads were creating customer_id's, but when I
+searched for Jose (Joe) Mejia, his name did not come up in CUSTOMERS."
+They are — `leads.py _link_or_create_customer` gives every lead a real
+`customers` row (Joe Mejia = 729, `acquisition_source` facebook_lead,
+zero items). The page's default **This Year** activity filter counted
+only purchases in the year, so every lead was invisible until a first
+order. `customers.created_at` in the target year now counts as activity
+(the list query ships `created_at` + `acquisition_source`). Guard:
+`test_customers_filter.js`.

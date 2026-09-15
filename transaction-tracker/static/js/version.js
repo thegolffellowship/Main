@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.417.0";
+window.TGF_VERSION = "2.418.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.418.0",
+    date: "2026-09-15",
+    changes: [
+      "The Starter Sheet carries the full round TGF logo left of the event and course (Kerry: \u2018This needs our full logo left of the event and course\u2019). The artwork is a rebuild of TGF-Logo-R from the emblem paths \u2014 the connector cannot deliver the OneDrive SVG \u2014 and every surface reads it from one file, so dropping the official file over it swaps it everywhere.",
+      "Leads are visible on the Customers page (Kerry: \u2018I thought Leads were creating customer_id\u2019s, but when I searched for Jose (Joe) Mejia, his name did not come up\u2019). They were: every lead gets a real customer row on arrival. The default This Year filter only counted purchases, so a lead with none was hidden. A customer created in the year now counts as activity.",
+    ],
+  },
   {
     version: "2.417.0",
     date: "2026-09-15",

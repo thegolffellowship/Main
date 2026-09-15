@@ -1025,14 +1025,22 @@
         // Activity year filter (default: this calendar year). Counts any
         // membership purchase or event registration in the target year;
         // excludes RSVP-only items and admin/roster-import placeholders.
+        // A LEAD is activity too (Kerry 2026-09-15: "I thought Leads were
+        // creating customer_id's, but when I searched for Jose (Joe)
+        // Mejia, his name did not come up in CUSTOMERS") — every lead
+        // gets a real customers row on arrival, with no purchases, and
+        // this filter was hiding all of them. A row CREATED in the target
+        // year counts, whatever its purchases.
         if (activityFilter === "this_year" || activityFilter === "last_year") {
             const targetYear = String(new Date().getFullYear() - (activityFilter === "last_year" ? 1 : 0));
             const SKIP_TX = new Set(["rsvp_only", "gg_rsvp"]);
-            filtered = filtered.filter(c => (c.items || []).some(i =>
-                (i.order_date || "").startsWith(targetYear)
-                && !SKIP_TX.has(i.transaction_status)
-                && !PLACEHOLDER_MERCHANTS.has(i.merchant)
-            ));
+            filtered = filtered.filter(c =>
+                (c.created_at || "").startsWith(targetYear)
+                || (c.items || []).some(i =>
+                    (i.order_date || "").startsWith(targetYear)
+                    && !SKIP_TX.has(i.transaction_status)
+                    && !PLACEHOLDER_MERCHANTS.has(i.merchant)
+                ));
         }
 
         if (query) {

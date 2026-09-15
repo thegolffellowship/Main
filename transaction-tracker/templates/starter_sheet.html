@@ -45,6 +45,8 @@
       display: flex; justify-content: space-between; align-items: flex-end;
       border-bottom: 3px solid #111; padding-bottom: 8px; margin-bottom: 12px;
     }
+    .sheet-brand { display: flex; align-items: center; gap: 14px; }
+    .sheet-logo { width: 68px; height: 68px; flex-shrink: 0; display: block; }
     .sheet-head h1 {
       font-family: "Bitter", Georgia, serif; font-weight: 700;
       font-size: 22px; margin: 0;
@@ -161,10 +163,14 @@
   </div>
   <div class="sheet">
   <div class="sheet-head">
-    <div>
+    <div class="sheet-brand">
+      {# Full round logo left of the event + course (Kerry 2026-09-15) #}
+      <img class="sheet-logo" src="/static/tgf-logo-r.svg" alt="The Golf Fellowship">
+      <div>
       <h1>{{ pack.event.item_name }}</h1>
       <div class="sub">
         {{ pack.event.course or "" }}{% if pack.event.chapter %} · {{ pack.event.chapter }}{% endif %}
+      </div>
       </div>
     </div>
     <div class="meta">
