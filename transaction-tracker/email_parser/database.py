@@ -28520,6 +28520,89 @@ def get_item(item_id: int, db_path: str | Path | None = None) -> dict | None:
         return dict(row) if row else None
 
 
+def _pairings_drop_if_off_roster(item_id: int, reason: str,
+                                 event_name: str | None = None,
+                                 db_path: str | Path | None = None) -> dict | None:
+    """After a credit / WD / refund / transfer, pull the player off the
+    event's saved PAIRINGS — automatically.
+
+    Kerry 2026-09-15, having credited Will Wallace mid-round and then
+    found him still seated: "He should automatically be removed from the
+    pairings when that happens unless you strongly suggest otherwise."
+    The yes/no popup already existed on two front-end paths (the credit
+    modal and the WD modal), which is precisely the problem: a money
+    action taken anywhere else — the roster tab, the customer page, the
+    MCP bridge, a bulk fix — left the sheet stale, and the amber "Not on
+    the roster" banner was the only thing that noticed. Protect the
+    CLASS, at the boundary: the status change itself does the removal, so
+    no caller can forget to.
+
+    THE GUARD THAT MATTERS: a player can hold more than one row on an
+    event (entry, side games, a package add-on). Crediting ONE row must
+    never unseat someone who is still playing — so this only acts once
+    the player has no active row left on that event at all.
+
+    Re-seating is left to `remove_player_from_pairings`, which re-seats
+    before the start and leaves the seat OPEN after it (for a blind).
+    """
+    try:
+        with _connect(db_path) as conn:
+            it = conn.execute("SELECT * FROM items WHERE id = ?",
+                              (item_id,)).fetchone()
+            if not it:
+                return None
+            it = dict(it)
+            name = (it.get("customer") or "").strip()
+            if not name:
+                return None
+            ev = None
+            if event_name:
+                ev = conn.execute(
+                    """SELECT e.id, e.item_name FROM events e
+                       LEFT JOIN event_aliases ea
+                              ON ea.canonical_event_name = e.item_name
+                       WHERE e.item_name = ? COLLATE NOCASE
+                          OR ea.alias_name = ? COLLATE NOCASE
+                       LIMIT 1""", (event_name, event_name)).fetchone()
+            if ev is None and it.get("event_id"):
+                ev = conn.execute("SELECT id, item_name FROM events WHERE id = ?",
+                                  (it["event_id"],)).fetchone()
+            if ev is None and it.get("item_name"):
+                ev = conn.execute(
+                    """SELECT e.id, e.item_name FROM events e
+                       LEFT JOIN event_aliases ea
+                              ON ea.canonical_event_name = e.item_name
+                       WHERE e.item_name = ? COLLATE NOCASE
+                          OR ea.alias_name = ? COLLATE NOCASE
+                       LIMIT 1""",
+                    (it["item_name"], it["item_name"])).fetchone()
+            if ev is None:
+                return None
+            event_id = ev["id"]
+            still_playing = [
+                r for r in _event_roster_rows(conn, event_id)
+                if (r.get("customer_id") and it.get("customer_id")
+                    and r["customer_id"] == it["customer_id"])
+                or _cmp_person_key(r.get("name") or r.get("customer") or "")
+                   == _cmp_person_key(name)]
+        if still_playing:
+            return {"skipped": "still on the roster", "event_id": event_id,
+                    "name": name}
+        res = remove_player_from_pairings(event_id, name, db_path=db_path)
+        if res.get("found"):
+            logger.info("Pairings: %s removed from event %s after %s "
+                        "(re-seated=%s)", name, event_id, reason,
+                        res.get("reseated"))
+        res["event_id"] = event_id
+        res["event"] = ev["item_name"]
+        res["reason"] = reason
+        return res
+    except Exception:
+        logger.exception("Non-fatal: pairings auto-removal failed for item %s",
+                         item_id)
+        return None
+
+
 def credit_item(item_id: int, note: str = "", db_path: str | Path | None = None) -> bool:
     """Mark an item as credited (money held for future use). Cascades to child payments."""
     with _connect(db_path) as conn:
@@ -28534,7 +28617,11 @@ def credit_item(item_id: int, note: str = "", db_path: str | Path | None = None)
             (note or "Credit on account (cascaded from parent)", item_id),
         )
         conn.commit()
-        return cursor.rowcount > 0
+        changed = cursor.rowcount > 0
+    # Off the roster ⇒ off the sheet, automatically (Kerry 2026-09-15).
+    if changed:
+        _pairings_drop_if_off_roster(item_id, "credit", db_path=db_path)
+    return changed
 
 
 def refund_item(item_id: int, method: str = "", note: str = "",
@@ -28628,7 +28715,10 @@ def refund_item(item_id: int, method: str = "", note: str = "",
                 logger.warning("Failed to create flat accounting entry for refund %s", item_id, exc_info=True)
 
         conn.commit()
-        return cursor.rowcount > 0
+        changed = cursor.rowcount > 0
+    if changed:
+        _pairings_drop_if_off_roster(item_id, "refund", db_path=db_path)
+    return changed
 
 
 def payout_credit(
@@ -28828,7 +28918,10 @@ def wd_item(
                 logger.warning("Failed to create liability entry for WD %s", item_id, exc_info=True)
 
         conn.commit()
-        return cursor.rowcount > 0
+        changed = cursor.rowcount > 0
+    if changed:
+        _pairings_drop_if_off_roster(item_id, "wd", db_path=db_path)
+    return changed
 
 
 def transfer_item(item_id: int, target_event_name: str, note: str = "", db_path: str | Path | None = None) -> dict | None:
@@ -28979,7 +29072,11 @@ def transfer_item(item_id: int, target_event_name: str, note: str = "", db_path:
         conn.commit()
 
         new_values["id"] = new_id
-        return new_values
+    # The player left the SOURCE event — that is the sheet to clear.
+    _pairings_drop_if_off_roster(item_id, "transfer",
+                                 event_name=(orig.get("item_name") or None),
+                                 db_path=db_path)
+    return new_values
 
 
 def reverse_credit(item_id: int, db_path: str | Path | None = None) -> bool:
@@ -55060,6 +55157,50 @@ def _ensure_pairing_tables(conn: sqlite3.Connection) -> None:
         )
         """
     )
+    # BLIND DRAWS (Kerry 2026-09-15, the night Will Wallace was credited
+    # after the shotgun went off): "for any open spots like this, BLIND's
+    # from the field of Members with established handicaps only, should be
+    # added into those slots... Blind's should be auto generated based off
+    # of a history of who's been blinds too, so there's even distribution
+    # of who gets the benefit of being a blind for Team Net over the
+    # course of a year."
+    #
+    # A blind is NOT a seat in the group — nobody is physically there. It
+    # is a drawn player's CARD borrowed to complete a short team, which is
+    # why it never goes into event_pairings (that table is who is on the
+    # cart, and pairing_history is built from it — a blind would invent a
+    # pair that never happened). It lives here, keyed to the empty seat.
+    #
+    # slot_key is the dedupe key so one row can mean two different things
+    # without NULL columns defeating a UNIQUE index: an app-drawn blind is
+    # "<holes>:<group_num>:<cart_pos>"; a blind read back out of a Golf
+    # Genius team string (the 2026 history, where no seat is recorded) is
+    # "gg:<normalized name>".
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS blind_draws (
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            event_id     INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+            event_date   TEXT,
+            chapter      TEXT,
+            holes        TEXT,
+            group_num    INTEGER,
+            slot_label   TEXT,
+            cart_pos     INTEGER,
+            customer_id  INTEGER REFERENCES customers(customer_id),
+            player_name  TEXT NOT NULL,
+            slot_key     TEXT NOT NULL,
+            source       TEXT DEFAULT 'app',
+            note         TEXT,
+            created_at   TEXT DEFAULT (datetime('now')),
+            UNIQUE(event_id, slot_key)
+        )
+        """
+    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_blind_draws_cust "
+                 "ON blind_draws(customer_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_blind_draws_date "
+                 "ON blind_draws(event_date)")
     conn.commit()
 
 
@@ -55184,6 +55325,16 @@ def get_event_pairings(event_id: int, db_path=None) -> dict:
             "tee_choice": r["tee_choice"],
             "handicap_index": hi,
         })
+    # Blinds ride ALONGSIDE the seats, never in them (see the BLIND DRAWS
+    # section): a drawn card completing a short team, not a body in a cart.
+    try:
+        blinds = get_event_blinds(event_id, db_path=db_path)
+    except Exception:
+        logger.exception("Non-fatal: blind read failed for event %s", event_id)
+        blinds = {}
+    for h, grp_list in result.items():
+        for grp in grp_list:
+            grp["blinds"] = (blinds.get(h, {}).get(grp["group_num"]) or [])
     return result
 
 
@@ -55228,9 +55379,11 @@ def _reseat_group_after_removal(players: list) -> list:
 
 
 def remove_player_from_pairings(event_id: int, player_name: str,
-                                dry_run: bool = False, db_path=None) -> dict:
-    """Remove a player from an event's saved pairings and re-seat their
-    group(s) per Kerry's adjustment standard (_reseat_group_after_removal).
+                                dry_run: bool = False, reseat: bool | None = None,
+                                db_path=None) -> dict:
+    """Remove a player from an event's saved pairings, re-seating their
+    group(s) per Kerry's adjustment standard (_reseat_group_after_removal)
+    ONLY while the event has not started.
 
     Built for the roster→pairings sync (Kerry 2026-09-01: WD/credit must
     offer to pull the player from existing pairings). Matches by
@@ -55238,6 +55391,15 @@ def remove_player_from_pairings(event_id: int, player_name: str,
     'Paul Reed' finds 'Paul Reed III' too. dry_run=True reports what WOULD
     happen without writing. Groups emptied by the removal are dropped;
     remaining groups keep their slot labels/tee times.
+
+    `reseat` — None (default) asks the clock: re-seat before the event
+    starts, leave the seat OPEN once it has. Kerry 2026-09-15, having
+    credited a player after the shotgun: "In this case the group would
+    not be 're-seated' because the event starts." The sheet is out, the
+    carts are numbered, the group is on a hole — moving people on paper
+    now only makes the paper wrong. The open seat is then what a blind
+    draw fills (`draw_event_blinds`). Pass True/False to decide it
+    explicitly.
     """
     def _rm_key(nm: str):
         parts = (nm or "").strip().split()
@@ -55247,6 +55409,11 @@ def remove_player_from_pairings(event_id: int, player_name: str,
         return _cmp_person_key(" ".join(parts))
 
     pairings = get_event_pairings(event_id, db_path=db_path)
+    if reseat is None:
+        with _connect(db_path) as _c:
+            _ev = _c.execute("SELECT event_date, start_time, start_time_18 "
+                             "FROM events WHERE id = ?", (event_id,)).fetchone()
+        reseat = not _event_started(dict(_ev)) if _ev else True
     want = _rm_key(player_name)
     hits = []
     for holes, groups in pairings.items():
@@ -55260,15 +55427,18 @@ def remove_player_from_pairings(event_id: int, player_name: str,
     detail = []
     for holes, g, p in hits:
         remaining = [q for q in g["players"] if q is not p]
-        reseated = _reseat_group_after_removal(remaining)
-        g["players"] = reseated
+        if reseat:
+            remaining = _reseat_group_after_removal(remaining)
+        g["players"] = remaining
         detail.append({
             "holes": holes,
             "group_num": g["group_num"],
             "slot_label": g.get("slot_label"),
             "removed": p.get("name"),
+            "reseated": bool(reseat),
+            "open_seat": None if reseat else p.get("cart_pos"),
             "after": [{"name": q.get("name"), "cart_pos": q.get("cart_pos")}
-                      for q in reseated],
+                      for q in remaining],
         })
 
     if not dry_run:
@@ -55276,7 +55446,353 @@ def remove_player_from_pairings(event_id: int, player_name: str,
                    for h, groups in pairings.items()}
         save_event_pairings(event_id, cleaned, db_path=db_path)
     return {"found": True, "removed": len(hits), "dry_run": bool(dry_run),
-            "groups": detail}
+            "reseated": bool(reseat), "groups": detail}
+
+
+# ── BLIND DRAWS ─────────────────────────────────────────────────────
+#    Kerry 2026-09-15, event night, after crediting Will Wallace once the
+#    shotgun had already gone off: "for any open spots like this, BLIND's
+#    from the field of Members with established handicaps only, should be
+#    added into those slots. I've already added for the previously open
+#    spots but not for Will's. Blind's should be auto generated based off
+#    of a history of who's been blinds too, so there's even distribution
+#    of who gets the benefit of being a blind for Team Net over the course
+#    of a year."
+#
+#    WHAT A BLIND IS. A short team cannot play a best-ball against full
+#    ones, so the missing slot borrows a CARD: a player already in the
+#    field is drawn, and their score plays for that team as well as their
+#    own. Golf Genius writes it into the team string as "Bl[LAST, First]",
+#    and our Team Net payout code already pays that slot its equal share
+#    (v2.78.4). So a blind is worth money to the drawn player — which is
+#    exactly why Kerry wants the draw spread evenly over the year rather
+#    than landing on whoever is standing nearest the first tee.
+#
+#    A BLIND IS NOT A SEAT. Nobody is physically in the cart, so a blind
+#    never enters event_pairings: that table is who rode with whom, and
+#    pairing_history is built straight off it — a blind written there
+#    would invent a pair that never happened and then feed the repeat
+#    counts. Blinds live in `blind_draws`, keyed to the empty seat, and
+#    ride alongside the sheet everywhere it is shown.
+
+BLIND_TEAM_SIZE_DEFAULT = 4          # SA foursomes; dial: blind_team_size
+BLIND_MEMBER_STATUSES = ("active_member", "member_plus")
+_BLIND_MARK_RE = re.compile(r"Bl\[([^\]]+)\]")
+
+
+def _blind_team_size(conn) -> int:
+    """Seats a team is meant to have. Four everywhere TGF plays today;
+    a dial rather than a literal because the day an event runs threesomes
+    on purpose, the answer is 3 and no code should have to change."""
+    try:
+        return max(2, int(_setting_via(conn, "blind_team_size") or
+                          BLIND_TEAM_SIZE_DEFAULT))
+    except (TypeError, ValueError):
+        return BLIND_TEAM_SIZE_DEFAULT
+
+
+def _event_started(ev: dict, now: datetime | None = None) -> bool:
+    """Has this event teed off?
+
+    Kerry's ruling the same night: "I could understand if it was before
+    the event started. In this case the group would not be 're-seated'
+    because the event starts." So the re-seat is conditional on this
+    answer, and the answer errs toward STARTED: a sheet already in
+    players' hands must never be reshuffled underneath them, while a
+    sheet that has not gone out yet costs nothing to regenerate. An event
+    dated today with no start time recorded therefore counts as started.
+    """
+    now = now or datetime.now()
+    date_s = (ev.get("event_date") or "").strip()
+    if not date_s:
+        return False
+    try:
+        day = datetime.strptime(date_s[:10], "%Y-%m-%d").date()
+    except ValueError:
+        return False
+    if day < now.date():
+        return True
+    if day > now.date():
+        return False
+    times = []
+    for key in ("start_time", "start_time_18"):
+        t = (ev.get(key) or "").strip()
+        for fmt in ("%H:%M", "%H:%M:%S", "%I:%M %p", "%I:%M%p"):
+            try:
+                times.append(datetime.strptime(t.upper(), fmt).time())
+                break
+            except ValueError:
+                continue
+    if not times:
+        return True          # today, time unknown — treat as underway
+    return now.time() >= min(times)
+
+
+def _blind_slot_key(holes, group_num, cart_pos) -> str:
+    return f"{holes}:{group_num}:{cart_pos}"
+
+
+def get_event_blinds(event_id: int, conn=None, db_path=None) -> dict:
+    """Blinds drawn for one event: {holes: {group_num: [seat, ...]}}.
+
+    Each seat is {"cart_pos", "name", "customer_id", "source"}. Names
+    resolve through customer_id (guiding principle 6) so a rename reaches
+    the blind exactly as it reaches the sheet."""
+    def _run(c):
+        _ensure_pairing_tables(c)
+        rows = c.execute(
+            """SELECT b.holes, b.group_num, b.cart_pos, b.customer_id,
+                      b.source,
+                      COALESCE(NULLIF(TRIM(COALESCE(cu.first_name,'') || ' ' ||
+                                           COALESCE(cu.last_name,'')), ''),
+                               b.player_name) AS player_name
+                 FROM blind_draws b
+                 LEFT JOIN customers cu ON cu.customer_id = b.customer_id
+                WHERE b.event_id = ? AND b.group_num IS NOT NULL
+                ORDER BY b.holes, b.group_num, b.cart_pos""",
+            (event_id,)).fetchall()
+        out: dict = {}
+        for r in rows:
+            out.setdefault(r["holes"], {}).setdefault(r["group_num"], []).append({
+                "cart_pos": r["cart_pos"], "name": r["player_name"],
+                "customer_id": r["customer_id"], "source": r["source"]})
+        return out
+    if conn is not None:
+        return _run(conn)
+    with _connect(db_path) as c2:
+        return _run(c2)
+
+
+def blind_draw_history(conn, year: int | None = None,
+                       exclude_event_id: int | None = None) -> dict:
+    """{customer_id: {"count", "last_date", "name"}} — who has been a
+    blind, and when they last were. THE history the draw is spread over
+    (Kerry: "even distribution ... over the course of a year"). Rows from
+    Golf Genius (source 'gg') count exactly as ours do: the benefit was
+    received either way."""
+    _ensure_pairing_tables(conn)
+    y = year or datetime.now().year
+    sql = ["""SELECT b.customer_id, COUNT(*) AS n, MAX(b.event_date) AS last_date,
+                     MAX(COALESCE(NULLIF(TRIM(COALESCE(cu.first_name,'') || ' ' ||
+                                              COALESCE(cu.last_name,'')), ''),
+                                  b.player_name)) AS nm
+                FROM blind_draws b
+                LEFT JOIN customers cu ON cu.customer_id = b.customer_id
+               WHERE b.customer_id IS NOT NULL
+                 AND substr(COALESCE(b.event_date, ''), 1, 4) = ?"""]
+    params: list = [str(y)]
+    if exclude_event_id:
+        sql.append(" AND b.event_id <> ?")
+        params.append(exclude_event_id)
+    sql.append(" GROUP BY b.customer_id")
+    rows = conn.execute("".join(sql), params).fetchall()
+    return {r["customer_id"]: {"count": r["n"], "last_date": r["last_date"],
+                               "name": r["nm"]} for r in rows}
+
+
+def backfill_blind_draws_from_gg(year: int | None = None, dry_run: bool = True,
+                                 db_path=None) -> dict:
+    """Read the year's blinds back out of Golf Genius.
+
+    Every recorded Team/Cart Net row carries its team string, and a blind
+    fill rides in it as "Bl[LAST, First]". That is the only record of who
+    has already had the benefit, so the distribution starts from the real
+    history instead of from zero. Winner rows and board rows describe the
+    same team, so the dedupe key is per (event, drawn player)."""
+    y = year or datetime.now().year
+    found, written, unresolved = [], 0, []
+    with _connect(db_path) as conn:
+        _ensure_pairing_tables(conn)
+        rows = conn.execute(
+            """SELECT r.event_id, r.player_name, e.event_date, e.chapter
+                 FROM gg_game_results r
+                 JOIN events e ON e.id = r.event_id
+                WHERE r.is_team = 1 AND r.player_name LIKE '%Bl[%'
+                  AND substr(COALESCE(e.event_date,''), 1, 4) = ?""",
+            (str(y),)).fetchall()
+        for r in rows:
+            for raw in _BLIND_MARK_RE.findall(r["player_name"] or ""):
+                nm = raw.strip()
+                cid = _resolve_scoring_player(conn, nm)
+                rec = {"event_id": r["event_id"], "event_date": r["event_date"],
+                       "chapter": r["chapter"], "name": nm, "customer_id": cid}
+                found.append(rec)
+                if cid is None:
+                    unresolved.append(rec)
+                if dry_run:
+                    continue
+                cur = conn.execute(
+                    """INSERT OR IGNORE INTO blind_draws
+                           (event_id, event_date, chapter, player_name,
+                            customer_id, slot_key, source)
+                       VALUES (?, ?, ?, ?, ?, ?, 'gg')""",
+                    (r["event_id"], r["event_date"], r["chapter"], nm, cid,
+                     "gg:" + _cmp_person_key_str(nm)))
+                written += cur.rowcount
+        if not dry_run:
+            conn.commit()
+    return {"year": y, "dry_run": bool(dry_run), "rows_scanned": len(rows),
+            "blinds_found": len(found), "written": written,
+            "unresolved": unresolved, "found": found}
+
+
+def _cmp_person_key_str(name: str) -> str:
+    k = _cmp_person_key(name)
+    return "|".join(str(x) for x in k)
+
+
+def event_blind_pool(conn, event_id: int, year: int | None = None) -> dict:
+    """Who may be drawn as a blind for this event, and who may not.
+
+    Kerry's eligibility, verbatim: "BLIND's from the field of Members with
+    established handicaps only". Three gates, each reported rather than
+    silently applied —
+      IN THE FIELD  : on tonight's roster (a borrowed card has to exist)
+      MEMBER        : active_member / member_plus (not guests, not
+                      first-timers, not former members)
+      ESTABLISHED   : has a TGF handicap index, which our own computation
+                      only issues at min_rounds (3) rounds or more
+    """
+    rows = _event_roster_rows(conn, event_id)
+    hcp = _roster_handicap_index_map(conn)
+    hist = blind_draw_history(conn, year=year, exclude_event_id=event_id)
+    eligible, excluded, seen = [], [], set()
+    for r in rows:
+        cid = r.get("customer_id")
+        nm = (r.get("name") or r.get("customer") or "").strip()
+        key = cid or nm.lower()
+        if not nm or key in seen:
+            continue
+        seen.add(key)
+        status = (r.get("current_player_status") or "").strip().lower()
+        idx = hcp.get(nm.lower())
+        h = hist.get(cid) or {}
+        entry = {"customer_id": cid, "name": nm, "status": status,
+                 "handicap_index": idx, "blinds_ytd": h.get("count", 0),
+                 "last_blind": h.get("last_date")}
+        if cid is None:
+            excluded.append({**entry, "why": "no customer record"})
+        elif status not in BLIND_MEMBER_STATUSES:
+            excluded.append({**entry, "why": f"not a member ({status or 'unknown'})"})
+        elif idx is None:
+            excluded.append({**entry, "why": "no established handicap index"})
+        else:
+            eligible.append(entry)
+    eligible.sort(key=lambda e: (e["blinds_ytd"], e["last_blind"] or "",
+                                 e["name"].lower()))
+    return {"eligible": eligible, "excluded": excluded,
+            "year": year or datetime.now().year}
+
+
+def _blind_tiebreak(event_id, holes, group_num, cart_pos, cid) -> str:
+    """Stable, non-alphabetical tiebreak. Two players equal on history
+    must not be separated by surname — that would hand the benefit to the
+    top of the alphabet every time. Hashing the seat keeps the draw
+    reproducible (re-running names the same person) without that bias."""
+    import hashlib
+    raw = f"{event_id}:{holes}:{group_num}:{cart_pos}:{cid}"
+    return hashlib.md5(raw.encode()).hexdigest()
+
+
+def draw_event_blinds(event_id: int, dry_run: bool = True, redraw: bool = False,
+                      year: int | None = None, db_path=None) -> dict:
+    """Fill every open seat on the saved sheet with a blind.
+
+    An OPEN SEAT is a seat a full team would have and this group does not
+    (`_blind_team_size`, 4). Selection order is Kerry's distribution rule:
+    fewest blinds this year first, then longest since the last one (never
+    drawn sorts first), then a seat hash so equal players are separated by
+    something other than the alphabet.
+
+    Never drawn for a seat: anyone in that group (a card cannot fill its
+    own team) and anyone already blind elsewhere in this event (one
+    benefit per person per night). `redraw=True` clears this event's
+    app-drawn blinds first; GG-sourced history rows are never touched."""
+    with _connect(db_path) as conn:
+        _ensure_pairing_tables(conn)
+        ev = conn.execute("SELECT * FROM events WHERE id = ?",
+                          (event_id,)).fetchone()
+        if not ev:
+            return {"error": f"no event {event_id}"}
+        ev = dict(ev)
+        size = _blind_team_size(conn)
+        pairings = get_event_pairings(event_id, db_path=db_path)
+        pool = event_blind_pool(conn, event_id, year=year)
+        by_cid = {e["customer_id"]: e for e in pool["eligible"]}
+        existing = get_event_blinds(event_id, conn=conn)
+        if redraw and not dry_run:
+            conn.execute("DELETE FROM blind_draws WHERE event_id = ? "
+                         "AND source = 'app'", (event_id,))
+            conn.commit()
+            existing = get_event_blinds(event_id, conn=conn)
+        taken = {b["customer_id"] for hs in existing.values()
+                 for seats in hs.values() for b in seats
+                 if b["customer_id"] is not None}
+        drawn, open_seats, unfilled = [], 0, []
+        for holes, groups in sorted(pairings.items()):
+            for g in sorted(groups, key=lambda x: x["group_num"]):
+                seated = {p.get("cart_pos") for p in (g.get("players") or [])}
+                here = {p.get("customer_id") for p in (g.get("players") or [])}
+                have = {b["cart_pos"] for b in
+                        (existing.get(holes, {}).get(g["group_num"]) or [])}
+                for pos in range(1, size + 1):
+                    if pos in seated or pos in have:
+                        continue
+                    open_seats += 1
+                    cands = [e for e in pool["eligible"]
+                             if e["customer_id"] not in taken
+                             and e["customer_id"] not in here]
+                    if not cands:
+                        unfilled.append({"holes": holes,
+                                         "group_num": g["group_num"],
+                                         "slot_label": g.get("slot_label"),
+                                         "cart_pos": pos,
+                                         "why": "no eligible player left"})
+                        continue
+                    pick = min(cands, key=lambda e: (
+                        e["blinds_ytd"], e["last_blind"] or "",
+                        _blind_tiebreak(event_id, holes, g["group_num"], pos,
+                                        e["customer_id"])))
+                    taken.add(pick["customer_id"])
+                    row = {"holes": holes, "group_num": g["group_num"],
+                           "slot_label": g.get("slot_label"), "cart_pos": pos,
+                           "customer_id": pick["customer_id"],
+                           "name": pick["name"],
+                           "blinds_ytd": pick["blinds_ytd"],
+                           "last_blind": pick["last_blind"],
+                           "gg_text": f"Bl[{_sort_name(pick['name'])}]"}
+                    drawn.append(row)
+                    if dry_run:
+                        continue
+                    conn.execute(
+                        """INSERT OR REPLACE INTO blind_draws
+                               (event_id, event_date, chapter, holes, group_num,
+                                slot_label, cart_pos, customer_id, player_name,
+                                slot_key, source)
+                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'app')""",
+                        (event_id, ev.get("event_date"), ev.get("chapter"),
+                         holes, g["group_num"], g.get("slot_label"), pos,
+                         pick["customer_id"], pick["name"],
+                         _blind_slot_key(holes, g["group_num"], pos)))
+        if not dry_run:
+            conn.commit()
+    return {"event_id": event_id, "event": ev.get("item_name"),
+            "dry_run": bool(dry_run), "team_size": size,
+            "open_seats": open_seats, "drawn": drawn, "unfilled": unfilled,
+            "eligible": len(pool["eligible"]),
+            "excluded": pool["excluded"],
+            "already_drawn": [b for hs in existing.values()
+                              for seats in hs.values() for b in seats]}
+
+
+def clear_event_blinds(event_id: int, db_path=None) -> int:
+    """Drop this event's app-drawn blinds (GG history rows stay)."""
+    with _connect(db_path) as conn:
+        _ensure_pairing_tables(conn)
+        cur = conn.execute("DELETE FROM blind_draws WHERE event_id = ? "
+                           "AND source = 'app'", (event_id,))
+        conn.commit()
+        return cur.rowcount
 
 
 # ── PAIRINGS REPORTS: Divisions & Flights, Proximity Markers ─────────
@@ -56031,6 +56547,12 @@ def get_event_print_pack(event_id: int, db_path=None) -> dict | None:
                 "slot_label": g.get("slot_label") or f"Group {g.get('group_num')}",
                 "players": players,
                 "carts": _carts(players),
+                # The team's drawn cards for its empty seats. Printed on
+                # the starter sheet so the group knows what completes
+                # their Team Net — never on a cart sign, because nobody
+                # by that name is in the cart.
+                "blinds": [{**b, "sort_name": _sort_name(b.get("name") or "")}
+                           for b in (g.get("blinds") or [])],
             })
     # WHEN to be there, not just where (Kerry 2026-09-08: the starter
     # sheet "needs to show the time of the shotgun"). start_time is

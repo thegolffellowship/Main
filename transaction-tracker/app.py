@@ -5356,6 +5356,34 @@ def api_pairings_remove_player(event_id):
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/events/<int:event_id>/pairings/blinds", methods=["POST"])
+@require_role("manager")
+def api_pairings_blinds(event_id):
+    """Draw BLINDs for the open seats on this event's saved sheet.
+
+    Kerry 2026-09-15: "for any open spots like this, BLIND's from the
+    field of Members with established handicaps only, should be added
+    into those slots... so there's even distribution of who gets the
+    benefit of being a blind for Team Net over the course of a year."
+
+    Body: {"apply": bool, "redraw": bool, "clear": bool}. Default is a
+    dry run — the draw is money-adjacent (a blind's card plays for a team
+    that can win Team Net), so nothing is written until asked.
+    """
+    from email_parser.database import draw_event_blinds, clear_event_blinds
+    data = request.get_json(silent=True) or {}
+    try:
+        if data.get("clear"):
+            return jsonify({"status": "ok",
+                            "cleared": clear_event_blinds(event_id)})
+        return jsonify(draw_event_blinds(
+            event_id, dry_run=not data.get("apply"),
+            redraw=bool(data.get("redraw"))))
+    except Exception as e:
+        logger.exception("Blind draw failed for event %d", event_id)
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/events/<int:event_id>/pairings/gg-rounds")
 @require_role("manager")
 def api_pairings_gg_rounds(event_id):

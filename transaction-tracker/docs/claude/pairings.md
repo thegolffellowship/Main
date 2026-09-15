@@ -1584,3 +1584,116 @@ with no way to reach them. Opening also scrolls the row up under the nav.
 **Chevrons:** the events and customers row arrows now use the house
 values (TGF orange, ▶, 0.75rem) to match `.tgf-exp`. `/me` and Money Flow
 still carry their own grey ▸ and are the remaining offenders.
+
+## Rule 15 — a credited player leaves the sheet, and a BLIND fills the seat (v2.438.0)
+
+Kerry, 2026-09-15, having credited Will Wallace after the s9.23 shotgun
+had already gone off and then found him still on the sheet:
+
+> "He should automatically be removed from the pairings when that happens
+> unless you strongly suggest otherwise. I could understand if it was
+> before the event started. In this case the group would not be
+> 're-seated' because the event starts. However, for games purposes, and
+> it's something we've never really discussed, is that for any open spots
+> like this, BLIND's from the field of Members with established handicaps
+> only, should be added into those slots. I've already added for the
+> previously open spots but not for Will's. Blind's should be auto
+> generated based off of a history of who's been blinds too, so there's
+> even distribution of who gets the benefit of being a blind for Team Net
+> over the course of a year."
+
+### 15a — the removal is automatic, and it happens at the boundary
+
+`_pairings_drop_if_off_roster(item_id, reason)` runs inside `credit_item`,
+`refund_item`, `wd_item` and `transfer_item`. The yes/no popup
+(`offerPairingRemoval`) stays for the two front-end paths that had it, but
+it is no longer what keeps the sheet honest: a credit taken from the
+roster tab, the customer page, the MCP bridge or a bulk fix now clears the
+sheet too. Protect the CLASS, not the instance.
+
+**The one guard.** A player can hold more than one active row on an event
+— entry, side games, a package add-on. Crediting ONE row must never unseat
+someone who is still playing, so the removal only fires once the player
+has no active row left on that event at all (`_event_roster_rows`).
+
+Transfers clear the SOURCE event's sheet, not the target's.
+
+### 15b — the clock decides whether the group re-seats
+
+`remove_player_from_pairings(..., reseat=None)` asks `_event_started(ev)`:
+
+* **before the start** — seats close up per the adjustment standard
+  (intact cart pairs keep the front seats, the leftover single slides
+  down). Unchanged.
+* **after the start** — the seat is left OPEN. The sheet is printed, the
+  carts are numbered, the group is on a hole; moving people on paper now
+  only makes the paper wrong.
+
+An event dated **today with no start time recorded counts as started**.
+The asymmetry is deliberate: re-seating a sheet that has not gone out
+costs nothing, and re-seating one that has is the expensive mistake.
+
+### 15c — what a blind is, and what it is not
+
+A short team cannot play a best-ball against full ones, so the empty slot
+borrows a **card**: a player already in the field is drawn and their score
+plays for that team as well as their own. Golf Genius writes it into the
+team string as `Bl[LAST, First]`, and `assemble_event_game_payouts` has
+paid that slot its equal share since v2.78.4. **Being a blind is worth
+money** — which is exactly why the draw is a rule and not a favour.
+
+**A blind is never written into `event_pairings`.** That table is who rode
+with whom, and `pairing_history` (the repeat counts on the cards) is built
+straight off it — a blind there would invent a pairing that never
+happened. Blinds live in `blind_draws`, keyed to the empty seat, and ride
+alongside the sheet: greyed and marked on the PAIRINGS cards (no drag, no
+X), printed under the group on the starter sheet, absent from cart signs
+because nobody by that name is in the cart.
+
+### 15d — eligibility and the draw order
+
+`event_blind_pool(conn, event_id)` applies three gates and **reports** each
+exclusion rather than silently dropping it:
+
+| gate | test |
+|---|---|
+| in the field | on this event's roster — a borrowed card has to exist |
+| member | `current_player_status` in `active_member` / `member_plus` |
+| established | has a TGF handicap index, which our own computation only issues at `min_rounds` (3) rounds or more |
+
+`draw_event_blinds(event_id)` fills every seat a full team would have and
+this group does not (`_blind_team_size`, dial `blind_team_size`, default
+4). Order:
+
+1. **fewest blinds this calendar year** — Kerry's distribution rule
+2. then **longest since their last one** (never drawn sorts first)
+3. then a **seat hash** — equal players must not be separated by surname,
+   or the benefit lands at the top of the alphabet every time
+
+Never drawn for a seat: anyone **in that group** (a card cannot fill its
+own team) and anyone **already blind elsewhere in this event** (one
+benefit per person per night). The draw is a **dry run by default** and
+previews every pick with its year-to-date count before anything is
+written.
+
+### 15e — the history is real, not from zero
+
+`backfill_blind_draws_from_gg(year)` reads the year's blinds back out of
+Golf Genius: every recorded Team/Cart Net row carries its team string and
+a blind rides in it as `Bl[...]`. Those rows land as `source='gg'` and
+count exactly as ours do — the benefit was received either way.
+
+### Surfaces
+
+* `POST /api/events/<id>/pairings/blinds` — `{apply, redraw, clear}`
+* 🎲 **Blinds** button on the PAIRINGS actions row
+* `scoring-blinds:<event>[|draw|apply|clear]`
+* `scoring-blinds-history[:<year>[|backfill]]`
+
+### Open for ratification (rule 3b)
+
+The draw feeds Team Net money, so these specifics are stated here rather
+than assumed: **team size 4**; **field-only** eligibility; **one blind per
+person per event**; **calendar-year** counting across both chapters; and
+the fact that our draw is a **proposal Kerry enters into GG** — the money
+still follows GG's recorded team string, so nothing pays off this table.

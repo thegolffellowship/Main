@@ -647,6 +647,30 @@ def get_customer_data_audit() -> str:
 # exact change and mutates nothing until a second call passes
 # confirm=True. Reads are untouched.
 
+def _bridge_event(query: str):
+    """Resolve an event-name fragment to its row for a bridge command.
+
+    Returns the row dict, or a JSON error string the caller returns as-is.
+    An exact name always wins: "s9.23 The Quarry" must not be ambiguous
+    just because "Excess credit — s9.23 The Quarry" also contains it."""
+    import email_parser.database as _db
+    q = (query or "").strip()
+    with _db._connect() as c:
+        rows = c.execute(
+            "SELECT id, item_name, event_date FROM events "
+            "WHERE item_name LIKE '%' || ? || '%' "
+            "ORDER BY event_date DESC", (q,)).fetchall()
+    if not rows:
+        return json.dumps({"error": f"no event matches '{q}'"})
+    exact = [r for r in rows if (r["item_name"] or "").lower() == q.lower()]
+    if exact:
+        return dict(exact[0])
+    if len(rows) > 1:
+        return json.dumps({"error": "ambiguous event",
+                           "matches": [r["item_name"] for r in rows]})
+    return dict(rows[0])
+
+
 _AGENT_NAME = "mcp-claude"
 
 
@@ -1800,7 +1824,15 @@ def _scoring_dispatch(url: str, extract: str):
                                    deletes the losers
       scoring-pairings-remove:<event>|<player>[|dry]  pull one player from
                                    the saved pairings + re-seat the group
-                                   per the TGF adjustment standard
+                                   per the TGF adjustment standard (a
+                                   started event leaves the seat OPEN)
+      scoring-blinds:<event>[|draw|apply|clear]  BLIND draws for the open
+                                   seats: no arg = pool + current draw,
+                                   draw = preview, apply = write, clear =
+                                   drop this event's app-drawn blinds
+      scoring-blinds-history[:<year>[|backfill]]  who has been a blind
+                                   this year (backfill reads the year's
+                                   Golf Genius team strings into the store)
       scoring-facilities           facility census (course registry v1)
       scoring-partial-credit       JSON {"item_id","amount","new_holes"?,
                                    "package_index"?,"note"?} — partial CREDIT
@@ -4712,6 +4744,47 @@ def _scoring_dispatch(url: str, extract: str):
             # combine-9s 18-hole indexes from TGF scores vs TGF index x2,
             # plus the 75% onboarding-rule validation.
             return json.dumps(db.ghin_comparison_analysis(),
+                              indent=2, default=str)
+        if cmd == "scoring-blinds":
+            # "<event>[|draw|apply|clear]" — BLIND draws for the open
+            # seats on a saved sheet (Kerry 2026-09-15). Default and
+            # "draw" are dry runs; only "apply" writes. Event name is
+            # parsed from the LEFT because the mode words are fixed.
+            _parts = [x.strip() for x in arg.split("|")]
+            _evq = _parts[0]
+            _mode = (_parts[1].lower() if len(_parts) > 1 else "")
+            if not _evq:
+                return json.dumps({"error": "<event>[|draw|apply|clear]"})
+            _ev = _bridge_event(_evq)
+            if isinstance(_ev, str):
+                return _ev
+            if _mode == "clear":
+                return json.dumps({"event": _ev["item_name"],
+                                   "cleared": db.clear_event_blinds(_ev["id"])},
+                                  indent=2, default=str)
+            out = db.draw_event_blinds(_ev["id"], dry_run=(_mode != "apply"),
+                                       redraw=(_mode == "apply"))
+            return json.dumps(out, indent=2, default=str)
+        if cmd == "scoring-blinds-history":
+            # "[<year>][|backfill|apply]" — the blind history the draw
+            # spreads itself over. backfill reads Golf Genius team
+            # strings ("Bl[LAST, First]") into blind_draws; it is a dry
+            # run unless "apply" follows.
+            _parts = [x.strip() for x in arg.split("|")] if arg.strip() else [""]
+            _yr = int(_parts[0]) if _parts[0].isdigit() else None
+            _mode = (_parts[1].lower() if len(_parts) > 1 else "")
+            if _parts[0].lower() == "backfill":
+                _mode = _mode or "backfill"
+            if _mode in ("backfill", "apply"):
+                return json.dumps(db.backfill_blind_draws_from_gg(
+                    year=_yr, dry_run=(_mode != "apply")), indent=2, default=str)
+            with db._connect() as _c:
+                hist = db.blind_draw_history(_c, year=_yr)
+            rows = sorted(hist.items(), key=lambda kv: (-kv[1]["count"],
+                                                        kv[1]["name"] or ""))
+            return json.dumps({"year": _yr or 2026, "players": len(rows),
+                               "history": [{"customer_id": k, **v}
+                                           for k, v in rows]},
                               indent=2, default=str)
         if cmd == "scoring-pairings-remove":
             # "<event>|<player>[|dry]" — pull one player from the event's

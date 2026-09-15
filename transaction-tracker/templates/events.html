@@ -418,6 +418,18 @@
             transition: background 0.12s;
         }
         .pairing-player-row:hover { background: var(--bg-hover); }
+        /* A BLIND is a drawn card, not a body in the cart — greyed,
+           italic, and it never gets the drag cursor or an X. */
+        .pairing-player-row.pairing-blind-row {
+            background: repeating-linear-gradient(45deg, #fafafa, #fafafa 6px, #f1f1f1 6px, #f1f1f1 12px);
+            color: var(--text-muted); font-style: italic; cursor: default;
+        }
+        .pairing-player-row.pairing-blind-row:hover {
+            background: repeating-linear-gradient(45deg, #fafafa, #fafafa 6px, #f1f1f1 6px, #f1f1f1 12px);
+        }
+        .pairing-player-row.pairing-blind-row .pairing-player-name {
+            font-weight: 600; letter-spacing: 0.02em;
+        }
         /* STANDINGS in/out bands — same convention as Player Rankings
            (Kerry 2026-07-31). Class-based, not inline, so :hover still
            gives feedback on a coloured row. */
@@ -6287,6 +6299,7 @@
                 // matrix and course card.
                 html += `<button class="pairings-action-btn" onclick="window.open('/events/${ev.id}/divisions-flights','_blank')" title="Print Divisions &amp; Flights — NET, Skins and Gross on one page">&#x1F5A8; Divisions &amp; Flights</button>`;
                 html += `<button class="pairings-action-btn" onclick="window.open('/events/${ev.id}/proximity-markers','_blank')" title="Print Closest-to-the-Pin markers for the par 3s">&#x1F5A8; Proximity</button>`;
+                html += `<button class="pairings-action-btn pairings-blinds-btn" title="Draw BLINDs for the open seats — members in the field with an established handicap, spread evenly over the year">&#x1F3B2; Blinds</button>`;
             }
         }
         html += '</div>'; // .pairings-actions
@@ -6838,6 +6851,17 @@
                 html += '</div>';
             }
 
+            // BLINDS (Kerry 2026-09-15). A blind is not a seat — it is a
+            // drawn card completing a short team for Team Net — so it
+            // renders under the foursome, marked, and is never draggable
+            // and never has an X. Removing it means redrawing.
+            (grp.blinds || []).forEach(b => {
+                html += `<div class="pairing-player-row pairing-blind-row" title="BLIND draw — ${escapeHtml(b.name || '')}'s card plays for this team. Nobody is in the cart.">`
+                    + '<span class="pairing-cart-dot" style="background:#bbb;"></span>'
+                    + `<span class="pairing-player-name">BLIND &middot; ${escapeHtml(b.name || '')}</span>`
+                    + '</div>';
+            });
+
             // Drop rail for drag-and-drop (Kerry 2026-07-31). Hidden
             // until a player is dragged over this card; the label says
             // exactly what releasing will do, including when it means
@@ -6847,6 +6871,50 @@
         });
         html += '</div>'; // .pairings-groups-grid
         return html;
+    }
+
+    /** BLIND DRAWS (Kerry 2026-09-15). Every open seat on the saved
+     *  sheet gets a drawn card so a short team can still play Team Net.
+     *  The draw is money-adjacent, so it PREVIEWS first: the dialog names
+     *  every player, the seat they fill, and how many blinds they have
+     *  already had this year — then writes only on OK. */
+    async function drawBlinds(evId, container, ev) {
+        try {
+            const res = await fetch(`/api/events/${evId}/pairings/blinds`, {
+                method: "POST", headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({}),
+            });
+            const d = await res.json();
+            if (!res.ok || d.error) { alert("Blind draw failed: " + (d.error || res.status)); return; }
+            const already = (d.already_drawn || []).length;
+            if (!d.drawn.length) {
+                alert(d.open_seats
+                    ? `${d.open_seats} open seat(s), but no eligible player left `
+                      + `(members in the field with an established handicap).`
+                    : `No open seats — every group is a full ${d.team_size}.`
+                      + (already ? `\n\n${already} blind(s) already drawn.` : ""));
+                return;
+            }
+            const lines = d.drawn.map(b =>
+                `  ${b.slot_label || "Group " + b.group_num} seat ${b.cart_pos}: `
+                + `${b.name}  (${b.blinds_ytd} blind${b.blinds_ytd === 1 ? "" : "s"} `
+                + `this year${b.last_blind ? ", last " + b.last_blind : ""})`).join("\n");
+            const ok = confirm(
+                `BLIND DRAW — ${d.drawn.length} open seat(s)\n\n${lines}\n\n`
+                + `Drawn from members in the field with an established handicap, `
+                + `fewest blinds this year first.\n\nRecord these?`);
+            if (!ok) return;
+            const w = await fetch(`/api/events/${evId}/pairings/blinds`, {
+                method: "POST", headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ apply: true, redraw: true }),
+            });
+            const wd = await w.json();
+            if (!w.ok || wd.error) { alert("Blind draw failed: " + (wd.error || w.status)); return; }
+            await loadPairings(evId);
+            if (container && ev) rerenderDetail(container, ev);
+        } catch (err) {
+            alert("Blind draw failed: " + err.message);
+        }
     }
 
     // ROSTER-ONLY REFRESH (Kerry 2026-09-15: "Just had a late signup...
@@ -9770,6 +9838,17 @@
                 rerenderDetail(container, ev);
             });
         }
+
+        // BLINDS — draw a card for every open seat (Kerry 2026-09-15).
+        container.querySelectorAll('.pairings-blinds-btn').forEach(btn => {
+            btn.addEventListener('click', async e => {
+                e.stopPropagation();
+                const was = btn.textContent;
+                btn.textContent = 'Drawing…'; btn.disabled = true;
+                try { await drawBlinds(ev.id, container, ev); }
+                finally { btn.textContent = was; btn.disabled = false; }
+            });
+        });
 
         // Re-check roster (Kerry 2026-09-15) — roster only, never groups.
         container.querySelectorAll('.pairings-roster-refresh').forEach(btn => {
