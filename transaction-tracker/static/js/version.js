@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.440.0";
+window.TGF_VERSION = "2.441.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.441.0",
+    date: "2026-09-15",
+    changes: [
+      "EVERY HOLE OF THE EVENT IS A COLUMN, played or not (Kerry: \u2018Also need to show ALL holes that will be played for that event, whether or not that have been played\u2019). The grid was built from the holes that had SCORES on them, so it grew a column each time a group finished one \u2014 you could see who had posted, never who was behind. The column set now comes from the EVENT: its hole count and which nine it plays (`nine_side`), with the posted holes unioned in so a card that ran somewhere unexpected still shows. That also answers the reason the restriction existed \u2014 keeping a front-nine event from rendering 10-18 \u2014 by asking the event instead of inferring it from what happens to be posted.",
+      "PAR now reads off the TEES IN PLAY rather than off the holes already scored, so an unplayed hole still carries its par and the row is complete from the first group out.",
+      "PIN TO TOP LANDS UNDER THE WHOLE STICKY STACK (Kerry: \u2018Pin to top goes a little high on the LEADERBOARD\u2019). That page pins three bars \u2014 the dark header, the orange contests CTA and the top tabs \u2014 and the pin maths counted the header plus a `.tab-nav` that does not exist there, so an expanded event slid up under the tabs with its name half cut off. The offset is now measured from whatever is ACTUALLY sticky, which also fixes the same undershoot on the Match Play name jump.",
+    ],
+  },
   {
     version: "2.440.0",
     date: "2026-09-15",

@@ -2734,13 +2734,30 @@
     //    offset comes from the sticky chrome's measured height rather
     //    than a hard-coded number, because the header's height changes
     //    with role and viewport (the same reason auth.js measures it).
+    // THE WHOLE STICKY STACK, not two named pieces of it (Kerry
+    // 2026-09-15: "Pin to top goes a little high on the LEADERBOARD").
+    // This page pins THREE bars — the dark header, the orange contests
+    // CTA and the top tabs (prPinBars makes the last two sticky at
+    // runtime) — and the pin maths counted the header and a `.tab-nav`
+    // that does not exist here, so a pinned event slid up under the
+    // tabs with its name half cut off. Measured, and only counted when
+    // the element is ACTUALLY sticky, so the same call is right on a
+    // page that pins fewer bars.
+    function evlbStickyTop() {
+        return ["header", ".contest-cta-row", ".top-tabs-wrap", ".tab-nav"]
+            .reduce((sum, sel) => {
+                const el = document.querySelector(sel);
+                if (!el) return sum;
+                const cs = getComputedStyle(el);
+                if (cs.position !== "sticky" && cs.position !== "fixed") return sum;
+                if (cs.display === "none" || cs.visibility === "hidden") return sum;
+                return sum + el.offsetHeight;
+            }, 0);
+    }
     function evlbPinToTop(el) {
         requestAnimationFrame(() => {
-            const hdr = document.querySelector("header");
-            const nav = document.querySelector(".tab-nav");
-            const pad = (hdr ? hdr.offsetHeight : 0)
-                      + (nav ? nav.offsetHeight : 0) + 8;
-            const y = el.getBoundingClientRect().top + window.scrollY - pad;
+            const y = el.getBoundingClientRect().top + window.scrollY
+                    - evlbStickyTop() - 8;
             window.scrollTo({ top: Math.max(0, y), behavior: "smooth" });
         });
     }
@@ -5444,10 +5461,7 @@
         exp.style.display = '';
         // Bring the clicked name to the top of the window (under the sticky
         // header stack) so the expanded match cards are what fills the screen.
-        const sticky = ['header', '.tab-nav'].reduce((sum, sel) => {
-            const el = document.querySelector(sel);
-            return sum + (el && getComputedStyle(el).position === 'sticky' ? el.offsetHeight : 0);
-        }, 0);
+        const sticky = evlbStickyTop();
         window.scrollTo({ top: row.getBoundingClientRect().top + window.scrollY - sticky - 6,
                           behavior: 'smooth' });
     }

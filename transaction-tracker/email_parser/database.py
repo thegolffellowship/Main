@@ -13584,7 +13584,8 @@ def get_event_leaderboard(event_name: str,
     with _connect(db_path) as conn:
         _ensure_scoring_tables(conn)
         ev = conn.execute(
-            """SELECT id, item_name, event_date, course, chapter, format
+            """SELECT id, item_name, event_date, course, chapter, format,
+                      nine_side
                FROM events WHERE LOWER(item_name) = ?""",
             ((event_name or "").strip().lower(),)).fetchone()
         if not ev:
@@ -13781,21 +13782,22 @@ def get_event_leaderboard(event_name: str,
         # and publish a hole's par ONLY when they agree. A hole where
         # the tees disagree renders blank rather than asserting one
         # tee's par over another's — same rule as the to-par totals.
+        #
+        # Read off the TEES IN PLAY, not off the holes already scored
+        # (Kerry 2026-09-15: "Also need to show ALL holes that will be
+        # played for that event, whether or not that have been played").
+        # Hanging par off scoring_holes meant an unplayed hole had no par
+        # either, so the column it belongs in could not even be drawn.
         hole_par: dict = {}
         if rids:
             ph = ",".join("?" for _ in rids)
             seen: dict = {}
             for hp in conn.execute(
-                    f"""SELECT DISTINCT sh.hole_number AS hn,
-                                        cth.par AS par
-                         FROM scoring_holes sh
-                         JOIN scoring_rounds sr ON sr.id = sh.scoring_round_id
-                         JOIN course_tee_holes cth
-                           ON cth.tee_id = sr.tee_id
-                          AND cth.hole_number = sh.hole_number
-                        WHERE sh.scoring_round_id IN ({ph})
-                          AND sh.strokes IS NOT NULL
-                          AND cth.par IS NOT NULL""", list(rids)):
+                    f"""SELECT DISTINCT cth.hole_number AS hn, cth.par AS par
+                         FROM scoring_rounds sr
+                         JOIN course_tee_holes cth ON cth.tee_id = sr.tee_id
+                        WHERE sr.id IN ({ph}) AND cth.par IS NOT NULL""",
+                    list(rids)):
                 seen.setdefault(hp["hn"], set()).add(hp["par"])
             for hn_, pars_ in seen.items():
                 if len(pars_) == 1:
@@ -14195,11 +14197,22 @@ def get_event_leaderboard(event_name: str,
     # see the team net scorecard like on Golf Genius") — grouped by
     # scoring_rounds.team_num; total = best NET ball per hole summed;
     # GG's recorded purse attaches by member-surname overlap ──
-    # only holes actually PLAYED (GG cards can carry empty rows for the
-    # unplayed nine — a front-9 event must not render 10-18, Kerry
-    # 2026-09-11)
-    hole_cols = sorted({h[0] for hs in cards.values() for h in hs
-                        if h[1] is not None})
+    # EVERY HOLE THE EVENT WILL PLAY, played or not (Kerry 2026-09-15:
+    # "Also need to show ALL holes that will be played for that event,
+    # whether or not that have been played"). A board that grows a column
+    # each time a group finishes a hole cannot be read at a glance —
+    # you cannot see who is behind, only who has posted. The set comes
+    # from the EVENT (hole count + which nine), not from the cards, and
+    # the played holes are unioned in so a card that ran somewhere
+    # unexpected still shows. The original restriction was there to stop
+    # a front-9 event rendering 10-18 (GG cards carry empty rows for the
+    # unplayed nine, Kerry 2026-09-11) — `nine_side` answers that
+    # directly instead of inferring it from what happens to be posted.
+    _back9 = (ev.get("nine_side") or "").strip().lower() == "back"
+    _expected = (list(range(1, 19)) if (ev["holes"] or 9) == 18
+                 else (list(range(10, 19)) if _back9 else list(range(1, 10))))
+    _played = {h[0] for hs in cards.values() for h in hs if h[1] is not None}
+    hole_cols = sorted(set(_expected) | _played)
 
     def _player_holes(rid):
         return {h[0]: (h[1], h[2]) for h in cards.get(rid, [])}
