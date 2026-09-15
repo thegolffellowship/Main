@@ -56137,6 +56137,131 @@ def get_pairing_history_counts(year: int | None = None, db_path=None,
     return counts
 
 
+def pairing_counts_report(event_id: int, year: int | None = None,
+                          db_path=None) -> dict:
+    """Kerry 2026-09-15: "how many times has each player played with the
+    others in their groups this year including tonight."
+
+    Scores the SAVED sheet (`event_pairings`) — the groups as the manager
+    left them, not a fresh generation — against `pairing_history` for the
+    year. INCLUDING TONIGHT means tonight is the +1: a pair reading 1 has
+    never played together before today, a pair reading 3 has played twice
+    already and is about to make it three. History obeys the same two
+    rules the generator obeys (`get_pairing_history_counts`): Golf Genius
+    is the record of what was played, and nothing counts until it has
+    been played — so the sheet never scores against itself.
+
+    Returns the groups with every pair counted, a per-player line for
+    each group (his three mates and the count with each), and the repeats
+    (pairs above 1) pulled out, which is the part a manager acts on.
+    """
+    with _connect(db_path) as conn:
+        _ensure_pairing_tables(conn)
+        ev = conn.execute(
+            "SELECT id, item_name, event_date, chapter FROM events WHERE id = ?",
+            (event_id,)).fetchone()
+        if not ev:
+            return {"error": f"no event {event_id}"}
+        ev = dict(ev)
+        roster = {_pair_key_name(r["name"]): r for r in _event_roster_rows(conn, event_id)}
+    if year is None:
+        year = int((ev.get("event_date") or today_central_str())[:4] or
+                   today_central().year)
+    counts = get_pairing_history_counts(year=year, db_path=db_path,
+                                        exclude_event_id=event_id)
+    sheet = get_event_pairings(event_id, db_path=db_path)
+
+    def _prior(a: str, b: str) -> int:
+        ka, kb = _pair_key_name(a), _pair_key_name(b)
+        return int(counts.get((min(ka, kb), max(ka, kb)), 0))
+
+    groups_out, repeats, worst = [], [], 0
+    for holes in sorted(sheet.keys(), key=lambda h: str(h)):
+        for grp in sorted(sheet[holes], key=lambda g: g.get("group_num") or 0):
+            players = sorted(grp.get("players") or [],
+                             key=lambda p: p.get("cart_pos") or 0)
+            names = [p["name"] for p in players]
+            carts = {}
+            for lo, hi in ((0, 1), (2, 3)):
+                if hi < len(names):
+                    carts[frozenset((names[lo], names[hi]))] = True
+            pairs = []
+            for i in range(len(names)):
+                for j in range(i + 1, len(names)):
+                    prior = _prior(names[i], names[j])
+                    worst = max(worst, prior + 1)
+                    pair = {"a": names[i], "b": names[j],
+                            "prior": prior, "total": prior + 1,
+                            "rode": bool(carts.get(frozenset((names[i], names[j]))))}
+                    pairs.append(pair)
+                    if prior:
+                        repeats.append(dict(pair, slot=grp.get("slot_label"),
+                                            holes=str(holes)))
+            per_player = []
+            for n in names:
+                mates = [{"name": m, "total": _prior(n, m) + 1,
+                          "rode": bool(carts.get(frozenset((n, m))))}
+                         for m in names if m != n]
+                row = roster.get(_pair_key_name(n)) or {}
+                per_player.append({
+                    "name": n,
+                    "tee": row.get("tee_choice"),
+                    "ambassador": bool(row.get("ambassador")),
+                    "group_captain": bool(row.get("group_captain")),
+                    "is_first_timer": bool(row.get("is_first_timer")),
+                    "is_new": bool(row.get("is_new")),
+                    "mates": mates,
+                    "max": max([m["total"] for m in mates], default=0),
+                })
+            groups_out.append({
+                "holes": str(holes),
+                "group_num": grp.get("group_num"),
+                "slot_label": grp.get("slot_label"),
+                "players": names,
+                "pairs": pairs,
+                "per_player": per_player,
+            })
+    return {
+        "event_id": event_id,
+        "event": ev.get("item_name"),
+        "event_date": ev.get("event_date"),
+        "chapter": ev.get("chapter"),
+        "year": year,
+        "counts_include_tonight": True,
+        "history_source": "played rounds only (Golf Genius), this event excluded",
+        "groups": groups_out,
+        "repeats": sorted(repeats, key=lambda r: -r["total"]),
+        "n_pairs": sum(len(g["pairs"]) for g in groups_out),
+        "n_repeat_pairs": len(repeats),
+        "highest_pair_count": worst,
+        "text": _format_pairing_counts(ev, year, groups_out, repeats),
+    }
+
+
+def _format_pairing_counts(ev: dict, year: int, groups: list, repeats: list) -> str:
+    """The same report as plain text, for a print-out or an email."""
+    L = [f"PAIRINGS COUNT REPORT — {ev.get('item_name')} "
+         f"({ev.get('event_date')}, {ev.get('chapter')})",
+         f"Times played together in {year}, INCLUDING tonight. 1 = first time together.",
+         ""]
+    for g in groups:
+        L.append(f"GROUP {g['slot_label'] or g['group_num']}"
+                 + (f"  ({g['holes']} holes)" if g.get("holes") else ""))
+        for pp in g["per_player"]:
+            marks = "".join([" C" if pp["group_captain"] else "",
+                             " A" if pp["ambassador"] else "",
+                             " 1ST" if pp["is_first_timer"] else ""])
+            mates = ", ".join(f"{m['name']} {m['total']}"
+                              + ("*" if m["rode"] else "") for m in pp["mates"])
+            L.append(f"  {pp['name']}{marks}: {mates}")
+        L.append("")
+    L.append(f"REPEATS ({len(repeats)}): "
+             + ("; ".join(f"{r['a']} + {r['b']} = {r['total']} ({r['slot']})"
+                          for r in repeats) or "none — every pair is a first"))
+    L.append("* = same cart")
+    return "\n".join(L)
+
+
 # ── GG tee-sheet pairings ingest (Kerry 2026-07-14, overnight directive:
 #    "run a pairings grab from GG tonight for all 2026 events … stored
 #    primarily for Generate Pairings to randomize based off history").
@@ -57826,7 +57951,79 @@ def _event_roster_rows(conn, event_id: int) -> list[dict]:
             continue
         _decorate_roster_roles(d, ev_year)
         out.append(d)
+    _mark_first_timers(conn, event_id, out)
     return out
+
+
+def _mark_first_timers(conn, event_id: int, rows: list[dict]) -> None:
+    """Second pass over the finished roster: a player whose FIRST TGF
+    EVENT this is reads as a 1st timer, whatever they bought.
+
+    Kerry 2026-09-15: "any 1st Timer, even if they've become a member
+    already and didn't select 1st timer should be highlighted as a first
+    timer. So Morris Allen should be highlighted even though he joined
+    already, because it's his first event." A membership purchase is not
+    an event, and the checkout label is what someone SELECTED — neither
+    decides whether they have ever teed off with us.
+
+    Two independent proofs of having played, either one is enough:
+      * an active order row on an EARLIER event (joined the three ways
+        the roster join uses: item name, event alias, event_id), and
+      * a handicap round posted before this event's date, which covers
+        Golf Genius history and pre-Tracker play where no order row
+        exists — the same proof that stopped `is_new` over-tagging.
+
+    A roster row with no `customer_id` is left alone: unknown identity
+    is not evidence of a first event, and inventing a 1st timer would
+    send an ambassador after someone who does not need one (rule 14).
+    """
+    ids = sorted({int(r["customer_id"]) for r in rows if r.get("customer_id")})
+    if not ids:
+        return
+    try:
+        ev = conn.execute("SELECT event_date FROM events WHERE id = ?",
+                          (event_id,)).fetchone()
+    except sqlite3.OperationalError:
+        return
+    ev_date = (ev["event_date"] if ev else "") or ""
+    if not ev_date:
+        return
+    idph = ",".join("?" * len(ids))
+    stph = ",".join("?" * len(PAIRING_INACTIVE_STATUSES))
+    played: set = set()
+    try:
+        for r in conn.execute(
+                f"""SELECT DISTINCT i.customer_id AS cid
+                      FROM items i
+                      LEFT JOIN event_aliases ea ON ea.alias_name = i.item_name
+                      JOIN events e2 ON (e2.item_name = i.item_name COLLATE NOCASE
+                                         OR e2.item_name = ea.canonical_event_name COLLATE NOCASE
+                                         OR e2.id = i.event_id)
+                     WHERE i.customer_id IN ({idph})
+                       AND e2.id <> ?
+                       AND COALESCE(e2.event_date, '') < ?
+                       AND COALESCE(i.transaction_status, 'active') NOT IN ({stph})
+                       AND i.parent_item_id IS NULL""",
+                (*ids, event_id, ev_date, *PAIRING_INACTIVE_STATUSES)).fetchall():
+            played.add(int(r["cid"]))
+    except sqlite3.OperationalError as e:
+        logger.warning("first-timer sweep (orders) skipped: %s", e)
+        return
+    try:
+        for r in conn.execute(
+                f"""SELECT DISTINCT l.customer_id AS cid
+                      FROM handicap_rounds hr
+                      JOIN handicap_player_links l ON l.player_name = hr.player_name
+                     WHERE l.customer_id IN ({idph})
+                       AND COALESCE(hr.round_date, '') < ?""",
+                (*ids, ev_date)).fetchall():
+            played.add(int(r["cid"]))
+    except sqlite3.OperationalError:
+        pass
+    for r in rows:
+        cid = r.get("customer_id")
+        if cid and int(cid) not in played:
+            r["is_first_timer"] = True
 
 
 def _decorate_roster_roles(d: dict, ev_year: str | None) -> None:
@@ -57850,7 +58047,8 @@ def _decorate_roster_roles(d: dict, ev_year: str | None) -> None:
                    and not (played_before and played_before < ev_year))
     d["experience"] = int(d.get("n_orders") or 0)
     # Rule 14 (Kerry 2026-09-15): a 1ST TIMER rides with an ambassador.
-    # The order label OR the profile status says so.
+    # The order label OR the profile status says so; _mark_first_timers
+    # then adds everyone whose FIRST EVENT this is, however they bought.
     us = str(d.get("user_status") or "").strip().upper()
     d["is_first_timer"] = us.startswith("1ST") or (
         str(d.get("current_player_status") or "").strip().lower() == "first_timer")

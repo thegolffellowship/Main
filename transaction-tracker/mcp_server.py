@@ -1746,6 +1746,7 @@ def _scoring_dispatch(url: str, extract: str):
       scoring-fee-splits-repair[:apply]  pro-rate multi-item orders' fee rows by price (dry by default)
       scoring-margin-rebook[:<since>[|apply]]  recompute allocations >= since so margin carries the fee spread
       scoring-margin-gaps[:<limit>]  pre-cutover events: booked vs residual-would-book, with reasons (measure-only)
+      scoring-pairings-counts:<event_id>[|<year>]  saved sheet scored against played history: times each pair has played together this year INCLUDING this event
       scoring-liabilities          payouts owed, credits held, LSC shirt fund by Cup year, HIO pot, tax reserve by month
       scoring-membership-gap[:apply]  the membership gap group: booked vs today's decomposition by price/type/contests; apply rebooks membership rows only
       scoring-import-orders:<from>|<to>[|apply][|membership-only]  date-range import of "New Order" emails from the mailbox (dry-run counts; apply runs in the background, no member email)
@@ -2515,6 +2516,18 @@ def _scoring_dispatch(url: str, extract: str):
                     f"applied {res.get('applied')} flag corrections: "
                     f"{[m['order_id'] for m in res.get('mismatches', [])]}")
             return json.dumps(res, indent=2, default=str)
+        if cmd == "scoring-pairings-counts":
+            # Kerry 2026-09-15: "how many times has each player played
+            # with the others in their groups this year including
+            # tonight." Reads the SAVED sheet, scores it against played
+            # history. arg = <event_id>[|<year>]. Read-only.
+            _parts = [x.strip() for x in arg.split("|") if x.strip()]
+            if not _parts:
+                return json.dumps({"error": "usage: scoring-pairings-counts:"
+                                            "<event_id>[|<year>]"})
+            _yr = int(_parts[1]) if len(_parts) > 1 else None
+            return json.dumps(db.pairing_counts_report(int(_parts[0]), year=_yr),
+                              indent=2, default=str)
         if cmd == "scoring-liabilities":
             # What TGF is holding for someone else or has earmarked:
             # prize payouts owed, credits held, LSC shirt fund by Cup

@@ -5921,6 +5921,14 @@
         if (!name) return null;
         const k = String(name).trim().replace(/\s+/g, ' ').toLowerCase();
         const p = rosterEntry(state, name);
+        // 1ST TIMER outranks every other band (Kerry 2026-09-15: "any 1st
+        // Timer, even if they've become a member already and didn't
+        // select 1st timer should be highlighted as a first timer ...
+        // because it's his first event"). The server decides this from
+        // whether the player has EVER teed off with us, not from what
+        // the order said, so a brand-new member playing his first event
+        // reads orange here instead of disappearing into the green.
+        if (p && p.is_first_timer) return 'firsttimer';
         // Unknown tier is treated as MEMBER, matching the server's
         // fallback — never badge someone a non-member on missing data.
         const tier = (p && p.member_status) || 'member';

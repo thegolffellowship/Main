@@ -134,7 +134,9 @@ matters too, not just the foursome.
 14. **First-timers ride with an ambassador (Kerry-ratified 2026-09-15,
     v2.420.0).** "1st Timers also need to be paired up (carted) with an
     Ambassador of the same tees whenever possible." `is_first_timer` =
-    order label `1ST TIMER` or profile status `first_timer`. Composition:
+    order label `1ST TIMER`, profile status `first_timer`, **or the
+    player's first event ever** (v2.421.0 — see "1st timer means FIRST
+    EVENT" below). Composition:
     `_pair_first_timers_with_ambassadors` gives every group holding a
     first-timer an ambassador by the cheapest history swap that keeps
     rule 12, a tee mismatch costing as much as a once-played repeat so a
@@ -1203,3 +1205,50 @@ scroll and resize close them. The same technique backs
 this is the mechanism-level fix, not another per-case `overflow` patch.
 
 Test: `test_pairings_roster.js`.
+
+## "1st timer" means FIRST EVENT (v2.421.0)
+
+Kerry 2026-09-15, on the s9.23 sheet: "any 1st Timer, even if they've
+become a member already and didn't select 1st timer should be highlighted
+as a first timer. So Morris Allen should be highlighted even though he
+joined already, because it's his first event."
+
+A membership purchase is a buy-in, not a round, and the checkout label is
+what someone SELECTED — neither decides whether they have ever teed off
+with us. `_mark_first_timers(conn, event_id, rows)` runs as a second pass
+over the finished roster (`_event_roster_rows`) and marks every player
+with BOTH:
+
+- no active order row on an EARLIER event (joined the same three ways the
+  roster join uses: item name, event alias, `items.event_id`), and
+- no `handicap_rounds` row before this event's date (via
+  `handicap_player_links.customer_id`) — the Golf Genius / pre-Tracker
+  proof, the same one that stopped `is_new` over-tagging.
+
+A roster row with no `customer_id` is left alone: unknown identity is not
+evidence of a first event. The explicit label still stands on its own, so
+the flag only ever grows. On the cards the orange **1ST TIMER** band
+outranks every other band (`standingsBand`) — a new member reads orange
+rather than disappearing into the points-race green. The Players tab's
+registrant rows still colour by the ORDER LABEL: that table is about what
+was purchased and at which price tier, a different question.
+
+## Pairings count report (v2.421.0)
+
+Kerry: "produce a pairings count report ... how many times has each
+player played with the others in their groups this year including
+tonight." `pairing_counts_report(event_id, year=None)` reads the SAVED
+sheet (`event_pairings`) — the groups as the manager left them, not a
+fresh generation — and scores every pair against
+`get_pairing_history_counts`, so the report obeys the same two rules the
+generator obeys: Golf Genius is the record of what was PLAYED
+(`source <> 'app'`), and the event never scores against itself.
+
+**Including tonight is the +1.** A pair reading 1 has never played
+together before today; a pair reading 3 has played twice already. Returns
+per group: every pair with `prior` / `total` / `rode`, a `per_player` line
+(three mates and the count with each, plus the player's C / A / 1ST /
+1Y marks), the `repeats` (everything above 1) sorted worst-first, and
+`text` — the same report as a plain-text block for a print-out. Bridge:
+`scoring-pairings-counts:<event_id>[|<year>]` via `probe_golf_genius`.
+Guard: `test_pairing_counts.py`.

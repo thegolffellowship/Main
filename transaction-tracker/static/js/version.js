@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.420.1";
+window.TGF_VERSION = "2.421.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.421.0",
+    date: "2026-09-15",
+    changes: [
+      "1ST TIMER NOW MEANS FIRST EVENT, not what the order said (Kerry, looking at the s9.23 sheet: \u2018any 1st Timer, even if they've become a member already and didn't select 1st timer should be highlighted as a first timer. So Morris Allen should be highlighted even though he joined already, because it's his first event\u2019). A membership purchase is a buy-in, not a round. `_mark_first_timers` sweeps the finished roster and marks anyone with no active order on an EARLIER event and no handicap round before this one \u2014 two independent proofs of having played, either is enough, and a row with no customer_id is left alone rather than invented into a 1st timer. On the pairing cards the orange 1ST TIMER band now outranks every other band, so a brand-new member reads orange instead of disappearing into the points-race green. Rule 14 follows it: these are the players an ambassador gets carted with.",
+      "PAIRINGS COUNT REPORT (Kerry: \u2018how many times has each player played with the others in their groups this year including tonight\u2019). `pairing_counts_report(event_id)` scores the SAVED sheet against played history: every pair in every group, a line per player naming his three mates and the count with each, the repeats pulled out, and a plain-text rendering for printing. Including tonight is the +1 \u2014 a pair reading 1 has never played together before today. History obeys the generator's own two rules: Golf Genius is the record of what was played, and the event never counts against itself. Read it from any session with the bridge `scoring-pairings-counts:<event_id>`.",
+    ],
+  },
   {
     version: "2.420.1",
     date: "2026-09-15",
