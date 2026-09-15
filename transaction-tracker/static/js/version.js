@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.426.0";
+window.TGF_VERSION = "2.427.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.427.0",
+    date: "2026-09-15",
+    changes: [
+      "HOUSE TYPE ON BOTH NEW SHEETS (Kerry: \u2018We need to use more of our standard fonts\u2019). Applied to the ratified rule rather than by taste (mailbox #44, 2026-07-09): Bitter serif for headings, labels, EYEBROWS and large numerals; dense data stays system sans with tabular figures, and Bitter stays judicious. On the marker card that means the course line, the event eyebrow, the contest title and both footer lines are Bitter; the numbered seats stay sans so eight of them line up. On Divisions & Flights the eyebrow and event name join the headings in Bitter, while every roster row stays sans with tabular figures, which is what keeps a column of handicaps readable.",
+      "The marker footer is now TWO lines at one size (Kerry): \u2018Only for participants of The Golf Fellowship\u2019s event\u2019 in red, and \u2018Ball must be on the green.\u2019 under it in black. The marker mechanics line is gone \u2014 who may claim and what makes a claim valid are the only two things a tee sign has to say.",
+      "Both sheets are with design-claude for review before they are called finished.",
+    ],
+  },
   {
     version: "2.426.0",
     date: "2026-09-15",

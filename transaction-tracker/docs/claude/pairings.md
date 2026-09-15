@@ -1381,8 +1381,12 @@ fill the card; no par/yardage/closest-wins subline (obvious, and the
 yardage is wrong on its face when the field plays several tees); the
 footer leads with **"Only for participants of The Golf Fellowship's
 event"** in red (marked print-exact so it does not fall back to grey),
-over the notes: "Ball must be on the green. Write your name only if you
-are inside the marker, then move the marker to your ball." The report
+over one rule at the SAME SIZE: "Ball must be on the green." Who may
+claim and what makes a claim valid are the only two things a tee sign has
+to say (v2.427.0). **Type** follows the ratified rule (mailbox #44):
+Bitter for the course line, the eyebrow, the title and both footer lines;
+system sans with tabular figures for the numbered seats and, on the
+flights sheet, for every roster row. The report
 still computes yardage — it is what ranks the par-3s by length — it is
 simply not printed.
 

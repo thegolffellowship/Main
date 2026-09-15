@@ -195,8 +195,28 @@ check("the red line names who the contest is for, above the notes",
       and _mk.index('class="mk-warn"') < _mk.index('class="mk-notes"'))
 check("...and it prints red rather than dropping to grey",
       ".mk-title, .mk-warn { -webkit-print-color-adjust: exact" in _mk)
-check("the notes are larger and carry the green rule",
-      "Ball must be on the green." in _mk and ".mk-notes { font-size: 11.5px" in _mk)
+check("the bottom line is the green rule ALONE, at the same size as the red line",
+      "Ball must be on the green." in _mk
+      and "font-size: 14px; color: #111" in _mk
+      and "inside the marker" not in _mk, "marker mechanics should be gone")
+# House type (Kerry 2026-09-15: "We need to use more of our standard
+# fonts"). The ratified rule, mailbox #44: Bitter for headings, nav/CTA
+# labels, eyebrows and large stat numerals; dense data stays system sans
+# with tabular figures. "Be judicious with Bitter."
+_BIT = '"Bitter", Georgia, serif'
+check("the marker's display type is all Bitter — course, event, title, both footer lines",
+      all(f'.{k} {{' in _mk for k in ("mk-course", "mk-event", "mk-warn", "mk-notes"))
+      and _mk.count(_BIT) >= 5, str(_mk.count(_BIT)))
+check("…and the numbered seats stay sans with tabular figures",
+      ".line .num {" in _mk and "font-variant-numeric: tabular-nums;" in _mk
+      and _BIT not in _mk.split(".line .num {")[1].split("}")[0])
+_df = open("templates/divisions_flights.html", encoding="utf-8").read()
+check("the flights sheet sets its eyebrow and event name in Bitter too",
+      _BIT in _df.split(".sheet-head .sub {")[1].split("}")[0]
+      and _BIT in _df.split(".sheet-head .meta strong {")[1].split("}")[0])
+check("…and every roster row stays system sans — dense data, not display",
+      _BIT not in _df.split(".prow {")[1].split("}")[0]
+      and "font-variant-numeric: tabular-nums" in _df)
 
 check("proximity markers print landscape, two to a page",
       "letter landscape" in open("templates/proximity_markers.html", encoding="utf-8").read()
