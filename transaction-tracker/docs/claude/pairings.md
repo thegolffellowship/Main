@@ -1374,5 +1374,17 @@ narrowed to the nine in play. A Back nine stored as holes 1-9 falls back
 with a warning on the sheet. No hole card → nothing printed and the
 reason said.
 
+**The marker card** (Kerry 2026-09-15, after the first print): logo
+centred at 87px with the course and date stacked directly under it; the
+eight name lines each take an equal share of the remaining height so they
+fill the card; no par/yardage/closest-wins subline (obvious, and the
+yardage is wrong on its face when the field plays several tees); the
+footer leads with **"Only for participants of The Golf Fellowship's
+event"** in red (marked print-exact so it does not fall back to grey),
+over the notes: "Ball must be on the green. Write your name only if you
+are inside the marker, then move the marker to your ball." The report
+still computes yardage — it is what ranks the par-3s by length — it is
+simply not printed.
+
 Both read live through `scoring-event-report:<event_id>|flights|proximity`.
 Guard: `test_event_reports.py`.

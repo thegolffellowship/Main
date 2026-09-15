@@ -11,7 +11,7 @@
        already know from the Golf Genius original. Margin in padding, not
        in @page, so the browser's Margins setting cannot flatten it. */
     @page { size: letter landscape; margin: 0; }
-    html, body, .mk-title { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    html, body, .mk-title, .mk-warn { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     body {
       margin: 0; padding: 0; background: #EFEFEC; color: #111;
       font-family: "Helvetica Neue", Arial, system-ui, sans-serif; font-size: 12px;
@@ -23,23 +23,37 @@
     }
     .mk { border: 2px solid #111; border-radius: 6px; padding: 14px 16px;
           display: flex; flex-direction: column; }
-    .mk-head { display: flex; align-items: center; gap: 12px; border-bottom: 2px solid #111;
-               padding-bottom: 8px; }
-    .mk-logo { width: 58px; height: 58px; flex-shrink: 0; display: block; }
+    /* Logo centred and half again as big, with the course and date
+       stacked directly under it (Kerry 2026-09-15). The header is one
+       centred column, not a row — the sign is read from across a tee
+       box, so nothing competes with the mark. */
+    .mk-head { text-align: center; border-bottom: 2px solid #111; padding-bottom: 10px; }
+    .mk-logo { width: 87px; height: 87px; display: block; margin: 0 auto 8px; }
     .mk-course { font-family: "Bitter", Georgia, serif; font-weight: 700; font-size: 15px;
                  line-height: 1.15; text-transform: uppercase; }
     .mk-event { font-size: 11.5px; color: #444; margin-top: 3px; }
     .mk-title {
       font-family: "Bitter", Georgia, serif; font-weight: 700; font-size: 26px;
-      text-align: center; margin: 14px 0 4px; line-height: 1.1;
+      text-align: center; margin: 14px 0 10px; line-height: 1.1;
     }
-    .mk-sub { text-align: center; font-size: 11.5px; color: #6B7280; margin-bottom: 10px; }
-    .lines { flex: 1; display: flex; flex-direction: column; justify-content: flex-start; }
-    .line { display: flex; align-items: flex-end; gap: 8px; padding: 0 0 2px; margin-bottom: 9px;
-            border-bottom: 1.5px solid #111; }
-    .line .num { font-weight: 700; width: 18px; flex-shrink: 0; font-size: 13px; }
-    .line .rule { flex: 1; height: 17px; }
-    .mk-foot { font-size: 9.5px; color: #9CA3AF; text-align: center; margin-top: 4px; }
+    /* The name lines SPREAD to fill the card (Kerry 2026-09-15): each
+       takes an equal share of whatever height is left, so eight lines
+       fill a tee sign the same way they fill a taller one. */
+    .lines { flex: 1; display: flex; flex-direction: column; margin-bottom: 10px; }
+    .line { flex: 1 1 0; display: flex; align-items: flex-end; gap: 10px;
+            padding-bottom: 3px; border-bottom: 1.5px solid #111; }
+    .line:last-child { border-bottom: 1.5px solid #111; }
+    .line .num { font-weight: 700; width: 20px; flex-shrink: 0; font-size: 15px; }
+    .line .rule { flex: 1; }
+    .mk-foot { text-align: center; margin-top: 2px; }
+    /* Who this contest belongs to, in red and ahead of the mechanics
+       (Kerry 2026-09-15) — the one line that stops a stranger's name
+       going on the sheet. */
+    .mk-warn {
+      color: #B91C1C; font-weight: 700; font-size: 14px; line-height: 1.25;
+      margin-bottom: 4px;
+    }
+    .mk-notes { font-size: 11.5px; color: #374151; line-height: 1.35; }
     @media print {
       body { background: #fff; }
       .page { width: auto; height: auto; min-height: 7.7in; margin: 0; border: 0;
@@ -63,22 +77,22 @@
   <div class="mk">
     <div class="mk-head">
       <img class="mk-logo" src="/static/tgf-logo-r.svg" alt="The Golf Fellowship">
-      <div>
-        <div class="mk-course">{{ rep.course_name }}</div>
-        <div class="mk-event">{{ rep.event_name }}{% if rep.event_date %} &middot; {{ rep.event_date }}{% endif %}</div>
-      </div>
+      <div class="mk-course">{{ rep.course_name }}</div>
+      <div class="mk-event">{{ rep.event_name }}{% if rep.event_date %} &middot; {{ rep.event_date }}{% endif %}</div>
     </div>
     <div class="mk-title">{{ c.title }}</div>
-    <div class="mk-sub">
-      {% if c.kind == 'ctp' %}Par 3{% if c.yardage %} &middot; {{ c.yardage }} yards{% endif %}
-      &middot; closest to the hole wins{% else %}Longest made putt wins{% endif %}
-    </div>
     <div class="lines">
       {% for i in range(1, 9) %}
       <div class="line"><span class="num">{{ i }}.</span><span class="rule"></span></div>
       {% endfor %}
     </div>
-    <div class="mk-foot">Write your name only if you are inside the marker. Move the marker to your ball.</div>
+    <div class="mk-foot">
+      <div class="mk-warn">Only for participants of The Golf Fellowship&rsquo;s event</div>
+      <div class="mk-notes">
+        Ball must be on the green. Write your name only if you are inside the marker,
+        then move the marker to your ball.
+      </div>
+    </div>
   </div>
   {% endfor %}
 </div>

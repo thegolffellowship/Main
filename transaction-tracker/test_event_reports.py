@@ -172,6 +172,32 @@ for t in ("divisions_flights.html", "proximity_markers.html"):
     src = open(f"templates/{t}", encoding="utf-8").read()
     check(f"{t} prints the official full logo", "/static/tgf-logo-r.svg" in src)
     check(f"{t} keeps its margin out of @page", "@page { size: letter" in src and "margin: 0; }" in src)
+# Kerry 2026-09-15, looking at the first print: "Space the name lines out
+# to fill each card. Make logo centered and 1.5x larger. Move Course and
+# date info directly below logo. Remove yardage ... remove that whole line
+# with Par 3 (obvious) and Closest to the hole wins (obvious). Make the
+# bottom notes larger and include Only for participants of The Golf
+# Fellowship's event in larger red letters on top of those notes. Also,
+# 'Ball must be on the green.'"
+_mk = open("templates/proximity_markers.html", encoding="utf-8").read()
+check("the logo is centred and half again as big (58 -> 87px)",
+      "width: 87px; height: 87px; display: block; margin: 0 auto" in _mk)
+check("course and date sit directly under the logo, centred",
+      ".mk-head { text-align: center;" in _mk
+      and _mk.index('class="mk-logo"') < _mk.index('class="mk-course"') < _mk.index('class="mk-event"'))
+check("the yardage / par-3 / closest-wins line is gone",
+      "mk-sub" not in _mk and "yards" not in _mk and "closest to the hole wins" not in _mk)
+check("the name lines spread to fill the card",
+      ".line { flex: 1 1 0;" in _mk and ".lines { flex: 1; display: flex; flex-direction: column;" in _mk)
+check("the red line names who the contest is for, above the notes",
+      "Only for participants of The Golf Fellowship" in _mk
+      and ".mk-warn {" in _mk and "color: #B91C1C" in _mk
+      and _mk.index('class="mk-warn"') < _mk.index('class="mk-notes"'))
+check("...and it prints red rather than dropping to grey",
+      ".mk-title, .mk-warn { -webkit-print-color-adjust: exact" in _mk)
+check("the notes are larger and carry the green rule",
+      "Ball must be on the green." in _mk and ".mk-notes { font-size: 11.5px" in _mk)
+
 check("proximity markers print landscape, two to a page",
       "letter landscape" in open("templates/proximity_markers.html", encoding="utf-8").read()
       and "batch(2)" in open("templates/proximity_markers.html", encoding="utf-8").read())

@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.425.1";
+window.TGF_VERSION = "2.426.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.426.0",
+    date: "2026-09-15",
+    changes: [
+      "PROXIMITY MARKER CARDS REWORKED after Kerry's first print. The logo is centred and half again as large (58 \u2192 87px) with the course and date stacked directly beneath it, because the sign is read from across a tee box and nothing should compete with the mark. The eight name lines now each take an equal share of whatever height is left, so they fill the card instead of bunching at the top.",
+      "The \u2018Par 3 \u00b7 107 yards \u00b7 closest to the hole wins\u2019 line is gone entirely (Kerry: the par and the object of the contest are obvious, and the yardage is wrong on its face because we always play multiple tees).",
+      "The footer now leads with \u2018Only for participants of The Golf Fellowship\u2019s event\u2019 in larger red type \u2014 the one line that stops a stranger\u2019s name going on the sheet \u2014 above larger notes that now carry the green rule: \u2018Ball must be on the green. Write your name only if you are inside the marker, then move the marker to your ball.\u2019 The red is marked print-exact so it does not fall back to grey on the way to the printer.",
+    ],
+  },
   {
     version: "2.425.1",
     date: "2026-09-15",
