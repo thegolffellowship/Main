@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.420.0";
+window.TGF_VERSION = "2.420.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.420.1",
+    date: "2026-09-15",
+    changes: [
+      "MERGE KEEPS THE DUPLICATE'S PROFILE FACTS. merge_customers re-pointed every FK and moved the emails but dropped the SOURCE row's own columns \u2014 the starting handicap Kerry set on Jose Mejia's duplicate an hour before the merge ran, his 1st-timer status, pace, roles, Venmo, DOB. Every customers column the target lacks and the source has now rides along (target wins, source fills gaps, the promise email/phone already had); identity and audit columns stay the target's.",
+    ],
+  },
   {
     version: "2.420.0",
     date: "2026-09-15",

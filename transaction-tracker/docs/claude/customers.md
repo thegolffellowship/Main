@@ -1331,3 +1331,10 @@ missing and are now in:
 lead form said Joe → alias "Joe Mejia"), both emails on 729, his PLAYING
 RSVP bound to the order by the identity rung; `app_settings` flag so it
 runs once. Guard: `test_customer_identity.py` (full `init_db` schema).
+
+**Merge carries profile facts (v2.420.1).** `merge_customers` → `_fill_profile_gaps_from_source`:
+every `customers.*` column NULL/'' on the target and set on the source is
+copied (read from `PRAGMA table_info`, so new columns are covered); identity
+and audit columns (`_MERGE_KEEP_TARGET_COLUMNS`) stay the target's. Found
+because Kerry set a starting handicap on the Mejia duplicate before the
+one-shot ran and the merge would have dropped it.

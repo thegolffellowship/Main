@@ -65,7 +65,7 @@ with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.St
     db.init_db(tmp2)
 c = sqlite3.connect(tmp2); c.row_factory = sqlite3.Row
 c.execute("INSERT INTO customers (customer_id, first_name, last_name, phone, chapter, acquisition_source, account_status) VALUES (729, 'Joe', 'Mejia', '+17033098234', 'San Antonio', 'facebook_lead', 'active')")
-c.execute("INSERT INTO customers (customer_id, first_name, last_name, phone, chapter, acquisition_source, account_status, current_player_status) VALUES (824, 'Jose', 'Mejia', '(703) 309-8234', 'San Antonio', 'godaddy', 'active', 'first_timer')")
+c.execute("INSERT INTO customers (customer_id, first_name, last_name, phone, chapter, acquisition_source, account_status, current_player_status, starting_handicap_18, starting_handicap_set_at, starting_handicap_set_by, starting_handicap_note) VALUES (824, 'Jose', 'Mejia', '(703) 309-8234', 'San Antonio', 'godaddy', 'active', 'first_timer', 10.0, '2026-09-15 17:03:44', 'manual:admin', 'Set from event roster')")
 c.execute("INSERT INTO customer_emails (customer_id, email, is_primary, label) VALUES (729, 'jmejiasat@yahoo.com', 1, 'lead')")
 c.execute("INSERT INTO customer_emails (customer_id, email, is_primary, label) VALUES (824, 'jmejiasat@mac.com', 1, 'godaddy')")
 c.execute("INSERT INTO events (id, item_name, event_date, chapter, status) VALUES (3302, 's9.23 The Quarry', '2026-09-15', 'San Antonio', 'active')")
@@ -77,6 +77,10 @@ with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.St
     n = db._repair_mejia_identity(c, tmp2)
 row = lambda q, *a: c.execute(q, a).fetchone()
 check("824 is gone", row("SELECT 1 FROM customers WHERE customer_id = 824") is None)
+_p = row("SELECT starting_handicap_18, starting_handicap_set_by, current_player_status, acquisition_source, phone FROM customers WHERE customer_id = 729")
+check("the starting handicap Kerry set on the duplicate rides to 729", _p and _p[0] == 10.0 and _p[1] == "manual:admin", str(dict(_p) if _p else None))
+check("…and his first_timer status", _p and _p[2] == "first_timer", str(dict(_p) if _p else None))
+check("…but the target's own facts win (acquisition_source stays facebook_lead, phone kept)", _p and _p[3] == "facebook_lead" and _p[4] == "+17033098234", str(dict(_p) if _p else None))
 check("the order now points at 729", row("SELECT customer_id FROM items WHERE id = 2880")["customer_id"] == 729)
 check("canonical first name is Jose, Joe is an alias", row("SELECT first_name FROM customers WHERE customer_id = 729")["first_name"] == "Jose"
       and row("SELECT 1 FROM customer_aliases WHERE alias_value = 'Joe Mejia' AND customer_id = 729") is not None)

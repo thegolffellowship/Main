@@ -28124,6 +28124,37 @@ def add_custom_field(field_name: str, db_path: str | Path | None = None) -> bool
     return True
 
 
+# customers.* columns a merge never copies from the source row: identity,
+# audit stamps, and platform keys belong to the surviving row alone.
+_MERGE_KEEP_TARGET_COLUMNS = {
+    "customer_id", "first_name", "last_name", "middle_name", "suffix",
+    "created_at", "updated_at", "account_status", "platform_user_id",
+    "portal_token_version", "merged_into_id",
+}
+
+
+def _fill_profile_gaps_from_source(conn, source_cid: int, target_cid: int) -> list[str]:
+    """Copy every customers.* column that is NULL/'' on the target and set on
+    the source (except _MERGE_KEEP_TARGET_COLUMNS). Returns the columns
+    filled. Reads the live column list so a column added later is covered
+    without touching this function (protect the class)."""
+    cols = [r[1] for r in conn.execute("PRAGMA table_info(customers)").fetchall()]
+    src = conn.execute("SELECT * FROM customers WHERE customer_id = ?", (source_cid,)).fetchone()
+    tgt = conn.execute("SELECT * FROM customers WHERE customer_id = ?", (target_cid,)).fetchone()
+    if not src or not tgt:
+        return []
+    filled = []
+    for c in cols:
+        if c in _MERGE_KEEP_TARGET_COLUMNS:
+            continue
+        sv, tv = src[c], tgt[c]
+        if sv in (None, "") or tv not in (None, ""):
+            continue
+        conn.execute(f"UPDATE customers SET {c} = ? WHERE customer_id = ?", (sv, target_cid))
+        filled.append(c)
+    return filled
+
+
 def merge_customers(source_name: str, target_name: str,
                     db_path: str | Path | None = None,
                     source_customer_id: int | None = None,
@@ -28238,10 +28269,19 @@ def merge_customers(source_name: str, target_name: str,
                     pass
             conn.execute("DELETE FROM customer_emails WHERE customer_id = ?", (source_cid,))
 
+            # Profile facts the SOURCE row carried and the target lacks
+            # (starting handicap, player status, pace, roles, venmo, DOB,
+            # ...) ride along — target wins, source fills gaps, the same
+            # promise email/phone already had. Without this the v2.420.0
+            # Mejia merge would have dropped the starting handicap Kerry
+            # set on the duplicate an hour before the merge ran.
+            filled = _fill_profile_gaps_from_source(conn, source_cid, target_cid)
+
             # Delete the now-orphaned source customers row
             conn.execute("DELETE FROM customers WHERE customer_id = ?", (source_cid,))
-            logger.info("Merged customer_id %d → %d (FKs moved: %s; emails moved; source deleted)",
-                        source_cid, target_cid, moved or "none")
+            logger.info("Merged customer_id %d → %d (FKs moved: %s; emails moved; "
+                        "profile gaps filled: %s; source deleted)",
+                        source_cid, target_cid, moved or "none", filled or "none")
         elif not source_cust:
             # Source has no customers row — just reassign any items with source name
             conn.execute(
