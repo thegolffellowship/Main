@@ -10112,10 +10112,15 @@
     // text carries the marker because <option> styling is not honoured
     // on every browser, and the amber colour rides along where it is
     // (Kerry 2026-09-15: "show RSVPs in this list, but highlighted").
+    // Reads "Last, First" (Kerry 2026-09-15: "Change the list to display
+    // [Last Name], [First Name]") through displayName, the Roster tab's
+    // formatter, so the dropdown and the list it fills from agree. The
+    // option VALUE stays the roster's own "First Last" — that is the
+    // name the server matches on.
     function rosterOptionHtml(state, name, suffix) {
         const rsvp = isRsvpOnlyPlayer(state, name);
         return `<option value="${escapeHtml(name)}"${rsvp ? ' class="opt-rsvp-only" style="color:#b45309;font-weight:700;"' : ''}>`
-            + `${escapeHtml(name)}${rsvp ? ' \u00b7 RSVP' : ''}${suffix || ''}</option>`;
+            + `${escapeHtml(displayName(name))}${rsvp ? ' \u00b7 RSVP' : ''}${suffix || ''}</option>`;
     }
 
     function getUnassigned(state) {

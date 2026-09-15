@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.411.0";
+window.TGF_VERSION = "2.412.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.412.0",
+    date: "2026-09-15",
+    changes: [
+      "The PAIRINGS request dropdowns now read \u2018Last, First\u2019 (Kerry: \u2018Change the list to display [Last Name], [First Name]\u2019) \u2014 the same formatter the Roster tab uses, suffix-aware, so \u2018Young, Jeff \u00b7 RSVP\u2019 sits where the last-name order put it. The value behind each entry is still the roster\u2019s own name, which is what the server matches on.",
+    ],
+  },
   {
     version: "2.411.0",
     date: "2026-09-15",

@@ -122,6 +122,25 @@ check("request dropdowns, candidates, and the unassigned list all use it (" + (h
 check("getUnassigned returns last-name order (feeds the picker and the panel)",
     /return out\.sort\(byLastName\);\s*\}/.test(html));
 
+console.log("\nDropdowns read Last, First (v2.412.0)");
+check("rosterOptionHtml displays through displayName but keeps the raw name as the value",
+    /function rosterOptionHtml\(state, name, suffix\)[\s\S]{0,400}<option value="\$\{escapeHtml\(name\)\}"[\s\S]{0,200}\$\{escapeHtml\(displayName\(name\)\)\}/.test(html));
+// Behavioural: slice the real helpers and render one option.
+(() => {
+    const grab = (n) => { const i = html.indexOf('function ' + n + '('); let d = 0, j = html.indexOf('{', i);
+        for (let k = j; k < html.length; k++) { if (html[k] === '{') d++; else if (html[k] === '}') { d--; if (!d) return html.slice(i, k + 1); } } };
+    const escapeHtml = (t) => String(t).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    const pairPersonKey = (n) => String(n || '').toLowerCase().trim();
+    const isRsvpOnlyPlayer = (state, name) => (state.event_players || []).some(p => p.rsvp_only && pairPersonKey(p.name) === pairPersonKey(name));
+    eval(grab('isElevatedStatus') + grab('displayName') + grab('rosterOptionHtml'));
+    const st = { event_players: [{ name: 'Jeff Young', rsvp_only: true }, { name: 'Victor Arias III', rsvp_only: false }] };
+    const a = rosterOptionHtml(st, 'Jeff Young'), b = rosterOptionHtml(st, 'Victor Arias III');
+    check("an RSVP entry renders 'Young, Jeff · RSVP' with value 'Jeff Young'",
+        /value="Jeff Young"[^>]*>Young, Jeff \u00b7 RSVP<\/option>/.test(a), a);
+    check("a suffixed name renders 'Arias, Victor III'",
+        /value="Victor Arias III">Arias, Victor III<\/option>/.test(b), b);
+})();
+
 console.log("");
 if (failures) { console.log(failures + " FAILURE(S)"); process.exit(1); }
 console.log("All pairings-roster assertions passed.");

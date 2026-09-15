@@ -1053,6 +1053,9 @@ Roster tab's suffix-aware key) and is applied to the request dropdowns,
 the multi-name candidates, and `getUnassigned` (which feeds the Unassigned
 panel and the open-seat picker). The server roster is first-name ordered
 (`ORDER BY i.customer`); the page, not the server, owns display order.
+The dropdown TEXT is `displayName(name)` — "Last, First", suffix-aware
+(v2.412.0); the `<option>` VALUE stays the raw roster name because that is
+what `set_partner_request_match` resolves.
 
 ## Menus inside tables (v2.342.0)
 
