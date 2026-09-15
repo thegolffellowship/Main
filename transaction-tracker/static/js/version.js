@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.430.0";
+window.TGF_VERSION = "2.431.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.431.0",
+    date: "2026-09-15",
+    changes: [
+      "HOW TGF STATES A START IS NOW A RULE (Kerry: \u2018When Shotgun, list Hole first | then Time. When Tee Times, List Tee Time | Hole\u2019). The group box on the Starter Sheet read a bare \u20181A\u2019; it now reads \u2018Hole 1A | 5:00 PM\u2019 on a shotgun and \u20188:10a | Hole 1\u2019 on tee times. The lead item is the one that VARIES between groups \u2014 on a shotgun everyone starts at the same minute and the hole is what distinguishes you, on tee times everyone starts at the same tee and the time is. A back-nine tee-time event starts at hole 10. Composed once on the server, so the Starter Sheet and the Cart Signs can never state a start differently.",
+      "TEE COLOURS FROM THE COURSE CARD, with a legend above the foursomes (Kerry: \u2018add colors for the tee assignments according to our course info\u2019). Each band\u2019s chip takes the colour of the tee it plays, in the group boxes and in the alphabetical list, and the legend prints the tee\u2019s own NAME beside the swatch \u2014 at The Quarry that reads <50 Gold, 50-64 Blue, 65+ Red, Forward Red (L), so a starter can send a player to the right markers. Two bands on the same paint (65+ Red and Forward Red (L)) never print as two identical swatches: the second is a ring. A course with no tee card prints no legend rather than invented colours.",
+      "The band-to-tee pairing is DERIVED from the club\u2019s own tee order in the course card (the \u20181 -\u2019, \u20182 -\u2019, \u20183 -\u2019 prefixes Golf Genius numbers tees by), longest first. That derivation is not ratified, which is exactly why the tee name prints beside each swatch \u2014 a wrong pairing is obvious on the sheet rather than on the first tee.",
+    ],
+  },
   {
     version: "2.430.0",
     date: "2026-09-15",

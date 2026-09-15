@@ -55528,6 +55528,91 @@ def print_file_stub(event: dict) -> str:
     return f"{yy}-{code}" if yy else code
 
 
+# TGF sells four tee bands; a course sells named tees. The colour on the
+# sheet comes from the COURSE CARD (Kerry 2026-09-15: "add colors for the
+# tee assignments according to our course info"), so a starter can tell a
+# player which markers to walk to.
+TEE_BANDS = ("<50", "50-64", "65+", "Forward")
+_TEE_COLOR_WORDS = {
+    "black": "#111111", "gold": "#B8860B", "blue": "#1D4ED8",
+    "white": "#6B7280", "green": "#15803D", "red": "#B91C1C",
+    "silver": "#64748B", "gray": "#6B7280", "grey": "#6B7280",
+    "yellow": "#CA8A04", "orange": "#C2410C", "purple": "#7E22CE",
+    "copper": "#B45309", "bronze": "#92400E", "maroon": "#7F1D1D",
+    "navy": "#1E3A8A", "teal": "#0F766E", "tan": "#A16207",
+    "pink": "#BE185D", "jade": "#047857", "burgundy": "#7F1D1D",
+}
+_TEE_ORDER_RE = re.compile(r"^\s*(\d+)\s*[-–]\s*")
+
+
+def _tee_color_for(tee_name: str) -> str | None:
+    low = " ".join((tee_name or "").split()).lower()
+    for word, hexv in _TEE_COLOR_WORDS.items():
+        if re.search(rf"\b{word}\b", low):
+            return hexv
+    return None
+
+
+def event_tee_legend(conn, event_id: int, ev: dict) -> list:
+    """[{band, tee_name, color}] for the event's course.
+
+    The course's tee names carry BOTH their colour and the club's own tee
+    ORDER ("1 - Gold Tee", "2 - Blue Tee", "3 - Red Tee", "3 - Red (L)
+    Tee"), which is how Golf Genius numbers them. Bands map onto that
+    order longest-first: <50 to tee 1, 50-64 to tee 2, 65+ to tee 3,
+    Forward to the most forward tee left over (a ladies' rating of the
+    same number, else the last one).
+
+    DERIVED, NOT RATIFIED — the tee names are printed beside the swatches
+    precisely so a wrong pairing is obvious on the sheet rather than on
+    the first tee. Returns [] when the course has no tee card.
+    """
+    cid = ev.get("course_id")
+    if not cid:
+        return []
+    try:
+        rows = [dict(r) for r in conn.execute(
+            "SELECT tee_name, rating, slope FROM course_tees WHERE course_id = ?",
+            (cid,)).fetchall()]
+    except sqlite3.OperationalError:
+        return []
+    by_order: dict = {}
+    for r in rows:
+        nm = " ".join((r.get("tee_name") or "").split())
+        m = _TEE_ORDER_RE.match(nm)
+        if not m:
+            continue
+        n = int(m.group(1))
+        label = _TEE_ORDER_RE.sub("", nm).strip()
+        ladies = bool(re.search(r"\((?:l|lady|ladies)\)", label, re.I))
+        by_order.setdefault(n, {"men": None, "ladies": None})
+        key = "ladies" if ladies else "men"
+        if not by_order[n][key]:
+            by_order[n][key] = label
+    if not by_order:
+        return []
+    order = sorted(by_order)
+    mens = [by_order[n]["men"] for n in order if by_order[n]["men"]]
+    forward = next((by_order[n]["ladies"] for n in reversed(order)
+                    if by_order[n]["ladies"]), None) or (mens[-1] if mens else None)
+    picks = {"<50": mens[0] if mens else None,
+             "50-64": mens[1] if len(mens) > 1 else (mens[0] if mens else None),
+             "65+": mens[2] if len(mens) > 2 else (mens[-1] if mens else None),
+             "Forward": forward}
+    out, seen = [], set()
+    for band in TEE_BANDS:
+        nm = picks.get(band)
+        if not nm:
+            continue
+        col = _tee_color_for(nm) or "#374151"
+        # 65+ on Red and Forward on Red (L) are the same colour of paint.
+        # The second one reads as a RING so the two are never one swatch.
+        out.append({"band": band, "tee_name": nm, "color": col,
+                    "ring": col in seen})
+        seen.add(col)
+    return out
+
+
 _NAME_SUFFIXES = {"jr", "jr.", "sr", "sr.", "ii", "iii", "iv", "v"}
 
 
@@ -55562,6 +55647,7 @@ def get_event_print_pack(event_id: int, db_path=None) -> dict | None:
         if not ev:
             return None
         ev = dict(ev)
+        tee_legend = event_tee_legend(conn, event_id, ev)
     pairings = get_event_pairings(event_id, db_path=db_path)
 
     def _carts(players: list) -> list:
@@ -55605,15 +55691,25 @@ def get_event_print_pack(event_id: int, db_path=None) -> dict | None:
     if _start:
         start_label = (f"Shotgun {_start}" if _st == "Shotgun"
                        else f"First tee {_start}")
-    # GG's cart sign says "5:00 PM | Hole 1A" — one line telling a player
-    # WHEN and WHERE. Composed here rather than in the template: on a
-    # tee-time event the slot label already IS the time, so repeating the
-    # clock would print "8:10a | Hole 8:10a".
+    # ONE LINE SAYING WHEN AND WHERE, and the order is a rule (Kerry
+    # 2026-09-15): "When Shotgun, list Hole first | then Time. When Tee
+    # Times, List Tee Time | Hole." The lead item is the one that varies
+    # between groups — on a shotgun everybody starts at the same minute
+    # and the HOLE is what distinguishes you; on tee times everybody
+    # starts at the same tee and the TIME is. Composed here so the
+    # starter sheet and the cart signs can never state a start
+    # differently, and so a tee-time event never reads "Hole 8:10a".
     _shotgun = _st.lower().startswith("shotgun")
+    _first_tee = "10" if (ev.get("nine_side") or "").strip().lower() == "back" else "1"
     for g in groups:
         short = re.sub(r"^HOLE\s+", "", g["slot_label"], flags=re.I)
-        g["start_line"] = (f"{_start} | Hole {short}"
-                           if (_shotgun and _start) else short)
+        if _shotgun:
+            g["start_line"] = f"Hole {short}" + (f" | {_start}" if _start else "")
+        else:
+            # The slot label IS the tee time on a tee-time event; the hole
+            # is the first tee of the nine being played.
+            g["start_line"] = f"{short} | Hole {_first_tee}"
+        g["hole_label"] = f"Hole {short}" if _shotgun else f"Hole {_first_tee}"
 
     _st18 = (ev.get("start_type_18") or "").strip()
     _start18 = _clock(ev.get("start_time_18"))
@@ -55673,6 +55769,8 @@ def get_event_print_pack(event_id: int, db_path=None) -> dict | None:
         },
         "groups": groups,
         "group_count": len(groups),
+        "tee_legend": tee_legend,
+        "tee_colors": {t["band"]: t["color"] for t in tee_legend},
         "alpha": alpha,
         "player_count": len(alpha),
     }

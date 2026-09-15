@@ -20,7 +20,8 @@
        showing in preview as Black with white letters"). The group
        headers and the shaded B rows are how the sheet is read at a
        glance, so they are content, not decoration. */
-    html, body, .gbox-head, .prow {
+    html, body, .gbox-head, .prow, .tee-legend, .tee-legend .sw,
+    .tee-hot {
       -webkit-print-color-adjust: exact; print-color-adjust: exact;
     }
     /* WYSIWYG (Kerry 2026-09-08: "can you format the view to exactly
@@ -81,6 +82,24 @@
       font-size: 13px; letter-spacing: 0.02em;
     }
     .gbox-head .grp { font-size: 10px; color: #bbb; }
+    /* TEE LEGEND (Kerry 2026-09-15: "add colors for the tee assignments
+       according to our course info. With a legend up above the
+       foursomes"). The colour comes off the COURSE CARD, and the tee's
+       own name is printed beside it — a starter can send a player to the
+       right markers, and a wrong band/tee pairing is obvious here rather
+       than on the first tee. */
+    .tee-legend {
+      display: flex; flex-wrap: wrap; gap: 14px; align-items: center;
+      margin: 0 0 8px; padding: 5px 8px; border: 1px solid #E5E7EB;
+      border-radius: 4px; font-size: 11px;
+    }
+    .tee-legend .tl-lab { font-family: "Bitter", Georgia, serif; font-weight: 700;
+                          font-size: 10px; letter-spacing: 0.06em; color: #444; }
+    .tee-legend .tl { display: inline-flex; align-items: center; gap: 5px; }
+    .tee-legend .sw { width: 11px; height: 11px; border-radius: 3px; flex-shrink: 0; }
+    .tee-legend .band { font-weight: 700; }
+    .tee-legend .tn { color: #555; }
+    .tee-hot { font-weight: 700; }
     .prow {
       display: flex; align-items: baseline; gap: 5px;
       padding: 3px 7px; border-top: 1px solid #e2e2e2; font-size: 11.5px;
@@ -195,17 +214,30 @@
   {% if not pack.groups %}
     <div class="empty">No pairings saved for this event yet. Generate &amp; save pairings first.</div>
   {% else %}
+  {% if pack.tee_legend %}
+  <div class="tee-legend">
+    <span class="tl-lab">TEES</span>
+    {% for t in pack.tee_legend %}
+      <span class="tl">
+        <span class="sw" style="{% if t.ring %}border:2.5px solid {{ t.color }};background:#fff;{% else %}background:{{ t.color }};{% endif %}"></span>
+        <span class="band" style="color:{{ t.color }};">{{ t.band }}</span>
+        <span class="tn">{{ t.tee_name }}</span>
+      </span>
+    {% endfor %}
+  </div>
+  {% endif %}
   <div class="groups">
     {% for g in pack.groups %}
       <div class="gbox">
         <div class="gbox-head">
-          <span class="slot">{{ g.slot_label }}</span>
+          <span class="slot">{{ g.start_line or g.slot_label }}</span>
           <span class="grp">{{ g.group_num }}{% if g.holes == '18' %} · 18{% endif %}</span>
         </div>
         {% for p in g.players %}
           <div class="prow{% if (p.cart_pos or 0) not in [1,2] %} is-b{% endif %}">
             <span class="pname">{{ p.name }}</span>
-            <span class="tee">{{ p.tee_choice or "—" }}</span>
+            <span class="tee{% if pack.tee_colors.get(p.tee_choice) %} tee-hot{% endif %}"
+                  {% if pack.tee_colors.get(p.tee_choice) %}style="color:{{ pack.tee_colors.get(p.tee_choice) }};"{% endif %}>{{ p.tee_choice or "—" }}</span>
             <span class="idx">{% if p.handicap_index is not none %}{{ "%.1f"|format(p.handicap_index) }}{% else %}—{% endif %}</span>
             <span class="cart {% if (p.cart_pos or 0) in [1,2] %}cart-A{% else %}cart-B{% endif %}">{% if (p.cart_pos or 0) in [1,2] %}A{% else %}B{% endif %}</span>
           </div>
@@ -221,7 +253,8 @@
     {% for a in pack.alpha %}
       <div class="arow">
         <span class="an">{{ a.sort_name }}</span>
-        <span class="atee">{{ a.tee_choice or "—" }}</span>
+        <span class="atee{% if pack.tee_colors.get(a.tee_choice) %} tee-hot{% endif %}"
+              {% if pack.tee_colors.get(a.tee_choice) %}style="color:{{ pack.tee_colors.get(a.tee_choice) }};"{% endif %}>{{ a.tee_choice or "—" }}</span>
         <span class="aidx">{% if a.handicap_index is not none %}{{ "%.1f"|format(a.handicap_index) }}{% else %}—{% endif %}</span>
         <span class="as">{{ a.slot_short }}</span>
       </div>

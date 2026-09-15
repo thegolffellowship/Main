@@ -281,10 +281,7 @@ check("surnames print in caps, given names as written",
       and db._cart_sign_name("Paul Reed III") == "Paul REED III")
 check("one line says when and where, like the Golf Genius sign",
       "{{ s.g.start_line or s.g.slot_label }}" in _cs)
-_pk = db.get_event_print_pack(EV, db_path=tmp)
-check("…composed server-side so a tee-time event never reads 'Hole 8:10a'",
-      all(("| Hole " in g["start_line"]) == (str(_pk["event"].get("start_type") or "").lower().startswith("shotgun"))
-          for g in _pk["groups"]) if _pk["groups"] else True)
+
 check("the off-palette cart pills are gone", "#0b6" not in _cs and "#06c" not in _cs)
 check("the TGF mark is on every sign", _cs.count("/static/tgf-logo-r.svg") >= 1)
 # Test the RENDERED sign, not the source — the source mentions GGID in
@@ -312,6 +309,59 @@ check("the alphabetical name reads exactly like the foursome name",
 check("…declared once, not twice, so the two cannot drift",
       _ss.count("font-weight: 600;") >= 1
       and ".prow .pname { flex: 1; min-width: 0; }" in _ss)
+
+# Kerry 2026-09-15: "When Shotgun, list Hole first | then Time. When Tee
+# Times, List Tee Time | Hole." The lead item is the one that VARIES
+# between groups — on a shotgun that is the hole, on tee times the time.
+def _start_lines(start_type, nine="Front", slot="1A"):
+    c.execute("UPDATE events SET start_type = ?, nine_side = ?, start_time = '17:00' WHERE id = ?",
+              (start_type, nine, EV))
+    c.execute("DELETE FROM event_pairings WHERE event_id = ?", (EV,))
+    c.execute("INSERT INTO event_pairings (event_id, holes, group_num, slot_label, player_name, cart_pos) "
+              "VALUES (?, '9', 1, ?, 'Pat Youngs', 1)", (EV, slot))
+    c.commit()
+    return [g["start_line"] for g in db.get_event_print_pack(EV, db_path=tmp)["groups"]]
+check("shotgun reads Hole first, then the time", _start_lines("Shotgun") == ["Hole 1A | 5:00 PM"],
+      str(_start_lines("Shotgun")))
+check("tee times read the time first, then the hole",
+      _start_lines("Tee Times", slot="8:10a") == ["8:10a | Hole 1"], str(_start_lines("Tee Times", slot="8:10a")))
+check("a BACK nine on tee times starts at hole 10, not hole 1",
+      _start_lines("Tee Times", nine="Back", slot="8:10a") == ["8:10a | Hole 10"],
+      str(_start_lines("Tee Times", nine="Back", slot="8:10a")))
+check("…so a tee-time event never reads 'Hole 8:10a'",
+      all("Hole 8:10a" not in x for x in _start_lines("Tee Times", slot="8:10a")))
+c.execute("UPDATE events SET start_type = 'Shotgun', nine_side = 'Front' WHERE id = ?", (EV,)); c.commit()
+
+print("\n== tee colours come off the COURSE CARD ==")
+for _tid, _nm in ((11, "1 - Gold Tee"), (12, "2 - Blue Tee"), (13, "3 - Red Tee"), (14, "3 - Red (L) Tee")):
+    c.execute("INSERT INTO course_tees (tee_id, course_id, tee_name, slope, rating) VALUES (?, ?, ?, 120, 34.5)",
+              (_tid, COURSE, _nm))
+c.commit()
+_leg = db.event_tee_legend(c, EV, {"course_id": COURSE})
+_by = {t["band"]: t for t in _leg}
+check("the club's own tee ORDER drives the bands, longest first",
+      [_by[b]["tee_name"] for b in ("<50", "50-64", "65+")] == ["Gold Tee", "Blue Tee", "Red Tee"], str(_leg))
+check("Forward takes the ladies' tee when the card has one",
+      _by["Forward"]["tee_name"] == "Red (L) Tee", str(_by.get("Forward")))
+check("the colour is read out of the tee NAME",
+      _by["<50"]["color"] == "#B8860B" and _by["50-64"]["color"] == "#1D4ED8"
+      and _by["65+"]["color"] == "#B91C1C", str(_leg))
+check("two bands on the same paint are never two identical swatches",
+      _by["Forward"]["color"] == _by["65+"]["color"] and _by["Forward"]["ring"] is True
+      and _by["65+"]["ring"] is False)
+check("no course card -> no legend, rather than invented colours",
+      db.event_tee_legend(c, EV, {"course_id": None}) == [])
+check("the legend and the lookup both ride on the print pack",
+      db.get_event_print_pack(EV, db_path=tmp)["tee_colors"].get("<50") == "#B8860B")
+_ss2 = open("templates/starter_sheet.html", encoding="utf-8").read()
+check("the legend sits ABOVE the foursomes",
+      _ss2.index('class="tee-legend"') < _ss2.index('<div class="groups">'))
+check("the tee name is printed beside the swatch, so a wrong pairing is visible",
+      '<span class="tn">{{ t.tee_name }}</span>' in _ss2)
+check("the legend and the coloured tees survive the printer",
+      ".tee-legend, .tee-legend .sw," in _ss2 and ".tee-hot {" in _ss2)
+check("the group header names the hole and the time",
+      '<span class="slot">{{ g.start_line or g.slot_label }}</span>' in _ss2)
 
 print("\nALL PASSED" if not F else f"\n{len(F)} FAILED: {F}")
 sys.exit(1 if F else 0)

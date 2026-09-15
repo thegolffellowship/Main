@@ -1458,3 +1458,34 @@ direction only.
   that is the moment a manager hunting a late signup needs it.
 
 Guard: `test_pairings_roster.js`.
+
+## Stating a start, and tee colours (v2.431.0)
+
+**How TGF states a start is a rule** (Kerry 2026-09-15): "When Shotgun,
+list Hole first | then Time. When Tee Times, List Tee Time | Hole." The
+lead item is the one that VARIES between groups — on a shotgun everyone
+starts at the same minute and the hole distinguishes you; on tee times
+everyone starts at the same tee and the time does. `group.start_line` is
+composed once in `get_event_print_pack`, so the Starter Sheet and the
+Cart Signs can never state a start differently, and a tee-time event
+never reads "Hole 8:10a". A back-nine tee-time event starts at hole 10.
+
+**Tee colours come off the COURSE CARD** ("add colors for the tee
+assignments according to our course info. With a legend up above the
+foursomes"). `event_tee_legend(conn, event_id, ev)` reads
+`course_tees.tee_name`, which carries BOTH the colour word and the club's
+own tee ORDER (`"1 - Gold Tee"`, `"2 - Blue Tee"`, `"3 - Red Tee"`,
+`"3 - Red (L) Tee"` — how Golf Genius numbers them). Bands map onto that
+order longest-first: `<50` → tee 1, `50-64` → tee 2, `65+` → tee 3,
+`Forward` → the ladies' tee if the card has one, else the most forward.
+The chip takes that colour in the group boxes and the alpha list; the
+legend prints the tee NAME beside each swatch. A band landing on a colour
+already used gets `ring: True` so 65+ Red and Forward Red (L) are never
+one swatch. No course card → no legend, never invented colours.
+
+**The band→tee pairing is DERIVED, not ratified.** That is exactly why the
+tee name prints beside the swatch: a wrong pairing shows on the sheet
+rather than on the first tee. If Kerry corrects it, make the mapping data
+(`app_settings`, per course) rather than editing the derivation.
+
+Guard: `test_event_reports.py`.
