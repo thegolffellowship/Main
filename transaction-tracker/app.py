@@ -4541,6 +4541,24 @@ def api_set_customer_status(customer_id):
     return jsonify({"status": "ok", "id": new_id, "status_name": status_name})
 
 
+@app.route("/api/customers/<int:customer_id>/roles", methods=["POST"])
+@require_role("manager")
+def api_set_customer_role(customer_id):
+    """One-tap role flags (Kerry-ratified 2026-09-15, pairings rules
+    12/13): body { flag: ambassador|group_captain|solo_back_ok, value:
+    true|false }. Always writes an explicit 0/1 — the boot seed is
+    fill-only-if-NULL, so a cleared seeded player stays cleared."""
+    from email_parser.database import set_customer_role_flag
+    data = request.get_json(silent=True) or {}
+    flag = str(data.get("flag") or "").strip()
+    try:
+        result = set_customer_role_flag(customer_id, flag, bool(data.get("value")))
+    except ValueError as e:
+        code = 404 if "not found" in str(e) else 400
+        return jsonify({"error": str(e)}), code
+    return jsonify({"status": "ok", **result})
+
+
 @app.route("/api/customers/<int:customer_id>/pace", methods=["POST"])
 @require_role("manager")
 def api_set_customer_pace(customer_id):
@@ -5085,6 +5103,11 @@ def api_get_pairings(event_id):
                     "customer_id": _r.get("customer_id"),
                     "rsvp_only": bool(_r.get("rsvp_only")),
                     "handicap_index": _hcp.get((_r["name"] or "").lower()),
+                    # Rules 12/13 inputs for the card badges + driver mark
+                    "ambassador": bool(_r.get("ambassador")),
+                    "group_captain": bool(_r.get("group_captain")),
+                    "solo_back_ok": bool(_r.get("solo_back_ok")),
+                    "is_new": bool(_r.get("is_new")),
                 })
         finally:
             _pconn.close()

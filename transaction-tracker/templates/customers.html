@@ -179,6 +179,17 @@
                 z-index: 55; box-shadow: 0 1px 0 var(--border);
             }
         }
+        /* Role chips (Kerry-ratified 2026-09-15): AMB / CAPT / BACK */
+        .role-chips { display: inline-flex; gap: 3px; margin-left: 0.35rem; vertical-align: middle; }
+        .role-chip {
+            font: 700 9px/1 'Bitter', serif; letter-spacing: 0.08em; padding: 3px 6px;
+            border-radius: 9999px; border: 1px solid #D1D5DB; background: #fff; color: #9CA3AF;
+            cursor: pointer; transition: background .12s, color .12s, border-color .12s;
+        }
+        .role-chip:disabled { cursor: default; }
+        .role-chip.on.role-ambassador { background: #DBEAFE; color: #1E40AF; border-color: #93C5FD; }
+        .role-chip.on.role-group_captain { background: #1B1B1B; color: #fff; border-color: #1B1B1B; }
+        .role-chip.on.role-solo_back_ok { background: #FEF3C7; color: #92400E; border-color: #FCD34D; }
     </style>
 
         <!-- Customer list view (default) -->
@@ -702,6 +713,50 @@
         </div>`;
     }
 
+    // Role flags (Kerry-ratified 2026-09-15, pairings rules 12/13):
+    // AMB = ambassador (welcoming; spread across groups), CAPT = group
+    // captain (rules/pace; drives, rides with the newest player),
+    // BACK = OK alone on the <50 tee. One tap toggles; an explicit 0/1
+    // is stored so a cleared seed stays cleared. Managers only.
+    const ROLE_CHIPS = [
+        ["ambassador", "AMB", "Ambassador — welcoming and encouraging; spread across groups"],
+        ["group_captain", "CAPT", "Group captain — rules, pace, looks out for the group; drives and rides with the newest player"],
+        ["solo_back_ok", "BACK", "OK alone on the <50 tee (rule 12 otherwise keeps two <50s together)"],
+    ];
+    function renderRoleChips(c) {
+        const isMgr = currentRole === "manager" || currentRole === "admin";
+        if (!c.customer_id) return '';
+        return `<div class="role-chips" data-customer-id="${c.customer_id}" onclick="event.stopPropagation()">`
+            + ROLE_CHIPS.map(([flag, label, title]) => {
+                const on = !!c[flag];
+                if (!isMgr && !on) return '';
+                return `<button type="button" class="role-chip role-${flag}${on ? ' on' : ''}" data-role-flag="${flag}"
+                    title="${escapeHtml(title)}" ${isMgr ? '' : 'disabled'}>${label}</button>`;
+            }).join('') + '</div>';
+    }
+    async function _tapRole(btn) {
+        const wrap = btn.closest(".role-chips");
+        const cid = parseInt(wrap.dataset.customerId);
+        const flag = btn.dataset.roleFlag;
+        const value = !btn.classList.contains("on");
+        wrap.querySelectorAll(".role-chip").forEach(b => { b.disabled = true; });
+        try {
+            const res = await fetch(`/api/customers/${cid}/roles`, {
+                method: "POST", headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ flag, value }),
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) { alert(data.error || "Failed to save role."); return; }
+            allCustomers.forEach(c => { if (c.customer_id === cid) c[flag] = value ? 1 : 0; });
+            document.querySelectorAll(`.role-chips[data-customer-id="${cid}"] .role-chip[data-role-flag="${flag}"]`)
+                .forEach(b => b.classList.toggle("on", value));
+        } catch (e) {
+            alert("Failed to save role.");
+        } finally {
+            wrap.querySelectorAll(".role-chip").forEach(b => { b.disabled = false; });
+        }
+    }
+
     async function _tapPace(btn) {
         const seg = btn.closest(".pace-seg");
         const cid = parseInt(seg.dataset.customerId);
@@ -734,6 +789,9 @@
     }
 
     function attachPaceHandlers(rootEl) {
+        rootEl.querySelectorAll(".role-chips .role-chip").forEach(btn => {
+            btn.addEventListener("click", e => { e.stopPropagation(); _tapRole(btn); });
+        });
         rootEl.querySelectorAll(".pace-seg .pace-btn").forEach(btn => {
             btn.addEventListener("click", e => {
                 e.stopPropagation();
@@ -1301,6 +1359,7 @@
                         ${currentRole === "admin" ? `<button class="btn btn-edit" data-merge-customer="${escapeHtml(c.name)}" style="font-size:0.65rem; padding:0.1rem 0.3rem; margin-left:0.25rem; vertical-align:middle;" onclick="event.stopPropagation(); openCustMergeModal('${escapeHtml(c.name).replace(/'/g, "\\'")}')">Merge</button>` : ''}
                         <br><span class="mc-event">${meta.join(" &bull; ")}</span>
                         <span style="margin-left:0.4rem; vertical-align:middle;">${renderPaceControl(c)}</span>
+                        <span style="margin-left:0.4rem; vertical-align:middle;">${renderRoleChips(c)}</span>
                     </div>
                     <span class="mc-chevron" ${isExpanded ? 'style="transform:rotate(90deg)"' : ''}>&#9656;</span>
                 </div>
@@ -1558,7 +1617,7 @@
                 <td style="font-size:0.78rem; font-weight:600; color:${c.handicapIndex !== null ? (c.handicapIndex < 0 ? '#16a34a' : '#2563eb') : 'var(--text-muted)'};">${c.handicapIndex !== null ? (c.handicapIndex < 0 ? '+' + Math.abs(c.handicapIndex).toFixed(1) : c.handicapIndex.toFixed(1)) + '<span style="font-size:0.85em;color:#94a3b8;font-weight:500;margin-left:2px;">N</span><span style="font-size:0.9em;color:#64748b;font-weight:500;"> / ' + (c.handicapIndex < 0 ? '+' + Math.abs(c.handicapIndex * 2).toFixed(1) : (c.handicapIndex * 2).toFixed(1)) + '</span>' : '\u2014'}</td>
                 <td style="font-size:0.78rem;">${renderRenewalCell(c)}</td>
                 <td style="font-size:0.78rem; color:var(--text-muted);">${escapeHtml(c.latestDate || "\u2014")}</td>
-                <td>${renderPaceControl(c)}</td>
+                <td>${renderPaceControl(c)}${renderRoleChips(c)}</td>
             </tr>
             <tr class="cust-detail-row ${isExpanded ? 'visible' : ''}" data-detail-for="${escapeHtml(c.name)}">
                 <td colspan="11">

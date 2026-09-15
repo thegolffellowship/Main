@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.415.0";
+window.TGF_VERSION = "2.416.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.416.0",
+    date: "2026-09-15",
+    changes: [
+      "PAIRINGS RULE 12 \u2014 no lone back tee (Kerry-ratified). A <50 player is never the only <50 in their foursome unless flagged OK alone back; Forward and 65+ may be alone. The generator repairs it after the groups form and below everything that binds (Match Play, requests, locks, seeds), by the swap that costs the least history. If no legal swap exists the sheet says so in a note and the manager decides.",
+      "PAIRINGS RULE 13 \u2014 driver\u2019s seat. A group captain rides with the newest player in the group and drives (seats 1 and 3); a first-season player never drives; otherwise the more experienced player takes the wheel. A wheel mark on the card shows who drives. Rule 7 (spread ambassadors and captains across groups) is built alongside it so every group has a leader to seat.",
+      "Three role flags on the customer with the same one-tap editor as pace, on the Customers page: AMB (ambassador), CAPT (group captain), BACK (OK alone on the <50 tee). Seeded from Kerry\u2019s 2026-09-15 lists, fill-only-if-NULL, so a tap wins forever. Pairing cards show CAPT / AMB / NEW badges.",
+    ],
+  },
   {
     version: "2.415.0",
     date: "2026-09-15",

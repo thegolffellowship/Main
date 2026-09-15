@@ -147,7 +147,7 @@ check("open-seat picker entries display through displayName",
 check("Unassigned panel names display through displayName, raw name kept on data-unassigned-name",
     /data-unassigned-name="\$\{escapeHtml\(player\.name\)\}"[\s\S]{0,500}\$\{escapeHtml\(displayName\(player\.name\)\)\}/.test(html));
 check("seated cards still read First Last",
-    /data-cart-pos="\$\{player\.cart_pos\}">`;[\s\S]{0,200}\$\{escapeHtml\(player\.name \|\| '\u2014'\)\}/.test(html));
+    /data-cart-pos="\$\{player\.cart_pos\}">`;[\s\S]{0,400}\$\{escapeHtml\(player\.name \|\| '\u2014'\)\}/.test(html));
 check("detail panel is capped at the wrapper's visible width and sticks left",
     /\.event-detail-content \{[^}]*max-width: var\(--ev-detail-w, 100%\);[^}]*position: sticky; left: 0;/.test(html));
 check("a ResizeObserver on the table wrapper publishes --ev-detail-w",
@@ -176,6 +176,19 @@ check("the choice is remembered per browser and re-renders",
     && /localStorage\.getItem\('tgf_pairings_points_col'\)/.test(html));
 check("default is ON when nothing is stored",
     /return raw === null \? true : raw === '1';/.test(html));
+
+console.log("\nRoles on the sheet (v2.416.0)");
+check("badges read the roster row by identity",
+    /function rosterFlags\(state, name\)[\s\S]{0,200}pairPersonKey\(p\.name\) === k/.test(html));
+check("CAPT / AMB / NEW badges follow the seated name and the unassigned name",
+    /html \+= driverMarkHtml\(grp, player\);\s*html \+= `<span class="pairing-player-name">\$\{escapeHtml\(player\.name \|\| '\u2014'\)\}<\/span>`;\s*if \(player\.name\) html \+= roleBadgesHtml\(state, player\.name\);/.test(html)
+    && /displayName\(player\.name\)\)\}<\/span>`;\s*if \(player\.name\) html \+= roleBadgesHtml\(state, player\.name\);/.test(html));
+check("the driver mark sits on seats 1 and 3 only when the cart has a passenger",
+    /if \(cp !== 1 && cp !== 3\) return '';[\s\S]{0,160}Number\(p\.cart_pos\) === cp \+ 1 && p\.name/.test(html));
+const cust = fs.readFileSync("templates/customers.html", "utf8");
+check("Customers page offers AMB / CAPT / BACK chips beside pace, both layouts",
+    (cust.match(/renderRoleChips\(c\)/g) || []).length >= 2
+    && /fetch\(`\/api\/customers\/\$\{cid\}\/roles`/.test(cust));
 
 console.log("");
 if (failures) { console.log(failures + " FAILURE(S)"); process.exit(1); }

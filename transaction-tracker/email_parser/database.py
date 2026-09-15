@@ -1356,6 +1356,85 @@ _PACE_RATING_SEED = {
 }
 
 
+# Player ROLE flags, Kerry-ratified 2026-09-15 (pairings rules 12 + 13).
+#   ambassador   — welcoming and encouraging; spread across groups (rule 7)
+#   group_captain — rules, pace, looks out for the group; DRIVES and rides
+#                   with the newest player in the group (rule 13)
+#   solo_back_ok  — may be the only <50 player in a foursome (rule 12:
+#                   "no lone back tee" for everyone else)
+# Fill-only-if-NULL like the pace seed: a Customers-page tap (explicit 0
+# or 1) wins forever. Gus Vasquez is on both lists by Kerry's words in the
+# same session ("he's someone who I would consider an ambassador and good
+# as a group captain") even though the typed lists omitted him.
+_PLAYER_ROLE_SEED = {
+    "ambassador": [
+        "Daniel South", "Mary Wade", "Scott Marroquin", "Luke Mazanec",
+        "Larry Anthis", "Jeff Young", "Rob Callaway", "Kelly Barna",
+        "John Wade", "Neal Cloer", "Robert Straiton", "Kerry Niester",
+        "Roland Campos", "Gus Vasquez"],
+    "group_captain": [
+        "Daniel South", "Mary Wade", "Jeff Young", "Rob Callaway",
+        "Adam Baker", "Don Sharitz", "Fred Wicker", "Kelly Barna",
+        "John Wade", "Neal Cloer", "Robert Straiton", "Kerry Niester",
+        "Mark Freund", "Gus Vasquez"],
+    "solo_back_ok": [
+        "Jeff Young", "Kerry Niester", "Luke Mazanec", "Adam Baker"],
+}
+PLAYER_ROLE_FLAGS = ("ambassador", "group_captain", "solo_back_ok")
+
+
+def _seed_player_roles(conn: sqlite3.Connection) -> int:
+    """Seed the three role flags (fill-only-if-NULL). Returns rows set.
+    Name match is first+last like the pace seed; a name with no customer
+    row is logged, not invented."""
+    for flag in PLAYER_ROLE_FLAGS:
+        try:
+            conn.execute(f"ALTER TABLE customers ADD COLUMN {flag} INTEGER")
+        except sqlite3.OperationalError:
+            pass
+    seeded = 0
+    for flag, names in _PLAYER_ROLE_SEED.items():
+        for name in names:
+            cur = conn.execute(
+                f"""UPDATE customers SET {flag} = 1
+                    WHERE LOWER(TRIM(first_name || ' ' || last_name)) = LOWER(?)
+                      AND {flag} IS NULL""", (name,))
+            seeded += cur.rowcount
+            if cur.rowcount == 0:
+                hit = conn.execute(
+                    "SELECT 1 FROM customers WHERE "
+                    "LOWER(TRIM(first_name || ' ' || last_name)) = LOWER(?)",
+                    (name,)).fetchone()
+                if not hit:
+                    logger.warning("Role seed: no customer named %r for %s",
+                                   name, flag)
+    conn.commit()
+    if seeded:
+        logger.info("Player role seed: applied %d flag(s)", seeded)
+    return seeded
+
+
+def set_customer_role_flag(customer_id: int, flag: str, value: bool,
+                           db_path: str | Path = DB_PATH) -> dict:
+    """Manager one-tap role edit (Kerry 2026-09-15). Writes an EXPLICIT
+    0/1 — never NULL, so a cleared seeded player is not re-seeded on the
+    next deploy."""
+    if flag not in PLAYER_ROLE_FLAGS:
+        raise ValueError(f"flag must be one of {PLAYER_ROLE_FLAGS}")
+    with _connect(db_path) as conn:
+        try:
+            conn.execute(f"ALTER TABLE customers ADD COLUMN {flag} INTEGER")
+        except sqlite3.OperationalError:
+            pass
+        cur = conn.execute(
+            f"UPDATE customers SET {flag} = ? WHERE customer_id = ?",
+            (1 if value else 0, int(customer_id)))
+        if cur.rowcount == 0:
+            raise ValueError(f"customer {customer_id} not found")
+        conn.commit()
+    return {"customer_id": int(customer_id), flag: 1 if value else 0}
+
+
 def _seed_pace_ratings(conn: sqlite3.Connection) -> None:
     """Seed customers.pace_rating with Kerry's ratified initial values.
 
@@ -4423,6 +4502,11 @@ def init_db(db_path: str | Path | None = None) -> None:
             _repair_pace_rulings_2026_09_15(conn)
         except Exception as e:
             logger.warning("Pace rulings 2026-09-15 failed: %s", e)
+        # Player role flags (Kerry-ratified 2026-09-15): fill-only-if-NULL
+        try:
+            _seed_player_roles(conn)
+        except Exception as e:
+            logger.warning("Player role seed failed: %s", e)
 
         # Always-run repair: merge twin Crystal Falls events 3267 → 3263
         # (Kerry 2026-07-14: same May 30 event, renamed mid-registration)
@@ -27062,6 +27146,7 @@ def get_all_customers(db_path=None) -> list[dict]:
                    c.account_status,
                    c.pace_rating,
                    c.pace_rating_source,
+                   c.ambassador, c.group_captain, c.solo_back_ok,
                    c.payment_method,
                    c.payment_handle,
                    c.updated_at,
@@ -57446,13 +57531,22 @@ def _event_rsvp_only_players(conn, event_id: int) -> list[dict]:
             continue
         seen.add(key)
         cps = None
+        roles: dict = {}
         cid = r.get("customer_id")
         if cid:
             try:
                 crow = conn.execute(
-                    "SELECT current_player_status FROM customers "
-                    "WHERE customer_id = ?", (cid,)).fetchone()
-                cps = crow["current_player_status"] if crow else None
+                    "SELECT current_player_status, ambassador, group_captain, "
+                    "solo_back_ok, (SELECT MIN(order_date) FROM items "
+                    "WHERE customer_id = c.customer_id) AS first_order, "
+                    "(SELECT COUNT(*) FROM items WHERE customer_id = "
+                    "c.customer_id) AS n_orders "
+                    "FROM customers c WHERE c.customer_id = ?", (cid,)).fetchone()
+                if crow:
+                    cps = crow["current_player_status"]
+                    roles = {k: crow[k] for k in ("ambassador", "group_captain",
+                                                  "solo_back_ok", "first_order",
+                                                  "n_orders")}
             except sqlite3.OperationalError:
                 cps = None
         received = r.get("received_at") or None
@@ -57468,6 +57562,7 @@ def _event_rsvp_only_players(conn, event_id: int) -> list[dict]:
             "created_at": received, "notes": None, "order_id": None,
             "transaction_status": "gg_rsvp", "rsvp_only": True,
             "rsvp_id": r.get("id"),
+            **roles,
         })
     return out
 
@@ -57495,7 +57590,12 @@ def _event_roster_rows(conn, event_id: int) -> list[dict]:
                         i.created_at, i.notes, i.order_id,
                         i.customer_email, i.user_status,
                         i.transaction_status,
-                        c.current_player_status, c.pace_rating
+                        c.current_player_status, c.pace_rating,
+                        c.ambassador, c.group_captain, c.solo_back_ok,
+                        (SELECT MIN(i2.order_date) FROM items i2
+                          WHERE i2.customer_id = i.customer_id) AS first_order,
+                        (SELECT COUNT(*) FROM items i3
+                          WHERE i3.customer_id = i.customer_id) AS n_orders
         FROM events e
         LEFT JOIN event_aliases ea ON ea.canonical_event_name = e.item_name
         JOIN items i ON (
@@ -57511,6 +57611,13 @@ def _event_roster_rows(conn, event_id: int) -> list[dict]:
         """,
         (event_id, *PAIRING_INACTIVE_STATUSES),
     ).fetchall()
+    ev_year = None
+    try:
+        evr = conn.execute("SELECT event_date FROM events WHERE id = ?",
+                           (event_id,)).fetchone()
+        ev_year = (evr["event_date"] or "")[:4] if evr else None
+    except sqlite3.OperationalError:
+        ev_year = None
     out: list[dict] = []
     keys: set = set()
     for r in rows:
@@ -57519,13 +57626,28 @@ def _event_roster_rows(conn, event_id: int) -> list[dict]:
             continue
         d["name"] = d["customer"]
         d["rsvp_only"] = (d.get("transaction_status") or "active") == "rsvp_only"
+        _decorate_roster_roles(d, ev_year)
         out.append(d)
         keys.add(_pair_key_name(d["customer"]))
     for d in _event_rsvp_only_players(conn, event_id):
         if _pair_key_name(d["name"]) in keys:
             continue
+        _decorate_roster_roles(d, ev_year)
         out.append(d)
     return out
+
+
+def _decorate_roster_roles(d: dict, ev_year: str | None) -> None:
+    """Rules 12/13 inputs on a roster row (Kerry-ratified 2026-09-15):
+    the three flags as plain booleans, `is_new` = FIRST SEASON (no order
+    before the event's year — a GG-RSVP-only player with no order at all
+    counts as new), and `experience` = order rows on file, the tiebreak
+    for who drives when no captain is in the cart."""
+    for flag in PLAYER_ROLE_FLAGS:
+        d[flag] = bool(d.get(flag))
+    first = (d.get("first_order") or "")[:4]
+    d["is_new"] = (not first) or (bool(ev_year) and first >= ev_year)
+    d["experience"] = int(d.get("n_orders") or 0)
 
 
 def _event_roster_players(conn, event_id: int) -> list[dict]:
@@ -58116,6 +58238,28 @@ def generate_event_pairings(
                     break
             groups_players = best_groups or []
 
+        # Rules 12 + 7 (Kerry-ratified 2026-09-15), AFTER the groups are
+        # formed and BELOW everything in locked_names: no lone <50 unless
+        # flagged, then spread captains/ambassadors so every group has a
+        # leader to seat. Both are cheapest-history swaps; unresolvable
+        # cases become notes the PAIRINGS tab shows.
+        solo_ok = {p["customer"] for p in player_items
+                   if p.get("customer") and p.get("solo_back_ok")}
+        captains = {p["customer"] for p in player_items
+                    if p.get("customer") and p.get("group_captain")}
+        leaders = captains | {p["customer"] for p in player_items
+                              if p.get("customer") and p.get("ambassador")}
+        newbies = {p["customer"] for p in player_items
+                   if p.get("customer") and p.get("is_new")}
+        experience = {_pair_key_name(p["customer"]): int(p.get("experience") or 0)
+                      for p in player_items if p.get("customer")}
+        groups_players, _lb_notes = _repair_lone_back_tee(
+            groups_players, tee_map, solo_ok, locked_names, pair_counts)
+        mp_notes.extend(_lb_notes)
+        groups_players, _sp_notes = _spread_leaders(
+            groups_players, leaders, locked_names, pair_counts, tee_map, solo_ok)
+        mp_notes.extend(_sp_notes)
+
         # Seat order within a settled group (foursomes already decided —
         # this only decides who RIDES with whom): every group runs the
         # exact seater. Priority when they conflict (Kerry 2026-07-21):
@@ -58123,10 +58267,13 @@ def generate_event_pairings(
         # request pairs in the SAME cart (requests supersede tees) >
         # same-tee players share a cart. The old sort-by-tee ordering
         # for unconstrained groups could split a tee pair across carts
-        # when a third tee was present — the seater can't.
+        # when a third tee was present — the seater can't. Rule 13 adds
+        # captain-with-newest and the driver order (seats 1 and 3).
         def _seat(names: list[str]) -> list[str]:
             return _arrange_group_seats(names, mp_opponents,
-                                        partner_adj, tee_map)
+                                        partner_adj, tee_map,
+                                        captains=captains, newbies=newbies,
+                                        experience=experience)
 
         is_shotgun = (ev.get("start_type" if holes == "9" else "start_type_18") == "Shotgun")
 
@@ -58393,8 +58540,131 @@ def _make_group_sizes(n: int, max_size: int = 4) -> list[int]:
         return [4] * q + [3]              # e.g. 7→[4,3], 11→[4,4,3]
 
 
+_BACK_TEE_RE = re.compile(r"^<\s*50$")
+
+
+def _is_back_tee(tee) -> bool:
+    """Rule 12 applies to the <50 tee ONLY (Kerry 2026-09-15: "This only
+    applies to the <50s") — Forward and 65+ players may be alone."""
+    return bool(_BACK_TEE_RE.match(str(tee or "").strip()))
+
+
+def _lone_back_offender(group: list[str], tee_map: dict, solo_ok: set):
+    """The one <50 player alone on the back in this group who is NOT
+    flagged OK-alone-back, else None."""
+    backs = [n for n in group if _is_back_tee(tee_map.get(n))]
+    if len(backs) == 1 and _pair_key_name(backs[0]) not in solo_ok:
+        return backs[0]
+    return None
+
+
+def _repair_lone_back_tee(groups: list[list[str]], tee_map: dict,
+                          solo_ok: set, locked: set, pair_counts: dict
+                          ) -> tuple[list[list[str]], list[str]]:
+    """Pairings rule 12 (Kerry-ratified 2026-09-15): a <50 player is never
+    the only <50 in their foursome unless flagged OK-alone-back. Runs
+    AFTER the groups are formed and BELOW everything that binds (Match
+    Play, requests/locks, seeds, host units — all in `locked`): swaps an
+    unlocked non-<50 out of the lone group for an unlocked <50 from a
+    group that keeps a legal shape afterwards, choosing the swap that
+    costs the least history (rule 3 is the tiebreak, not the veto). If
+    no legal swap exists the group is left alone and a note says so —
+    "in the end if it's necessary, then fine" — so the manager decides.
+    """
+    notes: list[str] = []
+    groups = [list(g) for g in groups]
+    solo_ok = {_pair_key_name(n) for n in solo_ok}
+    lockk = {_pair_key_name(n) for n in locked}
+
+    def _ok(g):
+        return _lone_back_offender(g, tee_map, solo_ok) is None
+
+    for _ in range(len(groups) * 2):
+        gi = next((i for i, g in enumerate(groups) if not _ok(g)), None)
+        if gi is None:
+            break
+        lone = _lone_back_offender(groups[gi], tee_map, solo_ok)
+        best = None
+        for hj, h in enumerate(groups):
+            if hj == gi:
+                continue
+            for xi, x in enumerate(h):
+                if not _is_back_tee(tee_map.get(x)) or _pair_key_name(x) in lockk:
+                    continue
+                for yi, y in enumerate(groups[gi]):
+                    if _is_back_tee(tee_map.get(y)) or _pair_key_name(y) in lockk:
+                        continue
+                    g2 = list(groups[gi]); h2 = list(h)
+                    g2[yi], h2[xi] = x, y
+                    if not (_ok(g2) and _ok(h2)):
+                        continue
+                    base = _group_score(groups[gi], pair_counts) + _group_score(h, pair_counts)
+                    cost = _group_score(g2, pair_counts) + _group_score(h2, pair_counts) - base
+                    if best is None or cost < best[0]:
+                        best = (cost, gi, hj, g2, h2, x, y)
+        if best is None:
+            notes.append(f"{lone} is alone on the <50 tee — no legal swap "
+                         "(Match Play, requests and locks kept). Hand-fix or "
+                         "flag them OK alone back.")
+            # mark handled so the loop moves on: treat as accepted
+            solo_ok.add(_pair_key_name(lone))
+            continue
+        _, gi, hj, g2, h2, x, y = best
+        groups[gi], groups[hj] = g2, h2
+    return groups, notes
+
+
+def _spread_leaders(groups: list[list[str]], leaders: set, locked: set,
+                    pair_counts: dict, tee_map: dict, solo_ok: set
+                    ) -> tuple[list[list[str]], list[str]]:
+    """Pairings rule 7 (ambassadors/captains spread across groups), built
+    2026-09-15 alongside rules 12/13 because rule 13 needs a captain IN
+    the group to have anyone to seat. Soft: a group with no leader takes
+    one from a group holding two or more, by the cheapest history swap
+    that keeps rule 12 intact. Never moves a locked player."""
+    notes: list[str] = []
+    groups = [list(g) for g in groups]
+    lead = {_pair_key_name(n) for n in leaders}
+    lockk = {_pair_key_name(n) for n in locked}
+    sok = {_pair_key_name(n) for n in solo_ok}
+
+    def _n(g):
+        return sum(1 for n in g if _pair_key_name(n) in lead)
+
+    for _ in range(len(groups)):
+        gi = next((i for i, g in enumerate(groups) if len(g) >= 2 and _n(g) == 0), None)
+        if gi is None:
+            break
+        best = None
+        for hj, h in enumerate(groups):
+            if hj == gi or _n(h) < 2:
+                continue
+            for xi, x in enumerate(h):
+                if _pair_key_name(x) not in lead or _pair_key_name(x) in lockk:
+                    continue
+                for yi, y in enumerate(groups[gi]):
+                    if _pair_key_name(y) in lockk:
+                        continue
+                    g2 = list(groups[gi]); h2 = list(h)
+                    g2[yi], h2[xi] = x, y
+                    if _lone_back_offender(g2, tee_map, sok) or _lone_back_offender(h2, tee_map, sok):
+                        continue
+                    base = _group_score(groups[gi], pair_counts) + _group_score(h, pair_counts)
+                    cost = _group_score(g2, pair_counts) + _group_score(h2, pair_counts) - base
+                    if best is None or cost < best[0]:
+                        best = (cost, hj, g2, h2)
+        if best is None:
+            break       # nobody spare to give; not worth a note per group
+        _, hj, g2, h2 = best
+        groups[gi], groups[hj] = g2, h2
+    return groups, notes
+
+
 def _arrange_group_seats(names: list[str], mp_opponents: set,
-                         partner_adj: set, tee_map: dict) -> list[str]:
+                         partner_adj: set, tee_map: dict,
+                         captains: set | None = None,
+                         newbies: set | None = None,
+                         experience: dict | None = None) -> list[str]:
     """Seat order for a settled group — foursomes are already decided;
     this only decides who RIDES with whom. Carts are seats 1&2 and 3&4
     (Kerry's cart-pair ruling).
@@ -58407,9 +58677,19 @@ def _arrange_group_seats(names: list[str], mp_opponents: set,
     - Same-tee cart-mates (weight 1) — tee compare is case/whitespace-
       insensitive so label drift can't split a tee pair.
 
+    - Rule 13 (Kerry-ratified 2026-09-15): a group captain rides with the
+      NEWEST player in the group (weight 10 — below a request, above a
+      tee match), and within each cart the DRIVER (seats 1 and 3) is the
+      captain, else the most experienced non-new player; a first-season
+      player never drives.
+
     Groups are ≤ 4 players (24 permutations), so brute force is exact.
     """
     from itertools import permutations
+
+    captains = {_pair_key_name(n) for n in (captains or set())}
+    newbies = {_pair_key_name(n) for n in (newbies or set())}
+    experience = experience or {}
 
     def _cart(idx: int) -> int:
         return 0 if idx < 2 else 1
@@ -58418,6 +58698,12 @@ def _arrange_group_seats(names: list[str], mp_opponents: set,
         return str(tee_map.get(name) or "").strip().lower()
 
     keys = {n: _pair_key_name(n) for n in names}
+    has_capt = any(keys[n] in captains for n in names)
+    newest = None
+    if has_capt:
+        cands = [n for n in names if keys[n] in newbies and keys[n] not in captains]
+        if cands:
+            newest = min(cands, key=lambda n: (experience.get(keys[n], 0), n))
     best, best_cost = list(names), None
     for perm in permutations(names):
         cost = 0
@@ -58434,10 +58720,26 @@ def _arrange_group_seats(names: list[str], mp_opponents: set,
                 ta, tb = _tee(perm[i]), _tee(perm[j])
                 if ta and tb and ta != tb:
                     cost += 1
+        if newest is not None:
+            ni = perm.index(newest)
+            if not any(_cart(k) == _cart(ni) and keys[perm[k]] in captains
+                       for k in range(len(perm)) if k != ni):
+                cost += 10
         if best_cost is None or cost < best_cost:
             best, best_cost = list(perm), cost
         if best_cost == 0:
             break
+
+    # DRIVER order inside each settled cart (rule 13). Cart composition
+    # is decided above; this only says who takes the wheel.
+    def _rank(n):
+        k = keys[n]
+        return (1 if k in captains else 0,
+                0 if k in newbies else 1,
+                experience.get(k, 0))
+    for i, j in ((0, 1), (2, 3)):
+        if j < len(best) and _rank(best[j]) > _rank(best[i]):
+            best[i], best[j] = best[j], best[i]
     return best
 
 

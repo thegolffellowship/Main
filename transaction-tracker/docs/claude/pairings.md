@@ -99,6 +99,35 @@ matters too, not just the foursome.
     when someone signs up, notify whom they've requested.
 11. **A request from or for a person LOCKS both players** from further
     requests for that event, unless the other declines.
+12. **No lone back tee (Kerry-ratified 2026-09-15, v2.416.0).** A `<50`
+    player is never the only `<50` in their foursome unless flagged
+    `solo_back_ok`. Forward and 65+ may be alone. Applied AFTER groups
+    form and BELOW rules 1–6/8/11 (everything in `locked_names`):
+    `_repair_lone_back_tee` swaps an unlocked non-`<50` out for an
+    unlocked `<50` from a group that keeps a legal shape, cheapest
+    history first (rule 3 is the tiebreak, not the veto). No legal swap
+    → a note on the sheet, manager decides. `<50` detection is strict
+    (`_is_back_tee`); Kerry: "This only applies to the <50s."
+13. **Driver's seat (Kerry-ratified 2026-09-15, v2.416.0).** Seats 1 and
+    3 drive. A `group_captain` rides with the NEWEST player in the group
+    (weight 10 in `_arrange_group_seats`: below a request, above a tee
+    match) and drives; a first-season player (`is_new`) never drives;
+    otherwise the more experienced player (`experience` = order rows on
+    file) takes the wheel. Rule 7 is built alongside (`_spread_leaders`:
+    a leaderless group takes a captain/ambassador from a group holding
+    two, cheapest history, never breaking rule 12).
+
+**Role flags** (`customers.ambassador / group_captain / solo_back_ok`,
+seeded by `_PLAYER_ROLE_SEED` fill-only-if-NULL; one-tap chips AMB /
+CAPT / BACK on the Customers page write an explicit 0/1 via
+`POST /api/customers/<id>/roles`). Roster rows carry them plus `is_new`
+and `experience` (`_decorate_roster_roles`); the /pairings GET passes them
+to the page for the CAPT / AMB / NEW badges and the driver mark. Kerry's
+seed lists: ambassadors South, M. Wade, Marroquin, Mazanec, Anthis, Young,
+Callaway, Barna, J. Wade, Cloer, Straiton, Niester, Campos (+ Vasquez per
+his words); captains South, M. Wade, Young, Callaway, Baker, Sharitz,
+Wicker, Barna, J. Wade, Cloer, Straiton, Niester, Freund (+ Vasquez); OK
+alone back Young, Niester, Mazanec, Baker. Guard: `test_pairing_roles.py`.
 
 ## Ratified (Kerry, in-session 2026-07-12)
 

@@ -47,7 +47,7 @@ tmp = os.path.join(tempfile.mkdtemp(prefix="tgf-pr-"), "t.db")
 conn = sqlite3.connect(tmp)
 conn.executescript("""
  CREATE TABLE events (id INTEGER PRIMARY KEY, item_name TEXT, chapter TEXT,
-   status TEXT);
+   status TEXT, event_date TEXT);
  CREATE TABLE event_aliases (alias_name TEXT, canonical_event_name TEXT);
  CREATE TABLE items (id INTEGER PRIMARY KEY, customer TEXT, customer_id INTEGER,
    item_name TEXT, holes TEXT, tee_choice TEXT, partner_request TEXT,
@@ -56,7 +56,8 @@ conn.executescript("""
    customer_email TEXT, user_status TEXT);
  CREATE TABLE customers (customer_id INTEGER PRIMARY KEY, first_name TEXT,
    last_name TEXT, company_name TEXT, account_status TEXT,
-   current_player_status TEXT, pace_rating INTEGER);
+   current_player_status TEXT, pace_rating INTEGER, ambassador INTEGER,
+   group_captain INTEGER, solo_back_ok INTEGER);
  -- The roster now folds in PLAYING GG RSVPs (test_pairings_rsvp_roster.py);
  -- this fixture has none, but the tables must exist to be read.
  CREATE TABLE rsvps (id INTEGER PRIMARY KEY, email_uid TEXT, player_name TEXT,
