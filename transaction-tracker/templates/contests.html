@@ -2706,7 +2706,7 @@
                     `<div><div class="nm">${escapeHtml(ev.item_name)}</div>` +
                     `<div class="meta">${evlbDate(ev.event_date)}${ev.course ? " &middot; " + escapeHtml(ev.course) : ""} &middot; ${ev.field} players ${ch}</div></div>` +
                     (ev.money_visible === false
-                        ? `<div class="pot" style="color:var(--text-muted);font-size:11px;font-weight:600;">IN PLAY<span class="s">POT PENDING</span></div>`
+                        ? `<div class="pot" style="color:var(--text-muted);font-size:11px;font-weight:600;" title="${ev.money_reason === "scores" ? (ev.players_pending || 0) + " player(s) still have holes to post" : "Settling — money posts 10 minutes after the last score"}">IN PLAY<span class="s">${ev.money_reason === "scores" ? "SCORES OUT" : "POT PENDING"}</span></div>`
                         : `<div class="pot">$${(ev.pot || 0).toFixed(2)}<span class="s">POT</span></div>`) +
                     `</summary><div class="evlb-body"><p style="color:var(--text-muted);">Loading&hellip;</p></div></details>`;
             }).join("");
@@ -2761,10 +2761,30 @@
     function evlbMoneyNotice(d) {
         if (!d || !d._moneyHeld) return "";
         const mins = d.money_hold_minutes || 10;
+        // TWO reasons the money is held, and the manager needs to know
+        // which (Kerry 2026-09-15: "Not all scores are in. Every hole
+        // must be accounted for every player"). Cards still out is a
+        // "go find them"; the ten-minute settle is a "wait".
+        let why, who = "";
+        if (d.money_reason === "scores" || d.field_complete === false) {
+            const n = d.scores_pending_total || 0;
+            why = `Every hole must be posted for every player first &mdash; `
+                + `${n} player${n === 1 ? " is" : "s are"} still short`
+                + (d.holes_needed ? ` (${d.holes_posted} of ${d.holes_needed} holes in)` : "")
+                + `. Then money shows ${mins} minutes after the last score.`;
+            const list = (d.scores_pending || []).map(p =>
+                `${escapeHtml(p.player || "")} ${p.holes}/${p.of}`).join(" &middot; ");
+            if (list) who = `<div style="margin-top:5px;font-size:11.5px;opacity:0.9;">${list}`
+                + ((d.scores_pending_total > (d.scores_pending || []).length)
+                    ? ` &middot; +${d.scores_pending_total - d.scores_pending.length} more` : "")
+                + `</div>`;
+        } else {
+            why = `Money shows ${mins} minutes after the last score is posted, so a `
+                + `half-posted field can never name the wrong winner.`;
+        }
         return `<div style="margin:0 0 8px;padding:7px 10px;border:1px solid #FCD34D;background:#FFFBEB;border-radius:6px;font-size:12px;color:#92400E;">
             <strong>Round in play &mdash; winnings are not posted yet.</strong>
-            Money shows ${mins} minutes after the last score is posted, so a half-posted
-            field can never name the wrong winner. Scores below are live.</div>`;
+            ${why} Scores below are live.${who}</div>`;
     }
 
     async function evlbLoadEvent(el) {

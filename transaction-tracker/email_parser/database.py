@@ -13462,6 +13462,42 @@ def _events_leaderboard_codes(db_path=None) -> list[str]:
     return list(_EVENTS_LEADERBOARD_SEED)
 
 
+def _event_field_complete(conn, event_id: int, holes_n: int) -> dict:
+    """Is every hole accounted for, for every player in the field?
+
+    Kerry 2026-09-15, looking at $63 beside a name with three holes
+    posted: "Winnings should not be showing. Not all scores are in. Every
+    hole must be accounted for every player." A quiet ten minutes is not
+    the end of a round — it is a group between nines, a phone in a pocket,
+    a scorer who stopped to eat. The clock cannot tell those apart; the
+    CARD can.
+
+    A player's holes are the union across their scoring rounds (a GG
+    import writes one row per board, and the ALL Gross row carries no
+    net), counting only holes with an actual stroke on them.
+    """
+    rows = [dict(r) for r in conn.execute(
+        """SELECT COALESCE(CAST(sr.customer_id AS TEXT),
+                           'n:' || LOWER(TRIM(sr.player_name))) AS k,
+                  MAX(sr.player_name) AS nm,
+                  COUNT(DISTINCT CASE WHEN sh.strokes IS NOT NULL
+                                      THEN sh.hole_number END) AS n_holes
+             FROM scoring_rounds sr
+             LEFT JOIN scoring_holes sh ON sh.scoring_round_id = sr.id
+            WHERE sr.event_id = ?
+              AND COALESCE(sr.source, 'gg') NOT LIKE 'gg_history%'
+            GROUP BY k""", (event_id,))]
+    want = int(holes_n or 0) or 9
+    pending = [{"player": r["nm"], "holes": r["n_holes"], "of": want}
+               for r in rows if (r["n_holes"] or 0) < want]
+    pending.sort(key=lambda r: (r["holes"], r["player"] or ""))
+    return {"complete": bool(rows) and not pending,
+            "field": len(rows), "pending": pending,
+            "holes_wanted": want,
+            "holes_posted": sum(r["n_holes"] or 0 for r in rows),
+            "holes_needed": len(rows) * want}
+
+
 def get_events_leaderboard(chapter: str | None = None,
                            year: str | None = None,
                            db_path: str | Path = DB_PATH) -> dict:
@@ -13477,6 +13513,7 @@ def get_events_leaderboard(chapter: str | None = None,
             _money_hold = 10
         rows = [dict(r) for r in conn.execute(
             """SELECT e.id, e.item_name, e.event_date, e.course, e.chapter,
+                      e.format,
                       COUNT(DISTINCT COALESCE(sr.customer_id,
                                               'n:' || sr.player_name)) AS field
                FROM events e
@@ -13514,12 +13551,25 @@ def get_events_leaderboard(chapter: str | None = None,
                 (r["id"],)).fetchone()
             r["last_score_at"] = (_lr["t"] if _lr else None) or None
             r["money_visible"] = True
-            if r["last_score_at"] and _money_hold > 0:
+            # EVERY HOLE FOR EVERY PLAYER FIRST (Kerry 2026-09-15). The
+            # clock alone let a quiet ten minutes mid-round look like the
+            # end of one; the card is what knows.
+            _fc = _event_field_complete(
+                conn, r["id"],
+                _event_holes_type(r["item_name"], r.get("format")))
+            r["field_complete"] = _fc["complete"]
+            r["players_pending"] = len(_fc["pending"])
+            if not _fc["complete"]:
+                r["money_visible"] = False
+                r["money_reason"] = "scores"
+            elif r["last_score_at"] and _money_hold > 0:
                 try:
                     _rt = datetime.strptime(str(r["last_score_at"])[:19],
                                             "%Y-%m-%d %H:%M:%S") + timedelta(minutes=_money_hold)
                     r["money_visible"] = datetime.utcnow() >= _rt
                     r["money_at"] = _rt.strftime("%Y-%m-%d %H:%M:%S")
+                    if not r["money_visible"]:
+                        r["money_reason"] = "hold"
                 except (ValueError, TypeError):
                     pass
             if not r["money_visible"]:
@@ -13557,13 +13607,18 @@ def get_event_leaderboard(event_name: str,
             "SELECT MAX(imported_at) AS t FROM scoring_rounds WHERE event_id = ?",
             (ev["id"],)).fetchone()
         last_score_at = (_last["t"] if _last else None) or None
-        money_visible, money_at = True, None
-        if last_score_at and _hold > 0:
+        money_visible, money_at, money_reason = True, None, None
+        field_state = _event_field_complete(conn, ev["id"], ev["holes"])
+        if not field_state["complete"]:
+            money_visible, money_reason = False, "scores"
+        elif last_score_at and _hold > 0:
             try:
                 _t = datetime.strptime(str(last_score_at)[:19], "%Y-%m-%d %H:%M:%S")
                 _ready = _t + timedelta(minutes=_hold)
                 money_visible = datetime.utcnow() >= _ready
                 money_at = _ready.strftime("%Y-%m-%d %H:%M:%S")
+                if not money_visible:
+                    money_reason = "hold"
             except (ValueError, TypeError):
                 money_visible = True
 
@@ -14316,7 +14371,15 @@ def get_event_leaderboard(event_name: str,
                   "holes": ev["holes"]},
         "money_visible": money_visible,
         "money_at": money_at,
+        "money_reason": money_reason,
         "money_hold_minutes": _hold,
+        "field_complete": field_state["complete"],
+        "holes_posted": field_state["holes_posted"],
+        "holes_needed": field_state["holes_needed"],
+        # Named, not counted: "waiting on 4" makes a manager hunt. The
+        # board should say WHO and how far along they are.
+        "scores_pending": field_state["pending"][:12],
+        "scores_pending_total": len(field_state["pending"]),
         "last_score_at": last_score_at,
         "field": len(plist),
         "pot": round(sum(w["cents"] for ws in won.values()

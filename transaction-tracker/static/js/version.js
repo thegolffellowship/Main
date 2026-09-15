@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.438.1";
+window.TGF_VERSION = "2.439.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.439.0",
+    date: "2026-09-15",
+    changes: [
+      "EVERY HOLE, FOR EVERY PLAYER, BEFORE A DOLLAR SHOWS (Kerry, mid-round, looking at $63 beside a name with three holes posted: \u2018Winnings should not be showing. Not all scores are in. Every hole must be accounted for every player\u2019). The hold shipped an hour earlier trusted the clock alone \u2014 ten minutes since the last score was written \u2014 and a quiet ten minutes is not the end of a round: it is a group between nines, a phone in a pocket, a scorer who stopped to eat. The clock cannot tell those apart; the CARD can. Money is now held until every player in the field has a stroke on every hole of the event, and only THEN does the ten-minute settle start. A hole row with no strokes on it counts as missing, not as posted.",
+      "The banner says WHICH of the two reasons it is, and names names: \u2018Every hole must be posted for every player first \u2014 4 players are still short (137 of 189 holes in)\u2019, followed by each one and how far along they are. A manager chasing a card should not have to go hunting for who to chase. The events list badge reads SCORES OUT rather than POT PENDING while cards are still in play.",
+    ],
+  },
   {
     version: "2.438.1",
     date: "2026-09-15",
