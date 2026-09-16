@@ -352,6 +352,17 @@ Wednesday auto-draft fills the template:**
   sender 1, list 3 minus segment 2, tag `public-recap`. Kerry gets the
   campaign link by email (Graph, COO_EMAIL_TO), logged to message_log as
   `insider-draft`. Skipped when no event has cards in the window.
+- **2026-09-16 — dial set to `review`; the writer is its own lane.** Kerry:
+  "I'm thinking you don't auto post to Brevo each week, but instead send me
+  an email of what you suggest, that I can edit and approve. I want it to be
+  creative though. I don't necessarily want the same format each time with
+  the '3 things.'" and "yes, I am comfortable, ultimately, allowing an
+  AI-written draft with options to choose from." Spun off as "Insider
+  Writer: Angle Rotation + AI Draft" (branch claude/insider-writer-0e4788):
+  angle rotation as a dial, a Claude-written draft with two alternate
+  headlines, lint still gating, review email to Kerry, Brevo draft only from
+  his approved text. Until it ships, Wednesday 8:00 emails the deterministic
+  draft for review and creates NOTHING in Brevo.
 - MODES (dial `insider_autodraft`). **draft** (DEFAULT — Kerry 2026-09-10:
   *"Update the dial to create the Brevo draft directly each wednesday at
   8am. I'll review it there because I can see all the visual with it too.
