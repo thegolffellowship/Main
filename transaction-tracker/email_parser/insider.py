@@ -114,6 +114,35 @@ def _cap(s: str) -> str:
     return s[:1].upper() + s[1:] if s else s
 
 
+def _fraction_headline(n: int, m: int) -> str | None:
+    """Kerry's headline shape (2026-09-16, s9.23 week): "Half the Field Won
+    Money!" — the beat-1 fraction, capitalised, as the title."""
+    if not m:
+        return None
+    r = n / m
+    if r >= 0.66:
+        return "Two-Thirds of the Field Won Money!"
+    if r >= 0.5:
+        return "Half the Field Won Money!"
+    if r >= 0.33:
+        return "A Third of the Field Won Money!"
+    return None
+
+
+def pick_headline(candidates: list, last_headline: str | None) -> str:
+    """Strongest candidate that is NOT last week's title. Kerry 2026-09-16:
+    "We copied the Brevo title from last week" — two Insiders in a row led
+    "First round. First payday." because a first-timer cashed both weeks.
+    The last candidate is the ratified default and is allowed to repeat
+    only when nothing else is left."""
+    cands = [c for c in candidates if c]
+    last = (last_headline or "").strip().lower()
+    for c in cands:
+        if c.strip().lower() != last:
+            return c
+    return cands[-1] if cands else "TGF Insider"
+
+
 def _fraction_phrase(n: int, m: int) -> str:
     if not m:
         return ""
@@ -144,6 +173,31 @@ def _hio_pot_as_of(pot, as_of: date):
 
 
 # ── data ────────────────────────────────────────────────────────────────
+
+def last_insider_headline(db_path=None, before: date | None = None) -> str | None:
+    """The previous Insider's headline, from the draft ping logged to
+    message_log ('insider-draft', subject "TGF Insider | <headline>" or
+    "Insider draft ready — TGF Insider | <headline>"). Only drafts BEFORE
+    the as-of date count, so re-running today's draft does not rotate
+    itself away."""
+    from . import database as db
+    try:
+        with db._connect(db_path) as conn:
+            row = conn.execute(
+                """SELECT subject FROM message_log
+                    WHERE event_name = 'insider-draft' AND subject IS NOT NULL
+                      AND date(sent_at) < ?
+                    ORDER BY id DESC LIMIT 1""",
+                ((before or today_central()).isoformat(),)).fetchone()
+    except Exception:
+        logger.warning("insider: last headline unavailable", exc_info=True)
+        return None
+    if not row or not row[0]:
+        return None
+    subj = str(row[0])
+    marker = "TGF Insider | "
+    return subj.split(marker, 1)[1].strip() if marker in subj else subj.strip()
+
 
 def gather_week(db_path=None, as_of: date | None = None, days: int = 7) -> dict:
     """Everything the template needs, from Tracker data only.
@@ -303,6 +357,7 @@ def gather_week(db_path=None, as_of: date | None = None, days: int = 7) -> dict:
         out["hio_pot"] = _hio_pot_as_of(pot, as_of)
     except Exception:
         logger.warning("insider: HIO pot unavailable", exc_info=True)
+    out["last_headline"] = last_insider_headline(db_path=db_path, before=as_of)
     try:
         out["hcp_dist"] = handicap_distribution(db_path=db_path)
     except Exception:
@@ -531,13 +586,17 @@ def compose(data: dict) -> dict:
             slots["BEAT_3_BODY"] = ("A TGF handicap keeps it fair, so a 20-handicap has the same "
                                     "shot as a scratch player.")
 
-    # Headline follows the strongest beat.
-    if cashed_firsts:
-        slots["HEADLINE"] = "First round. First payday."
-    elif story and story["skins_story"]["score"] == "bogey":
-        slots["HEADLINE"] = "A bogey won money Tuesday"
-    else:
-        slots["HEADLINE"] = "You don't have to be the best golfer out here to get paid"
+    # Headline follows the strongest beat — but never repeats last week's
+    # title (Kerry 2026-09-16). Candidates in strength order; the ratified
+    # default sits last and may repeat only when nothing else remains.
+    candidates = [
+        "First round. First payday." if cashed_firsts else None,
+        (f"A {story['skins_story']['score']} won money Tuesday"
+         if story and story["skins_story"]["score"] in ("bogey", "par") else None),
+        _fraction_headline(total_c, total_f),
+        "You don't have to be the best golfer out here to get paid",
+    ]
+    slots["HEADLINE"] = pick_headline(candidates, data.get("last_headline"))
 
     slots["HIO_POT"] = _fmt_money(data.get("hio_pot")) if data.get("hio_pot") is not None else "growing"
 

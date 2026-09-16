@@ -332,9 +332,15 @@ Wednesday auto-draft fills the template:**
   "Course · Tue Sep 15"); Saturday 18s = future `[sa]18.` within 45 days,
   not cancelled, max 4.
 - `compose()` — deterministic sentences into the 5-block slots. Headline
-  follows the strongest beat: "First round. First payday." (a first-timer
-  cashed) → "A bogey won money Tuesday" → the ratified default. Beat 1 is
-  the fraction ("half the field", "a third of the field"), never dollars.
+  follows the strongest beat — "First round. First payday." (a first-timer
+  cashed) → "A bogey/par won money Tuesday" → the fraction as a title
+  ("Half the Field Won Money!", Kerry's shape 2026-09-16) → the ratified
+  default — **and never repeats last week's title** (`pick_headline`;
+  `last_insider_headline` reads the previous draft ping in `message_log`).
+  Kerry, week 3: "We copied the Brevo title from last week" — two Insiders
+  in a row led "First round. First payday." because a first-timer cashed
+  both weeks. Beat 1 is the fraction ("half the field", "a third of the
+  field"), never dollars.
 - `render()` strips the template's `<!-- example -->` author notes;
   Brevo merge tags (`{{ contact.FIRSTNAME }}`, `{{ unsubscribe }}`,
   `{{ update_profile }}`) stay.

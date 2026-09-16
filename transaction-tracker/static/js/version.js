@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.462.3";
+window.TGF_VERSION = "2.462.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.462.4",
+    date: "2026-09-16",
+    changes: [
+      "TGF Insider: the headline never repeats last week's (Kerry 2026-09-16: 'We copied the Brevo title from last week' — two drafts in a row led 'First round. First payday.' because a first-timer cashed both weeks). compose() now ranks candidates — first-timer cashed → a par/bogey won a skin → the beat-1 fraction as a title ('Half the Field Won Money!', Kerry's edit) → the ratified default — and skips the one that matches the previous draft's subject in message_log. Test: test_insider_headline.py.",
+    ],
+  },
   {
     version: "2.462.3",
     date: "2026-09-16",
