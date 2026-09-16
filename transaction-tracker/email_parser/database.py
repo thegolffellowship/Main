@@ -13709,7 +13709,7 @@ def get_event_leaderboard(event_name: str,
                 tee_legend.append({
                     "band": None,
                     "tee_name": _tee_legend_display_name(label, ladies),
-                    "band_label": "Women" if ladies else None,
+                    "band_label": TEE_LEGEND_WOMEN_WORD if ladies else None,
                     "color": col, "ladies": ladies,
                     # An outline, always — the starter sheet's own mark
                     # for the women's tee (Kerry 2026-09-15).
@@ -56827,27 +56827,30 @@ def _tee_name_plural(name: str) -> str:
     NOTE: this is the BAND legend's spelling and it is RATIFIED (Kerry
     2026-09-15: "Women should just be: Women (no colored Red) Red
     Tees") — the band already says who plays it, so the colour does not
-    repeat it. The LEADERBOARD's played-tee legend carries no band and
-    prefixes "Ladies - " itself; see `_tee_legend_display_name`."""
+    repeat it. The LEADERBOARD's played-tee legend says who plays it the same
+    way, through `band_label` — see `TEE_LEGEND_WOMEN_WORD`."""
     n = _TEE_ORDER_RE.sub("", " ".join((name or "").split())).strip()
     n = re.sub(r"\s*\((?:l|lady|ladies)\)", "", n, flags=re.I).strip()
     n = re.sub(r"\bTees?\b\s*$", "", n, flags=re.I).strip()
     return f"{n} Tees" if n else n
 
 
+# THE ONE WORD FOR THE WOMEN'S TEE, on every surface (Kerry 2026-09-16:
+# "S1. Women's" / "We need to sync up the two legends somehow to maintain
+# consistency"). The LEADERBOARD's played-tee legend and the STARTER
+# SHEET's band legend are built by different code and used to spell it
+# differently ("Ladies - Red Tees" vs "Women Red Tees"). Both now compose
+# the same two fields — `band_label` (this word, or the men's band) then
+# `tee_name` ("Red Tees") — and this constant is the only place the word
+# lives. `test_tee_legend_pairing.js` fails either surface that drifts.
+TEE_LEGEND_WOMEN_WORD = "Women"
+
+
 def _tee_legend_display_name(name: str, ladies: bool) -> str:
-    """The LEADERBOARD legend's spelling (Kerry 2026-09-16: "Should show
-    as Ladies - [color] Tees").
-
-    That legend is built from the tees actually PLAYED, so it carries no
-    band to say who plays which — and a board showing two Reds then
-    tells them apart only by an outline the reader has to be told about.
-    So this one says it in words. The band legend keeps its own ratified
-    spelling; the two are deliberately different because one has a band
-    beside it and the other does not."""
-    base = _tee_name_plural(name)
-    return f"Ladies - {base}" if (ladies and base) else base
-
+    """The tee's printed name for ANY legend: "Red Tees". Who plays it is
+    `band_label`'s job (see `TEE_LEGEND_WOMEN_WORD`), never the name's —
+    so the two legends cannot say it two ways."""
+    return _tee_name_plural(name)
 
 def _tee_color_for(tee_name: str) -> str | None:
     low = " ".join((tee_name or "").split()).lower()
@@ -56965,7 +56968,8 @@ def event_tee_legend(conn, event_id: int, ev: dict) -> list:
         raw_label = _TEE_ORDER_RE.sub("", nm).strip()
         band_label = {"<50": "Men <50", "50-64": "Men 50-64",
                       "65+": "Men 65+"}.get(
-            band, "Women" if (ladies or band == "Forward") else band)
+            band, TEE_LEGEND_WOMEN_WORD if (ladies or band == "Forward")
+            else band)
         out.append({"band": band, "band_label": band_label,
                     "tee_name": label,
                     # What the COURSE CARD calls it — the printed name is

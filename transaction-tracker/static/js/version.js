@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.458.10";
+window.TGF_VERSION = "2.458.11";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.458.11",
+    date: "2026-09-16",
+    changes: [
+      "ONE WORD FOR THE WOMEN\u2019S TEE, ON BOTH LEGENDS (Kerry 2026-09-16: \u2018S1. Women\u2019s\u2019 / \u2018We need to sync up the two legends somehow to maintain consistency\u2019). The LEADERBOARD\u2019s played-tee legend and the STARTER SHEET\u2019s band legend are built by different code and had drifted to two spellings \u2014 \u2018Ladies - Red Tees\u2019 on the board, \u2018Women Red Tees\u2019 on the sheet. Both now compose the same two fields, `band_label` then `tee_name`, and the word lives in exactly one place: `TEE_LEGEND_WOMEN_WORD`. The tee\u2019s printed name is \u2018Red Tees\u2019 everywhere; who plays it is the band label\u2019s job. `test_tee_legend_pairing.js` (12 checks) fails either surface that spells it on its own.",
+      "The key already aligns to the board\u2019s RIGHT-MOST VISIBLE column (v2.446.0 `fitKeys`, re-measured on every hole/handicap toggle and on resize) \u2014 confirmed rather than rebuilt.",
+    ],
+  },
   {
     version: "2.458.10",
     date: "2026-09-16",
