@@ -1809,6 +1809,8 @@ def _scoring_dispatch(url: str, extract: str):
                                    board (GG duplicate member records folded;
                                    refresh re-fetches all races first)
       scoring-hcp-distribution     member handicap-index spread (18-hole equiv.)
+      scoring-hcp-link-audit       READ-ONLY: handicap identity coverage by customer_id,
+                                   who is unlinked, link-label name drift, plus-handicap rounds
       scoring-brevo-draft[:dry|review|apply]  Wednesday TGF Insider: fill the
                                    public recap template from the week's events;
                                    dry (default) returns HTML; review emails Kerry
@@ -4361,6 +4363,13 @@ def _scoring_dispatch(url: str, extract: str):
                     indent=2, default=str)
             return json.dumps({"error": "usage: scoring-pairings:rounds|<portal> "
                                "or round|<portal>|<id>[|apply] or all|<portal>[|apply]"})
+        if cmd == "scoring-hcp-link-audit":
+            # READ-ONLY identity audit (Kerry 2026-09-16): how much of the
+            # handicap layer resolves by customer_id, who does not, where
+            # the link label has drifted from the canonical name, and
+            # whether any live plus handicap is fractional. Writes nothing.
+            return json.dumps(db.audit_handicap_link_identity(),
+                              indent=2, default=str)
         if cmd == "scoring-hcp-audit":
             # READ-ONLY full-table audit: every handicap record classified
             # by how it reconciles with its scorecard (Kerry 2026-07-14).

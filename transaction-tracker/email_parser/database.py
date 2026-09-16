@@ -10145,9 +10145,16 @@ def fetch_champ_player_card(race_key: str, customer_id: int,
             h = (player.get("holes") or {}).get(n) or {}
             gross = h.get("strokes")
             dots = 0 if gross_mode else (h.get("dots") or 0)
+            # KERRY'S PLUS RULE (ratified 2026-09-15), v2.458.0. A NEGATIVE
+            # dot count is a stroke GIVEN BACK, and `gross - dots` ADDED it
+            # to that hole — so a plus player was charged twice over: once
+            # hole by hole here, and again by the flat `plus_adj` deduction
+            # below that this card has applied since 2026-08-01. No hole is
+            # ever made harder; the plus comes off the ROUND once.
+            play_dots = max(0, dots)
             par = pars.get(n)
             net = None if gross_mode else (
-                (gross - dots) if gross is not None else None)
+                (gross - play_dots) if gross is not None else None)
             if gross_mode:
                 pts = compute_hole_derivations(
                     par, gross, 0, gross_formulas)["stableford_gross"]
@@ -10158,7 +10165,11 @@ def fetch_champ_player_card(race_key: str, customer_id: int,
             if pts is not None:
                 computed = (computed or 0) + pts
             holes.append({"hole": n, "par": par, "gross": gross,
-                          "dots": dots, "net": net, "pts": pts,
+                          # `dots` is what the card DRAWS: a give-back is
+                          # no longer marked, because it no longer applies.
+                          "dots": play_dots,
+                          "strokes_given_back": -min(0, dots),
+                          "net": net, "pts": pts,
                           "yardage": ydss.get(n),
                           "stroke_index": sis.get(n)})
 
@@ -10199,7 +10210,7 @@ def fetch_champ_player_card(race_key: str, customer_id: int,
         plus_adj = (roster.get("plus_by_cid") or {}).get(int(customer_id))
         ph = player.get("playing_handicap")
         if plus_adj is None and ph is not None and ph < 0:
-            plus_adj = -ph
+            plus_adj = plus_round_deduction(ph)
         if gross_mode:
             plus_adj = None     # net-points rule only — see _champ_plus_adjustments
         computed_adj = (computed - plus_adj
@@ -13997,7 +14008,7 @@ def get_event_leaderboard(event_name: str,
             for pr in conn.execute(
                     "SELECT id, playing_handicap FROM scoring_rounds "
                     "WHERE event_id = ? AND playing_handicap < 0", (ev["id"],)):
-                _plus[pr["id"]] = int(round(abs(pr["playing_handicap"])))
+                _plus[pr["id"]] = plus_round_deduction(pr["playing_handicap"])
             for hr in conn.execute(
                     """SELECT sr.id AS rid, sh.hole_number, sh.strokes,
                               sh.strokes_received, cth.par
@@ -14009,11 +14020,12 @@ def get_event_leaderboard(event_name: str,
                        WHERE sr.event_id = ?
                          AND COALESCE(sr.source, 'gg') NOT LIKE 'gg_history%'""",
                     (ev["id"],)):
-                _recv = hr["strokes_received"] or 0
-                if hr["rid"] in _plus:
-                    _recv = max(0, _recv)
+                # game=True IS the clamp now — the local `max(0, _recv)`
+                # this used to do lived here and nowhere else, which is
+                # why two other surfaces never got the rule (v2.458.0).
                 d = compute_hole_derivations(hr["par"], hr["strokes"],
-                                             _recv, formulas)
+                                             hr["strokes_received"] or 0,
+                                             formulas, game=True)
                 a = pts.setdefault(hr["rid"], {"net": 0, "gross": 0})
                 if d.get("stableford_net") is not None:
                     a["net"] += d["stableford_net"]
@@ -15530,19 +15542,73 @@ def get_championship_formulas(base: dict | None = None,
     return f
 
 
+def plus_round_deduction(playing_handicap) -> int:
+    """Strokes a PLUS handicap gives back across the ROUND (v2.458.0).
+
+    THE one implementation of the round half of Kerry's plus rule. Every
+    game surface calls this rather than writing `int(round(abs(ph)))`
+    again, so the leaderboard, the live cards, the `/handicaps` scorecard
+    and the Players Cup card can never disagree about what a plus costs.
+
+    NOTE for Kerry (rule 3b, open): `round()` is banker's rounding, so a
+    FRACTIONAL plus handicap of -0.5 deducts 0 and -1.5 deducts 2. No
+    live round has a fractional plus handicap today — `scoring-hcp-link-
+    audit` reports whether that is still true — so this preserves the
+    v2.450.0 arithmetic exactly until he rules on it.
+    """
+    if playing_handicap is None:
+        return 0
+    try:
+        ph = float(playing_handicap)
+    except (TypeError, ValueError):
+        return 0
+    return int(round(abs(ph))) if ph < 0 else 0
+
+
 def compute_hole_derivations(par: int | None, strokes: int | None,
-                             strokes_received: int, formulas: dict) -> dict:
+                             strokes_received: int, formulas: dict,
+                             game: bool = False) -> dict:
     """Derived per-hole values — never stored, always computed through the
-    formula settings so the admin can retune without touching facts."""
+    formula settings so the admin can retune without touching facts.
+
+    `game=True` applies KERRY'S PLUS RULE (ratified 2026-09-15): *"For MVP
+    nobody is allowed to have to add strokes on any given hole, so there
+    should be no pluses on any holes. But his +3 PH still stands… his
+    total points gets deducted that 3 strokes. It's not fair to make a
+    player have to perform on any one hole, but it should be applied
+    across a round."*
+
+    A NEGATIVE `strokes_received` is a stroke GIVEN BACK. Left alone it
+    makes `net = strokes - (-1)` ADD a stroke on that hole and drops
+    `stableford_net` a rung — which is exactly what the rule forbids. So
+    under `game=True` the per-hole `net` / `net_vs_par` / `stableford_net`
+    read a give-back as ZERO, and the caller takes the plus off the ROUND
+    once via `plus_round_deduction`.
+
+    `adjusted_strokes` ALWAYS keeps the true `strokes_received`, in both
+    modes: USGA net double bogey is `par + 2 + strokes_received`, and for
+    a plus that legitimately lowers the cap. Changing it would corrupt
+    every differential and every index we have posted.
+
+    The flag is EXPLICIT and defaults to False so the WHS/index call
+    sites keep their behaviour by doing nothing — v2.450.0 patched two
+    game call sites locally and left nine others to guess, which is how
+    the `/handicaps` scorecard and the Players Cup card were still adding
+    a plus stroke hole by hole a day later.
+    """
     out = {"vs_par": None, "net_vs_par": None, "adjusted_strokes": strokes,
            "stableford_net": None, "stableford_gross": None}
     if par is None or strokes is None:
         return out
+    sr_true = strokes_received or 0
+    # The split: the game half never makes a hole harder; the handicap
+    # half must see the real allocation.
+    sr_play = max(0, sr_true) if game else sr_true
     out["vs_par"] = strokes - par
-    net = strokes - (strokes_received or 0)
+    net = strokes - sr_play
     out["net_vs_par"] = net - par
     if formulas.get("adjusted_gross_method") == "whs_net_double_bogey":
-        out["adjusted_strokes"] = min(strokes, par + 2 + (strokes_received or 0))
+        out["adjusted_strokes"] = min(strokes, par + 2 + sr_true)
     def _tbl(table, diff):
         keys = sorted(int(k) for k in table)
         d = max(keys[0], min(keys[-1], diff))
@@ -21525,6 +21591,127 @@ def repair_handicap_adjusted_scores(cells: list[dict], dry_run: bool = True,
             "summary": {"planned": len(plan), "skipped": len(skipped)}}
 
 
+def audit_handicap_link_identity(db_path: str | Path = DB_PATH) -> dict:
+    """READ-ONLY: how much of the handicap layer can be resolved by
+    `customer_id`, and exactly who cannot (Kerry 2026-09-16).
+
+    Nothing is written. This exists so the size of the unlinked
+    population is KNOWN before any fallback hides it — a name-string
+    fallback that quietly works is indistinguishable from one that
+    quietly drops somebody, which is the whole defect this lane fixes.
+
+    Four sections:
+      links          — handicap_player_links coverage: rows with no
+                       customer_id, rows whose customer_id points at no
+                       customer, and rows whose customer_name disagrees
+                       with the canonical name on their customer_id
+                       (NAME DRIFT — harmless now, fatal under the old
+                       name-string join, and the reason Mike/Michael
+                       Murphy could read as two people).
+      rounds         — handicap_rounds reachable through a link, and the
+                       player_name values that reach no link at all.
+      export         — what get_handicap_export_data can resolve.
+      plus_handicaps — every scoring round played off a PLUS handicap,
+                       flagged when the playing handicap is FRACTIONAL.
+                       The round-level plus deduction is
+                       `int(round(abs(ph)))`, and Python rounds half to
+                       EVEN — so a -0.5 would deduct 0 and a -1.5 would
+                       deduct 2. Kerry rules on that; this says whether
+                       any live round is affected.
+    """
+    out: dict = {"read_only": True}
+    with _connect(db_path) as conn:
+        total = conn.execute(
+            "SELECT COUNT(*) AS n FROM handicap_player_links").fetchone()["n"]
+        no_id = conn.execute(
+            """SELECT player_name, customer_name FROM handicap_player_links
+               WHERE customer_id IS NULL ORDER BY player_name""").fetchall()
+        orphan = conn.execute(
+            """SELECT l.player_name, l.customer_name, l.customer_id
+               FROM handicap_player_links l
+               LEFT JOIN customers c ON c.customer_id = l.customer_id
+               WHERE l.customer_id IS NOT NULL AND c.customer_id IS NULL
+               ORDER BY l.player_name""").fetchall()
+        no_label = conn.execute(
+            """SELECT COUNT(*) AS n FROM handicap_player_links
+               WHERE customer_id IS NOT NULL
+                 AND (customer_name IS NULL OR TRIM(customer_name) = '')"""
+        ).fetchone()["n"]
+        drift = conn.execute(
+            """SELECT l.player_name, l.customer_name, l.customer_id,
+                      TRIM(COALESCE(c.first_name,'') || ' ' ||
+                           COALESCE(c.last_name,'')) AS canonical_name
+               FROM handicap_player_links l
+               JOIN customers c ON c.customer_id = l.customer_id
+               WHERE l.customer_name IS NOT NULL
+                 AND TRIM(l.customer_name) != ''
+                 AND LOWER(TRIM(l.customer_name)) !=
+                     LOWER(TRIM(COALESCE(c.first_name,'') || ' ' ||
+                                COALESCE(c.last_name,'')))
+               ORDER BY l.player_name""").fetchall()
+        out["links"] = {
+            "total": total,
+            "no_customer_id": len(no_id),
+            "no_customer_id_rows": [dict(r) for r in no_id],
+            "orphan_customer_id": len(orphan),
+            "orphan_rows": [dict(r) for r in orphan],
+            "customer_id_but_no_name_label": no_label,
+            "coverage_pct": round(100.0 * (total - len(no_id)) / total, 1) if total else None,
+            "name_drift": len(drift),
+            "name_drift_rows": [dict(r) for r in drift],
+        }
+
+        r_total = conn.execute(
+            "SELECT COUNT(*) AS n FROM handicap_rounds").fetchone()["n"]
+        r_unlinked = conn.execute(
+            """SELECT r.player_name, COUNT(*) AS rounds
+               FROM handicap_rounds r
+               LEFT JOIN handicap_player_links l
+                 ON l.player_name = r.player_name
+               WHERE l.player_name IS NULL OR l.customer_id IS NULL
+               GROUP BY r.player_name ORDER BY rounds DESC""").fetchall()
+        out["rounds"] = {
+            "total": r_total,
+            "rows_not_resolvable_to_a_customer_id":
+                sum(r["rounds"] for r in r_unlinked),
+            "player_names_not_resolvable": len(r_unlinked),
+            "worst": [dict(r) for r in r_unlinked[:25]],
+        }
+
+        plus = conn.execute(
+            """SELECT sr.id AS scoring_round_id, sr.player_name,
+                      sr.customer_id, sr.round_date, sr.playing_handicap,
+                      e.item_name AS event_name
+               FROM scoring_rounds sr
+               LEFT JOIN events e ON e.id = sr.event_id
+               WHERE sr.playing_handicap IS NOT NULL
+                 AND sr.playing_handicap < 0
+               ORDER BY sr.round_date DESC, sr.id DESC""").fetchall()
+    frac = [dict(r) for r in plus
+            if float(r["playing_handicap"]) != int(float(r["playing_handicap"]))]
+    out["plus_handicaps"] = {
+        "rounds": len(plus),
+        "fractional_playing_handicaps": len(frac),
+        "fractional_rows": frac[:25],
+        "recent": [dict(r) for r in plus[:25]],
+        "note": ("The round-level deduction is int(round(abs(ph))). Python "
+                 "rounds half to EVEN, so -0.5 -> 0 and -1.5 -> 2. Only "
+                 "fractional rows are affected; whole-number plus handicaps "
+                 "are exact."),
+    }
+
+    export = get_handicap_export_data(db_path=db_path)
+    out["export"] = {
+        "rows": len(export.get("rows") or []),
+        "rows_with_customer_id": sum(
+            1 for r in (export.get("rows") or []) if r.get("customer_id") is not None),
+        "name_fallbacks": export.get("name_fallbacks") or [],
+        "no_email": len(export.get("no_email") or []),
+        "no_index": len(export.get("no_index") or []),
+    }
+    return out
+
+
 def audit_handicap_bridges(db_path: str | Path = DB_PATH) -> dict:
     """Full-table audit of every handicap record's link to its scorecard
     (Kerry 2026-07-14: 'audit all the records and see if you find any
@@ -22426,17 +22613,51 @@ def get_scorecard(scoring_round_id: int, db_path: str | Path = DB_PATH) -> dict 
             (sr["tee_id"], scoring_round_id)).fetchall()
     formulas = get_scoring_formulas(db_path)
     out_holes = []
-    totals = {"stableford_net": 0, "stableford_gross": 0, "adjusted_gross": 0}
+    totals = {"stableford_net": 0, "stableford_gross": 0, "adjusted_gross": 0,
+              "game_stableford_net": 0, "game_net": 0}
+    # KERRY'S PLUS RULE ON THE CARD (v2.458.0, ratified 2026-09-15; Kerry
+    # looking at Pat Youngs' Quarry Front card: "We just determined this
+    # isn't how we do Net Points with pluses on holes").
+    #
+    # The card carries BOTH views, deliberately:
+    #   * the unflagged keys stay the TRUE WHS/GG derivation, because
+    #     `verify_scoring_round` compares GG's own circle/square markings
+    #     against `net_vs_par` and GG marks a plus player's hole WITH the
+    #     give-back stroke. Clamping them would turn every plus player's
+    #     round into a false parity failure.
+    #   * the `game_*` keys are what a PLAYER is shown and scored on: no
+    #     hole is ever made harder, and the plus comes off the round once.
+    _round_plus = plus_round_deduction(sr["playing_handicap"])
     for h in holes:
-        d = compute_hole_derivations(h["par"], h["strokes"],
-                                     h["strokes_received"] or 0, formulas)
+        sr_true = h["strokes_received"] or 0
+        d = compute_hole_derivations(h["par"], h["strokes"], sr_true, formulas)
+        g = compute_hole_derivations(h["par"], h["strokes"], sr_true, formulas,
+                                     game=True)
         row = dict(h) | d
+        # What the card RENDERS: a give-back stroke reads as no stroke,
+        # so no `○` mark is drawn and the NET cell equals the gross cell.
+        row["game_strokes_received"] = max(0, sr_true)
+        row["strokes_given_back"] = -min(0, sr_true)
+        row["game_net_vs_par"] = g["net_vs_par"]
+        row["game_stableford_net"] = g["stableford_net"]
         out_holes.append(row)
         if d["stableford_net"] is not None:
             totals["stableford_net"] += d["stableford_net"]
             totals["stableford_gross"] += d["stableford_gross"]
             totals["adjusted_gross"] += d["adjusted_strokes"] or 0
+        if g["stableford_net"] is not None:
+            totals["game_stableford_net"] += g["stableford_net"]
+        if h["strokes"] is not None:
+            totals["game_net"] += h["strokes"] - max(0, sr_true)
+    # The round-level half of the rule. Both are 0 for everyone who is
+    # not a plus, so the card is unchanged for the whole field but one.
+    totals["plus_points_adjust"] = -_round_plus
+    totals["plus_strokes_adjust"] = _round_plus
+    totals["game_stableford_net_after_plus"] = (
+        totals["game_stableford_net"] - _round_plus)
+    totals["game_net_after_plus"] = totals["game_net"] + _round_plus
     round_out = dict(sr)
+    round_out["plus_round_deduction"] = _round_plus
     # Play order for the scorecard renderers (Kerry 2026-08-03: SA champ
     # teed off on the back): first_hole 10 puts the IN block on top.
     round_out["first_hole"] = (
@@ -36895,20 +37116,42 @@ def get_handicap_export_data(chapter: str | None = None,
     Returns:
         {
           "rows": [{"email": ..., "player_name": ...,
+                    "customer_id": int | None,    # THE identity key
                     "handicap_index_9": float,   # raw 9-hole index
                     "handicap_index": float,      # ×2 for GG (18-hole)
                     "chapter": ...}],
           "no_email": [player_name, ...],   # have an index but no linked email
           "no_index": [player_name, ...],   # linked but N/A index
+          "name_fallbacks": [{player_name, customer_name, resolved_by}, ...],
           "chapter": chapter or "All",
         }
+
+    Every row carries `customer_id` (v2.458.0). Callers MUST match people
+    on it and never on `player_name` / `chapter` string equality — that is
+    the defect this function used to force on everything downstream.
     """
     players = get_all_handicap_players(db_path)
     player_map = {p["player_name"]: p for p in players}
 
+    # IDENTITY THROUGH `customer_id`, NOT THROUGH A NAME STRING (guiding
+    # principle 6; Kerry 2026-09-15: "What's the bug? We need to fix it").
+    #
+    # Every field below used to be reached with
+    # `LOWER(items.customer) = LOWER(l.customer_name)` — one historical
+    # per-order name snapshot compared against another name string. "Mike
+    # Murphy" on the order against "Michael Murphy" on the link is the
+    # same person and resolved to nothing, so the row came back with no
+    # email and the player read as having no handicap on record. The
+    # `WHERE l.customer_name IS NOT NULL` filter compounded it by dropping
+    # any link that had a `customer_id` but no name label at all.
+    #
+    # Now: `l.customer_id` is the join for every subquery, the row set is
+    # every link (named or not), and the name join survives ONLY as an
+    # explicit last resort for a link with no id — which is REPORTED in
+    # `name_fallbacks` rather than silently papering over the gap.
     with _connect(db_path) as conn:
         links = conn.execute(
-            """SELECT l.player_name, l.customer_name,
+            """SELECT l.player_name, l.customer_name, l.customer_id,
                       COALESCE(
                         -- Canonical first (v2.16.26): the customer profile's
                         -- designated Golf Genius email, then primary email,
@@ -36924,78 +37167,140 @@ def get_handicap_export_data(chapter: str | None = None,
                                   ce.email_id ASC
                          LIMIT 1),
                         (SELECT LOWER(TRIM(i1.customer_email)) FROM items i1
-                         WHERE LOWER(i1.customer) = LOWER(l.customer_name)
+                         WHERE i1.customer_id = l.customer_id
                            AND i1.customer_email IS NOT NULL AND TRIM(i1.customer_email) != ''
                          ORDER BY i1.id DESC LIMIT 1),
+                        -- LAST RESORT, unlinked rows only (reported):
+                        (SELECT LOWER(TRIM(i1b.customer_email)) FROM items i1b
+                         WHERE l.customer_id IS NULL
+                           AND LOWER(i1b.customer) = LOWER(l.customer_name)
+                           AND i1b.customer_email IS NOT NULL AND TRIM(i1b.customer_email) != ''
+                         ORDER BY i1b.id DESC LIMIT 1),
                         (SELECT LOWER(TRIM(ca.alias_value)) FROM customer_aliases ca
-                         WHERE LOWER(ca.customer_name) = LOWER(l.customer_name)
+                         WHERE l.customer_id IS NULL
+                           AND LOWER(ca.customer_name) = LOWER(l.customer_name)
                            AND ca.alias_type = 'email'
                          LIMIT 1),
                         ''
                       ) AS customer_email,
                       COALESCE(
+                        (SELECT cu0.chapter FROM customers cu0
+                         WHERE cu0.customer_id = l.customer_id
+                           AND cu0.chapter IS NOT NULL AND TRIM(cu0.chapter) != ''),
                         (SELECT i2.chapter FROM items i2
-                         WHERE LOWER(i2.customer) = LOWER(l.customer_name)
+                         WHERE i2.customer_id = l.customer_id
                            AND i2.chapter IS NOT NULL AND TRIM(i2.chapter) != ''
                          ORDER BY i2.id DESC LIMIT 1),
+                        (SELECT i2b.chapter FROM items i2b
+                         WHERE l.customer_id IS NULL
+                           AND LOWER(i2b.customer) = LOWER(l.customer_name)
+                           AND i2b.chapter IS NOT NULL AND TRIM(i2b.chapter) != ''
+                         ORDER BY i2b.id DESC LIMIT 1),
                         ''
                       ) AS chapter,
                       COALESCE(
+                        (SELECT cu1.last_name FROM customers cu1
+                         WHERE cu1.customer_id = l.customer_id
+                           AND cu1.last_name IS NOT NULL AND TRIM(cu1.last_name) != ''),
                         (SELECT i3.last_name FROM items i3
-                         WHERE LOWER(i3.customer) = LOWER(l.customer_name)
+                         WHERE i3.customer_id = l.customer_id
                            AND i3.last_name IS NOT NULL AND TRIM(i3.last_name) != ''
                          ORDER BY i3.id DESC LIMIT 1),
+                        (SELECT i3b.last_name FROM items i3b
+                         WHERE l.customer_id IS NULL
+                           AND LOWER(i3b.customer) = LOWER(l.customer_name)
+                           AND i3b.last_name IS NOT NULL AND TRIM(i3b.last_name) != ''
+                         ORDER BY i3b.id DESC LIMIT 1),
                         ''
                       ) AS last_name,
                       COALESCE(
+                        (SELECT cu2.first_name FROM customers cu2
+                         WHERE cu2.customer_id = l.customer_id
+                           AND cu2.first_name IS NOT NULL AND TRIM(cu2.first_name) != ''),
                         (SELECT i4.first_name FROM items i4
-                         WHERE LOWER(i4.customer) = LOWER(l.customer_name)
+                         WHERE i4.customer_id = l.customer_id
                            AND i4.first_name IS NOT NULL AND TRIM(i4.first_name) != ''
                          ORDER BY i4.id DESC LIMIT 1),
+                        (SELECT i4b.first_name FROM items i4b
+                         WHERE l.customer_id IS NULL
+                           AND LOWER(i4b.customer) = LOWER(l.customer_name)
+                           AND i4b.first_name IS NOT NULL AND TRIM(i4b.first_name) != ''
+                         ORDER BY i4b.id DESC LIMIT 1),
                         ''
                       ) AS first_name,
                       COALESCE(
+                        -- `customers` carries no suffix column; the order row
+                        -- is the only source, so this one reads `items` by id.
                         (SELECT i5.suffix FROM items i5
-                         WHERE LOWER(i5.customer) = LOWER(l.customer_name)
+                         WHERE i5.customer_id = l.customer_id
                            AND i5.suffix IS NOT NULL AND TRIM(i5.suffix) != ''
                          ORDER BY i5.id DESC LIMIT 1),
+                        (SELECT i5b.suffix FROM items i5b
+                         WHERE l.customer_id IS NULL
+                           AND LOWER(i5b.customer) = LOWER(l.customer_name)
+                           AND i5b.suffix IS NOT NULL AND TRIM(i5b.suffix) != ''
+                         ORDER BY i5b.id DESC LIMIT 1),
                         ''
                       ) AS suffix
-               FROM handicap_player_links l
-               WHERE l.customer_name IS NOT NULL""",
+               FROM handicap_player_links l""",
         ).fetchall()
 
-        # Also collect ALL chapters per customer for multi-chapter players
+        # ALL chapters per customer for multi-chapter players — keyed by
+        # `customer_id` so a player who bought under two name spellings is
+        # one person with two chapters, not two people with one each.
         all_chapters = conn.execute(
-            """SELECT DISTINCT LOWER(l.customer_name) AS cname_lower,
-                      i.chapter
+            """SELECT DISTINCT l.customer_id AS cid, i.chapter
+               FROM handicap_player_links l
+               JOIN items i ON i.customer_id = l.customer_id
+               WHERE l.customer_id IS NOT NULL
+                 AND i.chapter IS NOT NULL AND TRIM(i.chapter) != ''""",
+        ).fetchall()
+        # Unlinked rows only: the old name join, kept so an id-less link
+        # does not lose its chapter filtering outright.
+        all_chapters_by_name = conn.execute(
+            """SELECT DISTINCT LOWER(l.customer_name) AS cname_lower, i.chapter
                FROM handicap_player_links l
                JOIN items i ON LOWER(i.customer) = LOWER(l.customer_name)
-               WHERE l.customer_name IS NOT NULL
+               WHERE l.customer_id IS NULL AND l.customer_name IS NOT NULL
                  AND i.chapter IS NOT NULL AND TRIM(i.chapter) != ''""",
         ).fetchall()
 
-    # Build set of chapters per customer name (lowercase)
-    customer_chapters: dict[str, set[str]] = {}
+    customer_chapters: dict[int, set[str]] = {}
     for row in all_chapters:
-        customer_chapters.setdefault(row["cname_lower"], set()).add(
-            row["chapter"].lower()
-        )
+        customer_chapters.setdefault(row["cid"], set()).add(row["chapter"].lower())
+    name_chapters: dict[str, set[str]] = {}
+    for row in all_chapters_by_name:
+        name_chapters.setdefault(row["cname_lower"], set()).add(
+            row["chapter"].lower())
 
-    # Build a map: player_name → (email, chapter, all_chapters) from best linked record
+    # player_name → resolved identity. `customer_id` rides on every entry
+    # so no caller downstream is forced back onto a name string.
     link_map: dict[str, dict] = {}
+    name_fallbacks: list[dict] = []
     for lnk in links:
         pname = lnk["player_name"]
         if pname not in link_map:
             cname_lower = (lnk["customer_name"] or "").strip().lower()
+            cid = lnk["customer_id"]
+            if cid is None:
+                # The gap is NAMED, never silent (Kerry 2026-09-16: every
+                # registrant lands in exactly one bucket, and anyone
+                # skipped is named).
+                name_fallbacks.append({
+                    "player_name": pname,
+                    "customer_name": lnk["customer_name"],
+                    "resolved_by": "name" if cname_lower else "nothing",
+                })
             link_map[pname] = {
                 "email": (lnk["customer_email"] or "").strip().lower(),
                 "chapter": lnk["chapter"] or "",
-                "all_chapters": customer_chapters.get(cname_lower, set()),
+                "all_chapters": (customer_chapters.get(cid, set()) if cid is not None
+                                 else name_chapters.get(cname_lower, set())),
                 "last_name": (lnk["last_name"] or "").strip(),
                 "first_name": (lnk["first_name"] or "").strip(),
                 "suffix": (lnk["suffix"] or "").strip(),
                 "customer_name": cname_lower,
+                "customer_id": cid,
             }
 
     # Check if ANY linked player has chapter data; if not, skip chapter filtering
@@ -37087,6 +37392,12 @@ def get_handicap_export_data(chapter: str | None = None,
         rows.append({
             "email": email,
             "player_name": pname,
+            # THE identity key on every row (guiding principle 6). Its
+            # absence here is why every caller downstream — the card
+            # send, the event filter, members-only — was matching people
+            # by name string. `None` means a genuinely unlinked link row,
+            # which `name_fallbacks` also names.
+            "customer_id": info["customer_id"],
             "handicap_index_9": idx_9,   # kept for reference / display
             "handicap_index": idx_18,    # value written to CSV / sent to GG
             "chapter": info["chapter"],
@@ -37103,10 +37414,18 @@ def get_handicap_export_data(chapter: str | None = None,
         "no_email": sorted(no_email),
         "no_index": sorted(no_index),
         "excluded": sorted(excluded),  # admin-removed from GG, never exported
+        # Links with NO customer_id — resolved by name string or not at
+        # all. Reported rather than hidden so the size of the unlinked
+        # population is always visible to the caller.
+        "name_fallbacks": sorted(name_fallbacks,
+                                 key=lambda f: f["player_name"]),
         "chapter": chapter or "All",
         "_debug": {
             "total_players": len(player_map),
             "total_linked": len(link_map),
+            "linked_by_customer_id": sum(
+                1 for v in link_map.values() if v["customer_id"] is not None),
+            "name_fallback_count": len(name_fallbacks),
             "has_chapter_data": has_chapter_data,
             "chapter_filter": chapter,
             "duplicate_emails": duplicate_emails,

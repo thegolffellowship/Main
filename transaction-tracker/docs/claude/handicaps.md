@@ -703,3 +703,120 @@ the card (dry run first). A card whose SCORES were wrong is a different
 case: `scoring-round-drop:<id>|unpost|apply` deletes the card and its
 differentials so the corrected card can post (Aguilera / Ayala, whose
 8/29 import predated Kerry's manual score entry on GG).
+
+
+## Identity: `customer_id`, never a name string (v2.458.0, 2026-09-16)
+
+**Kerry, 2026-09-15:** *"What's the bug? We need to fix it."*
+
+The handicap-card send matched event registrants to handicap links by
+comparing two NAME STRINGS. `items.customer` is a per-order historical
+snapshot (CLAUDE.md "Identity drift watch") and
+`handicap_player_links.customer_name` is another one, so **"Mike Murphy"
+on the order and "Michael Murphy" on the link were one man who resolved
+to nobody** — classified *"no TGF handicap on record"* and silently given
+no card, with a current index on file. A name proper-cased, married, or
+corrected after the order did exactly the same. This violated guiding
+principle 6 outright.
+
+Three compounding defects, all fixed:
+
+1. **Name-string identity on both sides.** Both are now `customer_id`
+   sets.
+2. **`WHERE customer_name IS NOT NULL`** dropped any link that had a
+   `customer_id` but no name label. The links query now takes every row.
+3. **A fifth roster.** The route built its own from `get_all_items()` +
+   `get_all_event_aliases()` instead of `_event_roster_rows(conn,
+   event_id)` — the ONE builder mandated in v2.410.0 — so a Golf Genius
+   RSVP with no order row was invisible to it and was not even counted in
+   `registered`.
+
+### `get_handicap_export_data` — the bigger half
+
+It returned **no `customer_id` at all**, which is why every caller
+downstream was forced back onto names. It now publishes `customer_id` on
+every row, and resolves email / chapter / first name / last name / suffix
+through `handicap_player_links.customer_id`: the canonical `customers`
+profile first, then the order row **by id**. The old
+`LOWER(items.customer) = LOWER(l.customer_name)` join survives only as an
+explicit last resort for a link that genuinely has no id, and every such
+row is reported in `name_fallbacks` (and surfaced on the send result as
+`unlinked_handicap_count`). **The same function feeds the Golf Genius CSV
+export**, so fixing only the send would have left the export on the old
+footing.
+
+Callers MUST match on `customer_id`. Matching on `player_name` or
+`chapter` string equality is the defect this function used to force.
+
+### The send route
+
+`api_handicap_send_bulk_email`:
+
+- reads `_event_roster_rows` and dedupes **per person** (roster rows are
+  per ORDER row — entry, side games, an add-on — so one player can hold
+  several);
+- filters eligible rows by `customer_id` set membership;
+- classifies a registrant with no customer record as its own NAMED bucket
+  (*"on the roster with no customer record to match"*) rather than
+  calling it a missing handicap. v2.456.0 made the count COMPLETE; this
+  makes the classification underneath it CORRECT;
+- **refuses an unrecognised `event_name` with a 400** instead of falling
+  through to an empty filter. The composer hazard of 2026-09-08 (handoff
+  §7) mailed a whole roster exactly that way;
+- MEMBERS-only is `customer_id` set membership. It used to fall back to
+  `c.first_name || ' ' || c.last_name = l.customer_name` and then match
+  the result back by `player_name`, so a member whose profile name and
+  link label differed by a nickname or a suffix read as "not a member".
+
+Tests: `test_handicap_identity.py` (end-to-end through the route),
+`test_handicap_card_counts.js` (the v2.456.0 accounting).
+
+### `scoring-hcp-link-audit` — READ-ONLY
+
+`audit_handicap_link_identity()`. Writes nothing. Four sections:
+
+- **links** — coverage by `customer_id`, every unlinked row NAMED, rows
+  whose `customer_id` points at no customer, rows with an id but no name
+  label, and **name drift**: a link whose `customer_name` disagrees with
+  the canonical name on its own `customer_id`. Drift is harmless now and
+  was fatal under the name join.
+- **rounds** — `handicap_rounds` that reach no `customer_id`.
+- **export** — what `get_handicap_export_data` can resolve.
+- **plus_handicaps** — every scoring round played off a plus handicap,
+  flagging any FRACTIONAL playing handicap (see side-games.md OPEN 1).
+
+**Run live 2026-09-16, before any of the above shipped: 279
+`handicap_player_links` rows, exactly 1 with no `customer_id`, 0
+orphans — 99.6% coverage.** That is why the join was switched straight
+over rather than backfilled first. `handicap_rounds` is the weaker half:
+~1,713 of 15,549 rows (11%) carry no `customer_id` and are reachable only
+through `player_name`.
+
+### The class — what was swept, and what was deliberately left
+
+Signature: a join from `handicap_player_links` or `handicap_rounds` to a
+person by name, typically `LOWER(i.customer) = LOWER(l.customer_name)`.
+
+**Fixed**
+
+| Site | What changed |
+|---|---|
+| `get_handicap_export_data` | every join re-pointed to `customer_id`; publishes it; reports fallbacks |
+| `api_handicap_send_bulk_email` | roster + identity + members-only, all `customer_id` |
+| `api_handicap_unlinked_players` | "unlinked" now means **no `customer_id`**, not a missing label — the old test called a row with a real id and a blank label "unlinked", and a row with a name but no id "linked", which is exactly backwards |
+
+**Deliberately left alone, with reasons**
+
+| Site | Why |
+|---|---|
+| `api_create_customers_for_unlinked` (`app.py`) | a WRITE path that CREATES customer records. Re-pointing its selector to `customer_id IS NULL` would change which rows it writes for, and it can create duplicate profiles. Needs Kerry's word (rule 3b) — **open**. |
+| `_log_gg_export_email_changes` | boot-time LOG only. Its name join IS the "legacy" side of a canonical-vs-legacy diff; removing it would remove the thing being compared. |
+| `_roster_handicap_index_map` | returns a map KEYED BY NAME because its caller matches roster display names. It already resolves the name through `l.customer_id` → `customers`, so the drift case is handled; only the key is a string. |
+| `analyze_pairing_staging` | offline analysis of historical pairings, no member-facing output, no money. |
+| `get_all_handicap_players` | already joins `l.customer_id` → `customers`; it selects `customer_name` only as a display label. |
+
+`handicap_rounds.player_name` remains the bridge between a Golf Genius
+card and a person — that is the table's design, and `_resolve_scoring_
+player` resolves it through `handicap_player_links` first. The 11% of
+rows with no `customer_id` are the residue worth backfilling next; the
+audit measures it.

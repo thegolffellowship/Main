@@ -142,9 +142,26 @@ def _bands_lookup(bands: list, n: int, default=None):
 # Formula layer (injected — see module docstring)
 # ---------------------------------------------------------------------------
 
-def _default_derive_hole(par, strokes, strokes_received, formulas):
+def _default_derive_hole(par, strokes, strokes_received, formulas, game=False):
     from .database import compute_hole_derivations
-    return compute_hole_derivations(par, strokes, strokes_received, formulas)
+    return compute_hole_derivations(par, strokes, strokes_received, formulas,
+                                    game=game)
+
+
+def _derive_game(derive_hole, par, strokes, strokes_received, formulas):
+    """The GAME derivation for one hole — the plus rule applied by the
+    mechanism where the injected deriver supports it, and by the clamp
+    otherwise. `build_cards` takes `derive_hole` as an injection point
+    (the parity harness supplies its own), so this cannot assume the
+    engine's own signature."""
+    if derive_hole is _default_derive_hole:
+        return derive_hole(par, strokes, strokes_received, formulas, game=True)
+    # An injected deriver (the parity harness supplies its own) may predate
+    # the flag, so clamp at the call instead — the same arithmetic the
+    # mechanism performs. Narrowed to this branch deliberately: a blanket
+    # try/except TypeError would swallow a real error inside the engine
+    # and quietly return a second, differently-computed answer.
+    return derive_hole(par, strokes, max(0, strokes_received or 0), formulas)
 
 
 # ---------------------------------------------------------------------------
@@ -196,13 +213,16 @@ def build_cards(state: dict, formulas: dict, derive_hole=None) -> list[dict]:
             strokes = scores.get(hole)
             sr = received.get(hole, 0) or 0
             d = derive_hole(meta.get("par"), strokes, sr, formulas)
-            # POINTS never make a hole harder (Kerry 2026-09-16): a plus
-            # player's give-back stroke is clamped to zero per hole and
-            # the plus comes off the TOTAL once, below. Stroke-play net
-            # keeps the real allocation — the total is the same either
-            # way there, and only stableford is hole-shaped.
-            d_pts = (derive_hole(meta.get("par"), strokes, max(0, sr), formulas)
-                     if sr < 0 else d)
+            # POINTS never make a hole harder (Kerry 2026-09-15): a plus
+            # player's give-back stroke reads as zero per hole and the
+            # plus comes off the TOTAL once, below. That rule now lives
+            # in the MECHANISM (`compute_hole_derivations(..., game=True)`,
+            # v2.458.0) instead of in this local `max(0, sr)` — the local
+            # version is what two other surfaces never inherited.
+            # Stroke-play net keeps the real allocation: the total is the
+            # same either way there, and only stableford is hole-shaped.
+            d_pts = _derive_game(derive_hole, meta.get("par"), strokes, sr,
+                                 formulas) if sr < 0 else d
             row = {"hole": hole, "par": meta.get("par"),
                    "yardage": meta.get("yardage"),
                    "stroke_index": meta.get("stroke_index"),
@@ -223,9 +243,10 @@ def build_cards(state: dict, formulas: dict, derive_hole=None) -> list[dict]:
 
         # The plus, taken off the round rather than off a hole.
         pts_adjust = 0
-        if ph is not None and int(ph) < 0 and any(
+        if ph is not None and float(ph) < 0 and any(
                 h["strokes"] is not None for h in holes_out):
-            pts_adjust = -int(round(abs(ph)))
+            from .database import plus_round_deduction
+            pts_adjust = -plus_round_deduction(ph)
             totals["stableford_net"] += pts_adjust
 
         thru = sum(1 for h in holes_out if h["strokes"] is not None)

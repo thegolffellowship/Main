@@ -533,13 +533,22 @@
             if (h.strokes == null) return `<td style="${td}${extra}"></td>`;
             return `<td style="${td}${extra}"><span style="display:inline-block;min-width:${spanW};line-height:${spanW};${decoFor(h.vs_par)}">${h.strokes}</span></td>`;
         };
-        // ● = stroke received; ○ = stroke GIVEN BACK (plus handicap) —
-        // shown on the NET row (they're what turns gross into net), pinned
-        // to the cell's top-right corner so they never displace the number
+        // KERRY'S PLUS RULE (ratified 2026-09-15, rendered v2.458.0): a
+        // plus handicap comes off the ROUND, never off a hole. The server
+        // publishes `game_strokes_received` (a give-back read as zero)
+        // beside the true WHS value, and the card shows the GAME view.
+        // ● = stroke RECEIVED, shown on the NET row (they're what turns
+        // gross into net), pinned to the cell's top-right corner so they
+        // never displace the number. There is no give-back mark any more,
+        // because no hole carries a give-back.
+        const srOf = h => (h.game_strokes_received != null
+            ? h.game_strokes_received : (h.strokes_received || 0));
+        const netPtsOf = h => (h.game_stableford_net !== undefined
+            ? h.game_stableford_net : h.stableford_net);
         const strokeDots = h => {
-            const sr = h.strokes_received || 0;
-            return sr
-                ? `<span style="position:absolute;top:0;right:1px;font-size:0.55em;line-height:1.4;color:#334155;">${(sr > 0 ? "●" : "○").repeat(Math.abs(sr))}</span>`
+            const sr = srOf(h);
+            return sr > 0
+                ? `<span style="position:absolute;top:0;right:1px;font-size:0.55em;line-height:1.4;color:#334155;">${"●".repeat(sr)}</span>`
                 : "";
         };
         const sum = (hs, f) => hs.reduce((a, h) => a + (f(h) || 0), 0);
@@ -553,7 +562,11 @@
         // Visual hierarchy: course facts on top, then a thick-bordered
         // score section (GROSS most important, then NET), then points —
         // sectTop/sectBot/grey come from prCardStyle above
-        const netOf = h => (h.strokes == null ? null : h.strokes - (h.strokes_received || 0));
+        const netOf = h => (h.strokes == null ? null : h.strokes - srOf(h));
+        const dt0 = card.derived_totals || {};
+        // Both are 0 for everyone who is not a plus.
+        const plusPts = dt0.plus_points_adjust || 0;
+        const plusStr = dt0.plus_strokes_adjust || 0;
         // Phones: plain-space separators (the &nbsp; glue defeats line
         // wrapping)
         const sep = compact ? " · " : " &nbsp;·&nbsp; ";
@@ -600,9 +613,10 @@
             const netRow = hs.map(h => {
                 const n = netOf(h);
                 if (n == null) return `<td style="${td}${sectTop}"></td>`;
-                return `<td style="${td}${sectTop}font-weight:700;position:relative;">${strokeDots(h)}<span style="display:inline-block;min-width:${spanW};line-height:${spanW};${decoFor(h.net_vs_par)}">${n}</span></td>`;
+                const nvp = (h.game_net_vs_par != null ? h.game_net_vs_par : h.net_vs_par);
+                return `<td style="${td}${sectTop}font-weight:700;position:relative;">${strokeDots(h)}<span style="display:inline-block;min-width:${spanW};line-height:${spanW};${decoFor(nvp)}">${n}</span></td>`;
             }).join("");
-            const npRow = hs.map(h => `<td style="${td}${grey}${sectBot}">${h.stableford_net ?? ""}</td>`).join("");
+            const npRow = hs.map(h => `<td style="${td}${grey}${sectBot}">${netPtsOf(h) ?? ""}</td>`).join("");
             const tot = `style="${td}font-weight:700;background:#f1f5f9;"`;
             const totG = `style="${td}${sectTop}font-weight:700;background:#f1f5f9;"`;
             const totGP = `style="${td}${grey}font-weight:600;"`;
@@ -618,7 +632,7 @@
                 ${anyCapped ? `<tr><td style="${lbl}color:#E87C3E;" title="WHS net double bogey cap: par + 2 + strokes received. Orange holes were lowered for handicap purposes.">${L.adj}</td>${adjRow}<td style="${td}font-weight:700;background:#f1f5f9;color:#E87C3E;">${sum(hs, h => h.adjusted_strokes) || ""}</td></tr>` : ""}
                 ${opts.hideGrossPts ? "" : `<tr><td style="${lbl}${grey}" title="Gross stableford points per hole">${L.gp}</td>${gpRow}<td ${totGP}>${sumPts(hs, h => h.stableford_gross)}</td></tr>`}
                 <tr><td style="${lbl}${sectTop}font-weight:700;" title="Gross strokes minus handicap strokes received on the hole">${L.ns}</td>${netRow}<td ${totN}>${sumPts(hs, netOf)}</td></tr>
-                <tr><td style="${lbl}${grey}${sectBot}" title="Net stableford points per hole (through the admin formula settings)">${L.np}</td>${npRow}<td ${totNP}>${sumPts(hs, h => h.stableford_net)}</td></tr>
+                <tr><td style="${lbl}${grey}${sectBot}" title="Net stableford points per hole (through the admin formula settings)">${L.np}</td>${npRow}<td ${totNP}>${sumPts(hs, netPtsOf)}</td></tr>
                 ${isLast && g18 ? `<tr><td colspan="${hs.length + 1}" style="border:1px solid transparent;text-align:right;vertical-align:middle;font-weight:700;color:#334155;font-size:0.85em;line-height:1;letter-spacing:0.05em;padding:0 8px 0 0;white-space:nowrap;">18-HOLE GROSS TOTAL</td><td style="${td}font-weight:800;background:#f1f5f9;border:2px solid #334155;vertical-align:middle;" title="18-hole gross score">${g18}</td></tr>` : ""}
                 ${isLast && g18 && n18 !== "" && n18 != null ? `<tr><td colspan="${hs.length + 1}" style="border:1px solid transparent;text-align:right;vertical-align:middle;font-weight:700;color:#334155;font-size:0.85em;line-height:1;letter-spacing:0.05em;padding:0 8px 0 0;white-space:nowrap;">18-HOLE NET TOTAL</td><td style="${td}font-weight:800;background:#f1f5f9;border:2px solid #334155;vertical-align:middle;" title="18-hole net score">${n18}</td></tr>` : ""}
             </table>${nineNote(label)}`;
@@ -637,10 +651,18 @@
             }
         }
         const noteW = compact ? "max-width:calc(100vw - 3rem);" : "";
+        // The plus stated once and in full — what it cost, and that it
+        // came off the round rather than off any hole.
+        const plusLine = (plusPts || plusStr)
+            ? `<div style="font-size:${compact ? "0.66rem" : "0.76rem"};color:#334155;margin-top:0.25rem;${noteW}">
+                Plus handicap <strong>+${plusStr}</strong>: applied to the ROUND, not to any hole${sep}NET <strong>${dt0.game_net_after_plus}</strong>${sep}NET PTS <strong>${dt0.game_stableford_net_after_plus}</strong>
+               </div>`
+            : "";
         return `<div style="overflow-x:auto;max-width:calc(100vw - 2rem);">${tables}</div>
+            ${plusLine}
             ${bits.length ? `<div style="font-size:${compact ? "0.7rem" : "0.8rem"};color:#334155;margin-top:0.25rem;${noteW}">${bits.join(sep)}</div>` : ""}
             <div style="font-size:${compact ? "0.62rem" : "0.72rem"};color:var(--text-muted);margin-top:0.15rem;${noteW}">
-                ● = handicap stroke${sep}○ = plus stroke${sep}<span style="border:1.5px solid #dc2626;border-radius:50%;padding:0 4px;">n</span> under par &nbsp;
+                ● = handicap stroke${sep}<span style="border:1.5px solid #dc2626;border-radius:50%;padding:0 4px;">n</span> under par &nbsp;
                 <span style="border:1.5px solid #2563eb;padding:0 4px;">n</span> over par
             </div>`;
     }

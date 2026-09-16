@@ -549,6 +549,32 @@ header into two rows between 561px and 1479px (brand + right-hand pills on
 row 1, links on row 2; member shell: brand + CTA, then the three tabs) —
 above 1480px the single row is unchanged.
 
+## Handicap identity: `customer_id` (v2.458.0)
+
+`get_handicap_export_data` publishes `customer_id` on every row and
+resolves email/chapter/name through `handicap_player_links.customer_id`
+(canonical profile, then the order row BY ID). The name join survives
+only as a reported last resort for a link with no id. The handicap-card
+send (`api_handicap_send_bulk_email`) reads `_event_roster_rows` and
+matches on `customer_id` sets — never `player_name` or `items.customer`
+string equality, which used to classify "Mike Murphy" vs "Michael
+Murphy" as "no TGF handicap on record" and silently send no card. Audit
+coverage read-only with `scoring-hcp-link-audit`. Details + the class
+sweep (what was left alone and why): `docs/claude/handicaps.md`.
+
+## The plus rule lives in the mechanism (v2.458.0)
+
+A plus handicap comes off the ROUND, never off a hole (Kerry, ratified
+2026-09-15). `compute_hole_derivations(..., game=True)` reads a negative
+`strokes_received` as zero for `net` / `net_vs_par` / `stableford_net`;
+`adjusted_strokes` keeps the TRUE value in both modes. The round half is
+`plus_round_deduction()`, written once. The flag defaults OFF so the five
+WHS/index call sites keep their behaviour by doing nothing — changing
+those would corrupt every differential and index. `get_scorecard`
+publishes the `game_*` view BESIDE the true one because
+`verify_scoring_round` compares GG's markings against `net_vs_par`.
+Details + the full call-site table: `docs/claude/side-games.md`.
+
 ## Pairings roster: ONE builder (v2.410.0)
 
 `_event_roster_rows(conn, event_id)` is the only source of "who is on

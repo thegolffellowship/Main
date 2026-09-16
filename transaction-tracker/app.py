@@ -9331,13 +9331,21 @@ def api_handicap_link_debug():
 @app.route("/api/handicaps/unlinked-players")
 @require_role("admin")
 def api_handicap_unlinked_players():
-    """Return handicap players with no linked customer record."""
+    """Return handicap players with no linked customer record.
+
+    UNLINKED means no `customer_id` (v2.458.0, guiding principle 6), not
+    a missing display label. The old test was `customer_name IS NULL`,
+    which called a row with a real customer_id and a blank label
+    "unlinked" and a row with a name but no id "linked" — exactly
+    backwards, and the second kind is the one the card send could not
+    resolve.
+    """
     conn = get_connection()
     try:
         rows = conn.execute(
             """SELECT l.player_name, l.customer_name
                FROM handicap_player_links l
-               WHERE l.customer_name IS NULL"""
+               WHERE l.customer_id IS NULL"""
         ).fetchall()
     finally:
         conn.close()
@@ -9700,23 +9708,25 @@ def api_handicap_send_bulk_email():
 
     skipped_not_member = 0
     if members_only:
+        # MEMBERS by `customer_id`, never by a name string (v2.458.0,
+        # guiding principle 6). The old query fell back to
+        # `c.first_name || ' ' || c.last_name = l.customer_name` for a
+        # link with no id, then matched the RESULT back by player_name —
+        # so a member whose profile name and link label disagreed by a
+        # nickname, a suffix or a proper-casing read as "not a member"
+        # and quietly got no card.
         conn = get_connection()
         try:
-            member_names = {r["player_name"] for r in conn.execute(
-                """SELECT l.player_name
-                     FROM handicap_player_links l
-                     JOIN customers c
-                       ON (c.customer_id = l.customer_id
-                           OR (l.customer_id IS NULL
-                               AND c.first_name || ' ' || c.last_name
-                                   = l.customer_name))
+            member_ids = {r["customer_id"] for r in conn.execute(
+                """SELECT c.customer_id
+                     FROM customers c
                     WHERE c.current_player_status
                           IN ('active_member', 'member_plus')""")}
         finally:
             conn.close()
         before = len(eligible_rows)
         eligible_rows = [r for r in eligible_rows
-                         if r["player_name"] in member_names]
+                         if r.get("customer_id") in member_ids]
         skipped_not_member = before - len(eligible_rows)
 
     # If filtering by event, restrict to players registered for that event
@@ -9734,47 +9744,89 @@ def api_handicap_send_bulk_email():
     registered = None
     event_names: dict = {}
     if event_name:
-        all_items = get_all_items()
-        aliases = get_all_event_aliases()
-        # Collect customer names registered for this event (active only)
-        event_customers = set()
-        for item in all_items:
-            iname = item.get("item_name") or ""
-            if iname.lower() == event_name.lower() or (aliases.get(iname) or "").lower() == event_name.lower():
-                if item.get("transaction_status") in (None, "active", "rsvp_only", "gg_rsvp"):
-                    cname = (item.get("customer") or "").strip().lower()
-                    if cname:
-                        event_customers.add(cname)
-                        event_names.setdefault(cname, item.get("customer"))
-
-        # Build player_name → customer_name map from handicap links
+        # THE ROSTER, AND IDENTITY BY `customer_id` (v2.458.0).
+        #
+        # This block used to build a FIFTH roster out of get_all_items() +
+        # aliases — so a Golf Genius RSVP with no order row was invisible
+        # to it and was not even counted in `registered` — and then match
+        # `handicap_player_links.customer_name` against `items.customer`
+        # by string equality. Both sides are per-order historical name
+        # snapshots (CLAUDE.md "Identity drift watch"), so "Mike Murphy"
+        # against "Michael Murphy" classified a player with a current
+        # index as "no TGF handicap on record", and he silently got no
+        # card. `WHERE customer_name IS NOT NULL` dropped any link that
+        # had an id but no name label on top of that.
+        #
+        # Now: `_event_roster_rows` — the ONE roster builder mandated in
+        # v2.410.0 — and set membership on `customer_id`.
+        from email_parser.database import _event_roster_rows
         conn = get_connection()
         try:
-            links = conn.execute(
-                "SELECT player_name, customer_name FROM handicap_player_links "
-                "WHERE customer_name IS NOT NULL"
-            ).fetchall()
+            ev = conn.execute(
+                "SELECT id, item_name FROM events WHERE item_name = ? COLLATE NOCASE",
+                (event_name,)).fetchone()
+            if not ev:
+                ev = conn.execute(
+                    """SELECT e.id, e.item_name FROM events e
+                         JOIN event_aliases ea
+                           ON ea.canonical_event_name = e.item_name
+                        WHERE ea.alias_name = ? COLLATE NOCASE""",
+                    (event_name,)).fetchone()
+            if not ev:
+                # An unrecognised audience must NEVER fall through to a
+                # send — the composer hazard of 2026-09-08 (handoff §7)
+                # mailed a whole roster exactly that way. Refuse instead.
+                return jsonify({
+                    "error": f"No event matches {event_name!r} — nothing sent.",
+                }), 400
+            roster = _event_roster_rows(conn, ev["id"])
         finally:
             conn.close()
-        player_to_customer = {r["player_name"]: r["customer_name"] for r in links}
 
-        # Filter eligible rows to only those whose linked customer is in the event
-        eligible_rows = [
-            r for r in eligible_rows
-            if player_to_customer.get(r["player_name"], "").strip().lower() in event_customers
-        ]
+        # One entry per PERSON. Roster rows are per order row (entry,
+        # side games, an add-on), so a player can hold several; dedupe on
+        # customer_id where there is one, on the pairing name key where
+        # there is not.
+        roster_ids: set = set()
+        roster_unidentified: dict = {}
+        for r in roster:
+            cid = r.get("customer_id")
+            disp = (r.get("name") or r.get("customer") or "").strip()
+            if cid is not None:
+                roster_ids.add(int(cid))
+                event_names.setdefault(int(cid), disp)
+            elif disp:
+                roster_unidentified.setdefault(disp.lower(), disp)
 
-        # Count event-specific skips: event registrants not in eligible list
-        eligible_customers = {
-            player_to_customer.get(r["player_name"], "").strip().lower()
-            for r in eligible_rows
-        }
-        registered = len(event_customers)
-        for cname_l in event_customers:
-            if cname_l not in eligible_customers:
+        # Filter eligible rows to the people on THIS event's roster, ONE
+        # card per person. A customer can hold two handicap links (a
+        # legacy Golf Genius name variant beside the current one); the
+        # export already collapses those that share an email, but two
+        # links on two addresses would otherwise each draw a card.
+        _by_cid: dict = {}
+        for r in eligible_rows:
+            cid = r.get("customer_id")
+            if cid is None or int(cid) not in roster_ids:
+                continue
+            _by_cid.setdefault(int(cid), r)
+        eligible_rows = list(_by_cid.values())
+        eligible_ids = set(_by_cid)
+
+        # Every registrant lands in exactly one bucket, and anyone skipped
+        # is NAMED (Kerry 2026-09-16). A registrant with no customer_id at
+        # all is its own bucket with its own reason — it is an identity
+        # gap, not a missing handicap, and calling it the latter is what
+        # made the old counts read as authoritative when they were wrong.
+        registered = len(roster_ids) + len(roster_unidentified)
+        for cid in sorted(roster_ids):
+            if cid not in eligible_ids:
                 skipped_no_index += 1  # no handicap, no link, or no email
-                skipped_names.append({"player": event_names.get(cname_l, cname_l),
+                skipped_names.append({"player": event_names.get(cid, f"customer {cid}"),
                                       "why": "no TGF handicap on record"})
+        for disp in sorted(roster_unidentified.values()):
+            skipped_no_index += 1
+            skipped_names.append({"player": disp,
+                                  "why": "on the roster with no customer record to match"})
     else:
         skipped_no_email = len(export.get("no_email") or [])
         skipped_no_index = len(export.get("no_index") or [])
@@ -9856,6 +9908,13 @@ def api_handicap_send_bulk_email():
         "skipped_players": skipped_names[:40],
         "errors": errors[:20],  # limit error details
     }
+    # Handicap links that carry no customer_id — the population that can
+    # only be resolved by name string. Surfaced on every send so the gap
+    # stays visible instead of being papered over by the fallback.
+    _fallbacks = export.get("name_fallbacks") or []
+    if _fallbacks:
+        out["unlinked_handicap_players"] = [f["player_name"] for f in _fallbacks][:40]
+        out["unlinked_handicap_count"] = len(_fallbacks)
     if registered is not None:
         # The arithmetic is published, so a gap can never hide again.
         out["registered"] = registered
