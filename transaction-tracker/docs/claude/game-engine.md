@@ -1055,3 +1055,46 @@ without the guard, configuring a gross scorecard board would silently make
 gross race totals (Players Cup reset money rides on those figures).
 
 Tests: `test_champ_card_live.py`.
+
+---
+
+## Progress: the definition layer, first piece (v2.459.0, 2026-09-16)
+
+The a9.23 Avery Ranch skins finding forced the first real instalment of
+the game-definition layer sketched above. See `docs/claude/side-games.md`
+§"The buy-in count selects WHICH GAME IS PLAYED" for the full finding.
+
+**Built, in the PURE ENGINE (`email_parser/live_scoring.py`) — no schema:**
+
+- **Variants.** A game config carries `variants`, each with its own
+  `basis`, `handicap` dials and GG name. This is `config_json`'s attribute
+  set (format / competition / basis / handicap allowance / eligibility)
+  living as data, one layer short of the table.
+- **The matrix as the governing layer.** `select_variant(game_cfg,
+  holes_key, buyers)` resolves buyer count → which game version runs, and
+  returns the decision WITH ITS REASON attached. Kerry: the buy-in count
+  is *"the 1st level governing factor for game decision"*.
+- **`pops_per_hole`** declared on every game, and `game_handicaps()` so a
+  game derives its own allocation instead of inheriting the card's.
+- **USGA Appendix C as data**, carrying each row's verification state.
+
+**NOT built, and deliberately: the TABLES.** `game_templates` /
+`game_template_versions` / `event_games` are schema, and schema needs
+Kerry's rule-3b ratification before it ships. The variant structure above
+is shaped to lift into `config_json` unchanged when he gives it, so the
+migration is a move rather than a redesign.
+
+**What the tables still buy us that the seed config cannot:**
+
+1. **Append-only versions** — today a config edit has no history.
+2. **Per-event snapshot + frozen history** (guiding principle 4) — today a
+   past event recomputes under TODAY's rules. The a9.23 audit is a live
+   example: it now returns ½ Net for that event because the CURRENT config
+   says 4 buyers on a nine means ½ Net, which is right by luck rather than
+   by record.
+3. **A non-developer editing surface** (guiding principle 2).
+
+**Open, from the a9.23 GG setup screen — modelled nowhere yet:** "Skins
+with Carry", "To win Skin, score must be", "Validated on next hole by".
+None were in play on a9.23 (No / Any score / No validation) but all three
+are real dials TGF may use, and they belong in `config_json`.

@@ -57,20 +57,30 @@ prize matrix (analysis below). Open flags listed at the bottom.
 
 ## GROSS add-on games (buyers only)
 
-- **Skins** — GROSS skins (outright low gross on a hole within
-  flight); flighted (2 flights at 8+ buyers on 9h — below 8 the
-  matrix runs Skins ½ Net — up to 4 flights on 18s); each flight's
-  pot divides equally per skin won.
+- **Skins** — the buyer count selects WHICH SKINS GAME IS PLAYED, not
+  merely the pot size (see "½-Net Skins" below — this is the first-level
+  governing factor). At 8+ buyers on a nine it is GROSS skins (outright
+  low gross on a hole within flight), flighted 2 ways (up to 4 flights
+  on 18s); each flight's pot divides equally per skin won. **Below 8
+  buyers on a nine the matrix runs Skins ½ Net, a NET game** with a 50%
+  allowance off the lowest.
   **Audit it with `scoring-skins-audit:<event>`** (v2.457.0, read-only,
-  `database.py skins_audit`): it rebuilds what the board does for its
-  circles and prints the working — every buyer's stroke on every hole,
-  the low, who held it, and why the hole did or did not pay — set
-  against the recorded skins money. Built when a player showed skins
-  MONEY with no circled hole (Kerry 2026-09-15: "Carlos's skin isn't
-  circled. Audit"). That case turned out to be Golf Genius disagreeing
-  with ITSELF: its skins board paid a birdie on a hole where its own
-  scorecard has a par. When our board and a GG payout diverge, run this
-  first and look at the TIED holes.
+  `database.py skins_audit`; rewritten v2.459.0): it resolves the
+  variant the matrix selected, derives THAT game's own strokes, and
+  prints the working — every buyer's playing handicap and game strokes,
+  and both the gross and the pops on every hole, the low, who held it,
+  and why the hole did or did not pay — set against the recorded skins
+  money. Built when a player showed skins MONEY with no circled hole
+  (Kerry 2026-09-15: "Carlos's skin isn't circled. Audit").
+  **When our board and a GG payout diverge, check `game` FIRST — which
+  game the buyer count selected — and only then look at the TIED holes.**
+
+  > **CORRECTION (2026-09-16).** This entry previously recorded the
+  > a9.23 case as "Golf Genius disagreeing with ITSELF: its skins board
+  > paid a birdie on a hole where its own scorecard has a par." **That
+  > was wrong, and the error was ours.** The game was ½ Net; GG's board
+  > was reporting a NET birdie, and its scorecard's par is the GROSS.
+  > Both GG numbers were right and consistent. See below.
 - **Individual Gross** — raw gross, flighted. Activates at **16
   buyers (9h) / 12 (18h)** per the LIVE matrix — admin lowered the
   thresholds via the Matrix UI (the old Excel seed said 20/16); 3
@@ -1005,4 +1015,249 @@ at −1, `nvp −3` and `−4` are both 4) the totals diverge as well.
    (2026-09-15) the points are `game_stableford_net_after_plus`; before it
    the frozen WHS `stableford_net` — no MVP already decided can move
    (guiding principle 4). Pat's s9.23 total is 8 either way.
+
+---
+
+## The buy-in count selects WHICH GAME IS PLAYED (a9.23, RATIFIED 2026-09-16)
+
+**Kerry, 2026-09-16, on the a9.23 skins:**
+
+> "Yep, the game shifted due to buy ins based off of the side game matrix
+> built in. That is the 1st level governing factor for game decision and
+> different rules/controls come with that obviously for this situation
+> changing it from a gross game to a net game with an applied percentage.
+> I've attached the GG setup for review. Needs to be codified into the
+> Tracker along with all other game settings."
+
+### The finding, and the correction
+
+a9.23 Avery Ranch, $52 of skins. Only **4 players bought the gross bundle**
+on a nine, and the matrix switches Skins to ½ Net below 8 buyers on a nine.
+So Golf Genius ran **"SKINS 1/2 Net $"** — a NET game.
+
+Our engine computed skins on `"basis": "gross"` and carried
+`"half_net_below": {"9": 8}` beside a comment saying the engine *"does not
+yet implement"* it — and then computed gross anyway, behind a warning
+nobody acted on. **A rule that only warns is not a rule.**
+
+So we compared a net result against a gross computation, and reported that
+Golf Genius was contradicting itself about Carlos Zapata's hole 7.
+**It was not. We were wrong.** Zapata made **gross 4 on a par 4**, received
+a stroke there under the 50% allowance, and **netted 3 — an outright net
+birdie**, which is exactly what GG's detail line says. GG's scorecard par
+and GG's skins-board birdie are the *gross* and the *net* of the same hole,
+both correct.
+
+**No money moves.** a9.23 was always paid correctly: Luke Youngs $39 (holes
+2/3/5), Carlos Zapata $13 (hole 7), $52 across 4 skins. Zapata's handicap
+differential (7.7 off gross 44) is untouched — the differential is computed
+off gross and never saw the allowance.
+
+### What is PROVEN, and what is still OPEN
+
+GG's own detail lines are stated relative to par, which pins the allocation
+from the outside:
+
+| Player | GG detail | GG purse |
+|---|---|---|
+| YOUNGS, Luke | "Par on 2, Birdie on 3, Eagle on 5" | $39 |
+| ZAPATA, Carlos | "Birdie on 7" | $13 |
+
+- **PROVEN — Youngs received ZERO strokes.** Hole 5 is a par 5 he made in 3.
+  GG calls it an **Eagle**; with a stroke it would have been an Albatross.
+  His playing handicap is 1.0, so 50% = 0.5 and it **rounded DOWN**.
+  Round-half-up is refuted by GG's own words, not merely by the payout.
+- **PROVEN — the engine reproduces GG exactly.** Given the allocation those
+  strings pin, `game_skins` independently returns Youngs holes 2/3/5 and
+  Zapata hole 7, with the same vs-par labels and the same $39/$13 of $52.
+- **OPEN (CA Queue #7) — how the half stroke ROUNDS.** Nothing pins what
+  Zapata's 2.5 and Melchor's 3.5 do. **Every naive independent rounding
+  awards Eduardo Melchor a fifth skin GG did not pay** (half-up 5 skins and
+  contradicts the Eagle; banker's 6; floor 5). Brute force over all stroke
+  counts leaves 21 allocations consistent with GG's board, and in *every*
+  one Melchor ends up **≤** Zapata — which no independent per-player
+  rounding of 2.5 and 3.5 produces. **The dial cannot be reverse-engineered
+  from outcomes and must come from the GG setup screen or from Kerry.**
+
+**RESOLVED 2026-09-16, and the bug was OURS — in two places.**
+
+Kerry supplied the Golf Genius league handicap settings and GG's own worked
+example for Eduardo Melchor. Neither was a rounding-mode question.
+
+**(1) We applied the allowance to the ROUNDED playing handicap.** That
+double-rounds. GG states the rule on its own settings page — *"The World
+Handicap System requires full precision to be maintained in intermediary
+calculations. Rounding is performed only once and as the last step"* — and
+its Melchor line shows it:
+
+```
+index 5.6, Blue (slope 139 / rating 36.0 / par 36), front nine
+CH   = 5.6 x 139/113 = 6.888...      <- unrounded, CARRIED
+x50% = 3.444...                       <- allowance applied to the float
+round ONCE -> PH 3                    <- GG's published column
+```
+
+We were computing `round(6.888) = 7`, then `7 x 50% = 3.5`. Zapata the same:
+CH 5.491 (White, slope 133, rating 34.9 — a −1.1 course-rating-minus-par
+adjustment), ×50% = 2.746 → **3**.
+
+So **Melchor and Zapata both land on 3.** The "2.5 and 3.5" this lane spent
+its time trying to round correctly *never existed* — they were artifacts of
+our own double-rounding. That is why brute force found Melchor ≤ Zapata in
+all 21 consistent allocations, and why no independent rounding of those two
+numbers was ever going to work.
+
+**(2) Stroke allocation.** GG is set to *"Allocate strokes based on the full
+card Stroke Index Allocation"*, not its *"subset of holes played"* (which GG
+marks Recommended and TGF does not use). A stroke lands only where the
+18-hole stroke index is ≤ the playing handicap — so on a front nine with odd
+indexes, **a playing handicap of 3 delivers only TWO strokes**, because index
+2 is on the back nine and is not played.
+
+**Rounding is half-up.** GG's "Round up" means round *half* up, not ceiling:
+its tooltip reads *"A handicap allowance 50% applied to a CH of 13 becomes
+7"* (6.5 → 7), and 3.444 → 3 confirms nearest. This does **not** conflict
+with the CA Queue #5 plus-handicap ruling — that is a round-level deduction,
+a different mechanism, exactly as mailbox #530 said.
+
+**What is ratified by what.** The distinction is recorded in code and asserted
+in `test_half_net_skins.py`:
+
+| Dial | Ratified by | Strength |
+|---|---|---|
+| Allowance on the unrounded CH, rounded once | replay | **Proven** — reproduces GG's published handicap column for all four players |
+| Rounding half-up | GG settings screen | Confirmed, and consistent with a9.23 |
+| Full-card allocation | GG settings screen **only** | a9.23 does **not** discriminate it — both modes reproduce its board |
+
+Matching GG's board alone could be luck. Matching the Playing Handicap column
+GG printed, from index and tee, cannot — that is what closed this.
+
+**Where an unrounded course handicap is not available**, the engine falls
+back to the rounded playing handicap and reports `precision_loss` with a
+warning on the board, rather than silently computing a number GG would not
+have used.
+
+### The governing rule when we and GG disagree
+
+**Kerry, 2026-09-16: "Until we detach from GG, GG rules. When untethered,
+obviously we rule everything."**
+
+That is the tie-breaker for every future conflict of this shape, and it is
+why the dials above are set to reproduce Golf Genius rather than to express
+TGF's own preference. The half-Net rounding and the plus-handicap deduction
+(CA Queue #5) round differently *on purpose*: one is GG's mechanism and we
+match it, the other is TGF's own and we rule it.
+
+### The GG setup screen IS the schema
+
+Kerry's attached a9.23 setup maps almost one-for-one onto what a
+`game_template_versions.config_json` must carry (game-engine.md):
+
+| GG field | a9.23 Skins value | Where it lives now |
+|---|---|---|
+| Name | SKINS 1/2 Net $ | variant `gg_name` |
+| Format | Basic Skins | `format: "skins"` |
+| Competition | Player v. Field | `competition` |
+| Balls | Own Ball on each hole | — |
+| Holes | 9 Holes (Front or Back) | `when_buyers` key |
+| Skins with Carry | No | *(not yet modelled — see open items)* |
+| To win Skin, score must be | Any score | *(not yet modelled)* |
+| Validated on next hole by | No validation | *(not yet modelled)* |
+| **Handicap** | **USGA Net (off lowest)** | `handicap.method` + `off_lowest` |
+| **Handicap Allowance** | **50%** | `handicap.allowance_pct` |
+| Purse & Points | pro-rata to Skins won | matrix |
+| Purse pot | 52.0 | matrix ($13×N, all of the gross pool below 16) |
+| Round allocated purse down to | 0 (no rounding) | matrix |
+
+**Allowance % and "off lowest" are TWO SEPARATE DIALS.** USGA's allowance is
+a percentage of each player's own Course Handicap; "off the lowest in the
+group" is an additional TGF/GG convention (USGA applies play-off-the-low to
+**match** play). The starter sheet's own footnote carries both: *"TEAM —
+Team Net handicap: Best 1 net ball, 75% of PH, off the lowest in the
+group."* They are stored as separate fields or the maths goes wrong in one
+direction or the other.
+
+*(Note: on a9.23 "off lowest" happened to be a no-op — Robert Straiton
+played off 0.0 and was the low — so this event does not test that dial
+either.)*
+
+---
+
+## Pops are a property of the GAME, not of the card (2026-09-16)
+
+**Kerry, 2026-09-16, on Individual Net:**
+
+> "Individual Net is not a pops per hole game, so pops don't need to show on
+> individual net views. It is instead a Gross Score - PH = Net Score. It's
+> based off the raw gross total minus their playing handicap (Pat +3).
+> Typically on a scorecard the playing handicap is displayed between the
+> GROSS Score and the NET Score columns."
+
+**The rule.** Every game DECLARES `pops_per_hole`:
+
+| Game | `pops_per_hole` | Why |
+|---|---|---|
+| Individual Net | **false** | round-level: `gross total − playing handicap` |
+| Individual Gross | **false** | never sees a handicap at all |
+| Team Net (best ball) | **true** | the best ball on a hole can't be picked without knowing which ball got the stroke |
+| Net Points / MVP (Stableford) | **true** | Stableford scores each hole |
+| ½-Net Skins | **true** | the hole is the unit of the game |
+| CTP / Hole-in-One | **false** | not handicap games |
+
+**Every surface must READ this flag rather than assume.** Rendering per-hole
+net everywhere is precisely why a plus handicapper's Individual Net view
+showed `○` marks for a mechanic that game does not use.
+
+**And a game derives its OWN strokes.** A card carries whatever allocation
+the event's headline net game used; a *different* game on the same card has
+a different allowance and may have none. `live_scoring.game_handicaps`
+therefore derives each game's allocation from the playing handicap under
+that game's own dials — allowance → rounding → off-lowest → allocate by
+stroke index — rather than borrowing the card's.
+
+---
+
+## USGA handicap allowances (Rules of Handicapping, Appendix C)
+
+Recorded as DATA in `live_scoring._USGA_ALLOWANCES`, **with its verification
+state**, so no game carries a percentage in code and no reader has to guess
+how sure we are.
+
+**Kerry, 2026-09-16:** *"Team Net is 75% for one ball, 85% for two ball, and
+100% for 3 or 4. Cart Net is (I believe) 85% for one ball and 100% for 2
+ball...need you to check USGA's recommendations."*
+
+### CONFIRMED — the four-player ladder (TEAM Net)
+
+| Format | Allowance | State |
+|---|---|---|
+| Best 1 of 4 | **75%** | confirmed |
+| Best 2 of 4 | **85%** | confirmed |
+| Best 3 of 4 | **100%** | confirmed |
+| Best 4 of 4 | **100%** | confirmed |
+
+Matches Kerry's ruling exactly, and matches the Team Net definition v1
+already in this doc ("Best 1 → 75%, Best 2 → 85%, Best 3 → 100%, Best 4 →
+100%"). Team Net's allowance now follows the **ball count**, as data
+(`allowance_pct_by_balls`), so the standard Best-1/Best-2 rotation carries
+its percentage automatically.
+
+### NOT CONFIRMED — the two-player ladder (CART Net). CA Queue #8.
+
+| Format | Kerry's recollection | State |
+|---|---|---|
+| Best 1 of 2 | 85% | **unconfirmed** (USGA's Four-Ball Stroke Play *is* 85%, which agrees, but unverified here) |
+| Best 2 of 2 (both count) | 100% | **UNRESOLVED — carries no value** |
+
+**Why it is not simply taken.** `usga.org` is blocked by the network egress
+proxy (403 on CONNECT) — as it was for the parent session — and so are
+`randa.org`, the mirrored Appendix C PDFs, and FORE Magazine. Only search
+**snippets** were reachable, and a snippet is not the Rules of Handicapping.
+The four-player ladder was corroborated by two independent searches agreeing
+exactly with what Kerry had already ratified, which is why it is recorded;
+the two-ball Cart Net row had no such agreement.
+
+**The unconfirmed rows carry `allowance_pct: None` rather than a plausible
+number.** Nothing may fall back to a default for them — a game that needs
+one must report, not assume. This is money.
 

@@ -245,10 +245,32 @@ sk_small = ls.game_skins(ls.build_cards(
     {"holes": NINE, "players": [player(f"s{i}", f"S{i}", 5, even_par())
                                 for i in range(6)]}, FORMULAS),
     ls.SEED_LIVE_SCORING_CONFIG, "9")
-check("below 8 buyers Skins 1/2 Net is flagged as NOT implemented",
-      sk_small["active"] is False
-      and any("1/2 Net" in w for w in sk_small["warnings"]),
+check("below 8 buyers the matrix selects the half-Net variant",
+      sk_small["variant"] == "half_net" and sk_small["basis"] == "net",
+      f"{sk_small['variant']} / {sk_small['basis']}")
+check("the half-Net game is COMPUTED, not merely flagged",
+      sk_small["active"] is True and "flights" in sk_small)
+check("the variant selection is REPORTED, not inferred",
+      "6 buyers" in (sk_small["selection"] or {}).get("reason", ""),
+      str(sk_small.get("selection")))
+check("skins declares itself a pops-per-hole game",
+      sk_small["pops_per_hole"] is True)
+# The dials are ratified (CA Queue #7, closed 2026-09-16 from GG's league
+# settings + its worked example), so no provisional flag here. But this
+# fixture supplies no unrounded course handicap, and applying a 50% allowance
+# to an already-ROUNDED handicap double-rounds — so the board must SAY so
+# rather than quietly paying a number GG would not have computed.
+check("the ratified dial is no longer declared provisional",
+      sk_small.get("handicap_ratified") is not False
+      and not any("NOT ratified" in w for w in sk_small["warnings"]),
       str(sk_small["warnings"]))
+check("but computing off a ROUNDED handicap is reported, not hidden",
+      any("ROUNDED handicap" in w for w in sk_small["warnings"]),
+      str(sk_small["warnings"]))
+check("at 8+ buyers the matrix selects GROSS skins",
+      sk["variant"] == "gross" and sk["basis"] == "gross"
+      and sk.get("handicap_ratified") is None,
+      f"{sk['variant']} / {sk['basis']}")
 
 
 # ---------------------------------------------------------------------------
