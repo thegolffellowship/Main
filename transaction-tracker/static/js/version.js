@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.462.4";
+window.TGF_VERSION = "2.462.5";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.462.5",
+    date: "2026-09-16",
+    changes: [
+      "TGF Insider headline order: the fraction title ('Half the Field Won Money!') now ranks above the par/bogey skins story — Kerry chose it over 'A par won money' for the 9/16 draft.",
+    ],
+  },
   {
     version: "2.462.4",
     date: "2026-09-16",

@@ -333,8 +333,9 @@ Wednesday auto-draft fills the template:**
   not cancelled, max 4.
 - `compose()` — deterministic sentences into the 5-block slots. Headline
   follows the strongest beat — "First round. First payday." (a first-timer
-  cashed) → "A bogey/par won money Tuesday" → the fraction as a title
-  ("Half the Field Won Money!", Kerry's shape 2026-09-16) → the ratified
+  cashed) → the fraction as a title ("Half the Field Won Money!", Kerry's
+  pick 2026-09-16, ranked above the skins story because he chose it over
+  "A par won money") → "A bogey/par won money Tuesday" → the ratified
   default — **and never repeats last week's title** (`pick_headline`;
   `last_insider_headline` reads the previous draft ping in `message_log`).
   Kerry, week 3: "We copied the Brevo title from last week" — two Insiders

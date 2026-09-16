@@ -591,9 +591,9 @@ def compose(data: dict) -> dict:
     # default sits last and may repeat only when nothing else remains.
     candidates = [
         "First round. First payday." if cashed_firsts else None,
+        _fraction_headline(total_c, total_f),      # Kerry's pick, week 3
         (f"A {story['skins_story']['score']} won money Tuesday"
          if story and story["skins_story"]["score"] in ("bogey", "par") else None),
-        _fraction_headline(total_c, total_f),
         "You don't have to be the best golfer out here to get paid",
     ]
     slots["HEADLINE"] = pick_headline(candidates, data.get("last_headline"))
