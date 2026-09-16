@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.451.0";
+window.TGF_VERSION = "2.451.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.451.1",
+    date: "2026-09-16",
+    changes: [
+      "The GAMES tab names only as many Team Net winners as the matrix actually PAYS (Kerry: \u20182nd Team net doesn\u2019t need to show if there\u2019s only one place paid\u2019). Golf Genius records the whole finishing order, and printing a runner-up beside a single-place pot reads as money that is not there.",
+    ],
+  },
   {
     version: "2.451.0",
     date: "2026-09-16",
