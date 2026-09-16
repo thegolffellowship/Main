@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.458.0";
+window.TGF_VERSION = "2.458.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.458.1",
+    date: "2026-09-16",
+    changes: [
+      "DOCS ONLY, no behaviour change. Kerry merged Luke Mazanec\u2019s two Golf Genius member records on GG\u2019s side, so the duplicate the v2.458.0 note described is gone at source: GG now returns ONE card (12135103), our standings row reads `merged_from: null`, and his total is 36 \u2014 the union of his five events \u2014 matching the rows in his expansion exactly. `scoring-race-dupes` reports zero unmerged and zero folded across all five races.",
+      "`docs/claude/customers.md` no longer reads that as a live open item. The summing fold (`{\u201cmethod\u201d: \u201csum\u201d}`) is still in the code and is now DORMANT rather than open \u2014 exercised by nobody, and it never produced a wrong number even when it was exercised, because with best 6 and five events the sum and the union agree. The note records what would make it bite (a duplicate whose cards hold more than `best_n` events between them), and what fixing it would cost (the refresh would have to fetch every card\u2019s detail to rebuild the union \u2014 a GG round-trip per duplicate per refresh, so a decision rather than a tidy-up). Kerry\u2019s preference is to resolve duplicates at Golf Genius, which makes our fold a fallback rather than the primary path.",
+    ],
+  },
   {
     version: "2.458.0",
     date: "2026-09-16",

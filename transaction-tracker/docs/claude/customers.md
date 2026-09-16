@@ -1154,13 +1154,26 @@ docs/claude/handicaps.md → public-portal probe for the fetch layer).
   `event_date >= date(fetched_at)` excluded the event that had just
   finished. Both tests now read the snapshot's Central day via
   `to_central`. Guard: `test_points_race_staleness.py`.
-- **OPEN (Kerry's call): a merged row SUMS its member cards' totals.**
-  `merged_from` carries `{"method": "sum"}` — Luke Mazanec has two GG
-  member records (12135103 + 12135088 = 33). Summing two per-card best-N
-  subtotals equals best-N-of-the-union only while neither card exceeds the
-  cutoff; past it, it overcounts. `combine_member_detail_tables` already
-  rebuilds the union correctly for the row EXPANSION, and the standings
-  total does not use it. Not biting today (best 6, few events).
+- **DORMANT, not fixed: a merged row SUMS its member cards' totals.**
+  When GG carries the same person as two member records, our write-time
+  fold stores `merged_from` with `{"method": "sum"}` and adds the two
+  totals. Summing two per-card best-N subtotals equals best-N-of-the-union
+  only while neither card exceeds the cutoff; past it, it overcounts.
+  `combine_member_detail_tables` already rebuilds the union correctly for
+  the row EXPANSION — the standings total does not use it.
+  **Currently exercised by nobody.** Luke Mazanec was the live case
+  (12135103 + 12135088 = 33); **Kerry merged the two records on Golf
+  Genius on 2026-09-16**, so GG now returns one card and our row reads
+  `merged_from: null`, one card, total 36 = the union of his five events.
+  `scoring-race-dupes` reports zero unmerged and zero folded across all
+  five races. It never produced a wrong number either — with best 6 and
+  five events the sum and the union agreed.
+  Kerry's preference is to resolve duplicates AT GOLF GENIUS, which makes
+  our fold a fallback rather than the primary path. Fixing the mechanism
+  means the refresh would have to fetch every card's detail to rebuild the
+  union, which costs a GG round-trip per duplicate per refresh — so it is
+  a decision, not a tidy-up. Left as written down until a duplicate
+  actually appears with more than `best_n` events between its cards.
 - Endpoint GET /api/season-contests/points-race?race=<key>[&force=1]
   (manager role).
 - UI colors: green = enrolled, red = profile but no buy-in, amber =
