@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.457.0";
+window.TGF_VERSION = "2.457.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.457.1",
+    date: "2026-09-16",
+    changes: [
+      "THE OPEN DECISIONS MOVED OUT OF THE TRANSCRIPT AND ONTO KERRY\u2019S OWN CHECKLIST. Five rows written to the CA Queue: the a9.23 skins question (Golf Genius\u2019s skins board pays Carlos Zapata a birdie on hole 7 while Golf Genius\u2019s own scorecard has him at par there \u2014 $52 and a posted handicap round hang on which is right), the five blind-draw specifics still running on inferred rules, the chapter-badge rule, how the plus-handicap deduction rounds when a nine-hole plus sits at \u22120.5 and rounds to zero, and the re-send of both events\u2019 handicap cards that went out with pre-round indexes. A decision living only in a chat is a decision nobody can find next week.",
+      "Docs caught up to the code: the event-night handoff now runs to v2.457.0 with a new \u00a713 covering the proxy-name change, the `scoring-skins-audit` bridge, the Golf Genius self-contradiction in full, the chapter-badge rule that has NOT been given yet (with the constraint that only the badge display may change \u2014 `customers.chapter` must never be overwritten from `items.chapter`), and the split of what went to the spin-off lane versus what stayed. The skins section of side-games.md now points at the audit bridge from the RULE, so the next person finds it without reading a handoff.",
+    ],
+  },
   {
     version: "2.457.0",
     date: "2026-09-16",

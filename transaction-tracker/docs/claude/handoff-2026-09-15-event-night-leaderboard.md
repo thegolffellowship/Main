@@ -1,14 +1,15 @@
-# Session record — 2026-09-15 event night, v2.437.0 → v2.456.0
+# Session record — 2026-09-15 event night, v2.437.0 → v2.457.0
 
 **Lane:** tracker-claude "TGF Tracker Improvements" · branch
-`claude/tracker-improvements-h7q2ns` · all 25 commits merged to `main`
+`claude/tracker-improvements-h7q2ns` · all 27 commits merged to `main`
 and live on Railway.
 **Events in play:** s9.23 The Quarry (San Antonio, 5:00 PM shotgun, 21
 players) and a9.23 Avery Ranch (Austin, 4:57 PM tee times, 12 players).
 Most of this was built WHILE the rounds were being played, from Kerry
 watching the live board on his phone at the course.
-**Mailbox:** #508–#522 are this session's posts. #522 covers through
-v2.442.0 only; the digest for v2.443.0–v2.456.0 is post #523.
+**Mailbox:** #508–#524 are this session's posts. #522 covers through
+v2.442.0; #523 is the close-out digest for v2.443.0–v2.457.0; #524 is
+the addendum (§13 below + the CA Queue rows).
 
 ---
 
@@ -491,3 +492,132 @@ is spun off — see §11.
   `db_path` from `PRAGMA database_list` when not given.
 - **The events-board test harness slices the file**; tee helpers had to
   move inside the sliced renderer region to be visible to it.
+
+
+---
+
+## 13. After the close-out — v2.457.0 and the three questions left with Kerry
+
+The handoff above was written and pushed at v2.456.1. Kerry kept
+working, so this section covers what came after it.
+
+### 13a — Proxy winners read like every other board (v2.457.0)
+
+**Kerry:** *"Use same text for Proxy winners as the others."*
+
+The Proxies tab was printing the raw Golf Genius string —
+`escapeHtml(p.player)` — with no board name cell and no card behind it.
+So the one tab whose entire job is to NAME a winner was the one tab
+whose winner did not look like a player anywhere else on the page, and
+did not open when tapped, although the footer note promises "Tap a
+player for their scorecard".
+
+`proxWinner(nm)` resolves the GG name back to the board row through
+`evlbRowByName` (built from `d.overall_board`, keyed by both the plain
+name and `evlbFlipName`'s "LAST, First" flip — the same flip the tee
+dots already use), renders OUR `player_name` in a standard `td.nm` with
+its tee dot right-justified, and wraps the row in `evlb-plr` +
+`data-rid` so it styles, dots and opens exactly like the others. The
+proxies table is the only board that is not `.evlb-holes`, so
+`.evlb-prox td.nm` repeats the name-cell rule.
+
+### 13b — NEW BRIDGE: `scoring-skins-audit:<event>` (v2.457.0)
+
+**Kerry:** *"Carlos's skin isn't circled. Audit."*
+
+`skins_audit(event_query, db_path=None)` in `database.py` (just above
+`_flight_skins`), bridged in `mcp_server.py`. Read-only. It rebuilds
+exactly what `get_event_leaderboard` does for `skin_cells` — outright
+low GROSS on a hole among the BUYERS in that flight — and prints the
+working: every buyer's stroke on every hole, the low, who held it, and
+why the hole did or did not pay, set against what is actually recorded
+as skins money. A player with money but no circled hole now produces a
+line you can read instead of a missing circle you have to guess at.
+
+### 13c — What the audit found: Golf Genius contradicts itself
+
+a9.23 Avery Ranch. Skins buyers are the GROSS bundle — Luke Youngs,
+Carlos Zapata, Eduardo Melchor, Robert Straiton (4 buyers, so ONE
+flight; the Individual Gross pot rolled into skins at 4 buy-ins).
+
+Computed: exactly **three** skins, all Luke's — holes 2, 3 and 5. That
+matches GG's own detail line for him, *"Par on 2, Birdie on 3, Eagle on
+5"*, hole for hole. Carlos was low on three holes and **tied every
+one**: hole 1 (4, with Luke), hole 7 (4, with Luke), hole 8 (3, with
+Straiton).
+
+But GG's skins board pays Carlos $13 for **"Birdie on 7"**. Avery Ranch
+front hole 7 is par 4, so GG's board believes he made **3** there —
+while GG's **own scorecard**, which is what we imported, has him at
+**4** and totals him at gross 44 (4-5-7-5-7-4-4-3-5).
+
+So our board is faithful to the scorecard; the disagreement is inside
+GG. If Carlos made 3, there are four skins at $13 and GG's payout is
+right. If he made 4, there are three skins and the whole $52 pot is
+Luke's. **$52 and Carlos's posted handicap round both hang on it** —
+left with Kerry rather than guessed at. CA Queue #2.
+
+Worth noting for the next person: the same 4-buyer field, the same
+`_flight_skins` rule, and GG's own prose agreed on Luke's three skins
+exactly. A single hole disagreed. That is what made it diagnosable —
+the audit's value is that it prints the agreement as well as the gap.
+
+### 13d — Chapter badges: the rule Kerry has not given yet
+
+**Kerry, on the Points Races standings:** *"Some of these aren't the
+right chapters. Weigh against their event signup locations."* (Flagged
+in the screenshot: Barna, Moore, Sharp, Franz, Williams.)
+
+The A/SA badge is `prChapterBadge(chapter)` in `templates/contests.html`
+(~line 7770); its input is the standings payload's `chapter`, which is
+**`customers.chapter` — the DECLARED home chapter**.
+
+Two sensible replacement rules give DIFFERENT answers for exactly the
+cross-chapter players flagged:
+
+- (a) the chapter where the player registered for the **most events in
+  that race's season**;
+- (b) the chapter of their **most recent event**.
+
+tracker-claude recommends (a), with `customers.chapter` as the fallback
+for anyone with no event rows: it is stable week to week, where (b)
+flips every time someone visits the other city. **Not built** — awaiting
+the ruling. CA Queue #4.
+
+**Constraint that must survive whichever rule wins:** change only what
+the BADGE DISPLAYS. CLAUDE.md's identity-drift section is explicit that
+`customers.chapter` must not be overwritten from `items.chapter`,
+because `items.chapter` is the event/course LOCATION and cross-chapter
+play would corrupt the member's home chapter. This is a display
+derivation, not a data repair.
+
+### 13e — Everything now on Kerry's desk, in the CA Queue
+
+Written to `ca_queue` so they live on his own checklist rather than in a
+transcript:
+
+| # | Section | Item |
+|---|---|---|
+| 2 | kerry_decision | a9.23 skins — Carlos Zapata hole 7, $52 (13c) |
+| 3 | kerry_decision | Ratify the five blind-draw specifics (§10) |
+| 4 | kerry_decision | Chapter badge rule (13d) |
+| 5 | kerry_decision | How the plus-handicap deduction rounds — Pat Youngs at −0.5 rounds to zero (§6) |
+| 6 | followups | Re-send the handicap cards for both events — the first send carried stale indexes (§9) |
+
+(#1 was already open: ratify importing TEAM tournament per-player nets
+at event sync, mailbox #472.)
+
+### 13f — Split of what went where
+
+- **Spun off** to "Handicap Surfaces: Identity + Plus Rule"
+  (`claude/handicap-surfaces-k4m9xr`, session prompt
+  `docs/claude/session-prompt-2026-09-16-handicap-card-identity.md`):
+  the handicap-card identity bug (§10) and the plus rule's nine
+  unvisited call sites (§6).
+- **Stays with this lane:** the Carlos skins question, the chapter
+  badge rule, the blind-draw ratifications, and every leaderboard /
+  starter-sheet / pairings surface.
+- **Still carried from earlier sessions, untouched tonight:**
+  design-claude reviews #517 and #520 awaiting a reply; the two
+  off-standard chevrons on `/me` and Money Flow; the live-scoring build
+  awaiting Kerry's "go".

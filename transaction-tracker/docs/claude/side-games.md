@@ -61,6 +61,16 @@ prize matrix (analysis below). Open flags listed at the bottom.
   flight); flighted (2 flights at 8+ buyers on 9h — below 8 the
   matrix runs Skins ½ Net — up to 4 flights on 18s); each flight's
   pot divides equally per skin won.
+  **Audit it with `scoring-skins-audit:<event>`** (v2.457.0, read-only,
+  `database.py skins_audit`): it rebuilds what the board does for its
+  circles and prints the working — every buyer's stroke on every hole,
+  the low, who held it, and why the hole did or did not pay — set
+  against the recorded skins money. Built when a player showed skins
+  MONEY with no circled hole (Kerry 2026-09-15: "Carlos's skin isn't
+  circled. Audit"). That case turned out to be Golf Genius disagreeing
+  with ITSELF: its skins board paid a birdie on a hole where its own
+  scorecard has a par. When our board and a GG payout diverge, run this
+  first and look at the TIED holes.
 - **Individual Gross** — raw gross, flighted. Activates at **16
   buyers (9h) / 12 (18h)** per the LIVE matrix — admin lowered the
   thresholds via the Matrix UI (the old Excel seed said 20/16); 3
