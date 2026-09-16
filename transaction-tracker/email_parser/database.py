@@ -16661,14 +16661,26 @@ def skins_audit(event_query: str, db_path: str | Path | None = None) -> dict:
     payouts beside it (Kerry 2026-09-15: "Carlos's skin isn't circled.
     Audit").
 
-    Read-only. Rebuilds exactly what `get_event_leaderboard` does for
-    `skin_cells` — outright low GROSS on a hole among the BUYERS in that
-    flight — and prints the working: every buyer's stroke on every hole,
-    the low, who held it, and why the hole did or did not pay. Then it
-    sets that against what is actually RECORDED as skins money, so a
-    disagreement between our board and Golf Genius is visible as a line
-    rather than as a missing circle.
+    Read-only, and it asks THE GAME THE MATRIX ACTUALLY SELECTED.
+
+    It used to ask the gross question unconditionally. On a9.23 Avery Ranch
+    four players bought the gross bundle on a nine, so the side-games matrix
+    ran "SKINS 1/2 Net $" — a NET game — and this audit computed gross skins,
+    found three skins to one player, and concluded Golf Genius was
+    contradicting itself about Carlos Zapata's hole 7. Golf Genius was right.
+    Zapata made gross 4 on a par 4, received a stroke there, and netted an
+    outright birdie. The buyer count had silently changed which game was
+    played, and the rules of that game lived only in a GG settings screen.
+
+    So the audit now resolves the variant through `live_scoring.select_variant`
+    (buyer count -> which game), derives that game's OWN stroke allocation
+    through `live_scoring.game_handicaps` (pops are a property of the GAME,
+    not of the card), and prints both the gross and the playing score for
+    every hole so the two questions can never again be confused for each
+    other.
     """
+    from . import live_scoring as _ls_mod
+
     d = get_event_leaderboard(event_query, db_path=db_path)
     if not d:
         return {"error": "event not found"}
@@ -16681,30 +16693,87 @@ def skins_audit(event_query: str, db_path: str | Path | None = None) -> dict:
                 return h[1]
         return None
 
+    # Playing handicap + this course/tee's stroke index, straight from the
+    # rounds, because the GAME derives its own pops and cannot borrow the
+    # card's (those belong to whatever net game the card was built for).
+    ph_by_rid: dict = {}
+    si_by_rid: dict = {}
+    conn = get_connection(db_path)
+    try:
+        for rid in list(cards.keys()):
+            row = conn.execute(
+                "SELECT playing_handicap, tee_id FROM scoring_rounds "
+                "WHERE id = ?", (int(rid),)).fetchone()
+            if not row:
+                continue
+            ph_by_rid[str(rid)] = row[0]
+            si = {}
+            for hn, sidx in conn.execute(
+                    "SELECT hole_number, stroke_index FROM course_tee_holes "
+                    "WHERE tee_id = ? AND stroke_index IS NOT NULL",
+                    (row[1],)):
+                if hn in hole_cols:
+                    si[hn] = sidx
+            si_by_rid[str(rid)] = si
+    finally:
+        conn.close()
+
+    n_gross_buyers = d.get("n_gross_buyers") or 0
+    holes_key = "18" if len(hole_cols) > 9 else "9"
+    gcfg = (_ls_mod.SEED_LIVE_SCORING_CONFIG["games"].get("skins") or {})
+    variant = _ls_mod.select_variant(gcfg, holes_key, n_gross_buyers)
+    hcfg = variant.get("handicap")
+
     flights = []
     for sec in (d.get("skins_board") or []):
         buyers = [r for r in sec["rows"] if r.get("buyer")]
         placed = [r for r in sec["rows"] if not r.get("buyer")]
+
+        # This flight's own allocation under the selected variant's dials.
+        si_union: dict = {}
+        for r in buyers:
+            si_union.update(si_by_rid.get(str(r["scoring_round_id"])) or {})
+        pseudo = [{"key": str(r["scoring_round_id"]),
+                   "playing_handicap": ph_by_rid.get(str(r["scoring_round_id"]))}
+                  for r in buyers]
+        hcaps = _ls_mod.game_handicaps(pseudo, hcfg, si_union)
+
+        def _pops(rid, hn):
+            return ((hcaps["by_key"].get(str(rid)) or {})
+                    .get("by_hole", {}).get(hn, 0) or 0)
+
         holes = []
         for hn in hole_cols:
-            scores = {}
+            scores, gross_scores, pops_at = {}, {}, {}
             for r in buyers:
                 st = _stroke(r["scoring_round_id"], hn)
-                if st is not None:
-                    scores[r["player_name"]] = st
+                if st is None:
+                    continue
+                pops = _pops(r["scoring_round_id"], hn)
+                gross_scores[r["player_name"]] = st
+                pops_at[r["player_name"]] = pops
+                scores[r["player_name"]] = st - pops
             if not scores:
                 holes.append({"hole": hn, "verdict": "no scores posted"})
                 continue
             low = min(scores.values())
             holders = [n for n, v in scores.items() if v == low]
-            holes.append({
+            entry = {
                 "hole": hn,
-                "scores": scores,
+                "gross": gross_scores,
                 "low": low,
                 "verdict": ("SKIN \u2014 " + holders[0]) if len(holders) == 1
                            else "tied \u2014 " + ", ".join(sorted(holders)),
                 "winner": holders[0] if len(holders) == 1 else None,
-            })
+            }
+            if variant.get("basis") == "net":
+                entry["pops"] = {k: v for k, v in pops_at.items() if v}
+                entry["net"] = scores
+            else:
+                # Gross game: the playing score IS the gross. Keep the old
+                # key so existing readers of this bridge do not break.
+                entry["scores"] = gross_scores
+            holes.append(entry)
         won = {}
         for h in holes:
             if h.get("winner"):
@@ -16713,6 +16782,13 @@ def skins_audit(event_query: str, db_path: str | Path | None = None) -> dict:
             "flight": sec.get("label"),
             "buyers": [r["player_name"] for r in buyers],
             "placed_non_buyers": [r["player_name"] for r in placed],
+            "playing_handicaps": {
+                r["player_name"]: {
+                    "playing_handicap": ph_by_rid.get(
+                        str(r["scoring_round_id"])),
+                    "game_strokes": (hcaps["by_key"].get(
+                        str(r["scoring_round_id"])) or {}).get("strokes"),
+                } for r in buyers},
             "holes": holes,
             "computed_skins": won,
             "computed_total": sum(won.values()),
@@ -16732,14 +16808,37 @@ def skins_audit(event_query: str, db_path: str | Path | None = None) -> dict:
                         w["cents"] for w in (r.get("won") or [])
                         if "skin" in (w.get("label") or "").lower()) / 100.0, 2),
                 }
+
+    warnings = []
+    if hcfg and not hcfg.get("rounding_ratified", True):
+        warnings.append(
+            "The half-stroke ROUNDING under this allowance is NOT ratified "
+            "(CA Queue #7) \u2014 the skins below are provisional. a9.23 proves "
+            "only that 0.5 rounds DOWN.")
+
+    note = ("computed_skins is the rule for THE GAME THE MATRIX SELECTED, "
+            "printed under `game` below \u2014 not gross unless gross is what "
+            "the buyer count selected. A player with money but no circled "
+            "hole means our board and the recorded payout disagree; check "
+            "`game` FIRST, then look at the tied holes.")
     return {"event": d.get("event_name") or d.get("event") or event_query,
             "holes_in_play": hole_cols,
+            "game": {
+                "variant": variant.get("name"),
+                "label": variant.get("label"),
+                "gg_name": variant.get("gg_name"),
+                "basis": variant.get("basis"),
+                "pops_per_hole": gcfg.get("pops_per_hole", True),
+                "gross_buyers": n_gross_buyers,
+                "selection": variant.get("selection"),
+                "handicap": hcfg,
+                "handicap_ratified": (
+                    True if not hcfg else hcfg.get("rounding_ratified", True)),
+            },
             "flights": flights,
             "board": circles,
-            "note": "computed_skins is the rule (outright low gross among "
-                    "buyers in the flight). A player with money but no "
-                    "circled hole means our board and the recorded payout "
-                    "disagree \u2014 look at the tied holes first."}
+            "warnings": warnings,
+            "note": note}
 
 
 def _flight_skins(conn, group: list[dict]) -> dict:

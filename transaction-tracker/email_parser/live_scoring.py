@@ -34,7 +34,58 @@ from .handicap_calc import allocate_strokes
 # ---------------------------------------------------------------------------
 # Rules-as-data. Every threshold below is transcribed from the RATIFIED
 # side-games spec v1.0 tables; see docs/claude/side-games.md.
+#
+# POPS ARE A PROPERTY OF THE GAME, NOT OF THE CARD (2026-09-16).
+# Every game declares `pops_per_hole`. ROUND-level games (Individual Net,
+# Individual Gross) are `gross total - playing handicap` and never put a
+# stroke on a hole; HOLE-level games (Team Net best-ball, Net Points /
+# Stableford, half-Net Skins) allocate by stroke index because the hole
+# cannot be decided otherwise. Surfaces must READ this flag rather than
+# assume — rendering per-hole net everywhere is why a plus handicapper's
+# Individual Net view showed circle marks for a mechanic that game does
+# not use.
+#
+# USGA HANDICAP ALLOWANCES (Rules of Handicapping, Appendix C).
+# Recorded as data so a non-developer can read it and so no game has to
+# carry a percentage in code. VERIFICATION STATE IS PART OF THE DATA: the
+# four-player ladder below is confirmed and matches Kerry's ratified Team
+# Net figures exactly; the two-player CART Net row is NOT confirmed
+# (usga.org and every mirror are blocked by this environment's network
+# egress proxy) and is therefore ABSENT rather than guessed at. CA Queue
+# #8 carries the ask. Nothing may fall back to a default for it — a game
+# that needs it must report, not assume.
 # ---------------------------------------------------------------------------
+
+_USGA_ALLOWANCES: dict = {
+    # {format_key: {"allowance_pct": n, "confirmed": bool, "source": str}}
+    # Four-player team ladder — CONFIRMED, and identical to Kerry's
+    # 2026-09-16 ruling ("Team Net is 75% for one ball, 85% for two ball,
+    # and 100% for 3 or 4").
+    "best_1_of_4": {"allowance_pct": 75, "confirmed": True,
+                    "source": "USGA Appendix C, four-player ladder"},
+    "best_2_of_4": {"allowance_pct": 85, "confirmed": True,
+                    "source": "USGA Appendix C, four-player ladder"},
+    "best_3_of_4": {"allowance_pct": 100, "confirmed": True,
+                    "source": "USGA Appendix C, four-player ladder"},
+    "best_4_of_4": {"allowance_pct": 100, "confirmed": True,
+                    "source": "USGA Appendix C, four-player ladder"},
+    # Two-player (CART Net). Kerry's recollection is 85% one ball / 100%
+    # two ball. "Best 1 of 2" IS USGA's Four-Ball Stroke Play at 85%, which
+    # agrees; the two-ball row could not be verified to the standard money
+    # deserves. Left UNCONFIRMED on purpose.
+    "best_1_of_2": {"allowance_pct": 85, "confirmed": False,
+                    "source": "Kerry recollection; USGA Four-Ball Stroke "
+                              "Play is 85% but unverified here — CA Queue #8"},
+    "best_2_of_2": {"allowance_pct": None, "confirmed": False,
+                    "source": "UNRESOLVED — CA Queue #8, Kerry's call"},
+}
+
+# "Off the lowest in the group" is NOT a USGA allowance. USGA applies
+# play-off-the-low to MATCH play; TGF/GG apply it to Team and Cart Net
+# stroke play as a house convention. It is a SEPARATE dial on every game
+# that uses it, never folded into the percentage.
+_OFF_LOWEST_IS_TGF_CONVENTION = True
+
 
 SEED_LIVE_SCORING_CONFIG: dict = {
     "version": 1,
@@ -42,8 +93,13 @@ SEED_LIVE_SCORING_CONFIG: dict = {
         "individual_net": {
             "label": "Individual Net",
             "basis": "net",
-            "format": "stableford",
+            "format": "stroke",
+            "competition": "player_v_flight",
             "eligibility": "net_buyers",
+            # ROUND-level. Kerry, 2026-09-16: "Individual Net is not a pops
+            # per hole game, so pops don't need to show on individual net
+            # views. It is instead a Gross Score - PH = Net Score."
+            "pops_per_hole": False,
             # Flight COUNT by buyer count, per holes-type. Bands are
             # [min_buyers, max_buyers_or_None, flights].
             "flight_bands": {
@@ -59,8 +115,12 @@ SEED_LIVE_SCORING_CONFIG: dict = {
         "individual_gross": {
             "label": "Individual Gross",
             "basis": "gross",
-            "format": "stableford",
+            "format": "stroke",
+            "competition": "player_v_flight",
             "eligibility": "gross_buyers",
+            # Gross games never see a handicap at all, so there is nothing
+            # to put on a hole.
+            "pops_per_hole": False,
             # Activation thresholds are the LIVE matrix values (admin
             # lowered them from the Excel seed's 20/16).
             "min_buyers": {"9": 16, "18": 12},
@@ -73,8 +133,19 @@ SEED_LIVE_SCORING_CONFIG: dict = {
             "label": "Team Net",
             "basis": "net",
             "format": "best_ball_vs_par",
+            "competition": "foursome_v_field",
             "eligibility": "all",
             "team_size": 4,
+            # HOLE-level: best ball per hole cannot be decided without
+            # knowing which ball got a stroke on that hole.
+            "pops_per_hole": True,
+            # Allowance follows the BALL COUNT (Kerry 2026-09-16, matching
+            # USGA Appendix C's four-player ladder exactly: Best 1 of 4 75%,
+            # Best 2 of 4 85%, Best 3 of 4 100%, Best 4 of 4 100%).
+            # See _USGA_ALLOWANCES below — CART Net's two-player row is NOT
+            # yet confirmed (CA Queue #8) and is deliberately absent here.
+            "allowance_pct_by_balls": {"1": 75, "2": 85, "3": 100, "4": 100},
+            "off_lowest": True,
             # game-engine.md lists disallow-strokes-on-par-3 as a team-game
             # attribute. TGF's ratified side-games spec does not assert it,
             # so it ships OFF and is a config toggle, never a code branch.
@@ -82,24 +153,82 @@ SEED_LIVE_SCORING_CONFIG: dict = {
         },
         "skins": {
             "label": "Skins",
-            "basis": "gross",
             "format": "skins",
+            "competition": "player_v_field",
             "eligibility": "gross_buyers",
+            # Skins is a HOLE-level game in every variant — the stroke, when
+            # there is one, lands on a hole by stroke index. See the
+            # "pops_per_hole" note at the top of this config.
+            "pops_per_hole": True,
             "flight_bands": {
                 "9": [[0, 7, 1], [8, None, 2]],
                 "18": [[0, 7, 1], [8, 31, 2], [32, 47, 3], [48, None, 4]],
             },
-            # Below 8 buyers on a nine the matrix runs a DIFFERENT game
-            # (Skins 1/2 Net), which this engine does not yet implement —
-            # it reports the condition rather than silently computing the
-            # wrong game.
-            "half_net_below": {"9": 8, "18": 8},
+            # ---------------------------------------------------------------
+            # THE MATRIX IS THE GOVERNING LAYER (a9.23 Avery Ranch, 2026-09-15).
+            # The buyer count does not merely change the POT — it changes WHICH
+            # GAME IS PLAYED. Four players bought the gross bundle on a nine,
+            # so the matrix ran "SKINS 1/2 Net $", a NET game, and our engine
+            # computed GROSS skins and concluded Golf Genius was contradicting
+            # itself. GG was right. The rules of the game it actually ran lived
+            # only in a GG settings screen.
+            #
+            # Variants are therefore DATA, each carrying its own basis and its
+            # own handicap dials, and the selection is REPORTED (see
+            # `select_variant`) rather than inferred at the point of use.
+            # ---------------------------------------------------------------
+            "variants": [
+                {
+                    "name": "half_net",
+                    "label": "Skins \u00bd Net",
+                    "gg_name": "SKINS 1/2 Net $",
+                    # Buyer band per holes-type: [min, max_or_None].
+                    "when_buyers": {"9": [0, 7], "18": [0, 7]},
+                    "basis": "net",
+                    # Allowance % and "off the lowest" are TWO SEPARATE DIALS
+                    # and must stay that way. USGA's allowance is a percentage
+                    # of each player's own Course Handicap; "off the lowest in
+                    # the group" is an additional TGF/GG convention that USGA
+                    # applies to MATCH play. Collapsing them gets the maths
+                    # wrong in one direction or the other.
+                    "handicap": {
+                        "method": "usga_net",
+                        "allowance_pct": 50,
+                        "off_lowest": True,
+                        # HOW THE HALF STROKE ROUNDS IS NOT RATIFIED.
+                        # a9.23 proves Luke Youngs took ZERO strokes (GG calls
+                        # his hole 5 an Eagle, not an Albatross), so 0.5 went
+                        # DOWN — which rules out half-up. It does NOT pin what
+                        # 2.5 and 3.5 do: every naive independent rounding
+                        # awards Eduardo Melchor a fifth skin GG did not pay.
+                        # Carried as CA Queue #7. Until Kerry rules, the game
+                        # computes but reports `handicap_ratified: False`.
+                        "rounding": "half_down",
+                        "rounding_ratified": False,
+                    },
+                },
+                {
+                    "name": "gross",
+                    "label": "Skins",
+                    "gg_name": "Skins",
+                    "when_buyers": {"9": [8, None], "18": [8, None]},
+                    "basis": "gross",
+                    # Gross games never see a handicap at all.
+                    "handicap": None,
+                },
+            ],
         },
         "mvp": {
             "label": "MVP",
             "basis": "net",
             "format": "stableford",
+            "competition": "player_v_field",
             "eligibility": "net_buyers",
+            # HOLE-level: Stableford scores each hole, so the stroke has to
+            # land on one. (The PLUS rule is the deliberate exception — a
+            # give-back stroke is clamped per hole and the plus comes off
+            # the round's total once. See build_cards.)
+            "pops_per_hole": True,
             # City MVP = highest net Stableford POINTS among NET buyers;
             # tiebreak Individual Net score -> gross score -> split.
             "tiebreakers": ["net", "gross"],
@@ -112,6 +241,7 @@ SEED_LIVE_SCORING_CONFIG: dict = {
             "label": "Closest to Pin",
             "format": "manual",
             "eligibility": "all",
+            "pops_per_hole": False,
             "slots_per_nine": 2,
             # More par-3s than slots -> automation selects the SHORTEST.
             "select_par3_by": "shortest",
@@ -123,6 +253,7 @@ SEED_LIVE_SCORING_CONFIG: dict = {
             "label": "Hole-in-One",
             "format": "auto_detect",
             "eligibility": "members_only",
+            "pops_per_hole": False,
             # A raw ace is gross strokes == 1. Guests/first-timers pay in
             # but cannot win (side-games.md).
         },
@@ -628,22 +759,194 @@ def game_team_net(cards: list[dict], cfg: dict) -> dict:
     return out
 
 
-def game_skins(cards: list[dict], cfg: dict, holes_key: str) -> dict:
-    """GROSS skins — outright low gross on a hole WITHIN FLIGHT."""
+def _round_allowance(value: float, mode: str) -> int:
+    """Round an allowanced handicap to whole strokes under a NAMED mode.
+
+    The mode is data, never a code branch, because which one Golf Genius
+    uses is not yet ratified (CA Queue #7). a9.23 proves only that 0.5 goes
+    DOWN — GG calls Luke Youngs' hole 5 an Eagle, and with a stroke it would
+    have been an Albatross — which eliminates "half_up" and nothing else.
+    """
+    import math
+    neg = value < 0
+    v = abs(value)
+    if mode == "half_up":
+        out = math.floor(v + 0.5)
+    elif mode == "half_even":
+        out = round(v)
+    elif mode == "floor":
+        out = math.floor(v)
+    else:                                     # "half_down" (the default)
+        out = math.ceil(v - 0.5)
+    return int(-out if neg else out)
+
+
+def select_variant(game_cfg: dict, holes_key: str, buyers: int) -> dict:
+    """Pick which VARIANT of a game the side-games matrix selects, and say so.
+
+    This is the layer the a9.23 skins confusion existed for. The buyer count
+    is the first-level governing factor for the game decision (Kerry,
+    2026-09-16: "the game shifted due to buy ins based off of the side game
+    matrix built in. That is the 1st level governing factor for game
+    decision") — so the selection is made ONCE, here, and REPORTED on the
+    result, rather than each surface inferring it from a basis field.
+
+    Returns the variant dict with a `selection` record attached. A game with
+    no variants reports the game itself as its own single variant, so every
+    caller can read the same shape.
+    """
+    variants = game_cfg.get("variants") or []
+    if not variants:
+        return {
+            "name": "default",
+            "label": game_cfg.get("label"),
+            "basis": game_cfg.get("basis"),
+            "handicap": None,
+            "selection": {"reason": "game has a single form", "buyers": buyers},
+        }
+    for v in variants:
+        band = (v.get("when_buyers") or {}).get(holes_key)
+        if not band:
+            continue
+        lo, hi = band[0], band[1]
+        if buyers >= lo and (hi is None or buyers <= hi):
+            hi_txt = hi if hi is not None else "+"
+            out = dict(v)
+            out["selection"] = {
+                "buyers": buyers,
+                "holes": holes_key,
+                "band": [lo, hi],
+                "reason": (f"{buyers} buyers on a {holes_key}-hole event falls "
+                           f"in the {lo}-{hi_txt} band, so the matrix runs "
+                           f"{v.get('gg_name') or v.get('label')}"),
+            }
+            return out
+    out = dict(variants[-1])
+    out["selection"] = {
+        "buyers": buyers, "holes": holes_key, "band": None,
+        "reason": (f"{buyers} buyers matched NO configured band on a "
+                   f"{holes_key}-hole event — fell back to "
+                   f"{out.get('label')}. This is a gap in the matrix, "
+                   f"not a rule."),
+        "unmatched": True,
+    }
+    return out
+
+
+def game_handicaps(cards: list[dict], handicap_cfg: dict | None,
+                   si_by_hole: dict) -> dict:
+    """The GAME's own stroke allocation — not the card's.
+
+    Pops are a property of the GAME (2026-09-16). A card carries whatever
+    allocation the event's headline net game used; a different game on the
+    same card has a different allowance, and may have none at all. So each
+    game that needs strokes derives them here, from the playing handicap,
+    under its own dials:
+
+      1. allowance:  hcp * allowance_pct / 100
+      2. rounding:   to whole strokes under the named mode
+      3. off lowest: subtract the lowest RESULTING handicap so the low
+                     player plays off scratch (a TGF/GG convention, a
+                     SEPARATE dial from the percentage)
+      4. allocate:   by stroke index over the holes actually played
+
+    Returns {"by_key": {key: {"raw", "allowanced", "strokes", "by_hole"}},
+             "dials": {...}} so a surface can print the working.
+    """
+    out = {"by_key": {}, "dials": dict(handicap_cfg or {}) or None}
+    if not handicap_cfg:
+        for c in cards:
+            out["by_key"][c["key"]] = {
+                "raw": c.get("playing_handicap"), "allowanced": 0,
+                "strokes": 0, "by_hole": {h: 0 for h in si_by_hole}}
+        return out
+
+    pct = handicap_cfg.get("allowance_pct", 100)
+    mode = handicap_cfg.get("rounding", "half_down")
+    interim = {}
+    for c in cards:
+        ph = c.get("playing_handicap")
+        interim[c["key"]] = (0.0 if ph is None else float(ph) * pct / 100.0)
+    if handicap_cfg.get("off_lowest") and interim:
+        low = min(interim.values())
+        interim = {k: v - low for k, v in interim.items()}
+    for c in cards:
+        allowanced = interim[c["key"]]
+        strokes = _round_allowance(allowanced, mode)
+        out["by_key"][c["key"]] = {
+            "raw": c.get("playing_handicap"),
+            "allowanced": round(allowanced, 2),
+            "strokes": strokes,
+            "by_hole": allocate_strokes(strokes, si_by_hole) if si_by_hole
+            else {},
+        }
+    return out
+
+
+def game_skins(cards: list[dict], cfg: dict, holes_key: str,
+               strokes_override: dict | None = None) -> dict:
+    """Skins — computed as the VARIANT the side-games matrix actually selects.
+
+    The buyer count decides which game is played, not merely how big the pot
+    is. Above the threshold this is GROSS skins (outright low gross on a hole
+    within flight); below it the matrix runs half-Net Skins, a NET game with
+    its own allowance. Both are computed here off the same code path, because
+    the difference between them is DATA.
+
+    This is the a9.23 Avery Ranch lesson. Four players bought the gross
+    bundle on a nine, GG ran "SKINS 1/2 Net $", and this function used to
+    compute gross skins regardless and report a warning nobody acted on — so
+    we compared a net result against a gross computation and concluded Golf
+    Genius was contradicting itself. It was not.
+
+    `strokes_override` ({player_key: {hole: strokes_received}}) forces a known
+    allocation, which is how the parity harness pins GG's own dots and
+    isolates the SCORING diff from the ALLOCATION diff.
+    """
     gc = cfg["games"]["skins"]
     field = _eligible(cards, gc["eligibility"])
-    out = {"game": "skins", "label": gc["label"], "buyers": len(field),
-           "flights": [], "warnings": []}
-    half_net_below = (gc.get("half_net_below") or {}).get(holes_key)
-    if half_net_below is not None and len(field) < half_net_below:
-        out["active"] = False
+    variant = select_variant(gc, holes_key, len(field))
+    hcfg = variant.get("handicap")
+    si_by_hole = {}
+    for c in field:
+        for h in c["holes"]:
+            if h.get("stroke_index") is not None:
+                si_by_hole[h["hole"]] = h["stroke_index"]
+
+    hcaps = game_handicaps(field, hcfg, si_by_hole)
+    if strokes_override:
+        for key, by_hole in strokes_override.items():
+            if key in hcaps["by_key"]:
+                hcaps["by_key"][key]["by_hole"] = dict(by_hole)
+                hcaps["by_key"][key]["strokes"] = sum(by_hole.values())
+                hcaps["by_key"][key]["source"] = "override"
+
+    out = {
+        "game": "skins",
+        "label": variant.get("label") or gc["label"],
+        "buyers": len(field),
+        "active": True,
+        "basis": variant.get("basis"),
+        "pops_per_hole": gc.get("pops_per_hole", True),
+        "variant": variant.get("name"),
+        "gg_name": variant.get("gg_name"),
+        "selection": variant.get("selection"),
+        "handicaps": hcaps,
+        "flights": [],
+        "warnings": [],
+    }
+    if variant.get("selection", {}).get("unmatched"):
+        out["warnings"].append(out["selection"]["reason"])
+    # Money computed off an unratified dial is reported as such rather than
+    # quietly paid. CA Queue #7.
+    if hcfg and not hcfg.get("rounding_ratified", True):
+        out["handicap_ratified"] = False
         out["warnings"].append(
-            f"Below {half_net_below} buyers the matrix runs Skins 1/2 Net, a "
-            f"different game this engine does not implement yet — "
-            f"{len(field)} bought in, so these GROSS skins are NOT the game "
-            f"that would actually be paid.")
-    else:
-        out["active"] = True
+            f"{out['label']} applies a {hcfg.get('allowance_pct')}% allowance"
+            f"{' off the lowest' if hcfg.get('off_lowest') else ''}, but HOW "
+            f"the half stroke rounds is NOT ratified (CA Queue #7) — this "
+            f"board is provisional, using '{hcfg.get('rounding')}'.")
+
     for label, members in assign_flights(field, gc, holes_key).items():
         hole_numbers = sorted({h["hole"] for c in members for h in c["holes"]})
         skins, carried = [], 0
@@ -656,15 +959,27 @@ def game_skins(cards: list[dict], cfg: dict, holes_key: str) -> dict:
                     continue
                 played += 1
                 par = h["par"]
-                if best is None or h["strokes"] < best:
-                    best, winners = h["strokes"], [c]
-                elif h["strokes"] == best:
+                pops = (hcaps["by_key"].get(c["key"], {})
+                        .get("by_hole", {}).get(hole, 0) or 0)
+                value = h["strokes"] - pops
+                if best is None or value < best:
+                    best, winners = value, [c]
+                elif value == best:
                     winners.append(c)
             if best is None:
                 continue
             settled = played == len(members)
             if len(winners) == 1:
-                skins.append({"hole": hole, "par": par, "gross": best,
+                skins.append({"hole": hole, "par": par,
+                              "gross": next(x["strokes"] for x in
+                                            winners[0]["holes"]
+                                            if x["hole"] == hole),
+                              "score": best,
+                              "pops": (hcaps["by_key"]
+                                       .get(winners[0]["key"], {})
+                                       .get("by_hole", {}).get(hole, 0) or 0),
+                              "vs_par": (best - par) if par is not None
+                              else None,
                               "winner": winners[0]["name"],
                               "key": winners[0]["key"],
                               "customer_id": winners[0]["customer_id"],
@@ -672,14 +987,14 @@ def game_skins(cards: list[dict], cfg: dict, holes_key: str) -> dict:
             else:
                 carried += 1
         tally: dict = {}
-        for s in skins:
-            tally[s["winner"]] = tally.get(s["winner"], 0) + 1
+        for sk in skins:
+            tally[sk["winner"]] = tally.get(sk["winner"], 0) + 1
         out["flights"].append({
             "flight": label, "players": len(members), "skins": skins,
             "tied_holes": carried,
             "tally": [{"name": k, "skins": v} for k, v in
                       sorted(tally.items(), key=lambda kv: (-kv[1], kv[0]))],
-            "provisional": any(not s["settled"] for s in skins)})
+            "provisional": any(not sk["settled"] for sk in skins)})
     return out
 
 
