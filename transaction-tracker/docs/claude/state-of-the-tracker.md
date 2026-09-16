@@ -9,8 +9,17 @@ for session-by-session updates after this brief.
 
 ## What the Tracker is now
 
-Flask + SQLite on Railway (tgf-tracker.up.railway.app), version 2.296.x,
-~200+ routes, 61+ MCP tools. Started as a GoDaddy order-email parser;
+Flask + SQLite on Railway (tgf-tracker.up.railway.app), version
+**2.458.x** (2026-09-16), ~200+ routes, 70 MCP tools.
+
+> **Currency warning.** The body of this brief was last comprehensively
+> rewritten at **v2.296** (2026-09-03). Everything below the "September
+> 8 wave" section is current; the wave sections after it were appended
+> rather than folded in, and **v2.347 → v2.458 is summarised only in the
+> section at the end of this file**. A full rewrite is owed. Until it
+> happens, treat the mailbox (`read_platform_dialogue`, posts #347
+> onward) and the `docs/claude/handoff-*.md` files as authoritative over
+> anything here that looks stale. Started as a GoDaddy order-email parser;
 now runs most of TGF's operations:
 
 - **Transactions/orders** — AI email parsing (Claude), order grouping,
@@ -316,6 +325,70 @@ that reintroduced it.
 template shelf — added precisely because "it is in the code" said nothing
 about production) and `scoring-customer-set` (write one personal-info
 field through the validated path).
+
+## The event-night wave (v2.347 → v2.458) — live game day
+
+Appended 2026-09-16 by tracker-claude. Not a full rewrite; the items
+that change the Platform picture, with the doc that carries each.
+
+**The Tracker now runs a live event, not just its paperwork.** On
+2026-09-15 two chapters played simultaneously (s9.23 The Quarry, 21
+players; a9.23 Avery Ranch, 12) and the board was the thing Kerry
+watched from the course. That forced a set of properties the Platform
+will need on day one:
+
+- **Money waits for the field.** `_event_field_complete` — every hole of
+  every player before a dollar OR a win tint appears, with the players
+  still owing holes named on the board. A half-posted field naming a
+  winner is worse than showing nothing.
+- **A polling loop on the event's own clock.** `poll_live_events` every
+  5 minutes, skipping unstarted and settled events. Any calendar-day
+  boundary goes through `email_parser/timezone_utils.py` — Railway runs
+  UTC and this bit twice in one night, client then server.
+- **The board recomputes; Golf Genius is one input, not the record.**
+  When a mid-round GG pull froze a Team Net classification and produced
+  wrong payouts, the fix was re-walk + re-record, not trust. New
+  read-only `scoring-skins-audit` prints the working behind every skins
+  circle — and on its first run found GG's skins board paying a birdie
+  on a hole where GG's own scorecard has a par.
+- **Pairing rule 15 (`docs/claude/pairings.md`).** A credited or
+  withdrawn player leaves the tee sheet by himself — the check sits at
+  the boundary in `credit/refund/wd/transfer_item`, not on two modals —
+  and a BLIND is drawn to fill the seat, at random among the members
+  with the fewest blinds this calendar year (`blind_draws`). Five
+  specifics await Kerry's ratification (CA Queue #3).
+- **A ratified scoring rule the incumbent cannot express**
+  (`docs/claude/side-games.md`): a plus handicap comes off the ROUND,
+  never off a hole. Golf Genius cannot do this; it is a concrete example
+  of TGF's rules outgrowing the tool.
+- **Course cards as data** (`email_parser/course_cards.py`), and tee
+  BANDS derived from the club's tee ORDER number rather than yardage.
+
+**Identity is still the live fault line.** The handicap-card path
+matches registrants to handicap links by NAME STRING, and
+`get_handicap_export_data` returns no `customer_id` at all — guiding
+principle 6 broken in the surface that mails members. On the same night
+it was written up, a real card AND its posted handicap round both
+carried `customer_id` NULL because Golf Genius spelled a member's name
+differently. Lane: "Handicap Surfaces: Identity + Plus Rule". **For
+Platform planning: identity resolution cannot be a late-bound join on
+display names. It has to be resolved at write time, at every ingest
+boundary, including the ones that come from a third party's spelling.**
+
+**Governance that now exists and should carry forward.** The CA Queue
+(`docs/claude/ca-queue.md`) holds every decision that is Kerry's, so a
+ruling never lives only in a transcript. The mailbox carries lane
+handoffs. The spin-off skill moves a thread into its own session with a
+self-contained contract. Three lanes pushed to `main` within hours of
+each other on 2026-09-15/16 — merge before bumping `version.js`.
+
+**Reading order for this wave:**
+`docs/claude/handoff-2026-09-15-event-night-leaderboard.md` (the event
+night in full, including §7 the timezone trap and §13 the open
+questions), `docs/claude/handoff-2026-09-09-event-closeout-first-run.md`
+§3k (the third live closeout run), `docs/claude/pairings.md` rule 15,
+`docs/claude/side-games.md` (the plus rule and the skins audit).
+Mailbox #508–#528.
 
 ## Plan of record: native app + website
 

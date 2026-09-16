@@ -222,12 +222,16 @@ may or may not be what he wants.
 - v2.456.0 already counts and NAMES every skipped player and publishes
   the arithmetic (red when it does not reconcile) — the reporting is
   right, the *classification underneath it* is what this lane fixes.
-- **Handicap rounds for both 2026-09-15 events are POSTED**: s9.23 The
-  Quarry 21 written / 0 skipped; a9.23 Avery Ranch 11 written / 1
-  skipped — **Lee Vasquez, scoring_round_id 3518, "no tee slope/rating
-  on the round"**. That skip is a real data gap (the round has no tee
-  rating attached) and is worth resolving in this lane, since it is the
-  same family of "a player silently gets nothing".
+- **Handicap rounds for both 2026-09-15 events are POSTED and COMPLETE**:
+  s9.23 The Quarry 21 / 21, a9.23 Avery Ranch **12 / 12**.
+  **CORRECTION (2026-09-15 late):** Lee Vasquez's tee-less card (3518)
+  and Guillermo Arevalo's null-`customer_id` card were BOTH resolved by
+  the concurrent event-closeout lane — dropped and keyed-re-imported as
+  3529 (Blue tee, index 7.3) and 3528 (`customer_id` 821, index 7.8).
+  **Neither is in your scope any more.** They are worth reading as
+  evidence: Arevalo's card AND its posted handicap round both carried
+  `customer_id` NULL, which is this lane's bug appearing in live data on
+  the very night it was written up.
 - Kerry's handicap cards for both events went out BEFORE those rounds
   posted, so they carried stale indexes. Once this lane's fix is live,
   tell him the cards are worth re-sending — do not send them yourself.

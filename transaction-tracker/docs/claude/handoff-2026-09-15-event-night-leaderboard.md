@@ -1,14 +1,15 @@
-# Session record — 2026-09-15 event night, v2.437.0 → v2.456.0
+# Session record — 2026-09-15 event night, v2.437.0 → v2.457.0
 
 **Lane:** tracker-claude "TGF Tracker Improvements" · branch
-`claude/tracker-improvements-h7q2ns` · all 25 commits merged to `main`
+`claude/tracker-improvements-h7q2ns` · all 27 commits merged to `main`
 and live on Railway.
 **Events in play:** s9.23 The Quarry (San Antonio, 5:00 PM shotgun, 21
 players) and a9.23 Avery Ranch (Austin, 4:57 PM tee times, 12 players).
 Most of this was built WHILE the rounds were being played, from Kerry
 watching the live board on his phone at the course.
-**Mailbox:** #508–#522 are this session's posts. #522 covers through
-v2.442.0 only; the digest for v2.443.0–v2.456.0 is post #523.
+**Mailbox:** #508–#524 are this session's posts. #522 covers through
+v2.442.0; #523 is the close-out digest for v2.443.0–v2.457.0; #524 is
+the addendum (§13 below + the CA Queue rows).
 
 ---
 
@@ -385,7 +386,8 @@ without actually running the handicaps. Do that now."*
   second round with no index yet: Morris Allen, Christopher Espinosa,
   Justin Guerrero, Joe Mejia. Wade Lewis had 2 capped holes.
 - **a9.23 Avery Ranch** — 11 written, **1 skipped: Lee Vasquez, "no tee
-  slope/rating on the round"** (round 3518). Index moves: Kyle Compton
+  slope/rating on the round"** (round 3518). **RESOLVED the same night by
+  the event-closeout lane** (see below). Index moves: Kyle Compton
   11.1→8.4, Louis Schneider 5.1→4.8, Luke Youngs 0.5→0.3, Eduardo
   Melchor 5.6→5.8, Robert Straiton 0.4→0.6. No index yet: Guillermo
   Arevalo, Tom Donovan, Jeff King.
@@ -491,3 +493,216 @@ is spun off — see §11.
   `db_path` from `PRAGMA database_list` when not given.
 - **The events-board test harness slices the file**; tee helpers had to
   move inside the sliced renderer region to be visible to it.
+
+
+---
+
+## 13. After the close-out — v2.457.0 and the three questions left with Kerry
+
+The handoff above was written and pushed at v2.456.1. Kerry kept
+working, so this section covers what came after it.
+
+### 13a — Proxy winners read like every other board (v2.457.0)
+
+**Kerry:** *"Use same text for Proxy winners as the others."*
+
+The Proxies tab was printing the raw Golf Genius string —
+`escapeHtml(p.player)` — with no board name cell and no card behind it.
+So the one tab whose entire job is to NAME a winner was the one tab
+whose winner did not look like a player anywhere else on the page, and
+did not open when tapped, although the footer note promises "Tap a
+player for their scorecard".
+
+`proxWinner(nm)` resolves the GG name back to the board row through
+`evlbRowByName` (built from `d.overall_board`, keyed by both the plain
+name and `evlbFlipName`'s "LAST, First" flip — the same flip the tee
+dots already use), renders OUR `player_name` in a standard `td.nm` with
+its tee dot right-justified, and wraps the row in `evlb-plr` +
+`data-rid` so it styles, dots and opens exactly like the others. The
+proxies table is the only board that is not `.evlb-holes`, so
+`.evlb-prox td.nm` repeats the name-cell rule.
+
+### 13b — NEW BRIDGE: `scoring-skins-audit:<event>` (v2.457.0)
+
+**Kerry:** *"Carlos's skin isn't circled. Audit."*
+
+`skins_audit(event_query, db_path=None)` in `database.py` (just above
+`_flight_skins`), bridged in `mcp_server.py`. Read-only. It rebuilds
+exactly what `get_event_leaderboard` does for `skin_cells` — outright
+low GROSS on a hole among the BUYERS in that flight — and prints the
+working: every buyer's stroke on every hole, the low, who held it, and
+why the hole did or did not pay, set against what is actually recorded
+as skins money. A player with money but no circled hole now produces a
+line you can read instead of a missing circle you have to guess at.
+
+### 13c — What the audit found: Golf Genius contradicts itself
+
+a9.23 Avery Ranch. Skins buyers are the GROSS bundle — Luke Youngs,
+Carlos Zapata, Eduardo Melchor, Robert Straiton (4 buyers, so ONE
+flight; the Individual Gross pot rolled into skins at 4 buy-ins).
+
+Computed: exactly **three** skins, all Luke's — holes 2, 3 and 5. That
+matches GG's own detail line for him, *"Par on 2, Birdie on 3, Eagle on
+5"*, hole for hole. Carlos was low on three holes and **tied every
+one**: hole 1 (4, with Luke), hole 7 (4, with Luke), hole 8 (3, with
+Straiton).
+
+But GG's skins board pays Carlos $13 for **"Birdie on 7"**. Avery Ranch
+front hole 7 is par 4, so GG's board believes he made **3** there —
+while GG's **own scorecard**, which is what we imported, has him at
+**4** and totals him at gross 44 (4-5-7-5-7-4-4-3-5).
+
+So our board is faithful to the scorecard; the disagreement is inside
+GG. If Carlos made 3, there are four skins at $13 and GG's payout is
+right. If he made 4, there are three skins and the whole $52 pot is
+Luke's. **$52 and Carlos's posted handicap round both hang on it** —
+left with Kerry rather than guessed at. CA Queue #2.
+
+Worth noting for the next person: the same 4-buyer field, the same
+`_flight_skins` rule, and GG's own prose agreed on Luke's three skins
+exactly. A single hole disagreed. That is what made it diagnosable —
+the audit's value is that it prints the agreement as well as the gap.
+
+### 13d — Chapter badges: the rule Kerry has not given yet
+
+**Kerry, on the Points Races standings:** *"Some of these aren't the
+right chapters. Weigh against their event signup locations."* (Flagged
+in the screenshot: Barna, Moore, Sharp, Franz, Williams.)
+
+The A/SA badge is `prChapterBadge(chapter)` in `templates/contests.html`
+(~line 7770); its input is the standings payload's `chapter`, which is
+**`customers.chapter` — the DECLARED home chapter**.
+
+Two sensible replacement rules give DIFFERENT answers for exactly the
+cross-chapter players flagged:
+
+- (a) the chapter where the player registered for the **most events in
+  that race's season**;
+- (b) the chapter of their **most recent event**.
+
+tracker-claude recommends (a), with `customers.chapter` as the fallback
+for anyone with no event rows: it is stable week to week, where (b)
+flips every time someone visits the other city. **Not built** — awaiting
+the ruling. CA Queue #4.
+
+**Constraint that must survive whichever rule wins:** change only what
+the BADGE DISPLAYS. CLAUDE.md's identity-drift section is explicit that
+`customers.chapter` must not be overwritten from `items.chapter`,
+because `items.chapter` is the event/course LOCATION and cross-chapter
+play would corrupt the member's home chapter. This is a display
+derivation, not a data repair.
+
+### 13e — Everything now on Kerry's desk, in the CA Queue
+
+Written to `ca_queue` so they live on his own checklist rather than in a
+transcript:
+
+| # | Section | Item |
+|---|---|---|
+| 2 | kerry_decision | a9.23 skins — Carlos Zapata hole 7, $52 (13c) |
+| 3 | kerry_decision | Ratify the five blind-draw specifics (§10) |
+| 4 | kerry_decision | Chapter badge rule (13d) |
+| 5 | kerry_decision | How the plus-handicap deduction rounds — Pat Youngs at −0.5 rounds to zero (§6) |
+| 6 | followups | Re-send the handicap cards for both events — the first send carried stale indexes (§9) |
+
+(#1 was already open: ratify importing TEAM tournament per-player nets
+at event sync, mailbox #472.)
+
+### 13e-2 — Corrected by the event-closeout lane, same night
+
+A second lane ("event closeout", v2.458.0–v2.458.4) was running
+concurrently and resolved two things this handoff had recorded as open.
+Verified independently against `scoring-hcp-preview:a9.23 Avery Ranch`
+rather than taken from its prose:
+
+- **Lee Vasquez is posted.** Golf Genius's results page DID carry his
+  tee (Blue, 139 / 36.0); the auto-sync's card had lost it. Card 3518
+  dropped and keyed-re-imported as **3529** with the tee, differential
+  7.3, index 7.3 (unchanged). **a9.23 is now 12 of 12, 0 skipped.**
+- **Guillermo Arevalo** — GG spelled "AREVALO, Guillermo" against a
+  store row "Guilermo Arevalo", and the card AND its posted round both
+  carried `customer_id` NULL (a rule-6 breach in the wild, on this very
+  night). Alias added, card dropped, keyed re-import as **3528** with
+  `customer_id` 821, index 7.8. Kerry ruled "Guillermo is correct"; 821
+  renamed, three `items` rows followed.
+- Austin pairings applied from the TEE SHEET (3 foursomes, 4:57 / 5:06 /
+  5:15 PM) — Austin's only GG team board is CART Net, so the foursomes
+  live on no board.
+- That lane also reports the handicap cards were emailed **twice**
+  (01:52 and 02:06 UTC), the second pass after the index fix. Not
+  verified here — CA Queue #6 carries it as open until Kerry confirms.
+
+**Carlos Zapata's card is unchanged at gross 44**, so 13c stands exactly
+as written and his posted differential (7.7) is computed off 44.
+
+**Note the lane collision:** this session and the closeout lane both
+pushed to `main` within minutes, and `version.js` conflicted. Both
+changelog stacks were kept; this session's entry was renumbered to sit
+on top of theirs. When two lanes run on one night, merge `main` before
+bumping — the rule is already in CLAUDE.md's conventions, and it earned
+its place again here.
+
+### 13f — Split of what went where
+
+- **Spun off** to "Handicap Surfaces: Identity + Plus Rule"
+  (`claude/handicap-surfaces-k4m9xr`, session prompt
+  `docs/claude/session-prompt-2026-09-16-handicap-card-identity.md`):
+  the handicap-card identity bug (§10) and the plus rule's nine
+  unvisited call sites (§6).
+- **HANDED OVER 2026-09-16** — Kerry, closing this session: *"Pass any
+  open items to TGF Tracker Improvements 2 lane to pick up."* So the
+  Carlos skins question (CA #2), the chapter-badge rule (CA #4), the
+  blind-draw ratifications (CA #3), the handicap-card re-send (CA #6),
+  the older carry-forwards, and the owed rewrite of
+  `state-of-the-tracker.md` ALL moved to that lane
+  (`session_01CD1p3A96wXobio1yz2y7JS`, which renamed itself "TGF Tracker
+  Improvements 2"). **This lane owns nothing further.** Earlier drafts of
+  this section said these stayed with the parent; that is superseded.
+- **Still carried from earlier sessions, untouched tonight:**
+  design-claude reviews #517 and #520 awaiting a reply; the two
+  off-standard chevrons on `/me` and Money Flow; the live-scoring build
+  awaiting Kerry's "go".
+
+
+---
+
+## 14. Session closed — 2026-09-16
+
+Kerry: *"I want to close this session, so needs to be thorough"* and
+*"Pass any open items to TGF Tracker Improvements 2 lane to pick up."*
+
+**Shipped and live:** v2.437.0 → v2.458.5 on
+`https://tgf-tracker.up.railway.app`. Branch
+`claude/tracker-improvements-h7q2ns` fully merged to `main`; working
+tree clean.
+
+**Documented:** this handoff (§1–§14), `docs/claude/pairings.md` rule
+15, `docs/claude/side-games.md` (the plus rule, the open call-site gap,
+and the skins audit reachable from the rule),
+`docs/claude/session-prompt-2026-09-16-handicap-card-identity.md`, and
+`docs/claude/state-of-the-tracker.md` (version stamped, currency warning
+added, v2.347→v2.458 wave section appended — a full rewrite is owed and
+was handed over).
+
+**Mailed:** #522, #523 (close-out digest), #528 (the gap-closing
+addendum). Every finding in this document has a mailbox home.
+
+**On Kerry's CA Queue** rather than in a transcript: #2 the a9.23 skins
+question, #3 the blind-draw ratifications, #4 the chapter-badge rule, #5
+the plus-deduction rounding, #6 the handicap-card re-send.
+
+**Handed to "TGF Tracker Improvements 2"** by direct session message:
+the three contract corrections (§13e-2) plus every item above, with the
+note that A and D block on Kerry rather than on the lane, so those cost
+him least to clear first.
+
+**The one thing this lane would tell its successor.** Three separate
+defects tonight were the same shape: a correct fix applied to the
+instance in front of us instead of to the mechanism — the timezone rule
+fixed on the client and not the server (§7), the plus rule fixed at two
+call sites out of eleven (§6), and the money hold that blanked dollars
+but not win tints (§3). CLAUDE.md's first guiding principle already says
+this. The failure is not that we do not know the rule; it is that under
+time pressure the visible symptom feels like the whole class. When you
+fix something, enumerate its siblings before you move on — or write down
+which ones you are deliberately leaving.

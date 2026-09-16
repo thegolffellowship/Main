@@ -127,6 +127,22 @@ def _fraction_phrase(n: int, m: int) -> str:
     return f"{n} of {m} players"
 
 
+def _hio_pot_as_of(pot, as_of: date):
+    """The pot AS OF a date. get_hio_pot() adds every event's registrations
+    into the running total, FUTURE events included (closeout skill OPEN 8:
+    Cedar Creek's 8 signups were in the 9/16 figure). The Insider prints
+    what the pot IS today, so take the running total at the last PLAYED
+    event; fall back to the tool's headline when the event list is absent."""
+    if not isinstance(pot, dict):
+        return None
+    cutoff = as_of.isoformat()
+    played = [e for e in (pot.get("events") or [])
+              if (e.get("date") or "") <= cutoff and e.get("running") is not None]
+    if played:
+        return max(float(e["running"]) for e in played)
+    return pot.get("pot")
+
+
 # ── data ────────────────────────────────────────────────────────────────
 
 def gather_week(db_path=None, as_of: date | None = None, days: int = 7) -> dict:
@@ -284,7 +300,7 @@ def gather_week(db_path=None, as_of: date | None = None, days: int = 7) -> dict:
                 })
     try:
         pot = db.get_hio_pot(db_path=db_path)
-        out["hio_pot"] = pot.get("pot") if isinstance(pot, dict) else None
+        out["hio_pot"] = _hio_pot_as_of(pot, as_of)
     except Exception:
         logger.warning("insider: HIO pot unavailable", exc_info=True)
     try:

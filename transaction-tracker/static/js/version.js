@@ -18,6 +18,100 @@ window.TGF_CHANGELOG = [
     ],
   },
   {
+    version: "2.458.11",
+    date: "2026-09-16",
+    changes: [
+      "ONE WORD FOR THE WOMEN\u2019S TEE, ON BOTH LEGENDS (Kerry 2026-09-16: \u2018S1. Women\u2019s\u2019 / \u2018We need to sync up the two legends somehow to maintain consistency\u2019). The LEADERBOARD\u2019s played-tee legend and the STARTER SHEET\u2019s band legend are built by different code and had drifted to two spellings \u2014 \u2018Ladies - Red Tees\u2019 on the board, \u2018Women Red Tees\u2019 on the sheet. Both now compose the same two fields, `band_label` then `tee_name`, and the word lives in exactly one place: `TEE_LEGEND_WOMEN_WORD`. The tee\u2019s printed name is \u2018Red Tees\u2019 everywhere; who plays it is the band label\u2019s job. `test_tee_legend_pairing.js` (12 checks) fails either surface that spells it on its own.",
+      "The key already aligns to the board\u2019s RIGHT-MOST VISIBLE column (v2.446.0 `fitKeys`, re-measured on every hole/handicap toggle and on resize) \u2014 confirmed rather than rebuilt.",
+    ],
+  },
+  {
+    version: "2.458.10",
+    date: "2026-09-16",
+    changes: [
+      "AN INGEST MAY NOT ERASE WHAT IT DOES NOT CARRY. Kerry, the morning after s9.23: \u2018This shouldn\u2019t say Hole Group 1. It should just say Hole 1. Where\u2019s that coming from? Also, this lost the hole assignments that I had assigned yesterday.\u2019 One cause. The closeout applied the Golf Genius TEAM NET board to the finished event, and that board knows who rode together and in what FINISH order \u2014 nothing about which hole a group started on or which tee anyone played. `_write_event_pairings_from_groups` deleted the sheet and wrote the board back with \u2018Group N\u2019 labels, no tee and no customer_id; the starter sheet then prefixed \u2018Hole \u2019 onto \u2018Group 1\u2019, the PAIRINGS tab read a dash for every tee, and every seat-keyed blind pointed at a seat that no longer existed. The writer now remembers each group\u2019s hole label (by the PEOPLE in it), each player\u2019s tee, handicap and customer_id before the delete, and hands them back to any group the ingest left unlabelled. A label the ingest DOES carry (the tee-sheet route\u2019s 1A/1B) still wins.",
+      "THE TEE COMES FROM THE ROSTER, NOT THE SAVED ROW (Kerry: \u2018If the tees are in ROSTER, they should automatically show up in PAIRINGS\u2019). `get_event_pairings` now resolves a blank `tee_choice` from `_event_roster_rows` by customer_id \u2014 the same read-time lookup the sheet already does for names and handicap indexes \u2014 so PAIRINGS and ROSTER can no longer disagree about a tee. The saved row is a snapshot; the truth is looked up.",
+      "\u2018Group N\u2019 is never printed as \u2018Hole Group N\u2019. The starter-sheet `start_line` / `hole_label` composition leaves a generic label alone instead of dressing it up as a hole.",
+      "THE REPAIR: `relabel_event_pairings` + bridge `scoring-pairings:relabel|<event>|{current group_num: hole label}[|apply[|holes]]` gives a sheet its hole labels back and renumbers the groups in the order listed, THROUGH the normal save so the blinds re-seat with it and the roster tees persist. Nobody changes seats. Dry-run unless `apply`. Built for s9.23 (Kerry: \u2018Re-seat the pairings as necessary to match and fix blinds\u2019), where the GG tee-sheet widget no longer lists a played round, so Kerry\u2019s screenshot of the tee sheet is the record.",
+      "Test: `test_pairings_ingest_preserve.py` (12 checks) \u2014 label-less ingest keeps hole labels, tees and customer_ids; a carried label still wins; a blank row tee is read from the roster; the Group-N guard; the repair relabels, reorders, persists tees and re-seats a blind through the normal save.",
+    ],
+  },
+  {
+    version: "2.458.9",
+    date: "2026-09-16",
+    changes: [
+      "CORRECTING v2.458.8: the re-seat reached rows it had no business touching. The `gg`-sourced blinds \u2014 the ones Kerry enters straight into Golf Genius, read back out of the team string \u2014 are deliberately LOOSE, because as `draw_event_blinds` has always put it, \u2018we cannot know which slot each one covers, and it does not matter\u2019. v2.458.8 re-seated those too and handed them seats they were never meant to hold. The re-seat now touches only the app\u2019s own seat-keyed rows; a gg row keeps its shape and its `gg:` key.",
+      "ONE BLIND PER PERSON PER EVENT, ENFORCED AT THE BOUNDARY (rule 15, ratified 2026-09-16). s9.23 carries Pat Youngs TWICE in `blind_draws`, so a re-seat that merely moved rows around would have given one man two seats on the sheet. The second row is loosened instead \u2014 never deleted, so it still counts against his turn for the year \u2014 and the rule is now checked where the rows are written rather than trusted of the data.",
+      "What this does NOT do is clean the existing rows. s9.23 holds four app blinds for two open seats, Pat Youngs among them twice, alongside two gg rows for the same night. That is a data question with Kerry\u2019s name on it, not something to silently resolve: `scoring-blinds:<event>` prints the rows read-only and the fix waits on his word.",
+      "Test: `test_blind_reseat.py` grows to 11 checks \u2014 a gg row keeps its loose shape and key through a regenerate, and a duplicated person is seated exactly once with the duplicate kept.",
+    ],
+  },
+  {
+    version: "2.458.8",
+    date: "2026-09-16",
+    changes: [
+      "BLINDS SURVIVE THE SHEET BEING REGENERATED (Kerry: \u2018Lost blinds visually\u2019 \u2014 and, picking a name for an empty seat, \u2018Gus Vasquez is already a blind in this event\u2019 when no blind showed for him anywhere). Two symptoms, ONE cause: `blind_draws` rows are keyed to a SEAT (`holes:group_num:cart_pos`) and `save_event_pairings` rebuilt `event_pairings` from scratch without touching them. Regenerate the sheet and the seats move while the blind rows keep pointing at the old coordinates \u2014 so the card renders \u2018\u2014 open \u2014\u2019 because the blind is invisible, while the eligibility guard still counts that person because the blind is very much there. An orphan, visible to the rules and to nobody else.",
+      "A BLIND BELONGS TO THE EVENT AND THE PERSON; THE SEAT IS ONLY WHERE IT IS DISPLAYED. `_reseat_event_blinds` now runs inside `save_event_pairings`, moving every blind onto the sheet\u2019s CURRENT open seats in sheet order \u2014 the same order `draw_event_blinds` fills them, and the same treatment the loose rows Kerry enters straight into Golf Genius already get. Rule 15c is honoured on the way: a card never fills its own team, so a seat in that player\u2019s own group is skipped. Nothing is deleted \u2014 a blind with no open seat left is nulled to LOOSE, where it still counts against that member\u2019s turn for the year.",
+      "Two constraints the fix had to respect, both found by running it: `slot_key` is NOT NULL with UNIQUE(event_id, slot_key), and a re-seat can SWAP two blinds \u2014 writing A into B\u2019s seat while B still holds it trips the constraint. Every row is parked on a temporary key first, then the real ones are written. A loosened row takes a `loose:` key rather than a null, matching the `gg:` convention the backfill already uses.",
+      "Test: `test_blind_reseat.py` \u2014 reproduces the s9.23 case exactly (a blind in group 3 seat 4, then every seat moved), and asserts the blind stays on the sheet, lands somewhere that exists, avoids its own group, is never deleted when seats run short, and becomes loose instead. Its fixture uses NAMED columns on `events`, the trap that broke `test_pairing_rounds.py` on 09-15.",
+    ],
+  },
+  {
+    version: "2.458.7",
+    date: "2026-09-16",
+    changes: [
+      "THE LADIES\u2019 TEE GETS THE OUTLINE AGAIN, AND THE MEN\u2019S RED DOES NOT (Kerry: \u2018Mike is showing as that open circle and the ladies should be the open circle. So need to flip those\u2019). Not a config problem \u2014 a real pairing bug. The legend was BUILT in tee order, then re-sorted so the ladies\u2019 tee falls last, and only THEN zipped against the still-unsorted label list. After the sort the two sequences no longer line up, so every entry from the moved element onward paired with the wrong label. On a card carrying both \u20183 - Red Tee\u2019 and \u20183 - Red (L) Tee\u2019 that is an exact swap: Michelle DelCarmen played the ladies\u2019 tee and drew the men\u2019s filled dot, Mike Murphy played the men\u2019s and drew the ladies\u2019 outline. The pairing is now made BEFORE the sort; it is keyed by LABEL, so display order can change freely without touching it.",
+      "THE LADIES\u2019 TEE IS NAMED, NOT JUST RINGED (Kerry: \u2018Should show as Ladies - [color] Tees\u2019). `_tee_name_plural` now returns \u2018Ladies - Red Tees\u2019 where it returned \u2018Red Tees\u2019, so a board showing two Reds says which is which in words rather than relying on an outline the reader has to be told about. Men\u2019s tees are unchanged.",
+      "TWO LEGENDS, DELIBERATELY SPELLED DIFFERENTLY \u2014 caught by `test_event_reports.py` before this shipped. The first cut renamed the shared helper and trampled a RATIFIED rule: the BAND legend (starter sheet) already prints \u2018Women\u2019 beside the colour, and Kerry ruled on 2026-09-15 that it must therefore read plain \u2018Red Tees\u2019. The LEADERBOARD legend is built from the tees actually PLAYED and carries no band at all, which is exactly why it needs the words. `_tee_name_plural` is unchanged and keeps the ratified spelling; the new `_tee_legend_display_name` adds the prefix for the board alone.",
+      "Test: `test_tee_legend_pairing.js` \u2014 asserts the pairing happens before the sort (the ordering that caused the swap), that a ladies tee renders as \u2018Ladies - <colour> Tees\u2019 while a men\u2019s does not, and that the outline is still driven by the (L) marker and nothing else.",
+    ],
+  },
+  {
+    version: "2.458.6",
+    date: "2026-09-16",
+    changes: [
+      "SESSION CLOSED, EVERY OPEN ITEM HANDED OVER (Kerry: \u2018I want to close this session, so needs to be thorough\u2019 and \u2018Pass any open items to TGF Tracker Improvements 2 lane to pick up\u2019). The event-night handoff gains \u00a714: what shipped (v2.437.0 \u2192 v2.458.6), where every finding is documented, which mailbox posts carry it, the five CA Queue rows that hold Kerry\u2019s outstanding decisions, and what was passed to the successor lane. \u00a713f is corrected \u2014 earlier drafts said the skins question, the chapter-badge rule and the blind-draw ratifications stayed with this lane; per Kerry they did not.",
+      "THE PLATFORM-FACING BRIEF WAS 162 VERSIONS STALE. `docs/claude/state-of-the-tracker.md` \u2014 the document platform-claude reads through `get_tracker_docs` \u2014 still described v2.296 as current, so Platform planning was working from a picture that predated live game-day scoring entirely. Version stamped, a currency warning added at the top pointing at the mailbox and the handoff files, and a v2.347\u2192v2.458 section appended covering what changes the Platform picture: money that waits for the whole field, a polling loop on the event\u2019s own clock, the board recomputing rather than trusting Golf Genius, pairing rule 15 and the blind draws, a ratified scoring rule the incumbent cannot express, and identity as the live fault line. A full rewrite is still owed and was handed over with the rest.",
+    ],
+  },
+  {
+    version: "2.458.5",
+    date: "2026-09-16",
+    changes: [
+      "THE OPEN DECISIONS MOVED OUT OF THE TRANSCRIPT AND ONTO KERRY\u2019S OWN CHECKLIST. Five rows written to the CA Queue: the a9.23 skins question (Golf Genius\u2019s skins board pays Carlos Zapata a birdie on hole 7 while Golf Genius\u2019s own scorecard has him at par there \u2014 $52 and a posted handicap round hang on which is right), the five blind-draw specifics still running on inferred rules, the chapter-badge rule, how the plus-handicap deduction rounds when a nine-hole plus sits at \u22120.5 and rounds to zero, and the re-send of both events\u2019 handicap cards that went out with pre-round indexes. A decision living only in a chat is a decision nobody can find next week.",
+      "Docs caught up to the code: the event-night handoff now runs to v2.457.0 with a new \u00a713 covering the proxy-name change, the `scoring-skins-audit` bridge, the Golf Genius self-contradiction in full, the chapter-badge rule that has NOT been given yet (with the constraint that only the badge display may change \u2014 `customers.chapter` must never be overwritten from `items.chapter`), and the split of what went to the spin-off lane versus what stayed. The skins section of side-games.md now points at the audit bridge from the RULE, so the next person finds it without reading a handoff.",
+    ],
+  },
+  {
+    version: "2.458.4",
+    date: "2026-09-16",
+    changes: [
+      "docs: closeout skill 1.1/1.2 — the drop + keyed re-import recipe for a null-customer_id or tee-less card (refresh= does nothing for either), and the tee-sheet path for a cart-only team board (pass the event id; the sheet has no label). Skill OPEN 9 and 10 closed by Kerry's rulings 2026-09-16; a9.23 pairings applied from the tee sheet; Lee Vasquez posted; customer 821 is Guillermo Arevalo.",
+    ],
+  },
+  {
+    version: "2.458.3",
+    date: "2026-09-16",
+    changes: [
+      "docs: third live closeout run (s9.23 The Quarry + a9.23 Avery Ranch) in the closeout handoff §3k — the null-customer_id card GG's spelling created (alias, drop, keyed re-import, one handicap post), the tee-less Lee Vasquez card, the cart-only Austin pairings board; skill OPEN 9–11. Recap drafts for both chapters under docs/claude/recaps/.",
+    ],
+  },
+  {
+    version: "2.458.2",
+    date: "2026-09-16",
+    changes: [
+      "TGF Insider: the Hole-In-One pot line now prints the pot AS OF today — get_hio_pot() folds FUTURE events' registrations into its headline (closeout skill OPEN 8; Cedar Creek's 8 signups put $3,392 in the 9/16 draft when the pot after Tuesday's play was $3,384). The Insider takes the running total at the last PLAYED event instead.",
+    ],
+  },
+  {
+    version: "2.458.1",
+    date: "2026-09-16",
+    changes: [
+      "DOCS ONLY, no behaviour change. Kerry merged Luke Mazanec\u2019s two Golf Genius member records on GG\u2019s side, so the duplicate the v2.458.0 note described is gone at source: GG now returns ONE card (12135103), our standings row reads `merged_from: null`, and his total is 36 \u2014 the union of his five events \u2014 matching the rows in his expansion exactly. `scoring-race-dupes` reports zero unmerged and zero folded across all five races.",
+      "`docs/claude/customers.md` no longer reads that as a live open item. The summing fold (`{\u201cmethod\u201d: \u201csum\u201d}`) is still in the code and is now DORMANT rather than open \u2014 exercised by nobody, and it never produced a wrong number even when it was exercised, because with best 6 and five events the sum and the union agree. The note records what would make it bite (a duplicate whose cards hold more than `best_n` events between them), and what fixing it would cost (the refresh would have to fetch every card\u2019s detail to rebuild the union \u2014 a GG round-trip per duplicate per refresh, so a decision rather than a tidy-up). Kerry\u2019s preference is to resolve duplicates at Golf Genius, which makes our fold a fallback rather than the primary path.",
+    ],
+  },
+  {
     version: "2.458.0",
     date: "2026-09-16",
     changes: [

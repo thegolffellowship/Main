@@ -2931,9 +2931,12 @@
         if (!legend.length) return "";
         return `<div class="evlb-teekey" aria-label="Tee colours">` +
             legend.map(t =>
+                // SAME WORDS AS THE STARTER SHEET: who plays it, then the
+                // tee — "Women Red Tees" (Kerry 2026-09-16: "sync up the
+                // two legends"). Both surfaces compose band_label + tee_name.
                 `<span class="evlb-teekey-item" title="${escapeHtml(t.band_label || t.band || "")}">`
                 + `<span class="evlb-tee-dot" style="${evlbTeeFill(t)}"></span>`
-                + `${escapeHtml(t.tee_name || t.band_label || t.band || "")}</span>`
+                + `${escapeHtml([t.band_label || t.band || "", t.tee_name || ""].filter(Boolean).join(" "))}</span>`
             ).join("") + `</div>`;
     }
     // KEYED OFF THE EVENT'S OWN PAYLOAD, never a page-level global

@@ -13719,19 +13719,35 @@ def get_event_leaderboard(event_name: str,
                                         label, re.I))
                 tee_legend.append({
                     "band": None,
-                    "tee_name": _tee_name_plural(label),
-                    "band_label": "Women" if ladies else None,
+                    "tee_name": _tee_legend_display_name(label, ladies),
+                    "band_label": TEE_LEGEND_WOMEN_WORD if ladies else None,
                     "color": col, "ladies": ladies,
                     # An outline, always — the starter sheet's own mark
                     # for the women's tee (Kerry 2026-09-15).
                     "ring": ladies})
-            # …and the ladies' tee sorts LAST, always.
-            tee_legend.sort(key=lambda t: 1 if t["ladies"] else 0)
+            # THE LABEL PAIRING IS MADE BEFORE THE SORT (v2.458.6, Kerry
+            # 2026-09-16: "Mike is showing as that open circle and the
+            # ladies should be the open circle. So need to flip those").
+            #
+            # `tee_legend` was built in tee ORDER, then re-sorted so the
+            # ladies' tee falls last — and only THEN zipped against the
+            # still-unsorted label list. After the sort the two sequences
+            # no longer line up, so every entry from the moved element
+            # onward was paired with the wrong label. On a card carrying
+            # both "3 - Red Tee" and "3 - Red (L) Tee" that is an exact
+            # swap: Michelle DelCarmen played the ladies' tee and got the
+            # men's filled dot, Mike Murphy played the men's and got the
+            # ladies' outline.
+            #
+            # Zip first, sort after. The mapping is by LABEL, so the
+            # display order can then change freely without touching it.
             _leg_by_label = {}
             for t, (lbl, _o) in zip(tee_legend,
                                     sorted(set(_lbl_of.values()),
                                            key=lambda x: (x[1], x[0]))):
                 _leg_by_label[lbl] = t
+            # …and the ladies' tee sorts LAST, always.
+            tee_legend.sort(key=lambda t: 1 if t["ladies"] else 0)
             for t in tee_legend:
                 _leg_by_label.setdefault(t["tee_name"], t)
             for r in played:
@@ -56047,6 +56063,28 @@ def get_event_pairings(event_id: int, db_path=None) -> dict:
         hcp_map: dict = {}
         if any(r["handicap_index"] is None for r in rows):
             hcp_map = _roster_handicap_index_map(conn)
+        # THE TEE COMES FROM THE ROSTER, NOT THE SAVED ROW (v2.458.10,
+        # Kerry 2026-09-16: "If the tees are in ROSTER, they should
+        # automatically show up in PAIRINGS"). `event_pairings.tee_choice`
+        # is the snapshot the save or the ingest happened to carry, and a
+        # Golf Genius board ingest carries none — so every seated player
+        # read "—" while the ROSTER tab, reading the order, showed <50 /
+        # 50-64 / 65+ / Forward for the same people. Resolved through
+        # customer_id first (principle 6), the name key only for a row
+        # that never resolved to a profile.
+        tee_map: dict = {}
+        if any(not (r["tee_choice"] or "").strip() for r in rows):
+            try:
+                for rr in _event_roster_rows(conn, event_id):
+                    t = (rr.get("tee_choice") or "").strip()
+                    if not t:
+                        continue
+                    if rr.get("customer_id") is not None:
+                        tee_map.setdefault(("c", int(rr["customer_id"])), t)
+                    tee_map.setdefault(("n", (rr.get("name") or "").strip().lower()), t)
+            except Exception:
+                logger.exception("roster tee lookup failed for event %s "
+                                 "(non-fatal)", event_id)
 
     result: dict = {}
     for r in rows:
@@ -56062,11 +56100,16 @@ def get_event_pairings(event_id: int, db_path=None) -> dict:
         hi = r["handicap_index"]
         if hi is None:
             hi = hcp_map.get((r["player_name"] or "").lower())
+        tee = (r["tee_choice"] or "").strip() or None
+        if not tee:
+            tee = (tee_map.get(("c", r["customer_id"]))
+                   if r["customer_id"] is not None else None) \
+                or tee_map.get(("n", (r["player_name"] or "").strip().lower()))
         grp["players"].append({
             "name": r["player_name"],
             "customer_id": r["customer_id"],
             "cart_pos": r["cart_pos"],
-            "tee_choice": r["tee_choice"],
+            "tee_choice": tee,
             "handicap_index": hi,
         })
     # Blinds ride ALONGSIDE the seats, never in them (see the BLIND DRAWS
@@ -57098,12 +57141,35 @@ def event_team_net_dial(conn, ev: dict) -> tuple[int, float, str]:
 def _tee_name_plural(name: str) -> str:
     """'3 - Red (L) Tee' -> 'Red Tees' (Kerry 2026-09-16). The order
     prefix is bookkeeping, '(L)' is said better by the band label
-    ('Women'), and TGF says TEES."""
+    ('Women'), and TGF says TEES.
+
+    NOTE: this is the BAND legend's spelling and it is RATIFIED (Kerry
+    2026-09-15: "Women should just be: Women (no colored Red) Red
+    Tees") — the band already says who plays it, so the colour does not
+    repeat it. The LEADERBOARD's played-tee legend says who plays it the same
+    way, through `band_label` — see `TEE_LEGEND_WOMEN_WORD`."""
     n = _TEE_ORDER_RE.sub("", " ".join((name or "").split())).strip()
     n = re.sub(r"\s*\((?:l|lady|ladies)\)", "", n, flags=re.I).strip()
     n = re.sub(r"\bTees?\b\s*$", "", n, flags=re.I).strip()
     return f"{n} Tees" if n else n
 
+
+# THE ONE WORD FOR THE WOMEN'S TEE, on every surface (Kerry 2026-09-16:
+# "S1. Women's" / "We need to sync up the two legends somehow to maintain
+# consistency"). The LEADERBOARD's played-tee legend and the STARTER
+# SHEET's band legend are built by different code and used to spell it
+# differently ("Ladies - Red Tees" vs "Women Red Tees"). Both now compose
+# the same two fields — `band_label` (this word, or the men's band) then
+# `tee_name` ("Red Tees") — and this constant is the only place the word
+# lives. `test_tee_legend_pairing.js` fails either surface that drifts.
+TEE_LEGEND_WOMEN_WORD = "Women"
+
+
+def _tee_legend_display_name(name: str, ladies: bool) -> str:
+    """The tee's printed name for ANY legend: "Red Tees". Who plays it is
+    `band_label`'s job (see `TEE_LEGEND_WOMEN_WORD`), never the name's —
+    so the two legends cannot say it two ways."""
+    return _tee_name_plural(name)
 
 def _tee_color_for(tee_name: str) -> str | None:
     low = " ".join((tee_name or "").split()).lower()
@@ -57221,7 +57287,8 @@ def event_tee_legend(conn, event_id: int, ev: dict) -> list:
         raw_label = _TEE_ORDER_RE.sub("", nm).strip()
         band_label = {"<50": "Men <50", "50-64": "Men 50-64",
                       "65+": "Men 65+"}.get(
-            band, "Women" if (ladies or band == "Forward") else band)
+            band, TEE_LEGEND_WOMEN_WORD if (ladies or band == "Forward")
+            else band)
         out.append({"band": band, "band_label": band_label,
                     "tee_name": label,
                     # What the COURSE CARD calls it — the printed name is
@@ -57813,13 +57880,23 @@ def get_event_print_pack(event_id: int, db_path=None) -> dict | None:
     _first_tee = "10" if (ev.get("nine_side") or "").strip().lower() == "back" else "1"
     for g in groups:
         short = re.sub(r"^HOLE\s+", "", g["slot_label"], flags=re.I)
-        if _shotgun:
+        # A generic "Group N" label is not a hole (v2.458.10, Kerry: "This
+        # shouldn't say Hole Group 1. It should just say Hole 1"). The
+        # real fix is a sheet that carries its hole labels — see
+        # `_write_event_pairings_from_groups` — but a label that admits
+        # it knows no hole must not be dressed up as one.
+        _generic = bool(re.match(r"^group\s+\d+$", short, re.I))
+        if _shotgun and _generic:
+            g["start_line"] = short + (f" | {_start}" if _start else "")
+        elif _shotgun:
             g["start_line"] = f"Hole {short}" + (f" | {_start}" if _start else "")
         else:
             # The slot label IS the tee time on a tee-time event; the hole
             # is the first tee of the nine being played.
             g["start_line"] = f"{short} | Hole {_first_tee}"
-        g["hole_label"] = f"Hole {short}" if _shotgun else f"Hole {_first_tee}"
+        g["hole_label"] = (short if (_shotgun and _generic)
+                           else f"Hole {short}" if _shotgun
+                           else f"Hole {_first_tee}")
 
     _st18 = (ev.get("start_type_18") or "").strip()
     _start18 = _clock(ev.get("start_time_18"))
@@ -57999,6 +58076,127 @@ def purge_app_pairing_history(dry_run: bool = True, db_path=None) -> dict:
         return out
 
 
+def _reseat_event_blinds(conn, event_id: int) -> dict:
+    """Move blinds onto the sheet's CURRENT open seats (v2.458.8).
+
+    Kerry 2026-09-16, after regenerating s9.23's sheet: "Lost blinds
+    visually" — and, picking a name for an empty seat, "Gus Vasquez is
+    already a blind in this event" when no blind showed for him anywhere.
+
+    Both symptoms, one cause. `blind_draws` rows are keyed to a SEAT
+    (`holes:group_num:cart_pos`), and `save_event_pairings` rebuilds
+    `event_pairings` from scratch without touching them. Regenerate the
+    sheet and the seats move while the blind rows keep pointing at
+    coordinates that may no longer be an open seat — so the card renders
+    "— open —" (the blind is invisible) while the eligibility guard still
+    counts that person (the blind is very much there). An orphan.
+
+    A blind belongs to the EVENT and the PERSON; the seat is only where
+    it is displayed. So on every save the blinds are re-seated into the
+    current open seats in sheet order — the same order `draw_event_blinds`
+    already fills them in, and the same treatment its `loose` rows (the
+    ones Kerry enters straight into Golf Genius) already get. Nobody is
+    dropped: a blind with no open seat left to take is nulled to loose
+    rather than deleted, so it still counts against that member's turn.
+    """
+    _ensure_pairing_tables(conn)
+    # ONLY the app's own seat-keyed rows (v2.458.9). The `gg` rows are the
+    # blinds Kerry enters straight into Golf Genius, read back out of the
+    # team string: they are deliberately LOOSE because, as
+    # `draw_event_blinds` puts it, "we cannot know which slot each one
+    # covers, and it does not matter". v2.458.8 re-seated them too, which
+    # handed them seats they were never meant to hold. Leave them alone.
+    rows = [dict(r) for r in conn.execute(
+        """SELECT id, customer_id, player_name, source, holes, group_num,
+                  cart_pos
+             FROM blind_draws
+            WHERE event_id = ? AND COALESCE(source, 'app') = 'app'
+            ORDER BY id""",
+        (event_id,)).fetchall()]
+    if not rows:
+        return {"reseated": 0, "loosened": 0}
+    size = _blind_team_size(conn)
+    # Read the sheet through THIS connection: `get_event_pairings` opens
+    # its own, and this runs inside `save_event_pairings`'s transaction —
+    # it would see the sheet as it was before the save.
+    groups: dict = {}
+    for r in conn.execute(
+            """SELECT holes, group_num, slot_label, cart_pos, customer_id
+                 FROM event_pairings WHERE event_id = ?
+                ORDER BY holes, group_num, cart_pos""", (event_id,)):
+        g = groups.setdefault((r["holes"], r["group_num"]),
+                              {"slot_label": r["slot_label"],
+                               "seated": set(), "here": set()})
+        g["seated"].add(r["cart_pos"])
+        if r["customer_id"] is not None:
+            g["here"].add(r["customer_id"])
+    open_seats = []
+    for (holes, group_num), g in sorted(
+            groups.items(), key=lambda kv: (kv[0][0], kv[0][1])):
+        for pos in range(1, size + 1):
+            if pos in g["seated"]:
+                continue
+            open_seats.append({"holes": holes, "group_num": group_num,
+                               "slot_label": g["slot_label"],
+                               "cart_pos": pos, "here": g["here"]})
+    plan = []
+    seated_cids: set = set()
+    for r in rows:
+        # ONE BLIND PER PERSON PER EVENT (rule 15, ratified 2026-09-16).
+        # Enforced HERE, at the boundary, rather than trusted of the rows:
+        # s9.23 carried Pat Youngs twice, and a re-seat that simply moved
+        # rows around would have given one man two seats on the sheet.
+        # The duplicate is loosened, never deleted — it still counts.
+        if r["customer_id"] is not None and r["customer_id"] in seated_cids:
+            plan.append((r, None))
+            continue
+        # A card can never fill its own team (rule 15c) — if the seat that
+        # comes up next is in that player's OWN group, skip past it.
+        seat = next((st for st in open_seats
+                     if r["customer_id"] not in st["here"]), None)
+        if seat is not None:
+            open_seats.remove(seat)
+            if r["customer_id"] is not None:
+                seated_cids.add(r["customer_id"])
+        plan.append((r, seat))
+    # `slot_key` is NOT NULL and UNIQUE(event_id, slot_key), and a re-seat
+    # can SWAP two blinds — writing A into B's seat while B still holds it
+    # trips the constraint. So park every row on a temporary key first,
+    # then write the real ones.
+    for r, _seat in plan:
+        conn.execute("UPDATE blind_draws SET slot_key = ? WHERE id = ?",
+                     (f"tmp:{r['id']}", r["id"]))
+    reseated = loosened = 0
+    for r, seat in plan:
+        if seat is None:
+            # No open seat left for this one. It is NOT deleted: a loose
+            # blind still counts against that member's turn, and the draw
+            # already knows how to read one (the rows Kerry enters
+            # straight into Golf Genius look exactly like this).
+            conn.execute(
+                """UPDATE blind_draws
+                      SET group_num = NULL, cart_pos = NULL,
+                          slot_label = NULL, slot_key = ?
+                    WHERE id = ?""",
+                (f"loose:{r['customer_id'] or _cmp_person_key_str(r['player_name'])}",
+                 r["id"]))
+            loosened += 1
+            continue
+        conn.execute(
+            """UPDATE blind_draws
+                  SET holes = ?, group_num = ?, slot_label = ?, cart_pos = ?,
+                      slot_key = ?
+                WHERE id = ?""",
+            (seat["holes"], seat["group_num"], seat["slot_label"],
+             seat["cart_pos"],
+             _blind_slot_key(seat["holes"], seat["group_num"],
+                             seat["cart_pos"]), r["id"]))
+        if (r["holes"], r["group_num"], r["cart_pos"]) != (
+                seat["holes"], seat["group_num"], seat["cart_pos"]):
+            reseated += 1
+    return {"reseated": reseated, "loosened": loosened}
+
+
 def save_event_pairings(event_id: int, groups_by_holes: dict, db_path=None) -> None:
     """Persist pairings for an event and rebuild pairing_history rows.
 
@@ -58083,7 +58281,62 @@ def save_event_pairings(event_id: int, groups_by_holes: dict, db_path=None) -> N
                              1 if frozenset((a, b)) in rode_pairs else 0),
                         )
 
+        # The seats just moved; the blinds keyed to them have not. Re-seat
+        # them onto the sheet's current open seats before anything reads it
+        # again (v2.458.8) — otherwise a blind points at a seat that no
+        # longer exists: invisible on the card, still counted by the
+        # eligibility guard.
+        _reseat_event_blinds(conn, event_id)
         conn.commit()
+
+
+def relabel_event_pairings(event_id: int, holes: str, labels: dict,
+                           apply: bool = False, db_path=None) -> dict:
+    """Give a saved sheet its hole labels back and put its groups in hole
+    order, through the normal save so the blinds re-seat with it.
+
+    `labels` maps CURRENT group_num -> hole label ({5: "1A", 4: "1B", …});
+    groups are renumbered in the order the mapping lists them. Nobody
+    moves seats; only the label and the group order change. Built for
+    s9.23 (Kerry 2026-09-16: "Re-seat the pairings as necessary to match
+    and fix blinds") after a Team Net board ingest rewrote the sheet in
+    finish order — the GG tee sheet is the record, and this is how a
+    manager applies it without retyping the groups.
+    """
+    pairings = get_event_pairings(event_id, db_path=db_path)
+    groups = {g["group_num"]: g for g in (pairings.get(holes) or [])}
+    missing = [k for k in labels if int(k) not in groups]
+    if missing:
+        return {"error": f"no such group(s) on the {holes}-hole sheet: {missing}",
+                "have": sorted(groups)}
+    unlisted = sorted(set(groups) - {int(k) for k in labels})
+    plan, new_groups = [], []
+    for new_num, (old_num, label) in enumerate(labels.items(), start=1):
+        g = groups[int(old_num)]
+        plan.append({"was_group": int(old_num), "was_label": g["slot_label"],
+                     "now_group": new_num, "now_label": str(label),
+                     "players": [p["name"] for p in g["players"]],
+                     "tees": [p.get("tee_choice") for p in g["players"]]})
+        new_groups.append({"group_num": new_num, "slot_label": str(label),
+                           "players": [dict(p) for p in g["players"]]})
+    for old_num in unlisted:      # anything not mentioned keeps its label, goes last
+        g = groups[old_num]
+        new_num = len(new_groups) + 1
+        plan.append({"was_group": old_num, "was_label": g["slot_label"],
+                     "now_group": new_num, "now_label": g["slot_label"],
+                     "players": [p["name"] for p in g["players"]],
+                     "tees": [p.get("tee_choice") for p in g["players"]]})
+        new_groups.append({"group_num": new_num, "slot_label": g["slot_label"],
+                           "players": [dict(p) for p in g["players"]]})
+    out = {"event_id": int(event_id), "holes": holes, "applied": False,
+           "plan": plan}
+    if apply:
+        other = {h: v for h, v in pairings.items() if h != holes}
+        save_event_pairings(int(event_id), {**other, holes: new_groups},
+                            db_path=db_path)
+        out["applied"] = True
+        out["blinds"] = get_event_blinds(int(event_id), db_path=db_path)
+    return out
 
 
 def delete_event_pairings(event_id: int, db_path=None) -> None:
@@ -60088,26 +60341,78 @@ def _write_event_pairings_from_groups(conn: sqlite3.Connection,
         nm = (ev["item_name"] or "") if ev else ""
         holes = "18" if ("18" in fmt and "9/18" not in fmt) or \
             re.match(r"^[a-z]18\b", nm, re.I) or "MATCHES" in nm.upper() else "9"
-        conn.execute("DELETE FROM event_pairings WHERE event_id = ?",
-                     (int(event_id),))
+        scope_sql, scope_args = "", ()
     else:
-        conn.execute("DELETE FROM event_pairings WHERE event_id = ? "
-                     "AND holes = ?", (int(event_id), holes))
+        scope_sql, scope_args = " AND holes = ?", (holes,)
+    # AN INGEST MAY NOT ERASE WHAT IT DOES NOT CARRY (v2.458.10, Kerry
+    # 2026-09-16: "this lost the hole assignments that I had assigned
+    # yesterday. Why'd it screw everything up?"). The Team Net board says
+    # who rode together and in what FINISH order; it says nothing about
+    # which hole a group started on or which tee anyone played. Applying
+    # it after the event rewrote s9.23's sheet in finish order with
+    # "Group N" labels and blank tees — the starter sheet then printed
+    # "Hole Group 1", the PAIRINGS tab showed a dash for every tee, and
+    # every seat-keyed blind was orphaned. So, before the delete: remember
+    # each existing group's hole label and each player's tee, keyed by the
+    # people in it, and hand them back to any incoming group the ingest
+    # left unlabelled. Same rule as the sheet's names and handicaps —
+    # the row is a snapshot; the truth is looked up.
+    prior = conn.execute(
+        f"""SELECT group_num, slot_label, player_name, customer_id,
+                   tee_choice, handicap_index
+              FROM event_pairings WHERE event_id = ?{scope_sql}
+             ORDER BY group_num, cart_pos""",
+        (int(event_id), *scope_args)).fetchall()
+    prior_groups: dict = {}
+    prior_tee: dict = {}
+    prior_hcp: dict = {}
+    prior_cid: dict = {}
+    for r in prior:
+        key = (r["player_name"] or "").strip().lower()
+        if r["customer_id"] is not None:
+            prior_tee[("c", r["customer_id"])] = r["tee_choice"]
+            prior_hcp[("c", r["customer_id"])] = r["handicap_index"]
+            prior_cid[key] = r["customer_id"]
+        prior_tee[("n", key)] = r["tee_choice"]
+        prior_hcp[("n", key)] = r["handicap_index"]
+        prior_groups.setdefault(r["group_num"], {"slot": r["slot_label"],
+                                                 "members": set()})
+        prior_groups[r["group_num"]]["members"].add(key)
+    # A prior group is recognised by its PEOPLE: the same set of names
+    # (blinds excluded on both sides) means the same foursome, so its hole
+    # label travels with it whatever order the ingest lists it in.
+    label_by_members = {frozenset(g["members"]): g["slot"]
+                        for g in prior_groups.values()
+                        if g["slot"] and not re.match(r"^group\s+\d+$",
+                                                      g["slot"], re.I)}
+    conn.execute(f"DELETE FROM event_pairings WHERE event_id = ?{scope_sql}",
+                 (int(event_id), *scope_args))
     n = 0
     for gi, g in enumerate(groups, start=1):
         seats = g["players"]
-        slot = g.get("slot") or f"Group {gi}"
+        members = frozenset((p["name"] or "").strip().lower()
+                            for p in seats[:5] if p and p.get("name"))
+        slot = g.get("slot") or label_by_members.get(members) or f"Group {gi}"
         # Fivesomes are legal since Kerry's 2026-07-31 ruling, and GG
         # sheets carry them — the old [:4] silently dropped the 5th.
         for idx, p in enumerate(seats[:5]):
             if not p:
                 continue
+            key = (p["name"] or "").strip().lower()
+            cid = p.get("cid") or p.get("customer_id") or prior_cid.get(key)
+            tee = (p.get("tee_choice")
+                   or (prior_tee.get(("c", cid)) if cid is not None else None)
+                   or prior_tee.get(("n", key)))
+            hcp = (p.get("handicap_index")
+                   or (prior_hcp.get(("c", cid)) if cid is not None else None)
+                   or prior_hcp.get(("n", key)))
             conn.execute(
                 """INSERT OR REPLACE INTO event_pairings
                    (event_id, holes, group_num, slot_label, player_name,
-                    cart_pos)
-                   VALUES (?, ?, ?, ?, ?, ?)""",
-                (int(event_id), holes, gi, slot, p["name"], idx + 1))
+                    cart_pos, customer_id, tee_choice, handicap_index)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (int(event_id), holes, gi, slot, p["name"], idx + 1,
+                 cid, tee, hcp))
             n += 1
     return n
 

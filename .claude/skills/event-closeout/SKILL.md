@@ -71,6 +71,15 @@ Do not assume it — read it — but do not redo it either.
     `scoring-alias-add:<canonical name>|<GG-style name>`, then re-pull the
     card: `scoring-import-event:<code>@<round_id>|refresh=<surname>`.
     Never post handicaps or pairings for a null-cid row (CLAUDE.md rule 6).
+    **`refresh=` does nothing for a null-cid card** (AREVALO, Guillermo,
+    2026-09-16: `refreshed_players_dropped: []`) — use
+    `scoring-round-drop:<id>|unpost|apply` then the keyed import
+    `scoring-import-event:<code>@<round_id>` (no refresh=), then
+    `scoring-hcp-import:<event>|apply` for the one re-created card.
+    **A card GG served without a tee** (Lee Vasquez, same run: course_id
+    and tee_id NULL, `no_tee_slope_rating`) is fixed the same way — the
+    drop + keyed re-import came back WITH the tee. Neither needs Kerry's
+    tee; check GG's results page first (his tee was printed there).
     **Which spelling is canonical is Kerry's call** (2026-09-09: "Tom
     Donovan" is the member's name, "Thomas Donovan" the alias) — ask
     before renaming a customers row; the rename itself is
@@ -83,6 +92,14 @@ Do not assume it — read it — but do not redo it either.
     GG is the only source of pairing history; app rows are plans. Blind
     draw seats never count. Both rounds of a multi-day event are applied
     separately on the same event.
+    **Small field / cart-only board (a9.23 Avery Ranch, 12 players,
+    2026-09-16 — Kerry: "You should be able to see pairings in the portal
+    in tee sheet"):** when the only team board is CART Net (pairs of 2),
+    do NOT apply it as groups. Read the TEE SHEET instead:
+    `scoring-pairings:round|<sa|austin>|<round_id>|dry|<event_id>` — the
+    sheet carries no round label, so the event id MUST be passed or it
+    errors "no Tracker event matched label ''"; then `…|apply|<event_id>`.
+    Groups come back with their tee-time slots.
 
 1.3 **GG winners + MVP cross-check.** `scoring-gg-results:<event>` — the
     boards GG has posted, with purses. Rows with `purse: 0.0` mean Kerry
@@ -239,3 +256,15 @@ Raised 2026-09-09, on the first run:
    GG posts, or hold them?
 8. **HIO pot pre-counting future events** (2.4). Cosmetic today; wrong the
    day a registration is refunded before the event.
+
+Raised 2026-09-16, on the third run (s9.23 / a9.23):
+
+9. ~~A bridge to stamp course/tee on a tee-less card~~ — CLOSED 2026-09-16:
+   drop + keyed re-import re-served the card WITH its tee (1.1). Open
+   question remains WHY the hourly auto-sync's first pass dropped it.
+10. ~~Cart-only GG boards~~ — CLOSED 2026-09-16 by Kerry: read the tee
+   sheet (`scoring-pairings:round|…|<event_id>`), recipe in 1.2.
+11. **A null-customer_id card is not "stale" to `refresh=`.** The alias +
+   re-pull recipe in 1.1 silently did nothing for AREVALO, Guillermo;
+   drop + keyed re-import was needed. Either teach refresh to drop
+   null-cid cards or say so in 1.1.

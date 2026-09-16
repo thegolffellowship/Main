@@ -4300,6 +4300,18 @@ def _scoring_dispatch(url: str, extract: str):
                     parts[1],
                     apply=(len(parts) > 2 and parts[2].lower() == "apply")),
                     indent=2, default=str)
+            if sub == "relabel" and len(parts) >= 3:
+                # relabel|<event_id>|<json {current group_num: hole label}>
+                #   [|apply[|<holes>]] — give a sheet its hole labels
+                # back and renumber the groups in the order listed, through
+                # the normal save so the blinds re-seat. Nobody changes
+                # seats. Dry-run unless "apply".
+                labels = json.loads(parts[2])
+                return json.dumps(db.relabel_event_pairings(
+                    int(parts[1]), (parts[4] if len(parts) > 4 else "9"),
+                    labels,
+                    apply=(len(parts) > 3 and parts[3].lower() == "apply")),
+                    indent=2, default=str)
             if sub == "manual" and len(parts) >= 3:
                 # manual|<event_id>|<json groups>[|apply] — groups from a
                 # tee sheet / starter sheet (lists of names, seat order)
