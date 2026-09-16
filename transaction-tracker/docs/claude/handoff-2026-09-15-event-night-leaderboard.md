@@ -649,10 +649,60 @@ its place again here.
   `docs/claude/session-prompt-2026-09-16-handicap-card-identity.md`):
   the handicap-card identity bug (§10) and the plus rule's nine
   unvisited call sites (§6).
-- **Stays with this lane:** the Carlos skins question, the chapter
-  badge rule, the blind-draw ratifications, and every leaderboard /
-  starter-sheet / pairings surface.
+- **HANDED OVER 2026-09-16** — Kerry, closing this session: *"Pass any
+  open items to TGF Tracker Improvements 2 lane to pick up."* So the
+  Carlos skins question (CA #2), the chapter-badge rule (CA #4), the
+  blind-draw ratifications (CA #3), the handicap-card re-send (CA #6),
+  the older carry-forwards, and the owed rewrite of
+  `state-of-the-tracker.md` ALL moved to that lane
+  (`session_01CD1p3A96wXobio1yz2y7JS`, which renamed itself "TGF Tracker
+  Improvements 2"). **This lane owns nothing further.** Earlier drafts of
+  this section said these stayed with the parent; that is superseded.
 - **Still carried from earlier sessions, untouched tonight:**
   design-claude reviews #517 and #520 awaiting a reply; the two
   off-standard chevrons on `/me` and Money Flow; the live-scoring build
   awaiting Kerry's "go".
+
+
+---
+
+## 14. Session closed — 2026-09-16
+
+Kerry: *"I want to close this session, so needs to be thorough"* and
+*"Pass any open items to TGF Tracker Improvements 2 lane to pick up."*
+
+**Shipped and live:** v2.437.0 → v2.458.5 on
+`https://tgf-tracker.up.railway.app`. Branch
+`claude/tracker-improvements-h7q2ns` fully merged to `main`; working
+tree clean.
+
+**Documented:** this handoff (§1–§14), `docs/claude/pairings.md` rule
+15, `docs/claude/side-games.md` (the plus rule, the open call-site gap,
+and the skins audit reachable from the rule),
+`docs/claude/session-prompt-2026-09-16-handicap-card-identity.md`, and
+`docs/claude/state-of-the-tracker.md` (version stamped, currency warning
+added, v2.347→v2.458 wave section appended — a full rewrite is owed and
+was handed over).
+
+**Mailed:** #522, #523 (close-out digest), #528 (the gap-closing
+addendum). Every finding in this document has a mailbox home.
+
+**On Kerry's CA Queue** rather than in a transcript: #2 the a9.23 skins
+question, #3 the blind-draw ratifications, #4 the chapter-badge rule, #5
+the plus-deduction rounding, #6 the handicap-card re-send.
+
+**Handed to "TGF Tracker Improvements 2"** by direct session message:
+the three contract corrections (§13e-2) plus every item above, with the
+note that A and D block on Kerry rather than on the lane, so those cost
+him least to clear first.
+
+**The one thing this lane would tell its successor.** Three separate
+defects tonight were the same shape: a correct fix applied to the
+instance in front of us instead of to the mechanism — the timezone rule
+fixed on the client and not the server (§7), the plus rule fixed at two
+call sites out of eleven (§6), and the money hold that blanked dollars
+but not win tints (§3). CLAUDE.md's first guiding principle already says
+this. The failure is not that we do not know the rule; it is that under
+time pressure the visible symptom feels like the whole class. When you
+fix something, enumerate its siblings before you move on — or write down
+which ones you are deliberately leaving.

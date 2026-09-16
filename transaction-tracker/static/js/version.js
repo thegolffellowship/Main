@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.458.5";
+window.TGF_VERSION = "2.458.6";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.458.6",
+    date: "2026-09-16",
+    changes: [
+      "SESSION CLOSED, EVERY OPEN ITEM HANDED OVER (Kerry: \u2018I want to close this session, so needs to be thorough\u2019 and \u2018Pass any open items to TGF Tracker Improvements 2 lane to pick up\u2019). The event-night handoff gains \u00a714: what shipped (v2.437.0 \u2192 v2.458.6), where every finding is documented, which mailbox posts carry it, the five CA Queue rows that hold Kerry\u2019s outstanding decisions, and what was passed to the successor lane. \u00a713f is corrected \u2014 earlier drafts said the skins question, the chapter-badge rule and the blind-draw ratifications stayed with this lane; per Kerry they did not.",
+      "THE PLATFORM-FACING BRIEF WAS 162 VERSIONS STALE. `docs/claude/state-of-the-tracker.md` \u2014 the document platform-claude reads through `get_tracker_docs` \u2014 still described v2.296 as current, so Platform planning was working from a picture that predated live game-day scoring entirely. Version stamped, a currency warning added at the top pointing at the mailbox and the handoff files, and a v2.347\u2192v2.458 section appended covering what changes the Platform picture: money that waits for the whole field, a polling loop on the event\u2019s own clock, the board recomputing rather than trusting Golf Genius, pairing rule 15 and the blind draws, a ratified scoring rule the incumbent cannot express, and identity as the live fault line. A full rewrite is still owed and was handed over with the rest.",
+    ],
+  },
   {
     version: "2.458.5",
     date: "2026-09-16",
