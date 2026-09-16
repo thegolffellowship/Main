@@ -1676,6 +1676,40 @@ benefit per person per night). The draw is a **dry run by default** and
 previews every pick with its year-to-date count before anything is
 written.
 
+### 15f — RATIFIED (Kerry 2026-09-16), and a blind is not a seat
+
+All five specifics Rule 15 had been running on are now ruled, with one
+amendment:
+
+1. **Team size follows the GROUP, not a constant.** Kerry: *"Could be
+   more if fivesomes are selected."* `BLIND_TEAM_SIZE_DEFAULT` is the
+   fallback; where a group is a fivesome the blind fills to five.
+2. **Eligibility is field-only** — members with an established TGF index.
+   No guests, no unestablished members.
+3. **One blind per person per event.**
+4. **Counting is by calendar year, across chapters** — a blind in Austin
+   counts against that member's turn in San Antonio.
+5. **Our draw is a PROPOSAL Kerry enters into Golf Genius.** The Tracker
+   never writes to GG. Kerry: *"will obviously go away when we sunset
+   Golf Genius."*
+
+**A blind belongs to the EVENT and the PERSON; the seat is only where it
+is displayed (v2.458.8).** `blind_draws` rows are keyed to a seat
+(`holes:group_num:cart_pos`), and `save_event_pairings` rebuilds
+`event_pairings` from scratch. Before this fix, regenerating the sheet
+left every blind pointing at coordinates that might no longer be an open
+seat — invisible on the card, still counted by the eligibility guard.
+Kerry hit both halves at once: *"Lost blinds visually"*, then *"Gus
+Vasquez is already a blind in this event"* for a blind that showed
+nowhere.
+
+`_reseat_event_blinds` runs inside every save and moves blinds onto the
+current open seats in sheet order, skipping a seat in the player's own
+group (15c). Nothing is deleted: a blind with no seat left is nulled to
+LOOSE — the same shape as the rows read back out of Golf Genius team
+strings — where it still counts for the year. Guard:
+`test_blind_reseat.py`.
+
 ### 15e — the history is real, not from zero
 
 `backfill_blind_draws_from_gg(year)` reads the year's blinds back out of

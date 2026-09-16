@@ -57716,6 +57716,108 @@ def purge_app_pairing_history(dry_run: bool = True, db_path=None) -> dict:
         return out
 
 
+def _reseat_event_blinds(conn, event_id: int) -> dict:
+    """Move blinds onto the sheet's CURRENT open seats (v2.458.8).
+
+    Kerry 2026-09-16, after regenerating s9.23's sheet: "Lost blinds
+    visually" — and, picking a name for an empty seat, "Gus Vasquez is
+    already a blind in this event" when no blind showed for him anywhere.
+
+    Both symptoms, one cause. `blind_draws` rows are keyed to a SEAT
+    (`holes:group_num:cart_pos`), and `save_event_pairings` rebuilds
+    `event_pairings` from scratch without touching them. Regenerate the
+    sheet and the seats move while the blind rows keep pointing at
+    coordinates that may no longer be an open seat — so the card renders
+    "— open —" (the blind is invisible) while the eligibility guard still
+    counts that person (the blind is very much there). An orphan.
+
+    A blind belongs to the EVENT and the PERSON; the seat is only where
+    it is displayed. So on every save the blinds are re-seated into the
+    current open seats in sheet order — the same order `draw_event_blinds`
+    already fills them in, and the same treatment its `loose` rows (the
+    ones Kerry enters straight into Golf Genius) already get. Nobody is
+    dropped: a blind with no open seat left to take is nulled to loose
+    rather than deleted, so it still counts against that member's turn.
+    """
+    _ensure_pairing_tables(conn)
+    rows = [dict(r) for r in conn.execute(
+        """SELECT id, customer_id, player_name, source, holes, group_num,
+                  cart_pos
+             FROM blind_draws WHERE event_id = ? ORDER BY id""",
+        (event_id,)).fetchall()]
+    if not rows:
+        return {"reseated": 0, "loosened": 0}
+    size = _blind_team_size(conn)
+    # Read the sheet through THIS connection: `get_event_pairings` opens
+    # its own, and this runs inside `save_event_pairings`'s transaction —
+    # it would see the sheet as it was before the save.
+    groups: dict = {}
+    for r in conn.execute(
+            """SELECT holes, group_num, slot_label, cart_pos, customer_id
+                 FROM event_pairings WHERE event_id = ?
+                ORDER BY holes, group_num, cart_pos""", (event_id,)):
+        g = groups.setdefault((r["holes"], r["group_num"]),
+                              {"slot_label": r["slot_label"],
+                               "seated": set(), "here": set()})
+        g["seated"].add(r["cart_pos"])
+        if r["customer_id"] is not None:
+            g["here"].add(r["customer_id"])
+    open_seats = []
+    for (holes, group_num), g in sorted(
+            groups.items(), key=lambda kv: (kv[0][0], kv[0][1])):
+        for pos in range(1, size + 1):
+            if pos in g["seated"]:
+                continue
+            open_seats.append({"holes": holes, "group_num": group_num,
+                               "slot_label": g["slot_label"],
+                               "cart_pos": pos, "here": g["here"]})
+    plan = []
+    for r in rows:
+        # A card can never fill its own team (rule 15c) — if the seat that
+        # comes up next is in that player's OWN group, skip past it.
+        seat = next((st for st in open_seats
+                     if r["customer_id"] not in st["here"]), None)
+        if seat is not None:
+            open_seats.remove(seat)
+        plan.append((r, seat))
+    # `slot_key` is NOT NULL and UNIQUE(event_id, slot_key), and a re-seat
+    # can SWAP two blinds — writing A into B's seat while B still holds it
+    # trips the constraint. So park every row on a temporary key first,
+    # then write the real ones.
+    for r, _seat in plan:
+        conn.execute("UPDATE blind_draws SET slot_key = ? WHERE id = ?",
+                     (f"tmp:{r['id']}", r["id"]))
+    reseated = loosened = 0
+    for r, seat in plan:
+        if seat is None:
+            # No open seat left for this one. It is NOT deleted: a loose
+            # blind still counts against that member's turn, and the draw
+            # already knows how to read one (the rows Kerry enters
+            # straight into Golf Genius look exactly like this).
+            conn.execute(
+                """UPDATE blind_draws
+                      SET group_num = NULL, cart_pos = NULL,
+                          slot_label = NULL, slot_key = ?
+                    WHERE id = ?""",
+                (f"loose:{r['customer_id'] or _cmp_person_key_str(r['player_name'])}",
+                 r["id"]))
+            loosened += 1
+            continue
+        conn.execute(
+            """UPDATE blind_draws
+                  SET holes = ?, group_num = ?, slot_label = ?, cart_pos = ?,
+                      slot_key = ?
+                WHERE id = ?""",
+            (seat["holes"], seat["group_num"], seat["slot_label"],
+             seat["cart_pos"],
+             _blind_slot_key(seat["holes"], seat["group_num"],
+                             seat["cart_pos"]), r["id"]))
+        if (r["holes"], r["group_num"], r["cart_pos"]) != (
+                seat["holes"], seat["group_num"], seat["cart_pos"]):
+            reseated += 1
+    return {"reseated": reseated, "loosened": loosened}
+
+
 def save_event_pairings(event_id: int, groups_by_holes: dict, db_path=None) -> None:
     """Persist pairings for an event and rebuild pairing_history rows.
 
@@ -57800,6 +57902,12 @@ def save_event_pairings(event_id: int, groups_by_holes: dict, db_path=None) -> N
                              1 if frozenset((a, b)) in rode_pairs else 0),
                         )
 
+        # The seats just moved; the blinds keyed to them have not. Re-seat
+        # them onto the sheet's current open seats before anything reads it
+        # again (v2.458.8) — otherwise a blind points at a seat that no
+        # longer exists: invisible on the card, still counted by the
+        # eligibility guard.
+        _reseat_event_blinds(conn, event_id)
         conn.commit()
 
 

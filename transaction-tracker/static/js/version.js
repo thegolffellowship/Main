@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.458.7";
+window.TGF_VERSION = "2.458.8";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.458.8",
+    date: "2026-09-16",
+    changes: [
+      "BLINDS SURVIVE THE SHEET BEING REGENERATED (Kerry: \u2018Lost blinds visually\u2019 \u2014 and, picking a name for an empty seat, \u2018Gus Vasquez is already a blind in this event\u2019 when no blind showed for him anywhere). Two symptoms, ONE cause: `blind_draws` rows are keyed to a SEAT (`holes:group_num:cart_pos`) and `save_event_pairings` rebuilt `event_pairings` from scratch without touching them. Regenerate the sheet and the seats move while the blind rows keep pointing at the old coordinates \u2014 so the card renders \u2018\u2014 open \u2014\u2019 because the blind is invisible, while the eligibility guard still counts that person because the blind is very much there. An orphan, visible to the rules and to nobody else.",
+      "A BLIND BELONGS TO THE EVENT AND THE PERSON; THE SEAT IS ONLY WHERE IT IS DISPLAYED. `_reseat_event_blinds` now runs inside `save_event_pairings`, moving every blind onto the sheet\u2019s CURRENT open seats in sheet order \u2014 the same order `draw_event_blinds` fills them, and the same treatment the loose rows Kerry enters straight into Golf Genius already get. Rule 15c is honoured on the way: a card never fills its own team, so a seat in that player\u2019s own group is skipped. Nothing is deleted \u2014 a blind with no open seat left is nulled to LOOSE, where it still counts against that member\u2019s turn for the year.",
+      "Two constraints the fix had to respect, both found by running it: `slot_key` is NOT NULL with UNIQUE(event_id, slot_key), and a re-seat can SWAP two blinds \u2014 writing A into B\u2019s seat while B still holds it trips the constraint. Every row is parked on a temporary key first, then the real ones are written. A loosened row takes a `loose:` key rather than a null, matching the `gg:` convention the backfill already uses.",
+      "Test: `test_blind_reseat.py` \u2014 reproduces the s9.23 case exactly (a blind in group 3 seat 4, then every seat moved), and asserts the blind stays on the sheet, lands somewhere that exists, avoids its own group, is never deleted when seats run short, and becomes loose instead. Its fixture uses NAMED columns on `events`, the trap that broke `test_pairing_rounds.py` on 09-15.",
+    ],
+  },
   {
     version: "2.458.7",
     date: "2026-09-16",
