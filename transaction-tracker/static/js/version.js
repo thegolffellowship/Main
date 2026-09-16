@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.458.3";
+window.TGF_VERSION = "2.458.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.458.4",
+    date: "2026-09-16",
+    changes: [
+      "docs: closeout skill 1.1/1.2 — the drop + keyed re-import recipe for a null-customer_id or tee-less card (refresh= does nothing for either), and the tee-sheet path for a cart-only team board (pass the event id; the sheet has no label). Skill OPEN 9 and 10 closed by Kerry's rulings 2026-09-16; a9.23 pairings applied from the tee sheet; Lee Vasquez posted; customer 821 is Guillermo Arevalo.",
+    ],
+  },
   {
     version: "2.458.3",
     date: "2026-09-16",

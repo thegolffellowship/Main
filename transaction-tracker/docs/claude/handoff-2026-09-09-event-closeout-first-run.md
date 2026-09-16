@@ -429,6 +429,14 @@ What the run added:
 - Recap drafts: `docs/claude/recaps/2026-09-15-s9.23-quarry-a9.23-avery-ranch.md`
   (one per chapter; blanks = fellowship headcounts, tee times, deadlines).
 
+**7:20 AM follow-up (Kerry's three answers).** (1) Lee Vasquez: GG's
+results page DID show his tee (Blue 139/36.0) — the auto-sync's card had
+lost it; drop 3518 + keyed re-import came back as 3529 WITH the tee,
+handicap posted (diff 7.3, index 7.3 unchanged). (2) Austin pairings from
+the TEE SHEET with the event id passed: 3 foursomes at 4:57 / 5:06 /
+5:15 PM, applied. (3) "Guillermo is correct" — customer 821 renamed
+(3 items rows followed); "Guilermo Arevalo" still resolves to 821.
+
 ## 4. NOT done, and why
 
 - **Wednesday-AM TGF Insider auto-draft (mailbox #453).** BUILT in
