@@ -196,20 +196,37 @@ def build_cards(state: dict, formulas: dict, derive_hole=None) -> list[dict]:
             strokes = scores.get(hole)
             sr = received.get(hole, 0) or 0
             d = derive_hole(meta.get("par"), strokes, sr, formulas)
+            # POINTS never make a hole harder (Kerry 2026-09-16): a plus
+            # player's give-back stroke is clamped to zero per hole and
+            # the plus comes off the TOTAL once, below. Stroke-play net
+            # keeps the real allocation — the total is the same either
+            # way there, and only stableford is hole-shaped.
+            d_pts = (derive_hole(meta.get("par"), strokes, max(0, sr), formulas)
+                     if sr < 0 else d)
             row = {"hole": hole, "par": meta.get("par"),
                    "yardage": meta.get("yardage"),
                    "stroke_index": meta.get("stroke_index"),
-                   "strokes": strokes, "strokes_received": sr, **d}
+                   "strokes": strokes, "strokes_received": sr, **d,
+                   # POINTS only — the hole's stroke-play net keeps the
+                   # real allocation, which Net and Team Net play off.
+                   "stableford_net": d_pts["stableford_net"]}
             holes_out.append(row)
             if strokes is None:
                 continue
             totals["gross"] += strokes
             totals["net"] += strokes - sr
-            totals["stableford_net"] += d["stableford_net"] or 0
+            totals["stableford_net"] += d_pts["stableford_net"] or 0
             totals["stableford_gross"] += d["stableford_gross"] or 0
             totals["adjusted_gross"] += d["adjusted_strokes"] or 0
             totals["vs_par"] += d["vs_par"] or 0
             totals["net_vs_par"] += d["net_vs_par"] or 0
+
+        # The plus, taken off the round rather than off a hole.
+        pts_adjust = 0
+        if ph is not None and int(ph) < 0 and any(
+                h["strokes"] is not None for h in holes_out):
+            pts_adjust = -int(round(abs(ph)))
+            totals["stableford_net"] += pts_adjust
 
         thru = sum(1 for h in holes_out if h["strokes"] is not None)
         cards.append({
@@ -224,6 +241,7 @@ def build_cards(state: dict, formulas: dict, derive_hole=None) -> list[dict]:
             "is_member": bool(p.get("is_member", True)),
             "holes": holes_out,
             "thru": thru,
+            "points_plus_adjust": pts_adjust or None,
             "complete": thru == len(hole_meta) and len(hole_meta) > 0,
             "allocation_source": allocation_source,
             **totals,

@@ -13976,6 +13976,26 @@ def get_event_leaderboard(event_name: str,
         hole_pts: dict = {}
         try:
             formulas = get_scoring_formulas(db_path)
+            # A PLUS HANDICAP COMES OFF THE ROUND, NEVER OFF A HOLE
+            # (Kerry 2026-09-16, the rule Golf Genius cannot express:
+            # "For MVP nobody is allowed to have to add strokes on any
+            # given hole, so there should be no pluses on any holes. But
+            # his +3 PH still stands. The way it works on our side is
+            # that his total points gets deducted that 3 strokes. It's
+            # not fair to make a player have to perform on any one hole,
+            # but it should be applied across a round.")
+            #
+            # For POINTS, then: a give-back stroke is clamped to zero on
+            # every hole, and the plus is subtracted from the TOTAL once.
+            # The arithmetic lands in the same place; what changes is
+            # that no single hole is made harder than the card says.
+            # Stroke-play NET is untouched — there the total is the total
+            # either way.
+            _plus: dict = {}
+            for pr in conn.execute(
+                    "SELECT id, playing_handicap FROM scoring_rounds "
+                    "WHERE event_id = ? AND playing_handicap < 0", (ev["id"],)):
+                _plus[pr["id"]] = int(round(abs(pr["playing_handicap"])))
             for hr in conn.execute(
                     """SELECT sr.id AS rid, sh.hole_number, sh.strokes,
                               sh.strokes_received, cth.par
@@ -13987,9 +14007,11 @@ def get_event_leaderboard(event_name: str,
                        WHERE sr.event_id = ?
                          AND COALESCE(sr.source, 'gg') NOT LIKE 'gg_history%'""",
                     (ev["id"],)):
+                _recv = hr["strokes_received"] or 0
+                if hr["rid"] in _plus:
+                    _recv = max(0, _recv)
                 d = compute_hole_derivations(hr["par"], hr["strokes"],
-                                             hr["strokes_received"] or 0,
-                                             formulas)
+                                             _recv, formulas)
                 a = pts.setdefault(hr["rid"], {"net": 0, "gross": 0})
                 if d.get("stableford_net") is not None:
                     a["net"] += d["stableford_net"]
@@ -13997,6 +14019,10 @@ def get_event_leaderboard(event_name: str,
                         hr["hole_number"]] = d["stableford_net"]
                 if d.get("stableford_gross") is not None:
                     a["gross"] += d["stableford_gross"]
+            for rid, give in _plus.items():
+                if rid in pts:
+                    pts[rid]["net"] -= give
+                    pts[rid]["plus_adjust"] = -give
         except Exception:
             logger.warning("event leaderboard points failed", exc_info=True)
 
@@ -14142,6 +14168,7 @@ def get_event_leaderboard(event_name: str,
             "player_name": p["player_name"], "customer_id": cid,
             "scoring_round_id": p["scoring_round_id"],
             "net_pts": a.get("net"), "gross_pts": a.get("gross"),
+            "pts_plus_adjust": a.get("plus_adjust"),
             "net": p["net"], "gross": p["gross"],
             "buyer": cid in net_buyers if cid is not None else False,
             "won": _won_cats(cid, ("mvp", "tgf_mvp")) if cid is not None
@@ -14257,6 +14284,7 @@ def get_event_leaderboard(event_name: str,
                 if p["net"] is not None
                 and p["scoring_round_id"] in par_by_rid else None),
             "net_pts": a.get("net"),
+            "pts_plus_adjust": a.get("plus_adjust"),
             "win_net": "individual_net" in cats,
             "win_gross": "individual_gross" in cats,
             "win_skins": "skins" in cats,

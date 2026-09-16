@@ -3185,8 +3185,13 @@
         // 2026-09-14: "remove the total on that row in lieu of the total
         // already being in the main row").
         const gcPts = gameCol === false ? "" : `<td class="bl br gc"></td>`;
+        // A PLUS HANDICAP IS TAKEN OFF THE ROUND (Kerry 2026-09-16) —
+        // so the hole points deliberately do NOT add up to the total,
+        // and the row says so rather than leaving it looking like a bug.
+        const adj = r && r.pts_plus_adjust;
         return `<tr class="evlb-ptsrow">` +
-            `<td></td><td class="nm">PTS</td>` +
+            `<td></td><td class="nm"${adj ? ` title="Plus handicap: no hole is played off an added stroke — the ${Math.abs(adj)} comes off the round's total instead."` : ""}>PTS${
+                adj ? ` <span style="font-weight:700;">${adj}</span>` : ""}</td>` +
             `<td class="won br"></td>` +
             (afterWon ? gcPts : "") +
             `<td class="bl hc"></td><td class="br hc"></td>` +

@@ -869,3 +869,40 @@ $360 ($240/$120) / CTP $58×4 · SUN skins $360 / Team Net $250 WTA / CTP
 $48×4 · COMBINED Ind Net 2 flights × ($130/$78/$52) / Ind Gross 4 flights,
 F1 $120/$60 (incl. $60 top-cut) F2–4 $80/$40. Total $2,814. Locked against
 the 08-12 field — field moves ⇒ re-derive + re-confirm.
+
+## A plus handicap comes off the ROUND, never off a hole (2026-09-16)
+
+Kerry, watching Pat Youngs (+3) on the s9.23 MVP board:
+
+> "For MVP nobody is allowed to have to add strokes on any given hole, so
+> there should be no pluses on any holes. But his +3 PH still stands. The
+> way it works on our side is that his total points gets deducted that 3
+> strokes. It's not fair to make a player have to perform on any one
+> hole, but it should be applied across a round."
+
+Golf Genius allocates a plus handicap onto the easiest holes, so the
+player must birdie a specific hole just to score what a scratch player
+scores for a par. **This is the rule GG cannot express, and it is ours.**
+
+**The rule.** For POINTS (MVP / Points Races):
+
+1. Every hole is scored off **no strokes** for a plus player — a
+   give-back stroke is clamped to zero, so no hole is ever harder than
+   the card says.
+2. The plus is subtracted from the **round's points total**, once:
+   `points = Σ(hole points at scratch) − |PH|`.
+
+The aggregate lands in the same place as GG's per-hole allocation; what
+changes is that no single hole decides it.
+
+**What is NOT changed.** Stroke-play **Individual Net** and **Team Net**
+keep the real per-hole allocation — there the total is the total either
+way, and Team Net's best ball is a ratified per-hole game. Gross games
+(Skins, Individual Gross) never saw a handicap at all.
+
+**Where it lives.** `get_event_leaderboard` (the EVENTS board) and
+`live_scoring.build_cards` (the engine) apply the same two steps, and
+both publish the deduction — `pts_plus_adjust` / `points_plus_adjust` —
+so the board can print it. The PTS row shows the deduction beside the
+label, because hole points that deliberately do not add up to the total
+otherwise read as a bug. Test: `test_plus_handicap_points.py`.

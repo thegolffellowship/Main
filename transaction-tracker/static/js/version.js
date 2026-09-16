@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.449.0";
+window.TGF_VERSION = "2.450.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.450.0",
+    date: "2026-09-16",
+    changes: [
+      "A PLUS HANDICAP COMES OFF THE ROUND, NEVER OFF A HOLE \u2014 the rule Golf Genius cannot express (Kerry, on Pat Youngs at +3: \u2018For MVP nobody is allowed to have to add strokes on any given hole, so there should be no pluses on any holes. But his +3 PH still stands. The way it works on our side is that his total points gets deducted that 3 strokes. It\u2019s not fair to make a player have to perform on any one hole, but it should be applied across a round.\u2019) GG allocates the plus onto the easiest holes, so the player has to birdie a particular hole just to score what a scratch player scores for a par. For POINTS every hole is now scored off no strokes, and the plus is subtracted from the round\u2019s total once. The aggregate lands in the same place; what changes is that no single hole decides it.",
+      "Individual Net and Team Net are deliberately untouched \u2014 there the total is the total either way, and Team Net\u2019s best ball is a ratified per-hole game. The EVENTS board and the scoring engine apply the identical two steps, so a number cannot mean one thing live and another at closeout, and both publish the deduction so the PTS row can print it beside the label: hole points that deliberately do not add up to the total would otherwise read as a bug.",
+    ],
+  },
   {
     version: "2.449.0",
     date: "2026-09-16",
