@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.451.1";
+window.TGF_VERSION = "2.452.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.452.0",
+    date: "2026-09-16",
+    changes: [
+      "WHILE CARDS ARE STILL OUT, NOBODY IS A WINNER EITHER (Kerry: \u2018Why is Rob Burlingame showing as a Net Flight winner?\u2019 \u2014 he was not; he was tenth in his flight). Payouts recorded mid-round are a snapshot of a half-posted field, and the winner TINTS read off those recorded categories, so whoever happened to lead a flight when Record Payouts was tapped kept the winner\u2019s colour while the round played on. Blanking the dollars was never enough \u2014 a tinted total IS a claim about money. Every win flag is now cleared for as long as a single hole is missing, and they come back at the moment the field completes, which is also when the pot posts.",
+    ],
+  },
   {
     version: "2.451.1",
     date: "2026-09-16",

@@ -553,6 +553,8 @@ check("the hold is a dial, not a constant",
       db.get_event_leaderboard("s9.99 Test Links", db_path=_t2)["money_visible"] is False)
 db.set_app_setting("leaderboard_money_hold_minutes", "10", db_path=_t2)
 _cts = open("templates/contests.html", encoding="utf-8").read()
+check("a half-posted field names no WINNER either, not just no dollars",
+      "r.win_net = false" in _cts and "d.field_complete === false" in _cts)
 check("the page blanks every board's money in ONE place, not seven",
       "function evlbBlankMoney(d)" in _cts
       and "if (d.money_visible === false) evlbBlankMoney(d);" in _cts)

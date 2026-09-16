@@ -2793,12 +2793,29 @@
     // Strip every dollar off a board that is still in play, and leave a
     // line saying when the money posts.
     function evlbBlankMoney(d) {
-        (d.overall_board || []).forEach(r => { r.won_total = 0; r.won_by_cat = {}; r.won = []; });
+        // WHILE CARDS ARE STILL OUT, NOBODY IS A WINNER EITHER (Kerry
+        // 2026-09-16: "Why is Rob Burlingame showing as a Net Flight
+        // winner?"). Payouts recorded mid-round are a snapshot of a
+        // half-posted field, and the win TINTS read off those recorded
+        // categories — so a player who happened to lead a flight when
+        // someone tapped Record Payouts kept the winner's colour while
+        // the round played on. Blanking the dollars was never enough: a
+        // green total IS a claim about money. The flags come back the
+        // moment every hole is in, which is also when the pot posts.
+        const stillOut = d.field_complete === false;
+        const clearWins = r => {
+            if (!stillOut || !r || typeof r !== "object") return;
+            r.win_net = false; r.win_gross = false;
+            r.win_skins = false; r.win_mvp = false;
+        };
+        (d.overall_board || []).forEach(r => {
+            r.won_total = 0; r.won_by_cat = {}; r.won = []; clearWins(r); });
         ["net_board", "gross_board", "skins_board", "points_board", "team_board"].forEach(k => {
             (d[k] || []).forEach(r => {
                 if (r && typeof r === "object") {
-                    r.won_total = 0; r.won_by_cat = {}; r.won = [];
-                    (r.rows || []).forEach(x => { x.won_total = 0; x.won_by_cat = {}; x.won = []; });
+                    r.won_total = 0; r.won_by_cat = {}; r.won = []; clearWins(r);
+                    (r.rows || []).forEach(x => {
+                        x.won_total = 0; x.won_by_cat = {}; x.won = []; clearWins(x); });
                 }
             });
         });
