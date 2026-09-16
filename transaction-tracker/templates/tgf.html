@@ -1024,10 +1024,16 @@
                     const customerId = btn.dataset.customerId;
                     const name = btn.dataset.name;
                     const amount = parseFloat(btn.dataset.amount).toFixed(2);
+                    // Apple Pay added 2026-09-16 (Kerry paid Jesse
+                    // Saldana that way). An Apple Cash send leaves no
+                    // receipt email for the classifier, so it reconciles
+                    // off the bank line — it is still a payment method
+                    // like any other here.
                     const method = prompt(
                         `Mark ${name}'s $${amount} payout as PAID.\n\n` +
-                        `Payment method (paypal / cashapp / cash / check / zelle / other):`,
-                        "paypal"
+                        `Payment method (venmo / paypal / applepay / cashapp / ` +
+                        `zelle / cash / check / other):`,
+                        "venmo"
                     );
                     if (!method) return;
                     const paidDate = prompt("Paid date (YYYY-MM-DD), leave blank for today:") || "";

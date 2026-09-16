@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.453.0";
+window.TGF_VERSION = "2.454.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.454.0",
+    date: "2026-09-16",
+    changes: [
+      "APPLE PAY IS A PAYMENT METHOD (Kerry: \u2018Need to add Apple Pay as an option. Just sent Jesse\u2019s money that way\u2019). Added to the Mark Paid prompt and its server whitelist, and \u2014 protecting the class rather than the instance \u2014 to refunds, credit payouts and the customer payment-method field as well, since money leaves by all four doors. The recorded description and account read \u2018Apple Pay\u2019 rather than the capitalised slug.",
+      "The one thing that differs: an Apple Cash send leaves NO receipt email, so the expense classifier (which matches Venmo / PayPal / Cash App / Zelle receipts) has nothing to match on. An Apple Pay payout reconciles off the BANK line instead \u2014 it is not auto-verified the way a Venmo payout is, and the Mark Paid record is what carries it.",
+    ],
+  },
   {
     version: "2.453.0",
     date: "2026-09-16",

@@ -27221,7 +27221,8 @@ def update_customer_info(customer_name: str, fields: dict,
     payment_method = safe.pop("payment_method", None)
     if payment_method is not None:
         payment_method = (payment_method or "").strip().lower()
-        allowed_pm = {"venmo", "paypal", "cashapp", "zelle", "cash", "check", ""}
+        allowed_pm = {"venmo", "paypal", "cashapp", "zelle", "cash", "check",
+                      "applepay", ""}
         if payment_method and payment_method not in allowed_pm:
             raise ValueError(f"Invalid payment_method: {payment_method}")
     payment_handle = safe.pop("payment_handle", None)

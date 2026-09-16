@@ -7439,7 +7439,7 @@ def api_refund_item(item_id):
     """Mark an item as refunded via GoDaddy or Venmo."""
     data = request.get_json(silent=True) or {}
     method = data.get("method", "")
-    if method and method not in ("GoDaddy", "Venmo", "Zelle", "PayPal", "Cash App"):
+    if method and method not in ("GoDaddy", "Venmo", "Zelle", "PayPal", "Cash App", "Apple Pay"):
         return jsonify({"error": "Invalid refund method. Must be GoDaddy, Venmo, Zelle, PayPal, or Cash App."}), 400
     if refund_item(item_id, method=method, note=data.get("note", "")):
         return jsonify({"status": "ok"})
@@ -7456,7 +7456,7 @@ def api_payout_credit(item_id):
     """
     data = request.get_json(silent=True) or {}
     method = (data.get("method") or "").strip()
-    if method and method not in ("GoDaddy", "Venmo", "Zelle", "Check", "PayPal", "Cash App"):
+    if method and method not in ("GoDaddy", "Venmo", "Zelle", "Check", "PayPal", "Cash App", "Apple Pay"):
         return jsonify({"error": "Invalid method. Must be GoDaddy, Venmo, Zelle, Check, PayPal, or Cash App."}), 400
     refund_date = (data.get("date") or "").strip()
     if refund_date:
@@ -7591,7 +7591,7 @@ def api_partial_refund_item(item_id):
     # "Credit" (Kerry 2026-07-14) keeps the money in the house: the child
     # row is a CREDITED item (picked up by get_player_credits → Apply
     # Credit / balance emails) instead of an outbound refund.
-    if method and method not in ("Credit", "GoDaddy", "Venmo", "Zelle", "PayPal", "Cash App"):
+    if method and method not in ("Credit", "GoDaddy", "Venmo", "Zelle", "PayPal", "Cash App", "Apple Pay"):
         return jsonify({"error": "Invalid refund method."}), 400
     from email_parser.database import apply_partial_refund
     res = apply_partial_refund(
@@ -14645,10 +14645,21 @@ def api_tgf_mark_paid():
     if not event_id or not customer_id or not payment_method:
         return jsonify({"error": "event_id, customer_id, and payment_method required"}), 400
 
-    # Whitelist allowed sources
-    ALLOWED_SOURCES = {"paypal", "cashapp", "cash", "check", "zelle", "other"}
+    # Whitelist allowed sources. Apple Pay added 2026-09-16 (Kerry paid
+    # Jesse Saldana's $21 that way) — an Apple Cash send leaves no receipt
+    # email for the expense classifier to match, so it reconciles off the
+    # BANK line rather than a provider receipt. It is a payment method
+    # like any other here; only the matching path differs.
+    ALLOWED_SOURCES = {"paypal", "cashapp", "cash", "check", "zelle",
+                       "applepay", "venmo", "other"}
     if payment_method not in ALLOWED_SOURCES:
         return jsonify({"error": f"payment_method must be one of {sorted(ALLOWED_SOURCES)}"}), 400
+    # The label a human reads — "Applepay" is not a word.
+    _METHOD_LABEL = {"applepay": "Apple Pay", "cashapp": "Cash App",
+                     "paypal": "PayPal", "zelle": "Zelle", "venmo": "Venmo",
+                     "cash": "Cash", "check": "Check", "other": "Other"}
+    method_label = _METHOD_LABEL.get(payment_method,
+                                     payment_method.capitalize())
 
     if not paid_date:
         from datetime import date as _date
@@ -14678,7 +14689,7 @@ def api_tgf_mark_paid():
         event_name = pending[0]["event_name"]
 
         # Create the real acct_transaction for the payment
-        description = f"{payment_method.upper()} payout: {customer_name} — {event_name}"
+        description = f"{method_label.upper()} payout: {customer_name} — {event_name}"
         if reference:
             description += f" (ref: {reference})"
 
@@ -14694,7 +14705,7 @@ def api_tgf_mark_paid():
                 customer_name,
                 f"MANUAL-PAYOUT-{event_id}-{customer_id}",
                 -total_amount,
-                payment_method.capitalize(),
+                method_label,
                 event_name,
             ),
         )
