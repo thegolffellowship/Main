@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.450.0";
+window.TGF_VERSION = "2.451.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.451.0",
+    date: "2026-09-16",
+    changes: [
+      "THE BLIND SITS IN THE SEAT IT FILLS (Kerry: \u2018They should also show in the OPEN spaces themselves, not below\u2019), so a group reads top to bottom in cart order. The row is still an open seat: pick a bullpen player from it and the blind goes with the seat \u2014 \u2018I should be able to add a player from the bullpen directly over a BLIND, or click the blind and add from bullpen\u2019 \u2014 and the same menu still offers redraw and remove.",
+      "THE SELECTOR IS FAST NOW (Kerry: \u2018Blind selector is really slow to show the list, and then when selected, it doesn\u2019t show up for like 20 seconds\u2019). Two causes, both fixed: eligibility was asked through the builder that assembles every player in the league with trends and placeholders \u2014 seconds of work to answer a yes/no question about sixteen people \u2014 and is now a single counting query (established = at least the minimum rounds posted inside the lookback window, which a starting handicap fails on its own). And the eligible field now rides in with the pairings panel, so CHOOSE opens from state with no round trip, while writing a blind patches the seat in place instead of re-reading the whole sheet.",
+      "NEW means JOINED SINCE THE LAST EVENT (Kerry: \u2018NEW should be joined since last event. And a player could be both a 1T and a NEW like Morris Allen\u2019) \u2014 it was \u2018within the last year\u2019, which is the pairings cards\u2019 1Y badge, a different idea that keeps its meaning there. On the sheet NEW answers \u2018who is here for the first time since we last played\u2019, and both badges now show when both are true.",
+      "The tee key reads \u2018Men <50 \u00b7 Gold Tees\u2019 and \u2018Women \u00b7 Red Tees\u2019 (Kerry: \u2018Tee should say Tees. Women should just be: Women (no colored Red) Red Tees\u2019). The ladies\u2019 marker is dropped from the name because the band already says Women, and the outline swatch is what tells two Reds apart. The card\u2019s own spelling is kept separately for matching rows, so renaming what people read cannot break which tee a playing handicap comes off.",
+    ],
+  },
   {
     version: "2.450.0",
     date: "2026-09-16",

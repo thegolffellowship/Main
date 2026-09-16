@@ -5272,8 +5272,23 @@ def api_get_pairings(event_id):
         except Exception:
             logger.exception("Pair-count lookup failed for event %d "
                              "(non-fatal)", event_id)
+        # The blind pool rides along with the panel (Kerry 2026-09-16:
+        # "Blind selector is really slow to show the list") — CHOOSE then
+        # renders from state with no round trip at all.
+        blind_pool = None
+        try:
+            from email_parser.database import event_blind_pool
+            _bconn = get_connection()
+            try:
+                blind_pool = event_blind_pool(_bconn, event_id)
+            finally:
+                _bconn.close()
+        except Exception:
+            logger.exception("Blind pool lookup failed for event %d "
+                             "(non-fatal)", event_id)
         return jsonify({
             "pairings": pairings,
+            "blind_pool": blind_pool,
             "slots_9": slots_9,
             "slots_18": slots_18,
             "event_players": event_players,

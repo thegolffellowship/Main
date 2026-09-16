@@ -76,7 +76,13 @@ check("the chooser names who is NOT eligible, and why",
     /pool\.excluded/.test(html) && /e\.why/.test(html));
 
 check("an empty seat with nothing selected opens the picker",
-    /if \(!state\.selection\) \{[\s\S]{0,400}openPairingPicker\(slot, getUnassigned\(state\), holes,/.test(html));
+    /if \(!state\.selection\) \{[\s\S]{0,900}openPairingPicker\(slot, getUnassigned\(state\), holes,/.test(html));
+// A seat holding a BLIND offers the bullpen too — seating a real player
+// is the whole point of the blind going away (Kerry 2026-09-16).
+check("a blind sits IN its seat, and a bullpen player can take it",
+    /pairing-blind-slot/.test(html)
+    && /const onBlind = slot\.classList\.contains\('pairing-blind-slot'\)/.test(html)
+    && /if \(onBlind\) \{[\s\S]{0,300}mode: 'clear'/.test(html));
 
 check("picking a player seats them in that exact seat",
     /_movePlayer\(state, \{unassigned: true, name: pick\.name\},\s*\n\s*holes, groupNum, cartPos\);/.test(html));

@@ -340,13 +340,13 @@ c.commit()
 _leg = db.event_tee_legend(c, EV, {"course_id": COURSE})
 _by = {t["band"]: t for t in _leg}
 check("bands run longest tee first",
-      [_by[b]["tee_name"] for b in ("<50", "50-64", "65+")] == ["Gold Tee", "Blue Tee", "Red Tee"], str(_leg))
+      [_by[b]["tee_name"] for b in ("<50", "50-64", "65+")] == ["Gold Tees", "Blue Tees", "Red Tees"], str(_leg))
 # "(L)" reads as "(Ladies)" and the band reads "Women Red" (Kerry
 # 2026-09-15) — a member should not have to know what (L) means.
 check("Forward takes the ladies' tee when the card has one",
-      _by["Forward"]["tee_name"] == "Red (Ladies) Tee", str(_by.get("Forward")))
+      _by["Forward"]["tee_name"] == "Red Tees", str(_by.get("Forward")))
 check("…spelled out, and labelled by who plays it",
-      _by["Forward"]["band_label"] == "Women Red"
+      _by["Forward"]["band_label"] == "Women"
       and _by["<50"]["band_label"] == "Men <50", str(_by.get("Forward")))
 check("the ladies' tee sorts LAST in the legend, always",
       _leg[-1]["band"] == "Forward", str([t["band"] for t in _leg]))
@@ -371,11 +371,11 @@ c.execute("UPDATE course_tees SET yardage_total = 5200, rating = 70.0 WHERE tee_
 c.commit()
 _b2 = {t["band"]: t for t in db.event_tee_legend(c, EV, {"course_id": COURSE})}
 check("tee 1 is the under-50 tee whatever the yardages say",
-      _b2["<50"]["tee_name"] == "Gold Tee", str(_b2.get("<50")))
+      _b2["<50"]["tee_name"] == "Gold Tees", str(_b2.get("<50")))
 check("…tee 2 is 50-64 and tee 3 is 65+",
-      [_b2[b]["tee_name"] for b in ("50-64", "65+")] == ["Blue Tee", "Red Tee"], str(_b2))
+      [_b2[b]["tee_name"] for b in ("50-64", "65+")] == ["Blue Tees", "Red Tees"], str(_b2))
 check("the ladies' number is Forward, never the under-50 one",
-      _b2["Forward"]["tee_name"] == "Red (Ladies) Tee"
+      _b2["Forward"]["tee_name"] == "Red Tees"
       and _b2["Forward"]["tee_name"] != _b2["<50"]["tee_name"])
 # A card with NO tee numbers falls back to the yardage rule.
 c.execute("UPDATE course_tees SET tee_name = REPLACE(REPLACE(REPLACE(REPLACE("
@@ -383,7 +383,7 @@ c.execute("UPDATE course_tees SET tee_name = REPLACE(REPLACE(REPLACE(REPLACE("
 c.commit()
 _b2b = {t["band"]: t for t in db.event_tee_legend(c, EV, {"course_id": COURSE})}
 check("with no numbers on the card, the <50 tee is the one INSIDE 6300-6800",
-      _b2b["<50"]["tee_name"] == "Blue Tee", str(_b2b.get("<50")))
+      _b2b["<50"]["tee_name"] == "Blue Tees", str(_b2b.get("<50")))
 c.execute("UPDATE course_tees SET tee_name = '1 - ' || tee_name WHERE tee_name = 'Gold Tee'")
 c.execute("UPDATE course_tees SET tee_name = '2 - ' || tee_name WHERE tee_name = 'Blue Tee'")
 c.execute("UPDATE course_tees SET tee_name = '3 - ' || tee_name WHERE tee_name IN ('Red Tee', 'Red (L) Tee')")
@@ -394,7 +394,7 @@ c.execute("UPDATE course_tees SET yardage_total = 6128 WHERE tee_name = '1 - Gol
 c.commit()
 _b3 = {t["band"]: t for t in db.event_tee_legend(c, EV, {"course_id": COURSE})}
 check("a course whose longest tee is under 6300 still gets its back tee",
-      _b3["<50"]["tee_name"] == "Gold Tee", str(_b3.get("<50")))
+      _b3["<50"]["tee_name"] == "Gold Tees", str(_b3.get("<50")))
 check("a nine-hole card doubles to be judged on the same ruler",
       db.UNDER_50_YARDS_18 == (6300, 6800))
 

@@ -312,7 +312,9 @@
          never end up mid-column (Kerry 2026-09-15). #}
       {% if loop.index0 == _mid %}<div class="arow ahead colbreak">{{ _ahead }}</div>{% endif %}
       <div class="arow">
-        <span class="an">{{ a.sort_name }}{% if a.is_first_timer %}<span class="abadge ft">1T</span>{% elif a.is_new %}<span class="abadge nw">NEW</span>{% endif %}</span>
+        {# Both can be true and both show (Kerry 2026-09-16: "a player
+           could be both a 1T and a NEW like Morris Allen"). #}
+        <span class="an">{{ a.sort_name }}{% if a.is_first_timer %}<span class="abadge ft">1T</span>{% endif %}{% if a.is_new %}<span class="abadge nw">NEW</span>{% endif %}</span>
         <span class="atee">{{ tee_dot(a.tee_choice) }}</span>
         <span class="aidx">{% if a.handicap_index is not none %}{{ "%.1f"|format(a.handicap_index) }}{% else %}—{% endif %}</span>
         <span class="aph">{% if a.playing_handicap is not none %}{{ a.playing_handicap }}{% else %}&mdash;{% endif %}</span>
@@ -326,7 +328,7 @@
   <div class="foot">
     {# One note per ROW (Kerry 2026-09-15) — a run-on paragraph that
        wraps where the column happens to end is not a key. #}
-    <div class="fnote"><span class="abadge ft">1T</span> &mdash; first TGF event ever. <span class="abadge nw">NEW</span> &mdash; joined within the last year. The tee circle matches the TEES key above.</div>
+    <div class="fnote"><span class="abadge ft">1T</span> &mdash; first TGF event ever. <span class="abadge nw">NEW</span> &mdash; joined since our last event. The tee circle matches the TEES key above.</div>
     <div class="fnote"><strong>IDX</strong> &mdash; TGF handicap index{% if pack.holes_key == '9' %} (9-hole){% endif %}.</div>
     <div class="fnote"><strong>PH</strong> &mdash; playing handicap at 100%, from that index and the tee played{% if pack.ph_basis %} ({{ pack.ph_basis }}){% endif %}.</div>
     <div class="fnote"><strong>TEAM</strong> &mdash; Team Net handicap{% if pack.team_basis %}: {{ pack.team_basis }}{% endif %}.</div>

@@ -84,7 +84,7 @@ const boards={
   overall:{sections:[{label:null,rows:d.overall_board}],sort:'net'},
   net:{sections:secsFrom(d.net_board),sort:'net',game:'net',gameCol:false},
   gross:{sections:secsFrom(d.gross_board),sort:'gross',game:'gross',gameCol:false,netCol:false},
-  skins:{sections:secsFrom(d.skins_board),sort:'gamecol',game:'skins',gameCol:{key:'skins',label:'Skins',value:skinsCount},gameColAfterWon:true},
+  skins:{sections:secsFrom(d.skins_board),sort:'gamecol',game:'skins',gameCol:{key:'skins',label:'#',title:'Skins won',value:skinsCount},gameColAfterWon:true},
   points:{sections:[{label:null,rows:d.points_board.map(x=>ovOf(x,x.mvp_note)).filter(Boolean)}],sort:'keep',game:'points',grossCol:false},
   team:{teamBands:true,teams:d.teams,game:'team',gameCol:false,grossCol:false,sections:d.teams.map(t=>({label:`${t.position} · total ${t.gg_total}`,rows:t.players.map(x=>ovOf(x)).filter(Boolean)})),sort:'keep'},
 };
@@ -118,8 +118,12 @@ ck('gross: drops Pts and the net pair, three columns narrower',
 // TEAM drops Pts AND the gross pair (Kerry 2026-09-14) — three narrower
 ck('team: drops Pts and the gross pair, three columns narrower',
    colCount(htmls.team) === base - 3, colCount(htmls.team));
-ck('skins relabels the game column to Skins', /class="sortable bl br[^"]*">Skins</.test(htmls.skins), '');
-ck('points keeps Pts in that slot', /class="sortable bl br[^"]*">Pts</.test(htmls.points));
+// The SKINS count header is "#" under a tab that already says SKINS
+// (Kerry 2026-09-15: "SKINS not fitting in cell header"); the word rides
+// on the tooltip.
+ck('skins labels the count column # and names it on hover',
+   /title="Skins won"/.test(htmls.skins) && />#</.test(htmls.skins), '');
+ck('points keeps Pts in that slot', /title="Pts"[\s\S]{0,40}>Pts</.test(htmls.points));
 ck('net has no Pts column', !/>Pts</.test(htmls.net));
 for (const k of Object.keys(boards))
   ck(`${k}: has the hole-by-hole toggle`, htmls[k].includes('data-ovr-holes'));
@@ -439,8 +443,12 @@ ck('badges use the ratified category colours',
    /--cat-mvp/.test(src) && /--cat-tgf-mvp/.test(src));
 
 console.log('== the expanded card lines up with the board (Kerry 2026-09-14) ==');
+// Measured from the CARD's own edge, not the row's — the card sits in a
+// cell with its own padding (Kerry 2026-09-15: "not aligning perfectly").
 ck('the card measures the board rather than assuming a width',
-   /firstHole\.getBoundingClientRect\(\)\.left[\s\S]{0,120}playerRow\.getBoundingClientRect\(\)\.left/.test(src));
+   /firstHole\.getBoundingClientRect\(\)\.left[\s\S]{0,160}card\.getBoundingClientRect\(\)\.left/.test(src));
+ck('and it refuses to align off a HIDDEN hole cell',
+   /const hr = firstHole\.getBoundingClientRect\(\);[\s\S]{0,60}if \(!hr\.width\) return;/.test(src));
 ck('it reuses the board\'s own hole-width token',
    /getPropertyValue\("--evlb-hole-w"\)/.test(src));
 ck('the alignment CSS is scoped to the leaderboard card',
@@ -454,10 +462,12 @@ console.log('== an opened event pins to the top (Kerry 2026-09-14) ==');
   ck('opening an event scrolls it into place', /evlbPinToTop\(el\);/.test(src2));
   ck('only on OPEN, not on collapse',
      /if \(!el\.open\) return;[\s\S]{0,120}evlbPinToTop/.test(src2));
-  ck('the offset is MEASURED from the sticky chrome, not hard-coded',
-     /hdr \? hdr\.offsetHeight : 0[\s\S]{0,80}nav \? nav\.offsetHeight : 0/.test(src2));
+  // The whole sticky stack, not two named pieces of it — this page pins
+  // three bars (Kerry 2026-09-15: "Pin to top goes a little high").
+  ck('the offset is MEASURED from whatever is actually sticky',
+     /function evlbStickyTop\(\)[\s\S]{0,400}cs\.position !== "sticky"/.test(src2));
   ck('it targets the card top, which does not move as the body loads',
-     /el\.getBoundingClientRect\(\)\.top \+ window\.scrollY - pad/.test(src2));
+     /el\.getBoundingClientRect\(\)\.top \+ window\.scrollY[\s\S]{0,60}evlbStickyTop\(\)/.test(src2));
   ck('and it never scrolls to a negative offset', /Math\.max\(0, y\)/.test(src2));
 }
 
@@ -518,8 +528,11 @@ ck('every row type on GROSS has the same cell count',
 console.log('== SKINS count sits beside the money (Kerry 2026-09-14) ==');
 {
   const heads = [...htmls.skins.matchAll(/<th [^>]*>([^<]*)<\/th>/g)].map(m => m[1]);
-  ck('skins header order is # | Player | Won | Skins',
-     heads[2] === 'Won' && heads[3] === 'Skins', heads.slice(0, 5).join(' | '));
+  // The count column's label is "#" now, under a tab that already says
+  // SKINS (Kerry 2026-09-15); what matters here is that it sits right
+  // after the money.
+  ck('skins header order is # | Player | Won | #(skins)',
+     heads[2] === 'Won' && heads[3] === '#', heads.slice(0, 5).join(' | '));
   const nth = (row, n) => ((row || '').match(/<td[^>]*>/g) || [])[n] || '';
   const plr = (htmls.skins.match(/<tr class="evlb-plr[\s\S]*?<\/tr>/) || [''])[0];
   ck('skins player row: the count cell is fourth, right after the money',

@@ -420,6 +420,13 @@
         .pairing-player-row:hover { background: var(--bg-hover); }
         /* A BLIND is a drawn card, not a body in the cart — greyed,
            italic, and it never gets the drag cursor or an X. */
+        .pairing-empty-slot.pairing-blind-slot {
+            background: repeating-linear-gradient(45deg, #fafafa, #fafafa 6px, #f1f1f1 6px, #f1f1f1 12px);
+            color: var(--text-muted); font-style: italic;
+        }
+        .pairing-empty-slot.pairing-blind-slot .pairing-player-name {
+            font-weight: 600; letter-spacing: 0.02em;
+        }
         .pairing-player-row.pairing-blind-row {
             background: repeating-linear-gradient(45deg, #fafafa, #fafafa 6px, #f1f1f1 6px, #f1f1f1 12px);
             color: var(--text-muted); font-style: italic; cursor: default;
@@ -6728,7 +6735,22 @@
                 }
                 const player = byPos[pos];
                 if (!player) {
-                    html += `<div class="pairing-empty-slot" title="Open spot — click to pick a player from the roster, or select a player/cart pair first and click here"
+                    // A BLIND SITS IN THE SEAT IT FILLS (Kerry
+                    // 2026-09-16: "They should also show in the OPEN
+                    // spaces themselves, not below"), so the group reads
+                    // top to bottom in cart order. The row is still an
+                    // open seat: a bullpen player dropped or clicked
+                    // onto it replaces the blind.
+                    const bl = (grp.blinds || []).find(b => b.cart_pos === pos);
+                    if (bl) {
+                        html += `<div class="pairing-empty-slot pairing-blind-slot" data-blind-seat="${holes}:${grp.group_num}:${pos}"
+                            title="BLIND — ${escapeHtml(bl.name || '')}'s card plays for this team. Nobody is in the cart. Click to redraw, remove, or seat a real player here."
+                            data-ev-id="${ev.id}" data-holes="${holes}" data-group-num="${grp.group_num}" data-cart-pos="${pos}">
+                            <span class="pairing-cart-dot" style="background:#bbb;"></span>
+                            <span class="pairing-player-name">BLIND &middot; ${escapeHtml(bl.name || '')}</span></div>`;
+                        continue;
+                    }
+                    html += `<div class="pairing-empty-slot" title="Open spot — click to pick a player from the roster or add a BLIND, or select a player/cart pair first and click here"
                         data-ev-id="${ev.id}" data-holes="${holes}" data-group-num="${grp.group_num}" data-cart-pos="${pos}">
                         <span class="pairing-cart-dot" style="background:var(--border);"></span>
                         <span class="pairing-player-name">— open —</span></div>`;
@@ -6869,16 +6891,15 @@
                 html += '</div>';
             }
 
-            // BLINDS (Kerry 2026-09-15). A blind is not a seat — it is a
-            // drawn card completing a short team for Team Net — so it
-            // renders under the foursome, marked, and is never draggable
-            // and never has an X. Removing it means redrawing.
-            (grp.blinds || []).forEach(b => {
-                html += `<div class="pairing-player-row pairing-blind-row" data-blind-seat="${holes}:${grp.group_num}:${b.cart_pos}" data-ev-id="${ev.id}" title="BLIND draw — ${escapeHtml(b.name || '')}'s card plays for this team. Nobody is in the cart. Click to redraw or remove.">`
-                    + '<span class="pairing-cart-dot" style="background:#bbb;"></span>'
-                    + `<span class="pairing-player-name">BLIND &middot; ${escapeHtml(b.name || '')}</span>`
-                    + '</div>';
-            });
+            // A blind past the seat count (a sheet edited after the draw)
+            // still has to be visible rather than silently dropped.
+            (grp.blinds || []).filter(b => (b.cart_pos || 0) > seatCount)
+                .forEach(b => {
+                    html += `<div class="pairing-player-row pairing-blind-row" data-blind-seat="${holes}:${grp.group_num}:${b.cart_pos}" data-ev-id="${ev.id}" title="BLIND — ${escapeHtml(b.name || '')}'s card plays for this team.">`
+                        + '<span class="pairing-cart-dot" style="background:#bbb;"></span>'
+                        + `<span class="pairing-player-name">BLIND &middot; ${escapeHtml(b.name || '')}</span>`
+                        + '</div>';
+                });
 
             // Drop rail for drag-and-drop (Kerry 2026-07-31). Hidden
             // until a player is dragged over this card; the label says
@@ -6961,6 +6982,7 @@
             state.standingsPoints = data.standings_points || {};
             state.standingsEnrolled = data.standings_enrolled || {};
             state.pairCounts = data.pair_counts || {};
+            state.blindPool = data.blind_pool || null;
             return state.event_players.length;
         } catch (e) {
             return null;
@@ -6997,6 +7019,7 @@
             state.standingsPoints = data.standings_points || {};
             state.standingsEnrolled = data.standings_enrolled || {};
             state.pairCounts = data.pair_counts || {};
+            state.blindPool = data.blind_pool || null;
             state.isDirty = false;
             state.loaded = true;
             seedPairHistory(state);   // undo starts from what was saved
@@ -9590,6 +9613,7 @@
             if (data.standings_points) state.standingsPoints = data.standings_points;
             if (data.standings_enrolled) state.standingsEnrolled = data.standings_enrolled;
             if (data.pair_counts) state.pairCounts = data.pair_counts;
+            if (data.blind_pool) state.blindPool = data.blind_pool;
             state.isDirty = true;
             state.swapMode = null; state.selection = null;
             state.loaded = true;
@@ -10379,8 +10403,10 @@
             });
         });
 
-        // A BLIND can be redrawn or removed — click it (Kerry 2026-09-15).
-        container.querySelectorAll('[data-blind-seat]').forEach(row => {
+        // A BLIND past the seat count still opens its own menu; a blind
+        // sitting IN a seat is handled by the empty-seat listener below,
+        // which also lets a bullpen player take the seat off it.
+        container.querySelectorAll('.pairing-blind-row[data-blind-seat]').forEach(row => {
             row.addEventListener('click', e => {
                 e.stopPropagation();
                 const [bHoles, gnum, cpos] = row.dataset.blindSeat.split(':');
@@ -10401,19 +10427,31 @@
                 const holes = slot.dataset.holes;
                 const groupNum = parseInt(slot.dataset.groupNum);
                 const cartPos = parseInt(slot.dataset.cartPos);
+                const onBlind = slot.classList.contains('pairing-blind-slot');
                 if (!state.selection) {
                     // Nothing picked up yet — offer the unassigned roster
                     // right at the seat (Kerry 2026-09-08). Before this the
                     // only way in was Move mode + a click in the Unassigned
                     // panel, which is a long way from the empty chair you
-                    // are looking at.
+                    // are looking at. On a seat holding a BLIND the same
+                    // menu also offers redraw / remove, and seating a real
+                    // player clears the blind (Kerry 2026-09-16: "I should
+                    // be able to add a player from the bullpen directly
+                    // over a BLIND").
                     openPairingPicker(slot, getUnassigned(state), holes, pick => {
                         _movePlayer(state, {unassigned: true, name: pick.name},
                                     holes, groupNum, cartPos);
                         state.isDirty = true; state.selection = null;
                         commitPairHistory(state);
-                        rerenderDetail(container, ev);
-                    }, {ev, holes, groupNum, cartPos, container});
+                        if (onBlind) {
+                            // A real player took the seat — the blind that
+                            // was standing in for them goes.
+                            blindSeat({ev, holes, groupNum, cartPos, container},
+                                      {mode: 'clear'});
+                        } else {
+                            rerenderDetail(container, ev);
+                        }
+                    }, {ev, holes, groupNum, cartPos, container}, onBlind);
                     return;
                 }
                 if (state.swapMode === 'cartpair') {
@@ -10442,7 +10480,14 @@
                     _movePlayer(state, state.selection, holes, groupNum, cartPos);
                 }
                 state.isDirty = true; state.selection = null; commitPairHistory(state);
-                rerenderDetail(container, ev);
+                if (onBlind) {
+                    // A real player just took the seat the blind was
+                    // holding — the blind goes with it.
+                    blindSeat({ev, holes, groupNum, cartPos, container},
+                              {mode: 'clear'});
+                } else {
+                    rerenderDetail(container, ev);
+                }
             });
         });
 
@@ -10527,10 +10572,10 @@
         closePairingPicker();
         const menu = document.createElement('div');
         menu.className = 'pairing-pick-menu';
-        let inner = seated ? '' : '<div class="pairing-pick-head">Seat a player</div>';
-        if (seated) {
-            // The row IS the blind — there is nobody to seat here.
-        } else if (!players.length) {
+        // A seat holding a BLIND still offers the bullpen — seating a
+        // real player is the whole point of the blind going away.
+        let inner = '<div class="pairing-pick-head">Seat a player</div>';
+        if (!players.length) {
             inner += '<div class="pairing-pick-empty">Everyone on the roster is already in a group.</div>';
         } else {
             players.forEach((p, i) => {
@@ -10616,7 +10661,18 @@
             });
             const d = await res.json();
             if (!res.ok || d.error) { alert(d.error || res.statusText); return; }
-            await loadPairings(ctx.ev.id);
+            // Patch the sheet in place. Re-reading the whole panel took
+            // long enough that the seat looked broken (Kerry 2026-09-16:
+            // "when selected, it doesn't show up for like 20 seconds").
+            const st = getPairingsState(ctx.ev.id);
+            if (st.blindPool) st.blindPool = null;   // counts moved
+            const grp = _findGroup(st, ctx.holes, ctx.groupNum);
+            if (grp) {
+                grp.blinds = (grp.blinds || []).filter(
+                    b => b.cart_pos !== ctx.cartPos);
+                if (d.name) grp.blinds.push({cart_pos: ctx.cartPos,
+                    name: d.name, customer_id: d.customer_id, source: 'app'});
+            }
             rerenderDetail(ctx.container, ctx.ev);
         } catch (err) {
             alert('Blind failed: ' + (err.message || err));
@@ -10626,17 +10682,22 @@
     /** CHOOSE — the eligible field, fewest blinds first, each with the
      *  count that put them there so the choice is informed. */
     async function openBlindChooser(anchor, ctx) {
-        let pool;
-        try {
-            const res = await fetch(`/api/events/${ctx.ev.id}/pairings/blinds`, {
-                method: 'POST', headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({mode: 'pool',
-                    seat: {holes: ctx.holes, group_num: ctx.groupNum,
-                           cart_pos: ctx.cartPos}}),
-            });
-            pool = await res.json();
-            if (!res.ok || pool.error) { alert(pool.error || res.statusText); return; }
-        } catch (err) { alert('Could not load the eligible field.'); return; }
+        // The pool rides in with the panel, so the list is instant
+        // (Kerry 2026-09-16). The fetch is only the cold-start path.
+        let pool = getPairingsState(ctx.ev.id).blindPool;
+        if (!pool) {
+            try {
+                const res = await fetch(`/api/events/${ctx.ev.id}/pairings/blinds`, {
+                    method: 'POST', headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({mode: 'pool',
+                        seat: {holes: ctx.holes, group_num: ctx.groupNum,
+                               cart_pos: ctx.cartPos}}),
+                });
+                pool = await res.json();
+                if (!res.ok || pool.error) { alert(pool.error || res.statusText); return; }
+                getPairingsState(ctx.ev.id).blindPool = pool;
+            } catch (err) { alert('Could not load the eligible field.'); return; }
+        }
         closePairingPicker();
         const menu = document.createElement('div');
         menu.className = 'pairing-pick-menu';

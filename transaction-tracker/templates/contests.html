@@ -2814,65 +2814,6 @@
     // say so. The colour is the COURSE's own tee colour, the same map
     // the starter sheet prints, so the two can never disagree. Rendered
     // in the ONE shared name cell rather than per tab.
-    /** "PALACIOS, Richard" -> "richard palacios"; a plain name is just
-     *  lowercased. The boards mix both spellings. */
-    function evlbFlipName(nm) {
-        const s2 = String(nm || "").trim();
-        if (!s2.includes(",")) return s2.toLowerCase();
-        const [last, first] = s2.split(",");
-        return ((first || "").trim() + " " + (last || "").trim())
-            .trim().toLowerCase();
-    }
-
-    // The key to the dots (Kerry 2026-09-15: "Need to show legend up
-    // top for TEE colors. Right of the check boxes on the same row on
-    // desktop. move to row below if narrow or on mobile."). A swatch
-    // with no key is decoration; the same course colours and the same
-    // "duplicate colour gets a ring" rule as the starter sheet's legend,
-    // so the two pages read identically.
-    /** How a swatch is painted. A WHITE tee is a black outline round
-     *  white, or it disappears into the page; the WOMEN'S tee is an
-     *  outline in its own colour, the mark the starter sheet has always
-     *  printed (Kerry 2026-09-15: "Just show as Red outline like we did
-     *  on the STARTER SHEET report"). */
-    function evlbTeeFill(t) {
-        if (t.ring) return `background:#fff;box-shadow:inset 0 0 0 2px ${t.color};`;
-        const pale = /^#(f|e)/i.test(t.color || "");
-        return `background:${t.color};`
-            + (pale ? "box-shadow:inset 0 0 0 1.5px #1B1B1B;" : "");
-    }
-
-    function evlbTeeLegend(d) {
-        const legend = (d && d.tee_legend) || [];
-        if (!legend.length) return "";
-        return `<div class="evlb-teekey" aria-label="Tee colours">` +
-            legend.map(t =>
-                `<span class="evlb-teekey-item" title="${escapeHtml(t.band_label || t.band || "")}">`
-                + `<span class="evlb-tee-dot" style="${evlbTeeFill(t)}"></span>`
-                + `${escapeHtml(t.tee_name || t.band_label || t.band || "")}</span>`
-            ).join("") + `</div>`;
-    }
-    // KEYED OFF THE EVENT'S OWN PAYLOAD, never a page-level global
-    // (Kerry 2026-09-15: "Tee color circles need to persist in all
-    // views"). A single global belongs to whichever event loaded LAST —
-    // open two events and the first one's names stopped matching, so its
-    // dots quietly vanished. Every caller already holds its own `d`.
-    function evlbTeeDot(d, r, place) {
-        const map = (d && d.tee_by_player) || {};
-        const t = (r && r.customer_id != null && map["c:" + r.customer_id])
-            || (r && r.player_name && map["n:" + String(r.player_name).trim().toLowerCase()])
-            // A GG board name is "LAST, First"; the sheet's is "First
-            // Last". Try the flip before giving up, or every board that
-            // carries GG spelling loses its dots.
-            || (r && r.player_name && map["n:" + evlbFlipName(r.player_name)]);
-        if (!t || !t.color) return "";
-        return `<span class="evlb-tee-dot${place === "right" ? " right" : ""}"`
-            + ` title="${escapeHtml(t.tee_name || "")}`
-            + `${t.band_label ? " (" + escapeHtml(t.band_label) + ")"
-                : (t.band ? " (" + escapeHtml(t.band) + ")" : "")}" `
-            + `style="${evlbTeeFill(t)}"></span>`;
-    }
-
     function evlbMoneyNotice(d) {
         if (!d || !d._moneyHeld) return "";
         const mins = d.money_hold_minutes || 10;
@@ -2935,6 +2876,65 @@
     // flight 2 green, flight 3 blue, then amber/violet. A game with no
     // flights (or an unresolved one) paints as flight 1.
     const EVLB_FLIGHT_COLORS = ["#DC2626", "#15803D", "#2563EB", "#B45309", "#6D28D9"];
+
+    /** "PALACIOS, Richard" -> "richard palacios"; a plain name is just
+     *  lowercased. The boards mix both spellings. */
+    function evlbFlipName(nm) {
+        const s2 = String(nm || "").trim();
+        if (!s2.includes(",")) return s2.toLowerCase();
+        const [last, first] = s2.split(",");
+        return ((first || "").trim() + " " + (last || "").trim())
+            .trim().toLowerCase();
+    }
+
+    // The key to the dots (Kerry 2026-09-15: "Need to show legend up
+    // top for TEE colors. Right of the check boxes on the same row on
+    // desktop. move to row below if narrow or on mobile."). A swatch
+    // with no key is decoration; the same course colours and the same
+    // "duplicate colour gets a ring" rule as the starter sheet's legend,
+    // so the two pages read identically.
+    /** How a swatch is painted. A WHITE tee is a black outline round
+     *  white, or it disappears into the page; the WOMEN'S tee is an
+     *  outline in its own colour, the mark the starter sheet has always
+     *  printed (Kerry 2026-09-15: "Just show as Red outline like we did
+     *  on the STARTER SHEET report"). */
+    function evlbTeeFill(t) {
+        if (t.ring) return `background:#fff;box-shadow:inset 0 0 0 2px ${t.color};`;
+        const pale = /^#(f|e)/i.test(t.color || "");
+        return `background:${t.color};`
+            + (pale ? "box-shadow:inset 0 0 0 1.5px #1B1B1B;" : "");
+    }
+
+    function evlbTeeLegend(d) {
+        const legend = (d && d.tee_legend) || [];
+        if (!legend.length) return "";
+        return `<div class="evlb-teekey" aria-label="Tee colours">` +
+            legend.map(t =>
+                `<span class="evlb-teekey-item" title="${escapeHtml(t.band_label || t.band || "")}">`
+                + `<span class="evlb-tee-dot" style="${evlbTeeFill(t)}"></span>`
+                + `${escapeHtml(t.tee_name || t.band_label || t.band || "")}</span>`
+            ).join("") + `</div>`;
+    }
+    // KEYED OFF THE EVENT'S OWN PAYLOAD, never a page-level global
+    // (Kerry 2026-09-15: "Tee color circles need to persist in all
+    // views"). A single global belongs to whichever event loaded LAST —
+    // open two events and the first one's names stopped matching, so its
+    // dots quietly vanished. Every caller already holds its own `d`.
+    function evlbTeeDot(d, r, place) {
+        const map = (d && d.tee_by_player) || {};
+        const t = (r && r.customer_id != null && map["c:" + r.customer_id])
+            || (r && r.player_name && map["n:" + String(r.player_name).trim().toLowerCase()])
+            // A GG board name is "LAST, First"; the sheet's is "First
+            // Last". Try the flip before giving up, or every board that
+            // carries GG spelling loses its dots.
+            || (r && r.player_name && map["n:" + evlbFlipName(r.player_name)]);
+        if (!t || !t.color) return "";
+        return `<span class="evlb-tee-dot${place === "right" ? " right" : ""}"`
+            + ` title="${escapeHtml(t.tee_name || "")}`
+            + `${t.band_label ? " (" + escapeHtml(t.band_label) + ")"
+                : (t.band ? " (" + escapeHtml(t.band) + ")" : "")}" `
+            + `style="${evlbTeeFill(t)}"></span>`;
+    }
     // Hole-by-hole on LANDING is per board (Kerry 2026-09-14: "OVERALL
     // view is only one that should actually show Hole by Hole on
     // landing") — Overall opens with the grid, every game tab opens on

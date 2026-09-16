@@ -13654,8 +13654,8 @@ def get_event_leaderboard(event_name: str,
                                         label, re.I))
                 tee_legend.append({
                     "band": None,
-                    "tee_name": re.sub(r"\((?:l|lady|ladies)\)", "(Ladies)",
-                                       label, flags=re.I),
+                    "tee_name": _tee_name_plural(label),
+                    "band_label": "Women" if ladies else None,
                     "color": col, "ladies": ladies,
                     # An outline, always — the starter sheet's own mark
                     # for the women's tee (Kerry 2026-09-15).
@@ -13663,10 +13663,12 @@ def get_event_leaderboard(event_name: str,
             # …and the ladies' tee sorts LAST, always.
             tee_legend.sort(key=lambda t: 1 if t["ladies"] else 0)
             _leg_by_label = {}
+            for t, (lbl, _o) in zip(tee_legend,
+                                    sorted(set(_lbl_of.values()),
+                                           key=lambda x: (x[1], x[0]))):
+                _leg_by_label[lbl] = t
             for t in tee_legend:
-                _leg_by_label[t["tee_name"]] = t
-                _leg_by_label[re.sub(r"\(Ladies\)", "(L)",
-                                     t["tee_name"])] = t
+                _leg_by_label.setdefault(t["tee_name"], t)
             for r in played:
                 lbl = _lbl_of.get(r["tee_name"])
                 _t = _leg_by_label.get(lbl[0]) if lbl else None
@@ -55889,16 +55891,35 @@ def _established_index_by_customer(db_path=None) -> dict:
     record. Both are excluded here, which is the difference between a
     number to look at and a number to play for money off.
     """
+    # Asked DIRECTLY rather than through get_all_handicap_players (Kerry
+    # 2026-09-16: "Blind selector is really slow to show the list"). That
+    # builder assembles every player in the league with trends and
+    # placeholders — seconds of work to answer a yes/no question about
+    # sixteen people. ESTABLISHED is exactly: at least `min_rounds`
+    # posted differentials inside the lookback window. A starting
+    # handicap has no rounds at all, so it fails this on its own.
     out = {}
     try:
-        rows_ = get_all_handicap_players(db_path)
+        cfg = get_handicap_settings(db_path)
+        min_rounds = int(cfg.get("min_rounds", 3))
+        months = int(cfg.get("lookback_months", 12))
+        cutoff = (datetime.now() - timedelta(days=months * 30.44)
+                  ).strftime("%Y-%m-%d")
+        with _connect(db_path) as conn:
+            for r in conn.execute(
+                    """SELECT l.customer_id AS cid, COUNT(*) AS n,
+                              AVG(r.differential) AS idx
+                         FROM handicap_rounds r
+                         JOIN handicap_player_links l
+                           ON l.player_name = r.player_name
+                        WHERE l.customer_id IS NOT NULL
+                          AND r.differential IS NOT NULL
+                          AND r.round_date >= ?
+                        GROUP BY l.customer_id""", (cutoff,)):
+                if (r["n"] or 0) >= min_rounds:
+                    out[int(r["cid"])] = round((r["idx"] or 0) * 2, 1)
     except sqlite3.Error:
         return out          # no handicap tables yet (fresh db, tests)
-    for p in rows_:
-        cid = p.get("customer_id")
-        if (cid and p.get("handicap_source") == "computed"
-                and p.get("handicap_index") is not None):
-            out[int(cid)] = p.get("handicap_index_18") or p["handicap_index"]
     return out
 
 
@@ -56566,6 +56587,16 @@ def event_team_net_dial(conn, ev: dict) -> tuple[int, float, str]:
                               f"in the group")
 
 
+def _tee_name_plural(name: str) -> str:
+    """'3 - Red (L) Tee' -> 'Red Tees' (Kerry 2026-09-16). The order
+    prefix is bookkeeping, '(L)' is said better by the band label
+    ('Women'), and TGF says TEES."""
+    n = _TEE_ORDER_RE.sub("", " ".join((name or "").split())).strip()
+    n = re.sub(r"\s*\((?:l|lady|ladies)\)", "", n, flags=re.I).strip()
+    n = re.sub(r"\bTees?\b\s*$", "", n, flags=re.I).strip()
+    return f"{n} Tees" if n else n
+
+
 def _tee_color_for(tee_name: str) -> str | None:
     low = " ".join((tee_name or "").split()).lower()
     for word, hexv in _TEE_COLOR_WORDS.items():
@@ -56674,15 +56705,20 @@ def event_tee_legend(conn, event_id: int, ev: dict) -> list:
         # Men 65+, and Forward to Women [Color]". A member should not
         # have to know that "(L)" or "Forward" is the women's tee.
         ladies = bool(re.search(r"\((?:l|lady|ladies)\)", nm, re.I))
-        label = re.sub(r"\((?:l|lady|ladies)\)", "(Ladies)", nm, flags=re.I)
-        colour_word = next((w.title() for w in _TEE_COLOR_WORDS
-                            if re.search(rf"\b{w}\b", nm.lower())), "")
+        # "Tee should say Tees. Women should just be: Women (no colored
+        # 'Red') Red Tees" (Kerry 2026-09-16). The ladies' marker is
+        # dropped from the NAME because the band already says Women, and
+        # the outline swatch is what tells two Reds apart.
+        label = _tee_name_plural(nm)
+        raw_label = _TEE_ORDER_RE.sub("", nm).strip()
         band_label = {"<50": "Men <50", "50-64": "Men 50-64",
                       "65+": "Men 65+"}.get(
-            band, f"Women {colour_word}".strip() if ladies or band == "Forward"
-            else band)
+            band, "Women" if (ladies or band == "Forward") else band)
         out.append({"band": band, "band_label": band_label,
-                    "tee_name": label, "color": col,
+                    "tee_name": label,
+                    # What the COURSE CARD calls it — the printed name is
+                    # for people, this is for matching rows.
+                    "tee_key": raw_label, "color": col,
                     "ladies": ladies,
                     # The ladies' tee is an OUTLINE, always — the same
                     # mark the starter sheet has always printed, and it
@@ -57083,7 +57119,8 @@ def _event_tee_rows(conn, ev: dict, legend: list) -> tuple[dict, str, str]:
 
     out, ambiguous = {}, False
     for entry in legend:
-        cands = [r for r in rows if _label(r["tee_name"]) == entry["tee_name"]
+        _want = entry.get("tee_key") or entry["tee_name"]
+        cands = [r for r in rows if _label(r["tee_name"]) == _want
                  and r["slope"] and r["rating"] is not None
                  and ((r["rating"] >= 50) == is18)]
         if not cands:
@@ -57155,10 +57192,26 @@ def get_event_print_pack(event_id: int, db_path=None) -> dict | None:
         # looking after. Flags come from the ROSTER, the one place that
         # decides them (`_decorate_roster_roles` / `_mark_first_timers`),
         # so the sheet and the pairings cards can never disagree.
+        # NEW means JOINED SINCE THE LAST EVENT (Kerry 2026-09-16: "NEW
+        # should be joined since last event. And a player could be both a
+        # 1T and a NEW like Morris Allen."). The pairings cards' 1Y badge
+        # is a different idea — first-year member — and keeps its meaning
+        # there; on the starter sheet NEW answers "who is here for the
+        # first time since we last played", which is what a captain
+        # scans for. The two badges are independent and both can show.
+        _prev = conn.execute(
+            """SELECT MAX(event_date) AS d FROM events
+                WHERE event_date < ? AND event_date IS NOT NULL
+                  AND (chapter = ? OR ? IS NULL)""",
+            (ev.get("event_date"), ev.get("chapter"), ev.get("chapter"))
+        ).fetchone()
+        _prev_date = (_prev["d"] if _prev else None) or None
         _roles: dict = {}
         try:
             for _r in _event_roster_rows(conn, event_id):
-                _rec = {"is_new": bool(_r.get("is_new")),
+                _start = (_r.get("first_member_start") or "")[:10]
+                _rec = {"is_new": bool(_start and _prev_date
+                                       and _start > _prev_date),
                         "is_first_timer": bool(_r.get("is_first_timer"))}
                 if _r.get("customer_id"):
                     _roles[f"c:{_r['customer_id']}"] = _rec
