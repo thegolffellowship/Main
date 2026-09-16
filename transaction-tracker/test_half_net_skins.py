@@ -13,21 +13,47 @@ net birdie, which is exactly what GG's own detail line says ("Birdie on 7").
 The buyer count had silently changed WHICH GAME WAS PLAYED, and the rules of
 that game lived only in a Golf Genius settings screen.
 
-WHAT IS PROVEN AND WHAT IS NOT. GG's detail strings are relative to par and
-therefore pin the allocation from the outside:
+WHY OUR FIRST NET ATTEMPT STILL MISSED. Reading the game right was not
+enough: we applied the 50% allowance to the ROUNDED playing handicap. That
+double-rounds. GG states the rule on its own settings page — "The World
+Handicap System requires full precision to be maintained in intermediary
+calculations. Rounding is performed only once and as the last step" — and
+its worked example for Eduardo Melchor shows it:
+
+    index 5.6, Blue (slope 139 / rating 36.0 / par 36), front nine
+    CH   = 5.6 x 139/113 = 6.888...        <- unrounded, carried
+    x50% = 3.444...                         <- allowance on the float
+    round once -> PH 3                      <- GG's published column
+
+Double-rounding gives round(6.888) = 7, then 7 x 50% = 3.5, a different
+number that pays a different skin. That single misplaced rounding, not any
+exotic tie-breaking rule, is what made Melchor look like he was owed a
+fifth skin GG never paid.
+
+WHAT IS PROVEN. Ratified 2026-09-16 from Kerry's GG league handicap settings
+and GG's own worked example. The pipeline below reproduces GG's PUBLISHED
+PLAYING HANDICAP COLUMN for all four players AND its skins board and dollars
+exactly, which is a stronger result than matching the board alone:
+
+    STRAITON, Robert  index 0.4  Blue   -> PH 0      (GG: 0)
+    ZAPATA,  Carlos   index 5.6  White  -> PH 3      (GG: 3)
+    MELCHOR, Eduardo  index 5.6  Blue   -> PH 3      (GG: 3)
+    YOUNGS,  Luke     index 0.5  Blue   -> PH 0      (GG: 0)
 
     YOUNGS, Luke    "Par on 2, Birdie on 3, Eagle on 5"   $39
     ZAPATA, Carlos  "Birdie on 7"                         $13   (pot $52)
 
-Luke's hole 5 is a par 5 he made in 3. GG calls that an EAGLE, so Luke
-received ZERO strokes — with a stroke it would have been an Albatross. His
-playing handicap is 1.0, so 50% = 0.5 rounded DOWN. That eliminates
-round-half-up and is the only rounding fact this event establishes.
+Melchor and Zapata BOTH land on 3 — which is why no independent rounding of
+"2.5 and 3.5" was ever going to work. Those numbers never existed.
 
-It does NOT establish what 2.5 (Zapata) and 3.5 (Melchor) do. Every naive
-independent rounding hands Eduardo Melchor a fifth skin that GG did not pay.
-That gap is CA Queue #7 and is asserted below so nobody closes it by
-guessing.
+WHAT RESTS ON THE SETTING RATHER THAN THE REPLAY. GG is set to "Allocate
+strokes based on the full card Stroke Index Allocation", so a stroke lands
+only where the 18-hole stroke index is <= the playing handicap. On this
+front nine (odd indexes) a PH of 3 therefore delivers only TWO strokes,
+because index 2 is on the back nine and is not played. a9.23 does NOT
+discriminate full-card from subset allocation — both reproduce its board —
+so that dial is ratified by Kerry's settings screen, not by this event, and
+the test below records exactly that.
 
 Run: python3 test_half_net_skins.py
 """
@@ -65,8 +91,25 @@ GROSS = {
     "MELCHOR, Eduardo": {1: 5, 2: 5, 3: 5, 4: 5, 5: 6, 6: 6, 7: 7, 8: 4, 9: 5},
     "STRAITON, Robert": {1: 5, 2: 5, 3: 6, 4: 7, 5: 6, 6: 3, 7: 5, 8: 3, 9: 5},
 }
+# The card's ROUNDED playing handicap, as the event's headline net game
+# carried it. A per-game allowance must NOT be applied to these.
 PH = {"YOUNGS, Luke": 1.0, "ZAPATA, Carlos": 5.0,
       "MELCHOR, Eduardo": 7.0, "STRAITON, Robert": 0.0}
+
+# Index and tee as GG published them, front nine. This is what the allowance
+# is actually applied to.  CH = index x slope/113 + (rating - par)
+TEE = {  # (handicap index, slope, course rating, par)
+    "YOUNGS, Luke":     (0.5, 139, 36.0, 36),   # 1 - Blue
+    "ZAPATA, Carlos":   (5.6, 133, 34.9, 36),   # 2 - White
+    "MELCHOR, Eduardo": (5.6, 139, 36.0, 36),   # 1 - Blue
+    "STRAITON, Robert": (0.4, 139, 36.0, 36),   # 1 - Blue
+}
+COURSE_HCP = {n: i * sl / 113.0 + (cr - par)
+              for n, (i, sl, cr, par) in TEE.items()}
+# GG's own published "Playing Handicap (off lowest)" column.
+GG_PH = {"YOUNGS, Luke": 0, "ZAPATA, Carlos": 3,
+         "MELCHOR, Eduardo": 3, "STRAITON, Robert": 0}
+
 CUSTOMER_ID = {"YOUNGS, Luke": 13, "ZAPATA, Carlos": 439,
                "MELCHOR, Eduardo": 61, "STRAITON, Robert": 31}
 
@@ -82,6 +125,7 @@ def a923_state():
         {"key": name, "customer_id": CUSTOMER_ID[name], "name": name,
          "playing_handicap": PH[name], "flight": None, "team": None,
          "buys_net": True, "buys_gross": True, "is_member": True,
+         "course_handicap": COURSE_HCP[name],
          "scores": GROSS[name]} for name in GROSS]}
 
 
@@ -110,6 +154,21 @@ def money(result, pot=POT):
 
 
 cards = ls.build_cards(a923_state(), FORMULAS)
+
+# The half-Net variant's own dials, and a way to vary ONE of them in place so
+# a test can ask "would the other setting have shown up in this event?".
+HALF_NET = next(v for v in ls.SEED_LIVE_SCORING_CONFIG["games"]["skins"]
+                ["variants"] if v["name"] == "half_net")
+
+
+def _cfg_with(**dials):
+    import copy
+    cfg = copy.deepcopy(ls.SEED_LIVE_SCORING_CONFIG)
+    for v in cfg["games"]["skins"]["variants"]:
+        if v["name"] == "half_net":
+            v["handicap"].update(dials)
+    return cfg
+
 
 print("== the matrix is the governing layer ==")
 
@@ -181,60 +240,74 @@ for tag, strokes in (("Zapata 2 / Melchor 2", {"ZAPATA, Carlos": 2,
               and s["pops"] == 0 and s["score"] == 3
               for f in r["flights"] for s in f["skins"]))
 
-print("\n== the rounding dial is NOT ratified — CA Queue #7 ==")
+print("\n== the handicap pipeline reproduces GG's OWN published column ==")
 
-check("the board declares its handicap dial unratified",
-      res.get("handicap_ratified") is False)
-check("and says so in a warning a reader will see",
-      any("NOT ratified" in w for w in res["warnings"]), str(res["warnings"]))
+# This is the strong result. Matching GG's skins board could be luck; matching
+# the Playing Handicap it printed for every player, from index and tee, cannot.
+_h = ls.game_handicaps(cards, HALF_NET["handicap"], SI)
+for _n in sorted(GG_PH):
+    check(f"  {_n} -> PH {GG_PH[_n]}, as GG published it",
+          _h["by_key"][_n]["strokes"] == GG_PH[_n],
+          f'got {_h["by_key"][_n]["strokes"]}')
 
-# The guard: no naive independent rounding of 0.5 / 2.5 / 3.5 reproduces
-# GG. If a future change makes one of these pass, the dial has been GUESSED
-# rather than ruled on, and this test is the thing that should stop it.
-for mode in ("half_up", "half_even", "floor", "half_down"):
-    cfg = {**ls.SEED_LIVE_SCORING_CONFIG,
-           "games": {**ls.SEED_LIVE_SCORING_CONFIG["games"],
-                     "skins": {**ls.SEED_LIVE_SCORING_CONFIG["games"]["skins"],
-                               "variants": [
-                                   {**ls.SEED_LIVE_SCORING_CONFIG["games"]
-                                    ["skins"]["variants"][0],
-                                    "handicap": {
-                                        **ls.SEED_LIVE_SCORING_CONFIG["games"]
-                                        ["skins"]["variants"][0]["handicap"],
-                                        "rounding": mode}}]}}}
-    r = ls.game_skins(cards, cfg, "9")
-    check(f"'{mode}' does NOT reproduce GG (the dial is still open)",
-          skins_set(r) != GG_SKINS,
-          f"{mode} unexpectedly matched — has the dial been ruled on?")
+check("the allowance is applied to the UNROUNDED course handicap",
+      abs(_h["by_key"]["MELCHOR, Eduardo"]["course_handicap"] - 6.888) < 0.01,
+      str(_h["by_key"]["MELCHOR, Eduardo"]))
+check("  ...Melchor's 6.888 x 50% = 3.444 rounds ONCE, to 3",
+      abs(_h["by_key"]["MELCHOR, Eduardo"]["allowanced"] - 3.444) < 0.01,
+      str(_h["by_key"]["MELCHOR, Eduardo"]["allowanced"]))
+check("  ...and no player is flagged as computed at rounded precision",
+      not any(v["precision_loss"] for v in _h["by_key"].values()))
 
-# Kerry ratified a TGF rounding convention the same day (CA Queue #5, mailbox
-# #530): the PLUS-handicap round deduction rounds half away from zero. The
-# tempting shortcut is to apply it to this allowance too and call the dial
-# closed. It does not reproduce GG, and this asserts so, because the shortcut
-# will occur to the next reader as well.
-_half_away = {"YOUNGS, Luke": 1, "ZAPATA, Carlos": 3,
-              "MELCHOR, Eduardo": 4, "STRAITON, Robert": 0}
-_ov = {}
-for _name in GROSS:
-    _ov[_name] = {h: 0 for h in SI}
-    for _hole in sorted(SI, key=lambda x: SI[x])[:_half_away[_name]]:
-        _ov[_name][_hole] = 1
-_ha = ls.game_skins(cards, ls.SEED_LIVE_SCORING_CONFIG, "9", strokes_override=_ov)
-check("TGF's ratified 'half away from zero' does NOT reproduce GG either",
-      skins_set(_ha) != GG_SKINS, str(sorted(skins_set(_ha))))
-check("  ...it makes Youngs' hole 5 an Albatross, where GG says Eagle",
-      any(s["hole"] == 5 and s["winner"] == "YOUNGS, Luke"
-          and label_vs_par(s["score"], s["par"]) == "Albatross"
-          for f in _ha["flights"] for s in f["skins"]),
-      str(sorted(skins_set(_ha))))
-check("  ...and it pays a fifth skin GG did not pay",
-      len(skins_set(_ha)) == 5, str(sorted(skins_set(_ha))))
+# The bug this file exists to prevent coming back: applying the allowance to
+# the ROUNDED playing handicap double-rounds and pays a skin GG did not pay.
+_double = ls.game_handicaps(
+    [dict(c, course_handicap=None) for c in cards], HALF_NET["handicap"], SI)
+check("DOUBLE-ROUNDING (allowance on the rounded PH) breaks Melchor's column",
+      _double["by_key"]["MELCHOR, Eduardo"]["strokes"] != GG_PH["MELCHOR, Eduardo"],
+      str(_double["by_key"]["MELCHOR, Eduardo"]["strokes"]))
+check("  ...and it is REPORTED as precision loss, never computed silently",
+      all(v["precision_loss"] for v in _double["by_key"].values()))
+_dres = ls.game_skins([dict(c, course_handicap=None) for c in cards],
+                      ls.SEED_LIVE_SCORING_CONFIG, "9")
+check("  ...the board says so in a warning a reader will see",
+      any("ROUNDED handicap" in w for w in _dres["warnings"]),
+      str(_dres["warnings"]))
 
-check("half-up is refuted by GG's own words, not merely by the payout",
-      ls._round_allowance(0.5, "half_up") == 1
-      and ls._round_allowance(0.5, "half_down") == 0,
-      "GG calls Youngs' hole 5 an Eagle, so 0.5 must round DOWN")
+print("\n== the dials are RATIFIED, and each says what ratified it ==")
 
+check("the board no longer declares itself provisional",
+      res.get("handicap_ratified") is not False)
+check("no 'not ratified' warning remains",
+      not any("NOT ratified" in w for w in res["warnings"]),
+      str(res["warnings"]))
+check("rounding is half-up, per GG's setting (tooltip: a CH of 13 -> 7)",
+      HALF_NET["handicap"]["rounding"] == "half_up")
+check("the config records WHAT ratified it, not merely that it is ratified",
+      "worked example" in HALF_NET["handicap"].get("ratified_source", ""),
+      HALF_NET["handicap"].get("ratified_source"))
+
+print("\n== full-card allocation: ratified by the SETTING, not by a9.23 ==")
+
+# Honest bookkeeping. GG's league setting is "full card Stroke Index
+# Allocation", so a PH of 3 lands only TWO strokes on this front nine —
+# index 2 is on the back nine and is not played. But a9.23 does NOT
+# discriminate the two modes, and the test says so rather than implying
+# the replay proved it.
+check("a PH of 3 delivers only TWO strokes on the front nine",
+      sum(_h["by_key"]["MELCHOR, Eduardo"]["by_hole"].values()) == 2,
+      str(_h["by_key"]["MELCHOR, Eduardo"]["by_hole"]))
+check("  ...on the holes whose FULL-CARD index is 1 and 3 (holes 5 and 7)",
+      [h for h, v in _h["by_key"]["MELCHOR, Eduardo"]["by_hole"].items() if v]
+      == [5, 7])
+_subset = ls.game_handicaps(
+    cards, dict(HALF_NET["handicap"], stroke_allocation="subset"), SI)
+check("subset allocation would deliver THREE — a real, different answer",
+      sum(_subset["by_key"]["MELCHOR, Eduardo"]["by_hole"].values()) == 3)
+check("BUT a9.23 does not discriminate them: both reproduce GG's board",
+      skins_set(ls.game_skins(cards, _cfg_with(stroke_allocation="subset"),
+                              "9")) == GG_SKINS,
+      "if this ever fails, a9.23 HAS become evidence for the dial")
 print("\n== the USGA allowance table, with its verification state ==")
 
 check("the four-player ladder matches Kerry's ratified Team Net figures",
@@ -339,9 +412,9 @@ check("the audit computes on a NET basis, not gross",
       audit["game"]["basis"] == "net")
 check("the audit reports the buyer count that made the decision",
       audit["game"]["gross_buyers"] == 4)
-check("the audit declares the unratified dial rather than paying off it",
-      audit["game"]["handicap_ratified"] is False
-      and any("NOT ratified" in w for w in audit["warnings"]),
+check("the audit no longer flags the dial as provisional",
+      audit["game"].get("handicap_ratified") is not False
+      and not any("NOT ratified" in w for w in audit["warnings"]),
       str(audit["warnings"]))
 _f = audit["flights"][0]
 check("the audit prints each buyer's playing handicap AND game strokes",

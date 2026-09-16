@@ -1,5 +1,23 @@
-window.TGF_VERSION = "2.459.0";
+window.TGF_VERSION = "2.460.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.460.0",
+    date: "2026-09-16",
+    title: "half-Net Skins reproduces Golf Genius exactly \u2014 the bug was ours",
+    changes: [
+      "CLOSED CA Queue #7, and it was never a rounding-mode question. Two bugs, both ours. (1) We applied the 50% allowance to the ROUNDED playing handicap, which double-rounds. Golf Genius states the rule on its own settings page \u2014 \u201cThe World Handicap System requires full precision to be maintained in intermediary calculations. Rounding is performed only once and as the last step\u201d \u2014 and its worked example for Eduardo Melchor shows it: course handicap 5.6 \u00d7 139/113 = 6.888 unrounded, \u00d7 50% = 3.444, rounded ONCE to 3. We were computing round(6.888) = 7, then 7 \u00d7 50% = 3.5. (2) Stroke allocation was re-ranked over the holes played; GG\u2019s league setting is \u201cfull card Stroke Index Allocation\u201d.",
+      "The consequence of bug (1) is the whole mystery: Melchor and Zapata BOTH land on a playing handicap of 3. The \u201c2.5 and 3.5\u201d this lane spent its time trying to round correctly never existed \u2014 they were artifacts of our own double-rounding, which is why no independent rounding of them could reproduce GG\u2019s board and why every one of them paid Melchor a fifth skin GG did not pay.",
+      "The engine now reproduces GG\u2019s PUBLISHED PLAYING HANDICAP COLUMN for all four a9.23 players from index and tee \u2014 Straiton 0, Zapata 3, Melchor 3, Youngs 0 \u2014 as well as its skins board and its dollars. Matching the board alone could be luck; matching the column GG printed cannot, which is what closed the item.",
+      "game_handicaps now takes the UNROUNDED course handicap, applies the allowance to it, rounds once, then applies \u2018off lowest\u2019 to the rounded figure in GG\u2019s printed order. Where no unrounded handicap is available it falls back to the rounded one and REPORTS precision_loss with a warning on the board, rather than quietly computing a number GG would not have used. course_handicap is a new optional field on the player/card shape.",
+      "Rounding is half-up, ratified from the GG settings screen: \u201cRound up\u201d there means round HALF up, not ceiling (its tooltip reads \u201cA handicap allowance 50% applied to a CH of 13 becomes 7\u201d). This does NOT conflict with the CA Queue #5 plus-handicap ruling \u2014 that is a round-level deduction, a different mechanism.",
+      "allocate_strokes gains a mode dial: \u201cfull_card\u201d (a stroke lands where the 18-hole index is \u2264 the handicap) vs \u201csubset\u201d (re-rank over the holes played). Worth knowing, because it is money and nobody has said it out loud: under full-card allocation on a nine, a playing handicap of 3 delivers only TWO strokes \u2014 index 2 is on the back nine and is not played. That is the setting working correctly.",
+      "GUARD: two stroke-index conventions exist in our data \u2014 a9.23 carries real GG indexes (1, 3, 5 \u2026 17 on a front nine) while some rounds carry them re-ranked to 1..N. Applying full-card to a re-ranked nine would cap every handicap above 9 at one stroke per hole and silently under-allocate. allocate_strokes now RAISES on that combination instead, turning a silent money bug into a loud failure.",
+      "The card path (build_cards) is deliberately left on \u2018subset\u2019 rather than flipped to the league setting: no real GG event has yet discriminated the two there, and flipping it blind broke four test files. Carried as CA Queue #10, with the plus-handicap interaction noted for checking against a real plus card.",
+      "RATIFIED GOVERNING RULE (Kerry): \u201cUntil we detach from GG, GG rules. When untethered, obviously we rule everything.\u201d Recorded in side-games.md as the tie-breaker whenever our rules and Golf Genius\u2019s disagree \u2014 which is why the half-Net allowance and the plus deduction round differently on purpose.",
+      "Documented what is ratified BY WHAT, because \u2018we are sure\u2019 and \u2018we think\u2019 must not look alike in money code: the unrounded-handicap pipeline is proven by replay; half-up rounding is confirmed by the settings screen; full-card allocation rests on the settings screen ALONE, since a9.23 does not discriminate it. test_half_net_skins.py asserts that non-discrimination explicitly so nobody later cites this event as evidence for a dial it never tested.",
+      "Tests: test_half_net_skins.py (56 checks), including an assertion that double-rounding breaks Melchor\u2019s column and is reported as precision loss \u2014 the bug cannot come back silently. Full suite unchanged against baseline (11 pre-existing failures, none from this lane).",
+    ],
+  },
   {
     version: "2.459.0",
     date: "2026-09-16",

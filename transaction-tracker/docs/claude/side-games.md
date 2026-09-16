@@ -1021,25 +1021,74 @@ from the outside:
   rounding of 2.5 and 3.5 produces. **The dial cannot be reverse-engineered
   from outcomes and must come from the GG setup screen or from Kerry.**
 
-Until it is ruled on, the board **computes but declares itself provisional**
-(`handicap_ratified: False`, plus a warning on the audit), and
-`test_half_net_skins.py` asserts that *none* of the naive roundings
-reproduce GG — so the gap cannot be quietly closed by guessing.
+**RESOLVED 2026-09-16, and the bug was OURS — in two places.**
 
-**And it cannot be closed by analogy either.** Kerry ratified a TGF rounding
-convention the same day (CA Queue #5, mailbox #530): the plus-handicap round
-deduction rounds **half away from zero** — *"USGA has no ruling here because
-USGA never does a round-level deduction at all; the mechanism is TGF's own.
-Python's banker's rounding was the artifact."* Applying that same convention
-to the ½-Net allowance **does not reproduce GG**: it gives Youngs 1 stroke,
-which makes his hole 5 an **Albatross** where GG says Eagle, and it pays a
-fifth skin to Melchor on hole 9 that GG did not pay.
+Kerry supplied the Golf Genius league handicap settings and GG's own worked
+example for Eduardo Melchor. Neither was a rounding-mode question.
 
-That is not a contradiction in Kerry's rulings — a round-level plus deduction
-and a per-player handicap allowance are different mechanisms. But it means
-**TGF's own rounding convention and Golf Genius's observed behaviour
-disagree here**, which turns CA Queue #7 into the untether question in
-miniature: *when our rules and GG's disagree, whose answer pays?*
+**(1) We applied the allowance to the ROUNDED playing handicap.** That
+double-rounds. GG states the rule on its own settings page — *"The World
+Handicap System requires full precision to be maintained in intermediary
+calculations. Rounding is performed only once and as the last step"* — and
+its Melchor line shows it:
+
+```
+index 5.6, Blue (slope 139 / rating 36.0 / par 36), front nine
+CH   = 5.6 x 139/113 = 6.888...      <- unrounded, CARRIED
+x50% = 3.444...                       <- allowance applied to the float
+round ONCE -> PH 3                    <- GG's published column
+```
+
+We were computing `round(6.888) = 7`, then `7 x 50% = 3.5`. Zapata the same:
+CH 5.491 (White, slope 133, rating 34.9 — a −1.1 course-rating-minus-par
+adjustment), ×50% = 2.746 → **3**.
+
+So **Melchor and Zapata both land on 3.** The "2.5 and 3.5" this lane spent
+its time trying to round correctly *never existed* — they were artifacts of
+our own double-rounding. That is why brute force found Melchor ≤ Zapata in
+all 21 consistent allocations, and why no independent rounding of those two
+numbers was ever going to work.
+
+**(2) Stroke allocation.** GG is set to *"Allocate strokes based on the full
+card Stroke Index Allocation"*, not its *"subset of holes played"* (which GG
+marks Recommended and TGF does not use). A stroke lands only where the
+18-hole stroke index is ≤ the playing handicap — so on a front nine with odd
+indexes, **a playing handicap of 3 delivers only TWO strokes**, because index
+2 is on the back nine and is not played.
+
+**Rounding is half-up.** GG's "Round up" means round *half* up, not ceiling:
+its tooltip reads *"A handicap allowance 50% applied to a CH of 13 becomes
+7"* (6.5 → 7), and 3.444 → 3 confirms nearest. This does **not** conflict
+with the CA Queue #5 plus-handicap ruling — that is a round-level deduction,
+a different mechanism, exactly as mailbox #530 said.
+
+**What is ratified by what.** The distinction is recorded in code and asserted
+in `test_half_net_skins.py`:
+
+| Dial | Ratified by | Strength |
+|---|---|---|
+| Allowance on the unrounded CH, rounded once | replay | **Proven** — reproduces GG's published handicap column for all four players |
+| Rounding half-up | GG settings screen | Confirmed, and consistent with a9.23 |
+| Full-card allocation | GG settings screen **only** | a9.23 does **not** discriminate it — both modes reproduce its board |
+
+Matching GG's board alone could be luck. Matching the Playing Handicap column
+GG printed, from index and tee, cannot — that is what closed this.
+
+**Where an unrounded course handicap is not available**, the engine falls
+back to the rounded playing handicap and reports `precision_loss` with a
+warning on the board, rather than silently computing a number GG would not
+have used.
+
+### The governing rule when we and GG disagree
+
+**Kerry, 2026-09-16: "Until we detach from GG, GG rules. When untethered,
+obviously we rule everything."**
+
+That is the tie-breaker for every future conflict of this shape, and it is
+why the dials above are set to reproduce Golf Genius rather than to express
+TGF's own preference. The half-Net rounding and the plus-handicap deduction
+(CA Queue #5) round differently *on purpose*: one is GG's mechanism and we
+match it, the other is TGF's own and we rule it.
 
 ### The GG setup screen IS the schema
 

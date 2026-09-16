@@ -195,16 +195,29 @@ SEED_LIVE_SCORING_CONFIG: dict = {
                         "method": "usga_net",
                         "allowance_pct": 50,
                         "off_lowest": True,
-                        # HOW THE HALF STROKE ROUNDS IS NOT RATIFIED.
-                        # a9.23 proves Luke Youngs took ZERO strokes (GG calls
-                        # his hole 5 an Eagle, not an Albatross), so 0.5 went
-                        # DOWN — which rules out half-up. It does NOT pin what
-                        # 2.5 and 3.5 do: every naive independent rounding
-                        # awards Eduardo Melchor a fifth skin GG did not pay.
-                        # Carried as CA Queue #7. Until Kerry rules, the game
-                        # computes but reports `handicap_ratified: False`.
-                        "rounding": "half_down",
-                        "rounding_ratified": False,
+                        # RATIFIED 2026-09-16 from Kerry's Golf Genius league
+                        # handicap settings + GG's own worked example for
+                        # Eduardo Melchor on a9.23. Reproduces GG's published
+                        # Playing Handicap column for all four players AND its
+                        # skins board exactly. See CA Queue #7.
+                        #
+                        # "Round up" in GG means round HALF up, not ceiling —
+                        # its tooltip reads "A handicap allowance 50% applied
+                        # to a CH of 13 becomes 7" (6.5 -> 7). Melchor's
+                        # 3.444 -> 3 and Zapata's 2.746 -> 3 confirm nearest.
+                        "rounding": "half_up",
+                        # GG league setting: "Allocate strokes based on the
+                        # full card Stroke Index Allocation" (NOT its
+                        # "subset of holes played", which GG marks
+                        # Recommended and TGF does not use). Ratified from
+                        # the settings screen. a9.23 does NOT discriminate
+                        # the two — both reproduce its board — so this rests
+                        # on the setting, not on the replay.
+                        "stroke_allocation": "full_card",
+                        "rounding_ratified": True,
+                        "ratified_source": (
+                            "GG league handicap settings + GG worked example "
+                            "(Melchor, a9.23), Kerry 2026-09-16"),
                     },
                 },
                 {
@@ -290,8 +303,15 @@ def build_cards(state: dict, formulas: dict, derive_hole=None) -> list[dict]:
         players: [{"key", "customer_id", "name", "playing_handicap",
                    "flight", "team", "buys_net", "buys_gross", "is_member",
                    "scores": {hole: gross_strokes},
-                   "strokes_received": {hole: n}   # optional
+                   "strokes_received": {hole: n},    # optional
+                   "course_handicap": float          # optional, UNROUNDED
                   }, ...]
+
+    `course_handicap` is the unrounded WHS course handicap for the tee played
+    (index x slope/113 + rating - par). Supply it wherever it is known: a
+    per-game allowance must be applied to it, NOT to the rounded playing
+    handicap, or the result double-rounds and stops matching Golf Genius.
+    See `game_handicaps` for the worked example.
 
     A player's strokes_received is USED AS GIVEN when supplied (that is how
     a GG-seeded card keeps GG's own handicap dots, so a parity diff compares
@@ -300,6 +320,16 @@ def build_cards(state: dict, formulas: dict, derive_hole=None) -> list[dict]:
     nobody hands us dots.
     """
     derive_hole = derive_hole or _default_derive_hole
+    # The league's stroke-allocation setting. TGF's Golf Genius league is set
+    # to "full card Stroke Index Allocation", so a nine allocates against the
+    # 18-hole card and can deliver fewer strokes than the playing handicap.
+    # Deliberately "subset" here, NOT the league's "full_card". This is the
+    # headline net game's allocation and it is not this lane's to change: no
+    # real GG event has yet been checked that discriminates the two on the
+    # card path, and some rounds store stroke indexes re-ranked to 1..N,
+    # where "full_card" would silently under-allocate. Carried as CA Queue
+    # #10. `game_handicaps` uses the league setting because a9.23 verified it.
+    allocation_mode = state.get("stroke_allocation", "subset")
     hole_meta = {h["hole"]: h for h in state.get("holes") or []}
     si_by_hole = {h: (m.get("stroke_index") or 99) for h, m in hole_meta.items()}
     cards = []
@@ -315,7 +345,8 @@ def build_cards(state: dict, formulas: dict, derive_hole=None) -> list[dict]:
             received = {}
             allocation_source = "none"
         else:
-            received = allocate_strokes(int(ph), si_by_hole)
+            received = allocate_strokes(int(ph), si_by_hole,
+                                        mode=allocation_mode)
             allocation_source = "derived"
 
         holes_out, totals = [], {
@@ -365,6 +396,7 @@ def build_cards(state: dict, formulas: dict, derive_hole=None) -> list[dict]:
             "customer_id": p.get("customer_id"),
             "name": p.get("name"),
             "playing_handicap": ph,
+            "course_handicap": p.get("course_handicap"),
             "flight": p.get("flight"),
             "team": p.get("team"),
             "buys_net": bool(p.get("buys_net")),
@@ -840,45 +872,82 @@ def game_handicaps(cards: list[dict], handicap_cfg: dict | None,
     Pops are a property of the GAME (2026-09-16). A card carries whatever
     allocation the event's headline net game used; a different game on the
     same card has a different allowance, and may have none at all. So each
-    game that needs strokes derives them here, from the playing handicap,
-    under its own dials:
+    game that needs strokes derives them here, under its own dials.
 
-      1. allowance:  hcp * allowance_pct / 100
-      2. rounding:   to whole strokes under the named mode
-      3. off lowest: subtract the lowest RESULTING handicap so the low
-                     player plays off scratch (a TGF/GG convention, a
-                     SEPARATE dial from the percentage)
-      4. allocate:   by stroke index over the holes actually played
+    THE ORDER IS GOLF GENIUS'S, AND IT IS LOAD-BEARING (Kerry's GG handicap
+    settings + the Melchor worked example, 2026-09-16):
 
-    Returns {"by_key": {key: {"raw", "allowanced", "strokes", "by_hole"}},
-             "dials": {...}} so a surface can print the working.
+      1. start from the UNROUNDED course handicap
+                     index x (slope/113) + (rating - par)
+      2. allowance:  x allowance_pct / 100
+      3. round ONCE, here, and only here
+      4. off lowest: subtract the lowest ROUNDED handicap in the group
+      5. allocate:   by stroke index under the `stroke_allocation` dial
+
+    Step 1 is the one this function got wrong until 2026-09-16, and it is
+    why our a9.23 board would not reproduce GG's. We applied the allowance
+    to an already-ROUNDED playing handicap, which double-rounds. GG states
+    the rule on its own settings page: "The World Handicap System requires
+    full precision to be maintained in intermediary calculations. Rounding
+    is performed only once and as the last step."
+
+    Worked, from GG's own detail line for Eduardo Melchor on a9.23:
+        index 5.6, Blue (slope 139 / rating 36.0 / par 36), front nine
+        CH  = 5.6 x 139/113 = 6.888...          <- unrounded, carried
+        x50% = 3.444...                          <- allowance on the float
+        round once -> 3                          <- GG's published column
+    Double-rounding instead gives round(6.888)=7, 7x50%=3.5, which is a
+    different number and pays a different skin.
+
+    When a card cannot supply an unrounded course handicap this falls back
+    to the rounded playing handicap and REPORTS `precision_loss: True` per
+    player rather than pretending the two are the same.
+
+    Returns {"by_key": {key: {"raw", "course_handicap", "allowanced",
+             "strokes", "by_hole", "precision_loss"}}, "dials": {...}}
+    so a surface can print the working.
     """
     out = {"by_key": {}, "dials": dict(handicap_cfg or {}) or None}
     if not handicap_cfg:
         for c in cards:
             out["by_key"][c["key"]] = {
-                "raw": c.get("playing_handicap"), "allowanced": 0,
-                "strokes": 0, "by_hole": {h: 0 for h in si_by_hole}}
+                "raw": c.get("playing_handicap"), "course_handicap": None,
+                "allowanced": 0, "strokes": 0, "precision_loss": False,
+                "by_hole": {h: 0 for h in si_by_hole}}
         return out
 
     pct = handicap_cfg.get("allowance_pct", 100)
-    mode = handicap_cfg.get("rounding", "half_down")
-    interim = {}
+    mode = handicap_cfg.get("rounding", "half_up")
+    alloc_mode = handicap_cfg.get("stroke_allocation", "full_card")
+
+    # Step 1-3: allowance on the unrounded course handicap, rounded ONCE.
+    rounded, lossy = {}, {}
     for c in cards:
-        ph = c.get("playing_handicap")
-        interim[c["key"]] = (0.0 if ph is None else float(ph) * pct / 100.0)
-    if handicap_cfg.get("off_lowest") and interim:
-        low = min(interim.values())
-        interim = {k: v - low for k, v in interim.items()}
+        ch = c.get("course_handicap")
+        lossy[c["key"]] = ch is None
+        if ch is None:
+            ch = c.get("playing_handicap")
+        base = 0.0 if ch is None else float(ch)
+        rounded[c["key"]] = (base, _round_allowance(base * pct / 100.0, mode))
+
+    # Step 4: off lowest, applied to the ROUNDED handicaps, as GG prints it
+    # ("After rounding, the PH is 3. The lowest handicap in the group is
+    # 0.0. After applying 'off lowest', the handicap becomes 3.0.").
+    low = min((v[1] for v in rounded.values()), default=0) \
+        if handicap_cfg.get("off_lowest") else 0
+
     for c in cards:
-        allowanced = interim[c["key"]]
-        strokes = _round_allowance(allowanced, mode)
+        base, strokes = rounded[c["key"]]
+        strokes -= low
         out["by_key"][c["key"]] = {
             "raw": c.get("playing_handicap"),
-            "allowanced": round(allowanced, 2),
+            "course_handicap": (None if lossy[c["key"]]
+                                else round(base, 3)),
+            "allowanced": round(base * pct / 100.0, 3),
             "strokes": strokes,
-            "by_hole": allocate_strokes(strokes, si_by_hole) if si_by_hole
-            else {},
+            "precision_loss": lossy[c["key"]],
+            "by_hole": (allocate_strokes(strokes, si_by_hole, mode=alloc_mode)
+                        if si_by_hole else {}),
         }
     return out
 
@@ -946,6 +1015,17 @@ def game_skins(cards: list[dict], cfg: dict, holes_key: str,
             f"{' off the lowest' if hcfg.get('off_lowest') else ''}, but HOW "
             f"the half stroke rounds is NOT ratified (CA Queue #7) — this "
             f"board is provisional, using '{hcfg.get('rounding')}'.")
+    # A handicap we could only take at ROUNDED precision is money computed on
+    # a number GG would not have used, so it is reported and never silent.
+    lossy = sorted(k for k, v in hcaps.get("by_key", {}).items()
+                   if v.get("precision_loss"))
+    if hcfg and lossy:
+        out["warnings"].append(
+            f"{out['label']} applied its {hcfg.get('allowance_pct')}% "
+            f"allowance to a ROUNDED handicap for {len(lossy)} player(s) "
+            f"({', '.join(lossy[:4])}{'...' if len(lossy) > 4 else ''}) "
+            f"because no unrounded course handicap was available. GG rounds "
+            f"ONCE, at the end — these strokes may differ from GG's.")
 
     for label, members in assign_flights(field, gc, holes_key).items():
         hole_numbers = sorted({h["hole"] for c in members for h in c["holes"]})

@@ -255,9 +255,17 @@ check("the variant selection is REPORTED, not inferred",
       str(sk_small.get("selection")))
 check("skins declares itself a pops-per-hole game",
       sk_small["pops_per_hole"] is True)
-check("an unratified rounding dial is declared on the board",
-      sk_small.get("handicap_ratified") is False
-      and any("NOT ratified" in w for w in sk_small["warnings"]),
+# The dials are ratified (CA Queue #7, closed 2026-09-16 from GG's league
+# settings + its worked example), so no provisional flag here. But this
+# fixture supplies no unrounded course handicap, and applying a 50% allowance
+# to an already-ROUNDED handicap double-rounds — so the board must SAY so
+# rather than quietly paying a number GG would not have computed.
+check("the ratified dial is no longer declared provisional",
+      sk_small.get("handicap_ratified") is not False
+      and not any("NOT ratified" in w for w in sk_small["warnings"]),
+      str(sk_small["warnings"]))
+check("but computing off a ROUNDED handicap is reported, not hidden",
+      any("ROUNDED handicap" in w for w in sk_small["warnings"]),
       str(sk_small["warnings"]))
 check("at 8+ buyers the matrix selects GROSS skins",
       sk["variant"] == "gross" and sk["basis"] == "gross"

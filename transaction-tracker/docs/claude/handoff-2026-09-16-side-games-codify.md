@@ -189,3 +189,103 @@ a correct *diagnosis* recorded instead of enforced.
 When a rule is known but unimplemented, make the code REFUSE or REPORT at the
 surface someone actually reads — not leave a comment and compute something
 else.
+
+
+---
+
+## RESOLVED — Kerry supplied the Golf Genius settings, 2026-09-16
+
+Everything above about the rounding dial being open is **superseded**. It was
+never a rounding-mode question, and the bug was ours in two places.
+
+### What the screenshots showed
+
+1. **Handicap Allowance Rounding: Round up** — meaning round *half* up, not
+   ceiling. GG's own tooltip: *"A handicap allowance 50% applied to a CH of
+   13 becomes 7"* (6.5 → 7).
+2. **"Allocate strokes based on the full card Stroke Index Allocation"** —
+   not the "subset of holes played" that GG marks Recommended.
+3. **GG's worked example for Eduardo Melchor**, which is the one that closed
+   it, and the note above it: *"The World Handicap System requires full
+   precision to be maintained in intermediary calculations. Rounding is
+   performed only once and as the last step."*
+
+### The two bugs
+
+**(1) Double-rounding.** We applied the 50% allowance to the *rounded*
+playing handicap:
+
+```
+GG:   CH 6.888 (unrounded)  x50% = 3.444  -> round once -> 3
+ours: round(6.888) = 7      x50% = 3.5    -> round      -> 3 or 4
+```
+
+Zapata the same: CH 5.491 (White tee, slope 133, rating 34.9 — a −1.1
+rating-minus-par adjustment), ×50% = 2.746 → 3.
+
+**So Melchor and Zapata both land on 3.** The "2.5 and 3.5" this lane spent
+its time trying to round correctly **never existed**. That is the whole
+mystery: they were artifacts of our own error, which is why brute force found
+Melchor ≤ Zapata in all 21 consistent allocations and why every independent
+rounding of those two numbers paid a fifth skin GG did not pay.
+
+**(2) Subset re-ranking instead of full-card allocation.** A stroke lands
+only where the 18-hole index is ≤ the playing handicap, so on this front nine
+a PH of 3 delivers **two** strokes — index 2 is on the back nine.
+
+### Verification, and its strength
+
+The rebuilt pipeline reproduces GG's **published Playing Handicap column**
+for all four players from index and tee — Straiton 0, Zapata 3, Melchor 3,
+Youngs 0 — *and* the skins board *and* the dollars. Matching a board could be
+luck. Matching the column GG printed cannot.
+
+| Dial | Ratified by | Strength |
+|---|---|---|
+| Allowance on unrounded CH, rounded once | replay | **Proven** |
+| Rounding half-up | GG settings screen | Confirmed; consistent with a9.23 |
+| Full-card allocation | GG settings screen **only** | a9.23 does **not** discriminate it |
+
+That third row matters and is asserted in the test: both allocation modes
+reproduce a9.23's board, so nobody should later cite this event as evidence
+for a dial it never tested.
+
+### What I did NOT change, and why
+
+`build_cards` — the card path that derives the headline net game's dots — is
+still on `subset`. Flipping it blind broke four test files, and the reason is
+a genuine landmine: **two stroke-index conventions live in our data.** a9.23
+carries real GG indexes (1, 3, 5 … 17); other rounds carry them re-ranked to
+1..N. Full-card on a re-ranked nine caps every handicap above 9 at one stroke
+per hole — a 14 lands 9 strokes and nothing says so. `allocate_strokes` now
+**raises** on that combination rather than under-allocating. Carried as
+**CA Queue #10**.
+
+Also flagged there: `test_live_scoring_center.py`'s "PARITY: engine
+reproduces GG exactly" does **not** test parity with GG — its fixture
+generates the "GG" dots by calling our own allocator and then asserts we
+reproduce them. The comment reads *"GG's own dots, allocated by stroke index
+exactly as GG would"*, which is an assumption wearing the costume of a fact.
+Same class of error as the one just closed; it briefly misled me here.
+
+### The governing rule
+
+**Kerry: "Until we detach from GG, GG rules. When untethered, obviously we
+rule everything."** This is why the half-Net allowance and the plus-handicap
+deduction (CA Queue #5) round differently *on purpose* — one is GG's
+mechanism and we match it, the other is TGF's own and we rule it.
+
+### The lesson, which is the lane's lesson turned on its author
+
+This lane opened by correcting a doc that blamed Golf Genius for
+contradicting itself, and the correction was right: the error was ours. Then
+it spent its length building increasingly careful machinery — brute force
+over 21 allocations, refutation tests for four rounding modes, a provisional
+flag on the board — *around a number it had computed wrong*. Every one of
+those artifacts was sound reasoning applied to a corrupted input, and none of
+them could detect that, because they all took the playing handicap as given.
+
+**When a derived value will not reconcile, re-derive it from the source
+before building anything that depends on it.** The tell was available the
+whole time: GG published its Playing Handicap column, and we never checked
+our numbers against it — only against the board downstream of it.
