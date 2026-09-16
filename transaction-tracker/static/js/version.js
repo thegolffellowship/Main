@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.452.1";
+window.TGF_VERSION = "2.452.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.452.2",
+    date: "2026-09-16",
+    changes: [
+      "\u2018When scores were last posted\u2019 now means that. The money hold measures its ten-minute settle from `imported_at`, but a RE-import left that column alone \u2014 so the clock ran from whenever a card first appeared, and by the time the last hole landed the ten minutes had long since \u2018elapsed\u2019 and the pot would post the instant the field completed. A card whose score actually CHANGED restamps it now; an unchanged re-import deliberately does not, because a five-minute poll finding the same numbers would otherwise push the settle forward forever and the money would never post at all.",
+    ],
+  },
   {
     version: "2.452.1",
     date: "2026-09-16",

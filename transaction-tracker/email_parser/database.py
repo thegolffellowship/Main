@@ -21979,7 +21979,26 @@ def import_gg_scorecards(tournament_url: str, event_code: str | None = None,
             # stays read-only shadow until then.
             if existing:
                 srid = existing["id"]
+                # `imported_at` MEANS "when scores were last posted" — the
+                # money hold measures its settle from it (v2.436.0). A
+                # re-import used to leave it alone, so the clock ran from
+                # whenever the card FIRST appeared: by the time the last
+                # hole landed the ten minutes had long since "elapsed"
+                # and the pot would post instantly. It is stamped on a
+                # real CHANGE only — a five-minute poll that finds the
+                # same numbers must not keep pushing the settle forward,
+                # or the money would never post at all.
+                _before = conn.execute(
+                    "SELECT holes_played, gross, net FROM scoring_rounds "
+                    "WHERE id = ?", (srid,)).fetchone()
+                _changed = (not _before
+                            or (_before["holes_played"] or 0) != holes_played
+                            or _before["gross"] != p.get("gross")
+                            or _before["net"] != p.get("net"))
                 conn.execute("DELETE FROM scoring_holes WHERE scoring_round_id = ?", (srid,))
+                if _changed:
+                    conn.execute("UPDATE scoring_rounds SET imported_at = "
+                                 "datetime('now') WHERE id = ?", (srid,))
                 conn.execute(
                     """UPDATE scoring_rounds SET customer_id=?, event_id=?, gg_event_id=?,
                            gg_aggregate_id=?, gg_profile_id=?, round_date=?, course_id=?,

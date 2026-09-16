@@ -86,11 +86,23 @@ with db._connect(tmp) as c:
     check("an empty field is never 'complete' — that would post money on "
           "nothing", db._event_field_complete(c, 9002, 9)["complete"] is False)
 
+import inspect
+print("\n== 'when scores were last posted' must mean that ==")
+# Kerry's hold measures its settle from imported_at. A re-import used to
+# leave it alone, so the clock ran from whenever the card FIRST appeared
+# — by the time the last hole landed the ten minutes had long since
+# elapsed and the pot would post instantly.
+_imp = inspect.getsource(db.import_gg_scorecards) if hasattr(
+    db, "import_gg_scorecards") else ""
+check("a CHANGED card restamps imported_at",
+      "SET imported_at = " in _imp and "_changed" in _imp)
+check("…and an unchanged re-import does NOT, or the money never posts",
+      "if _changed:" in _imp)
+
 print("\n== the live poll asks for TGF's day, not the container's ==")
 # Kerry 2026-09-16: "Leaderboard isn't updating again." Railway runs in
 # UTC, so from 7pm Central the poller asked for events dated TOMORROW and
 # reported a clean sweep of zero events while a round was being played.
-import inspect
 _src = inspect.getsource(db.poll_live_events)
 check("the poller's today is Central", "today_central_str()" in _src
       and "datetime.now().strftime" not in _src, _src[:200])
