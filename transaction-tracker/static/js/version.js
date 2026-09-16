@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.455.0";
+window.TGF_VERSION = "2.456.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.456.0",
+    date: "2026-09-16",
+    changes: [
+      "EVERY REGISTRANT LANDS IN EXACTLY ONE BUCKET (Kerry: \u201821 registered and only 16 sent and 3 skipped. Seems to be 2 unaccounted for\u2019 \u2014 then the same on Austin, 12 registered, 9 sent, 2 skipped). Two `continue`s inside the handicap-card send loop \u2014 no email on file, and no NINE-hole index even though the player was otherwise eligible \u2014 dropped people with no counter and no name, so the arithmetic could not close and there was no way to find out who missed a card. Both are counted now, and every skipped player is NAMED with the reason.",
+      "The result line also publishes the arithmetic: \u2018N sent \u00b7 N skipped \u2026 of 21 registered\u2019, and if the buckets still do not add up it says so in red rather than leaving a gap to be spotted. A count that does not reconcile is worse than no count \u2014 it reads as authoritative.",
+    ],
+  },
   {
     version: "2.455.0",
     date: "2026-09-16",

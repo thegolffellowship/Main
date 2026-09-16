@@ -747,6 +747,13 @@
     <script src="/static/js/tgf-standards.js"></script>
     <script src="/static/js/scorecard-render.js"></script>
     <script>
+      // This page does not load dashboard.js, so it carries its own.
+      function escapeHtml(str) {
+          return String(str ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;")
+              .replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+      }
+    </script>
+    <script>
     // ── State ───────────────────────────────────────────────────────
     let allPlayers = [];
     let settings   = {};
@@ -2463,9 +2470,28 @@
                 if (data.failed) parts.push(`<strong style="color:#dc2626;">${data.failed}</strong> failed`);
                 if (data.skipped_no_email) parts.push(`${data.skipped_no_email} skipped (no email)`);
                 if (data.skipped_no_index) parts.push(`${data.skipped_no_index} skipped (no index)`);
+                if (data.skipped_not_member) parts.push(`${data.skipped_not_member} skipped (not a member)`);
+                // THE ARITHMETIC IS SHOWN (Kerry 2026-09-16: "Not sure how
+                // we have 21 registered and only 16 sent and 3 skipped.
+                // Seems to be 2 unaccounted for."). A count that does not
+                // add up is worse than no count.
+                if (data.registered != null) {
+                    parts.push(`<span style="opacity:0.75;">of ${data.registered} registered</span>`);
+                }
                 result.style.background = data.failed ? '#fef3c7' : '#dcfce7';
                 result.style.color = data.failed ? '#92400e' : '#166534';
                 result.innerHTML = parts.join(' &middot; ');
+                if (data.unaccounted) {
+                    result.innerHTML += `<br><span style="font-size:0.85em;color:#991b1b;font-weight:700;">`
+                        + `${data.unaccounted} unaccounted — tell tracker-claude.</span>`;
+                }
+                // …and WHO did not get one, so it can be fixed.
+                if ((data.skipped_players || []).length) {
+                    result.innerHTML += '<br><span style="font-size:0.85em;opacity:0.85;">'
+                        + data.skipped_players.map(p =>
+                            `${escapeHtml(p.player)} — ${escapeHtml(p.why)}`).join('<br>')
+                        + '</span>';
+                }
                 if (data.errors && data.errors.length) {
                     result.innerHTML += '<br><span style="font-size:0.85em;color:#991b1b;">Errors: ' +
                         data.errors.map(e => e.player + ': ' + e.error).join(', ') + '</span>';

@@ -9721,8 +9721,18 @@ def api_handicap_send_bulk_email():
 
     # If filtering by event, restrict to players registered for that event
     # and compute event-specific skip counts
+    # EVERY REGISTRANT LANDS IN EXACTLY ONE BUCKET (Kerry 2026-09-16:
+    # "Not sure how we have 21 registered and only 16 sent and 3 skipped.
+    # Seems to be 2 unaccounted for."). Two `continue`s inside the send
+    # loop — no email on file, and no NINE-hole index even though the
+    # player is otherwise eligible — dropped people silently, so the
+    # numbers could not add up and there was no way to find out who.
+    # They are counted now, and everyone skipped is NAMED.
     skipped_no_email = 0
     skipped_no_index = 0
+    skipped_names: list = []
+    registered = None
+    event_names: dict = {}
     if event_name:
         all_items = get_all_items()
         aliases = get_all_event_aliases()
@@ -9735,6 +9745,7 @@ def api_handicap_send_bulk_email():
                     cname = (item.get("customer") or "").strip().lower()
                     if cname:
                         event_customers.add(cname)
+                        event_names.setdefault(cname, item.get("customer"))
 
         # Build player_name → customer_name map from handicap links
         conn = get_connection()
@@ -9758,9 +9769,12 @@ def api_handicap_send_bulk_email():
             player_to_customer.get(r["player_name"], "").strip().lower()
             for r in eligible_rows
         }
+        registered = len(event_customers)
         for cname_l in event_customers:
             if cname_l not in eligible_customers:
                 skipped_no_index += 1  # no handicap, no link, or no email
+                skipped_names.append({"player": event_names.get(cname_l, cname_l),
+                                      "why": "no TGF handicap on record"})
     else:
         skipped_no_email = len(export.get("no_email") or [])
         skipped_no_index = len(export.get("no_index") or [])
@@ -9774,11 +9788,16 @@ def api_handicap_send_bulk_email():
         pname = row["player_name"]
         email = row.get("email") or ""
         if not email:
+            skipped_no_email += 1
+            skipped_names.append({"player": pname, "why": "no email on file"})
             continue
 
         try:
             card_data = build_handicap_card_data(pname)
             if card_data.get("handicap_index_9") is None:
+                skipped_no_index += 1
+                skipped_names.append({"player": pname,
+                                      "why": "no nine-hole index to print"})
                 continue
 
             html = build_handicap_card_html(card_data)
@@ -9826,7 +9845,7 @@ def api_handicap_send_bulk_email():
         if i < len(eligible_rows) - 1:
             _time.sleep(0.3)
 
-    return jsonify({
+    out = {
         "status": "ok" if failed == 0 else "partial",
         "sent": sent,
         "failed": failed,
@@ -9834,8 +9853,16 @@ def api_handicap_send_bulk_email():
         "skipped_no_index": skipped_no_index,
         "skipped_not_member": skipped_not_member,
         "total_eligible": len(eligible_rows),
+        "skipped_players": skipped_names[:40],
         "errors": errors[:20],  # limit error details
-    })
+    }
+    if registered is not None:
+        # The arithmetic is published, so a gap can never hide again.
+        out["registered"] = registered
+        out["accounted"] = (sent + failed + skipped_no_email
+                            + skipped_no_index + skipped_not_member)
+        out["unaccounted"] = registered - out["accounted"]
+    return jsonify(out)
 
 
 # ---------------------------------------------------------------------------
