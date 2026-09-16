@@ -217,7 +217,7 @@ def build_cards(state: dict, formulas: dict, derive_hole=None) -> list[dict]:
             # player's give-back stroke reads as zero per hole and the
             # plus comes off the TOTAL once, below. That rule now lives
             # in the MECHANISM (`compute_hole_derivations(..., game=True)`,
-            # v2.458.0) instead of in this local `max(0, sr)` — the local
+            # v2.459.0) instead of in this local `max(0, sr)` — the local
             # version is what two other surfaces never inherited.
             # Stroke-play net keeps the real allocation: the total is the
             # same either way there, and only stableford is hole-shaped.

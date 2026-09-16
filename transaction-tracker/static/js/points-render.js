@@ -533,7 +533,7 @@
             if (h.strokes == null) return `<td style="${td}${extra}"></td>`;
             return `<td style="${td}${extra}"><span style="display:inline-block;min-width:${spanW};line-height:${spanW};${decoFor(h.vs_par)}">${h.strokes}</span></td>`;
         };
-        // KERRY'S PLUS RULE (ratified 2026-09-15, rendered v2.458.0): a
+        // KERRY'S PLUS RULE (ratified 2026-09-15, rendered v2.459.0): a
         // plus handicap comes off the ROUND, never off a hole. The server
         // publishes `game_strokes_received` (a give-back read as zero)
         // beside the true WHS value, and the card shows the GAME view.

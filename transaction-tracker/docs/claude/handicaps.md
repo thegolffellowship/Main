@@ -705,7 +705,7 @@ differentials so the corrected card can post (Aguilera / Ayala, whose
 8/29 import predated Kerry's manual score entry on GG).
 
 
-## Identity: `customer_id`, never a name string (v2.458.0, 2026-09-16)
+## Identity: `customer_id`, never a name string (v2.459.0, 2026-09-16)
 
 **Kerry, 2026-09-15:** *"What's the bug? We need to fix it."*
 

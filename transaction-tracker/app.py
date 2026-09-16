@@ -9333,7 +9333,7 @@ def api_handicap_link_debug():
 def api_handicap_unlinked_players():
     """Return handicap players with no linked customer record.
 
-    UNLINKED means no `customer_id` (v2.458.0, guiding principle 6), not
+    UNLINKED means no `customer_id` (v2.459.0, guiding principle 6), not
     a missing display label. The old test was `customer_name IS NULL`,
     which called a row with a real customer_id and a blank label
     "unlinked" and a row with a name but no id "linked" — exactly
@@ -9708,7 +9708,7 @@ def api_handicap_send_bulk_email():
 
     skipped_not_member = 0
     if members_only:
-        # MEMBERS by `customer_id`, never by a name string (v2.458.0,
+        # MEMBERS by `customer_id`, never by a name string (v2.459.0,
         # guiding principle 6). The old query fell back to
         # `c.first_name || ' ' || c.last_name = l.customer_name` for a
         # link with no id, then matched the RESULT back by player_name —
@@ -9744,7 +9744,7 @@ def api_handicap_send_bulk_email():
     registered = None
     event_names: dict = {}
     if event_name:
-        # THE ROSTER, AND IDENTITY BY `customer_id` (v2.458.0).
+        # THE ROSTER, AND IDENTITY BY `customer_id` (v2.459.0).
         #
         # This block used to build a FIFTH roster out of get_all_items() +
         # aliases — so a Golf Genius RSVP with no order row was invisible

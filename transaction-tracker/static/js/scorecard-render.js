@@ -40,7 +40,7 @@
         // you can see exactly where the handicap score diverges from gross.
         const anyCapped = holes.some(h =>
             h.strokes != null && h.adjusted_strokes != null && h.adjusted_strokes !== h.strokes);
-        // KERRY'S PLUS RULE (ratified 2026-09-15, rendered v2.458.0): a
+        // KERRY'S PLUS RULE (ratified 2026-09-15, rendered v2.459.0): a
         // plus handicap comes off the ROUND, never off a hole. The server
         // publishes `game_strokes_received` (a give-back read as zero) and
         // `game_stableford_net` beside the true WHS values; the card shows

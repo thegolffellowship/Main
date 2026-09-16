@@ -549,7 +549,7 @@ header into two rows between 561px and 1479px (brand + right-hand pills on
 row 1, links on row 2; member shell: brand + CTA, then the three tabs) —
 above 1480px the single row is unchanged.
 
-## Handicap identity: `customer_id` (v2.458.0)
+## Handicap identity: `customer_id` (v2.459.0)
 
 `get_handicap_export_data` publishes `customer_id` on every row and
 resolves email/chapter/name through `handicap_player_links.customer_id`
@@ -562,7 +562,7 @@ Murphy" as "no TGF handicap on record" and silently send no card. Audit
 coverage read-only with `scoring-hcp-link-audit`. Details + the class
 sweep (what was left alone and why): `docs/claude/handicaps.md`.
 
-## The plus rule lives in the mechanism (v2.458.0)
+## The plus rule lives in the mechanism (v2.459.0)
 
 A plus handicap comes off the ROUND, never off a hole (Kerry, ratified
 2026-09-15). `compute_hole_derivations(..., game=True)` reads a negative

@@ -907,7 +907,7 @@ so the board can print it. The PTS row shows the deduction beside the
 label, because hole points that deliberately do not add up to the total
 otherwise read as a bug. Test: `test_plus_handicap_points.py`.
 
-### The rule lives in the MECHANISM (v2.458.0, 2026-09-16)
+### The rule lives in the MECHANISM (v2.459.0, 2026-09-16)
 
 **Kerry, 2026-09-15 ~9:15 PM, looking at Pat Youngs' Quarry Front card on
 `/handicaps`:** *"We just determined this isn't how we do Net Points with
@@ -916,7 +916,7 @@ pluses on holes."* The card showed NET SCORE 4 where GROSS was 3, the
 
 v2.450.0 had implemented the rule **at the two call sites in front of
 us**, not at the mechanism — the third instance in one night of a fix
-landing on the instance instead of the class. v2.458.0 moves it:
+landing on the instance instead of the class. v2.459.0 moves it:
 
 - **`compute_hole_derivations(par, strokes, strokes_received, formulas,
   game=False)`** — with `game=True`, a NEGATIVE `strokes_received` (a
