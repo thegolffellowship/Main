@@ -1,5 +1,17 @@
-window.TGF_VERSION = "2.457.0";
+window.TGF_VERSION = "2.458.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.458.0",
+    date: "2026-09-16",
+    changes: [
+      "A PLAYER\u2019S OWN ROWS NOW ADD UP TO HIS OWN TOTAL (Kerry, on the SA FALL NET board on event night: \u2018Why aren\u2019t these points adding correctly?\u2019). Jeff Rideout\u2019s five counted rows read 11 + 10 + 8 + 6 + 1 = 36 above a total of 30 \u2014 and 30 was exactly those same rows MINUS the 9/15 Quarry line worth 6. Two caches on one page, roughly 72x apart: the row expansion is fetched live from Golf Genius and cached TEN MINUTES, while the total beside it came from the `gg_points_standings` snapshot on a TWELVE HOUR timer. Golf Genius awards season points when the manager closes an event out \u2014 hours after the snapshot that is still serving the page \u2014 so on event night the rows carried the night\u2019s points and the total did not. Every total on the board was short by that player\u2019s Quarry score (South 37 vs 38, Mazanec 33 vs 36, Rideout 30 vs 36).",
+      "THE GUARD WAS ARMED IN ONE DIRECTION ONLY \u2014 the pattern CLAUDE.md names, and the same shape as the late-signup bug in v2.430.0. `get_points_race_standings` already knew standings move with events: it had a check that let a TIME-STALE snapshot stand when no event had happened since. But nothing could ever make a time-FRESH snapshot stale, so the clock alone decided \u2014 and the clock cannot tell that a round finished twenty minutes ago. An event PLAYED on or after the snapshot\u2019s day (and not in the future \u2014 next week\u2019s fixture must never hold the board open, and a cancelled event awards nothing) now puts the race in a short window instead of the long one. It settles itself: the refresh moves `fetched_at` forward, so this costs one Golf Genius round-trip per window, not one per page load.",
+      "THE TIMEZONE TRAP IS WHY IT HID, AND IT WAS ALREADY IN THE OLD GUARD. `fetched_at` is stored naive UTC like every timestamp in this database; `events.event_date` is a CENTRAL calendar day. At 9 PM Central on a Tuesday the snapshot is ALREADY TOMORROW in UTC, so `event_date >= date(fetched_at)` silently excluded the event that had just finished \u2014 on exactly the night it mattered. Both the new test and the pre-existing one now read the snapshot\u2019s CENTRAL day through `to_central`, whose docstring describes this precise trap. Fixed across the board rather than only on the new code path (rule 3d).",
+      "The event-day window is a named rule, not a literal buried in a staleness test: `_POINTS_EVENT_DAY_REFRESH_HOURS` (0.25h) beside the race registry, with the ordinary window still `auto_refresh_hours=12`. Manual Refresh is unaffected and remains instant.",
+      "NOT FIXED, WRITTEN DOWN: a merged standings row sums the member cards\u2019 totals (`{\u201cmethod\u201d: \u201csum\u201d}`) \u2014 Luke Mazanec carries two Golf Genius member records. Summing two per-card best-N subtotals equals best-N-of-the-union only while neither card exceeds the cutoff; past it, it overcounts. `combine_member_detail_tables` already does the union correctly and the standings total does not use it. Not biting today (best 6, few events); recorded in `docs/claude/customers.md` for Kerry to rule on before it does.",
+      "Test: `test_points_race_staleness.py` (18 checks \u2014 the event-day refresh, the thrash guards for a future fixture and a cancelled event, the long window and the original guard still intact, and the 9:30 PM Central snapshot that reads as the event\u2019s day rather than the next).",
+    ],
+  },
   {
     version: "2.457.0",
     date: "2026-09-16",
