@@ -1717,6 +1717,44 @@ Golf Genius: every recorded Team/Cart Net row carries its team string and
 a blind rides in it as `Bl[...]`. Those rows land as `source='gg'` and
 count exactly as ours do — the benefit was received either way.
 
+### 15g — an ingest may not erase what it does not carry (v2.458.10)
+
+The morning after s9.23 the sheet read "Hole Group 1", every tee on the
+PAIRINGS tab was a dash, and the blinds had vanished again. Kerry:
+"this lost the hole assignments that I had assigned yesterday. Why'd it
+screw everything up? ... If the tees are in ROSTER, they should
+automatically show up in PAIRINGS."
+
+The closeout had applied the Golf Genius TEAM NET board
+(`scoring-pairings:team|…|apply`) to the finished event. That board says
+who rode together and in what FINISH order; it knows nothing about start
+holes or tees. `_write_event_pairings_from_groups` deleted the sheet and
+wrote the board back with `slot=None` → "Group N", no `tee_choice`, no
+`customer_id` — and the seat-keyed blinds were orphaned a second time.
+
+Three rules now hold:
+
+1. **The writer preserves what the ingest does not carry.** Before the
+   delete it remembers each group's hole label (keyed by the SET of
+   people in it), and each player's tee, handicap index and customer_id;
+   any incoming group without a label, and any player without a tee,
+   gets them back. A label the ingest DOES carry (the tee-sheet route's
+   1A/1B) still wins.
+2. **The tee is read from the ROSTER at read time.** `get_event_pairings`
+   resolves a blank `tee_choice` from `_event_roster_rows` by
+   `customer_id`, exactly as it already does for names and handicap
+   indexes. The saved row is a snapshot; the truth is looked up.
+3. **"Group N" is never printed as "Hole Group N".** The starter-sheet
+   `start_line` leaves a generic label alone.
+
+Repair for a sheet already flattened: `scoring-pairings:relabel|<event>|
+{"5":"1A","4":"1B","2":"2","3":"3","6":"4","1":"5"}[|apply[|holes]]` —
+maps CURRENT group_num → hole label, renumbers in the order listed, and
+saves through `save_event_pairings` so the blinds re-seat and the roster
+tees persist. Nobody changes seats. Dry-run unless `apply`.
+
+Guard: `test_pairings_ingest_preserve.py`.
+
 ### Surfaces
 
 * `POST /api/events/<id>/pairings/blinds` — `{apply, redraw, clear}`

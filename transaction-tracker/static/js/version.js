@@ -1,5 +1,16 @@
-window.TGF_VERSION = "2.458.9";
+window.TGF_VERSION = "2.458.10";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.458.10",
+    date: "2026-09-16",
+    changes: [
+      "AN INGEST MAY NOT ERASE WHAT IT DOES NOT CARRY. Kerry, the morning after s9.23: \u2018This shouldn\u2019t say Hole Group 1. It should just say Hole 1. Where\u2019s that coming from? Also, this lost the hole assignments that I had assigned yesterday.\u2019 One cause. The closeout applied the Golf Genius TEAM NET board to the finished event, and that board knows who rode together and in what FINISH order \u2014 nothing about which hole a group started on or which tee anyone played. `_write_event_pairings_from_groups` deleted the sheet and wrote the board back with \u2018Group N\u2019 labels, no tee and no customer_id; the starter sheet then prefixed \u2018Hole \u2019 onto \u2018Group 1\u2019, the PAIRINGS tab read a dash for every tee, and every seat-keyed blind pointed at a seat that no longer existed. The writer now remembers each group\u2019s hole label (by the PEOPLE in it), each player\u2019s tee, handicap and customer_id before the delete, and hands them back to any group the ingest left unlabelled. A label the ingest DOES carry (the tee-sheet route\u2019s 1A/1B) still wins.",
+      "THE TEE COMES FROM THE ROSTER, NOT THE SAVED ROW (Kerry: \u2018If the tees are in ROSTER, they should automatically show up in PAIRINGS\u2019). `get_event_pairings` now resolves a blank `tee_choice` from `_event_roster_rows` by customer_id \u2014 the same read-time lookup the sheet already does for names and handicap indexes \u2014 so PAIRINGS and ROSTER can no longer disagree about a tee. The saved row is a snapshot; the truth is looked up.",
+      "\u2018Group N\u2019 is never printed as \u2018Hole Group N\u2019. The starter-sheet `start_line` / `hole_label` composition leaves a generic label alone instead of dressing it up as a hole.",
+      "THE REPAIR: `relabel_event_pairings` + bridge `scoring-pairings:relabel|<event>|{current group_num: hole label}[|apply[|holes]]` gives a sheet its hole labels back and renumbers the groups in the order listed, THROUGH the normal save so the blinds re-seat with it and the roster tees persist. Nobody changes seats. Dry-run unless `apply`. Built for s9.23 (Kerry: \u2018Re-seat the pairings as necessary to match and fix blinds\u2019), where the GG tee-sheet widget no longer lists a played round, so Kerry\u2019s screenshot of the tee sheet is the record.",
+      "Test: `test_pairings_ingest_preserve.py` (12 checks) \u2014 label-less ingest keeps hole labels, tees and customer_ids; a carried label still wins; a blank row tee is read from the roster; the Group-N guard; the repair relabels, reorders, persists tees and re-seats a blind through the normal save.",
+    ],
+  },
   {
     version: "2.458.9",
     date: "2026-09-16",
