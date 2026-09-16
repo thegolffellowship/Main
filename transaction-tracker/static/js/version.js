@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.462.0";
+window.TGF_VERSION = "2.462.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.462.1",
+    date: "2026-09-16",
+    changes: [
+      "The starter sheet\u2019s \u2018No playing handicap for some tees\u2019 note is about the tees ON THE SHEET. a9.23 Avery Ranch printed it after v2.462.0 had restored every player\u2019s PH, because the Green tees were still unresolved \u2014 and nobody was playing Green. An unlabelled tee no seated player uses is not a missing handicap; the note now prints only when a player\u2019s own tee yielded none.",
+    ],
+  },
   {
     version: "2.462.0",
     date: "2026-09-16",

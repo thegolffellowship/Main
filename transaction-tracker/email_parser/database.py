@@ -58126,10 +58126,17 @@ def get_event_print_pack(event_id: int, db_path=None) -> dict | None:
     # sheet PRINTS which one it used, so a wrong dial is visible.
     from email_parser.handicap_calc import playing_handicap as _ph_fn, whs_round as _wr
     ph_by_name: dict = {}
+    # THE NOTE IS ABOUT THE TEES ON THIS SHEET (v2.462.1). An unlabelled
+    # tee nobody is playing tonight is not a missing handicap — a9.23's
+    # Green tees were unresolved and unused, and the sheet still warned.
+    _bands_short: set = set()
     for g in groups:
         for p in g["players"]:
             cid = p.get("customer_id")
-            tee = tee_rows.get((p.get("tee_choice") or "").strip())
+            _band = (p.get("tee_choice") or "").strip()
+            tee = tee_rows.get(_band)
+            if _band and not tee:
+                _bands_short.add(_band)
             idx = idx_map.get(int(cid)) if cid else None
             if idx is None or not tee:
                 continue
@@ -58216,7 +58223,7 @@ def get_event_print_pack(event_id: int, db_path=None) -> dict | None:
         # The women's tee prints as an OUTLINE wherever it appears.
         "tee_ladies": {t["band"]: bool(t.get("ladies")) for t in tee_legend},
         "ph_basis": ph_basis,
-        "ph_note": ph_note,
+        "ph_note": ph_note if _bands_short else "",
         "team_basis": team_basis,
         "team_balls": team_balls,
         "holes_key": "18" if _event_holes_type(

@@ -190,6 +190,9 @@ check("an unlabelled nine is decided by the event's own scorecards (Avery Ranch)
       "event_used" in src[src.index("def _print_pack_tee_basis") if "def _print_pack_tee_basis" in src
                           else src.index("event_used"):])
 
+check("the PH note is scoped to tees a seated player actually uses",
+      '"ph_note": ph_note if _bands_short else ""' in src)
+
 try:
     os.unlink(DB)
 except OSError:
