@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.454.0";
+window.TGF_VERSION = "2.455.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.455.0",
+    date: "2026-09-16",
+    changes: [
+      "MARK PAID IS ONE MODAL, AND IT ARRIVES FILLED IN (Kerry: \u2018make it all one modal to Mark Paid so I can just click a button or select from a drop down, then auto enter today\u2019s date which would most likely be the date that I\u2019m marking it, and enter the appropriate note\u2019). It was three chained browser prompts \u2014 TYPE the method, TYPE the date, TYPE the note \u2014 for a payout whose method is one of eight, whose date is today, and whose note is already written on its own rows. Now: method is a row of buttons (Venmo first, Apple Pay beside it), the date opens on TGF\u2019s Central today, and the note arrives composed from what the player actually won \u2014 \u2018TEAM Net 1st + Skins Birdie on 8\u2019 \u2014 with the bookkeeping tails a human would not write stripped off. Nothing has to be typed to mark a payout paid; Enter confirms, Escape cancels, the backdrop closes it.",
+    ],
+  },
   {
     version: "2.454.0",
     date: "2026-09-16",
