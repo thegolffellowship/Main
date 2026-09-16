@@ -381,6 +381,80 @@ Wednesday auto-draft fills the template:**
   changes goes into the lessons list below and, where it is a pattern,
   into `compose()`.
 
+**THE WRITER (v2.463.0, 2026-09-16, `email_parser/insider_writer.py` — the
+"Insider Writer" lane, branch `claude/insider-writer-0e4788`):**
+- Kerry's brief, verbatim: *"I'm thinking you don't auto post to Brevo each
+  week, but instead send me an email of what you suggest, that I can edit and
+  approve. I want it to be creative though. I don't necessarily want the same
+  format each time with the '3 things.' I think we need to be more diverse
+  about it. We need to explore more of The Golf Fellowship and what it
+  provides. So many avenues for potential."* and *"yes, I am comfortable,
+  ultimately, allowing an AI-written draft with options to choose from. I
+  would ultimately work back and forth with it to hone the message that can
+  be committed to memory."*
+- **Angle rotation as data.** `insider_writer.ANGLES` is the catalogue (ten
+  angles: `tuesday-story`, `first-timer`, `fellowship`, `handicap-fair`,
+  `saturday-18s`, `season-contests`, `hio-pot`, `twenty-seasons`,
+  `course-of-week`, `member-words`); dial `insider_angles` (comma list of
+  keys) is the ORDER; `insider_angle_force` names one angle for the next run
+  (consumed once); `insider_angle_history` (JSON, written by the scheduled
+  run only) keeps every angle from repeating until the rest have had a
+  turn. An angle whose facts are missing this week is skipped, never faked
+  (`first-timer` needs a first-timer, `saturday-18s` a Saturday 18 on the
+  calendar, `member-words` a quote on the dial `insider_member_quote`).
+  `handicap-fair` pins the skill band, `hio-pot` the pot band; every other
+  angle keeps the weekly band rotation. Read-only view:
+  `scoring-insider-angles`. **The order is Kerry's to ratify (rule 3b) —
+  proposed 2026-09-16, awaiting his reorder.**
+- **One Claude call a week** (`write_insider`; model dial `insider_model` /
+  env `INSIDER_MODEL`, default the parser's Sonnet route; parser.py's client
+  pattern; `ops_alerts.maybe_alert_anthropic_billing` on auth/credit
+  failures). Fed: the angle brief, the public FACT SHEET from
+  `gather_week()` (every name already first + initial; the links it may use;
+  the surnames it must not print), `PUBLIC_RULES` (the #381 guardrails + the
+  Insider lessons, and they WIN over the member-recap style), THIS file for
+  voice and corrections, and `docs/claude/templates/insider-voice-examples.md`
+  (Kerry's SENT texts — the voice memory; add to it only with text he sent
+  or approved). It returns the headline PLUS two alternates, the lede, the
+  story box as 1–4 beats (the shape varies — the "3 things" every week is
+  what Kerry asked us to stop), the Celebrate line, the close-box header,
+  and a one-line "why this angle this week".
+- **The gate holds.** `validate()` whitelists tags, unwraps any link not on
+  the allow-list, refuses a full surname from the week's roster, a banned
+  word, a dollar figure other than the pot, "alone", and a headline that
+  repeats a recent one; `lint()` runs on the rendered HTML. One retry with
+  the problems fed back, then `compose()` (the deterministic draft) is the
+  fallback and the review email says so — the 8:00 email always goes out.
+  `insider_writer=off` turns the writer off; no `ANTHROPIC_API_KEY` = off.
+- **Review email** (`send_review_preview`, the 8:00 Wednesday job in
+  `review` mode): the orange box now carries the angle, why this angle, the
+  three headline/subject options, and who wrote it; the mailbox post
+  (topic `insider-review`) carries the same digest. `send_review_samples`
+  puts SEVERAL angles in ONE email (`scoring-brevo-draft:samples|a,b,c`) —
+  the "options to choose from" Kerry asked for.
+- **Approval → Brevo.** Kerry edits in chat; the lane folds each edit into
+  the lessons here AND the voice examples; then
+  `scoring-insider-approve:<subject>|<html>` runs `lint()` on HIS html
+  (merge tags must survive), creates the Brevo DRAFT from it, emails him
+  the link, and logs `insider-approved` so the headline rotation sees the
+  title. Nothing sends itself. `scoring-brevo-draft:apply` (the
+  deterministic Brevo draft) stays as the legacy path.
+- Bridges: `scoring-brevo-draft[:dry|review|apply|samples][|<angle>|<a,b,c>][|nowriter]`,
+  `scoring-insider-angles`, `scoring-insider-approve`. Tests:
+  `test_insider_writer.py` (mocked call; rotation, facts, validation,
+  fallback, billing alert, review/samples/approve), `test_insider.py`
+  unchanged and green.
+
+**Lessons from Insider #3 (Kerry's Brevo edits of the 8:00 draft, 2026-09-16):**
+- **When no fellowship spot is on record, the Celebrate line is** *"Stick
+  around for food, drink, and banter after the round."* — Kerry replaced the
+  generic "Most of the field stayed for a drink after." with it. Draft that
+  shape (the writer's `fellowship` brief carries it); never a blank, never a
+  guessed venue.
+- The 8:00 draft had repeated last week's headline; he retitled it "Half the
+  Field Won Money!" (already folded: `pick_headline`, v2.462.4–.5; the
+  writer refuses a recent headline too).
+
 **Lessons from the auto-draft (Kerry's edits, 2026-09-10 — "so you can learn from it"):**
 - Skins need plain language for a public list. Kerry on the first draft:
   *"the skin sentence doesn't really work where it says you don't have to

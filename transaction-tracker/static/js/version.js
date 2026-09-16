@@ -1,5 +1,17 @@
-window.TGF_VERSION = "2.462.5";
+window.TGF_VERSION = "2.463.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.463.0",
+    date: "2026-09-16",
+    title: "TGF Insider: the writer — a Claude-written weekly draft on a rotating angle, options for Kerry, Brevo only from his approved text",
+    changes: [
+      "The Wednesday Insider is now WRITTEN, not assembled (Kerry 2026-09-16: 'I want it to be creative though. I don't necessarily want the same format each time with the 3 things… We need to explore more of The Golf Fellowship and what it provides'). New email_parser/insider_writer.py: one Claude call a week (Sonnet route, parser.py's client pattern, billing alert on auth/credit failures) fed the week's facts in public form, the chosen ANGLE, the ratified public rules, the member-recap house style for voice, and Kerry's sent Insiders as examples (docs/claude/templates/insider-voice-examples.md). It returns the headline plus two alternates, the lede, a story box of 1–4 beats, the Celebrate line, the close header, and a one-line 'why this angle this week'.",
+      "Angle rotation as data: ten angles in a catalogue (a Tuesday story, a first-timer's night, the fellowship afterward, how the handicap makes a 20 and a scratch equal, the Saturday 18s and road trips, the season contests explained, the Hole-In-One pot, twenty seasons of TGF, a course of the week, a member's own words). Dial insider_angles sets the order (Kerry to ratify), insider_angle_force picks one for the next run, insider_angle_history keeps any angle from repeating until the rest have had a turn; an angle whose facts are missing this week is skipped, never faked. Read-only view: scoring-insider-angles.",
+      "The gate holds on the writer's output: tags whitelisted, links only from the allow-list, no full surname from the week's roster, no banned word, no dollar figure but the pot, no 'alone', no recent headline — then lint() on the rendered HTML. One retry with the problems fed back, then the deterministic compose() is the fallback and the review email says so, so the 8:00 email always goes out. Dial insider_writer=off keeps the composer only.",
+      "Review email (dial insider_autodraft=review, set 2026-09-16 1:19 PM): the banner now carries the angle, why this angle, the three headline/subject options and who wrote it; the mailbox post carries the same digest. scoring-brevo-draft:samples|a,b,c writes several angles and emails them to Kerry as ONE message — the 'options to choose from'. The Brevo DRAFT is created only from Kerry's approved text (scoring-insider-approve:<subject>|<html>, lint-gated, merge tags checked, logged as insider-approved so the headline rotation sees it). Nothing sends itself.",
+      "Insider #3 lesson folded (Kerry's Brevo edit): with no fellowship spot on record the Celebrate line is 'Stick around for food, drink, and banter after the round.' Tests: test_insider_writer.py (60 checks, Anthropic call mocked); test_insider.py and test_insider_headline.py unchanged and green.",
+    ],
+  },
   {
     version: "2.462.5",
     date: "2026-09-16",
