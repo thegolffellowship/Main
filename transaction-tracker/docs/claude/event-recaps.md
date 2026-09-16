@@ -156,6 +156,49 @@ South comparisons and the skins paragraph. What he changed is the rulebook:
     the second new-member paragraph. Kept: "It is early. It is very
     early." Draft leaner; let Kerry add.
 
+## Lessons from the s9.23 send (Kerry's edit of the Word draft, 2026-09-16)
+
+Kerry kept the lede, the ten-shot trend, the head-to-head, the skins
+paragraph's facts, the Team Net line, the fall-race top four, the New
+Faces bullets and every link. What he changed:
+
+30. **Members' surnames in CAPS and bold on first mention, in the body
+    too** — not only in the New Faces block: Adam BAKER, Luke YOUNGS,
+    Mary WADE, Pat YOUNGS, Jeff YOUNG, Larry ANTHIS, Rob BURLINGAME, Jesse
+    SALDANA, Daniel SOUTH, Luke MAZANEC, Jeff RIDEOUT. Non-members stay
+    plain (Justin Guerrero, Joe Mejia). Key phrases bold: "A $156 night",
+    "TGF MVP head-to-head over…", "Justin's first TGF round, and he left
+    with money", "HOLE-IN-ONE Pot stands at $3,384". (Richard Palacios,
+    a member, was left plain — flagged back to Kerry as a likely miss.)
+31. **Cut the handicap mechanics from the prose.** Gone: "playing plus-3
+    (so his net was 36 — all gross, giving strokes back)" and "with no
+    strokes at all". The score line is enough; the reader does not need
+    the arithmetic.
+32. **Genderless collectives.** "two men at 33" → "two at 33" (rule 15
+    extended: do not assume gender of a group either).
+33. **The skins nudge is an invitation, not a jab.** Cut: "In our skins
+    game every hole is its own contest. Play the games, people." →
+    "Every hole is an opportunity to win in Skins, and with
+    pre-handicapped flights of <12.0 and 12.0+, everyone has a chance!"
+    — explain the flight mechanic, never scold.
+34. **Never name who has NOT bought in.** Cut from the fall-race graf:
+    "Dan Stich sits fifth at 32 and Jeff Young is tied sixth at 25 — both
+    without a buy-in, so those points are waiting on them." Only enrolled
+    leaders are named; the BUY IN link carries the nudge (rule 20, hard).
+35. **Fellowship without a headcount is fine**: "A number of the players
+    stuck around in the clubhouse for food & drinks and good banter."
+    Draft that shape when the count is unknown; do not leave a blank.
+36. **UP NEXT line shape**: `This Sat, Sep 19 | 8:10-9:00a Tee Times |
+    CEDAR CREEK (18) | REGISTER — yes, you gain fall points by playing.
+    Deadline tomorrow at NOON.` (deadline in red); Tuesdays as
+    `Tue, Sep 22 | 5:00p Shot | BRACKENRIDGE PARK | REGISTER`. "Shot" is
+    the shotgun shorthand; the nine side is NOT printed. Tuesday nines
+    are 5:00 PM shotguns as a rule — draft that, not a blank.
+37. **Draft error Kerry did not catch — ours to catch next time.** The
+    lede said "Two weeks ago at Silverhorn"; s9.22 Silverhorn was
+    2026-09-08, ONE week before. Every relative date in a draft gets
+    checked against `round_date` (rule 17, now including "weeks ago").
+
 Draft-time checklist derived from the above: two-week trend table for
 the headliner (previous event's card + payout), team score on Team Net,
 acquisition source per first-timer, links for every proper noun, both
