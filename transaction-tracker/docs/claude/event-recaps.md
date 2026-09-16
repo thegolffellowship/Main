@@ -203,6 +203,13 @@ Faces bullets and every link. What he changed:
     ("Luke YOUNGS from Austin is the current leader.") — name the
     monthly leader when the cache includes last night's rounds.
 
+38. **Name the team game's FORMAT with a one-line explainer** (Kerry's
+    last edit, s9.23): "Team Net was Best 2 Balls (cumulative of best two
+    net scores per hole) went to … at 61". The format is in
+    `scoring-gg-results` (the TEAM Net board's setup) and the allowance
+    ladder in side-games.md (1 ball 75%, 2 ball 85%, 3–4 ball 100%);
+    print the format, not the percentage. Extends rule 23.
+
 Draft-time checklist derived from the above: two-week trend table for
 the headliner (previous event's card + payout), team score on Team Net,
 acquisition source per first-timer, links for every proper noun, both
