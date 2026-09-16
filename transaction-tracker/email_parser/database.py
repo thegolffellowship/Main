@@ -55740,7 +55740,9 @@ def _event_started(ev: dict, now: datetime | None = None) -> bool:
     sheet that has not gone out yet costs nothing to regenerate. An event
     dated today with no start time recorded therefore counts as started.
     """
-    now = now or datetime.now()
+    # Central, because event_date is a Central business date and the
+    # container clock is UTC (same rule as the poller).
+    now = now or now_central()
     date_s = (ev.get("event_date") or "").strip()
     if not date_s:
         return False
@@ -56771,13 +56773,31 @@ def poll_live_events(force: bool = False, db_path=None) -> dict:
     It reports what it did per event, including why it skipped one, so a
     quiet board is diagnosable instead of mysterious.
     """
-    today = datetime.now().strftime("%Y-%m-%d")
+    # TGF'S DAY, NOT THE CONTAINER'S (Kerry 2026-09-16, an hour after the
+    # same mistake on the events list: "Leaderboard isn't updating
+    # again"). Railway runs in UTC, so from 7pm Central the poller was
+    # asking for events dated TOMORROW and finding none — it reported a
+    # clean sweep of zero events every five minutes while a round was
+    # being played. The repo's own timezone rule, applied on the server
+    # this time.
+    today = today_central_str()
+    yday = (datetime.strptime(today, "%Y-%m-%d") - timedelta(days=1)
+            ).strftime("%Y-%m-%d")
     out = {"checked": [], "imported": [], "skipped": [], "ran_at": today}
     with _connect(db_path) as conn:
+        # Yesterday's event still polls while it is unfinished AND
+        # something was posted recently — a round that runs past midnight
+        # is rare, but abandoning it at 00:00 is the wrong answer.
         evs = [dict(r) for r in conn.execute(
             """SELECT id, item_name, chapter, format, event_date,
                       start_time, start_time_18
-                 FROM events WHERE event_date = ?""", (today,))]
+                 FROM events
+                WHERE event_date = ?
+                   OR (event_date = ? AND EXISTS (
+                         SELECT 1 FROM scoring_rounds sr
+                          WHERE sr.event_id = events.id
+                            AND sr.imported_at >= datetime('now', '-6 hours')))""",
+            (today, yday))]
         for ev in evs:
             code_m = _PRINT_EVENT_CODE_RE.match(ev["item_name"] or "")
             code = (code_m.group(0).strip().replace(" ", "")

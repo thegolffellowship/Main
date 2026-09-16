@@ -86,5 +86,18 @@ with db._connect(tmp) as c:
     check("an empty field is never 'complete' — that would post money on "
           "nothing", db._event_field_complete(c, 9002, 9)["complete"] is False)
 
+print("\n== the live poll asks for TGF's day, not the container's ==")
+# Kerry 2026-09-16: "Leaderboard isn't updating again." Railway runs in
+# UTC, so from 7pm Central the poller asked for events dated TOMORROW and
+# reported a clean sweep of zero events while a round was being played.
+import inspect
+_src = inspect.getsource(db.poll_live_events)
+check("the poller's today is Central", "today_central_str()" in _src
+      and "datetime.now().strftime" not in _src, _src[:200])
+check("a round that runs past midnight is still polled",
+      "-6 hours" in _src and "event_date = ?" in _src)
+check("has-it-started reads the Central clock too",
+      "now_central()" in inspect.getsource(db._event_started))
+
 print("\n" + ("ALL PASS" if not F else f"{len(F)} FAILURE(S): " + "; ".join(F)))
 sys.exit(1 if F else 0)

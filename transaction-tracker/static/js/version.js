@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.452.0";
+window.TGF_VERSION = "2.452.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.452.1",
+    date: "2026-09-16",
+    changes: [
+      "The live poll asks for TGF\u2019S DAY, not the container\u2019s (Kerry: \u2018Leaderboard isn\u2019t updating again\u2019). Railway runs in UTC, so from 7pm Central the five-minute sweep was asking for events dated TOMORROW, finding none, and reporting a clean run \u2014 zero events checked \u2014 while a round was being played. Exactly the mistake fixed an hour earlier on the events list, made again on the server side; the repo\u2019s own timezone rule now covers both. A round that runs past midnight keeps polling while it is unfinished and something was posted in the last six hours, rather than being abandoned at 00:00, and \u2018has it started\u2019 reads the Central clock too.",
+    ],
+  },
   {
     version: "2.452.0",
     date: "2026-09-16",
