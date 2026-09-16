@@ -1130,6 +1130,50 @@ docs/claude/handicaps.md → public-portal probe for the fetch layer).
   recorded after the fetch shows immediately). Auto-refreshes only when
   empty/stale/forced; serves the stale snapshot with `gg_error` set when
   GG is unreachable.
+- **THE EVENT-DAY WINDOW (v2.458.0, Kerry 2026-09-16: "Why aren't these
+  points adding correctly?").** Two caches sit on the same page roughly
+  72x apart: the row expansion is fetched live and cached 10 MINUTES (see
+  "Expandable detail" below), the total beside it 12 HOURS. GG awards
+  season points at CLOSEOUT — hours after the snapshot still serving the
+  page — so on event night Jeff Rideout's rows read
+  11+10+8+6+1 = 36 above a total of 30, which was those same rows minus
+  the Quarry line. Every total on the board was short by that player's
+  s9.23 score.
+  The staleness test had a guard that let a time-stale snapshot stand when
+  no event had happened since — but **armed in one direction only**:
+  nothing could make a time-FRESH snapshot stale, so the clock alone
+  decided. An event PLAYED on or after the snapshot's day, and not in the
+  future, now selects `_POINTS_EVENT_DAY_REFRESH_HOURS` (0.25h) instead of
+  `auto_refresh_hours`. Bounded and self-settling: the refresh moves
+  `fetched_at`, so it is one GG round-trip per window, not one per load.
+  Excluded: future fixtures (a scheduled event would pin the race in the
+  short window forever) and cancelled events (they award nothing).
+  **The timezone trap is why it hid, and it was already in the OLD
+  guard.** `fetched_at` is naive UTC; `event_date` is a CENTRAL calendar
+  day. At 9 PM Central the snapshot is already TOMORROW in UTC, so
+  `event_date >= date(fetched_at)` excluded the event that had just
+  finished. Both tests now read the snapshot's Central day via
+  `to_central`. Guard: `test_points_race_staleness.py`.
+- **DORMANT, not fixed: a merged row SUMS its member cards' totals.**
+  When GG carries the same person as two member records, our write-time
+  fold stores `merged_from` with `{"method": "sum"}` and adds the two
+  totals. Summing two per-card best-N subtotals equals best-N-of-the-union
+  only while neither card exceeds the cutoff; past it, it overcounts.
+  `combine_member_detail_tables` already rebuilds the union correctly for
+  the row EXPANSION — the standings total does not use it.
+  **Currently exercised by nobody.** Luke Mazanec was the live case
+  (12135103 + 12135088 = 33); **Kerry merged the two records on Golf
+  Genius on 2026-09-16**, so GG now returns one card and our row reads
+  `merged_from: null`, one card, total 36 = the union of his five events.
+  `scoring-race-dupes` reports zero unmerged and zero folded across all
+  five races. It never produced a wrong number either — with best 6 and
+  five events the sum and the union agreed.
+  Kerry's preference is to resolve duplicates AT GOLF GENIUS, which makes
+  our fold a fallback rather than the primary path. Fixing the mechanism
+  means the refresh would have to fetch every card's detail to rebuild the
+  union, which costs a GG round-trip per duplicate per refresh — so it is
+  a decision, not a tidy-up. Left as written down until a duplicate
+  actually appears with more than `best_n` events between its cards.
 - Endpoint GET /api/season-contests/points-race?race=<key>[&force=1]
   (manager role).
 - UI colors: green = enrolled, red = profile but no buy-in, amber =

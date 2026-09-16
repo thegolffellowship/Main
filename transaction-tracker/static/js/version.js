@@ -1,11 +1,52 @@
-window.TGF_VERSION = "2.457.1";
+window.TGF_VERSION = "2.458.5";
 window.TGF_CHANGELOG = [
   {
-    version: "2.457.1",
+    version: "2.458.5",
     date: "2026-09-16",
     changes: [
       "THE OPEN DECISIONS MOVED OUT OF THE TRANSCRIPT AND ONTO KERRY\u2019S OWN CHECKLIST. Five rows written to the CA Queue: the a9.23 skins question (Golf Genius\u2019s skins board pays Carlos Zapata a birdie on hole 7 while Golf Genius\u2019s own scorecard has him at par there \u2014 $52 and a posted handicap round hang on which is right), the five blind-draw specifics still running on inferred rules, the chapter-badge rule, how the plus-handicap deduction rounds when a nine-hole plus sits at \u22120.5 and rounds to zero, and the re-send of both events\u2019 handicap cards that went out with pre-round indexes. A decision living only in a chat is a decision nobody can find next week.",
       "Docs caught up to the code: the event-night handoff now runs to v2.457.0 with a new \u00a713 covering the proxy-name change, the `scoring-skins-audit` bridge, the Golf Genius self-contradiction in full, the chapter-badge rule that has NOT been given yet (with the constraint that only the badge display may change \u2014 `customers.chapter` must never be overwritten from `items.chapter`), and the split of what went to the spin-off lane versus what stayed. The skins section of side-games.md now points at the audit bridge from the RULE, so the next person finds it without reading a handoff.",
+    ],
+  },
+  {
+    version: "2.458.4",
+    date: "2026-09-16",
+    changes: [
+      "docs: closeout skill 1.1/1.2 — the drop + keyed re-import recipe for a null-customer_id or tee-less card (refresh= does nothing for either), and the tee-sheet path for a cart-only team board (pass the event id; the sheet has no label). Skill OPEN 9 and 10 closed by Kerry's rulings 2026-09-16; a9.23 pairings applied from the tee sheet; Lee Vasquez posted; customer 821 is Guillermo Arevalo.",
+    ],
+  },
+  {
+    version: "2.458.3",
+    date: "2026-09-16",
+    changes: [
+      "docs: third live closeout run (s9.23 The Quarry + a9.23 Avery Ranch) in the closeout handoff §3k — the null-customer_id card GG's spelling created (alias, drop, keyed re-import, one handicap post), the tee-less Lee Vasquez card, the cart-only Austin pairings board; skill OPEN 9–11. Recap drafts for both chapters under docs/claude/recaps/.",
+    ],
+  },
+  {
+    version: "2.458.2",
+    date: "2026-09-16",
+    changes: [
+      "TGF Insider: the Hole-In-One pot line now prints the pot AS OF today — get_hio_pot() folds FUTURE events' registrations into its headline (closeout skill OPEN 8; Cedar Creek's 8 signups put $3,392 in the 9/16 draft when the pot after Tuesday's play was $3,384). The Insider takes the running total at the last PLAYED event instead.",
+    ],
+  },
+  {
+    version: "2.458.1",
+    date: "2026-09-16",
+    changes: [
+      "DOCS ONLY, no behaviour change. Kerry merged Luke Mazanec\u2019s two Golf Genius member records on GG\u2019s side, so the duplicate the v2.458.0 note described is gone at source: GG now returns ONE card (12135103), our standings row reads `merged_from: null`, and his total is 36 \u2014 the union of his five events \u2014 matching the rows in his expansion exactly. `scoring-race-dupes` reports zero unmerged and zero folded across all five races.",
+      "`docs/claude/customers.md` no longer reads that as a live open item. The summing fold (`{\u201cmethod\u201d: \u201csum\u201d}`) is still in the code and is now DORMANT rather than open \u2014 exercised by nobody, and it never produced a wrong number even when it was exercised, because with best 6 and five events the sum and the union agree. The note records what would make it bite (a duplicate whose cards hold more than `best_n` events between them), and what fixing it would cost (the refresh would have to fetch every card\u2019s detail to rebuild the union \u2014 a GG round-trip per duplicate per refresh, so a decision rather than a tidy-up). Kerry\u2019s preference is to resolve duplicates at Golf Genius, which makes our fold a fallback rather than the primary path.",
+    ],
+  },
+  {
+    version: "2.458.0",
+    date: "2026-09-16",
+    changes: [
+      "A PLAYER\u2019S OWN ROWS NOW ADD UP TO HIS OWN TOTAL (Kerry, on the SA FALL NET board on event night: \u2018Why aren\u2019t these points adding correctly?\u2019). Jeff Rideout\u2019s five counted rows read 11 + 10 + 8 + 6 + 1 = 36 above a total of 30 \u2014 and 30 was exactly those same rows MINUS the 9/15 Quarry line worth 6. Two caches on one page, roughly 72x apart: the row expansion is fetched live from Golf Genius and cached TEN MINUTES, while the total beside it came from the `gg_points_standings` snapshot on a TWELVE HOUR timer. Golf Genius awards season points when the manager closes an event out \u2014 hours after the snapshot that is still serving the page \u2014 so on event night the rows carried the night\u2019s points and the total did not. Every total on the board was short by that player\u2019s Quarry score (South 37 vs 38, Mazanec 33 vs 36, Rideout 30 vs 36).",
+      "THE GUARD WAS ARMED IN ONE DIRECTION ONLY \u2014 the pattern CLAUDE.md names, and the same shape as the late-signup bug in v2.430.0. `get_points_race_standings` already knew standings move with events: it had a check that let a TIME-STALE snapshot stand when no event had happened since. But nothing could ever make a time-FRESH snapshot stale, so the clock alone decided \u2014 and the clock cannot tell that a round finished twenty minutes ago. An event PLAYED on or after the snapshot\u2019s day (and not in the future \u2014 next week\u2019s fixture must never hold the board open, and a cancelled event awards nothing) now puts the race in a short window instead of the long one. It settles itself: the refresh moves `fetched_at` forward, so this costs one Golf Genius round-trip per window, not one per page load.",
+      "THE TIMEZONE TRAP IS WHY IT HID, AND IT WAS ALREADY IN THE OLD GUARD. `fetched_at` is stored naive UTC like every timestamp in this database; `events.event_date` is a CENTRAL calendar day. At 9 PM Central on a Tuesday the snapshot is ALREADY TOMORROW in UTC, so `event_date >= date(fetched_at)` silently excluded the event that had just finished \u2014 on exactly the night it mattered. Both the new test and the pre-existing one now read the snapshot\u2019s CENTRAL day through `to_central`, whose docstring describes this precise trap. Fixed across the board rather than only on the new code path (rule 3d).",
+      "The event-day window is a named rule, not a literal buried in a staleness test: `_POINTS_EVENT_DAY_REFRESH_HOURS` (0.25h) beside the race registry, with the ordinary window still `auto_refresh_hours=12`. Manual Refresh is unaffected and remains instant.",
+      "NOT FIXED, WRITTEN DOWN: a merged standings row sums the member cards\u2019 totals (`{\u201cmethod\u201d: \u201csum\u201d}`) \u2014 Luke Mazanec carries two Golf Genius member records. Summing two per-card best-N subtotals equals best-N-of-the-union only while neither card exceeds the cutoff; past it, it overcounts. `combine_member_detail_tables` already does the union correctly and the standings total does not use it. Not biting today (best 6, few events); recorded in `docs/claude/customers.md` for Kerry to rule on before it does.",
+      "Test: `test_points_race_staleness.py` (18 checks \u2014 the event-day refresh, the thrash guards for a future fixture and a cancelled event, the long window and the original guard still intact, and the 9:30 PM Central snapshot that reads as the event\u2019s day rather than the next).",
     ],
   },
   {

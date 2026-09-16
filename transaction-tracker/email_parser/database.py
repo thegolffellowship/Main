@@ -19,7 +19,8 @@ import logging
 from collections import defaultdict
 from datetime import datetime, timedelta
 from contextlib import contextmanager
-from .timezone_utils import now_central, today_central, today_central_str
+from .timezone_utils import (now_central, today_central, today_central_str,
+                              to_central)
 from pathlib import Path
 
 import anthropic as _anthropic
@@ -7683,6 +7684,16 @@ _GG_SYNC_EXCLUDES: frozenset = frozenset(n.lower() for n in (
 # ?page_id=<page_id>) to the tracker contest it charges buy-ins for. The
 # Enrollment tab's "Points Race — Buy-in Status" panel joins these standings
 # against season_contests by customer_id to color-code who is bought in.
+# How long a standings snapshot is trusted on a day an event was PLAYED.
+# The long window is `get_points_race_standings(auto_refresh_hours=12)`;
+# this is the short one, because Golf Genius awards season points at
+# closeout and a board that is hours behind on event night is wrong in
+# front of the people who just played (Kerry 2026-09-16). Rules-based, not
+# magic (guiding principle 2) — one named number, not a literal buried in
+# the staleness test.
+_POINTS_EVENT_DAY_REFRESH_HOURS = 0.25
+
+
 _GG_POINTS_RACES: dict = {
     "san_antonio_net": {
         "label": "SAN ANTONIO Net 2026",
@@ -10333,22 +10344,65 @@ def get_points_race_standings(race_key: str,
                FROM gg_points_standings WHERE race_key = ?""",
             (race_key,),
         ).fetchone()
+        # EVENT-DAY WINDOW (v2.458.0, Kerry 2026-09-16: "Why aren't these
+        # points adding correctly?"). Golf Genius awards season points when
+        # the manager closes an event out, which on a Tuesday is hours
+        # AFTER the snapshot that is still serving the page. The row
+        # expansion is fetched live (and cached 10 minutes); the total
+        # beside it was cached for 12 — so on event night the rows carried
+        # the night's points and the total did not, and a player's own
+        # five rows added to 36 over a total reading 30.
+        #
+        # The guard below already knew that standings move with events, but
+        # it was armed in ONE DIRECTION ONLY: "no event since" could let a
+        # time-stale snapshot stand, and nothing could make a time-fresh one
+        # stale. So the clock alone decided, and the clock cannot tell that
+        # a round finished twenty minutes ago.
+        #
+        # An event PLAYED on or after the snapshot's day (and not in the
+        # future — next week's fixture must never hold the board open) puts
+        # the race in a short window instead of the long one. It settles
+        # itself: the refresh moves `fetched_at` forward, so this costs one
+        # GG round-trip per window, not one per page load.
+        # `fetched_at` is stored NAIVE UTC like every timestamp here, and
+        # `events.event_date` is a CENTRAL calendar day. Taking date()
+        # straight off the stored value is the trap `to_central` exists to
+        # stop (and the one this codebase hit twice on 2026-09-15): at 9 PM
+        # Central on event night the snapshot is ALREADY TOMORROW in UTC,
+        # so "an event on or after the snapshot's day" silently excludes
+        # the event that just finished. Both tests below read the Central
+        # day of the snapshot.
+        snap_day = None
+        if stat["fetched_at"]:
+            _snap = to_central(stat["fetched_at"])
+            snap_day = _snap.date().isoformat() if _snap else None
+        played_since = None
+        if stat["n"] and snap_day:
+            played_since = conn.execute(
+                """SELECT 1 FROM events
+                    WHERE event_date IS NOT NULL
+                      AND event_date >= ?
+                      AND event_date <= ?
+                      AND COALESCE(status, 'active') = 'active'
+                    LIMIT 1""",
+                (snap_day, today_central_str())).fetchone()
+        window_hours = (_POINTS_EVENT_DAY_REFRESH_HOURS if played_since
+                        else auto_refresh_hours)
         stale = (
             stat["n"] == 0
             or stat["fetched_at"] is None
             or conn.execute(
                 "SELECT datetime(?) < datetime('now', ?)",
-                (stat["fetched_at"], f"-{auto_refresh_hours} hours"),
+                (stat["fetched_at"], f"-{window_hours} hours"),
             ).fetchone()[0] == 1
         )
         # Standings only change after events (Kerry, 2026-07-08): a stale
         # snapshot with NO event since it was taken is still current — skip
         # the GG round-trip. Manual Refresh (force_refresh) is unaffected.
-        if stale and stat["n"] and stat["fetched_at"]:
+        if stale and stat["n"] and snap_day:
             event_since = conn.execute(
                 "SELECT 1 FROM events WHERE event_date IS NOT NULL "
-                "AND event_date >= date(?) LIMIT 1",
-                (stat["fetched_at"],)).fetchone()
+                "AND event_date >= ? LIMIT 1", (snap_day,)).fetchone()
             if not event_since:
                 stale = False
 

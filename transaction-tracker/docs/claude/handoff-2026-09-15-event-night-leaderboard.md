@@ -386,7 +386,8 @@ without actually running the handicaps. Do that now."*
   second round with no index yet: Morris Allen, Christopher Espinosa,
   Justin Guerrero, Joe Mejia. Wade Lewis had 2 capped holes.
 - **a9.23 Avery Ranch** — 11 written, **1 skipped: Lee Vasquez, "no tee
-  slope/rating on the round"** (round 3518). Index moves: Kyle Compton
+  slope/rating on the round"** (round 3518). **RESOLVED the same night by
+  the event-closeout lane** (see below). Index moves: Kyle Compton
   11.1→8.4, Louis Schneider 5.1→4.8, Luke Youngs 0.5→0.3, Eduardo
   Melchor 5.6→5.8, Robert Straiton 0.4→0.6. No index yet: Guillermo
   Arevalo, Tom Donovan, Jeff King.
@@ -606,6 +607,40 @@ transcript:
 
 (#1 was already open: ratify importing TEAM tournament per-player nets
 at event sync, mailbox #472.)
+
+### 13e-2 — Corrected by the event-closeout lane, same night
+
+A second lane ("event closeout", v2.458.0–v2.458.4) was running
+concurrently and resolved two things this handoff had recorded as open.
+Verified independently against `scoring-hcp-preview:a9.23 Avery Ranch`
+rather than taken from its prose:
+
+- **Lee Vasquez is posted.** Golf Genius's results page DID carry his
+  tee (Blue, 139 / 36.0); the auto-sync's card had lost it. Card 3518
+  dropped and keyed-re-imported as **3529** with the tee, differential
+  7.3, index 7.3 (unchanged). **a9.23 is now 12 of 12, 0 skipped.**
+- **Guillermo Arevalo** — GG spelled "AREVALO, Guillermo" against a
+  store row "Guilermo Arevalo", and the card AND its posted round both
+  carried `customer_id` NULL (a rule-6 breach in the wild, on this very
+  night). Alias added, card dropped, keyed re-import as **3528** with
+  `customer_id` 821, index 7.8. Kerry ruled "Guillermo is correct"; 821
+  renamed, three `items` rows followed.
+- Austin pairings applied from the TEE SHEET (3 foursomes, 4:57 / 5:06 /
+  5:15 PM) — Austin's only GG team board is CART Net, so the foursomes
+  live on no board.
+- That lane also reports the handicap cards were emailed **twice**
+  (01:52 and 02:06 UTC), the second pass after the index fix. Not
+  verified here — CA Queue #6 carries it as open until Kerry confirms.
+
+**Carlos Zapata's card is unchanged at gross 44**, so 13c stands exactly
+as written and his posted differential (7.7) is computed off 44.
+
+**Note the lane collision:** this session and the closeout lane both
+pushed to `main` within minutes, and `version.js` conflicted. Both
+changelog stacks were kept; this session's entry was renumbered to sit
+on top of theirs. When two lanes run on one night, merge `main` before
+bumping — the rule is already in CLAUDE.md's conventions, and it earned
+its place again here.
 
 ### 13f — Split of what went where
 
