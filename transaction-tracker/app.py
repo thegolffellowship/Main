@@ -5140,7 +5140,8 @@ def api_get_pairings(event_id):
         # same people (Kerry 2026-09-15: "assign RSVP only's to groups
         # and requests"). Rows carry `rsvp_only` for the badge.
         from email_parser.database import (
-            _event_roster_rows, _pair_key_name, _roster_handicap_index_map)
+            _event_roster_rows, _pair_key_name, _roster_handicap_index_map,
+            _event_index_as_of)
         _pconn = get_connection()
         try:
             _seen_keys = set()
@@ -5148,7 +5149,10 @@ def api_get_pairings(event_id):
             # The index rides on the roster row so a player seated FROM
             # Unassigned (picker, move, drag) keeps it — the same map the
             # generator and the saved sheet read (Kerry 2026-09-15).
-            _hcp = _roster_handicap_index_map(_pconn)
+            _pev = _pconn.execute("SELECT * FROM events WHERE id = ?",
+                                  (event_id,)).fetchone()
+            _hcp = _roster_handicap_index_map(
+                _pconn, as_of=_event_index_as_of(dict(_pev) if _pev else None))
             for _r in _event_roster_rows(_pconn, event_id):
                 _k = _pair_key_name(_r["name"])
                 if not _k or _k in _seen_keys:
@@ -5162,7 +5166,10 @@ def api_get_pairings(event_id):
                     "user_status": _r.get("user_status"),
                     "customer_id": _r.get("customer_id"),
                     "rsvp_only": bool(_r.get("rsvp_only")),
-                    "handicap_index": _hcp.get((_r["name"] or "").lower()),
+                    "handicap_index": (_hcp.get(("c", _r.get("customer_id")))
+                                       if _r.get("customer_id") is not None else None)
+                                      if _hcp.get(("c", _r.get("customer_id"))) is not None
+                                      else _hcp.get((_r["name"] or "").lower()),
                     # Rules 12/13 inputs for the card badges + driver mark
                     "ambassador": bool(_r.get("ambassador")),
                     "group_captain": bool(_r.get("group_captain")),
@@ -8792,8 +8799,11 @@ def api_handicap_index_map():
     """Return a map of customer_name (lowercase) → handicap_index for all linked players.
 
     Lightweight endpoint used by the events page to display live HCP values.
+    `?as_of=YYYY-MM-DD` returns the map IN EFFECT that morning — the
+    handicap lock for an event that has begun (Kerry 2026-09-16).
     """
-    players = get_all_handicap_players()
+    _as_of = (request.args.get("as_of") or "").strip()[:10] or None
+    players = get_all_handicap_players(as_of=_as_of)
     index_map = {}
     for p in players:
         cname = p.get("customer_name")

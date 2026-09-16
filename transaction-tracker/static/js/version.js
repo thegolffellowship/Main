@@ -1,7 +1,7 @@
-window.TGF_VERSION = "2.462.0";
+window.TGF_VERSION = "2.462.3";
 window.TGF_CHANGELOG = [
   {
-    version: "2.462.0",
+    version: "2.462.3",
     date: "2026-09-16",
     title: "Cart Net and fivesome allowances ruled; the 9s-vs-18s stroke question opened",
     changes: [
@@ -13,6 +13,31 @@ window.TGF_CHANGELOG = [
       "The two consequences now written down, because neither appears to have been said out loud in TGF before. (1) A NINE PAYS FEWER STROKES THAN THE PRINTED PLAYING HANDICAP \u2014 Melchor\u2019s card says PH 3 and he receives 2, because stroke index 2 is on the back nine. (2) THE FRONT NINE PAYS MORE THAN THE BACK \u2014 front holds the odd indexes, back the even, so on every odd playing handicap the front gives one extra stroke; a 3-handicap gets 2 on the front and 1 on the back. Same player, same course, different nine.",
       "NOTHING CHANGED in the stroke-application code. GG\u2019s behaviour is coherent, a9.23 confirms we match it, and we stay tethered (\u2018until we detach from GG, GG rules\u2019). CA Queue #11 holds the discussion and should be settled together with CA Queue #10 \u2014 they are the same question at two layers.",
       "Tests: `test_half_net_skins.py` extended to 63 checks, including that an unruled combination refuses and names what IS ruled, that the fivesome dial is a separate entry rather than a fall-through, and that the Cart Net rows keep their \u2018NOT screenshot-verified\u2019 provenance.",
+    ],
+  },
+  {
+    version: "2.462.2",
+    date: "2026-09-16",
+    changes: [
+      "A TEE ROW\u2019S NINE IS DECIDED BY THE ROUNDS ALREADY PLAYED OFF IT (Kerry 2026-09-16, on Avery Ranch: \u2018I submitted ALL Avery Ranch tees, ratings and info last night. Is this fixed now?\u2019). Avery\u2019s card has two nine-hole rows per tee and no 18-hole row, so `label_course_tee_nines`\u2019 yardage strategies could not tell front from back and every future Avery sheet would have printed no handicap until an 18-hole card was imported. But each round we hold off a row was scored on a night whose nine we recorded (`events.nine_side`) and posted as a handicap round naming its nine (`handicap_rounds.nine`). Unanimous history now labels the row \u2014 permanently, for every future event at the course \u2014 and a row played as both front and back stays unresolved and says so. v2.462.0\u2019s per-event fallback still covers the night itself. Test: `test_tee_nine_from_history.py` (8 checks).",
+    ],
+  },
+  {
+    version: "2.462.1",
+    date: "2026-09-16",
+    changes: [
+      "The starter sheet\u2019s \u2018No playing handicap for some tees\u2019 note is about the tees ON THE SHEET. a9.23 Avery Ranch printed it after v2.462.0 had restored every player\u2019s PH, because the Green tees were still unresolved \u2014 and nobody was playing Green. An unlabelled tee no seated player uses is not a missing handicap; the note now prints only when a player\u2019s own tee yielded none.",
+    ],
+  },
+  {
+    version: "2.462.0",
+    date: "2026-09-16",
+    changes: [
+      "THE HANDICAP LOCK (Kerry 2026-09-16: \u2018ROSTER handicaps need to lock after an event begins. Past events should not update to current handicap indexes.\u2019). Every event now carries `handicap_as_of` \u2014 null until it tees off (`_event_started`, the same clock the blind re-seat uses), then its own date \u2014 and every handicap surface reads the index IN EFFECT that morning: the same computation over the rounds posted BEFORE that day, with the lookback measured back from it. Nothing is stored; the rounds that decided a past index do not change, so recomputing them yields the same number every time (principles 1 and 4). `get_all_handicap_players(as_of=)` is the one computation; `/api/handicaps/index-map?as_of=` serves it; the events page fetches that day\u2019s map when a started event is expanded and reads it in place of the live one for ROSTER and PAIRINGS alike.",
+      "PAIRINGS AND ROSTER ARE THE SAME NUMBER (Kerry: \u2018PAIRINGS handicap indexes are not matching those in ROSTER. PAIRINGS handicaps are not correct, which then affects the Starter Sheet handicaps\u2019). `_roster_handicap_index_map` \u2014 what PAIRINGS, the generator and the starter sheet\u2019s IDX column read \u2014 was its own query: a plain AVERAGE of the last twenty differentials, while the ROSTER showed the TGF index (`compute_handicap_index`: best-N of twenty, \u00d70.96, WHS adjustment). An average of all twenty is always higher than an average of the best eight, so every PAIRINGS index read two to four strokes above the ROSTER (Rideout 16.3 vs 13.6, South 6.8 vs 4.2), the starter sheet printed those, and a first-timer with two rounds got a number the ROSTER rightly refused him. The map is now a view of the one computation, locked to the event, and a saved sheet\u2019s `handicap_index` snapshot is the fallback rather than the answer \u2014 so every sheet already saved with the wrong number reads right without being re-saved.",
+      "AVERY RANCH PRINTS A PLAYING HANDICAP AGAIN (Kerry: \u2018Avery Ranch doesn\u2019t even show PH or TEAM (Cart) handicaps\u2019). Its card holds two nine-hole rows per tee and no 18-hole row to label them from, so the sheet, refusing to guess, printed none. Once the night\u2019s scorecards are in, the tee row Golf Genius scored the round off IS the nine that was played \u2014 a recorded fact \u2014 and the print pack now lets THIS EVENT\u2019s own rounds decide an otherwise unlabelled card. A future event at such a course still prints the note until its 18-hole card is imported.",
+      "New read-only bridge `scoring-pairings:sheet|<event_id>` returns the saved sheet as the page and starter sheet read it (locked index, roster tee, hole label) plus the print pack\u2019s PH basis and note, so a lane can verify a sheet without a login.",
+      "Test: `test_handicap_index_lock.py` (28 checks) \u2014 the as-of index counts only rounds before the day and differs from today\u2019s; the pairings map equals the roster index, keyed by customer_id, and is not the old average; a two-round player has no index anywhere; the lock date for past / future / today-before-tee; `/api/events` publishes it; a saved sheet reads the locked index over its own stale snapshot; and structural checks that every consumer honours the lock.",
     ],
   },
   {
