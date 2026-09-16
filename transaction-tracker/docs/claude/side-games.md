@@ -906,3 +906,34 @@ both publish the deduction — `pts_plus_adjust` / `points_plus_adjust` —
 so the board can print it. The PTS row shows the deduction beside the
 label, because hole points that deliberately do not add up to the total
 otherwise read as a bug. Test: `test_plus_handicap_points.py`.
+
+### OPEN — the rule is on 2 call sites out of 11 (2026-09-15, 9:15 PM)
+
+**Kerry, looking at Pat Youngs' Quarry Front card on `/handicaps`:**
+*"We just determined this isn't how we do Net Points with pluses on
+holes."* The card still shows NET SCORE 4 where GROSS is 3, the `○`
+plus-stroke mark, and NET PTS 0 on a hole he parred.
+
+The rule above was implemented **at the two call sites in front of us**,
+not at the mechanism. The mechanism is `compute_hole_derivations`
+(`database.py:15533`), where a negative `strokes_received` makes
+`net = strokes - strokes_received` ADD a stroke. Eleven call sites go
+through it.
+
+- **Must KEEP the plus stroke (WHS / index):** `get_differential_parity`,
+  `get_scoring_handicap_preview`, `_two_nine_recap_rows`,
+  `derive_18hole_rounds_as_two_nines`, `_nine_totals_for_card`. USGA net
+  double bogey is `par + 2 + strokes_received`; for a plus that
+  legitimately lowers the cap. **Changing these would corrupt every
+  differential and index.**
+- **Still wrong (game/display):** `get_scorecard` (22345),
+  `fetch_champ_player_card` (10152); plus the `○ = plus stroke` mark in
+  `static/js/scorecard-render.js:137` and
+  `static/js/points-render.js:643`.
+
+The fix belongs INSIDE `compute_hole_derivations` behind an explicit
+game-vs-WHS flag, with the two local patches then deleted so there is
+one implementation. **Open question for Kerry:** how the round-level
+deduction rounds — a −0.5 nine-hole playing handicap is the live case
+and `int(round(abs(ph)))` makes it 0. Carried in
+`docs/claude/session-prompt-2026-09-16-handicap-card-identity.md`.

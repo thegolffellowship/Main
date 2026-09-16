@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.456.0";
+window.TGF_VERSION = "2.456.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.456.1",
+    date: "2026-09-16",
+    changes: [
+      "SESSION DOCUMENTED \u2014 docs only, no behaviour change. `docs/claude/handoff-2026-09-15-event-night-leaderboard.md` records the whole event night, v2.437.0 \u2192 v2.456.0: pairing rule 15 (a credited or WD player leaves the sheet by himself, BLINDs drawn at random among the members with the fewest blinds this year), the money hold, the leaderboard wave, the starter-sheet tee circles, the plus-handicap rule, the Golf Genius re-pull chain that had made both chapters\u2019 winnings wrong, Apple Pay, one-modal Mark Paid, and the handicap-card counts that would not reconcile.",
+      "TWO OPEN BUGS WRITTEN DOWN RATHER THAN HALF-FIXED AT NIGHT. (1) The handicap-card event filter matches registrants to handicap links by NAME STRING \u2014 so \u2018Mike Murphy\u2019 against \u2018Michael Murphy\u2019 reads as \u2018no TGF handicap on record\u2019 and the player silently gets no card \u2014 and `get_handicap_export_data` never returns a `customer_id` at all, which is why every caller downstream is forced onto names. (2) The plus-handicap rule ratified this evening was applied at 2 of the 11 `compute_hole_derivations` call sites, so the `/handicaps` scorecard and the Players Cup card still add a plus stroke hole by hole. Both are spun off into their own session with the WHS call sites that must KEEP the plus stroke listed explicitly \u2014 touching those would corrupt every differential and index.",
+      "Both findings are the same failure the night already produced twice: the fix landed on the instance in front of us instead of on the mechanism. The Timezone trap in \u00a77 of the handoff is the third.",
+    ],
+  },
   {
     version: "2.456.0",
     date: "2026-09-16",
