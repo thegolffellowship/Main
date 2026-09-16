@@ -917,33 +917,92 @@ so the board can print it. The PTS row shows the deduction beside the
 label, because hole points that deliberately do not add up to the total
 otherwise read as a bug. Test: `test_plus_handicap_points.py`.
 
-### OPEN — the rule is on 2 call sites out of 11 (2026-09-15, 9:15 PM)
+### The rule lives in the MECHANISM (v2.459.0, 2026-09-16)
 
-**Kerry, looking at Pat Youngs' Quarry Front card on `/handicaps`:**
-*"We just determined this isn't how we do Net Points with pluses on
-holes."* The card still shows NET SCORE 4 where GROSS is 3, the `○`
-plus-stroke mark, and NET PTS 0 on a hole he parred.
+**Kerry, 2026-09-15 ~9:15 PM, looking at Pat Youngs' Quarry Front card on
+`/handicaps`:** *"We just determined this isn't how we do Net Points with
+pluses on holes."* The card showed NET SCORE 4 where GROSS was 3, the
+`○` plus-stroke mark, and NET PTS 0 on a hole he parred.
 
-The rule above was implemented **at the two call sites in front of us**,
-not at the mechanism. The mechanism is `compute_hole_derivations`
-(`database.py:15533`), where a negative `strokes_received` makes
-`net = strokes - strokes_received` ADD a stroke. Eleven call sites go
-through it.
+v2.450.0 had implemented the rule **at the two call sites in front of
+us**, not at the mechanism — the third instance in one night of a fix
+landing on the instance instead of the class. v2.459.0 moves it:
 
-- **Must KEEP the plus stroke (WHS / index):** `get_differential_parity`,
-  `get_scoring_handicap_preview`, `_two_nine_recap_rows`,
-  `derive_18hole_rounds_as_two_nines`, `_nine_totals_for_card`. USGA net
-  double bogey is `par + 2 + strokes_received`; for a plus that
-  legitimately lowers the cap. **Changing these would corrupt every
-  differential and index.**
-- **Still wrong (game/display):** `get_scorecard` (22345),
-  `fetch_champ_player_card` (10152); plus the `○ = plus stroke` mark in
-  `static/js/scorecard-render.js:137` and
-  `static/js/points-render.js:643`.
+- **`compute_hole_derivations(par, strokes, strokes_received, formulas,
+  game=False)`** — with `game=True`, a NEGATIVE `strokes_received` (a
+  stroke given back) reads as ZERO for `net`, `net_vs_par` and
+  `stableford_net`. `adjusted_strokes` keeps the TRUE value in both
+  modes. The flag is explicit and defaults OFF, so every WHS call site
+  keeps its behaviour by doing nothing.
+- **`plus_round_deduction(playing_handicap)`** — the round half, written
+  once. `get_event_leaderboard`, `live_scoring.build_cards`,
+  `get_scorecard` and `fetch_champ_player_card` all call it; the two
+  v2.450.0 local patches are deleted. `test_plus_handicap_card.py`
+  asserts there is exactly one executable copy of the arithmetic.
 
-The fix belongs INSIDE `compute_hole_derivations` behind an explicit
-game-vs-WHS flag, with the two local patches then deleted so there is
-one implementation. **Open question for Kerry:** how the round-level
-deduction rounds — a −0.5 nine-hole playing handicap is the live case
-and `int(round(abs(ph)))` makes it 0. Carried in
-`docs/claude/session-prompt-2026-09-16-handicap-card-identity.md`.
+**Call-site table, settled.**
+
+| Call site | Purpose | Plus strokes on holes |
+|---|---|---|
+| `get_differential_parity` | WHS | **KEEP** — untouched, no flag |
+| `get_scoring_handicap_preview` | WHS | **KEEP** — untouched, no flag |
+| `_two_nine_recap_rows` | WHS | **KEEP** — untouched, no flag |
+| `derive_18hole_rounds_as_two_nines` | WHS | **KEEP** — untouched, no flag |
+| `_nine_totals_for_card` | adjusted gross | **KEEP** — untouched, no flag |
+| `get_event_leaderboard` | game | `game=True` (local patch removed) |
+| `live_scoring.build_cards` | game | `game=True` (local patch removed) |
+| `get_scorecard` | display | publishes BOTH views (see below) |
+| `fetch_champ_player_card` | display | give-back dots clamped |
+
+**Why `get_scorecard` publishes both.** `verify_scoring_round` compares
+Golf Genius's own circle/square markings against `net_vs_par`, and GG
+marks a plus player's hole WITH the give-back stroke. Clamping the base
+keys would have turned every plus player's round into a false parity
+failure. So the unflagged keys stay the true WHS derivation and the card
+renders the `game_*` keys beside them: `game_strokes_received`,
+`game_net_vs_par`, `game_stableford_net`, `strokes_given_back`, plus
+round-level `plus_points_adjust` / `plus_strokes_adjust` /
+`game_net_after_plus` / `game_stableford_net_after_plus`.
+
+**The `○ = plus stroke` mark is gone** from `scorecard-render.js` and
+`points-render.js`, legend entry included — there is no give-back on any
+hole to mark. Both cards state the adjustment once instead: *"Plus
+handicap +3: applied to the ROUND, not to any hole · NET 36 · NET PTS
+8."* Nothing renders for a player who is not a plus.
+
+**The worked example (the fixture in `test_plus_handicap_card.py`).** Pat
+Youngs, 2026-09-15, The Quarry front, 2-Blue, playing handicap −3, gross
+4,4,3,3,5,4,4,2,4 = 33.
+
+| | before | after |
+|---|---|---|
+| NET row | 4,4,**4**,**4**,5,4,4,**3**,4 = 36, `○` on 3/4/8 | 4,4,3,3,5,4,4,2,4 = 33, no marks |
+| NET PTS | 1,1,**0**,1,1,1,1,1,1 = 8 | 1,1,1,**2**,1,1,1,**2**,1 = 11 |
+| round adjustment | none shown | −3 pts / +3 strokes |
+| totals | NET 36 · NET PTS 8 | NET 36 · NET PTS 8 |
+
+The totals match here because each affected hole sat in the linear part
+of the net table, where one stroke is worth exactly one point. It is the
+DISTRIBUTION that was wrong — and at the table edges (`nvp ≥ 2` flattens
+at −1, `nvp −3` and `−4` are both 4) the totals diverge as well.
+
+### RULED by Kerry 2026-09-16 (were OPEN under rule 3b)
+
+1. **Rounding of the round deduction — HALF AWAY FROM ZERO** ("Standard
+   rounding where .5 goes away from 0", CA Queue #5). `plus_round_deduction`
+   is `int(abs(ph) + 0.5)` for a plus, never Python's banker's `round()`:
+   −0.5 gives back 1, −2.5 gives back 3. This is the ROUND-level rule
+   only; the per-player allowance rounding in ½ Net Skins is a different
+   mechanism and is still open (CA Queue #7, side-games lane #533).
+2. **The card's NET total — GROSS − PH = NET across the totals** ("Individual
+   Net is not a pops per hole game... Gross Score - PH = Net Score";
+   "I accept your recommendation"). The expanded scorecard carries PH and
+   NET total columns beside OUT/IN, filled on the GROSS SCORE row of the
+   block that closes the round; hole columns do not move. NET is
+   `game_net_after_plus` (= gross − PH for everyone who is not a plus).
+3. **`determine_tgf_mvp` reads the GAME view, FORWARD ONLY** ("MVP -
+   Proceed"). For events on or after `PLUS_RULE_EFFECTIVE_DATE`
+   (2026-09-15) the points are `game_stableford_net_after_plus`; before it
+   the frozen WHS `stableford_net` — no MVP already decided can move
+   (guiding principle 4). Pat's s9.23 total is 8 either way.
+
