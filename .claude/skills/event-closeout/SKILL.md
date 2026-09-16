@@ -204,7 +204,15 @@ Do not assume it — read it — but do not redo it either.
     v2.357.0; `scoring-event-links` shows the state) — do not hand-build
     a slug when the row already carries a verified URL.
     Save the draft under `transaction-tracker/docs/claude/recaps/`.
-    Kerry sends — OPEN 2.
+    **Then render each chapter's draft as a Word file and hand both
+    over** (Robert 2026-09-16: "I really would love if it could almost
+    duplicate the spacing, where I bold, etc." — Kerry: "It can and
+    will."): `node tools/recap_docx.js <recap.md> --section "SAN ANTONIO"
+    -o TGF_Recap_<code>.docx` (needs `npm i docx` once in the sandbox;
+    **bold**, [links](url), "- " bullets, CAPS-with-period heads and
+    [__ blanks __] all survive as Word formatting). Austin's carries
+    Robert's signature block (lesson 39); SA's carries Kerry's. Kerry
+    sends SA; Robert sends Austin — OPEN 2 answered in practice.
     **Draft-time inputs the s9.22 send taught (event-recaps.md 20–29):**
     the headliner's PREVIOUS event (card + payout) for a trend; the Team
     Net team score; `customers.acquisition_source` for every first-timer;
