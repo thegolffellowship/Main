@@ -15612,6 +15612,14 @@ def get_championship_formulas(base: dict | None = None,
     return f
 
 
+# THE DAY THE PLUS RULE TOOK EFFECT (Kerry, ratified 2026-09-15; MVP
+# adoption "Proceed" 2026-09-16, forward only). Scoring that decided
+# money or a title before this date is frozen as it was decided
+# (guiding principle 4); from this date on, every game surface reads the
+# game view. Named here so no surface carries its own copy of the date.
+PLUS_RULE_EFFECTIVE_DATE = "2026-09-15"
+
+
 def plus_round_deduction(playing_handicap) -> int:
     """Strokes a PLUS handicap gives back across the ROUND (v2.459.0).
 
@@ -15620,11 +15628,13 @@ def plus_round_deduction(playing_handicap) -> int:
     again, so the leaderboard, the live cards, the `/handicaps` scorecard
     and the Players Cup card can never disagree about what a plus costs.
 
-    NOTE for Kerry (rule 3b, open): `round()` is banker's rounding, so a
-    FRACTIONAL plus handicap of -0.5 deducts 0 and -1.5 deducts 2. No
-    live round has a fractional plus handicap today — `scoring-hcp-link-
-    audit` reports whether that is still true — so this preserves the
-    v2.450.0 arithmetic exactly until he rules on it.
+    ROUNDING IS HALF AWAY FROM ZERO (Kerry 2026-09-16, CA Queue #5:
+    "Standard rounding where .5 goes away from 0"): a plus of 0.5 gives
+    back 1, 1.5 gives back 2, 2.4 gives back 2. Python's `round()` is
+    banker's rounding and would have made -0.5 cost nothing and -2.5
+    cost 2 — so it is not used here. This is the ROUND-LEVEL deduction
+    only; the per-player allowance rounding in ½ Net Skins is a
+    different mechanism and is still open (CA Queue #7).
     """
     if playing_handicap is None:
         return 0
@@ -15632,7 +15642,7 @@ def plus_round_deduction(playing_handicap) -> int:
         ph = float(playing_handicap)
     except (TypeError, ValueError):
         return 0
-    return int(round(abs(ph))) if ph < 0 else 0
+    return int(abs(ph) + 0.5) if ph < 0 else 0
 
 
 def compute_hole_derivations(par: int | None, strokes: int | None,
@@ -16213,9 +16223,23 @@ def determine_tgf_mvp(event_name: str, db_path: str | Path = DB_PATH) -> dict:
         buyers_by_event = {d["item_name"]: _event_net_buyers(conn, d["item_name"])
                            for d in day}
 
+    # THE MVP READS THE GAME VIEW FROM THE DAY THE PLUS RULE TOOK EFFECT
+    # (Kerry 2026-09-16: "MVP - Proceed"). Before it, a plus player's
+    # points were the WHS hole-by-hole net (a plus stroke added to a
+    # hole); those events decided their MVPs on that arithmetic and stay
+    # decided. From `PLUS_RULE_EFFECTIVE_DATE` the points are the game
+    # view — no hole made harder, the plus taken off the round once —
+    # the same number the leaderboard and the card show.
+    _game_view = (ev.get("event_date") or "") >= PLUS_RULE_EFFECTIVE_DATE
+
     def _round_points(rd: dict) -> dict:
         card = get_scorecard(rd["id"], db_path=db_path)
-        pts = card["derived_totals"]["stableford_net"] if card else None
+        pts = None
+        if card:
+            dt = card["derived_totals"]
+            pts = (dt.get("game_stableford_net_after_plus")
+                   if _game_view and dt.get("game_stableford_net_after_plus")
+                   is not None else dt["stableford_net"])
         gross = rd["gross"]
         if gross is None and card:
             gross = sum(h["strokes"] for h in card["holes"]

@@ -95,7 +95,23 @@
                 : "";
         };
 
+        // INDIVIDUAL NET READS ACROSS THE TOTALS: GROSS − PH = NET (Kerry
+        // 2026-09-16: "Individual Net is not a pops per hole game... Gross
+        // Score - PH = Net Score", and "Adjust columns in the expanded
+        // view scorecard (not hole columns...they still need to align
+        // with top level) for total columns"). Two more total columns,
+        // PH and NET, beside OUT/IN — filled on the GROSS SCORE row of
+        // the block that closes the round, so the hole columns never
+        // move. NET is the round's game net after the plus (equal to
+        // gross − PH for everyone who is not a plus).
+        const rnd = card.round || {};
+        const phRaw = rnd.playing_handicap;
+        const phTxt = phRaw == null ? "" : (Number(phRaw) < 0 ? "+" + Math.abs(Number(phRaw)) : String(phRaw));
+        const roundNet = dt0.game_net_after_plus != null ? dt0.game_net_after_plus
+            : (dt0.net != null ? dt0.net : "");
+        const closingLabel = blocks[blocks.length - 1][0];
         const tables = blocks.map(([label, hs]) => {
+            const closes = label === closingLabel;
             const holeRow = hs.map(h => `<td style="${td}font-weight:700;${dark}">${h.hole_number}</td>`).join("");
             const parRow = hs.map(h => `<td style="${td}${info}">${h.par ?? ""}</td>`).join("");
             const ydsRow = hs.map(h => `<td style="${td}${info}">${h.yardage ?? ""}</td>`).join("");
@@ -123,16 +139,20 @@
             const totNP = `style="${td}${grey}${sectBot}font-weight:600;"`;
             const totHead = `style="${td}font-weight:700;${dark}"`;
             const totADJ = `style="${td}font-weight:700;background:#f1f5f9;color:#E87C3E;"`;
+            const two = st => `<td ${st} colspan="2"></td>`;
+            const phNet = closes
+                ? `<td ${totG} title="Playing handicap">${phTxt}</td><td ${totG} title="Gross − PH = Net">${roundNet}</td>`
+                : two(totG);
             return `<table style="border-collapse:collapse;font-size:${fs};margin:0.25rem 0;">
-                <tr><td style="${lbl}${dark}">HOLE</td>${holeRow}<td ${totHead}>${label}</td></tr>
-                <tr><td style="${lbl}${info}">PAR</td>${parRow}<td ${tot}>${sum(hs, h => h.par) || ""}</td></tr>
-                <tr><td style="${lbl}${info}">${L.yds}</td>${ydsRow}<td ${tot}>${sum(hs, h => h.yardage) || ""}</td></tr>
-                <tr><td style="${lbl}${info}" title="Hole handicap ranking: 1 = hardest">HCP</td>${siRow}<td ${tot}></td></tr>
-                <tr><td style="${lbl}${sectTop}font-weight:700;">${L.gs}</td>${scRow}<td ${totG}>${sum(hs, h => h.strokes) || ""}</td></tr>
-                ${anyCapped ? `<tr><td style="${lbl}color:#E87C3E;" title="WHS net double bogey cap: par + 2 + strokes received. Orange holes were lowered for handicap purposes.">${L.adj}</td>${adjRow}<td ${totADJ}>${sum(hs, h => h.adjusted_strokes) || ""}</td></tr>` : ""}
-                <tr><td style="${lbl}${grey}">${L.gp}</td>${gpRow}<td ${totGP}>${sumPts(hs, h => h.stableford_gross)}</td></tr>
-                <tr><td style="${lbl}${sectTop}font-weight:700;">${L.ns}</td>${netRow}<td ${totN}>${sumPts(hs, netOf)}</td></tr>
-                <tr><td style="${lbl}${grey}${sectBot}">${L.np}</td>${npRow}<td ${totNP}>${sumPts(hs, netPtsOf)}</td></tr>
+                <tr><td style="${lbl}${dark}">HOLE</td>${holeRow}<td ${totHead}>${label}</td><td ${totHead}>PH</td><td ${totHead}>NET</td></tr>
+                <tr><td style="${lbl}${info}">PAR</td>${parRow}<td ${tot}>${sum(hs, h => h.par) || ""}</td>${two(tot)}</tr>
+                <tr><td style="${lbl}${info}">${L.yds}</td>${ydsRow}<td ${tot}>${sum(hs, h => h.yardage) || ""}</td>${two(tot)}</tr>
+                <tr><td style="${lbl}${info}" title="Hole handicap ranking: 1 = hardest">HCP</td>${siRow}<td ${tot}></td>${two(tot)}</tr>
+                <tr><td style="${lbl}${sectTop}font-weight:700;">${L.gs}</td>${scRow}<td ${totG}>${sum(hs, h => h.strokes) || ""}</td>${phNet}</tr>
+                ${anyCapped ? `<tr><td style="${lbl}color:#E87C3E;" title="WHS net double bogey cap: par + 2 + strokes received. Orange holes were lowered for handicap purposes.">${L.adj}</td>${adjRow}<td ${totADJ}>${sum(hs, h => h.adjusted_strokes) || ""}</td>${two(totADJ)}</tr>` : ""}
+                <tr><td style="${lbl}${grey}">${L.gp}</td>${gpRow}<td ${totGP}>${sumPts(hs, h => h.stableford_gross)}</td>${two(totGP)}</tr>
+                <tr><td style="${lbl}${sectTop}font-weight:700;">${L.ns}</td>${netRow}<td ${totN}>${sumPts(hs, netOf)}</td>${two(totN)}</tr>
+                <tr><td style="${lbl}${grey}${sectBot}">${L.np}</td>${npRow}<td ${totNP}>${sumPts(hs, netPtsOf)}</td>${two(totNP)}</tr>
             </table>${nineNote(label)}`;
         }).join("");
 

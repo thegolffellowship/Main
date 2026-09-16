@@ -68,5 +68,17 @@ check("…and keeps the TRUE net_vs_par, which GG parity compares against",
     /row = dict\(h\) \| d\b/.test(body),
     "verify_scoring_round would fail every plus player's round");
 
+console.log("\nGROSS − PH = NET reads across the totals (Kerry 2026-09-16)");
+const sc = files["scorecard-render.js"];
+check("the header row carries PH and NET total columns after OUT/IN",
+    /<td \$\{totHead\}>\$\{label\}<\/td><td \$\{totHead\}>PH<\/td><td \$\{totHead\}>NET<\/td>/.test(sc));
+check("the GROSS SCORE row fills them on the block that closes the round",
+    /const closes = label === closingLabel;/.test(sc) && /\$\{phNet\}<\/tr>/.test(sc));
+check("NET is the round's game net after the plus",
+    /const roundNet = dt0\.game_net_after_plus/.test(sc));
+check("a plus PH prints with its sign", /"\+" \+ Math\.abs\(Number\(phRaw\)\)/.test(sc));
+check("the hole columns are untouched — every other row spans the two new cells",
+    (sc.match(/\$\{two\((tot|totG|totGP|totN|totNP|totADJ)\)\}/g) || []).length >= 7);
+
 console.log("\n" + (failures ? failures + " FAILURE(S)" : "ALL PASS"));
 process.exit(failures ? 1 : 0);

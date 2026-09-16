@@ -986,25 +986,23 @@ of the net table, where one stroke is worth exactly one point. It is the
 DISTRIBUTION that was wrong — and at the table edges (`nvp ≥ 2` flattens
 at −1, `nvp −3` and `−4` are both 4) the totals diverge as well.
 
-### OPEN for Kerry (rule 3b)
+### RULED by Kerry 2026-09-16 (were OPEN under rule 3b)
 
-1. **Rounding of the round deduction.** `plus_round_deduction` is
-   `int(round(abs(ph)))`, preserved exactly from v2.450.0. Python rounds
-   half to EVEN, so a FRACTIONAL plus playing handicap of −0.5 would
-   deduct **0** and −1.5 would deduct **2**. No live round has a
-   fractional plus handicap — `scoring-hcp-link-audit` reports whether
-   that is still true — so nothing is affected today. (The −0.5 in the
-   spin-off prompt is Pat's nine-hole INDEX, not his playing handicap;
-   the round itself was played off −3.0.)
-2. **The card's NET total.** The cells now add to 33 and the round
-   adjustment line states the +3 separately, so NET reads 36 on the line
-   rather than in the column. The alternative is a column total of 36
-   over cells that sum to 33.
-3. **`determine_tgf_mvp` reads `derived_totals["stableford_net"]` — the
-   TRUE value, deliberately left alone.** Applying the game view there
-   would change MVP determination for plus players, including on past
-   events (CLAUDE.md rule 4, "past events are frozen"), and MVP is money.
-   Kerry's verbatim rule names MVP, so this probably SHOULD change — it
-   is called out here rather than done quietly. Pat's s9.23 total is 8
-   either way, so no recorded MVP moves today.
+1. **Rounding of the round deduction — HALF AWAY FROM ZERO** ("Standard
+   rounding where .5 goes away from 0", CA Queue #5). `plus_round_deduction`
+   is `int(abs(ph) + 0.5)` for a plus, never Python's banker's `round()`:
+   −0.5 gives back 1, −2.5 gives back 3. This is the ROUND-level rule
+   only; the per-player allowance rounding in ½ Net Skins is a different
+   mechanism and is still open (CA Queue #7, side-games lane #533).
+2. **The card's NET total — GROSS − PH = NET across the totals** ("Individual
+   Net is not a pops per hole game... Gross Score - PH = Net Score";
+   "I accept your recommendation"). The expanded scorecard carries PH and
+   NET total columns beside OUT/IN, filled on the GROSS SCORE row of the
+   block that closes the round; hole columns do not move. NET is
+   `game_net_after_plus` (= gross − PH for everyone who is not a plus).
+3. **`determine_tgf_mvp` reads the GAME view, FORWARD ONLY** ("MVP -
+   Proceed"). For events on or after `PLUS_RULE_EFFECTIVE_DATE`
+   (2026-09-15) the points are `game_stableford_net_after_plus`; before it
+   the frozen WHS `stableford_net` — no MVP already decided can move
+   (guiding principle 4). Pat's s9.23 total is 8 either way.
 

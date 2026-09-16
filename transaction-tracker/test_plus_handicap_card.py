@@ -140,9 +140,9 @@ src = (open("email_parser/database.py", encoding="utf-8").read()
        + open("app.py", encoding="utf-8").read())
 import re as _re
 code = [ln.strip() for ln in src.splitlines()
-        if _re.match(r"\s*(return|\S+\s*=|\S+\[[^\]]*\]\s*=)\s*.*int\(round\(abs\(", ln)]
+        if _re.match(r"\s*(return|\S+\s*=|\S+\[[^\]]*\]\s*=)\s*.*int\((round\()?abs\(", ln)]
 check("the round deduction is written once, and only once",
-      len(code) == 1 and code[0].strip().startswith("return int(round(abs(ph)))"),
+      len(code) == 1 and code[0].strip().startswith("return int(abs(ph) + 0.5)"),
       f"{len(code)} executable copies: {code}")
 
 
@@ -247,6 +247,30 @@ for name in whs_sites:
     check(f"{name} still computes WHS with the real allocation",
           "game=True" not in body,
           "a WHS call site acquired the game flag — differentials would move")
+
+# ROUNDING IS HALF AWAY FROM ZERO (Kerry 2026-09-16, CA Queue #5:
+# "Standard rounding where .5 goes away from 0"). Banker's rounding
+# would make -0.5 cost nothing and -2.5 cost 2.
+for ph, want in ((-0.5, 1), (-1.5, 2), (-2.5, 3), (-2.4, 2), (-2.6, 3),
+                 (-1, 1), (0, 0), (0.5, 0), (3, 0), (None, 0), ("x", 0)):
+    check(f"plus_round_deduction({ph!r}) == {want}",
+          db.plus_round_deduction(ph) == want, db.plus_round_deduction(ph))
+check("the round deduction does not use banker's round()",
+      "round(" not in dbsrc[dbsrc.index("def plus_round_deduction"):
+                           dbsrc.index("\ndef compute_hole_derivations(")]
+      .split('"""')[-1])
+
+# THE MVP READS THE GAME VIEW FROM THE EFFECTIVE DATE, and not before
+# (Kerry 2026-09-16: "MVP - Proceed"; principle 4: past events frozen).
+check("the effective date is named once", db.PLUS_RULE_EFFECTIVE_DATE == "2026-09-15")
+mvp = dbsrc[dbsrc.index("def determine_tgf_mvp"):]
+mvp = mvp[:mvp.index("\n    per_event, all_city_mvps")]
+check("determine_tgf_mvp gates on the effective date",
+      '>= PLUS_RULE_EFFECTIVE_DATE' in mvp)
+check("…reading game_stableford_net_after_plus when on or after it",
+      'dt.get("game_stableford_net_after_plus")' in mvp)
+check("…and the frozen WHS stableford_net before it",
+      'else dt["stableford_net"]' in mvp)
 
 try:
     os.unlink(DB)
