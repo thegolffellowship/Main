@@ -437,6 +437,16 @@ the TEE SHEET with the event id passed: 3 foursomes at 4:57 / 5:06 /
 5:15 PM, applied. (3) "Guillermo is correct" — customer 821 renamed
 (3 items rows followed); "Guilermo Arevalo" still resolves to 821.
 
+### 3l. a18.5 correction, 2026-09-16 2:30 PM — Luke Youngs 71 → 70
+
+Robert (Austin manager), via Kerry: "there was a scoring error and Luke
+shot 70." GG had corrected the card after our 9/12 import (back nine
+33 → 32). Dropped card 3479 (unposting hr 15644/15645), keyed re-import
+→ card 3530 (70 / 67 net, MVP flag kept), two nines re-posted (front 38
+diff 1.8, back 32 diff −3.7; index 0.9 → 0.1). GG boards and all 17
+PAID payout rows unchanged (the skins GG paid were already right).
+Skill OPEN 12 raised: a post-import GG edit is invisible to the Tracker.
+
 ## 4. NOT done, and why
 
 - **Wednesday-AM TGF Insider auto-draft (mailbox #453).** BUILT in

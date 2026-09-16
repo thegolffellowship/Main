@@ -274,6 +274,14 @@ Raised 2026-09-16, on the third run (s9.23 / a9.23):
    question remains WHY the hourly auto-sync's first pass dropped it.
 10. ~~Cart-only GG boards~~ — CLOSED 2026-09-16 by Kerry: read the tee
    sheet (`scoring-pairings:round|…|<event_id>`), recipe in 1.2.
+12. **A GG score correction after our import is invisible** (a18.5
+   Forest Creek, found 2026-09-16 by Robert: Luke Youngs 71 → 70, GG
+   fixed a scoring error after Saturday's import; the recap, the
+   handicap post and the leaderboard all carried 71 for four days).
+   The hourly auto-sync only re-walks an event on its day and the day
+   after. Proposal: a weekly re-verify of the last 7 days' cards (gross
+   vs GG's current board), reporting any drift to the closeout lane;
+   the fix is 3.1b (drop + keyed re-import + re-post).
 11. **A null-customer_id card is not "stale" to `refresh=`.** The alias +
    re-pull recipe in 1.1 silently did nothing for AREVALO, Guillermo;
    drop + keyed re-import was needed. Either teach refresh to drop

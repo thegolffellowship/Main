@@ -239,9 +239,13 @@ Robert Straiton sent the Austin draft under HIS name and phone
     Robert's); (b) the fall-race graf still names Straiton and Cloer as
     "without a buy-in" (rule 34 says never name who has NOT bought in —
     he named himself, which softens it, but the rule stands for the
-    draft); (c) "Luke Youngs shot 70" at Forest Creek — the Tracker card
-    is 71 gross / 68 net (a18.5, verified against GG's board). Flagged to
-    Kerry; not corrected after the send.
+    draft); (c) "Luke Youngs shot 70" at Forest Creek — ROBERT WAS RIGHT.
+    GG fixed a scoring error after our Saturday import (back nine 33 →
+    32); the Tracker card said 71 until 2026-09-16 2:30 PM, when it was
+    dropped, re-imported (70 / 67 net) and its two nines re-posted
+    (index 0.9 → 0.1). The manager on the ground knows about a
+    correction before the Tracker does; when a manager's number differs
+    from ours, re-pull the card BEFORE calling it wrong.
 
 Draft-time checklist derived from the above: two-week trend table for
 the headliner (previous event's card + payout), team score on Team Net,
