@@ -194,10 +194,14 @@ Faces bullets and every link. What he changed:
     `Tue, Sep 22 | 5:00p Shot | BRACKENRIDGE PARK | REGISTER`. "Shot" is
     the shotgun shorthand; the nine side is NOT printed. Tuesday nines
     are 5:00 PM shotguns as a rule — draft that, not a blank.
-37. **Draft error Kerry did not catch — ours to catch next time.** The
-    lede said "Two weeks ago at Silverhorn"; s9.22 Silverhorn was
-    2026-09-08, ONE week before. Every relative date in a draft gets
-    checked against `round_date` (rule 17, now including "weeks ago").
+37. **Draft error, caught by Kerry on his final pass — ours to catch
+    next time.** The lede said "Two weeks ago at Silverhorn"; s9.22
+    Silverhorn was 2026-09-08, ONE week before. Every relative date in a
+    draft gets checked against `round_date` (rule 17, now including
+    "weeks ago"). Same pass: PALACIOS went to caps (rule 30 holds for
+    every member), and the monthly one-liner gained the current leader
+    ("Luke YOUNGS from Austin is the current leader.") — name the
+    monthly leader when the cache includes last night's rounds.
 
 Draft-time checklist derived from the above: two-week trend table for
 the headliner (previous event's card + payout), team score on Team Net,
