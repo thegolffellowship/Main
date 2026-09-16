@@ -96,7 +96,11 @@
     .tee-legend .tl-lab { font-family: "Bitter", Georgia, serif; font-weight: 700;
                           font-size: 10px; letter-spacing: 0.06em; color: #444; }
     .tee-legend .tl { display: inline-flex; align-items: center; gap: 5px; }
-    .tee-legend .sw { width: 11px; height: 11px; border-radius: 3px; flex-shrink: 0; }
+    .tee-legend .sw { width: 11px; height: 11px; border-radius: 50%; flex-shrink: 0; }
+    /* The tee column IS the swatch now. */
+    .tdot { display: inline-block; width: 9px; height: 9px; border-radius: 50%;
+            vertical-align: middle; }
+    .tdash { color: #999; }
     .tee-legend .band { font-weight: 700; }
     .tee-legend .tn { color: #555; }
     .tee-hot { font-weight: 700; }
@@ -110,7 +114,7 @@
        (Kerry 2026-09-08). */
     .prow.is-b { background: #efefef; }
     .prow .pname { flex: 1; min-width: 0; }
-    .prow .tee { color: #444; width: 42px; text-align: right; white-space: nowrap; }
+    .prow .tee { color: #444; width: 22px; text-align: center; white-space: nowrap; }
     .prow .idx { color: #444; width: 30px; text-align: right;
                  font-variant-numeric: tabular-nums; white-space: nowrap; }
 
@@ -140,8 +144,16 @@
     .prow .pname, .arow .an { font-size: 11.5px; font-weight: 600; }
     .prow.blind-row { background: #fff; color: #666; font-style: italic; }
     .prow.blind-row .pname { font-weight: 500; }
-    .arow .atee { color: #444; width: 40px; text-align: right;
+    .arow .atee { color: #444; width: 22px; text-align: center;
                   white-space: nowrap; }
+    /* NEW / 1T beside the name (Kerry 2026-09-15). A first timer
+       outranks new — it is their first event either way, and two badges
+       on one name is noise. */
+    .abadge { display: inline-block; margin-left: 4px; padding: 0 3px;
+              border-radius: 3px; font-size: 7.5px; font-weight: 700;
+              letter-spacing: 0.04em; vertical-align: 1px; color: #fff; }
+    .abadge.ft { background: #B45309; }
+    .abadge.nw { background: #15803D; }
     .arow .aidx { color: #444; width: 26px; text-align: right;
                   font-variant-numeric: tabular-nums; white-space: nowrap; }
     .arow .aph, .arow .atn { width: 24px; text-align: right; color: #111;
@@ -232,14 +244,27 @@
     {% for t in pack.tee_legend %}
       <span class="tl">
         {# A WHITE tee prints as a black outline round white (Kerry
-           2026-09-15) — a white square on white paper is nothing. #}
-        <span class="sw" style="{% if t.ring %}border:2.5px solid {{ t.color }};background:#fff;{% elif t.color|lower in ['#ffffff', '#fff'] %}border:1.5px solid #1B1B1B;background:#fff;{% else %}background:{{ t.color }};{% endif %}"></span>
-        <span class="band" style="color:{% if t.color|lower in ['#ffffff', '#fff'] %}#1B1B1B{% else %}{{ t.color }}{% endif %};">{{ t.band }}</span>
+           2026-09-15) — a white square on white paper is nothing — and
+           the women's tee as an outline in its own colour. #}
+        <span class="sw" style="{% if t.ring %}border:2px solid {{ t.color }};background:#fff;{% elif t.color|lower in ['#ffffff', '#fff'] %}border:1.5px solid #1B1B1B;background:#fff;{% else %}background:{{ t.color }};{% endif %}"></span>
+        <span class="band" style="color:{% if t.color|lower in ['#ffffff', '#fff'] %}#1B1B1B{% else %}{{ t.color }}{% endif %};">{{ t.band_label or t.band }}</span>
         <span class="tn">{{ t.tee_name }}</span>
       </span>
     {% endfor %}
   </div>
   {% endif %}
+{# THE TEE IS A CIRCLE, not a word (Kerry 2026-09-15: "Change all
+   text in columns for tees to just simple color circles that
+   correspond"). The legend above the foursomes is the key. A women's
+   tee prints as an OUTLINE in its own colour; a white tee as a black
+   outline round white, or it prints as nothing at all. #}
+{% macro tee_dot(band) -%}
+  {%- set sw = pack.tee_swatches.get(band) -%}
+  {%- set lad = pack.tee_ladies.get(band) -%}
+  {%- if sw -%}
+    <span class="tdot" style="{% if lad %}background:#fff;border:2px solid {{ sw }};{% elif sw|lower in ['#ffffff', '#fff'] %}background:#fff;border:1.5px solid #1B1B1B;{% else %}background:{{ sw }};{% endif %}" title="{{ band }}"></span>
+  {%- else -%}<span class="tdash">&mdash;</span>{%- endif -%}
+{%- endmacro %}
   <div class="groups">
     {% for g in pack.groups %}
       <div class="gbox">
@@ -250,8 +275,7 @@
         {% for p in g.players %}
           <div class="prow{% if (p.cart_pos or 0) not in [1,2] %} is-b{% endif %}">
             <span class="pname">{{ p.name }}</span>
-            <span class="tee{% if pack.tee_colors.get(p.tee_choice) %} tee-hot{% endif %}"
-                  {% if pack.tee_colors.get(p.tee_choice) %}style="color:{{ pack.tee_colors.get(p.tee_choice) }};"{% endif %}>{{ p.tee_choice or "—" }}</span>
+            <span class="tee">{{ tee_dot(p.tee_choice) }}</span>
             <span class="idx">{% if p.handicap_index is not none %}{{ "%.1f"|format(p.handicap_index) }}{% else %}—{% endif %}</span>
           </div>
         {% endfor %}
@@ -288,9 +312,8 @@
          never end up mid-column (Kerry 2026-09-15). #}
       {% if loop.index0 == _mid %}<div class="arow ahead colbreak">{{ _ahead }}</div>{% endif %}
       <div class="arow">
-        <span class="an">{{ a.sort_name }}</span>
-        <span class="atee{% if pack.tee_colors.get(a.tee_choice) %} tee-hot{% endif %}"
-              {% if pack.tee_colors.get(a.tee_choice) %}style="color:{{ pack.tee_colors.get(a.tee_choice) }};"{% endif %}>{{ a.tee_choice or "—" }}</span>
+        <span class="an">{{ a.sort_name }}{% if a.is_first_timer %}<span class="abadge ft">1T</span>{% elif a.is_new %}<span class="abadge nw">NEW</span>{% endif %}</span>
+        <span class="atee">{{ tee_dot(a.tee_choice) }}</span>
         <span class="aidx">{% if a.handicap_index is not none %}{{ "%.1f"|format(a.handicap_index) }}{% else %}—{% endif %}</span>
         <span class="aph">{% if a.playing_handicap is not none %}{{ a.playing_handicap }}{% else %}&mdash;{% endif %}</span>
         <span class="atn">{% if a.team_handicap is not none %}{{ a.team_handicap }}{% else %}&mdash;{% endif %}</span>
@@ -303,6 +326,7 @@
   <div class="foot">
     {# One note per ROW (Kerry 2026-09-15) — a run-on paragraph that
        wraps where the column happens to end is not a key. #}
+    <div class="fnote"><span class="abadge ft">1T</span> &mdash; first TGF event ever. <span class="abadge nw">NEW</span> &mdash; joined within the last year. The tee circle matches the TEES key above.</div>
     <div class="fnote"><strong>IDX</strong> &mdash; TGF handicap index{% if pack.holes_key == '9' %} (9-hole){% endif %}.</div>
     <div class="fnote"><strong>PH</strong> &mdash; playing handicap at 100%, from that index and the tee played{% if pack.ph_basis %} ({{ pack.ph_basis }}){% endif %}.</div>
     <div class="fnote"><strong>TEAM</strong> &mdash; Team Net handicap{% if pack.team_basis %}: {{ pack.team_basis }}{% endif %}.</div>

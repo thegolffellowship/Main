@@ -348,7 +348,6 @@
         .evlb-teekey-item { display: inline-flex; align-items: center; gap: 5px;
             white-space: nowrap; }
         .evlb-teekey .evlb-tee-dot { margin: 0; }
-        .evlb-tee-dot.ring { box-shadow: 0 0 0 1.5px #fff, 0 0 0 3px #6B7280; }
         @media (max-width: 720px) {
             .evlb-teekey { margin-left: 0; width: 100%; }
         }
@@ -2826,20 +2825,27 @@
     // with no key is decoration; the same course colours and the same
     // "duplicate colour gets a ring" rule as the starter sheet's legend,
     // so the two pages read identically.
+    /** How a swatch is painted. A WHITE tee is a black outline round
+     *  white, or it disappears into the page; the WOMEN'S tee is an
+     *  outline in its own colour, the mark the starter sheet has always
+     *  printed (Kerry 2026-09-15: "Just show as Red outline like we did
+     *  on the STARTER SHEET report"). */
+    function evlbTeeFill(t) {
+        if (t.ring) return `background:#fff;box-shadow:inset 0 0 0 2px ${t.color};`;
+        const pale = /^#(f|e)/i.test(t.color || "");
+        return `background:${t.color};`
+            + (pale ? "box-shadow:inset 0 0 0 1.5px #1B1B1B;" : "");
+    }
+
     function evlbTeeLegend(d) {
         const legend = (d && d.tee_legend) || [];
         if (!legend.length) return "";
         return `<div class="evlb-teekey" aria-label="Tee colours">` +
-            legend.map(t => {
-                // "For white tees, make it just a black outline with a white
-        // center" (Kerry 2026-09-15). Any near-white colour takes the
-        // outline, or the swatch disappears into the page.
-        const pale = /^#(f|e)/i.test(t.color || "");
-                return `<span class="evlb-teekey-item" title="${escapeHtml(t.band || "")}">`
-                    + `<span class="evlb-tee-dot${t.ring ? " ring" : ""}" `
-                    + `style="background:${t.color};${pale ? "box-shadow:inset 0 0 0 1.5px #1B1B1B;" : ""}"></span>`
-                    + `${escapeHtml(t.tee_name || t.band || "")}</span>`;
-            }).join("") + `</div>`;
+            legend.map(t =>
+                `<span class="evlb-teekey-item" title="${escapeHtml(t.band_label || t.band || "")}">`
+                + `<span class="evlb-tee-dot" style="${evlbTeeFill(t)}"></span>`
+                + `${escapeHtml(t.tee_name || t.band_label || t.band || "")}</span>`
+            ).join("") + `</div>`;
     }
     // KEYED OFF THE EVENT'S OWN PAYLOAD, never a page-level global
     // (Kerry 2026-09-15: "Tee color circles need to persist in all
@@ -2855,12 +2861,11 @@
             // carries GG spelling loses its dots.
             || (r && r.player_name && map["n:" + evlbFlipName(r.player_name)]);
         if (!t || !t.color) return "";
-        // A white or very pale tee needs an outline or it is invisible.
-        const pale = /^#(f|e)/i.test(t.color);
-        return `<span class="evlb-tee-dot${place === "right" ? " right" : ""}`
-            + `${t.ring ? " ring" : ""}" title="${escapeHtml(t.tee_name || "")}`
-            + `${t.band ? " (" + escapeHtml(t.band) + ")" : ""}" `
-            + `style="background:${t.color};${pale ? "box-shadow:inset 0 0 0 1.5px #1B1B1B;" : ""}"></span>`;
+        return `<span class="evlb-tee-dot${place === "right" ? " right" : ""}"`
+            + ` title="${escapeHtml(t.tee_name || "")}`
+            + `${t.band_label ? " (" + escapeHtml(t.band_label) + ")"
+                : (t.band ? " (" + escapeHtml(t.band) + ")" : "")}" `
+            + `style="${evlbTeeFill(t)}"></span>`;
     }
 
     function evlbMoneyNotice(d) {

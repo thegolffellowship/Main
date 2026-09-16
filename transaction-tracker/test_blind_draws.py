@@ -92,6 +92,10 @@ check("today with NO time recorded counts as started — a sheet already out "
       db._event_started({"event_date": TODAY}, now=_noon))
 
 print("\n== crediting a player removes him from the sheet, by itself ==")
+# The shotgun has GONE OFF: dated yesterday, so the assertion does not
+# depend on what time of day the suite happens to run.
+c.execute("UPDATE events SET event_date = date(?, '-1 day') WHERE id = ?",
+          (TODAY, EV)); c.commit()
 will = c.execute("SELECT id FROM items WHERE customer = 'Will Wallace'").fetchone()["id"]
 db.credit_item(will, note="Could not make it", db_path=tmp)
 got = db.get_event_pairings(EV, db_path=tmp)
@@ -103,6 +107,8 @@ check("the event has started, so nobody was re-seated: Mary keeps seat 3",
       [p["cart_pos"] for p in g2["players"] if p["name"] == "Mary Wade"] == [3],
       str([(p["name"], p["cart_pos"]) for p in g2["players"]]))
 check("seat 2 is now OPEN", 2 not in {p["cart_pos"] for p in g2["players"]})
+
+c.execute("UPDATE events SET event_date = ? WHERE id = ?", (TODAY, EV)); c.commit()
 
 print("\n== a player with a second row on the event is NOT unseated ==")
 c.execute("INSERT INTO items (id, email_uid, merchant, customer, customer_id, "

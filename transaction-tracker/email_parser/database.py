@@ -13650,14 +13650,23 @@ def get_event_leaderboard(event_name: str,
             for label, order in sorted(set(_lbl_of.values()),
                                        key=lambda t: (t[1], t[0])):
                 col = _tee_color_for(label)
+                ladies = bool(re.search(r"\((?:l|lady|ladies)\)",
+                                        label, re.I))
                 tee_legend.append({
-                    "band": None, "tee_name": label, "color": col,
-                    # two tees sharing a colour (a ladies' rating of the
-                    # same one) — ringed, the starter sheet's convention
-                    "ring": len(set(_seen_color.get(col) or [])) > 1
-                            and bool(re.search(r"\((?:l|lady|ladies)\)",
-                                               label, re.I))})
-            _leg_by_label = {t["tee_name"]: t for t in tee_legend}
+                    "band": None,
+                    "tee_name": re.sub(r"\((?:l|lady|ladies)\)", "(Ladies)",
+                                       label, flags=re.I),
+                    "color": col, "ladies": ladies,
+                    # An outline, always — the starter sheet's own mark
+                    # for the women's tee (Kerry 2026-09-15).
+                    "ring": ladies})
+            # …and the ladies' tee sorts LAST, always.
+            tee_legend.sort(key=lambda t: 1 if t["ladies"] else 0)
+            _leg_by_label = {}
+            for t in tee_legend:
+                _leg_by_label[t["tee_name"]] = t
+                _leg_by_label[re.sub(r"\(Ladies\)", "(L)",
+                                     t["tee_name"])] = t
             for r in played:
                 lbl = _lbl_of.get(r["tee_name"])
                 _t = _leg_by_label.get(lbl[0]) if lbl else None
@@ -56496,17 +56505,35 @@ def event_tee_legend(conn, event_id: int, ev: dict) -> list:
                 picks[band] = t["label"]
         if ladies_numbered:
             picks["Forward"] = ladies_numbered[-1]["label"]
-    out, seen = [], set()
+    out = []
     for band in TEE_BANDS:
         nm = picks.get(band)
         if not nm:
             continue
         col = _tee_color_for(nm) or "#374151"
-        # 65+ on Red and Forward on Red (L) are the same colour of paint.
-        # The second one reads as a RING so the two are never one swatch.
-        out.append({"band": band, "tee_name": nm, "color": col,
-                    "ring": col in seen})
-        seen.add(col)
+        # HOW THE LEGEND READS (Kerry 2026-09-15): "Change (L) to
+        # (Ladies) in legend, <50 to Men <50, 50-64 to Men 50-64, 65+ to
+        # Men 65+, and Forward to Women [Color]". A member should not
+        # have to know that "(L)" or "Forward" is the women's tee.
+        ladies = bool(re.search(r"\((?:l|lady|ladies)\)", nm, re.I))
+        label = re.sub(r"\((?:l|lady|ladies)\)", "(Ladies)", nm, flags=re.I)
+        colour_word = next((w.title() for w in _TEE_COLOR_WORDS
+                            if re.search(rf"\b{w}\b", nm.lower())), "")
+        band_label = {"<50": "Men <50", "50-64": "Men 50-64",
+                      "65+": "Men 65+"}.get(
+            band, f"Women {colour_word}".strip() if ladies or band == "Forward"
+            else band)
+        out.append({"band": band, "band_label": band_label,
+                    "tee_name": label, "color": col,
+                    "ladies": ladies,
+                    # The ladies' tee is an OUTLINE, always — the same
+                    # mark the starter sheet has always printed, and it
+                    # no longer depends on another tee happening to share
+                    # its colour.
+                    "ring": ladies})
+    # The ladies' tee sorts LAST, always (Kerry).
+    out.sort(key=lambda t: (1 if t["ladies"] else 0,
+                            TEE_BANDS.index(t["band"])))
     return out
 
 
@@ -56963,6 +56990,25 @@ def get_event_print_pack(event_id: int, db_path=None) -> dict | None:
         tee_legend = event_tee_legend(conn, event_id, ev)
         tee_rows, ph_basis, ph_note = _event_tee_rows(conn, ev, tee_legend)
         team_balls, team_allowance, team_basis = event_team_net_dial(conn, ev)
+        # WHO IS NEW AND WHO HAS NEVER PLAYED (Kerry 2026-09-15: "Add NEW
+        # & 1st Timer (1T) badges to players in Alphabetical list"). The
+        # starter reads that list to answer "where am I?" — and it is the
+        # same list a captain scans before the shotgun to know who needs
+        # looking after. Flags come from the ROSTER, the one place that
+        # decides them (`_decorate_roster_roles` / `_mark_first_timers`),
+        # so the sheet and the pairings cards can never disagree.
+        _roles: dict = {}
+        try:
+            for _r in _event_roster_rows(conn, event_id):
+                _rec = {"is_new": bool(_r.get("is_new")),
+                        "is_first_timer": bool(_r.get("is_first_timer"))}
+                if _r.get("customer_id"):
+                    _roles[f"c:{_r['customer_id']}"] = _rec
+                if _r.get("name"):
+                    _roles["n:" + _pair_key_name(_r["name"])] = _rec
+        except Exception:
+            logger.exception("Non-fatal: roster flags unavailable for %s",
+                             event_id)
     idx_map = _handicap_index_18_by_customer(db_path)
     pairings = get_event_pairings(event_id, db_path=db_path)
 
@@ -56982,6 +57028,11 @@ def get_event_print_pack(event_id: int, db_path=None) -> dict | None:
                              key=lambda p: p.get("cart_pos") or 0)
             for pl in players:
                 pl["cart_name"] = _cart_sign_name(pl.get("name"))
+                _fl = (_roles.get(f"c:{pl.get('customer_id')}")
+                       or _roles.get("n:" + _pair_key_name(pl.get("name") or ""))
+                       or {})
+                pl["is_new"] = bool(_fl.get("is_new"))
+                pl["is_first_timer"] = bool(_fl.get("is_first_timer"))
             groups.append({
                 "holes": holes,
                 "group_num": g.get("group_num"),
@@ -57092,6 +57143,8 @@ def get_event_print_pack(event_id: int, db_path=None) -> dict | None:
             alpha.append({
                 "playing_handicap": p.get("playing_handicap"),
                 "team_handicap": p.get("team_handicap"),
+                "is_new": bool(p.get("is_new")),
+                "is_first_timer": bool(p.get("is_first_timer")),
                 "name": nm,
                 "sort_name": f"{last}, {first}".strip().strip(","),
                 "slot_label": g["slot_label"],
@@ -57137,6 +57190,8 @@ def get_event_print_pack(event_id: int, db_path=None) -> dict | None:
             "#1B1B1B" if (t["color"] or "").lower() in ("#ffffff", "#fff")
             else t["color"]) for t in tee_legend},
         "tee_swatches": {t["band"]: t["color"] for t in tee_legend},
+        # The women's tee prints as an OUTLINE wherever it appears.
+        "tee_ladies": {t["band"]: bool(t.get("ladies")) for t in tee_legend},
         "ph_basis": ph_basis,
         "ph_note": ph_note,
         "team_basis": team_basis,

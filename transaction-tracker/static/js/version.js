@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.447.0";
+window.TGF_VERSION = "2.448.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.448.0",
+    date: "2026-09-16",
+    changes: [
+      "THE TEE COLUMN IS A CIRCLE, NOT A WORD (Kerry: \u2018Change all text in columns for tees to just simple color circles that correspond\u2019). Both the foursomes and the ALPHABETICAL list on the starter sheet now print the tee\u2019s own colour beside the name, keyed by the TEES legend above \u2014 which also answers \u2018Forward\u2019 being too long for the column. The legend\u2019s squares are circles too, matching the leaderboard.",
+      "THE LEGEND SAYS WHO PLAYS EACH TEE (Kerry: \u2018Change (L) to (Ladies) in legend, <50 to Men <50, 50-64 to Men 50-64, 65+ to Men 65+, and Forward to Women [Color]\u2019). A member should not have to know that \u2018(L)\u2019 or \u2018Forward\u2019 is the women\u2019s tee. It also sorts LAST, always, and prints as an OUTLINE in its own colour \u2014 on the leaderboard as well as the sheet \u2014 rather than only when another tee happens to share its paint.",
+      "NEW and 1T badges in the ALPHABETICAL list (Kerry), with a line under it saying what they mean: 1T is a first TGF event ever, NEW is joined within the year. A first timer outranks new \u2014 it is their first event either way, and two badges on one name is noise. The flags come from the ROSTER, the one place that decides them, so the sheet and the pairings cards can never disagree.",
+    ],
+  },
   {
     version: "2.447.0",
     date: "2026-09-15",

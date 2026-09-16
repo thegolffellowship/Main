@@ -341,14 +341,25 @@ _leg = db.event_tee_legend(c, EV, {"course_id": COURSE})
 _by = {t["band"]: t for t in _leg}
 check("bands run longest tee first",
       [_by[b]["tee_name"] for b in ("<50", "50-64", "65+")] == ["Gold Tee", "Blue Tee", "Red Tee"], str(_leg))
+# "(L)" reads as "(Ladies)" and the band reads "Women Red" (Kerry
+# 2026-09-15) — a member should not have to know what (L) means.
 check("Forward takes the ladies' tee when the card has one",
-      _by["Forward"]["tee_name"] == "Red (L) Tee", str(_by.get("Forward")))
+      _by["Forward"]["tee_name"] == "Red (Ladies) Tee", str(_by.get("Forward")))
+check("…spelled out, and labelled by who plays it",
+      _by["Forward"]["band_label"] == "Women Red"
+      and _by["<50"]["band_label"] == "Men <50", str(_by.get("Forward")))
+check("the ladies' tee sorts LAST in the legend, always",
+      _leg[-1]["band"] == "Forward", str([t["band"] for t in _leg]))
+check("…and prints as an outline, whether or not another tee shares its paint",
+      _by["Forward"]["ring"] is True and _by["65+"]["ring"] is False)
 check("the colour is read out of the tee NAME",
       _by["<50"]["color"] == "#B8860B" and _by["50-64"]["color"] == "#1D4ED8"
       and _by["65+"]["color"] == "#B91C1C", str(_leg))
 check("two bands on the same paint are never two identical swatches",
       _by["Forward"]["color"] == _by["65+"]["color"] and _by["Forward"]["ring"] is True
       and _by["65+"]["ring"] is False)
+check("the tee column is a CIRCLE, not a word, on the printed sheet",
+      "tdot" in open("templates/starter_sheet.html", encoding="utf-8").read())
 # THE CLUB'S OWN TEE NUMBER IS THE MAPPING (Kerry 2026-09-15, stating it
 # plainly: "1 - <50 / 2 - 50-64 / 3 - 65+ / 3 (L) - Forward (Ladies), OR
 # 4 (L) - Forward (Ladies)"). Yardage no longer decides where a numbered
@@ -364,7 +375,8 @@ check("tee 1 is the under-50 tee whatever the yardages say",
 check("…tee 2 is 50-64 and tee 3 is 65+",
       [_b2[b]["tee_name"] for b in ("50-64", "65+")] == ["Blue Tee", "Red Tee"], str(_b2))
 check("the ladies' number is Forward, never the under-50 one",
-      _b2["Forward"]["tee_name"] == "Red (L) Tee" and _b2["Forward"]["tee_name"] != _b2["<50"]["tee_name"])
+      _b2["Forward"]["tee_name"] == "Red (Ladies) Tee"
+      and _b2["Forward"]["tee_name"] != _b2["<50"]["tee_name"])
 # A card with NO tee numbers falls back to the yardage rule.
 c.execute("UPDATE course_tees SET tee_name = REPLACE(REPLACE(REPLACE(REPLACE("
           "tee_name, '1 - ', ''), '2 - ', ''), '3 - ', ''), '4 - ', '')")
