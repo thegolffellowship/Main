@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.458.6";
+window.TGF_VERSION = "2.458.7";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.458.7",
+    date: "2026-09-16",
+    changes: [
+      "THE LADIES\u2019 TEE GETS THE OUTLINE AGAIN, AND THE MEN\u2019S RED DOES NOT (Kerry: \u2018Mike is showing as that open circle and the ladies should be the open circle. So need to flip those\u2019). Not a config problem \u2014 a real pairing bug. The legend was BUILT in tee order, then re-sorted so the ladies\u2019 tee falls last, and only THEN zipped against the still-unsorted label list. After the sort the two sequences no longer line up, so every entry from the moved element onward paired with the wrong label. On a card carrying both \u20183 - Red Tee\u2019 and \u20183 - Red (L) Tee\u2019 that is an exact swap: Michelle DelCarmen played the ladies\u2019 tee and drew the men\u2019s filled dot, Mike Murphy played the men\u2019s and drew the ladies\u2019 outline. The pairing is now made BEFORE the sort; it is keyed by LABEL, so display order can change freely without touching it.",
+      "THE LADIES\u2019 TEE IS NAMED, NOT JUST RINGED (Kerry: \u2018Should show as Ladies - [color] Tees\u2019). `_tee_name_plural` now returns \u2018Ladies - Red Tees\u2019 where it returned \u2018Red Tees\u2019, so a board showing two Reds says which is which in words rather than relying on an outline the reader has to be told about. Men\u2019s tees are unchanged.",
+      "TWO LEGENDS, DELIBERATELY SPELLED DIFFERENTLY \u2014 caught by `test_event_reports.py` before this shipped. The first cut renamed the shared helper and trampled a RATIFIED rule: the BAND legend (starter sheet) already prints \u2018Women\u2019 beside the colour, and Kerry ruled on 2026-09-15 that it must therefore read plain \u2018Red Tees\u2019. The LEADERBOARD legend is built from the tees actually PLAYED and carries no band at all, which is exactly why it needs the words. `_tee_name_plural` is unchanged and keeps the ratified spelling; the new `_tee_legend_display_name` adds the prefix for the board alone.",
+      "Test: `test_tee_legend_pairing.js` \u2014 asserts the pairing happens before the sort (the ordering that caused the swap), that a ladies tee renders as \u2018Ladies - <colour> Tees\u2019 while a men\u2019s does not, and that the outline is still driven by the (L) marker and nothing else.",
+    ],
+  },
   {
     version: "2.458.6",
     date: "2026-09-16",

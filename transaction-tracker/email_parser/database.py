@@ -13708,19 +13708,35 @@ def get_event_leaderboard(event_name: str,
                                         label, re.I))
                 tee_legend.append({
                     "band": None,
-                    "tee_name": _tee_name_plural(label),
+                    "tee_name": _tee_legend_display_name(label, ladies),
                     "band_label": "Women" if ladies else None,
                     "color": col, "ladies": ladies,
                     # An outline, always — the starter sheet's own mark
                     # for the women's tee (Kerry 2026-09-15).
                     "ring": ladies})
-            # …and the ladies' tee sorts LAST, always.
-            tee_legend.sort(key=lambda t: 1 if t["ladies"] else 0)
+            # THE LABEL PAIRING IS MADE BEFORE THE SORT (v2.458.6, Kerry
+            # 2026-09-16: "Mike is showing as that open circle and the
+            # ladies should be the open circle. So need to flip those").
+            #
+            # `tee_legend` was built in tee ORDER, then re-sorted so the
+            # ladies' tee falls last — and only THEN zipped against the
+            # still-unsorted label list. After the sort the two sequences
+            # no longer line up, so every entry from the moved element
+            # onward was paired with the wrong label. On a card carrying
+            # both "3 - Red Tee" and "3 - Red (L) Tee" that is an exact
+            # swap: Michelle DelCarmen played the ladies' tee and got the
+            # men's filled dot, Mike Murphy played the men's and got the
+            # ladies' outline.
+            #
+            # Zip first, sort after. The mapping is by LABEL, so the
+            # display order can then change freely without touching it.
             _leg_by_label = {}
             for t, (lbl, _o) in zip(tee_legend,
                                     sorted(set(_lbl_of.values()),
                                            key=lambda x: (x[1], x[0]))):
                 _leg_by_label[lbl] = t
+            # …and the ladies' tee sorts LAST, always.
+            tee_legend.sort(key=lambda t: 1 if t["ladies"] else 0)
             for t in tee_legend:
                 _leg_by_label.setdefault(t["tee_name"], t)
             for r in played:
@@ -56779,11 +56795,31 @@ def event_team_net_dial(conn, ev: dict) -> tuple[int, float, str]:
 def _tee_name_plural(name: str) -> str:
     """'3 - Red (L) Tee' -> 'Red Tees' (Kerry 2026-09-16). The order
     prefix is bookkeeping, '(L)' is said better by the band label
-    ('Women'), and TGF says TEES."""
+    ('Women'), and TGF says TEES.
+
+    NOTE: this is the BAND legend's spelling and it is RATIFIED (Kerry
+    2026-09-15: "Women should just be: Women (no colored Red) Red
+    Tees") — the band already says who plays it, so the colour does not
+    repeat it. The LEADERBOARD's played-tee legend carries no band and
+    prefixes "Ladies - " itself; see `_tee_legend_display_name`."""
     n = _TEE_ORDER_RE.sub("", " ".join((name or "").split())).strip()
     n = re.sub(r"\s*\((?:l|lady|ladies)\)", "", n, flags=re.I).strip()
     n = re.sub(r"\bTees?\b\s*$", "", n, flags=re.I).strip()
     return f"{n} Tees" if n else n
+
+
+def _tee_legend_display_name(name: str, ladies: bool) -> str:
+    """The LEADERBOARD legend's spelling (Kerry 2026-09-16: "Should show
+    as Ladies - [color] Tees").
+
+    That legend is built from the tees actually PLAYED, so it carries no
+    band to say who plays which — and a board showing two Reds then
+    tells them apart only by an outline the reader has to be told about.
+    So this one says it in words. The band legend keeps its own ratified
+    spelling; the two are deliberately different because one has a band
+    beside it and the other does not."""
+    base = _tee_name_plural(name)
+    return f"Ladies - {base}" if (ladies and base) else base
 
 
 def _tee_color_for(tee_name: str) -> str | None:
