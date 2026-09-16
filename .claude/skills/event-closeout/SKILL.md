@@ -239,3 +239,18 @@ Raised 2026-09-09, on the first run:
    GG posts, or hold them?
 8. **HIO pot pre-counting future events** (2.4). Cosmetic today; wrong the
    day a registration is refunded before the event.
+
+Raised 2026-09-16, on the third run (s9.23 / a9.23):
+
+9. **A bridge to stamp course/tee on a card GG served tee-less** (Lee
+   Vasquez, a9.23). Today the only path is drop + re-import, which
+   re-serves the same tee-less card, so the handicap post stays blocked.
+   Manager-side data repair, but it feeds a handicap — rule 3b.
+10. **Cart-only GG boards.** a9.23 Avery Ranch had CART Net and no TEAM
+   Net; the pairing ingest takes the team board as the foursomes, so a
+   2-man cart board would record groups of 2. Record the cart pairs (true
+   co-riders) or hold the event's history?
+11. **A null-customer_id card is not "stale" to `refresh=`.** The alias +
+   re-pull recipe in 1.1 silently did nothing for AREVALO, Guillermo;
+   drop + keyed re-import was needed. Either teach refresh to drop
+   null-cid cards or say so in 1.1.
