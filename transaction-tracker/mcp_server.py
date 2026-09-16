@@ -4300,6 +4300,30 @@ def _scoring_dispatch(url: str, extract: str):
                     parts[1],
                     apply=(len(parts) > 2 and parts[2].lower() == "apply")),
                     indent=2, default=str)
+            if sub == "sheet" and len(parts) >= 2:
+                # sheet|<event_id> — read-only: the saved sheet as the page
+                # and the starter sheet read it (locked index, roster tee,
+                # hole label), plus the print pack's PH basis + note.
+                _eid = int(parts[1])
+                _pk = db.get_event_print_pack(_eid) or {}
+                return json.dumps({
+                    "event_id": _eid,
+                    "handicap_as_of": next((e.get("handicap_as_of") for e in
+                                            db.get_all_events() if e["id"] == _eid), None),
+                    "pairings": db.get_event_pairings(_eid),
+                    "print_pack": {k: _pk.get(k) for k in
+                                   ("tee_basis", "tee_note", "ph_note", "note",
+                                    "tee_legend", "team_allowance")},
+                    "print_groups": [{"label": g.get("hole_label") or g.get("slot_label"),
+                                      "start_line": g.get("start_line"),
+                                      "players": [{"name": p.get("name"),
+                                                   "idx": p.get("handicap_index"),
+                                                   "ph": p.get("playing_handicap"),
+                                                   "team": p.get("team_handicap"),
+                                                   "tee": p.get("tee_choice")}
+                                                  for p in g.get("players", [])]}
+                                     for g in (_pk.get("groups") or [])],
+                }, indent=1, default=str)
             if sub == "relabel" and len(parts) >= 3:
                 # relabel|<event_id>|<json {current group_num: hole label}>
                 #   [|apply[|<holes>]] — give a sheet its hole labels

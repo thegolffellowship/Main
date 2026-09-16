@@ -96,10 +96,14 @@ conn.execute("INSERT INTO rsvp_email_overrides (player_email, event_name, status
 # A handicap history for Alan so the index rides on his roster row
 # (v2.414.0: a player seated FROM Unassigned must keep his index).
 conn.execute("INSERT INTO handicap_player_links (player_name, customer_name, customer_id) VALUES ('Alan Paid', 'Alan Paid', 1)")
-for i, d in enumerate((4.0, 6.0)):
+# Three rounds, because the map is the TGF index (v2.460.0 — the same
+# computation the ROSTER shows) and an index needs three.
+ALAN_DIFFS = (4.0, 6.0, 5.0)
+for i, d in enumerate(ALAN_DIFFS):
     conn.execute("INSERT INTO handicap_rounds (player_name, round_date, adjusted_score, rating, slope, differential) "
                  "VALUES ('Alan Paid', date('now', ?), 40, 34.5, 120, ?)", (f'-{i+1} days', d))
 conn.commit()
+ALAN_IDX = db.compute_handicap_index(list(ALAN_DIFFS), db.get_handicap_settings(tmp))
 
 print("\n== derivation mirrors the Players tab ==")
 extra = db._event_rsvp_only_players(conn, 1)
@@ -142,7 +146,8 @@ check("no membership at all is not 1Y (Fay, RSVP-only order)", rows["Fay Zero"][
 
 print("\n== one handicap-index lookup ==")
 hmap = db._roster_handicap_index_map(conn)
-check("the shared map reads the linked history (Alan: avg of 4.0 and 6.0)", hmap.get("alan paid") == 5.0, str(hmap))
+check("the shared map reads the linked history (Alan: the TGF index of his three rounds)",
+      hmap.get("alan paid") == ALAN_IDX, str(hmap))
 check("unlinked players are simply absent", "bob paid" not in hmap)
 conn.close()
 
@@ -179,7 +184,7 @@ try:
     check("Alan's request for Carl is honored", grp_of.get("Alan Paid") == grp_of.get("Carl Rsvp"), str(grp_of))
     check("Bob's manual match to Ivan is honored", grp_of.get("Bob Paid") == grp_of.get("Ivan"), str(grp_of))
     alan = next(p for g in out.get("9", []) for p in g["players"] if p.get("name") == "Alan Paid")
-    check("the generator seats Alan with the same index the map holds", alan.get("handicap_index") == 5.0, str(alan))
+    check("the generator seats Alan with the same index the map holds", alan.get("handicap_index") == ALAN_IDX, str(alan))
 except Exception as e:  # noqa: BLE001
     import traceback; traceback.print_exc()
     check("generate_event_pairings ran on the fixture", False, repr(e))

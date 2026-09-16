@@ -2983,12 +2983,31 @@
     // name only as a fallback — a name key cannot survive one person being
     // spelled differently on an order row than on their profile, which is
     // how an edit made on one screen went missing on the other.
-    function hcpEntryFor(name, customerId) {
+    // THE HANDICAP LOCK (v2.460.0, Kerry 2026-09-16: "ROSTER handicaps
+    // need to lock after an event begins. Past events should not update
+    // to current handicap indexes"). Every event carries `handicap_as_of`
+    // from /api/events — null until it tees off, then its own date — and
+    // the index map IN EFFECT that morning is fetched once per date and
+    // read in place of the live map wherever an `ev` is known. A site
+    // with no event in hand reads the live map, as before.
+    const hcpAsOfMaps = {};
+    async function ensureHcpAsOf(ev) {
+        const d = ev && ev.handicap_as_of;
+        if (!d || hcpAsOfMaps[d]) return;
+        try {
+            const res = await fetch(`/api/handicaps/index-map?as_of=${encodeURIComponent(d)}`, {cache: "no-store"});
+            if (res.ok) hcpAsOfMaps[d] = await res.json();
+        } catch (err) {
+            console.error("ensureHcpAsOf:", err);
+        }
+    }
+    function hcpEntryFor(name, customerId, ev) {
+        const map = (ev && ev.handicap_as_of && hcpAsOfMaps[ev.handicap_as_of]) || handicapIndexMap;
         if (customerId) {
-            const byId = handicapIndexMap[`cid:${customerId}`];
+            const byId = map[`cid:${customerId}`];
             if (byId) return byId;
         }
-        return name ? handicapIndexMap[String(name).trim().toLowerCase()] : undefined;
+        return name ? map[String(name).trim().toLowerCase()] : undefined;
     }
 
     function patchLocalHandicapIndex(customerId, extraNames, index18) {
@@ -3274,7 +3293,7 @@
             const fields = _mFp ? [
                 ["Chapter", _mFp.chapter || "\u2014"],
                 ["HCP", (() => {
-                    const lh = r.customer ? handicapIndexMap[(r.customer || "").toLowerCase()] : undefined;
+                    const lh = hcpEntryFor(r.customer, r.customer_id, ev);
                     if (lh === undefined) return r.handicap || "\u2014";
                     return showHcp18Only ? lh.index_18.toFixed(1) : (lh.index_9.toFixed(1) + 'N');
                 })()],
@@ -3296,7 +3315,7 @@
                 ["Order Date", r.order_date || "\u2014"],
                 ["Price", stripPriceSuffix(r.item_price) || "\u2014"],
                 ["HCP", (() => {
-                    const lh = r.customer ? handicapIndexMap[(r.customer || "").toLowerCase()] : undefined;
+                    const lh = hcpEntryFor(r.customer, r.customer_id, ev);
                     if (lh === undefined) return r.handicap || "\u2014";
                     return showHcp18Only ? lh.index_18.toFixed(1) : (lh.index_9.toFixed(1) + 'N');
                 })()],
@@ -4239,7 +4258,7 @@
                 const cnt18 = refs.filter(r => isEighteenStyleHoles(r.holes)).length;
                 const use18 = cnt9 === 0 && cnt18 > 0;
                 const getHcp = r => {
-                    const lh = r.customer ? handicapIndexMap[(r.customer || "").toLowerCase()] : undefined;
+                    const lh = hcpEntryFor(r.customer, r.customer_id, ev);
                     if (lh !== undefined) return use18 ? lh.index_18 : lh.index_9;
                     return parseFloat(r.handicap) || null;
                 };
@@ -6785,7 +6804,8 @@
                 // this event.
                 const _rCid0 = (_rEnt && _rEnt.customer_id)
                     || (player.name ? _cidByName[_nk(player.name)] : null);
-                const _liveH = hcpEntryFor(player.name, _rCid0);
+                const _liveH = hcpEntryFor(player.name, _rCid0,
+                    allEvents.find(e => e.id === state.eventId));
                 const _prelimVal = (player.handicap_index != null)
                     ? null
                     : (player.prelim_handicap_18 != null
@@ -6991,6 +7011,7 @@
 
     async function loadPairings(evId) {
         try {
+            await ensureHcpAsOf(allEvents.find(e => e.id === evId));
             const res = await fetch(`/api/events/${evId}/pairings`);
             const data = await res.json();
             const state = getPairingsState(evId);
@@ -8281,7 +8302,7 @@
                 } else if (c.key === "handicap") {
                     // Show live handicap index from the handicap system, fall back to item field.
                     // 9-only or mixed events show 9-hole net; 18-only events show 18-hole.
-                    const liveHcp = hcpEntryFor(r.customer, r.customer_id);
+                    const liveHcp = hcpEntryFor(r.customer, r.customer_id, ev);
                     if (liveHcp !== undefined) {
                         // A PLACEHOLDER must never read like an established
                         // index. Golf Genius flights unhandicapped players
@@ -8650,6 +8671,7 @@
         if (ev) await Promise.all([
             fetchRsvpCreditMap(ev.item_name),
             fetchBalanceDueSendMap(ev.item_name),
+            ensureHcpAsOf(ev),
         ]);
 
         // Desktop: render detail into table row

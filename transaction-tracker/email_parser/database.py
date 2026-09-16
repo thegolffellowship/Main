@@ -27068,6 +27068,10 @@ def get_all_events(db_path: str | Path | None = None) -> list[dict]:
         _today = today_central()
         for r in rows:
             d = dict(r)
+            # THE HANDICAP LOCK DATE, published on every event (v2.460.0):
+            # None until the event tees off, then its own date — the page
+            # reads the index in effect that morning for a started event.
+            d["handicap_as_of"] = _event_index_as_of(d)
             # Convert aliases CSV to list
             d["aliases"] = [a for a in (d.get("aliases") or "").split(",") if a]
             # Store link as the modal and composer should read it —
@@ -37666,17 +37670,34 @@ def get_starting_handicaps(db_path: str | Path | None = None) -> dict:
         "note": r["starting_handicap_note"]} for r in rows}
 
 
-def get_all_handicap_players(db_path: str | Path | None = None) -> list[dict]:
+def get_all_handicap_players(db_path: str | Path | None = None,
+                             as_of: str | None = None) -> list[dict]:
     """Return one record per player with current handicap index and round stats.
 
     Only rounds within the lookback_months window count toward the index.
+
+    `as_of` (YYYY-MM-DD) is THE HANDICAP LOCK (Kerry 2026-09-16: "ROSTER
+    handicaps need to lock after an event begins. Past events should not
+    update to current handicap indexes."). Given a date, the index is the
+    one IN EFFECT that morning: the same computation over the rounds
+    posted BEFORE that day (`round_date < as_of`), with the lookback
+    window measured back from it. Nothing is stored — the rounds that
+    decided a past index do not change, so recomputing them yields the
+    same number every time (principles 1 and 4). Trend is not computed
+    for an as-of index; it is a today-relative reading.
     """
     cfg = get_handicap_settings(db_path)
     lookback_months = int(cfg.get("lookback_months", 12))
 
-    # Cutoff date: today minus lookback_months
-    cutoff = datetime.now() - timedelta(days=lookback_months * 30.44)
+    # Cutoff date: the anchor (today, or the as-of day) minus lookback_months
+    if as_of:
+        anchor = datetime.strptime(str(as_of)[:10], "%Y-%m-%d")
+    else:
+        anchor = datetime.combine(today_central(), datetime.min.time())
+    cutoff = anchor - timedelta(days=lookback_months * 30.44)
     cutoff_str = cutoff.strftime("%Y-%m-%d")
+    before_sql = " AND round_date < ?" if as_of else ""
+    before_args = (str(as_of)[:10],) if as_of else ()
 
     with _connect(db_path) as conn:
         summary_rows = conn.execute(
@@ -37716,9 +37737,9 @@ def get_all_handicap_players(db_path: str | Path | None = None) -> list[dict]:
                    ) AS rn
             FROM handicap_rounds
             WHERE differential IS NOT NULL
-              AND round_date >= ?
+              AND round_date >= ?""" + before_sql + """
             """,
-            (cutoff_str,),
+            (cutoff_str, *before_args),
         ).fetchall()
 
     player_diffs: dict[str, list] = {}
@@ -37744,7 +37765,8 @@ def get_all_handicap_players(db_path: str | Path | None = None) -> list[dict]:
         prior = [df for dt, df in rows_nf if dt != latest_date][:20]
         index_prev = compute_handicap_index(prior, cfg) if prior else None
         trend = (round(index - index_prev, 1)
-                 if index is not None and index_prev is not None else None)
+                 if index is not None and index_prev is not None
+                 and not as_of else None)
         # Suppress the trend mark for players idle 30+ days (Kerry 2026-07-17):
         # a trend arrow off stale rounds is misleading, so drop it once the
         # player hasn't posted a round in over a month.
@@ -55586,49 +55608,87 @@ def _nine_side(event: dict) -> str:
     return "Back" if side == "Back" else "Front"
 
 
-def _roster_handicap_index_map(conn) -> dict:
-    """{customer_name.lower(): handicap_index} for every linked player —
-    AVG of the last ≤20 differentials in 12 months via
-    handicap_player_links. THE index the pairings surface shows, in one
-    place: saved-sheet enrichment, the generator, and the /pairings GET's
-    event_players all read it (Kerry 2026-09-15: "Why isn't Adam Baker's
-    handicap showing?" — a player moved out of Unassigned lost his index
-    because the roster rows never carried one; the generator and the
-    saved sheet each had their own copy of this query and Unassigned had
-    none). Returns {} if the handicap tables are absent."""
+def _event_index_as_of(ev: dict | None) -> str | None:
+    """The date a started event's handicaps are locked to, or None for an
+    event that has not teed off (Kerry 2026-09-16: "ROSTER handicaps need
+    to lock after an event begins"). Started is `_event_started`'s answer
+    — the same clock the blind re-seat uses — and the lock is the event's
+    own date: the index in effect that morning, before the night's round
+    was posted. One helper so ROSTER, PAIRINGS, the starter sheet, the
+    flights report and the generator cannot disagree about WHEN."""
+    if not ev:
+        return None
+    return (ev.get("event_date") or "")[:10] or None if _event_started(ev) else None
+
+
+def _roster_handicap_index_map(conn, as_of: str | None = None,
+                               db_path=None) -> dict:
+    """{customer_name.lower(): handicap_index, ("c", customer_id): idx} —
+    THE index the pairings surfaces show, in one place: saved-sheet
+    enrichment, the generator, the /pairings GET's event_players and the
+    starter sheet all read it (Kerry 2026-09-15: "Why isn't Adam Baker's
+    handicap showing?").
+
+    IT IS THE SAME NUMBER AS THE ROSTER (v2.460.0, Kerry 2026-09-16:
+    "PAIRINGS handicap indexes are not matching those in ROSTER.
+    PAIRINGS handicaps are not correct, which then affects the Starter
+    Sheet handicaps"). This used to be its own query — a plain AVERAGE
+    of the last twenty differentials — while the ROSTER showed the TGF
+    index (`compute_handicap_index`: best-N of the last twenty, times
+    0.96, WHS adjustment). An average of all twenty is always higher
+    than an average of the best eight, so every PAIRINGS index read two
+    to four strokes above the ROSTER, the starter sheet printed those,
+    and a first-timer with two rounds got a number the ROSTER rightly
+    refused him. There is ONE index computation; this is a view of it,
+    locked to `as_of` for an event that has begun. `conn` is kept for
+    the callers' signature; the computation opens its own read.
+    """
+    if db_path is None:
+        # Read the SAME database the caller's connection is on — a test
+        # fixture or a secondary DB must not be answered from DB_PATH.
+        try:
+            for r in conn.execute("PRAGMA database_list").fetchall():
+                if r[1] == "main" and r[2]:
+                    db_path = r[2]
+                    break
+        except sqlite3.OperationalError:
+            db_path = None
     try:
-        rows = conn.execute(
-            """
-                    SELECT COALESCE(NULLIF(TRIM(COALESCE(cu.first_name,'') || ' ' ||
-                                                COALESCE(cu.last_name,'')), ''),
-                                    l.customer_name) AS customer_name,
-                           p.handicap_index
-                    FROM (
-                        SELECT player_name,
-                               AVG(differential) as handicap_index
-                        FROM (
-                            SELECT player_name, differential,
-                                   ROW_NUMBER() OVER (
-                                       PARTITION BY player_name
-                                       ORDER BY round_date DESC, id DESC
-                                   ) as rn
-                            FROM handicap_rounds
-                            WHERE differential IS NOT NULL
-                              AND round_date >= date('now', '-12 months')
-                        )
-                        WHERE rn <= 20
-                        GROUP BY player_name
-                    ) p
-                    JOIN handicap_player_links l ON l.player_name = p.player_name
-                    LEFT JOIN customers cu ON cu.customer_id = l.customer_id
-                    WHERE l.customer_name IS NOT NULL
-            """
-        ).fetchall()
+        players = get_all_handicap_players(db_path, as_of=as_of)
     except sqlite3.OperationalError:
         return {}
-    return {(r["customer_name"] or "").lower(): r["handicap_index"]
-            for r in rows if r["customer_name"]}
-
+    # The CANONICAL name is a key too (test_pairings_identity: a customer
+    # renamed after the link was made must still be found by the roster's
+    # spelling), resolved through customer_id — principle 6.
+    canon: dict = {}
+    try:
+        cids = [int(p["customer_id"]) for p in players
+                if p.get("customer_id") is not None]
+        if cids:
+            qm = ",".join("?" * len(cids))
+            for r in conn.execute(
+                    f"""SELECT customer_id, TRIM(COALESCE(first_name,'') || ' ' ||
+                               COALESCE(last_name,'')) AS nm
+                          FROM customers WHERE customer_id IN ({qm})""",
+                    cids).fetchall():
+                if (r["nm"] or "").strip():
+                    canon[int(r["customer_id"])] = r["nm"].strip().lower()
+    except sqlite3.OperationalError:
+        canon = {}
+    out: dict = {}
+    for p in players:
+        idx = p.get("handicap_index")
+        if idx is None:
+            continue
+        cid = p.get("customer_id")
+        names = [canon.get(int(cid)) if cid is not None else None,
+                 p.get("customer_name"), p.get("player_name")]
+        for nm in names:
+            if nm:
+                out.setdefault(nm.strip().lower(), idx)
+        if cid is not None:
+            out.setdefault(("c", int(cid)), idx)
+    return out
 
 def _pairing_time_slots(event: dict, holes: str, needed: int = 0) -> list[str]:
     """Compute ordered slot labels for a given holes type (9 or 18).
@@ -56084,9 +56144,16 @@ def get_event_pairings(event_id: int, db_path=None) -> dict:
         # same AVG-of-last-≤20-differentials-in-12-months the generator
         # uses — without writing back, so the saved rows stay a faithful
         # snapshot of what the import/save provided.
-        hcp_map: dict = {}
-        if any(r["handicap_index"] is None for r in rows):
-            hcp_map = _roster_handicap_index_map(conn)
+        # THE INDEX IS LOOKED UP, LOCKED TO THE EVENT (v2.460.0). The saved
+        # row's handicap_index is whatever the sheet carried when it was
+        # saved — for months that was the wrong average (see
+        # `_roster_handicap_index_map`) — so it is the fallback, never the
+        # answer, and a started event reads the index in effect that day.
+        _ev_row = conn.execute("SELECT * FROM events WHERE id = ?",
+                               (event_id,)).fetchone()
+        hcp_map = _roster_handicap_index_map(
+            conn, as_of=_event_index_as_of(dict(_ev_row) if _ev_row else None),
+            db_path=db_path)
         # THE TEE COMES FROM THE ROSTER, NOT THE SAVED ROW (v2.458.10,
         # Kerry 2026-09-16: "If the tees are in ROSTER, they should
         # automatically show up in PAIRINGS"). `event_pairings.tee_choice`
@@ -56121,9 +56188,12 @@ def get_event_pairings(event_id: int, db_path=None) -> dict:
         if grp is None:
             grp = {"group_num": r["group_num"], "slot_label": r["slot_label"], "players": []}
             grp_list.append(grp)
-        hi = r["handicap_index"]
+        hi = (hcp_map.get(("c", r["customer_id"]))
+              if r["customer_id"] is not None else None)
         if hi is None:
             hi = hcp_map.get((r["player_name"] or "").lower())
+        if hi is None:
+            hi = r["handicap_index"]
         tee = (r["tee_choice"] or "").strip() or None
         if not tee:
             tee = (tee_map.get(("c", r["customer_id"]))
@@ -56812,7 +56882,7 @@ def _sort_name(name: str) -> str:
     return f"{parts[-1].upper()}, {' '.join(parts[:-1])}"
 
 
-def _handicap_index_18_by_customer(db_path=None) -> dict:
+def _handicap_index_18_by_customer(db_path=None, as_of: str | None = None) -> dict:
     """{customer_id: 18-hole TGF index} — the index of RECORD (WHS
     computation, doubled per Kerry's 2026-07-30 ruling that the 18-hole
     TGF handicap is simply twice the nine). Keyed by customer_id, not by
@@ -56820,7 +56890,7 @@ def _handicap_index_18_by_customer(db_path=None) -> dict:
     handicap link spells them differently (Jeff Rideout on s9.23), which
     is the same stale-name class as the pairings rename."""
     out = {}
-    for p in get_all_handicap_players(db_path):
+    for p in get_all_handicap_players(db_path, as_of=as_of):
         cid = p.get("customer_id")
         if cid and p.get("handicap_index_18") is not None:
             out[int(cid)] = p["handicap_index_18"]
@@ -56853,7 +56923,7 @@ def event_flights_report(event_id: int, db_path=None) -> dict | None:
             k: _event_game_buyers(conn, ev["item_name"], k)
             for k in ("NET", "GROSS")
         }
-    idx18 = _handicap_index_18_by_customer(db_path)
+    idx18 = _handicap_index_18_by_customer(db_path, as_of=_event_index_as_of(ev))
     holes_key = "18" if _event_holes_type(ev["item_name"],
                                           ev.get("format")) == 18 else "9"
     games = []
@@ -57716,12 +57786,25 @@ def _event_tee_rows(conn, ev: dict, legend: list) -> tuple[dict, str, str]:
     except sqlite3.OperationalError:
         return {}, "", "No course card on file, so no playing handicap could be computed."
     used_tees: dict = {}
+    # THIS EVENT'S OWN ROUNDS (v2.460.0, Kerry 2026-09-16: "Avery Ranch
+    # doesn't even show PH or TEAM (Cart) handicaps"). Avery's card holds
+    # two nine-hole rows per tee and no 18-hole row to label them from,
+    # so the sheet printed no handicap at all. But once the night's
+    # scorecards are in, the tee row Golf Genius scored the round off IS
+    # the nine that was played — a recorded fact, not a guess — and it
+    # decides an otherwise unlabelled card for that event.
+    event_used: set = set()
     try:
         for r in conn.execute(
                 "SELECT sr.tee_id, COUNT(*) AS n FROM scoring_rounds sr "
                 "WHERE sr.course_id = ? AND sr.tee_id IS NOT NULL GROUP BY sr.tee_id",
                 (cid,)).fetchall():
             used_tees[r["tee_id"]] = r["n"]
+        if ev.get("id"):
+            event_used = {r["tee_id"] for r in conn.execute(
+                "SELECT DISTINCT tee_id FROM scoring_rounds "
+                "WHERE event_id = ? AND tee_id IS NOT NULL",
+                (ev["id"],)).fetchall()}
     except sqlite3.OperationalError:
         used_tees = {}
     holes_by_tee: dict = {}
@@ -57766,6 +57849,9 @@ def _event_tee_rows(conn, ev: dict, legend: list) -> tuple[dict, str, str]:
                     -(used_tees.get(r["tee_id"], 0)), r["tee_id"]))[0]
             elif len(cands) == 1 and not cands[0].get("nine"):
                 pick = cands[0]        # one card, nothing to confuse it with
+            elif len([r for r in cands if r["tee_id"] in event_used]) == 1:
+                # the row this event's own scorecards were scored off
+                pick = [r for r in cands if r["tee_id"] in event_used][0]
             else:
                 ambiguous = True
                 continue
@@ -57837,7 +57923,7 @@ def get_event_print_pack(event_id: int, db_path=None) -> dict | None:
         except Exception:
             logger.exception("Non-fatal: roster flags unavailable for %s",
                              event_id)
-    idx_map = _handicap_index_18_by_customer(db_path)
+    idx_map = _handicap_index_18_by_customer(db_path, as_of=_event_index_as_of(ev))
     pairings = get_event_pairings(event_id, db_path=db_path)
 
     def _carts(players: list) -> list:
@@ -61391,8 +61477,9 @@ def generate_event_pairings(
             if k in _suppressed:
                 it["partner_request"] = None
 
-        # ── Handicap index map ────────────────────────────────────────
-        hcp_map = _roster_handicap_index_map(conn)
+        # ── Handicap index map (locked to the event once it has begun) ─
+        hcp_map = _roster_handicap_index_map(
+            conn, as_of=_event_index_as_of(ev), db_path=db_path)
 
         # ── Pace map for STAGING (task #23) ───────────────────────────
         # Keyed by the roster's own name via customer_id (rule 6 — also

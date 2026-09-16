@@ -820,3 +820,41 @@ card and a person — that is the table's design, and `_resolve_scoring_
 player` resolves it through `handicap_player_links` first. The 11% of
 rows with no `customer_id` are the residue worth backfilling next; the
 audit measures it.
+
+## The handicap lock, and ONE index on every surface (v2.460.0)
+
+Kerry 2026-09-16: "ROSTER handicaps need to lock after an event begins.
+Past events should not update to current handicap indexes." And:
+"PAIRINGS handicap indexes are not matching those in ROSTER. PAIRINGS
+handicaps are not correct, which then affects the Starter Sheet
+handicaps."
+
+**One computation.** `get_all_handicap_players(db_path, as_of=None)` is
+the TGF index (`compute_handicap_index`: best-N of the last twenty
+differentials in the lookback window, ×0.96, WHS adjustment). Every
+surface is a view of it:
+
+| Surface | Reads | Lock |
+|---|---|---|
+| ROSTER (events page HCP column) | `/api/handicaps/index-map[?as_of=]` | page fetches the as-of map for a started event (`ensureHcpAsOf`) and `hcpEntryFor(name, cid, ev)` reads it |
+| PAIRINGS cards, Unassigned, generator | `_roster_handicap_index_map(conn, as_of=)` | `_event_index_as_of(ev)` |
+| Saved sheet (`get_event_pairings`) | the map first, the row's `handicap_index` snapshot only as fallback | same |
+| Starter sheet IDX / PH / TEAM, flights report | `_handicap_index_18_by_customer(db_path, as_of=)` | same |
+
+**The lock.** `_event_index_as_of(ev)` returns the event's own date once
+`_event_started(ev)` says it has teed off (past date; today at/after
+`start_time`; today with no time recorded), else None. With `as_of`, the
+index is computed over rounds with `round_date < as_of`, lookback
+measured back from that day, no trend. Nothing is stored — the rounds
+posted before a date do not change, so the number does not either
+(principles 1 and 4). If a round is back-dated or deleted later, the
+as-of index follows the data; a stored snapshot would need schema (rule
+3b) and was not built.
+
+**What was wrong before.** `_roster_handicap_index_map` was a plain
+`AVG(differential)` of the last twenty — always above the best-eight
+average the ROSTER showed, and it gave a two-round first-timer an index.
+The saved sheets carry those numbers in `event_pairings.handicap_index`;
+they are now ignored in favour of the computed value.
+
+Guard: `test_handicap_index_lock.py`.

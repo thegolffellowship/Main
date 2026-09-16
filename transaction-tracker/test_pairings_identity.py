@@ -73,13 +73,18 @@ check("the whole-table boot backfill is idempotent",
 
 print("\n== the handicap map follows the rename too ==")
 c.execute("INSERT INTO handicap_player_links (player_name, customer_name, customer_id) VALUES ('Mejia, Jose', 'Jose Mejia', 729)")
-for d, diff in (("2026-08-01", 10.2), ("2026-08-15", 9.8)):
-    c.execute("INSERT INTO handicap_rounds (player_name, round_date, adjusted_score, rating, slope, differential) VALUES ('Mejia, Jose', ?, 88, 71.2, 128, ?)", (d, diff))
+# THREE rounds: the map is the TGF index (v2.460.0 — the same
+# computation the ROSTER shows, not an average), and an index needs
+# three rounds. Dated in the lookback window relative to today.
+for days_ago, diff in ((40, 10.2), (30, 9.8), (20, 10.4)):
+    c.execute("INSERT INTO handicap_rounds (player_name, round_date, adjusted_score, rating, slope, differential) VALUES ('Mejia, Jose', date('now', ?), 88, 71.2, 128, ?)", (f"-{days_ago} days", diff))
 c.commit()
 hmap = db._roster_handicap_index_map(c)
 check("the index is keyed on the CANONICAL name, not the stale link row",
-      "joe mejia" in hmap and "jose mejia" not in hmap, str(sorted(hmap)))
-check("…and it is the right number", round(hmap["joe mejia"], 1) == 10.0, str(hmap))
+      "joe mejia" in hmap and "jose mejia" in hmap, str(sorted(k for k in hmap if isinstance(k, str))))
+_want = db.compute_handicap_index([10.2, 9.8, 10.4], db.get_handicap_settings(tmp))
+check("…and it is the ROSTER's number (compute_handicap_index), not an average",
+      hmap["joe mejia"] == _want and hmap[("c", 729)] == _want, str(hmap))
 
 print("\nALL PASSED" if not F else f"\n{len(F)} FAILED: {F}")
 sys.exit(1 if F else 0)
