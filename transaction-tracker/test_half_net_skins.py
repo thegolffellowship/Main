@@ -207,6 +207,29 @@ for mode in ("half_up", "half_even", "floor", "half_down"):
           skins_set(r) != GG_SKINS,
           f"{mode} unexpectedly matched — has the dial been ruled on?")
 
+# Kerry ratified a TGF rounding convention the same day (CA Queue #5, mailbox
+# #530): the PLUS-handicap round deduction rounds half away from zero. The
+# tempting shortcut is to apply it to this allowance too and call the dial
+# closed. It does not reproduce GG, and this asserts so, because the shortcut
+# will occur to the next reader as well.
+_half_away = {"YOUNGS, Luke": 1, "ZAPATA, Carlos": 3,
+              "MELCHOR, Eduardo": 4, "STRAITON, Robert": 0}
+_ov = {}
+for _name in GROSS:
+    _ov[_name] = {h: 0 for h in SI}
+    for _hole in sorted(SI, key=lambda x: SI[x])[:_half_away[_name]]:
+        _ov[_name][_hole] = 1
+_ha = ls.game_skins(cards, ls.SEED_LIVE_SCORING_CONFIG, "9", strokes_override=_ov)
+check("TGF's ratified 'half away from zero' does NOT reproduce GG either",
+      skins_set(_ha) != GG_SKINS, str(sorted(skins_set(_ha))))
+check("  ...it makes Youngs' hole 5 an Albatross, where GG says Eagle",
+      any(s["hole"] == 5 and s["winner"] == "YOUNGS, Luke"
+          and label_vs_par(s["score"], s["par"]) == "Albatross"
+          for f in _ha["flights"] for s in f["skins"]),
+      str(sorted(skins_set(_ha))))
+check("  ...and it pays a fifth skin GG did not pay",
+      len(skins_set(_ha)) == 5, str(sorted(skins_set(_ha))))
+
 check("half-up is refuted by GG's own words, not merely by the payout",
       ls._round_allowance(0.5, "half_up") == 1
       and ls._round_allowance(0.5, "half_down") == 0,

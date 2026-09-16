@@ -69,8 +69,31 @@ Until then the board **computes but declares itself provisional**
 the naive roundings reproduce GG, so the gap cannot be quietly closed by
 guessing.
 
+**It cannot be closed by analogy either, and this is the sharp bit.** Kerry
+ratified a TGF rounding convention the same day (CA Queue #5, mailbox #530):
+the plus-handicap ROUND deduction rounds **half away from zero**. Applying
+that to the ½-Net allowance is the obvious shortcut — and it **does not
+reproduce GG**. It gives Youngs 1 stroke, making his hole 5 an **Albatross**
+where GG's own words say Eagle, and pays a fifth skin GG did not pay.
+
+Not a contradiction in Kerry's rulings — a round-level deduction and a
+per-player allowance are different mechanisms, and #530 says so. But **TGF's
+own rounding convention and GG's observed behaviour disagree here**, which
+makes CA Queue #7 the untether question in miniature: **when our rules and
+GG's disagree, whose answer pays?** That is Kerry's to settle, and it is
+bigger than one $52 pot.
+
 *(Note: "off lowest" was a no-op on a9.23 — Straiton played off 0.0 and was
 the low — so this event does not exercise that dial either.)*
+
+**Also opened: CA Queue #9 — the allowance ladder has no row for a FIVESOME.**
+Rule 15f (ratified today, #530) made blind-draw team size follow the GROUP
+rather than a constant — Kerry: *"Could be more if fivesomes are selected."*
+USGA Appendix C stops at four, and a fivesome playing Best 1 would currently
+fall through to the four-player 75% row by assumption. Not biting today (live
+Team Net money follows GG's team string and the matrix), but it is reachable
+by ratified rule now, so it is flagged before it becomes live rather than
+after.
 
 ## 4. USGA allowances — CA Queue #8
 

@@ -1026,6 +1026,21 @@ Until it is ruled on, the board **computes but declares itself provisional**
 `test_half_net_skins.py` asserts that *none* of the naive roundings
 reproduce GG — so the gap cannot be quietly closed by guessing.
 
+**And it cannot be closed by analogy either.** Kerry ratified a TGF rounding
+convention the same day (CA Queue #5, mailbox #530): the plus-handicap round
+deduction rounds **half away from zero** — *"USGA has no ruling here because
+USGA never does a round-level deduction at all; the mechanism is TGF's own.
+Python's banker's rounding was the artifact."* Applying that same convention
+to the ½-Net allowance **does not reproduce GG**: it gives Youngs 1 stroke,
+which makes his hole 5 an **Albatross** where GG says Eagle, and it pays a
+fifth skin to Melchor on hole 9 that GG did not pay.
+
+That is not a contradiction in Kerry's rulings — a round-level plus deduction
+and a per-player handicap allowance are different mechanisms. But it means
+**TGF's own rounding convention and Golf Genius's observed behaviour
+disagree here**, which turns CA Queue #7 into the untether question in
+miniature: *when our rules and GG's disagree, whose answer pays?*
+
 ### The GG setup screen IS the schema
 
 Kerry's attached a9.23 setup maps almost one-for-one onto what a
