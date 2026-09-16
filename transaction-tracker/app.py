@@ -5404,12 +5404,39 @@ def api_pairings_blinds(event_id):
     dry run — the draw is money-adjacent (a blind's card plays for a team
     that can win Team Net), so nothing is written until asked.
     """
-    from email_parser.database import draw_event_blinds, clear_event_blinds
+    from email_parser.database import (draw_event_blinds, clear_event_blinds,
+                                        draw_one_blind, set_event_blind,
+                                        event_blind_pool, get_connection)
     data = request.get_json(silent=True) or {}
+    seat = data.get("seat") or {}
     try:
         if data.get("clear"):
             return jsonify({"status": "ok",
                             "cleared": clear_event_blinds(event_id)})
+        # ONE SEAT (Kerry 2026-09-15: "Need to be able to click an OPEN
+        # spot and be able to click ADD BLIND as option, then to select
+        # RANDOM or CHOOSE from eligible field").
+        if seat.get("holes") is not None:
+            holes = str(seat["holes"])
+            gnum = int(seat["group_num"])
+            cpos = int(seat["cart_pos"])
+            mode = (data.get("mode") or "").lower()
+            if mode == "pool":
+                conn = get_connection()
+                try:
+                    return jsonify(event_blind_pool(conn, event_id))
+                finally:
+                    conn.close()
+            if mode == "clear":
+                return jsonify(set_event_blind(event_id, holes, gnum, cpos,
+                                               None))
+            if mode == "choose":
+                cid = data.get("customer_id")
+                if cid is None:
+                    return jsonify({"error": "customer_id required"}), 400
+                return jsonify(set_event_blind(event_id, holes, gnum, cpos,
+                                               int(cid)))
+            return jsonify(draw_one_blind(event_id, holes, gnum, cpos))
         return jsonify(draw_event_blinds(
             event_id, dry_run=not data.get("apply"),
             redraw=bool(data.get("redraw"))))

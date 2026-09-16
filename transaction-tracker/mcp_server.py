@@ -1832,10 +1832,11 @@ def _scoring_dispatch(url: str, extract: str):
                                    (ratings, slopes, per-hole par /
                                    yardage / stroke index, front+back)
                                    from email_parser/course_cards.py
-      scoring-blinds:<event>[|draw|apply|clear]  BLIND draws for the open
-                                   seats: no arg = pool + current draw,
-                                   draw = preview, apply = write, clear =
-                                   drop this event's app-drawn blinds
+      scoring-blinds:<event>[|draw|apply|clear|pool]  BLIND draws for the
+                                   open seats: no arg / draw = preview,
+                                   apply = write, clear = drop this
+                                   event's app-drawn blinds, pool = who is
+                                   eligible and who is not, with reasons
       scoring-blinds-history[:<year>[|backfill]]  who has been a blind
                                    this year (backfill reads the year's
                                    Golf Genius team strings into the store)
@@ -4782,6 +4783,10 @@ def _scoring_dispatch(url: str, extract: str):
                 return json.dumps({"event": _ev["item_name"],
                                    "cleared": db.clear_event_blinds(_ev["id"])},
                                   indent=2, default=str)
+            if _mode == "pool":
+                with db._connect() as _c2:
+                    return json.dumps(db.event_blind_pool(_c2, _ev["id"]),
+                                      indent=2, default=str)
             out = db.draw_event_blinds(_ev["id"], dry_run=(_mode != "apply"),
                                        redraw=(_mode == "apply"))
             return json.dumps(out, indent=2, default=str)

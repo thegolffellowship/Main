@@ -2356,6 +2356,24 @@
     let eventSortField = "event_date";
     let eventSortDir = "asc";
     let eventSearchQuery = "";
+    /** TGF'S OWN DAY, not the browser's UTC day (Kerry 2026-09-16, at
+     *  8pm Central on event night: "Tonight's events that are currently
+     *  active, already switched to PAST events. Let's not allow that
+     *  until midnight of the last day of event."). `toISOString()` is
+     *  UTC, so from 7pm Central onward every event dated today was
+     *  already "yesterday" and dropped out of UPCOMING while it was
+     *  still being played. The league runs on Central time; an event
+     *  stays upcoming until midnight of its own day. */
+    function tgfToday() {
+        try {
+            return new Intl.DateTimeFormat("en-CA", {
+                timeZone: "America/Chicago", year: "numeric",
+                month: "2-digit", day: "2-digit" }).format(new Date());
+        } catch (e) {
+            return new Date().toISOString().slice(0, 10);
+        }
+    }
+
     let eventTimeFilter = "upcoming";  // "all", "upcoming", "past"
     let eventChapterFilter = "all";   // "all", "Austin", "San Antonio"
 
@@ -2456,7 +2474,7 @@
     }
 
     function buildEvPickerOptions(events) {
-        const today = new Date().toISOString().split("T")[0];
+        const today = tgfToday();
         const upcoming = events.filter(e => e.event_date && e.event_date >= today).sort((a, b) => (a.event_date || "").localeCompare(b.event_date || ""));
         const past = events.filter(e => e.event_date && e.event_date < today).sort((a, b) => (b.event_date || "").localeCompare(a.event_date || ""));
         const noDate = events.filter(e => !e.event_date);
@@ -3070,7 +3088,7 @@
 
     function getFilteredSortedEvents() {
         let filtered = allEvents.filter(evInChapter);
-        const today = new Date().toISOString().split("T")[0];
+        const today = tgfToday();
 
         // Time filter (unless actively searching — search searches everything)
         if (!eventSearchQuery) {
@@ -3323,7 +3341,7 @@
         // All Events view: TGF-orange breakline (mirrors the desktop table)
         let mDividerAfterIdx = -1;
         if (eventTimeFilter === "all" && eventSortField === "event_date") {
-            const mToday = new Date().toISOString().split("T")[0];
+            const mToday = tgfToday();
             const mIsPast = e => !e.event_date || e.event_date < mToday;
             for (let i = 0; i < filtered.length - 1; i++) {
                 if (mIsPast(filtered[i]) !== mIsPast(filtered[i + 1])) { mDividerAfterIdx = i; break; }
@@ -3843,7 +3861,7 @@
         const tbody = document.getElementById("events-body");
 
         // Summary stats (scoped to the selected chapter)
-        const today = new Date().toISOString().split("T")[0];
+        const today = tgfToday();
         const scoped = allEvents.filter(evInChapter);
         const upcoming = scoped.filter(e => e.event_date && e.event_date >= today);
         const past = scoped.filter(e => !e.event_date || e.event_date < today);
@@ -3999,7 +4017,7 @@
         if (itemParam && expandedEventId === null) {
             const fullMatch = allEvents.find(e => e.item_name === itemParam);
             if (fullMatch) {
-                const today = new Date().toISOString().split("T")[0];
+                const today = tgfToday();
                 const isPast = !fullMatch.event_date || fullMatch.event_date < today;
                 const desiredFilter = isPast ? "past" : "upcoming";
                 if (eventChapterFilter !== "all"
@@ -6856,7 +6874,7 @@
             // renders under the foursome, marked, and is never draggable
             // and never has an X. Removing it means redrawing.
             (grp.blinds || []).forEach(b => {
-                html += `<div class="pairing-player-row pairing-blind-row" title="BLIND draw — ${escapeHtml(b.name || '')}'s card plays for this team. Nobody is in the cart.">`
+                html += `<div class="pairing-player-row pairing-blind-row" data-blind-seat="${holes}:${grp.group_num}:${b.cart_pos}" data-ev-id="${ev.id}" title="BLIND draw — ${escapeHtml(b.name || '')}'s card plays for this team. Nobody is in the cart. Click to redraw or remove.">`
                     + '<span class="pairing-cart-dot" style="background:#bbb;"></span>'
                     + `<span class="pairing-player-name">BLIND &middot; ${escapeHtml(b.name || '')}</span>`
                     + '</div>';
@@ -10361,6 +10379,17 @@
             });
         });
 
+        // A BLIND can be redrawn or removed — click it (Kerry 2026-09-15).
+        container.querySelectorAll('[data-blind-seat]').forEach(row => {
+            row.addEventListener('click', e => {
+                e.stopPropagation();
+                const [bHoles, gnum, cpos] = row.dataset.blindSeat.split(':');
+                openPairingPicker(row, [], bHoles, () => {},
+                    {ev, holes: bHoles, groupNum: Number(gnum),
+                     cartPos: Number(cpos), container}, true);
+            });
+        });
+
         // Empty seat click — open spots in short groups are drop targets for
         // the selected player (Player/Move modes) or cart pair (Cart Pair
         // mode). Kerry, 2026-07-08: "treat open spots in a 3some, 2some or
@@ -10384,7 +10413,7 @@
                         state.isDirty = true; state.selection = null;
                         commitPairHistory(state);
                         rerenderDetail(container, ev);
-                    });
+                    }, {ev, holes, groupNum, cartPos, container});
                     return;
                 }
                 if (state.swapMode === 'cartpair') {
@@ -10494,12 +10523,14 @@
         if (window.tgfOverlayDrop) window.tgfOverlayDrop();
     }
 
-    function openPairingPicker(anchor, players, holes, onPick) {
+    function openPairingPicker(anchor, players, holes, onPick, blindCtx, seated) {
         closePairingPicker();
         const menu = document.createElement('div');
         menu.className = 'pairing-pick-menu';
-        let inner = '<div class="pairing-pick-head">Seat a player</div>';
-        if (!players.length) {
+        let inner = seated ? '' : '<div class="pairing-pick-head">Seat a player</div>';
+        if (seated) {
+            // The row IS the blind — there is nobody to seat here.
+        } else if (!players.length) {
             inner += '<div class="pairing-pick-empty">Everyone on the roster is already in a group.</div>';
         } else {
             players.forEach((p, i) => {
@@ -10514,6 +10545,25 @@
                     + `<span>${escapeHtml(displayName(p.name))}${p.rsvp_only ? ' <span style="color:#d97706;font-size:0.7rem;font-weight:700;">RSVP</span>' : ''}${mismatch}</span>`
                     + `<span class="pairing-pick-meta">${hcp} &middot; ${tee}</span></button>`;
             });
+        }
+        // ADD BLIND — an open seat is a Team Net problem as much as a
+        // seating one (Kerry 2026-09-15). RANDOM draws from the members
+        // in the field with an established TGF handicap who have been a
+        // blind least; CHOOSE lists that same field, so a manager cannot
+        // pick someone the rules exclude.
+        if (blindCtx) {
+            inner += `<div class="pairing-pick-head" style="margin-top:2px;">${seated ? 'Change this blind' : 'Add a blind'}</div>`
+                + '<button type="button" class="pairing-pick-item" data-blind="random">'
+                + '<span>&#127922; RANDOM</span>'
+                + '<span class="pairing-pick-meta">fewest blinds this year</span></button>'
+                + '<button type="button" class="pairing-pick-item" data-blind="choose">'
+                + '<span>&#9998; CHOOSE&hellip;</span>'
+                + '<span class="pairing-pick-meta">eligible field</span></button>';
+            if (seated) {
+                inner += '<button type="button" class="pairing-pick-item" data-blind="clear">'
+                    + '<span style="color:#b91c1c;">&#10005; REMOVE</span>'
+                    + '<span class="pairing-pick-meta">leave the seat open</span></button>';
+            }
         }
         menu.innerHTML = inner;
         document.body.appendChild(menu);
@@ -10536,11 +10586,102 @@
                 if (pick) onPick(pick);
             });
         });
+        menu.querySelectorAll('[data-blind]').forEach(btn => {
+            btn.addEventListener('click', async e => {
+                e.stopPropagation();
+                const how = btn.dataset.blind;
+                closePairingPicker();
+                if (how === 'random') {
+                    await blindSeat(blindCtx, {mode: 'random'});
+                } else if (how === 'clear') {
+                    await blindSeat(blindCtx, {mode: 'clear'});
+                } else {
+                    await openBlindChooser(anchor, blindCtx);
+                }
+            });
+        });
         // Swallow the click that opened it, then close on the next one.
         setTimeout(() => {
             document.addEventListener('click', closePairingPicker, {once: true});
         }, 0);
     }
+    /** Write one blind into one seat and reload the sheet. */
+    async function blindSeat(ctx, body) {
+        try {
+            const res = await fetch(`/api/events/${ctx.ev.id}/pairings/blinds`, {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(Object.assign({
+                    seat: {holes: ctx.holes, group_num: ctx.groupNum,
+                           cart_pos: ctx.cartPos}}, body)),
+            });
+            const d = await res.json();
+            if (!res.ok || d.error) { alert(d.error || res.statusText); return; }
+            await loadPairings(ctx.ev.id);
+            rerenderDetail(ctx.container, ctx.ev);
+        } catch (err) {
+            alert('Blind failed: ' + (err.message || err));
+        }
+    }
+
+    /** CHOOSE — the eligible field, fewest blinds first, each with the
+     *  count that put them there so the choice is informed. */
+    async function openBlindChooser(anchor, ctx) {
+        let pool;
+        try {
+            const res = await fetch(`/api/events/${ctx.ev.id}/pairings/blinds`, {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({mode: 'pool',
+                    seat: {holes: ctx.holes, group_num: ctx.groupNum,
+                           cart_pos: ctx.cartPos}}),
+            });
+            pool = await res.json();
+            if (!res.ok || pool.error) { alert(pool.error || res.statusText); return; }
+        } catch (err) { alert('Could not load the eligible field.'); return; }
+        closePairingPicker();
+        const menu = document.createElement('div');
+        menu.className = 'pairing-pick-menu';
+        const elig = pool.eligible || [];
+        let inner = '<div class="pairing-pick-head">Choose a blind</div>';
+        if (!elig.length) {
+            inner += '<div class="pairing-pick-empty">Nobody in the field is '
+                + 'eligible — members with an established TGF handicap only.</div>';
+        } else {
+            elig.forEach((p, i) => {
+                inner += `<button type="button" class="pairing-pick-item" data-bidx="${i}">`
+                    + `<span>${escapeHtml(displayName(p.name))}</span>`
+                    + `<span class="pairing-pick-meta">${p.blinds_ytd} blind${p.blinds_ytd === 1 ? '' : 's'}`
+                    + `${p.last_blind ? ' &middot; ' + escapeHtml(p.last_blind) : ''}</span></button>`;
+            });
+        }
+        // Say who is NOT eligible and why — an absence with no reason
+        // reads as a bug (Kerry has asked that question twice tonight).
+        const ex = (pool.excluded || []).filter(e => e.name);
+        if (ex.length) {
+            inner += '<div class="pairing-pick-empty" style="border-top:1px solid var(--border);">'
+                + ex.map(e => `${escapeHtml(e.name)} — ${escapeHtml(e.why)}`).join('<br>')
+                + '</div>';
+        }
+        menu.innerHTML = inner;
+        document.body.appendChild(menu);
+        const b = anchor.getBoundingClientRect();
+        const m = menu.getBoundingClientRect();
+        const pad = 6;
+        menu.style.left = Math.max(pad, Math.min(b.left, window.innerWidth - m.width - pad)) + 'px';
+        menu.style.top = Math.max(pad, Math.min(b.bottom + 3,
+            window.innerHeight - m.height - pad)) + 'px';
+        menu.querySelectorAll('[data-bidx]').forEach(btn => {
+            btn.addEventListener('click', async e => {
+                e.stopPropagation();
+                const p = elig[Number(btn.dataset.bidx)];
+                closePairingPicker();
+                if (p) await blindSeat(ctx, {mode: 'choose', customer_id: p.customer_id});
+            });
+        });
+        setTimeout(() => {
+            document.addEventListener('click', closePairingPicker, {once: true});
+        }, 0);
+    }
+
     window.addEventListener('scroll', closePairingPicker, true);
     window.addEventListener('resize', closePairingPicker);
     document.addEventListener('keydown', e => {
@@ -12907,7 +13048,7 @@
             `<div><strong>${escapeHtml(playerName || "Player")}</strong> &middot; ${escapeHtml(eventName || "")}</div>` +
             `<div style="margin-top:0.25rem; color:#991b1b; font-weight:600;">Outstanding credit: ${escapeHtml(amount || "")}</div>`;
         document.getElementById("wd-payout-method").value = "Venmo";
-        const today = new Date().toISOString().slice(0, 10);
+        const today = tgfToday();
         document.getElementById("wd-payout-date").value = today;
         document.getElementById("wd-payout-note").value = "";
         const btn = document.getElementById("wd-payout-submit");

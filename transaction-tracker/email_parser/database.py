@@ -55849,7 +55849,33 @@ def _cmp_person_key_str(name: str) -> str:
     return "|".join(str(x) for x in k)
 
 
-def event_blind_pool(conn, event_id: int, year: int | None = None) -> dict:
+def _established_index_by_customer(db_path=None) -> dict:
+    """{customer_id: index} for players with an ESTABLISHED TGF handicap.
+
+    Kerry 2026-09-15: "Christopher Espinosa is NOT an eligible blind
+    because he doesn't have an established TGF Handicap yet." He shows an
+    index on the pairings card because that number is a plain average of
+    whatever rounds exist — useful for seating, not a handicap. The
+    handicap of RECORD only exists once the card's own `min_rounds`
+    (3) are posted, and a STARTING handicap is a stand-in, never a
+    record. Both are excluded here, which is the difference between a
+    number to look at and a number to play for money off.
+    """
+    out = {}
+    try:
+        rows_ = get_all_handicap_players(db_path)
+    except sqlite3.Error:
+        return out          # no handicap tables yet (fresh db, tests)
+    for p in rows_:
+        cid = p.get("customer_id")
+        if (cid and p.get("handicap_source") == "computed"
+                and p.get("handicap_index") is not None):
+            out[int(cid)] = p.get("handicap_index_18") or p["handicap_index"]
+    return out
+
+
+def event_blind_pool(conn, event_id: int, year: int | None = None,
+                     db_path=None) -> dict:
     """Who may be drawn as a blind for this event, and who may not.
 
     Kerry's eligibility, verbatim: "BLIND's from the field of Members with
@@ -55862,7 +55888,16 @@ def event_blind_pool(conn, event_id: int, year: int | None = None) -> dict:
                       only issues at min_rounds (3) rounds or more
     """
     rows = _event_roster_rows(conn, event_id)
-    hcp = _roster_handicap_index_map(conn)
+    # The established-index read opens its own connection, so it needs to
+    # be told WHICH database — and a caller holding a conn should not
+    # have to remember that. Ask the connection itself.
+    if db_path is None:
+        try:
+            _f = conn.execute("PRAGMA database_list").fetchone()
+            db_path = (_f[2] if _f and len(_f) > 2 else None) or None
+        except sqlite3.Error:
+            db_path = None
+    hcp = _established_index_by_customer(db_path)
     hist = blind_draw_history(conn, year=year, exclude_event_id=event_id)
     eligible, excluded, seen = [], [], set()
     for r in rows:
@@ -55873,7 +55908,7 @@ def event_blind_pool(conn, event_id: int, year: int | None = None) -> dict:
             continue
         seen.add(key)
         status = (r.get("current_player_status") or "").strip().lower()
-        idx = hcp.get(nm.lower())
+        idx = hcp.get(int(cid)) if cid else None
         h = hist.get(cid) or {}
         entry = {"customer_id": cid, "name": nm, "status": status,
                  "handicap_index": idx, "blinds_ytd": h.get("count", 0),
@@ -55883,7 +55918,8 @@ def event_blind_pool(conn, event_id: int, year: int | None = None) -> dict:
         elif status not in BLIND_MEMBER_STATUSES:
             excluded.append({**entry, "why": f"not a member ({status or 'unknown'})"})
         elif idx is None:
-            excluded.append({**entry, "why": "no established handicap index"})
+            excluded.append({**entry,
+                             "why": "no established TGF handicap yet"})
         else:
             eligible.append(entry)
     eligible.sort(key=lambda e: (e["blinds_ytd"], e["last_blind"] or "",
@@ -55892,14 +55928,18 @@ def event_blind_pool(conn, event_id: int, year: int | None = None) -> dict:
             "year": year or datetime.now().year}
 
 
-def _blind_tiebreak(event_id, holes, group_num, cart_pos, cid) -> str:
-    """Stable, non-alphabetical tiebreak. Two players equal on history
-    must not be separated by surname — that would hand the benefit to the
-    top of the alphabet every time. Hashing the seat keeps the draw
-    reproducible (re-running names the same person) without that bias."""
-    import hashlib
-    raw = f"{event_id}:{holes}:{group_num}:{cart_pos}:{cid}"
-    return hashlib.md5(raw.encode()).hexdigest()
+def _blind_pick(cands: list) -> dict:
+    """Draw one name: RANDOM among those who have been a blind least.
+
+    Kerry 2026-09-15: "RANDOM would choose players randomly who've been
+    blinds the least." Fewest first is the fairness rule; the randomness
+    is what stops the same person inside that tier being picked every
+    week by whatever happens to sort first. A draw is meant to be a draw.
+    """
+    import random
+    fewest = min(c["blinds_ytd"] for c in cands)
+    tier = [c for c in cands if c["blinds_ytd"] == fewest]
+    return random.choice(tier)
 
 
 def draw_event_blinds(event_id: int, dry_run: bool = True, redraw: bool = False,
@@ -55925,7 +55965,7 @@ def draw_event_blinds(event_id: int, dry_run: bool = True, redraw: bool = False,
         ev = dict(ev)
         size = _blind_team_size(conn)
         pairings = get_event_pairings(event_id, db_path=db_path)
-        pool = event_blind_pool(conn, event_id, year=year)
+        pool = event_blind_pool(conn, event_id, year=year, db_path=db_path)
         by_cid = {e["customer_id"]: e for e in pool["eligible"]}
         existing = get_event_blinds(event_id, conn=conn)
         if redraw and not dry_run:
@@ -55980,10 +56020,7 @@ def draw_event_blinds(event_id: int, dry_run: bool = True, redraw: bool = False,
                                          "cart_pos": pos,
                                          "why": "no eligible player left"})
                         continue
-                    pick = min(cands, key=lambda e: (
-                        e["blinds_ytd"], e["last_blind"] or "",
-                        _blind_tiebreak(event_id, holes, g["group_num"], pos,
-                                        e["customer_id"])))
+                    pick = _blind_pick(cands)
                     taken.add(pick["customer_id"])
                     row = {"holes": holes, "group_num": g["group_num"],
                            "slot_label": g.get("slot_label"), "cart_pos": pos,
@@ -56015,6 +56052,99 @@ def draw_event_blinds(event_id: int, dry_run: bool = True, redraw: bool = False,
             "excluded": pool["excluded"],
             "already_drawn": [b for hs in existing.values()
                               for seats in hs.values() for b in seats]}
+
+
+def set_event_blind(event_id: int, holes: str, group_num: int, cart_pos: int,
+                    customer_id: int | None = None, db_path=None) -> dict:
+    """Put a chosen player in ONE open seat — or clear that seat.
+
+    Kerry 2026-09-15: "Need to be able to click an OPEN spot and be able
+    to click ADD BLIND as option, then to select RANDOM or CHOOSE from
+    eligible field." RANDOM is `draw_event_blinds`; this is CHOOSE, and
+    it is also how a seat is emptied again (customer_id=None).
+
+    The eligibility gates still apply to a chosen name — a manager
+    picking from the list cannot pick someone the rules exclude, because
+    the list they are picking from IS the eligible pool.
+    """
+    with _connect(db_path) as conn:
+        _ensure_pairing_tables(conn)
+        ev = conn.execute("SELECT * FROM events WHERE id = ?",
+                          (event_id,)).fetchone()
+        if not ev:
+            return {"error": f"no event {event_id}"}
+        ev = dict(ev)
+        key = _blind_slot_key(holes, group_num, cart_pos)
+        if customer_id is None:
+            cur = conn.execute(
+                "DELETE FROM blind_draws WHERE event_id = ? AND slot_key = ?",
+                (event_id, key))
+            conn.commit()
+            return {"cleared": cur.rowcount, "seat": key}
+        pool = event_blind_pool(conn, event_id, db_path=db_path)
+        pick = next((e for e in pool["eligible"]
+                     if e["customer_id"] == int(customer_id)), None)
+        if not pick:
+            why = next((e["why"] for e in pool["excluded"]
+                        if e["customer_id"] == int(customer_id)),
+                       "not in this event's eligible field")
+            return {"error": f"not eligible: {why}"}
+        taken = [b for hs in get_event_blinds(event_id, conn=conn).values()
+                 for seats in hs.values() for b in seats
+                 if b["customer_id"] == int(customer_id)
+                 and b["cart_pos"] != cart_pos]
+        if taken:
+            return {"error": f"{pick['name']} is already a blind in this event"}
+        grp = next((g for g in (get_event_pairings(event_id, db_path=db_path)
+                                .get(holes) or [])
+                    if g["group_num"] == group_num), None)
+        if grp and any(p.get("customer_id") == int(customer_id)
+                       for p in (grp.get("players") or [])):
+            return {"error": f"{pick['name']} is in that group — a card "
+                             f"cannot fill its own team"}
+        slot_label = (grp or {}).get("slot_label")
+        conn.execute(
+            """INSERT OR REPLACE INTO blind_draws
+                   (event_id, event_date, chapter, holes, group_num,
+                    slot_label, cart_pos, customer_id, player_name,
+                    slot_key, source)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'app')""",
+            (event_id, ev.get("event_date"), ev.get("chapter"), holes,
+             group_num, slot_label, cart_pos, pick["customer_id"],
+             pick["name"], key))
+        conn.commit()
+        return {"seat": key, "name": pick["name"],
+                "customer_id": pick["customer_id"],
+                "blinds_ytd": pick["blinds_ytd"],
+                "gg_text": f"Bl[{_sort_name(pick['name'])}]"}
+
+
+def draw_one_blind(event_id: int, holes: str, group_num: int, cart_pos: int,
+                   db_path=None) -> dict:
+    """RANDOM for ONE seat — the same rule as the whole-sheet draw."""
+    with _connect(db_path) as conn:
+        _ensure_pairing_tables(conn)
+        pool = event_blind_pool(conn, event_id, db_path=db_path)
+        existing = get_event_blinds(event_id, conn=conn)
+        taken = {b["customer_id"] for hs in existing.values()
+                 for seats in hs.values() for b in seats
+                 if b["customer_id"] is not None and b["cart_pos"] != cart_pos}
+        taken |= {r["customer_id"] for r in conn.execute(
+            "SELECT customer_id FROM blind_draws WHERE event_id = ? "
+            "AND group_num IS NULL", (event_id,)) if r["customer_id"]}
+        grp = next((g for g in (get_event_pairings(event_id, db_path=db_path)
+                                .get(holes) or [])
+                    if g["group_num"] == group_num), None)
+        here = {p.get("customer_id") for p in ((grp or {}).get("players") or [])}
+    cands = [e for e in pool["eligible"]
+             if e["customer_id"] not in taken and e["customer_id"] not in here]
+    if not cands:
+        return {"error": "no eligible player left — members in the field "
+                         "with an established TGF handicap, not already a "
+                         "blind tonight, not in this group"}
+    pick = _blind_pick(cands)
+    return set_event_blind(event_id, holes, group_num, cart_pos,
+                           pick["customer_id"], db_path=db_path)
 
 
 def clear_event_blinds(event_id: int, db_path=None) -> int:

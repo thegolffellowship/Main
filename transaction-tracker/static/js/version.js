@@ -1,5 +1,16 @@
-window.TGF_VERSION = "2.448.0";
+window.TGF_VERSION = "2.449.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.449.0",
+    date: "2026-09-16",
+    changes: [
+      "ESTABLISHED MEANS ESTABLISHED (Kerry: \u2018Christopher Espinosa is NOT an eligible blind because he doesn\u2019t have an established TGF Handicap yet\u2019). The pool was reading the number the pairings card shows \u2014 a plain average of whatever rounds exist, useful for seating a group, not a handicap. Eligibility now takes the index of RECORD, which only exists once the card\u2019s own minimum rounds are posted, and never a STARTING handicap, which is a stand-in. That is the difference between a number to look at and a number to play for money off. Guests were already out; they stay out.",
+      "ADD BLIND ON AN OPEN SEAT (Kerry: \u2018Need to be able to click an OPEN spot and be able to click ADD BLIND as option, then to select RANDOM or CHOOSE from eligible field\u2019). RANDOM draws from the eligible field; CHOOSE lists it, each name with how many blinds they have had this year and when the last one was, and says underneath who is NOT eligible and why \u2014 an absence with no reason reads as a bug. Clicking a blind already in a seat offers redraw or remove.",
+      "RANDOM IS ACTUALLY RANDOM (Kerry: \u2018RANDOM would choose players randomly who\u2019ve been blinds the least\u2019). It was deterministic \u2014 fewest blinds, then oldest, then a seat hash \u2014 which is fair on paper but picks the same person inside a tier every week. Fewest-first is still the rule; the choice within that tier is now a draw.",
+      "Tonight\u2019s events stayed in UPCOMING (Kerry, at 8pm Central: \u2018Tonight\u2019s events that are currently active, already switched to PAST events. Let\u2019s not allow that until midnight of the last day of event\u2019). The page compared dates against the browser\u2019s UTC day, so from 7pm Central every event dated today was already \u2018yesterday\u2019 and dropped out of UPCOMING while it was still being played. The league runs on Central time and the list now says so.",
+      "Pops are 50% larger (Kerry) \u2014 0.28em read as grit on the cell; they are a mark you can count now, still well short of the second number they used to look like.",
+    ],
+  },
   {
     version: "2.448.0",
     date: "2026-09-16",

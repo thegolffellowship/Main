@@ -63,7 +63,17 @@ check("duplicates across the two roster sources collapse",
 console.log("\nOpen-seat picker");
 
 check("picker helper exists",
-    /function openPairingPicker\(anchor, players, holes, onPick\)/.test(html));
+    /function openPairingPicker\(anchor, players, holes, onPick, blindCtx, seated\)/.test(html));
+
+// ADD BLIND lives on the same popover (Kerry 2026-09-15: "Need to be able
+// to click an OPEN spot and be able to click ADD BLIND as option, then to
+// select RANDOM or CHOOSE from eligible field").
+check("an open seat offers RANDOM and CHOOSE",
+    /data-blind="random"/.test(html) && /data-blind="choose"/.test(html));
+check("a seated blind can be redrawn or removed",
+    /data-blind-seat=/.test(html) && /data-blind="clear"/.test(html));
+check("the chooser names who is NOT eligible, and why",
+    /pool\.excluded/.test(html) && /e\.why/.test(html));
 
 check("an empty seat with nothing selected opens the picker",
     /if \(!state\.selection\) \{[\s\S]{0,400}openPairingPicker\(slot, getUnassigned\(state\), holes,/.test(html));

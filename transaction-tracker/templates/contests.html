@@ -370,8 +370,13 @@
            packs 18 hole columns where the scorecard grid packs nine, so
            the dots shrink to stay a marker rather than a second number.
            scorecard-render.js keeps the standard size on its own card. */
-        .evlb-pops { position: absolute; top: 0; right: 1px; font-size: 0.28em;
-            line-height: 1.4; color: #334155; letter-spacing: -0.2px; }
+        /* 50% larger (Kerry 2026-09-16: "Pops are too small like you
+           warned. Make them 50% larger, not where they were before
+           obviously.") — 0.28em read as grit on the cell; 0.42em is a
+           mark you can count, still well short of the second number they
+           used to look like. */
+        .evlb-pops { position: absolute; top: 0; right: 1px; font-size: 0.42em;
+            line-height: 1.25; color: #334155; letter-spacing: -0.2px; }
         /* per-player POINTS row on the MVP/Points tab (Kerry 2026-09-13) */
         .evlb-ovr tr.evlb-ptsrow td { background: #FAF7FF; color: #6D28D9;
             font-size: 0.72rem; font-weight: 700; border-top: none; }

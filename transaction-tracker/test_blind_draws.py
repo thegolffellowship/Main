@@ -137,7 +137,8 @@ with db._connect(tmp) as conn:
     pool = db.event_blind_pool(conn, EV)
 elig = {e["name"] for e in pool["eligible"]}
 why = {e["name"]: e["why"] for e in pool["excluded"]}
-check("members in the field with an index are eligible", "Daniel South" in elig, str(elig))
+check("members in the field with an ESTABLISHED index are eligible",
+      "Daniel South" in elig, str(elig))
 check("a GUEST is not", "Randy Guest" not in elig, str(elig))
 check("…and the reason is recorded, not swallowed",
       "not a member" in why.get("Randy Guest", ""), str(why))
@@ -221,11 +222,19 @@ check("…and it says who covers it",
 c.execute("DELETE FROM blind_draws WHERE event_id = ? AND source = 'gg'", (EV2,))
 c.commit()
 
-print("\n== the draw is reproducible ==")
-again = db.draw_event_blinds(EV2, dry_run=True, db_path=tmp)
-check("running it twice names the same player",
-      [d["name"] for d in again["drawn"]] == [d["name"] for d in res2["drawn"]],
-      str([d["name"] for d in again["drawn"]]))
+print("\n== the draw is a DRAW ==")
+# Kerry 2026-09-15: "RANDOM would choose players randomly who've been
+# blinds the least." Fewest-first is the fairness rule; the randomness is
+# what stops the same person inside that tier being picked every week.
+_names = set()
+for _ in range(25):
+    _r = db.draw_event_blinds(EV2, dry_run=True, db_path=tmp)
+    for d in _r["drawn"]:
+        _names.add(d["name"])
+        if d["blinds_ytd"] != 0:
+            F.append("a player with blinds was drawn over one with none")
+check("every pick comes from the fewest-blinds tier", not F, str(_names))
+check("…and it is not the same name every time", len(_names) > 1, str(_names))
 check("a dry run writes nothing", c.execute(
     "SELECT COUNT(*) n FROM blind_draws WHERE event_id = ?", (EV2,)).fetchone()["n"] == 0)
 
