@@ -57740,10 +57740,18 @@ def _reseat_event_blinds(conn, event_id: int) -> dict:
     rather than deleted, so it still counts against that member's turn.
     """
     _ensure_pairing_tables(conn)
+    # ONLY the app's own seat-keyed rows (v2.458.9). The `gg` rows are the
+    # blinds Kerry enters straight into Golf Genius, read back out of the
+    # team string: they are deliberately LOOSE because, as
+    # `draw_event_blinds` puts it, "we cannot know which slot each one
+    # covers, and it does not matter". v2.458.8 re-seated them too, which
+    # handed them seats they were never meant to hold. Leave them alone.
     rows = [dict(r) for r in conn.execute(
         """SELECT id, customer_id, player_name, source, holes, group_num,
                   cart_pos
-             FROM blind_draws WHERE event_id = ? ORDER BY id""",
+             FROM blind_draws
+            WHERE event_id = ? AND COALESCE(source, 'app') = 'app'
+            ORDER BY id""",
         (event_id,)).fetchall()]
     if not rows:
         return {"reseated": 0, "loosened": 0}
@@ -57772,13 +57780,24 @@ def _reseat_event_blinds(conn, event_id: int) -> dict:
                                "slot_label": g["slot_label"],
                                "cart_pos": pos, "here": g["here"]})
     plan = []
+    seated_cids: set = set()
     for r in rows:
+        # ONE BLIND PER PERSON PER EVENT (rule 15, ratified 2026-09-16).
+        # Enforced HERE, at the boundary, rather than trusted of the rows:
+        # s9.23 carried Pat Youngs twice, and a re-seat that simply moved
+        # rows around would have given one man two seats on the sheet.
+        # The duplicate is loosened, never deleted — it still counts.
+        if r["customer_id"] is not None and r["customer_id"] in seated_cids:
+            plan.append((r, None))
+            continue
         # A card can never fill its own team (rule 15c) — if the seat that
         # comes up next is in that player's OWN group, skip past it.
         seat = next((st for st in open_seats
                      if r["customer_id"] not in st["here"]), None)
         if seat is not None:
             open_seats.remove(seat)
+            if r["customer_id"] is not None:
+                seated_cids.add(r["customer_id"])
         plan.append((r, seat))
     # `slot_key` is NOT NULL and UNIQUE(event_id, slot_key), and a re-seat
     # can SWAP two blinds — writing A into B's seat while B still holds it

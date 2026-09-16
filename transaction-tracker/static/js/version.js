@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.458.8";
+window.TGF_VERSION = "2.458.9";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.458.9",
+    date: "2026-09-16",
+    changes: [
+      "CORRECTING v2.458.8: the re-seat reached rows it had no business touching. The `gg`-sourced blinds \u2014 the ones Kerry enters straight into Golf Genius, read back out of the team string \u2014 are deliberately LOOSE, because as `draw_event_blinds` has always put it, \u2018we cannot know which slot each one covers, and it does not matter\u2019. v2.458.8 re-seated those too and handed them seats they were never meant to hold. The re-seat now touches only the app\u2019s own seat-keyed rows; a gg row keeps its shape and its `gg:` key.",
+      "ONE BLIND PER PERSON PER EVENT, ENFORCED AT THE BOUNDARY (rule 15, ratified 2026-09-16). s9.23 carries Pat Youngs TWICE in `blind_draws`, so a re-seat that merely moved rows around would have given one man two seats on the sheet. The second row is loosened instead \u2014 never deleted, so it still counts against his turn for the year \u2014 and the rule is now checked where the rows are written rather than trusted of the data.",
+      "What this does NOT do is clean the existing rows. s9.23 holds four app blinds for two open seats, Pat Youngs among them twice, alongside two gg rows for the same night. That is a data question with Kerry\u2019s name on it, not something to silently resolve: `scoring-blinds:<event>` prints the rows read-only and the fix waits on his word.",
+      "Test: `test_blind_reseat.py` grows to 11 checks \u2014 a gg row keeps its loose shape and key through a regenerate, and a duplicated person is seated exactly once with the duplicate kept.",
+    ],
+  },
   {
     version: "2.458.8",
     date: "2026-09-16",

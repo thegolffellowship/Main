@@ -158,6 +158,54 @@ check("no blind row was deleted by the re-seat", after == before,
 check("a blind with no seat left becomes LOOSE, so it still counts "
       "against that member's turn", loose >= 1, f"loose={loose}")
 
+print("\n== the GG-entered rows are left LOOSE, as designed ==")
+with db._connect(DB) as conn:
+    conn.execute("DELETE FROM blind_draws WHERE event_id = ?", (EV,))
+    conn.execute(
+        """INSERT INTO blind_draws (event_id, event_date, chapter,
+               player_name, customer_id, slot_key, source)
+           VALUES (?, '2026-09-15', 'San Antonio', 'Pat Youngs', 136,
+                   'gg:youngspat', 'gg')""", (EV,))
+    conn.commit()
+db.save_event_pairings(EV, sheet({
+    1: [seat(1, 1, "Jeff Rideout", 6), seat(1, 2, "Mary Wade", 23)],
+}), db_path=DB)
+with db._connect(DB) as conn:
+    r = conn.execute(
+        """SELECT source, group_num, slot_key FROM blind_draws
+            WHERE event_id = ?""", (EV,)).fetchone()
+check("a gg-sourced blind keeps its loose shape and its key",
+      r["source"] == "gg" and r["group_num"] is None
+      and r["slot_key"] == "gg:youngspat",
+      f"source={r['source']} group={r['group_num']} key={r['slot_key']}")
+
+print("\n== one blind per person per event, enforced at the boundary ==")
+with db._connect(DB) as conn:
+    conn.execute("DELETE FROM blind_draws WHERE event_id = ?", (EV,))
+    for k in (1, 2):
+        conn.execute(
+            """INSERT INTO blind_draws (event_id, event_date, chapter, holes,
+                   group_num, slot_label, cart_pos, customer_id, player_name,
+                   slot_key, source)
+               VALUES (?, '2026-09-15', 'San Antonio', '9', ?, 'x', 4, 136,
+                       'Pat Youngs', ?, 'app')""", (EV, 90 + k, f"9:{90+k}:4"))
+    conn.commit()
+db.save_event_pairings(EV, sheet({
+    1: [seat(1, 1, "Jeff Rideout", 6)],
+    2: [seat(2, 1, "Mary Wade", 23)],
+}), db_path=DB)
+with db._connect(DB) as conn:
+    seated_rows = conn.execute(
+        """SELECT COUNT(*) AS n FROM blind_draws
+            WHERE event_id = ? AND customer_id = 136
+              AND group_num IS NOT NULL""", (EV,)).fetchone()["n"]
+    total = conn.execute(
+        "SELECT COUNT(*) AS n FROM blind_draws WHERE event_id = ?",
+        (EV,)).fetchone()["n"]
+check("the same man is seated as a blind exactly ONCE", seated_rows == 1,
+      f"{seated_rows} seats hold him")
+check("…and the duplicate row is kept, not deleted", total == 2, str(total))
+
 try:
     os.unlink(DB)
 except OSError:
