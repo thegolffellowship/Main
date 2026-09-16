@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.452.2";
+window.TGF_VERSION = "2.453.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.453.0",
+    date: "2026-09-16",
+    changes: [
+      "A SNAPSHOT OF A ROUND IN PROGRESS NO LONGER OUTRANKS THE FINISHED BOARD (Kerry: \u2018all sorts of stuff about winnings is off because we pulled stuff too soon from GG\u2019). Team Net rows are filed two ways \u2014 `team_net` for the winners the payout assembly pays, `team_net_board` for the rest \u2014 and `game` was deliberately left out of the upsert, so whichever side a team landed on during a LIVE walk it stayed on for good. On s9.23 that put the actual winner (Burlingame / Saldana / Baker / Guerrero, $84) on the board side and a team that happened to lead mid-round on the winners side at $0. The classification now follows the latest walk, and a team no longer in the winner set is demoted rather than left where an early pull put it.",
+      "Re-walked both chapters\u2019 game boards for the completed rounds, so the CTPs, skins, flight winners and Team Net purses on s9.23 and a9.23 are GG\u2019s finished result rather than a half-played one.",
+    ],
+  },
   {
     version: "2.452.2",
     date: "2026-09-16",

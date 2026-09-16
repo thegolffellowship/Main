@@ -16977,6 +16977,25 @@ def import_gg_game_results(widget_url: str, db_path: str | Path = DB_PATH,
                            DO UPDATE SET purse = excluded.purse,
                                          position = excluded.position,
                                          detail = excluded.detail,
+                                         -- WHICH SIDE OF THE BOARD A TEAM IS
+                                         -- ON MUST FOLLOW THE LATEST WALK
+                                         -- (Kerry 2026-09-16: "all sorts of
+                                         -- stuff about winnings is off because
+                                         -- we pulled stuff too soon from GG").
+                                         -- `game` was excluded from this
+                                         -- update, so a team stored during a
+                                         -- live round kept that label for
+                                         -- good: s9.23's real winner was
+                                         -- captured as a $0 board row early
+                                         -- on and stayed 'team_net_board'
+                                         -- even after GG posted their $84,
+                                         -- while a team that happened to lead
+                                         -- at the time stayed 'team_net' at
+                                         -- $0 — and the payout assembly reads
+                                         -- 'team_net'. A snapshot of a round
+                                         -- in progress must never outrank the
+                                         -- finished board.
+                                         game = excluded.game,
                                          customer_id = COALESCE(excluded.customer_id, gg_game_results.customer_id),
                                          event_id = COALESCE(excluded.event_id, gg_game_results.event_id)""",
                         (ev_id, ev_code, rid, tid, game, text,
@@ -17012,8 +17031,15 @@ def import_gg_game_results(widget_url: str, db_path: str | Path = DB_PATH,
                     for table in tstruct.get("tables") or []:
                         board.extend(r for r in _game_winners_from_table(
                             table, winners_only=False) if r["is_team"])
+                    # A team in the CURRENT winner set keeps its team_net
+                    # row; every other team is (re)filed as board — which
+                    # is how a former live-round "winner" gets demoted
+                    # once the real result posts.
+                    _winner_names = {w["player"] for w in fresh if w["is_team"]}
                     for b in board:
                         board_names.append(b["player"])
+                        if b["player"] in _winner_names:
+                            continue
                         conn.execute(
                             """INSERT INTO gg_game_results
                                    (event_id, event_code, gg_round_id,
@@ -17024,7 +17050,8 @@ def import_gg_game_results(widget_url: str, db_path: str | Path = DB_PATH,
                                ON CONFLICT (gg_tournament_id, player_name)
                                DO UPDATE SET purse = excluded.purse,
                                              position = excluded.position,
-                                             detail = excluded.detail""",
+                                             detail = excluded.detail,
+                                             game = excluded.game""",
                             (ev_id, ev_code, rid, tid, "team_net_board",
                              text, None, b["player"], 1, b["chapter"],
                              b["position"],
