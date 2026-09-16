@@ -821,7 +821,7 @@ player` resolves it through `handicap_player_links` first. The 11% of
 rows with no `customer_id` are the residue worth backfilling next; the
 audit measures it.
 
-## The handicap lock, and ONE index on every surface (v2.460.0)
+## The handicap lock, and ONE index on every surface (v2.462.0)
 
 Kerry 2026-09-16: "ROSTER handicaps need to lock after an event begins.
 Past events should not update to current handicap indexes." And:

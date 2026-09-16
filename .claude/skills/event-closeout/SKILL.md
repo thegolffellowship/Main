@@ -100,6 +100,16 @@ Do not assume it — read it — but do not redo it either.
     sheet carries no round label, so the event id MUST be passed or it
     errors "no Tracker event matched label ''"; then `…|apply|<event_id>`.
     Groups come back with their tee-time slots.
+    **Order matters (mailbox #534, 2026-09-16):** run the TEE-SHEET ingest
+    FIRST, while the round is still on the tee-sheet widget — once GG
+    archives a played round off it, only a screenshot +
+    `scoring-pairings:relabel|<event>|{group: hole}[|apply]` can restore
+    hole labels. The TEAM Net board knows who rode together, not start
+    holes or tees; before v2.458.10 applying it after the fact wiped the
+    saved hole assignments and tees (s9.23, repaired by the improvements
+    lane). Since v2.458.10 the writer keeps labels/tees the ingest does
+    not carry, so the team ingest is safe — but the tee sheet is still
+    the richer source and goes first.
 
 1.3 **GG winners + MVP cross-check.** `scoring-gg-results:<event>` — the
     boards GG has posted, with purses. Rows with `purse: 0.0` mean Kerry

@@ -96,7 +96,7 @@ conn.execute("INSERT INTO rsvp_email_overrides (player_email, event_name, status
 # A handicap history for Alan so the index rides on his roster row
 # (v2.414.0: a player seated FROM Unassigned must keep his index).
 conn.execute("INSERT INTO handicap_player_links (player_name, customer_name, customer_id) VALUES ('Alan Paid', 'Alan Paid', 1)")
-# Three rounds, because the map is the TGF index (v2.460.0 — the same
+# Three rounds, because the map is the TGF index (v2.462.0 — the same
 # computation the ROSTER shows) and an index needs three.
 ALAN_DIFFS = (4.0, 6.0, 5.0)
 for i, d in enumerate(ALAN_DIFFS):

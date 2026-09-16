@@ -73,7 +73,7 @@ check("the whole-table boot backfill is idempotent",
 
 print("\n== the handicap map follows the rename too ==")
 c.execute("INSERT INTO handicap_player_links (player_name, customer_name, customer_id) VALUES ('Mejia, Jose', 'Jose Mejia', 729)")
-# THREE rounds: the map is the TGF index (v2.460.0 — the same
+# THREE rounds: the map is the TGF index (v2.462.0 — the same
 # computation the ROSTER shows, not an average), and an index needs
 # three rounds. Dated in the lookback window relative to today.
 for days_ago, diff in ((40, 10.2), (30, 9.8), (20, 10.4)):

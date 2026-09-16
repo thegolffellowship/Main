@@ -57,13 +57,30 @@ def playing_handicap(index: float, slope: float, rating: float, par: float,
 
 
 def allocate_strokes(playing_hcp: int, stroke_index_by_hole: dict,
-                     max_pops: int = 2) -> dict:
+                     max_pops: int = 2, mode: str = "subset") -> dict:
     """Distribute a playing handicap across holes by stroke index.
 
     stroke_index_by_hole: {hole_number: stroke_index} for the holes played
-    (stroke_index 1 = hardest). Allocation is over exactly those holes, so a
-    9-hole round allocates over its 9 (their 18-hole stroke indexes are fine
-    — only their RELATIVE order matters).
+    (stroke_index 1 = hardest).
+
+    `mode` is the LEAGUE SETTING for a round played over a subset of the card
+    (e.g. a TGF nine), and the two modes give different stroke counts:
+
+      "full_card"  (default) — a hole gets a stroke when its stroke index on
+          the FULL 18-hole card is <= the playing handicap. A playing handicap
+          of 3 played over the front nine therefore lands only TWO strokes,
+          because stroke index 2 is on the back nine and is simply not played.
+          This is Golf Genius's "Allocate strokes based on the full card
+          Stroke Index Allocation", which is the setting on the TGF league
+          (Kerry's handicap-settings screenshot, 2026-09-16).
+
+      "subset" — re-rank the holes played and allocate over them, so a
+          playing handicap of 3 always lands three strokes. This is GG's
+          "Allocate strokes for the subset of holes played", which GG labels
+          Recommended and TGF does NOT use.
+
+    Under "subset" only the RELATIVE order of the stroke indexes matters;
+    under "full_card" their ABSOLUTE values do.
 
     Positive handicap: one stroke to each hole, hardest first; if the
     handicap exceeds the hole count it wraps for a 2nd stroke, capped at
@@ -78,6 +95,38 @@ def allocate_strokes(playing_hcp: int, stroke_index_by_hole: dict,
     n = len(holes)
     out = {h: 0 for h in holes}
     if n == 0 or playing_hcp == 0:
+        return out
+    if mode == "full_card":
+        # Absolute stroke index against the full card. A stroke lands only on
+        # a hole actually played, so a subset round can deliver fewer strokes
+        # than the playing handicap — that is the setting working, not a bug.
+        #
+        # GUARD. "full_card" is only meaningful when the stored stroke indexes
+        # ARE the full card's. Two conventions exist in our data: a9.23 Avery
+        # Ranch carries real GG indexes (1, 3, 5 ... 17 on a front nine),
+        # while some rounds carry indexes re-ranked to 1..N over the holes
+        # played. Applying "full_card" to a re-ranked nine silently caps every
+        # handicap above 9 at one stroke per hole — a 14 would land 9 strokes
+        # and nobody would see why. Refuse instead: a caller that means the
+        # re-ranked convention should say "subset".
+        if n and sorted(stroke_index_by_hole.values()) == list(range(1, n + 1)) \
+                and n < 18 and abs(playing_hcp) > n:
+            raise ValueError(
+                f"full_card allocation needs FULL-CARD stroke indexes, but got "
+                f"{n} holes indexed 1..{n} (the re-ranked subset convention) "
+                f"with a handicap of {playing_hcp}. Pass mode='subset', or "
+                f"store the holes' real 18-hole stroke indexes.")
+        if playing_hcp > 0:
+            for h, si in stroke_index_by_hole.items():
+                out[h] = min(playing_hcp // 18 + (1 if si <= playing_hcp % 18
+                                                  else 0), max_pops)
+        else:
+            give = -playing_hcp
+            for h, si in stroke_index_by_hole.items():
+                # Strokes are given BACK from the easiest hole down: on an
+                # 18-hole card that is stroke index 18, 17, ...
+                out[h] = -min(give // 18 + (1 if si > 18 - (give % 18) else 0),
+                              max_pops)
         return out
     if playing_hcp > 0:
         full, rem = divmod(playing_hcp, n)
