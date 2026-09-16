@@ -69,16 +69,78 @@ _USGA_ALLOWANCES: dict = {
                     "source": "USGA Appendix C, four-player ladder"},
     "best_4_of_4": {"allowance_pct": 100, "confirmed": True,
                     "source": "USGA Appendix C, four-player ladder"},
-    # Two-player (CART Net). Kerry's recollection is 85% one ball / 100%
-    # two ball. "Best 1 of 2" IS USGA's Four-Ball Stroke Play at 85%, which
-    # agrees; the two-ball row could not be verified to the standard money
-    # deserves. Left UNCONFIRMED on purpose.
-    "best_1_of_2": {"allowance_pct": 85, "confirmed": False,
-                    "source": "Kerry recollection; USGA Four-Ball Stroke "
-                              "Play is 85% but unverified here — CA Queue #8"},
-    "best_2_of_2": {"allowance_pct": None, "confirmed": False,
-                    "source": "UNRESOLVED — CA Queue #8, Kerry's call"},
+    # Two-player (CART Net) — RULED by Kerry 2026-09-16: "standard should be
+    # 85%" for one ball, "Two Ball would be 100%". Best 1 of 2 is also USGA's
+    # Four-Ball Stroke Play figure, which agrees independently.
+    #
+    # Honest provenance: Kerry believed he had already supplied Cart Net
+    # setup screenshots ("I thought I already gave you Cart Net screenshots
+    # for 1 ball"). NO SUCH SCREENSHOT REACHED THIS SESSION — these rows rest
+    # on his ruling, not on a Golf Genius settings screen, which is a weaker
+    # footing than the half-Net dials that were verified against a9.23. If a
+    # Cart Net event ever fails to reproduce GG, re-check the screen first.
+    "best_1_of_2": {"allowance_pct": 85, "confirmed": True,
+                    "source": "Kerry ruling 2026-09-16; agrees with USGA "
+                              "Four-Ball Stroke Play. NOT screenshot-verified"},
+    "best_2_of_2": {"allowance_pct": 100, "confirmed": True,
+                    "source": "Kerry ruling 2026-09-16. NOT screenshot-verified"},
+    # FIVESOME — Kerry 2026-09-16: "Fivesome 1 ball remains 75% now, but will
+    # need a dial specifically for that." Rule 15f made team size follow the
+    # GROUP, so a five-player team is reachable by ratified rule. USGA
+    # Appendix C stops at four and publishes no one-of-five row.
+    #
+    # This is its OWN row on purpose rather than a fall-through to the
+    # four-player 75%: the two happen to carry the same number today, and a
+    # fall-through would make that coincidence invisible on the day Kerry
+    # changes it. `confirmed` is True because he ruled it; `provisional` says
+    # the number is a holding position, not a settled allowance.
+    "best_1_of_5": {"allowance_pct": 75, "confirmed": True, "provisional": True,
+                    "source": "Kerry ruling 2026-09-16 — holding at the "
+                              "four-player figure; no USGA row exists for "
+                              "one of five. CA Queue #9"},
+    # Deliberately absent: best_2_of_5 and above. Kerry ruled the ONE-ball
+    # case only. A five-player Best 2 must report rather than assume.
 }
+
+def team_allowance_pct(game_cfg: dict, team_size: int, balls: int) -> dict:
+    """Resolve a team game's handicap allowance, or REFUSE and say why.
+
+    The allowance depends on BOTH how many players are on the team and how
+    many balls count. USGA Appendix C publishes the four-player ladder and
+    stops there; TGF's other sizes are Kerry's rulings. Where neither exists
+    this returns `pct: None` with a reason, because a team game that cannot
+    name its allowance must report rather than fall back to a neighbouring
+    row — a wrong allowance is a wrong payout, and a silent one is worse.
+
+    Why this is not a plain dict lookup: the five-player one-ball row and the
+    four-player one-ball row are both 75% today (Kerry, 2026-09-16: "Fivesome
+    1 ball remains 75% now, but will need a dial specifically for that"). If
+    a fivesome fell through to the four-player row the two numbers would be
+    the SAME NUMBER rather than two numbers that happen to agree, and the day
+    Kerry moves one, the other would move with it silently.
+
+    Returns {"pct", "confirmed", "provisional", "source", "reason"}.
+    """
+    table = game_cfg.get("allowance_pct_by_balls") or {}
+    row = table.get(str(team_size))
+    if row is None:
+        return {"pct": None, "confirmed": False, "provisional": False,
+                "source": None,
+                "reason": f"no allowance is defined for a {team_size}-player "
+                          f"team; sizes on file: "
+                          f"{', '.join(sorted(table)) or 'none'}"}
+    pct = row.get(str(balls))
+    if pct is None:
+        return {"pct": None, "confirmed": False, "provisional": False,
+                "source": None,
+                "reason": f"a {team_size}-player team has no ruled allowance "
+                          f"for BEST {balls}; ruled ball counts at that size: "
+                          f"{', '.join(sorted(row)) or 'none'}"}
+    meta = _USGA_ALLOWANCES.get(f"best_{balls}_of_{team_size}", {})
+    return {"pct": pct, "confirmed": bool(meta.get("confirmed")),
+            "provisional": bool(meta.get("provisional")),
+            "source": meta.get("source"), "reason": None}
+
 
 # "Off the lowest in the group" is NOT a USGA allowance. USGA applies
 # play-off-the-low to MATCH play; TGF/GG apply it to Team and Cart Net
@@ -135,16 +197,25 @@ SEED_LIVE_SCORING_CONFIG: dict = {
             "format": "best_ball_vs_par",
             "competition": "foursome_v_field",
             "eligibility": "all",
+            # The DEFAULT team size. Pairing rule 15f (ratified 2026-09-16)
+            # makes the real size follow the GROUP — Kerry: "Could be more if
+            # fivesomes are selected" — so this is a fallback, not a constant.
             "team_size": 4,
             # HOLE-level: best ball per hole cannot be decided without
             # knowing which ball got a stroke on that hole.
             "pops_per_hole": True,
-            # Allowance follows the BALL COUNT (Kerry 2026-09-16, matching
-            # USGA Appendix C's four-player ladder exactly: Best 1 of 4 75%,
-            # Best 2 of 4 85%, Best 3 of 4 100%, Best 4 of 4 100%).
-            # See _USGA_ALLOWANCES below — CART Net's two-player row is NOT
-            # yet confirmed (CA Queue #8) and is deliberately absent here.
-            "allowance_pct_by_balls": {"1": 75, "2": 85, "3": 100, "4": 100},
+            # Allowance follows the BALL COUNT **within the team's actual
+            # size** (Kerry 2026-09-16). The four-player ladder matches USGA
+            # Appendix C exactly. The five-player row is Kerry's ruling
+            # ("Fivesome 1 ball remains 75% now, but will need a dial
+            # specifically for that") and is its OWN entry rather than a
+            # fall-through, so the day he changes it there is one place to
+            # change and the 75% coincidence is not load-bearing.
+            "allowance_pct_by_balls": {
+                "4": {"1": 75, "2": 85, "3": 100, "4": 100},
+                "5": {"1": 75},        # Kerry ruling; 2-of-5 and up UNRULED
+                "2": {"1": 85, "2": 100},   # CART Net, Kerry ruling
+            },
             "off_lowest": True,
             # game-engine.md lists disallow-strokes-on-par-3 as a team-game
             # attribute. TGF's ratified side-games spec does not assert it,

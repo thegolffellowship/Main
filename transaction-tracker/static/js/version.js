@@ -1,5 +1,20 @@
-window.TGF_VERSION = "2.461.0";
+window.TGF_VERSION = "2.462.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.462.0",
+    date: "2026-09-16",
+    title: "Cart Net and fivesome allowances ruled; the 9s-vs-18s stroke question opened",
+    changes: [
+      "RULED (Kerry): CART Net is 85% for one ball and 100% for two. The one-ball figure also matches USGA\u2019s Four-Ball Stroke Play allowance independently. Recorded with an honest caveat in the code itself \u2014 no Cart Net settings screenshot reached this session, so both rows rest on the ruling rather than on a Golf Genius screen, and their `source` says \u2018NOT screenshot-verified\u2019. If a Cart Net event ever fails to reproduce GG, check that screen first.",
+      "RULED (Kerry): a FIVESOME playing Best 1 stays at 75%, \u2018but will need a dial specifically for that\u2019. It is its OWN entry rather than a fall-through to the four-player row \u2014 the two carry the same number today, and a fall-through would make that coincidence load-bearing instead of leaving two numbers that happen to agree. Flagged `provisional`: a holding position, not a settled allowance.",
+      "Allowances now resolve through `team_allowance_pct(game_cfg, team_size, balls)`, which reads BOTH the team size and the ball count and REFUSES with a named reason where nothing is ruled \u2014 a five-player Best 2, or any unruled team size, reports rather than borrowing a neighbouring row. Pairing rule 15f made team size follow the group, so sizes other than four are now reachable by ratified rule.",
+      "OPENED CA Queue #11, at Kerry\u2019s request, on how strokes apply to 9s vs 18s. Checking the arithmetic first: Golf Genius does NOT halve the index for nine-hole play. Melchor\u2019s 6.888 is a course handicap on the 18-hole stroke scale (18-hole-scale slope, nine-hole rating-minus-par adjustment). The nine-hole discount happens in the ALLOCATION \u2014 strokes spread across the full 18-hole stroke-index card and the player collects only those landing on the nine he plays.",
+      "A coincidence recorded before it misleads someone: on a HALF-NET game the 50% allowance and the nine-hole halving are the same arithmetic \u2014 6.888 \u00d7 50% and (5.6 \u00f7 2) \u00d7 139/113 are both 3.444. They come apart on any other game. a9.23 does discriminate and picks GG\u2019s reading: halving first and then applying the allowance drops Zapata\u2019s hole 7, the $13. So the shipped behaviour is verified, not assumed.",
+      "The two consequences now written down, because neither appears to have been said out loud in TGF before. (1) A NINE PAYS FEWER STROKES THAN THE PRINTED PLAYING HANDICAP \u2014 Melchor\u2019s card says PH 3 and he receives 2, because stroke index 2 is on the back nine. (2) THE FRONT NINE PAYS MORE THAN THE BACK \u2014 front holds the odd indexes, back the even, so on every odd playing handicap the front gives one extra stroke; a 3-handicap gets 2 on the front and 1 on the back. Same player, same course, different nine.",
+      "NOTHING CHANGED in the stroke-application code. GG\u2019s behaviour is coherent, a9.23 confirms we match it, and we stay tethered (\u2018until we detach from GG, GG rules\u2019). CA Queue #11 holds the discussion and should be settled together with CA Queue #10 \u2014 they are the same question at two layers.",
+      "Tests: `test_half_net_skins.py` extended to 63 checks, including that an unruled combination refuses and names what IS ruled, that the fivesome dial is a separate entry rather than a fall-through, and that the Cart Net rows keep their \u2018NOT screenshot-verified\u2019 provenance.",
+    ],
+  },
   {
     version: "2.461.0",
     date: "2026-09-16",

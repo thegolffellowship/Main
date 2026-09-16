@@ -318,14 +318,38 @@ check("the confirmed ladder is marked confirmed",
       all(ls._USGA_ALLOWANCES[k]["confirmed"]
           for k in ("best_1_of_4", "best_2_of_4", "best_3_of_4",
                     "best_4_of_4")))
-check("Team Net's allowance follows the BALL COUNT, as data",
-      ls.SEED_LIVE_SCORING_CONFIG["games"]["team_net"]
-      ["allowance_pct_by_balls"] == {"1": 75, "2": 85, "3": 100, "4": 100})
-check("the UNVERIFIED Cart Net two-ball row carries no number to fall back on",
-      ls._USGA_ALLOWANCES["best_2_of_2"]["allowance_pct"] is None
-      and ls._USGA_ALLOWANCES["best_2_of_2"]["confirmed"] is False)
-check("and the one-ball Cart Net row is flagged unconfirmed too",
-      ls._USGA_ALLOWANCES["best_1_of_2"]["confirmed"] is False)
+_TN = ls.SEED_LIVE_SCORING_CONFIG["games"]["team_net"]
+_alw = lambda size, balls: ls.team_allowance_pct(_TN, size, balls)
+
+check("the four-player ladder resolves to USGA's figures",
+      [_alw(4, b)["pct"] for b in (1, 2, 3, 4)] == [75, 85, 100, 100])
+
+# Kerry 2026-09-16: "standard should be 85%" one ball, "Two Ball would be 100%".
+check("CART Net one ball is 85%, per Kerry's ruling",
+      _alw(2, 1)["pct"] == 85 and _alw(2, 1)["confirmed"])
+check("CART Net two ball is 100%, per Kerry's ruling",
+      _alw(2, 2)["pct"] == 100 and _alw(2, 2)["confirmed"])
+check("...and both record that no GG screenshot verified them",
+      all("NOT screenshot-verified" in ls._USGA_ALLOWANCES[k]["source"]
+          for k in ("best_1_of_2", "best_2_of_2")))
+
+# Kerry 2026-09-16: "Fivesome 1 ball remains 75% now, but will need a dial
+# specifically for that." Rule 15f made a five-player team reachable.
+check("a FIVESOME best-1 resolves to 75%", _alw(5, 1)["pct"] == 75)
+check("...and is flagged PROVISIONAL, not settled",
+      _alw(5, 1)["provisional"] is True)
+check("...and is its OWN dial, not a fall-through to the four-player row",
+      "5" in _TN["allowance_pct_by_balls"]
+      and "1" in _TN["allowance_pct_by_balls"]["5"],
+      str(_TN["allowance_pct_by_balls"]))
+
+# The whole point of the resolver: an unruled combination REPORTS.
+check("a five-player BEST 2 refuses rather than borrowing 85%",
+      _alw(5, 2)["pct"] is None and "no ruled allowance" in _alw(5, 2)["reason"],
+      str(_alw(5, 2)))
+check("an unruled TEAM SIZE refuses and names the sizes on file",
+      _alw(3, 1)["pct"] is None and "3-player" in _alw(3, 1)["reason"],
+      str(_alw(3, 1)))
 
 print("\n== pops are a property of the GAME, not of the card ==")
 
