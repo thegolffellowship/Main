@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.458.1";
+window.TGF_VERSION = "2.458.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.458.2",
+    date: "2026-09-16",
+    changes: [
+      "TGF Insider: the Hole-In-One pot line now prints the pot AS OF today — get_hio_pot() folds FUTURE events' registrations into its headline (closeout skill OPEN 8; Cedar Creek's 8 signups put $3,392 in the 9/16 draft when the pot after Tuesday's play was $3,384). The Insider takes the running total at the last PLAYED event instead.",
+    ],
+  },
   {
     version: "2.458.1",
     date: "2026-09-16",
