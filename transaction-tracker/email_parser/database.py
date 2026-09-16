@@ -16586,6 +16586,92 @@ def determine_event_game_results(event_name: str, game: str,
         return out
 
 
+def skins_audit(event_query: str, db_path: str | Path | None = None) -> dict:
+    """Why a hole is or is not a skin, per flight, with the recorded
+    payouts beside it (Kerry 2026-09-15: "Carlos's skin isn't circled.
+    Audit").
+
+    Read-only. Rebuilds exactly what `get_event_leaderboard` does for
+    `skin_cells` — outright low GROSS on a hole among the BUYERS in that
+    flight — and prints the working: every buyer's stroke on every hole,
+    the low, who held it, and why the hole did or did not pay. Then it
+    sets that against what is actually RECORDED as skins money, so a
+    disagreement between our board and Golf Genius is visible as a line
+    rather than as a missing circle.
+    """
+    d = get_event_leaderboard(event_query, db_path=db_path)
+    if not d:
+        return {"error": "event not found"}
+    hole_cols = d.get("hole_cols") or []
+    cards = d.get("cards") or {}
+
+    def _stroke(rid, hn):
+        for h in (cards.get(str(rid)) or []):
+            if h[0] == hn:
+                return h[1]
+        return None
+
+    flights = []
+    for sec in (d.get("skins_board") or []):
+        buyers = [r for r in sec["rows"] if r.get("buyer")]
+        placed = [r for r in sec["rows"] if not r.get("buyer")]
+        holes = []
+        for hn in hole_cols:
+            scores = {}
+            for r in buyers:
+                st = _stroke(r["scoring_round_id"], hn)
+                if st is not None:
+                    scores[r["player_name"]] = st
+            if not scores:
+                holes.append({"hole": hn, "verdict": "no scores posted"})
+                continue
+            low = min(scores.values())
+            holders = [n for n, v in scores.items() if v == low]
+            holes.append({
+                "hole": hn,
+                "scores": scores,
+                "low": low,
+                "verdict": ("SKIN \u2014 " + holders[0]) if len(holders) == 1
+                           else "tied \u2014 " + ", ".join(sorted(holders)),
+                "winner": holders[0] if len(holders) == 1 else None,
+            })
+        won = {}
+        for h in holes:
+            if h.get("winner"):
+                won[h["winner"]] = won.get(h["winner"], 0) + 1
+        flights.append({
+            "flight": sec.get("label"),
+            "buyers": [r["player_name"] for r in buyers],
+            "placed_non_buyers": [r["player_name"] for r in placed],
+            "holes": holes,
+            "computed_skins": won,
+            "computed_total": sum(won.values()),
+        })
+
+    # What the board is actually SHOWING (the circles) and what money is
+    # recorded against skins, so the three can be compared in one read.
+    circles = {}
+    for sec in (d.get("skins_board") or []):
+        for r in sec["rows"]:
+            hl = (d.get("skin_cells") or {}).get(str(r["scoring_round_id"])) or []
+            if hl or r.get("win_skins"):
+                circles[r["player_name"]] = {
+                    "circled_holes": hl,
+                    "win_skins_recorded": bool(r.get("win_skins")),
+                    "money": round(sum(
+                        w["cents"] for w in (r.get("won") or [])
+                        if "skin" in (w.get("label") or "").lower()) / 100.0, 2),
+                }
+    return {"event": d.get("event_name") or d.get("event") or event_query,
+            "holes_in_play": hole_cols,
+            "flights": flights,
+            "board": circles,
+            "note": "computed_skins is the rule (outright low gross among "
+                    "buyers in the flight). A player with money but no "
+                    "circled hole means our board and the recorded payout "
+                    "disagree \u2014 look at the tied holes first."}
+
+
 def _flight_skins(conn, group: list[dict]) -> dict:
     """Gross skins within one flight: a hole's outright lowest gross
     wins a skin; any tie kills the hole. Returns skins + per-player

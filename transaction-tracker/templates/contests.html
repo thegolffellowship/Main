@@ -297,6 +297,10 @@
         .evlb-flight { display: inline-block; background: #EEF2FF; color: #4338CA; border-radius: 99px;
             padding: 2px 8px; font-size: 10px; font-weight: 700; margin-left: 6px; }
         .evlb-plr { cursor: pointer; }
+        /* The proxies table is the only board that is not `.evlb-holes`,
+           so its name cell has to be told the same thing (Kerry
+           2026-09-16: "Use same text for Proxy winners as the others"). */
+        .evlb-prox td.nm { text-align: left; font-weight: 600; color: #475569; }
         .evlb-card-row > td { background: #FAF9F7; }
         /* hole grids share THE card standard's metrics (tgf-standards
            TGF_CARD_STYLE: 2px 6px cells, 2em min-width, #e2e8f0 grid,
@@ -3677,16 +3681,43 @@
                   `<td class="r">${t.purse != null ? "$" + Number(t.purse).toFixed(2) : ""}</td></tr>`).join("") +
               `</tbody></table></div>`
             : '<p style="color:var(--text-muted);">Team results not recorded yet.</p>';
+        // PROXY WINNERS READ LIKE EVERY OTHER BOARD (Kerry 2026-09-16:
+        // "Use same text for Proxy winners as the others"). This table
+        // was printing the raw Golf Genius string — GG's own casing, no
+        // board name cell, no card behind it — so the one tab whose
+        // whole job is to name a winner was the one tab whose winner did
+        // not look like a player anywhere else. Resolve the GG name back
+        // to the board row (the same "LAST, First" flip the tee dots
+        // already use), then render OUR name in the standard `td.nm`
+        // inside an `evlb-plr` row so it styles, dots and opens its
+        // scorecard exactly like the others.
+        const evlbRowByName = {};
+        (d.overall_board || []).forEach(r => {
+            const k = String(r.player_name || "").trim().toLowerCase();
+            if (k) evlbRowByName[k] = r;
+            const f = evlbFlipName(r.player_name);
+            if (f) evlbRowByName[f] = r;
+        });
+        const proxWinner = (nm) => {
+            const r = evlbRowByName[String(nm || "").trim().toLowerCase()]
+                   || evlbRowByName[evlbFlipName(nm || "")] || null;
+            return {
+                rid: r ? (r.scoring_round_id || "") : "",
+                cell: `<td class="nm">${escapeHtml(r ? r.player_name : (nm || ""))}` +
+                      evlbTeeDot(d, r || { player_name: nm }, "right") + `</td>`,
+            };
+        };
+        const proxRow = (label, p) => {
+            const w = proxWinner(p.player);
+            return `<tr class="evlb-plr" data-rid="${w.rid}">` +
+                `<td>${escapeHtml(label)}</td>${w.cell}` +
+                `<td>${escapeHtml(p.detail || "")}</td>` +
+                `<td class="r">${p.purse != null ? "$" + Number(p.purse).toFixed(2) : ""}</td></tr>`;
+        };
         const proxHtml = ((d.proxies || []).length || (d.hio || []).length)
-            ? `<div class="evlb-scroll"><table class="evlb-tbl"><thead><tr><th>Contest</th><th>Winner</th><th>Detail</th><th style="text-align:right;">$</th></tr></thead><tbody>` +
-              (d.proxies || []).map(p =>
-                  `<tr><td>${escapeHtml(p.label || "")}</td><td>${escapeHtml(p.player || "")}` +
-                  evlbTeeDot(d, { player_name: p.player }) + `</td>` +
-                  `<td>${escapeHtml(p.detail || "")}</td><td class="r">${p.purse != null ? "$" + Number(p.purse).toFixed(2) : ""}</td></tr>`).join("") +
-              (d.hio || []).map(p =>
-                  `<tr><td>Hole-in-One</td><td>${escapeHtml(p.player || "")}` +
-                  evlbTeeDot(d, { player_name: p.player }) + `</td>` +
-                  `<td>${escapeHtml(p.detail || "")}</td><td class="r">${p.purse != null ? "$" + Number(p.purse).toFixed(2) : ""}</td></tr>`).join("") +
+            ? `<div class="evlb-scroll"><table class="evlb-tbl evlb-prox"><thead><tr><th>Contest</th><th>Winner</th><th>Detail</th><th style="text-align:right;">$</th></tr></thead><tbody>` +
+              (d.proxies || []).map(p => proxRow(p.label || "", p)).join("") +
+              (d.hio || []).map(p => proxRow("Hole-in-One", p)).join("") +
               `</tbody></table></div>`
             : '<p style="color:var(--text-muted);">No proxies recorded yet.</p>';
         // Every tab is the SAME board re-ordered (Kerry 2026-09-13);

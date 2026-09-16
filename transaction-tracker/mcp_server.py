@@ -5100,6 +5100,12 @@ def _scoring_dispatch(url: str, extract: str):
             _ev, _, _gurl = arg.partition("|")
             return json.dumps(db.team_net_parity(_ev.strip(), _gurl.strip()),
                               indent=2, default=str)
+        if cmd == "scoring-skins-audit":
+            # "<event>" — why a hole is or is not a skin, per flight,
+            # with the recorded payouts beside it (Kerry 2026-09-15:
+            # "Carlos's skin isn't circled. Audit"). Read-only.
+            return json.dumps(db.skins_audit(arg.strip()), default=str)
+
         if cmd == "scoring-event-board":
             # "<event>" — compact read of the events-leaderboard TEAM
             # board for vetting: per team the GG position, GG posted

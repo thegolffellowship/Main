@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.456.1";
+window.TGF_VERSION = "2.457.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.457.0",
+    date: "2026-09-16",
+    changes: [
+      "PROXY WINNERS READ LIKE EVERY OTHER BOARD (Kerry: \u2018Use same text for Proxy winners as the others\u2019). The Proxies tab was printing the raw Golf Genius string \u2014 GG\u2019s own casing, no board name cell, no card behind the name \u2014 so the one tab whose entire job is to name a winner was the one tab whose winner did not look like a player anywhere else on the page. The GG name now resolves back to the board row through the same \u2018LAST, First\u2019 flip the tee dots already use, OUR name is rendered in the standard name cell with its tee dot right-justified, and the row opens the winner\u2019s scorecard like every other row does.",
+      "NEW READ-ONLY AUDIT: `scoring-skins-audit:<event>` (Kerry: \u2018Carlos\u2019s skin isn\u2019t circled. Audit\u2019). It rebuilds exactly what the board does for its skins circles \u2014 outright low GROSS on a hole among the BUYERS in that flight \u2014 and prints the working: every buyer\u2019s stroke on every hole, the low, who held it, and why the hole did or did not pay, set against what is actually recorded as skins money. A player with money but no circled hole now produces a line you can read instead of a missing circle you have to guess at.",
+    ],
+  },
   {
     version: "2.456.1",
     date: "2026-09-16",
