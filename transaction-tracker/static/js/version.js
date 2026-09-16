@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.458.2";
+window.TGF_VERSION = "2.458.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.458.3",
+    date: "2026-09-16",
+    changes: [
+      "docs: third live closeout run (s9.23 The Quarry + a9.23 Avery Ranch) in the closeout handoff §3k — the null-customer_id card GG's spelling created (alias, drop, keyed re-import, one handicap post), the tee-less Lee Vasquez card, the cart-only Austin pairings board; skill OPEN 9–11. Recap drafts for both chapters under docs/claude/recaps/.",
+    ],
+  },
   {
     version: "2.458.2",
     date: "2026-09-16",

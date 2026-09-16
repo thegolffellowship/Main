@@ -390,6 +390,45 @@ Recap draft:
 `docs/claude/recaps/2026-09-12-a18.5-forest-creek.{txt,html}` — three
 Kerry blanks (fellowship, tee times, the Luke-not-bought-in line).
 
+### 3k. Third live run — s9.23 THE QUARRY + a9.23 AVERY RANCH (Tue 2026-09-15), run Wed 6:50–7:20 AM
+
+Kerry: "Yeah do closeout for last nights events. Like you said, much was
+done last night." True — the improvements + handicap-surfaces lanes had
+already posted every handicap (21 SA, 11 of 12 Austin) and emailed the
+cards twice (01:52 and 02:06 UTC, the second after the index fix), and
+Kerry had paid every payout (14 SA rows, 12 Austin, all PAID by 9/15).
+What the run added:
+
+- **Identity:** GG spelled "AREVALO, Guillermo"; the store row is
+  "Guilermo Arevalo" (821). The card AND its posted handicap round carried
+  customer_id NULL (rule 6 breach, one row). Alias added; `refresh=` on the
+  keyed import dropped nothing (`refreshed_players_dropped: []` — the
+  stale-card matcher does not treat a null-cid card as stale), so the fix
+  was `scoring-round-drop:3526|unpost|apply` → keyed re-import (card 3528,
+  cid 821) → `scoring-hcp-import:a9.23|apply` (1 row, index 7.8, recap
+  mail to Kerry + Robert for that one row). Which spelling is canonical is
+  Kerry's call (his email is guillermoarevalo25@).
+- **Lee Vasquez (card 3518) has NO tee or course** — GG served the card
+  without a tee row, so par, dots-vs-par and the handicap post are blocked
+  (`no_tee_slope_rating`). Not guessed. Registration says <50, which at
+  Avery Ranch was Blue (885) for everyone else in that band — Kerry
+  confirms, then the card needs a tee stamped (no bridge; skill OPEN 9)
+  and one more `scoring-hcp-import:a9.23|apply`.
+- **Pairings:** SA TEAM Net board applied (6 groups, 3 blind seats, 21
+  rows, 28 pairs). Austin's only team board is **CART Net** (6 pairs of 2)
+  — the foursomes are on no GG board, so NOT applied (skill OPEN 10).
+- Cards = field both chapters (21, 12); parity all_ok Baker 3498 +
+  Youngs 3519; MVP Baker 12 (TGF MVP over Youngs 10), GG agrees both;
+  financials verified 100% both; Avery Ranch bill $714.45 alerted 9/15 =
+  course_fees exactly; **The Quarry bill ($886.57 expected) has not alerted
+  yet**; contests sync enrolled 0; HIO pot $3,384 after Tuesday (Cedar
+  Creek's 8 pre-registrations make the tool say 3,392 — OPEN 8; the Insider
+  prints the as-of figure since v2.458.2).
+- Jeff King (776, Austin first-timer, facebook_lead) had chapter NULL →
+  set Austin.
+- Recap drafts: `docs/claude/recaps/2026-09-15-s9.23-quarry-a9.23-avery-ranch.md`
+  (one per chapter; blanks = fellowship headcounts, tee times, deadlines).
+
 ## 4. NOT done, and why
 
 - **Wednesday-AM TGF Insider auto-draft (mailbox #453).** BUILT in
