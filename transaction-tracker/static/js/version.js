@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.462.1";
+window.TGF_VERSION = "2.462.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.462.2",
+    date: "2026-09-16",
+    changes: [
+      "A TEE ROW\u2019S NINE IS DECIDED BY THE ROUNDS ALREADY PLAYED OFF IT (Kerry 2026-09-16, on Avery Ranch: \u2018I submitted ALL Avery Ranch tees, ratings and info last night. Is this fixed now?\u2019). Avery\u2019s card has two nine-hole rows per tee and no 18-hole row, so `label_course_tee_nines`\u2019 yardage strategies could not tell front from back and every future Avery sheet would have printed no handicap until an 18-hole card was imported. But each round we hold off a row was scored on a night whose nine we recorded (`events.nine_side`) and posted as a handicap round naming its nine (`handicap_rounds.nine`). Unanimous history now labels the row \u2014 permanently, for every future event at the course \u2014 and a row played as both front and back stays unresolved and says so. v2.462.0\u2019s per-event fallback still covers the night itself. Test: `test_tee_nine_from_history.py` (8 checks).",
+    ],
+  },
   {
     version: "2.462.1",
     date: "2026-09-16",

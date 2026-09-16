@@ -57839,6 +57839,37 @@ def label_course_tee_nines(conn, course_id: int | None = None) -> dict:
                                 r["_nine"] = "front" if ya == fa else "back"
                             for r in gb:
                                 r["_nine"] = "front" if yb == fa else "back"
+        # THE ROUNDS ALREADY PLAYED OFF A ROW SAY WHICH NINE IT IS
+        # (v2.462.2, Kerry 2026-09-16: "I submitted ALL Avery Ranch tees,
+        # ratings and info last night. Is this fixed now?"). Avery has no
+        # 18-hole row to match against, so the yardage strategies above
+        # cannot label it — but every round we have imported off a tee
+        # row was scored on a night whose nine we recorded (`events.
+        # nine_side`) and posted as a handicap round that names its nine
+        # (`handicap_rounds.nine`). Unanimous history labels the row; a
+        # row played as both stays unresolved and says so. Data, not a
+        # guess: the same fact the print pack uses for one event, kept.
+        played_why: dict = {}
+        for r in [x for x in nines if not x.get("_nine")]:
+            sides: set = set()
+            try:
+                for h in conn.execute(
+                        """SELECT hr.nine AS hr_nine, e.nine_side AS ev_nine
+                             FROM scoring_rounds sr
+                             LEFT JOIN handicap_rounds hr
+                                    ON hr.scoring_round_id = sr.id
+                             LEFT JOIN events e ON e.id = sr.event_id
+                            WHERE sr.tee_id = ?""", (r["tee_id"],)).fetchall():
+                    for v in (h["hr_nine"], h["ev_nine"]):
+                        v = (v or "").strip().lower()
+                        if v in ("front", "back"):
+                            sides.add(v)
+            except sqlite3.OperationalError:
+                sides = set()
+            if len(sides) == 1:
+                r["_nine"] = sides.pop()
+            elif len(sides) > 1:
+                played_why[r["tee_id"]] = "played as both front and back"
         for r in grp:
             if r.get("_nine"):
                 if r["nine"] != r["_nine"]:
@@ -57851,7 +57882,9 @@ def label_course_tee_nines(conn, course_id: int | None = None) -> dict:
                 unresolved.append({"tee_id": r["tee_id"], "course_id": r["course_id"],
                                    "tee_name": r["tee_name"], "rating": r["rating"],
                                    "yards": r["yardage_total"],
-                                   "why": ("no 18-hole row of this tee to match against"
+                                   "why": played_why.get(r["tee_id"]) or (
+                                           "no 18-hole row of this tee to match against, "
+                                           "and no round played off it yet"
                                            if not anchor else
                                            "yardages match neither nine and the ratings "
                                            "do not add up to the 18")})
