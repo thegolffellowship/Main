@@ -156,6 +156,10 @@ PUBLIC_RULES = """PUBLIC INSIDER RULES (these override the member-recap style be
 - Links: only the URLs on the fact sheet's allow-list, as <a href="..."> around a short label (RESULTS, CURRENT STANDINGS, TGF Handicaps, the course name). Every event mentioned in the lede links to its RESULTS page.
 - Structure: the email is a fixed template. You write ONLY the headline, the lede, the story box (1 to 4 beats — vary it; "three things" every week is what Kerry asked us to stop doing), the Celebrate line, and the close-box header. The evergreen "How a TGF Event works", the Try-a-Tuesday buttons and the offer are already there and must not be restated.
 - Length: the whole thing is a two-minute read. Lede 1–3 sentences. Each beat 2–4 sentences.
+- Logistics only from the fact sheet. Tee times, shotgun starts, when pairings go out, prices, what is included: say it only if the fact sheet says it (each event carries its "format" line). San Antonio Tuesdays are usually a 5:00 PM shotgun; Austin Tuesdays are usually tee times, so never write one rule for both cities.
+- A Tuesday is NINE holes: it ends on the 9th green, never the 18th. Saturdays are the 18s.
+- Never expose our bookkeeping to the reader. If a fact is missing (no fellowship spot recorded, no first-timer, no photo), write around it silently — never "no spot was on the books", never "we don't have a record".
+- Consistency across options: when you write the Celebrate line and a fellowship beat, they must agree with each other and with the fact sheet.
 """
 
 OUTPUT_SCHEMA = """Return ONLY a JSON object, no prose, no code fences, with exactly these keys:
@@ -297,6 +301,28 @@ def _short_date(d: str | None) -> str:
     return f"{dt.strftime('%a %b')} {dt.day}"
 
 
+def _clock(t: str | None) -> str | None:
+    """'17:00' → '5:00 PM'; anything unparseable → None."""
+    try:
+        h, m = (t or "").strip()[:5].split(":")
+        h, m = int(h), int(m)
+    except (ValueError, AttributeError):
+        return None
+    return f"{(h % 12) or 12}:{m:02d} {'PM' if h >= 12 else 'AM'}"
+
+
+def event_format(chapter: str, holes: int, start_time: str | None) -> str:
+    """One plain line the writer may quote for logistics (rule: logistics
+    only from the fact sheet). SA Tuesday nines are shotguns as a rule;
+    Austin's are tee times (event-recaps.md lessons 36 + 39–43)."""
+    clock = _clock(start_time)
+    if holes == 18:
+        return f"18 holes on a Saturday, morning tee times{(' from ' + clock) if clock else ''}"
+    if chapter == "Austin":
+        return f"nine holes, late-afternoon tee times{(' from ' + clock) if clock else ''}"
+    return f"nine holes, {clock or '5:00 PM'} shotgun start (everyone tees off together and finishes together)"
+
+
 def recent_headlines(db_path=None, before: date | None = None, limit: int = 6) -> list:
     """Titles of the last few Insiders (draft pings + review mails), so the
     writer never repeats one (Kerry 2026-09-16)."""
@@ -367,6 +393,7 @@ def writer_facts(data: dict, db_path=None) -> dict:
         events.append({
             "chapter": e["chapter"], "course": e.get("course") or e.get("name"),
             "date": _long_date(e.get("date")), "holes": e.get("holes", 9),
+            "format": event_format(e["chapter"], e.get("holes", 9), e.get("start_time")),
             "field": e.get("field"), "cashed": e.get("cashed"),
             "cashed_phrase": _fraction_phrase(e.get("cashed") or 0, e.get("field") or 0),
             "first_timers": firsts, "skins_story": story,
@@ -388,7 +415,7 @@ def writer_facts(data: dict, db_path=None) -> dict:
     next_t = {}
     for ch, nt in (data.get("next_tuesday") or {}).items():
         next_t[ch] = {"course": nt.get("course") or nt.get("name"), "date": _short_date(nt.get("date")),
-                      "url": nt.get("url")}
+                      "url": nt.get("url"), "format": event_format(ch, 9, nt.get("start_time"))}
     sats = [{"chapter": ("San Antonio" if (s.get("name") or "").lower().startswith("s") else "Austin"),
              "course": s.get("course") or s.get("name"), "date": _short_date(s.get("date")), "url": s.get("url")}
             for s in data.get("saturdays") or []]
@@ -644,6 +671,11 @@ def validate(draft: dict, facts: dict) -> tuple:
             problems.append(f"dollar figure not allowed: {d}")
     if re.search(r"\balone\b", text, re.I):
         problems.append("'alone' is banned in the skins explanation")
+    if all((e.get("holes") or 9) == 9 for e in facts.get("events") or []) and facts.get("events") \
+            and re.search(r"\b(18th|eighteenth)\b", text, re.I):
+        problems.append("this week's events were nines — there is no 18th hole/green; say the 9th")
+    if re.search(r"on the books|no record|not recorded|we don'?t have|wasn'?t recorded", text, re.I):
+        problems.append("never expose missing data to the reader — write around it")
     for h in facts.get("recent_headlines") or []:
         if h and clean["headline"].strip().lower() == h.strip().lower():
             problems.append(f"headline repeats a recent one: {h}")

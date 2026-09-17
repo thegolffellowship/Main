@@ -222,7 +222,7 @@ def gather_week(db_path=None, as_of: date | None = None, days: int = 7) -> dict:
     with db._connect(db_path) as conn:
         played = [dict(r) for r in conn.execute(
             """SELECT e.id, e.item_name, e.event_date, e.course, e.chapter,
-                      e.fellowship_spot,
+                      e.fellowship_spot, e.start_time,
                       COUNT(sr.id) AS cards
                  FROM events e
                  JOIN scoring_rounds sr ON sr.event_id = e.id
@@ -332,6 +332,7 @@ def gather_week(db_path=None, as_of: date | None = None, days: int = 7) -> dict:
                 "hcp_min": hcp[0] if hcp else None, "hcp_max": hcp[1] if hcp else None,
                 "skins_story": skins_story,
                 "fellowship_spot": ev["fellowship_spot"],
+                "start_time": ev["start_time"],
                 "results_url": (f"{base}?round_id={round_id}" if base and round_id
                                 else base),
                 "holes": 18 if _EIGHTEEN_RE.match(ev["item_name"] or "") else 9,
@@ -350,7 +351,7 @@ def gather_week(db_path=None, as_of: date | None = None, days: int = 7) -> dict:
                     and ch not in out["next_tuesday"]:
                 out["next_tuesday"][ch] = {
                     "name": ev["item_name"], "course": ev["course"],
-                    "date": ev["event_date"], "url": url,
+                    "date": ev["event_date"], "url": url, "start_time": ev.get("start_time"),
                     "label": f"{ev['course'] or ev['item_name']} · {_fmt_day(ev['event_date'])}",
                 }
             elif _EIGHTEEN_RE.match(ev["item_name"] or "") and len(out["saturdays"]) < 4 \

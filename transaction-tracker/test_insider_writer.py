@@ -197,6 +197,20 @@ fake_client.responses = []
 iw._client_create = fake_client
 os.environ["ANTHROPIC_API_KEY"] = "test-key"
 
+print("\n== 2b. logistics from the fact sheet (first machine sample, 2026-09-17) ==")
+check("format lines: SA shotgun, Austin tee times, Saturday 18", iw.event_format("San Antonio", 9, "17:00").startswith("nine holes, 5:00 PM shotgun")
+      and iw.event_format("Austin", 9, "16:57") == "nine holes, late-afternoon tee times from 4:57 PM"
+      and iw.event_format("Austin", 9, None) == "nine holes, late-afternoon tee times"
+      and iw.event_format("San Antonio", 18, "08:10").startswith("18 holes on a Saturday"), iw.event_format("Austin", 9, "16:57"))
+check("fact sheet carries a format per event and per next Tuesday", sa["format"].startswith("nine holes")
+      and facts["next_tuesday"]["San Antonio"]["format"].startswith("nine holes, 5:00 PM shotgun"), str(facts["next_tuesday"]))
+_, probs = iw.validate(dict(GOOD, celebrate="The banter starts on the 18th green."), facts)
+check("'18th green' on a nine is refused", any("18th" in x for x in probs), str(probs))
+_, probs = iw.validate(dict(GOOD, celebrate="No fellowship spot was on the books, so some grabbed drinks."), facts)
+check("bookkeeping leak is refused", any("missing data" in x for x in probs), str(probs))
+check("rules name the three lessons", "NINE holes" in iw.PUBLIC_RULES and "Logistics only from the fact sheet" in iw.PUBLIC_RULES
+      and "bookkeeping" in iw.PUBLIC_RULES)
+
 print("\n== 4. write_insider: clean draft, fences tolerated ==")
 fake_client.responses = ["```json\n" + json.dumps(GOOD) + "\n```"]
 d = iw.write_insider(facts, "first-timer", db_path=p)

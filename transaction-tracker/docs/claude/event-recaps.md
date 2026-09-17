@@ -499,6 +499,23 @@ recap (golf-world items, encouragement) is welcome by ruling; it still goes thro
 and Kerry's approval, and the writer never invents a news item — facts come from a dial or the lane's
 research.
 
+**Lessons from the first machine-written sample (three Sonnet drafts on s9.23/a9.23,
+2026-09-17 5:21 PM CDT, mailbox #544 — the lane's own edit, before Kerry's):**
+- W1. **A Tuesday is nine holes.** The fellowship draft wrote "the banter starts on the
+  18th green". `validate()` now refuses 18th/eighteenth when the week's events are nines.
+- W2. **Never expose bookkeeping.** "No fellowship spot was on the books, so some grabbed
+  drinks where they could" — a reader must never see our data gaps. Refused by
+  `validate()`; the rule says write around it silently.
+- W3. **Logistics only from the fact sheet, per chapter.** "Usually a 5:00 PM shotgun start"
+  was written for both cities; Austin runs tee times. Each event and each next-Tuesday
+  button now carries a `format` line (`event_format()`: SA = shotgun at `start_time`,
+  Austin = late-afternoon tee times, Saturdays = 18 with morning tee times) and the writer
+  may quote only that. "We send you a tee time and your group a day or two before" is
+  unverified — Kerry to confirm the real lead time; until then it is not on the sheet.
+- Also seen: the three options must agree with each other on the same fact (option 1 said
+  SA "grabbed drinks in the clubhouse", option 3 said no spot was recorded) — the SA spot
+  is set on the EVENT row (Edit Event → GENERAL), which is where the writer reads it.
+
 **Lessons from Insider #3 (Kerry's Brevo edits of the 8:00 draft, 2026-09-16):**
 - **When no fellowship spot is on record, the Celebrate line is** *"Stick
   around for food, drink, and banter after the round."* — Kerry replaced the

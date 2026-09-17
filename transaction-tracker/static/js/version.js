@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.463.0";
+window.TGF_VERSION = "2.463.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.463.1",
+    date: "2026-09-17",
+    changes: [
+      "Insider writer, first machine sample read as the editor (three Sonnet drafts on s9.23/a9.23, mailbox #544): three slips became rules + checks. A Tuesday is NINE holes (the fellowship draft had 'the banter starts on the 18th green') — validate() refuses 18th/eighteenth when the week's events are nines. Never expose bookkeeping ('No fellowship spot was on the books') — refused, the rule says write around it. Logistics only from the fact sheet, per chapter ('usually a 5:00 PM shotgun' was written for both cities; Austin runs tee times) — every event and next-Tuesday button now carries a format line from events.start_time (event_format(): SA shotgun, Austin late-afternoon tee times, Saturdays 18 with morning tee times) and gather_week() carries start_time. Kerry ratified the angle order the same day ('Go with your order. Push to main.'); v2.463.0 is live and the order is on the dial.",
+    ],
+  },
   {
     version: "2.463.0",
     date: "2026-09-16",
