@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.463.2";
+window.TGF_VERSION = "2.463.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.463.3",
+    date: "2026-09-17",
+    changes: [
+      "Insider writer: faith stays implicit in the public voice (Kerry's founding stance, 2026-09-17, verbatim in event-recaps.md — 'preparing a field for people of any background… I don't want that to be a stumbling block… a barrier of religiosity'). PUBLIC_RULES carries the stance; validate() refuses religious language (God/Christ/Jesus/Lord, scripture references, church, prayer, blessed) and lets plain encouragement through; a new catalogue angle built-for-this ('We were built for this' — connection over isolation, in human words, anchored on one real moment) is available but NOT on the rotation dial until Kerry adds it.",
+    ],
+  },
   {
     version: "2.463.2",
     date: "2026-09-17",

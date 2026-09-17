@@ -122,6 +122,14 @@ ANGLES = [
                "name, the city, nine holes late afternoon); no course-condition "
                "reviews, no invented yardages."),
      "needs": None, "band": None},
+    {"key": "built-for-this", "title": "We were built for this (connection, not isolation)",
+     "brief": ("Kerry's founding conviction, in plain human words: we have more ways to connect "
+               "than any generation and are lonelier than any of them; functionally we can do "
+               "life alone, emotionally we cannot; we were built for community. Anchor it in ONE "
+               "real moment from this week (a first-timer who knew everyone by the turn, a group "
+               "that stayed for a drink) and land on the invitation: show up once, be known. "
+               "Encouraging, never preachy; no religious language of any kind."),
+     "needs": None, "band": None},
     {"key": "member-words", "title": "A member's own words",
      "brief": ("Build the issue around ONE member quote Kerry has put on file "
                "(verbatim, attributed as first name + last initial). Set it up in a "
@@ -160,6 +168,7 @@ PUBLIC_RULES = """PUBLIC INSIDER RULES (these override the member-recap style be
 - A Tuesday is NINE holes: it ends on the 9th green, never the 18th. Saturdays are the 18s.
 - Never expose our bookkeeping to the reader. If a fact is missing (no fellowship spot recorded, no first-timer, no photo), write around it silently — never "no spot was on the books", never "we don't have a record".
 - Consistency across options: when you write the Celebrate line and a fellowship beat, they must agree with each other and with the fact sheet.
+- FAITH STAYS IMPLICIT (Kerry, 2026-09-17, the founding stance): The Golf Fellowship is "preparing a field for people of any background to come into connecting with other human beings"; its theme is HUMAN CONNECTION in an isolating world — "we were built for community". Kerry's own faith is the reason he is kind, curious and encouraging, and it must never become "a barrier of religiosity" between a reader and TGF. So in the public Insider: no scripture, no God/Christ/Jesus/Lord, no church, no prayer, no "blessed", no sermon. Encouragement is welcome and wanted — in plain human words about belonging, showing up, being known, looking someone in the eye. Take people where they are.
 - THE JOIN OFFER (Kerry-ratified 2026-09-17): when the fact sheet carries "join_offer", print it ONCE, verbatim, as its own short beat or as the last sentence of the last beat, linked to the membership URL. Its dollar figures are the only prices allowed besides the pot. Never paraphrase the price, never invent a deadline.
 """
 
@@ -701,6 +710,10 @@ def validate(draft: dict, facts: dict) -> tuple:
         problems.append("this week's events were nines — there is no 18th hole/green; say the 9th")
     if re.search(r"on the books|no record|not recorded|we don'?t have|wasn'?t recorded", text, re.I):
         problems.append("never expose missing data to the reader — write around it")
+    if re.search(r"\b(God|Jesus|Christ|Lord|scripture|bible|gospel|church|pray|prayer|blessed|blessing|amen|faith)\b"
+                 r"|\b[1-3]?\s?[A-Z][a-z]+\s\d{1,3}:\d{1,3}\b", text):
+        problems.append("religious language: Kerry's public voice keeps faith implicit — "
+                        "say it in plain human words (belonging, showing up, being known)")
     for h in facts.get("recent_headlines") or []:
         if h and clean["headline"].strip().lower() == h.strip().lower():
             problems.append(f"headline repeats a recent one: {h}")
