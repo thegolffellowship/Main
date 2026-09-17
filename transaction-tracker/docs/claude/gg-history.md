@@ -809,8 +809,24 @@ TGF/Former profiles remain Kerry's open decision (option b).
       is the EXACT "LAST, First" string standings print — a direct
       join key. Report-first discipline: apply only runs after Kerry
       sees the report.
-- [ ] 2024 wave next (incl. DFW/Houston finales) → … → 2016 — 2025
-      completes FIRST (Kerry's year-at-a-time directive)
+- [x] **2019–2024 SA + AUSTIN PHASE A INGESTED (2026-09-17, the
+      historical-ingester lane, mailbox #547/#548):** twelve portals,
+      every one to pages_remaining = 0 in a single budgeted call —
+      sa2024 12 pages/801 rows, austin2024 10/551, sa2023 14/491,
+      austin2023 9/398, sa2022 6/377, austin2022 4/275, sa2021 1/135,
+      austin2021 3/284, sa2020 3/238, austin2020 3/171, sa2019 5/249,
+      austin2019 4/181 (4,151 rows). Identity linking ~98% in 2024 and
+      ~60% in 2019–2021 (pre-Tracker rosters — the review queue, not a
+      parse problem). league_ids in the handoff doc. `roster=report`
+      after the wave was zero-conflict and identity-only (589 of 1,089
+      roster rows matched, 0 unmatched TGF/Former members), so
+      `roster=apply` ran per the ruling: map 1,842 rows, 2 standings
+      rows + 3 pending names backfilled. NOT run: DFW 2020–2024 /
+      Houston 2021–2024 (Kerry to say whether the closed chapters join
+      the participation series — asked in #548), the 2016–2018 SA
+      portals (out of this lane's 2019–2024 scope).
+- [ ] 2016–2018 SA portals + DFW/Houston + the 2024 one-offs (champ24,
+      lonestarcup24, roadtrip24, hillcountrymatches) — next wave
 - [x] Hole-by-hole ingest engine (v2.74.0): Phase-B walker
       `holes=<subdomain>` live — see "Phase B — hole-by-hole walk"
       above.
@@ -897,5 +913,8 @@ TGF/Former profiles remain Kerry's open decision (option b).
       3-col target, reviewed rulings never overwritten by automated
       passes. Bridge ops: holes-bg=<sub>[@budget] (daemon-thread walk;
       MCP clients time out ~60s) + holes-status + overview.
+- [x] **FIELD walk engine (v2.464.0/.1)** — see "Phase B — FIELD walk"
+      above; the 2019–2024 holes walk is unblocked in principle by the
+      calendar dates but was NOT run in the participation lane.
 - [ ] Two Man Tour lane (last): verify per-course events inside
       tgf-twomantour; ingest under brand='TwoManTour'
