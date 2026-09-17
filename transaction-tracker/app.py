@@ -9973,20 +9973,10 @@ happy to help.</p>
 The Golf Fellowship</p>"""
 
 
-def _participation_event_filter_sql(alias: str = "i") -> str:
-    """SQL fragment selecting event-participation items only.
-
-    Excludes membership renewals, season contest enrollments, and child
-    payment rows. Both paid (active) and RSVP-only rows count as
-    "played" for the purposes of last-event / frequency.
-    """
-    return f"""
-        {alias}.customer_id IS NOT NULL
-        AND COALESCE({alias}.transaction_status, 'active') IN ('active', 'rsvp_only')
-        AND UPPER(COALESCE({alias}.item_name, '')) NOT LIKE '%MEMBERSHIP%'
-        AND UPPER(COALESCE({alias}.item_name, '')) NOT LIKE '%SEASON CONTEST%'
-        AND {alias}.parent_item_id IS NULL
-    """
+# _participation_event_filter_sql lives in email_parser.database since
+# v2.464.0 so the MCP participation series (gg_history.py) shares the
+# ONE definition of "played" with this page (participation.md).
+from email_parser.database import _participation_event_filter_sql  # noqa: E402
 
 
 def _get_participation_rows(conn: sqlite3.Connection) -> list[dict]:

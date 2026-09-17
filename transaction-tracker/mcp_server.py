@@ -5014,6 +5014,14 @@ def _scoring_dispatch(url: str, extract: str):
             #   scoring-gg-history:ingest=<subdomain>[@<budget_s>]
             #       Phase-A standings walk of one portal; resumable —
             #       repeat until pages_remaining == 0. url param unused.
+            #   scoring-gg-history:field=<subdomain>[@<budget_s>]
+            #       Phase-B FIELD walk (v2.464.0): per-round field off the
+            #       ALL Net/ALL Gross boards + calendar dates; field-bg=
+            #       runs it in a daemon thread (poll holes-status).
+            #   scoring-gg-history:calendar=<subdomain>   read-only parse
+            #   scoring-gg-history:participation[=<from>-<to>]
+            #       season × chapter participation series (docs:
+            #       gg-history.md "Participation series")
             from email_parser import gg_history as ggh
             sub, _, rest = arg.partition("=")
             sub = sub.strip().lower()
@@ -5037,12 +5045,31 @@ def _scoring_dispatch(url: str, extract: str):
                 dom, _, budget = rest.partition("@")
                 return json.dumps(ggh.ingest_portal_games(
                     dom.strip(), budget_seconds=int(budget or 240)), indent=2)
-            if sub in ("holes-bg", "games-bg") and rest:
+            if sub == "field" and rest:
+                # Phase B: FIELD walk (v2.464.0) — every round's ALL Net /
+                # ALL Gross board → gg_history_results, dates from the
+                # calendar widget. field=<subdomain>[@budget]; repeat
+                # until rounds_left == 0.
+                dom, _, budget = rest.partition("@")
+                return json.dumps(ggh.ingest_portal_field(
+                    dom.strip(), budget_seconds=int(budget or 240)), indent=2)
+            if sub == "calendar" and rest:
+                # read-only: the portal's calendar widget parsed (rounds,
+                # full labels, dates) — verification for the field walk
+                return json.dumps(ggh.portal_calendar(rest.strip()), indent=2)
+            if sub == "participation":
+                # participation[=<from>-<to>] — season × chapter series
+                # from the field walk + the Tracker's items-based rows
+                a, _, b = rest.strip().partition("-")
+                return json.dumps(ggh.participation_series(
+                    a or "2019", b or "2026"), indent=2, default=str)
+            if sub in ("holes-bg", "games-bg", "field-bg") and rest:
                 # Same walks in a daemon thread (MCP clients time out
                 # ~60s; a portal walk wants minutes). Poll: holes-status.
                 import threading
-                fn = (ggh.ingest_portal_holes if sub == "holes-bg"
-                      else ggh.ingest_portal_games)
+                fn = {"holes-bg": ggh.ingest_portal_holes,
+                      "games-bg": ggh.ingest_portal_games,
+                      "field-bg": ggh.ingest_portal_field}[sub]
                 dom, _, budget = rest.partition("@")
                 dom, budget_s = dom.strip(), int(budget or 600)
                 key = f"{sub}:{dom}"
@@ -5109,6 +5136,10 @@ def _scoring_dispatch(url: str, extract: str):
             return json.dumps({"error": "usage: scoring-gg-history:seed | "
                                "status | ingest=<subdomain>[@<budget_s>] | "
                                "holes=<subdomain>[@<budget_s>] | "
+                               "field=<subdomain>[@<budget_s>] | "
+                               "field-bg=<subdomain>[@<budget_s>] | "
+                               "calendar=<subdomain> | "
+                               "participation[=<from>-<to>] | "
                                "roster=report|apply"})
         if cmd == "scoring-payouts-bulk-paid":
             # "scoring-payouts-bulk-paid:<YYYY-MM-DD>" — one-time cleanup:
