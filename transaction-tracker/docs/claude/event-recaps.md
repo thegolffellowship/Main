@@ -441,8 +441,11 @@ Wednesday auto-draft fills the template:**
   calendar, `member-words` a quote on the dial `insider_member_quote`).
   `handicap-fair` pins the skill band, `hio-pot` the pot band; every other
   angle keeps the weekly band rotation. Read-only view:
-  `scoring-insider-angles`. **The order is Kerry's to ratify (rule 3b) —
-  proposed 2026-09-16, awaiting his reorder.**
+  `scoring-insider-angles`. **RATIFIED, Kerry 2026-09-17 ("Go with your order. Push to main. I don't
+  really want to overthink this."):** `first-timer, fellowship, handicap-fair, tuesday-story,
+  saturday-18s, hio-pot, season-contests, course-of-week, twenty-seasons, member-words` — set on the
+  dial the same day; v2.463.0 on main. Rationale: ~70% of recipients have never bought (mailbox
+  #543), so the angles that get a stranger to a first Tuesday lead, and the proof angles follow.
 - **One Claude call a week** (`write_insider`; model dial `insider_model` /
   env `INSIDER_MODEL`, default the parser's Sonnet route; parser.py's client
   pattern; `ops_alerts.maybe_alert_anthropic_billing` on auth/credit
@@ -481,6 +484,20 @@ Wednesday auto-draft fills the template:**
   `test_insider_writer.py` (mocked call; rotation, facts, validation,
   fallback, billing alert, review/samples/approve), `test_insider.py`
   unchanged and green.
+
+**The mandate (Kerry 2026-09-17, verbatim, the lane's standing brief):** *"I need your help to get me as
+close to SEND each week as possible. There needs to be evaluation of who's clicking what and any other
+things you can think of too. You need to be my research assistant and also prompt me when you need more
+information. I need you to help me make this thing grow. So putting content out there is important. I
+think even tying in current events in the golf world or perhaps other stuff or encouragement or skies the
+limit really. We want to build our committee and grow it. If you need to interview me to come up with a
+direction fine, but I need you to take the bull by the horns and push the envelope so to say. I'm fine
+with taking risks. I can coach you and teach you, but I also need you to push me and teach me."* Two
+Routines carry it: Wednesday ~8:30 AM CDT (read the writer's draft, fix what is weak, bring Kerry to
+"say go") and Friday ~1:30 PM CDT (the scorecard by group + one recommendation). Content beyond the
+recap (golf-world items, encouragement) is welcome by ruling; it still goes through the writer's rules
+and Kerry's approval, and the writer never invents a news item — facts come from a dial or the lane's
+research.
 
 **Lessons from Insider #3 (Kerry's Brevo edits of the 8:00 draft, 2026-09-16):**
 - **When no fellowship spot is on record, the Celebrate line is** *"Stick

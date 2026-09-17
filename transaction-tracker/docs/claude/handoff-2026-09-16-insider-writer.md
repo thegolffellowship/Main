@@ -1,7 +1,13 @@
 # Insider Writer — lane handoff (2026-09-16)
 
 Branch `claude/insider-writer-0e4788`. Spun off from the closeout lane
-(mailbox #538); ack #539. Ships as **v2.463.0**. Companion rules:
+(mailbox #538); ack #539. **v2.463.0 is ON MAIN (2026-09-17, Kerry: "Go with
+your order. Push to main.")**; the angle order below is ratified and set on
+the dial. Routines: Wednesday ~8:30 AM CDT (draft → get Kerry to SEND) and
+Friday ~1:30 PM CDT (scorecard by group), both firing into this session.
+v2.462.6 (`scoring-brevo-campaign-split`) shipped the same day; mailbox #541–#543
+carry Insider #3's +8h / +24h reads and the audience split (~70% of recipients
+have never bought). Companion rules:
 `docs/claude/event-recaps.md` ("THE WRITER" block + the Insider #3
 lessons); voice memory: `docs/claude/templates/insider-voice-examples.md`.
 
@@ -60,10 +66,10 @@ twenty-seasons facts). History lives in `insider_angle_history` (JSON), written
 ONLY by the scheduled run (`record=True`), so dry runs and samples never
 advance the rotation. `scoring-insider-angles` shows all of it.
 
-**The order above is a PROPOSAL (rule 3b — member-facing content strategy).
-Kerry reorders, cuts or adds by dial; until he does, the catalogue order is
-the rotation and next Wednesday runs `tuesday-story` (or `first-timer` if he
-forces it).**
+**RATIFIED 2026-09-17 — the dial holds Kerry's order: `first-timer, fellowship,
+handicap-fair, tuesday-story, saturday-18s, hio-pot, season-contests,
+course-of-week, twenty-seasons, member-words`.** Next Wednesday (2026-09-23)
+runs `first-timer` if the week has one, else `fellowship`.
 
 ### The call
 
