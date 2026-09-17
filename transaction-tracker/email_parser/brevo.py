@@ -539,3 +539,100 @@ def nightly_brevo_sync() -> None:
                                      "error")}))
     except Exception:
         logger.exception("Brevo nightly sync failed")
+
+
+# ── Campaign audience split (Kerry 2026-09-17: "do the split by group") ──
+#
+# Who actually opened / clicked a sent campaign, by TGF status. Brevo's
+# per-recipient data is only reachable through the ASYNC export:
+#   POST /v3/emailCampaigns/<id>/exportRecipients {"recipientsType": T}
+#     → 202 {"processId": N}
+#   GET  /v3/processes/<N>  → {"status": queued|in_process|completed,
+#                              "export_url": ...}
+#   GET  export_url → CSV (one email per row)
+# Emails are classified with the same map the nightly sync stamps
+# (active_member / former_member / prospect) — anyone the Tracker does not
+# know is "unknown" (never bought, or pre-Tracker). Read-only: nothing on
+# a contact or campaign changes.
+
+SPLIT_TYPES = ("all", "openers", "clickers", "unsubscribed")
+SPLIT_GROUPS = ("active_member", "former_member", "prospect", "unknown")
+
+
+def _export_recipients(key: str, campaign_id: int, rtype: str,
+                       wait_s: float = 90.0) -> list:
+    """Emails (lower-cased) for one recipientsType, via the async export."""
+    r = requests.post(f"{BREVO_API}/emailCampaigns/{int(campaign_id)}/exportRecipients",
+                      headers=_headers(key), json={"recipientsType": rtype}, timeout=30)
+    if r.status_code not in (200, 201, 202):
+        raise RuntimeError(f"exportRecipients {rtype}: HTTP {r.status_code} {r.text[:200]}")
+    pid = (r.json() or {}).get("processId")
+    if not pid:
+        raise RuntimeError(f"exportRecipients {rtype}: no processId in {r.text[:200]}")
+    deadline = time.time() + wait_s
+    url = None
+    while time.time() < deadline:
+        p = requests.get(f"{BREVO_API}/processes/{pid}", headers=_headers(key), timeout=30)
+        p.raise_for_status()
+        pj = p.json() or {}
+        if (pj.get("status") or "").lower() == "completed":
+            url = pj.get("export_url")
+            break
+        time.sleep(2.0)
+    if not url:
+        raise RuntimeError(f"export {rtype}: process {pid} not completed within {wait_s:.0f}s")
+    f = requests.get(url, timeout=60)
+    f.raise_for_status()
+    emails = []
+    for line in f.text.splitlines():
+        for cell in line.replace(";", ",").split(","):
+            cell = cell.strip().strip('"').lower()
+            if "@" in cell and "." in cell.rsplit("@", 1)[-1]:
+                emails.append(cell)
+                break
+    return sorted(set(emails))
+
+
+def campaign_split(campaign_id: int, types: tuple = SPLIT_TYPES,
+                   db_path: str | Path | None = None) -> dict:
+    """Per-group counts for a sent campaign: recipients, openers, clickers,
+    unsubscribed, with rates inside each group."""
+    key = _api_key()
+    if not key:
+        return {"error": "BREVO_API_KEY not set"}
+    targets = tracker_contact_targets(db_path=db_path)
+
+    def group_of(email: str) -> str:
+        t = targets.get(email)
+        return t["status"] if t and t.get("status") in SPLIT_GROUPS else "unknown"
+
+    out: dict = {"campaign_id": int(campaign_id), "groups": {g: {} for g in SPLIT_GROUPS},
+                 "totals": {}, "errors": []}
+    per_type: dict = {}
+    for t in types:
+        try:
+            per_type[t] = _export_recipients(key, campaign_id, t)
+        except Exception as exc:
+            out["errors"].append(f"{t}: {exc}")
+            per_type[t] = None
+        time.sleep(_PAUSE)
+    for t, emails in per_type.items():
+        if emails is None:
+            continue
+        counts = {g: 0 for g in SPLIT_GROUPS}
+        for e in emails:
+            counts[group_of(e)] += 1
+        out["totals"][t] = len(emails)
+        for g in SPLIT_GROUPS:
+            out["groups"][g][t] = counts[g]
+    base = "all" if per_type.get("all") is not None else None
+    if base:
+        for g in SPLIT_GROUPS:
+            n = out["groups"][g].get("all") or 0
+            for t in ("openers", "clickers", "unsubscribed"):
+                if t in out["groups"][g]:
+                    out["groups"][g][f"{t}_pct"] = round(100.0 * out["groups"][g][t] / n, 1) if n else None
+    out["note"] = ("groups by the Tracker's status map at read time (active_member / former_member / "
+                   "prospect); 'unknown' = no Tracker customer with that email — never bought, or "
+                   "pre-Tracker. Openers include Apple Mail auto-opens.")
+    return out

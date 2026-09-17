@@ -1820,6 +1820,10 @@ def _scoring_dispatch(url: str, extract: str):
                                    samples = several angles in ONE review email;
                                    apply = legacy deterministic Brevo DRAFT.
                                    Never sends.
+      scoring-brevo-campaign-split:<campaign_id>[|all,openers,clickers,unsubscribed]
+                                   READ-ONLY: a sent campaign's recipients /
+                                   openers / clickers / unsubs by TGF status
+                                   (active, former, prospect, unknown)
       scoring-insider-angles       READ-ONLY: the angle rotation (order, history,
                                    forced, next, unavailable this week) + dials
       scoring-insider-approve:<subject>|<html>[|dry]  Kerry's APPROVED Insider
@@ -2989,6 +2993,15 @@ def _scoring_dispatch(url: str, extract: str):
             # Brevo key present / account reachable / last sync summary.
             from email_parser.brevo import brevo_status
             return json.dumps(brevo_status(), indent=2, default=str)
+        if cmd == "scoring-brevo-campaign-split":
+            # "<campaign_id>[|all,openers,clickers,unsubscribed]" — READ-ONLY:
+            # who opened / clicked a SENT campaign by TGF status (Kerry
+            # 2026-09-17: "do the split by group"). Uses Brevo's async
+            # recipient export; nothing on a contact or campaign changes.
+            from email_parser.brevo import SPLIT_TYPES, campaign_split
+            _cid, _, _types = (arg or "").partition("|")
+            _ts = tuple(t.strip() for t in _types.split(",") if t.strip() in SPLIT_TYPES) or SPLIT_TYPES
+            return json.dumps(campaign_split(int(_cid.strip()), _ts), indent=2, default=str)
         if cmd == "scoring-brevo-sync":
             # ":dry" previews (counts + sample) without writing to Brevo.
             # Real run stamps TGF_MEMBER_STATUS / TGF_CHAPTER (mailbox
