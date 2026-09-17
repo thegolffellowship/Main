@@ -1942,19 +1942,36 @@ def classify_round_label(label: str) -> str:
     return "other"
 
 
-_FIELD_SKIP_RE = re.compile(
-    r"^(adjustments?|closest|longest|player purse|team points|match|"
-    r"total purse)|\bmvp\b|points summary|purse summary|\bctp\b|"
-    r"\bpin\b|\bputt\b", re.I)
+# Per-round INDIVIDUAL boards, by ALLOW-list. A round page also lists the
+# season's cumulative standings snapshots ('SAN ANTONIO Net', 'THE
+# FELLOWSHIP CUP', 'JULY Points', 'as18.6 FALL POINTS - …') — those name
+# everyone who has played all season and would inflate a round's field
+# several-fold (the 2026-09-17 first-pass lesson on SA 2024). So the
+# fallback takes only boards that are, after an optional event-code
+# prefix ('s8f SCORES net'), INDIVIDUAL / SKINS / SCORES / GROSS / NET /
+# ALL boards. Team, cart, MVP, proximity, purse and points boards never.
+_FIELD_BOARD_RE = re.compile(
+    r"^(?:[a-z]+\d+(?:\.\d+)?[a-z]*\s+)?"        # optional 's9.1 ' / 's8f '
+    r"(all|individual|indiv|ind|skins|scores|gross|net)\b", re.I)
 _FIELD_TEAM_RE = re.compile(
     r"\b(cart|team|foursome|twosome|two man|2 man|scramble|four ?ball|"
-    r"alternate)\b", re.I)
+    r"alternate|points?|race|cup|mvp)\b", re.I)
+
+
+def _is_field_board(label: str) -> bool:
+    """The deny-list applies to the board's own name (before ' - '), so
+    's8f SCORES net - FALL POINTS net' (a per-round scores board that
+    FEEDS the fall race) passes while 'as18.6 FALL POINTS - …' (the race
+    itself) does not."""
+    lab = " ".join((label or "").split())
+    head = lab.split(" - ", 1)[0]
+    return bool(_FIELD_BOARD_RE.match(lab)) and not _FIELD_TEAM_RE.search(head)
 
 
 def _pick_field_boards(links: list) -> tuple:
     """(boards, basis, all_labels). ALL Net + ALL Gross when the round has
-    them ('all_boards'); else every individual (non-team, non-proximity,
-    non-match) board ('fallback'); ([], 'none', labels) otherwise."""
+    them ('all_boards'); else the per-round individual boards that pass
+    _is_field_board ('fallback'); ([], 'none', labels) otherwise."""
     v2t = [l for l in links
            if "/v2tournaments/" in (l.get("href") or "")
            and "total_purse" not in l["href"]]
@@ -1963,9 +1980,7 @@ def _pick_field_boards(links: list) -> tuple:
                   .startswith(("all net", "all gross"))]
     if all_boards:
         return all_boards, "all_boards", labels
-    rest = [l for l in v2t
-            if not _FIELD_SKIP_RE.search((l.get("text") or "").strip())
-            and not _FIELD_TEAM_RE.search((l.get("text") or "").strip())]
+    rest = [l for l in v2t if _is_field_board(l.get("text") or "")]
     return rest, ("fallback" if rest else "none"), labels
 
 
@@ -2297,6 +2312,21 @@ def ingest_portal_field(subdomain: str, budget_seconds: int = 240,
         return stats
 
 
+def reset_portal_field(subdomain: str, db_path=None) -> dict:
+    """Mark a portal's field-walk rounds 'redo' so ingest_portal_field
+    walks them again (rows are replaced per board label; nothing is
+    deleted — banked boards stay banked)."""
+    from email_parser.database import _connect, DB_PATH
+    with _connect(db_path or DB_PATH) as conn:
+        cur = conn.execute(
+            """UPDATE gg_history_pages SET fetch_status='redo'
+               WHERE gg_page_id LIKE 'field:%' AND fetch_status='done'
+                 AND portal_id=(SELECT id FROM gg_history_portals
+                                WHERE subdomain=?)""", (subdomain,))
+        conn.commit()
+        return {"subdomain": subdomain, "rounds_reset": cur.rowcount}
+
+
 def _median(vals: list):
     v = sorted(vals)
     if not v:
@@ -2307,16 +2337,20 @@ def _median(vals: list):
 
 def _field_names(conn, ev_id: int) -> list:
     """Distinct (player_name, aff, customer_id) of an event's FIELD, by
-    precedence: ALL boards → export_round rows → every other individual
-    board (the fallback basis). Team rows never count."""
+    precedence: ALL boards → export_round rows → the per-round individual
+    boards that pass _is_field_board (the fallback basis — applied at
+    query time too, so cumulative standings rows banked on the same
+    event by any walk never count). Team rows never count."""
     for where in ("game_label LIKE 'ALL %'",
                   "game_label = 'export_round'",
                   "1=1"):
         rows = conn.execute(
-            f"""SELECT player_name, customer_id, raw_row
+            f"""SELECT player_name, customer_id, raw_row, game_label
                 FROM gg_history_results
                 WHERE gg_event_id=? AND team_label IS NULL AND {where}""",
             (ev_id,)).fetchall()
+        if where == "1=1":
+            rows = [r for r in rows if _is_field_board(r["game_label"])]
         if rows:
             seen = {}
             for r in rows:

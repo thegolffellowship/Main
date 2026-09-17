@@ -130,15 +130,21 @@ boards, basis, labels = ggh._pick_field_boards(modern)
 check("picker: modern round → ALL boards only",
       basis == "all_boards" and [b["text"] for b in boards] == ["ALL Net", "ALL Gross"],
       (basis, [b["text"] for b in boards]))
-old = _links("Player Purse Summary", "s1 POINTS RACE", "s1 MVP",
-             "CART Net $", "INDIVIDUAL Net $ - s1 MEMBER Games",
+old = _links("Player Purse Summary", "s1 POINTS RACE", "s1 MVP $",
+             "CART Net $", "TEAM Net $", "INDIVIDUAL Net $ - s1 MEMBER Games",
              "INDIVIDUAL Gross $ - s1 ALL PLAY Games", "SKINS 1/2 Net $",
-             "Closest to Pin #13", "Longest Putt #2", "Adjustments")
+             "s8f SCORES net - FALL POINTS net", "GROSS front", "NET back",
+             "SAN ANTONIO Net", "THE FELLOWSHIP CUP", "JULY Points",
+             "AUSTIN NET Points Race", "as18.6 FALL POINTS - SAN ANTONIO Fall",
+             "Closest to Pin #13", "Longest Putt #2", "HOLE IN ONE #12",
+             "Adjustments")
 boards, basis, labels = ggh._pick_field_boards(old)
-check("picker: pre-ALL era → fallback individual boards",
+check("picker: pre-ALL era → per-round individual boards only (no cumulative "
+      "standings, no team/MVP/proximity)",
       basis == "fallback" and [b["text"] for b in boards] == [
-          "s1 POINTS RACE", "INDIVIDUAL Net $ - s1 MEMBER Games",
-          "INDIVIDUAL Gross $ - s1 ALL PLAY Games", "SKINS 1/2 Net $"],
+          "INDIVIDUAL Net $ - s1 MEMBER Games",
+          "INDIVIDUAL Gross $ - s1 ALL PLAY Games", "SKINS 1/2 Net $",
+          "s8f SCORES net - FALL POINTS net", "GROSS front", "NET back"],
       (basis, [b["text"] for b in boards]))
 boards, basis, labels = ggh._pick_field_boards(_links("Team Points Summary", "MATCH 1"))
 check("picker: nothing usable → none", basis == "none" and boards == [] and len(labels) == 2)
@@ -199,6 +205,8 @@ _event(2, "s2 SILVERHORN front", "r2", "fallback", [
     ("INDIVIDUAL Gross $", "HOGUE, Jay", "TGF Austin", 11, None),
     ("INDIVIDUAL Gross $", "WHITE, John", "TGF San Antonio", None, None),
     ("INDIVIDUAL Gross $", "FEHLIS, Chuck", "TGF San Antonio", None, None),
+    ("SAN ANTONIO Net", "SEASONLONG, Sue", "TGF San Antonio", None, None),  # cumulative: ignored
+    ("THE FELLOWSHIP CUP", "SEASONLONG, Sue", "TGF San Antonio", None, None),
 ])
 # event 3: Saturday 18, 2 players — counts in 'all' not 'tue'
 _event(3, "s18.1 TAPATIO SPRINGS", "r3", "all_boards", [
@@ -234,6 +242,17 @@ check("series: member-ever 5 (TGF*/Former), linked 3",
       r["distinct_member_ever"] == 5 and r["distinct_linked"] == 3, r)
 check("series: fallback events flagged = 1", r["fallback_basis_events"] == 1, r)
 check("series: unwalked rounds = 1", r["rounds_unwalked"] == 1, r)
+# reset marks field rounds redo (nothing deleted)
+_c = sqlite3.connect(tmp.name)
+_before = _c.execute("SELECT COUNT(*) FROM gg_history_results").fetchone()[0]
+_c.close()
+rr = ggh.reset_portal_field("tgf-sa2019", db_path=tmp.name)
+_c = sqlite3.connect(tmp.name)
+_after = _c.execute("SELECT COUNT(*) FROM gg_history_results").fetchone()[0]
+_redo = _c.execute("SELECT COUNT(*) FROM gg_history_pages WHERE fetch_status='redo'").fetchone()[0]
+_c.close()
+check("reset: 5 done rounds → redo, rows untouched",
+      rr["rounds_reset"] == 5 and _redo == 5 and _before == _after, (rr, _redo, _before, _after))
 check("series: tracker rows absent on bare DB → tracker_error, no crash",
       res["tracker"] == [] and "tracker_error" in res, res.get("tracker_error"))
 check("series: median helper", ggh._median([]) is None and ggh._median([3, 1, 2]) == 2

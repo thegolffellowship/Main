@@ -5053,6 +5053,10 @@ def _scoring_dispatch(url: str, extract: str):
                 dom, _, budget = rest.partition("@")
                 return json.dumps(ggh.ingest_portal_field(
                     dom.strip(), budget_seconds=int(budget or 240)), indent=2)
+            if sub == "field-reset" and rest:
+                # re-walk a portal's rounds (walk-state → 'redo'; nothing
+                # deleted, boards replaced per label on the next walk)
+                return json.dumps(ggh.reset_portal_field(rest.strip()), indent=2)
             if sub == "calendar" and rest:
                 # read-only: the portal's calendar widget parsed (rounds,
                 # full labels, dates) — verification for the field walk
@@ -5138,7 +5142,7 @@ def _scoring_dispatch(url: str, extract: str):
                                "holes=<subdomain>[@<budget_s>] | "
                                "field=<subdomain>[@<budget_s>] | "
                                "field-bg=<subdomain>[@<budget_s>] | "
-                               "calendar=<subdomain> | "
+                               "field-reset=<subdomain> | calendar=<subdomain> | "
                                "participation[=<from>-<to>] | "
                                "roster=report|apply"})
         if cmd == "scoring-payouts-bulk-paid":
