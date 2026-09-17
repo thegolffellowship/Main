@@ -1811,6 +1811,10 @@ def _scoring_dispatch(url: str, extract: str):
       scoring-hcp-distribution     member handicap-index spread (18-hole equiv.)
       scoring-hcp-link-audit       READ-ONLY: handicap identity coverage by customer_id,
                                    who is unlinked, link-label name drift, plus-handicap rounds
+      scoring-brevo-campaign-split:<campaign_id>[|all,openers,clickers,unsubscribed]
+                                   READ-ONLY: a sent campaign's recipients /
+                                   openers / clickers / unsubs by TGF status
+                                   (active, former, prospect, unknown)
       scoring-brevo-draft[:dry|review|apply]  Wednesday TGF Insider: fill the
                                    public recap template from the week's events;
                                    dry (default) returns HTML; review emails Kerry
@@ -2981,6 +2985,15 @@ def _scoring_dispatch(url: str, extract: str):
             # Brevo key present / account reachable / last sync summary.
             from email_parser.brevo import brevo_status
             return json.dumps(brevo_status(), indent=2, default=str)
+        if cmd == "scoring-brevo-campaign-split":
+            # "<campaign_id>[|all,openers,clickers,unsubscribed]" — READ-ONLY:
+            # who opened / clicked a SENT campaign by TGF status (Kerry
+            # 2026-09-17: "do the split by group"). Uses Brevo's async
+            # recipient export; nothing on a contact or campaign changes.
+            from email_parser.brevo import SPLIT_TYPES, campaign_split
+            _cid, _, _types = (arg or "").partition("|")
+            _ts = tuple(t.strip() for t in _types.split(",") if t.strip() in SPLIT_TYPES) or SPLIT_TYPES
+            return json.dumps(campaign_split(int(_cid.strip()), _ts), indent=2, default=str)
         if cmd == "scoring-brevo-sync":
             # ":dry" previews (counts + sample) without writing to Brevo.
             # Real run stamps TGF_MEMBER_STATUS / TGF_CHAPTER (mailbox

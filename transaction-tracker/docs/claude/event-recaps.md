@@ -485,7 +485,7 @@ rhythm and the fallback if open/click trends sag; monthly is off the
 table because the format lives on last Tuesday's results and next
 Tuesday's button. Read #2 again at +24h and keep the opens/clicks trend
 per issue (Brevo campaign ids: #15 = Insider 1 (9/2), #18 = Insider 2
-(9/10)).
+(9/10), #19 = Insider 3 (9/16)). **Audience split (v2.462.6):** `scoring-brevo-campaign-split:<campaign id>` — recipients / openers / clickers / unsubs by TGF status (active, former, prospect, unknown = not in the Tracker), read-only; Kerry 2026-09-17: most of list 3 (~920 of 1,437) has no Tracker record, i.e. signed up over the years and never bought.
 
 **v3 fixes (Kerry, off the Brevo preview 2026-09-02) — template rules:**
 - The Season-20 logo (69986bc3…png) is BLACK INK — header band must be
