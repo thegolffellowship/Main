@@ -517,6 +517,22 @@ refuses religious language; `PUBLIC_RULES` carries the stance; a new catalogue a
 `built-for-this` ("We were built for this") says the conviction in his words without the religion —
 NOT on the dial until Kerry adds it.
 
+**WHY MEMBERS STOP SHOWING UP — Kerry's read (2026-09-17, interview Q3), the brief for the
+re-engagement note to the 71 members who have not played since July and for the Insider's
+"there is a place for you" thread:** "mostly people just getting busy" — summer vacations, a
+number of injuries, heat, a few money-related, relationship changes, people moving, people
+active in other groups, people traveling. And ONE reason he named twice: the group felt
+"overly competitive" to a player who did not feel he could play well enough to be comfortable
+— Randy Copper (Austin) and Brian Parch (San Antonio), both "no intentions of coming back".
+Rules that follow: (a) the re-engagement note assumes life got busy — never guesses at the
+reason, never asks "why did you stop"; (b) Randy Copper and Brian Parch are EXCLUDED from any
+re-engagement send and any "we miss you" list — Kerry's call whether he reaches them himself;
+(c) the "too competitive to be comfortable" perception is a real retention leak: the Insider
+and the note both need a plain, true line that a member can show up, skip every game, and
+just play (verify the exact mechanics with Kerry before printing — Q4); (d) injuries and heat
+are named collectively, never a person ("a few of you have been nursing something"); (e)
+nothing about money in a re-engagement note beyond the ratified join-offer line.
+
 **THE JOIN OFFER — ratified 2026-09-17 (Kerry: "Yes" to "are you comfortable letting the writer
 print '$50 to join through September 30, then $75' in the Insider?").** Supersedes the #381
 "no dollar prices" guardrail for ONE line: dial `insider_join_offer` holds the price line verbatim
