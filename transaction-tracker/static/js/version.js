@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.463.1";
+window.TGF_VERSION = "2.463.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.463.2",
+    date: "2026-09-17",
+    changes: [
+      "TGF Insider: the JOIN OFFER may be printed (Kerry-ratified 2026-09-17 — 'Yes' — the first exception to the #381 no-prices guardrail). Dial insider_join_offer holds the price line verbatim (set: '$50 to join through September 30, then $75. 365 days from purchase. No monthly dues.' — the CA round-two price card); the fact sheet carries it, the writer prints it once, verbatim, linked to membership; validate() allows only the dial's dollar figures and refuses a paraphrase ('just $50'); lint() and the approve path allow the same figures via _allowed_dollars(). Blank dial = no price, as before. Kerry edits the dial when the promo ends on Oct 1.",
+    ],
+  },
   {
     version: "2.463.1",
     date: "2026-09-17",

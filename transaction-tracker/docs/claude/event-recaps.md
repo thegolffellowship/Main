@@ -499,6 +499,15 @@ recap (golf-world items, encouragement) is welcome by ruling; it still goes thro
 and Kerry's approval, and the writer never invents a news item — facts come from a dial or the lane's
 research.
 
+**THE JOIN OFFER — ratified 2026-09-17 (Kerry: "Yes" to "are you comfortable letting the writer
+print '$50 to join through September 30, then $75' in the Insider?").** Supersedes the #381
+"no dollar prices" guardrail for ONE line: dial `insider_join_offer` holds the price line verbatim
+(set 2026-09-17: "$50 to join through September 30, then $75. 365 days from purchase. No monthly
+dues." — the CA round-two price card, #477); the writer prints it once, verbatim, linked to the
+membership page; `validate()` allows only the dial's figures and refuses a paraphrase;
+`lint()` and `approve_insider()` allow the same figures. Blank dial = no price. Kerry edits the
+dial when the promo ends (Oct 1: "$75 to join. 365 days from purchase. No monthly dues.").
+
 **Lessons from the first machine-written sample (three Sonnet drafts on s9.23/a9.23,
 2026-09-17 5:21 PM CDT, mailbox #544 — the lane's own edit, before Kerry's):**
 - W1. **A Tuesday is nine holes.** The fellowship draft wrote "the banter starts on the

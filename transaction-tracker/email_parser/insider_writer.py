@@ -160,6 +160,7 @@ PUBLIC_RULES = """PUBLIC INSIDER RULES (these override the member-recap style be
 - A Tuesday is NINE holes: it ends on the 9th green, never the 18th. Saturdays are the 18s.
 - Never expose our bookkeeping to the reader. If a fact is missing (no fellowship spot recorded, no first-timer, no photo), write around it silently — never "no spot was on the books", never "we don't have a record".
 - Consistency across options: when you write the Celebrate line and a fellowship beat, they must agree with each other and with the fact sheet.
+- THE JOIN OFFER (Kerry-ratified 2026-09-17): when the fact sheet carries "join_offer", print it ONCE, verbatim, as its own short beat or as the last sentence of the last beat, linked to the membership URL. Its dollar figures are the only prices allowed besides the pot. Never paraphrase the price, never invent a deadline.
 """
 
 OUTPUT_SCHEMA = """Return ONLY a JSON object, no prose, no code fences, with exactly these keys:
@@ -323,6 +324,22 @@ def event_format(chapter: str, holes: int, start_time: str | None) -> str:
     return f"nine holes, {clock or '5:00 PM'} shotgun start (everyone tees off together and finishes together)"
 
 
+def join_offer_text(db_path=None) -> str:
+    """Dial `insider_join_offer`: the membership price line, verbatim, that the
+    writer may print (Kerry 2026-09-17: "Yes" to printing "$50 to join through
+    September 30, then $75"). Empty = no price in the Insider. Kerry edits the
+    dial when the promo ends."""
+    from . import database as db
+    try:
+        return (db.get_app_setting("insider_join_offer", db_path=db_path) or "").strip()
+    except Exception:
+        return ""
+
+
+def dollars_in(text: str | None) -> set:
+    return set(re.findall(r"\$[\d,]+(?:\.\d\d)?", text or ""))
+
+
 def recent_headlines(db_path=None, before: date | None = None, limit: int = 6) -> list:
     """Titles of the last few Insiders (draft pings + review mails), so the
     writer never repeats one (Kerry 2026-09-16)."""
@@ -444,6 +461,7 @@ def writer_facts(data: dict, db_path=None) -> dict:
         allow.add(base)
     quote = None
     hist = HISTORY_FACTS
+    join_offer = join_offer_text(db_path=db_path)
     try:
         q = db.get_app_setting("insider_member_quote", db_path=db_path)
         if q:
@@ -471,6 +489,7 @@ def writer_facts(data: dict, db_path=None) -> dict:
             "monthly_points": "every member is in automatically, no buy-in; the month's winner takes the pot",
         },
         "history": hist,
+        "join_offer": join_offer or None,
         "member_quote": quote,
         "recent_headlines": ([data["last_headline"]] if data.get("last_headline") else [])
                             + [h for h in recent_headlines(db_path=db_path, before=as_of)
@@ -664,11 +683,17 @@ def validate(draft: dict, facts: dict) -> tuple:
         if re.search(rf"\b{re.escape(w)}\b", text, re.I):
             problems.append(f"banned word: {w}")
     pot = facts.get("hio_pot")
+    offer_dollars = dollars_in(facts.get("join_offer"))
     for d in re.findall(r"\$[\d,]+(?:\.\d\d)?", text):
         if d == "$25":
             problems.append("do not restate the offer; the template carries it")
-        elif not (pot and d == pot):
+        elif not (pot and d == pot) and d not in offer_dollars:
             problems.append(f"dollar figure not allowed: {d}")
+    if offer_dollars:
+        for d in offer_dollars:
+            if d in text and facts["join_offer"].split(".")[0] not in text:
+                problems.append("the join offer must be printed verbatim, not paraphrased")
+                break
     if re.search(r"\balone\b", text, re.I):
         problems.append("'alone' is banned in the skins explanation")
     if all((e.get("holes") or 9) == 9 for e in facts.get("events") or []) and facts.get("events") \

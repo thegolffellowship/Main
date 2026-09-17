@@ -211,6 +211,23 @@ check("bookkeeping leak is refused", any("missing data" in x for x in probs), st
 check("rules name the three lessons", "NINE holes" in iw.PUBLIC_RULES and "Logistics only from the fact sheet" in iw.PUBLIC_RULES
       and "bookkeeping" in iw.PUBLIC_RULES)
 
+print("\n== 2c. the join offer (Kerry 2026-09-17: 'Yes' to printing the price) ==")
+OFFER = "$50 to join through September 30, then $75. 365 days from purchase. No monthly dues."
+db.set_app_setting("insider_join_offer", OFFER, db_path=p)
+facts_o = iw.writer_facts(data, db_path=p)
+check("fact sheet carries the offer verbatim", facts_o["join_offer"] == OFFER)
+_, probs = iw.validate(dict(GOOD, story=[{"lead": "Join before the price moves.", "body": OFFER + ' <a href="https://thegolffellowship.com/shop/ols/products/tgf-membership">Membership</a>'}]), facts_o)
+check("offer dollars allowed when printed verbatim", probs == [], str(probs))
+_, probs = iw.validate(dict(GOOD, story=[{"lead": "Cheap.", "body": "Join for just $50 this month."}]), facts_o)
+check("paraphrased price refused", any("verbatim" in x for x in probs), str(probs))
+_, probs = iw.validate(dict(GOOD, story=[{"lead": "Cheap.", "body": "Join for $60."}]), facts_o)
+check("a price not on the dial is refused", any("$60" in x for x in probs), str(probs))
+html_o = insider.render(insider.compose(data)).replace("Jump in any time.", "Jump in any time. " + OFFER)
+check("lint allows the dial's figures only when passed", insider.lint(html_o) != [] and insider.lint(html_o, insider._allowed_dollars(db_path=p)) == [])
+check("no dial → no extra dollars", iw.join_offer_text(db_path=p) == OFFER and iw.dollars_in(OFFER) == {"$50", "$75"})
+db.set_app_setting("insider_join_offer", "", db_path=p)
+check("blank dial → offer absent from the sheet", iw.writer_facts(data, db_path=p)["join_offer"] is None)
+
 print("\n== 4. write_insider: clean draft, fences tolerated ==")
 fake_client.responses = ["```json\n" + json.dumps(GOOD) + "\n```"]
 d = iw.write_insider(facts, "first-timer", db_path=p)

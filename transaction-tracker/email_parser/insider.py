@@ -679,9 +679,20 @@ def render(slots: dict, template_path: Path = TEMPLATE_PATH, story: list | None 
     return tpl
 
 
-def lint(html_out: str) -> list:
+def _allowed_dollars(db_path=None) -> set:
+    """Dollar figures the dial `insider_join_offer` carries (Kerry 2026-09-17
+    ratified printing the join price); empty when the dial is blank."""
+    try:
+        from .insider_writer import dollars_in, join_offer_text
+        return dollars_in(join_offer_text(db_path=db_path))
+    except Exception:
+        return set()
+
+
+def lint(html_out: str, allowed_extra=()) -> list:
     """Boundary check before anything reaches Brevo: no unfilled slot, no
-    banned word, no dollar figure outside the two allowed."""
+    banned word, no dollar figure outside the allowed ones ($25 offer, the
+    pot line, and the join-offer figures on the dial)."""
     problems = []
     for m in re.findall(r"\{\{[A-Z0-9_]+\}\}", html_out):
         problems.append(f"unfilled slot {m}")
@@ -690,7 +701,7 @@ def lint(html_out: str) -> list:
         if re.search(rf"\b{re.escape(w)}\b", text, re.I):
             problems.append(f"banned word: {w}")
     dollars = re.findall(r"\$[\d,]+(?:\.\d\d)?", text)
-    allowed = {"$25"}
+    allowed = {"$25"} | set(allowed_extra or ())
     for d in dollars:
         if d in allowed:
             continue
@@ -786,8 +797,9 @@ def build_public_recap_draft(dry_run: bool = True, db_path=None,
             draft = None
     if draft is None:
         slots = compose(data)
+    extra = _allowed_dollars(db_path=db_path)
     html_out = render(slots, story=story)
-    problems = lint(html_out)
+    problems = lint(html_out, extra)
     if problems and draft is not None:
         # The gate holds even on the writer's output: fall back rather than ship a rule break.
         writer_info.update({"ok": False, "error": f"lint after render: {'; '.join(problems)}"})
@@ -795,7 +807,7 @@ def build_public_recap_draft(dry_run: bool = True, db_path=None,
         story = None
         slots = compose(data)
         html_out = render(slots)
-        problems = lint(html_out)
+        problems = lint(html_out, extra)
     subject = f"TGF Insider | {slots['HEADLINE']}"
     out = {"dry_run": dry_run, "subject": subject, "slots": slots, "story": story,
            "events": [{k: e[k] for k in ("name", "date", "field", "cashed", "results_url")}
@@ -1035,7 +1047,7 @@ def approve_insider(subject: str, html_out: str, db_path=None, dry_run: bool = F
     subject = (subject or "").strip()
     if subject and not subject.lower().startswith("tgf insider |"):
         subject = f"TGF Insider | {subject}"
-    problems = lint(html_out or "")
+    problems = lint(html_out or "", _allowed_dollars(db_path=db_path))
     for tag in ("{{ contact.FIRSTNAME }}", "{{ unsubscribe }}", "{{ update_profile }}"):
         if tag not in (html_out or ""):
             problems.append(f"merge tag missing: {tag}")
