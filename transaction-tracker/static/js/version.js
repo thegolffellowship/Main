@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.464.0";
+window.TGF_VERSION = "2.464.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.464.1",
+    date: "2026-09-17",
+    changes: [
+      "GG history field walk: the calendar widget is PAGINATED (SA 2024 shows 30 rounds on page 1 and a 'Next →' to page=2; the results selector has 32) — fetch_calendar_rounds() now walks page=1,2,… (show_registration=false, follows only while the page advertises a higher page number, stops when a page adds nothing new), archives every page, and both the sync and the read-only calendar= bridge use it. Course text no longer carries GG's leading '|'. Tests cover pagination, the no-Next case and the HTTP-error case.",
+    ],
+  },
   {
     version: "2.464.0",
     date: "2026-09-17",

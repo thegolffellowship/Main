@@ -60,6 +60,40 @@ check("calendar: plain row", cal[2]["gg_round_id"] == "1226540"
       cal[2])
 check("calendar: empty html → []", ggh.parse_calendar_widget("") == [])
 
+# pagination: GG paginates the calendar ('Next →' to page=2); the fetcher
+# follows page links until a page adds nothing new
+PAGE2 = CAL_HTML.replace("1226540", "1226599").replace("s9.27 BRACKENRIDGE front",
+                                                       "s9.28 SILVERHORN back") \
+    .replace("Oct 15, 2024", "Oct 22, 2024")
+NEXT = '<a href="/leagues/1/widgets/calendar?page=2&shared=false">Next</a>'
+served = []
+
+
+def _fake_fetch(url):
+    served.append(url)
+    if "page=1" in url:
+        return {"status_code": 200, "final_url": url, "html": CAL_HTML + NEXT}
+    if "page=2" in url:
+        return {"status_code": 200, "final_url": url, "html": PAGE2}
+    return {"status_code": 404, "final_url": url, "html": ""}
+
+
+rounds, raws = ggh.fetch_calendar_rounds("https://x.golfgenius.com", "1", _fake_fetch)
+check("pagination: page 2 followed, duplicates collapsed, 2 raw pages archived",
+      len(raws) == 2 and len(served) == 2 and
+      [r["gg_round_id"] for r in rounds] == [None, "1226498", "1226540", "1226599"],
+      ([r["gg_round_id"] for r in rounds], served))
+check("pagination: page 1 without a Next link stops after one fetch",
+      len(ggh.fetch_calendar_rounds("https://x.golfgenius.com", "1",
+          lambda u: {"status_code": 200, "final_url": u, "html": CAL_HTML})[1]) == 1)
+check("pagination: HTTP error on page 1 → (None, status)",
+      ggh.fetch_calendar_rounds("https://x.golfgenius.com", "1",
+          lambda u: {"status_code": 500, "final_url": u, "html": ""})[0] is None)
+check("calendar: course strips GG's leading pipe",
+      ggh.parse_calendar_widget(CAL_HTML.replace("<b>Where</b>: The Quarry",
+                                                 "<b>Where</b>: | The Quarry"))[1]["course"]
+      == "The Quarry Golf Club")
+
 # ── round classifier ─────────────────────────────────────────────────────
 for label, want in [
     ("s9.27 BRACKENRIDGE front", "tuesday9"),

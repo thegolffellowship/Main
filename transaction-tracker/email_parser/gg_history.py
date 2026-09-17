@@ -1904,7 +1904,7 @@ def parse_calendar_widget(html: str) -> list:
                     if nxt:
                         rest = nxt
                         break
-            course = rest or None
+            course = rest.strip(" |:") or None
             break
         key = rid or f"{date}|{label}"
         if key in seen:
@@ -1984,19 +1984,53 @@ _FIELD_AFFILIATIONS = ("TGF San Antonio", "TGF Austin",
                        "TGF DFW", "TGF Hill Country", "Former", "Guest")
 
 
+_CAL_NEXT_RE = re.compile(r"widgets/calendar\?[^\"']*page=(\d+)", re.I)
+
+
+def fetch_calendar_rounds(base: str, league_id: str, fetch_public_page,
+                          max_pages: int = 12) -> tuple:
+    """Walk the calendar widget's PAGES (GG paginates it — SA 2024 shows
+    30 rounds on page 1 and a 'Next →' to page 2). Returns
+    (rounds, [(url, html), …]) — every page's raw body for archiving."""
+    rounds, raws, seen = [], [], set()
+    for page in range(1, max_pages + 1):
+        url = (f"{base}/leagues/{league_id}/widgets/calendar?shared=false"
+               f"&show_registration=false&page={page}")
+        pg = fetch_public_page(url)
+        if pg["status_code"] != 200:
+            if page == 1:
+                return None, [(url, None, pg["status_code"])]
+            break
+        raws.append((url, pg["html"]))
+        got = parse_calendar_widget(pg["html"])
+        new = 0
+        for r in got:
+            key = r["gg_round_id"] or f"{r['event_date']}|{r['event_label']}"
+            if key in seen:
+                continue
+            seen.add(key)
+            rounds.append(r)
+            new += 1
+        if not new:
+            break
+        # only follow when the page advertises a higher page number
+        if not any(int(m) > page for m in _CAL_NEXT_RE.findall(pg["html"])):
+            break
+    return rounds, raws
+
+
 def sync_portal_calendar(conn, portal: dict, base: str, league_id: str,
                          fetch_public_page) -> dict:
     """Fetch + archive the calendar widget; upsert one gg_history_events
     row per round (by (portal_id, gg_round_id)), filling event_date /
     event_label / course ONLY where NULL — export-channel values are
     never overwritten. Returns {rounds, created, dated, calendar}."""
-    url = f"{base}/leagues/{league_id}/widgets/calendar?shared=false"
-    pg = fetch_public_page(url)
-    if pg["status_code"] != 200:
-        return {"error": f"calendar widget HTTP {pg['status_code']}",
+    cal, raws = fetch_calendar_rounds(base, league_id, fetch_public_page)
+    if cal is None:
+        return {"error": f"calendar widget HTTP {raws[0][2]}",
                 "rounds": 0, "created": 0, "dated": 0, "calendar": []}
-    _archive_raw(conn, url, pg["html"])
-    cal = parse_calendar_widget(pg["html"])
+    for url, html in raws:
+        _archive_raw(conn, url, html)
     created = dated = 0
     for ev in cal:
         if not ev["gg_round_id"]:
@@ -2050,13 +2084,11 @@ def portal_calendar(subdomain: str, db_path=None) -> dict:
         league_id = (m.group(1) or m.group(2)) if m else None
     if not league_id:
         return {"error": "league_id undiscoverable"}
-    url = f"{base}/leagues/{league_id}/widgets/calendar?shared=false"
-    pg = fetch_public_page(url)
-    if pg["status_code"] != 200:
-        return {"error": f"calendar widget HTTP {pg['status_code']}"}
-    cal = parse_calendar_widget(pg["html"])
+    cal, raws = fetch_calendar_rounds(base, league_id, fetch_public_page)
+    if cal is None:
+        return {"error": f"calendar widget HTTP {raws[0][2]}"}
     return {"subdomain": subdomain, "league_id": league_id,
-            "rounds": len(cal),
+            "rounds": len(cal), "pages": len(raws),
             "kinds": {k: sum(1 for c in cal
                              if classify_round_label(c["event_label"]) == k)
                       for k in ("tuesday9", "saturday18", "match",
