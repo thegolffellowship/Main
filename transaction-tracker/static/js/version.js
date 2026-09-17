@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.464.1";
+window.TGF_VERSION = "2.464.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.464.2",
+    date: "2026-09-17",
+    changes: [
+      "Participation series: classify_round_label learns 2023. That season SA split its Tuesdays into EAST and WEST league nights ('east | SILVERHORN front', 'east/west | …') and Austin into NORTH and SOUTH; the fall used unnumbered 's9 OLMOS BASIN front | The Dogfather' / 'a9 FOREST CREEK front'; match rounds were written 'MATCH - HANSON v CHANDLER' with no number. All of those now land in the right bucket (tuesday9 / match) and 'MATCHES - … Match Play' boards stay 'other'. Query-time only — no walk had to be redone.",
+    ],
+  },
   {
     version: "2.464.1",
     date: "2026-09-17",
