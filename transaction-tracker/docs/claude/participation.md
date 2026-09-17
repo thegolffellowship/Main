@@ -98,3 +98,13 @@ top the list). A "Played" filter select (any / this calendar year /
 has played / never) sits next to the status filter. Users can change
 everything; defaults apply once per page load. Participation is a
 sub-tab of CUSTOMERS (top-level nav tab removed in v2.47.0).
+
+## Re-engagement exclusions (Kerry, 2026-09-17)
+
+Randy Copper (Austin) and Brian Parch (San Antonio) left because the group
+felt overly competitive to them and have said they are not coming back.
+They are never on a re-engagement or "we miss you" send from the Tracker;
+Kerry reaches them himself if at all. Kerry's read on why the rest stop
+mid-season (busy, vacations, injuries, heat, money, moves, other groups)
+and the rules for the note are in `event-recaps.md` under "WHY MEMBERS
+STOP SHOWING UP".
