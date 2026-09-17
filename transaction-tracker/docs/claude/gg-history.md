@@ -643,6 +643,63 @@ LAST and live in their own brand lane** (Kerry 2026-07-11: the Tour
 TGF members who played Tour events still identity-link via customer_id,
 ready for the future partner build, invisible on TGF surfaces).
 
+### Phase B — FIELD walk (v2.464.0, LIVE) — participation without scorecards
+
+`scoring-gg-history:field=<subdomain>[@budget]` (+ `field-bg=`, poll
+`holes-status`) → `ingest_portal_field()`. Built 2026-09-17 by the
+historical-ingester lane (mailbox #547/#548) because the archive holes
+walk needs a round DATE and 2019–2024 have none: no exports, and GG
+**truncates the round selector's labels** (`s9.26 THE QUARRY (Tue, Oct…`),
+so `_export_date()` fails on most rounds. Two findings unblocked it:
+
+1. **The calendar widget is the date source.** Every portal serves
+   `/leagues/<league_id>/widgets/calendar?shared=false` (plain GET, no
+   login) — one table row per round: `Mon DD, YYYY | full round name |
+   Accepting Signups | Tee Sheet | Results | More Info`, and the Tee
+   Sheet / Results links carry `round_id=<id>` (the SAME id family as
+   the results widget's selector). The expandable details block carries
+   `When / Where / Format / entry fee` text — the course comes from
+   `Where`. `parse_calendar_widget()` reads it; `sync_portal_calendar()`
+   upserts one `gg_history_events` row per round by (portal_id,
+   gg_round_id), filling event_date / event_label / course **only where
+   NULL** (export-channel values are never overwritten). Verified on both
+   eras (2019 and 2024 calendars share the layout). Postponed placeholder
+   rounds have no results link and come back with `gg_round_id None`.
+   Read-only check: `scoring-gg-history:calendar=<subdomain>`.
+2. **The field of a round is its ALL Net / ALL Gross board** — the same
+   two boards the holes walk imports, so "played" means the same thing
+   whether a season came in through scorecards (2025–26) or the field
+   walk (2019–2024). Rows land in `gg_history_results` under the board's
+   verbatim `game_label` ('ALL Net', 'ALL Gross'); GG's appended
+   affiliation is split off the name (`'ROHRMANN, Lance TGF San Antonio'`
+   → player_name `ROHRMANN, Lance`, `raw_row` JSON `{"src":"field_walk",
+   "aff":"TGF San Antonio","row":[…]}`); identity through the usual
+   `_resolve_identity` cascade. **Eras before ALL boards** (2019–2021
+   print `INDIVIDUAL Gross $ - s1 ALL PLAY Games`, `INDIVIDUAL Net $ - s1
+   MEMBER Games` instead — in 2019 the entry fee INCLUDED Individual
+   Gross, so that board is the field) fall back to the union of every
+   individual board (team/cart, proximity, MVP, match and purse-summary
+   boards excluded — `_pick_field_boards`) and the walk-state row records
+   `widget_type='fallback'` so the series can flag those events.
+
+Walk state = `gg_history_pages` `'field:<round_id>'` rows
+(`page_kind='event_field'`, `widget_type` = basis `all_boards | fallback |
+none`); resumable, repeat until `rounds_left == 0`; empty rounds mark
+done. Fetch-then-write per round like the games walk. The games walk's
+idempotent delete now spares `'ALL %'` rows so both walks coexist on one
+event. Field count at query time (`_field_names`): ALL boards → export
+rows → other individual boards, team rows never.
+
+`classify_round_label()` — the series' event kinds, from GG's round name:
+`tuesday9` (s9.27 / a9.3 in the 2023+ codes; s1..s15, s8f in 2019–2022),
+`saturday18` (as18.6 / s18.4 / a18.2), `match` (`MATCH 63 - X v Y`,
+`CHAMPIONSHIP MATCH …` — two-player rounds, never an event), `admin`
+(`POINTS RESET`), `other` (kickoffs, championships, cups, Two Man, the
+Handicapper).
+
+`scoring-gg-history:participation[=<from>-<to>]` → `participation_series()`
+— see **Participation series** below. Tests: `test_gg_history_field.py`.
+
 ## THE THREE-CHANNEL FRAMEWORK (Kerry + tracker-claude, 2026-07-11 late)
 
 GG admin EXPORTS joined the design as the third channel. Verified
@@ -752,8 +809,24 @@ TGF/Former profiles remain Kerry's open decision (option b).
       is the EXACT "LAST, First" string standings print — a direct
       join key. Report-first discipline: apply only runs after Kerry
       sees the report.
-- [ ] 2024 wave next (incl. DFW/Houston finales) → … → 2016 — 2025
-      completes FIRST (Kerry's year-at-a-time directive)
+- [x] **2019–2024 SA + AUSTIN PHASE A INGESTED (2026-09-17, the
+      historical-ingester lane, mailbox #547/#548):** twelve portals,
+      every one to pages_remaining = 0 in a single budgeted call —
+      sa2024 12 pages/801 rows, austin2024 10/551, sa2023 14/491,
+      austin2023 9/398, sa2022 6/377, austin2022 4/275, sa2021 1/135,
+      austin2021 3/284, sa2020 3/238, austin2020 3/171, sa2019 5/249,
+      austin2019 4/181 (4,151 rows). Identity linking ~98% in 2024 and
+      ~60% in 2019–2021 (pre-Tracker rosters — the review queue, not a
+      parse problem). league_ids in the handoff doc. `roster=report`
+      after the wave was zero-conflict and identity-only (589 of 1,089
+      roster rows matched, 0 unmatched TGF/Former members), so
+      `roster=apply` ran per the ruling: map 1,842 rows, 2 standings
+      rows + 3 pending names backfilled. NOT run: DFW 2020–2024 /
+      Houston 2021–2024 (Kerry to say whether the closed chapters join
+      the participation series — asked in #548), the 2016–2018 SA
+      portals (out of this lane's 2019–2024 scope).
+- [ ] 2016–2018 SA portals + DFW/Houston + the 2024 one-offs (champ24,
+      lonestarcup24, roadtrip24, hillcountrymatches) — next wave
 - [x] Hole-by-hole ingest engine (v2.74.0): Phase-B walker
       `holes=<subdomain>` live — see "Phase B — hole-by-hole walk"
       above.
@@ -840,5 +913,8 @@ TGF/Former profiles remain Kerry's open decision (option b).
       3-col target, reviewed rulings never overwritten by automated
       passes. Bridge ops: holes-bg=<sub>[@budget] (daemon-thread walk;
       MCP clients time out ~60s) + holes-status + overview.
+- [x] **FIELD walk engine (v2.464.0/.1)** — see "Phase B — FIELD walk"
+      above; the 2019–2024 holes walk is unblocked in principle by the
+      calendar dates but was NOT run in the participation lane.
 - [ ] Two Man Tour lane (last): verify per-course events inside
       tgf-twomantour; ingest under brand='TwoManTour'

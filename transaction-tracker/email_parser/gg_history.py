@@ -1773,7 +1773,8 @@ def ingest_portal_games(subdomain: str, budget_seconds: int = 240,
             # idempotent per event: scrape rows replaced, export rows kept
             conn.execute(
                 """DELETE FROM gg_history_results
-                   WHERE gg_event_id=? AND game_label != 'export_round'""",
+                   WHERE gg_event_id=? AND game_label != 'export_round'
+                     AND game_label NOT LIKE 'ALL %'""",
                 (ev_id,))
             for blabel, href, html in fetched:
                 _archive_raw(conn, href, html)
@@ -1823,6 +1824,712 @@ def ingest_portal_games(subdomain: str, budget_seconds: int = 240,
         except Exception:
             pass
         return stats
+
+
+# ── Phase B: FIELD walk + participation series (v2.464.0) ───────────────
+#
+# Kerry 2026-09-17 (historical GG ingester lane, spun off the Insider
+# writer): "Before 2023, participation rates were higher, significantly."
+# Measure it, don't remember it. The archive holes walk needs a round
+# DATE to scope its dedupe, and for 2019–2024 there are no exports and
+# GG truncates the round selector's labels ('s9.26 THE QUARRY (Tue, Oct…')
+# — so this walk banks the FIELD of every round straight off the ALL Net /
+# ALL Gross boards (the same boards the holes walk imports, so the
+# definition of "played" is identical), and takes round dates from the
+# portal's public CALENDAR widget, which lists every round in full with
+# its round_id. Rows land in gg_history_results under the board's
+# verbatim label ('ALL Net', 'ALL Gross'); the event row is the same
+# gg_history_events row the export/games channels use (gg_round_id
+# join). Walk state = gg_history_pages 'field:<round_id>' rows.
+#
+# Eras without ALL boards (2019–2021 print INDIVIDUAL Gross / MEMBER
+# Games boards instead) fall back to the union of every individual
+# (non-team, non-proximity, non-match) board — recorded as basis
+# 'fallback' on the walk-state row so the series can say so.
+
+_CAL_TR_RE = re.compile(r"<tr\b.*?</tr>", re.S)
+_CAL_TD_RE = re.compile(r"<t[dh]\b[^>]*>(.*?)</t[dh]>", re.S)
+_CAL_DATE_RE = re.compile(r"^([A-Z][a-z]{2})\s+(\d{1,2}),\s+(\d{4})")
+_CAL_ROUND_ID_RE = re.compile(r"round_id=(\d+)")
+_CAL_BLOCK_TAG_RE = re.compile(r"<\s*/?\s*(?:br|div|p|li|tr|h\d|table)\b[^>]*>",
+                               re.I)
+_TAG_RE = re.compile(r"<[^>]+>")
+
+
+def _html_text_lines(fragment: str) -> list:
+    """Tag-stripped text of an HTML fragment, one entry per block-level
+    boundary, blank entries dropped."""
+    import html as _html
+    s = _CAL_BLOCK_TAG_RE.sub("\n", fragment or "")
+    s = _TAG_RE.sub(" ", s)
+    s = _html.unescape(s).replace("\xa0", " ")
+    return [" ".join(ln.split()) for ln in s.split("\n") if ln.strip()]
+
+
+def parse_calendar_widget(html: str) -> list:
+    """The portal's public calendar widget
+    (/leagues/<id>/widgets/calendar?shared=false) → one dict per round:
+    {gg_round_id, event_date (YYYY-MM-DD), event_label (FULL, untruncated),
+    course}. Rows are 'Mon DD, YYYY | round name | signups | Tee Sheet |
+    Results | More Info'; the Tee Sheet / Results links carry round_id.
+    A round with no results link (postponed placeholder) is returned
+    with gg_round_id None so the caller can still see it."""
+    out, seen = [], set()
+    for tr in _CAL_TR_RE.findall(html or ""):
+        cells = _CAL_TD_RE.findall(tr)
+        if len(cells) < 2:
+            continue
+        head = _html_text_lines(cells[0])
+        m = _CAL_DATE_RE.match(head[0]) if head else None
+        if not m or m.group(1) not in _MONTH_NUM:
+            continue
+        date = (f"{m.group(3)}-{_MONTH_NUM[m.group(1)]:02d}"
+                f"-{int(m.group(2)):02d}")
+        lines = _html_text_lines(cells[1])
+        label = lines[0] if lines else ""
+        if not label:
+            continue
+        rm = _CAL_ROUND_ID_RE.search(tr)
+        rid = rm.group(1) if rm else None
+        course = None
+        text = _html_text_lines(tr)
+        for i, ln in enumerate(text):
+            wm = re.match(r"^where\s*:?\s*(.*)$", ln, re.I)
+            if not wm:
+                continue
+            rest = wm.group(1).strip()
+            if not rest:  # 'Where' / ':' / 'The Quarry' on separate lines
+                for nxt in text[i + 1:i + 3]:
+                    nxt = nxt.lstrip(":").strip()
+                    if nxt:
+                        rest = nxt
+                        break
+            course = rest.strip(" |:") or None
+            break
+        key = rid or f"{date}|{label}"
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append({"gg_round_id": rid, "event_date": date,
+                    "event_label": label, "course": course})
+    return out
+
+
+def classify_round_label(label: str) -> str:
+    """Round kind from GG's round name — the participation series counts
+    TUESDAY NINES as the headline ('how many members play week to week')
+    and everything else as 'all events'.
+      tuesday9   : s9.27 / a9.3 (2023+ codes), s1..s15, s8f (2019–2022)
+      saturday18 : as18.6 / s18.4 / a18.2 / s18 (Saturday 18s)
+      match      : 'MATCH 63 - X v Y', 'CHAMPIONSHIP MATCH …' (2-player
+                   match-play rounds — never an event)
+      admin      : 'POINTS RESET' (0-player bookkeeping rounds)
+      other      : kickoffs, championships, cups, Two Man, Handicapper"""
+    u = " ".join((label or "").split()).upper()
+    if not u:
+        return "other"
+    if re.match(r"^(?:CHAMPIONSHIP\s+)?MATCH\s*\d", u) or \
+            re.match(r"^CHAMPIONSHIP MATCH\b", u):
+        return "match"
+    if u.startswith("POINTS RESET"):
+        return "admin"
+    if re.match(r"^(?:AS|A|S)18(?:\.\d+)?\b", u):
+        return "saturday18"
+    if re.match(r"^[AS]9\.\d+", u):
+        return "tuesday9"
+    if re.match(r"^[AS]\d{1,2}F?\b", u):
+        return "tuesday9"
+    return "other"
+
+
+# Per-round INDIVIDUAL boards, by ALLOW-list. A round page also lists the
+# season's cumulative standings snapshots ('SAN ANTONIO Net', 'THE
+# FELLOWSHIP CUP', 'JULY Points', 'as18.6 FALL POINTS - …') — those name
+# everyone who has played all season and would inflate a round's field
+# several-fold (the 2026-09-17 first-pass lesson on SA 2024). So the
+# fallback takes only boards that are, after an optional event-code
+# prefix ('s8f SCORES net'), INDIVIDUAL / SKINS / SCORES / GROSS / NET /
+# ALL boards. Team, cart, MVP, proximity, purse and points boards never.
+_FIELD_BOARD_RE = re.compile(
+    r"^(?:[a-z]+\d+(?:\.\d+)?[a-z]*\s+)?"        # optional 's9.1 ' / 's8f '
+    r"(all|individual|indiv|ind|skins|scores|gross|net)\b", re.I)
+_FIELD_TEAM_RE = re.compile(
+    r"\b(cart|team|foursome|twosome|two man|2 man|scramble|four ?ball|"
+    r"alternate|points?|race|cup|mvp)\b", re.I)
+
+
+def _is_field_board(label: str) -> bool:
+    """The deny-list applies to the board's own name (before ' - '), so
+    's8f SCORES net - FALL POINTS net' (a per-round scores board that
+    FEEDS the fall race) passes while 'as18.6 FALL POINTS - …' (the race
+    itself) does not."""
+    lab = " ".join((label or "").split())
+    head = lab.split(" - ", 1)[0]
+    return bool(_FIELD_BOARD_RE.match(lab)) and not _FIELD_TEAM_RE.search(head)
+
+
+def _pick_field_boards(links: list) -> tuple:
+    """(boards, basis, all_labels). ALL Net + ALL Gross when the round has
+    them ('all_boards'); else the per-round individual boards that pass
+    _is_field_board ('fallback'); ([], 'none', labels) otherwise."""
+    v2t = [l for l in links
+           if "/v2tournaments/" in (l.get("href") or "")
+           and "total_purse" not in l["href"]]
+    labels = [(l.get("text") or "").strip() for l in v2t]
+    all_boards = [l for l in v2t if (l.get("text") or "").strip().lower()
+                  .startswith(("all net", "all gross"))]
+    if all_boards:
+        return all_boards, "all_boards", labels
+    rest = [l for l in v2t if _is_field_board(l.get("text") or "")]
+    return rest, ("fallback" if rest else "none"), labels
+
+
+def _split_affiliation(cell: str) -> tuple:
+    """'ROHRMANN, Lance TGF San Antonio' → ('ROHRMANN, Lance',
+    'TGF San Antonio'); 'Esselborn, Rob Former' → (…, 'Former')."""
+    from email_parser.database import _strip_gg_affiliation
+    raw = " ".join((cell or "").split())
+    name = _strip_gg_affiliation(raw, _FIELD_AFFILIATIONS)
+    aff = raw[len(name):].strip() if raw.startswith(name) else ""
+    return name, aff
+
+
+_FIELD_AFFILIATIONS = ("TGF San Antonio", "TGF Austin",
+                       "TGF Dallas-Fort Worth", "TGF Houston", "TGF Dallas",
+                       "TGF DFW", "TGF Hill Country", "Former", "Guest")
+
+
+_CAL_NEXT_RE = re.compile(r"widgets/calendar\?[^\"']*page=(\d+)", re.I)
+
+
+def fetch_calendar_rounds(base: str, league_id: str, fetch_public_page,
+                          max_pages: int = 12) -> tuple:
+    """Walk the calendar widget's PAGES (GG paginates it — SA 2024 shows
+    30 rounds on page 1 and a 'Next →' to page 2). Returns
+    (rounds, [(url, html), …]) — every page's raw body for archiving."""
+    rounds, raws, seen = [], [], set()
+    for page in range(1, max_pages + 1):
+        url = (f"{base}/leagues/{league_id}/widgets/calendar?shared=false"
+               f"&show_registration=false&page={page}")
+        pg = fetch_public_page(url)
+        if pg["status_code"] != 200:
+            if page == 1:
+                return None, [(url, None, pg["status_code"])]
+            break
+        raws.append((url, pg["html"]))
+        got = parse_calendar_widget(pg["html"])
+        new = 0
+        for r in got:
+            key = r["gg_round_id"] or f"{r['event_date']}|{r['event_label']}"
+            if key in seen:
+                continue
+            seen.add(key)
+            rounds.append(r)
+            new += 1
+        if not new:
+            break
+        # only follow when the page advertises a higher page number
+        if not any(int(m) > page for m in _CAL_NEXT_RE.findall(pg["html"])):
+            break
+    return rounds, raws
+
+
+def sync_portal_calendar(conn, portal: dict, base: str, league_id: str,
+                         fetch_public_page) -> dict:
+    """Fetch + archive the calendar widget; upsert one gg_history_events
+    row per round (by (portal_id, gg_round_id)), filling event_date /
+    event_label / course ONLY where NULL — export-channel values are
+    never overwritten. Returns {rounds, created, dated, calendar}."""
+    cal, raws = fetch_calendar_rounds(base, league_id, fetch_public_page)
+    if cal is None:
+        return {"error": f"calendar widget HTTP {raws[0][2]}",
+                "rounds": 0, "created": 0, "dated": 0, "calendar": []}
+    for url, html in raws:
+        _archive_raw(conn, url, html)
+    created = dated = 0
+    for ev in cal:
+        if not ev["gg_round_id"]:
+            continue
+        row = conn.execute(
+            """SELECT id, event_date FROM gg_history_events
+               WHERE portal_id=? AND gg_round_id=?""",
+            (portal["id"], ev["gg_round_id"])).fetchone()
+        if row is None:
+            conn.execute(
+                """INSERT INTO gg_history_events (portal_id, season, chapter,
+                       event_label, event_date, course, brand, gg_round_id,
+                       raw_row)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (portal["id"], portal["season"], portal["chapter"],
+                 ev["event_label"], ev["event_date"], ev["course"],
+                 portal["brand"], ev["gg_round_id"],
+                 json.dumps({"src": "calendar", **ev})))
+            created += 1
+        else:
+            conn.execute(
+                """UPDATE gg_history_events SET
+                       event_date=COALESCE(event_date, ?),
+                       event_label=COALESCE(event_label, ?),
+                       course=COALESCE(course, ?)
+                   WHERE id=?""",
+                (ev["event_date"], ev["event_label"], ev["course"],
+                 row["id"]))
+            if not row["event_date"]:
+                dated += 1
+    conn.commit()
+    return {"rounds": len(cal), "created": created, "dated": dated,
+            "calendar": cal}
+
+
+def portal_calendar(subdomain: str, db_path=None) -> dict:
+    """Read-only: parse the portal's calendar widget (verification bridge
+    scoring-gg-history:calendar=<subdomain>). Writes nothing."""
+    from email_parser.database import _connect, DB_PATH
+    from golf_genius_sync import fetch_public_page
+    base = f"https://{subdomain}.golfgenius.com"
+    with _connect(db_path or DB_PATH) as conn:
+        ensure_gg_history_tables(conn)
+        portal = conn.execute(
+            "SELECT * FROM gg_history_portals WHERE subdomain = ?",
+            (subdomain,)).fetchone()
+    league_id = portal["league_id"] if portal else None
+    if not league_id:
+        home = fetch_public_page(base + "/")
+        m = _LEAGUE_ID_RE.search(home.get("html") or "")
+        league_id = (m.group(1) or m.group(2)) if m else None
+    if not league_id:
+        return {"error": "league_id undiscoverable"}
+    cal, raws = fetch_calendar_rounds(base, league_id, fetch_public_page)
+    if cal is None:
+        return {"error": f"calendar widget HTTP {raws[0][2]}"}
+    return {"subdomain": subdomain, "league_id": league_id,
+            "rounds": len(cal), "pages": len(raws),
+            "kinds": {k: sum(1 for c in cal
+                             if classify_round_label(c["event_label"]) == k)
+                      for k in ("tuesday9", "saturday18", "match",
+                                "admin", "other")},
+            "calendar": cal}
+
+
+def ingest_portal_field(subdomain: str, budget_seconds: int = 240,
+                        db_path=None) -> dict:
+    """Phase-B FIELD walk of one portal (see the block comment above).
+    Resumable + time-budgeted: repeat until rounds_left == 0."""
+    from email_parser.database import _connect, DB_PATH
+    from golf_genius_sync import fetch_public_page, parse_page_structure
+
+    t0 = time.time()
+    base = f"https://{subdomain}.golfgenius.com"
+    stats = {"subdomain": subdomain, "rounds_done": 0, "rows": 0,
+             "boards": 0, "matched": 0, "pending": 0,
+             "rounds_no_boards": [], "rounds_detail": []}
+
+    with _connect(db_path or DB_PATH) as conn:
+        ensure_gg_history_tables(conn)
+        ensure_gg_member_map(conn)
+        portal = conn.execute(
+            "SELECT * FROM gg_history_portals WHERE subdomain = ?",
+            (subdomain,)).fetchone()
+        if portal is None:
+            return {"error": f"unknown portal {subdomain!r} — seed first"}
+        portal = dict(portal)
+        portal_id, league_id = portal["id"], portal["league_id"]
+        if not league_id:
+            home = fetch_public_page(base + "/")
+            m = _LEAGUE_ID_RE.search(home.get("html") or "")
+            league_id = (m.group(1) or m.group(2)) if m else None
+            if not league_id:
+                return {"error": "league_id undiscoverable — run "
+                                 "ingest=<subdomain> (Phase A) first"}
+            conn.execute("UPDATE gg_history_portals SET league_id=? "
+                         "WHERE id=?", (league_id, portal_id))
+            conn.commit()
+
+        # 1) calendar → dated event rows (once per walk call; cheap)
+        cal = sync_portal_calendar(conn, portal, base, league_id,
+                                   fetch_public_page)
+        stats["calendar"] = {k: cal.get(k) for k in ("rounds", "created",
+                                                     "dated", "error")}
+        cal_by_rid = {c["gg_round_id"]: c for c in cal.get("calendar", [])
+                      if c.get("gg_round_id")}
+
+        # 2) round selector
+        widget_url = (f"{base}/leagues/{league_id}/widgets/"
+                      f"tournament_results?shared=false")
+        w = fetch_public_page(widget_url)
+        if w["status_code"] != 200:
+            return {**stats, "error": f"tournament_results widget HTTP "
+                                      f"{w['status_code']}"}
+        sel = _ROUND_SELECT_RE.search(w["html"])
+        options = _ROUND_OPTION_RE.findall(sel.group(1) if sel else "")
+        if not options:
+            return {**stats, "error": "no round selector in "
+                                      "tournament_results widget"}
+        options = [(rid, " ".join(re.sub(r"<[^>]+>", " ", lbl).split()))
+                   for rid, lbl in options]
+        options.reverse()  # newest-first → chronological
+
+        done = {r["gg_page_id"][len("field:"):] for r in conn.execute(
+            """SELECT gg_page_id FROM gg_history_pages
+               WHERE portal_id=? AND gg_page_id LIKE 'field:%'
+                 AND fetch_status='done'""", (portal_id,))}
+        pending = [(rid, lbl) for rid, lbl in options if rid not in done]
+
+        for rid, sel_label in pending:
+            if time.time() - t0 > budget_seconds:
+                break
+            round_url = f"{widget_url}&round={rid}"
+            pg = fetch_public_page(round_url)
+            if pg["status_code"] != 200:
+                stats["rounds_detail"].append(
+                    {"round": rid, "error": f"http_{pg['status_code']}"})
+                continue
+            links = (parse_page_structure(pg["html"], round_url)
+                     .get("links") or [])
+            ridx = None
+            for l in links:
+                m = _ROUND_INDEX_RE.search(l.get("href") or "")
+                if m:
+                    ridx = int(m.group(1))
+                    break
+            boards, basis, all_labels = _pick_field_boards(links)
+            cal_ev = cal_by_rid.get(rid) or {}
+            label = cal_ev.get("event_label") or sel_label
+            kind = classify_round_label(label)
+
+            # FETCH phase (no write txn open across network I/O)
+            fetched = []
+            for l in boards:
+                href = l["href"]
+                if href.startswith("/"):
+                    href = base + href
+                blabel = (l.get("text") or "").strip()
+                b = fetch_public_page(href)
+                if b["status_code"] != 200:
+                    continue
+                fetched.append((blabel, href, b["html"]))
+                time.sleep(0.3)
+
+            # WRITE phase
+            ev = conn.execute(
+                """SELECT id FROM gg_history_events
+                   WHERE portal_id=? AND gg_round_id=?""",
+                (portal_id, rid)).fetchone()
+            if ev is None and ridx is not None:
+                ev = conn.execute(
+                    """SELECT id FROM gg_history_events
+                       WHERE portal_id=? AND gg_round_index=?
+                         AND gg_round_id IS NULL""",
+                    (portal_id, ridx)).fetchone()
+                if ev is not None:
+                    conn.execute("UPDATE gg_history_events SET gg_round_id=?"
+                                 " WHERE id=?", (rid, ev["id"]))
+            if ev is None:
+                cur = conn.execute(
+                    """INSERT INTO gg_history_events (portal_id, season,
+                           chapter, event_label, event_date, course, brand,
+                           gg_round_id, gg_round_index, raw_row)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (portal_id, portal["season"], portal["chapter"], label,
+                     cal_ev.get("event_date")
+                     or _export_date(sel_label, portal["season"] or ""),
+                     cal_ev.get("course"), portal["brand"], rid, ridx,
+                     json.dumps({"src": "field_walk", "label": sel_label})))
+                ev_id = cur.lastrowid
+            else:
+                ev_id = ev["id"]
+                conn.execute(
+                    """UPDATE gg_history_events SET
+                           gg_round_index=COALESCE(gg_round_index, ?),
+                           event_label=COALESCE(event_label, ?)
+                       WHERE id=?""", (ridx, label, ev_id))
+
+            detail = {"round": rid, "label": label, "kind": kind,
+                      "basis": basis, "boards": []}
+            if basis == "none":
+                stats["rounds_no_boards"].append(
+                    {"round": rid, "label": label,
+                     "board_labels": all_labels[:12]})
+            names_this_round = set()
+            for blabel, href, html in fetched:
+                _archive_raw(conn, href, html)
+                rows = _results_rows_from_tables(
+                    parse_page_structure(html, href).get("tables") or [])
+                # idempotent per board label
+                conn.execute(
+                    """DELETE FROM gg_history_results
+                       WHERE gg_event_id=? AND game_label=?""",
+                    (ev_id, blabel))
+                for rec in rows:
+                    name, aff = _split_affiliation(rec["player_name"])
+                    team = rec["team_label"]
+                    cid = None
+                    if not team and name:
+                        cid = _resolve_identity(conn, portal_id, name)
+                        names_this_round.add(name)
+                    conn.execute(
+                        """INSERT INTO gg_history_results (gg_event_id,
+                               game_label, player_name, customer_id,
+                               team_label, position, playing_handicap,
+                               gross, net, points, money_cents, raw_row)
+                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                        (ev_id, blabel, name or rec["player_name"], cid,
+                         team, rec["position"], rec["playing_handicap"],
+                         rec["gross"], rec["net"], rec["points"],
+                         rec["money_cents"],
+                         json.dumps({"src": "field_walk", "aff": aff,
+                                     "row": json.loads(rec["raw_row"])})))
+                    stats["rows"] += 1
+                    stats["matched" if cid else "pending"] += 1
+                stats["boards"] += 1
+                detail["boards"].append({"board": blabel, "rows": len(rows)})
+            detail["field"] = len(names_this_round)
+
+            conn.execute(
+                """INSERT INTO gg_history_pages (portal_id, gg_page_id,
+                       page_title, page_kind, widget_type, fetch_status,
+                       fetched_at)
+                   VALUES (?, ?, ?, 'event_field', ?, 'done',
+                           datetime('now'))
+                   ON CONFLICT(portal_id, gg_page_id) DO UPDATE SET
+                       page_title=excluded.page_title,
+                       widget_type=excluded.widget_type,
+                       fetch_status='done', fetched_at=excluded.fetched_at""",
+                (portal_id, f"field:{rid}", label, basis))
+            conn.commit()
+            stats["rounds_done"] += 1
+            stats["rounds_detail"].append(detail)
+            time.sleep(1.0)
+
+        stats["rounds_total"] = len(options)
+        stats["rounds_left"] = len(pending) - stats["rounds_done"]
+        stats["elapsed_s"] = round(time.time() - t0, 1)
+        try:
+            stats["names_pending_review"] = _sync_pending_action_item(conn)
+            conn.commit()
+        except Exception:
+            pass
+        return stats
+
+
+def reset_portal_field(subdomain: str, db_path=None) -> dict:
+    """Mark a portal's field-walk rounds 'redo' so ingest_portal_field
+    walks them again (rows are replaced per board label; nothing is
+    deleted — banked boards stay banked)."""
+    from email_parser.database import _connect, DB_PATH
+    with _connect(db_path or DB_PATH) as conn:
+        cur = conn.execute(
+            """UPDATE gg_history_pages SET fetch_status='redo'
+               WHERE gg_page_id LIKE 'field:%' AND fetch_status='done'
+                 AND portal_id=(SELECT id FROM gg_history_portals
+                                WHERE subdomain=?)""", (subdomain,))
+        conn.commit()
+        return {"subdomain": subdomain, "rounds_reset": cur.rowcount}
+
+
+def _median(vals: list):
+    v = sorted(vals)
+    if not v:
+        return None
+    n = len(v)
+    return (v[n // 2] if n % 2 else (v[n // 2 - 1] + v[n // 2]) / 2)
+
+
+def _field_names(conn, ev_id: int) -> list:
+    """Distinct (player_name, aff, customer_id) of an event's FIELD, by
+    precedence: ALL boards → export_round rows → the per-round individual
+    boards that pass _is_field_board (the fallback basis — applied at
+    query time too, so cumulative standings rows banked on the same
+    event by any walk never count). Team rows never count."""
+    for where in ("game_label LIKE 'ALL %'",
+                  "game_label = 'export_round'",
+                  "1=1"):
+        rows = conn.execute(
+            f"""SELECT player_name, customer_id, raw_row, game_label
+                FROM gg_history_results
+                WHERE gg_event_id=? AND team_label IS NULL AND {where}""",
+            (ev_id,)).fetchall()
+        if where == "1=1":
+            rows = [r for r in rows if _is_field_board(r["game_label"])]
+        if rows:
+            seen = {}
+            for r in rows:
+                aff = ""
+                try:
+                    j = json.loads(r["raw_row"])
+                    if isinstance(j, dict):
+                        aff = j.get("aff") or ""
+                except (ValueError, TypeError):
+                    pass
+                key = " ".join(r["player_name"].split()).upper()
+                if key not in seen or (r["customer_id"] and not seen[key][2]):
+                    seen[key] = (r["player_name"], aff, r["customer_id"])
+            return list(seen.values())
+    return []
+
+
+def participation_series(season_from: str = "2019", season_to: str = "2026",
+                         db_path=None) -> dict:
+    """ONE table, season × chapter, from the FIELD walk (gg_history), with
+    the Tracker's items-based rows for 2025+ beside it so the two
+    definitions can be reconciled in a line. 'played' (archive) = the
+    name is on the round's ALL Net / ALL Gross board (fallback: any
+    individual board, flagged); 'played' (Tracker) = an items row that
+    passes _participation_event_filter_sql joined to a dated event."""
+    from email_parser.database import (_connect, DB_PATH,
+                                       _participation_event_filter_sql)
+    from email_parser.timezone_utils import today_central_str
+    out = {"gg_history": [], "tracker": [], "definition": {
+        "gg_history": "distinct names on the round's ALL Net/ALL Gross "
+                      "board (fallback: union of individual boards, "
+                      "flagged); tuesday9 = round label s9.N/a9.N or "
+                      "s1..s15/s8f; match-play and POINTS RESET rounds "
+                      "and empty rounds excluded",
+        "tracker": "items rows passing _participation_event_filter_sql "
+                   "joined to a dated events row (event_date <= today); "
+                   "member = a MEMBERSHIP items row within 366 days "
+                   "before the event",
+    }}
+    with _connect(db_path or DB_PATH) as conn:
+        ensure_gg_history_tables(conn)
+        portals = conn.execute(
+            """SELECT * FROM gg_history_portals
+               WHERE chapter IS NOT NULL AND season IS NOT NULL
+                 AND status='alive' AND season BETWEEN ? AND ?
+               ORDER BY season, chapter""",
+            (season_from, season_to)).fetchall()
+        for p in portals:
+            p = dict(p)
+            evs = conn.execute(
+                """SELECT e.id, e.event_label, e.event_date, g.widget_type
+                   FROM gg_history_events e
+                   JOIN gg_history_pages g
+                     ON g.portal_id=e.portal_id
+                    AND g.gg_page_id='field:'||e.gg_round_id
+                    AND g.fetch_status='done'
+                   WHERE e.portal_id=?
+                   ORDER BY e.event_date, e.id""", (p["id"],)).fetchall()
+            unwalked = conn.execute(
+                """SELECT COUNT(*) FROM gg_history_pages
+                   WHERE portal_id=? AND gg_page_id LIKE 'field:%'
+                     AND fetch_status!='done'""", (p["id"],)).fetchone()[0]
+            if not evs:
+                continue
+            buckets = {"tuesday9": [], "all": []}
+            names, member_ever, linked = {}, set(), set()
+            fallback_events = 0
+            for e in evs:
+                kind = classify_round_label(e["event_label"])
+                if kind in ("match", "admin"):
+                    continue
+                field = _field_names(conn, e["id"])
+                if not field:
+                    continue
+                if e["widget_type"] == "fallback":
+                    fallback_events += 1
+                n = len(field)
+                buckets["all"].append(n)
+                if kind == "tuesday9":
+                    buckets["tuesday9"].append(n)
+                for nm, aff, cid in field:
+                    key = nm.upper()
+                    names[key] = nm
+                    if aff.upper().startswith("TGF") or aff == "Former":
+                        member_ever.add(key)
+                    if cid:
+                        linked.add(cid)
+            row = {"season": p["season"], "chapter": p["chapter"],
+                   "portal": p["subdomain"],
+                   "events_all": len(buckets["all"]),
+                   "events_tue": len(buckets["tuesday9"]),
+                   "mean_tue": (round(sum(buckets["tuesday9"])
+                                      / len(buckets["tuesday9"]), 1)
+                                if buckets["tuesday9"] else None),
+                   "median_tue": _median(buckets["tuesday9"]),
+                   "mean_all": (round(sum(buckets["all"])
+                                      / len(buckets["all"]), 1)
+                                if buckets["all"] else None),
+                   "median_all": _median(buckets["all"]),
+                   "player_rounds": sum(buckets["all"]),
+                   "distinct_players": len(names),
+                   "distinct_member_ever": len(member_ever),
+                   "distinct_linked": len(linked),
+                   "fallback_basis_events": fallback_events,
+                   "rounds_unwalked": unwalked}
+            out["gg_history"].append(row)
+
+        # Tracker rows (items-based), 2025+ only — the Tracker is the
+        # system of record from the 2025 season
+        try:
+            filt = _participation_event_filter_sql("i")
+            today = today_central_str()
+            rows = conn.execute(
+                f"""SELECT e.id AS event_id, e.event_date, e.item_name,
+                           e.chapter, i.customer_id
+                    FROM items i
+                    JOIN events e
+                      ON e.id = i.event_id
+                      OR (i.event_id IS NULL
+                          AND TRIM(e.item_name) = TRIM(i.item_name)
+                              COLLATE NOCASE)
+                    WHERE {filt}
+                      AND e.event_date IS NOT NULL
+                      AND e.event_date <= DATE(?)
+                      AND SUBSTR(e.event_date, 1, 4) BETWEEN ? AND ?""",
+                (today, max(season_from, "2025"), season_to)).fetchall()
+            members = {}
+            for m in conn.execute(
+                    """SELECT customer_id, order_date FROM items
+                       WHERE customer_id IS NOT NULL
+                         AND UPPER(COALESCE(item_name,'')) LIKE '%MEMBERSHIP%'
+                         AND COALESCE(transaction_status,'active')='active'
+                    """):
+                members.setdefault(m["customer_id"], []).append(
+                    str(m["order_date"])[:10])
+            per = {}
+            for r in rows:
+                key = (str(r["event_date"])[:4], r["chapter"] or "?")
+                d = per.setdefault(key, {"events": {}, "names": set(),
+                                         "members": set()})
+                ev = d["events"].setdefault(
+                    r["event_id"], {"label": r["item_name"],
+                                    "date": str(r["event_date"])[:10],
+                                    "cids": set()})
+                ev["cids"].add(r["customer_id"])
+                d["names"].add(r["customer_id"])
+                ed = str(r["event_date"])[:10]
+                for od in members.get(r["customer_id"], []):
+                    if od <= ed and _days_between(od, ed) <= 366:
+                        d["members"].add(r["customer_id"])
+                        break
+            for (season, chapter), d in sorted(per.items()):
+                tue = [len(e["cids"]) for e in d["events"].values()
+                       if classify_round_label(e["label"]) == "tuesday9"]
+                alln = [len(e["cids"]) for e in d["events"].values()]
+                out["tracker"].append({
+                    "season": season, "chapter": chapter,
+                    "events_all": len(alln), "events_tue": len(tue),
+                    "mean_tue": round(sum(tue) / len(tue), 1) if tue else None,
+                    "median_tue": _median(tue),
+                    "mean_all": round(sum(alln) / len(alln), 1) if alln else None,
+                    "median_all": _median(alln),
+                    "player_rounds": sum(alln),
+                    "distinct_players": len(d["names"]),
+                    "distinct_members": len(d["members"])})
+        except Exception as exc:  # items/events absent on a bare test DB
+            out["tracker_error"] = str(exc)
+    return out
+
+
+def _days_between(a: str, b: str) -> int:
+    from datetime import date
+    try:
+        da = date.fromisoformat(a[:10])
+        db_ = date.fromisoformat(b[:10])
+        return abs((db_ - da).days)
+    except ValueError:
+        return 10 ** 6
+
 
 
 # ── Review UI backend (admin page /admin/gg-history) ─────────────────────
