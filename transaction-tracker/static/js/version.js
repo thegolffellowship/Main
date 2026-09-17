@@ -13,6 +13,13 @@ window.TGF_CHANGELOG = [
     ],
   },
   {
+    version: "2.462.6",
+    date: "2026-09-17",
+    changes: [
+      "Brevo campaign audience split (Kerry 2026-09-17, on Insider #3: 'do the split by group'): scoring-brevo-campaign-split:<campaign_id> reports a sent campaign's recipients, openers, clickers and unsubscribes by TGF status — active_member / former_member / prospect (the nightly sync's map) / unknown (no Tracker customer with that email: never bought, or pre-Tracker). Brevo only exposes per-recipient data through its async export (POST exportRecipients → poll /processes → CSV), which the bridge drives; read-only, nothing on a contact or campaign changes. Test: test_brevo_campaign_split.py.",
+    ],
+  },
+  {
     version: "2.462.5",
     date: "2026-09-16",
     changes: [

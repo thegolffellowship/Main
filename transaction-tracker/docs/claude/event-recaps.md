@@ -192,8 +192,10 @@ Faces bullets and every link. What he changed:
     CEDAR CREEK (18) | REGISTER — yes, you gain fall points by playing.
     Deadline tomorrow at NOON.` (deadline in red); Tuesdays as
     `Tue, Sep 22 | 5:00p Shot | BRACKENRIDGE PARK | REGISTER`. "Shot" is
-    the shotgun shorthand; the nine side is NOT printed. Tuesday nines
-    are 5:00 PM shotguns as a rule — draft that, not a blank.
+    the shotgun shorthand; the nine side is NOT printed. SAN ANTONIO
+    Tuesday nines are 5:00 PM shotguns as a rule — draft that, not a
+    blank. AUSTIN varies (Teravista 9/22 = 4:40 PM tee times, ShadowGlen
+    9/29 = 5:00 PM): read the event, never assume.
 37. **Draft error, caught by Kerry on his final pass — ours to catch
     next time.** The lede said "Two weeks ago at Silverhorn"; s9.22
     Silverhorn was 2026-09-08, ONE week before. Every relative date in a
@@ -209,6 +211,41 @@ Faces bullets and every link. What he changed:
     `scoring-gg-results` (the TEAM Net board's setup) and the allowance
     ladder in side-games.md (1 ball 75%, 2 ball 85%, 3–4 ball 100%);
     print the format, not the percentage. Extends rule 23.
+
+## Austin — what Robert sent for a9.23 (2026-09-16, from the closeout draft)
+
+Kerry: "Most of my edits would be how I'd want to dictate future recaps,
+but certainly want to capture anything useful or insightful from him."
+Robert Straiton sent the Austin draft under HIS name and phone
+(361-389-9395), "See you Tuesday!", with the GG results PDF attached
+(26-a9-23-RESULTS.pdf). What he changed and what it teaches:
+
+39. **The chapter manager sends the chapter's recap under his own name**
+    (skill OPEN 2, answered in practice for Austin). Draft Austin's with
+    Robert's signature block, not Kerry's.
+40. **Fellowship line, Austin shape:** "5 of us had drinks and dinner at
+    Mama Betty's Mexican Cantina." — headcount + spot, the rule-26 shape.
+    The spot is now on the event (fellowship_spot) so the Insider's
+    Celebrate line can use it.
+41. **Austin UP NEXT carries the real tee time and the real deadline:**
+    "Tue Sep 22 | 4:40 PM | TERAVISTA (9) | REGISTER — Deadline Mon Sep
+    21 @ 3 PM." (he also prints "(9)" / "(18)" after the course). Those
+    are facts only the manager had; the draft's blanks were right to be
+    blanks. Capture them on the event when they arrive.
+42. **Attach the GG results PDF** — Austin's practice; SA links FULL
+    EVENT RESULTS instead. Either is fine; note the chapter's habit.
+43. **He kept two things Kerry's rules cut, and one number moved.** (a)
+    Surnames stayed plain (rule 30 is Kerry's dictation, not yet
+    Robert's); (b) the fall-race graf still names Straiton and Cloer as
+    "without a buy-in" (rule 34 says never name who has NOT bought in —
+    he named himself, which softens it, but the rule stands for the
+    draft); (c) "Luke Youngs shot 70" at Forest Creek — ROBERT WAS RIGHT.
+    GG fixed a scoring error after our Saturday import (back nine 33 →
+    32); the Tracker card said 71 until 2026-09-16 2:30 PM, when it was
+    dropped, re-imported (70 / 67 net) and its two nines re-posted
+    (index 0.9 → 0.1). The manager on the ground knows about a
+    correction before the Tracker does; when a manager's number differs
+    from ours, re-pull the card BEFORE calling it wrong.
 
 Draft-time checklist derived from the above: two-week trend table for
 the headliner (previous event's card + payout), team score on Team Net,
@@ -522,7 +559,7 @@ rhythm and the fallback if open/click trends sag; monthly is off the
 table because the format lives on last Tuesday's results and next
 Tuesday's button. Read #2 again at +24h and keep the opens/clicks trend
 per issue (Brevo campaign ids: #15 = Insider 1 (9/2), #18 = Insider 2
-(9/10)).
+(9/10), #19 = Insider 3 (9/16)). **Audience split (v2.462.6):** `scoring-brevo-campaign-split:<campaign id>` — recipients / openers / clickers / unsubs by TGF status (active, former, prospect, unknown = not in the Tracker), read-only; Kerry 2026-09-17: most of list 3 (~920 of 1,437) has no Tracker record, i.e. signed up over the years and never bought.
 
 **v3 fixes (Kerry, off the Brevo preview 2026-09-02) — template rules:**
 - The Season-20 logo (69986bc3…png) is BLACK INK — header band must be
