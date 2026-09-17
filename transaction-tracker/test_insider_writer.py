@@ -107,7 +107,8 @@ data["member_quote"] = None
 print("\n== 1. angle catalogue + rotation dial ==")
 check("catalogue has the ten angles Kerry heard, in the proposed order",
       iw.ANGLE_KEYS == ["tuesday-story", "first-timer", "fellowship", "handicap-fair", "saturday-18s",
-                        "season-contests", "hio-pot", "twenty-seasons", "course-of-week", "member-words"],
+                        "season-contests", "hio-pot", "twenty-seasons", "course-of-week", "built-for-this",
+                        "member-words"],
       str(iw.ANGLE_KEYS))
 check("default order = catalogue", iw.angle_order(db_path=p) == iw.ANGLE_KEYS)
 db.set_app_setting("insider_angles", "fellowship, hio-pot, bogus, fellowship, first-timer", db_path=p)
@@ -227,6 +228,16 @@ check("lint allows the dial's figures only when passed", insider.lint(html_o) !=
 check("no dial → no extra dollars", iw.join_offer_text(db_path=p) == OFFER and iw.dollars_in(OFFER) == {"$50", "$75"})
 db.set_app_setting("insider_join_offer", "", db_path=p)
 check("blank dial → offer absent from the sheet", iw.writer_facts(data, db_path=p)["join_offer"] is None)
+
+print("\n== 2d. faith stays implicit (Kerry 2026-09-17) ==")
+_, probs = iw.validate(dict(GOOD, celebrate="We are blessed to have you. Come pray with us after."), facts)
+check("religious language refused", any("religious" in x for x in probs), str(probs))
+_, probs = iw.validate(dict(GOOD, celebrate="Show up once and be known. You were built for this."), facts)
+check("plain encouragement passes", probs == [], str(probs))
+_, probs = iw.validate(dict(GOOD, story=[{"lead": "Read this.", "body": "As it says in John 3:16, come along."}]), facts)
+check("a scripture reference is refused", any("religious" in x for x in probs), str(probs))
+check("the rule and the built-for-this angle exist", "FAITH STAYS IMPLICIT" in iw.PUBLIC_RULES and "built-for-this" in iw.ANGLE_BY_KEY
+      and iw.angle_available("built-for-this", data))
 
 print("\n== 4. write_insider: clean draft, fences tolerated ==")
 fake_client.responses = ["```json\n" + json.dumps(GOOD) + "\n```"]

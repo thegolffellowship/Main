@@ -499,6 +499,24 @@ recap (golf-world items, encouragement) is welcome by ruling; it still goes thro
 and Kerry's approval, and the writer never invents a news item — facts come from a dial or the lane's
 research.
 
+**FAITH STAYS IMPLICIT — Kerry's founding stance for the public voice (2026-09-17, verbatim):**
+*"I've always looked at The Golf Fellowship as preparing a field for people of any background to
+come into connecting with other human beings we don't discriminate in anyway, and I certainly want
+to continue that as a standard. The Golf Fellowship is about human connection and I believe that is
+something we really need and we need more and more in a world that is becoming more and more
+isolated even though we have more and more ways to connect than any other time in history, it's
+easy to say I can just do life by myself because functionally we can. But emotionally is another
+story altogether I believe that we were built for community… So while obviously I go to Mission
+point and I've been a disciple of Christ for years and years, as well as that being the foundation
+of my faith and what drives me to be loving and kind and encouraging and interested to, and in the
+people that come into The Golf Fellowship, I also don't want that to be a stumbling block of any
+kind. I want to take people where they are and [not] put a barrier of religiosity in between them
+and myself or CHRIST for that matter."* → In the public Insider: no scripture, no God/Christ/Jesus,
+no church, no prayer, no "blessed"; encouragement in plain human words is wanted. `validate()`
+refuses religious language; `PUBLIC_RULES` carries the stance; a new catalogue angle
+`built-for-this` ("We were built for this") says the conviction in his words without the religion —
+NOT on the dial until Kerry adds it.
+
 **THE JOIN OFFER — ratified 2026-09-17 (Kerry: "Yes" to "are you comfortable letting the writer
 print '$50 to join through September 30, then $75' in the Insider?").** Supersedes the #381
 "no dollar prices" guardrail for ONE line: dial `insider_join_offer` holds the price line verbatim
