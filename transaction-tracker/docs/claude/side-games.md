@@ -1137,6 +1137,61 @@ back to the rounded playing handicap and reports `precision_loss` with a
 warning on the board, rather than silently computing a number GG would not
 have used.
 
+### The USGA / TGF allowance table (ruled 2026-09-16)
+
+Resolved through `team_allowance_pct(game_cfg, team_size, balls)`, which takes
+**both** the team size and the ball count and **refuses with a named reason**
+where nothing is ruled — a team game that cannot name its allowance reports
+rather than borrowing a neighbouring row.
+
+| Team | Balls | Allowance | Source |
+|---|---|---|---|
+| 4 | 1 / 2 / 3 / 4 | 75 / 85 / 100 / 100 | USGA Appendix C; matches Kerry's ruling |
+| 2 (Cart Net) | 1 | **85%** | Kerry ruling; agrees with USGA Four-Ball Stroke Play |
+| 2 (Cart Net) | 2 | **100%** | Kerry ruling |
+| 5 (fivesome) | 1 | **75%, provisional** | Kerry ruling — a holding position, not a settled allowance |
+| 5 | 2+ | *refuses* | unruled; USGA publishes no five-player row |
+| any other size | — | *refuses* | unruled |
+
+**The fivesome row is its own dial, not a fall-through.** It carries the same
+75% as the four-player row *today*, and Kerry asked for a dedicated dial
+precisely so that is two numbers which happen to agree rather than one number
+serving twice — *"Fivesome 1 ball remains 75% now, but will need a dial
+specifically for that."*
+
+**Cart Net's two rows are NOT screenshot-verified.** They rest on Kerry's
+ruling; no Golf Genius settings screen for Cart Net reached the session that
+recorded them. The `source` field says so, and a test keeps that wording in
+place. If a Cart Net event ever fails to reproduce GG, check the settings
+screen first.
+
+### 9s vs 18s — OPEN, CA Queue #11
+
+Golf Genius does **not** halve the index for nine-hole play. Melchor's 6.888
+is a course handicap on the 18-hole stroke scale (18-hole-scale slope, but the
+*nine*-hole rating-minus-par adjustment). The nine-hole discount happens in the
+**allocation**: strokes spread across the full 18-hole stroke-index card and
+the player collects only those landing on the nine he plays.
+
+A coincidence that will mislead someone eventually: on a **half-Net** game the
+50% allowance and the nine-hole halving are the same arithmetic —
+`6.888 × 50% = (5.6 ÷ 2) × 139/113 = 3.444`. They come apart on any other
+game. a9.23 *does* discriminate, and picks GG's reading: halving first and
+then applying the allowance drops Zapata's hole 7, the $13.
+
+Two consequences, which are the open discussion:
+
+1. **A nine pays fewer strokes than the printed playing handicap.** Melchor's
+   card says PH 3; he receives 2, because stroke index 2 is on the back nine.
+2. **The front nine pays more than the back.** Front holds the odd indexes,
+   back the even, so on every *odd* playing handicap the front nine gives one
+   extra stroke — a 3-handicap gets 2 on the front and 1 on the back. Same
+   player, same course, different nine.
+
+Both are GG behaving consistently, and we stay tethered. Whether TGF wants it
+after untether is Kerry's, on CA Queue #11 — which should be settled together
+with CA Queue #10, since they are the same question at two layers.
+
 ### The governing rule when we and GG disagree
 
 **Kerry, 2026-09-16: "Until we detach from GG, GG rules. When untethered,

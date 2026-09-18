@@ -15748,6 +15748,26 @@ def _upsert_course_tee(conn: sqlite3.Connection, tee: dict) -> tuple:
     return course_id, tee_id
 
 
+# ── Participation: the ONE definition of "played" (participation.md) ──
+# Moved here from app.py in v2.464.0 so gg_history.participation_series
+# (MCP, no Flask app import) and the /participation page cannot drift.
+
+def _participation_event_filter_sql(alias: str = "i") -> str:
+    """SQL fragment selecting event-participation items only.
+
+    Excludes membership renewals, season contest enrollments, and child
+    payment rows. Both paid (active) and RSVP-only rows count as
+    "played" for the purposes of last-event / frequency.
+    """
+    return f"""
+        {alias}.customer_id IS NOT NULL
+        AND COALESCE({alias}.transaction_status, 'active') IN ('active', 'rsvp_only')
+        AND UPPER(COALESCE({alias}.item_name, '')) NOT LIKE '%MEMBERSHIP%'
+        AND UPPER(COALESCE({alias}.item_name, '')) NOT LIKE '%SEASON CONTEST%'
+        AND {alias}.parent_item_id IS NULL
+    """
+
+
 def _resolve_scoring_player(conn: sqlite3.Connection, gg_name: str) -> int | None:
     """handicap_player_links first (curated GG-name map), then the alias
     machinery — same identity spine as everything else."""

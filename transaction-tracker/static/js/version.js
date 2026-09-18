@@ -1,11 +1,128 @@
-window.TGF_VERSION = "2.462.3";
+window.TGF_VERSION = "2.464.6";
 window.TGF_CHANGELOG = [
   {
-    version: "2.462.3",
+    version: "2.464.6",
     date: "2026-09-18",
     changes: [
       "A REMEMBERED PAIRINGS TAB COMES BACK ON A PHONE TOO (Kerry 2026-09-18, iPhone: \u2018Had generated pairings, tweaked, saved, then added blinds, then clicked Starter Sheet, then clicked back. Now it\u2019s stuck on LOADING\u2019). iOS reloads the tab on return; the restore-on-load path (v2.432.0) re-opened the event on PAIRINGS, loaded the sheet, and repainted the DESKTOP container by id. The phone\u2019s container has a different id, so the data arrived and nothing repainted \u2014 the panel sat on \u2018Loading\u2026\u2019 with the sheet already in hand. One helper now resolves the open event\u2019s container in either layout and every after-the-fact repaint (restore, post-action refresh) goes through it. Nothing was lost: the saved sheet and the blinds were on the server the whole time, and tapping ROSTER then PAIRINGS would have repainted it. Test: `test_events_restore_mobile.js`.",
       "Blinds need no Save: the draw is recorded the moment it is confirmed, and the sheet re-reads it. The Save button is for seats.",
+    ],
+  },
+  {
+    version: "2.464.5",
+    date: "2026-09-18",
+    changes: [
+      "Kerry's 2022 question (mailbox #555: 'I want to know what happened in 2022. We had our most members that year.'): scoring-gg-history:cohort[=<A>-<B>] → cohort_analysis(). Per chapter, from gg_history alone: season A → B retention of the field-walk population (returned next season / never seen again through 2026 / came back later), for all players, for the member-ever subset and for the roster start_year <= A subset (the season-dated proxy the public widgets allow), with the prior season as the control; Tuesday fields by calendar month for A and B (did 2023 drop in spring with the league split or through the year); rounds-per-player profiles (1 / 2–3 / 4–6 / 7+) for A, B and 2025; and whether season-A standings pages print an Affiliation column (they do — but GG renders today's affiliation on archived widgets, so it is not that season's membership). Players keyed by printed GG name, not customer_id, so uneven linking rates across seasons cannot split one person in two. Participation series doc now reaches 2016.",
+    ],
+  },
+  {
+    version: "2.464.4",
+    date: "2026-09-18",
+    changes: [
+      "Participation series reaches 2016 (Kerry #553: 'Ingest and Run the other years in that spin off'). classify_round_label learns the 2016–2018 San Antonio era: Tuesdays were coded 'e1'…'e12' and 2017 wrote its match-play rounds 'M61 - PLAYBACK SEMIFINAL'; both land in the right bucket. Query-time only.",
+      "Archive HOLES walk: the INDIVIDUAL-board fallback (the known gap since v2.74). The first 2019–2024 holes runs imported 88 cards for SA 2024 and none for Austin 2024 because the walker read only ALL Net / ALL Gross boards, which appear in fall 2024 and not at all in 2016–2018 or Austin 2024. _pick_hole_boards now falls back to the same per-round individual boards the field walk trusts (_is_field_board), Net-style boards first so playing handicaps ride with the cards; import_gg_scorecards' (player, date, round_key) dedupe keeps a player on three boards to one card. scoring-gg-history:holes-reset=<subdomain> re-queues only the rounds that produced no scorecards (nothing deleted, imported rounds stay done) so the earlier walks can be finished without re-fetching what worked.",
+    ],
+  },
+  {
+    version: "2.464.3",
+    date: "2026-09-17",
+    changes: [
+      "Insider writer: WHAT ENTRY INCLUDES is now a rule in PUBLIC_RULES (Kerry 2026-09-17 + the Tracker's event pricing model) — every entrant is in the team game, closest-to-the-pin and the hole-in-one pot; the individual Net/Gross games are an add-on a member can skip any week; no dollar figures, never a dig at buyers, members get no free drink. Written for the 'too competitive to feel comfortable' retention leak Kerry named (two departures). The exact member-facing sentence awaits his ratification (event-recaps.md).",
+    ],
+  },
+  {
+    version: "2.464.2",
+    date: "2026-09-17",
+    changes: [
+      "Participation series: classify_round_label learns 2023. That season SA split its Tuesdays into EAST and WEST league nights ('east | SILVERHORN front', 'east/west | …') and Austin into NORTH and SOUTH; the fall used unnumbered 's9 OLMOS BASIN front | The Dogfather' / 'a9 FOREST CREEK front'; match rounds were written 'MATCH - HANSON v CHANDLER' with no number. All of those now land in the right bucket (tuesday9 / match) and 'MATCHES - … Match Play' boards stay 'other'. Query-time only — no walk had to be redone.",
+    ],
+  },
+  {
+    version: "2.464.1",
+    date: "2026-09-17",
+    changes: [
+      "GG history field walk: the calendar widget is PAGINATED (SA 2024 shows 30 rounds on page 1 and a 'Next →' to page=2; the results selector has 32) — fetch_calendar_rounds() now walks page=1,2,… (show_registration=false, follows only while the page advertises a higher page number, stops when a page adds nothing new), archives every page, and both the sync and the read-only calendar= bridge use it. Course text no longer carries GG's leading '|'. Tests cover pagination, the no-Next case and the HTTP-error case.",
+      "Field walk fallback is an ALLOW-list now. The first SA 2024 pass showed the round view also lists the season's points and cup boards ('SAN ANTONIO Net', 'THE FELLOWSHIP CUP', 'APRIL Points', 'as18.6 FALL POINTS - …'); a union that includes them is not a round's field. Rounds without ALL boards (every 2024 round before the ALL boards appeared, and all of 2019–2023) now take only the per-round individual boards — after an optional event-code prefix: INDIVIDUAL / SKINS / SCORES / GROSS / NET / ALL, never team, cart, MVP, points, race, cup or proximity boards (_is_field_board; the deny-list reads the board's own name before ' - ', so 's8f SCORES net - FALL POINTS net' passes and 'as18.6 FALL POINTS - SAN ANTONIO Fall' does not). The same rule runs at query time in _field_names, so boards already banked on an event by any walk are counted only if they pass it — no re-walk needed for the rounds done tonight. scoring-gg-history:field-reset=<subdomain> marks a portal's field rounds 'redo' (nothing deleted; boards are replaced per label on the next walk) for when a rule change needs the boards themselves refetched.",
+    ],
+  },
+  {
+    version: "2.464.0",
+    date: "2026-09-17",
+    title: "GG history: the FIELD walk + the participation series (2019–2026) — Kerry's 'participation was higher before 2023' measured, not remembered",
+    changes: [
+      "Historical GG ingester lane (spun off the Insider writer 2026-09-17, mailbox #547/#548). Phase A standings for every SA + Austin portal 2019–2024 ran tonight (12 portals, 4,151 standings rows; the runs are data, this entry is the code). The archive HOLES walk could not follow: it needs a round DATE to scope its dedupe, 2019–2024 have no GG exports, and Golf Genius truncates the round selector's labels ('s9.26 THE QUARRY (Tue, Oct…'). Two findings fixed that. (1) The portal's public CALENDAR widget (/leagues/<id>/widgets/calendar?shared=false) lists every round in full — date, untruncated name, course, and the round_id in its Tee Sheet/Results links. parse_calendar_widget() reads it; sync_portal_calendar() upserts dated gg_history_events rows by (portal, gg_round_id), filling event_date/label/course only where NULL (export-channel values are never overwritten). (2) Participation does not need scorecards: the FIELD of a round is the ALL Net / ALL Gross board — the same boards the holes walk imports, so 'played' means the same thing in both.",
+      "New Phase-B walk: scoring-gg-history:field=<subdomain>[@budget] (and field-bg= in a daemon thread, poll holes-status) → ingest_portal_field(): calendar sync, then per selector round the ALL Net + ALL Gross boards → gg_history_results rows under the board's verbatim label, name split from GG's appended affiliation ('ROHRMANN, Lance TGF San Antonio' → name + aff, aff kept in raw_row JSON), identity via the same _resolve_identity cascade. Eras before ALL boards (2019–2021 print INDIVIDUAL Gross / MEMBER Games instead) fall back to the union of every individual (non-team, non-proximity, non-match) board and the walk-state row records basis 'fallback' so the series can say so. Walk state = gg_history_pages 'field:<round_id>' rows (resumable; empty rounds mark done). The games walk's idempotent delete now spares 'ALL %' rows so the two walks coexist. scoring-gg-history:calendar=<subdomain> is the read-only parse for verification.",
+      "scoring-gg-history:participation[=<from>-<to>] → participation_series(): ONE table, season × chapter, from the field walk — events (all, and Tuesday nines by round label: s9.N/a9.N, or s1..s15/s8f in the 2019–2022 numbering), mean/median players per event, player-rounds, distinct players, distinct member-ever (board affiliation TGF*/Former — GG prints TODAY's affiliation, so it is 'was ever a member', not 'was a member that season'), distinct customer-linked, and how many events sat on the fallback basis. Match-play rounds ('MATCH 63 - X v Y'), POINTS RESET rounds and empty rounds are excluded. Beside it, for 2025+, the Tracker's own items-based rows (the /participation page definition) so the two definitions reconcile in a line — _participation_event_filter_sql moved from app.py to email_parser/database.py so the MCP layer and the page share the one definition (participation.md rule: reuse it so it can't drift).",
+      "Tests: test_gg_history_field.py (calendar parser incl. the postponed-row case, the round classifier across both numbering eras, the board picker + fallback, the affiliation split, the season aggregation on a scratch DB, the Tracker rows incl. stale-membership and child-row exclusions). Docs: gg-history.md gains the field-walk section and, once the walks finish, the 'Participation series' table.",
+    ],
+  },
+  {
+    version: "2.463.3",
+    date: "2026-09-17",
+    changes: [
+      "Insider writer: faith stays implicit in the public voice (Kerry's founding stance, 2026-09-17, verbatim in event-recaps.md — 'preparing a field for people of any background… I don't want that to be a stumbling block… a barrier of religiosity'). PUBLIC_RULES carries the stance; validate() refuses religious language (God/Christ/Jesus/Lord, scripture references, church, prayer, blessed) and lets plain encouragement through; a new catalogue angle built-for-this ('We were built for this' — connection over isolation, in human words, anchored on one real moment) is available but NOT on the rotation dial until Kerry adds it.",
+    ],
+  },
+  {
+    version: "2.463.2",
+    date: "2026-09-17",
+    changes: [
+      "TGF Insider: the JOIN OFFER may be printed (Kerry-ratified 2026-09-17 — 'Yes' — the first exception to the #381 no-prices guardrail). Dial insider_join_offer holds the price line verbatim (set: '$50 to join through September 30, then $75. 365 days from purchase. No monthly dues.' — the CA round-two price card); the fact sheet carries it, the writer prints it once, verbatim, linked to membership; validate() allows only the dial's dollar figures and refuses a paraphrase ('just $50'); lint() and the approve path allow the same figures via _allowed_dollars(). Blank dial = no price, as before. Kerry edits the dial when the promo ends on Oct 1.",
+    ],
+  },
+  {
+    version: "2.463.1",
+    date: "2026-09-17",
+    changes: [
+      "Insider writer, first machine sample read as the editor (three Sonnet drafts on s9.23/a9.23, mailbox #544): three slips became rules + checks. A Tuesday is NINE holes (the fellowship draft had 'the banter starts on the 18th green') — validate() refuses 18th/eighteenth when the week's events are nines. Never expose bookkeeping ('No fellowship spot was on the books') — refused, the rule says write around it. Logistics only from the fact sheet, per chapter ('usually a 5:00 PM shotgun' was written for both cities; Austin runs tee times) — every event and next-Tuesday button now carries a format line from events.start_time (event_format(): SA shotgun, Austin late-afternoon tee times, Saturdays 18 with morning tee times) and gather_week() carries start_time. Kerry ratified the angle order the same day ('Go with your order. Push to main.'); v2.463.0 is live and the order is on the dial.",
+    ],
+  },
+  {
+    version: "2.463.0",
+    date: "2026-09-16",
+    title: "TGF Insider: the writer — a Claude-written weekly draft on a rotating angle, options for Kerry, Brevo only from his approved text",
+    changes: [
+      "The Wednesday Insider is now WRITTEN, not assembled (Kerry 2026-09-16: 'I want it to be creative though. I don't necessarily want the same format each time with the 3 things… We need to explore more of The Golf Fellowship and what it provides'). New email_parser/insider_writer.py: one Claude call a week (Sonnet route, parser.py's client pattern, billing alert on auth/credit failures) fed the week's facts in public form, the chosen ANGLE, the ratified public rules, the member-recap house style for voice, and Kerry's sent Insiders as examples (docs/claude/templates/insider-voice-examples.md). It returns the headline plus two alternates, the lede, a story box of 1–4 beats, the Celebrate line, the close header, and a one-line 'why this angle this week'.",
+      "Angle rotation as data: ten angles in a catalogue (a Tuesday story, a first-timer's night, the fellowship afterward, how the handicap makes a 20 and a scratch equal, the Saturday 18s and road trips, the season contests explained, the Hole-In-One pot, twenty seasons of TGF, a course of the week, a member's own words). Dial insider_angles sets the order (Kerry to ratify), insider_angle_force picks one for the next run, insider_angle_history keeps any angle from repeating until the rest have had a turn; an angle whose facts are missing this week is skipped, never faked. Read-only view: scoring-insider-angles.",
+      "The gate holds on the writer's output: tags whitelisted, links only from the allow-list, no full surname from the week's roster, no banned word, no dollar figure but the pot, no 'alone', no recent headline — then lint() on the rendered HTML. One retry with the problems fed back, then the deterministic compose() is the fallback and the review email says so, so the 8:00 email always goes out. Dial insider_writer=off keeps the composer only.",
+      "Review email (dial insider_autodraft=review, set 2026-09-16 1:19 PM): the banner now carries the angle, why this angle, the three headline/subject options and who wrote it; the mailbox post carries the same digest. scoring-brevo-draft:samples|a,b,c writes several angles and emails them to Kerry as ONE message — the 'options to choose from'. The Brevo DRAFT is created only from Kerry's approved text (scoring-insider-approve:<subject>|<html>, lint-gated, merge tags checked, logged as insider-approved so the headline rotation sees it). Nothing sends itself.",
+      "Insider #3 lesson folded (Kerry's Brevo edit): with no fellowship spot on record the Celebrate line is 'Stick around for food, drink, and banter after the round.' Tests: test_insider_writer.py (60 checks, Anthropic call mocked); test_insider.py and test_insider_headline.py unchanged and green.",
+    ],
+  },
+  {
+    version: "2.462.6",
+    date: "2026-09-17",
+    changes: [
+      "Brevo campaign audience split (Kerry 2026-09-17, on Insider #3: 'do the split by group'): scoring-brevo-campaign-split:<campaign_id> reports a sent campaign's recipients, openers, clickers and unsubscribes by TGF status — active_member / former_member / prospect (the nightly sync's map) / unknown (no Tracker customer with that email: never bought, or pre-Tracker). Brevo only exposes per-recipient data through its async export (POST exportRecipients → poll /processes → CSV), which the bridge drives; read-only, nothing on a contact or campaign changes. Test: test_brevo_campaign_split.py.",
+    ],
+  },
+  {
+    version: "2.462.5",
+    date: "2026-09-16",
+    changes: [
+      "TGF Insider headline order: the fraction title ('Half the Field Won Money!') now ranks above the par/bogey skins story — Kerry chose it over 'A par won money' for the 9/16 draft.",
+    ],
+  },
+  {
+    version: "2.462.4",
+    date: "2026-09-16",
+    changes: [
+      "TGF Insider: the headline never repeats last week's (Kerry 2026-09-16: 'We copied the Brevo title from last week' — two drafts in a row led 'First round. First payday.' because a first-timer cashed both weeks). compose() now ranks candidates — first-timer cashed → a par/bogey won a skin → the beat-1 fraction as a title ('Half the Field Won Money!', Kerry's edit) → the ratified default — and skips the one that matches the previous draft's subject in message_log. Test: test_insider_headline.py.",
+    ],
+  },
+  {
+    version: "2.462.3",
+    date: "2026-09-16",
+    title: "Cart Net and fivesome allowances ruled; the 9s-vs-18s stroke question opened",
+    changes: [
+      "RULED (Kerry): CART Net is 85% for one ball and 100% for two. The one-ball figure also matches USGA\u2019s Four-Ball Stroke Play allowance independently. Recorded with an honest caveat in the code itself \u2014 no Cart Net settings screenshot reached this session, so both rows rest on the ruling rather than on a Golf Genius screen, and their `source` says \u2018NOT screenshot-verified\u2019. If a Cart Net event ever fails to reproduce GG, check that screen first.",
+      "RULED (Kerry): a FIVESOME playing Best 1 stays at 75%, \u2018but will need a dial specifically for that\u2019. It is its OWN entry rather than a fall-through to the four-player row \u2014 the two carry the same number today, and a fall-through would make that coincidence load-bearing instead of leaving two numbers that happen to agree. Flagged `provisional`: a holding position, not a settled allowance.",
+      "Allowances now resolve through `team_allowance_pct(game_cfg, team_size, balls)`, which reads BOTH the team size and the ball count and REFUSES with a named reason where nothing is ruled \u2014 a five-player Best 2, or any unruled team size, reports rather than borrowing a neighbouring row. Pairing rule 15f made team size follow the group, so sizes other than four are now reachable by ratified rule.",
+      "OPENED CA Queue #11, at Kerry\u2019s request, on how strokes apply to 9s vs 18s. Checking the arithmetic first: Golf Genius does NOT halve the index for nine-hole play. Melchor\u2019s 6.888 is a course handicap on the 18-hole stroke scale (18-hole-scale slope, nine-hole rating-minus-par adjustment). The nine-hole discount happens in the ALLOCATION \u2014 strokes spread across the full 18-hole stroke-index card and the player collects only those landing on the nine he plays.",
+      "A coincidence recorded before it misleads someone: on a HALF-NET game the 50% allowance and the nine-hole halving are the same arithmetic \u2014 6.888 \u00d7 50% and (5.6 \u00f7 2) \u00d7 139/113 are both 3.444. They come apart on any other game. a9.23 does discriminate and picks GG\u2019s reading: halving first and then applying the allowance drops Zapata\u2019s hole 7, the $13. So the shipped behaviour is verified, not assumed.",
+      "The two consequences now written down, because neither appears to have been said out loud in TGF before. (1) A NINE PAYS FEWER STROKES THAN THE PRINTED PLAYING HANDICAP \u2014 Melchor\u2019s card says PH 3 and he receives 2, because stroke index 2 is on the back nine. (2) THE FRONT NINE PAYS MORE THAN THE BACK \u2014 front holds the odd indexes, back the even, so on every odd playing handicap the front gives one extra stroke; a 3-handicap gets 2 on the front and 1 on the back. Same player, same course, different nine.",
+      "NOTHING CHANGED in the stroke-application code. GG\u2019s behaviour is coherent, a9.23 confirms we match it, and we stay tethered (\u2018until we detach from GG, GG rules\u2019). CA Queue #11 holds the discussion and should be settled together with CA Queue #10 \u2014 they are the same question at two layers.",
+      "Tests: `test_half_net_skins.py` extended to 63 checks, including that an unruled combination refuses and names what IS ruled, that the fivesome dial is a separate entry rather than a fall-through, and that the Cart Net rows keep their \u2018NOT screenshot-verified\u2019 provenance.",
     ],
   },
   {

@@ -1811,11 +1811,23 @@ def _scoring_dispatch(url: str, extract: str):
       scoring-hcp-distribution     member handicap-index spread (18-hole equiv.)
       scoring-hcp-link-audit       READ-ONLY: handicap identity coverage by customer_id,
                                    who is unlinked, link-label name drift, plus-handicap rounds
-      scoring-brevo-draft[:dry|review|apply]  Wednesday TGF Insider: fill the
-                                   public recap template from the week's events;
-                                   dry (default) returns HTML; review emails Kerry
-                                   the preview + posts the mailbox; apply creates
-                                   the Brevo DRAFT + emails the link (never sends)
+      scoring-brevo-draft[:dry|review|apply|samples][|<angle>|<a,b,c>][|nowriter]
+                                   Wednesday TGF Insider, WRITTEN by one Claude
+                                   call on a rotating angle (fallback: the
+                                   deterministic composer). dry returns HTML +
+                                   the headline options; review emails Kerry the
+                                   draft + posts the mailbox (the 8:00 job);
+                                   samples = several angles in ONE review email;
+                                   apply = legacy deterministic Brevo DRAFT.
+                                   Never sends.
+      scoring-brevo-campaign-split:<campaign_id>[|all,openers,clickers,unsubscribed]
+                                   READ-ONLY: a sent campaign's recipients /
+                                   openers / clickers / unsubs by TGF status
+                                   (active, former, prospect, unknown)
+      scoring-insider-angles       READ-ONLY: the angle rotation (order, history,
+                                   forced, next, unavailable this week) + dials
+      scoring-insider-approve:<subject>|<html>[|dry]  Kerry's APPROVED Insider
+                                   text → Brevo DRAFT (lint-gated, never sent)
       scoring-status-changes[:<since>][|<limit>]  customer status flips since a
                                    date with the status before (read-only)
       scoring-dedupe-rounds[:<event>|all][|apply]  duplicate scorecards
@@ -2981,6 +2993,15 @@ def _scoring_dispatch(url: str, extract: str):
             # Brevo key present / account reachable / last sync summary.
             from email_parser.brevo import brevo_status
             return json.dumps(brevo_status(), indent=2, default=str)
+        if cmd == "scoring-brevo-campaign-split":
+            # "<campaign_id>[|all,openers,clickers,unsubscribed]" — READ-ONLY:
+            # who opened / clicked a SENT campaign by TGF status (Kerry
+            # 2026-09-17: "do the split by group"). Uses Brevo's async
+            # recipient export; nothing on a contact or campaign changes.
+            from email_parser.brevo import SPLIT_TYPES, campaign_split
+            _cid, _, _types = (arg or "").partition("|")
+            _ts = tuple(t.strip() for t in _types.split(",") if t.strip() in SPLIT_TYPES) or SPLIT_TYPES
+            return json.dumps(campaign_split(int(_cid.strip()), _ts), indent=2, default=str)
         if cmd == "scoring-brevo-sync":
             # ":dry" previews (counts + sample) without writing to Brevo.
             # Real run stamps TGF_MEMBER_STATUS / TGF_CHAPTER (mailbox
@@ -3287,23 +3308,70 @@ def _scoring_dispatch(url: str, extract: str):
             from email_parser.insider import handicap_distribution
             return json.dumps(handicap_distribution(), indent=2, default=str)
         if cmd == "scoring-brevo-draft":
-            # "[dry|apply]" — the Wednesday-AM TGF Insider (#453). dry returns
-            # the rendered HTML + lint; apply creates the Brevo DRAFT and emails
-            # Kerry the link. Nothing here ever sends a campaign.
-            # "review" runs exactly what the Wednesday job does in review
-            # mode: preview email to Kerry + mailbox post, nothing in Brevo.
-            from email_parser.insider import build_public_recap_draft, send_review_preview
-            _mode = (arg or "").strip().lower()
+            # "[dry|review|apply|samples][|<angle or a,b,c>][|nowriter]" — the
+            # Wednesday-AM TGF Insider (#453; the WRITER since 2026-09-16).
+            # dry returns the rendered HTML + lint (+ the writer's options);
+            # review emails Kerry the draft + posts the mailbox (what the
+            # 8:00 job does), nothing in Brevo; samples writes SEVERAL
+            # angles and emails them as ONE review message; apply creates
+            # the Brevo DRAFT from the deterministic composer (legacy path —
+            # Kerry's approved text goes through scoring-insider-approve).
+            # Nothing here ever sends a campaign.
+            from email_parser.insider import (build_public_recap_draft, send_review_preview,
+                                              send_review_samples)
+            _p = [x.strip() for x in (arg or "").split("|")]
+            _mode = (_p[0] or "dry").lower()
+            _angle = _p[1].lower() if len(_p) > 1 and _p[1] else None
+            _nowriter = any(x.lower() == "nowriter" for x in _p[2:])
+            _writer = False if _nowriter else None
+            if _mode == "samples":
+                _angles = [a for a in (_angle or "").split(",") if a]
+                _results = [build_public_recap_draft(dry_run=True, angle=a, writer=_writer) for a in _angles]
+                _rv = send_review_samples(_results)
+                _audit("scoring-brevo-draft", f"samples angles={_angles} emailed={_rv.get('emailed')} "
+                       f"mailbox={_rv.get('mailbox_post')}")
+                for _r in _results:
+                    _r.pop("html", None)
+                return json.dumps({"samples": _rv, "drafts": _results}, indent=2, default=str)
             _apply = _mode == "apply"
-            _res = build_public_recap_draft(dry_run=not _apply)
+            _res = build_public_recap_draft(dry_run=not _apply, angle=_angle, writer=_writer)
             if _mode == "review" and not _res.get("skipped"):
                 _res["review"] = send_review_preview(_res)
                 _res.pop("html", None)
-                _audit("scoring-brevo-draft", f"review emailed={_res['review'].get('emailed')} "
+                _audit("scoring-brevo-draft", f"review angle={_res.get('angle')} "
+                       f"emailed={_res['review'].get('emailed')} "
                        f"mailbox={_res['review'].get('mailbox_post')}")
             if _apply:
                 _audit("scoring-brevo-draft", f"campaign_id={_res.get('campaign_id')} "
                        f"error={_res.get('error')} lint={_res.get('lint')}")
+            return json.dumps(_res, indent=2, default=str)
+        if cmd == "scoring-insider-angles":
+            # READ-ONLY: the angle rotation — order (dial insider_angles),
+            # history, the forced angle, what runs next, and which angles
+            # this week's facts cannot support.
+            from email_parser.insider import gather_week
+            from email_parser.insider_writer import rotation_status
+            _data = gather_week()
+            try:
+                _data["member_quote"] = json.loads(db.get_app_setting("insider_member_quote") or "null")
+            except Exception:
+                _data["member_quote"] = None
+            return json.dumps(rotation_status(_data), indent=2, default=str)
+        if cmd == "scoring-insider-approve":
+            # "<subject>|<html>[|dry]" — Kerry's APPROVED Insider text → the
+            # Brevo DRAFT (never sent). lint() gates his html too; the merge
+            # tags must survive. The subject may omit the "TGF Insider | "
+            # prefix. Audited.
+            from email_parser.insider import approve_insider
+            _subj, _, _rest = (arg or "").partition("|")
+            _html, _, _flag = _rest.rpartition("|")
+            if _flag.strip().lower() == "dry":
+                _dry = True
+            else:
+                _html, _dry = _rest, False
+            _res = approve_insider(_subj, _html, dry_run=_dry)
+            _audit("scoring-insider-approve", f"subject={_res.get('subject')} created={_res.get('created')} "
+                   f"campaign_id={_res.get('campaign_id')} lint={_res.get('lint')} dry={_dry}")
             return json.dumps(_res, indent=2, default=str)
         if cmd == "scoring-membership-terms-dedupe":
             # "[apply]" — one item, one term: delete the duplicate terms the
@@ -4946,6 +5014,14 @@ def _scoring_dispatch(url: str, extract: str):
             #   scoring-gg-history:ingest=<subdomain>[@<budget_s>]
             #       Phase-A standings walk of one portal; resumable —
             #       repeat until pages_remaining == 0. url param unused.
+            #   scoring-gg-history:field=<subdomain>[@<budget_s>]
+            #       Phase-B FIELD walk (v2.464.0): per-round field off the
+            #       ALL Net/ALL Gross boards + calendar dates; field-bg=
+            #       runs it in a daemon thread (poll holes-status).
+            #   scoring-gg-history:calendar=<subdomain>   read-only parse
+            #   scoring-gg-history:participation[=<from>-<to>]
+            #       season × chapter participation series (docs:
+            #       gg-history.md "Participation series")
             from email_parser import gg_history as ggh
             sub, _, rest = arg.partition("=")
             sub = sub.strip().lower()
@@ -4969,12 +5045,45 @@ def _scoring_dispatch(url: str, extract: str):
                 dom, _, budget = rest.partition("@")
                 return json.dumps(ggh.ingest_portal_games(
                     dom.strip(), budget_seconds=int(budget or 240)), indent=2)
-            if sub in ("holes-bg", "games-bg") and rest:
+            if sub == "field" and rest:
+                # Phase B: FIELD walk (v2.464.0) — every round's ALL Net /
+                # ALL Gross board → gg_history_results, dates from the
+                # calendar widget. field=<subdomain>[@budget]; repeat
+                # until rounds_left == 0.
+                dom, _, budget = rest.partition("@")
+                return json.dumps(ggh.ingest_portal_field(
+                    dom.strip(), budget_seconds=int(budget or 240)), indent=2)
+            if sub == "cohort":
+                # cohort[=<A>-<B>] — Kerry's 2022 question (#555): season
+                # A → B retention, months, rounds-per-player profiles
+                a, _, b = rest.strip().partition("-")
+                return json.dumps(ggh.cohort_analysis(
+                    a or "2022", b or "2023"), indent=2, default=str)
+            if sub == "holes-reset" and rest:
+                # re-queue holes-walk rounds that yielded no cards (the
+                # pre-ALL-board rounds); nothing deleted
+                return json.dumps(ggh.reset_portal_holes(rest.strip()), indent=2)
+            if sub == "field-reset" and rest:
+                # re-walk a portal's rounds (walk-state → 'redo'; nothing
+                # deleted, boards replaced per label on the next walk)
+                return json.dumps(ggh.reset_portal_field(rest.strip()), indent=2)
+            if sub == "calendar" and rest:
+                # read-only: the portal's calendar widget parsed (rounds,
+                # full labels, dates) — verification for the field walk
+                return json.dumps(ggh.portal_calendar(rest.strip()), indent=2)
+            if sub == "participation":
+                # participation[=<from>-<to>] — season × chapter series
+                # from the field walk + the Tracker's items-based rows
+                a, _, b = rest.strip().partition("-")
+                return json.dumps(ggh.participation_series(
+                    a or "2019", b or "2026"), indent=2, default=str)
+            if sub in ("holes-bg", "games-bg", "field-bg") and rest:
                 # Same walks in a daemon thread (MCP clients time out
                 # ~60s; a portal walk wants minutes). Poll: holes-status.
                 import threading
-                fn = (ggh.ingest_portal_holes if sub == "holes-bg"
-                      else ggh.ingest_portal_games)
+                fn = {"holes-bg": ggh.ingest_portal_holes,
+                      "games-bg": ggh.ingest_portal_games,
+                      "field-bg": ggh.ingest_portal_field}[sub]
                 dom, _, budget = rest.partition("@")
                 dom, budget_s = dom.strip(), int(budget or 600)
                 key = f"{sub}:{dom}"
@@ -5041,6 +5150,11 @@ def _scoring_dispatch(url: str, extract: str):
             return json.dumps({"error": "usage: scoring-gg-history:seed | "
                                "status | ingest=<subdomain>[@<budget_s>] | "
                                "holes=<subdomain>[@<budget_s>] | "
+                               "field=<subdomain>[@<budget_s>] | "
+                               "field-bg=<subdomain>[@<budget_s>] | "
+                               "field-reset=<subdomain> | holes-reset=<subdomain> | "
+                               "calendar=<subdomain> | "
+                               "participation[=<from>-<to>] | cohort[=<A>-<B>] | "
                                "roster=report|apply"})
         if cmd == "scoring-payouts-bulk-paid":
             # "scoring-payouts-bulk-paid:<YYYY-MM-DD>" — one-time cleanup:

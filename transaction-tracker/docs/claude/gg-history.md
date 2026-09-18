@@ -643,6 +643,193 @@ LAST and live in their own brand lane** (Kerry 2026-07-11: the Tour
 TGF members who played Tour events still identity-link via customer_id,
 ready for the future partner build, invisible on TGF surfaces).
 
+### Phase B — FIELD walk (v2.464.0, LIVE) — participation without scorecards
+
+`scoring-gg-history:field=<subdomain>[@budget]` (+ `field-bg=`, poll
+`holes-status`) → `ingest_portal_field()`. Built 2026-09-17 by the
+historical-ingester lane (mailbox #547/#548) because the archive holes
+walk needs a round DATE and 2019–2024 have none: no exports, and GG
+**truncates the round selector's labels** (`s9.26 THE QUARRY (Tue, Oct…`),
+so `_export_date()` fails on most rounds. Two findings unblocked it:
+
+1. **The calendar widget is the date source.** Every portal serves
+   `/leagues/<league_id>/widgets/calendar?shared=false` (plain GET, no
+   login) — one table row per round: `Mon DD, YYYY | full round name |
+   Accepting Signups | Tee Sheet | Results | More Info`, and the Tee
+   Sheet / Results links carry `round_id=<id>` (the SAME id family as
+   the results widget's selector). The expandable details block carries
+   `When / Where / Format / entry fee` text — the course comes from
+   `Where`. `parse_calendar_widget()` reads it; `sync_portal_calendar()`
+   upserts one `gg_history_events` row per round by (portal_id,
+   gg_round_id), filling event_date / event_label / course **only where
+   NULL** (export-channel values are never overwritten). Verified on both
+   eras (2019 and 2024 calendars share the layout). Postponed placeholder
+   rounds have no results link and come back with `gg_round_id None`.
+   Read-only check: `scoring-gg-history:calendar=<subdomain>`.
+2. **The field of a round is its ALL Net / ALL Gross board** — the same
+   two boards the holes walk imports, so "played" means the same thing
+   whether a season came in through scorecards (2025–26) or the field
+   walk (2019–2024). Rows land in `gg_history_results` under the board's
+   verbatim `game_label` ('ALL Net', 'ALL Gross'); GG's appended
+   affiliation is split off the name (`'ROHRMANN, Lance TGF San Antonio'`
+   → player_name `ROHRMANN, Lance`, `raw_row` JSON `{"src":"field_walk",
+   "aff":"TGF San Antonio","row":[…]}`); identity through the usual
+   `_resolve_identity` cascade. **Eras before ALL boards** (2019–2021
+   print `INDIVIDUAL Gross $ - s1 ALL PLAY Games`, `INDIVIDUAL Net $ - s1
+   MEMBER Games` instead — in 2019 the entry fee INCLUDED Individual
+   Gross, so that board is the field) fall back to the union of every
+   individual board (team/cart, proximity, MVP, match and purse-summary
+   boards excluded — `_pick_field_boards`) and the walk-state row records
+   `widget_type='fallback'` so the series can flag those events.
+
+Walk state = `gg_history_pages` `'field:<round_id>'` rows
+(`page_kind='event_field'`, `widget_type` = basis `all_boards | fallback |
+none`); resumable, repeat until `rounds_left == 0`; empty rounds mark
+done. Fetch-then-write per round like the games walk. The games walk's
+idempotent delete now spares `'ALL %'` rows so both walks coexist on one
+event. Field count at query time (`_field_names`): ALL boards → export
+rows → other individual boards, team rows never.
+
+`classify_round_label()` — the series' event kinds, from GG's round name:
+`tuesday9` (s9.27 / a9.3 in the 2023+ codes; s1..s15, s8f in 2019–2022),
+`saturday18` (as18.6 / s18.4 / a18.2), `match` (`MATCH 63 - X v Y`,
+`CHAMPIONSHIP MATCH …` — two-player rounds, never an event), `admin`
+(`POINTS RESET`), `other` (kickoffs, championships, cups, Two Man, the
+Handicapper).
+
+`scoring-gg-history:participation[=<from>-<to>]` → `participation_series()`
+— see **Participation series** below. Tests: `test_gg_history_field.py`.
+
+## Participation series 2016–2026 (season × chapter) — measured 2026-09-17/18
+
+Kerry, 2026-09-17: *"Before 2023, participation rates were higher,
+significantly."* Measured off the FIELD walk (every round's ALL Net /
+ALL Gross board, fallback = per-round individual boards, flagged) —
+`scoring-gg-history:participation` re-computes this table any time.
+**Tue** = Tuesday nines by round label (s9.N / a9.N; s1–s15, s8f;
+2023's `east | …` / `west | …` / `north | …` / `south | …` league
+nights); **All** = every event on the chapter's portal that fielded
+players (Tuesdays + Saturday 18s + kickoffs + championships), match-play
+and POINTS RESET rounds excluded. **Players** = distinct names on the
+season's boards; **member-ever** = names whose board affiliation reads
+TGF-anything or Former (GG prints TODAY's affiliation, and 2019–2021
+boards print none — so it is "was ever a member", never "was a member
+that season"); **linked** = distinct customer_ids resolved.
+
+### San Antonio
+
+| season | Tue nights | players / Tue (mean · median) | all events | players / event | player-rounds | distinct players | member-ever | linked | note |
+|---|---|---|---|---|---|---|---|---|---|
+| 2016 | 12 | 36.9 · 37.5 | 16 | 33.0 | 528 | 99 | — | 25 | first GG season; 'e1'…'e12' codes; no ALL boards (all events on the fallback basis) |
+| 2017 | 10 | 33.1 · 33 | 14 | 32.7 | 458 | 75 | — | 26 | 4 events on the fallback basis |
+| 2018 | 12 | 50.9 · 50.5 | 19 | 49.1 | 932 | 157 | — | 47 | first Fellowship Cup + money pages; 7 events on the fallback basis |
+| 2019 | 10 | 55.8 · 57.5 | 13 | 58.2 | 756 | 153 | — | 60 | Tuesdays every OTHER week (s1–s10); ALL boards present |
+| 2020 | 10 | 51.5 · 51 | 12 | 48.9 | 587 | 98 | — | 52 | COVID season |
+| 2021 | 16 | 46.7 · 48.5 | 22 | 44.2 | 972 | 144 | — | 81 | |
+| 2022 | 22 | 34.9 · 36 | 29 | 34.3 | 995 | 126 | 104 | 106 | weekly Tuesdays + fall series (s1f–s8f) |
+| 2023 | 38 | 22.6 · 22.5 | 56 | 20.0 | 1,119 | 134 | 82 | 96 | **EAST / WEST league split** — two half-fields on alternate Tuesdays; 6 events on the fallback basis |
+| 2024 | 23 | 27.6 · 28 | 31 | 26.2 | 813 | 107 | 76 | 84 | ALL boards only from the fall; 26 events on the fallback basis (INDIVIDUAL Net = entry-included, so the field) |
+| 2025 | 30 | 32.9 · 33 | 42 | 29.7 | 1,248 | 168 | 120 | 140 | |
+| 2026 (to 9/17) | 20 | 29.4 · 27 | 31 | 26.8 | 832 | 147 | 117 | 143 | Tracker items-based: 20 Tue, 29.4 · 27, 141 distinct, 84 members |
+
+### Austin
+
+| season | Tue nights | players / Tue (mean · median) | all events | players / event | player-rounds | distinct players | member-ever | linked | note |
+|---|---|---|---|---|---|---|---|---|---|
+| 2019 | 10 | 13.9 · 14 | 11 | 13.8 | 152 | 39 | — | 14 | first Austin season, biweekly |
+| 2020 | 10 | 20.9 · 17.5 | 12 | 21.8 | 261 | 71 | — | 31 | |
+| 2021 | 15 | 23.2 · 24 | 22 | 24.3 | 534 | 103 | — | 48 | |
+| 2022 | 18 | 21.0 · 23 | 24 | 22.5 | 539 | 78 | 62 | 58 | |
+| 2023 | 22 | 13.2 · 13 | 34 | 12.8 | 434 | 75 | 53 | 54 | **NORTH / SOUTH league split** |
+| 2024 | 16 | 7.1 · 6.5 | 18 | 7.8 | 140 | 23 | 17 | 20 | the trough: 23 people all season; all events on the fallback basis |
+| 2025 | 24 | 21.8 · 21 | 29 | 21.6 | 626 | 149 | 100 | 119 | the rebuild |
+| 2026 (to 9/17) | 22 | 18.8 · 18.5 | 27 | 18.3 | 493 | 84 | 60 | 83 | Tracker items-based: 22 Tue, 18.9 · 19, 86 distinct, 52 members |
+
+### DFW and Houston (closed chapters — Kerry #549 "Go ahead"; never member-facing)
+
+Their round labels use neither the s/a code nor the 2023 league words,
+so only the all-events line is computed (closed chapters answer "how big
+were we"; the Tuesday split is not needed for them).
+
+| chapter | season | events | players / event (mean · median) | player-rounds | distinct players | member-ever | linked |
+|---|---|---|---|---|---|---|---|
+| DFW | 2020 | 10 | 13.0 · 13.5 | 130 | 27 | — | 9 |
+| DFW | 2021 | 20 | 12.3 · 13 | 247 | 38 | — | 22 |
+| DFW | 2022 | 23 | 15.1 · 15 | 348 | 52 | 38 | 37 |
+| DFW | 2023 | 36 | 9.6 · 10 | 344 | 56 | 32 | 32 |
+| DFW | 2024 | 25 | 8.3 · 8 | 208 | 31 | 16 | 18 |
+| Houston | 2021 | 21 | 12.9 · 13 | 270 | 40 | — | 23 |
+| Houston | 2022 | 23 | 13.5 · 13 | 311 | 42 | 28 | 27 |
+| Houston | 2023 | 25 | 11.2 · 11 | 280 | 46 | 29 | 31 |
+| Houston | 2024 | 18 | 4.4 · 4 | 80 | 18 | 15 | 14 |
+
+Neither chapter ever fielded more than ~15 a night; both thinned through
+2023 and 2024 (the closing years) the way Austin did in 2024.
+
+### Reconciliation with the Tracker's own definition (2026)
+
+The Tracker counts "played" as an items row (paid or RSVP-only) joined
+to a dated event; the field walk counts a name on the round's board.
+For 2026 the two agree to within 0.1 player per Tuesday on both
+chapters (SA 29.4 vs 29.4, Austin 18.8 vs 18.9) and within 2–4 distinct
+players per season — registration and playing are the same population,
+so the archive series and the Tracker series are one line. The Tracker
+has no dated 2025 events, so 2025 is archive-only.
+
+### What the numbers say (the finding, 2026-09-18)
+
+1. **Per-Tuesday fields WERE much bigger before 2023 — in San Antonio.**
+   37 players a night in 2016, 33 in 2017, 51 in 2018, 56 in 2019, 52 in
+   2020, 47 in 2021, 35 in 2022, then 23 in 2023, 28 in 2024, 33 in
+   2025, 29 in 2026. The 2018–2020 peak sat on a ten-to-twelve-night
+   calendar. Austin never had
+   that shape: 14 → 21 → 23 → 21 → 13 → 7 → 22 → 19.
+2. **Because there were far fewer Tuesdays.** 2019–2020 ran ten
+   Tuesdays a season (every other week); 2022 ran 22; 2023 ran 38
+   league nights (EAST/WEST alternating, so each night was half the
+   chapter by design); 2025 ran 30. Per-night attendance divided as the
+   calendar multiplied.
+3. **Total participation is at a record, not in decline.** SA
+   player-rounds per season: 756 (2019) → 587 → 972 → 995 → 1,119 →
+   813 → **1,248 (2025)** → 832 through 9/17 (on pace for ~1,150).
+   Distinct players: 153 (2019) → 98 → 144 → 126 → 134 → 107 → **168
+   (2025)** → 147 YTD. Rounds per player rose from 4.9 (2019) to 7.4
+   (2025) — members play MORE often now, spread across three times the
+   nights.
+4. **Austin's collapse was 2024, not 2023.** 23 distinct players and 7
+   a night all season; 2025 rebuilt it to 149 distinct / 22 a night.
+   The 2026 slide to 18.8 (and #546's fall 9.7 members per Tuesday) is
+   measured against the rebuild year, not against a long plateau.
+5. **The honest comparison for "how many members play week to week"**
+   is the per-Tuesday field at equal cadence: 2022 (22 weekly Tuesdays,
+   35 a night) vs 2025 (30, 33) vs 2026 (20 so far, 29). That is a
+   17% slide from 2022, not the 50% the 2019 memory suggests — and #546
+   already found where it lives: the fall drop-off (SA 28 → 18 members
+   per Tuesday spring → fall, Austin 18 → 10), i.e. frequency in the
+   second half of the season, not the size of the base.
+
+### The 2022 question (Kerry via #555: "We had our most members that year") — mailbox #557
+
+`scoring-gg-history:cohort=2022-2023` (v2.464.5, `cohort_analysis()`):
+retention 2022→2023 was normal (SA 47.6% of 2022's 126 players returned
+in 2023 vs 41.7% for 2021→2022; Austin 38.5% vs 35.9%); the drop
+happened INSIDE 2022 — SA Tuesdays ran 54–55 a night in March–April,
+33–42 in May–August, then 18–20 from September (the first fall series)
+— and 2023's spring (29 a night, one league per night) was a partial
+per-night recovery on a split calendar. SA's core of 7+-night regulars
+has held at 52–63 every season since 2022; Austin's thinned (35 → 21 →
+31 of 149, 73 of whom played once in 2025). DFW's 2022 class genuinely
+left (28.8% returned vs 55.3% the year before). Season-dated membership
+is not in the public widgets (Affiliation columns render today's value);
+the roster start_year subset is the proxy; 2022 exports would settle it.
+
+Caveats that travel with the table: 2019–2021 boards print no
+affiliation (member-ever is blank); 2024 SA/Austin and six 2023 SA
+events count off INDIVIDUAL boards (entry-included games in those
+seasons, so the same population, flagged anyway); championships and
+Saturday 18s hosted on one chapter's portal count under that chapter;
+2026 is year-to-date.
+
 ## THE THREE-CHANNEL FRAMEWORK (Kerry + tracker-claude, 2026-07-11 late)
 
 GG admin EXPORTS joined the design as the third channel. Verified
@@ -752,8 +939,52 @@ TGF/Former profiles remain Kerry's open decision (option b).
       is the EXACT "LAST, First" string standings print — a direct
       join key. Report-first discipline: apply only runs after Kerry
       sees the report.
-- [ ] 2024 wave next (incl. DFW/Houston finales) → … → 2016 — 2025
-      completes FIRST (Kerry's year-at-a-time directive)
+- [x] **2019–2024 SA + AUSTIN PHASE A INGESTED (2026-09-17, the
+      historical-ingester lane, mailbox #547/#548):** twelve portals,
+      every one to pages_remaining = 0 in a single budgeted call —
+      sa2024 12 pages/801 rows, austin2024 10/551, sa2023 14/491,
+      austin2023 9/398, sa2022 6/377, austin2022 4/275, sa2021 1/135,
+      austin2021 3/284, sa2020 3/238, austin2020 3/171, sa2019 5/249,
+      austin2019 4/181 (4,151 rows). Identity linking ~98% in 2024 and
+      ~60% in 2019–2021 (pre-Tracker rosters — the review queue, not a
+      parse problem). league_ids in the handoff doc. `roster=report`
+      after the wave was zero-conflict and identity-only (589 of 1,089
+      roster rows matched, 0 unmatched TGF/Former members), so
+      `roster=apply` ran per the ruling: map 1,842 rows, 2 standings
+      rows + 3 pending names backfilled. NOT run: DFW 2020–2024 /
+      Houston 2021–2024 (Kerry to say whether the closed chapters join
+      the participation series — asked in #548), the 2016–2018 SA
+      portals (out of this lane's 2019–2024 scope).
+- [x] **WAVE 2 (Kerry #553 "Ingest and Run the other years", 2026-09-17
+      night):** tgf-sa2016/2017/2018 (Phase A 66 / 48 / 257 standings
+      rows; field walks 18 / 17 / 25 rounds; SA Tuesdays 37 / 33 / 51 a
+      night; no ALL boards before 2019 → fallback basis) and the 2024
+      one-offs tgf-champ24 (387 standings rows, 3 rounds),
+      hillcountrymatches (4), lonestarcup24 (4), tgf-roadtrip24 (5).
+      Series section now reaches 2016.
+- [x] **ARCHIVE HOLES WALKS 2019–2024 SA + AUSTIN COMPLETE (2026-09-18
+      ~2:40 AM UTC):** 7,254 scorecards (165,708 holes registry-wide
+      incl. 2025). Per portal — sa2024 32 rounds / 789 cards, austin2024
+      19 / 131 (one 'Taylor Video Practice' round has no date), sa2023
+      57 / 1,119, austin2023 34 / 432, sa2022 32 / 993, austin2022 24 /
+      536, sa2021 32 / 969 (one undated match round), austin2021 27 /
+      534, sa2020 13 / 586 (POINTS RESET undated), austin2020 13 / 261,
+      sa2019 28 / 752, austin2019 12 / 152. **The two channels agree:**
+      cards per season vs the field walk's player-rounds — SA 2023 1,119
+      = 1,119, SA 2022 993 vs 995, SA 2021 969 vs 972, SA 2019 752 vs
+      756, Austin 2021 534 = 534, Austin 2022 536 vs 539. Needed the
+      INDIVIDUAL-board fallback (v2.464.4): the first pass read only ALL
+      boards and got 88 SA 2024 / 0 Austin 2024 cards. Walks ran as
+      `holes-bg` 600 s budgets relaunched per portal until
+      `rounds_left = 0`; ~11 concurrent walks moved ~15 rounds per
+      portal per budget. 2023 SKINS NIGHT par-3 rounds import off the
+      SKINS flight boards with per-card verifier flags (partial-hole
+      cards) — the known cumulative/partial class, on the spot-check
+      list. Not run: holes for 2016–2018 (no ALL boards, fallback
+      boards untested there), DFW/Houston, one-offs.
+- [ ] Holes for 2016–2018 SA, DFW 2020–2024, Houston 2021–2024 and the
+      2020–2024 one-offs — next wave (engine ready; `holes-bg=` per
+      portal)
 - [x] Hole-by-hole ingest engine (v2.74.0): Phase-B walker
       `holes=<subdomain>` live — see "Phase B — hole-by-hole walk"
       above.
@@ -840,5 +1071,18 @@ TGF/Former profiles remain Kerry's open decision (option b).
       3-col target, reviewed rulings never overwritten by automated
       passes. Bridge ops: holes-bg=<sub>[@budget] (daemon-thread walk;
       MCP clients time out ~60s) + holes-status + overview.
+- [x] **FIELD walk engine (v2.464.0–.2)** — see "Phase B — FIELD walk"
+      above; the 2019–2024 holes walk is unblocked in principle by the
+      calendar dates but was NOT run in the participation lane.
+- [x] **FIELD WALKS COMPLETE 2019–2026 (2026-09-17/18):** every SA and
+      Austin season portal 2019–2025 plus the live 2026 portals
+      (tgf-sa 31 rounds, tgf-austin 28), and — Kerry #549 "Go ahead" —
+      DFW 2020–2024 (Phase A + field) and Houston 2021–2024 (Phase A +
+      field). 25 portals, every one at rounds_left = 0; calendars
+      archived and every dated round on gg_history_events. The
+      **Participation series** section above is the output. Pending
+      identity names rose to 975 (the 2019–2021 and DFW/Houston eras
+      predate the roster map) — `/admin/gg-history` queue; roster=report
+      after the wave still 0 unmatched TGF/Former members.
 - [ ] Two Man Tour lane (last): verify per-course events inside
       tgf-twomantour; ingest under brand='TwoManTour'
