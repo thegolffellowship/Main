@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.465.6";
+window.TGF_VERSION = "2.465.7";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.465.7",
+    date: "2026-09-18",
+    changes: [
+      "PDF engine, second try: v2.465.4 built, but the running app could not load \u2018gobject-2.0-0\u2019 \u2014 the Nix-provided Python on Railway does not see libraries installed with apt. The libraries WeasyPrint needs (glib, pango, harfbuzz, fontconfig, cairo, gdk-pixbuf, libffi) now come from Nix via nixpacks\u2019 `nixLibs`, which is what puts them on the app\u2019s library path; apt keeps the fonts. Still one commit to revert if it fails.",
+    ],
+  },
   {
     version: "2.465.6",
     date: "2026-09-18",
