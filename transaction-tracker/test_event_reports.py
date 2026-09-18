@@ -439,7 +439,7 @@ check("the alphabetical handicap columns are centred",
 check("NEW means new member, and both badges may show",
       "new member (first year)" in _ss3 and "wears both" in _ss3)
 check("the explanation names each column and how it was computed",
-      "<strong>PH</strong>" in _ss3 and "<strong>TEAM</strong>" in _ss3
+      "<strong>PH</strong>" in _ss3 and "%}CART{% else %}TEAM{% endif %}</strong>" in _ss3
       and "pack.ph_basis" in _ss3 and "pack.team_basis" in _ss3)
 check("each note is its own ROW, not a run-on paragraph (Kerry)",
       _ss3.count('<div class="fnote">') >= 4 and ".foot .fnote { margin-bottom" in _ss3)
