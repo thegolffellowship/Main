@@ -632,6 +632,18 @@ def _pick_hole_boards(links: list) -> tuple:
     labels = [(l.get("text") or "").strip() for l in v2t]
     boards = [l for want in ("all net", "all gross") for l in v2t
               if (l.get("text") or "").strip().lower().startswith(want)]
+    if not boards:
+        # INDIVIDUAL-board fallback (v2.464.3, the 2024 lesson: no ALL
+        # boards before that fall, none at all in Austin 2024, none in
+        # 2016–2018): the same per-round individual boards the FIELD
+        # walk trusts, Net-style boards first so playing handicaps come
+        # with the cards, then Gross/Skins/Scores to fill anyone left.
+        # import_gg_scorecards dedupes across boards by (player, date,
+        # round_key), so a player on three boards imports once.
+        cand = [l for l in v2t if _is_field_board(l.get("text") or "")]
+        boards = ([l for l in cand if "net" in (l.get("text") or "").lower()]
+                  + [l for l in cand
+                     if "net" not in (l.get("text") or "").lower()])
     return boards, labels
 
 
@@ -2331,6 +2343,28 @@ def reset_portal_field(subdomain: str, db_path=None) -> dict:
                WHERE gg_page_id LIKE 'field:%' AND fetch_status='done'
                  AND portal_id=(SELECT id FROM gg_history_portals
                                 WHERE subdomain=?)""", (subdomain,))
+        conn.commit()
+        return {"subdomain": subdomain, "rounds_reset": cur.rowcount}
+
+
+def reset_portal_holes(subdomain: str, db_path=None) -> dict:
+    """Re-queue a portal's holes-walk rounds that produced NO scorecards
+    (the pre-ALL-board rounds the walker used to skip): 'round:<rid>'
+    walk-state rows → 'redo' when no scoring_rounds row carries that
+    gg_league_round_id under this portal's source tag. Rounds that did
+    import stay done; nothing is deleted."""
+    from email_parser.database import _connect, DB_PATH
+    with _connect(db_path or DB_PATH) as conn:
+        cur = conn.execute(
+            """UPDATE gg_history_pages SET fetch_status='redo'
+               WHERE gg_page_id LIKE 'round:%' AND fetch_status='done'
+                 AND portal_id=(SELECT id FROM gg_history_portals
+                                WHERE subdomain=?)
+                 AND NOT EXISTS (
+                     SELECT 1 FROM scoring_rounds sr
+                     WHERE sr.gg_league_round_id = SUBSTR(gg_page_id, 7)
+                       AND sr.source = 'gg_history:' || ?)""",
+            (subdomain, subdomain))
         conn.commit()
         return {"subdomain": subdomain, "rounds_reset": cur.rowcount}
 

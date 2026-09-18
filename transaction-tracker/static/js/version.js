@@ -5,6 +5,7 @@ window.TGF_CHANGELOG = [
     date: "2026-09-18",
     changes: [
       "Participation series reaches 2016 (Kerry #553: 'Ingest and Run the other years in that spin off'). classify_round_label learns the 2016–2018 San Antonio era: Tuesdays were coded 'e1'…'e12' and 2017 wrote its match-play rounds 'M61 - PLAYBACK SEMIFINAL'; both land in the right bucket. Query-time only.",
+      "Archive HOLES walk: the INDIVIDUAL-board fallback (the known gap since v2.74). The first 2019–2024 holes runs imported 88 cards for SA 2024 and none for Austin 2024 because the walker read only ALL Net / ALL Gross boards, which appear in fall 2024 and not at all in 2016–2018 or Austin 2024. _pick_hole_boards now falls back to the same per-round individual boards the field walk trusts (_is_field_board), Net-style boards first so playing handicaps ride with the cards; import_gg_scorecards' (player, date, round_key) dedupe keeps a player on three boards to one card. scoring-gg-history:holes-reset=<subdomain> re-queues only the rounds that produced no scorecards (nothing deleted, imported rounds stay done) so the earlier walks can be finished without re-fetching what worked.",
     ],
   },
   {

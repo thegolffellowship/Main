@@ -169,6 +169,20 @@ check("picker: pre-ALL era → per-round individual boards only (no cumulative "
 boards, basis, labels = ggh._pick_field_boards(_links("Team Points Summary", "MATCH 1"))
 check("picker: nothing usable → none", basis == "none" and boards == [] and len(labels) == 2)
 
+# holes walker: ALL boards when present, else the same individual boards
+hb, hl = ggh._pick_hole_boards(modern)
+check("holes picker: ALL boards only when present",
+      [b["text"] for b in hb] == ["ALL Net", "ALL Gross"], [b["text"] for b in hb])
+hb, hl = ggh._pick_hole_boards(old)
+check("holes picker: fallback = individual boards, Net-style first",
+      [b["text"] for b in hb] == [
+          "INDIVIDUAL Net $ - s1 MEMBER Games", "SKINS 1/2 Net $",
+          "s8f SCORES net - FALL POINTS net", "NET back",
+          "INDIVIDUAL Gross $ - s1 ALL PLAY Games", "GROSS front"],
+      [b["text"] for b in hb])
+check("holes picker: nothing usable → []",
+      ggh._pick_hole_boards(_links("Team Points Summary", "MATCH 1"))[0] == [])
+
 # ── affiliation split ────────────────────────────────────────────────────
 for raw, want in [("ROHRMANN, Lance TGF San Antonio", ("ROHRMANN, Lance", "TGF San Antonio")),
                   ("Esselborn, Rob Former", ("Esselborn, Rob", "Former")),
@@ -273,6 +287,20 @@ _redo = _c.execute("SELECT COUNT(*) FROM gg_history_pages WHERE fetch_status='re
 _c.close()
 check("reset: 5 done rounds → redo, rows untouched",
       rr["rounds_reset"] == 5 and _redo == 5 and _before == _after, (rr, _redo, _before, _after))
+# holes reset re-queues only card-less rounds
+_c = sqlite3.connect(tmp.name)
+_c.execute("CREATE TABLE scoring_rounds (id INTEGER PRIMARY KEY, gg_league_round_id TEXT, source TEXT)")
+_c.execute("INSERT INTO gg_history_pages (portal_id, gg_page_id, page_kind, fetch_status) VALUES "
+           "(1,'round:h1','event_round','done'), (1,'round:h2','event_round','done'), "
+           "(1,'round:h3','event_round','no_date')")
+_c.execute("INSERT INTO scoring_rounds (gg_league_round_id, source) VALUES ('h1','gg_history:tgf-sa2019')")
+_c.commit(); _c.close()
+hr = ggh.reset_portal_holes("tgf-sa2019", db_path=tmp.name)
+_c = sqlite3.connect(tmp.name)
+_st = dict(_c.execute("SELECT gg_page_id, fetch_status FROM gg_history_pages WHERE gg_page_id LIKE 'round:%'").fetchall())
+_c.close()
+check("holes reset: only the done round without cards → redo",
+      hr["rounds_reset"] == 1 and _st == {"round:h1": "done", "round:h2": "redo", "round:h3": "no_date"}, (hr, _st))
 check("series: tracker rows absent on bare DB → tracker_error, no crash",
       res["tracker"] == [] and "tracker_error" in res, res.get("tracker_error"))
 check("series: median helper", ggh._median([]) is None and ggh._median([3, 1, 2]) == 2
