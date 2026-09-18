@@ -1755,6 +1755,26 @@ tees persist. Nobody changes seats. Dry-run unless `apply`.
 
 Guard: `test_pairings_ingest_preserve.py`.
 
+### 15h — a CART Net blind is the other cart of the same foursome (v2.465.6)
+
+Kerry 2026-09-18, verbatim: *"On Cart Net, when there are OPEN slots in
+need of a Blind, the blind is from the other cart in the foursome (the
+one that meets the requirements of the random selection for Team Net).
+In Team Net, it is randomly from the field outside of their group like
+we've had it, because it doesn't make any sense and would be unfair if
+the random blind selected for a Team Net blind was from within their own
+foursome."*
+
+`draw_event_blinds` asks the matrix which game the field plays
+(`_event_team_unit`: below 16 players is CART Net). On a cart night an
+open seat's candidates are the ELIGIBLE players in the other cart of the
+same group (same eligibility rules — member with an established index,
+one blind per person per event, fewest blinds this year first); only
+when that cart has no eligible player does the draw fall back to the
+field, and the row says so (`drawn_from`). On a Team Net night the draw
+is the field outside the group, unchanged. `team_unit="cart"|"group"`
+overrides the matrix for tests or a one-off.
+
 ### Surfaces
 
 * `POST /api/events/<id>/pairings/blinds` — `{apply, redraw, clear}`

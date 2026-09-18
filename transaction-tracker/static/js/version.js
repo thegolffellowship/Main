@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.465.5";
+window.TGF_VERSION = "2.465.6";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.465.6",
+    date: "2026-09-18",
+    changes: [
+      "RULE 15h \u2014 A CART NET BLIND IS THE OTHER CART OF THE SAME FOURSOME (Kerry 2026-09-18: \u2018On Cart Net, when there are OPEN slots in need of a Blind, the blind is from the other cart in the foursome\u2026 In Team Net, it is randomly from the field outside of their group like we\u2019ve had it\u2019). The draw asks the matrix which game the field plays; on a cart night an open seat takes the eligible player from the other cart of its own group (fewest blinds this year first, one blind per person), falling back to the field only when that cart has nobody eligible \u2014 and the row says where it came from. Team Net is unchanged. `docs/claude/pairings.md` rule 15h; `test_blind_draws.py` covers both nights.",
+    ],
+  },
   {
     version: "2.465.5",
     date: "2026-09-18",

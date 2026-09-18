@@ -150,7 +150,7 @@ check("the credited player is off the roster, so out of the pool",
 print("\n== the draw fills the open seats ==")
 db.save_event_pairings(EV, SHEET, db_path=tmp)          # restore the 3-man group
 db.remove_player_from_pairings(EV, "Will Wallace", reseat=False, db_path=tmp)
-res = db.draw_event_blinds(EV, dry_run=False, redraw=True, db_path=tmp)
+res = db.draw_event_blinds(EV, dry_run=False, redraw=True, db_path=tmp, team_unit="group")
 seats = {(d["group_num"], d["cart_pos"]): d["name"] for d in res["drawn"]}
 check("group 2 is short two seats of a foursome and both are drawn",
       sorted(p for (g, p) in seats if g == 2) == [2, 4], str(sorted(seats)))
@@ -201,7 +201,7 @@ db.save_event_pairings(EV2, {"9": [{"group_num": 1, "slot_label": "1", "players"
     {"name": "Larry Anthis", "cart_pos": 2, "tee_choice": "50-64", "handicap_index": 7.0},
     {"name": "Gus Vasquez", "cart_pos": 3, "tee_choice": "50-64", "handicap_index": 8.0}]}]},
     db_path=tmp)
-res2 = db.draw_event_blinds(EV2, dry_run=True, db_path=tmp)
+res2 = db.draw_event_blinds(EV2, dry_run=True, db_path=tmp, team_unit="group")
 pick2 = {d["name"] for d in res2["drawn"]}
 check("the next event's blind is NOT someone who has already been one",
       not (pick2 & drawn_names), f"{pick2} vs already {drawn_names}")
@@ -212,7 +212,7 @@ print("\n== a blind already entered in Golf Genius covers a seat ==")
 c.execute("INSERT INTO blind_draws (event_id, event_date, player_name, "
           "customer_id, slot_key, source) VALUES (?, ?, 'YOUNGS, Pat', 8, "
           "'gg:youngs|p', 'gg')", (EV2, TODAY)); c.commit()
-res3 = db.draw_event_blinds(EV2, dry_run=True, db_path=tmp)
+res3 = db.draw_event_blinds(EV2, dry_run=True, db_path=tmp, team_unit="group")
 check("the seat Kerry already filled in GG is not drawn again",
       len(res3["drawn"]) == 0 and len(res3["covered_by_existing"]) == 1,
       str(res3["drawn"]) + str(res3["covered_by_existing"]))
@@ -228,7 +228,7 @@ print("\n== the draw is a DRAW ==")
 # what stops the same person inside that tier being picked every week.
 _names = set()
 for _ in range(25):
-    _r = db.draw_event_blinds(EV2, dry_run=True, db_path=tmp)
+    _r = db.draw_event_blinds(EV2, dry_run=True, db_path=tmp, team_unit="group")
     for d in _r["drawn"]:
         _names.add(d["name"])
         if d["blinds_ytd"] != 0:
@@ -237,6 +237,27 @@ check("every pick comes from the fewest-blinds tier", not F, str(_names))
 check("…and it is not the same name every time", len(_names) > 1, str(_names))
 check("a dry run writes nothing", c.execute(
     "SELECT COUNT(*) n FROM blind_draws WHERE event_id = ?", (EV2,)).fetchone()["n"] == 0)
+
+
+print("\n== rule 15h: on a CART Net night the blind is the other cart of the same foursome ==")
+# Kerry 2026-09-18: "On Cart Net, when there are OPEN slots in need of a
+# Blind, the blind is from the other cart in the foursome (the one that
+# meets the requirements of the random selection for Team Net). In Team
+# Net, it is randomly from the field outside of their group."
+db.save_event_pairings(EV, SHEET, db_path=tmp)      # group 2: Rideout 1, Wallace 2, Wade 3 — seat 4 open
+with db._connect(tmp) as _c:
+    _c.execute("DELETE FROM blind_draws WHERE event_id = ?", (EV,)); _c.commit()
+_cart = db.draw_event_blinds(EV, dry_run=True, redraw=True, db_path=tmp)      # matrix: 7 seated -> cart
+check("the field below 16 is a cart night", _cart["team_unit"] == "cart", _cart.get("team_unit"))
+_seat4 = next((d for d in _cart["drawn"] if d["group_num"] == 2 and d["cart_pos"] == 4), None)
+check("the open seat in cart B is filled from cart A of the SAME group",
+      _seat4 is not None and _seat4["name"] in ("Jeff Rideout", "Will Wallace")
+      and _seat4["drawn_from"] == "other cart", _seat4)
+_team = db.draw_event_blinds(EV, dry_run=True, redraw=True, db_path=tmp, team_unit="group")
+_seat4t = next((d for d in _team["drawn"] if d["group_num"] == 2 and d["cart_pos"] == 4), None)
+check("on a Team Net night the same seat draws from the field outside the group",
+      _seat4t is not None and _seat4t["name"] not in ("Jeff Rideout", "Will Wallace", "Mary Wade")
+      and _seat4t["drawn_from"] == "field", _seat4t)
 
 print("\n" + ("ALL PASS" if not F else f"{len(F)} FAILURE(S): " + "; ".join(F)))
 sys.exit(1 if F else 0)

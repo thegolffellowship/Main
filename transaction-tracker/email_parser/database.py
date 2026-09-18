@@ -56893,7 +56893,7 @@ def _blind_pick(cands: list) -> dict:
 
 
 def draw_event_blinds(event_id: int, dry_run: bool = True, redraw: bool = False,
-                      year: int | None = None, db_path=None) -> dict:
+                      year: int | None = None, db_path=None, team_unit: str | None = None) -> dict:
     """Fill every open seat on the saved sheet with a blind.
 
     An OPEN SEAT is a seat a full team would have and this group does not
@@ -56943,6 +56943,18 @@ def draw_event_blinds(event_id: int, dry_run: bool = True, redraw: bool = False,
                 ORDER BY b.id""", (event_id,)).fetchall()]
         taken |= {r["customer_id"] for r in loose if r["customer_id"] is not None}
         drawn, open_seats, unfilled, covered = [], 0, [], []
+        # CART NET DRAWS FROM THE OTHER CART OF THE SAME FOURSOME (rule 15h,
+        # Kerry 2026-09-18: "On Cart Net, when there are OPEN slots in need
+        # of a Blind, the blind is from the other cart in the foursome (the
+        # one that meets the requirements of the random selection for Team
+        # Net). In Team Net, it is randomly from the field outside of their
+        # group like we've had it"). The matrix says which game the field
+        # plays (`_event_team_unit`); the eligibility rules are the same.
+        _n_seated = sum(len(g.get("players") or []) for gs in pairings.values() for g in gs)
+        _unit, _ = _event_team_unit(_n_seated, "18" if "18" in pairings else "9",
+                                    db_path=db_path)
+        if team_unit in ("cart", "group"):        # explicit override (tests, a manager)
+            _unit = team_unit
         for holes, groups in sorted(pairings.items()):
             for g in sorted(groups, key=lambda x: x["group_num"]):
                 seated = {p.get("cart_pos") for p in (g.get("players") or [])}
@@ -56960,9 +56972,20 @@ def draw_event_blinds(event_id: int, dry_run: bool = True, redraw: bool = False,
                                         "slot_label": g.get("slot_label"),
                                         "cart_pos": pos, **already})
                         continue
-                    cands = [e for e in pool["eligible"]
-                             if e["customer_id"] not in taken
-                             and e["customer_id"] not in here]
+                    cands, source = [], "field"
+                    if _unit == "cart":
+                        other_cart = {p.get("customer_id") for p in (g.get("players") or [])
+                                      if ((p.get("cart_pos") or 0) <= 2) != (pos <= 2)}
+                        cands = [e for e in pool["eligible"]
+                                 if e["customer_id"] in other_cart
+                                 and e["customer_id"] not in taken]
+                        source = "other cart"
+                    if not cands:
+                        cands = [e for e in pool["eligible"]
+                                 if e["customer_id"] not in taken
+                                 and e["customer_id"] not in here]
+                        source = ("field (no eligible player in the other cart)"
+                                  if _unit == "cart" else "field")
                     if not cands:
                         unfilled.append({"holes": holes,
                                          "group_num": g["group_num"],
@@ -56978,6 +57001,7 @@ def draw_event_blinds(event_id: int, dry_run: bool = True, redraw: bool = False,
                            "name": pick["name"],
                            "blinds_ytd": pick["blinds_ytd"],
                            "last_blind": pick["last_blind"],
+                           "drawn_from": source,
                            "gg_text": f"Bl[{_sort_name(pick['name'])}]"}
                     drawn.append(row)
                     if dry_run:
@@ -56996,6 +57020,7 @@ def draw_event_blinds(event_id: int, dry_run: bool = True, redraw: bool = False,
             conn.commit()
     return {"event_id": event_id, "event": ev.get("item_name"),
             "dry_run": bool(dry_run), "team_size": size,
+            "team_unit": _unit,
             "open_seats": open_seats, "drawn": drawn, "unfilled": unfilled,
             "covered_by_existing": covered,
             "eligible": len(pool["eligible"]),
