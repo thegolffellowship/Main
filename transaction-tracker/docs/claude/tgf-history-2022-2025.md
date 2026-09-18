@@ -112,3 +112,47 @@ Rulings that follow for the Insider and the fall re-engagement:
 - Kerry kept fall going for the members who still benefit — the Insider
   can say that plainly (belonging angle): the fall is for the people who
   need a Tuesday most.
+
+## 2027 — Kerry's targets and the winter cadence (2026-09-17, interview Q9)
+
+Verbatim: *"I'd say every other week or possibly every third week or monthly.
+We will have monthly 18s and possibly every 3 week 18s during the winter
+months to kind of keep the light on for people. We definitely need to be
+strategic how to build towards 2027 full kickoff after spring break and to
+ramp up membership. Starting off at 40 S.A. and 30 Austin averages for
+Tuesdays would be a realistically achievable goal. That would be about 50%
+of current membership numbers. If we could gain 20–40 new members (perhaps
+a net gain of 15–30 with turnover), which I think is realistic, we could hit
+those numbers. That's going to require more lead campaign work. People are
+always moving to San Antonio. We want to catch them first if possible. So
+there's always an aspect of getting our name out there in front of people
+that have never heard of us. And there are tens of thousands of golfers in
+SA and Austin. We just need our share of them who really yearn for the value
+we provide."*
+
+**Winter Insider cadence (ruling):** after the Fall Championship (Oct 31),
+every 2–3 weeks or monthly, carrying the winter 18s (monthly, possibly every
+3 weeks), the Lone Star Cup / match play, member stories and the kickoff
+countdown. The Wednesday Routine switches to that cadence by Halloween
+(update `trig_015yGJ19gz1a5tgZL9fnUSCU` to a fortnightly cron and pass the
+winter angle list); weekly resumes at the 2027 kickoff.
+
+**The targets against the record (tracker-claude, for Kerry to weigh):**
+
+| | SA | Austin |
+|---|---|---|
+| 2027 target, members per Tuesday | 40 | 30 |
+| 2026 to date (all players) | 29.4 | 18.8 |
+| 2026 members only: spring / summer / last 8 wks | 28 / 28.6 / 18.3 | 18.1 / 17.0 / 9.7 |
+| best season average ever (players) | 55.8 (2019, 10 nights) · 34.9 at weekly cadence (2022) | 23.2 (2021) |
+| best spring month (players) | 55 (Mar 2022) · 29–30 (2023) | 30 (Mar 2022) |
+
+SA 40 is +36% on 2026 and above any weekly-cadence season, but spring
+months have been there. Austin 30 has never been a season average; it was
+one month, March 2022. Two levers, both needed: (1) members: 20–40 new,
+net 15–30 → ~100 SA / ~70 Austin active; (2) the weekly participation RATE
+among members, ~33% today (28 of ~85 SA; 18 of ~53 Austin), to 50%. The
+second lever is the harder one and it is the fall-fade problem in another
+form. Recommended framing: SA 40 as the goal, Austin 25 as the goal with
+30 as the stretch; measure both as a SPRING average (Mar–Jun), the way
+Kerry remembers the good years.
