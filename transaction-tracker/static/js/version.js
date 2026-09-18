@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.464.7";
+window.TGF_VERSION = "2.464.8";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.464.8",
+    date: "2026-09-18",
+    changes: [
+      "`scoring-chapter-guesses:confirm` applies the confirmations BEFORE listing what is still a guess, so the reply shows the list as it stands after the write. v2.464.7 listed it first and a just-confirmed customer still appeared as guessed (its own test caught it; shipped past a gate that did not stop on the failure \u2014 fixed the gate too).",
+    ],
+  },
   {
     version: "2.464.7",
     date: "2026-09-18",

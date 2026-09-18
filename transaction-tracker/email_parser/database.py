@@ -37334,6 +37334,23 @@ def audit_chapter_guesses(confirm: dict | None = None, db_path=None) -> dict:
     """
     out = {"guessed": [], "confirmed": [], "refused": []}
     with _connect(db_path) as conn:
+        if confirm:
+            for cid, ch in confirm.items():
+                cid = int(cid); ch = (ch or "").strip()
+                cur = conn.execute("SELECT chapter FROM customers WHERE customer_id = ?",
+                                   (cid,)).fetchone()
+                if not cur:
+                    out["refused"].append({"customer_id": cid, "why": "no such customer"})
+                elif (cur["chapter"] or "").strip():
+                    out["refused"].append({"customer_id": cid,
+                                           "why": f"profile already says {cur['chapter']}"})
+                elif ch not in ("San Antonio", "Austin"):
+                    out["refused"].append({"customer_id": cid, "why": f"unknown chapter {ch!r}"})
+                else:
+                    conn.execute("UPDATE customers SET chapter = ? WHERE customer_id = ?",
+                                 (ch, cid))
+                    out["confirmed"].append({"customer_id": cid, "chapter": ch})
+            conn.commit()
         rows = conn.execute(
             """SELECT DISTINCT l.customer_id,
                       TRIM(COALESCE(cu.first_name,'') || ' ' || COALESCE(cu.last_name,'')) AS name,
@@ -37363,23 +37380,6 @@ def audit_chapter_guesses(confirm: dict | None = None, db_path=None) -> dict:
                 "unanimous": len(by_ch) == 1,
                 "majority": max(by_ch, key=by_ch.get),
             })
-        if confirm:
-            for cid, ch in confirm.items():
-                cid = int(cid); ch = (ch or "").strip()
-                cur = conn.execute("SELECT chapter FROM customers WHERE customer_id = ?",
-                                   (cid,)).fetchone()
-                if not cur:
-                    out["refused"].append({"customer_id": cid, "why": "no such customer"})
-                elif (cur["chapter"] or "").strip():
-                    out["refused"].append({"customer_id": cid,
-                                           "why": f"profile already says {cur['chapter']}"})
-                elif ch not in ("San Antonio", "Austin"):
-                    out["refused"].append({"customer_id": cid, "why": f"unknown chapter {ch!r}"})
-                else:
-                    conn.execute("UPDATE customers SET chapter = ? WHERE customer_id = ?",
-                                 (ch, cid))
-                    out["confirmed"].append({"customer_id": cid, "chapter": ch})
-            conn.commit()
     out["n_guessed"] = len(out["guessed"])
     return out
 
