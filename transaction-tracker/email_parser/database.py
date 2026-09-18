@@ -37314,6 +37314,76 @@ def delete_all_handicap_rounds_for_player(player_name: str,
         return rows_affected
 
 
+def audit_chapter_guesses(confirm: dict | None = None, db_path=None) -> dict:
+    """The handicap-linked customers whose CHAPTER is a guess, and the
+    evidence behind each guess (Kerry 2026-09-16, item B: "Give me a list
+    of customers you guessed on that didn't already have chapters and
+    I'll confirm" / "Do it").
+
+    `customers.chapter` is the member's HOME chapter and is never written
+    from `items.chapter` (an order's chapter is where the EVENT was, so
+    cross-chapter play would corrupt it — CLAUDE.md, identity drift). But
+    the handicap card and the roster fall back to the latest order's
+    chapter when the profile has none, which is a guess. This lists every
+    linked customer with a blank profile chapter: the guess in use, the
+    orders by chapter behind it, and whether the evidence is unanimous.
+
+    `confirm` = {customer_id: chapter} sets the PROFILE chapter for those
+    ids only, and only where it is still blank — Kerry's confirmation per
+    person is the one path by which a guess becomes the record.
+    """
+    out = {"guessed": [], "confirmed": [], "refused": []}
+    with _connect(db_path) as conn:
+        rows = conn.execute(
+            """SELECT DISTINCT l.customer_id,
+                      TRIM(COALESCE(cu.first_name,'') || ' ' || COALESCE(cu.last_name,'')) AS name,
+                      cu.current_player_status AS status
+                 FROM handicap_player_links l
+                 JOIN customers cu ON cu.customer_id = l.customer_id
+                WHERE l.customer_id IS NOT NULL
+                  AND (cu.chapter IS NULL OR TRIM(cu.chapter) = '')
+                ORDER BY name COLLATE NOCASE""").fetchall()
+        for r in rows:
+            cid = r["customer_id"]
+            by_ch = {x["chapter"]: x["n"] for x in conn.execute(
+                """SELECT chapter, COUNT(*) AS n FROM items
+                    WHERE customer_id = ? AND chapter IS NOT NULL AND TRIM(chapter) != ''
+                    GROUP BY chapter ORDER BY n DESC""", (cid,)).fetchall()}
+            latest = conn.execute(
+                """SELECT chapter, order_date FROM items
+                    WHERE customer_id = ? AND chapter IS NOT NULL AND TRIM(chapter) != ''
+                    ORDER BY id DESC LIMIT 1""", (cid,)).fetchone()
+            if not by_ch:
+                continue          # nothing to guess from; the card shows no chapter
+            guess = latest["chapter"]
+            out["guessed"].append({
+                "customer_id": cid, "name": r["name"], "status": r["status"],
+                "guess": guess, "guess_from": f"latest order {latest['order_date']}",
+                "orders_by_chapter": by_ch,
+                "unanimous": len(by_ch) == 1,
+                "majority": max(by_ch, key=by_ch.get),
+            })
+        if confirm:
+            for cid, ch in confirm.items():
+                cid = int(cid); ch = (ch or "").strip()
+                cur = conn.execute("SELECT chapter FROM customers WHERE customer_id = ?",
+                                   (cid,)).fetchone()
+                if not cur:
+                    out["refused"].append({"customer_id": cid, "why": "no such customer"})
+                elif (cur["chapter"] or "").strip():
+                    out["refused"].append({"customer_id": cid,
+                                           "why": f"profile already says {cur['chapter']}"})
+                elif ch not in ("San Antonio", "Austin"):
+                    out["refused"].append({"customer_id": cid, "why": f"unknown chapter {ch!r}"})
+                else:
+                    conn.execute("UPDATE customers SET chapter = ? WHERE customer_id = ?",
+                                 (ch, cid))
+                    out["confirmed"].append({"customer_id": cid, "chapter": ch})
+            conn.commit()
+    out["n_guessed"] = len(out["guessed"])
+    return out
+
+
 def get_handicap_export_data(chapter: str | None = None,
                              test_player_email: str | None = None,
                              db_path: str | Path | None = None) -> dict:

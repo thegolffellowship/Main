@@ -1809,6 +1809,7 @@ def _scoring_dispatch(url: str, extract: str):
                                    board (GG duplicate member records folded;
                                    refresh re-fetches all races first)
       scoring-hcp-distribution     member handicap-index spread (18-hole equiv.)
+      scoring-chapter-guesses[:confirm|<cid>=<chapter>;…]  linked customers whose chapter is a GUESS (blank profile) + evidence; confirm writes the profile chapter for those ids, blank ones only
       scoring-hcp-link-audit       READ-ONLY: handicap identity coverage by customer_id,
                                    who is unlinked, link-label name drift, plus-handicap rounds
       scoring-brevo-draft[:dry|review|apply|samples][|<angle>|<a,b,c>][|nowriter]
@@ -4467,6 +4468,23 @@ def _scoring_dispatch(url: str, extract: str):
                     indent=2, default=str)
             return json.dumps({"error": "usage: scoring-pairings:rounds|<portal> "
                                "or round|<portal>|<id>[|apply] or all|<portal>[|apply]"})
+        if cmd == "scoring-chapter-guesses":
+            # scoring-chapter-guesses            READ-ONLY list of linked
+            #   customers whose chapter is a guess (blank profile, latest
+            #   order's chapter in use) with the orders behind each guess.
+            # scoring-chapter-guesses:confirm|<cid>=<chapter>;<cid>=…
+            #   sets the PROFILE chapter for those ids, blank ones only —
+            #   Kerry's per-person confirmation is the only write path.
+            _conf = None
+            if arg and arg.lower().startswith("confirm|"):
+                _conf = {}
+                for pair in arg.split("|", 1)[1].split(";"):
+                    if "=" in pair:
+                        k, v = pair.split("=", 1)
+                        _conf[int(k.strip())] = v.strip()
+                db.log_agent_action("mcp-claude", "scoring-chapter-guesses",
+                                    json.dumps(_conf))
+            return json.dumps(db.audit_chapter_guesses(_conf), indent=2, default=str)
         if cmd == "scoring-hcp-link-audit":
             # READ-ONLY identity audit (Kerry 2026-09-16): how much of the
             # handicap layer resolves by customer_id, who does not, where

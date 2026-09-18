@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.464.6";
+window.TGF_VERSION = "2.464.7";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.464.7",
+    date: "2026-09-18",
+    changes: [
+      "CHAPTER GUESSES, LISTED WITH THEIR EVIDENCE (Kerry 2026-09-16, item B: \u2018Give me a list of customers you guessed on that didn\u2019t already have chapters and I\u2019ll confirm\u2019 / \u2018Do it\u2019). `customers.chapter` is the HOME chapter and is never written from an order (an order\u2019s chapter is where the event was); the handicap card and roster fall back to the latest order\u2019s chapter when the profile is blank, which is a guess. New read-only bridge `scoring-chapter-guesses` lists every handicap-linked customer with a blank profile chapter: the guess in use, the orders by chapter behind it, whether the evidence is unanimous, and the majority. `scoring-chapter-guesses:confirm|<cid>=<chapter>;\u2026` writes the profile chapter for those ids only, blank ones only, real chapters only \u2014 Kerry\u2019s per-person confirmation is the one path by which a guess becomes the record. Test: `test_chapter_guesses.py` (10 checks).",
+    ],
+  },
   {
     version: "2.464.6",
     date: "2026-09-18",
