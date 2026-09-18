@@ -276,7 +276,7 @@
           <div class="prow{% if (p.cart_pos or 0) not in [1,2] %} is-b{% endif %}">
             <span class="pname">{{ p.name }}</span>
             <span class="tee">{{ tee_dot(p.tee_choice) }}</span>
-            <span class="idx">{% if p.handicap_index is not none %}{{ "%.1f"|format(p.handicap_index) }}{% else %}—{% endif %}</span>
+            <span class="idx">{% if p.handicap_index_display is not none %}{{ "%.1f"|format(p.handicap_index_display) }}{% elif p.handicap_index is not none %}{{ "%.1f"|format(p.handicap_index) }}{% else %}—{% endif %}</span>
           </div>
         {% endfor %}
         {# A BLIND is not in the cart — it is the card that completes a
@@ -300,7 +300,7 @@
       <span class="atee">TEE</span>
       <span class="aidx">IDX</span>
       <span class="aph">PH</span>
-      <span class="atn">TEAM</span>
+      <span class="atn">{% if pack.team_unit == 'cart' %}CART{% else %}TEAM{% endif %}</span>
       <span class="as">HOLE</span>
   {% endset %}
   {% set _mid = (pack.alpha|length + 1) // 2 %}
@@ -316,7 +316,7 @@
            could be both a 1T and a NEW like Morris Allen"). #}
         <span class="an">{{ a.sort_name }}{% if a.is_first_timer %}<span class="abadge ft">1T</span>{% endif %}{% if a.is_new %}<span class="abadge nw">NEW</span>{% endif %}</span>
         <span class="atee">{{ tee_dot(a.tee_choice) }}</span>
-        <span class="aidx">{% if a.handicap_index is not none %}{{ "%.1f"|format(a.handicap_index) }}{% else %}—{% endif %}</span>
+        <span class="aidx">{% if a.handicap_index_display is not none %}{{ "%.1f"|format(a.handicap_index_display) }}{% elif a.handicap_index is not none %}{{ "%.1f"|format(a.handicap_index) }}{% else %}—{% endif %}</span>
         <span class="aph">{% if a.playing_handicap is not none %}{{ a.playing_handicap }}{% else %}&mdash;{% endif %}</span>
         <span class="atn">{% if a.team_handicap is not none %}{{ a.team_handicap }}{% else %}&mdash;{% endif %}</span>
         <span class="as">{{ a.slot_short }}</span>
@@ -329,9 +329,9 @@
     {# One note per ROW (Kerry 2026-09-15) — a run-on paragraph that
        wraps where the column happens to end is not a key. #}
     <div class="fnote"><span class="abadge ft">1T</span> &mdash; first TGF event ever. <span class="abadge nw">NEW</span> &mdash; joined since our last event. The tee circle matches the TEES key above.</div>
-    <div class="fnote"><strong>IDX</strong> &mdash; TGF handicap index{% if pack.holes_key == '9' %} (9-hole){% endif %}.</div>
+    <div class="fnote"><strong>IDX</strong> &mdash; TGF handicap index ({{ pack.holes_key }}-hole).</div>
     <div class="fnote"><strong>PH</strong> &mdash; playing handicap at 100%, from that index and the tee played{% if pack.ph_basis %} ({{ pack.ph_basis }}){% endif %}.</div>
-    <div class="fnote"><strong>TEAM</strong> &mdash; Team Net handicap{% if pack.team_basis %}: {{ pack.team_basis }}{% endif %}.</div>
+    <div class="fnote"><strong>TEAM</strong> &mdash; {% if pack.team_unit == 'cart' %}Cart{% else %}Team{% endif %} Net handicap{% if pack.team_basis %}: {{ pack.team_basis }}{% endif %}.</div>
     {% if pack.ph_note %}<div class="fnote warn">{{ pack.ph_note }}</div>{% endif %}
     <div class="fnote">The Golf Fellowship{% if pack.chapter %} &middot; {{ pack.chapter }}{% endif %}.</div>
   </div>

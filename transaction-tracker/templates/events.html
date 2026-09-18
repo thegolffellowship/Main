@@ -6818,7 +6818,9 @@
                 const _rCid = _rCid0;
                 let hcp;
                 if (player.handicap_index != null) {
-                    hcp = Number(player.handicap_index).toFixed(1);
+                    // The index on the EVENT's scale (Kerry 2026-09-18): the
+                    // stored index is the nine; an 18-hole night shows twice it.
+                    hcp = (Number(player.handicap_index) * (state.hcpScale === 18 ? 2 : 1)).toFixed(1);
                 } else if (_isPlaceholder) {
                     const pv = _prelimVal.toFixed(1);
                     // A placeholder IS editable — that is what it is for —
@@ -7029,6 +7031,7 @@
             // the events-list payload can (Kerry 2026-07-31 — the reason
             // STANDINGS kept reverting to Random on reopen).
             const evb = data.event || {};
+            state.hcpScale = Number(evb.hcp_scale) === 18 ? 18 : 9;
             const lsm = readLocalPairingMode(evId);
             const savedMode = String(evb.pairing_mode || lsm.mode || '').trim();
             if (savedMode === 'random' || savedMode === 'abcd' || savedMode === 'standings') {

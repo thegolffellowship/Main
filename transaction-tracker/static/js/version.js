@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.464.14";
+window.TGF_VERSION = "2.464.15";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.464.15",
+    date: "2026-09-18",
+    changes: [
+      "THE TEAM COLUMN IS THE GAME BEING PLAYED, COMPUTED THE WHS WAY (Kerry 2026-09-18, s18.11 Cedar Creek: \u2018the cart net handicaps do not all look correct\u2026 Larry Anthis and Richard Palacios. We have Cart Net going tomorrow which is 85% handicaps\u2019). The starter sheet computed a foursome\u2019s Team Net \u2014 75%, off the lowest in the GROUP \u2014 on a Cart Net night, and applied the allowance to the already-rounded PH, the double-rounding CA Queue #7 found. The sheet now asks the matrix which team game the field plays (below 16 players it is CART Net), takes the allowance from the codified ladder (Cart 85% / 100%, four-player 75/85/100/100), applies it to the UNROUNDED course handicap, rounds once, and plays each unit off its own lowest \u2014 the cart (seats 1\u20132 / 3\u20134) for Cart Net, the group for Team Net. The column is headed CART on a Cart Net sheet and the footnote states the game, the percentage and the unit.",
+      "THE INDEX PRINTS ON THE EVENT\u2019S SCALE (Kerry: \u2018For an 18 hole event, the TGF Handicap to be shown should be the 18 hole handicap\u2019). IDX on the starter sheet and the index on the pairings cards show the 18-hole index (twice the nine) on an 18-hole night and the nine on a nine; PH and TEAM were already on the card\u2019s scale. Test: `test_team_handicaps.py`.",
+    ],
+  },
   {
     version: "2.464.14",
     date: "2026-09-18",

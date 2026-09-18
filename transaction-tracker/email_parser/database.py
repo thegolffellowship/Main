@@ -57448,6 +57448,56 @@ TEAM_ALLOWANCE_BY_BALLS = {1: 0.75, 2: 0.85, 3: 1.00, 4: 1.00}
 TEAM_BALLS_DEFAULT = 1                      # the normal one-ball net
 
 
+def _event_team_unit(n_players: int, holes_key: str, db_path=None) -> tuple[str, str]:
+    """("cart" | "group", team_type) — the team game the MATRIX says this
+    field plays (v2.464.15, Kerry 2026-09-18: "We have Cart Net going
+    tomorrow which is 85% handicaps"). Below 16 players the side-games
+    matrix runs CART Net — two-man cart teams — not foursomes; the matrix
+    row's teamType decides where it exists, the 16 threshold when it is
+    silent (same rule `determine_event_game_results` applies)."""
+    team_type = ""
+    try:
+        m9, m18 = _load_games_matrix(db_path=db_path)
+        mat = m9 if holes_key == "9" else m18
+        row = mat.get(str(n_players)) or mat.get(n_players) or {}
+        team_type = str(row.get("teamType") or "")
+    except Exception:
+        team_type = ""
+    # The matrix says "No Event" below four players and is silent above
+    # its last row; either way the 16 threshold decides.
+    _tt = team_type.lower()
+    if "cart" in _tt:
+        return "cart", team_type
+    if "team" in _tt:
+        return "group", team_type
+    return ("cart" if n_players < 16 else "group"), team_type
+
+
+def team_handicaps_for_groups(groups: list, allowance: float, unit: str) -> None:
+    """Set `team_handicap` on every player who has `course_handicap_raw`
+    (v2.464.15). The allowance is applied to the UNROUNDED course handicap
+    and rounded ONCE (WHS: "rounding is performed only once and as the
+    last step" — CA Queue #7 found the double-rounding), then each player
+    plays off the LOWEST in their UNIT: the whole group for Team Net, the
+    CART (seats 1-2 / 3-4; a fifth rider is their own unit) for Cart Net.
+    Kerry 2026-09-18: Anthis and Palacios read wrong because the sheet
+    computed a foursome's Team Net at 75% for a Cart Net night at 85%."""
+    from email_parser.handicap_calc import whs_round as _wr
+    for g in groups:
+        units: dict = {}
+        for p in g["players"]:
+            if p.get("course_handicap_raw") is None:
+                continue
+            key = (((p.get("cart_pos") or 1) - 1) // 2) if unit == "cart" else 0
+            units.setdefault(key, []).append(p)
+        for members in units.values():
+            vals = {id(p): _wr(p["course_handicap_raw"] * allowance) for p in members}
+            low = min(vals.values())
+            for p in members:
+                p["team_allowed"] = vals[id(p)]
+                p["team_handicap"] = vals[id(p)] - low
+
+
 def event_team_net_dial(conn, ev: dict) -> tuple[int, float, str]:
     """(balls, allowance, printable basis) for this event's Team Net.
 
@@ -58314,8 +58364,10 @@ def get_event_print_pack(event_id: int, db_path=None) -> dict | None:
     # which is the shape CA ratified for Cedar Creek (#502/#507). The
     # allowance is a dial (`team_net_allowance`, default 100%) and the
     # sheet PRINTS which one it used, so a wrong dial is visible.
-    from email_parser.handicap_calc import playing_handicap as _ph_fn, whs_round as _wr
+    from email_parser.handicap_calc import (playing_handicap as _ph_fn,
+                                            course_handicap as _ch_fn)
     ph_by_name: dict = {}
+    _is18 = _event_holes_type(ev.get("item_name"), ev.get("format")) == 18
     # THE NOTE IS ABOUT THE TEES ON THIS SHEET (v2.462.1). An unlabelled
     # tee nobody is playing tonight is not a missing handicap — a9.23's
     # Green tees were unresolved and unused, and the sheet still warned.
@@ -58328,6 +58380,13 @@ def get_event_print_pack(event_id: int, db_path=None) -> dict | None:
             if _band and not tee:
                 _bands_short.add(_band)
             idx = idx_map.get(int(cid)) if cid else None
+            # THE INDEX PRINTS ON THE EVENT'S SCALE (Kerry 2026-09-18: "For
+            # an 18 hole event, the TGF Handicap to be shown should be the
+            # 18 hole handicap"). `idx_map` is the 18-hole index of record
+            # (twice the nine); the sheet's IDX column shows that on an
+            # 18-hole night and the nine on a nine.
+            if idx is not None:
+                p["handicap_index_display"] = round(idx if _is18 else idx / 2.0, 1)
             if idx is None or not tee:
                 continue
             # A nine-hole card takes the nine-hole index (half the 18).
@@ -58335,17 +58394,38 @@ def get_event_print_pack(event_id: int, db_path=None) -> dict | None:
             try:
                 p["playing_handicap"] = _ph_fn(idx_scoped, tee["slope"],
                                                tee["rating"], tee["par"])
+                p["course_handicap_raw"] = _ch_fn(idx_scoped, tee["slope"],
+                                                  tee["rating"], tee["par"])
             except Exception:
                 continue
             ph_by_name[_pair_key_name(p.get("name"))] = p["playing_handicap"]
-    for g in groups:
-        raw = [(p, _wr((p.get("playing_handicap") or 0) * team_allowance))
-               for p in g["players"] if p.get("playing_handicap") is not None]
-        if not raw:
-            continue
-        low = min(v for _p, v in raw)
-        for p, v in raw:
-            p["team_handicap"] = v - low
+    # THE TEAM COLUMN IS THE GAME BEING PLAYED (v2.464.15). Unit and
+    # allowance come from the matrix + the codified ladder
+    # (`live_scoring` team_net.allowance_pct_by_balls: 4-player 75/85/100/
+    # 100, CART 85/100), applied to the unrounded course handicap and
+    # rounded once; the dial's allowance is the fallback only when the
+    # ladder has no row, and the sheet SAYS which it used.
+    _n_seated = sum(len(g["players"]) for g in groups)
+    _holes_key = "18" if _is18 else "9"
+    team_unit, _team_type = _event_team_unit(_n_seated, _holes_key, db_path=db_path)
+    try:
+        from email_parser.live_scoring import (SEED_LIVE_SCORING_CONFIG as _LSC,
+                                               team_allowance_pct as _tap)
+        _res = _tap(_LSC["games"]["team_net"], 2 if team_unit == "cart" else 4,
+                    team_balls)
+        _pct = _res.get("pct")
+    except Exception:
+        _pct = None
+    if _pct is not None and "manager override" not in (team_basis or ""):
+        team_allowance = _pct / 100.0
+        team_basis = (f"{'Cart' if team_unit == 'cart' else 'Team'} Net: best "
+                      f"{team_balls} net ball{'' if team_balls == 1 else 's'} of "
+                      f"{2 if team_unit == 'cart' else 4}, {round(team_allowance * 100)}% "
+                      f"of the course handicap (rounded once), off the lowest in the "
+                      f"{'cart' if team_unit == 'cart' else 'group'}")
+    elif _pct is None:
+        team_basis = team_basis + " (dial fallback — no ruled allowance for this size)"
+    team_handicaps_for_groups(groups, team_allowance, team_unit)
 
     # ALPHA LIST (Kerry 2026-09-08): the starter's other job is answering
     # "where am I?" for a player who walks up knowing only their own
@@ -58363,6 +58443,10 @@ def get_event_print_pack(event_id: int, db_path=None) -> dict | None:
             alpha.append({
                 "playing_handicap": p.get("playing_handicap"),
                 "team_handicap": p.get("team_handicap"),
+                "handicap_index_display": p.get("handicap_index_display"),
+                "team_allowed": p.get("team_allowed"),
+                "course_handicap_raw": p.get("course_handicap_raw"),
+                "cart_pos": p.get("cart_pos"),
                 "is_new": bool(p.get("is_new")),
                 "is_first_timer": bool(p.get("is_first_timer")),
                 "name": nm,
@@ -58416,6 +58500,8 @@ def get_event_print_pack(event_id: int, db_path=None) -> dict | None:
         "ph_note": ph_note if _bands_short else "",
         "team_basis": team_basis,
         "team_balls": team_balls,
+        "team_unit": team_unit,
+        "team_allowance": team_allowance,
         "holes_key": "18" if _event_holes_type(
             ev.get("item_name"), ev.get("format")) == 18 else "9",
         "alpha": alpha,

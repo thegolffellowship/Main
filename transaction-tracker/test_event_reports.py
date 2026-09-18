@@ -422,7 +422,7 @@ check("the cart letters are gone from the sheet entirely",
       "cart-A" not in _ss3 and "cart-B" not in _ss3 and "Cart A =" not in _ss3)
 check("the alphabetical list has column headings",
       '<span class="aidx">IDX</span>' in _ss3 and '<span class="aph">PH</span>' in _ss3
-      and '<span class="atn">TEAM</span>' in _ss3)
+      and '<span class="atn">{% if pack.team_unit == \'cart\' %}CART{% else %}TEAM{% endif %}</span>' in _ss3)
 check("…repeated at the top of the SECOND column, on a forced break",
       "loop.index0 == _mid" in _ss3 and ".arow.ahead.colbreak { break-before: column;" in _ss3)
 check("the explanation names each column and how it was computed",
@@ -472,31 +472,44 @@ check("PH rises with the index",
       str([(k, v["playing_handicap"]) for k, v in _al.items()]))
 from email_parser.handicap_calc import whs_round as _wrt  # noqa: E402
 def _team_expected(pack):
-    al = db.TEAM_ALLOWANCE_BY_BALLS[pack["team_balls"]]
-    vals = [_wrt(a["playing_handicap"] * al) for a in pack["alpha"]]
-    return [v - min(vals) for v in vals]
+    # v2.464.15 (Kerry 2026-09-18): allowance on the UNROUNDED course
+    # handicap, rounded once, off the lowest in the UNIT — the cart for
+    # Cart Net (this three-player fixture is a cart night: below 16), the
+    # group for Team Net.
+    al = pack["team_allowance"]
+    rows = [a for a in pack["alpha"] if a.get("course_handicap_raw") is not None]
+    unit = (lambda a: (a["slot_label"], ((a["cart_pos"] or 1) - 1) // 2)) if pack["team_unit"] == "cart" \
+        else (lambda a: a["slot_label"])
+    lows = {}
+    for a in rows:
+        lows[unit(a)] = min(lows.get(unit(a), 99), _wrt(a["course_handicap_raw"] * al))
+    return [_wrt(a["course_handicap_raw"] * al) - lows[unit(a)] for a in rows]
 check("the lowest player in the group is the team zero",
       min(a["team_handicap"] for a in _pk3["alpha"]) == 0)
-check("TEAM is the allowance applied to PH, off that lowest",
-      [a["team_handicap"] for a in _pk3["alpha"]] == _team_expected(_pk3),
+check("TEAM is the allowance applied to the unrounded course handicap, rounded once, off the unit's lowest",
+      [a["team_handicap"] for a in _pk3["alpha"] if a.get("course_handicap_raw") is not None] == _team_expected(_pk3),
       str([(a["sort_name"], a["playing_handicap"], a["team_handicap"]) for a in _pk3["alpha"]]))
-check("the sheet states the allowance it used, so a wrong dial is visible",
-      "off the lowest in the group" in _pk3["team_basis"] and "%" in _pk3["team_basis"], _pk3["team_basis"])
+check("the sheet states the allowance and the UNIT it used, so a wrong dial is visible",
+      "off the lowest in the cart" in _pk3["team_basis"] and "%" in _pk3["team_basis"], _pk3["team_basis"])
 check("...and which card the playing handicap came off", "nine card" in _pk3["ph_basis"], _pk3["ph_basis"])
 # Kerry 2026-09-15: "Team Net is not 100%. It is 85% for tonight's two
 # ball net. It is 75% for normal one ball net. Needs to follow our rules
 # and adjust to the games we play." The ladder was already ratified
 # (side-games.md, 2026-07-05): Best 1 75%, Best 2 85%, Best 3/4 100%.
-check("one ball net is 75%, the normal case and the default",
-      _pk3["team_balls"] == 1 and "75% of PH" in _pk3["team_basis"], _pk3["team_basis"])
+# A three-player field is a CART night (below 16, side-games matrix), so
+# one ball is Cart Net's 85% (Kerry 2026-09-16/18); the four-player 75%
+# row is asserted on the ladder constant below and in test_team_handicaps.py.
+check("one ball on a cart night is Cart Net at 85%",
+      _pk3["team_balls"] == 1 and _pk3["team_unit"] == "cart"
+      and "Cart Net: best 1 net ball of 2, 85%" in _pk3["team_basis"], _pk3["team_basis"])
 _c2.execute("UPDATE events SET team_ball_count = 2 WHERE id = 990"); _c2.commit()
 _pk4 = db.get_event_print_pack(990, db_path=_t2)
-check("two ball net is 85%, off the event's own ball count",
-      _pk4["team_balls"] == 2 and "85% of PH" in _pk4["team_basis"], _pk4["team_basis"])
+check("two balls of the cart is 100%, off the event's own ball count",
+      _pk4["team_balls"] == 2 and "100%" in _pk4["team_basis"], _pk4["team_basis"])
 check("…and the sheet names the game, not just the percentage",
-      "Best 2 net balls" in _pk4["team_basis"], _pk4["team_basis"])
+      "Cart Net: best 2 net balls of 2" in _pk4["team_basis"], _pk4["team_basis"])
 check("the numbers move with the allowance",
-      [a["team_handicap"] for a in _pk4["alpha"]] == _team_expected(_pk4)
+      [a["team_handicap"] for a in _pk4["alpha"] if a.get("course_handicap_raw") is not None] == _team_expected(_pk4)
       and [a["team_handicap"] for a in _pk4["alpha"]] != [a["team_handicap"] for a in _pk3["alpha"]],
       str([(a["sort_name"], a["playing_handicap"], a["team_handicap"]) for a in _pk4["alpha"]]))
 check("Best 3 and Best 4 are 100%, per the ratified ladder",

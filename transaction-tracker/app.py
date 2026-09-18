@@ -5141,7 +5141,7 @@ def api_get_pairings(event_id):
         # and requests"). Rows carry `rsvp_only` for the badge.
         from email_parser.database import (
             _event_roster_rows, _pair_key_name, _roster_handicap_index_map,
-            _event_index_as_of)
+            _event_index_as_of, _event_holes_type)
         _pconn = get_connection()
         try:
             _seen_keys = set()
@@ -5306,6 +5306,9 @@ def api_get_pairings(event_id):
             "standings_enrolled": standings_enrolled,
             "event": {
                 "format": ev.get("format"),
+                # The index on the EVENT's scale (Kerry 2026-09-18): 18 on
+                # an 18-hole night, 9 on a nine. The cards multiply.
+                "hcp_scale": 18 if _event_holes_type(ev.get("item_name"), ev.get("format")) == 18 else 9,
                 "start_type": ev.get("start_type"),
                 "start_type_18": ev.get("start_type_18"),
                 "tee_time_count": ev.get("tee_time_count"),
