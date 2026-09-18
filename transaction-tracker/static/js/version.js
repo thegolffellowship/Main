@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.465.9";
+window.TGF_VERSION = "2.465.10";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.465.10",
+    date: "2026-09-18",
+    changes: [
+      "`scoring-print-pack-pdf:<id>` reports `engine` (chromium / weasyprint) beside parts, hash and size, so a lane can confirm which renderer produced a pack on Railway before mailing it.",
+    ],
+  },
   {
     version: "2.465.9",
     date: "2026-09-18",
