@@ -284,12 +284,13 @@
           </div>
         {% endfor %}
         {# A BLIND is not in the cart — it is the card that completes a
-           short team for Team Net. Printed under the group, greyed and
-           labelled, so nobody looks for a fourth who was never coming. #}
+           short cart (Cart Net) or team (Team Net). Printed under the
+           group, greyed and labelled with the unit it completes, so nobody
+           looks for a fourth who was never coming. #}
         {% for b in g.blinds %}
           <div class="prow blind-row">
             <span class="pname">BLIND · {{ b.name }}</span>
-            <span class="tee">team</span>
+            <span class="tee">{% if pack.team_unit == 'cart' %}cart{% else %}team{% endif %}</span>
           </div>
         {% endfor %}
       </div>

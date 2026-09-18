@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.465.14";
+window.TGF_VERSION = "2.465.15";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.465.15",
+    date: "2026-09-18",
+    changes: [
+      "Starter sheet: the BLIND row's tag follows the game like the column heading does — `cart` on a Cart Net sheet, `team` on Team Net. It was hard-coded `team`, the one place the v2.465.2 CART/TEAM rule had not reached (Cedar Creek's 8:10 box).",
+    ],
+  },
   {
     version: "2.465.14",
     date: "2026-09-18",
