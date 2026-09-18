@@ -516,6 +516,11 @@ check("a manager override still wins, and says so on the sheet",
       "manager override 90%" in db.get_event_print_pack(990, db_path=_t2)["team_basis"])
 db.set_app_setting("team_net_allowance", "", db_path=_t2)
 _c2.execute("UPDATE events SET team_ball_count = NULL WHERE id = 990"); _c2.commit()
+# v2.465.0: a player with NO index must still render (StrictUndefined
+# would 500 the whole sheet on a missing key).
+_pk5 = db.get_event_print_pack(990, db_path=_t2)
+check("every alpha row carries handicap_index_display, None for an index-less player",
+      all("handicap_index_display" in a for a in _pk5["alpha"]))
 check("a player with no index is left blank, never given a made-up handicap",
       db._event_tee_rows(_c2, {"course_id": None}, [])[0] == {})
 

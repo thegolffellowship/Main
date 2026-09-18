@@ -58387,8 +58387,10 @@ def get_event_print_pack(event_id: int, db_path=None) -> dict | None:
             # 18 hole handicap"). `idx_map` is the 18-hole index of record
             # (twice the nine); the sheet's IDX column shows that on an
             # 18-hole night and the nine on a nine.
-            if idx is not None:
-                p["handicap_index_display"] = round(idx if _is18 else idx / 2.0, 1)
+            # Always present — the template reads it under StrictUndefined,
+            # and a player with no index must print a dash, not a 500.
+            p["handicap_index_display"] = (round(idx if _is18 else idx / 2.0, 1)
+                                           if idx is not None else None)
             if idx is None or not tee:
                 continue
             # A nine-hole card takes the nine-hole index (half the 18).

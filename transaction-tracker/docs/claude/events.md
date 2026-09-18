@@ -2139,3 +2139,32 @@ NB the clock runs off the IMPORT, and the Golf Genius scorecard import is
 manual (`import_gg_scorecards` / the `scoring-import` bridge). Nothing
 polls GG on a timer, so "how often does the leaderboard update" is "when
 someone runs the import".
+
+## The event PRINT PACK — one bound PDF, mailed the evening before (v2.465.0)
+
+Kerry 2026-09-18: "a bound PDF with all of them in one that I could
+print, rather than each separately" / "Build the PDF routine and have it
+emailed to me."
+
+- **What:** Starter Sheet, Cart Signs, Divisions & Flights, Proximity
+  Markers — the same templates the browser prints — rendered server-side
+  by WeasyPrint (`email_parser/print_pack.py`) and bound in that order.
+  `GET /events/<id>/print-pack.pdf` (manager) serves it; the page's
+  Download PDF stays the browser print dialog.
+- **Routine:** `send_due_print_packs_job` runs hourly 5–10 PM Central.
+  Every active event dated TOMORROW gets its pack mailed as a PDF
+  attachment to `PRINT_PACK_EMAIL_TO` (→ `DAILY_REPORT_TO` →
+  `EMAIL_ADDRESS`). A content hash of the rendered parts is stored in
+  `app_settings` (`print_pack_sent:<event_id>`), so a pack is sent once
+  and again only if the sheet changed after the first send.
+- **On demand:** `scoring-print-pack:<event_id>` builds and reports parts,
+  page counts, hash and size; `|send[|<to>]` mails it and records the
+  hash; `scoring-print-pack:due` lists tomorrow's events.
+- **Deploy:** `weasyprint==62.3` + `pydyf==0.11.0` in requirements;
+  Pango/Cairo apt packages in `nixpacks.toml`. The engine is imported
+  lazily — without it the app boots and the route/bridge say so (503).
+- **Mail:** `send_mail_graph(..., attachments=[(name, bytes, mime)])`
+  sends Graph `fileAttachment`s (inline base64, under Graph's 3 MB).
+- Test: `test_print_pack.py` (builds a real PDF, serves the route,
+  runs the routine with a stubbed sender: once, unchanged → skipped,
+  changed → sent again).

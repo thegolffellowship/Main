@@ -410,8 +410,13 @@ def send_mail_graph(
     cc_address: str | None = None,
     bcc_address: str | None = None,
     reply_to: str | None = None,
+    attachments: list | None = None,
 ) -> bool:
     """Send an email via Microsoft Graph API (requires Mail.Send permission).
+
+    ``attachments`` (v2.465.0): a list of ``(filename, bytes, content_type)``
+    tuples sent as Graph ``fileAttachment``s (base64 in the body, fine up
+    to Graph's 3 MB inline limit — a print pack is a few hundred KB).
 
     ``to_address`` may be a single email or a comma-separated list of emails.
     ``cc_address`` / ``bcc_address`` (optional) likewise — added as
@@ -460,6 +465,14 @@ def send_mail_graph(
             message["bccRecipients"] = [
                 {"emailAddress": {"address": addr}} for addr in bcc_addresses
             ]
+
+    if attachments:
+        import base64
+        message["attachments"] = [
+            {"@odata.type": "#microsoft.graph.fileAttachment",
+             "name": name, "contentType": ctype,
+             "contentBytes": base64.b64encode(data).decode("ascii")}
+            for name, data, ctype in attachments]
 
     payload = {
         "message": message,

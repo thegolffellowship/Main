@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.464.16";
+window.TGF_VERSION = "2.465.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.465.0",
+    date: "2026-09-18",
+    changes: [
+      "THE EVENT PRINT PACK \u2014 ONE BOUND PDF, MAILED THE EVENING BEFORE (Kerry 2026-09-18: \u2018a bound PDF with all of them in one that I could print, rather than each separately\u2019 / \u2018Build the PDF routine and have it emailed to me\u2019). Starter Sheet, Cart Signs, Divisions & Flights and Proximity Markers \u2014 the same templates the browser prints \u2014 are rendered server-side by WeasyPrint and bound in print order: `GET /events/<id>/print-pack.pdf`. A routine runs hourly 5\u201310 PM Central and mails every active event dated TOMORROW as a PDF attachment to `PRINT_PACK_EMAIL_TO` (falling back to the daily-report address); a content hash of the rendered parts is recorded so a pack goes once, and again only if the sheet changes after it went. On demand: `scoring-print-pack:<id>[|send[|to]]` and `scoring-print-pack:due`. Graph mail learned attachments. WeasyPrint + Pango/Cairo added to the deploy; the engine loads lazily so a deploy without it still boots and says so. Test: `test_print_pack.py` (a real PDF, the route, the routine once / unchanged / changed).",
+    ],
+  },
   {
     version: "2.464.16",
     date: "2026-09-18",

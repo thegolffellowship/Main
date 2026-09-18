@@ -1428,6 +1428,19 @@ def start_scheduler():
     logger.info("Expense email classifier scheduled every %d minutes", expense_interval)
 
     # COO daily email — runs at 7:00 AM US/Central
+    # Print packs: every active event dated tomorrow, mailed to Kerry the
+    # evening before (5–10 PM Central, hourly; a content hash makes it
+    # once-per-change). v2.465.0.
+    scheduler.add_job(
+        send_due_print_packs_job,
+        "cron",
+        hour="17-22",
+        minute=5,
+        timezone="US/Central",
+        id="print_packs_evening_before",
+        replace_existing=True,
+    )
+
     coo_email_to = os.getenv("COO_EMAIL_TO")
     if coo_email_to:
         scheduler.add_job(
@@ -5081,6 +5094,43 @@ def starter_sheet_page(event_id):
     if not pack:
         return "Event not found", 404
     return render_template("starter_sheet.html", pack=pack)
+
+
+def _print_pack_render(template, **ctx):
+    """Render a print template for the PDF engine — inside an app context
+    so the scheduler (no request) can do it too."""
+    with app.app_context():
+        return render_template(template, **ctx)
+
+
+def build_print_pack_for_event(event_id: int) -> dict | None:
+    from email_parser.print_pack import build_event_print_pack
+    return build_event_print_pack(_print_pack_render, event_id, app.static_folder)
+
+
+@app.route("/events/<int:event_id>/print-pack.pdf")
+@require_role("manager")
+def print_pack_pdf(event_id):
+    """Every print sheet for the event bound into one PDF (v2.465.0)."""
+    from flask import Response
+    built = build_print_pack_for_event(event_id)
+    if not built:
+        return "Event not found or nothing to print", 404
+    if built.get("error"):
+        return built["error"], 503
+    return Response(built["pdf"], mimetype="application/pdf",
+                    headers={"Content-Disposition":
+                             f'inline; filename="{built["filename"]}"'})
+
+
+def send_due_print_packs_job():
+    from email_parser.print_pack import send_due_print_packs
+    try:
+        res = send_due_print_packs(_print_pack_render, app.static_folder)
+        if res:
+            logger.info("print packs: %s", res)
+    except Exception:
+        logger.exception("print pack routine failed")
 
 
 @app.route("/events/<int:event_id>/divisions-flights")
