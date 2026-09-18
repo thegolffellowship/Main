@@ -2174,6 +2174,12 @@ emailed to me."
   `CHROMIUM_PATH` → `shutil.which` → the Playwright cache) and `pypdf`.
   A current Chrome has removed the OLD headless mode Playwright asks
   for by default, so the launch passes `--headless=new` explicitly.
+  `stdenv.cc.cc.lib` + `zlib` are in `nixLibs` too: without them
+  `import playwright` fails under the Nix Python with "libstdc++.so.6:
+  cannot open shared object file" and the pack falls back to WeasyPrint
+  (v2.465.12–13; the bridge's `engine_note` carries the reason whenever
+  a fallback happens — never trust a pack without reading `engine`).
+  Cedar Creek's Chromium pack went out 2026-09-18 5:31 PM CDT.
   Lesson from v2.465.0–3: a literal `\n` written into requirements.txt
   by a heredoc failed the Railway build twice; validate each line.
 - **NEW badge on the sheet (v2.465.9, Kerry-confirmed):** NEW = a

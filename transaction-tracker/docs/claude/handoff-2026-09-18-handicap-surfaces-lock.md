@@ -2,7 +2,7 @@
 
 Lane "Handicap Surfaces: Identity + Plus Rule", branch
 `claude/handicap-surfaces-k4m9xr` (merged to `main` as v2.459.0), then
-continued on `main` through **v2.465.9**. Spun off from "TGF Tracker
+continued on `main` through **v2.465.13**. Spun off from "TGF Tracker
 Improvements 2" by the 2026-09-16 contract
 (`session-prompt-2026-09-16-handicap-card-identity.md`); Kerry then
 routed the parent's carry-forwards (items A–G) and the morning-after
@@ -31,6 +31,7 @@ closed by this lane.
 | 2.465.2 | PH beside the index in the foursome boxes; both badges; CART/TEAM label follows the game; centred handicap columns | test_event_reports.py |
 | 2.465.6 | **Rule 15h**: a Cart Net blind is drawn from the OTHER cart of the same foursome (field only when nobody there qualifies); Team Net unchanged (field outside the group) | test_blind_draws.py |
 | 2.465.8 | Pack rendered by headless Chromium (WeasyPrint fallback) — the WeasyPrint pack "really bad compared to the PDF downloads" | test_print_pack.py |
+| 2.465.10–13 | Bridges report `engine` / `engine_note` and per-player badges; Railway fix: `stdenv.cc.cc.lib` + `zlib` in nixLibs (Playwright could not import — libstdc++ invisible to the Nix Python). Cedar Creek pack re-sent through Chromium 5:31 PM | — |
 | 2.465.9 | **NEW = first event AS A MEMBER** (membership started ≤ event, nothing played since); 1T independent; both can show | test_new_badge.py |
 
 ## 2. Kerry's rulings this lane (verbatim, dated)
