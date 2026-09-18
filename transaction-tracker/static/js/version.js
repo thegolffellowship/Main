@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.465.2";
+window.TGF_VERSION = "2.465.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.465.3",
+    date: "2026-09-18",
+    changes: [
+      "THE BUILD FAILURE WAS A TYPO, NOT THE PACKAGES. The v2.465.0 script wrote a literal backslash-n into requirements.txt, so pip read one bogus line (\u2018\\nweasyprint==62.3\\npydyf==0.11.0\u2019) and every build since 4:19 PM failed at the install step \u2014 the v2.465.1 back-out removed lines STARTING with weasyprint and missed it. Removed; main deploys again. The PDF engine retry (real package lines + Pango/Cairo) follows as its own commit so a second failure is isolated and reversible.",
+    ],
+  },
   {
     version: "2.465.2",
     date: "2026-09-18",
