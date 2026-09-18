@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.465.3";
+window.TGF_VERSION = "2.465.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.465.4",
+    date: "2026-09-18",
+    changes: [
+      "PDF ENGINE RETRY, isolated: `weasyprint==62.3` + `pydyf==0.11.0` as real requirement lines, and the libraries WeasyPrint loads by name at runtime (Pango, PangoFT2, HarfBuzz + subset, FontConfig, GObject via glib, Cairo, GdkPixbuf, FFI, shared-mime-info, DejaVu) as apt packages in nixpacks.toml. If this build fails it is this one commit to revert; if it succeeds the print pack mails tonight.",
+    ],
+  },
   {
     version: "2.465.3",
     date: "2026-09-18",

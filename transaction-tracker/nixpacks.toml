@@ -1,8 +1,10 @@
 # Nixpacks build configuration for Railway
-# No special system packages or build commands needed — Golf Genius sync
-# uses HTTP requests (no browser/Playwright required).
+# Golf Genius sync uses HTTP requests (no browser/Playwright required).
 #
-# 2026-09-18: adding [phases.setup] aptPkgs (Pango/Cairo for WeasyPrint, the
-# print-pack PDF engine) FAILED the Railway build. Backed out in v2.465.1 so
-# main deploys; the print pack degrades to a 503 until the engine ships —
-# see docs/claude/events.md "print pack" for the retry plan.
+# WeasyPrint (the print-pack PDF engine, v2.465.4) loads Pango, HarfBuzz,
+# FontConfig, GObject and Cairo by name at runtime; the nixpacks image is
+# Ubuntu, so they come from apt. Nothing else here needs a browser.
+[phases.setup]
+aptPkgs = ["libpango-1.0-0", "libpangoft2-1.0-0", "libharfbuzz0b", "libharfbuzz-subset0",
+           "libfontconfig1", "libglib2.0-0", "libcairo2", "libgdk-pixbuf-2.0-0",
+           "libffi8", "shared-mime-info", "fonts-dejavu-core"]
