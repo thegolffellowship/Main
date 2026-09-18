@@ -56264,7 +56264,7 @@ def _pairing_cid_for_name(conn, name: str) -> int | None:
 
 
 def _seat_customer_id(conn, name: str | None, payload_cid) -> int | None:
-    """The person in a seat (v2.464.10). A seat payload's `customer_id` is
+    """The person in a seat (v2.464.11). A seat payload's `customer_id` is
     whatever the page happened to carry — after a swap that moved the
     name and not the id it was the OTHER player's. So: if the NAME on the
     seat resolves to a customer, that customer is the person (a payload
