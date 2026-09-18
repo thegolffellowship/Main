@@ -95,16 +95,22 @@ def build_event_print_pack(render, event_id: int, static_dir: str,
     # (collapsed columns, broken cart signs). Rendering through the same
     # engine the browser uses makes the pack identical to the download.
     # WeasyPrint stays as the fallback when no Chromium is on the box.
+    engine_note = None
     try:
         pdf, parts, engine = _render_pdf_chromium(htmls, static_dir)
     except Exception as exc:
-        logger.warning("print pack: chromium render unavailable (%s); trying weasyprint", exc)
+        # Kept on the result (and the bridge) so a lane can see WHY the
+        # pack fell back without reading the Railway log.
+        engine_note = f"chromium unavailable: {type(exc).__name__}: {str(exc)[:600]} " \
+                      f"(executable={_chromium_executable()!r})"
+        logger.warning("print pack: %s; trying weasyprint", engine_note)
         try:
             pdf, parts, engine = _render_pdf_weasyprint(htmls, static_dir)
         except Exception as exc2:                  # engine absent on this deploy
-            return {"error": f"PDF engine unavailable: {exc2}", "sha": sha,
+            return {"error": f"PDF engine unavailable: {exc2}", "sha": sha, "engine_note": engine_note,
                     "parts": [{"slug": s_, "pages": None} for s_, _ in htmls], "event": ev}
     return {"pdf": pdf, "parts": parts, "sha": sha, "event": ev, "engine": engine,
+            "engine_note": engine_note,
             "filename": f"{code} — print pack — {ev.get('event_date')}.pdf"}
 
 

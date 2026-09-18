@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.465.11";
+window.TGF_VERSION = "2.465.12";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.465.12",
+    date: "2026-09-18",
+    changes: [
+      "Print pack: when Chromium cannot render, the build result and the bridge carry `engine_note` — the exception and the executable found — so the fallback to WeasyPrint is never silent. On Railway the v2.465.9 pack still came back `engine: weasyprint`; this is the diagnostic for it.",
+    ],
+  },
   {
     version: "2.465.11",
     date: "2026-09-18",
