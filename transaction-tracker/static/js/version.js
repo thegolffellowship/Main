@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.465.12";
+window.TGF_VERSION = "2.465.13";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.465.13",
+    date: "2026-09-18",
+    changes: [
+      "Build: libstdc++ and zlib from Nix on the library path (`stdenv.cc.cc.lib`, `zlib` in nixLibs). The v2.465.12 diagnostic showed the pack falling back to WeasyPrint on Railway because `import playwright` could not load libstdc++.so.6 under the Nix Python — Chromium itself was found at /root/.nix-profile/bin/chromium.",
+    ],
+  },
   {
     version: "2.465.12",
     date: "2026-09-18",

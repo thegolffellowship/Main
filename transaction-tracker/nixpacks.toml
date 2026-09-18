@@ -8,5 +8,8 @@
 # NOTE: nixPkgs REPLACES the provider list, so python3 + gcc are repeated.
 [phases.setup]
 nixPkgs = ["python3", "gcc", "chromium"]
-nixLibs = ["glib", "pango", "harfbuzz", "fontconfig", "cairo", "gdk-pixbuf", "libffi"]
+# stdenv.cc.cc.lib + zlib: the Nix Python cannot see the image's
+# libstdc++, so `import playwright` (greenlet) failed with
+# "libstdc++.so.6: cannot open shared object file" (v2.465.12 note).
+nixLibs = ["glib", "pango", "harfbuzz", "fontconfig", "cairo", "gdk-pixbuf", "libffi", "stdenv.cc.cc.lib", "zlib"]
 aptPkgs = ["fonts-dejavu-core", "shared-mime-info"]
