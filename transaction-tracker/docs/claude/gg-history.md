@@ -744,7 +744,24 @@ that season"); **linked** = distinct customer_ids resolved.
 
 ### DFW and Houston (closed chapters — Kerry #549 "Go ahead"; never member-facing)
 
-(rows land here when the field walks finish — see the mailbox post)
+Their round labels use neither the s/a code nor the 2023 league words,
+so only the all-events line is computed (closed chapters answer "how big
+were we"; the Tuesday split is not needed for them).
+
+| chapter | season | events | players / event (mean · median) | player-rounds | distinct players | member-ever | linked |
+|---|---|---|---|---|---|---|---|
+| DFW | 2020 | 10 | 13.0 · 13.5 | 130 | 27 | — | 9 |
+| DFW | 2021 | 20 | 12.3 · 13 | 247 | 38 | — | 22 |
+| DFW | 2022 | 23 | 15.1 · 15 | 348 | 52 | 38 | 37 |
+| DFW | 2023 | 36 | 9.6 · 10 | 344 | 56 | 32 | 32 |
+| DFW | 2024 | 25 | 8.3 · 8 | 208 | 31 | 16 | 18 |
+| Houston | 2021 | 21 | 12.9 · 13 | 270 | 40 | — | 23 |
+| Houston | 2022 | 23 | 13.5 · 13 | 311 | 42 | 28 | 27 |
+| Houston | 2023 | 25 | 11.2 · 11 | 280 | 46 | 29 | 31 |
+| Houston | 2024 | 18 | 4.4 · 4 | 80 | 18 | 15 | 14 |
+
+Neither chapter ever fielded more than ~15 a night; both thinned through
+2023 and 2024 (the closing years) the way Austin did in 2024.
 
 ### Reconciliation with the Tracker's own definition (2026)
 
@@ -1006,8 +1023,18 @@ TGF/Former profiles remain Kerry's open decision (option b).
       3-col target, reviewed rulings never overwritten by automated
       passes. Bridge ops: holes-bg=<sub>[@budget] (daemon-thread walk;
       MCP clients time out ~60s) + holes-status + overview.
-- [x] **FIELD walk engine (v2.464.0/.1)** — see "Phase B — FIELD walk"
+- [x] **FIELD walk engine (v2.464.0–.2)** — see "Phase B — FIELD walk"
       above; the 2019–2024 holes walk is unblocked in principle by the
       calendar dates but was NOT run in the participation lane.
+- [x] **FIELD WALKS COMPLETE 2019–2026 (2026-09-17/18):** every SA and
+      Austin season portal 2019–2025 plus the live 2026 portals
+      (tgf-sa 31 rounds, tgf-austin 28), and — Kerry #549 "Go ahead" —
+      DFW 2020–2024 (Phase A + field) and Houston 2021–2024 (Phase A +
+      field). 25 portals, every one at rounds_left = 0; calendars
+      archived and every dated round on gg_history_events. The
+      **Participation series** section above is the output. Pending
+      identity names rose to 975 (the 2019–2021 and DFW/Houston eras
+      predate the roster map) — `/admin/gg-history` queue; roster=report
+      after the wave still 0 unmatched TGF/Former members.
 - [ ] Two Man Tour lane (last): verify per-course events inside
       tgf-twomantour; ingest under brand='TwoManTour'
