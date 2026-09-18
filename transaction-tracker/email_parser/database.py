@@ -246,12 +246,17 @@ def _backfill_name_parts(conn: sqlite3.Connection) -> None:
             conn.execute("DELETE FROM name_parse_failures WHERE customer_name = ?", (name,))
         else:
             # Parse returned no first_name — record the failure
+            _npf_cid = conn.execute(
+                "SELECT customer_id FROM customers WHERE customer = ? COLLATE NOCASE "
+                "ORDER BY customer_id LIMIT 1", (name,)).fetchone()
             conn.execute(
-                """INSERT INTO name_parse_failures (customer_name, attempts, last_attempt)
-                   VALUES (?, 1, datetime('now'))
+                """INSERT INTO name_parse_failures (customer_name, attempts, last_attempt,
+                                                    customer_id)
+                   VALUES (?, 1, datetime('now'), ?)
                    ON CONFLICT(customer_name) DO UPDATE SET
-                   attempts = attempts + 1, last_attempt = datetime('now')""",
-                (name,),
+                   attempts = attempts + 1, last_attempt = datetime('now'),
+                   customer_id = COALESCE(name_parse_failures.customer_id, excluded.customer_id)""",
+                (name, _npf_cid["customer_id"] if _npf_cid else None),
             )
             # On 3rd failure, create a parse warning so admin sees it
             attempt_row = conn.execute(
@@ -3571,9 +3576,18 @@ def init_db(db_path: str | Path | None = None) -> None:
             CREATE TABLE IF NOT EXISTS name_parse_failures (
                 customer_name TEXT PRIMARY KEY,
                 attempts      INTEGER DEFAULT 0,
-                last_attempt  TEXT DEFAULT (datetime('now'))
+                last_attempt  TEXT DEFAULT (datetime('now')),
+                customer_id   INTEGER REFERENCES customers(customer_id)
             )
         """)
+        # EVERY row that names a person carries customer_id (Kerry
+        # 2026-09-18: "EVERY person gets a customer_id, no matter what their
+        # role is... customer_id is king"). This log predated the rule.
+        try:
+            conn.execute("ALTER TABLE name_parse_failures ADD COLUMN customer_id INTEGER "
+                         "REFERENCES customers(customer_id)")
+        except sqlite3.OperationalError:
+            pass
 
         # Backfill: parse existing customer names into first/last name parts.
         # Only runs once — skips rows that already have first_name populated.
@@ -6105,6 +6119,7 @@ def init_db(db_path: str | Path | None = None) -> None:
         _backfill_customer_id_on_message_log(conn)
         _backfill_customer_id_on_rsvp_email_overrides(conn)
         _backfill_customer_id_on_action_items(conn)
+        _backfill_customer_id_on_name_parse_failures(conn)
 
         # Course registry v1 + gender (Kerry-ratified 2026-07-20): facility
         # layer, OLD-course merges w/ tee version tags, stub dedup, gender
@@ -25123,6 +25138,28 @@ def _backfill_approved_expenses_to_ledger(conn: sqlite3.Connection) -> int:
         conn.commit()
         logger.info("Backfilled %d approved expenses into acct_transactions", count)
     return count
+
+
+def _backfill_customer_id_on_name_parse_failures(conn: sqlite3.Connection) -> int:
+    """Link the parse-failure log's names to their customer rows (principle
+    6; the table predated the rule). A name matching no customer stays
+    NULL and is retried next boot."""
+    try:
+        rows = conn.execute("SELECT customer_name FROM name_parse_failures "
+                            "WHERE customer_id IS NULL").fetchall()
+        n = 0
+        for r in rows:
+            cid = conn.execute(
+                "SELECT customer_id FROM customers WHERE customer = ? COLLATE NOCASE "
+                "ORDER BY customer_id LIMIT 1", (r["customer_name"],)).fetchone()
+            if cid:
+                n += conn.execute("UPDATE name_parse_failures SET customer_id = ? "
+                                  "WHERE customer_name = ?",
+                                  (cid["customer_id"], r["customer_name"])).rowcount
+        conn.commit()
+        return n
+    except sqlite3.OperationalError:
+        return 0
 
 
 def _backfill_customer_id_on_acct_transactions(conn: sqlite3.Connection) -> int:

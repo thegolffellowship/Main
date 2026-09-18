@@ -10261,7 +10261,13 @@
                 const seed = state.seeds[si];
                 if (!seed) return;
                 seed.players = seed.players.filter(p => p.cart_pos !== cp);
-                if (name) seed.players.push({name, cart_pos: cp});
+                // A seat carries the PERSON (customer_id), never a name
+                // alone — principle 6, Kerry 2026-09-18.
+                if (name) {
+                    const _re = rosterEntry(state, name, null);
+                    seed.players.push({name, cart_pos: cp,
+                                       customer_id: _re ? (_re.customer_id ?? null) : null});
+                }
             });
         });
 

@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.464.13";
+window.TGF_VERSION = "2.464.14";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.464.14",
+    date: "2026-09-18",
+    changes: [
+      "CUSTOMER_ID IS KING, ENFORCED (Kerry 2026-09-18: \u2018EVERY person gets a customer_id, no matter what their role is\u2026 everything remotely related to a customer needs to be tied to that customer\u2019). An audit of the REAL schema (init_db, PRAGMA table_info) found 23 tables that name a person; 22 already carry the id (Match Play\u2019s under player_id / winner_id), one did not \u2014 `name_parse_failures`, a parser log that predated the rule. It now carries `customer_id`, filled on write and backfilled at boot. On the page, the seed picker seated a person by name alone; it now carries the id from the roster. Two guards make the rule structural: `test_customer_id_everywhere.py` fails on any person-naming column without a sibling id (allow-list empty), and `test_seat_carries_identity.js` fails on any seat object built or moved without customer_id. The ruling is in CLAUDE.md principle 6 verbatim.",
+    ],
+  },
   {
     version: "2.464.13",
     date: "2026-09-18",
