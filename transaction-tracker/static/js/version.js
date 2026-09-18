@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.465.1";
+window.TGF_VERSION = "2.465.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.465.2",
+    date: "2026-09-18",
+    changes: [
+      "STARTER SHEET, three asks from Kerry 2026-09-18: (1) the foursome boxes print the playing handicap beside the index \u2014 the Cart/Team number stays in the alphabetical list only; (2) NEW means a NEW MEMBER (the roster\u2019s first-year rule, the same fact the pairings cards badge 1Y), no longer \u2018joined since our last event\u2019 \u2014 a first-timer who is already a member wears both NEW and 1T (Bear Clarkson), and the legend says so; (3) the legend\u2019s last label follows the game (CART on a Cart Net night, TEAM otherwise) to match the column heading, and the IDX / PH / CART numbers are centred in their columns.",
+    ],
+  },
   {
     version: "2.465.1",
     date: "2026-09-18",

@@ -425,6 +425,19 @@ check("the alphabetical list has column headings",
       and '<span class="atn">{% if pack.team_unit == \'cart\' %}CART{% else %}TEAM{% endif %}</span>' in _ss3)
 check("…repeated at the top of the SECOND column, on a forced break",
       "loop.index0 == _mid" in _ss3 and ".arow.ahead.colbreak { break-before: column;" in _ss3)
+# v2.465.2 (Kerry 2026-09-18): PH beside the index in the box, the Cart/Team
+# number only in the alphabetical list; the last legend label follows the
+# game; handicap columns centred; NEW = new member (both badges allowed).
+check("the foursome box prints PH beside the index",
+      '<span class="ph">{% if p.playing_handicap is not none %}' in _ss3 and '.prow .ph' in _ss3)
+check("…and no Cart/Team number in the box", 'p.team_handicap' not in _ss3)
+check("the legend's last label follows the game",
+      "<strong>{% if pack.team_unit == 'cart' %}CART{% else %}TEAM{% endif %}</strong>" in _ss3)
+check("the alphabetical handicap columns are centred",
+      ".arow .aidx { color: #444; width: 26px; text-align: center;" in _ss3
+      and ".arow .aph, .arow .atn { width: 24px; text-align: center;" in _ss3)
+check("NEW means new member, and both badges may show",
+      "new member (first year)" in _ss3 and "wears both" in _ss3)
 check("the explanation names each column and how it was computed",
       "<strong>PH</strong>" in _ss3 and "<strong>TEAM</strong>" in _ss3
       and "pack.ph_basis" in _ss3 and "pack.team_basis" in _ss3)

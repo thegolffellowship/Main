@@ -58236,26 +58236,17 @@ def get_event_print_pack(event_id: int, db_path=None) -> dict | None:
         # looking after. Flags come from the ROSTER, the one place that
         # decides them (`_decorate_roster_roles` / `_mark_first_timers`),
         # so the sheet and the pairings cards can never disagree.
-        # NEW means JOINED SINCE THE LAST EVENT (Kerry 2026-09-16: "NEW
-        # should be joined since last event. And a player could be both a
-        # 1T and a NEW like Morris Allen."). The pairings cards' 1Y badge
-        # is a different idea — first-year member — and keeps its meaning
-        # there; on the starter sheet NEW answers "who is here for the
-        # first time since we last played", which is what a captain
-        # scans for. The two badges are independent and both can show.
-        _prev = conn.execute(
-            """SELECT MAX(event_date) AS d FROM events
-                WHERE event_date < ? AND event_date IS NOT NULL
-                  AND (chapter = ? OR ? IS NULL)""",
-            (ev.get("event_date"), ev.get("chapter"), ev.get("chapter"))
-        ).fetchone()
-        _prev_date = (_prev["d"] if _prev else None) or None
+        # NEW means a NEW MEMBER — the roster's first-year rule, the same
+        # fact the pairings cards badge 1Y (v2.465.2, Kerry 2026-09-18:
+        # "Bear Clarkson is ALSO a NEW member, though not since the last
+        # event which is what I gave as a qualifier previously. If they
+        # are a 1st Time participant but already a member, then they get
+        # both badges. NEW Member & 1T for 1st Timer."). The two badges
+        # are independent and both can show.
         _roles: dict = {}
         try:
             for _r in _event_roster_rows(conn, event_id):
-                _start = (_r.get("first_member_start") or "")[:10]
-                _rec = {"is_new": bool(_start and _prev_date
-                                       and _start > _prev_date),
+                _rec = {"is_new": bool(_r.get("is_new")),
                         "is_first_timer": bool(_r.get("is_first_timer"))}
                 if _r.get("customer_id"):
                     _roles[f"c:{_r['customer_id']}"] = _rec
