@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.462.2";
+window.TGF_VERSION = "2.462.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.462.3",
+    date: "2026-09-18",
+    changes: [
+      "A REMEMBERED PAIRINGS TAB COMES BACK ON A PHONE TOO (Kerry 2026-09-18, iPhone: \u2018Had generated pairings, tweaked, saved, then added blinds, then clicked Starter Sheet, then clicked back. Now it\u2019s stuck on LOADING\u2019). iOS reloads the tab on return; the restore-on-load path (v2.432.0) re-opened the event on PAIRINGS, loaded the sheet, and repainted the DESKTOP container by id. The phone\u2019s container has a different id, so the data arrived and nothing repainted \u2014 the panel sat on \u2018Loading\u2026\u2019 with the sheet already in hand. One helper now resolves the open event\u2019s container in either layout and every after-the-fact repaint (restore, post-action refresh) goes through it. Nothing was lost: the saved sheet and the blinds were on the server the whole time, and tapping ROSTER then PAIRINGS would have repainted it. Test: `test_events_restore_mobile.js`.",
+      "Blinds need no Save: the draw is recorded the moment it is confirmed, and the sheet re-reads it. The Save button is for seats.",
+    ],
+  },
   {
     version: "2.462.2",
     date: "2026-09-16",

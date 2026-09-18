@@ -4032,7 +4032,7 @@
                     if (mem.view === "2") {
                         const st = getPairingsState(mem.id);
                         if (!st.loaded) await loadPairings(mem.id);
-                        const c = document.getElementById(`detail-content-${mem.id}`);
+                        const c = detailContainerFor(mem.id);
                         const ev2 = allEvents.find(e => e.id === mem.id);
                         if (c && ev2) rerenderDetail(c, ev2);
                     }
@@ -8693,6 +8693,20 @@
 
     function isMobileContainer(container) {
         return container.id && container.id.startsWith("ev-mobile-detail-");
+    }
+
+    // THE OPEN EVENT'S CONTAINER, WHICHEVER LAYOUT DREW IT (v2.462.3,
+    // Kerry 2026-09-18 on a phone: "clicked Starter Sheet, then clicked
+    // back. Now it's stuck on LOADING"). iOS reloads the tab on return;
+    // the restore-on-load path then loaded the sheet and re-rendered
+    // `detail-content-<id>` — the DESKTOP container. On a phone that
+    // element does not exist, so the data arrived and nothing repainted,
+    // and the panel sat on "Loading…" with `state.loaded` true. Every
+    // after-the-fact repaint resolves the container through here;
+    // `rerenderDetail` already knows what to do with a mobile one.
+    function detailContainerFor(evId) {
+        return document.getElementById(`detail-content-${evId}`)
+            || document.getElementById(`ev-mobile-detail-${evId}`);
     }
 
     function rerenderDetail(container, ev) {
@@ -16708,11 +16722,8 @@
             await fetchItems();
             const ev = allEvents.find(e => e.item_name === eventName);
             if (ev) {
-                const container = document.getElementById(`detail-content-${ev.id}`);
-                if (container) {
-                    container.innerHTML = renderDetailContent(ev);
-                    attachDetailHandlers(container, ev);
-                }
+                const container = detailContainerFor(ev.id);
+                if (container) rerenderDetail(container, ev);
             }
         } catch (err) {
             alert('Error: ' + err.message);
@@ -16818,11 +16829,8 @@
                     fetchBalanceDueSendMap(evName).then(() => {
                         const ev = allEvents.find(e => e.item_name === evName);
                         if (ev) {
-                            const container = document.getElementById(`detail-content-${ev.id}`);
-                            if (container) {
-                                container.innerHTML = renderDetailContent(ev);
-                                attachDetailHandlers(container, ev);
-                            }
+                            const container = detailContainerFor(ev.id);
+                            if (container) rerenderDetail(container, ev);
                         }
                     });
                 }
@@ -16873,8 +16881,8 @@
                 const ev = allEvents.find(ev2 => ev2.item_name === eventName);
                 if (ev) {
                     await fetchRsvps(eventName);
-                    const container = document.getElementById(`detail-content-${ev.id}`);
-                    if (container) { container.innerHTML = renderDetailContent(ev); attachDetailHandlers(container, ev); }
+                    const container = detailContainerFor(ev.id);
+                    if (container) rerenderDetail(container, ev);
                 }
             } catch (err) {
                 alert('Error: ' + err.message);
