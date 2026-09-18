@@ -89,3 +89,26 @@ already begun; the members Kerry describes losing (time- and money-squeezed)
 are the fall-2022 no-shows as much as the 2023 non-renewals. The pattern is
 the SAME one 2026 shows: a spring peak and a second-half fade — which makes
 the fall drop-off the oldest problem in the business, not a new one.
+
+## Why September empties the field — Kerry (2026-09-17, interview Q8)
+
+Asked which of daylight, football, school schedules, hunting season, course
+fall rates or something else explains the fall fade every year: *"All of
+those things you mention except fall rates, plus I think because we have a
+lot of business professionals we get late quarter business expectations
+that demand more of them. I've always known Fall is lighter and I've not
+always done Fall because of it. It's just been that I've felt there were
+enough that still benefitted from it to keep it going."*
+
+Rulings that follow for the Insider and the fall re-engagement:
+- Fall is a DIFFERENT product from spring: shorter days, competing seasons,
+  Q4 work pressure. Sell it as "one night when you can", never as "the race
+  you're behind in". The frequency pitch ("your seventh Tuesday") is a
+  spring/summer pitch; in fall it becomes "one more before the year is out".
+- Fall's job is warmth into the spring kickoff (renewals, the March field),
+  not volume. Measure fall by who comes back in March, not by the Tuesday
+  count. The scorecard Routine reports fall fields against FALL baselines
+  (2022 Sep–Nov SA 18–20; 2023 fall 13–20), never against spring.
+- Kerry kept fall going for the members who still benefit — the Insider
+  can say that plainly (belonging angle): the fall is for the people who
+  need a Tuesday most.
