@@ -42,19 +42,22 @@ exp = {n: whs_round(course_handicap(i, SLOPE, RATING, PAR) * 0.85)
        for n, i in (("Richard Palacios", 15.4), ("Larry Anthis", 16.0), ("Dan Stich", 16.0), ("Will Wallace", 15.8))}
 check("allowance is applied to the UNROUNDED course handicap and rounded once",
       all(by[n]["team_allowed"] == exp[n] for n in by), {n: (by[n]["team_allowed"], exp[n]) for n in by})
-check("cart A plays off its own lowest (Palacios 0, Anthis the difference)",
-      by["Richard Palacios"]["team_handicap"] == 0
-      and by["Larry Anthis"]["team_handicap"] == exp["Larry Anthis"] - exp["Richard Palacios"], by)
-check("cart B plays off ITS lowest, not cart A's",
-      min(by["Dan Stich"]["team_handicap"], by["Will Wallace"]["team_handicap"]) == 0
-      and by["Dan Stich"]["team_handicap"] == exp["Dan Stich"] - min(exp["Dan Stich"], exp["Will Wallace"]), by)
+# OFF LOWEST IS THE WHOLE FIELD (Kerry 2026-09-18: "OFF Lowest is not per
+# cart. OFF Lowest is lowest in the whole field.") — one low for everyone.
+low = min(exp.values())
+check("everyone plays off the lowest in the FIELD, cart or no cart",
+      all(by[n]["team_handicap"] == exp[n] - low for n in by), {n: by[n]["team_handicap"] for n in by})
+check("the field's low man is the zero, and only him unless tied",
+      [n for n in by if by[n]["team_handicap"] == 0] == [n for n in by if exp[n] == low])
 
-print("Team Net: off the lowest in the GROUP")
-db.team_handicaps_for_groups([g], 0.75, "group")
-by = {p["name"]: p for p in g["players"]}
-low = min(whs_round(course_handicap(i, SLOPE, RATING, PAR) * 0.75) for i in (15.4, 16.0, 16.0, 15.8))
-check("one lowest for the whole group", sum(1 for p in by.values() if p["team_handicap"] == 0) >= 1
-      and all(p["team_allowed"] - low == p["team_handicap"] for p in by.values()), by)
+print("Team Net: the same field low, across GROUPS")
+g2 = {"players": [player(1, "Low Man", 2.0), player(2, "Other", 20.0)]}
+db.team_handicaps_for_groups([g, g2], 0.75, "group")
+by = {p["name"]: p for g_ in (g, g2) for p in g_["players"]}
+low = min(p["team_allowed"] for p in by.values())
+check("the low man in ANOTHER group is everyone's zero",
+      by["Low Man"]["team_handicap"] == 0 and by["Richard Palacios"]["team_handicap"] == by["Richard Palacios"]["team_allowed"] - low
+      and all(p["team_allowed"] - low == p["team_handicap"] for p in by.values()), {n: p["team_handicap"] for n, p in by.items()})
 
 print("The double-rounding is gone")
 # 16.0 x 125/113 + (70.1-71) = 16.80; x0.85 = 14.28 -> 14. The OLD path rounded 16.80 -> 17 first, then 17 x 0.85 = 14.45 -> 14 here,

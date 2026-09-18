@@ -1225,9 +1225,14 @@ Kerry's attached a9.23 setup maps almost one-for-one onto what a
 | Round allocated purse down to | 0 (no rounding) | matrix |
 
 **Allowance % and "off lowest" are TWO SEPARATE DIALS.** USGA's allowance is
-a percentage of each player's own Course Handicap; "off the lowest in the
-group" is an additional TGF/GG convention (USGA applies play-off-the-low to
-**match** play). The starter sheet's own footnote carries both: *"TEAM —
+a percentage of each player's own Course Handicap; "off the lowest" is an
+additional TGF/GG convention (USGA applies play-off-the-low to **match**
+play). **OFF LOWEST IS THE WHOLE FIELD — RATIFIED (Kerry 2026-09-18):**
+*"OFF Lowest is not per cart. OFF Lowest is lowest in the whole field. For
+1/2 Net Skins it is field too. Team Net is field too."* The engine already
+did this (`game_handicaps(field, …)` takes the min over the field); the
+starter sheet's TEAM/CART column did it per group, then per cart, and now
+per field (`team_handicaps_for_groups`, v2.464.16). The starter sheet's own footnote carries both: *"TEAM —
 Team Net handicap: Best 1 net ball, 75% of PH, off the lowest in the
 group."* They are stored as separate fields or the maths goes wrong in one
 direction or the other.

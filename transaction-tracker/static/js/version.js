@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.464.15";
+window.TGF_VERSION = "2.464.16";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.464.16",
+    date: "2026-09-18",
+    changes: [
+      "OFF LOWEST IS THE WHOLE FIELD (Kerry 2026-09-18: \u2018OFF Lowest is not per cart. OFF Lowest is lowest in the whole field. For 1/2 Net Skins it is field too. Team Net is field too.\u2019). The starter sheet\u2019s CART/TEAM column now plays every player off the lowest allowed handicap in the FIELD \u2014 one zero for the night \u2014 not the lowest in their cart (v2.464.15) or their group (before). The scoring engine already took the field minimum (`game_handicaps(field, \u2026)`), so board and sheet now agree. Basis text and side-games.md carry the ruling verbatim.",
+    ],
+  },
   {
     version: "2.464.15",
     date: "2026-09-18",

@@ -478,19 +478,16 @@ def _team_expected(pack):
     # group for Team Net.
     al = pack["team_allowance"]
     rows = [a for a in pack["alpha"] if a.get("course_handicap_raw") is not None]
-    unit = (lambda a: (a["slot_label"], ((a["cart_pos"] or 1) - 1) // 2)) if pack["team_unit"] == "cart" \
-        else (lambda a: a["slot_label"])
-    lows = {}
-    for a in rows:
-        lows[unit(a)] = min(lows.get(unit(a), 99), _wrt(a["course_handicap_raw"] * al))
-    return [_wrt(a["course_handicap_raw"] * al) - lows[unit(a)] for a in rows]
+    # OFF LOWEST = the whole FIELD (Kerry 2026-09-18), whatever the unit.
+    vals = [_wrt(a["course_handicap_raw"] * al) for a in rows]
+    return [v - min(vals) for v in vals]
 check("the lowest player in the group is the team zero",
       min(a["team_handicap"] for a in _pk3["alpha"]) == 0)
 check("TEAM is the allowance applied to the unrounded course handicap, rounded once, off the unit's lowest",
       [a["team_handicap"] for a in _pk3["alpha"] if a.get("course_handicap_raw") is not None] == _team_expected(_pk3),
       str([(a["sort_name"], a["playing_handicap"], a["team_handicap"]) for a in _pk3["alpha"]]))
 check("the sheet states the allowance and the UNIT it used, so a wrong dial is visible",
-      "off the lowest in the cart" in _pk3["team_basis"] and "%" in _pk3["team_basis"], _pk3["team_basis"])
+      "off the lowest in the field" in _pk3["team_basis"] and "%" in _pk3["team_basis"], _pk3["team_basis"])
 check("...and which card the playing handicap came off", "nine card" in _pk3["ph_basis"], _pk3["ph_basis"])
 # Kerry 2026-09-15: "Team Net is not 100%. It is 85% for tonight's two
 # ball net. It is 75% for normal one ball net. Needs to follow our rules

@@ -57475,27 +57475,29 @@ def _event_team_unit(n_players: int, holes_key: str, db_path=None) -> tuple[str,
 
 def team_handicaps_for_groups(groups: list, allowance: float, unit: str) -> None:
     """Set `team_handicap` on every player who has `course_handicap_raw`
-    (v2.464.15). The allowance is applied to the UNROUNDED course handicap
+    (v2.464.16). The allowance is applied to the UNROUNDED course handicap
     and rounded ONCE (WHS: "rounding is performed only once and as the
-    last step" — CA Queue #7 found the double-rounding), then each player
-    plays off the LOWEST in their UNIT: the whole group for Team Net, the
-    CART (seats 1-2 / 3-4; a fifth rider is their own unit) for Cart Net.
-    Kerry 2026-09-18: Anthis and Palacios read wrong because the sheet
-    computed a foursome's Team Net at 75% for a Cart Net night at 85%."""
+    last step" — CA Queue #7 found the double-rounding), then every
+    player plays off the LOWEST IN THE WHOLE FIELD — not the cart, not
+    the group. Kerry 2026-09-18: "OFF Lowest is not per cart. OFF Lowest
+    is lowest in the whole field. For 1/2 Net Skins it is field too.
+    Team Net is field too." `unit` names the game (cart / group) for the
+    sheet; it no longer changes the arithmetic."""
     from email_parser.handicap_calc import whs_round as _wr
+    allowed: list = []
     for g in groups:
-        units: dict = {}
         for p in g["players"]:
             if p.get("course_handicap_raw") is None:
                 continue
-            key = (((p.get("cart_pos") or 1) - 1) // 2) if unit == "cart" else 0
-            units.setdefault(key, []).append(p)
-        for members in units.values():
-            vals = {id(p): _wr(p["course_handicap_raw"] * allowance) for p in members}
-            low = min(vals.values())
-            for p in members:
-                p["team_allowed"] = vals[id(p)]
-                p["team_handicap"] = vals[id(p)] - low
+            p["team_allowed"] = _wr(p["course_handicap_raw"] * allowance)
+            allowed.append(p["team_allowed"])
+    if not allowed:
+        return
+    low = min(allowed)
+    for g in groups:
+        for p in g["players"]:
+            if p.get("team_allowed") is not None:
+                p["team_handicap"] = p["team_allowed"] - low
 
 
 def event_team_net_dial(conn, ev: dict) -> tuple[int, float, str]:
@@ -57530,12 +57532,12 @@ def event_team_net_dial(conn, ev: dict) -> tuple[int, float, str]:
         try:
             allowance = float(override)
             return balls, allowance, (f"manager override {round(allowance * 100)}% "
-                                      f"of PH, off the lowest in the group")
+                                      f"of PH, off the lowest in the field")
         except (TypeError, ValueError):
             pass
     return balls, allowance, (f"Best {balls} net ball{'' if balls == 1 else 's'}, "
                               f"{round(allowance * 100)}% of PH, off the lowest "
-                              f"in the group")
+                              f"in the field")
 
 
 def _tee_name_plural(name: str) -> str:
@@ -58421,8 +58423,7 @@ def get_event_print_pack(event_id: int, db_path=None) -> dict | None:
         team_basis = (f"{'Cart' if team_unit == 'cart' else 'Team'} Net: best "
                       f"{team_balls} net ball{'' if team_balls == 1 else 's'} of "
                       f"{2 if team_unit == 'cart' else 4}, {round(team_allowance * 100)}% "
-                      f"of the course handicap (rounded once), off the lowest in the "
-                      f"{'cart' if team_unit == 'cart' else 'group'}")
+                      f"of the course handicap (rounded once), off the lowest in the field")
     elif _pct is None:
         team_basis = team_basis + " (dial fallback — no ruled allowance for this size)"
     team_handicaps_for_groups(groups, team_allowance, team_unit)
