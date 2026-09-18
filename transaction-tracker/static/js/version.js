@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.464.9";
+window.TGF_VERSION = "2.464.10";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.464.10",
+    date: "2026-09-18",
+    changes: [
+      "Insider scorecard (Friday Routine, first run): the issue trend table now lives in event-recaps.md on the per-list Brevo basis — #1 24 clickers, #2 21, #3 15 at +48h with real reads under half of #2's; by-group split and link ranking recorded per issue; one non-member registration after the #3 send. Recommendation on record: rotate off money headlines to the first-timer angle with a person-and-moment subject.",
+    ],
+  },
   {
     version: "2.464.9",
     date: "2026-09-18",

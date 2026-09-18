@@ -649,6 +649,16 @@ Tuesday's button. Read #2 again at +24h and keep the opens/clicks trend
 per issue (Brevo campaign ids: #15 = Insider 1 (9/2), #18 = Insider 2
 (9/10), #19 = Insider 3 (9/16)). **Audience split (v2.462.6):** `scoring-brevo-campaign-split:<campaign id>` — recipients / openers / clickers / unsubs by TGF status (active, former, prospect, unknown = not in the Tracker), read-only; Kerry 2026-09-17: most of list 3 (~920 of 1,437) has no Tracker record, i.e. signed up over the years and never bought.
 
+**ISSUE TREND (per-list basis, Brevo campaignStats listId 3 — the only basis that is consistent across issues; globalStats double-count mirror/share hits). Friday scorecard Routine appends one row per issue:**
+
+| issue | sent | audience | delivered | trackable views | opens rate | unique clickers | clicks | unsubs | non-member regs after send | read at |
+|---|---|---|---|---|---|---|---|---|---|---|
+| #1 (#15) | Wed 9/2 2:18 PM | whole list 3 | 1,245 | 119 | 32.3% | 24 | 56 | 4 | — | final |
+| #2 (#18) | Wed 9/10 1:36 PM | list 3 − active | 1,222 | 238 | 44.0% | 21 | 46 | 10 | 0 | final |
+| #3 (#19) | Wed 9/16 1:17 PM | list 3 − active | 1,207 | 106 | 38.0% | 15 | 43 | 6 | 1 (Ty B., 1st timer, Cedar Creek 18, Fri 1:32 PM — source unattributed) | +48h Fri 9/18 |
+
+#3 by group at +48h (openers incl. Apple auto-opens / unique clickers): unknown 71 / 7 · prospect 19 / 6 · former 15 / 1 · active 1 / 1. Links: Brackenridge button 6, MEMBERSHIP 6, SA RESULTS 6, SA calendar 5, Austin calendar 4, Teravista 3, Cedar Creek 18 3, Austin RESULTS 2, home 1. **Reading (2026-09-18):** three issues, clickers 24 → 21 → 15 on a fixed audience; #3's real reads are under half of #2's. Two money headlines in a row ("First payday" → "Half the Field Won Money!") and the second pulled less; prospects are still the group that clicks (6 of 15 from ~260 people) and the event buttons + MEMBERSHIP are where they go. Next issue: the rotation's first-timer angle, a subject that names a person and a moment (no purse, no exclamation), and the ratified "you're in the team game without buying anything" line above the Try-a-Tuesday button. The list itself is the ceiling — the Insider cannot grow the audience; lead ads and first-timers do.
+
 **v3 fixes (Kerry, off the Brevo preview 2026-09-02) — template rules:**
 - The Season-20 logo (69986bc3…png) is BLACK INK — header band must be
   WHITE (with a dark rule under it), never #1b1b1b (v2 rendered black
