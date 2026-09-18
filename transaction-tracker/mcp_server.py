@@ -4494,7 +4494,7 @@ def _scoring_dispatch(url: str, extract: str):
             built = build_print_pack_for_event(int(parts[0]))
             if not built:
                 return json.dumps({"error": "event not found or nothing to print"})
-            summary = {k: built.get(k) for k in ("parts", "sha", "filename", "engine", "engine_note", "error")}
+            summary = {k: built.get(k) for k in ("parts", "sha", "filename", "engine", "engine_note", "assets", "error")}
             summary["bytes"] = len(built.get("pdf") or b"")
             if len(parts) > 1 and parts[1].lower() == "send" and not built.get("error"):
                 db.log_agent_action("mcp-claude", "scoring-print-pack-pdf", arg)

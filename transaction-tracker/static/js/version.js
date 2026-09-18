@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.465.13";
+window.TGF_VERSION = "2.465.14";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.465.14",
+    date: "2026-09-18",
+    changes: [
+      "Print pack: the logo renders. Chromium loads each part with set_content() at about:blank, where a root-relative `/static/tgf-logo-r.svg` resolves to nothing and no request is made — the first Chromium pack printed the alt text (Kerry: \u2018the logo is not rendering\u2019). Every /static/ reference now gets a host the route answers; the build result and the bridge list the `assets` actually served, and `test_print_pack.py` fails if the logo is not among them.",
+    ],
+  },
   {
     version: "2.465.13",
     date: "2026-09-18",

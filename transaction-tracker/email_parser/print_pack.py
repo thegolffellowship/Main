@@ -26,6 +26,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import os
+import re
 from datetime import timedelta
 
 logger = logging.getLogger(__name__)
@@ -111,7 +112,11 @@ def build_event_print_pack(render, event_id: int, static_dir: str,
                     "parts": [{"slug": s_, "pages": None} for s_, _ in htmls], "event": ev}
     return {"pdf": pdf, "parts": parts, "sha": sha, "event": ev, "engine": engine,
             "engine_note": engine_note,
+            "assets": sorted(set(getattr(_render_pdf_chromium, "last_served", []))) if engine == "chromium" else None,
             "filename": f"{code} — print pack — {ev.get('event_date')}.pdf"}
+
+
+PRINT_STATIC_ORIGIN = "http://tgf-print.local"   # never fetched: the route answers it
 
 
 def _chromium_executable() -> str | None:
@@ -144,6 +149,8 @@ def _render_pdf_chromium(htmls, static_dir: str):
     from pypdf import PdfReader, PdfWriter
     import io
 
+    served: list = []
+
     def _serve_static(route, request):
         url = request.url
         i = url.find("/static/")
@@ -151,10 +158,19 @@ def _render_pdf_chromium(htmls, static_dir: str):
             rel = url[i + len("/static/"):].split("?")[0]
             path = os.path.normpath(os.path.join(static_dir, rel))
             if path.startswith(os.path.normpath(static_dir)) and os.path.isfile(path):
+                served.append(rel)
                 route.fulfill(path=path, content_type=mimetypes.guess_type(path)[0] or "application/octet-stream")
                 return
             route.abort(); return
         route.continue_()
+
+    # set_content() loads the document at about:blank, where a ROOT-RELATIVE
+    # reference (`src="/static/tgf-logo-r.svg"`) resolves to nothing and no
+    # request is ever made — the first Chromium pack printed the logo's alt
+    # text (Kerry 2026-09-18: "the logo is not rendering"). Give every
+    # /static/ reference a host so it becomes a request the route serves.
+    _abs = re.compile(r"""(["'(])/static/""")
+    htmls = [(slug, _abs.sub(r"\1" + PRINT_STATIC_ORIGIN + "/static/", html)) for slug, html in htmls]
 
     def _run():
         writer, parts = PdfWriter(), []
@@ -178,6 +194,7 @@ def _render_pdf_chromium(htmls, static_dir: str):
             finally:
                 browser.close()
         out = io.BytesIO(); writer.write(out)
+        _render_pdf_chromium.last_served = list(served)
         return out.getvalue(), parts, "chromium"
     with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
         return ex.submit(_run).result(timeout=180)
