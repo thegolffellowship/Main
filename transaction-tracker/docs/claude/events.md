@@ -2160,9 +2160,16 @@ emailed to me."
 - **On demand:** `scoring-print-pack:<event_id>` builds and reports parts,
   page counts, hash and size; `|send[|<to>]` mails it and records the
   hash; `scoring-print-pack:due` lists tomorrow's events.
-- **Deploy:** `weasyprint==62.3` + `pydyf==0.11.0` in requirements;
-  Pango/Cairo apt packages in `nixpacks.toml`. The engine is imported
-  lazily — without it the app boots and the route/bridge say so (503).
+- **Deploy — NOT YET ON RAILWAY.** The first attempt (v2.465.0:
+  `weasyprint==62.3` + `pydyf==0.11.0` in requirements, Pango/Cairo apt
+  packages via `[phases.setup] aptPkgs` in `nixpacks.toml`) FAILED the
+  Railway build at 4:19 PM on 2026-09-18 and was backed out in v2.465.1.
+  The code stays; the engine is imported lazily, so the route/bridge
+  answer 503 "PDF engine unavailable" and the routine logs it. Retry
+  plan: get the build log (Railway → View build logs), then either fix
+  the apt package names for the builder image or move the PDF render to
+  a Dockerfile stage; the test (`test_print_pack.py`) proves the bind
+  works where the engine is present (this container).
 - **Mail:** `send_mail_graph(..., attachments=[(name, bytes, mime)])`
   sends Graph `fileAttachment`s (inline base64, under Graph's 3 MB).
 - Test: `test_print_pack.py` (builds a real PDF, serves the route,

@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.465.0";
+window.TGF_VERSION = "2.465.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.465.1",
+    date: "2026-09-18",
+    changes: [
+      "v2.465.0 FAILED TO BUILD ON RAILWAY (the Pango/Cairo apt packages + WeasyPrint added for the print pack). Production stayed on v2.464.16. This release backs the packaging out so main deploys again \u2014 carrying the v2.465.0 code (print pack route, routine, bridge, Graph attachments) and, more urgently, the starter-sheet fix for an index-less player (v2.464.15 read a key the pack set only for players with an index; under strict templates a sheet with one such player would not render). The PDF engine is loaded lazily: until it ships, `/events/<id>/print-pack.pdf` and `scoring-print-pack` answer 503 \u2018PDF engine unavailable\u2019 and the evening routine logs the same. Retry plan in events.md.",
+    ],
+  },
   {
     version: "2.465.0",
     date: "2026-09-18",
