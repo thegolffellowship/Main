@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.464.8";
+window.TGF_VERSION = "2.464.9";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.464.9",
+    date: "2026-09-18",
+    changes: [
+      "ONE EXPAND ARROW, EVERYWHERE. `/me` and Money Flow each carried a grey glyph of their own \u2014 the \u2018two off-standard chevrons\u2019 on the carry-forward list since Kerry\u2019s 2026-09-15 ruling that the standard chevron is orange. Both now use the house arrow (`.tgf-exp`: \u25b6, TGF orange, rotates open); `/me` takes the values because it does not load dashboard.css, and rotates by class instead of swapping glyphs. Guard: `test_chevron_standard.js`.",
+      "`docs/claude/state-of-the-tracker.md` REWRITTEN IN FULL at v2.464.8 (it had described v2.296 with wave sections appended). Now: the subsystem map with a doc per row, the RULES OF RECORD the Platform implements (league mechanics, the handicap system and lock, the plus rule, the allowance ladder and the \u2018GG rules until untethered\u2019 tie-breaker, money-waits-for-the-field, pairings 1\u201315g, ONE ORDER ONE FEE), game day as it runs, the data estate incl. the participation finding, every open decision, ten paid-for lessons for the Platform, a timeline of waves as pointers, and the stack ruling for live leaderboards.",
+    ],
+  },
   {
     version: "2.464.8",
     date: "2026-09-18",

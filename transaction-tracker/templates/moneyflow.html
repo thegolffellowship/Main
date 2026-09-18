@@ -29,7 +29,11 @@
         .mf-line { display:flex; align-items:center; gap:10px; padding:12px 16px; border-bottom:1px solid var(--border); cursor:default; }
         .mf-line.expandable { cursor:pointer; }
         .mf-line.expandable:hover { background:#F8F8F8; }
-        .mf-line .chev { width:14px; color:var(--text-muted); font-size:0.7rem; transition:transform 0.15s; }
+        /* The house expand arrow (`.tgf-exp`, orange, rotates open) — this
+           page used a grey glyph of its own (Kerry 2026-09-15: "Standard
+           chevron is supposed to be orange"). Width only; colour, size and
+           glyph come from the class. */
+        .mf-line .chev { width:14px; }
         .mf-line.open .chev { transform:rotate(90deg); }
         .mf-line .lbl { flex:1; min-width:0; }
         .mf-line .lbl .t { font-weight:600; font-size:0.9rem; }
@@ -222,7 +226,7 @@
             const exp = expandKey ? " expandable" : "";
             return `
                 <div class="mf-line ${cls}${exp}"${expandKey ? ` data-exp="${expandKey}"` : ""}>
-                    <span class="chev">${expandKey ? "&#9656;" : ""}</span>
+                    <span class="chev tgf-exp">${expandKey ? "&#9654;" : ""}</span>
                     <span class="lbl"><span class="t">${title}</span>
                         ${sub ? `<div class="s">${sub}</div>` : ""}</span>
                     <span class="amt">${fmt(amount)}</span>
