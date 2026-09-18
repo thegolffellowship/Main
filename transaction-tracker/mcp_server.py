@@ -5053,6 +5053,12 @@ def _scoring_dispatch(url: str, extract: str):
                 dom, _, budget = rest.partition("@")
                 return json.dumps(ggh.ingest_portal_field(
                     dom.strip(), budget_seconds=int(budget or 240)), indent=2)
+            if sub == "cohort":
+                # cohort[=<A>-<B>] — Kerry's 2022 question (#555): season
+                # A → B retention, months, rounds-per-player profiles
+                a, _, b = rest.strip().partition("-")
+                return json.dumps(ggh.cohort_analysis(
+                    a or "2022", b or "2023"), indent=2, default=str)
             if sub == "holes-reset" and rest:
                 # re-queue holes-walk rounds that yielded no cards (the
                 # pre-ALL-board rounds); nothing deleted
@@ -5148,7 +5154,7 @@ def _scoring_dispatch(url: str, extract: str):
                                "field-bg=<subdomain>[@<budget_s>] | "
                                "field-reset=<subdomain> | holes-reset=<subdomain> | "
                                "calendar=<subdomain> | "
-                               "participation[=<from>-<to>] | "
+                               "participation[=<from>-<to>] | cohort[=<A>-<B>] | "
                                "roster=report|apply"})
         if cmd == "scoring-payouts-bulk-paid":
             # "scoring-payouts-bulk-paid:<YYYY-MM-DD>" — one-time cleanup:

@@ -2574,6 +2574,200 @@ def _days_between(a: str, b: str) -> int:
 
 
 
+# ── 2022 question (Kerry via #555, 2026-09-17: "I want to know what
+# happened in 2022. We had our most members that year.") ─────────────────
+#
+# cohort_analysis(): season-to-season retention of the FIELD-walk
+# population, month-by-month Tuesday fields, and rounds-per-player
+# profiles — all from gg_history, no re-pull. Players are keyed by the
+# printed name (GG's 'LAST, First' handle, upper-cased, duplicate-digit
+# stripped) rather than customer_id, because identity linking runs 60%
+# in 2019 and 98% in 2024 and a customer_id key would count one person
+# as two across seasons.
+
+def _name_key(name: str) -> str:
+    n = " ".join((name or "").split()).upper()
+    return " ".join(w.rstrip("0123456789") for w in n.split())
+
+
+def _season_fields(conn, portal_id: int):
+    """[(event_id, label, date, kind, [(name_key, aff, cid), …]), …] for a
+    portal's walked, non-empty, non-match/admin rounds."""
+    out = []
+    for e in conn.execute(
+            """SELECT e.id, e.event_label, e.event_date
+               FROM gg_history_events e
+               JOIN gg_history_pages g
+                 ON g.portal_id=e.portal_id
+                AND g.gg_page_id='field:'||e.gg_round_id
+                AND g.fetch_status='done'
+               WHERE e.portal_id=? ORDER BY e.event_date, e.id""",
+            (portal_id,)):
+        kind = classify_round_label(e["event_label"])
+        if kind in ("match", "admin"):
+            continue
+        field = [(_name_key(nm), aff, cid)
+                 for nm, aff, cid in _field_names(conn, e["id"])]
+        if field:
+            out.append((e["id"], e["event_label"], e["event_date"], kind,
+                        field))
+    return out
+
+
+def cohort_analysis(season_a: str = "2022", season_b: str = "2023",
+                    through: str = "2026", db_path=None) -> dict:
+    from email_parser.database import _connect, DB_PATH
+    out = {"season_a": season_a, "season_b": season_b, "through": through,
+           "chapters": {}, "caveats": [
+               "players keyed by printed GG name (upper-cased, duplicate "
+               "digit stripped), not customer_id — cross-season identity "
+               "is the name GG prints, which is stable for members",
+               "member-ever = TODAY's board affiliation (TGF*/Former); "
+               "roster_start_le_a = the master roster's start_year <= "
+               "season A (Kerry's 2026-07 export) — the closest thing to "
+               "'was a member by then' the public widgets allow",
+               "Tuesday = classify_round_label tuesday9; a 2023 league "
+               "night (east/west, north/south) counts as one Tuesday",
+           ]}
+    with _connect(db_path or DB_PATH) as conn:
+        ensure_gg_history_tables(conn)
+        ensure_gg_member_map(conn)
+        roster_start = {}
+        try:
+            for r in conn.execute(
+                    """SELECT handle, MIN(start_year) AS sy FROM gg_member_map
+                       WHERE handle IS NOT NULL AND start_year IS NOT NULL
+                       GROUP BY handle"""):
+                try:
+                    roster_start[_name_key(r["handle"])] = int(r["sy"])
+                except (TypeError, ValueError):
+                    pass
+        except Exception:
+            pass
+        portals = conn.execute(
+            """SELECT id, subdomain, chapter, season FROM gg_history_portals
+               WHERE chapter IS NOT NULL AND season IS NOT NULL
+                 AND status='alive' ORDER BY chapter, season""").fetchall()
+        by_chapter = {}
+        for p in portals:
+            by_chapter.setdefault(p["chapter"], {})[p["season"]] = p
+
+        for chapter, seasons in by_chapter.items():
+            def players(season):
+                p = seasons.get(season)
+                if not p:
+                    return None, []
+                fields = _season_fields(conn, p["id"])
+                names = {}
+                for _eid, _lbl, _date, _kind, field in fields:
+                    for key, aff, cid in field:
+                        d = names.setdefault(key, {"rounds": 0, "aff": aff,
+                                                   "cid": cid})
+                        d["rounds"] += 1
+                        if aff:
+                            d["aff"] = aff
+                return names, fields
+
+            def cohort(a, b):
+                na, fa = players(a)
+                nb, _ = players(b)
+                if na is None or nb is None:
+                    return None
+                later = set()
+                for s in range(int(b) + 1, int(through) + 1):
+                    ns, _ = players(str(s))
+                    if ns:
+                        later |= set(ns)
+                A, B = set(na), set(nb)
+                gone = A - B - later
+                back = (A - B) & later
+                member_ever = {k for k, d in na.items()
+                               if (d["aff"] or "").upper().startswith("TGF")
+                               or d["aff"] == "Former"}
+                start_le = {k for k in A if roster_start.get(k, 9999)
+                            <= int(a)}
+                def sub(S):
+                    return {"n": len(S), "returned_next": len(S & B),
+                            "never_again": len(S & gone),
+                            "back_later": len(S & back),
+                            "pct_returned_next": (round(100 * len(S & B)
+                                                        / len(S), 1)
+                                                  if S else None)}
+                return {"players": sub(A), "member_ever": sub(member_ever),
+                        "roster_start_le_a": sub(start_le),
+                        "new_in_b": len(B - A),
+                        "b_players": len(B)}
+
+            def months(season):
+                na, fields = players(season)
+                if na is None:
+                    return None
+                m = {}
+                for _eid, _lbl, date, kind, field in fields:
+                    if kind != "tuesday9" or not date:
+                        continue
+                    mo = date[:7]
+                    m.setdefault(mo, []).append(len(field))
+                return {mo: {"nights": len(v),
+                             "mean": round(sum(v) / len(v), 1)}
+                        for mo, v in sorted(m.items())}
+
+            def profile(season):
+                na, _ = players(season)
+                if na is None:
+                    return None
+                buckets = {"1": 0, "2-3": 0, "4-6": 0, "7+": 0}
+                for d in na.values():
+                    r = d["rounds"]
+                    buckets["1" if r == 1 else "2-3" if r <= 3
+                            else "4-6" if r <= 6 else "7+"] += 1
+                return {"players": len(na), **buckets,
+                        "rounds_per_player": (round(sum(d["rounds"]
+                                                        for d in na.values())
+                                                    / len(na), 2)
+                                              if na else None)}
+
+            prev_a = str(int(season_a) - 1)
+            out["chapters"][chapter] = {
+                f"cohort_{season_a}_to_{season_b}": cohort(season_a, season_b),
+                f"cohort_{prev_a}_to_{season_a}_control":
+                    cohort(prev_a, season_a),
+                f"months_{season_a}": months(season_a),
+                f"months_{season_b}": months(season_b),
+                "profiles": {s: profile(s) for s in
+                             (season_a, season_b, "2025")},
+            }
+
+        # (4) does a season-A standings page carry an affiliation column?
+        aff_pages = 0
+        try:
+            for r in conn.execute(
+                    """SELECT a.body_gz FROM gg_history_pages g
+                       JOIN gg_history_portals p ON p.id=g.portal_id
+                       JOIN gg_raw_archive a ON a.id=g.raw_archive_id
+                       WHERE p.season=? AND g.fetch_status='done'
+                         AND g.page_kind IN ('season_standings',
+                                             'money_leaders')""",
+                    (season_a,)):
+                try:
+                    body = zlib.decompress(r["body_gz"]).decode(
+                        "utf-8", "replace")
+                except Exception:
+                    continue
+                if "Affiliation" in body:
+                    aff_pages += 1
+        except Exception:
+            pass
+        out["standings_affiliation_pages"] = aff_pages
+        out["caveats"].append(
+            f"{aff_pages} season-{season_a} standings pages print an "
+            "Affiliation column, but GG renders a member's CURRENT "
+            "affiliation on archived widgets too (the pages were fetched "
+            "in 2026), so it is not that season's membership — the roster "
+            "start_year subset above is the season-dated proxy")
+    return out
+
+
 # ── Review UI backend (admin page /admin/gg-history) ─────────────────────
 # Kerry's identity review queue: every pending name gets a human ruling —
 # link to a customer, mark guest (never auto-created), or not-a-person

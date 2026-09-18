@@ -700,7 +700,7 @@ Handicapper).
 `scoring-gg-history:participation[=<from>-<to>]` → `participation_series()`
 — see **Participation series** below. Tests: `test_gg_history_field.py`.
 
-## Participation series 2019–2026 (season × chapter) — measured 2026-09-17/18
+## Participation series 2016–2026 (season × chapter) — measured 2026-09-17/18
 
 Kerry, 2026-09-17: *"Before 2023, participation rates were higher,
 significantly."* Measured off the FIELD walk (every round's ALL Net /
@@ -720,6 +720,9 @@ that season"); **linked** = distinct customer_ids resolved.
 
 | season | Tue nights | players / Tue (mean · median) | all events | players / event | player-rounds | distinct players | member-ever | linked | note |
 |---|---|---|---|---|---|---|---|---|---|
+| 2016 | 12 | 36.9 · 37.5 | 16 | 33.0 | 528 | 99 | — | 25 | first GG season; 'e1'…'e12' codes; no ALL boards (all events on the fallback basis) |
+| 2017 | 10 | 33.1 · 33 | 14 | 32.7 | 458 | 75 | — | 26 | 4 events on the fallback basis |
+| 2018 | 12 | 50.9 · 50.5 | 19 | 49.1 | 932 | 157 | — | 47 | first Fellowship Cup + money pages; 7 events on the fallback basis |
 | 2019 | 10 | 55.8 · 57.5 | 13 | 58.2 | 756 | 153 | — | 60 | Tuesdays every OTHER week (s1–s10); ALL boards present |
 | 2020 | 10 | 51.5 · 51 | 12 | 48.9 | 587 | 98 | — | 52 | COVID season |
 | 2021 | 16 | 46.7 · 48.5 | 22 | 44.2 | 972 | 144 | — | 81 | |
@@ -776,8 +779,10 @@ has no dated 2025 events, so 2025 is archive-only.
 ### What the numbers say (the finding, 2026-09-18)
 
 1. **Per-Tuesday fields WERE much bigger before 2023 — in San Antonio.**
-   56 players a night in 2019, 52 in 2020, 47 in 2021, 35 in 2022, then
-   23 in 2023, 28 in 2024, 33 in 2025, 29 in 2026. Austin never had
+   37 players a night in 2016, 33 in 2017, 51 in 2018, 56 in 2019, 52 in
+   2020, 47 in 2021, 35 in 2022, then 23 in 2023, 28 in 2024, 33 in
+   2025, 29 in 2026. The 2018–2020 peak sat on a ten-to-twelve-night
+   calendar. Austin never had
    that shape: 14 → 21 → 23 → 21 → 13 → 7 → 22 → 19.
 2. **Because there were far fewer Tuesdays.** 2019–2020 ran ten
    Tuesdays a season (every other week); 2022 ran 22; 2023 ran 38

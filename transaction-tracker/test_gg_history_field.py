@@ -306,6 +306,46 @@ check("series: tracker rows absent on bare DB → tracker_error, no crash",
 check("series: median helper", ggh._median([]) is None and ggh._median([3, 1, 2]) == 2
       and ggh._median([1, 2, 3, 4]) == 2.5)
 
+# ── cohort analysis on the same scratch DB (SA 2019 → 2020 with a 2020 portal)
+_c = sqlite3.connect(tmp.name)
+_c.execute("UPDATE gg_history_pages SET fetch_status='done' WHERE fetch_status='redo'")  # undo the reset check
+_c.execute("INSERT INTO gg_history_portals (id, subdomain, chapter, season, kind, brand, status) "
+           "VALUES (3,'tgf-sa2020','San Antonio','2020','season','TGF','alive')")
+_c.execute("INSERT INTO gg_history_events (id, portal_id, season, chapter, event_label, event_date, gg_round_id) "
+           "VALUES (20,3,'2020','San Antonio','s1 THE QUARRY back','2020-04-07','r20')")
+_c.execute("INSERT INTO gg_history_pages (portal_id, gg_page_id, page_kind, widget_type, fetch_status) "
+           "VALUES (3,'field:r20','event_field','all_boards','done')")
+for nm, aff, cid in [("NIESTER, Kerry", "TGF San Antonio", 7), ("NEWGUY, Sam", "Guest", None),
+                     ("FRESH, Face", "Guest", None)]:
+    _c.execute("INSERT INTO gg_history_results (gg_event_id, game_label, player_name, customer_id, raw_row) "
+               "VALUES (20,'ALL Net',?,?,?)", (nm, cid, json.dumps({"src": "field_walk", "aff": aff, "row": []})))
+_c.execute("CREATE TABLE IF NOT EXISTS gg_member_map (gg_member_id TEXT PRIMARY KEY, customer_id INTEGER, "
+           "handle TEXT, email TEXT, affiliation TEXT, start_year TEXT, member_guest TEXT)")
+_c.execute("INSERT INTO gg_member_map (gg_member_id, handle, start_year) VALUES ('1','NIESTER, Kerry','2007'), "
+           "('2','ANTHIS, Larry','2018'), ('3','HOGUE, Jay','2021')")
+_c.commit(); _c.close()
+co = ggh.cohort_analysis("2019", "2020", through="2020", db_path=tmp.name)
+sa = co["chapters"]["San Antonio"]
+c19 = sa["cohort_2019_to_2020"]
+check("cohort: 2019 SA had 7 players, 2 returned in 2020 (Niester, Newguy), 5 never again",
+      c19["players"] == {"n": 7, "returned_next": 2, "never_again": 5, "back_later": 0,
+                         "pct_returned_next": 28.6}, c19["players"])
+check("cohort: member-ever subset 5 with 1 returning",
+      c19["member_ever"]["n"] == 5 and c19["member_ever"]["returned_next"] == 1, c19["member_ever"])
+check("cohort: roster start_year <= 2019 subset = Niester + Anthis (Hogue started 2021)",
+      c19["roster_start_le_a"]["n"] == 2 and c19["roster_start_le_a"]["returned_next"] == 1,
+      c19["roster_start_le_a"])
+check("cohort: new in 2020 = 1 (Fresh Face), 2020 players 3",
+      c19["new_in_b"] == 1 and c19["b_players"] == 3, c19)
+check("cohort: control 2018→2019 absent → None", sa["cohort_2018_to_2019_control"] is None)
+check("cohort: months 2019 = April only, 2 Tuesday nights mean 4.0",
+      sa["months_2019"] == {"2019-04": {"nights": 2, "mean": 4.0}}, sa["months_2019"])
+check("cohort: profile 2019 buckets (1: 5 players, 2-3: 2 players)",
+      sa["profiles"]["2019"]["1"] == 5 and sa["profiles"]["2019"]["2-3"] == 2
+      and sa["profiles"]["2019"]["players"] == 7, sa["profiles"]["2019"])
+check("cohort: profile 2025 absent → None", sa["profiles"]["2025"] is None)
+check("cohort: name key strips GG duplicate digits", ggh._name_key("REED, Paul1 ") == "REED, PAUL")
+
 # ── Tracker rows on a scratch DB with items/events ───────────────────────
 conn = sqlite3.connect(tmp.name)
 conn.execute("CREATE TABLE events (id INTEGER PRIMARY KEY, item_name TEXT, "

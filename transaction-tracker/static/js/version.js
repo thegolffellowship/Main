@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.464.4";
+window.TGF_VERSION = "2.464.5";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.464.5",
+    date: "2026-09-18",
+    changes: [
+      "Kerry's 2022 question (mailbox #555: 'I want to know what happened in 2022. We had our most members that year.'): scoring-gg-history:cohort[=<A>-<B>] → cohort_analysis(). Per chapter, from gg_history alone: season A → B retention of the field-walk population (returned next season / never seen again through 2026 / came back later), for all players, for the member-ever subset and for the roster start_year <= A subset (the season-dated proxy the public widgets allow), with the prior season as the control; Tuesday fields by calendar month for A and B (did 2023 drop in spring with the league split or through the year); rounds-per-player profiles (1 / 2–3 / 4–6 / 7+) for A, B and 2025; and whether season-A standings pages print an Affiliation column (they do — but GG renders today's affiliation on archived widgets, so it is not that season's membership). Players keyed by printed GG name, not customer_id, so uneven linking rates across seasons cannot split one person in two. Participation series doc now reaches 2016.",
+    ],
+  },
   {
     version: "2.464.4",
     date: "2026-09-18",
