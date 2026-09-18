@@ -58661,6 +58661,50 @@ def save_event_pairings(event_id: int, groups_by_holes: dict, db_path=None) -> N
         conn.commit()
 
 
+def swap_event_seats(event_id: int, name_a: str, name_b: str,
+                     apply: bool = False, db_path=None) -> dict:
+    """Swap two seated players' SEATS on a saved sheet, through the normal
+    save (v2.464.13, Kerry 2026-09-18 on s18.11: "You with Jeff"). The
+    whole person moves and the seat stays — the same rule the page's
+    swap now follows — so tees, ids and the locked index travel with the
+    names and the blinds re-seat. Names match by pair key (case and
+    spacing insensitive). Dry-run unless `apply`."""
+    pairings = get_event_pairings(event_id, db_path=db_path)
+    ka, kb = _pair_key_name(name_a), _pair_key_name(name_b)
+    found: dict = {}
+    for holes, groups in pairings.items():
+        for g in groups:
+            for p in g["players"]:
+                k = _pair_key_name(p.get("name"))
+                if k in (ka, kb):
+                    found[k] = (holes, g, p)
+    missing = [n for n, k in ((name_a, ka), (name_b, kb)) if k not in found]
+    if missing:
+        return {"error": f"not seated on this sheet: {missing}"}
+    (ha, ga, pa), (hb, gb, pb) = found[ka], found[kb]
+    if ha != hb:
+        return {"error": "cannot swap across the 9-hole and 18-hole sheets"}
+    plan = {"a": {"name": pa["name"], "from": f"{ga['slot_label']} seat {pa['cart_pos']}",
+                  "to": f"{gb['slot_label']} seat {pb['cart_pos']}"},
+            "b": {"name": pb["name"], "from": f"{gb['slot_label']} seat {pb['cart_pos']}",
+                  "to": f"{ga['slot_label']} seat {pa['cart_pos']}"}}
+    # swap everything but the seat number
+    seat_a, seat_b = pa["cart_pos"], pb["cart_pos"]
+    keys = set(pa) | set(pb); keys.discard("cart_pos")
+    va, vb = {k: pa.get(k) for k in keys}, {k: pb.get(k) for k in keys}
+    pa.clear(); pa.update(vb); pa["cart_pos"] = seat_a
+    pb.clear(); pb.update(va); pb["cart_pos"] = seat_b
+    out = {"event_id": int(event_id), "holes": ha, "applied": False, "plan": plan,
+           "groups_after": [{"slot": g["slot_label"],
+                             "players": [f"{p['cart_pos']}:{p['name']}" for p in g["players"]]}
+                            for g in pairings[ha] if g in (ga, gb)]}
+    if apply:
+        save_event_pairings(int(event_id), pairings, db_path=db_path)
+        out["applied"] = True
+        out["blinds"] = get_event_blinds(int(event_id), db_path=db_path)
+    return out
+
+
 def relabel_event_pairings(event_id: int, holes: str, labels: dict,
                            apply: bool = False, db_path=None) -> dict:
     """Give a saved sheet its hole labels back and put its groups in hole

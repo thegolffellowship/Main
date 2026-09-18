@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.464.12";
+window.TGF_VERSION = "2.464.13";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.464.13",
+    date: "2026-09-18",
+    changes: [
+      "`scoring-pairings:swap|<event>|<name A>|<name B>[|apply]` \u2014 swap two seated players\u2019 seats on a saved sheet through the normal save: the whole person moves and the seat stays (tees, ids and the locked index travel with the names; blinds re-seat). Dry-run unless apply. Built so a seat change Kerry names in chat (s18.11: \u2018You with Jeff\u2019) goes through the same path as the page, not a hand edit.",
+    ],
+  },
   {
     version: "2.464.12",
     date: "2026-09-18",

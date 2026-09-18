@@ -73,6 +73,21 @@ pr = db.get_event_pairings(1, db_path=DB)
 byname = {p["name"]: p["customer_id"] for p in pr["18"][0]["players"]}
 check("the seat reads the NEW name through its id, id untouched",
       byname.get("Jeffrey Rideout") == 6, byname)
+print("4. swap_event_seats moves the whole person through the normal save")
+with db._connect(DB) as conn:
+    conn.execute("UPDATE customers SET first_name = 'Jeff' WHERE customer_id = 6")
+    conn.commit()
+db.save_event_pairings(1, {"18": [
+    {"group_num": 1, "slot_label": "8:20 AM", "players": [seat(1, "Justin Angelone", 900, "<50"), seat(2, "Jeff Rideout", 6, "50-64")]},
+    {"group_num": 2, "slot_label": "8:30 AM", "players": [seat(1, "Joe Mejia", 729, "<50")]}]}, db_path=DB)
+dry = db.swap_event_seats(1, "joe mejia", "Justin Angelone", db_path=DB)
+check("dry run plans and does not apply", dry["applied"] is False and dry["plan"]["a"]["to"] == "8:20 AM seat 1", dry)
+res = db.swap_event_seats(1, "Joe Mejia", "Justin Angelone", apply=True, db_path=DB)
+pr = db.get_event_pairings(1, db_path=DB)
+seats = {(g["slot_label"], p["cart_pos"]): (p["name"], p["customer_id"]) for g in pr["18"] for p in g["players"]}
+check("the people swapped seats, ids with them",
+      seats[("8:20 AM", 1)] == ("Joe Mejia", 729) and seats[("8:30 AM", 1)] == ("Justin Angelone", 900), seats)
+check("an unknown name is refused", "error" in db.swap_event_seats(1, "Nobody Here", "Jeff Rideout", db_path=DB))
 try: os.unlink(DB)
 except OSError: pass
 print("\n" + ("ALL PASS" if not F else f"{len(F)} FAILURE(S): " + "; ".join(F)))

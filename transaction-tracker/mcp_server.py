@@ -4393,6 +4393,14 @@ def _scoring_dispatch(url: str, extract: str):
                                                   for p in g.get("players", [])]}
                                      for g in (_pk.get("groups") or [])],
                 }, indent=1, default=str)
+            if sub == "swap" and len(parts) >= 4:
+                # swap|<event_id>|<name A>|<name B>[|apply] — swap two seated
+                # players' seats through the normal save (whole person
+                # moves, blinds re-seat). Dry-run unless "apply".
+                return json.dumps(db.swap_event_seats(
+                    int(parts[1]), parts[2], parts[3],
+                    apply=(len(parts) > 4 and parts[4].lower() == "apply")),
+                    indent=2, default=str)
             if sub == "relabel" and len(parts) >= 3:
                 # relabel|<event_id>|<json {current group_num: hole label}>
                 #   [|apply[|<holes>]] — give a sheet its hole labels
