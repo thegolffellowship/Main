@@ -2157,9 +2157,9 @@ emailed to me."
   `EMAIL_ADDRESS`). A content hash of the rendered parts is stored in
   `app_settings` (`print_pack_sent:<event_id>`), so a pack is sent once
   and again only if the sheet changed after the first send.
-- **On demand:** `scoring-print-pack:<event_id>` builds and reports parts,
+- **On demand:** `scoring-print-pack-pdf:<event_id>` builds and reports parts,
   page counts, hash and size; `|send[|<to>]` mails it and records the
-  hash; `scoring-print-pack:due` lists tomorrow's events.
+  hash; `scoring-print-pack-pdf:due` lists tomorrow's events.
 - **Deploy — NOT YET ON RAILWAY.** The first attempt (v2.465.0:
   `weasyprint==62.3` + `pydyf==0.11.0` in requirements, Pango/Cairo apt
   packages via `[phases.setup] aptPkgs` in `nixpacks.toml`) FAILED the

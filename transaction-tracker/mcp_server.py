@@ -4476,11 +4476,11 @@ def _scoring_dispatch(url: str, extract: str):
                     indent=2, default=str)
             return json.dumps({"error": "usage: scoring-pairings:rounds|<portal> "
                                "or round|<portal>|<id>[|apply] or all|<portal>[|apply]"})
-        if cmd == "scoring-print-pack":
-            # scoring-print-pack:<event_id>[|send[|<to>]] — build the bound
+        if cmd == "scoring-print-pack-pdf":
+            # scoring-print-pack-pdf:<event_id>[|send[|<to>]] — build the bound
             # PDF (parts + page counts + hash); "send" mails it as an
             # attachment to <to> or the configured recipient and records
-            # the hash. scoring-print-pack:due lists tomorrow's events.
+            # the hash. scoring-print-pack-pdf:due lists tomorrow's events.
             from email_parser.print_pack import (print_packs_due,
                                                  send_event_print_pack)
             if (arg or "").strip().lower() == "due":
@@ -4495,7 +4495,7 @@ def _scoring_dispatch(url: str, extract: str):
             summary = {k: built.get(k) for k in ("parts", "sha", "filename", "error")}
             summary["bytes"] = len(built.get("pdf") or b"")
             if len(parts) > 1 and parts[1].lower() == "send" and not built.get("error"):
-                db.log_agent_action("mcp-claude", "scoring-print-pack", arg)
+                db.log_agent_action("mcp-claude", "scoring-print-pack-pdf", arg)
                 summary["send"] = send_event_print_pack(
                     built, to_address=(parts[2] if len(parts) > 2 else None))
             return json.dumps(summary, indent=2, default=str)

@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.465.4";
+window.TGF_VERSION = "2.465.5";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.465.5",
+    date: "2026-09-18",
+    changes: [
+      "The PDF bridge is `scoring-print-pack-pdf:<id>[|send[|to]]` / `:due` \u2014 v2.465.0 named it `scoring-print-pack`, which an older read-only bridge (the JSON print pack) already owns and dispatches first, so the PDF branch never ran on the live app. Renamed; nothing else changes.",
+    ],
+  },
   {
     version: "2.465.4",
     date: "2026-09-18",
