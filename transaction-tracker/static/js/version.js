@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.465.10";
+window.TGF_VERSION = "2.465.11";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.465.11",
+    date: "2026-09-18",
+    changes: [
+      "`scoring-pairings:sheet|<id>` lists each seated player's starter-sheet badges (1T / NEW) so a lane can verify the NEW rule against live members without a login.",
+    ],
+  },
   {
     version: "2.465.10",
     date: "2026-09-18",

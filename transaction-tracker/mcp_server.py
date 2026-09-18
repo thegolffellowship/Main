@@ -4389,7 +4389,9 @@ def _scoring_dispatch(url: str, extract: str):
                                                    "idx": p.get("handicap_index"),
                                                    "ph": p.get("playing_handicap"),
                                                    "team": p.get("team_handicap"),
-                                                   "tee": p.get("tee_choice")}
+                                                   "tee": p.get("tee_choice"),
+                                                   "badges": [b for b, on in (("1T", p.get("is_first_timer")),
+                                                                              ("NEW", p.get("is_new"))) if on]}
                                                   for p in g.get("players", [])]}
                                      for g in (_pk.get("groups") or [])],
                 }, indent=1, default=str)
