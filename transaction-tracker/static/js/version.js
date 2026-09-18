@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.464.9";
+window.TGF_VERSION = "2.464.10";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.464.10",
+    date: "2026-09-18",
+    changes: [
+      "THE WHOLE PERSON MOVES, THE SEAT STAYS (Kerry 2026-09-18, s18.11 Cedar Creek: \u2018pairings switched Jeff Rideout and Justin Angelone\u2019s tees when I swapped their cart assignments\u2019). The Player and Cart Pair swaps moved name, tee and index between seats and left `customer_id` behind, so after Save the row read \u2018Jeff Rideout\u2019 with Angelone\u2019s id \u2014 and the server, which since v2.462.0 resolves the tee and the locked index BY customer_id, handed back the other man\u2019s tee. Every field a seat carries is the person\u2019s except the seat number; the swaps now move all of it, and a player seated from Unassigned carries the roster entry whole.",
+      "Two boundary checks so the class cannot recur from any page: the save resolves each seat\u2019s customer_id from the NAME the manager sees (a payload id is kept only when it names the same person, never handed to a guest), and the read corrects a stale id already on file \u2014 so Cedar Creek\u2019s sheet reads right on its next open without a re-save. Tests: `test_pairings_swap_identity.js`, `test_pairings_seat_identity.py`.",
+    ],
+  },
   {
     version: "2.464.9",
     date: "2026-09-18",

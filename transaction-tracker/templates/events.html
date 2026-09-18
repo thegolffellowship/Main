@@ -11080,10 +11080,13 @@
             const unassigned = getUnassigned(state);
             const found = unassigned.find(p => p.name === src.name);
             if (!found) return;
-            // Unassigned players don't live in a real group; just add to
-            // dest. We reconstruct a minimal player object.
-            player = { name: found.name, tee_choice: found.tee_choice || null,
-                       handicap_index: found.handicap_index ?? null };
+            // Unassigned players don't live in a real group; the seat
+            // takes the roster entry WHOLE — customer_id included — so the
+            // save resolves the person, never just the name.
+            player = Object.assign({}, found);
+            delete player.cart_pos;
+            player.tee_choice = found.tee_choice || null;
+            player.handicap_index = found.handicap_index ?? null;
         } else {
             srcGroup = _findGroup(state, src.holes, src.group_num);
             if (!srcGroup) return;
@@ -11140,6 +11143,24 @@
         group.players = order;
     }
 
+    // THE WHOLE PERSON MOVES, THE SEAT STAYS (v2.464.10, Kerry 2026-09-18:
+    // "pairings switched Jeff Rideout and Justin Angelone's tees when I
+    // swapped their cart assignments"). The swaps used to move name, tee
+    // and index between seats and leave `customer_id` behind — so after
+    // Save the row read "Jeff Rideout" with Angelone's id, and the server,
+    // which resolves the tee and the locked index BY customer_id, handed
+    // back the other man's tee. Every field a seat carries is the person's
+    // except `cart_pos`, which is the seat's; swap everything else.
+    function _swapSeatPayloads(pA, pB) {
+        const keys = new Set([...Object.keys(pA), ...Object.keys(pB)]);
+        keys.delete('cart_pos');
+        keys.forEach(k => {
+            const va = pA[k], vb = pB[k];
+            if (vb === undefined) delete pA[k]; else pA[k] = vb;
+            if (va === undefined) delete pB[k]; else pB[k] = va;
+        });
+    }
+
     function _swapPlayers(state, a, b) {
         const grpA = _findGroup(state, a.holes, a.group_num);
         const grpB = _findGroup(state, b.holes, b.group_num);
@@ -11147,10 +11168,7 @@
         const pA = _findPlayer(grpA, a.cart_pos);
         const pB = _findPlayer(grpB, b.cart_pos);
         if (!pA || !pB) return;
-        // Swap names + metadata, keep cart positions in place
-        [pA.name, pB.name] = [pB.name, pA.name];
-        [pA.tee_choice, pB.tee_choice] = [pB.tee_choice, pA.tee_choice];
-        [pA.handicap_index, pB.handicap_index] = [pB.handicap_index, pA.handicap_index];
+        _swapSeatPayloads(pA, pB);      // everyone travels; the seats stay
     }
 
     function _swapCartPairs(state, a, b) {
@@ -11163,13 +11181,10 @@
         if (isCart1A === isCart1B && a.holes === b.holes && a.group_num === b.group_num) return; // same cart, no-op
         const pairsA = grpA.players.filter(p => isCart1A ? p.cart_pos <= 2 : p.cart_pos > 2);
         const pairsB = grpB.players.filter(p => isCart1B ? p.cart_pos <= 2 : p.cart_pos > 2);
-        // Swap player data between pairs (name, tee, hcp)
+        // Swap the PEOPLE between the pairs' seats — every field, not a
+        // hand-picked three (see _swapSeatPayloads).
         const minLen = Math.min(pairsA.length, pairsB.length);
-        for (let i = 0; i < minLen; i++) {
-            [pairsA[i].name, pairsB[i].name] = [pairsB[i].name, pairsA[i].name];
-            [pairsA[i].tee_choice, pairsB[i].tee_choice] = [pairsB[i].tee_choice, pairsA[i].tee_choice];
-            [pairsA[i].handicap_index, pairsB[i].handicap_index] = [pairsB[i].handicap_index, pairsA[i].handicap_index];
-        }
+        for (let i = 0; i < minLen; i++) _swapSeatPayloads(pairsA[i], pairsB[i]);
         // If sizes differ, move the extra player
         if (pairsA.length > pairsB.length) {
             const extra = pairsA[minLen];

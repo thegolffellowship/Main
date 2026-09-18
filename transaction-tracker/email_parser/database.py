@@ -56263,24 +56263,50 @@ def _pairing_cid_for_name(conn, name: str) -> int | None:
     return row["customer_id"] if row else None
 
 
-def _backfill_customer_id_on_event_pairings(conn, event_id: int | None = None) -> int:
-    """Fill `event_pairings.customer_id` wherever it is NULL, by name.
-    Scoped to one event on a read, whole-table on boot. Idempotent: a
-    row whose name matches nobody is simply left alone and retried next
-    time (the player may be created later)."""
+def _seat_customer_id(conn, name: str | None, payload_cid) -> int | None:
+    """The person in a seat (v2.464.10). A seat payload's `customer_id` is
+    whatever the page happened to carry — after a swap that moved the
+    name and not the id it was the OTHER player's. So: if the NAME on the
+    seat resolves to a customer, that customer is the person (a payload
+    id that disagrees is stale). If the name resolves to nobody — a
+    guest, or a name the profile has since moved on from (the Jose → Joe
+    Mejia rename, where the id is the truth and the name the snapshot) —
+    the payload id stands. Boundary check, principle 6."""
     try:
-        q = ("SELECT id, player_name FROM event_pairings WHERE customer_id IS NULL"
-             + (" AND event_id = ?" if event_id else ""))
+        resolved = _pairing_cid_for_name(conn, name)
+    except sqlite3.OperationalError:
+        resolved = None
+    if resolved:
+        return resolved
+    return int(payload_cid) if payload_cid else None
+
+
+def _backfill_customer_id_on_event_pairings(conn, event_id: int | None = None) -> int:
+    """Make `event_pairings.customer_id` agree with `player_name`, by name.
+    Fills a NULL, and CORRECTS a stale id when the seat's name resolves
+    to a DIFFERENT customer (v2.464.10: a swap that moved the name and
+    left the id put "Jeff Rideout" on Angelone's id, and the read-time
+    tee/index lookups then answered for the wrong man). A name that
+    resolves to nobody keeps whatever id it has — that is the rename
+    case, where the id is the truth and the name the stale snapshot.
+    Scoped to one event on a read, whole-table on boot. Idempotent."""
+    try:
+        q = ("SELECT id, player_name, customer_id FROM event_pairings"
+             + (" WHERE event_id = ?" if event_id else ""))
         rows = conn.execute(q, (event_id,) if event_id else ()).fetchall()
     except sqlite3.OperationalError:
         return 0
     n = 0
     for r in rows:
-        cid = _pairing_cid_for_name(conn, r["player_name"])
-        if cid:
-            conn.execute("UPDATE event_pairings SET customer_id = ? WHERE id = ?",
-                         (cid, r["id"]))
-            n += 1
+        try:
+            cid = _pairing_cid_for_name(conn, r["player_name"])
+        except sqlite3.OperationalError:
+            return n
+        if not cid or cid == r["customer_id"]:
+            continue
+        conn.execute("UPDATE event_pairings SET customer_id = ? WHERE id = ?",
+                     (cid, r["id"]))
+        n += 1
     return n
 
 
@@ -58560,9 +58586,11 @@ def save_event_pairings(event_id: int, groups_by_holes: dict, db_path=None) -> N
                 group_num = grp["group_num"]
                 slot_label = grp["slot_label"]
                 for p in grp["players"]:
-                    # Save the PERSON, not just the name they had today.
-                    _cid = p.get("customer_id") or _pairing_cid_for_name(
-                        conn, p.get("name"))
+                    # Save the PERSON, not just the name they had today —
+                    # and the person is the NAME on the seat, never a
+                    # payload id that may have stayed behind in a swap.
+                    _cid = _seat_customer_id(conn, p.get("name"),
+                                             p.get("customer_id"))
                     conn.execute(
                         """
                         INSERT OR REPLACE INTO event_pairings
