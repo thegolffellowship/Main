@@ -533,6 +533,17 @@ just play (verify the exact mechanics with Kerry before printing — Q4); (d) in
 are named collectively, never a person ("a few of you have been nursing something"); (e)
 nothing about money in a re-engagement note beyond the ratified join-offer line.
 
+**WHAT ENTRY INCLUDES — Kerry's Q4 answer + the Tracker's pricing model (2026-09-17):** a
+member can enter any Tuesday without buying the side-game bundles and is still in the team
+game, closest-to-the-pin and the hole-in-one pot — that is the "Inc. Games" fee inside every
+entry (events.md pricing grid; side-games.md §Included games). The individual Net and Gross
+games are the +per-game add-on. Members get no free drink; the drink is the first-timer offer.
+Kerry: "You have access to the tracker to see all event pricing. I shouldn't have to tell you
+that stuff" — mechanics and prices come from the Tracker first, Kerry is asked only what the
+Tracker cannot know. The plain sentence for the Insider (awaiting his ratification): *"Enter a
+Tuesday and you're in the team game, closest-to-the-pin and the hole-in-one pot — that's every
+player. The individual games are an add-on you can skip any week."*
+
 **THE JOIN OFFER — ratified 2026-09-17 (Kerry: "Yes" to "are you comfortable letting the writer
 print '$50 to join through September 30, then $75' in the Insider?").** Supersedes the #381
 "no dollar prices" guardrail for ONE line: dial `insider_join_offer` holds the price line verbatim

@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.464.2";
+window.TGF_VERSION = "2.464.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.464.3",
+    date: "2026-09-17",
+    changes: [
+      "Insider writer: WHAT ENTRY INCLUDES is now a rule in PUBLIC_RULES (Kerry 2026-09-17 + the Tracker's event pricing model) — every entrant is in the team game, closest-to-the-pin and the hole-in-one pot; the individual Net/Gross games are an add-on a member can skip any week; no dollar figures, never a dig at buyers, members get no free drink. Written for the 'too competitive to feel comfortable' retention leak Kerry named (two departures). The exact member-facing sentence awaits his ratification (event-recaps.md).",
+    ],
+  },
   {
     version: "2.464.2",
     date: "2026-09-17",
