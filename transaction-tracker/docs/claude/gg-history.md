@@ -808,6 +808,21 @@ has no dated 2025 events, so 2025 is archive-only.
    per Tuesday spring → fall, Austin 18 → 10), i.e. frequency in the
    second half of the season, not the size of the base.
 
+### The 2022 question (Kerry via #555: "We had our most members that year") — mailbox #557
+
+`scoring-gg-history:cohort=2022-2023` (v2.464.5, `cohort_analysis()`):
+retention 2022→2023 was normal (SA 47.6% of 2022's 126 players returned
+in 2023 vs 41.7% for 2021→2022; Austin 38.5% vs 35.9%); the drop
+happened INSIDE 2022 — SA Tuesdays ran 54–55 a night in March–April,
+33–42 in May–August, then 18–20 from September (the first fall series)
+— and 2023's spring (29 a night, one league per night) was a partial
+per-night recovery on a split calendar. SA's core of 7+-night regulars
+has held at 52–63 every season since 2022; Austin's thinned (35 → 21 →
+31 of 149, 73 of whom played once in 2025). DFW's 2022 class genuinely
+left (28.8% returned vs 55.3% the year before). Season-dated membership
+is not in the public widgets (Affiliation columns render today's value);
+the roster start_year subset is the proxy; 2022 exports would settle it.
+
 Caveats that travel with the table: 2019–2021 boards print no
 affiliation (member-ever is blank); 2024 SA/Austin and six 2023 SA
 events count off INDIVIDUAL boards (entry-included games in those
