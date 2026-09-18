@@ -151,6 +151,16 @@ pr = db.get_event_pairings(EV, db_path=DB)
 got = {p["name"]: p["tee_choice"] for g in pr["9"] for p in g["players"]}
 check("blank row tee resolved from items by name/customer",
       got == {"Jeff Rideout": "50-64", "Mary Wade": "Forward"}, got)
+# v2.464.12: a WRONG non-blank tee on the row (left by a swap that moved
+# the name and not the tee) is overridden by the roster's, not kept.
+with db._connect(DB) as conn:
+    conn.execute("UPDATE event_pairings SET tee_choice='<50', customer_id=6 "
+                 "WHERE event_id=? AND player_name='Jeff Rideout'", (EV,))
+    conn.commit()
+pr = db.get_event_pairings(EV, db_path=DB)
+got = {p["name"]: p["tee_choice"] for g in pr["9"] for p in g["players"]}
+check("the ROSTER's tee wins over a wrong snapshot on the row",
+      got.get("Jeff Rideout") == "50-64", got)
 
 print("4. 'Group N' is never printed as 'Hole Group N'")
 src = open(os.path.join(os.path.dirname(__file__), "email_parser/database.py")).read()
@@ -189,5 +199,5 @@ check("unknown group in the map is refused",
 
 print()
 print(f"{'FAILED: ' + ', '.join(F) if F else 'ALL PASS'} "
-      f"({12 - len(F)}/12)")
+      f"({13 - len(F)}/13)")
 sys.exit(1 if F else 0)

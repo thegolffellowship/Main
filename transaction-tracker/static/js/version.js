@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.464.11";
+window.TGF_VERSION = "2.464.12";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.464.12",
+    date: "2026-09-18",
+    changes: [
+      "THE ROSTER\u2019S TEE WINS OVER THE ROW\u2019S SNAPSHOT. v2.464.11 corrected the seat ids on s18.11 Cedar Creek, but the swapped tees stayed: the row\u2019s saved tee was wrong and non-blank, and the read only ever filled a blank. Kerry\u2019s rule is that the tee comes from the ROSTER, so `get_event_pairings` now takes the roster\u2019s tee first (by customer_id, then name) and the seat\u2019s saved tee only for a player the roster cannot name \u2014 the same order the locked index already uses. Rideout and Angelone read their own tees again on the next open, no re-save needed.",
+    ],
+  },
   {
     version: "2.464.11",
     date: "2026-09-18",

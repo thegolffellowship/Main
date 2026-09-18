@@ -56378,8 +56378,13 @@ def get_event_pairings(event_id: int, db_path=None) -> dict:
         # 50-64 / 65+ / Forward for the same people. Resolved through
         # customer_id first (principle 6), the name key only for a row
         # that never resolved to a profile.
+        # THE ROSTER'S TEE WINS OVER THE ROW'S SNAPSHOT (v2.464.12): a
+        # swap that moved the name and not the tee left a wrong,
+        # non-blank tee on the seat (Rideout on <50, Angelone on 50-64 at
+        # s18.11), and a blank-only fill could not repair it. The seat's
+        # saved tee is the fallback for a player the roster cannot name.
         tee_map: dict = {}
-        if any(not (r["tee_choice"] or "").strip() for r in rows):
+        if rows:
             try:
                 for rr in _event_roster_rows(conn, event_id):
                     t = (rr.get("tee_choice") or "").strip()
@@ -56409,11 +56414,10 @@ def get_event_pairings(event_id: int, db_path=None) -> dict:
             hi = hcp_map.get((r["player_name"] or "").lower())
         if hi is None:
             hi = r["handicap_index"]
-        tee = (r["tee_choice"] or "").strip() or None
-        if not tee:
-            tee = (tee_map.get(("c", r["customer_id"]))
-                   if r["customer_id"] is not None else None) \
-                or tee_map.get(("n", (r["player_name"] or "").strip().lower()))
+        tee = ((tee_map.get(("c", r["customer_id"]))
+                if r["customer_id"] is not None else None)
+               or tee_map.get(("n", (r["player_name"] or "").strip().lower()))
+               or (r["tee_choice"] or "").strip() or None)
         grp["players"].append({
             "name": r["player_name"],
             "customer_id": r["customer_id"],
