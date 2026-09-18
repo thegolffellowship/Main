@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.464.2";
+window.TGF_VERSION = "2.464.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.464.3",
+    date: "2026-09-18",
+    changes: [
+      "Participation series reaches 2016 (Kerry #553: 'Ingest and Run the other years in that spin off'). classify_round_label learns the 2016–2018 San Antonio era: Tuesdays were coded 'e1'…'e12' and 2017 wrote its match-play rounds 'M61 - PLAYBACK SEMIFINAL'; both land in the right bucket. Query-time only.",
+    ],
+  },
   {
     version: "2.464.2",
     date: "2026-09-17",

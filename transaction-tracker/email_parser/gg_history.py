@@ -1920,6 +1920,7 @@ def classify_round_label(label: str) -> str:
     TUESDAY NINES as the headline ('how many members play week to week')
     and everything else as 'all events'.
       tuesday9   : s9.27 / a9.3 (2024+ codes), s9 / a9 (2023 fall), s1..s15,
+                   e1..e12 (SA 2016–2018),
                    s8f (2019–2022), 'east | …' / 'west | …' / 'north | …' /
                    'south | …' (2023 league nights — SA and Austin each
                    split their Tuesdays into two leagues that year)
@@ -1931,8 +1932,9 @@ def classify_round_label(label: str) -> str:
     u = " ".join((label or "").split()).upper()
     if not u:
         return "other"
-    if re.match(r"^(?:CHAMPIONSHIP\s+)?MATCH\b(?!\s*PLAY)", u):
-        return "match"          # 'MATCH 63 - X v Y', 'MATCH - X v Y'
+    if re.match(r"^(?:CHAMPIONSHIP\s+)?MATCH\b(?!\s*PLAY)", u) or \
+            re.match(r"^M\d+\s*[-|]", u):
+        return "match"          # 'MATCH 63 - X v Y', 'MATCH - X v Y', 'M61 - …'
     if u.startswith("POINTS RESET"):
         return "admin"
     if re.match(r"^(?:AS|A|S)18(?:\.\d+)?\b", u):
@@ -1941,6 +1943,8 @@ def classify_round_label(label: str) -> str:
         return "tuesday9"       # 's9.27 …' (2024+), 's9 OLMOS …' (2023 fall)
     if re.match(r"^[AS]\d{1,2}F?\b", u):
         return "tuesday9"       # 's1'…'s15', 's8f' (2019–2022)
+    if re.match(r"^E\d{1,2}\b", u):
+        return "tuesday9"       # 'e1'…'e12' (SA 2016–2018 event codes)
     if re.match(r"^(?:EAST|WEST|NORTH|SOUTH|EAST/WEST|NORTH/SOUTH)\s*\|", u):
         return "tuesday9"       # 2023 league nights: 'east | SILVERHORN front'
     return "other"
