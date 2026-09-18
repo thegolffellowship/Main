@@ -156,3 +156,31 @@ second lever is the harder one and it is the fall-fade problem in another
 form. Recommended framing: SA 40 as the goal, Austin 25 as the goal with
 30 as the stretch; measure both as a SPRING average (Mar–Jun), the way
 Kerry remembers the good years.
+
+## The rate lever — what has been tried (Kerry, 2026-09-17, interview Q10)
+
+Verbatim: *"I don't think I really have tried anything specifically other
+than personal text in regards to moving a member from one Tuesday in three
+to one in two. We already have playing partner request and I don't think
+that standing tee time or preferences work for that. I could see
+game-finding things where there's benefits from playing events in a row
+like discounts or credits but we've also talked about the TGF Plus
+membership which basically you pay more upfront, but you pay less, basically
+at cost, for each event so the benefit comes when you play more. So there's
+kind of a built-in incentive that if I'm gonna sign up for the Plus, then I
+need to play more to get my value out of it. I'm thinking once we get that
+going for 2027 that may be the single best kind of backdoor way of
+incentivizing more play and benefiting those who really deserve it or die
+hard… but I do believe that a captain texting his group Monday night — or
+before, really not a captain necessarily but like an ambassador or a crew
+leader or a team leader or something — of like 12 members, texting and
+keeping in touch with them could be a motivational, kind of peer effort and
+FOMO that could potentially work. I'm open to other ideas, but I have a
+feeling that those are kind of our primary options."*
+
+Standing facts: only personal texts from Kerry have ever been tried; the
+playing-partner request exists; standing tee times ruled out; Plus
+membership is the 2027 structural incentive (never named in public copy —
+banned word); crews of ~12 with a leader texting before Tuesday is the
+peer-pressure option. Proposal and pilot design: `docs/claude/crews.md`
+(pending Kerry's pick of the first two crew leaders).
