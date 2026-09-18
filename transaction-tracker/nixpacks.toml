@@ -1,12 +1,12 @@
 # Nixpacks build configuration for Railway
-# Golf Genius sync uses HTTP requests (no browser/Playwright required).
+# Golf Genius sync uses HTTP requests (no browser/Playwright required for it).
 #
-# WeasyPrint (the print-pack PDF engine, v2.465.7) loads GObject, Pango,
-# HarfBuzz, FontConfig and Cairo BY NAME at runtime. v2.465.4 asked apt for
-# them and the running app still could not find 'gobject-2.0-0': the
-# Nix-provided Python does not see the apt library path. Nixpacks' own
-# answer is `nixLibs`, which puts the Nix builds of these libraries on
-# LD_LIBRARY_PATH for the app; the apt packages stay for the fonts.
+# The print-pack PDF (v2.465.8) renders through headless CHROMIUM — the same
+# engine as the browser's Download PDF — driven by Playwright with the Nix
+# chromium as executable_path (no browser download at build time). Nix
+# libraries keep WeasyPrint importable as the fallback engine.
+# NOTE: nixPkgs REPLACES the provider list, so python3 + gcc are repeated.
 [phases.setup]
+nixPkgs = ["python3", "gcc", "chromium"]
 nixLibs = ["glib", "pango", "harfbuzz", "fontconfig", "cairo", "gdk-pixbuf", "libffi"]
 aptPkgs = ["fonts-dejavu-core", "shared-mime-info"]

@@ -2148,7 +2148,13 @@ emailed to me."
 
 - **What:** Starter Sheet, Cart Signs, Divisions & Flights, Proximity
   Markers — the same templates the browser prints — rendered server-side
-  by WeasyPrint (`email_parser/print_pack.py`) and bound in that order.
+  by **headless Chromium** (Playwright, `email_parser/print_pack.py`),
+  WeasyPrint as the fallback engine, and bound in that order (pypdf).
+  v2.465.8: the first pack went out through WeasyPrint and Kerry's
+  verdict was "really bad compared to the PDF downloads on the Tracker"
+  — WeasyPrint has no flex/grid, so the sheets the browser lays out
+  correctly came out stacked. Chromium prints them exactly as the
+  browser's Download PDF does. The build result reports `engine`.
   `GET /events/<id>/print-pack.pdf` (manager) serves it; the page's
   Download PDF stays the browser print dialog.
 - **Routine:** `send_due_print_packs_job` runs hourly 5–10 PM Central.
@@ -2160,16 +2166,26 @@ emailed to me."
 - **On demand:** `scoring-print-pack-pdf:<event_id>` builds and reports parts,
   page counts, hash and size; `|send[|<to>]` mails it and records the
   hash; `scoring-print-pack-pdf:due` lists tomorrow's events.
-- **Deploy — NOT YET ON RAILWAY.** The first attempt (v2.465.0:
-  `weasyprint==62.3` + `pydyf==0.11.0` in requirements, Pango/Cairo apt
-  packages via `[phases.setup] aptPkgs` in `nixpacks.toml`) FAILED the
-  Railway build at 4:19 PM on 2026-09-18 and was backed out in v2.465.1.
-  The code stays; the engine is imported lazily, so the route/bridge
-  answer 503 "PDF engine unavailable" and the routine logs it. Retry
-  plan: get the build log (Railway → View build logs), then either fix
-  the apt package names for the builder image or move the PDF render to
-  a Dockerfile stage; the test (`test_print_pack.py`) proves the bind
-  works where the engine is present (this container).
+- **Deploy:** `nixpacks.toml` installs `chromium` from Nix beside
+  Python (`nixPkgs`), the WeasyPrint libraries via `nixLibs` (apt libs
+  are invisible to the Nix Python — "cannot load library gobject-2.0-0"
+  was v2.465.6), DejaVu fonts via `aptPkgs`; requirements carry
+  `playwright` (client only — the browser is the Nix one, found through
+  `CHROMIUM_PATH` → `shutil.which` → the Playwright cache) and `pypdf`.
+  A current Chrome has removed the OLD headless mode Playwright asks
+  for by default, so the launch passes `--headless=new` explicitly.
+  Lesson from v2.465.0–3: a literal `\n` written into requirements.txt
+  by a heredoc failed the Railway build twice; validate each line.
+- **NEW badge on the sheet (v2.465.9, Kerry-confirmed):** NEW = a
+  member playing their FIRST EVENT AS A MEMBER — membership started on
+  or before the event and no event played between that start and this
+  one (`_first_event_as_member`: an active registration for an event
+  dated in that window, or a posted round in it, means they have
+  played). 1T = first TGF event ever, independent; a first-timer who is
+  already a member wears both. Two wrong rules preceded it: "joined
+  since our last event" (missed Bear Clarkson) and "first-year member"
+  (tagged Lewis, Wallace and Schneider, who had all played as members).
+  Guard: `test_new_badge.py`.
 - **Mail:** `send_mail_graph(..., attachments=[(name, bytes, mime)])`
   sends Graph `fileAttachment`s (inline base64, under Graph's 3 MB).
 - Test: `test_print_pack.py` (builds a real PDF, serves the route,

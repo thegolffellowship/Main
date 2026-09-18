@@ -437,7 +437,7 @@ check("the alphabetical handicap columns are centred",
       ".arow .aidx { color: #444; width: 26px; text-align: center;" in _ss3
       and ".arow .aph, .arow .atn { width: 24px; text-align: center;" in _ss3)
 check("NEW means new member, and both badges may show",
-      "new member (first year)" in _ss3 and "wears both" in _ss3)
+      "first event as a member" in _ss3 and "wears both" in _ss3)
 check("the explanation names each column and how it was computed",
       "<strong>PH</strong>" in _ss3 and "%}CART{% else %}TEAM{% endif %}</strong>" in _ss3
       and "pack.ph_basis" in _ss3 and "pack.team_basis" in _ss3)

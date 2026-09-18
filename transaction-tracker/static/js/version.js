@@ -1,5 +1,19 @@
-window.TGF_VERSION = "2.465.7";
+window.TGF_VERSION = "2.465.9";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.465.9",
+    date: "2026-09-18",
+    changes: [
+      "NEW = A MEMBER PLAYING THEIR FIRST EVENT AS A MEMBER (Kerry 2026-09-18, confirmed: \u2018Correct on your NEW badge understanding. Ship it.\u2019). Membership started on or before the event and no event played between that start and this one \u2014 by registration or by a posted round. Not \u2018joined since our last event\u2019 (missed Bear Clarkson), not \u2018first-year member\u2019 (tagged Wade Lewis, Will Wallace and Louis Schneider, who had all played as members). 1T stays independent \u2014 first TGF event ever \u2014 and a first-timer who is already a member wears both. Legend reworded. Test: `test_new_badge.py`.",
+    ],
+  },
+  {
+    version: "2.465.8",
+    date: "2026-09-18",
+    changes: [
+      "THE PRINT PACK RENDERS THROUGH CHROMIUM (Kerry 2026-09-18: \u2018Formatting for your PDF email is really bad compared to the PDF downloads on the Tracker\u2019). The first pack went out through WeasyPrint, which lays out the print templates\u2019 flex and grid wrong \u2014 the alphabetical columns collapsed and the cart signs broke. The Tracker\u2019s own Download PDF is the browser\u2019s print pipeline, so the pack now renders each part in headless Chromium (Playwright driving the Nix-provided browser, print media, the template\u2019s own @page size) and binds them with pypdf \u2014 identical to the download. WeasyPrint stays only as the fallback when no browser is on the box, and the result says which engine drew it. `test_print_pack.py` asserts Chromium.",
+    ],
+  },
   {
     version: "2.465.7",
     date: "2026-09-18",

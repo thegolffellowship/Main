@@ -58237,6 +58237,35 @@ def _event_tee_rows(conn, ev: dict, legend: list) -> tuple[dict, str, str]:
     return out, basis, note
 
 
+def _first_event_as_member(conn, roster_row: dict, event_date: str) -> bool:
+    """NEW badge rule (Kerry 2026-09-18): the member's membership started
+    on or before `event_date` and they have played NO event between that
+    start and this one — by registration (an active order for an event
+    dated in that window) or by a posted round in it."""
+    cid = roster_row.get("customer_id")
+    start = (roster_row.get("first_member_start") or "")[:10]
+    if not cid or not start or not event_date or start > event_date:
+        return False
+    try:
+        played = conn.execute(
+            """SELECT 1 FROM items i JOIN events e
+                 ON (e.id = i.event_id OR e.item_name = i.item_name COLLATE NOCASE)
+                WHERE i.customer_id = ? AND i.parent_item_id IS NULL
+                  AND COALESCE(i.transaction_status,'active') = 'active'
+                  AND e.event_date >= ? AND e.event_date < ?
+                LIMIT 1""", (cid, start, event_date)).fetchone()
+        if played:
+            return False
+        rnd = conn.execute(
+            """SELECT 1 FROM handicap_rounds hr
+                 JOIN handicap_player_links l ON l.player_name = hr.player_name
+                WHERE l.customer_id = ? AND hr.round_date >= ? AND hr.round_date < ?
+                LIMIT 1""", (cid, start, event_date)).fetchone()
+        return not rnd
+    except sqlite3.OperationalError:
+        return False
+
+
 def get_event_print_pack(event_id: int, db_path=None) -> dict | None:
     """Assemble the data for the Starter Sheet + Cart Signs printables (B5).
 
@@ -58261,17 +58290,19 @@ def get_event_print_pack(event_id: int, db_path=None) -> dict | None:
         # looking after. Flags come from the ROSTER, the one place that
         # decides them (`_decorate_roster_roles` / `_mark_first_timers`),
         # so the sheet and the pairings cards can never disagree.
-        # NEW means a NEW MEMBER — the roster's first-year rule, the same
-        # fact the pairings cards badge 1Y (v2.465.2, Kerry 2026-09-18:
-        # "Bear Clarkson is ALSO a NEW member, though not since the last
-        # event which is what I gave as a qualifier previously. If they
-        # are a 1st Time participant but already a member, then they get
-        # both badges. NEW Member & 1T for 1st Timer."). The two badges
-        # are independent and both can show.
+        # NEW means A MEMBER PLAYING THEIR FIRST EVENT AS A MEMBER (v2.465.9,
+        # Kerry 2026-09-18, confirmed: "Correct on your NEW badge
+        # understanding. Ship it."): membership started on or before this
+        # event, and no event played between that start and this one. Not
+        # "joined since our last event" (missed Bear Clarkson), not
+        # "first-year member" (tagged Lewis, Wallace and Schneider, who had
+        # all played as members). 1T = first TGF event ever. Independent;
+        # a first-timer who is already a member wears both.
+        _ev_date = (ev.get("event_date") or "")[:10]
         _roles: dict = {}
         try:
             for _r in _event_roster_rows(conn, event_id):
-                _rec = {"is_new": bool(_r.get("is_new")),
+                _rec = {"is_new": _first_event_as_member(conn, _r, _ev_date),
                         "is_first_timer": bool(_r.get("is_first_timer"))}
                 if _r.get("customer_id"):
                     _roles[f"c:{_r['customer_id']}"] = _rec

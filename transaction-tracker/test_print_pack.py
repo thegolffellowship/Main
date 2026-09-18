@@ -43,6 +43,8 @@ check("it is a PDF", bool(built) and built.get("pdf", b"")[:4] == b"%PDF")
 check("the starter sheet and cart signs are in it, in print order",
       bool(built) and [p["slug"] for p in built["parts"]][:2] == ["starter-sheet", "cart-signs"], built and built["parts"])
 check("every part has at least one page", bool(built) and all(p["pages"] >= 1 for p in built["parts"]), built and built["parts"])
+check("it rendered through Chromium here (the same engine as the browser's Download PDF)",
+      bool(built) and built.get("engine") == "chromium", built and built.get("engine"))
 check("the filename names the event and the date",
       bool(built) and "s18.11 CEDAR CREEK" in built["filename"] and "2026-09-19" in built["filename"])
 check("unknown event → None", appmod.build_print_pack_for_event(424242) is None)

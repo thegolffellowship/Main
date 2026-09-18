@@ -87,11 +87,98 @@ def build_event_print_pack(render, event_id: int, static_dir: str,
     if not htmls:
         return None
     sha = hashlib.sha256("\n".join(h for _, h in htmls).encode("utf-8")).hexdigest()[:16]
+    code = (ev.get("item_name") or f"event-{event_id}").replace("/", "-")
+    # CHROMIUM FIRST (v2.465.8, Kerry 2026-09-18: "Formatting for your PDF
+    # email is really bad compared to the PDF downloads on the Tracker").
+    # The Tracker's own Download PDF is the browser's print pipeline; the
+    # print templates lean on flex/grid that WeasyPrint lays out wrong
+    # (collapsed columns, broken cart signs). Rendering through the same
+    # engine the browser uses makes the pack identical to the download.
+    # WeasyPrint stays as the fallback when no Chromium is on the box.
     try:
-        from weasyprint import HTML
-    except Exception as exc:                       # engine absent on this deploy
-        return {"error": f"PDF engine unavailable: {exc}", "sha": sha,
-                "parts": [{"slug": s_, "pages": None} for s_, _ in htmls], "event": ev}
+        pdf, parts, engine = _render_pdf_chromium(htmls, static_dir)
+    except Exception as exc:
+        logger.warning("print pack: chromium render unavailable (%s); trying weasyprint", exc)
+        try:
+            pdf, parts, engine = _render_pdf_weasyprint(htmls, static_dir)
+        except Exception as exc2:                  # engine absent on this deploy
+            return {"error": f"PDF engine unavailable: {exc2}", "sha": sha,
+                    "parts": [{"slug": s_, "pages": None} for s_, _ in htmls], "event": ev}
+    return {"pdf": pdf, "parts": parts, "sha": sha, "event": ev, "engine": engine,
+            "filename": f"{code} — print pack — {ev.get('event_date')}.pdf"}
+
+
+def _chromium_executable() -> str | None:
+    import glob, shutil
+    env = os.getenv("CHROMIUM_PATH")
+    if env and os.path.isfile(env):
+        return env
+    for name in ("chromium", "chromium-browser", "google-chrome", "chrome"):
+        found = shutil.which(name)
+        if found:
+            return found
+    for pat in ("/opt/pw-browsers/chromium-*/chrome-linux/chrome",
+                os.path.expanduser("~/.cache/ms-playwright/chromium-*/chrome-linux/chrome")):
+        hits = sorted(glob.glob(pat))
+        if hits:
+            return hits[-1]
+    return None
+
+
+def _render_pdf_chromium(htmls, static_dir: str):
+    """Each part printed by headless Chromium with print media and the
+    template's own @page size, then bound with pypdf. Runs in its own
+    thread because Playwright's sync API refuses to start inside an
+    asyncio loop (the MCP bridge runs in one)."""
+    import concurrent.futures, mimetypes
+    exe = _chromium_executable()
+    if not exe:
+        raise RuntimeError("no Chromium executable on this deploy")
+    from playwright.sync_api import sync_playwright
+    from pypdf import PdfReader, PdfWriter
+    import io
+
+    def _serve_static(route, request):
+        url = request.url
+        i = url.find("/static/")
+        if i >= 0:
+            rel = url[i + len("/static/"):].split("?")[0]
+            path = os.path.normpath(os.path.join(static_dir, rel))
+            if path.startswith(os.path.normpath(static_dir)) and os.path.isfile(path):
+                route.fulfill(path=path, content_type=mimetypes.guess_type(path)[0] or "application/octet-stream")
+                return
+            route.abort(); return
+        route.continue_()
+
+    def _run():
+        writer, parts = PdfWriter(), []
+        with sync_playwright() as pw:
+            # A current Chrome has dropped the OLD headless mode Playwright
+            # asks for by default; request the new one explicitly.
+            browser = pw.chromium.launch(executable_path=exe, headless=False,
+                                         args=["--headless=new", "--no-sandbox", "--disable-gpu",
+                                               "--disable-dev-shm-usage"])
+            try:
+                page = browser.new_page()
+                page.route("**/*", _serve_static)
+                for slug, html in htmls:
+                    page.set_content(html, wait_until="networkidle")
+                    page.emulate_media(media="print")
+                    data = page.pdf(prefer_css_page_size=True, print_background=True)
+                    reader = PdfReader(io.BytesIO(data))
+                    for pg in reader.pages:
+                        writer.add_page(pg)
+                    parts.append({"slug": slug, "pages": len(reader.pages)})
+            finally:
+                browser.close()
+        out = io.BytesIO(); writer.write(out)
+        return out.getvalue(), parts, "chromium"
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
+        return ex.submit(_run).result(timeout=180)
+
+
+def _render_pdf_weasyprint(htmls, static_dir: str):
+    from weasyprint import HTML
     fetcher = _static_url_fetcher(static_dir)
     docs, parts = [], []
     for slug, html in htmls:
@@ -99,10 +186,7 @@ def build_event_print_pack(render, event_id: int, static_dir: str,
         docs.append(doc)
         parts.append({"slug": slug, "pages": len(doc.pages)})
     pages = [p for d in docs for p in d.pages]
-    pdf = docs[0].copy(pages).write_pdf()
-    code = (ev.get("item_name") or f"event-{event_id}").replace("/", "-")
-    return {"pdf": pdf, "parts": parts, "sha": sha, "event": ev,
-            "filename": f"{code} — print pack — {ev.get('event_date')}.pdf"}
+    return docs[0].copy(pages).write_pdf(), parts, "weasyprint"
 
 
 def print_pack_recipient() -> str | None:
