@@ -955,8 +955,36 @@ TGF/Former profiles remain Kerry's open decision (option b).
       Houston 2021–2024 (Kerry to say whether the closed chapters join
       the participation series — asked in #548), the 2016–2018 SA
       portals (out of this lane's 2019–2024 scope).
-- [ ] 2016–2018 SA portals + DFW/Houston + the 2024 one-offs (champ24,
-      lonestarcup24, roadtrip24, hillcountrymatches) — next wave
+- [x] **WAVE 2 (Kerry #553 "Ingest and Run the other years", 2026-09-17
+      night):** tgf-sa2016/2017/2018 (Phase A 66 / 48 / 257 standings
+      rows; field walks 18 / 17 / 25 rounds; SA Tuesdays 37 / 33 / 51 a
+      night; no ALL boards before 2019 → fallback basis) and the 2024
+      one-offs tgf-champ24 (387 standings rows, 3 rounds),
+      hillcountrymatches (4), lonestarcup24 (4), tgf-roadtrip24 (5).
+      Series section now reaches 2016.
+- [x] **ARCHIVE HOLES WALKS 2019–2024 SA + AUSTIN COMPLETE (2026-09-18
+      ~2:40 AM UTC):** 7,254 scorecards (165,708 holes registry-wide
+      incl. 2025). Per portal — sa2024 32 rounds / 789 cards, austin2024
+      19 / 131 (one 'Taylor Video Practice' round has no date), sa2023
+      57 / 1,119, austin2023 34 / 432, sa2022 32 / 993, austin2022 24 /
+      536, sa2021 32 / 969 (one undated match round), austin2021 27 /
+      534, sa2020 13 / 586 (POINTS RESET undated), austin2020 13 / 261,
+      sa2019 28 / 752, austin2019 12 / 152. **The two channels agree:**
+      cards per season vs the field walk's player-rounds — SA 2023 1,119
+      = 1,119, SA 2022 993 vs 995, SA 2021 969 vs 972, SA 2019 752 vs
+      756, Austin 2021 534 = 534, Austin 2022 536 vs 539. Needed the
+      INDIVIDUAL-board fallback (v2.464.4): the first pass read only ALL
+      boards and got 88 SA 2024 / 0 Austin 2024 cards. Walks ran as
+      `holes-bg` 600 s budgets relaunched per portal until
+      `rounds_left = 0`; ~11 concurrent walks moved ~15 rounds per
+      portal per budget. 2023 SKINS NIGHT par-3 rounds import off the
+      SKINS flight boards with per-card verifier flags (partial-hole
+      cards) — the known cumulative/partial class, on the spot-check
+      list. Not run: holes for 2016–2018 (no ALL boards, fallback
+      boards untested there), DFW/Houston, one-offs.
+- [ ] Holes for 2016–2018 SA, DFW 2020–2024, Houston 2021–2024 and the
+      2020–2024 one-offs — next wave (engine ready; `holes-bg=` per
+      portal)
 - [x] Hole-by-hole ingest engine (v2.74.0): Phase-B walker
       `holes=<subdomain>` live — see "Phase B — hole-by-hole walk"
       above.
