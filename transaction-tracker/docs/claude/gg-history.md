@@ -700,6 +700,99 @@ Handicapper).
 `scoring-gg-history:participation[=<from>-<to>]` → `participation_series()`
 — see **Participation series** below. Tests: `test_gg_history_field.py`.
 
+## Participation series 2019–2026 (season × chapter) — measured 2026-09-17/18
+
+Kerry, 2026-09-17: *"Before 2023, participation rates were higher,
+significantly."* Measured off the FIELD walk (every round's ALL Net /
+ALL Gross board, fallback = per-round individual boards, flagged) —
+`scoring-gg-history:participation` re-computes this table any time.
+**Tue** = Tuesday nines by round label (s9.N / a9.N; s1–s15, s8f;
+2023's `east | …` / `west | …` / `north | …` / `south | …` league
+nights); **All** = every event on the chapter's portal that fielded
+players (Tuesdays + Saturday 18s + kickoffs + championships), match-play
+and POINTS RESET rounds excluded. **Players** = distinct names on the
+season's boards; **member-ever** = names whose board affiliation reads
+TGF-anything or Former (GG prints TODAY's affiliation, and 2019–2021
+boards print none — so it is "was ever a member", never "was a member
+that season"); **linked** = distinct customer_ids resolved.
+
+### San Antonio
+
+| season | Tue nights | players / Tue (mean · median) | all events | players / event | player-rounds | distinct players | member-ever | linked | note |
+|---|---|---|---|---|---|---|---|---|---|
+| 2019 | 10 | 55.8 · 57.5 | 13 | 58.2 | 756 | 153 | — | 60 | Tuesdays every OTHER week (s1–s10); ALL boards present |
+| 2020 | 10 | 51.5 · 51 | 12 | 48.9 | 587 | 98 | — | 52 | COVID season |
+| 2021 | 16 | 46.7 · 48.5 | 22 | 44.2 | 972 | 144 | — | 81 | |
+| 2022 | 22 | 34.9 · 36 | 29 | 34.3 | 995 | 126 | 104 | 106 | weekly Tuesdays + fall series (s1f–s8f) |
+| 2023 | 38 | 22.6 · 22.5 | 56 | 20.0 | 1,119 | 134 | 82 | 96 | **EAST / WEST league split** — two half-fields on alternate Tuesdays; 6 events on the fallback basis |
+| 2024 | 23 | 27.6 · 28 | 31 | 26.2 | 813 | 107 | 76 | 84 | ALL boards only from the fall; 26 events on the fallback basis (INDIVIDUAL Net = entry-included, so the field) |
+| 2025 | 30 | 32.9 · 33 | 42 | 29.7 | 1,248 | 168 | 120 | 140 | |
+| 2026 (to 9/17) | 20 | 29.4 · 27 | 31 | 26.8 | 832 | 147 | 117 | 143 | Tracker items-based: 20 Tue, 29.4 · 27, 141 distinct, 84 members |
+
+### Austin
+
+| season | Tue nights | players / Tue (mean · median) | all events | players / event | player-rounds | distinct players | member-ever | linked | note |
+|---|---|---|---|---|---|---|---|---|---|
+| 2019 | 10 | 13.9 · 14 | 11 | 13.8 | 152 | 39 | — | 14 | first Austin season, biweekly |
+| 2020 | 10 | 20.9 · 17.5 | 12 | 21.8 | 261 | 71 | — | 31 | |
+| 2021 | 15 | 23.2 · 24 | 22 | 24.3 | 534 | 103 | — | 48 | |
+| 2022 | 18 | 21.0 · 23 | 24 | 22.5 | 539 | 78 | 62 | 58 | |
+| 2023 | 22 | 13.2 · 13 | 34 | 12.8 | 434 | 75 | 53 | 54 | **NORTH / SOUTH league split** |
+| 2024 | 16 | 7.1 · 6.5 | 18 | 7.8 | 140 | 23 | 17 | 20 | the trough: 23 people all season; all events on the fallback basis |
+| 2025 | 24 | 21.8 · 21 | 29 | 21.6 | 626 | 149 | 100 | 119 | the rebuild |
+| 2026 (to 9/17) | 22 | 18.8 · 18.5 | 27 | 18.3 | 493 | 84 | 60 | 83 | Tracker items-based: 22 Tue, 18.9 · 19, 86 distinct, 52 members |
+
+### DFW and Houston (closed chapters — Kerry #549 "Go ahead"; never member-facing)
+
+(rows land here when the field walks finish — see the mailbox post)
+
+### Reconciliation with the Tracker's own definition (2026)
+
+The Tracker counts "played" as an items row (paid or RSVP-only) joined
+to a dated event; the field walk counts a name on the round's board.
+For 2026 the two agree to within 0.1 player per Tuesday on both
+chapters (SA 29.4 vs 29.4, Austin 18.8 vs 18.9) and within 2–4 distinct
+players per season — registration and playing are the same population,
+so the archive series and the Tracker series are one line. The Tracker
+has no dated 2025 events, so 2025 is archive-only.
+
+### What the numbers say (the finding, 2026-09-18)
+
+1. **Per-Tuesday fields WERE much bigger before 2023 — in San Antonio.**
+   56 players a night in 2019, 52 in 2020, 47 in 2021, 35 in 2022, then
+   23 in 2023, 28 in 2024, 33 in 2025, 29 in 2026. Austin never had
+   that shape: 14 → 21 → 23 → 21 → 13 → 7 → 22 → 19.
+2. **Because there were far fewer Tuesdays.** 2019–2020 ran ten
+   Tuesdays a season (every other week); 2022 ran 22; 2023 ran 38
+   league nights (EAST/WEST alternating, so each night was half the
+   chapter by design); 2025 ran 30. Per-night attendance divided as the
+   calendar multiplied.
+3. **Total participation is at a record, not in decline.** SA
+   player-rounds per season: 756 (2019) → 587 → 972 → 995 → 1,119 →
+   813 → **1,248 (2025)** → 832 through 9/17 (on pace for ~1,150).
+   Distinct players: 153 (2019) → 98 → 144 → 126 → 134 → 107 → **168
+   (2025)** → 147 YTD. Rounds per player rose from 4.9 (2019) to 7.4
+   (2025) — members play MORE often now, spread across three times the
+   nights.
+4. **Austin's collapse was 2024, not 2023.** 23 distinct players and 7
+   a night all season; 2025 rebuilt it to 149 distinct / 22 a night.
+   The 2026 slide to 18.8 (and #546's fall 9.7 members per Tuesday) is
+   measured against the rebuild year, not against a long plateau.
+5. **The honest comparison for "how many members play week to week"**
+   is the per-Tuesday field at equal cadence: 2022 (22 weekly Tuesdays,
+   35 a night) vs 2025 (30, 33) vs 2026 (20 so far, 29). That is a
+   17% slide from 2022, not the 50% the 2019 memory suggests — and #546
+   already found where it lives: the fall drop-off (SA 28 → 18 members
+   per Tuesday spring → fall, Austin 18 → 10), i.e. frequency in the
+   second half of the season, not the size of the base.
+
+Caveats that travel with the table: 2019–2021 boards print no
+affiliation (member-ever is blank); 2024 SA/Austin and six 2023 SA
+events count off INDIVIDUAL boards (entry-included games in those
+seasons, so the same population, flagged anyway); championships and
+Saturday 18s hosted on one chapter's portal count under that chapter;
+2026 is year-to-date.
+
 ## THE THREE-CHANNEL FRAMEWORK (Kerry + tracker-claude, 2026-07-11 late)
 
 GG admin EXPORTS joined the design as the third channel. Verified

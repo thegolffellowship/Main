@@ -12,7 +12,7 @@ A row in `items` qualifies as an event participation when ALL of these hold:
 - `UPPER(item_name)` does **not** contain `'SEASON CONTEST'` (enrollments are not playing).
 - `parent_item_id IS NULL` (child payment rows skipped — they're payments against an existing event registration, not new participations).
 
-The single source-of-truth for this filter is `_participation_event_filter_sql(alias)` in `app.py`. Reuse it if you add another participation-style endpoint so the definition can't drift.
+The single source-of-truth for this filter is `_participation_event_filter_sql(alias)` in `email_parser/database.py` (moved there from `app.py` in v2.464.0 so the MCP layer can share it; `app.py` imports it). Reuse it if you add another participation-style endpoint so the definition can't drift — `gg_history.participation_series` (the 2019–2026 season × chapter series, gg-history.md) does.
 
 ### "When" they played = event date, not purchase date
 
