@@ -120,6 +120,14 @@ with db._connect(DB) as conn:
     res2 = db.resolve_per_nine_from_course_tees(conn, 35670)
     check("…and the resolver now resolves Blue from the record",
           res2["per_nine"].get(2975) == {"front": (37.3, 139), "back": (36.7, 135)}, res2["per_nine"].get(2975))
+    # Identical halves (Forest Creek White is 35.2/125 both ways) with ONE
+    # Tuesday row on record: that row is one nine, the other is inserted.
+    conn.execute("INSERT INTO course_tees VALUES (9001, 35670, '5 - Twin Tee', 70.4, 125, 6400)")
+    conn.execute("INSERT INTO course_tees VALUES (9002, 35670, '5 - Twin Tee', 35.2, 125, 3200)")
+    conn.commit()
+    twin = db.store_tee_nines(conn, 9001, (35.2, 125), (35.2, 125), dry_run=True)
+    check("identical halves: the one row on record is kept as ONE nine and the other half is inserted",
+          twin["ok"] and sorted(r["action"].split(" ")[0] for r in twin["rows"]) == ["kept", "would"], twin)
     conn.execute("CREATE TABLE IF NOT EXISTS courses (course_id INTEGER PRIMARY KEY, name TEXT)")
     conn.execute("INSERT OR IGNORE INTO courses VALUES (35670, 'Cedar Creek Golf Course')")
     conn.execute("ALTER TABLE events ADD COLUMN course_id INTEGER")

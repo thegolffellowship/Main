@@ -21357,15 +21357,27 @@ def store_tee_nines(conn, full_tee_id: int, front: tuple, back: tuple,
     out = {"ok": True, "dry_run": dry_run, "course_id": full["course_id"],
            "tee_name": full["tee_name"], "rating_18": full["rating"],
            "slope_18": full["slope"], "rows": []}
+    used_ids: set = set()
     for nine, (r, sl), rng in (("front", (fr, fs), range(1, 10)),
                                ("back", (br, bs), range(10, 19))):
-        existing = conn.execute(
-            """SELECT tee_id, nine FROM course_tees
-                WHERE course_id = ? AND tee_name = ? AND rating = ? AND slope = ?
-                  AND rating < 50""",
-            (full["course_id"], full["tee_name"], r, sl)).fetchone()
+        # A half already on record is kept — but ONE row is ONE nine. A
+        # tee whose halves rate identically (Forest Creek White: 35.2/125
+        # both ways) must not have its single Tuesday row counted as both
+        # the front and the back; the other half is inserted.
+        existing = None
+        for cand in conn.execute(
+                """SELECT tee_id, nine FROM course_tees
+                    WHERE course_id = ? AND tee_name = ? AND rating = ? AND slope = ?
+                      AND rating < 50 ORDER BY tee_id""",
+                (full["course_id"], full["tee_name"], r, sl)).fetchall():
+            if cand["tee_id"] in used_ids:
+                continue
+            if (cand["nine"] or "") in ("", nine):
+                existing = cand
+                break
         yards = sum((holes[i]["yardage"] or 0) for i in rng if i in holes) or None
         if existing:
+            used_ids.add(existing["tee_id"])
             row = {"nine": nine, "rating": r, "slope": sl, "tee_id": existing["tee_id"],
                    "action": "kept (already on record)"}
             if not dry_run and (existing["nine"] or "") != nine:
@@ -21393,6 +21405,7 @@ def store_tee_nines(conn, full_tee_id: int, front: tuple, back: tuple,
                            VALUES (?, ?, ?, ?, ?)""",
                         (new_id, k, h["par"], h["yardage"], h["stroke_index"]))
             row["tee_id"] = new_id
+            used_ids.add(new_id)
             try:
                 log_agent_action("mcp-claude", "store_tee_nines",
                                  f"course {full['course_id']} {full['tee_name']} "

@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.465.19";
+window.TGF_VERSION = "2.465.20";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.465.20",
+    date: "2026-09-19",
+    changes: [
+      "Course record: `store_tee_nines` counts one row as ONE nine. The live dry run on Forest Creek\u2019s White (35.2/125 front AND back) reported its single Tuesday row as both halves \u2018kept\u2019 and would have left the tee unresolved; the second identical half is now inserted.",
+    ],
+  },
   {
     version: "2.465.19",
     date: "2026-09-19",
