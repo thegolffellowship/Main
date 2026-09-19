@@ -114,7 +114,14 @@ Do not assume it — read it — but do not redo it either.
 1.3 **GG winners + MVP cross-check.** `scoring-gg-results:<event>` — the
     boards GG has posted, with purses. Rows with `purse: 0.0` mean Kerry
     has not entered money on GG yet; the payout layer then falls back to
-    the matrix. A game with NO board at all (no CTP row, no Skins row)
+    the matrix. **A same-day walk is a snapshot, not the verdict** (s18.11,
+    2026-09-19): at 2 PM the walk saw two boards with purse 0.0, no Skins
+    board, and matrix-fallback payouts that split a three-way Ind Net tie
+    two ways; by 5:30 PM Kerry had entered the money, the Skins board
+    was up, and the hourly refresh had re-recorded all 18 rows from GG.
+    Before reporting a "missing board" or a wrong split, check
+    `<widget>&round=<round_id>` (`summary`) for the board list and re-run
+    the walk; say which time the numbers are from. A game with NO board at all (no CTP row, no Skins row)
     means GG has nothing for it — the tracker may still have
     SHADOW-computed it (payout descriptions without "(GG $)"). Say which
     is which. `scoring-mvp-import` with url = `<widget>&round=<round_id>`
@@ -154,6 +161,14 @@ Do not assume it — read it — but do not redo it either.
     bridged; the preview then shows them `hcp_excluded`. A card whose
     scores were WRONG (GG edited after our import) is
     `scoring-round-drop:<id>|unpost|apply` + re-import, not an exclusion.
+3.1c **18-hole events post per nine** (`scoring-hcp-2nines:<event>|<per_nine_json>[|apply]`,
+    tee_id → {"front":[rating,slope],"back":[…]}). `no_per_nine_rating`
+    does NOT mean ask Kerry: run `scoring-tee-nines:<course_id>` first —
+    a course TGF plays on Tuesdays already carries its per-nine numbers
+    as 9-hole tee rows (front + back sum to the 18-hole rating; the
+    yardage matches the card). Cedar Creek 2026-09-19 was asked for
+    twice because of this; the ratings-of-record table in handicaps.md
+    now carries it. Only a course never played as a nine needs Kerry.
 3.2 `scoring-hcp-import:<event>|apply` — writes one handicap round per
     9-hole card (WHS NDB adjusted gross, Kerry-ratified 2026-07-14) and
     auto-emails the chapter recap to `hcp_recap_email_<chapter>` →

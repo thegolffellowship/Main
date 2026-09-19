@@ -462,24 +462,31 @@ Cedar Creek chase alert yet ($100 Alamo City deposit booked 9/19 per
 the earlier split); a $100 expense row dated 9/17 carries event_name
 s18.11 under "Luke Mazanec" — noted, not touched.
 
-**Handicaps NOT posted.** Cedar Creek has no per-nine ratings on file
-(`scoring-hcp-2nines:s18.11 CEDAR CREEK|{}` skipped all 15 with
-`no_per_nine_rating`); tees in play: White 717 (125/71.4), Gold 711
-(118/69.4), Red (L) 710 (120/72.9). Same gate as Forest Creek (§3j):
-Kerry supplies front/back rating + slope per tee from the GG tee editor,
-then `scoring-hcp-2nines:s18.11 CEDAR CREEK|{...}|apply`, then the
-card emails (3.3) and the GG upload (3.4).
+**Handicaps — asked for twice, posted 5:40 PM.** The 2 PM run read
+`no_per_nine_rating` (skipped all 15) as "ask Kerry" and reported it so.
+Kerry: "I thought I'd already given you Cedar Creek's breakdown for
+tees ratings and indexes. No?" He had: the Tuesday 9-hole tee rows
+(`scoring-tee-nines:35670` decides each row's nine) carry them — White
+717 = 4433 F 35.5/126 + 2971 B 35.9/123 (= 71.4/125); Gold 711 = 4436
+F 34.8/116 + 2973 B 34.6/119 (= 69.4/118); Red (L) 710 = 2441 F
+36.4/124 + 2978 B 36.5/116 (= 72.9/120); front/back yardages match the
+cards. `scoring-hcp-2nines:s18.11 CEDAR CREEK|{...}|apply` → 30 rounds,
+0 skipped, no flags (Palacios 7.7 → 8.2, Straiton 0.6 → 1.1, Wade 7.5
+→ 7.3). Now in the ratings-of-record table and skill 3.1c. Card emails
+(3.3) and the GG upload (3.4) remain Kerry's.
 
-**Findings for Kerry (not fixed — money):**
-1. Three-way tie for Ind Net at 75 (Palacios 88, Stich 89, Wade 92).
-   `scoring-game-results` ranks all three `position 1, tied`, but the
-   recorded payouts are two rows "Ind Net Field 1st (T)" $81 each
-   (Palacios, Stich) and Mary Wade has no Ind Net row. GG's board lists
-   Palacios alone at 1 (purse 0.0). Either the split is three ways or
-   GG's tiebreak stands — Kerry's ruling; the recap purse line is blank.
-2. All 12 payout rows PENDING, $490.00 (Ind Net 162, Cart Net 120, Skins
-   LOW 104 + HIGH 104). GG purses all 0.0 — money not entered on GG.
-3. No Skins or CTP board on GG; the skins rows are shadow (OPEN 7).
+**The 2 PM money findings were a snapshot, not defects (skill 1.3).**
+At 2 PM the walk saw two boards at purse 0.0, no Skins board, and
+matrix-fallback rows (12 rows $490; the three-way Ind Net tie split
+two ways, Wade missing). Kerry then entered the money and the boards
+went up; by 5:30 PM the hourly refresh had re-recorded 18 rows, $622,
+all GG-backed: Ind Net T1 $54 ×3, City MVP $72 (Palacios, gross
+tiebreak — the tiebreak decides MVP, the purse still splits), Cart Net
+$60/$60 + four $15 (T2 Mazanec+Pearson, Palacios+Anthis), Skins Gross
+$208 (Schneider 13 and 15 — the shadow read had also given him 18).
+All PENDING. No CTP board — Kerry: none was run. Kerry's other read of
+my report ("both got $81 for MVP") was my wording: the $81s were the
+Ind Net purse, not MVP. Lesson: say which game a dollar belongs to.
 
 Recap draft: `docs/claude/recaps/2026-09-19-s18.11-cedar-creek.md` +
 Word file via tools/recap_docx.js (SA only, Kerry's signature). Fall

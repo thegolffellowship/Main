@@ -670,7 +670,11 @@ Rules of record:
 Every 18-hole course TGF plays, once its numbers have been read off GG,
 lives here until the ratings live in `course_tees` (OPEN — schema, rule
 3b). A closeout on one of these courses reuses the row; a NEW course is
-the only time to ask.
+the only time to ask — and before asking, run `scoring-tee-nines:<course_id>`:
+a course TGF plays on Tuesdays already HAS its per-nine numbers as the
+9-hole tee rows (Cedar Creek 2026-09-19: Kerry "I thought I'd already
+given you Cedar Creek's breakdown" — he had, as 9-hole rows; front and
+back sum to the 18-hole rating and the yardage matches the card).
 
 | Course | Tee (tee_id) | Front (R/S) | Back (R/S) | 18 (R/S) | Read |
 |---|---|---|---|---|---|
@@ -678,6 +682,9 @@ the only time to ask.
 | Forest Creek GC | White (3448) | 35.2/125 | 35.2/125 | 70.4/125 | 2026-09-12 |
 | Forest Creek GC | Green (—) | 34.3/119 | 34.2/121 | 68.5/120 | 2026-09-12 |
 | Forest Creek GC | Red (L) (3462) | 34.1/121 | 34.4/120 | 68.5/121 | 2026-09-12 |
+| Cedar Creek GC | White (717) | 35.5/126 | 35.9/123 | 71.4/125 | 2026-09-19 (from 9-hole tee rows 4433 / 2971) |
+| Cedar Creek GC | Gold (711) | 34.8/116 | 34.6/119 | 69.4/118 | 2026-09-19 (4436 / 2973) |
+| Cedar Creek GC | Red (L) (710) | 36.4/124 | 36.5/116 | 72.9/120 | 2026-09-19 (2441 / 2978) |
 | Forest Creek GC | Gold (—) | 37.2/140 | 37.6/137 | 74.8/139 | 2026-09-12 |
 | The Quarry | Gold | 34.2/117 | 35.6/128 | — | 2026-08-03 |
 | The Quarry | Blue | 32.5/103 | 34.2/115 | —/113 | 2026-08-03 |
