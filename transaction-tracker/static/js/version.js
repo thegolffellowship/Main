@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.465.16";
+window.TGF_VERSION = "2.465.17";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.465.17",
+    date: "2026-09-19",
+    changes: [
+      "Handicaps: an 18-hole posting reads its front/back course rating + slope OFF THE COURSE RECORD (Kerry: \u2018Aren\u2019t we checking course_ids and their information for ratings and indexes as a standard?\u2019). `resolve_per_nine_from_course_tees` pairs each 18-hole tee with the course\u2019s Tuesday nine-hole rows of the same tee (labelled front/back by `label_course_tee_nines`) and accepts a pair only when front + back equals the 18-hole rating; two fitting pairs are reported as ambiguous, never picked. `scoring-hcp-2nines:<event>[|auto|<json>][|apply]` \u2014 the JSON map is now optional and only overrides; the result carries `per_nine_source` with the derivation and anything unresolved. Cedar Creek s18.11 was asked for its ratings twice before this; test_hcp_2nines_auto.py.",
+    ],
+  },
   {
     version: "2.465.16",
     date: "2026-09-19",

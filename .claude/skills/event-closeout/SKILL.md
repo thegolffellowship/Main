@@ -161,14 +161,19 @@ Do not assume it — read it — but do not redo it either.
     bridged; the preview then shows them `hcp_excluded`. A card whose
     scores were WRONG (GG edited after our import) is
     `scoring-round-drop:<id>|unpost|apply` + re-import, not an exclusion.
-3.1c **18-hole events post per nine** (`scoring-hcp-2nines:<event>|<per_nine_json>[|apply]`,
-    tee_id → {"front":[rating,slope],"back":[…]}). `no_per_nine_rating`
-    does NOT mean ask Kerry: run `scoring-tee-nines:<course_id>` first —
-    a course TGF plays on Tuesdays already carries its per-nine numbers
-    as 9-hole tee rows (front + back sum to the 18-hole rating; the
-    yardage matches the card). Cedar Creek 2026-09-19 was asked for
-    twice because of this; the ratings-of-record table in handicaps.md
-    now carries it. Only a course never played as a nine needs Kerry.
+3.1c **18-hole events post per nine** — `scoring-hcp-2nines:<event>`
+    (dry) then `scoring-hcp-2nines:<event>|apply`. Since v2.465.17 the
+    front/back rating + slope come OFF THE COURSE RECORD (course_tees by
+    course_id + tee; the Tuesday nine-hole rows, paired and checked
+    against the 18-hole rating) — Kerry 2026-09-19: "Aren't we checking
+    course_ids and their information for ratings and indexes as a
+    standard?" Read `per_nine_source` in the result: it shows the
+    derivation per tee and anything unresolved. A tee it could not
+    resolve (no nine-hole rows on file, or two re-rated pairs that both
+    fit) is skipped with the reason; ONLY THEN read the numbers off GG's
+    course setup and pass them as the JSON override
+    (`…|{"<tee_id>":{"front":[r,s],"back":[r,s]}}|apply`). Cedar Creek
+    2026-09-19 was asked for twice before this existed.
     Since v2.465.16 the `|apply` also mails the chapter-manager recap
     (result key `recap_email`); before that only the 9-hole path did, and
     Cedar Creek's 30 rounds posted silently — `scoring-hcp-recap:<event>`

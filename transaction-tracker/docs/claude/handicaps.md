@@ -665,6 +665,25 @@ Rules of record:
   `{"3447":{"front":[35.9,133],"back":[36.3,131]},"3448":{"front":[35.2,125],
   "back":[35.2,125]},"3462":{"front":[34.1,121],"back":[34.4,120]}}`.
 
+### Per-nine ratings: THE COURSE RECORD is the source (v2.465.17)
+
+Kerry 2026-09-19: "Aren't we checking course_ids and their information
+for course info for ratings and indexes as a standard?" Yes — as of
+v2.465.17 the 18-hole posting path (`derive_18hole_rounds_as_two_nines`,
+bridge `scoring-hcp-2nines:<event>[|auto|<json>][|apply]`) reads every
+tee's front and back rating + slope off `course_tees` by course_id:
+`resolve_per_nine_from_course_tees` runs `label_course_tee_nines`, pairs
+each 18-hole row with one front and one back row of the same tee name,
+and accepts the pair only when front + back equals the 18-hole rating
+(± 0.15; slopes break a tie between two fitting pairs, and two that
+still fit are reported as ambiguous, never picked). The result's
+`per_nine_source` shows the derivation per course and every tee it
+could not resolve; a round on an unresolved tee is skipped with the
+reason. A JSON map passed to the bridge only OVERRIDES per tee — the
+place for a number read off GG's course setup for a course with no
+nine-hole rows on file. The table below is now a mirror of what the
+course record holds, kept for the reader; the code does not read it.
+
 ### Per-nine ratings of record (do not ask Kerry twice)
 
 Every 18-hole course TGF plays, once its numbers have been read off GG,

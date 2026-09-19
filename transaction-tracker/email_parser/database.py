@@ -18848,6 +18848,7 @@ def get_scoring_handicap_preview(event_query: str,
         rounds = conn.execute(
             """SELECT sr.id AS srid, sr.player_name, sr.customer_id,
                       sr.round_date, sr.holes_played, sr.gross, sr.tee_id,
+                      sr.course_id,
                       COALESCE(sr.hcp_exclude, 0) AS hcp_exclude,
                       sr.hcp_exclude_note,
                       e.item_name AS event_name, c.name AS course_name,
@@ -21231,7 +21232,91 @@ _VAALER_PER_NINE = {
 }
 
 
-def derive_18hole_rounds_as_two_nines(event_query: str, per_nine: dict,
+def resolve_per_nine_from_course_tees(conn, course_id: int) -> dict:
+    """Per-nine course rating + slope for every 18-hole tee of a course,
+    READ OFF THE COURSE RECORD — never asked for, never guessed.
+
+    Kerry 2026-09-19: "Aren't we checking course_ids and their information
+    for course info for ratings and indexes as a standard?" Yes. Golf
+    Genius files each nine-hole night as its own `course_tees` row (same
+    tee name, rating under 50), so a course TGF plays on Tuesdays already
+    carries front and back ratings beside its 18-hole row. Cedar Creek
+    s18.11 was asked for twice before this existed.
+
+    `label_course_tee_nines` decides which nine each row is (yardage,
+    then ratings, then the rounds played off it). This pairs one FRONT
+    and one BACK row with each FULL row of the same tee name and accepts
+    the pair only when front + back equals the 18-hole rating (± 0.15)
+    — the same corroboration the labeller uses. Two pairs that both fit
+    (a re-rated tee) are an ambiguity, reported, never picked.
+
+    Returns {"per_nine": {full_tee_id: {"front": (r, s), "back": (r, s)}},
+             "derivation": [...per full tee...], "unresolved": [...]}."""
+    label_course_tee_nines(conn, course_id)
+    rows = [dict(r) for r in conn.execute(
+        "SELECT tee_id, tee_name, rating, slope, yardage_total, nine "
+        "FROM course_tees WHERE course_id = ?", (course_id,)).fetchall()]
+
+    def _key(r):
+        return _TEE_ORDER_RE.sub("", " ".join(
+            (r["tee_name"] or "").split())).strip().lower()
+
+    groups: dict = {}
+    for r in rows:
+        groups.setdefault(_key(r), []).append(r)
+    per_nine: dict = {}
+    derivation: list = []
+    unresolved: list = []
+    for key, grp in groups.items():
+        fulls = [r for r in grp if (r["nine"] or "") == "full" or (r["rating"] or 0) >= 50]
+        fronts = [r for r in grp if (r["nine"] or "") == "front"]
+        backs = [r for r in grp if (r["nine"] or "") == "back"]
+        for full in fulls:
+            if not full["rating"] or not full["slope"]:
+                unresolved.append({"tee_id": full["tee_id"], "tee_name": full["tee_name"],
+                                   "why": "18-hole row has no rating/slope"})
+                continue
+            fits = []
+            for fr in fronts:
+                for bk in backs:
+                    if not (fr["rating"] and bk["rating"] and fr["slope"] and bk["slope"]):
+                        continue
+                    if abs((fr["rating"] + bk["rating"]) - full["rating"]) <= 0.15:
+                        fits.append((fr, bk))
+            if len(fits) > 1:
+                # A re-rated tee can leave two pairs that both sum to the
+                # 18; the slopes then have to agree with the 18's too.
+                fits = [(fr, bk) for fr, bk in fits
+                        if abs((fr["slope"] + bk["slope"]) / 2.0 - full["slope"]) <= 1.0] or fits
+            if len(fits) == 1:
+                fr, bk = fits[0]
+                per_nine[int(full["tee_id"])] = {
+                    "front": (float(fr["rating"]), int(fr["slope"])),
+                    "back": (float(bk["rating"]), int(bk["slope"]))}
+                derivation.append({
+                    "tee_id": full["tee_id"], "tee_name": full["tee_name"],
+                    "rating_18": full["rating"], "slope_18": full["slope"],
+                    "front": {"tee_id": fr["tee_id"], "rating": fr["rating"], "slope": fr["slope"]},
+                    "back": {"tee_id": bk["tee_id"], "rating": bk["rating"], "slope": bk["slope"]},
+                    "check": f"{fr['rating']} + {bk['rating']} = "
+                             f"{round(fr['rating'] + bk['rating'], 1)} vs {full['rating']}"})
+            elif not fits:
+                unresolved.append({
+                    "tee_id": full["tee_id"], "tee_name": full["tee_name"],
+                    "why": (f"no front+back pair sums to the 18-hole rating "
+                            f"{full['rating']} (fronts {[f['rating'] for f in fronts]}, "
+                            f"backs {[b['rating'] for b in backs]})")})
+            else:
+                unresolved.append({
+                    "tee_id": full["tee_id"], "tee_name": full["tee_name"],
+                    "why": f"{len(fits)} front+back pairs fit the 18-hole rating "
+                           f"{full['rating']} — ambiguous, not guessing",
+                    "pairs": [[fr["tee_id"], bk["tee_id"]] for fr, bk in fits]})
+    return {"course_id": course_id, "per_nine": per_nine,
+            "derivation": derivation, "unresolved": unresolved}
+
+
+def derive_18hole_rounds_as_two_nines(event_query: str, per_nine: dict | None = None,
                                       dry_run: bool = True,
                                       db_path: str | Path = DB_PATH) -> dict:
     """Post an 18-hole event as TWO 9-hole handicap_rounds per player (front +
@@ -21240,8 +21325,11 @@ def derive_18hole_rounds_as_two_nines(event_query: str, per_nine: dict,
     path deliberately skips 18-hole rounds, and this is the companion for them.
 
     `per_nine` maps tee_id -> {"front": (rating, slope), "back": (rating, slope)}.
-    A round on a tee absent from `per_nine` is SKIPPED and listed — never guess
-    a rating. Same WHS math as the 9-hole path (per-hole net-double-bogey via
+    Pass None (the standard since v2.465.17) and the map is READ OFF THE
+    COURSE RECORD by `resolve_per_nine_from_course_tees` for every course
+    the event's rounds were played on; an explicit map is merged OVER it
+    (a hand-read value wins). A round on a tee absent from both is SKIPPED
+    and listed — never guess a rating. Same WHS math as the 9-hole path (per-hole net-double-bogey via
     compute_hole_derivations; differential = (adjusted_9 - rating_9)*113/slope_9)
     and the same identity-reuse + dedup rules; the two rows get distinct tee
     labels ("<tee> — Front 9" / "<tee> — Back 9") so re-runs dedupe cleanly.
@@ -21276,6 +21364,25 @@ def derive_18hole_rounds_as_two_nines(event_query: str, per_nine: dict,
             return {"error": f"no imported scoring rounds match event "
                              f"{event_query!r} — run the scorecard import first"}
 
+        # The course record is the source of the per-nine numbers; a map
+        # passed by hand only overrides it.
+        per_nine_source: dict = {"courses": [], "explicit_tee_ids": sorted(
+            int(k) for k in (per_nine or {}).keys())}
+        resolved: dict = {}
+        for cid in sorted({r["course_id"] for r in rounds
+                           if r["course_id"] and (r["holes_played"] or 0) > 9}):
+            try:
+                res = resolve_per_nine_from_course_tees(conn, int(cid))
+            except Exception as exc:  # never let the lookup sink the posting
+                logger.exception("per-nine resolve failed for course %s", cid)
+                res = {"course_id": cid, "per_nine": {}, "derivation": [],
+                       "unresolved": [{"why": f"resolver error: {exc}"}]}
+            resolved.update(res["per_nine"])
+            per_nine_source["courses"].append(
+                {"course_id": cid, "derivation": res["derivation"],
+                 "unresolved": res["unresolved"]})
+        per_nine = {**resolved, **{int(k): v for k, v in (per_nine or {}).items()}}
+
         for r in rounds:
             events_seen.add(r["event_name"])
             if (r["holes_played"] or 0) <= 9:
@@ -21294,7 +21401,8 @@ def derive_18hole_rounds_as_two_nines(event_query: str, per_nine: dict,
                 skipped.append({"player_name": r["player_name"],
                                 "scoring_round_id": r["srid"],
                                 "reason": f"no per-nine rating for tee_id {r['tee_id']} "
-                                          f"({r['tee_name']}) — provide it, not guessing"})
+                                          f"({r['tee_name']}) on the course record — "
+                                          f"see per_nine_source; provide it, not guessing"})
                 continue
 
             hrows = conn.execute(
@@ -21463,6 +21571,7 @@ def derive_18hole_rounds_as_two_nines(event_query: str, per_nine: dict,
             ("would_write" if dry_run else "written"): plan,
             "skipped": skipped,
             "recap_email": recap,
+            "per_nine_source": per_nine_source,
             "summary": {"planned": len(plan), "skipped": len(skipped),
                         "players": len(set(p["player_name"] for p in plan))},
             "standard": "WHS net double bogey per nine; each nine its own "

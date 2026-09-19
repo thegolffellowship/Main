@@ -1771,6 +1771,7 @@ def _scoring_dispatch(url: str, extract: str):
       scoring-margin-rebook[:<since>[|apply]]  recompute allocations >= since so margin carries the fee spread
       scoring-margin-gaps[:<limit>]  pre-cutover events: booked vs residual-would-book, with reasons (measure-only)
       scoring-leaderboard-events[:add=<codes>|set=<codes>|clear]  the EVENTS leaderboard dial (admin pilot); reports which codes still await scorecards
+      scoring-hcp-2nines:<event>[|auto|<json>][|apply]  post an 18-hole event as two nines; ratings read off the course record (v2.465.17), JSON overrides
       scoring-tee-nines[:<course_id>]  label each course tee row front/back/full from the 18-hole card's yardages; reports what it could not decide
       scoring-event-report:<event_id>|flights|proximity  the two PAIRINGS printables as data (Divisions & Flights / CTP markers)
       scoring-pairings-counts:<event_id>[|<year>]  saved sheet scored against played history: times each pair has played together this year INCLUDING this event
@@ -5019,14 +5020,21 @@ def _scoring_dispatch(url: str, extract: str):
             # read off GG course setup, never guessed (Vaaler precedent,
             # Kerry 2026-07-18). Default is a dry-run preview; "|apply"
             # writes. Generic successor to scoring-hcp-2nines-vaaler.
-            _p = arg.split("|")
-            if len(_p) < 2:
-                return json.dumps({"error": "<event>|<per_nine_json>[|apply]"})
-            _pn = {int(k): {"front": tuple(v["front"]), "back": tuple(v["back"])}
-                   for k, v in json.loads(_p[1]).items()}
-            _apply = len(_p) > 2 and _p[2].strip().lower() == "apply"
+            # Since v2.465.17 the map is OPTIONAL: "<event>[|auto][|apply]"
+            # reads front/back rating + slope off the course record
+            # (course_tees by course_id + tee, `resolve_per_nine_from_
+            # course_tees`); a JSON map, when given, overrides per tee.
+            _p = [x.strip() for x in arg.split("|")]
+            if not _p or not _p[0]:
+                return json.dumps({"error": "<event>[|auto|<per_nine_json>][|apply]"})
+            _apply = _p[-1].lower() == "apply" if len(_p) > 1 else False
+            _mid = _p[1:-1] if _apply else _p[1:]
+            _pn = None
+            if _mid and _mid[0] and _mid[0].lower() != "auto":
+                _pn = {int(k): {"front": tuple(v["front"]), "back": tuple(v["back"])}
+                       for k, v in json.loads(_mid[0]).items()}
             return json.dumps(db.derive_18hole_rounds_as_two_nines(
-                _p[0].strip(), _pn, dry_run=not _apply), indent=2, default=str)
+                _p[0], _pn, dry_run=not _apply), indent=2, default=str)
         if cmd == "scoring-hcp-2nines-vaaler":
             # Post the s18.8 Vaaler Creek 18-hole event as TWO 9-hole handicap
             # rounds per player (front + back), each with that nine's own course
