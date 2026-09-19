@@ -122,8 +122,10 @@ with db._connect(DB) as conn:
           res2["per_nine"].get(2975) == {"front": (37.3, 139), "back": (36.7, 135)}, res2["per_nine"].get(2975))
     # Identical halves (Forest Creek White is 35.2/125 both ways) with ONE
     # Tuesday row on record: that row is one nine, the other is inserted.
-    conn.execute("INSERT INTO course_tees VALUES (9001, 35670, '5 - Twin Tee', 70.4, 125, 6400)")
-    conn.execute("INSERT INTO course_tees VALUES (9002, 35670, '5 - Twin Tee', 35.2, 125, 3200)")
+    conn.execute("INSERT INTO course_tees (tee_id, course_id, tee_name, rating, slope, yardage_total) "
+                 "VALUES (9001, 35670, '5 - Twin Tee', 70.4, 125, 6400)")
+    conn.execute("INSERT INTO course_tees (tee_id, course_id, tee_name, rating, slope, yardage_total) "
+                 "VALUES (9002, 35670, '5 - Twin Tee', 35.2, 125, 3200)")
     conn.commit()
     twin = db.store_tee_nines(conn, 9001, (35.2, 125), (35.2, 125), dry_run=True)
     check("identical halves: the one row on record is kept as ONE nine and the other half is inserted",
@@ -136,9 +138,9 @@ with db._connect(DB) as conn:
     conn.commit()
     audit = db.audit_course_per_nine(conn)
     c0 = audit["courses"][0]
-    check("the audit lists the course with its next event and 4 resolved / 0 unresolved tees",
+    check("the audit lists the course with its next event, 4 resolved tees and only the dry-run Twin tee unresolved",
           c0["course_id"] == 35670 and c0["next_event"] == 's18.99 CEDAR CREEK'
-          and len(c0["resolved"]) == 4 and c0["unresolved"] == [], c0)
+          and len(c0["resolved"]) == 4 and [u["tee_id"] for u in c0["unresolved"]] == [9001], c0)
 
 print()
 print("ALL PASS" if not F else f"FAILED: {F}")
