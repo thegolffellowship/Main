@@ -99,6 +99,39 @@ check("derive_18hole_rounds_as_two_nines resolves from the course record by defa
 check("an explicit map is merged OVER the resolved one",
       "{**resolved, **{int(k): v for k, v in (per_nine or {}).items()}}" in src)
 
+# ---- store_tee_nines: put the nines ON the record (Kerry 2026-09-19) ----
+with db._connect(DB) as conn:
+    conn.execute("CREATE TABLE IF NOT EXISTS agent_action_log (id INTEGER PRIMARY KEY, agent TEXT, action TEXT, detail TEXT, created_at TEXT)")
+    # Blue 2975 has an 18-hole row and no nines. Store 37.3/139 + 36.7/135.
+    bad = db.store_tee_nines(conn, 2975, (37.3, 139), (36.0, 135), dry_run=True)
+    check("a pair that does not sum to the 18 is REFUSED", bad["ok"] is False and "not storing" in bad["error"], bad)
+    dry = db.store_tee_nines(conn, 2975, (37.3, 139), (36.7, 135), dry_run=True)
+    check("dry run plans two inserts and writes nothing",
+          dry["ok"] and [r["action"] for r in dry["rows"]] == ["would insert", "would insert"]
+          and conn.execute("SELECT COUNT(*) FROM course_tees WHERE course_id = 35670").fetchone()[0] == 10, dry)
+    done = db.store_tee_nines(conn, 2975, (37.3, 139), (36.7, 135), dry_run=False)
+    n_after = conn.execute("SELECT COUNT(*) FROM course_tees WHERE course_id = 35670").fetchone()[0]
+    check("apply inserts front + back rows labelled by nine",
+          done["ok"] and n_after == 12 and sorted(r["nine"] for r in done["rows"]) == ["back", "front"], done)
+    again = db.store_tee_nines(conn, 2975, (37.3, 139), (36.7, 135), dry_run=False)
+    check("a second apply keeps the rows, never duplicates",
+          all("kept" in r["action"] for r in again["rows"])
+          and conn.execute("SELECT COUNT(*) FROM course_tees WHERE course_id = 35670").fetchone()[0] == 12, again)
+    res2 = db.resolve_per_nine_from_course_tees(conn, 35670)
+    check("…and the resolver now resolves Blue from the record",
+          res2["per_nine"].get(2975) == {"front": (37.3, 139), "back": (36.7, 135)}, res2["per_nine"].get(2975))
+    conn.execute("CREATE TABLE IF NOT EXISTS courses (course_id INTEGER PRIMARY KEY, name TEXT)")
+    conn.execute("INSERT OR IGNORE INTO courses VALUES (35670, 'Cedar Creek Golf Course')")
+    conn.execute("ALTER TABLE events ADD COLUMN course_id INTEGER")
+    conn.execute("ALTER TABLE events ADD COLUMN event_date TEXT")
+    conn.execute("INSERT INTO events (id, item_name, course_id, event_date) VALUES (1, 's18.99 CEDAR CREEK', 35670, '2099-01-01')")
+    conn.commit()
+    audit = db.audit_course_per_nine(conn)
+    c0 = audit["courses"][0]
+    check("the audit lists the course with its next event and 4 resolved / 0 unresolved tees",
+          c0["course_id"] == 35670 and c0["next_event"] == 's18.99 CEDAR CREEK'
+          and len(c0["resolved"]) == 4 and c0["unresolved"] == [], c0)
+
 print()
 print("ALL PASS" if not F else f"FAILED: {F}")
 sys.exit(1 if F else 0)

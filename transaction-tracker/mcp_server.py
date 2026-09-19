@@ -1772,6 +1772,8 @@ def _scoring_dispatch(url: str, extract: str):
       scoring-margin-gaps[:<limit>]  pre-cutover events: booked vs residual-would-book, with reasons (measure-only)
       scoring-leaderboard-events[:add=<codes>|set=<codes>|clear]  the EVENTS leaderboard dial (admin pilot); reports which codes still await scorecards
       scoring-hcp-2nines:<event>[|auto|<json>][|apply]  post an 18-hole event as two nines; ratings read off the course record (v2.465.17), JSON overrides
+      scoring-tee-nines-store:<full_tee_id>|<fr>,<fs>|<br>,<bs>[|apply]  put a tee's front/back nine on the course record (refuses a pair that does not sum to the 18)
+      scoring-per-nine-audit[:all]   every course with an 18-hole row: nines resolved / unresolved and why
       scoring-tee-nines[:<course_id>]  label each course tee row front/back/full from the 18-hole card's yardages; reports what it could not decide
       scoring-event-report:<event_id>|flights|proximity  the two PAIRINGS printables as data (Divisions & Flights / CTP markers)
       scoring-pairings-counts:<event_id>[|<year>]  saved sheet scored against played history: times each pair has played together this year INCLUDING this event
@@ -5035,6 +5037,35 @@ def _scoring_dispatch(url: str, extract: str):
                        for k, v in json.loads(_mid[0]).items()}
             return json.dumps(db.derive_18hole_rounds_as_two_nines(
                 _p[0], _pn, dry_run=not _apply), indent=2, default=str)
+        if cmd == "scoring-tee-nines-store":
+            # "<full_tee_id>|<front_rating>,<front_slope>|<back_rating>,<back_slope>[|apply]"
+            # Put a tee's front and back nine ON THE COURSE RECORD beside its
+            # 18-hole row (Kerry 2026-09-19: "Why wouldn't those tees be on
+            # the course record?"). Refuses a pair that does not sum to the
+            # 18-hole rating. Dry run unless |apply. Course data — Kerry's
+            # numbers, read off GG's course setup.
+            _p = [x.strip() for x in arg.split("|")]
+            if len(_p) < 3:
+                return json.dumps({"error": "<full_tee_id>|<fr>,<fs>|<br>,<bs>[|apply]"})
+            _fr = tuple(float(x) for x in _p[1].split(","))
+            _bk = tuple(float(x) for x in _p[2].split(","))
+            _apply = len(_p) > 3 and _p[3].lower() == "apply"
+            _c = db.get_connection()
+            try:
+                _res = db.store_tee_nines(_c, int(_p[0]), _fr, _bk, dry_run=not _apply)
+            finally:
+                _c.close()
+            return json.dumps(_res, indent=2, default=str)
+        if cmd == "scoring-per-nine-audit":
+            # READ-ONLY: every course with an 18-hole tee row — which tees
+            # resolve their nines off the record, which do not and why.
+            # ":all" includes courses never played with no upcoming event.
+            _c = db.get_connection()
+            try:
+                _res = db.audit_course_per_nine(_c, only_played=(arg.strip().lower() != "all"))
+            finally:
+                _c.close()
+            return json.dumps(_res, indent=2, default=str)
         if cmd == "scoring-hcp-2nines-vaaler":
             # Post the s18.8 Vaaler Creek 18-hole event as TWO 9-hole handicap
             # rounds per player (front + back), each with that nine's own course

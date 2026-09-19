@@ -171,9 +171,13 @@ Do not assume it — read it — but do not redo it either.
     derivation per tee and anything unresolved. A tee it could not
     resolve (no nine-hole rows on file, or two re-rated pairs that both
     fit) is skipped with the reason; ONLY THEN read the numbers off GG's
-    course setup and pass them as the JSON override
-    (`…|{"<tee_id>":{"front":[r,s],"back":[r,s]}}|apply`). Cedar Creek
-    2026-09-19 was asked for twice before this existed.
+    course setup and STORE them on the record with
+    `scoring-tee-nines-store:<full_tee_id>|<fr>,<fs>|<br>,<bs>|apply`
+    (Kerry's go — course data), then re-run; the JSON override
+    (`…|{"<tee_id>":{"front":[r,s],"back":[r,s]}}|apply`) is the
+    one-off. `scoring-per-nine-audit` before an 18-hole day says whether
+    its course will resolve. Cedar Creek 2026-09-19 was asked for twice
+    before this existed.
     Since v2.465.16 the `|apply` also mails the chapter-manager recap
     (result key `recap_email`); before that only the 9-hole path did, and
     Cedar Creek's 30 rounds posted silently — `scoring-hcp-recap:<event>`

@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.465.18";
+window.TGF_VERSION = "2.465.19";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.465.19",
+    date: "2026-09-19",
+    changes: [
+      "Course record: `scoring-tee-nines-store:<full_tee_id>|<fr>,<fs>|<br>,<bs>[|apply]` puts a tee\u2019s front and back nine ON the course record beside its 18-hole row (Kerry: \u2018Why wouldn\u2019t those tees be on the course record? \u2026 I want to make sure we have all the data\u2019). `course_tees` only ever accreted from imported rounds, so a course played only as an 18 had no nines and its ratings lived in a JSON paste-in. Refuses a pair that does not sum to the 18-hole rating; keeps a half already on record; copies the 18\u2019s holes so the labeller agrees. `scoring-per-nine-audit[:all]` (read-only) lists every course with an 18-hole row, next event first, with each tee resolved or unresolved and why.",
+    ],
+  },
   {
     version: "2.465.18",
     date: "2026-09-19",

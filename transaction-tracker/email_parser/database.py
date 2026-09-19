@@ -21315,6 +21315,131 @@ def resolve_per_nine_from_course_tees(conn, course_id: int) -> dict:
             "derivation": derivation, "unresolved": unresolved}
 
 
+def store_tee_nines(conn, full_tee_id: int, front: tuple, back: tuple,
+                    dry_run: bool = True, note: str = "") -> dict:
+    """Put a tee's FRONT and BACK nine on the course record beside its
+    18-hole row, so the per-nine posting resolves it without asking.
+
+    `course_tees` accretes from scorecard imports — a row exists only for
+    a tee somebody played a round off. A course TGF plays only as an 18
+    (Kissing Tree, Landa Park, Lost Pines…) therefore has no nine-hole
+    rows, and the numbers Kerry read off Golf Genius for those events
+    lived in a JSON paste-in and a doc table. Kerry 2026-09-19: "Why
+    wouldn't those tees be on the course record? … I want to make sure
+    we have all the data."
+
+    Writes two rows named like the 18 (nine='front' / 'back', yardage
+    and holes copied from the 18's card when it has one) and REFUSES a
+    pair that does not sum to the 18-hole rating (± 0.15) — the same
+    corroboration the resolver demands. A half already on the record
+    (same tee name, rating and slope) is kept, not duplicated. Dry run
+    by default."""
+    try:
+        conn.execute("ALTER TABLE course_tees ADD COLUMN nine TEXT")
+    except sqlite3.OperationalError:
+        pass
+    full = conn.execute(
+        "SELECT tee_id, course_id, tee_name, rating, slope, yardage_total "
+        "FROM course_tees WHERE tee_id = ?", (full_tee_id,)).fetchone()
+    if not full:
+        return {"ok": False, "error": f"no course_tees row {full_tee_id}"}
+    if (full["rating"] or 0) < 50:
+        return {"ok": False, "error": f"tee {full_tee_id} ({full['tee_name']}) is a "
+                                      f"nine-hole row (rating {full['rating']}), not an 18"}
+    fr, fs = float(front[0]), int(front[1])
+    br, bs = float(back[0]), int(back[1])
+    if abs((fr + br) - float(full["rating"])) > 0.15:
+        return {"ok": False, "error": f"front {fr} + back {br} = {round(fr + br, 1)} does not "
+                                      f"equal the 18-hole rating {full['rating']} — not storing"}
+    holes = {int(h["hole_number"]): h for h in conn.execute(
+        "SELECT hole_number, par, yardage, stroke_index FROM course_tee_holes "
+        "WHERE tee_id = ?", (full_tee_id,)).fetchall()}
+    out = {"ok": True, "dry_run": dry_run, "course_id": full["course_id"],
+           "tee_name": full["tee_name"], "rating_18": full["rating"],
+           "slope_18": full["slope"], "rows": []}
+    for nine, (r, sl), rng in (("front", (fr, fs), range(1, 10)),
+                               ("back", (br, bs), range(10, 19))):
+        existing = conn.execute(
+            """SELECT tee_id, nine FROM course_tees
+                WHERE course_id = ? AND tee_name = ? AND rating = ? AND slope = ?
+                  AND rating < 50""",
+            (full["course_id"], full["tee_name"], r, sl)).fetchone()
+        yards = sum((holes[i]["yardage"] or 0) for i in rng if i in holes) or None
+        if existing:
+            row = {"nine": nine, "rating": r, "slope": sl, "tee_id": existing["tee_id"],
+                   "action": "kept (already on record)"}
+            if not dry_run and (existing["nine"] or "") != nine:
+                conn.execute("UPDATE course_tees SET nine = ? WHERE tee_id = ?",
+                             (nine, existing["tee_id"]))
+                row["action"] = f"kept; nine label set to {nine}"
+            out["rows"].append(row)
+            continue
+        row = {"nine": nine, "rating": r, "slope": sl, "yardage_total": yards,
+               "holes_copied": sum(1 for i in rng if i in holes),
+               "action": "would insert" if dry_run else "inserted"}
+        if not dry_run:
+            cur = conn.execute(
+                """INSERT INTO course_tees (course_id, tee_name, slope, rating,
+                                            yardage_total, nine)
+                   VALUES (?, ?, ?, ?, ?, ?)""",
+                (full["course_id"], full["tee_name"], sl, r, yards, nine))
+            new_id = cur.lastrowid
+            for k, i in enumerate(rng, start=1):
+                h = holes.get(i)
+                if h:
+                    conn.execute(
+                        """INSERT OR REPLACE INTO course_tee_holes
+                           (tee_id, hole_number, par, yardage, stroke_index)
+                           VALUES (?, ?, ?, ?, ?)""",
+                        (new_id, k, h["par"], h["yardage"], h["stroke_index"]))
+            row["tee_id"] = new_id
+            try:
+                log_agent_action("mcp-claude", "store_tee_nines",
+                                 f"course {full['course_id']} {full['tee_name']} "
+                                 f"{nine} {r}/{sl} -> tee {new_id} {note}".strip())
+            except Exception:
+                pass
+        out["rows"].append(row)
+    if not dry_run:
+        conn.commit()
+    return out
+
+
+def audit_course_per_nine(conn, only_played: bool = True) -> dict:
+    """Every course with an 18-hole tee row: which tees resolve their
+    front/back nines off the record and which do not, with the reason.
+    Read-only (the labeller it runs writes only `course_tees.nine`).
+    Courses with upcoming events are listed first so the gap that
+    matters next is at the top."""
+    where = " WHERE ct.rating >= 50"
+    courses = [dict(r) for r in conn.execute(
+        f"""SELECT c.course_id, c.name,
+                   (SELECT COUNT(*) FROM scoring_rounds sr WHERE sr.course_id = c.course_id) AS n_rounds,
+                   (SELECT MIN(e.event_date) FROM events e
+                     WHERE e.course_id = c.course_id AND e.event_date >= date('now')) AS next_event_date,
+                   (SELECT e.item_name FROM events e
+                     WHERE e.course_id = c.course_id AND e.event_date >= date('now')
+                     ORDER BY e.event_date LIMIT 1) AS next_event
+              FROM courses c
+             WHERE EXISTS (SELECT 1 FROM course_tees ct WHERE ct.course_id = c.course_id {where.replace(' WHERE', ' AND')})
+             ORDER BY c.course_id""").fetchall()]
+    out = []
+    for c in courses:
+        if only_played and not c["n_rounds"] and not c["next_event"]:
+            continue
+        res = resolve_per_nine_from_course_tees(conn, int(c["course_id"]))
+        out.append({**c, "resolved": [
+            {"tee_id": d["tee_id"], "tee": d["tee_name"], "front": d["front"], "back": d["back"],
+             "check": d["check"]} for d in res["derivation"]],
+            "unresolved": res["unresolved"]})
+    out.sort(key=lambda c: (c["next_event_date"] is None, c["next_event_date"] or "",
+                            -(c["n_rounds"] or 0)))
+    return {"courses": out,
+            "n_courses": len(out),
+            "n_tees_resolved": sum(len(c["resolved"]) for c in out),
+            "n_tees_unresolved": sum(len(c["unresolved"]) for c in out)}
+
+
 def derive_18hole_rounds_as_two_nines(event_query: str, per_nine: dict | None = None,
                                       dry_run: bool = True,
                                       db_path: str | Path = DB_PATH) -> dict:

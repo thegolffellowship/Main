@@ -684,6 +684,20 @@ place for a number read off GG's course setup for a course with no
 nine-hole rows on file. The table below is now a mirror of what the
 course record holds, kept for the reader; the code does not read it.
 
+**Why a course can lack its nines (Kerry 2026-09-19: "Why wouldn't those
+tees be on the course record?"):** `course_tees` accretes from scorecard
+imports — a tee row exists only for a tee somebody played a round off.
+A course TGF plays only as an 18 (Kissing Tree, Landa Park, Lost Pines,
+Vaaler, La Cantera…) has 18-hole rows and nothing else; Forest Creek has
+its Austin-Tuesday FRONT rows and no backs because no back-nine Tuesday
+was ever played there. `scoring-tee-nines-store:<full_tee_id>|<fr>,<fs>|
+<br>,<bs>[|apply]` (v2.465.19) puts the halves on the record beside the
+18 (refuses a pair that does not sum to the 18-hole rating; keeps a half
+already there; copies the 18's holes). `scoring-per-nine-audit[:all]`
+lists every course with an 18-hole row, next event first, resolved /
+unresolved per tee. Storing is course data — Kerry's numbers, read off
+GG's course setup, on his go.
+
 ### Per-nine ratings of record (do not ask Kerry twice)
 
 Every 18-hole course TGF plays, once its numbers have been read off GG,
