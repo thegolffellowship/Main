@@ -169,6 +169,10 @@ Do not assume it — read it — but do not redo it either.
     yardage matches the card). Cedar Creek 2026-09-19 was asked for
     twice because of this; the ratings-of-record table in handicaps.md
     now carries it. Only a course never played as a nine needs Kerry.
+    Since v2.465.16 the `|apply` also mails the chapter-manager recap
+    (result key `recap_email`); before that only the 9-hole path did, and
+    Cedar Creek's 30 rounds posted silently — `scoring-hcp-recap:<event>`
+    is the manual resend either way.
 3.2 `scoring-hcp-import:<event>|apply` — writes one handicap round per
     9-hole card (WHS NDB adjusted gross, Kerry-ratified 2026-07-14) and
     auto-emails the chapter recap to `hcp_recap_email_<chapter>` →

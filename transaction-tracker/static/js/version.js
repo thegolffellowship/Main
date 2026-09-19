@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.465.15";
+window.TGF_VERSION = "2.465.16";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.465.16",
+    date: "2026-09-19",
+    changes: [
+      "Handicaps: posting an 18-hole event as two nines (`scoring-hcp-2nines … |apply`) now sends the chapter-manager recap email like the 9-hole posting path always has. Cedar Creek s18.11 posted 30 rounds with no recap and Kerry had to ask; the result carries `recap_email` so the send is visible. `scoring-hcp-recap:<event>` remains the manual resend.",
+    ],
+  },
   {
     version: "2.465.15",
     date: "2026-09-18",

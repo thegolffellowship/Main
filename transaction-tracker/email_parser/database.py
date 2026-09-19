@@ -21444,10 +21444,25 @@ def derive_18hole_rounds_as_two_nines(event_query: str, per_nine: dict,
             logger.info("Posted %d two-nine handicap rounds for %r (18-hole "
                         "event split, WHS NDB per nine)", len(plan), event_query)
 
+    # The chapter-manager recap goes out on every posting, whichever path
+    # posted it. The 9-hole path (derive_handicap_rounds_from_scoring) has
+    # sent it since the recap was built; this 18-hole path did not, so
+    # Cedar Creek s18.11 (2026-09-19) posted 30 rounds silently and Kerry
+    # had to ask "Was a handicap report summary sent to me as manager?"
+    recap = None
+    if not dry_run and plan:
+        try:
+            recap = send_handicap_recap_email(
+                (sorted(events_seen) or [event_query])[0], plan, db_path=db_path)
+        except Exception:
+            logger.exception("Non-fatal: two-nine handicap recap email failed")
+            recap = {"ok": False, "error": "exception (see logs)"}
+
     return {"event_query": event_query, "events_matched": sorted(events_seen),
             "dry_run": dry_run,
             ("would_write" if dry_run else "written"): plan,
             "skipped": skipped,
+            "recap_email": recap,
             "summary": {"planned": len(plan), "skipped": len(skipped),
                         "players": len(set(p["player_name"] for p in plan))},
             "standard": "WHS net double bogey per nine; each nine its own "
