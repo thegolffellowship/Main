@@ -18848,7 +18848,6 @@ def get_scoring_handicap_preview(event_query: str,
         rounds = conn.execute(
             """SELECT sr.id AS srid, sr.player_name, sr.customer_id,
                       sr.round_date, sr.holes_played, sr.gross, sr.tee_id,
-                      sr.course_id,
                       COALESCE(sr.hcp_exclude, 0) AS hcp_exclude,
                       sr.hcp_exclude_note,
                       e.item_name AS event_name, c.name AS course_name,
@@ -21349,6 +21348,7 @@ def derive_18hole_rounds_as_two_nines(event_query: str, per_nine: dict | None = 
         rounds = conn.execute(
             """SELECT sr.id AS srid, sr.player_name, sr.customer_id,
                       sr.round_date, sr.holes_played, sr.gross, sr.tee_id,
+                      sr.course_id,
                       COALESCE(sr.hcp_exclude, 0) AS hcp_exclude,
                       sr.hcp_exclude_note,
                       e.item_name AS event_name, c.name AS course_name,

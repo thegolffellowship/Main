@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.465.17";
+window.TGF_VERSION = "2.465.18";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.465.18",
+    date: "2026-09-19",
+    changes: [
+      "Handicaps: v2.465.17 failed live with \u2018No item with that key\u2019 \u2014 the `course_id` column had been added to the 9-hole preview\u2019s query instead of the 18-hole posting\u2019s (identical SELECT text, first match). Moved; the 9-hole query is back as it was. Proven end to end on a local scoring DB before shipping.",
+    ],
+  },
   {
     version: "2.465.17",
     date: "2026-09-19",
