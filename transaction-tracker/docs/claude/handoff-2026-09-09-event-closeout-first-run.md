@@ -447,6 +447,46 @@ diff 1.8, back 32 diff −3.7; index 0.9 → 0.1). GG boards and all 17
 PAID payout rows unchanged (the skins GG paid were already right).
 Skill OPEN 12 raised: a post-import GG edit is invisible to the Tracker.
 
+### 3m. Fourth live run — s18.11 CEDAR CREEK (Sat 2026-09-19, SA, 18 holes), run 1:30–2:30 PM CDT
+
+Single-event day (Austin off). Mailbox read #541–#565 first. Field 15 =
+15 cards (auto-sync 12:57–1:32 PM), every cid set, no null-cid or
+tee-less card. Parity all_ok on Palacios 10793 and Wade 10799. MVP:
+Palacios 15 pts on the gross tiebreak over Stich and Wade (all 75 net).
+Tee-sheet ingest applied FIRST (skill 1.2): `scoring-pairings:round|sa|
+1708030|apply|3310` → 4 groups (3/4/4/4), 15 rows, 21 pairs; the CART
+Net board was NOT applied as groups. Financials verified (15 × 90.65 =
+1,359.75, coverage 100). Contests sync enrolled 0. Card emails: none
+since 9/16 (`scoring-message-log:handicap-card`). Course bill: no
+Cedar Creek chase alert yet ($100 Alamo City deposit booked 9/19 per
+the earlier split); a $100 expense row dated 9/17 carries event_name
+s18.11 under "Luke Mazanec" — noted, not touched.
+
+**Handicaps NOT posted.** Cedar Creek has no per-nine ratings on file
+(`scoring-hcp-2nines:s18.11 CEDAR CREEK|{}` skipped all 15 with
+`no_per_nine_rating`); tees in play: White 717 (125/71.4), Gold 711
+(118/69.4), Red (L) 710 (120/72.9). Same gate as Forest Creek (§3j):
+Kerry supplies front/back rating + slope per tee from the GG tee editor,
+then `scoring-hcp-2nines:s18.11 CEDAR CREEK|{...}|apply`, then the
+card emails (3.3) and the GG upload (3.4).
+
+**Findings for Kerry (not fixed — money):**
+1. Three-way tie for Ind Net at 75 (Palacios 88, Stich 89, Wade 92).
+   `scoring-game-results` ranks all three `position 1, tied`, but the
+   recorded payouts are two rows "Ind Net Field 1st (T)" $81 each
+   (Palacios, Stich) and Mary Wade has no Ind Net row. GG's board lists
+   Palacios alone at 1 (purse 0.0). Either the split is three ways or
+   GG's tiebreak stands — Kerry's ruling; the recap purse line is blank.
+2. All 12 payout rows PENDING, $490.00 (Ind Net 162, Cart Net 120, Skins
+   LOW 104 + HIGH 104). GG purses all 0.0 — money not entered on GG.
+3. No Skins or CTP board on GG; the skins rows are shadow (OPEN 7).
+
+Recap draft: `docs/claude/recaps/2026-09-19-s18.11-cedar-creek.md` +
+Word file via tools/recap_docx.js (SA only, Kerry's signature). Fall
+race standings fetched 2:04 PM still show Tuesday's numbers (Wade on
+20 with a tied-1st net) — GG had not posted Saturday's points; monthly
+cache 05:30 pre-round. Both flagged as blanks.
+
 ## 4. NOT done, and why
 
 - **Wednesday-AM TGF Insider auto-draft (mailbox #453).** BUILT in
