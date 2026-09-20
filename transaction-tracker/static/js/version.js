@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.467.0";
+window.TGF_VERSION = "2.467.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.467.1",
+    date: "2026-09-20",
+    changes: [
+      "Two-nines dedupe no longer keys on the tee\u2019s printed name. `derive_18hole_rounds_as_two_nines` recognised an already-posted nine by matching `handicap_rounds.tee_name` text (\u20181 - White Tee \u2014 Front 9\u2019); after v2.467.0 the label reads \u2018White \u2014 Front 9\u2019 and the live dry run for s18.11 Cedar Creek showed all 30 nines as unposted (0 skipped). Nothing was written \u2014 that path only runs by hand \u2014 but an |apply would have double-posted the field. Already-posted is now player + day + course + NINE, whatever the label says.",
+      "`scoring-tee-bands` Forward proposal: a course whose women\u2019s sets are all under the 4800 floor (Forest Creek Red F 4780) is reported UNPLACED with the nearest women\u2019s sets, never handed a men\u2019s set; the men\u2019s fallback is only for a course that rates no women\u2019s tee at all (Brackenridge).",
+    ],
+  },
   {
     version: "2.467.0",
     date: "2026-09-20",

@@ -21986,12 +21986,19 @@ def derive_18hole_rounds_as_two_nines(event_query: str, per_nine: dict | None = 
                         capped += 1
                 diff9 = round((adj - rating9) * 113.0 / slope9, 1)
                 tee_lbl = f"{r['tee_name']} — {nine}"
+                # ALREADY POSTED = same player, same day, same course, same
+                # NINE — never the tee's printed name (v2.467.1: the label
+                # changed from "1 - White Tee — Front 9" to "White — Front
+                # 9" when the master name replaced the GG name, and a
+                # text match would have re-posted every Cedar Creek nine).
                 dup = conn.execute(
                     """SELECT id FROM handicap_rounds
                        WHERE player_name = ? AND round_date = ? AND round_id IS NULL
                          AND COALESCE(course_name,'') = COALESCE(?,'')
-                         AND COALESCE(tee_name,'') = COALESCE(?,'')""",
-                    (target_name, r["round_date"], r["course_name"], tee_lbl)).fetchone()
+                         AND (COALESCE(tee_name,'') = COALESCE(?,'')
+                              OR tee_name LIKE '%— ' || ?)
+                       ORDER BY id LIMIT 1""",
+                    (target_name, r["round_date"], r["course_name"], tee_lbl, nine)).fetchone()
                 nines_out.append({
                     "nine": nine, "tee_name": tee_lbl, "rating": rating9,
                     "slope": slope9, "gross9": gross9, "adjusted9": adj,
@@ -58360,11 +58367,15 @@ def propose_tgf_tees(conn, course_id: int) -> dict:
                              "nearest": [{"tee_id": t["tee_id"], "tee_name": t["tee_name"],
                                           "y18": t["y18"]} for t in near]})
     lo, hi = std["Forward"]
-    women = [t for t in sets if t["gender"] == "F" and _fits(t, lo, hi)]
+    women_all = [t for t in sets if t["gender"] == "F"]
+    women = [t for t in women_all if _fits(t, lo, hi)]
     plain = [t for t in women if not t["is_combo"]]
     pool = plain or women
     note = None
-    if not pool:
+    if not pool and not women_all:
+        # A course that rates NO women's tee: the shortest men's set at or
+        # above the floor, and say so. A course that rates women's tees
+        # all under the floor is UNPLACED (Kerry decides), never a men's set.
         men = [t for t in sets if t["gender"] == "M" and _fits(t, lo, hi)]
         pool = [t for t in men if not t["is_combo"]] or men
         note = "no women's set rated on this course — shortest men's set at or above the floor"
@@ -58375,7 +58386,11 @@ def propose_tgf_tees(conn, course_id: int) -> dict:
                                "is_combo": pick["is_combo"],
                                "why": note or f"shortest women's set not under {lo}"}
     else:
-        unplaced.append({"band": "Forward", "range": [lo, hi], "nearest": []})
+        near = sorted((t for t in women_all if t["y18"]), key=lambda t: -t["y18"])[:2]
+        unplaced.append({"band": "Forward", "range": [lo, hi],
+                         "nearest": [{"tee_id": t["tee_id"], "tee_name": t["tee_name"],
+                                      "gender": "F", "y18": t["y18"]} for t in near],
+                         "note": "every women's set on record is under the floor or has no yardage"})
     return {"ok": True, "course_id": course_id, "course": course["name"],
             "standards": std, "sets": [{k: t[k] for k in ("tee_id", "tee_name", "gg_alias",
                                                             "gender", "y18", "is_combo", "bands",
