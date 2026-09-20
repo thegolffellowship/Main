@@ -30,7 +30,8 @@ def check(label, cond, detail=""):
 with db._connect(DB) as conn:
     conn.executescript("""
         CREATE TABLE course_tees (tee_id INTEGER PRIMARY KEY, course_id INTEGER,
-            tee_name TEXT, rating REAL, slope INTEGER, yardage_total INTEGER);
+            tee_name TEXT, rating REAL, slope INTEGER, yardage_total INTEGER,
+            UNIQUE(course_id, tee_name, slope, rating));
         CREATE TABLE course_tee_holes (tee_id INTEGER, hole_number INTEGER,
             yardage INTEGER, par INTEGER, stroke_index INTEGER);
         CREATE TABLE events (id INTEGER PRIMARY KEY, item_name TEXT, nine_side TEXT);
@@ -128,8 +129,13 @@ with db._connect(DB) as conn:
                  "VALUES (9002, 35670, '5 - Twin Tee', 35.2, 125, 3200)")
     conn.commit()
     twin = db.store_tee_nines(conn, 9001, (35.2, 125), (35.2, 125), dry_run=True)
-    check("identical halves: the one row on record is kept as ONE nine and the other half is inserted",
-          twin["ok"] and sorted(r["action"].split(" ")[0] for r in twin["rows"]) == ["kept", "would"], twin)
+    check("identical halves: the one row on record is kept as ONE nine, the other half is "
+          "BLOCKED by the natural key (no `nine` in UNIQUE) and the call reports it, never raises",
+          twin["ok"] is False and [r["action"].split(" ")[0] for r in twin["rows"]] == ["kept", "BLOCKED:"], twin)
+    twin_apply = db.store_tee_nines(conn, 9001, (35.2, 125), (35.2, 125), dry_run=False)
+    check("…and apply writes nothing for the blocked half",
+          twin_apply["ok"] is False and conn.execute(
+              "SELECT COUNT(*) FROM course_tees WHERE tee_name = '5 - Twin Tee'").fetchone()[0] == 2, twin_apply)
     conn.execute("CREATE TABLE IF NOT EXISTS courses (course_id INTEGER PRIMARY KEY, name TEXT)")
     conn.execute("INSERT OR IGNORE INTO courses VALUES (35670, 'Cedar Creek Golf Course')")
     conn.execute("ALTER TABLE events ADD COLUMN course_id INTEGER")

@@ -21386,6 +21386,26 @@ def store_tee_nines(conn, full_tee_id: int, front: tuple, back: tuple,
                 row["action"] = f"kept; nine label set to {nine}"
             out["rows"].append(row)
             continue
+        # SCHEMA LIMIT (found 2026-09-19 on Forest Creek White, 35.2/125
+        # both nines): course_tees is UNIQUE(course_id, tee_name, slope,
+        # rating) — the natural key has no `nine` in it, so two halves
+        # that rate identically cannot both exist. The import's INSERT OR
+        # IGNORE drops the second silently; this writer says so instead.
+        # Fix = a table rebuild adding `nine` to the key (rule 3b).
+        clash = conn.execute(
+            """SELECT tee_id, nine FROM course_tees
+                WHERE course_id = ? AND tee_name = ? AND rating = ? AND slope = ?
+                  AND rating < 50""",
+            (full["course_id"], full["tee_name"], r, sl)).fetchone()
+        if clash:
+            out["rows"].append({
+                "nine": nine, "rating": r, "slope": sl, "tee_id": None,
+                "action": "BLOCKED: identical halves — course_tees UNIQUE(course_id, "
+                          f"tee_name, slope, rating) already holds tee {clash['tee_id']} "
+                          f"({clash['nine'] or 'unlabelled'}) at {r}/{sl}; the natural "
+                          "key needs `nine` (schema change, Kerry's go)"})
+            out["ok"] = False
+            continue
         row = {"nine": nine, "rating": r, "slope": sl, "yardage_total": yards,
                "holes_copied": sum(1 for i in rng if i in holes),
                "action": "would insert" if dry_run else "inserted"}

@@ -107,7 +107,7 @@ structure." It is. Three tables, created in `init_db` / `_ensure_scoring_tables`
 
 ```
 courses                                  -- the canonical course registry
-  course_id    INTEGER PK AUTOINCREMENT   (GG's course id is used when known)
+  course_id    INTEGER PK AUTOINCREMENT   (Tracker-assigned; GG's course id is NOT stored)
   name         VARCHAR(200) NOT NULL UNIQUE
   short_name   VARCHAR(120)               (ALTER, v2.56.4)
   chapter_id   INTEGER REFERENCES chapters(chapter_id)
@@ -115,7 +115,8 @@ courses                                  -- the canonical course registry
   facility_id  INTEGER REFERENCES facilities(facility_id)   (ALTER; multi-course facilities)
 
 course_tees                              -- ONE ROW PER TEE PER NINE-OR-EIGHTEEN
-  tee_id        INTEGER PK AUTOINCREMENT  (GG's tee id when the row came from an import)
+  tee_id        INTEGER PK AUTOINCREMENT  (ALWAYS Tracker-assigned; GG's tee id is NOT stored —
+                                           the natural key below is the only identity)
   course_id     INTEGER NOT NULL REFERENCES courses(course_id)
   tee_name      TEXT                      ("1 - White Tee" — the same name on the 18 and each nine)
   slope         INTEGER
@@ -126,7 +127,13 @@ course_tees                              -- ONE ROW PER TEE PER NINE-OR-EIGHTEEN
                                            written by label_course_tee_nines / store_tee_nines)
   version_label, valid_from, valid_to     (ALTER: a re-rating keeps the old row; dated)
   is_ladies     INTEGER DEFAULT 0         (ALTER: "(L)" tees; feeds customers.gender inference)
-  UNIQUE(course_id, tee_name, slope, rating)
+  UNIQUE(course_id, tee_name, slope, rating)   <- the natural key. No `nine` in it, so two
+                                                 halves that rate identically (Forest Creek
+                                                 White, 35.2/125 both ways) cannot both exist:
+                                                 the import's INSERT OR IGNORE drops the second
+                                                 silently, store_tee_nines reports BLOCKED.
+                                                 Fix = table rebuild with `nine` in the key
+                                                 (rule 3b, OPEN 2026-09-19).
 
 course_tee_holes                         -- the card behind each tee row
   tee_id       INTEGER NOT NULL REFERENCES course_tees(tee_id)

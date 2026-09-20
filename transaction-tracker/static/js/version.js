@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.465.20";
+window.TGF_VERSION = "2.465.21";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.465.21",
+    date: "2026-09-20",
+    changes: [
+      "Course record: `store_tee_nines` reports BLOCKED instead of raising when a tee\u2019s halves rate identically \u2014 `course_tees` is UNIQUE(course_id, tee_name, slope, rating), a natural key with no `nine`, so Forest Creek White (35.2/125 both nines) cannot hold both rows until the key is rebuilt (schema change, Kerry\u2019s go). The v2.465.20 test passed only because its fixture lacked the constraint; it carries it now. schema.md corrected: tee_id and course_id are always Tracker-assigned \u2014 Golf Genius ids are not stored anywhere.",
+    ],
+  },
   {
     version: "2.465.20",
     date: "2026-09-19",
