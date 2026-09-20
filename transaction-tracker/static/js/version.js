@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.466.2";
+window.TGF_VERSION = "2.466.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.466.3",
+    date: "2026-09-20",
+    changes: [
+      "Docs only: handicap-projection.md R1 said \u2018Not yet applied\u2019 while the \u00d70.96 multiplier has been out of the index since 2026-08-03 (v2.193.0; the live dial reads 1.0). Mailbox #574 re-ratified it as \u2018apply now\u2019 on the strength of that stale line; the doc now records the apply date, the sweep numbers and the H-2 freeze that protected every completed result.",
+    ],
+  },
   {
     version: "2.466.2",
     date: "2026-09-20",
