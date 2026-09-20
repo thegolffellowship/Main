@@ -98,6 +98,79 @@ where available. Backfills are idempotent (skip rows where `event_id IS NOT NULL
 See `PROJECT.md → Technical Debt & Known Concessions` for SQLite FK limitations and
 the full migration checklist for Supabase/PostgreSQL.
 
+## Course record — `courses` / `course_tees` / `course_tee_holes` (2026-09-19)
+
+Kerry 2026-09-19: "Is this stored in actual database schema? Show me the
+structure." It is. Three tables, created in `init_db` / `_ensure_scoring_tables`
+(database.py), with a few columns added later by guarded `ALTER TABLE`s
+(every one wrapped in try/except so a live DB self-migrates on boot):
+
+```
+courses                                  -- the canonical course registry
+  course_id    INTEGER PK AUTOINCREMENT   (GG's course id is used when known)
+  name         VARCHAR(200) NOT NULL UNIQUE
+  short_name   VARCHAR(120)               (ALTER, v2.56.4)
+  chapter_id   INTEGER REFERENCES chapters(chapter_id)
+  city, state, status ('active'), created_at
+  facility_id  INTEGER REFERENCES facilities(facility_id)   (ALTER; multi-course facilities)
+
+course_tees                              -- ONE ROW PER TEE PER NINE-OR-EIGHTEEN
+  tee_id        INTEGER PK AUTOINCREMENT  (GG's tee id when the row came from an import)
+  course_id     INTEGER NOT NULL REFERENCES courses(course_id)
+  tee_name      TEXT                      ("1 - White Tee" — the same name on the 18 and each nine)
+  slope         INTEGER
+  rating        REAL                      (>= 50 is an 18-hole row; < 50 is a nine)
+  yardage_total INTEGER
+  created_at    TEXT
+  nine          TEXT                      (ALTER, v2.462.x: 'front' | 'back' | 'full' | NULL —
+                                           written by label_course_tee_nines / store_tee_nines)
+  version_label, valid_from, valid_to     (ALTER: a re-rating keeps the old row; dated)
+  is_ladies     INTEGER DEFAULT 0         (ALTER: "(L)" tees; feeds customers.gender inference)
+  UNIQUE(course_id, tee_name, slope, rating)
+
+course_tee_holes                         -- the card behind each tee row
+  tee_id       INTEGER NOT NULL REFERENCES course_tees(tee_id)
+  hole_number  INTEGER NOT NULL           (1-18 on an 18-hole row; 1-9 on a nine)
+  par, yardage, stroke_index
+  PRIMARY KEY (tee_id, hole_number)
+```
+
+Where the rows come from: `import_gg_scorecards` / the hourly auto-sync
+create a `course_tees` row (and its holes) for every tee a scorecard was
+played off, keyed by GG's ids — so until v2.465.19 a tee existed on the
+record ONLY if someone had played a round off it, and a course played
+only as an 18 had no nine-hole rows. `store_tee_nines` (v2.465.19,
+bridge `scoring-tee-nines-store`) is the other writer: it inserts a front
+and a back row beside an 18-hole row from Kerry's GG read, refusing a
+pair that does not sum to the 18-hole rating, and copies the 18's holes
+1-9 / 10-18 into `course_tee_holes` for the new rows.
+
+Who reads them: `scoring_rounds.course_id` / `.tee_id` FK to these rows
+(a card knows its tee); `handicap_rounds` SNAPSHOTS `rating`, `slope`,
+`tee_name`, `course_name` and `nine` per posted round (past rounds are
+frozen — a later re-rating changes nothing already posted);
+`resolve_per_nine_from_course_tees` pairs a course's front and back rows
+with its 18-hole row for the 18-hole handicap posting; the print pack,
+starter sheet and PH projection read `rating`/`slope`/`nine` per tee.
+
+Example, Cedar Creek 35670 as the record holds it (2026-09-19):
+
+| tee_id | tee_name | rating | slope | yardage | nine |
+|---|---|---|---|---|---|
+| 717 | 1 - White Tee | 71.4 | 125 | 6507 | full |
+| 4433 | 1 - White Tee | 35.5 | 126 | 3236 | front |
+| 2971 | 1 - White Tee | 35.9 | 123 | 3271 | back |
+| 711 | 2 - Gold Tee | 69.4 | 118 | 6025 | full |
+| 4436 | 2 - Gold Tee | 34.8 | 116 | 3035 | front |
+| 2973 | 2 - Gold Tee | 34.6 | 119 | 2990 | back |
+| 710 | 3 - Red (L) Tee | 72.9 | 120 | 5439 | full |
+| 2441 | 3 - Red (L) Tee | 36.4 | 124 | 2709 | front |
+| 2978 | 3 - Red (L) Tee | 36.5 | 116 | 2730 | back |
+| 2190 | 1 - White Tee | 73.4 | 139 | 6660 | full (an older rating; no nines sum to it) |
+
+Related: `course_aliases` (name variants → course_id), `facilities` +
+`course_combos` / combo tees (a 27-hole facility's nine-pairings).
+
 ## Data-Hygiene Migrations (idempotent, run on every `init_db`)
 
 These run from `init_db()` and are safe to re-run on every startup. Each only touches
