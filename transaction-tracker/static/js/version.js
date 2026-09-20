@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.466.3";
+window.TGF_VERSION = "2.467.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.467.0",
+    date: "2026-09-20",
+    changes: [
+      "TGF TEE DESIGNATION (Kerry 2026-09-20: \u2018Master name is what USGA/course call it. GG should just be an alias. \u2026 there\u2019s never more than four sets of tees that we use on a course. The rest can and should be hidden.\u2019). Three columns on the tee set: `tee_name` is now the MASTER name every member-facing surface prints (\u2018White\u2019, \u2018Red\u2019, the CRDB\u2019s \u2018KT\u2019); `gg_alias` keeps Golf Genius\u2019s name (\u20183 - Red (L) Tee\u2019) for admin / GG coordination only; `tgf_bands` says which band(s) play the set (<50 / 50-64 / 65+ / Forward, or hidden). The number Kerry typed in front of a GG tee name was a designation, not a name \u2014 the boot step reads it (1/2/3/4, \u201823\u2019 for one tee serving both older bands, 0 for the tips, a women\u2019s 3 is Forward), moves the GG name to the alias and sets the master + bands, once per row; every existing course comes through already designated.",
+      "Selection is a RULE as data: `tee_yardage_standards` (Kerry verbatim: <50 6300\u20136799, 50\u201364 5800\u20136299, 65+ 5300\u20135799, Women = shortest tee not under 4800; combo tees last resort). `scoring-tee-bands:<course_id>` proposes the four for any course (a new course = one CRDB seed, one proposal, one apply); `scoring-tee-bands-set:<tee_id>|<bands|hide>[|apply]` designates or hides a set, one set per band per course; `scoring-tee-bands-apply:<course_id>[|apply]` writes the proposal and hides the rest.",
+      "The starter-sheet band legend, the leaderboard tee circles and the PH projection print ONLY designated sets on a designated course (the typed-number-then-yardage derivation stays as the fallback for an undesignated card, now with every band filled and the standards as its ruler). Ladies is read from the set\u2019s gender column, not from \u2018(L)\u2019 in a name. Both GG writers match on the alias OR the master and adopt an unaliased set by gender + slope + rating. `get_courses` publishes the three columns. Tests: test_hcp_2nines_auto.py (alias/master/bands migration, alias import, designated legend, the proposal, displacement, apply, idempotence), test_event_reports.py, test_tee_legend_pairing.js.",
+    ],
+  },
   {
     version: "2.466.3",
     date: "2026-09-20",

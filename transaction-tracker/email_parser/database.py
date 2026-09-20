@@ -13709,7 +13709,8 @@ def get_event_leaderboard(event_name: str,
             # `scoring_rounds.tee_id` is the tee of record for a played
             # round, so the board reads that and falls back to the band.
             played = [dict(r) for r in conn.execute(
-                """SELECT sr.customer_id, sr.player_name, ct.tee_name
+                """SELECT sr.customer_id, sr.player_name, ct.tee_name, ct.gender,
+                          ct.gg_alias
                      FROM scoring_rounds sr
                      JOIN course_tees ct ON ct.tee_id = sr.tee_id
                     WHERE sr.event_id = ?
@@ -13717,21 +13718,26 @@ def get_event_leaderboard(event_name: str,
                 (ev["id"],))]
             _seen_color: dict = {}
             _lbl_of: dict = {}
+            _gender_of: dict = {}
             for r in played:
                 raw = " ".join((r["tee_name"] or "").split())
                 m = _TEE_ORDER_RE.match(raw)
                 label = _TEE_ORDER_RE.sub("", raw).strip() if m else raw
                 if not label:
                     continue
-                _lbl_of[r["tee_name"]] = (label, int(m.group(1)) if m else 99)
+                # The ORDER (Kerry's typed number) lives on the GG alias
+                # since v2.467.0; the master name carries none.
+                _om = _TEE_ORDER_RE.match(" ".join((r.get("gg_alias") or "").split()))
+                _lbl_of[r["tee_name"]] = (label, int((_om or m).group(1)) if (_om or m) else 99)
+                _gender_of[label] = r.get("gender") or _gender_of.get(label)
             for label, order in _lbl_of.values():
                 col = _tee_color_for(label)
                 _seen_color.setdefault(col, []).append(label)
             for label, order in sorted(set(_lbl_of.values()),
                                        key=lambda t: (t[1], t[0])):
                 col = _tee_color_for(label)
-                ladies = bool(re.search(r"\((?:l|lady|ladies)\)",
-                                        label, re.I))
+                ladies = (_gender_of.get(label) == "F"
+                          or bool(re.search(r"\((?:l|lady|ladies)\)", label, re.I)))
                 tee_legend.append({
                     "band": None,
                     "tee_name": _tee_legend_display_name(label, ladies),
@@ -15459,7 +15465,9 @@ COURSE_TEES_DDL = """(
         is_combo      INTEGER NOT NULL DEFAULT 0,
         is_ladies     INTEGER DEFAULT 0,
         gg_tee_id     TEXT,
+        gg_alias   TEXT,
         usga_tee_label TEXT,
+        tgf_bands     TEXT,
         source        TEXT NOT NULL DEFAULT 'import'
                       CHECK (source IN ('import', 'course_card', 'usga_crdb', 'admin')),
         version_label TEXT,
@@ -15480,6 +15488,49 @@ TEE_SET_RATINGS_DDL = """CREATE TABLE IF NOT EXISTS tee_set_ratings (
 
 _COURSE_TEES_V2_COLS = ("gender", "holes", "source", "usga_tee_label", "bogey_rating",
                         "is_combo", "gg_tee_id", "par")
+
+
+# ── TGF tee designation (Kerry 2026-09-20) ─────────────────────────────
+# "Master name is what USGA/course call it. GG should just be an alias.
+# The GG names were purely for Admin, not necessary for member facing."
+# The number Kerry typed in front of a Golf Genius tee name was a
+# DESIGNATION, not a name: 1 = men <50, 2 = men 50-64, 3 = men 65+ (or
+# the women's tee when the course's shortest suitable tee is that one —
+# "we also have some 3- for women based on tee availability"), 4 =
+# women, "23" = one tee serving both older bands, 0 / 00 = on the record
+# but not played. It now lives on the row as `tgf_bands`; the GG name is
+# kept on `gg_alias` for GG coordination only, and `tee_name` is the
+# master (USGA / course) name every member-facing surface prints.
+_GG_TEE_BANDS_BY_ORDER = {"1": ("<50",), "2": ("50-64",), "3": ("65+",),
+                          "4": ("Forward",), "12": ("<50", "50-64"),
+                          "23": ("50-64", "65+"), "34": ("65+", "Forward")}
+
+
+def _gg_tee_parts(name: str | None) -> dict:
+    """Split a Golf Genius tee name into what it carries: the ORDER Kerry
+    typed ("3"), the MASTER name ("Red"), the bands that order means for
+    that gender, and the gender flag. "3 - Red (L) Tee" → order "3",
+    master "Red", gender F, bands ("Forward",). "0 - Blue Tee" → hidden."""
+    raw = " ".join((name or "").split())
+    m = re.match(r"^\s*(\d+)\s*[-–]\s*", raw)
+    order = m.group(1) if m else None
+    gender = _tee_gender_from_name(raw)
+    master = raw[m.end():] if m else raw
+    master = re.sub(r"\s*\((?:l|f|lady|ladies)\)", "", master, flags=re.I)
+    master = re.sub(r"\s*\bTees?\b\s*$", "", master, flags=re.I).strip()
+    bands: tuple = ()
+    if order and order.strip("0"):
+        bands = _GG_TEE_BANDS_BY_ORDER.get(order.lstrip("0") or order, ())
+        if gender == "F" and order.lstrip("0") in ("3", "23"):
+            bands = ("Forward",)
+    looks_gg = bool(m) or bool(re.search(r"\bTees?\b\s*$|\((?:l|f|ladies)\)", raw, re.I))
+    return {"order": order, "master": master or raw, "gender": gender,
+            "bands": bands, "looks_gg": looks_gg}
+
+
+def _tee_bands(val) -> list:
+    """`course_tees.tgf_bands` ('50-64,65+') → ['50-64', '65+']."""
+    return [b.strip() for b in str(val or "").split(",") if b.strip() in TEE_BANDS]
 
 
 def _tee_gender_from_name(name: str | None, is_ladies=None) -> str:
@@ -15538,11 +15589,40 @@ def _migrate_course_tees_v2(conn: sqlite3.Connection) -> dict:
                      WHERE rating IS NOT NULL
                        AND holes != CASE WHEN rating >= 50 THEN 18 ELSE 9 END""")
     for ddl in ("ALTER TABLE courses ADD COLUMN gg_course_id TEXT",
-                "ALTER TABLE courses ADD COLUMN usga_course_id TEXT"):
+                "ALTER TABLE courses ADD COLUMN usga_course_id TEXT",
+                "ALTER TABLE course_tees ADD COLUMN gg_alias TEXT",
+                "ALTER TABLE course_tees ADD COLUMN tgf_bands TEXT"):
         try:
             conn.execute(ddl)
         except sqlite3.OperationalError:
             pass
+    # v2.467.0 — the GG name becomes the ALIAS, the master name is the
+    # USGA / course name, and the number Kerry typed becomes the
+    # designation. Runs once per row: a row whose alias is set is done.
+    n_named = 0
+    for r in conn.execute("""SELECT tee_id, tee_name, usga_tee_label FROM course_tees
+                              WHERE gg_alias IS NULL AND tee_name IS NOT NULL""").fetchall():
+        parts = _gg_tee_parts(r["tee_name"])
+        if not parts["looks_gg"]:
+            continue
+        master = r["usga_tee_label"] or parts["master"]
+        bands = ",".join(parts["bands"]) or None
+        try:
+            with conn:
+                conn.execute("""UPDATE course_tees SET gg_alias = ?, tee_name = ?,
+                                       tgf_bands = COALESCE(tgf_bands, ?) WHERE tee_id = ?""",
+                             (r["tee_name"], master, bands, r["tee_id"]))
+        except sqlite3.IntegrityError:
+            # Two GG-named rows collapse to one master name on the same
+            # numbers: keep this one's GG name as its name, still alias it.
+            conn.execute("""UPDATE course_tees SET gg_alias = ?,
+                                   tgf_bands = COALESCE(tgf_bands, ?) WHERE tee_id = ?""",
+                         (r["tee_name"], bands, r["tee_id"]))
+        n_named += 1
+    if n_named:
+        out["aliased"] = n_named
+        logger.info("course_tees: %d GG tee names moved to gg_alias (master + bands set)",
+                    n_named)
     conn.execute(TEE_SET_RATINGS_DDL)
     # Every tee set carries its own TOTAL rating row (front/back rows come
     # from a course card, the USGA CRDB seed, or store_tee_nines).
@@ -15846,28 +15926,29 @@ def compute_hole_derivations(par: int | None, strokes: int | None,
 
 def _adopt_crdb_tee_set(conn: sqlite3.Connection, course_id, tee_name: str,
                         gender: str, slope, rating, dry_run: bool = False):
-    """A set the USGA CRDB seed wrote is named the way the CRDB names it
-    ("Green"); Golf Genius names the same set "3 - Green Tee". When a GG
-    writer misses on the exact name but an 18-hole row of the same
-    course, gender, slope and rating is still carrying its CRDB label as
-    its name, that row IS the set: take GG's name (the scorecards carry
-    it), keep the CRDB label, and return its tee_id. Anything else — a
-    GG-named row, a nine — is left alone. Returns None when nothing
-    qualifies."""
+    """A set the USGA CRDB seed wrote carries no Golf Genius name; GG
+    calls the same set "3 - Green Tee". When a GG writer misses on the
+    name but an 18-hole row of the same course, gender, slope and rating
+    has no GG alias yet, that row IS the set: GG's name goes on
+    `gg_alias` (the alias, v2.467.0 — the master name stays the
+    USGA / course one), the typed number becomes its designation if it
+    has none, and its tee_id comes back. Anything else — an aliased row,
+    a nine — is left alone. Returns None when nothing qualifies."""
     if not tee_name or slope is None or rating is None:
         return None
     row = conn.execute(
         """SELECT tee_id FROM course_tees
             WHERE course_id = ? AND gender = ? AND holes = 18
-              AND slope IS ? AND rating IS ? AND source = 'usga_crdb'
-              AND tee_name IS usga_tee_label
+              AND slope IS ? AND rating IS ? AND gg_alias IS NULL
             ORDER BY tee_id LIMIT 1""",
         (course_id, gender, slope, rating)).fetchone()
     if not row:
         return None
     if not dry_run:
-        conn.execute("UPDATE course_tees SET tee_name = ? WHERE tee_id = ?",
-                     (tee_name, row["tee_id"]))
+        parts = _gg_tee_parts(tee_name)
+        conn.execute("""UPDATE course_tees SET gg_alias = ?,
+                               tgf_bands = COALESCE(tgf_bands, ?) WHERE tee_id = ?""",
+                     (tee_name, ",".join(parts["bands"]) or None, row["tee_id"]))
     return row["tee_id"]
 
 
@@ -15894,23 +15975,27 @@ def _upsert_course_tee(conn: sqlite3.Connection, tee: dict) -> tuple:
     # One tee set = one row: reuse a row of the same course, name, gender,
     # holes and numbers whatever its nine label (the labeller sets that
     # later); only insert when none exists.
+    gg_name = tee.get("tee_name")
+    parts = _gg_tee_parts(gg_name)
     row = conn.execute(
-        """SELECT tee_id FROM course_tees WHERE course_id = ? AND tee_name IS ?
+        """SELECT tee_id FROM course_tees WHERE course_id = ?
+           AND (gg_alias IS ? OR tee_name IS ?)
            AND gender = ? AND holes = ? AND slope IS ? AND rating IS ?
            ORDER BY tee_id LIMIT 1""",
-        (course_id, tee.get("tee_name"), gender, holes, slope, rating)).fetchone()
+        (course_id, gg_name, gg_name, gender, holes, slope, rating)).fetchone()
     if row:
         tee_id = row["tee_id"]
     elif holes == 18 and (tee_id := _adopt_crdb_tee_set(
-            conn, course_id, tee.get("tee_name"), gender, slope, rating)):
+            conn, course_id, gg_name, gender, slope, rating)):
         pass
     else:
         tee_id = conn.execute(
-            """INSERT INTO course_tees (course_id, tee_name, gender, holes, nine, slope,
-                                        rating, yardage_total, is_ladies, source)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'import')""",
-            (course_id, tee.get("tee_name"), gender, holes,
-             "full" if holes == 18 else None, slope, rating,
+            """INSERT INTO course_tees (course_id, tee_name, gg_alias, tgf_bands, gender,
+                                        holes, nine, slope, rating, yardage_total,
+                                        is_ladies, source)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'import')""",
+            (course_id, parts["master"], gg_name, ",".join(parts["bands"]) or None,
+             gender, holes, "full" if holes == 18 else None, slope, rating,
              sum(v for v in yd.values() if v) or None,
              1 if gender == "F" else 0)).lastrowid
         if rating is not None and slope is not None:
@@ -21641,8 +21726,8 @@ def seed_usga_crdb(conn, course_id: int, sets: list | None = None,
     out = {"ok": True, "dry_run": dry_run, "course_id": course_id,
            "course": course["name"], "sets": []}
     existing = [dict(r) for r in conn.execute(
-        "SELECT tee_id, tee_name, gender, rating, slope, usga_tee_label FROM course_tees "
-        "WHERE course_id = ? AND holes = 18", (course_id,)).fetchall()]
+        "SELECT tee_id, tee_name, gg_alias, gender, rating, slope, usga_tee_label "
+        "FROM course_tees WHERE course_id = ? AND holes = 18", (course_id,)).fetchall()]
     used: set = set()
 
     def _norm(n):
@@ -21664,6 +21749,7 @@ def seed_usga_crdb(conn, course_id: int, sets: list | None = None,
             match = next((e for e in existing if e["tee_id"] not in used
                           and e["gender"] == gender
                           and (_norm(e["tee_name"]) == name.lower()
+                               or _norm(e["gg_alias"]) == name.lower()
                                or (e["usga_tee_label"] or "").lower() == name.lower())), None)
             how = "matched by name + gender" if match else None
         entry = {"name": name, "gender": gender, "r18": r18, "s18": s18, "bogey": bogey,
@@ -24806,8 +24892,9 @@ def list_courses(db_path: str | Path = DB_PATH) -> list:
         out = []
         for r in rows:
             tees = [dict(t) for t in conn.execute(
-                """SELECT tee_id, tee_name, gender, holes, nine, par, slope, rating,
-                          bogey_rating, yardage_total, is_combo, source, usga_tee_label
+                """SELECT tee_id, tee_name, gg_alias, tgf_bands, gender, holes, nine,
+                          par, slope, rating, bogey_rating, yardage_total, is_combo,
+                          source, usga_tee_label
                    FROM course_tees WHERE course_id = ? ORDER BY tee_id""",
                 (r["course_id"],)).fetchall()]
             rr: dict = {}
@@ -58174,95 +58261,307 @@ def _tee_color_for(tee_name: str) -> str | None:
     return None
 
 
+# THE YARDAGE STANDARDS (Kerry 2026-09-20, verbatim: "<50 6300-6799 /
+# 50-64 5800-6299 / 65+ 5300-5799 / Women - shortest tees not less than
+# 4800"), stored as DATA in app_settings `tee_yardage_standards` so a
+# non-developer can move a line; this is the seed. Combo tees are never
+# proposed while a plain tee fits ("as a default, we do not want to use
+# any combo tees, except as last resort").
+TEE_YARDAGE_STANDARDS_DEFAULT = {"<50": [6300, 6799], "50-64": [5800, 6299],
+                                 "65+": [5300, 5799], "Forward": [4800, None]}
+
+
+def tee_yardage_standards(conn=None) -> dict:
+    """{band: [min, max|None]} — the live dial, else the ratified seed."""
+    raw = None
+    try:
+        if conn is not None:
+            row = conn.execute("SELECT value FROM app_settings WHERE key = ?",
+                               ("tee_yardage_standards",)).fetchone()
+            raw = row["value"] if row else None
+        else:
+            raw = get_app_setting("tee_yardage_standards")
+    except Exception:
+        raw = None
+    out = {k: list(v) for k, v in TEE_YARDAGE_STANDARDS_DEFAULT.items()}
+    if raw:
+        try:
+            for k, v in (json.loads(raw) or {}).items():
+                if k in TEE_BANDS and isinstance(v, (list, tuple)) and len(v) == 2:
+                    out[k] = [v[0], v[1]]
+        except Exception:
+            pass
+    return out
+
+
+def _course_tee_sets_18(conn, course_id: int) -> list:
+    """Every 18-hole set on a course with the yardage it plays to (its
+    own, else the sum of its front + back nines by master name + gender)."""
+    rows = [dict(r) for r in conn.execute(
+        """SELECT tee_id, tee_name, gg_alias, gender, holes, nine, rating, slope,
+                  yardage_total, is_combo, tgf_bands, source, usga_tee_label
+             FROM course_tees WHERE course_id = ? ORDER BY tee_id""", (course_id,))]
+    nines: dict = {}
+    for r in rows:
+        if r["holes"] == 9 and r.get("yardage_total"):
+            k = (" ".join((r["tee_name"] or "").split()).lower(), r["gender"])
+            nines.setdefault(k, {})[r.get("nine") or f"n{r['tee_id']}"] = r["yardage_total"]
+    out = []
+    for r in rows:
+        if r["holes"] != 18:
+            continue
+        y = r.get("yardage_total")
+        if not y:
+            k = (" ".join((r["tee_name"] or "").split()).lower(), r["gender"])
+            halves = nines.get(k) or {}
+            if len(halves) >= 2:
+                y = sum(sorted(halves.values(), reverse=True)[:2])
+        out.append(r | {"y18": y or 0, "bands": _tee_bands(r.get("tgf_bands"))})
+    return out
+
+
+def propose_tgf_tees(conn, course_id: int) -> dict:
+    """Which four tee sets TGF plays on a course, by the yardage standards.
+    Men's bands take the LONGEST plain men's set inside the band's range;
+    Forward takes the SHORTEST women's set not under its floor (a men's
+    set only when the course rates no women's tee). A combo set is
+    proposed only when no plain set fits. Read-only — `set_tee_bands`
+    / `apply_tgf_tee_proposal` write."""
+    course = conn.execute("SELECT course_id, name FROM courses WHERE course_id = ?",
+                          (course_id,)).fetchone()
+    if not course:
+        return {"ok": False, "error": f"no courses row {course_id}"}
+    std = tee_yardage_standards(conn)
+    sets = _course_tee_sets_18(conn, course_id)
+    current = {}
+    for t in sets:
+        for b in t["bands"]:
+            current[b] = {"tee_id": t["tee_id"], "tee_name": t["tee_name"],
+                          "gender": t["gender"], "y18": t["y18"]}
+    proposal, unplaced = {}, []
+
+    def _fits(t, lo, hi):
+        return t["y18"] and (lo is None or t["y18"] >= lo) and (hi is None or t["y18"] <= hi)
+
+    for band in ("<50", "50-64", "65+"):
+        lo, hi = std[band]
+        men = [t for t in sets if t["gender"] == "M" and _fits(t, lo, hi)]
+        plain = [t for t in men if not t["is_combo"]]
+        pool = plain or men
+        if pool:
+            pick = max(pool, key=lambda t: t["y18"])
+            proposal[band] = {"tee_id": pick["tee_id"], "tee_name": pick["tee_name"],
+                              "gender": "M", "y18": pick["y18"], "is_combo": pick["is_combo"],
+                              "why": f"longest men's {'combo (no plain set fits)' if pick['is_combo'] else 'set'} in {lo}-{hi}"}
+        else:
+            near = sorted((t for t in sets if t["gender"] == "M" and t["y18"]),
+                          key=lambda t: min(abs(t["y18"] - lo), abs(t["y18"] - hi)))[:2]
+            unplaced.append({"band": band, "range": [lo, hi],
+                             "nearest": [{"tee_id": t["tee_id"], "tee_name": t["tee_name"],
+                                          "y18": t["y18"]} for t in near]})
+    lo, hi = std["Forward"]
+    women = [t for t in sets if t["gender"] == "F" and _fits(t, lo, hi)]
+    plain = [t for t in women if not t["is_combo"]]
+    pool = plain or women
+    note = None
+    if not pool:
+        men = [t for t in sets if t["gender"] == "M" and _fits(t, lo, hi)]
+        pool = [t for t in men if not t["is_combo"]] or men
+        note = "no women's set rated on this course — shortest men's set at or above the floor"
+    if pool:
+        pick = min(pool, key=lambda t: t["y18"])
+        proposal["Forward"] = {"tee_id": pick["tee_id"], "tee_name": pick["tee_name"],
+                               "gender": pick["gender"], "y18": pick["y18"],
+                               "is_combo": pick["is_combo"],
+                               "why": note or f"shortest women's set not under {lo}"}
+    else:
+        unplaced.append({"band": "Forward", "range": [lo, hi], "nearest": []})
+    return {"ok": True, "course_id": course_id, "course": course["name"],
+            "standards": std, "sets": [{k: t[k] for k in ("tee_id", "tee_name", "gg_alias",
+                                                            "gender", "y18", "is_combo", "bands",
+                                                            "source")} for t in sets],
+            "current": current, "proposal": proposal, "unplaced": unplaced,
+            "changes": {b: p for b, p in proposal.items()
+                        if (current.get(b) or {}).get("tee_id") != p["tee_id"]}}
+
+
+def set_tee_bands(conn, tee_id: int, bands, dry_run: bool = True) -> dict:
+    """Designate a tee set for TGF bands (or hide it: bands empty/None).
+    One set per band per course: a band moved here is taken off the
+    set that had it (reported as `displaced`)."""
+    row = conn.execute("SELECT tee_id, course_id, tee_name, gender, tgf_bands FROM course_tees "
+                       "WHERE tee_id = ?", (tee_id,)).fetchone()
+    if not row:
+        return {"ok": False, "error": f"no tee {tee_id}"}
+    want = [b for b in (bands or []) if b in TEE_BANDS]
+    bad = [b for b in (bands or []) if b not in TEE_BANDS]
+    if bad:
+        return {"ok": False, "error": f"unknown band(s) {bad}; bands are {list(TEE_BANDS)}"}
+    displaced = []
+    for other in conn.execute("SELECT tee_id, tee_name, gender, tgf_bands FROM course_tees "
+                              "WHERE course_id = ? AND tee_id != ?",
+                              (row["course_id"], tee_id)).fetchall():
+        keep = [b for b in _tee_bands(other["tgf_bands"]) if b not in want]
+        if keep != _tee_bands(other["tgf_bands"]):
+            displaced.append({"tee_id": other["tee_id"], "tee_name": other["tee_name"],
+                              "gender": other["gender"],
+                              "was": _tee_bands(other["tgf_bands"]), "now": keep})
+            if not dry_run:
+                conn.execute("UPDATE course_tees SET tgf_bands = ? WHERE tee_id = ?",
+                             (",".join(keep) or None, other["tee_id"]))
+    if not dry_run:
+        conn.execute("UPDATE course_tees SET tgf_bands = ? WHERE tee_id = ?",
+                     (",".join(want) or None, tee_id))
+        conn.commit()
+        try:
+            log_agent_action("mcp-claude", "set_tee_bands",
+                             f"tee {tee_id} {row['tee_name']} ({row['gender']}) -> {want or 'hidden'}")
+        except Exception:
+            pass
+    return {"ok": True, "dry_run": dry_run, "tee_id": tee_id, "tee_name": row["tee_name"],
+            "gender": row["gender"], "was": _tee_bands(row["tgf_bands"]), "now": want,
+            "displaced": displaced}
+
+
+def apply_tgf_tee_proposal(conn, course_id: int, dry_run: bool = True) -> dict:
+    """Write `propose_tgf_tees` onto the record: the proposed four get their
+    bands, every other set on the course is hidden."""
+    prop = propose_tgf_tees(conn, course_id)
+    if not prop.get("ok"):
+        return prop
+    wanted: dict = {}
+    for band, p in prop["proposal"].items():
+        wanted.setdefault(p["tee_id"], []).append(band)
+    writes = []
+    for t in prop["sets"]:
+        new = [b for b in TEE_BANDS if b in wanted.get(t["tee_id"], [])]
+        if new != t["bands"]:
+            writes.append({"tee_id": t["tee_id"], "tee_name": t["tee_name"],
+                           "gender": t["gender"], "was": t["bands"], "now": new})
+            if not dry_run:
+                conn.execute("UPDATE course_tees SET tgf_bands = ? WHERE tee_id = ?",
+                             (",".join(new) or None, t["tee_id"]))
+    if not dry_run:
+        conn.commit()
+    return {"ok": True, "dry_run": dry_run, "course_id": course_id, "course": prop["course"],
+            "proposal": prop["proposal"], "unplaced": prop["unplaced"], "writes": writes}
+
+
 def event_tee_legend(conn, event_id: int, ev: dict) -> list:
-    """[{band, tee_name, color}] for the event's course.
+    """[{band, band_label, tee_name, tee_key, color, ladies, ring, tee_id,
+    source}] for the event's course.
 
-    The course's tee names carry BOTH their colour and the club's own tee
-    ORDER ("1 - Gold Tee", "2 - Blue Tee", "3 - Red Tee", "3 - Red (L)
-    Tee"), which is how Golf Genius numbers them. Bands map onto that
-    order longest-first: <50 to tee 1, 50-64 to tee 2, 65+ to tee 3,
-    Forward to the most forward tee left over (a ladies' rating of the
-    same number, else the last one).
-
-    DERIVED, NOT RATIFIED — the tee names are printed beside the swatches
-    precisely so a wrong pairing is obvious on the sheet rather than on
-    the first tee. Returns [] when the course has no tee card.
+    DESIGNATED FIRST (v2.467.0, Kerry 2026-09-20): a course whose record
+    carries `tgf_bands` prints exactly those sets — the rest of the
+    record is hidden. A course nobody has designated yet falls back to
+    the derivation below: the number Kerry typed into the Golf Genius
+    name (now on `gg_alias`) is the mapping — 1 <50, 2 50-64, 3 65+,
+    the women's rating of a numbered tee is Forward — and the yardage
+    standards decide when a card carries no numbers. The tee names are
+    printed beside the swatches precisely so a wrong pairing is obvious
+    on the sheet rather than on the first tee. Returns [] when the
+    course has no tee card.
     """
     cid = ev.get("course_id")
     if not cid:
         return []
     try:
         rows = [dict(r) for r in conn.execute(
-            "SELECT tee_name, rating, slope, yardage_total "
-            "FROM course_tees WHERE course_id = ?", (cid,)).fetchall()]
+            "SELECT tee_id, tee_name, gg_alias, gender, holes, rating, slope, "
+            "yardage_total, tgf_bands FROM course_tees WHERE course_id = ?",
+            (cid,)).fetchall()]
     except sqlite3.OperationalError:
         return []
-    # One entry per NAMED tee, carrying its longest 18-hole equivalent.
-    # A course card holds several rows per tee (front nine, back nine,
-    # the 18); a rating under 50 is a NINE-hole rating, so that row's
-    # yardage doubles to compare like with like.
-    tees: dict = {}
-    for r in rows:
-        nm = " ".join((r.get("tee_name") or "").split())
-        m = _TEE_ORDER_RE.match(nm)
-        label = _TEE_ORDER_RE.sub("", nm).strip() if m else nm
-        if not label:
-            continue
-        order = int(m.group(1)) if m else 99
-        yds = r.get("yardage_total") or 0
-        rating = r.get("rating") or 0
-        y18 = (yds if rating >= 50 else yds * 2) or 0
-        t = tees.setdefault(label, {
-            "label": label, "order": order, "y18": 0,
-            "ladies": bool(re.search(r"\((?:l|lady|ladies)\)", label, re.I))})
-        t["order"] = min(t["order"], order)
-        t["y18"] = max(t["y18"], y18)
-    if not tees:
-        return []
-    mens_t = [t for t in tees.values() if not t["ladies"]]
-    ladies_t = [t for t in tees.values() if t["ladies"]]
-    # Longest first. Yardage is the ruler Kerry named; the club's own tee
-    # ORDER is the tiebreak, and the whole ranking when a card carries no
-    # yardage at all.
-    mens_t.sort(key=lambda t: (-(t["y18"] or 0), t["order"]))
-    lo, hi = UNDER_50_YARDS_18
-    in_band = [t for t in mens_t if t["y18"] and lo <= t["y18"] <= hi]
-    back = in_band[0] if in_band else (mens_t[0] if mens_t else None)
-    # Everything at or below the back tee, in order, feeds the older bands.
-    rest = [t for t in mens_t if t is not back]
-    mens = [back["label"]] + [t["label"] for t in rest] if back else []
-    ladies_t.sort(key=lambda t: (-(t["y18"] or 0), t["order"]))
-    forward = (ladies_t[0]["label"] if ladies_t
-               else (mens[-1] if mens else None))
-    picks = {"<50": mens[0] if mens else None,
-             "50-64": mens[1] if len(mens) > 1 else (mens[0] if mens else None),
-             "65+": mens[2] if len(mens) > 2 else (mens[-1] if mens else None),
-             "Forward": forward}
+    picks: dict = {}
+    pick_ids: dict = {}
+    designated = any(_tee_bands(r.get("tgf_bands")) for r in rows)
+    if designated:
+        for r in sorted(rows, key=lambda r: (0 if (r.get("holes") or 18) == 18 else 1, r["tee_id"])):
+            for band in _tee_bands(r.get("tgf_bands")):
+                if band in picks:
+                    continue
+                label = " ".join((r.get("tee_name") or "").split())
+                picks[band] = label
+                pick_ids[band] = (r["tee_id"], r.get("gender") == "F")
+    else:
+        # One entry per NAMED tee, carrying its longest 18-hole equivalent.
+        # A course card holds several rows per tee (front nine, back nine,
+        # the 18); a rating under 50 is a NINE-hole rating, so that row's
+        # yardage doubles to compare like with like.
+        tees: dict = {}
+        for r in rows:
+            nm = " ".join((r.get("tee_name") or "").split())
+            gg = " ".join((r.get("gg_alias") or "").split())
+            m = _TEE_ORDER_RE.match(gg) or _TEE_ORDER_RE.match(nm)
+            label = _TEE_ORDER_RE.sub("", nm).strip() if _TEE_ORDER_RE.match(nm) else nm
+            if not label:
+                continue
+            order = int(m.group(1)) if m else 99
+            yds = r.get("yardage_total") or 0
+            rating = r.get("rating") or 0
+            y18 = (yds if rating >= 50 else yds * 2) or 0
+            ladies = (r.get("gender") == "F"
+                      or bool(re.search(r"\((?:l|lady|ladies)\)", label, re.I)))
+            t = tees.setdefault((label, ladies), {
+                "label": label, "order": order, "y18": 0, "ladies": ladies,
+                "tee_id": r["tee_id"]})
+            t["order"] = min(t["order"], order)
+            if y18 > t["y18"]:
+                t["y18"], t["tee_id"] = y18, r["tee_id"]
+        if not tees:
+            return []
+        std = tee_yardage_standards(conn)
+        mens_t = [t for t in tees.values() if not t["ladies"]]
+        ladies_t = [t for t in tees.values() if t["ladies"]]
+        mens_t.sort(key=lambda t: (-(t["y18"] or 0), t["order"]))
+        ladies_t.sort(key=lambda t: (-(t["y18"] or 0), t["order"]))
 
-    # THE CLUB'S OWN TEE NUMBER IS THE MAPPING (Kerry 2026-09-15, stating
-    # it plainly: "1 - <50 / 2 - 50-64 / 3 - 65+ / 3 (L) - Forward
-    # (Ladies), OR 4 (L) - Forward (Ladies)"). Golf Genius numbers the
-    # tees the way the club rates them, so the number IS the answer and
-    # the yardage rule above is only the fallback for a card that
-    # carries no numbers. Tee 0 is the tips, which TGF does not play.
-    by_order: dict = {}
-    for t in tees.values():
-        if t["order"] == 99:
-            continue
-        key = (t["order"], t["ladies"])
-        # a duplicate number keeps the LONGEST (a re-rated box)
-        cur = by_order.get(key)
-        if cur is None or (t["y18"] or 0) > (cur["y18"] or 0):
-            by_order[key] = t
-    numbered = {n: t for (n, lad), t in by_order.items() if not lad}
-    ladies_numbered = [t for (n, lad), t in sorted(by_order.items()) if lad]
-    if numbered:
-        for band, num in (("<50", 1), ("50-64", 2), ("65+", 3)):
-            t = numbered.get(num)
+        def _in(t, band):
+            lo, hi = std[band]
+            return t["y18"] and (lo is None or t["y18"] >= lo) and (hi is None or t["y18"] <= hi)
+        # Yardage is the ruler Kerry named; the club's own tee ORDER is
+        # the tiebreak, and the whole ranking when a card carries no
+        # yardage at all.
+        # Each men's band takes the longest tee inside its range that is
+        # not longer than the band above it; a band with nothing in range
+        # takes the next tee down (the last one when the card runs out).
+        by_yards: dict = {}
+        prev = -1
+        for band in ("<50", "50-64", "65+"):
+            idx = next((i for i, t in enumerate(mens_t) if i > prev and _in(t, band)), None)
+            if idx is None and mens_t:
+                idx = min(prev + 1, len(mens_t) - 1)
+            if idx is not None:
+                by_yards[band] = mens_t[idx]
+                prev = idx
+        fwd = next((t for t in reversed(ladies_t) if _in(t, "Forward")), None) or \
+              (ladies_t[0] if ladies_t else (mens_t[-1] if mens_t else None))
+        for band, t in list(by_yards.items()) + [("Forward", fwd)]:
             if t:
                 picks[band] = t["label"]
-        if ladies_numbered:
-            picks["Forward"] = ladies_numbered[-1]["label"]
+                pick_ids[band] = (t["tee_id"], t["ladies"])
+        # THE CLUB'S OWN TEE NUMBER IS THE MAPPING (Kerry 2026-09-15: "1 -
+        # <50 / 2 - 50-64 / 3 - 65+ / 3 (L) - Forward (Ladies), OR 4 (L) -
+        # Forward (Ladies)"). Tee 0 is the tips, which TGF does not play.
+        by_order: dict = {}
+        for t in tees.values():
+            if t["order"] == 99:
+                continue
+            key = (t["order"], t["ladies"])
+            cur = by_order.get(key)
+            if cur is None or (t["y18"] or 0) > (cur["y18"] or 0):
+                by_order[key] = t
+        numbered = {n: t for (n, lad), t in by_order.items() if not lad}
+        ladies_numbered = [t for (n, lad), t in sorted(by_order.items()) if lad]
+        if numbered:
+            for band, num in (("<50", 1), ("50-64", 2), ("65+", 3)):
+                t = numbered.get(num)
+                if t:
+                    picks[band] = t["label"]
+                    pick_ids[band] = (t["tee_id"], False)
+            if ladies_numbered:
+                picks["Forward"] = ladies_numbered[-1]["label"]
+                pick_ids["Forward"] = (ladies_numbered[-1]["tee_id"], True)
     out = []
     for band in TEE_BANDS:
         nm = picks.get(band)
@@ -58273,11 +58572,10 @@ def event_tee_legend(conn, event_id: int, ev: dict) -> list:
         # (Ladies) in legend, <50 to Men <50, 50-64 to Men 50-64, 65+ to
         # Men 65+, and Forward to Women [Color]". A member should not
         # have to know that "(L)" or "Forward" is the women's tee.
-        ladies = bool(re.search(r"\((?:l|lady|ladies)\)", nm, re.I))
+        tee_id, ladies = pick_ids.get(band, (None, False))
+        ladies = ladies or bool(re.search(r"\((?:l|lady|ladies)\)", nm, re.I))
         # "Tee should say Tees. Women should just be: Women (no colored
-        # 'Red') Red Tees" (Kerry 2026-09-16). The ladies' marker is
-        # dropped from the NAME because the band already says Women, and
-        # the outline swatch is what tells two Reds apart.
+        # 'Red') Red Tees" (Kerry 2026-09-16).
         label = _tee_name_plural(nm)
         raw_label = _TEE_ORDER_RE.sub("", nm).strip()
         band_label = {"<50": "Men <50", "50-64": "Men 50-64",
@@ -58286,14 +58584,12 @@ def event_tee_legend(conn, event_id: int, ev: dict) -> list:
             else band)
         out.append({"band": band, "band_label": band_label,
                     "tee_name": label,
-                    # What the COURSE CARD calls it — the printed name is
-                    # for people, this is for matching rows.
+                    # What the course record calls it — the printed name
+                    # is for people, this is for matching rows.
                     "tee_key": raw_label, "color": col,
-                    "ladies": ladies,
-                    # The ladies' tee is an OUTLINE, always — the same
-                    # mark the starter sheet has always printed, and it
-                    # no longer depends on another tee happening to share
-                    # its colour.
+                    "ladies": ladies, "tee_id": tee_id,
+                    "source": "designated" if designated else "derived",
+                    # The ladies' tee is an OUTLINE, always.
                     "ring": ladies})
     # The ladies' tee sorts LAST, always (Kerry).
     out.sort(key=lambda t: (1 if t["ladies"] else 0,
@@ -58459,11 +58755,12 @@ def import_course_card(key: str, dry_run: bool = True, db_path=None) -> dict:
                 # working (the resolver reads them as either half).
                 row = conn.execute(
                     """SELECT tee_id FROM course_tees
-                        WHERE course_id = ? AND tee_name = ? AND gender = ?
-                          AND holes = ? AND slope = ? AND rating = ?
+                        WHERE course_id = ? AND (gg_alias = ? OR tee_name = ?)
+                          AND gender = ? AND holes = ? AND slope = ? AND rating = ?
                           AND (nine = ? OR nine IS NULL OR nine = 'both')
                         ORDER BY CASE WHEN nine = ? THEN 0 ELSE 1 END, tee_id""",
-                    (cid, tee["name"], gender, nholes, slope, rating, nine, nine)).fetchone()
+                    (cid, tee["name"], tee["name"], gender, nholes, slope, rating,
+                     nine, nine)).fetchone()
                 action = "existing"
                 tee_id = row["tee_id"] if row else None
                 if tee_id is None and nine == "full":
@@ -58475,13 +58772,16 @@ def import_course_card(key: str, dry_run: bool = True, db_path=None) -> dict:
                 if tee_id is None:
                     action = "new"
                     if not dry_run:
+                        _parts = _gg_tee_parts(tee["name"])
                         cur = conn.execute(
                             """INSERT INTO course_tees
-                                   (course_id, tee_name, gender, holes, nine, slope,
-                                    rating, yardage_total, is_ladies, source, par)
-                               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'course_card', ?)""",
-                            (cid, tee["name"], gender, nholes, nine, slope, rating,
-                             total, 1 if gender == "F" else 0, span_par))
+                                   (course_id, tee_name, gg_alias, tgf_bands, gender,
+                                    holes, nine, slope, rating, yardage_total, is_ladies,
+                                    source, par)
+                               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'course_card', ?)""",
+                            (cid, _parts["master"], tee["name"],
+                             ",".join(_parts["bands"]) or None, gender, nholes, nine,
+                             slope, rating, total, 1 if gender == "F" else 0, span_par))
                         tee_id = cur.lastrowid
                 elif not dry_run:
                     conn.execute(
@@ -58710,7 +59010,7 @@ def _event_tee_rows(conn, ev: dict, legend: list) -> tuple[dict, str, str]:
     try:
         label_course_tee_nines(conn, cid)      # cheap, idempotent, self-healing
         rows = [dict(r) for r in conn.execute(
-            "SELECT tee_id, tee_name, slope, rating, nine FROM course_tees "
+            "SELECT tee_id, tee_name, gg_alias, slope, rating, nine FROM course_tees "
             "WHERE course_id = ?", (cid,)).fetchall()]
     except sqlite3.OperationalError:
         return {}, "", "No course card on file, so no playing handicap could be computed."
@@ -58744,14 +59044,21 @@ def _event_tee_rows(conn, ev: dict, legend: list) -> tuple[dict, str, str]:
         holes_by_tee.setdefault(r["tee_id"], {})[int(r["hole_number"])] = r["par"]
 
     def _label(nm):
-        return _TEE_ORDER_RE.sub("", " ".join((nm or "").split())).strip()
+        # MASTER name on both sides (v2.467.0): "1 - Gold Tee", "Gold Tee"
+        # and "Gold" are the same tee whether the row has been aliased yet
+        # or not, so the legend and the record cannot disagree mid-boot.
+        return _gg_tee_parts(nm)["master"].lower()
 
     out, ambiguous = {}, False
     for entry in legend:
-        _want = entry.get("tee_key") or entry["tee_name"]
-        cands = [r for r in rows if _label(r["tee_name"]) == _want
+        _want = _label(entry.get("tee_key") or entry["tee_name"])
+        _want_id = entry.get("tee_id")
+        cands = [r for r in rows if (_label(r["tee_name"]) == _want
+                                     or _label(r.get("gg_alias")) == _want)
                  and r["slope"] and r["rating"] is not None
                  and ((r["rating"] >= 50) == is18)]
+        if is18 and _want_id and any(r["tee_id"] == _want_id for r in cands):
+            cands = [r for r in cands if r["tee_id"] == _want_id]
         if not cands:
             continue
         pick = None

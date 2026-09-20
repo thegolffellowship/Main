@@ -1774,6 +1774,9 @@ def _scoring_dispatch(url: str, extract: str):
       scoring-hcp-2nines:<event>[|auto|<json>][|apply]  post an 18-hole event as two nines; ratings read off the course record (v2.465.17), JSON overrides
       scoring-tee-nines-store:<full_tee_id>|<fr>,<fs>|<br>,<bs>[|apply]  front/back rating rows (each with its slope) on an 18-hole tee set (refuses a pair that does not sum to the 18)
       scoring-crdb-seed:<course_id>[|<json>][|apply]  write a course's USGA CRDB tee sets (gender, par, bogey, total/front/back) onto the record
+      scoring-tee-bands:<course_id>   which four sets TGF plays (current designation + the yardage-standards proposal; read-only)
+      scoring-tee-bands-set:<tee_id>|<band[,band]|hide>[|apply]  designate a tee set (<50 / 50-64 / 65+ / Forward) or hide it; one set per band per course
+      scoring-tee-bands-apply:<course_id>[|apply]  write the proposal: the four get their bands, every other set on the course is hidden
       scoring-per-nine-audit[:all]   every course with an 18-hole row: nines resolved / unresolved and why
       scoring-tee-nines[:<course_id>]  label each course tee row front/back/full from the 18-hole card's yardages; reports what it could not decide
       scoring-event-report:<event_id>|flights|proximity  the two PAIRINGS printables as data (Divisions & Flights / CTP markers)
@@ -5077,6 +5080,37 @@ def _scoring_dispatch(url: str, extract: str):
             _c = db.get_connection()
             try:
                 _res = db.seed_usga_crdb(_c, int(_p[0]), _sets, dry_run=not _apply)
+            finally:
+                _c.close()
+            return json.dumps(_res, indent=2, default=str)
+        if cmd in ("scoring-tee-bands", "scoring-tee-bands-apply"):
+            # Tee designation (Kerry 2026-09-20): the four sets TGF plays on
+            # a course, proposed from the yardage standards; -apply writes.
+            _p = [x.strip() for x in arg.split("|")]
+            if not _p or not _p[0].isdigit():
+                return json.dumps({"error": "<course_id>[|apply]"})
+            _c = db.get_connection()
+            try:
+                if cmd == "scoring-tee-bands":
+                    _res = db.propose_tgf_tees(_c, int(_p[0]))
+                else:
+                    _res = db.apply_tgf_tee_proposal(
+                        _c, int(_p[0]), dry_run=not (len(_p) > 1 and _p[-1].lower() == "apply"))
+            finally:
+                _c.close()
+            return json.dumps(_res, indent=2, default=str)
+        if cmd == "scoring-tee-bands-set":
+            # "<tee_id>|<band[,band]|hide>[|apply]"
+            _p = [x.strip() for x in arg.split("|")]
+            if len(_p) < 2 or not _p[0].isdigit():
+                return json.dumps({"error": "<tee_id>|<band[,band]|hide>[|apply]",
+                                   "bands": list(db.TEE_BANDS)})
+            _apply = len(_p) > 2 and _p[-1].lower() == "apply"
+            _bands = [] if _p[1].lower() in ("hide", "hidden", "none", "") else \
+                [b.strip() for b in _p[1].split(",")]
+            _c = db.get_connection()
+            try:
+                _res = db.set_tee_bands(_c, int(_p[0]), _bands, dry_run=not _apply)
             finally:
                 _c.close()
             return json.dumps(_res, indent=2, default=str)

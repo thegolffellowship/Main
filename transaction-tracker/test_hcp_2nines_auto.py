@@ -174,7 +174,8 @@ with db._connect(DB) as conn:
                  "VALUES (35670, '5 - Twin Tee', 'F', 18, 'full', 75.6, 138)")
     conn.commit()
     check("a women's set with the same tee name coexists (gender is in the key)",
-          conn.execute("SELECT COUNT(*) FROM course_tees WHERE tee_name = '5 - Twin Tee'").fetchone()[0] == 2)
+          conn.execute("SELECT COUNT(*) FROM course_tees WHERE tee_name IN ('Twin', '5 - Twin Tee')")
+          .fetchone()[0] == 2)
     conn.execute("INSERT INTO events (id, item_name, course_id, event_date) VALUES (1, 's18.99 CEDAR CREEK', 35670, '2099-01-01')")
     conn.commit()
     audit = db.audit_course_per_nine(conn)
@@ -182,7 +183,7 @@ with db._connect(DB) as conn:
     check("the audit lists the course with its next event, the resolved sets and the women's Twin set unresolved",
           c0["course_id"] == 35670 and c0["next_event"] == 's18.99 CEDAR CREEK'
           and len(c0["resolved"]) == 5
-          and [u["tee_name"] + "/" + u["gender"] for u in c0["unresolved"]] == ["5 - Twin Tee/F"], c0)
+          and [u["tee_name"] + "/" + u["gender"] for u in c0["unresolved"]] == ["Twin/F"], c0)
 
 # ---- the USGA CRDB seed ----
 print("USGA CRDB seed")
@@ -240,20 +241,24 @@ with db._connect(DB) as conn:
     n_before = conn.execute("SELECT COUNT(*) FROM course_tees WHERE course_id = 29522").fetchone()[0]
     cid, tid2 = db._upsert_course_tee(conn, {"course": "Forest Creek Golf Club", "tee_name": "2 - White (L) Tee",
                                              "rating": 75.6, "slope": 138, "yardage": {}})
-    row = conn.execute("SELECT tee_name, usga_tee_label, gender, holes, nine, source FROM course_tees WHERE tee_id = ?",
-                       (tid2,)).fetchone()
+    row = conn.execute("SELECT tee_name, gg_alias, usga_tee_label, tgf_bands, gender, holes, nine, source "
+                       "FROM course_tees WHERE tee_id = ?", (tid2,)).fetchone()
     n_after = conn.execute("SELECT COUNT(*) FROM course_tees WHERE course_id = 29522").fetchone()[0]
-    check("the GG import ADOPTS the CRDB-seeded women's White: renamed to GG's name, label kept, no new row",
-          tuple(row) == ("2 - White (L) Tee", "White", "F", 18, "full", "usga_crdb") and n_after == n_before,
-          (tuple(row), n_before, n_after))
+    check("the GG import ADOPTS the CRDB-seeded women's White: GG name becomes the ALIAS, master + label kept, "
+          "band 50-64 from the typed 2, no new row",
+          tuple(row) == ("White", "2 - White (L) Tee", "White", "50-64", "F", 18, "full", "usga_crdb")
+          and n_after == n_before, (tuple(row), n_before, n_after))
     cid, tid3 = db._upsert_course_tee(conn, {"course": "Forest Creek Golf Club", "tee_name": "2 - White (L) Tee",
                                              "rating": 75.6, "slope": 138, "yardage": {}})
     check("and a second import of it hits the exact name", tid3 == tid2, (tid2, tid3))
     cid, tid4 = db._upsert_course_tee(conn, {"course": "Forest Creek Golf Club", "tee_name": "5 - Gold (L) Tee",
                                              "rating": 77.0, "slope": 140, "yardage": {}})
-    row = conn.execute("SELECT gender, holes, nine, source FROM course_tees WHERE tee_id = ?", (tid4,)).fetchone()
-    check("a women's tee the CRDB did not carry imports as gender F, holes 18, nine 'full', source import",
-          tuple(row) == ("F", 18, "full", "import") and tid4 not in (tid2, 3448), tuple(row))
+    row = conn.execute("SELECT tee_name, gg_alias, tgf_bands, gender, holes, nine, source FROM course_tees "
+                       "WHERE tee_id = ?", (tid4,)).fetchone()
+    check("a women's tee the CRDB did not carry imports with master 'Gold', the GG alias, band Forward (typed 5 → none; "
+          "gender F, holes 18, nine 'full', source import)",
+          tuple(row) == ("Gold", "5 - Gold (L) Tee", None, "F", 18, "full", "import") and tid4 not in (tid2, 3448),
+          tuple(row))
     # The course card does the same for its 18-hole row (Green M 68.5/120 was
     # CRDB-inserted as "Green"; the card calls it "3 - Green Tee").
     conn.commit()
@@ -263,6 +268,50 @@ with db._connect(DB) as conn:
                               "AND holes = 18 AND rating = 68.5 AND slope = 120").fetchone()[0]
     check("the course card adopts the CRDB Green set instead of inserting a second one",
           green and green[0]["action"].startswith("existing") and green_rows == 1, (green, green_rows))
+
+    print()
+    print("Tee designation (Kerry 2026-09-20: master name = USGA/course, GG = alias, the typed number = the band)")
+    named = {r[0]: (r[1], r[2], r[3]) for r in conn.execute(
+        "SELECT tee_id, tee_name, gg_alias, tgf_bands FROM course_tees WHERE course_id = 35670")}
+    check("Cedar Creek's GG names moved to the alias; master names are the course's; bands from the typed number",
+          named[717] == ("White", "1 - White Tee", "<50") and named[711] == ("Gold", "2 - Gold Tee", "50-64")
+          and named[710] == ("Red", "3 - Red (L) Tee", "Forward") and named[4433] == ("White", "1 - White Tee", "<50"),
+          named)
+    check("'0 - Blue Tee' is on the record with no band (hidden) and the tips stay hidden",
+          named[2975] == ("Blue", "0 - Blue Tee", None), named.get(2975))
+    cid, tid = db._upsert_course_tee(conn, {"course": "Cedar Creek Golf Course", "tee_name": "1 - White Tee",
+                                            "rating": 71.4, "slope": 125, "yardage": {}})
+    check("a GG scorecard import still finds the set through the alias", tid == 717, tid)
+    leg = db.event_tee_legend(conn, 1, {"course_id": 35670})
+    by = {t["band"]: t for t in leg}
+    check("the starter-sheet legend prints ONLY designated sets: <50 White, 50-64 Gold, Women Red; no 65+ (none designated)",
+          set(by) == {"<50", "50-64", "Forward"} and by["<50"]["tee_name"] == "White Tees"
+          and by["Forward"]["band_label"] == "Women" and by["Forward"]["ring"] and by["<50"]["source"] == "designated"
+          and by["<50"]["tee_id"] == 717, leg)
+    prop = db.propose_tgf_tees(conn, 35670)
+    check("the yardage standards propose <50 White 6507 (Blue 6800 is over 6799), 50-64 Gold 6025, Forward Red 5439, "
+          "and report 65+ unplaceable",
+          prop["proposal"]["<50"]["tee_id"] == 717 and prop["proposal"]["50-64"]["tee_id"] == 711
+          and prop["proposal"]["Forward"]["tee_id"] == 710 and [u["band"] for u in prop["unplaced"]] == ["65+"]
+          and prop["changes"] == {}, prop)
+    mv = db.set_tee_bands(conn, 2975, ["<50"], dry_run=False)
+    named2 = {r[0]: r[1] for r in conn.execute("SELECT tee_id, tgf_bands FROM course_tees WHERE course_id = 35670")}
+    check("designating Blue for <50 displaces White (one set per band per course)",
+          mv["ok"] and mv["displaced"] and mv["displaced"][0]["tee_id"] == 717 and named2[2975] == "<50"
+          and named2[717] is None, (mv, named2))
+    back = db.apply_tgf_tee_proposal(conn, 35670, dry_run=False)
+    named3 = {r[0]: r[1] for r in conn.execute("SELECT tee_id, tgf_bands FROM course_tees WHERE course_id = 35670")}
+    check("applying the proposal puts White back on <50 and hides Blue",
+          named3[717] == "<50" and named3[2975] is None and named3[711] == "50-64" and named3[710] == "Forward",
+          (back["writes"], named3))
+    std = db.tee_yardage_standards(conn)
+    check("the yardage standards are data with Kerry's numbers as the seed",
+          std == {"<50": [6300, 6799], "50-64": [5800, 6299], "65+": [5300, 5799], "Forward": [4800, None]}, std)
+    again = db._migrate_course_tees_v2(conn)
+    named4 = {r[0]: (r[1], r[2], r[3]) for r in conn.execute(
+        "SELECT tee_id, tee_name, gg_alias, tgf_bands FROM course_tees WHERE course_id = 35670")}
+    check("the alias/designation step is idempotent — a second boot changes nothing",
+          not again.get("aliased") and named4[717] == ("White", "1 - White Tee", "<50"), (again, named4[717]))
 
 print()
 print("ALL PASS" if not F else f"FAILED: {F}")

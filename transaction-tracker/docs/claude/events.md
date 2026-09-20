@@ -381,6 +381,17 @@ cards remain inline buttons.
   are NOT flagged
 
 ## Pairings printables — Starter Sheet + Cart Signs (B5, v2.116.0)
+
+**Tee legend = the DESIGNATED sets (v2.467.0, Kerry 2026-09-20).** The
+band legend on the starter sheet (and the tee circles + PH on the
+leaderboard) prints the sets the course record designates in
+`course_tees.tgf_bands` — never more than four, master (USGA / course)
+names, the GG name is an alias for admin only. A course with no
+designation yet falls back to the typed-number-then-yardage derivation.
+Designate with `scoring-tee-bands:<course_id>` (proposal from the
+yardage standards) → `scoring-tee-bands-apply:<course_id>|apply`, or one
+set at a time with `scoring-tee-bands-set`. Details: schema.md "TGF tee
+designation".
 Two print-optimized pages rendered from the SAVED pairings
 (`get_event_pairings`), assembled by `get_event_print_pack(event_id)` in
 `database.py` (event row + ordered groups + cart split — seats 1&2 = Cart A,

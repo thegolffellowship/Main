@@ -71,8 +71,13 @@ check("the tee name keeps its ratified 'Red Tees' spelling",
 console.log("\nThe outline still means ladies, and only ladies");
 const k = py.indexOf('"ring": ladies');
 check("ring is set from the ladies flag, nothing else", k > -1);
-check("ladies is detected from the tee name's (L) marker",
-    /ladies = bool\(re\.search\(r"\\\(\(\?:l\|lady\|ladies\)\\\)"/.test(py));
+// v2.467.0 (Kerry 2026-09-20): gender is a COLUMN on the tee set; the
+// "(L)" marker in a Golf Genius name is only the fallback for a row that
+// has not been aliased yet. Both legends read the column first.
+check("ladies is detected from the tee set's gender column on the board legend",
+    /ladies = \(_gender_of\.get\(label\) == "F"/.test(py));
+check("…and on the band legend, with the (L) marker only as the fallback",
+    /ladies = \(r\.get\("gender"\) == "F"\s*\n\s*or bool\(re\.search\(r"\\\(\(\?:l\|lady\|ladies\)\\\)"/.test(py));
 
 console.log("\n" + (failures ? failures + " FAILURE(S)" : "ALL PASS"));
 process.exit(failures ? 1 : 0);

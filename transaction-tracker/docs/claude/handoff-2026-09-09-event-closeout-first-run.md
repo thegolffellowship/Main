@@ -551,6 +551,34 @@ blocker for the 13 staged tees in #569." Done in that order.
 - **Not populated yet:** gg_tee_id, gg_course_id, usga_course_id — the
   GG import does not carry its ids today; a follow-up when it does.
 
+### 3o. Tee designation — master name, GG alias, the four sets TGF plays (Kerry 2026-09-20 morning, v2.467.0)
+
+Kerry, after the #576 rebuild: "Master name is what USGA/course call it.
+GG should just be an alias. The GG names were purely for Admin, not
+necessary for member facing… there's never more than four sets of tees
+that we use on a course. The rest can and should be hidden. If we bring
+in a New course then there needs to be understanding to identify which
+tees we'll choose based on our standard yardage parameters. And as a
+default, we do not want to use any combo tees, except as last resort."
+Yardage standards, verbatim: <50 6300-6799 · 50-64 5800-6299 · 65+
+5300-5799 · Women — shortest tees not less than 4800. "We also have
+some 3- for women based on tee availability."
+
+- `course_tees.tee_name` = master; `gg_alias` = GG's name; `tgf_bands` =
+  designation. Boot step aliases every GG-style name once (the typed
+  number → bands). Writers match alias-or-master; adoption by numbers
+  generalised to any unaliased set.
+- Standards as data (`tee_yardage_standards`), proposer, setter, apply;
+  three bridges. Legend / tee circles / PH read designation first.
+- Also fixed on the way: the R1 ×0.96 line in handicap-projection.md was
+  stale (applied 2026-08-03) — #578 records it; P2-4 closed.
+- NOT done: the Courses admin page still lists every set (right for
+  admin); no member-facing tee PICKER exists yet (orders carry the band,
+  not a tee), so nothing member-facing needed a filter today. The CRDB
+  seed tuples carry no yardage, so a CRDB-only course cannot be proposed
+  until its yardages arrive (a course card or the CRDB pull's yardage
+  column — add it to the seed shape when the next course comes in).
+
 ## 4. NOT done, and why
 
 - **Wednesday-AM TGF Insider auto-draft (mailbox #453).** BUILT in

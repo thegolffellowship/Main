@@ -364,10 +364,10 @@ check("the tee column is a CIRCLE, not a word, on the printed sheet",
 # plainly: "1 - <50 / 2 - 50-64 / 3 - 65+ / 3 (L) - Forward (Ladies), OR
 # 4 (L) - Forward (Ladies)"). Yardage no longer decides where a numbered
 # card is concerned — reshuffling the yardages must NOT move the bands.
-c.execute("UPDATE course_tees SET yardage_total = 7100, rating = 74.0 WHERE tee_name = '1 - Gold Tee'")
-c.execute("UPDATE course_tees SET yardage_total = 6500, rating = 71.0 WHERE tee_name = '2 - Blue Tee'")
-c.execute("UPDATE course_tees SET yardage_total = 6000, rating = 68.0 WHERE tee_name = '3 - Red Tee'")
-c.execute("UPDATE course_tees SET yardage_total = 5200, rating = 70.0 WHERE tee_name = '3 - Red (L) Tee'")
+c.execute("UPDATE course_tees SET yardage_total = 7100, rating = 74.0 WHERE tee_id = 11")
+c.execute("UPDATE course_tees SET yardage_total = 6500, rating = 71.0 WHERE tee_id = 12")
+c.execute("UPDATE course_tees SET yardage_total = 6000, rating = 68.0 WHERE tee_id = 13")
+c.execute("UPDATE course_tees SET yardage_total = 5200, rating = 70.0 WHERE tee_id = 14")
 c.commit()
 _b2 = {t["band"]: t for t in db.event_tee_legend(c, EV, {"course_id": COURSE})}
 check("tee 1 is the under-50 tee whatever the yardages say",
@@ -378,19 +378,24 @@ check("the ladies' number is Forward, never the under-50 one",
       _b2["Forward"]["tee_name"] == "Red Tees"
       and _b2["Forward"]["tee_name"] != _b2["<50"]["tee_name"])
 # A card with NO tee numbers falls back to the yardage rule.
+# v2.467.0: the number is a DESIGNATION on the row now (tgf_bands, with the
+# GG name on gg_alias) — an undesignated card is one with neither.
 c.execute("UPDATE course_tees SET tee_name = REPLACE(REPLACE(REPLACE(REPLACE("
-          "tee_name, '1 - ', ''), '2 - ', ''), '3 - ', ''), '4 - ', '')")
+          "tee_name, '1 - ', ''), '2 - ', ''), '3 - ', ''), '4 - ', ''), "
+          "gg_alias = NULL, tgf_bands = NULL WHERE course_id = ?", (COURSE,))
 c.commit()
 _b2b = {t["band"]: t for t in db.event_tee_legend(c, EV, {"course_id": COURSE})}
 check("with no numbers on the card, the <50 tee is the one INSIDE 6300-6800",
       _b2b["<50"]["tee_name"] == "Blue Tees", str(_b2b.get("<50")))
-c.execute("UPDATE course_tees SET tee_name = '1 - ' || tee_name WHERE tee_name = 'Gold Tee'")
-c.execute("UPDATE course_tees SET tee_name = '2 - ' || tee_name WHERE tee_name = 'Blue Tee'")
-c.execute("UPDATE course_tees SET tee_name = '3 - ' || tee_name WHERE tee_name IN ('Red Tee', 'Red (L) Tee')")
+# The typed number now rides on the GG alias; the derivation reads it there.
+c.execute("UPDATE course_tees SET gg_alias = '1 - Gold Tee' WHERE tee_id = 11")
+c.execute("UPDATE course_tees SET gg_alias = '2 - Blue Tee' WHERE tee_id = 12")
+c.execute("UPDATE course_tees SET gg_alias = '3 - Red Tee' WHERE tee_id = 13")
+c.execute("UPDATE course_tees SET gg_alias = '3 - Red (L) Tee' WHERE tee_id = 14")
 c.commit()
 # Nothing in band -> the longest men's tee, rather than no answer.
-c.execute("UPDATE course_tees SET yardage_total = 5800 WHERE tee_name = '2 - Blue Tee'")
-c.execute("UPDATE course_tees SET yardage_total = 6128 WHERE tee_name = '1 - Gold Tee'")
+c.execute("UPDATE course_tees SET yardage_total = 5800 WHERE tee_id = 12")
+c.execute("UPDATE course_tees SET yardage_total = 6128 WHERE tee_id = 11")
 c.commit()
 _b3 = {t["band"]: t for t in db.event_tee_legend(c, EV, {"course_id": COURSE})}
 check("a course whose longest tee is under 6300 still gets its back tee",

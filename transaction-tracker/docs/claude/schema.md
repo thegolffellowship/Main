@@ -152,6 +152,49 @@ course_tee_holes                             -- the card behind each set
   PRIMARY KEY (tee_id, hole_number)
 ```
 
+**TGF tee designation (v2.467.0, Kerry 2026-09-20).** "Master name is
+what USGA/course call it. GG should just be an alias. The GG names were
+purely for Admin, not necessary for member facing… there's never more
+than four sets of tees that we use on a course. The rest can and should
+be hidden." Three more columns on the tee set:
+
+```
+  tee_name       the MASTER name ("White", "Red", the CRDB's "KT") — what members see
+  gg_alias       Golf Genius's name for the set ("3 - Red (L) Tee") — admin / GG coordination only
+  tgf_bands      which TGF band(s) play it: '<50' | '50-64' | '65+' | 'Forward', comma-joined
+                 ('50-64,65+' = one tee serving both older bands); NULL = on the record, hidden
+```
+
+The number Kerry typed in front of a GG tee name was a designation, not
+a name: 1 = <50, 2 = 50-64, 3 = 65+ (or Forward on a women's rating —
+"some 3- for women based on tee availability"), 4 = Forward, 23 = both
+older bands, 0/00 = not played. `_gg_tee_parts` reads it; the boot step
+in `_migrate_course_tees_v2` moves every GG-style `tee_name` to
+`gg_alias`, sets the master (the CRDB label when one exists, else the
+name stripped of number / "(L)" / "Tee") and the bands, once per row.
+Both GG writers match on the alias OR the master, then adopt an
+unaliased set by gender + slope + rating (v2.466.1 generalised).
+
+Selection is a RULE, as data: `tee_yardage_standards` in app_settings
+(seed `TEE_YARDAGE_STANDARDS_DEFAULT`, Kerry verbatim: <50 6300–6799,
+50–64 5800–6299, 65+ 5300–5799, Women = shortest tee not under 4800;
+combo tees only as a last resort). `propose_tgf_tees` picks the four
+(longest plain men's set in each band's range; shortest women's set at
+or above the floor), `set_tee_bands` designates or hides one set (one
+set per band per course — a moved band is taken off the set that had
+it), `apply_tgf_tee_proposal` writes the proposal and hides the rest.
+Bridges: `scoring-tee-bands:<course_id>`,
+`scoring-tee-bands-set:<tee_id>|<bands|hide>[|apply]`,
+`scoring-tee-bands-apply:<course_id>[|apply]`.
+
+`event_tee_legend` (starter sheet, leaderboard tee circles, PH
+projection) prints ONLY designated sets on a designated course; a
+course nobody has designated yet falls back to the number-then-yardage
+derivation. `list_courses` / `/api/courses/tees` publish all three
+columns. NOT yet filtered by designation: the Courses admin page (shows
+every set, which is right for admin) and the order-form tee choice,
+which already offers the four BANDS, not tee names.
+
 **Why the row's own rating/slope stay on `course_tees`:** thirty-odd
 readers join them off `scoring_rounds.tee_id` (a card knows its tee),
 and `handicap_rounds` snapshots them per posted round (past rounds are
