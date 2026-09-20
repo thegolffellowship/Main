@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.466.0";
+window.TGF_VERSION = "2.466.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.466.1",
+    date: "2026-09-20",
+    changes: [
+      "A CRDB-seeded tee set is ONE set with the Golf Genius one. The USGA seed names a set the way the CRDB does (\u2018Green\u2019); Golf Genius names the same set \u20183 - Green Tee\u2019, so the next scorecard import or course card would have inserted a second row with identical numbers. Both GG writers (`_upsert_course_tee`, `import_course_card`) now fall back from the exact name to `_adopt_crdb_tee_set`: an 18-hole row of the same course, gender, slope and rating that still carries its CRDB label as its name IS the set \u2014 it takes GG\u2019s name, keeps `usga_tee_label`, keeps its tee_id. Found on the live dry run of the Forest Creek card right after the v2.466.0 seed; covered in test_hcp_2nines_auto.py.",
+    ],
+  },
   {
     version: "2.466.0",
     date: "2026-09-20",

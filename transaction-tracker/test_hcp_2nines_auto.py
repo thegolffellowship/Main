@@ -42,7 +42,8 @@ with db._connect(DB) as conn:
         CREATE TABLE events (id INTEGER PRIMARY KEY, item_name TEXT, nine_side TEXT,
             course_id INTEGER, event_date TEXT);
         CREATE TABLE scoring_rounds (id INTEGER PRIMARY KEY, tee_id INTEGER,
-            course_id INTEGER, event_id INTEGER);
+            course_id INTEGER, event_id INTEGER, customer_id INTEGER, player_name TEXT,
+            gg_aggregate_id TEXT, gg_round_id TEXT, round_date TEXT);
         CREATE TABLE handicap_rounds (id INTEGER PRIMARY KEY, nine TEXT,
             scoring_round_id INTEGER);
         CREATE TABLE agent_action_log (id INTEGER PRIMARY KEY, agent TEXT, action TEXT,
@@ -234,11 +235,34 @@ with db._connect(DB) as conn:
     cid, tid = db._upsert_course_tee(conn, {"course": "Forest Creek Golf Club", "tee_name": "2 - White Tee",
                                             "rating": 70.4, "slope": 125, "yardage": {}})
     check("the scorecard import reuses the existing men's White row", (cid, tid) == (29522, 3448), (cid, tid))
+    # A CRDB-seeded set is named the USGA way ("White"); the same set arrives
+    # from Golf Genius as "2 - White (L) Tee" — ONE row, GG's name adopted.
+    n_before = conn.execute("SELECT COUNT(*) FROM course_tees WHERE course_id = 29522").fetchone()[0]
     cid, tid2 = db._upsert_course_tee(conn, {"course": "Forest Creek Golf Club", "tee_name": "2 - White (L) Tee",
                                              "rating": 75.6, "slope": 138, "yardage": {}})
-    row = conn.execute("SELECT gender, holes, nine, source FROM course_tees WHERE tee_id = ?", (tid2,)).fetchone()
-    check("a new women's tee imports as gender F, holes 18, nine 'full', source import",
-          tuple(row) == ("F", 18, "full", "import"), tuple(row))
+    row = conn.execute("SELECT tee_name, usga_tee_label, gender, holes, nine, source FROM course_tees WHERE tee_id = ?",
+                       (tid2,)).fetchone()
+    n_after = conn.execute("SELECT COUNT(*) FROM course_tees WHERE course_id = 29522").fetchone()[0]
+    check("the GG import ADOPTS the CRDB-seeded women's White: renamed to GG's name, label kept, no new row",
+          tuple(row) == ("2 - White (L) Tee", "White", "F", 18, "full", "usga_crdb") and n_after == n_before,
+          (tuple(row), n_before, n_after))
+    cid, tid3 = db._upsert_course_tee(conn, {"course": "Forest Creek Golf Club", "tee_name": "2 - White (L) Tee",
+                                             "rating": 75.6, "slope": 138, "yardage": {}})
+    check("and a second import of it hits the exact name", tid3 == tid2, (tid2, tid3))
+    cid, tid4 = db._upsert_course_tee(conn, {"course": "Forest Creek Golf Club", "tee_name": "5 - Gold (L) Tee",
+                                             "rating": 77.0, "slope": 140, "yardage": {}})
+    row = conn.execute("SELECT gender, holes, nine, source FROM course_tees WHERE tee_id = ?", (tid4,)).fetchone()
+    check("a women's tee the CRDB did not carry imports as gender F, holes 18, nine 'full', source import",
+          tuple(row) == ("F", 18, "full", "import") and tid4 not in (tid2, 3448), tuple(row))
+    # The course card does the same for its 18-hole row (Green M 68.5/120 was
+    # CRDB-inserted as "Green"; the card calls it "3 - Green Tee").
+    conn.commit()
+    card = db.import_course_card("29522", dry_run=False, db_path=DB)
+    green = [r for r in card["rows"] if r["tee_name"] == "3 - Green Tee" and r["nine"] == "full"]
+    green_rows = conn.execute("SELECT COUNT(*) FROM course_tees WHERE course_id = 29522 AND gender = 'M' "
+                              "AND holes = 18 AND rating = 68.5 AND slope = 120").fetchone()[0]
+    check("the course card adopts the CRDB Green set instead of inserting a second one",
+          green and green[0]["action"].startswith("existing") and green_rows == 1, (green, green_rows))
 
 print()
 print("ALL PASS" if not F else f"FAILED: {F}")

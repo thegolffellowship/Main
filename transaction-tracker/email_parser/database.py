@@ -15844,6 +15844,32 @@ def compute_hole_derivations(par: int | None, strokes: int | None,
     return out
 
 
+def _adopt_crdb_tee_set(conn: sqlite3.Connection, course_id, tee_name: str,
+                        gender: str, slope, rating):
+    """A set the USGA CRDB seed wrote is named the way the CRDB names it
+    ("Green"); Golf Genius names the same set "3 - Green Tee". When a GG
+    writer misses on the exact name but an 18-hole row of the same
+    course, gender, slope and rating is still carrying its CRDB label as
+    its name, that row IS the set: take GG's name (the scorecards carry
+    it), keep the CRDB label, and return its tee_id. Anything else — a
+    GG-named row, a nine — is left alone. Returns None when nothing
+    qualifies."""
+    if not tee_name or slope is None or rating is None:
+        return None
+    row = conn.execute(
+        """SELECT tee_id FROM course_tees
+            WHERE course_id = ? AND gender = ? AND holes = 18
+              AND slope IS ? AND rating IS ? AND source = 'usga_crdb'
+              AND tee_name IS usga_tee_label
+            ORDER BY tee_id LIMIT 1""",
+        (course_id, gender, slope, rating)).fetchone()
+    if not row:
+        return None
+    conn.execute("UPDATE course_tees SET tee_name = ? WHERE tee_id = ?",
+                 (tee_name, row["tee_id"]))
+    return row["tee_id"]
+
+
 def _upsert_course_tee(conn: sqlite3.Connection, tee: dict) -> tuple:
     """Course DB accretes passively from tee blocks. Returns (course_id, tee_id)."""
     course_name = (tee.get("course") or "").strip()
@@ -15874,6 +15900,9 @@ def _upsert_course_tee(conn: sqlite3.Connection, tee: dict) -> tuple:
         (course_id, tee.get("tee_name"), gender, holes, slope, rating)).fetchone()
     if row:
         tee_id = row["tee_id"]
+    elif holes == 18 and (tee_id := _adopt_crdb_tee_set(
+            conn, course_id, tee.get("tee_name"), gender, slope, rating)):
+        pass
     else:
         tee_id = conn.execute(
             """INSERT INTO course_tees (course_id, tee_name, gender, holes, nine, slope,
@@ -58436,6 +58465,10 @@ def import_course_card(key: str, dry_run: bool = True, db_path=None) -> dict:
                     (cid, tee["name"], gender, nholes, slope, rating, nine, nine)).fetchone()
                 action = "existing"
                 tee_id = row["tee_id"] if row else None
+                if tee_id is None and nine == "full":
+                    tee_id = _adopt_crdb_tee_set(conn, cid, tee["name"], gender, slope, rating)
+                    if tee_id is not None:
+                        action = "existing (CRDB set, renamed)"
                 span_par = sum(tee["par"][h - 1] for h in holes)
                 if tee_id is None:
                     action = "new"

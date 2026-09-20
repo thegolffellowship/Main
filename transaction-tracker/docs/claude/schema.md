@@ -161,7 +161,11 @@ also a real tee set in USGA terms.
 
 **Writers:** `_upsert_course_tee` (GG scorecard import: gender from the
 "(L)" name, holes from the rating, dedupes on the new key, source
-import); `import_course_card` (a club's own card from
+import; v2.466.1: when the exact name misses, `_adopt_crdb_tee_set`
+claims a CRDB-seeded 18-hole row of the same gender + slope + rating
+that is still named by its CRDB label — GG's name goes on, the label
+stays, the tee_id stays; the card importer does the same for its
+18-hole row); `import_course_card` (a club's own card from
 `email_parser/course_cards.py`: three rows per tee AND the front/back
 rating rows on the 18, source course_card — the old 'both' merge is
 gone, rows already labelled 'both' still read as either half);
