@@ -665,7 +665,18 @@ Rules of record:
   `{"3447":{"front":[35.9,133],"back":[36.3,131]},"3448":{"front":[35.2,125],
   "back":[35.2,125]},"3462":{"front":[34.1,121],"back":[34.4,120]}}`.
 
-### Per-nine ratings: THE COURSE RECORD is the source (v2.465.17)
+### Per-nine ratings: THE COURSE RECORD is the source (v2.465.17 → v2.466.0)
+
+**v2.466.0 (mailbox #576):** the record is the USGA/WHS shape — see
+schema.md "Course record". An 18-hole tee set carries its FRONT and
+BACK rating rows (each with its own slope) in `tee_set_ratings`, written
+by a course card, the USGA CRDB seed (`scoring-crdb-seed:<course_id>
+|apply`, source of record) or `scoring-tee-nines-store` (Kerry's GG
+read). The resolver reads those first; pairing the Tuesday nine-hole
+rows (same tee name AND gender) is the fallback. Gender is a rating
+dimension: a woman's round posts off the women's set of the same tee.
+
+### (history) v2.465.17
 
 Kerry 2026-09-19: "Aren't we checking course_ids and their information
 for course info for ratings and indexes as a standard?" Yes — as of

@@ -98,82 +98,98 @@ where available. Backfills are idempotent (skip rows where `event_id IS NOT NULL
 See `PROJECT.md → Technical Debt & Known Concessions` for SQLite FK limitations and
 the full migration checklist for Supabase/PostgreSQL.
 
-## Course record — `courses` / `course_tees` / `course_tee_holes` (2026-09-19)
+## Course record — the USGA/WHS shape (v2.466.0, mailbox #576)
 
-Kerry 2026-09-19: "Is this stored in actual database schema? Show me the
-structure." It is. Three tables, created in `init_db` / `_ensure_scoring_tables`
-(database.py), with a few columns added later by guarded `ALTER TABLE`s
-(every one wrapped in try/except so a live DB self-migrates on boot):
+Kerry 2026-09-19: "Yes we need the table rebuild… I think the full
+standard shape in one pass." Rebuilt IN PLACE by `_migrate_course_tees_v2`
+(called from `_ensure_scoring_tables`, so any live DB migrates on boot):
+same table name, same `tee_id`, so `scoring_rounds.tee_id`,
+`course_tee_holes` and every reader keep working. One row per TEE SET —
+a physical tee as rated for one gender over 9 or 18 holes.
 
 ```
-courses                                  -- the canonical course registry
-  course_id    INTEGER PK AUTOINCREMENT   (Tracker-assigned; GG's course id is NOT stored)
-  name         VARCHAR(200) NOT NULL UNIQUE
-  short_name   VARCHAR(120)               (ALTER, v2.56.4)
-  chapter_id   INTEGER REFERENCES chapters(chapter_id)
-  city, state, status ('active'), created_at
-  facility_id  INTEGER REFERENCES facilities(facility_id)   (ALTER; multi-course facilities)
+courses
+  course_id      INTEGER PK AUTOINCREMENT   (Tracker-assigned)
+  name           VARCHAR(200) NOT NULL UNIQUE
+  short_name, chapter_id, city, state, status, created_at
+  facility_id    REFERENCES facilities        (multi-course properties)
+  gg_course_id   TEXT                        (v2.466.0; not yet populated)
+  usga_course_id TEXT                        (v2.466.0; not yet populated)
 
-course_tees                              -- ONE ROW PER TEE PER NINE-OR-EIGHTEEN
-  tee_id        INTEGER PK AUTOINCREMENT  (ALWAYS Tracker-assigned; GG's tee id is NOT stored —
-                                           the natural key below is the only identity)
-  course_id     INTEGER NOT NULL REFERENCES courses(course_id)
-  tee_name      TEXT                      ("1 - White Tee" — the same name on the 18 and each nine)
-  slope         INTEGER
-  rating        REAL                      (>= 50 is an 18-hole row; < 50 is a nine)
-  yardage_total INTEGER
-  created_at    TEXT
-  nine          TEXT                      (ALTER, v2.462.x: 'front' | 'back' | 'full' | NULL —
-                                           written by label_course_tee_nines / store_tee_nines)
-  version_label, valid_from, valid_to     (ALTER: a re-rating keeps the old row; dated)
-  is_ladies     INTEGER DEFAULT 0         (ALTER: "(L)" tees; feeds customers.gender inference)
-  UNIQUE(course_id, tee_name, slope, rating)   <- the natural key. No `nine` in it, so two
-                                                 halves that rate identically (Forest Creek
-                                                 White, 35.2/125 both ways) cannot both exist:
-                                                 the import's INSERT OR IGNORE drops the second
-                                                 silently, store_tee_nines reports BLOCKED.
-                                                 Fix = table rebuild with `nine` in the key
-                                                 (rule 3b, OPEN 2026-09-19).
+course_tees                                  -- ONE ROW PER TEE SET
+  tee_id         INTEGER PK AUTOINCREMENT   (Tracker-assigned; GG's id is not stored)
+  course_id      NOT NULL REFERENCES courses
+  tee_name       TEXT                       ("1 - White Tee" as GG names it)
+  gender         TEXT NOT NULL 'M'|'F'      (a rating dimension, not a name)
+  holes          INTEGER NOT NULL 9|18      (follows the rating: a nine rates < 50)
+  nine           TEXT NULL|'full'|'front'|'back'|'both'
+  par            INTEGER
+  slope          INTEGER                    (this set's own — 9 or 18)
+  rating         REAL                       (this set's own — 9 or 18)
+  bogey_rating   REAL                       (stored for completeness, used by nothing)
+  yardage_total  INTEGER
+  is_combo       INTEGER NOT NULL 0|1       (Kissing Tree "Back/KT": rated as its own set)
+  is_ladies      INTEGER                    (legacy mirror of gender = 'F')
+  gg_tee_id      TEXT                       (not yet populated)
+  usga_tee_label TEXT                       (the CRDB's name for the set)
+  source         TEXT NOT NULL import|course_card|usga_crdb|admin
+  version_label, valid_from, valid_to       (a re-rating keeps the old row, dated)
+  created_at
+  UNIQUE(course_id, tee_name, gender, holes, nine, slope, rating)
 
-course_tee_holes                         -- the card behind each tee row
-  tee_id       INTEGER NOT NULL REFERENCES course_tees(tee_id)
-  hole_number  INTEGER NOT NULL           (1-18 on an 18-hole row; 1-9 on a nine)
-  par, yardage, stroke_index
+tee_set_ratings                              -- the ratings BY TYPE, per set
+  tee_id         NOT NULL REFERENCES course_tees
+  rating_type    'total'|'front'|'back'
+  course_rating  REAL NOT NULL
+  slope          INTEGER NOT NULL           (each nine has its OWN slope)
+  bogey_rating   REAL
+  source         TEXT NOT NULL
+  updated_at
+  PRIMARY KEY (tee_id, rating_type)
+
+course_tee_holes                             -- the card behind each set
+  tee_id, hole_number (1-18 on an 18, 1-9 on a nine), par, yardage, stroke_index
   PRIMARY KEY (tee_id, hole_number)
 ```
 
-Where the rows come from: `import_gg_scorecards` / the hourly auto-sync
-create a `course_tees` row (and its holes) for every tee a scorecard was
-played off, keyed by GG's ids — so until v2.465.19 a tee existed on the
-record ONLY if someone had played a round off it, and a course played
-only as an 18 had no nine-hole rows. `store_tee_nines` (v2.465.19,
-bridge `scoring-tee-nines-store`) is the other writer: it inserts a front
-and a back row beside an 18-hole row from Kerry's GG read, refusing a
-pair that does not sum to the 18-hole rating, and copies the 18's holes
-1-9 / 10-18 into `course_tee_holes` for the new rows.
+**Why the row's own rating/slope stay on `course_tees`:** thirty-odd
+readers join them off `scoring_rounds.tee_id` (a card knows its tee),
+and `handicap_rounds` snapshots them per posted round (past rounds are
+frozen). `tee_set_ratings` is where the 18-hole set's FRONT and BACK
+live — a 9-hole night still points at its own nine-hole set, which is
+also a real tee set in USGA terms.
 
-Who reads them: `scoring_rounds.course_id` / `.tee_id` FK to these rows
-(a card knows its tee); `handicap_rounds` SNAPSHOTS `rating`, `slope`,
-`tee_name`, `course_name` and `nine` per posted round (past rounds are
-frozen — a later re-rating changes nothing already posted);
-`resolve_per_nine_from_course_tees` pairs a course's front and back rows
-with its 18-hole row for the 18-hole handicap posting; the print pack,
-starter sheet and PH projection read `rating`/`slope`/`nine` per tee.
+**Writers:** `_upsert_course_tee` (GG scorecard import: gender from the
+"(L)" name, holes from the rating, dedupes on the new key, source
+import); `import_course_card` (a club's own card from
+`email_parser/course_cards.py`: three rows per tee AND the front/back
+rating rows on the 18, source course_card — the old 'both' merge is
+gone, rows already labelled 'both' still read as either half);
+`seed_usga_crdb` (bridge `scoring-crdb-seed`, source usga_crdb — the
+SOURCE OF RECORD per #576: matches an 18-hole row by gender + rating/
+slope, then name + gender, inserts the rest, writes total/front/back
+with bogey; seeds in `USGA_CRDB_SEEDS`); `store_tee_nines` (bridge
+`scoring-tee-nines-store`, source admin — Kerry's GG read as rating
+rows, refuses a pair that does not sum to the 18).
 
-Example, Cedar Creek 35670 as the record holds it (2026-09-19):
+**Readers:** `resolve_per_nine_from_course_tees` (rating rows first,
+then pairs Tuesday nine-hole rows of the same name AND gender);
+`label_course_tee_nines` (which nine a 9-hole row is, grouped by
+gender); `audit_course_per_nine` (`scoring-per-nine-audit`);
+`list_courses` (`get_courses` / `/api/course-tees`: every column plus
+the ratings list); the print pack / starter sheet / PH projection.
 
-| tee_id | tee_name | rating | slope | yardage | nine |
-|---|---|---|---|---|---|
-| 717 | 1 - White Tee | 71.4 | 125 | 6507 | full |
-| 4433 | 1 - White Tee | 35.5 | 126 | 3236 | front |
-| 2971 | 1 - White Tee | 35.9 | 123 | 3271 | back |
-| 711 | 2 - Gold Tee | 69.4 | 118 | 6025 | full |
-| 4436 | 2 - Gold Tee | 34.8 | 116 | 3035 | front |
-| 2973 | 2 - Gold Tee | 34.6 | 119 | 2990 | back |
-| 710 | 3 - Red (L) Tee | 72.9 | 120 | 5439 | full |
-| 2441 | 3 - Red (L) Tee | 36.4 | 124 | 2709 | front |
-| 2978 | 3 - Red (L) Tee | 36.5 | 116 | 2730 | back |
-| 2190 | 1 - White Tee | 73.4 | 139 | 6660 | full (an older rating; no nines sum to it) |
+**Migration rules** (`_migrate_course_tees_v2`): gender = F where
+is_ladies or the name carries "(L)", "(F)" or "Ladies"; holes = 18 where
+rating ≥ 50 else 9 (and healed on every boot — the rating is the fact);
+nine = 'full' for 18s, kept where front/back/both, else NULL; source =
+import; every set gets its 'total' rating row. Old key ⊂ new key, so no
+row can collide; the count is logged. Not yet populated: gg_tee_id,
+gg_course_id, usga_course_id (the import does not carry GG's ids today).
+
+Example, Forest Creek 29522 after the CRDB seed: seven 18-hole sets
+(M Blue/White/Green/Red, F White/Green/Red), each with total + front +
+back rating rows and bogey; White M = 70.4/125 with 35.2/125 both ways.
 
 Related: `course_aliases` (name variants → course_id), `facilities` +
 `course_combos` / combo tees (a 27-hole facility's nine-pairings).

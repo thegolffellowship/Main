@@ -1772,7 +1772,8 @@ def _scoring_dispatch(url: str, extract: str):
       scoring-margin-gaps[:<limit>]  pre-cutover events: booked vs residual-would-book, with reasons (measure-only)
       scoring-leaderboard-events[:add=<codes>|set=<codes>|clear]  the EVENTS leaderboard dial (admin pilot); reports which codes still await scorecards
       scoring-hcp-2nines:<event>[|auto|<json>][|apply]  post an 18-hole event as two nines; ratings read off the course record (v2.465.17), JSON overrides
-      scoring-tee-nines-store:<full_tee_id>|<fr>,<fs>|<br>,<bs>[|apply]  put a tee's front/back nine on the course record (refuses a pair that does not sum to the 18)
+      scoring-tee-nines-store:<full_tee_id>|<fr>,<fs>|<br>,<bs>[|apply]  front/back rating rows (each with its slope) on an 18-hole tee set (refuses a pair that does not sum to the 18)
+      scoring-crdb-seed:<course_id>[|<json>][|apply]  write a course's USGA CRDB tee sets (gender, par, bogey, total/front/back) onto the record
       scoring-per-nine-audit[:all]   every course with an 18-hole row: nines resolved / unresolved and why
       scoring-tee-nines[:<course_id>]  label each course tee row front/back/full from the 18-hole card's yardages; reports what it could not decide
       scoring-event-report:<event_id>|flights|proximity  the two PAIRINGS printables as data (Divisions & Flights / CTP markers)
@@ -5053,6 +5054,29 @@ def _scoring_dispatch(url: str, extract: str):
             _c = db.get_connection()
             try:
                 _res = db.store_tee_nines(_c, int(_p[0]), _fr, _bk, dry_run=not _apply)
+            finally:
+                _c.close()
+            return json.dumps(_res, indent=2, default=str)
+        if cmd == "scoring-crdb-seed":
+            # "<course_id>[|<json sets>][|apply]" — write a course's USGA
+            # Course Rating Database tee sets onto the record (mailbox #576:
+            # ncrdb.usga.org is the source of record). No JSON = the seed
+            # in database.USGA_CRDB_SEEDS. Dry run unless |apply.
+            _p = [x.strip() for x in arg.split("|")]
+            if not _p or not _p[0].isdigit():
+                return json.dumps({"error": "<course_id>[|<json sets>][|apply]",
+                                   "known": {k: v["course"] for k, v in db.USGA_CRDB_SEEDS.items()}})
+            _apply = len(_p) > 1 and _p[-1].lower() == "apply"
+            _mid = _p[1:-1] if _apply else _p[1:]
+            _sets = None
+            if _mid and _mid[0]:
+                _sets = [(x[0], x[1], float(x[2]), int(x[3]),
+                          (float(x[4]) if x[4] is not None else None),
+                          (float(x[5][0]), int(x[5][1])), (float(x[6][0]), int(x[6][1])))
+                         for x in json.loads(_mid[0])]
+            _c = db.get_connection()
+            try:
+                _res = db.seed_usga_crdb(_c, int(_p[0]), _sets, dry_run=not _apply)
             finally:
                 _c.close()
             return json.dumps(_res, indent=2, default=str)

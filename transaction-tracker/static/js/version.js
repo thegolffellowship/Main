@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.465.21";
+window.TGF_VERSION = "2.466.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.466.0",
+    date: "2026-09-20",
+    changes: [
+      "THE COURSE RECORD IS THE USGA/WHS SHAPE (mailbox #576, Kerry-ratified: \u2018the full standard shape in one pass\u2019). `course_tees` is rebuilt IN PLACE on boot \u2014 same table, same tee_id, so every scoring round and reader keeps working \u2014 as one row per TEE SET: tee + GENDER (M|F) + holes (9|18) + nine (full|front|back), with par, bogey rating, is_combo, gg_tee_id, usga_tee_label, source (import|course_card|usga_crdb|admin) and the dated version columns. New `tee_set_ratings` carries each set\u2019s TOTAL / FRONT / BACK course rating, slope and bogey the way ncrdb.usga.org publishes them. Natural key now includes gender and nine: a men\u2019s and a women\u2019s set share a name, and identical halves (Forest Creek White, 35.2/125 both ways) are two rating rows on one set \u2014 the v2.465.21 BLOCK is gone. Existing rows migrate with source=import, gender from the (L) flag, holes from the rating.",
+      "Readers and writers follow: the scorecard import dedupes on the new key and sets gender/holes; `scoring-course-card` writes the card\u2019s front/back rating rows onto the 18-hole set (no more \u2018both\u2019 merge); `resolve_per_nine_from_course_tees` reads rating rows first and pairs Tuesday nine-hole rows (same name AND gender) only as a fallback; `scoring-tee-nines-store` writes rating rows, not sibling tees; `get_courses` / `/api/course-tees` publish gender, holes, nine, par, bogey, source and the ratings list.",
+      "USGA Course Rating Database is the source of record: `scoring-crdb-seed:<course_id>[|<json>][|apply]` writes a course\u2019s CRDB tee sets (gender, par, bogey, total/front/back with slopes) onto the record, matching an existing 18-hole row by gender + rating/slope, then name, and inserting the rest (combo tees flagged). Seeds in `USGA_CRDB_SEEDS`: Kissing Tree (14 sets, Fall Championship 10/31) and Forest Creek (7 sets) from Kerry\u2019s pull, every front+back sum re-checked before a row is written. Tests: test_hcp_2nines_auto.py (rewritten for the new shape: migration, resolver, store, seed, import).",
+    ],
+  },
   {
     version: "2.465.21",
     date: "2026-09-20",

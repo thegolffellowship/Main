@@ -15433,19 +15433,134 @@ def get_player_spotlight(customer_id: int,
 #    re-parsed even if GG severs access.
 # ═══════════════════════════════════════════════════════════════════════
 
+# ── The course record, USGA/WHS shape (v2.466.0, mailbox #576) ─────────
+# Kerry 2026-09-19: "Yes we need the table rebuild… I think the full
+# standard shape in one pass." One row per TEE SET: a physical tee as
+# rated for ONE gender over 9 or 18 holes. Its own rating/slope stay on
+# the row (every existing reader joins them off scoring_rounds.tee_id);
+# tee_set_ratings carries the TOTAL / FRONT / BACK rating rows, each with
+# its own slope and the bogey rating, the way ncrdb.usga.org publishes
+# them. Natural key = course + name + gender + holes + nine + slope +
+# rating: a men's and a women's set share a name; front and back halves
+# that rate identically (Forest Creek White, 35.2/125 both ways) are two
+# rating rows on one 18-hole set, not sibling rows fighting a UNIQUE.
+COURSE_TEES_DDL = """(
+        tee_id        INTEGER PRIMARY KEY AUTOINCREMENT,
+        course_id     INTEGER NOT NULL REFERENCES courses(course_id),
+        tee_name      TEXT,
+        gender        TEXT NOT NULL DEFAULT 'M' CHECK (gender IN ('M', 'F')),
+        holes         INTEGER NOT NULL DEFAULT 18 CHECK (holes IN (9, 18)),
+        nine          TEXT CHECK (nine IS NULL OR nine IN ('full', 'front', 'back', 'both')),
+        par           INTEGER,
+        slope         INTEGER,
+        rating        REAL,
+        bogey_rating  REAL,
+        yardage_total INTEGER,
+        is_combo      INTEGER NOT NULL DEFAULT 0,
+        is_ladies     INTEGER DEFAULT 0,
+        gg_tee_id     TEXT,
+        usga_tee_label TEXT,
+        source        TEXT NOT NULL DEFAULT 'import'
+                      CHECK (source IN ('import', 'course_card', 'usga_crdb', 'admin')),
+        version_label TEXT,
+        valid_from    TEXT,
+        valid_to      TEXT,
+        created_at    TEXT DEFAULT (datetime('now')),
+        UNIQUE(course_id, tee_name, gender, holes, nine, slope, rating))"""
+
+TEE_SET_RATINGS_DDL = """CREATE TABLE IF NOT EXISTS tee_set_ratings (
+        tee_id        INTEGER NOT NULL REFERENCES course_tees(tee_id),
+        rating_type   TEXT NOT NULL CHECK (rating_type IN ('total', 'front', 'back')),
+        course_rating REAL NOT NULL,
+        slope         INTEGER NOT NULL,
+        bogey_rating  REAL,
+        source        TEXT NOT NULL DEFAULT 'import',
+        updated_at    TEXT DEFAULT (datetime('now')),
+        PRIMARY KEY (tee_id, rating_type))"""
+
+_COURSE_TEES_V2_COLS = ("gender", "holes", "source", "usga_tee_label", "bogey_rating",
+                        "is_combo", "gg_tee_id", "par")
+
+
+def _tee_gender_from_name(name: str | None, is_ladies=None) -> str:
+    n = (name or "")
+    if is_ladies == 1 or re.search(r"\((L|F)\)|\bLadies\b", n, re.I):
+        return "F"
+    return "M"
+
+
+def _migrate_course_tees_v2(conn: sqlite3.Connection) -> dict:
+    """Rebuild `course_tees` to the USGA/WHS shape IN PLACE (same table
+    name, same tee_id, so scoring_rounds / course_tee_holes / every
+    reader keep working), then create + seed `tee_set_ratings`.
+    Idempotent: a table that already has the v2 columns is left alone;
+    the ratings seed is a cheap INSERT OR IGNORE."""
+    cols = [r[1] for r in conn.execute("PRAGMA table_info(course_tees)").fetchall()]
+    out = {"rebuilt": False, "rows": 0}
+    if cols and not all(c in cols for c in _COURSE_TEES_V2_COLS):
+        have = set(cols)
+
+        def col(c, default="NULL"):
+            return c if c in have else default
+        gender_expr = (f"CASE WHEN {col('is_ladies', '0')} = 1 OR tee_name LIKE '%(L)%' "
+                       f"OR tee_name LIKE '%(F)%' OR tee_name LIKE '%Ladies%' "
+                       f"THEN 'F' ELSE 'M' END")
+        holes_expr = "CASE WHEN rating >= 50 THEN 18 ELSE 9 END"
+        nine_expr = (f"CASE WHEN rating >= 50 THEN 'full' "
+                     f"WHEN {col('nine')} IN ('front','back','both') THEN {col('nine')} "
+                     f"ELSE NULL END")
+        conn.execute("DROP TABLE IF EXISTS course_tees__v2")
+        conn.execute("CREATE TABLE course_tees__v2 " + COURSE_TEES_DDL)
+        n_before = conn.execute("SELECT COUNT(*) FROM course_tees").fetchone()[0]
+        conn.execute(f"""
+            INSERT OR IGNORE INTO course_tees__v2
+                (tee_id, course_id, tee_name, gender, holes, nine, slope, rating,
+                 yardage_total, is_ladies, source, version_label, valid_from,
+                 valid_to, created_at)
+            SELECT tee_id, course_id, tee_name, {gender_expr}, {holes_expr}, {nine_expr},
+                   slope, rating, {col('yardage_total')},
+                   CASE WHEN {gender_expr} = 'F' THEN 1 ELSE 0 END,
+                   'import', {col('version_label')}, {col('valid_from')},
+                   {col('valid_to')}, {col('created_at', "datetime('now')")}
+              FROM course_tees""")
+        n_after = conn.execute("SELECT COUNT(*) FROM course_tees__v2").fetchone()[0]
+        conn.execute("DROP TABLE course_tees")
+        conn.execute("ALTER TABLE course_tees__v2 RENAME TO course_tees")
+        out.update(rebuilt=True, rows=n_after, dropped=n_before - n_after)
+        logger.info("course_tees rebuilt to the USGA/WHS shape: %d rows (%d dropped)",
+                    n_after, n_before - n_after)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_course_tees_course ON course_tees(course_id)")
+    # `holes` follows the rating (a nine rates under 50): a writer that
+    # forgot to set it, or a fixture, gets healed here rather than read
+    # wrong — the rating is the fact, holes is its label.
+    conn.execute("""UPDATE course_tees
+                       SET holes = CASE WHEN rating >= 50 THEN 18 ELSE 9 END
+                     WHERE rating IS NOT NULL
+                       AND holes != CASE WHEN rating >= 50 THEN 18 ELSE 9 END""")
+    for ddl in ("ALTER TABLE courses ADD COLUMN gg_course_id TEXT",
+                "ALTER TABLE courses ADD COLUMN usga_course_id TEXT"):
+        try:
+            conn.execute(ddl)
+        except sqlite3.OperationalError:
+            pass
+    conn.execute(TEE_SET_RATINGS_DDL)
+    # Every tee set carries its own TOTAL rating row (front/back rows come
+    # from a course card, the USGA CRDB seed, or store_tee_nines).
+    conn.execute("""
+        INSERT OR IGNORE INTO tee_set_ratings (tee_id, rating_type, course_rating, slope, source)
+        SELECT ct.tee_id, 'total', ct.rating, ct.slope, ct.source
+          FROM course_tees ct
+         WHERE ct.rating IS NOT NULL AND ct.slope IS NOT NULL
+           AND NOT EXISTS (SELECT 1 FROM tee_set_ratings r
+                            WHERE r.tee_id = ct.tee_id AND r.rating_type = 'total')""")
+    return out
+
+
 def _ensure_scoring_tables(conn: sqlite3.Connection) -> None:
     # NB: courses / course_aliases / events.course_id already exist as the
     # canonical course registry (Events tab datalist reads it) — the scoring
     # layer ENRICHES that table with tees, never duplicates it.
-    conn.execute("""CREATE TABLE IF NOT EXISTS course_tees (
-        tee_id        INTEGER PRIMARY KEY AUTOINCREMENT,
-        course_id     INTEGER NOT NULL REFERENCES courses(course_id),
-        tee_name      TEXT,
-        slope         INTEGER,
-        rating        REAL,
-        yardage_total INTEGER,
-        created_at    TEXT DEFAULT (datetime('now')),
-        UNIQUE(course_id, tee_name, slope, rating))""")
+    conn.execute("CREATE TABLE IF NOT EXISTS course_tees " + COURSE_TEES_DDL)
     conn.execute("""CREATE TABLE IF NOT EXISTS course_tee_holes (
         tee_id       INTEGER NOT NULL REFERENCES course_tees(tee_id),
         hole_number  INTEGER NOT NULL,
@@ -15453,6 +15568,9 @@ def _ensure_scoring_tables(conn: sqlite3.Connection) -> None:
         yardage      INTEGER,
         stroke_index INTEGER,
         PRIMARY KEY (tee_id, hole_number))""")
+    # v2.466.0 (mailbox #576, Kerry-ratified): a live DB still on the old
+    # shape is rebuilt in place; the ratings table is created and seeded.
+    _migrate_course_tees_v2(conn)
     conn.execute("""CREATE TABLE IF NOT EXISTS scoring_rounds (
         id               INTEGER PRIMARY KEY AUTOINCREMENT,
         customer_id      INTEGER REFERENCES customers(customer_id),
@@ -15743,16 +15861,33 @@ def _upsert_course_tee(conn: sqlite3.Connection, tee: dict) -> tuple:
         course_id = conn.execute("INSERT INTO courses (name) VALUES (?)",
                                  (course_name,)).lastrowid
     yd = tee.get("yardage") or {}
-    conn.execute(
-        """INSERT OR IGNORE INTO course_tees (course_id, tee_name, slope, rating, yardage_total)
-           VALUES (?, ?, ?, ?, ?)""",
-        (course_id, tee.get("tee_name"), tee.get("slope"), tee.get("rating"),
-         sum(v for v in yd.values() if v) or None))
-    tee_id = conn.execute(
+    rating, slope = tee.get("rating"), tee.get("slope")
+    gender = _tee_gender_from_name(tee.get("tee_name"))
+    holes = 18 if (rating or 0) >= 50 else 9
+    # One tee set = one row: reuse a row of the same course, name, gender,
+    # holes and numbers whatever its nine label (the labeller sets that
+    # later); only insert when none exists.
+    row = conn.execute(
         """SELECT tee_id FROM course_tees WHERE course_id = ? AND tee_name IS ?
-           AND slope IS ? AND rating IS ?""",
-        (course_id, tee.get("tee_name"), tee.get("slope"), tee.get("rating")),
-    ).fetchone()["tee_id"]
+           AND gender = ? AND holes = ? AND slope IS ? AND rating IS ?
+           ORDER BY tee_id LIMIT 1""",
+        (course_id, tee.get("tee_name"), gender, holes, slope, rating)).fetchone()
+    if row:
+        tee_id = row["tee_id"]
+    else:
+        tee_id = conn.execute(
+            """INSERT INTO course_tees (course_id, tee_name, gender, holes, nine, slope,
+                                        rating, yardage_total, is_ladies, source)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'import')""",
+            (course_id, tee.get("tee_name"), gender, holes,
+             "full" if holes == 18 else None, slope, rating,
+             sum(v for v in yd.values() if v) or None,
+             1 if gender == "F" else 0)).lastrowid
+        if rating is not None and slope is not None:
+            conn.execute(
+                """INSERT OR IGNORE INTO tee_set_ratings
+                       (tee_id, rating_type, course_rating, slope, source)
+                   VALUES (?, 'total', ?, ?, 'import')""", (tee_id, rating, slope))
     par, si = tee.get("par") or {}, tee.get("stroke_index") or {}
     for hole in sorted(set(list(yd) + list(par) + list(si))):
         conn.execute(
@@ -21251,14 +21386,26 @@ def resolve_per_nine_from_course_tees(conn, course_id: int) -> dict:
 
     Returns {"per_nine": {full_tee_id: {"front": (r, s), "back": (r, s)}},
              "derivation": [...per full tee...], "unresolved": [...]}."""
+    # v2.466.0 (USGA/WHS shape, mailbox #576): the FRONT and BACK rating
+    # rows sit on the 18-hole set itself in tee_set_ratings (a course
+    # card, the USGA CRDB seed or store_tee_nines put them there). Only a
+    # set with none falls back to pairing the course's Tuesday nine-hole
+    # rows of the same tee name AND GENDER.
+    _migrate_course_tees_v2(conn)
     label_course_tee_nines(conn, course_id)
     rows = [dict(r) for r in conn.execute(
-        "SELECT tee_id, tee_name, rating, slope, yardage_total, nine "
+        "SELECT tee_id, tee_name, gender, holes, rating, slope, yardage_total, nine, source "
         "FROM course_tees WHERE course_id = ?", (course_id,)).fetchall()]
+    ratings: dict = {}
+    for r in conn.execute(
+            """SELECT r.tee_id, r.rating_type, r.course_rating, r.slope, r.source
+                 FROM tee_set_ratings r JOIN course_tees ct ON ct.tee_id = r.tee_id
+                WHERE ct.course_id = ?""", (course_id,)).fetchall():
+        ratings.setdefault(r["tee_id"], {})[r["rating_type"]] = dict(r)
 
     def _key(r):
-        return _TEE_ORDER_RE.sub("", " ".join(
-            (r["tee_name"] or "").split())).strip().lower()
+        return (r.get("gender") or "M", _TEE_ORDER_RE.sub("", " ".join(
+            (r["tee_name"] or "").split())).strip().lower())
 
     groups: dict = {}
     for r in rows:
@@ -21267,17 +21414,38 @@ def resolve_per_nine_from_course_tees(conn, course_id: int) -> dict:
     derivation: list = []
     unresolved: list = []
     for key, grp in groups.items():
-        fulls = [r for r in grp if (r["nine"] or "") == "full" or (r["rating"] or 0) >= 50]
-        fronts = [r for r in grp if (r["nine"] or "") == "front"]
-        backs = [r for r in grp if (r["nine"] or "") == "back"]
+        fulls = [r for r in grp if int(r["holes"] or 0) == 18 or (r["rating"] or 0) >= 50]
+        fronts = [r for r in grp if (r["nine"] or "") in ("front", "both")]
+        backs = [r for r in grp if (r["nine"] or "") in ("back", "both")]
         for full in fulls:
             if not full["rating"] or not full["slope"]:
                 unresolved.append({"tee_id": full["tee_id"], "tee_name": full["tee_name"],
+                                   "gender": full["gender"],
                                    "why": "18-hole row has no rating/slope"})
+                continue
+            rr = ratings.get(full["tee_id"], {})
+            if "front" in rr and "back" in rr:
+                fr, bk = rr["front"], rr["back"]
+                per_nine[int(full["tee_id"])] = {
+                    "front": (float(fr["course_rating"]), int(fr["slope"])),
+                    "back": (float(bk["course_rating"]), int(bk["slope"]))}
+                derivation.append({
+                    "tee_id": full["tee_id"], "tee_name": full["tee_name"],
+                    "gender": full["gender"], "rating_18": full["rating"],
+                    "slope_18": full["slope"], "how": "tee_set_ratings",
+                    "front": {"rating": fr["course_rating"], "slope": fr["slope"],
+                              "source": fr["source"]},
+                    "back": {"rating": bk["course_rating"], "slope": bk["slope"],
+                             "source": bk["source"]},
+                    "check": f"{fr['course_rating']} + {bk['course_rating']} = "
+                             f"{round(fr['course_rating'] + bk['course_rating'], 1)} "
+                             f"vs {full['rating']}"})
                 continue
             fits = []
             for fr in fronts:
                 for bk in backs:
+                    if fr is bk and (fr["nine"] or "") != "both":
+                        continue
                     if not (fr["rating"] and bk["rating"] and fr["slope"] and bk["slope"]):
                         continue
                     if abs((fr["rating"] + bk["rating"]) - full["rating"]) <= 0.15:
@@ -21294,7 +21462,8 @@ def resolve_per_nine_from_course_tees(conn, course_id: int) -> dict:
                     "back": (float(bk["rating"]), int(bk["slope"]))}
                 derivation.append({
                     "tee_id": full["tee_id"], "tee_name": full["tee_name"],
-                    "rating_18": full["rating"], "slope_18": full["slope"],
+                    "gender": full["gender"], "rating_18": full["rating"],
+                    "slope_18": full["slope"], "how": "paired nine-hole rows",
                     "front": {"tee_id": fr["tee_id"], "rating": fr["rating"], "slope": fr["slope"]},
                     "back": {"tee_id": bk["tee_id"], "rating": bk["rating"], "slope": bk["slope"]},
                     "check": f"{fr['rating']} + {bk['rating']} = "
@@ -21302,12 +21471,15 @@ def resolve_per_nine_from_course_tees(conn, course_id: int) -> dict:
             elif not fits:
                 unresolved.append({
                     "tee_id": full["tee_id"], "tee_name": full["tee_name"],
-                    "why": (f"no front+back pair sums to the 18-hole rating "
-                            f"{full['rating']} (fronts {[f['rating'] for f in fronts]}, "
-                            f"backs {[b['rating'] for b in backs]})")})
+                    "gender": full["gender"],
+                    "why": (f"no front/back rating rows on the set and no nine-hole pair "
+                            f"sums to the 18-hole rating {full['rating']} (fronts "
+                            f"{[f['rating'] for f in fronts]}, backs "
+                            f"{[b['rating'] for b in backs]})")})
             else:
                 unresolved.append({
                     "tee_id": full["tee_id"], "tee_name": full["tee_name"],
+                    "gender": full["gender"],
                     "why": f"{len(fits)} front+back pairs fit the 18-hole rating "
                            f"{full['rating']} — ambiguous, not guessing",
                     "pairs": [[fr["tee_id"], bk["tee_id"]] for fr, bk in fits]})
@@ -21316,124 +21488,193 @@ def resolve_per_nine_from_course_tees(conn, course_id: int) -> dict:
 
 
 def store_tee_nines(conn, full_tee_id: int, front: tuple, back: tuple,
-                    dry_run: bool = True, note: str = "") -> dict:
-    """Put a tee's FRONT and BACK nine on the course record beside its
-    18-hole row, so the per-nine posting resolves it without asking.
-
-    `course_tees` accretes from scorecard imports — a row exists only for
-    a tee somebody played a round off. A course TGF plays only as an 18
-    (Kissing Tree, Landa Park, Lost Pines…) therefore has no nine-hole
-    rows, and the numbers Kerry read off Golf Genius for those events
-    lived in a JSON paste-in and a doc table. Kerry 2026-09-19: "Why
-    wouldn't those tees be on the course record? … I want to make sure
-    we have all the data."
-
-    Writes two rows named like the 18 (nine='front' / 'back', yardage
-    and holes copied from the 18's card when it has one) and REFUSES a
-    pair that does not sum to the 18-hole rating (± 0.15) — the same
-    corroboration the resolver demands. A half already on the record
-    (same tee name, rating and slope) is kept, not duplicated. Dry run
-    by default."""
-    try:
-        conn.execute("ALTER TABLE course_tees ADD COLUMN nine TEXT")
-    except sqlite3.OperationalError:
-        pass
+                    dry_run: bool = True, note: str = "", bogey=None,
+                    source: str = "admin") -> dict:
+    """Put a tee set's FRONT and BACK ratings on the record — as rating
+    rows on the 18-hole tee set (USGA/WHS shape, v2.466.0), each with its
+    own slope. Refuses a pair that does not sum to the 18-hole rating
+    (± 0.15). Dry run by default; `source` is 'admin' (Kerry's read off
+    GG) or 'usga_crdb'. Identical halves are simply two rows now —
+    Kerry 2026-09-19: "I want to make sure we have all the data."."""
+    _migrate_course_tees_v2(conn)
     full = conn.execute(
-        "SELECT tee_id, course_id, tee_name, rating, slope, yardage_total "
+        "SELECT tee_id, course_id, tee_name, gender, holes, rating, slope "
         "FROM course_tees WHERE tee_id = ?", (full_tee_id,)).fetchone()
     if not full:
         return {"ok": False, "error": f"no course_tees row {full_tee_id}"}
     if (full["rating"] or 0) < 50:
         return {"ok": False, "error": f"tee {full_tee_id} ({full['tee_name']}) is a "
-                                      f"nine-hole row (rating {full['rating']}), not an 18"}
+                                      f"nine-hole set (rating {full['rating']}), not an 18"}
     fr, fs = float(front[0]), int(front[1])
     br, bs = float(back[0]), int(back[1])
     if abs((fr + br) - float(full["rating"])) > 0.15:
         return {"ok": False, "error": f"front {fr} + back {br} = {round(fr + br, 1)} does not "
                                       f"equal the 18-hole rating {full['rating']} — not storing"}
-    holes = {int(h["hole_number"]): h for h in conn.execute(
-        "SELECT hole_number, par, yardage, stroke_index FROM course_tee_holes "
-        "WHERE tee_id = ?", (full_tee_id,)).fetchall()}
-    out = {"ok": True, "dry_run": dry_run, "course_id": full["course_id"],
-           "tee_name": full["tee_name"], "rating_18": full["rating"],
+    out = {"ok": True, "dry_run": dry_run, "tee_id": full_tee_id,
+           "course_id": full["course_id"], "tee_name": full["tee_name"],
+           "gender": full["gender"], "rating_18": full["rating"],
            "slope_18": full["slope"], "rows": []}
-    used_ids: set = set()
-    for nine, (r, sl), rng in (("front", (fr, fs), range(1, 10)),
-                               ("back", (br, bs), range(10, 19))):
-        # A half already on record is kept — but ONE row is ONE nine. A
-        # tee whose halves rate identically (Forest Creek White: 35.2/125
-        # both ways) must not have its single Tuesday row counted as both
-        # the front and the back; the other half is inserted.
-        existing = None
-        for cand in conn.execute(
-                """SELECT tee_id, nine FROM course_tees
-                    WHERE course_id = ? AND tee_name = ? AND rating = ? AND slope = ?
-                      AND rating < 50 ORDER BY tee_id""",
-                (full["course_id"], full["tee_name"], r, sl)).fetchall():
-            if cand["tee_id"] in used_ids:
-                continue
-            if (cand["nine"] or "") in ("", nine):
-                existing = cand
-                break
-        yards = sum((holes[i]["yardage"] or 0) for i in rng if i in holes) or None
-        if existing:
-            used_ids.add(existing["tee_id"])
-            row = {"nine": nine, "rating": r, "slope": sl, "tee_id": existing["tee_id"],
-                   "action": "kept (already on record)"}
-            if not dry_run and (existing["nine"] or "") != nine:
-                conn.execute("UPDATE course_tees SET nine = ? WHERE tee_id = ?",
-                             (nine, existing["tee_id"]))
-                row["action"] = f"kept; nine label set to {nine}"
-            out["rows"].append(row)
+    for rtype, (r, sl) in (("front", (fr, fs)), ("back", (br, bs))):
+        cur = conn.execute(
+            "SELECT course_rating, slope, source FROM tee_set_ratings "
+            "WHERE tee_id = ? AND rating_type = ?", (full_tee_id, rtype)).fetchone()
+        if cur and float(cur["course_rating"]) == r and int(cur["slope"]) == sl:
+            out["rows"].append({"rating_type": rtype, "rating": r, "slope": sl,
+                                "action": f"kept (already on record, source {cur['source']})"})
             continue
-        # SCHEMA LIMIT (found 2026-09-19 on Forest Creek White, 35.2/125
-        # both nines): course_tees is UNIQUE(course_id, tee_name, slope,
-        # rating) — the natural key has no `nine` in it, so two halves
-        # that rate identically cannot both exist. The import's INSERT OR
-        # IGNORE drops the second silently; this writer says so instead.
-        # Fix = a table rebuild adding `nine` to the key (rule 3b).
-        clash = conn.execute(
-            """SELECT tee_id, nine FROM course_tees
-                WHERE course_id = ? AND tee_name = ? AND rating = ? AND slope = ?
-                  AND rating < 50""",
-            (full["course_id"], full["tee_name"], r, sl)).fetchone()
-        if clash:
-            out["rows"].append({
-                "nine": nine, "rating": r, "slope": sl, "tee_id": None,
-                "action": "BLOCKED: identical halves — course_tees UNIQUE(course_id, "
-                          f"tee_name, slope, rating) already holds tee {clash['tee_id']} "
-                          f"({clash['nine'] or 'unlabelled'}) at {r}/{sl}; the natural "
-                          "key needs `nine` (schema change, Kerry's go)"})
-            out["ok"] = False
-            continue
-        row = {"nine": nine, "rating": r, "slope": sl, "yardage_total": yards,
-               "holes_copied": sum(1 for i in rng if i in holes),
-               "action": "would insert" if dry_run else "inserted"}
+        action = (("would replace" if cur else "would insert") if dry_run
+                  else ("replaced" if cur else "inserted"))
+        if cur:
+            action += f" (was {cur['course_rating']}/{cur['slope']}, {cur['source']})"
         if not dry_run:
-            cur = conn.execute(
-                """INSERT INTO course_tees (course_id, tee_name, slope, rating,
-                                            yardage_total, nine)
-                   VALUES (?, ?, ?, ?, ?, ?)""",
-                (full["course_id"], full["tee_name"], sl, r, yards, nine))
-            new_id = cur.lastrowid
-            for k, i in enumerate(rng, start=1):
-                h = holes.get(i)
-                if h:
-                    conn.execute(
-                        """INSERT OR REPLACE INTO course_tee_holes
-                           (tee_id, hole_number, par, yardage, stroke_index)
-                           VALUES (?, ?, ?, ?, ?)""",
-                        (new_id, k, h["par"], h["yardage"], h["stroke_index"]))
-            row["tee_id"] = new_id
-            used_ids.add(new_id)
-            try:
-                log_agent_action("mcp-claude", "store_tee_nines",
-                                 f"course {full['course_id']} {full['tee_name']} "
-                                 f"{nine} {r}/{sl} -> tee {new_id} {note}".strip())
-            except Exception:
-                pass
-        out["rows"].append(row)
+            conn.execute(
+                """INSERT OR REPLACE INTO tee_set_ratings
+                       (tee_id, rating_type, course_rating, slope, bogey_rating, source)
+                   VALUES (?, ?, ?, ?, NULL, ?)""", (full_tee_id, rtype, r, sl, source))
+        out["rows"].append({"rating_type": rtype, "rating": r, "slope": sl, "action": action})
     if not dry_run:
+        conn.execute(
+            """INSERT OR IGNORE INTO tee_set_ratings
+                   (tee_id, rating_type, course_rating, slope, source)
+               VALUES (?, 'total', ?, ?, ?)""",
+            (full_tee_id, full["rating"], full["slope"], source))
+        if bogey is not None:
+            conn.execute("UPDATE tee_set_ratings SET bogey_rating = ? WHERE tee_id = ? "
+                         "AND rating_type = 'total'", (float(bogey), full_tee_id))
+            conn.execute("UPDATE course_tees SET bogey_rating = ? WHERE tee_id = ?",
+                         (float(bogey), full_tee_id))
+        try:
+            log_agent_action("mcp-claude", "store_tee_nines",
+                             f"tee {full_tee_id} {full['tee_name']} {full['gender']} "
+                             f"front {fr}/{fs} back {br}/{bs} {source} {note}".strip())
+        except Exception:
+            pass
+        conn.commit()
+    return out
+
+
+# USGA Course Rating Database (ncrdb.usga.org) — the source of record for
+# course data (mailbox #576, Kerry 2026-09-19). Each set: name, gender,
+# 18 rating, 18 slope, bogey, (front rating, slope), (back rating, slope).
+# Numbers pulled by Kerry; every front+back sum checked by CA (#576) and
+# re-checked by seed_usga_crdb before a row is written. Keyed by the
+# Tracker course_id.
+USGA_CRDB_SEEDS = {
+    22362: {"course": "Kissing Tree Golf Club", "par": 72, "sets": [
+        ("Back", "M", 71.4, 143, 98.0, (35.6, 144), (35.8, 142)),
+        ("Back/KT", "M", 69.9, 135, 94.9, (35.1, 140), (34.8, 129)),
+        ("KT", "M", 69.4, 124, 92.3, (35.0, 125), (34.4, 122)),
+        ("KT/Legends", "M", 68.1, 121, 90.6, (34.3, 123), (33.8, 119)),
+        ("Legends", "M", 66.9, 118, 88.8, (33.6, 119), (33.3, 116)),
+        ("Legends/Forward", "M", 66.4, 110, 86.7, (33.3, 111), (33.1, 108)),
+        ("Forward", "M", 65.1, 101, 83.8, (32.4, 101), (32.7, 100)),
+        ("Back", "F", 78.3, 150, 113.7, (39.0, 149), (39.3, 151)),
+        ("Back/KT", "F", 76.6, 147, 111.1, (38.4, 147), (38.2, 146)),
+        ("KT", "F", 75.5, 145, 109.6, (37.7, 143), (37.8, 146)),
+        ("KT/Legends", "F", 73.4, 137, 105.8, (36.7, 132), (36.7, 142)),
+        ("Legends", "F", 71.3, 134, 102.8, (35.6, 134), (35.7, 133)),
+        ("Legends/Forward", "F", 70.2, 126, 99.8, (35.1, 126), (35.1, 126)),
+        ("Forward", "F", 68.7, 118, 96.5, (34.3, 120), (34.4, 116)),
+    ]},
+    29522: {"course": "Forest Creek Golf Club", "par": 72, "sets": [
+        ("Blue", "M", 72.2, 132, 96.8, (35.9, 133), (36.3, 131)),
+        ("White", "M", 70.4, 125, 93.6, (35.2, 125), (35.2, 125)),
+        ("Green", "M", 68.5, 120, 90.8, (34.3, 119), (34.2, 121)),
+        ("Red", "M", 65.2, 113, 86.1, (32.8, 111), (32.4, 114)),
+        ("White", "F", 75.6, 138, 108.0, (37.7, 139), (37.9, 136)),
+        ("Green", "F", 72.7, 133, 104.0, (36.2, 134), (36.5, 131)),
+        ("Red", "F", 68.5, 121, 97.0, (34.1, 121), (34.4, 120)),
+    ]},
+}
+
+
+def seed_usga_crdb(conn, course_id: int, sets: list | None = None,
+                   dry_run: bool = True) -> dict:
+    """Write a course's USGA CRDB tee sets onto the record. Each set is
+    (name, gender, r18, s18, bogey, (fr, fs), (br, bs)) — from
+    USGA_CRDB_SEEDS when `sets` is None. An existing 18-hole row is
+    matched by (gender, rating, slope) first, then by name + gender; a
+    set with no row is inserted as a new tee set (source 'usga_crdb',
+    combo names like 'Back/KT' flagged is_combo). Every set gets its
+    total / front / back rating rows with bogey. Dry run by default."""
+    _migrate_course_tees_v2(conn)
+    seed = (USGA_CRDB_SEEDS.get(int(course_id)) if sets is None
+            else {"sets": sets, "par": None})
+    if not seed:
+        return {"ok": False, "error": f"no USGA CRDB seed for course {course_id}",
+                "known": {k: v["course"] for k, v in USGA_CRDB_SEEDS.items()}}
+    course = conn.execute("SELECT course_id, name FROM courses WHERE course_id = ?",
+                          (course_id,)).fetchone()
+    if not course:
+        return {"ok": False, "error": f"no courses row {course_id}"}
+    par = seed.get("par")
+    out = {"ok": True, "dry_run": dry_run, "course_id": course_id,
+           "course": course["name"], "sets": []}
+    existing = [dict(r) for r in conn.execute(
+        "SELECT tee_id, tee_name, gender, rating, slope, usga_tee_label FROM course_tees "
+        "WHERE course_id = ? AND holes = 18", (course_id,)).fetchall()]
+    used: set = set()
+
+    def _norm(n):
+        n = _TEE_ORDER_RE.sub("", " ".join((n or "").split())).strip().lower()
+        for junk in (" tee", "(l)", "(kt)", "(legends)"):
+            n = n.replace(junk, "")
+        return " ".join(n.split())
+
+    for name, gender, r18, s18, bogey, (fr, fs), (br, bs) in seed["sets"]:
+        if abs((fr + br) - r18) > 0.15:
+            out["sets"].append({"name": name, "gender": gender,
+                                "error": f"front {fr} + back {br} != 18 {r18} — skipped"})
+            continue
+        match = next((e for e in existing if e["tee_id"] not in used
+                      and e["gender"] == gender and float(e["rating"] or 0) == r18
+                      and int(e["slope"] or 0) == s18), None)
+        how = "matched by gender + rating/slope" if match else None
+        if not match:
+            match = next((e for e in existing if e["tee_id"] not in used
+                          and e["gender"] == gender
+                          and (_norm(e["tee_name"]) == name.lower()
+                               or (e["usga_tee_label"] or "").lower() == name.lower())), None)
+            how = "matched by name + gender" if match else None
+        entry = {"name": name, "gender": gender, "r18": r18, "s18": s18, "bogey": bogey,
+                 "front": [fr, fs], "back": [br, bs]}
+        tee_id = None
+        if match:
+            used.add(match["tee_id"])
+            tee_id = match["tee_id"]
+            entry.update(tee_id=tee_id, existing_name=match["tee_name"], action=how)
+            if float(match["rating"] or 0) != r18 or int(match["slope"] or 0) != s18:
+                entry["note"] = (f"record has {match['rating']}/{match['slope']}; CRDB says "
+                                 f"{r18}/{s18} — rating rows corrected, tee row kept")
+        else:
+            entry.update(action="would insert" if dry_run else "inserted",
+                         is_combo=1 if "/" in name else 0)
+            if not dry_run:
+                tee_id = conn.execute(
+                    """INSERT INTO course_tees (course_id, tee_name, gender, holes, nine, par,
+                                                slope, rating, bogey_rating, is_combo,
+                                                is_ladies, usga_tee_label, source)
+                       VALUES (?, ?, ?, 18, 'full', ?, ?, ?, ?, ?, ?, ?, 'usga_crdb')""",
+                    (course_id, name, gender, par, s18, r18, bogey, 1 if "/" in name else 0,
+                     1 if gender == "F" else 0, name)).lastrowid
+                entry["tee_id"] = tee_id
+        if not dry_run and tee_id is not None:
+            conn.execute("""UPDATE course_tees SET usga_tee_label = ?, bogey_rating = ?,
+                                   par = COALESCE(?, par) WHERE tee_id = ?""",
+                         (name, bogey, par, tee_id))
+            for rtype, cr, sl, bg in (("total", r18, s18, bogey), ("front", fr, fs, None),
+                                      ("back", br, bs, None)):
+                conn.execute(
+                    """INSERT OR REPLACE INTO tee_set_ratings
+                           (tee_id, rating_type, course_rating, slope, bogey_rating, source)
+                       VALUES (?, ?, ?, ?, ?, 'usga_crdb')""", (tee_id, rtype, cr, sl, bg))
+        out["sets"].append(entry)
+    if not dry_run:
+        try:
+            log_agent_action("mcp-claude", "seed_usga_crdb",
+                             f"course {course_id} {course['name']}: {len(out['sets'])} sets")
+        except Exception:
+            pass
         conn.commit()
     return out
 
@@ -21462,7 +21703,8 @@ def audit_course_per_nine(conn, only_played: bool = True) -> dict:
             continue
         res = resolve_per_nine_from_course_tees(conn, int(c["course_id"]))
         out.append({**c, "resolved": [
-            {"tee_id": d["tee_id"], "tee": d["tee_name"], "front": d["front"], "back": d["back"],
+            {"tee_id": d["tee_id"], "tee": d["tee_name"], "gender": d.get("gender"),
+             "how": d.get("how"), "front": d["front"], "back": d["back"],
              "check": d["check"]} for d in res["derivation"]],
             "unresolved": res["unresolved"]})
     out.sort(key=lambda c: (c["next_event_date"] is None, c["next_event_date"] or "",
@@ -24533,11 +24775,25 @@ def list_courses(db_path: str | Path = DB_PATH) -> list:
                GROUP BY c.course_id ORDER BY c.name""").fetchall()
         out = []
         for r in rows:
-            tees = conn.execute(
-                """SELECT tee_id, tee_name, slope, rating, yardage_total
+            tees = [dict(t) for t in conn.execute(
+                """SELECT tee_id, tee_name, gender, holes, nine, par, slope, rating,
+                          bogey_rating, yardage_total, is_combo, source, usga_tee_label
                    FROM course_tees WHERE course_id = ? ORDER BY tee_id""",
-                (r["course_id"],)).fetchall()
-            out.append(dict(r) | {"tees": [dict(t) for t in tees]})
+                (r["course_id"],)).fetchall()]
+            rr: dict = {}
+            for x in conn.execute(
+                    """SELECT r.tee_id, r.rating_type, r.course_rating, r.slope,
+                              r.bogey_rating, r.source
+                         FROM tee_set_ratings r JOIN course_tees ct ON ct.tee_id = r.tee_id
+                        WHERE ct.course_id = ? ORDER BY r.tee_id,
+                              CASE r.rating_type WHEN 'total' THEN 0 WHEN 'front' THEN 1 ELSE 2 END""",
+                    (r["course_id"],)).fetchall():
+                rr.setdefault(x["tee_id"], []).append(
+                    {k: x[k] for k in ("rating_type", "course_rating", "slope",
+                                       "bogey_rating", "source")})
+            for t in tees:
+                t["ratings"] = rr.get(t["tee_id"], [])
+            out.append(dict(r) | {"tees": tees})
         return out
 
 
@@ -58156,71 +58412,50 @@ def import_course_card(key: str, dry_run: bool = True, db_path=None) -> dict:
             pass
         cid = card["course_id"]
         for tee in card["tees"]:
+            gender = _tee_gender_from_name(tee["name"])
             spans = (
-                ("full", tee["r18"], tee["s18"], list(range(1, 19)), 0),
-                ("front", tee["front"][0], tee["front"][1], list(range(1, 10)), 0),
+                ("full", tee["r18"], tee["s18"], list(range(1, 19)), 18),
+                ("front", tee["front"][0], tee["front"][1], list(range(1, 10)), 9),
                 ("back", tee["back"][0], tee["back"][1], list(range(10, 19)), 9),
             )
-            for nine, rating, slope, holes, off in spans:
-                yards = [tee["yards"][h - 1] for h in
-                         (holes if nine != "back" else range(10, 19))]
+            full_tee_id = None
+            for nine, rating, slope, holes, nholes in spans:
+                yards = [tee["yards"][h - 1] for h in holes]
                 total = sum(yards)
-                # A tee whose FRONT and BACK carry the same rating and
-                # slope (Forest Creek's White: 35.2/125 both ways) can
-                # only ever be ONE row — the table is unique on
-                # (course, tee, slope, rating) and there is nothing to
-                # tell two such rows apart. It is labelled 'both' and
-                # carries all eighteen holes, which is the truth: either
-                # nine plays off those numbers.
-                if (nine == "back" and tee["front"] == tee["back"]):
-                    prior = conn.execute(
-                        """SELECT tee_id FROM course_tees
-                            WHERE course_id = ? AND tee_name = ?
-                              AND slope = ? AND rating = ?""",
-                        (cid, tee["name"], slope, rating)).fetchone()
-                    if prior and not dry_run:
-                        conn.execute(
-                            "UPDATE course_tees SET nine = 'both' "
-                            "WHERE tee_id = ?", (prior["tee_id"],))
-                        for h in range(10, 19):
-                            conn.execute(
-                                """INSERT OR REPLACE INTO course_tee_holes
-                                       (tee_id, hole_number, par, yardage,
-                                        stroke_index)
-                                   VALUES (?, ?, ?, ?, ?)""",
-                                (prior["tee_id"], h, tee["par"][h - 1],
-                                 tee["yards"][h - 1], tee["si"][h - 1]))
-                    out["rows"].append({
-                        "tee_name": tee["name"], "nine": "both",
-                        "rating": rating, "slope": slope,
-                        "yardage_total": total,
-                        "tee_id": prior["tee_id"] if prior else None,
-                        "action": "merged into the front row — this tee's "
-                                  "nines are rated identically",
-                        "holes": 9 if not dry_run else 0})
-                    out["holes_written"] += 0 if dry_run else 9
-                    continue
+                # v2.466.0: the natural key carries gender, holes and nine,
+                # so a tee whose halves rate identically (Forest Creek
+                # White, 35.2/125 both ways) is simply two rows — the old
+                # 'both' merge is gone. Rows already labelled 'both' keep
+                # working (the resolver reads them as either half).
                 row = conn.execute(
                     """SELECT tee_id FROM course_tees
-                        WHERE course_id = ? AND tee_name = ?
-                          AND slope = ? AND rating = ?""",
-                    (cid, tee["name"], slope, rating)).fetchone()
+                        WHERE course_id = ? AND tee_name = ? AND gender = ?
+                          AND holes = ? AND slope = ? AND rating = ?
+                          AND (nine = ? OR nine IS NULL OR nine = 'both')
+                        ORDER BY CASE WHEN nine = ? THEN 0 ELSE 1 END, tee_id""",
+                    (cid, tee["name"], gender, nholes, slope, rating, nine, nine)).fetchone()
                 action = "existing"
                 tee_id = row["tee_id"] if row else None
+                span_par = sum(tee["par"][h - 1] for h in holes)
                 if tee_id is None:
                     action = "new"
                     if not dry_run:
                         cur = conn.execute(
                             """INSERT INTO course_tees
-                                   (course_id, tee_name, slope, rating,
-                                    yardage_total, nine)
-                               VALUES (?, ?, ?, ?, ?, ?)""",
-                            (cid, tee["name"], slope, rating, total, nine))
+                                   (course_id, tee_name, gender, holes, nine, slope,
+                                    rating, yardage_total, is_ladies, source, par)
+                               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'course_card', ?)""",
+                            (cid, tee["name"], gender, nholes, nine, slope, rating,
+                             total, 1 if gender == "F" else 0, span_par))
                         tee_id = cur.lastrowid
                 elif not dry_run:
                     conn.execute(
-                        "UPDATE course_tees SET yardage_total = ?, nine = ? "
-                        "WHERE tee_id = ?", (total, nine, tee_id))
+                        """UPDATE course_tees SET yardage_total = ?,
+                                  nine = CASE WHEN nine = 'both' THEN nine ELSE ? END,
+                                  par = ? WHERE tee_id = ?""",
+                        (total, nine, span_par, tee_id))
+                if nine == "full":
+                    full_tee_id = tee_id
                 n_holes = 0
                 if not dry_run and tee_id is not None:
                     for h in holes:
@@ -58232,10 +58467,24 @@ def import_course_card(key: str, dry_run: bool = True, db_path=None) -> dict:
                             (tee_id, h, tee["par"][h - 1],
                              tee["yards"][h - 1], tee["si"][h - 1]))
                         n_holes += 1
+                    conn.execute(
+                        """INSERT OR REPLACE INTO tee_set_ratings
+                               (tee_id, rating_type, course_rating, slope, source)
+                           VALUES (?, 'total', ?, ?, 'course_card')""",
+                        (tee_id, rating, slope))
+                    # The card's front/back numbers live on the 18-hole set
+                    # too — the standard shape; no sibling row is needed to
+                    # post an 18-hole event as two nines.
+                    if nine in ("front", "back") and full_tee_id is not None:
+                        conn.execute(
+                            """INSERT OR REPLACE INTO tee_set_ratings
+                                   (tee_id, rating_type, course_rating, slope, source)
+                               VALUES (?, ?, ?, ?, 'course_card')""",
+                            (full_tee_id, nine, rating, slope))
                 out["holes_written"] += n_holes
                 out["rows"].append({
-                    "tee_name": tee["name"], "nine": nine, "rating": rating,
-                    "slope": slope, "yardage_total": total,
+                    "tee_name": tee["name"], "gender": gender, "nine": nine,
+                    "rating": rating, "slope": slope, "yardage_total": total,
                     "tee_id": tee_id, "action": action, "holes": n_holes})
         if not dry_run:
             conn.commit()
@@ -58260,15 +58509,12 @@ def label_course_tee_nines(conn, course_id: int | None = None) -> dict:
 
     Writes `course_tees.nine` ('front' | 'back' | 'full'); returns what
     it decided and, for anything it could not, why. Idempotent."""
-    try:
-        conn.execute("ALTER TABLE course_tees ADD COLUMN nine TEXT")
-    except sqlite3.OperationalError:
-        pass
+    _migrate_course_tees_v2(conn)
     where, args = "", []
     if course_id:
         where, args = " WHERE ct.course_id = ?", [course_id]
     rows = [dict(r) for r in conn.execute(
-        "SELECT ct.tee_id, ct.course_id, ct.tee_name, ct.rating, ct.slope, "
+        "SELECT ct.tee_id, ct.course_id, ct.tee_name, ct.gender, ct.rating, ct.slope, "
         "ct.yardage_total, ct.nine FROM course_tees ct" + where, args).fetchall()]
     holes: dict = {}
     for h in conn.execute(
@@ -58278,7 +58524,7 @@ def label_course_tee_nines(conn, course_id: int | None = None) -> dict:
         holes.setdefault(h["tee_id"], {})[int(h["hole_number"])] = h["yardage"]
 
     def _key(r):
-        return (r["course_id"], _TEE_ORDER_RE.sub("", " ".join(
+        return (r["course_id"], r.get("gender") or "M", _TEE_ORDER_RE.sub("", " ".join(
             (r["tee_name"] or "").split())).strip().lower())
 
     groups: dict = {}

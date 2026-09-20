@@ -170,10 +170,12 @@ Do not assume it — read it — but do not redo it either.
     standard?" Read `per_nine_source` in the result: it shows the
     derivation per tee and anything unresolved. A tee it could not
     resolve (no nine-hole rows on file, or two re-rated pairs that both
-    fit) is skipped with the reason; ONLY THEN read the numbers off GG's
-    course setup and STORE them on the record with
-    `scoring-tee-nines-store:<full_tee_id>|<fr>,<fs>|<br>,<bs>|apply`
-    (Kerry's go — course data), then re-run; the JSON override
+    fit) is skipped with the reason; ONLY THEN fetch the course from the
+    USGA Course Rating Database (ncrdb.usga.org — the source of record,
+    #576) and seed it: `scoring-crdb-seed:<course_id>|<json>|apply`
+    (or `scoring-tee-nines-store:<full_tee_id>|<fr>,<fs>|<br>,<bs>|apply`
+    for a single set read off GG; Kerry's go — course data), then re-run;
+    the JSON override
     (`…|{"<tee_id>":{"front":[r,s],"back":[r,s]}}|apply`) is the
     one-off. `scoring-per-nine-audit` before an 18-hole day says whether
     its course will resolve. Cedar Creek 2026-09-19 was asked for twice
