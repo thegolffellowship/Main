@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.466.1";
+window.TGF_VERSION = "2.466.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.466.2",
+    date: "2026-09-20",
+    changes: [
+      "A course-card DRY RUN no longer renames the CRDB set it would adopt \u2014 the v2.466.1 adoption wrote GG\u2019s name during the preview (harmless, the apply does the same, but a dry run must not write). The seed + cards + staged tees are on the live record: Kissing Tree 14 sets, Forest Creek 7 (+ the Gold card tee), Falconhead / Vaaler Creek / Lost Pines nines stored, Avery Ranch and Cedar Creek 18-hole sets from their cards; `scoring-per-nine-audit` 29 \u2192 60+ tees resolved.",
+    ],
+  },
   {
     version: "2.466.1",
     date: "2026-09-20",

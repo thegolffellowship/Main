@@ -15845,7 +15845,7 @@ def compute_hole_derivations(par: int | None, strokes: int | None,
 
 
 def _adopt_crdb_tee_set(conn: sqlite3.Connection, course_id, tee_name: str,
-                        gender: str, slope, rating):
+                        gender: str, slope, rating, dry_run: bool = False):
     """A set the USGA CRDB seed wrote is named the way the CRDB names it
     ("Green"); Golf Genius names the same set "3 - Green Tee". When a GG
     writer misses on the exact name but an 18-hole row of the same
@@ -15865,8 +15865,9 @@ def _adopt_crdb_tee_set(conn: sqlite3.Connection, course_id, tee_name: str,
         (course_id, gender, slope, rating)).fetchone()
     if not row:
         return None
-    conn.execute("UPDATE course_tees SET tee_name = ? WHERE tee_id = ?",
-                 (tee_name, row["tee_id"]))
+    if not dry_run:
+        conn.execute("UPDATE course_tees SET tee_name = ? WHERE tee_id = ?",
+                     (tee_name, row["tee_id"]))
     return row["tee_id"]
 
 
@@ -58466,7 +58467,8 @@ def import_course_card(key: str, dry_run: bool = True, db_path=None) -> dict:
                 action = "existing"
                 tee_id = row["tee_id"] if row else None
                 if tee_id is None and nine == "full":
-                    tee_id = _adopt_crdb_tee_set(conn, cid, tee["name"], gender, slope, rating)
+                    tee_id = _adopt_crdb_tee_set(conn, cid, tee["name"], gender, slope, rating,
+                                                 dry_run=dry_run)
                     if tee_id is not None:
                         action = "existing (CRDB set, renamed)"
                 span_par = sum(tee["par"][h - 1] for h in holes)

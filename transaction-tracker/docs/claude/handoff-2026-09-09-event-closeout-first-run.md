@@ -494,6 +494,63 @@ race standings fetched 2:04 PM still show Tuesday's numbers (Wade on
 20 with a tied-1st net) — GG had not posted Saturday's points; monthly
 cache 05:30 pre-round. Both flagged as blanks.
 
+### 3n. The course record rebuilt to the USGA/WHS shape (mailbox #576, 2026-09-19 evening → 2026-09-20 00:10 CDT, v2.466.0 → v2.466.2)
+
+Kerry, #576: "the full standard shape in one pass … Migrate existing
+rows with source='import' … then correct from CRDB … the rebuild is the
+blocker for the 13 staged tees in #569." Done in that order.
+
+- **v2.466.0** — `course_tees` rebuilt IN PLACE on boot (same table,
+  same tee_id): gender M|F, holes 9|18, nine, par, bogey_rating,
+  is_combo, gg_tee_id, usga_tee_label, source, version columns; natural
+  key `(course_id, tee_name, gender, holes, nine, slope, rating)`; new
+  `tee_set_ratings(tee_id, rating_type total|front|back, …)`; `courses`
+  gains gg_course_id / usga_course_id. The migration ran on the live DB
+  at 04:57 UTC — `scoring-per-nine-audit` immediately reported gender
+  and `how` per tee, 29 resolved / 85 unresolved, exactly the pre-rebuild
+  count (nothing lost, nothing yet corrected). Shape: schema.md.
+- **Seeds applied** (`scoring-crdb-seed:22362|apply`, `…:29522|apply`):
+  Kissing Tree — 4 existing sets matched by gender + rating/slope
+  (Black=Back, Red (KT)=KT, Gold (Legends)=Legends, Green (L)=Forward F),
+  10 inserted (tee_ids 14646–14655; three men's combos, six women's
+  sets, men's Forward). Forest Creek — Blue/White/Red (L) matched, 4
+  inserted (14656–14659: Green M, Red M, White F, Green F). Every set
+  now carries total + front + back rating rows with bogey.
+- **The 13 staged tees (#569)** → 10 stored as rating rows with
+  `scoring-tee-nines-store:<id>|…|apply` (Falconhead 3956/3959/3961,
+  Vaaler 2491/2492/2509, Lost Pines 8730/8729/8742/8741); the other
+  three of the 13 were Forest Creek's, covered by the seed.
+- **Kerry's course cards applied** (`scoring-course-card:<id>|apply`,
+  the 2026-09-15 GG course-setup reads): Avery Ranch — five 18-hole sets
+  created (Black/Blue/White/Green M, Green (L) F, 14667–14673) with the
+  nines the Tuesday rows already had; Cedar Creek — Blue 18 + its front
+  nine created, the rest existing; Forest Creek — Gold M created, the
+  back nines created, and **Green M adopted the CRDB-seeded row**.
+- **v2.466.1** — the gap that adoption fixes: the seed names a set the
+  USGA way ("Green"), GG names it "3 - Green Tee"; the exact-name match
+  in both GG writers would have inserted a twin with identical numbers.
+  `_adopt_crdb_tee_set` claims a CRDB-named 18-hole row of the same
+  gender + slope + rating, takes GG's name, keeps the label and tee_id.
+  Found on the Forest Creek card's live dry run, one minute after the
+  seed. **v2.466.2** — the adoption no longer writes on a dry run.
+- **Audit after:** 34 courses, 67 resolved / 68 unresolved. EVERY course
+  with an upcoming event resolves every tee: Canyon Springs, ShadowGlen,
+  Olympia Hills, The Quarry (paired Tuesday rows), Avery Ranch, Forest
+  Creek, Kissing Tree (rating rows). `scoring-hcp-2nines:s18.11 CEDAR
+  CREEK` dry run: 30 skipped "already posted", 0 planned — the dedupe
+  held through the rebuild; the per-nine source now reads
+  `how: paired nine-hole rows` for all four Cedar Creek tees.
+- **Still unresolved (68 tees):** 18 courses with no upcoming event
+  and no CRDB pull yet (Landa Park, La Cantera, Delaware Springs,
+  Crystal Falls, Flying L, The Bandit, Willow Springs, Morris Williams,
+  Squaw Valley, Comanche Trace ×2, plus nine archived "(OLD)" GG
+  courses), Vaaler White (L) 2514, Falconhead Red (L) 3958, and Cedar
+  Creek's three OLDER-rating rows (2198/2189/2190 at 74.2/71.2/73.4 —
+  a previous rating version; rounds may point at them). The recipe for
+  each is one CRDB pull → `scoring-crdb-seed:<course_id>|<json>|apply`.
+- **Not populated yet:** gg_tee_id, gg_course_id, usga_course_id — the
+  GG import does not carry its ids today; a follow-up when it does.
+
 ## 4. NOT done, and why
 
 - **Wednesday-AM TGF Insider auto-draft (mailbox #453).** BUILT in
