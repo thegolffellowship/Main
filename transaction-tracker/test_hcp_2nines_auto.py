@@ -304,6 +304,37 @@ with db._connect(DB) as conn:
     check("applying the proposal puts White back on <50 and hides Blue",
           named3[717] == "<50" and named3[2975] is None and named3[711] == "50-64" and named3[710] == "Forward",
           (back["writes"], named3))
+    print()
+    print("The yardages we have (Kerry 2026-09-21)")
+    # A men's Red with no yardage on the same physical tee as the women's Red (5439).
+    conn.execute("INSERT INTO course_tees (tee_id, course_id, tee_name, gender, holes, nine, rating, slope, source) "
+                 "VALUES (726, 35670, 'Red', 'M', 18, 'full', 66.7, 112, 'usga_crdb')")
+    conn.commit()
+    healed = db._heal_tee_yardages(conn)
+    y = {r[0]: r[1] for r in conn.execute("SELECT tee_id, yardage_total FROM course_tees WHERE course_id = 35670")}
+    check("a set with no yardage takes it from the same tee rated for the other gender",
+          y[726] == 5439 and healed["from_sibling"] >= 1, (y.get(726), healed))
+    from email_parser.course_cards import COURSE_CARDS as _CARDS
+    _blue = next(t for t in _CARDS["29522"]["tees"] if t["name"] == "1 - Blue Tee")
+    rr = {(r[0], r[1]): r[2] for r in conn.execute(
+        "SELECT tee_id, rating_type, yardage FROM tee_set_ratings WHERE tee_id IN (717, 3447)")}
+    check("rating rows carry yardage: Cedar White total 6507; Forest Creek Blue front/back from its card's holes",
+          rr.get((717, "total")) == 6507 and rr.get((3447, "total")) == sum(_blue["yards"])
+          and rr.get((3447, "front")) == sum(_blue["yards"][:9]) and rr.get((3447, "back")) == sum(_blue["yards"][9:]),
+          rr)
+    again = db._heal_tee_yardages(conn)
+    check("the yardage heal is idempotent", not any(again.values()), again)
+    # The seed shape's optional yardage triple lands on the set and its rating rows.
+    conn.execute("INSERT INTO courses (course_id, name, status) VALUES (22362, 'Kissing Tree Golf Club', 'active')")
+    conn.commit()
+    kt = db.seed_usga_crdb(conn, 22362, [("Back", "M", 71.4, 143, 98.0, (35.6, 144), (35.8, 142), (6484, 3300, 3184))],
+                           dry_run=False)
+    ktid = kt["sets"][0]["tee_id"]
+    ky = conn.execute("SELECT yardage_total FROM course_tees WHERE tee_id = ?", (ktid,)).fetchone()[0]
+    kr = {r[0]: r[1] for r in conn.execute("SELECT rating_type, yardage FROM tee_set_ratings WHERE tee_id = ?", (ktid,))}
+    check("a CRDB seed row with yardages writes them onto the set and its total/front/back rows",
+          ky == 6484 and kr == {"total": 6484, "front": 3300, "back": 3184} and kt["sets"][0]["yards"] == [6484, 3300, 3184],
+          (ky, kr, kt["sets"][0]))
     std = db.tee_yardage_standards(conn)
     check("the yardage standards are data with Kerry's numbers as the seed",
           std == {"<50": [6300, 6799], "50-64": [5800, 6299], "65+": [5300, 5799], "Forward": [4800, None]}, std)

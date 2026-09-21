@@ -1773,7 +1773,7 @@ def _scoring_dispatch(url: str, extract: str):
       scoring-leaderboard-events[:add=<codes>|set=<codes>|clear]  the EVENTS leaderboard dial (admin pilot); reports which codes still await scorecards
       scoring-hcp-2nines:<event>[|auto|<json>][|apply]  post an 18-hole event as two nines; ratings read off the course record (v2.465.17), JSON overrides
       scoring-tee-nines-store:<full_tee_id>|<fr>,<fs>|<br>,<bs>[|apply]  front/back rating rows (each with its slope) on an 18-hole tee set (refuses a pair that does not sum to the 18)
-      scoring-crdb-seed:<course_id>[|<json>][|apply]  write a course's USGA CRDB tee sets (gender, par, bogey, total/front/back) onto the record
+      scoring-crdb-seed:<course_id>[|<json>][|apply]  write a course's USGA CRDB tee sets (gender, par, bogey, total/front/back, optional yardages) onto the record; JSON row = [name, gender, r18, s18, bogey, [fr, fs], [br, bs], [y18, yf, yb]]
       scoring-tee-bands:<course_id>   which four sets TGF plays (current designation + the yardage-standards proposal; read-only)
       scoring-tee-bands-set:<tee_id>|<band[,band]|hide>[|apply]  designate a tee set (<50 / 50-64 / 65+ / Forward) or hide it; one set per band per course
       scoring-tee-bands-apply:<course_id>[|apply]  write the proposal: the four get their bands, every other set on the course is hidden
@@ -5075,7 +5075,10 @@ def _scoring_dispatch(url: str, extract: str):
             if _mid and _mid[0]:
                 _sets = [(x[0], x[1], float(x[2]), int(x[3]),
                           (float(x[4]) if x[4] is not None else None),
-                          (float(x[5][0]), int(x[5][1])), (float(x[6][0]), int(x[6][1])))
+                          (float(x[5][0]), int(x[5][1])), (float(x[6][0]), int(x[6][1])),
+                          # optional 8th: [yards18, yardsFront, yardsBack]
+                          (tuple(int(y) if y is not None else None for y in x[7])
+                           if len(x) > 7 and x[7] else None))
                          for x in json.loads(_mid[0])]
             _c = db.get_connection()
             try:

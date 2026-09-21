@@ -98,14 +98,17 @@ where available. Backfills are idempotent (skip rows where `event_id IS NOT NULL
 See `PROJECT.md → Technical Debt & Known Concessions` for SQLite FK limitations and
 the full migration checklist for Supabase/PostgreSQL.
 
-## Course record — the USGA/WHS shape (v2.466.0, mailbox #576)
+## Course record — the USGA/WHS shape (v2.466.0 → v2.468.0, mailbox #576 / #579)
 
 Kerry 2026-09-19: "Yes we need the table rebuild… I think the full
 standard shape in one pass." Rebuilt IN PLACE by `_migrate_course_tees_v2`
 (called from `_ensure_scoring_tables`, so any live DB migrates on boot):
 same table name, same `tee_id`, so `scoring_rounds.tee_id`,
 `course_tee_holes` and every reader keep working. One row per TEE SET —
-a physical tee as rated for one gender over 9 or 18 holes.
+a physical tee as rated for one gender over 9 or 18 holes. Three facts
+live on it and are never confused: what the tee IS (USGA identity:
+name, gender, rating, slope, nines), what Golf Genius CALLS it (the
+alias), and what TGF DOES with it (the designation).
 
 ```
 courses
@@ -119,7 +122,12 @@ courses
 course_tees                                  -- ONE ROW PER TEE SET
   tee_id         INTEGER PK AUTOINCREMENT   (Tracker-assigned; GG's id is not stored)
   course_id      NOT NULL REFERENCES courses
-  tee_name       TEXT                       ("1 - White Tee" as GG names it)
+  tee_name       TEXT                       MASTER name — what the USGA / course call it
+                                            ("White", "Red", Kissing Tree's "KT"); member-facing
+  gg_alias       TEXT                       Golf Genius's name ("3 - Red (L) Tee") — admin / GG only
+  usga_tee_label TEXT                       the CRDB's label when the set came from / matched the CRDB
+  tgf_bands      TEXT                       TGF designation: '<50' | '50-64' | '65+' | 'Forward',
+                                            comma-joined for one tee serving two bands; NULL = hidden
   gender         TEXT NOT NULL 'M'|'F'      (a rating dimension, not a name)
   holes          INTEGER NOT NULL 9|18      (follows the rating: a nine rates < 50)
   nine           TEXT NULL|'full'|'front'|'back'|'both'
@@ -127,11 +135,10 @@ course_tees                                  -- ONE ROW PER TEE SET
   slope          INTEGER                    (this set's own — 9 or 18)
   rating         REAL                       (this set's own — 9 or 18)
   bogey_rating   REAL                       (stored for completeness, used by nothing)
-  yardage_total  INTEGER
+  yardage_total  INTEGER                    the PHYSICAL tee's length (see "Yardage" below)
   is_combo       INTEGER NOT NULL 0|1       (Kissing Tree "Back/KT": rated as its own set)
   is_ladies      INTEGER                    (legacy mirror of gender = 'F')
   gg_tee_id      TEXT                       (not yet populated)
-  usga_tee_label TEXT                       (the CRDB's name for the set)
   source         TEXT NOT NULL import|course_card|usga_crdb|admin
   version_label, valid_from, valid_to       (a re-rating keeps the old row, dated)
   created_at
@@ -143,6 +150,7 @@ tee_set_ratings                              -- the ratings BY TYPE, per set
   course_rating  REAL NOT NULL
   slope          INTEGER NOT NULL           (each nine has its OWN slope)
   bogey_rating   REAL
+  yardage        INTEGER                    (v2.468.0: the 18 / the front nine / the back nine)
   source         TEXT NOT NULL
   updated_at
   PRIMARY KEY (tee_id, rating_type)
@@ -150,7 +158,25 @@ tee_set_ratings                              -- the ratings BY TYPE, per set
 course_tee_holes                             -- the card behind each set
   tee_id, hole_number (1-18 on an 18, 1-9 on a nine), par, yardage, stroke_index
   PRIMARY KEY (tee_id, hole_number)
+
+app_settings.tee_yardage_standards           -- the selection RULE, as data
+  {"<50": [6300, 6799], "50-64": [5800, 6299], "65+": [5300, 5799], "Forward": [4800, null]}
 ```
+
+**Yardage (v2.468.0, Kerry 2026-09-21: "incorporate the yardages we
+have").** Yardage belongs to the physical tee, not to the rating, so
+`_heal_tee_yardages` (every boot, after every card import / nine store /
+CRDB seed; only NULLs are written) fills: a set's `yardage_total` from
+its hole rows; a set with none from the same course's set of the same
+master name + holes rated for the OTHER gender (Kissing Tree "Back" F is
+the box GG calls "1 - Black Tee"); every rating row's `yardage` — total
+from the set, front / back from holes 1–9 / 10–18, else from the Tuesday
+nine-hole sibling. A combo set has no plain sibling and waits for the
+CRDB numbers: the seed shape now takes an optional 8th element
+`(y18, yf, yb)` per set (bridge JSON `[name, gender, r18, s18, bogey,
+[fr, fs], [br, bs], [y18, yf, yb]]`). Live after the heal: every
+imported / carded set had yardage already; of the 13 CRDB-only sets, 9
+took it from their other-gender twin and the 4 combos wait.
 
 **TGF tee designation (v2.467.0, Kerry 2026-09-20).** "Master name is
 what USGA/course call it. GG should just be an alias. The GG names were

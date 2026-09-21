@@ -15482,6 +15482,7 @@ TEE_SET_RATINGS_DDL = """CREATE TABLE IF NOT EXISTS tee_set_ratings (
         course_rating REAL NOT NULL,
         slope         INTEGER NOT NULL,
         bogey_rating  REAL,
+        yardage       INTEGER,
         source        TEXT NOT NULL DEFAULT 'import',
         updated_at    TEXT DEFAULT (datetime('now')),
         PRIMARY KEY (tee_id, rating_type))"""
@@ -15633,8 +15634,75 @@ def _migrate_course_tees_v2(conn: sqlite3.Connection) -> dict:
          WHERE ct.rating IS NOT NULL AND ct.slope IS NOT NULL
            AND NOT EXISTS (SELECT 1 FROM tee_set_ratings r
                             WHERE r.tee_id = ct.tee_id AND r.rating_type = 'total')""")
+    _heal_tee_yardages(conn)
     return out
 
+
+def _heal_tee_yardages(conn: sqlite3.Connection) -> dict:
+    """THE YARDAGES WE HAVE, onto every set that lacks one (v2.468.0,
+    Kerry 2026-09-21: "you need to incorporate the yardages we have").
+    Yardage is a property of the PHYSICAL tee, not of the rating, so:
+    1. a set with hole rows and no total gets the sum of its holes;
+    2. a set with no yardage takes it from the same course's set of the
+       same master name and holes rated for the OTHER gender (Kissing
+       Tree "Back" F is the same box as "Back" M = GG's "1 - Black Tee");
+    3. every rating row gets its yardage — total from the set, front /
+       back from holes 1-9 / 10-18 when the set has hole rows, else from
+       the Tuesday nine-hole sibling of the same name + gender.
+    Combo sets (Back/KT) have no plain sibling and stay empty until the
+    CRDB pull supplies them. Idempotent: only NULLs are written, and a
+    row is counted only when a value was actually found."""
+    try:
+        conn.execute("ALTER TABLE tee_set_ratings ADD COLUMN yardage INTEGER")
+    except sqlite3.OperationalError:
+        pass
+    out = {"from_holes": 0, "from_sibling": 0, "rating_rows": 0}
+    holes_ok = ("(SELECT COUNT(*) FROM course_tee_holes h WHERE h.tee_id = course_tees.tee_id "
+                "AND h.yardage IS NOT NULL) = course_tees.holes")
+    cur = conn.execute(f"""
+        UPDATE course_tees SET yardage_total = (
+            SELECT SUM(h.yardage) FROM course_tee_holes h WHERE h.tee_id = course_tees.tee_id)
+         WHERE yardage_total IS NULL AND {holes_ok}""")
+    out["from_holes"] = cur.rowcount
+    sibling = """(SELECT o.yardage_total FROM course_tees o
+             WHERE o.course_id = course_tees.course_id AND o.tee_id != course_tees.tee_id
+               AND o.gender != course_tees.gender AND o.holes = course_tees.holes
+               AND COALESCE(o.nine, '') = COALESCE(course_tees.nine, '')
+               AND LOWER(TRIM(o.tee_name)) = LOWER(TRIM(course_tees.tee_name))
+               AND o.yardage_total IS NOT NULL
+             ORDER BY o.tee_id LIMIT 1)"""
+    cur = conn.execute(f"""
+        UPDATE course_tees SET yardage_total = {sibling}
+         WHERE yardage_total IS NULL AND is_combo = 0 AND {sibling} IS NOT NULL""")
+    out["from_sibling"] = cur.rowcount
+    total_src = "(SELECT ct.yardage_total FROM course_tees ct WHERE ct.tee_id = tee_set_ratings.tee_id)"
+    cur = conn.execute(f"""
+        UPDATE tee_set_ratings SET yardage = {total_src}
+         WHERE yardage IS NULL AND rating_type = 'total' AND {total_src} IS NOT NULL""")
+    out["rating_rows"] += cur.rowcount
+    for rtype, lo, hi in (("front", 1, 9), ("back", 10, 18)):
+        n_holes = (f"(SELECT COUNT(*) FROM course_tee_holes h WHERE h.tee_id = tee_set_ratings.tee_id "
+                   f"AND h.hole_number BETWEEN {lo} AND {hi} AND h.yardage IS NOT NULL)")
+        cur = conn.execute(f"""
+            UPDATE tee_set_ratings SET yardage = (
+                SELECT SUM(h.yardage) FROM course_tee_holes h
+                 WHERE h.tee_id = tee_set_ratings.tee_id
+                   AND h.hole_number BETWEEN {lo} AND {hi})
+             WHERE yardage IS NULL AND rating_type = '{rtype}' AND {n_holes} = 9""")
+        out["rating_rows"] += cur.rowcount
+        nine_src = f"""(SELECT n.yardage_total FROM course_tees n
+                  JOIN course_tees ct ON ct.tee_id = tee_set_ratings.tee_id
+                 WHERE n.course_id = ct.course_id AND n.holes = 9 AND n.gender = ct.gender
+                   AND n.nine = '{rtype}' AND n.yardage_total IS NOT NULL
+                   AND LOWER(TRIM(n.tee_name)) = LOWER(TRIM(ct.tee_name))
+                 ORDER BY n.tee_id LIMIT 1)"""
+        cur = conn.execute(f"""
+            UPDATE tee_set_ratings SET yardage = {nine_src}
+             WHERE yardage IS NULL AND rating_type = '{rtype}' AND {nine_src} IS NOT NULL""")
+        out["rating_rows"] += cur.rowcount
+    if any(out.values()):
+        logger.info("tee yardages healed: %s", out)
+    return out
 
 def _ensure_scoring_tables(conn: sqlite3.Connection) -> None:
     # NB: courses / course_aliases / events.course_id already exist as the
@@ -21664,6 +21732,7 @@ def store_tee_nines(conn, full_tee_id: int, front: tuple, back: tuple,
                              f"front {fr}/{fs} back {br}/{bs} {source} {note}".strip())
         except Exception:
             pass
+        _heal_tee_yardages(conn)
         conn.commit()
     return out
 
@@ -21706,7 +21775,7 @@ USGA_CRDB_SEEDS = {
 def seed_usga_crdb(conn, course_id: int, sets: list | None = None,
                    dry_run: bool = True) -> dict:
     """Write a course's USGA CRDB tee sets onto the record. Each set is
-    (name, gender, r18, s18, bogey, (fr, fs), (br, bs)) — from
+    (name, gender, r18, s18, bogey, (fr, fs), (br, bs)[, (y18, yf, yb)]) — from
     USGA_CRDB_SEEDS when `sets` is None. An existing 18-hole row is
     matched by (gender, rating, slope) first, then by name + gender; a
     set with no row is inserted as a new tee set (source 'usga_crdb',
@@ -21736,7 +21805,11 @@ def seed_usga_crdb(conn, course_id: int, sets: list | None = None,
             n = n.replace(junk, "")
         return " ".join(n.split())
 
-    for name, gender, r18, s18, bogey, (fr, fs), (br, bs) in seed["sets"]:
+    for row in seed["sets"]:
+        name, gender, r18, s18, bogey, (fr, fs), (br, bs) = row[:7]
+        # Optional 8th element: (yards 18, yards front, yards back) — the
+        # CRDB lists them beside the ratings; None where not supplied.
+        y18, yf, yb = (tuple(row[7]) + (None, None, None))[:3] if len(row) > 7 and row[7] else (None, None, None)
         if abs((fr + br) - r18) > 0.15:
             out["sets"].append({"name": name, "gender": gender,
                                 "error": f"front {fr} + back {br} != 18 {r18} — skipped"})
@@ -21754,6 +21827,8 @@ def seed_usga_crdb(conn, course_id: int, sets: list | None = None,
             how = "matched by name + gender" if match else None
         entry = {"name": name, "gender": gender, "r18": r18, "s18": s18, "bogey": bogey,
                  "front": [fr, fs], "back": [br, bs]}
+        if y18:
+            entry["yards"] = [y18, yf, yb]
         tee_id = None
         if match:
             used.add(match["tee_id"])
@@ -21776,16 +21851,22 @@ def seed_usga_crdb(conn, course_id: int, sets: list | None = None,
                 entry["tee_id"] = tee_id
         if not dry_run and tee_id is not None:
             conn.execute("""UPDATE course_tees SET usga_tee_label = ?, bogey_rating = ?,
-                                   par = COALESCE(?, par) WHERE tee_id = ?""",
-                         (name, bogey, par, tee_id))
-            for rtype, cr, sl, bg in (("total", r18, s18, bogey), ("front", fr, fs, None),
-                                      ("back", br, bs, None)):
+                                   par = COALESCE(?, par),
+                                   yardage_total = COALESCE(?, yardage_total)
+                             WHERE tee_id = ?""",
+                         (name, bogey, par, y18, tee_id))
+            for rtype, cr, sl, bg, yd in (("total", r18, s18, bogey, y18),
+                                          ("front", fr, fs, None, yf),
+                                          ("back", br, bs, None, yb)):
                 conn.execute(
                     """INSERT OR REPLACE INTO tee_set_ratings
-                           (tee_id, rating_type, course_rating, slope, bogey_rating, source)
-                       VALUES (?, ?, ?, ?, ?, 'usga_crdb')""", (tee_id, rtype, cr, sl, bg))
+                           (tee_id, rating_type, course_rating, slope, bogey_rating, yardage, source)
+                       VALUES (?, ?, ?, ?, ?, COALESCE(?, (SELECT yardage FROM tee_set_ratings
+                                                          WHERE tee_id = ? AND rating_type = ?)),
+                               'usga_crdb')""", (tee_id, rtype, cr, sl, bg, yd, tee_id, rtype))
         out["sets"].append(entry)
     if not dry_run:
+        _heal_tee_yardages(conn)
         try:
             log_agent_action("mcp-claude", "seed_usga_crdb",
                              f"course {course_id} {course['name']}: {len(out['sets'])} sets")
@@ -24907,14 +24988,14 @@ def list_courses(db_path: str | Path = DB_PATH) -> list:
             rr: dict = {}
             for x in conn.execute(
                     """SELECT r.tee_id, r.rating_type, r.course_rating, r.slope,
-                              r.bogey_rating, r.source
+                              r.bogey_rating, r.yardage, r.source
                          FROM tee_set_ratings r JOIN course_tees ct ON ct.tee_id = r.tee_id
                         WHERE ct.course_id = ? ORDER BY r.tee_id,
                               CASE r.rating_type WHEN 'total' THEN 0 WHEN 'front' THEN 1 ELSE 2 END""",
                     (r["course_id"],)).fetchall():
                 rr.setdefault(x["tee_id"], []).append(
                     {k: x[k] for k in ("rating_type", "course_rating", "slope",
-                                       "bogey_rating", "source")})
+                                       "bogey_rating", "yardage", "source")})
             for t in tees:
                 t["ratings"] = rr.get(t["tee_id"], [])
             out.append(dict(r) | {"tees": tees})
@@ -58837,6 +58918,7 @@ def import_course_card(key: str, dry_run: bool = True, db_path=None) -> dict:
                     "rating": rating, "slope": slope, "yardage_total": total,
                     "tee_id": tee_id, "action": action, "holes": n_holes})
         if not dry_run:
+            _heal_tee_yardages(conn)
             conn.commit()
     return out
 
