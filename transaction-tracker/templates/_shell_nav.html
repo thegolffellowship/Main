@@ -50,7 +50,7 @@
         {# DASHBOARD is the landing page (Kerry 2026-09-21: "Dashboard
            replaces COO as landing, absorb the action items"). A ROUTER —
            counts and links, no work happens there. #}
-        <a href="/dashboard" class="{{ 'active' if SHELL_ACTIVE == 'dashboard' else '' }}">Dashboard</a>
+        <a href="/dashboard" class="admin-nav {{ 'active' if SHELL_ACTIVE == 'dashboard' else '' }}" style="display:none;">Dashboard</a>
         <a href="/events" class="{{ 'active' if SHELL_ACTIVE == 'events' else '' }}">Events</a>
         {# Kerry 2026-09-14: "Change SEASON CONTESTS to LEADERBOARD" — the
            manager/admin nav now uses the same word the member nav has used
@@ -99,7 +99,7 @@
         </button>
     </div>
     <nav class="shell-drawer-nav" id="shell-drawer-nav">
-        <a href="/dashboard" class="{{ 'active' if SHELL_ACTIVE == 'dashboard' else '' }}">Dashboard</a>
+        <a href="/dashboard" class="admin-nav {{ 'active' if SHELL_ACTIVE == 'dashboard' else '' }}" style="display:none;">Dashboard</a>
         <a href="/events" class="{{ 'active' if SHELL_ACTIVE == 'events' else '' }}">Events</a>
         <a href="/contests" class="{{ 'active' if SHELL_ACTIVE == 'contests' else '' }}">Leaderboard</a>
         <a href="/handicaps" class="{{ 'active' if SHELL_ACTIVE == 'handicaps' else '' }}">Handicaps</a>

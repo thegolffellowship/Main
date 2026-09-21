@@ -139,8 +139,17 @@
         // than restating it (the lesson from test_events_board.js).
         window.__dbRender = render;
 
-        window.onAuthReady = function () { load(); };
-        if (!window.initAuth) load();
+        // initAuth() must be called on every page (CLAUDE.md) — it is what
+        // gates the nav links by role. The first cut of this page set
+        // window.onAuthReady and never called initAuth, so the callback
+        // never fired, load() never ran, and the page sat on "Loading…"
+        // forever with an ungated nav. Kerry, 2026-09-21: "Stuck on perma
+        // load." LOAD UNCONDITIONALLY and let auth run alongside: the
+        // fetch carries the session cookie by itself, so the data never
+        // needs to wait on the nav.
+        window.onAuthReady = function () { /* nav gating handled by auth.js */ };
+        load();
+        if (window.initAuth) initAuth();
     })();
     </script>
 </body>

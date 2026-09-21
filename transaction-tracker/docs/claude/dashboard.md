@@ -8,8 +8,12 @@ etc."* Then, ratifying: *"Dashboard replaces COO as landing, absorb the
 action items — I don't use the current what needs me today stuff at all
 right now, so let's ditch those for the new comprehensive dashboard."*
 
-`/` now redirects to `/dashboard`. EVENTS held that slot from
-2026-07-08.
+**ADMIN ONLY** (Kerry, same day). `/` redirects to `/dashboard` for an
+admin and to `/events` for everyone else — the landing has to know who is
+asking, or a manager is bounced straight back off their own home page.
+The page route redirects a non-admin rather than answering `require_role`'s
+JSON 403, which is a dead end for anyone following a stale link or a
+bookmarked PWA start URL. EVENTS held the landing slot from 2026-07-08.
 
 ## The two rules
 
@@ -74,6 +78,27 @@ one-tap confirmation once the referral schema is ratified — see
   the date helpers), `test_dashboard.js` (the render, the peek cap, the
   failed-feed notice, HTML escaping). The page exposes `window.__dbRender`
   so the headless guard calls the REAL renderer instead of restating it.
+
+## The perma-load, and the class it belonged to
+
+The first cut set `window.onAuthReady = () => load()` and never called
+`initAuth()`. Nothing fired the callback, so `load()` never ran and the
+page sat on *"Loading…"* forever with an ungated nav (Kerry: *"Stuck on
+perma load."*). CLAUDE.md already said `initAuth()` must be called on
+every page; the page simply did not.
+
+Per the guiding principle, the sweep for the CLASS found one more:
+`participation.html` loaded auth.js and never called `initAuth()` either.
+Its symptom was quiet rather than loud — the data loaded, but the nav was
+never role-gated, so an admin saw no admin links on that page. Fixed the
+same day.
+
+The durable fix is `test_auth_init.js`: **every template that loads
+auth.js must call `initAuth()`**, directly or through a script it loads.
+It also pins the dashboard's own shape — `load()` is called at top level
+and is never reachable only through the auth callback, because the fetch
+carries the session cookie by itself and the data should never wait on
+the nav.
 
 ## Adding a card
 

@@ -728,6 +728,11 @@
         window.onAuthReady = function() { /* page works for any role; no extra toggles */ };
 
         load();
+        // initAuth() gates the nav links by role (CLAUDE.md). Without it
+        // the admin-only links stay hidden from an admin on this page —
+        // the same class as the dashboard's 2026-09-21 perma-load, caught
+        // by the sweep that bug prompted. Guard: test_auth_init.js
+        if (window.initAuth) initAuth();
     })();
     </script>
 </body>

@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.471.1";
+window.TGF_VERSION = "2.472.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.472.0",
+    date: "2026-09-21",
+    changes: [
+      "THE DASHBOARD IS ADMIN ONLY (Kerry, 2026-09-21). Both nav entries carry admin-nav and start hidden, the API is admin-gated, and the page route REDIRECTS a non-admin to /events rather than answering require_role's JSON 403 — a page that replies with raw JSON is a dead end for anyone on a stale link or a bookmarked PWA start URL. The landing redirect is now role-aware too: admin to /dashboard, everyone else to /events, so a manager is never bounced off their own home page.",
+      "FIXED the perma-load (Kerry: 'Stuck on perma load'). The page set window.onAuthReady = () => load() and never called initAuth(), so nothing ever fired the callback: load() never ran and the nav was never role-gated. It now calls load() at top level and runs initAuth() alongside — the fetch carries the session cookie by itself, so the data never needs to wait on the nav.",
+      "Protecting the CLASS, not the instance: the sweep for other pages that load auth.js and never call initAuth() found participation.html doing the same thing, with a quieter symptom — its data loaded but its nav was never gated, so an admin saw no admin links there. Fixed, and test_auth_init.js now fails any template that loads auth.js without calling initAuth (directly or through a script it loads), plus pins the dashboard's load-at-top-level shape and all three admin gates.",
+    ],
+  },
   {
     version: "2.471.1",
     date: "2026-09-21",

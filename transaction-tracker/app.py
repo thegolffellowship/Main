@@ -2059,17 +2059,25 @@ def index():
     # query intact.
     if request.args:
         return redirect("/transactions?" + request.query_string.decode())
-    return redirect("/dashboard")
+    # The dashboard is admin-only (Kerry, 2026-09-21), so the landing has
+    # to know who is asking — sending a manager to a page that bounces
+    # them straight back is a redirect loop dressed as a home page.
+    return redirect("/dashboard" if session.get("role") == "admin"
+                    else "/events")
 
 
 @app.route("/dashboard")
-@require_role("manager")
 def dashboard_page():
+    # ADMIN ONLY (Kerry, 2026-09-21). A redirect, not require_role's JSON
+    # 403 — a page route that answers with raw JSON is a dead end for a
+    # manager who followed a stale link or a bookmarked PWA start URL.
+    if session.get("role") != "admin":
+        return redirect("/events")
     return render_template("dashboard.html")
 
 
 @app.route("/api/dashboard")
-@require_role("manager")
+@require_role("admin")
 def api_dashboard():
     from email_parser.dashboard import build
     return jsonify(build())
