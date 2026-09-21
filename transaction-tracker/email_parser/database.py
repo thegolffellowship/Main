@@ -58813,14 +58813,14 @@ def team_handicaps_for_groups(groups: list, allowance: float, unit: str) -> dict
             allowed.append(p["team_allowed"])
     if not allowed:
         return {"low": 0, "lowest": [], "applied": False}
-    # OFF THE LOWEST never RAISES anyone (Kerry 2026-09-22 Brackenridge:
-    # "Some are higher than the PH. That can't be with a 75% application
-    # for Team One Ball"). With a plus player in the field the lowest is
-    # negative, and subtracting a negative handed every other player two
-    # strokes MORE than their playing handicap. The lowest floors at zero:
-    # a scratch-or-better field subtracts nothing, and the plus player
-    # keeps his plus (which comes off the round, per the plus rule).
-    low = max(min(allowed), 0)
+    # OFF THE LOWEST, exactly (Kerry 2026-09-21, second reading: "I wasn't
+    # thinking of the off lowest revision"): the field's lowest plays at 0
+    # and everyone else plays off them — so a PLUS player in the field
+    # RAISES everyone by his plus (Brackenridge: Pat Youngs at 75% is −2,
+    # every other team handicap is two more than its 75% figure). That is
+    # the rule; what the sheet owes the field is the explanation, which is
+    # why the cell prints "75% / adjusted" in red whenever low != 0.
+    low = min(allowed)
     for g in groups:
         for p in g["players"]:
             if p.get("team_allowed") is not None:
@@ -58830,7 +58830,7 @@ def team_handicaps_for_groups(groups: list, allowance: float, unit: str) -> dict
     # Maybe a red asterisk next to each team handicap").
     lowest = sorted({p.get("name") or "" for g in groups for p in g["players"]
                      if p.get("team_allowed") is not None and p["team_allowed"] == min(allowed)})
-    return {"low": low, "lowest": [n for n in lowest if n], "applied": low > 0}
+    return {"low": low, "lowest": [n for n in lowest if n], "applied": low != 0}
 
 
 def event_team_net_dial(conn, ev: dict) -> tuple[int, float, str]:

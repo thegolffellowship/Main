@@ -306,9 +306,10 @@ def print_pack_email_body(built: dict) -> str:
         notes.append(f"<strong>{unit}</strong> {_esc(pack['team_basis'])}")
     _ol = pack.get("team_off_lowest") or {}
     if _ol.get("applied"):
+        _n = abs(int(_ol["low"]))
         notes.append(f'<span style="color:#B91C1C;font-weight:600;">{unit} prints as allowance / OFF THE LOWEST — the number in red '
-                     f'is the one you play: {_ol["low"]} stroke{"" if _ol["low"] == 1 else "s"} less, because the field\'s lowest '
-                     f'({_esc(", ".join(_ol.get("lowest") or []))}) plays at 0 and everyone else plays off them.</span>')
+                     f'is the one you play: {_n} stroke{"" if _n == 1 else "s"} {"less" if _ol["low"] > 0 else "more"}, because the field\'s lowest '
+                     f'({_esc(", ".join(_ol.get("lowest") or []))}{", a plus " + str(_n) if _ol["low"] < 0 else ""}) plays at 0 and everyone else plays off them.</span>')
     if pack.get("ph_note"):
         notes.append(f'<span style="color:#B45309;">{_esc(pack["ph_note"])}</span>')
     out.append('<p style="margin:0 0 1em;font-size:12px;color:#6B7280;">' + "<br>".join(notes) + "</p>")

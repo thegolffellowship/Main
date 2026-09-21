@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.476.3";
+window.TGF_VERSION = "2.476.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.476.4",
+    date: "2026-09-21",
+    changes: [
+      "Team / Cart Net: OFF THE LOWEST is exact again \u2014 the v2.476.1 floor at zero is reverted. Kerry's second reading of the Brackenridge sheet (\u2018I wasn't thinking of the off lowest revision\u2019): the original numbers were right \u2014 Pat Youngs at 75% is \u22122, he plays at 0, and every other team handicap is two MORE than its 75% figure. What the field was owed was the explanation, so the cell now prints \u201875% / adjusted\u2019 with the adjusted number in red whenever the lowest is not zero (above OR below), and the footnote says how many strokes more or less and who the lowest is, naming a plus player as such. Same in the pack email. Guards: `test_team_handicaps.py`, `test_event_reports.py`.",
+    ],
+  },
   {
     version: "2.476.3",
     date: "2026-09-21",

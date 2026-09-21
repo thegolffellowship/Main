@@ -78,25 +78,27 @@ check("the TEAM column is named for the game", "{% if pack.team_unit == 'cart' %
 html = open(os.path.join(os.path.dirname(__file__), "templates/events.html"), encoding="utf-8").read()
 check("the pairings cards show the index on the event's scale", "state.hcpScale === 18 ? 2 : 1" in html)
 
-print("A plus player in the field never RAISES anyone (Kerry 2026-09-22, Brackenridge)")
+print("A plus player in the field: the lowest plays at 0, everyone else plays off him (Kerry 2026-09-21, second reading)")
 _groups = [{"players": [
     {"name": "Pat Youngs",   "course_handicap_raw": -2.4},   # plus player: lowest in the field
     {"name": "Kerry Niester", "course_handicap_raw": 1.6},
     {"name": "Rob Callaway", "course_handicap_raw": 6.4},
     {"name": "Craig Bourquin", "course_handicap_raw": 12.0}]}]
-db.team_handicaps_for_groups(_groups, 0.75, "group")
+_r = db.team_handicaps_for_groups(_groups, 0.75, "group")
 _th = {p["name"]: p["team_handicap"] for p in _groups[0]["players"]}
-check("nobody's TEAM exceeds 75% of his own course handicap — the lowest floors at zero",
-      _th["Rob Callaway"] == 5 and _th["Craig Bourquin"] == 9 and _th["Kerry Niester"] == 1, _th)
-check("the plus player keeps his plus (it comes off the round, per the plus rule)", _th["Pat Youngs"] == -2, _th)
+check("off the lowest is exact: Youngs (−2 at 75%) plays at 0 and everyone else is two MORE than his 75% figure",
+      _th["Pat Youngs"] == 0 and _th["Kerry Niester"] == 3 and _th["Rob Callaway"] == 7 and _th["Craig Bourquin"] == 11, _th)
+check("…and the engine reports the negative low so the sheet can print '75% / adjusted' in red with the explanation",
+      _r == {"low": -2, "lowest": ["Pat Youngs"], "applied": True}, _r)
 _groups2 = [{"players": [{"name": "A", "course_handicap_raw": 4.0}, {"name": "B", "course_handicap_raw": 12.0}]}]
 db.team_handicaps_for_groups(_groups2, 0.75, "group")
 check("a positive lowest is still subtracted as before", [p["team_handicap"] for p in _groups2[0]["players"]] == [0, 6])
 _r2 = db.team_handicaps_for_groups(_groups2, 0.75, "group")
 check("the engine reports WHO the lowest is and how many strokes came off, so the sheet can say so (Kerry: 'a red asterisk next to each team handicap')",
       _r2 == {"low": 3, "lowest": ["A"], "applied": True}, _r2)
-_r3 = db.team_handicaps_for_groups(_groups, 0.75, "group")
-check("…and reports nothing applied when the lowest is a plus player (floored at zero)", _r3["applied"] is False and _r3["low"] == 0, _r3)
+_groups3 = [{"players": [{"name": "Z", "course_handicap_raw": 0.4}, {"name": "B", "course_handicap_raw": 12.0}]}]
+_r3 = db.team_handicaps_for_groups(_groups3, 0.75, "group")
+check("…and reports nothing applied when the field's lowest is exactly 0", _r3["applied"] is False and _r3["low"] == 0, _r3)
 _ss = open("templates/starter_sheet.html").read()
 check("the sheet prints allowance / adjusted-in-red on every team handicap and explains it when off-the-lowest applied (Kerry: 'the 75%, then a / and the adjusted off-lowest in red with an explanation')",
       '{{ a.team_allowed }} / <span class="tadj">{{ a.team_handicap }}</span>' in _ss and 'class="fnote offlow"' in _ss
