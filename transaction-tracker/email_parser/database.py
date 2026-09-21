@@ -34379,9 +34379,14 @@ def sync_referral_fees(db_path: str | Path | None = None) -> dict:
        compensates in cash/Venmo: Atkinson/Aguilera 07-21,
        Atkinson/Decareaux 07-22). Cash fees only ever arise from that
        receipt path or manual entry now that coupon rows are comped.
+    3. MEMBERSHIP scan: an attributed referral who buys a membership
+       raises an OWED fee for their referrer (Kerry 2026-09-21). The
+       relationship alone still owes nobody anything — the membership is
+       the trigger. Any existing row for the pair (comped, owed or paid)
+       suppresses it, so a coupon is never topped up with cash.
     """
     out = {"coupon_comped": 0, "paid_recorded": 0, "comped_migrated": 0,
-           "notes": []}
+           "membership_owed": 0, "notes": []}
     with _connect(db_path) as conn:
         _ensure_referral_tables(conn)
         fee = _referral_fee_amount(conn)
@@ -34504,6 +34509,64 @@ def sync_referral_fees(db_path: str | Path | None = None) -> dict:
                     (ref_cid, ref_name, referred_cid, referred_name,
                      vals[3], vals[0], vals[1], vals[2]))
             out["paid_recorded"] += 1
+
+        # 3. MEMBERSHIP scan — an attributed referral who JOINS earns
+        #    the referrer a fee (Kerry 2026-09-21, on Guillermo Arevalo:
+        #    "He was Robert's referral and became a member so it needs
+        #    to trigger a referral fee payment").
+        #
+        #    This is a deliberate AMENDMENT to the 2026-07-30 rule that
+        #    a relationship must never mint a liability. The rule stands
+        #    for the relationship ALONE — naming who referred someone
+        #    still owes nobody anything. What creates the fee is the
+        #    relationship PLUS a membership purchase, which is the event
+        #    Kerry actually pays for. Recorded in
+        #    docs/claude/referral-attribution.md §7.
+        #
+        #    The coupon rule is untouched and takes precedence: if any
+        #    row already exists for this pair — comped by a coupon, owed,
+        #    or already paid — nothing is added. A redeemed coupon IS the
+        #    compensation (Kerry 2026-07-28), so this can never stack a
+        #    cash fee on top of one.
+        try:
+            candidates = conn.execute(
+                """SELECT c.customer_id AS referred_id,
+                          TRIM(COALESCE(c.first_name,'') || ' ' ||
+                               COALESCE(c.last_name,'')) AS referred_name,
+                          c.referred_by_customer_id AS referrer_id,
+                          TRIM(COALESCE(r.first_name,'') || ' ' ||
+                               COALESCE(r.last_name,'')) AS referrer_name,
+                          MIN(m.started_at) AS joined_at
+                     FROM customers c
+                     JOIN customers r
+                       ON r.customer_id = c.referred_by_customer_id
+                     JOIN customer_memberships m
+                       ON m.customer_id = c.customer_id
+                    WHERE c.referred_by_customer_id IS NOT NULL
+                    GROUP BY c.customer_id""").fetchall()
+        except sqlite3.OperationalError:
+            candidates = []
+        for cand in candidates:
+            existing = conn.execute(
+                """SELECT 1 FROM referral_fees
+                    WHERE referred_customer_id = ?
+                      AND (referrer_customer_id = ? OR referrer_customer_id IS NULL)
+                    LIMIT 1""",
+                (cand["referred_id"], cand["referrer_id"])).fetchone()
+            if existing:
+                continue
+            conn.execute(
+                """INSERT INTO referral_fees
+                       (referrer_customer_id, referrer_name,
+                        referred_customer_id, referred_name,
+                        source, amount, status, note)
+                   VALUES (?, ?, ?, ?, 'membership', ?, 'owed', ?)""",
+                (cand["referrer_id"], cand["referrer_name"],
+                 cand["referred_id"], cand["referred_name"], fee,
+                 f"{cand['referred_name']} was referred by "
+                 f"{cand['referrer_name']} and became a member on "
+                 f"{cand['joined_at']}"))
+            out["membership_owed"] += 1
         conn.commit()
     return out
 

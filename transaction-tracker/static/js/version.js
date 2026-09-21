@@ -1,5 +1,16 @@
-window.TGF_VERSION = "2.475.1";
+window.TGF_VERSION = "2.476.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.476.0",
+    date: "2026-09-21",
+    changes: [
+      "RESIDUAL ROI, ON ITS OWN LINE. Kerry: 'ROAS to me, includes the people that Leads referred/brought/became members and anything they purchase in the future ... I like the direct and + referred idea.' The Leads stats panel gets a Direct / + Referred toggle. DIRECT is unchanged and stays the default — it is the number Kerry has read all season and it has to stay comparable to itself. The residual is a separate roi_referred block with its own margin and a combined total, never folded in silently. Three rules, all his: membership is the gate (a referral who has not joined counts nothing; once they join, ALL their value counts), ONE HOP (a referral of a referral does not credit the campaign again), and never double-counted (anyone already in the campaign's own lead set is direct value). Caveat stated on the panel and in the docs: the residual only grows, so compare campaigns on Direct and read + Referred as what a campaign ultimately generated.",
+      "A REFERRAL WHO BECOMES A MEMBER NOW TRIGGERS THE FEE. Kerry, on Guillermo Arevalo: 'He was Robert's referral and became a member so it needs to trigger a referral fee payment.' sync_referral_fees gains a membership scan that raises an OWED row at the configured fee. This NARROWS the 2026-07-30 rule rather than repealing it: naming who referred someone still owes nobody anything — the membership purchase is what creates the fee. Idempotent, and any existing row for the pair suppresses it, so the 2026-07-28 coupon rule still wins outright and a redeemed coupon is never topped up with cash. Guard: test_referral_fee_membership.py, 16 checks including that the relationship alone still mints nothing.",
+      "FIXED a hole in the attribute queue that Kerry caught: 'Isn't Hector Hinojosa a campaign lead?' He is — customers.acquisition_source reads 'facebook_lead' — but his leads row is gone, so excluding on leads.campaign_id alone missed him. That stamp is only ever written to a customer who was linked to a lead, so it is proof of campaign origin that outlives the lead row. The queue now excludes on it too. 'godaddy' is a store channel and is deliberately not treated as campaign origin.",
+      "Renamed the control to WHO REFERRED THEM (Kerry: 'Modal should probably be who referred them, not who brought them'). The distinction now carries weight: 'brought' is a ride to the course, 'referred' is the thing TGF pays for.",
+      "Guards: test_residual_roi.py (15 checks — the membership gate, one hop, no double-counting, and that a database without a memberships table loses the residual rather than the ROI) and test_attribute_queue.py extended to 24.",
+    ],
+  },
   {
     version: "2.475.1",
     date: "2026-09-21",

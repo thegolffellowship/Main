@@ -179,6 +179,17 @@ def _first_timers_to_attribute(conn, today):
         "                    WHERE l.customer_id = c.customer_id "
         "                      AND l.campaign_id IS NOT NULL) "
         if has_leads else "")
+    # A lead row is not the only proof a campaign brought someone.
+    # Kerry, seeing Hector Hinojosa on this card: "Isn't Hector Hinojosa
+    # a campaign lead?" He is — customers.acquisition_source reads
+    # 'facebook_lead' — but his leads row is gone, so the clause above
+    # missed him. That stamp is only ever written to a customer who was
+    # linked to a lead (leads.py, both write sites), so it is proof of
+    # campaign origin that OUTLIVES the lead row itself. Anything else,
+    # 'godaddy' included, is a store channel and says nothing about who
+    # brought them.
+    campaign_clause += (
+        "  AND COALESCE(c.acquisition_source,'') <> 'facebook_lead' ")
     rows = conn.execute(
         "SELECT DISTINCT c.customer_id, "
         "  TRIM(COALESCE(c.first_name,'') || ' ' || COALESCE(c.last_name,'')) AS name, "
@@ -197,7 +208,7 @@ def _first_timers_to_attribute(conn, today):
               "href": f"/customers?cid={r['customer_id']}",
               "attribute_cid": r["customer_id"]} for r in rows]
     return _card("attribute", "First timers to attribute", len(rows),
-                 "/admin/leads", "who brought them?", "watch", items)
+                 "/admin/leads", "who referred them?", "watch", items)
 
 
 def _renewals(conn, today):

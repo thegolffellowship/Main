@@ -27,7 +27,8 @@ def build(with_leads=True):
             customer_id INTEGER PRIMARY KEY, first_name TEXT, last_name TEXT,
             phone TEXT, chapter TEXT,
             referred_by_customer_id INTEGER, referred_by_source TEXT,
-            referred_by_note TEXT, referred_at TEXT, found_us_via TEXT);
+            referred_by_note TEXT, referred_at TEXT, found_us_via TEXT,
+            acquisition_source TEXT);
         CREATE TABLE items (
             id INTEGER PRIMARY KEY, customer_id INTEGER, order_date TEXT,
             user_status TEXT, transaction_status TEXT DEFAULT 'active');
@@ -37,14 +38,16 @@ def build(with_leads=True):
                      "customer_id INTEGER, campaign_id INTEGER, "
                      "source TEXT, merged_into INTEGER)")
     people = [
-        (829, "Ty", "Bubela"),        # walk-in, nobody recorded
-        (791, "Logan", "Billeaud"),   # came through a campaign
-        (819, "Zac", "Hammond"),      # organic lead, no campaign
-        (709, "Justin", "Angelone"),  # already attributed
+        (829, "Ty", "Bubela", "godaddy"),       # walk-in, nobody recorded
+        (791, "Logan", "Billeaud", "godaddy"),  # came through a campaign
+        (819, "Zac", "Hammond", "godaddy"),     # organic lead, no campaign
+        (709, "Justin", "Angelone", "godaddy"), # already attributed
+        # Hector Hinojosa: stamped by the lead pipe, lead row since gone.
+        (759, "Hector", "Hinojosa", "facebook_lead"),
     ]
-    for cid, f, l in people:
-        conn.execute("INSERT INTO customers (customer_id, first_name, last_name) "
-                     "VALUES (?,?,?)", (cid, f, l))
+    for cid, f, l, src in people:
+        conn.execute("INSERT INTO customers (customer_id, first_name, last_name, "
+                     "acquisition_source) VALUES (?,?,?,?)", (cid, f, l, src))
         conn.execute("INSERT INTO items (customer_id, order_date, user_status) "
                      "VALUES (?,?, '1st Timer')", (cid, RECENT))
     conn.execute("UPDATE customers SET referred_by_customer_id = 31, "
@@ -69,6 +72,9 @@ check("a CAMPAIGN lead is not — Facebook already answered it",
 check("an ORGANIC lead still is — no campaign means nobody has said who brought them",
       "Zac Hammond" in names, names)
 check("someone already attributed is not", "Justin Angelone" not in names, names)
+check("a customer stamped 'facebook_lead' is not, even with NO lead row left "
+      "(Kerry: 'Isn't Hector Hinojosa a campaign lead?')",
+      "Hector Hinojosa" not in names, names)
 check("the count matches the rows shown", card["count"] == len(card["items"]), card["count"])
 check("each row carries the customer id the modal keys on",
       all(i.get("attribute_cid") for i in card["items"]), card["items"])
@@ -79,6 +85,8 @@ print("A Tracker with no leads table at all")
 card = _first_timers_to_attribute(build(with_leads=False), TODAY)
 check("the card still renders rather than the feed falling over rule 2",
       card is not None and "Ty Bubela" in [i["label"] for i in card["items"]], card)
+check("...and the acquisition_source exclusion still applies without a leads table",
+      "Hector Hinojosa" not in [i["label"] for i in card["items"]], card)
 
 print("Nothing waiting")
 conn = build()

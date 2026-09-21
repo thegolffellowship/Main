@@ -1735,7 +1735,7 @@
         return [line1, line2].filter(Boolean).join(", ");
     }
 
-    // ── WHO BROUGHT THEM ────────────────────────────────────────────
+    // ── WHO REFERRED THEM ───────────────────────────────────────────
     // Kerry 2026-09-21. The control itself lives in
     // /static/js/referral_control.js because it is now on three
     // surfaces — this card, the dashboard modal and the Leads band —
@@ -4439,7 +4439,7 @@
                 const canonRes = await fetch("/api/customers");
                 const canonList = await canonRes.json();
                 // The canonical list doubles as the people index for the
-                // "Who brought them" picker (Kerry 2026-09-21) — one
+                // "Who referred them" picker (Kerry 2026-09-21) — one
                 // fetch, not a second one per card.
                 window.__custAll = canonList;
                 // The picker's roster, free: this page has it already.

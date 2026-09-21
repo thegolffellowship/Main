@@ -230,3 +230,59 @@ first:
 
 Until those are answered, `ensure_referral_lead` deliberately writes
 `campaign_id=NULL`, and Ty stays in ORGANIC.
+
+## §7 — RATIFIED 2026-09-21: residual ROI, and membership as the fee trigger
+
+Kerry, on the §6 questions: *"Build it with the separate '+ referred'
+line."* And: *"ROAS to me, includes the people that Leads
+referred/brought/became members and anything they purchase in the
+future. Perhaps there's a toggle to show the pure lead ROAS vs all lead
+referrals included in there, but they're ultimately generated from that
+Campaign where the Lead originated."*
+
+That reasoning is sound. The ad bought the lead; the lead brought the
+member; the member's spend traces back to the ad. Two things keep it
+from turning into a number nobody trusts:
+
+**DIRECT never moves.** `roi` is computed exactly as before, from the
+campaign's own leads. The residual is `roi_referred`, a separate block
+carrying its own margin plus the combined total. The Leads stats panel
+defaults to Direct and toggles to "+ Referred". Nothing is folded in
+silently, so the ROAS Kerry has read all season stays comparable to
+itself.
+
+**The rules, all his:**
+1. Membership is the gate. A referral who has not joined contributes
+   nothing. Once they join, ALL their value counts — "anything they
+   purchase in the future."
+2. One hop. A referral of a referral does not credit the campaign again.
+3. Never double-counted. Anyone already in the campaign's lead set is
+   dropped from the residual; they are direct value.
+
+**One caveat worth stating**, since it affects how the toggled number
+should be read: the residual only grows. An older campaign has had more
+time to accumulate referrals than a recent one, so "+ Referred" is not a
+like-for-like comparison across campaigns of different ages. Compare
+campaigns on Direct; use "+ Referred" to see what a campaign ultimately
+generated.
+
+### The fee trigger (amends the 2026-07-30 rule)
+
+Kerry: *"Should tie to referrals as well, if they become/became a
+member, which in this case with Guillermo Arevalo, is true. He was
+Robert's referral and became a member so it needs to trigger a referral
+fee payment."*
+
+The 2026-07-30 rule — a relationship must never mint a liability — is
+**narrowed, not repealed**. Naming who referred someone still owes
+nobody anything. What creates the fee is the relationship PLUS a
+membership purchase, which is the event Kerry actually pays for.
+
+`sync_referral_fees` gains a third scan: an attributed referral with a
+membership raises an OWED row, `source='membership'`, at the configured
+fee. It is idempotent, and **any existing row for the pair suppresses
+it** — so the 2026-07-28 coupon rule still wins outright and a redeemed
+coupon is never topped up with cash.
+
+Guard: `test_referral_fee_membership.py` (16 checks), including that the
+relationship alone still mints nothing.

@@ -227,6 +227,9 @@
         .ld-attrband .ld-ab-meta { color:#92400E; font-size:.75rem; margin-left:8px; }
         .ld-attrband .ld-ab-ctl { margin-top:6px; }
         .ld-attrband .ld-ab-more { font-size:.76rem; color:#92400E; margin-top:6px; }
+        .ld-roiseg { float:right; font-size:.72rem; font-weight:400; }
+        .ld-refline { margin-top:8px; padding-top:8px; border-top:1px dashed var(--border,#E5E7EB);
+            font-size:.8rem; }
 </style>
 </head>
 <body>
@@ -512,6 +515,12 @@
     // as the dashboard card (/api/leads/attribute-queue), same control
     // (/static/js/referral_control.js) — the Leads page is simply where
     // he already is when he thinks about where people came from.
+    // Direct vs "+ referred" ROAS. Direct is the default: it is the
+    // figure Kerry has been tracking, and it must stay comparable to
+    // itself.
+    let roiMode = "direct";
+    function setRoiMode(m) { roiMode = m; renderStats(); }
+
     const AB_PEEK = 8;
     let AB_ITEMS = [], AB_SHOWN = AB_PEEK;
 
@@ -532,7 +541,7 @@
         const extra = AB_ITEMS.length - AB_SHOWN;
         el.innerHTML = '<h3>' + AB_ITEMS.length + ' first timer' +
             (AB_ITEMS.length === 1 ? "" : "s") + ' to attribute</h3>' +
-            '<div class="ld-ab-sub">Who brought them? Naming someone also adds ' +
+            '<div class="ld-ab-sub">Who referred them? Naming someone also adds ' +
             'them to the Lead Center as a referral.</div>' + rows +
             (extra > 0 ? '<div class="ld-ab-more"><a href="#" data-ab-more>+' +
                 extra + ' more</a></div>' : "");
@@ -1708,19 +1717,43 @@
         // pool. ROI is computed on MARGIN — what TGF actually kept —
         // and the gross figure sits beside it so the two can never be
         // read as the same thing.
+        // THE "+ REFERRED" TOGGLE (Kerry 2026-09-21: "ROAS to me,
+        // includes the people that Leads referred/brought/became members
+        // and anything they purchase in the future. Perhaps there's a
+        // toggle to show the pure lead ROAS vs all lead referrals
+        // included"). DIRECT is the default and is the untouched number
+        // he has read all season; the residual is additive and labelled,
+        // never folded in silently.
         const v = b.value || {}, r = b.roi;
-        const roiPanel = !r ? "" : `<div class="ld-panel" style="grid-column:1/-1"><h3>Return on ad spend</h3>
+        const rr = b.roi_referred, vr = b.value_referred || {};
+        const withRef = roiMode === "referred" && rr;
+        const roiToggle = !rr ? "" : `<span class="ld-seg ld-roiseg">
+                <button class="${roiMode === "direct" ? "on" : ""}" onclick="setRoiMode('direct')">Direct</button>
+                <button class="${roiMode === "referred" ? "on" : ""}" onclick="setRoiMode('referred')">+ Referred</button>
+            </span>`;
+        const roiPanel = !r ? "" : `<div class="ld-panel" style="grid-column:1/-1"><h3>Return on ad spend ${roiToggle}</h3>
             <div class="ld-metrics">
             ${metric("Ad spend", money(r.spend))}
-            ${metric("Collected", money(r.collected), "gross, lifetime")}
+            ${metric("Collected", money(withRef ? (r.collected || 0) + (rr.collected || 0) : r.collected), "gross, lifetime")}
             ${(v.rows || []).length
                 ? `<div class="ld-metric ld-mclick" onclick="toggleMarginDetail()" title="Show the per-player breakdown behind this number"><div class="lbl">TGF margin</div><div class="val">${money(r.margin)}</div><div class="sub">${!(v.rate_card_rows) ? "what TGF kept" : `<span class="ld-late">${v.rate_card_rows} row${v.rate_card_rows === 1 ? "" : "s"} still on rate card</span>`} · <span class="ld-mlink">${marginOpen ? "hide" : "show"} the math</span></div></div>`
                 : metric("TGF margin", money(r.margin), "what TGF kept")}
-            ${metric("Net", money(r.net), r.net >= 0 ? "ahead" : "behind")}
-            ${metric("ROAS", r.roas_margin == null ? "—" : `${r.roas_margin}×`, "margin per $1 spent")}
-            ${metric("ROI", r.pct == null ? "—" : `${r.pct > 0 ? "+" : ""}${r.pct}%`, "on margin")}
+            ${metric("Net", money(withRef ? rr.total_net : r.net),
+                     (withRef ? rr.total_net : r.net) >= 0 ? "ahead" : "behind")}
+            ${metric("ROAS", (withRef ? rr.total_roas_margin : r.roas_margin) == null ? "—"
+                     : `${withRef ? rr.total_roas_margin : r.roas_margin}×`, "margin per $1 spent")}
+            ${metric("ROI", (withRef ? rr.total_pct : r.pct) == null ? "—"
+                     : `${(withRef ? rr.total_pct : r.pct) > 0 ? "+" : ""}${withRef ? rr.total_pct : r.pct}%`, "on margin")}
             ${metric("Value / lead", money(r.value_per_lead), "margin ÷ leads")}
             </div>
+            ${!rr ? "" : `<div class="ld-refline">
+              <b>+ Referred:</b> ${num(rr.members)} member${rr.members === 1 ? "" : "s"}
+              referred by these leads, worth ${money(rr.margin)} of margin
+              &mdash; ${withRef
+                ? `included above, on top of ${money(r.margin)} direct.`
+                : `<a href="#" onclick="setRoiMode('referred');return false;">add them</a> to see ${money(rr.total_margin)} total.`}
+              <span class="ld-dsub">A referral counts once they buy a membership; one hop only, never double-counted.</span>
+            </div>`}
             <div class="ld-foot">
               Lifetime: every dollar these ${num(v.customers)} people have paid TGF, not just during the campaign.
               ${v.customers < (v.leads || 0) ? `<span class="ld-dsub">(${num(v.leads)} leads, ${num(v.customers)} people${v.leads_without_customer ? ` &mdash; ${num(v.leads_without_customer)} with no customer record yet` : ""}${v.duplicate_leads ? `, ${num(v.duplicate_leads)} duplicate submission${v.duplicate_leads === 1 ? "" : "s"}` : ""})</span>` : ""}

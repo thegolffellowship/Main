@@ -1,4 +1,10 @@
-/* Who brought them — the attribution control, once.
+/* Who referred them — the attribution control, once.
+ *
+ * Named for the question Kerry actually asks (2026-09-21:
+ * "Modal should probably be who referred them, not who brought
+ * them"). The distinction matters now that naming someone can
+ * trigger a referral fee: "brought" is a ride to the course,
+ * "referred" is the thing TGF pays for.
  *
  * Kerry 2026-09-21: "going to the customers board then clicking info
  * then choosing is way too many steps." The answer was to put the same
@@ -99,7 +105,7 @@
         return '<div style="' + frame + '" data-refblock="' + cid + '">' +
             '<div style="font-weight:600; font-size:0.7rem; color:var(--text-muted); ' +
                 'text-transform:uppercase; letter-spacing:0.03em; margin-bottom:0.3rem;">' +
-                esc(opts.heading || "Who brought them") + "</div>" +
+                esc(opts.heading || "Who referred them") + "</div>" +
             '<div style="font-size:0.82rem; min-height:1.2em;" data-refcurrent>' +
                 currentHtml(customer) + "</div>" +
             '<div style="margin-top:0.45rem; display:flex; flex-wrap:wrap; gap:6px; align-items:center;">' +

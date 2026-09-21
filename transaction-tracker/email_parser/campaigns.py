@@ -423,6 +423,62 @@ def _roll_up_insights(rows: list[dict]) -> dict | None:
     return agg
 
 
+def referred_lead_rows(lead_rows: list[dict], conn) -> list[dict]:
+    """The people this campaign's leads REFERRED, who then joined.
+
+    Kerry 2026-09-21: "ROAS to me, includes the people that Leads
+    referred/brought/became members and anything they purchase in the
+    future ... they're ultimately generated from that Campaign where the
+    Lead originated."
+
+    Three rules, all his:
+
+    1. MEMBERSHIP IS THE GATE. "A referral only comes when the person
+       buys a membership." Someone attributed to a campaign lead but who
+       has never joined contributes nothing. The moment they join, they
+       count — and then ALL of their value counts, not just the
+       membership, because "anything they purchase in the future" is the
+       measure of what the ad actually bought.
+    2. ONE HOP. A person referred by a referral does not credit the
+       campaign again. Second-order credit is defensible; an unbounded
+       chain eventually makes one campaign responsible for all of TGF.
+    3. NEVER DOUBLE-COUNTED. Anyone already in the campaign's own lead
+       set is dropped here — they are direct value, and counting them
+       in both lines would inflate the total the toggle shows.
+
+    Returns rows shaped like lead rows, because `campaign_value` reads
+    `customer_id` and nothing else.
+    """
+    ids = sorted({r["customer_id"] for r in lead_rows if r.get("customer_id")})
+    if not ids:
+        return []
+    ph = ",".join("?" * len(ids))
+    try:
+        rows = conn.execute(
+            f"SELECT c.customer_id, c.referred_by_customer_id, "
+            f"  TRIM(COALESCE(c.first_name,'') || ' ' || COALESCE(c.last_name,'')) "
+            f"    AS name "
+            f"FROM customers c "
+            f"WHERE c.referred_by_customer_id IN ({ph}) "
+            f"  AND EXISTS (SELECT 1 FROM customer_memberships m "
+            f"              WHERE m.customer_id = c.customer_id)",
+            tuple(ids)).fetchall()
+    except sqlite3.OperationalError:
+        # A database without the membership or referral columns simply
+        # has no residual to report — never a reason to lose the ROI.
+        return []
+    seen = set(ids)
+    out = []
+    for r in rows:
+        if r["customer_id"] in seen:
+            continue            # rule 3: already direct value
+        seen.add(r["customer_id"])
+        out.append({"customer_id": r["customer_id"],
+                    "name": r["name"],
+                    "referred_by_customer_id": r["referred_by_customer_id"]})
+    return out
+
+
 def campaign_value(lead_rows: list[dict], conn,
                    db_path: str | Path | None = None,
                    gap_fill_seconds: float = 8.0) -> dict:
@@ -873,7 +929,7 @@ def campaign_stats(db_path: str | Path | None = None,
         by_campaign.setdefault(l.get("campaign_id"), []).append(l)
 
     def _bucket(name, rows, spend, spend_source, end_date, insights=None,
-                cid=None, value=None):
+                cid=None, value=None, value_referred=None):
         cutoff = None
         window_open = None
         if end_date and TRAILING_DAYS is not None:
@@ -941,12 +997,37 @@ def campaign_stats(db_path: str | Path | None = None,
                 "coverage_pct": value.get("coverage_pct"),
                 "coverage_pending": value.get("coverage_pending"),
             }
+        # THE "+ REFERRED" LINE (Kerry 2026-09-21: "I like the 'direct'
+        # and '+ referred' idea"). `roi` above is DIRECT and is left
+        # exactly as it was, because it is the number Kerry has been
+        # reading all season and it has to stay comparable to itself.
+        # The residual is a SEPARATE line plus a combined total, so the
+        # page can toggle between pure lead ROAS and everything the
+        # campaign ultimately generated without either figure moving.
+        roi_referred = None
+        if value_referred and spend:
+            d_margin = (value.get("margin") or 0) if value else 0
+            r_margin = value_referred.get("margin") or 0
+            total = d_margin + r_margin
+            roi_referred = {
+                "members": value_referred.get("customers") or 0,
+                "collected": value_referred.get("collected"),
+                "margin": round(r_margin, 2),
+                # What the campaign is worth once its referrals count.
+                "total_margin": round(total, 2),
+                "total_net": round(total - spend, 2),
+                "total_roas_margin": (round(total / spend, 2)
+                                      if spend else None),
+                "total_pct": (round(100.0 * (total - spend) / spend, 1)
+                              if spend else None),
+            }
         return {"id": cid, "name": name, "spend": spend,
                 "spend_source": spend_source, "end_date": end_date,
                 "trailing_cutoff": cutoff.isoformat() if cutoff else None,
                 "trailing_window_open": window_open,
                 "meta": insights, "funnel": f, "cost": cost,
                 "value": value, "roi": roi,
+                "value_referred": value_referred, "roi_referred": roi_referred,
                 "chapters": chapters}
 
     out_campaigns = []
@@ -969,8 +1050,12 @@ def campaign_stats(db_path: str | Path | None = None,
         _rows = by_campaign.get(c["id"], [])
         with db._connect(db_path) as _vc:
             _val = campaign_value(_rows, _vc, db_path, gap_fill_seconds)
+            _ref_rows = referred_lead_rows(_rows, _vc)
+            _ref_val = (campaign_value(_ref_rows, _vc, db_path, gap_fill_seconds)
+                        if _ref_rows else None)
         b = _bucket(c["name"], _rows, spend,
-                    spend_source, c.get("end_date"), ins, c["id"], _val)
+                    spend_source, c.get("end_date"), ins, c["id"], _val,
+                    _ref_val)
         b.update({"source": c.get("source"),
                   "meta_campaign_id": c.get("meta_campaign_id"),
                   "start_date": c.get("start_date"),
@@ -1003,11 +1088,16 @@ def campaign_stats(db_path: str | Path | None = None,
     all_ins = _roll_up_insights(campaigns)
     with db._connect(db_path) as _vc:
         _camp_val = campaign_value(attributed_rows, _vc, db_path, gap_fill_seconds)
+        _camp_ref_rows = referred_lead_rows(attributed_rows, _vc)
+        _camp_ref_val = (campaign_value(_camp_ref_rows, _vc, db_path,
+                                        gap_fill_seconds)
+                         if _camp_ref_rows else None)
     campaigns_bucket = _bucket("Campaigns", attributed_rows,
                                total_spend if any_spend else None,
                                "meta" if all_ins else ("sum" if any_spend
                                                        else "none"),
-                               latest_end, all_ins, None, _camp_val)
+                               latest_end, all_ins, None, _camp_val,
+                               _camp_ref_val)
     with db._connect(db_path) as _vc:
         _all_val = campaign_value(leads, _vc, db_path, gap_fill_seconds)
     all_bucket = _bucket("Overall", leads,
