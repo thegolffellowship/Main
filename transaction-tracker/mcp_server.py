@@ -1782,6 +1782,7 @@ def _scoring_dispatch(url: str, extract: str):
       scoring-per-nine-audit[:all]   every course with an 18-hole row: nines resolved / unresolved and why
       scoring-tee-nines[:<course_id>]  label each course tee row front/back/full from the 18-hole card's yardages; reports what it could not decide
       scoring-event-report:<event_id>|flights|proximity  the two PAIRINGS printables as data (Divisions & Flights / CTP markers)
+      scoring-flights-board:<event_id>  the DIVISIONS/FLIGHTS board as data — ratified flighting + payout rules (SELECTION and AMOUNTS layers) beside what GG recorded; dry run, read-only
       scoring-pairings-counts:<event_id>[|<year>]  saved sheet scored against played history: times each pair has played together this year INCLUDING this event
       scoring-liabilities          payouts owed, credits held, LSC shirt fund by Cup year, HIO pot, tax reserve by month
       scoring-membership-gap[:apply]  the membership gap group: booked vs today's decomposition by price/type/contests; apply rebooks membership rows only
@@ -2652,6 +2653,20 @@ def _scoring_dispatch(url: str, extract: str):
                                 f"decided={_res['n_decided']} "
                                 f"unresolved={_res['n_unresolved']}")
             return _j.dumps(_res, indent=2, default=str)
+        if cmd == "scoring-flights-board":
+            # The DIVISIONS/FLIGHTS board (mailbox #582/#584) as data:
+            # the ratified rule set from `email_parser/flighting.py` on
+            # this event's roster, both layers, beside GG's recorded
+            # purses. Read-only; pays nobody.
+            _eid = arg.strip()
+            if not _eid.isdigit():
+                return json.dumps({"error": "usage: scoring-flights-board:<event_id>"})
+            _b = db.event_flights_board(int(_eid))
+            if not _b:
+                return json.dumps({"error": f"event {_eid} not found"})
+            _b = dict(_b)
+            _b.pop("event", None)
+            return json.dumps(_b, indent=2, default=str)
         if cmd == "scoring-event-report":
             # The two PAIRINGS printables as data, for checking a sheet
             # without a browser. "scoring-event-report:<event_id>|flights"

@@ -57921,116 +57921,209 @@ def _handicap_index_18_by_customer(db_path=None, as_of: str | None = None) -> di
     return out
 
 
-def event_flights_report(event_id: int, db_path=None) -> dict | None:
-    """Divisions & Flights for one event — NET, SKINS and GROSS together.
+def _event_player_ph_map(conn, ev: dict, idx18: dict) -> tuple[dict, str, str]:
+    """{customer_id: playing_handicap} for everyone on the roster — THE
+    starter sheet's own number (same tee band from the ROSTER row, same
+    course card row per band via `_event_tee_rows`, same
+    `handicap_calc.playing_handicap` chain), so the FLIGHTS tab and the
+    printed sheet cannot disagree about a PH. Returns (map, basis, note);
+    a player whose band has no resolved tee row gets no PH, never a
+    guess (Kerry 2026-09-15: "We need to get the calculations right")."""
+    from email_parser.handicap_calc import playing_handicap as _ph_fn
+    out: dict = {}
+    try:
+        legend = event_tee_legend(conn, ev["id"], ev)
+        tee_rows, basis, note = _event_tee_rows(conn, ev, legend)
+    except Exception as e:                       # noqa: BLE001 — a PH is optional
+        logger.warning("flights board: tee rows unavailable for event %s: %s",
+                       ev.get("id"), e)
+        return {}, "", "No course card on file, so no playing handicap could be computed."
+    if not tee_rows:
+        return {}, basis, note
+    bands: dict = {}
+    try:
+        for r in _event_roster_rows(conn, ev["id"]):
+            cid = r.get("customer_id")
+            band = (r.get("tee_choice") or "").strip()
+            if cid and band and int(cid) not in bands:
+                bands[int(cid)] = band
+    except sqlite3.OperationalError:
+        return {}, basis, note
+    for cid, idx in idx18.items():
+        tee = tee_rows.get(bands.get(int(cid), ""))
+        if idx is None or not tee:
+            continue
+        # A nine-hole card takes the nine-hole index (half the 18).
+        idx_scoped = idx if (tee["rating"] or 0) >= 50 else round(idx / 2.0, 1)
+        try:
+            out[int(cid)] = _ph_fn(idx_scoped, tee["slope"], tee["rating"], tee["par"])
+        except Exception:                        # noqa: BLE001
+            continue
+    return out, basis, note
 
-    Buy-ins come from the ROSTER (`_event_game_buyers`, the Games-tab
-    eligibility rules), the flight COUNT from the live games matrix, and
-    the CUT from the ratified flighting standard (`live_scoring
-    .flight_plan` with `SEED_FLIGHT_CONFIG`: flight on the raw 18-hole
-    TGF index, breaks are floors for the upper flight so 12.0 goes UP,
-    equal indexes never split, thin flights merge). Each game uses the
-    mode its config names — Individual Net equal_size, Skins and
-    Individual Gross fixed bands — which is what reproduced Golf Genius
-    exactly on s9.23 (net 13/13, skins 8/8).
 
-    A game below its activation threshold is REPORTED as not running,
-    with the reason. Players with no index are listed apart rather than
-    dropped into a flight they did not earn."""
-    from . import live_scoring as _ls
+_BOARD_GG_GAMES = ("individual_net", "skins", "individual_gross")
+
+
+def _event_gg_recorded_purses(conn, event_id: int) -> dict:
+    """What Golf Genius RECORDED for the three flighted games — the
+    published-vs-paid side of the board on a completed event. Read-only;
+    an event with no GG board yet reports empty games, not an error."""
+    out = {g: {"rows": [], "total": 0.0} for g in _BOARD_GG_GAMES}
+    try:
+        _ensure_gg_game_results_tables(conn)
+        rows = conn.execute(
+            """SELECT game, player_name, customer_id, position, detail, purse
+                 FROM gg_game_results
+                WHERE event_id = ? AND game IN (?, ?, ?)
+                ORDER BY game, purse DESC, player_name""",
+            (event_id, *_BOARD_GG_GAMES)).fetchall()
+    except sqlite3.OperationalError:
+        return out
+    for r in rows:
+        g = out.get(r["game"])
+        if g is None:
+            continue
+        purse = round(float(r["purse"] or 0), 2)
+        if purse <= 0:
+            continue
+        g["rows"].append({"player_name": r["player_name"],
+                          "customer_id": r["customer_id"],
+                          "position": r["position"], "detail": r["detail"],
+                          "purse": purse})
+        g["total"] = round(g["total"] + purse, 2)
+    return out
+
+
+def event_flights_board(event_id: int, db_path=None) -> dict | None:
+    """The DIVISIONS / FLIGHTS board for one event — the ratified flighting
+    and payout rule set (`email_parser/flighting.py`) computed from Tracker
+    data, in its two layers.
+
+    Buy-ins from the ROSTER (`_event_game_buyers` — wd_credits decides who
+    is a buyer), the index of record by customer_id locked as-of for a
+    started event (`_event_index_as_of`), each player's PH as the starter
+    sheet computes it, the flight count and the game variant from the LIVE
+    matrix, the cut from the ratified ladders, pots and places from the
+    ratified rules. Beside it, what Golf Genius recorded (a completed
+    event's published-vs-paid answer).
+
+    STATE is LIVE until the freeze action exists (rule 3b — the snapshot
+    schema is proposed in mailbox #584 and waits for Kerry). DRY RUN:
+    nothing here writes a payout; GG stays the payer of record."""
+    from . import flighting as _fl
     with _connect(db_path) as conn:
         ev = conn.execute("SELECT * FROM events WHERE id = ?", (event_id,)).fetchone()
         if not ev:
             return None
         ev = dict(ev)
-        buyers_by_kind = {
-            k: _event_game_buyers(conn, ev["item_name"], k)
-            for k in ("NET", "GROSS")
-        }
-    idx18 = _handicap_index_18_by_customer(db_path, as_of=_event_index_as_of(ev))
-    holes_key = "18" if _event_holes_type(ev["item_name"],
-                                          ev.get("format")) == 18 else "9"
+        buyers_by_kind = {k: _event_game_buyers(conn, ev["item_name"], k)
+                          for k in ("NET", "GROSS")}
+        as_of = _event_index_as_of(ev)
+        idx18 = _handicap_index_18_by_customer(db_path, as_of=as_of)
+        ph_map, ph_basis, ph_note = _event_player_ph_map(conn, ev, idx18)
+        gg = _event_gg_recorded_purses(conn, ev["id"])
+    holes = _event_holes_type(ev["item_name"], ev.get("format"))
+    holes_key = "18" if holes == 18 else "9"
+    m9, m18 = _load_games_matrix(db_path)
+    matrix = m18 if holes_key == "18" else m9
+    matrix_source = ("app_settings (live)" if get_app_setting(
+        f"games_matrix_{holes_key}", db_path=db_path) else "repo seed (games-matrix.js)")
+
+    def _row_for(n: int):
+        return matrix.get(str(int(n)))
+
+    field_by_kind = {}
+    for kind, res in buyers_by_kind.items():
+        field_by_kind[kind] = [
+            {"customer_id": int(cid), "name": nm, "index": idx18.get(int(cid)),
+             "ph": ph_map.get(int(cid))}
+            for cid, nm in res["buyers"].items()]
+    board = _fl.build(field_by_kind, holes_key, _row_for)
+    for entry in board["games"]:
+        for f in entry["selection"]["flights"]:
+            for m in f["members"]:
+                m["sort_name"] = _sort_name(m.get("name"))
+        for u in entry["selection"].get("unflighted") or []:
+            u["sort_name"] = _sort_name(u.get("name"))
+        entry["gg_recorded"] = gg.get(entry["game"]) or {"rows": [], "total": 0.0}
+    no_cid = sorted({n for r in buyers_by_kind.values() for n in r["no_customer_id"]})
+    started = _event_started(ev)
+    today = today_central_str()
+    completed = bool((ev.get("event_date") or "") and ev["event_date"][:10] < today)
+    board.update({
+        "event_id": ev["id"], "event": ev, "event_name": ev.get("item_name"),
+        "event_date": ev.get("event_date"), "chapter": ev.get("chapter"),
+        "course": ev.get("course"),
+        "buyers": {k: len(v) for k, v in field_by_kind.items()},
+        "no_customer_id": no_cid,
+        "handicap_as_of": as_of,
+        "index_basis": "18-hole TGF index (twice the nine-hole index)"
+                       + (f", locked as of {as_of}" if as_of else ""),
+        "ph_basis": ph_basis, "ph_note": ph_note,
+        "matrix_source": matrix_source,
+        "event_started": started, "event_completed": completed,
+        "freeze": None,            # populated once the snapshot schema is ratified
+        "dry_run": True,
+        "payer_of_record": "Golf Genius",
+        "file_stub": print_file_stub(ev),
+    })
+    return board
+
+
+def event_flights_report(event_id: int, db_path=None) -> dict | None:
+    """Divisions & Flights for one event — NET, SKINS and GROSS together,
+    as the PRINTED page reads it. A view of `event_flights_board` (one
+    computation per fact): the same buy-ins, the same locked index, the
+    same matrix-selected variant and flight count, the same ratified cut
+    (fixed bands for Skins and Individual Gross, the equal-size cut with
+    the 11.9 ceiling for Individual Net; NO merging — #572). A game below
+    its activation threshold is REPORTED as not running, with the reason.
+    Players with no index are listed apart rather than dropped into a
+    flight they did not earn."""
+    board = event_flights_board(event_id, db_path=db_path)
+    if not board:
+        return None
+    ev = board["event"]
     games = []
-    for game, label, kind in _FLIGHT_REPORT_GAMES:
-        buyers = buyers_by_kind[kind]["buyers"]
-        field = [{"key": str(cid), "customer_id": cid, "name": nm,
-                  "index": idx18.get(int(cid))}
-                 for cid, nm in buyers.items()]
-        n = len(field)
-        gcfg = (_ls.SEED_LIVE_SCORING_CONFIG["games"].get(game) or {})
-        count = _ls._bands_lookup((gcfg.get("flight_bands") or {}).get(holes_key), n, 1)
-        min_buyers = (gcfg.get("min_buyers") or {}).get(holes_key)
-        entry = {"game": game, "label": label, "kind": kind, "buyers": n,
-                 "flights": [], "unflighted": [], "notes": [], "active": True,
-                 "inactive_reason": None}
-        if n == 0:
-            entry["active"] = False
-            entry["inactive_reason"] = f"Nobody bought into {kind} games."
-            games.append(entry)
-            continue
-        if min_buyers is not None and n < min_buyers:
-            entry["active"] = False
-            entry["inactive_reason"] = (
-                f"{label} activates at {min_buyers} buyers on "
-                f"{'an 18' if holes_key == '18' else 'a 9'}-hole event; "
-                f"{n} bought in.")
-            games.append(entry)
-            continue
-        plan = _ls.flight_plan(field, count, game=game)
-        entry["mode"] = plan["mode"]
-        entry["notes"] = list(plan.get("notes") or [])
-        fl = plan["flights"]
-        # A label states the RULE, not the field. On a FIXED-BAND game the
-        # rule is the configured edge — Skins flight 1 is "<12.0" even when
-        # the lowest player above the line happens to be 12.4, because a
-        # 12.1 reading "<12.4" would place himself in the wrong flight.
-        # Only when a merge has changed the shape does the label fall back
-        # to describing the field.
-        edges = None
-        if (plan["mode"] == "fixed_bands"
-                and plan["effective_count"] == plan["requested_count"]):
-            edges = list((_ls.SEED_FLIGHT_CONFIG.get("bands") or {}).get(str(count)) or [])
-            if len(edges) != len(fl) - 1:
-                edges = None
-        for i, f in enumerate(fl):
-            nxt = (edges[i] if edges is not None and i < len(edges)
-                   else (fl[i + 1]["min_index"] if i + 1 < len(fl) else None))
-            prev = (edges[i - 1] if edges is not None and i > 0
-                    else f["min_index"])
-            if nxt is not None:
-                band = f"HCP <{nxt:.1f}"
-            elif len(fl) > 1:
-                band = f"HCP {prev:.1f}+"
-            else:
-                band = "All handicaps"
-            entry["flights"].append({
-                "name": f"Flight {f['flight']} ({band})",
-                "players": f["players"],
-                "members": [{"name": m["name"],
-                             "sort_name": _sort_name(m["name"]),
-                             "index": m["index"],
-                             "index_text": _index_text(m["index"])}
-                            for m in f["members"]],
-            })
-        entry["unflighted"] = [{"name": u["name"],
-                                "sort_name": _sort_name(u["name"]),
+    for entry in board["games"]:
+        sel = entry["selection"]
+        g = {"game": entry["game"], "label": entry["label"], "kind": entry["kind"],
+             "buyers": sel["buyers_at_selection"], "flights": [], "unflighted": [],
+             "notes": list(sel.get("notes") or []), "active": entry["active"],
+             "inactive_reason": entry["inactive_reason"], "mode": sel.get("mode")}
+        if entry["active"]:
+            multi = len(sel["flights"]) > 1
+            for f in sel["flights"]:
+                band = f["band"]
+                # The printed name states the RULE the band holds ("HCP
+                # <12.0"), the derived range beside it is the field.
+                name = (f"Flight {f['flight_no']} (HCP {band})" if multi
+                        else f"Flight {f['flight_no']} ({band})")
+                g["flights"].append({
+                    "name": name, "players": f["players"],
+                    "label": f["label"],
+                    "members": [{"name": m["name"], "sort_name": m["sort_name"],
+                                 "index": m["index"], "index_text": m["index_text"]}
+                                for m in f["members"]],
+                })
+            g["unflighted"] = [{"name": u["name"], "sort_name": u["sort_name"],
                                 "index_text": "—"}
-                               for u in sorted(plan.get("unflighted") or [],
-                                               key=lambda x: _sort_name(x["name"]))]
-        games.append(entry)
+                               for u in sorted(sel.get("unflighted") or [],
+                                               key=lambda x: x["sort_name"])]
+        games.append(g)
     return {
         "event": ev,
         "event_name": ev.get("item_name"),
         "event_date": ev.get("event_date"),
         "chapter": ev.get("chapter"),
         "course": ev.get("course"),
-        "holes_key": holes_key,
+        "holes_key": board["holes_key"],
         "year": (ev.get("event_date") or "")[:4],
         "games": games,
-        "index_basis": "18-hole TGF index (twice the nine-hole index)",
-        "file_stub": print_file_stub(ev),
+        "index_basis": board["index_basis"],
+        "file_stub": board["file_stub"],
     }
-
 
 def _course_hole_table(conn, course_id: int) -> dict:
     """{hole_number: {"par": int, "yardage": int|None}} for a course.

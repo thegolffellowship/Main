@@ -7747,6 +7747,28 @@ def api_reverse_credit(item_id):
     return jsonify({"error": "Item not found or not in credited/transferred state."}), 400
 
 
+@app.route("/api/events/<int:event_id>/flights-board")
+@require_role("manager")
+def api_event_flights_board(event_id):
+    """The DIVISIONS / FLIGHTS board for one event (mailbox #582): the
+    ratified flighting and payout rule set computed from Tracker data in
+    its two layers — SELECTION (games, variant, flight count, edges, each
+    player's flight) and AMOUNTS (pots, places, the 10% overall low-gross
+    bonus) — beside what Golf Genius recorded. DRY RUN: read-only, pays
+    nobody; GG stays the payer of record."""
+    from email_parser.database import event_flights_board
+    try:
+        board = event_flights_board(event_id)
+    except Exception as e:
+        logger.exception("flights board failed for event %s", event_id)
+        return jsonify({"error": str(e)}), 500
+    if not board:
+        return jsonify({"error": "Event not found"}), 404
+    board = dict(board)
+    board.pop("event", None)          # the row carries course_cost/markup; the page has /api/events
+    return jsonify(board)
+
+
 @app.route("/api/customers/activity")
 @require_role("view-only")
 def api_customers_activity():

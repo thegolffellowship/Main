@@ -575,10 +575,14 @@ def assign_flights(cards: list[dict], game_cfg: dict, holes_key: str) -> dict:
 #     concentrated (3 -> 2). That falls out of the min-flight merge below
 #     rather than needing its own test.
 #
-# STILL UNRATIFIED (do not treat the defaults as decisions):
-#   - minimum flight size (default 3 here)
-#   - the band ladders at 3 and 4 flights
-#   - whether the index is the 9-hole or 18-hole number (see INDEX_SCALE)
+# RATIFIED SINCE (mailbox #571-#575, Kerry 2026-09-18/19, revised #582
+# 2026-09-21 — the rule set as data lives in `email_parser/flighting.py`):
+#   - NO minimum flight size, NO merging, ever (B2 superseded). A flight of
+#     1 simply is that size; the min_flight_size dial below is 0 and stays
+#     a dial only so the Flighting Lab can still show what merging WOULD do.
+#   - the 3-flight ladder <6.0 / 6.0-11.9 / 12.0+ and the 4-flight ladder
+#     adding 12.0-17.9 / 18.0+; cut lines never move.
+#   - the index is the 18-hole number (ruled 2026-07-30, #253).
 # ---------------------------------------------------------------------------
 
 SEED_FLIGHT_CONFIG: dict = {
@@ -594,7 +598,8 @@ SEED_FLIGHT_CONFIG: dict = {
     # ratings anywhere, so the divergence risk raised in #253 does not exist
     # here — but the setting stays explicit so it can never be assumed again.
     "index_scale": "18",             # "9" | "18"  — RULED: 18
-    "min_flight_size": 3,            # UNRATIFIED
+    # RATIFIED 2026-09-19 (#572): no minimum, no merging. 0 = off.
+    "min_flight_size": 0,
     "tie_direction": "even",         # "even" | "up" | "down"
     "modes": {
         "individual_net": "equal_size",
@@ -610,7 +615,7 @@ SEED_FLIGHT_CONFIG: dict = {
     # and "12.0 goes UP" is exactly the boundary Kerry ratified.
     "bands": {
         "2": [12.0],                 # ratified: Net low flight is < 12.0
-        "3": [6.0, 12.0],            # UNRATIFIED — inferred from the ladder
+        "3": [6.0, 12.0],            # RATIFIED 2026-09-18 (#571 B3)
         "4": [6.0, 12.0, 18.0],      # the ratified Players Cup ladder
     },
     # Individual Net splits near the middle, but the low flight never

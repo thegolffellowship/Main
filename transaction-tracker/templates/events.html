@@ -2358,6 +2358,7 @@
     let pairingsData = {};          // keyed by event id → {groups_9, groups_18, slots_9, slots_18, isDirty, mode, protectPartners, seeds, swapMode, selection, loaded}
     let financialOpenForEvent = {};  // keyed by event id → true if financial panel is open
     let payoutsOpenForEvent = {};  // keyed by event id → true if payouts panel is open
+    let flightsOpenForEvent = {};  // keyed by event id → true if the DIVISIONS/FLIGHTS panel is open
     let tgfPayoutData = { customers: [], events: [], winnings: {} };  // TGF payout data from /api/tgf
     let mvpUnlinks = new Set();  // event names unlinked from same-day TGF MVP combining
     let eventSortField = "event_date";
@@ -3436,17 +3437,21 @@
                 const mobilePairingsView = pairingsOpenForEvent[ev.id];
                 const mobileFinancialView = financialOpenForEvent[ev.id];
                 const mobilePayoutsView = payoutsOpenForEvent[ev.id];
-                badgesHtml += `<span class="game-stat-badge ${!mobileGamesView && !mobilePairingsView && !mobileFinancialView && !mobilePayoutsView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="0">ROSTER <strong>${stats.players}</strong></span>`;
+                const mobileFlightsView = flightsOpenForEvent[ev.id];
+                badgesHtml += `<span class="game-stat-badge ${!mobileGamesView && !mobilePairingsView && !mobileFinancialView && !mobilePayoutsView && !mobileFlightsView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="0">ROSTER <strong>${stats.players}</strong></span>`;
                 badgesHtml += `<span class="game-stat-badge ${mobilePairingsView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="2">PAIRINGS</span>`;
                 if (mobileHolesType) {
                     badgesHtml += `<span class="game-stat-badge games-badge ${mobileGamesView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="1">GAMES</span>`;
+                }
+                if (mobileHolesType && canSeeFlights()) {
+                    badgesHtml += `<span class="game-stat-badge ${mobileFlightsView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="5" title="Divisions &amp; Flights — the ratified flighting and payout rules, dry run">FLIGHTS</span>`;
                 }
                 if (currentRole === 'admin') {
                     badgesHtml += `<span class="game-stat-badge ${mobilePayoutsView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="4">PAYOUTS</span>`;
                     badgesHtml += `<span class="game-stat-badge fin-badge-admin ${mobileFinancialView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="3">FINANCIAL</span>`;
                 }
                 badgesHtml += '</span>';
-                if (!mobileGamesView && !mobilePairingsView && !mobileFinancialView && !mobilePayoutsView) {
+                if (!mobileGamesView && !mobilePairingsView && !mobileFinancialView && !mobilePayoutsView && !mobileFlightsView) {
                     // Hole tabs — one per hole count this event actually sold
                     badgesHtml += holesTabsHtml(ev, registrants);
 
@@ -3473,6 +3478,8 @@
                     detailHtml = badgesHtml + renderPairingsPanel(ev, registrants, mGgRows);
                 } else if (mobilePayoutsView) {
                     detailHtml = badgesHtml + renderPayoutsPanel(ev, registrants);
+                } else if (mobileFlightsView) {
+                    detailHtml = badgesHtml + renderFlightsPanel(ev);
                 } else if (mobileFinancialView) {
                     detailHtml = badgesHtml + renderFinancialPanel(ev, registrants);
                 } else if (mobileGamesView) {
@@ -4036,6 +4043,12 @@
                         const ev2 = allEvents.find(e => e.id === mem.id);
                         if (c && ev2) rerenderDetail(c, ev2);
                     }
+                    if (mem.view === "5") {
+                        await loadFlightsBoard(mem.id);
+                        const c = detailContainerFor(mem.id);
+                        const ev2 = allEvents.find(e => e.id === mem.id);
+                        if (c && ev2) rerenderDetail(c, ev2);
+                    }
                 });
                 return;
             }
@@ -4081,6 +4094,7 @@
         pairingsOpenForEvent[evId] = val === "2";
         financialOpenForEvent[evId] = val === "3";
         payoutsOpenForEvent[evId] = val === "4";
+        flightsOpenForEvent[evId] = val === "5";
     }
 
     function currentDetailView(evId) {
@@ -4088,6 +4102,7 @@
         if (pairingsOpenForEvent[evId]) return "2";
         if (financialOpenForEvent[evId]) return "3";
         if (payoutsOpenForEvent[evId]) return "4";
+        if (flightsOpenForEvent[evId]) return "5";
         return "0";
     }
 
@@ -5381,6 +5396,180 @@
             if (msg) msg.textContent = (err && err.message) || "Save failed";
             if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = "Save"; }
         }
+    }
+
+    // ── DIVISIONS / FLIGHTS panel (mailbox #582 / #584, Kerry 2026-09-21) ──
+    // The ratified flighting + payout rule set (email_parser/flighting.py)
+    // on this event's roster, in its two layers: SELECTION (games, the
+    // variant the matrix picked, flight count, band edges, each player's
+    // flight — the layer that FREEZES) and AMOUNTS (pots, places, the 10%
+    // overall low-gross bonus — the layer that RECOMPUTES at settlement).
+    // Beside it, what Golf Genius recorded, so published-vs-paid answers
+    // itself. DRY RUN: nothing here pays anyone; GG is the payer of record.
+    const flightsBoards = {};   // event id → board payload | {error}
+    function canSeeFlights() {
+        return currentRole === 'admin' || currentRole === 'manager';
+    }
+    async function loadFlightsBoard(evId) {
+        try {
+            const res = await fetch(`/api/events/${evId}/flights-board`);
+            const data = await res.json().catch(() => ({}));
+            flightsBoards[evId] = res.ok ? data : { error: (data && data.error) || `HTTP ${res.status}` };
+        } catch (e) {
+            flightsBoards[evId] = { error: String(e && e.message || e) };
+        }
+    }
+    function fbMoney(v) {
+        const n = Number(v || 0);
+        return "$" + n.toFixed(2);
+    }
+    function fbStateBadge(board) {
+        const st = String(board.state || "live").toUpperCase();
+        const palette = {
+            LIVE:    { bg: "#ecfdf5", fg: "#065f46", bd: "#6ee7b7" },
+            FROZEN:  { bg: "#fffbeb", fg: "#92400e", bd: "#fcd34d" },
+            SETTLED: { bg: "#f3f4f6", fg: "#374151", bd: "#d1d5db" },
+        }[st] || { bg: "#f3f4f6", fg: "#374151", bd: "#d1d5db" };
+        let txt = st;
+        if (st === "FROZEN" && board.freeze && board.freeze.taken_at) txt += " " + escapeHtml(board.freeze.taken_at);
+        if (st === "LIVE") txt += board.event_completed ? " · recomputed now" : " · recomputing";
+        return `<span style="display:inline-block;padding:0.15rem 0.6rem;border-radius:999px;border:1px solid ${palette.bd};background:${palette.bg};color:${palette.fg};font-size:0.7rem;font-weight:700;letter-spacing:0.05em;">${txt}</span>`;
+    }
+    function fbPlacesText(flight) {
+        const pl = (flight.places || []);
+        if (!pl.length) return flight.paid ? escapeHtml(flight.paid) : (flight.players ? "—" : "no players");
+        return pl.map(p => `${p.place === 1 ? "1st" : p.place === 2 ? "2nd" : p.place === 3 ? "3rd" : p.place + "th"} ${fbMoney(p.amount)}`).join(" · ");
+    }
+    function renderFlightsPanel(ev) {
+        const board = flightsBoards[ev.id];
+        let html = '<div class="games-panel" style="white-space:normal;">';
+        if (board === undefined) {
+            html += `<div style="padding:1rem;color:var(--text-muted);font-size:0.85rem;">Loading the divisions &amp; flights board&hellip;</div></div>`;
+            return html;
+        }
+        if (board.error) {
+            html += `<div style="padding:1rem;color:#b91c1c;font-size:0.85rem;">Could not load the board: ${escapeHtml(board.error)}</div></div>`;
+            return html;
+        }
+        const b = board.buyers || {};
+        html += `<div class="games-panel-header" style="display:flex;align-items:center;gap:0.6rem;flex-wrap:wrap;">
+            <span>DIVISIONS / FLIGHTS &mdash; ${board.holes_key} holes</span>
+            ${fbStateBadge(board)}
+            <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text-muted);font-size:0.72rem;">dry run &middot; ${escapeHtml(board.payer_of_record || "Golf Genius")} is the payer of record</span>
+        </div>`;
+        html += `<div style="font-size:0.74rem;color:var(--text-muted);margin:0.35rem 0 0.6rem;line-height:1.5;">
+            Buyers: NET <strong>${b.NET || 0}</strong> &middot; GROSS <strong>${b.GROSS || 0}</strong>
+            &middot; ${escapeHtml(board.index_basis || "")}
+            ${board.ph_basis ? ` &middot; PH off the ${escapeHtml(board.ph_basis)}` : ""}
+            &middot; matrix: ${escapeHtml(board.matrix_source || "")}
+            &middot; rules v${board.rules_version} (${escapeHtml(board.rules_source || "")})
+        </div>`;
+        if (board.ph_note) {
+            html += `<div style="font-size:0.74rem;color:#92400e;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;padding:0.35rem 0.6rem;margin-bottom:0.6rem;">${escapeHtml(board.ph_note)}</div>`;
+        }
+        if ((board.no_customer_id || []).length) {
+            html += `<div style="font-size:0.74rem;color:#7c2d12;background:#fff7ed;border:1px dashed #b45309;border-radius:6px;padding:0.35rem 0.6rem;margin-bottom:0.6rem;">Buyers with no customer_id, not flighted: ${board.no_customer_id.map(escapeHtml).join(", ")}</div>`;
+        }
+        for (const g of (board.games || [])) {
+            const sel = g.selection || {};
+            const am = g.amounts;
+            html += `<div style="border:1px solid var(--border);border-radius:8px;margin-bottom:0.75rem;overflow:hidden;">`;
+            // Game bar
+            html += `<div style="display:flex;justify-content:space-between;align-items:baseline;gap:0.6rem;flex-wrap:wrap;background:${g.active ? "#1B1B1B" : "#6B7280"};color:#fff;padding:0.4rem 0.7rem;">
+                <span style="font-family:'Bitter',Georgia,serif;font-weight:700;font-size:0.9rem;">${escapeHtml(g.label)}</span>
+                <span style="font-size:0.72rem;opacity:0.9;font-variant-numeric:tabular-nums;">${sel.buyers_at_selection || 0} buyer${(sel.buyers_at_selection || 0) === 1 ? "" : "s"}${g.active ? ` &middot; ${sel.flight_count} flight${sel.flight_count === 1 ? "" : "s"} &middot; ${escapeHtml(sel.mode || "")}` : ""}</span>
+            </div>`;
+            if (!g.active) {
+                html += `<div style="padding:0.5rem 0.7rem;font-size:0.8rem;color:#4b5563;font-style:italic;">${escapeHtml(g.inactive_reason || "Not running.")}</div>`;
+                html += fbGgRecorded(g);
+                html += `</div>`;
+                continue;
+            }
+            // SELECTION line: the variant the matrix picked, and why
+            const v = sel.variant || {};
+            const vsel = v.selection || {};
+            html += `<div style="padding:0.4rem 0.7rem;font-size:0.74rem;color:var(--text-muted);border-bottom:1px solid var(--border);line-height:1.45;">
+                <strong style="color:var(--text);">Selection${board.state !== "live" ? " (frozen)" : ""}:</strong>
+                ${escapeHtml(v.label || g.label)}${vsel.reason ? ` &mdash; ${escapeHtml(vsel.reason)}` : ""}.
+                Flight count: ${sel.flight_count} (${escapeHtml(sel.count_source || "")}). Cut: ${escapeHtml(sel.edges_source || "")}${(sel.edges || []).length ? ` at ${sel.edges.map(e => e.toFixed(1)).join(" / ")}` : ""}.
+            </div>`;
+            // AMOUNTS header: total pot, bonus line for Ind Gross
+            if (am) {
+                html += `<div style="padding:0.4rem 0.7rem;font-size:0.78rem;border-bottom:1px solid var(--border);display:flex;gap:1rem;flex-wrap:wrap;align-items:baseline;">
+                    <span><strong>Amounts${board.state === "settled" ? " (settled)" : board.state === "frozen" ? " (as of freeze)" : ""}:</strong> pot ${fbMoney(am.total_pot)}${am.rate ? ` (${am.buyers} &times; ${fbMoney(am.rate)})` : ` at ${am.buyers} buyers`}</span>
+                    ${am.bonus !== undefined ? `<span style="color:#065f46;"><strong>${escapeHtml(am.bonus_label || "Overall Low Gross")}</strong> bonus ${fbMoney(am.bonus)} (${Math.round((am.bonus_pct || 0) * 100)}% off the top, whole field) &middot; share ${fbMoney(am.share)}/player</span>` : ""}
+                    <span style="color:var(--text-muted);">${escapeHtml(am.rule || "")}</span>
+                </div>`;
+            }
+            // Flights grid
+            const amBy = {};
+            for (const f of ((am && am.flights) || [])) amBy[f.flight_no] = f;
+            html += `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:0.6rem;padding:0.6rem 0.7rem;">`;
+            for (const f of (sel.flights || [])) {
+                const fa = amBy[f.flight_no] || { pot: 0, places: [] };
+                const d = ((g.delta || {}).flights || []).find(x => x.flight_no === f.flight_no);
+                html += `<div style="border:1.5px solid ${f.players ? "#1B1B1B" : "#d1d5db"};border-radius:6px;overflow:hidden;${f.players ? "" : "opacity:0.7;"}">
+                    <div style="display:flex;justify-content:space-between;align-items:baseline;gap:0.4rem;background:#E5E7EB;padding:0.3rem 0.5rem;border-bottom:1px solid #1B1B1B;">
+                        <span style="font-family:'Bitter',Georgia,serif;font-weight:700;font-size:0.8rem;">Flight ${f.flight_no} <span style="font-weight:400;color:#444;">${escapeHtml(f.band || "")}</span></span>
+                        <span style="font-size:0.7rem;color:#444;font-variant-numeric:tabular-nums;">${escapeHtml(f.label || "")} &middot; ${f.players} player${f.players === 1 ? "" : "s"}</span>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;gap:0.4rem;padding:0.25rem 0.5rem;font-size:0.74rem;background:#fafafa;border-bottom:1px solid #eee;font-variant-numeric:tabular-nums;">
+                        <span>pot <strong>${fbMoney(fa.pot)}</strong></span><span>${fbPlacesText(fa)}</span>
+                    </div>`;
+                if (d && d.changed) {
+                    html += `<div style="padding:0.2rem 0.5rem;font-size:0.7rem;color:#92400e;background:#fffbeb;border-bottom:1px solid #fde68a;">since freeze: ${d.players_before} &rarr; ${d.players_after} players, pot ${fbMoney(d.pot_before)} &rarr; ${fbMoney(d.pot_after)}${(d.places_before || []).join("/") !== (d.places_after || []).join("/") ? `, places ${(d.places_before || []).map(fbMoney).join(" / ") || "—"} &rarr; ${(d.places_after || []).map(fbMoney).join(" / ") || "—"}` : ""}</div>`;
+                }
+                if (!f.players) {
+                    html += `<div style="padding:0.3rem 0.5rem;font-size:0.74rem;color:var(--text-muted);font-style:italic;">no players in this band</div>`;
+                }
+                for (const m of (f.members || [])) {
+                    html += `<div style="display:flex;justify-content:space-between;gap:0.4rem;padding:0.15rem 0.5rem;border-bottom:1px solid #f1f1f1;font-size:0.76rem;">
+                        <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(m.sort_name || m.name || "")}</span>
+                        <span style="font-variant-numeric:tabular-nums;color:#333;white-space:nowrap;">IDX ${escapeHtml(m.index_text || "—")}${m.ph !== null && m.ph !== undefined ? ` &middot; PH ${m.ph}` : ""}</span>
+                    </div>`;
+                }
+                html += `</div>`;
+            }
+            html += `</div>`;
+            if ((sel.unflighted || []).length) {
+                html += `<div style="margin:0 0.7rem 0.6rem;padding:0.35rem 0.5rem;border:1px dashed #b45309;background:#fff7ed;color:#7c2d12;font-size:0.74rem;border-radius:6px;">No handicap index on file, not flighted: ${sel.unflighted.map(u => escapeHtml(u.sort_name || u.name)).join(", ")}</div>`;
+            }
+            // Delta panel (frozen / settled): who added, who dropped
+            const dl = g.delta;
+            if (dl && (dl.added || []).length + (dl.dropped || []).length) {
+                html += `<div style="margin:0 0.7rem 0.6rem;padding:0.4rem 0.6rem;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;font-size:0.74rem;color:#78350f;">
+                    <strong>Since the freeze:</strong> buyers ${dl.buyers_before} &rarr; ${dl.buyers_after}; pot ${fbMoney(dl.total_pot_before)} &rarr; ${fbMoney(dl.total_pot_after)}${dl.bonus_before !== undefined && dl.bonus_before !== null ? `; bonus ${fbMoney(dl.bonus_before)} &rarr; ${fbMoney(dl.bonus_after)}` : ""}.
+                    ${(dl.added || []).length ? ` Added: ${dl.added.map(a => escapeHtml(a.name) + (a.flight_no ? ` (F${a.flight_no})` : "")).join(", ")}.` : ""}
+                    ${(dl.dropped || []).length ? ` Dropped: ${dl.dropped.map(a => escapeHtml(a.name) + (a.flight_no ? ` (F${a.flight_no})` : "")).join(", ")}.` : ""}
+                </div>`;
+            }
+            if ((sel.notes || []).length) {
+                html += `<div style="margin:0 0.7rem 0.5rem;font-size:0.7rem;color:var(--text-muted);line-height:1.4;">${sel.notes.map(n => "&rsaquo; " + escapeHtml(n)).join("<br>")}</div>`;
+            }
+            html += fbGgRecorded(g);
+            html += `</div>`;
+        }
+        html += `<div style="font-size:0.72rem;color:var(--text-muted);line-height:1.5;">
+            Every number traces to a ratified rule (mailbox #571&ndash;#575 as revised by #582): ladders &lt;6.0 / 6.0&ndash;11.9 / 12.0+ (4 flights add 12.0&ndash;17.9 / 18.0+), no minimum flight size and no merging, places by flight size (1&ndash;9 one place; 10&ndash;19 two at 2/3&ndash;1/3; 20+ three at 50/30/20), Individual Gross pot = 90% of the buy-ins by headcount with 10% off the top to Overall Low Gross. Skins keeps the matrix pot split equally per flight; Individual Net keeps the matrix place columns. The board FREEZES its selection at the freeze action and RECOMPUTES amounts at settlement from actual buyers.
+            <strong>Dry run &mdash; nothing here pays anyone.</strong>
+        </div>`;
+        html += '</div>';
+        return html;
+    }
+    function fbGgRecorded(g) {
+        const gg = g.gg_recorded || { rows: [], total: 0 };
+        if (!(gg.rows || []).length) return "";
+        const am = g.amounts;
+        const rulePaid = am ? Number(am.total_pot || 0) : 0;
+        const diff = Math.round((rulePaid - Number(gg.total || 0)) * 100) / 100;
+        let h = `<div style="margin:0 0.7rem 0.6rem;border-top:1px dashed var(--border);padding-top:0.4rem;font-size:0.74rem;">
+            <div style="display:flex;justify-content:space-between;gap:0.5rem;flex-wrap:wrap;">
+                <span><strong>Golf Genius recorded</strong> ${fbMoney(gg.total)} across ${gg.rows.length} payout${gg.rows.length === 1 ? "" : "s"}</span>
+                <span style="color:${Math.abs(diff) < 0.005 ? "#065f46" : "#92400e"};">rule ${fbMoney(rulePaid)} &middot; rule &minus; GG = ${diff >= 0 ? "+" : "&minus;"}${fbMoney(Math.abs(diff))}</span>
+            </div>
+            <div style="color:var(--text-muted);margin-top:0.2rem;">${gg.rows.map(r => `${escapeHtml(r.player_name)}${r.position ? ` ${escapeHtml(r.position)}` : ""}${r.detail ? ` <span style="opacity:0.8;">(${escapeHtml(r.detail)})</span>` : ""} ${fbMoney(r.purse)}`).join(" &middot; ")}</div>
+        </div>`;
+        return h;
     }
 
     function renderPayoutsPanel(ev, registrants) {
@@ -7890,6 +8079,7 @@
         const pairingsView = pairingsOpenForEvent[ev.id];
         const financialView = financialOpenForEvent[ev.id];
         const payoutsView = payoutsOpenForEvent[ev.id];
+        const flightsView = flightsOpenForEvent[ev.id];
         let html = '';
 
         // Status banner for cancelled/postponed events
@@ -7908,10 +8098,16 @@
 
         html += '<div class="event-game-stats">';
         html += '<span class="view-toggle-group">';
-        html += `<span class="game-stat-badge ${!gamesView && !pairingsView && !financialView && !payoutsView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="0">ROSTER <strong>${stats.players}</strong></span>`;
+        html += `<span class="game-stat-badge ${!gamesView && !pairingsView && !financialView && !payoutsView && !flightsView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="0">ROSTER <strong>${stats.players}</strong></span>`;
         html += `<span class="game-stat-badge ${pairingsView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="2">PAIRINGS</span>`;
         if (holesType) {
             html += `<span class="game-stat-badge games-badge ${gamesView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="1">GAMES</span>`;
+        }
+        if (holesType && canSeeFlights()) {
+            // DIVISIONS / FLIGHTS (Kerry 2026-09-21, mailbox #582): the
+            // ratified flighting + payout rules on this event's roster,
+            // manager+, dry run — Golf Genius stays the payer of record.
+            html += `<span class="game-stat-badge ${flightsView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="5" title="Divisions &amp; Flights — the ratified flighting and payout rules, dry run">FLIGHTS</span>`;
         }
         if (currentRole === 'admin') {
             html += `<span class="game-stat-badge ${payoutsView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="4">PAYOUTS</span>`;
@@ -7922,7 +8118,7 @@
         html += '</span>';
 
         // Sub-filter badges (only in PLAYERS view)
-        if (!gamesView && !pairingsView && !financialView && !payoutsView) {
+        if (!gamesView && !pairingsView && !financialView && !payoutsView && !flightsView) {
             // Hole tabs — one per hole count this event actually sold
             html += holesTabsHtml(ev, registrants);
 
@@ -7976,6 +8172,10 @@
         // ---- PAYOUTS VIEW ----
         if (payoutsView) {
             html += renderPayoutsPanel(ev, registrants);
+            return html;
+        }
+        if (flightsView) {
+            html += renderFlightsPanel(ev);
             return html;
         }
 
@@ -8867,6 +9067,12 @@
                     } else {
                         await refreshPairingsRoster(ev.id);
                     }
+                    rerenderDetail(container, ev);
+                }
+                if (val === "5") {
+                    // LIVE board: re-read on every open so a signup a
+                    // moment ago is already in its flight.
+                    await loadFlightsBoard(ev.id);
                     rerenderDetail(container, ev);
                 }
             });

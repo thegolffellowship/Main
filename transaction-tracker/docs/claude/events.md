@@ -2175,6 +2175,70 @@ the person. Handicap is NOT prefilled on purpose: `items.handicap` is a
 snapshot; the index lives in `handicap_rounds`. Guards:
 `test_add_player_options.py` / `.js`.
 
+## The DIVISIONS / FLIGHTS tab — the ratified flighting + payout rules, dry run (v2.469.0)
+
+Kerry 2026-09-21 (mailbox #582): "need to see the divisions/flights
+breakdown so probably will need a tab for it under each event." The
+FLIGHTING lane (spun off "TGF Tracker Improvements 2"; plan #584).
+
+- **Rules as data:** `email_parser/flighting.py` — pure, no DB —
+  carries the RATIFIED rule set (#571–#575 as revised by #581/#582):
+  ladders `<6.0 / 6.0–11.9 / 12.0+` (4 flights add `12.0–17.9 / 18.0+`;
+  exclusive upper bounds, 12.0 goes UP; cut lines never move); **no
+  minimum flight size, no merging, ever** (B2 superseded — a flight of
+  one simply is that size, an empty band is still a numbered flight);
+  **places by FLIGHT size** (1–9 one place; 10–19 two at 2/3–1/3; 20+
+  three at 50/30/20; ties combine the tied places and split, summing to
+  the pot); **Individual Gross pot** = 10% of the total off the top as the
+  OVERALL LOW GROSS bonus (whole field) + 90% split by headcount (share
+  = 0.9 × rate: $7.20 on an 18, $3.60 on a nine; flight pot = share ×
+  headcount; a solo flight's player gets his share, plus the bonus if he
+  is also low gross); **labels derived from actual membership** (P2-6).
+  Skins is unaffected (#572: matrix pot ÷ flights, per skin); Individual
+  Net keeps the equal-size cut with the 11.9 ceiling and the matrix
+  place columns (netLow/netHigh/netMid/net4th, the recorded-payouts
+  convention). ASSUMPTION on the record (#584, awaiting Kerry): the
+  1/10/20 places rule is Individual Gross only.
+- **Two layers, as B5 requires:** `build()` = SELECTION (which games run
+  incl. every matrix game-selection threshold via `select_variant`, the
+  flight count from the LIVE matrix, band edges, each player's flight)
+  + AMOUNTS (pots, places, bonus). `settle(frozen, field_now)` keeps the
+  SELECTION, places a late add by the FROZEN edges, drops a credited WD
+  from the headcount, recomputes AMOUNTS from actual buyers and reports
+  the DELTA (added / dropped, pot then vs now, places then vs now, per
+  flight). A game not running at the freeze stays not running; a ½ Net
+  Skins frozen at 7 buyers stays ½ Net when an 8th arrives. Guard:
+  `test_flighting.py` (every #572/#573 worked example by number, Landa
+  Park 6/5/4, Cedar Creek's T1×3, 300 random fields to the cent).
+- **The board from Tracker data:** `event_flights_board(event_id)` —
+  buy-ins from `_event_game_buyers` (wd_credits decides), the 18-hole
+  index of record by customer_id locked as-of for a started event
+  (`_event_index_as_of`), each buyer's PH as the STARTER SHEET computes
+  it (`_event_player_ph_map`: roster tee band → `_event_tee_rows` →
+  `handicap_calc.playing_handicap`), the matrix from `_load_games_matrix`
+  (source reported: app_settings vs seed), and beside each game what
+  Golf Genius RECORDED (`gg_game_results` purses for Ind Net / Skins /
+  Ind Gross) so published-vs-paid answers itself. `state` is LIVE until
+  the freeze schema is ratified (rule 3b — proposed in #584:
+  `event_flight_snapshots` + `event_flight_snapshot_members` with
+  customer_id; FROZEN / SETTLED derived from the rows; freeze by an
+  ACTION, never a clock). **Dry run: pays nobody; GG is the payer of
+  record.** The printed Divisions & Flights page (`event_flights_report`)
+  is now a VIEW of this board — one computation per fact.
+- **Surfaces:** FLIGHTS badge beside GAMES on every event with a hole
+  count (manager+, desktop and phone; `data-toggle-games="5"`,
+  `flightsOpenForEvent`, re-read on every open; survives a refresh like
+  PAIRINGS). Per game: the game bar, the SELECTION line (variant + why,
+  flight count + source, cut + edges), the AMOUNTS line (pot, bonus,
+  share), one box per flight (band · derived range · headcount · pot ·
+  places · members as LAST, First · IDX · PH; an empty band greyed), the
+  unflighted, the delta panel when frozen/settled, GG's recorded purses
+  with rule − GG. `GET /api/events/<id>/flights-board` (manager);
+  bridge `scoring-flights-board:<event_id>`. Guard: `test_flights_board.py`.
+- **Seed flip (ratified):** `live_scoring.SEED_FLIGHT_CONFIG.min_flight_size`
+  is 0 — the Flighting Lab dial still exists to SHOW what merging would
+  do; nothing merges by default any more.
+
 ## The event PRINT PACK — one bound PDF, mailed the evening before (v2.465.0)
 
 Kerry 2026-09-18: "a bound PDF with all of them in one that I could

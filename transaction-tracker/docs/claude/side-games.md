@@ -85,9 +85,19 @@ prize matrix (analysis below). Open flags listed at the bottom.
   buyers (9h) / 12 (18h)** per the LIVE matrix — admin lowered the
   thresholds via the Matrix UI (the old Excel seed said 20/16); 3
   flights in the new bands (9h 16-19, 18h 12-15), 4 flights at 20+/
-  16+. 1st per flight (2nd added at large counts on 18s). s18.7's
-  observed 13 buyers / 3 flights matches the live rule exactly (it
-  was never a manager override).
+  16+. s18.7's observed 13 buyers / 3 flights matches the live rule
+  exactly (it was never a manager override).
+  **RATIFIED 2026-09-18/19 (mailbox #571–#575, revised #582) — the
+  Individual Gross POT and PLACES are now a rule, not the matrix
+  ladder:** 10% of the total gross pot off the top = OVERALL LOW GROSS
+  bonus (whole field); the remaining 90% split by headcount (share =
+  0.9 × rate, $7.20 on an 18 / $3.60 on a nine; flight pot = share ×
+  headcount); places by FLIGHT size (1–9 one place; 10–19 two at
+  2/3–1/3; 20+ three at 50/30/20); ladders <6.0 / 6.0–11.9 / 12.0+ (4
+  flights add 18.0), no minimum flight size, no merging. As data in
+  `email_parser/flighting.py`; on every event's FLIGHTS tab (dry run —
+  the `gross_flight_pot_mode` dial and GG purses still drive the
+  recorded payouts until Kerry flips an event). Skins is UNAFFECTED.
 
 ## Prize matrix — derived rules (verified against the LIVE
 ## app_settings copy 2026-07-05; seed regenerated to mirror it)
