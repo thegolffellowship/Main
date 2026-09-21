@@ -2235,6 +2235,27 @@ FLIGHTING lane (spun off "TGF Tracker Improvements 2"; plan #584).
   unflighted, the delta panel when frozen/settled, GG's recorded purses
   with rule − GG. `GET /api/events/<id>/flights-board` (manager);
   bridge `scoring-flights-board:<event_id>`. Guard: `test_flights_board.py`.
+- **Kerry's rulings 2026-09-21 (on the #584 questions):** the freeze is a
+  FREEZE BUTTON on the tab ("Let's go with the button for now"); Individual
+  Net places are the MATRIX's; Individual Gross places are 1/10/20 and
+  belong "in the matrix as well based on players in a flight" — so the
+  gross ladder is the `gross_places_by_flight_size` app_settings dial (a
+  JSON list of `{min, max, split}` rows, e.g. `[{"min":1,"max":9,"split":[1]},
+  {"min":10,"max":19,"split":[0.667,0.333]},{"min":20,"max":null,"split":[0.5,0.3,0.2]}]`),
+  FLIGHT_RULES as the seed when the dial is unset; the board reports
+  `places_source`. A Matrix-page editor for it is the next step.
+- **Stack left (Kerry 2026-09-21):** GAMES and FLIGHTS panels are inline
+  blocks sized by their widest requirement — the games table is exactly
+  the sum of its columns (47.5rem, fixed layout, long winner lines wrap
+  inside it); the FLIGHTS panel is as wide as the widest game's row of
+  300px flight boxes, and every text line is `width:0; min-width:100%` so
+  it wraps to that width instead of stretching the panel across the row.
+- **Nine-hole PH from an 18-hole set (v2.469.4):** `_event_tee_rows` reads
+  the nine's rating and slope off `tee_set_ratings` (front/back) when the
+  course record holds only 18-hole sets — the CRDB / GG tee-setup shape.
+  Brackenridge was seeded from Kerry's GG screenshots that day
+  (`scoring-crdb-seed:25402`, tee_ids 14676–14679, designated Blue <50 /
+  White 50-64 / Gold 65+ / Red Forward) and printed no PH until this.
 - **Seed flip (ratified):** `live_scoring.SEED_FLIGHT_CONFIG.min_flight_size`
   is 0 — the Flighting Lab dial still exists to SHOW what merging would
   do; nothing merges by default any more.

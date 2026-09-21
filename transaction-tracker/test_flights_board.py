@@ -124,6 +124,30 @@ check("Individual Net: 13 buyers on a nine → 2 equal-size flights, low flight 
 check("...amounts from the matrix columns (netLow / netHigh)",
       inn["amounts"]["total_pot"] > 0 and inn["amounts"]["flights"][1]["matrix_column"] == "netHigh", str(inn["amounts"]))
 
+print("\n== a nine on a course that holds only 18-hole sets with per-nine ratings (Brackenridge 2026-09-21) ==")
+EV2, COURSE2 = 4201, 9201
+c.execute("INSERT INTO courses (course_id, name, short_name, status) VALUES (?, 'Brackenridge CRDB', 'Brack', 'active')", (COURSE2,))
+c.execute("INSERT INTO events (id, item_name, event_date, chapter, course, course_id, status, format, nine_side) "
+          "VALUES (?, 's9.30 Brackenridge', date('now', '+30 day'), 'San Antonio', 'Brackenridge CRDB', ?, 'active', '9 Holes', 'Front')", (EV2, COURSE2))
+c.execute("INSERT INTO course_tees (tee_id, course_id, tee_name, gender, holes, slope, rating, tgf_bands) VALUES (12, ?, 'Blue', 'M', 18, 129, 69.8, '<50')", (COURSE2,))
+c.execute("INSERT INTO tee_set_ratings (tee_id, rating_type, course_rating, slope, source) VALUES (12, 'total', 69.8, 129, 'usga_crdb'), (12, 'front', 35.6, 131, 'usga_crdb'), (12, 'back', 34.2, 127, 'usga_crdb')")
+c.execute("INSERT INTO items (id, email_uid, merchant, customer, customer_id, item_name, order_date, transaction_status, event_id, side_games, user_status, tee_choice) "
+          "VALUES (900, 'u900', 'The Golf Fellowship', 'Kerry Niester', 302, 's9.30 Brackenridge', '2026-09-10', 'active', ?, 'NET', 'MEMBER', '<50')", (EV2,))
+c.commit()
+b2 = db.event_flights_board(EV2, db_path=tmp)
+m2 = b2["games"][0]["selection"]["flights"][0]["members"][0]
+check("the PH comes off the FRONT rating row of the 18-hole set (35.6 / 131), par 36 with no card",
+      m2["ph"] == _ph(0.8, 131, 35.6, 36) and b2["ph_basis"] == "front nine card", f"{m2} {b2['ph_basis']} {b2['ph_note']}")
+check("the gross places ladder reports its source (seed until the dial is set)",
+      b2["places_source"].startswith("seed") and b2["places_by_flight_size"][1]["min"] == 10, b2.get("places_source"))
+db.set_app_setting("gross_places_by_flight_size", json.dumps([{"min": 1, "max": 5, "split": [1.0]}, {"min": 6, "max": None, "split": [0.6, 0.4]}]), db_path=tmp)
+b3 = db.event_flights_board(EV, db_path=tmp)
+ig3 = next(g for g in b3["games"] if g["game"] == "individual_gross")
+check("...and the app_settings dial overrides it: a flight of 8 now pays two places 60/40",
+      b3["places_source"].startswith("app_settings") and [p["amount"] for p in ig3["amounts"]["flights"][2]["places"]] == [17.28, 11.52],
+      str(ig3["amounts"]["flights"][2]))
+db.set_app_setting("gross_places_by_flight_size", "", db_path=tmp)
+
 print("\n== the printed Divisions & Flights page is a view of the same board ==")
 rep = db.event_flights_report(EV, db_path=tmp)
 rg = {x["game"]: x for x in rep["games"]}

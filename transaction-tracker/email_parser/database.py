@@ -58039,7 +58039,30 @@ def event_flights_board(event_id: int, db_path=None) -> dict | None:
             {"customer_id": int(cid), "name": nm, "index": idx18.get(int(cid)),
              "ph": ph_map.get(int(cid))}
             for cid, nm in res["buyers"].items()]
-    board = _fl.build(field_by_kind, holes_key, _row_for)
+    # PLACES BY FLIGHT SIZE ARE A DIAL (Kerry 2026-09-21: "1/10/20 for Gross
+    # yes. Probably just needs to be part of the matrix as well based on
+    # players in a flight"): `gross_places_by_flight_size` in app_settings
+    # — a JSON list of {min, max, split} rows — overrides the seed in
+    # FLIGHT_RULES; the board reports which it used. Individual Net's
+    # places stay the matrix's own columns (same ruling).
+    import copy as _copy
+    rules = _copy.deepcopy(_fl.FLIGHT_RULES)
+    places_source = "seed (flighting.FLIGHT_RULES)"
+    try:
+        _dial = json.loads(get_app_setting("gross_places_by_flight_size",
+                                           db_path=db_path) or "null")
+        if isinstance(_dial, list) and _dial and all(
+                isinstance(r, dict) and r.get("split") for r in _dial):
+            rules["places_by_flight_size"] = [
+                {"min": int(r.get("min", 1)),
+                 "max": (int(r["max"]) if r.get("max") is not None else None),
+                 "split": [float(x) for x in r["split"]]} for r in _dial]
+            places_source = "app_settings gross_places_by_flight_size (live dial)"
+    except (TypeError, ValueError):
+        pass
+    board = _fl.build(field_by_kind, holes_key, _row_for, rules=rules)
+    board["places_source"] = places_source
+    board["places_by_flight_size"] = rules["places_by_flight_size"]
     for entry in board["games"]:
         for f in entry["selection"]["flights"]:
             for m in f["members"]:
@@ -59285,6 +59308,33 @@ def _event_tee_rows(conn, ev: dict, legend: list) -> tuple[dict, str, str]:
         par = sum(p for p in pars.values() if p) or (72 if is18 else 36)
         out[entry["band"]] = {"tee_name": entry["tee_name"], "slope": pick["slope"],
                               "rating": pick["rating"], "par": par}
+    # A course whose record holds only 18-hole SETS with per-nine RATING
+    # rows (the CRDB / Golf Genius tee-setup shape, v2.466.0) has no
+    # nine-hole course_tees row to pick — Brackenridge on 2026-09-21 had
+    # its four sets seeded from Kerry's GG screenshots and still printed no
+    # PH. The nine's own rating and slope live on tee_set_ratings
+    # (front / back), so a nine-hole event reads them there; par from the
+    # set's holes on that nine when the card is on file, else the nine's
+    # 36 (the same fallback the 18 uses).
+    if not is18:
+        want_type = "back" if nine == "back" else "front"
+        for entry in legend:
+            if entry["band"] in out or not entry.get("tee_id"):
+                continue
+            try:
+                r = conn.execute(
+                    "SELECT course_rating, slope FROM tee_set_ratings "
+                    "WHERE tee_id = ? AND rating_type = ?",
+                    (entry["tee_id"], want_type)).fetchone()
+            except sqlite3.OperationalError:
+                r = None
+            if not r or r["slope"] is None or r["course_rating"] is None:
+                continue
+            pars = holes_by_tee.get(entry["tee_id"], {})
+            lo, hi = (10, 18) if want_type == "back" else (1, 9)
+            par = sum(p for h, p in pars.items() if p and lo <= h <= hi) or 36
+            out[entry["band"]] = {"tee_name": entry["tee_name"], "slope": r["slope"],
+                                  "rating": r["course_rating"], "par": par}
     basis = ("18-hole card" if is18
              else f"{'back' if nine == 'back' else 'front'} nine card")
     # No guessing: a tee whose nine could not be established prints no

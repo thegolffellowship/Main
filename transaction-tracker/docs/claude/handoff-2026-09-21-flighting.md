@@ -125,6 +125,20 @@ index / PH), `amounts` (pot, bonus, share, per-flight pots and places),
    nine-hole scale, so an 18-hole fixture value like 5.9 (→ 2.95 → 3.0 →
    6.0) crosses a cut line. State fixture indexes with even hundredths.
 
+## 6b. Kerry's answers, 2026-09-21 afternoon
+
+1. Freeze action: "Let's go with the button for now." — a FREEZE button on
+   the FLIGHTS tab. Waits on the schema (2).
+2. The snapshot schema: Kerry asked to see it again ("What is that about?
+   Show me again") — explained in plain words in the session reply; not
+   yet ratified, nothing built.
+3. Places: "Matrix should govern placewinners for [Net]. 1/10/20 for Gross
+   yes. Probably just needs to be part of the matrix as well based on
+   players in a flight." → `gross_places_by_flight_size` dial (v2.469.4),
+   seed = FLIGHT_RULES; Matrix-page editor next.
+Also that afternoon: Brackenridge's four tee sets seeded from Kerry's GG
+screenshots and designated; nine-hole PH now reads per-nine rating rows.
+
 ## 7. Open / carried forward
 
 - Kerry: the freeze button question; ratify §3 schema; the 1/10/20-on-Net
