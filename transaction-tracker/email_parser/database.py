@@ -58813,7 +58813,14 @@ def team_handicaps_for_groups(groups: list, allowance: float, unit: str) -> None
             allowed.append(p["team_allowed"])
     if not allowed:
         return
-    low = min(allowed)
+    # OFF THE LOWEST never RAISES anyone (Kerry 2026-09-22 Brackenridge:
+    # "Some are higher than the PH. That can't be with a 75% application
+    # for Team One Ball"). With a plus player in the field the lowest is
+    # negative, and subtracting a negative handed every other player two
+    # strokes MORE than their playing handicap. The lowest floors at zero:
+    # a scratch-or-better field subtracts nothing, and the plus player
+    # keeps his plus (which comes off the round, per the plus rule).
+    low = max(min(allowed), 0)
     for g in groups:
         for p in g["players"]:
             if p.get("team_allowed") is not None:

@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.476.0";
+window.TGF_VERSION = "2.476.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.476.1",
+    date: "2026-09-21",
+    changes: [
+      "Team / Cart Net handicaps: OFF THE LOWEST never raises anyone (Kerry on tomorrow's Brackenridge sheet: \u2018Some are higher than the PH. That can't be with a 75% application for Team One Ball\u2019). Pat Youngs plays at plus 2, so the field's lowest was \u22122 and subtracting it handed every other player two strokes ABOVE their playing handicap. The lowest now floors at zero in both engines \u2014 the starter sheet's team handicaps and the live-scoring game handicaps \u2014 so a scratch-or-better field subtracts nothing and the plus player keeps his plus, which comes off the round per the plus rule. Guard: `test_team_handicaps.py`.",
+    ],
+  },
   {
     version: "2.476.0",
     date: "2026-09-21",

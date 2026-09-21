@@ -1030,7 +1030,10 @@ def game_handicaps(cards: list[dict], handicap_cfg: dict | None,
     # Step 4: off lowest, applied to the ROUNDED handicaps, as GG prints it
     # ("After rounding, the PH is 3. The lowest handicap in the group is
     # 0.0. After applying 'off lowest', the handicap becomes 3.0.").
-    low = min((v[1] for v in rounded.values()), default=0) \
+    # …and never below zero: a plus player in the field means nobody is
+    # RAISED (Kerry 2026-09-22 — subtracting a negative lowest handed the
+    # Brackenridge field two strokes above their playing handicaps).
+    low = max(min((v[1] for v in rounded.values()), default=0), 0) \
         if handicap_cfg.get("off_lowest") else 0
 
     for c in cards:

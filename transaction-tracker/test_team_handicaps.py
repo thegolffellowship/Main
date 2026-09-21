@@ -77,5 +77,21 @@ check("the footnote says which scale", "TGF handicap index ({{ pack.holes_key }}
 check("the TEAM column is named for the game", "{% if pack.team_unit == 'cart' %}CART{% else %}TEAM{% endif %}" in src)
 html = open(os.path.join(os.path.dirname(__file__), "templates/events.html"), encoding="utf-8").read()
 check("the pairings cards show the index on the event's scale", "state.hcpScale === 18 ? 2 : 1" in html)
+
+print("A plus player in the field never RAISES anyone (Kerry 2026-09-22, Brackenridge)")
+_groups = [{"players": [
+    {"name": "Pat Youngs",   "course_handicap_raw": -2.4},   # plus player: lowest in the field
+    {"name": "Kerry Niester", "course_handicap_raw": 1.6},
+    {"name": "Rob Callaway", "course_handicap_raw": 6.4},
+    {"name": "Craig Bourquin", "course_handicap_raw": 12.0}]}]
+db.team_handicaps_for_groups(_groups, 0.75, "group")
+_th = {p["name"]: p["team_handicap"] for p in _groups[0]["players"]}
+check("nobody's TEAM exceeds 75% of his own course handicap — the lowest floors at zero",
+      _th["Rob Callaway"] == 5 and _th["Craig Bourquin"] == 9 and _th["Kerry Niester"] == 1, _th)
+check("the plus player keeps his plus (it comes off the round, per the plus rule)", _th["Pat Youngs"] == -2, _th)
+_groups2 = [{"players": [{"name": "A", "course_handicap_raw": 4.0}, {"name": "B", "course_handicap_raw": 12.0}]}]
+db.team_handicaps_for_groups(_groups2, 0.75, "group")
+check("a positive lowest is still subtracted as before", [p["team_handicap"] for p in _groups2[0]["players"]] == [0, 6])
+
 print("\n" + ("ALL PASS" if not F else f"{len(F)} FAILURE(S): " + "; ".join(F)))
 sys.exit(1 if F else 0)

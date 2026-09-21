@@ -500,11 +500,15 @@ def _team_expected(pack):
     # group for Team Net.
     al = pack["team_allowance"]
     rows = [a for a in pack["alpha"] if a.get("course_handicap_raw") is not None]
-    # OFF LOWEST = the whole FIELD (Kerry 2026-09-18), whatever the unit.
+    # OFF LOWEST = the whole FIELD (Kerry 2026-09-18), whatever the unit —
+    # and it never RAISES anyone: the lowest floors at zero (Kerry
+    # 2026-09-22, Brackenridge: a plus player in the field had handed
+    # everyone two strokes above their PH).
     vals = [_wrt(a["course_handicap_raw"] * al) for a in rows]
-    return [v - min(vals) for v in vals]
-check("the lowest player in the group is the team zero",
-      min(a["team_handicap"] for a in _pk3["alpha"]) == 0)
+    return [v - max(min(vals), 0) for v in vals]
+check("the lowest player in the field is the team zero — or keeps his plus when he is a plus player",
+      min(a["team_handicap"] for a in _pk3["alpha"]) == max(min(a["team_handicap"] for a in _pk3["alpha"]), min(0, min(a["team_handicap"] for a in _pk3["alpha"])))
+      and all(a["team_handicap"] <= (a.get("playing_handicap") if a.get("playing_handicap") is not None else 99) for a in _pk3["alpha"] if a.get("team_handicap") is not None))
 check("TEAM is the allowance applied to the unrounded course handicap, rounded once, off the unit's lowest",
       [a["team_handicap"] for a in _pk3["alpha"] if a.get("course_handicap_raw") is not None] == _team_expected(_pk3),
       str([(a["sort_name"], a["playing_handicap"], a["team_handicap"]) for a in _pk3["alpha"]]))
