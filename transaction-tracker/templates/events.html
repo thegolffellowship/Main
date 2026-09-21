@@ -13499,6 +13499,84 @@
     // registration is PINNED to the package so the roster badge, the Holes
     // column, and the due math all read from it. Manual fields stay live
     // as the fallback (and for events with no packages).
+    // ---- Event-aware options (Kerry 2026-09-21: "responsive to what is
+    // actually available based on the event, rather than a standard list
+    // of selections that make me choose") -------------------------------
+    // /api/events/<id>/add-player-options derives HOLES from the event's
+    // format + packages, SIDE GAMES from the vocabulary its roster carries,
+    // TEES from the course record's designated bands. A single option is
+    // preselected — an answer, not a choice. The static lists in the HTML
+    // stay as the fallback when the fetch fails, so the modal never goes
+    // blank (check at the boundary, protect the class).
+    let apOptions = null;
+    let apOptionsSeq = 0;
+    function apRebuildSelect(id, options, placeholder) {
+        const sel = document.getElementById(id);
+        if (!sel) return;
+        const prev = sel.value;
+        const opts = (options || []).map(o => (typeof o === "string" ? { value: o, label: o } : o));
+        const single = opts.length === 1;
+        sel.innerHTML = (single ? "" : `<option value="">${escapeHtml(placeholder)}</option>`) +
+            opts.map(o => `<option value="${escapeHtml(o.value)}">${escapeHtml(o.label)}</option>`).join("");
+        if (single) sel.value = opts[0].value;
+        else if (prev && opts.some(o => o.value === prev)) sel.value = prev;
+        else sel.value = "";
+        sel.dataset.eventAware = single ? "single" : "list";
+    }
+    function apApplyOptions(opts) {
+        apOptions = opts || null;
+        if (!opts) return;
+        apRebuildSelect("add-player-holes", opts.holes, "Select…");
+        apRebuildSelect("add-player-side-games", opts.side_games, "Select…");
+        apRebuildSelect("add-player-tee", opts.tees, "—");
+    }
+    async function apLoadOptions(evId) {
+        apOptions = null;
+        if (evId == null) return;
+        const seq = ++apOptionsSeq;
+        try {
+            const res = await fetch(`/api/events/${evId}/add-player-options`, { cache: "no-store" });
+            if (!res.ok) return;
+            const opts = await res.json();
+            if (seq !== apOptionsSeq || addPlayerEventId !== evId) return;   // modal moved on
+            apApplyOptions(opts);
+            apPrefillFromPerson();
+        } catch (err) {
+            console.error("apLoadOptions:", err);   // static lists stand
+        }
+    }
+    // A select rebuilt from the event may lack a value a package or a
+    // person brings (36 holes on a two-day package) — add it rather than
+    // drop it silently.
+    function apEnsureOption(id, value, label) {
+        const sel = document.getElementById(id);
+        if (!sel || value == null || value === "") return;
+        if (![...sel.options].some(o => o.value === String(value))) {
+            const o = document.createElement("option");
+            o.value = String(value); o.textContent = label || String(value);
+            sel.appendChild(o);
+        }
+    }
+    // The person's own record answers TEE (their last tee on file) when
+    // the field is empty and the course offers that band. Handicap is
+    // NOT prefilled: items.handicap is a stale snapshot by design — the
+    // canonical index lives in handicap_rounds.
+    function apPersonName() {
+        return getAddPlayerMode() === "comp"
+            ? document.getElementById("add-player-manager").value
+            : document.getElementById("add-player-name").value.trim();
+    }
+    function apPrefillFromPerson() {
+        const name = (apPersonName() || "").toLowerCase();
+        if (!name) return;
+        const teeSel = document.getElementById("add-player-tee");
+        if (!teeSel || teeSel.value) return;
+        const rows = allItems.filter(i => (i.customer || "").toLowerCase() === name && i.tee_choice)
+            .sort((a, b) => String(b.order_date || "").localeCompare(String(a.order_date || "")));
+        const last = rows.length ? rows[0].tee_choice : "";
+        if (last && [...teeSel.options].some(o => o.value === last)) teeSel.value = last;
+    }
+
     function apPkgList() {
         if (addPlayerEventId == null) return [];
         const entry = pkgFor(addPlayerEventId);
@@ -13539,7 +13617,10 @@
         if (chosen) {
             const { pkg } = chosen;
             const holes = apPkgHoles(pkg);
-            if (holes) document.getElementById("add-player-holes").value = String(holes);
+            if (holes) {
+                apEnsureOption("add-player-holes", String(holes), holes > 18 ? `${holes} (${holes / 18} days)` : String(holes));
+                document.getElementById("add-player-holes").value = String(holes);
+            }
             // Current side_games vocabulary: a games-bundle buyer is in that
             // day's net AND gross games (ratified split, mailbox #276/#279)
             // → "Both"; no bundle → "None". Event-specific YES/SAT/SUN/NO
@@ -13666,6 +13747,7 @@
         document.getElementById("add-player-phone").value = "";
         document.getElementById("ap-contact-fields").style.display = "none";
         updateAddPlayerMode();
+        apLoadOptions(addPlayerEventId);
         document.getElementById("add-player-overlay").style.display = "flex";
     }
 
@@ -15575,9 +15657,11 @@
                     else if (statuses.includes("1ST TIMER")) statusSelect.value = "1ST TIMER";
                     else statusSelect.value = "";
                 }
+                apPrefillFromPerson();
             }
             renderApNameSuggest(name);
         });
+        document.getElementById("add-player-manager").addEventListener("change", apPrefillFromPerson);
 
         // Custom player-name typeahead — replaces the native <datalist>, which
         // shows no dropdown on iOS Safari (Kerry 2026-07-16: roster autofill

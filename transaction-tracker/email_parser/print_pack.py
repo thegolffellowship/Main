@@ -87,7 +87,7 @@ def build_event_print_pack(render, event_id: int, static_dir: str,
             logger.exception("print pack: %s failed to render for event %s", slug, event_id)
     if not htmls:
         return None
-    sha = hashlib.sha256("\n".join(h for _, h in htmls).encode("utf-8")).hexdigest()[:16]
+    sha = hashlib.sha256("\n".join(_hash_view(h) for _, h in htmls).encode("utf-8")).hexdigest()[:16]
     code = (ev.get("item_name") or f"event-{event_id}").replace("/", "-")
     # CHROMIUM FIRST (v2.465.8, Kerry 2026-09-18: "Formatting for your PDF
     # email is really bad compared to the PDF downloads on the Tracker").
@@ -117,6 +117,16 @@ def build_event_print_pack(render, event_id: int, static_dir: str,
 
 
 PRINT_STATIC_ORIGIN = "http://tgf-print.local"   # never fetched: the route answers it
+
+
+_STAMP_RE = re.compile(r'<span class="pstamp">.*?</span>', re.S)
+
+
+def _hash_view(html: str) -> str:
+    """The HTML as the once-per-change routine compares it: the printed-at
+    stamp removed, so a sheet that has not changed keeps its hash from
+    one hour to the next and is not mailed again."""
+    return _STAMP_RE.sub("", html or "")
 
 
 def _chromium_executable() -> str | None:

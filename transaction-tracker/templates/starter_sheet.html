@@ -338,7 +338,12 @@
     <div class="fnote"><strong>PH</strong> &mdash; playing handicap at 100%, from that index and the tee played{% if pack.ph_basis %} ({{ pack.ph_basis }}){% endif %}.</div>
     <div class="fnote"><strong>{% if pack.team_unit == 'cart' %}CART{% else %}TEAM{% endif %}</strong> &mdash; {% if pack.team_unit == 'cart' %}Cart{% else %}Team{% endif %} Net handicap{% if pack.team_basis %}: {{ pack.team_basis }}{% endif %}.</div>
     {% if pack.ph_note %}<div class="fnote warn">{{ pack.ph_note }}</div>{% endif %}
-    <div class="fnote">The Golf Fellowship{% if pack.chapter %} &middot; {{ pack.chapter }}{% endif %}.</div>
+    <div class="fnote">The Golf Fellowship{% if pack.chapter %} &middot; {{ pack.chapter }}{% endif %}.
+      {# Printed-at stamp (Kerry 2026-09-21, "Yes"): with a once-per-change
+         routine two copies can be in hand on the day — the stamp says
+         which one is current. Wrapped in .pstamp so the print pack's
+         content hash can strip it (a clock must never look like a change). #}
+      <span class="pstamp">Printed {{ print_stamp() }}.</span></div>
   </div>
   </div><!-- /.sheet -->
   <script>

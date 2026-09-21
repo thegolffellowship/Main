@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.468.1";
+window.TGF_VERSION = "2.468.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.468.2",
+    date: "2026-09-21",
+    changes: [
+      "Add Player modal follows the EVENT (Kerry 2026-09-21: \u2018responsive to what is actually available based on the event, rather than a standard list of selections that make me choose\u2019). `GET /api/events/<id>/add-player-options` derives HOLES from the event's format and packages (a nine offers 9, an 18 offers 18, a combo both, a championship adds its 36/54), SIDE GAMES from the vocabulary its roster actually carries (what the order form offered) plus None, and TEES from the course record's designated bands with their tee names \u2014 the starter sheet's own legend. A single option is preselected, an answer rather than a choice; the static lists stay as the fallback when the fetch fails; a package's hole count is added to the list rather than dropped; the person's last tee on file prefills an empty tee when the course offers that band (status already prefilled). Handicap is deliberately not prefilled \u2014 items.handicap is a snapshot, the index lives in handicap_rounds. Guards: `test_add_player_options.py`, `test_add_player_options.js`.",
+      "Starter sheet footer carries a printed-at stamp (Central time) so two copies in hand on the day tell which is current. The print pack's once-per-change hash strips it \u2014 a clock is never a change, so the evening routine does not re-mail an unchanged sheet.",
+    ],
+  },
   {
     version: "2.468.1",
     date: "2026-09-21",

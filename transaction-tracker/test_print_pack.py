@@ -15,6 +15,7 @@ os.environ.setdefault("ADMIN_PIN", "0000")
 logging.disable(logging.CRITICAL)
 with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
     from email_parser import database as db
+    from email_parser import print_pack as pp
     db.init_db(os.environ["DATABASE_PATH"])
     import app as appmod
 F = []
@@ -47,6 +48,9 @@ check("it rendered through Chromium here (the same engine as the browser's Downl
       bool(built) and built.get("engine") == "chromium", built and built.get("engine"))
 check("the logo was actually served to the renderer (root-relative /static/ refs resolve; Kerry: 'the logo is not rendering')",
       bool(built) and "tgf-logo-r.svg" in (built.get("assets") or []), built and built.get("assets"))
+check("the content hash ignores the printed-at stamp (a clock is not a change)",
+      bool(built) and appmod.build_print_pack_for_event(9001)["sha"] == built["sha"]
+      and pp._hash_view('<p>x</p><span class="pstamp">Printed Mon 9/21 12:30 PM.</span>') == "<p>x</p>")
 check("the filename names the event and the date",
       bool(built) and "s18.11 CEDAR CREEK" in built["filename"] and "2026-09-19" in built["filename"])
 check("unknown event → None", appmod.build_print_pack_for_event(424242) is None)
@@ -60,7 +64,6 @@ check("GET /events/<id>/print-pack.pdf serves the PDF", r.status_code == 200 and
       and r.get_data()[:4] == b"%PDF", (r.status_code, r.mimetype))
 
 print("3. The routine and the mail")
-from email_parser import print_pack as pp
 from email_parser import timezone_utils as tz
 from datetime import timedelta
 with db._connect(DB) as conn:

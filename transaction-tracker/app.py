@@ -436,6 +436,15 @@ def _inject_shell_flag():
     return {"shell_v2": os.environ.get("SHELL_V2", "1").strip().lower() not in ("0", "false", "off")}
 
 
+@app.context_processor
+def _inject_print_stamp():
+    """`print_stamp()` — the Central time a print template was rendered
+    (starter sheet footer, v2.468.2). A function, so the value is taken
+    at render, not at import."""
+    from email_parser.timezone_utils import now_central
+    return {"print_stamp": lambda: now_central().strftime("%a %-m/%-d %-I:%M %p")}
+
+
 @app.errorhandler(500)
 def handle_500(e):
     """Return JSON instead of HTML for unhandled server errors."""
@@ -7689,6 +7698,23 @@ def api_reverse_credit(item_id):
     if reverse_credit(item_id):
         return jsonify({"status": "ok"})
     return jsonify({"error": "Item not found or not in credited/transferred state."}), 400
+
+
+@app.route("/api/events/<int:event_id>/add-player-options")
+@require_role("manager")
+def api_add_player_options(event_id):
+    """Holes / side games / tees the Add Player modal may offer for THIS
+    event — derived from its format, packages, roster and course record
+    (Kerry 2026-09-21). The page keeps its static lists as the fallback."""
+    from email_parser.database import add_player_options
+    try:
+        opts = add_player_options(event_id)
+    except Exception as e:
+        logger.exception("add-player options failed for event %s", event_id)
+        return jsonify({"error": str(e)}), 500
+    if not opts:
+        return jsonify({"error": "Event not found"}), 404
+    return jsonify(opts)
 
 
 @app.route("/api/events/add-player", methods=["POST"])

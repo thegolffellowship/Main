@@ -2151,6 +2151,30 @@ manual (`import_gg_scorecards` / the `scoring-import` bridge). Nothing
 polls GG on a timer, so "how often does the leaderboard update" is "when
 someone runs the import".
 
+## Add Player: the modal offers what the EVENT has (v2.468.2)
+
+Kerry 2026-09-21: "I would like to see any of these Add Player modal
+selection be responsive to what is actually available based on the
+event, rather than a standard list of selections that make me choose."
+
+`GET /api/events/<id>/add-player-options` (`add_player_options` in
+database.py) is read when the modal opens:
+
+| Select | Derived from | Single option |
+|---|---|---|
+| Holes | the event's `format` (nine → 9, 18 → 18, combo → both) + every hole count its packages sell (36/54) | preselected |
+| Side Games | the Net / Gross / Both vocabulary the event's ACTIVE registrations carry (what the order form offered) + None; the full list only while the roster is empty | preselected |
+| Tee Choice | `event_tee_legend` — the course record's designated bands with their tee names; the standard four when the course has no card | — |
+
+The static lists in the HTML stay as the fallback (a failed fetch never
+blanks the modal); a package's hole count is added to the list rather
+than dropped (`apEnsureOption`); a person's last tee on file prefills an
+empty tee when the course offers that band (`apPrefillFromPerson`, on
+the typed name and the manager pick). Status was already prefilled from
+the person. Handicap is NOT prefilled on purpose: `items.handicap` is a
+snapshot; the index lives in `handicap_rounds`. Guards:
+`test_add_player_options.py` / `.js`.
+
 ## The event PRINT PACK — one bound PDF, mailed the evening before (v2.465.0)
 
 Kerry 2026-09-18: "a bound PDF with all of them in one that I could
@@ -2191,6 +2215,10 @@ emailed to me."
   (v2.465.12–13; the bridge's `engine_note` carries the reason whenever
   a fallback happens — never trust a pack without reading `engine`).
   Cedar Creek's Chromium pack went out 2026-09-18 5:31 PM CDT.
+- **Printed-at stamp (v2.468.2):** the starter sheet footer prints
+  `print_stamp()` (context processor, Central time). `_hash_view` strips
+  the `.pstamp` span before the once-per-change hash, so the clock never
+  reads as a change.
   Lesson from v2.465.0–3: a literal `\n` written into requirements.txt
   by a heredoc failed the Railway build twice; validate each line.
 - **NEW badge on the sheet (v2.465.9, Kerry-confirmed):** NEW = a

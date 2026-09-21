@@ -59204,6 +59204,108 @@ def _event_tee_rows(conn, ev: dict, legend: list) -> tuple[dict, str, str]:
     return out, basis, note
 
 
+def _package_holes_from_label(label) -> int | None:
+    """Server twin of the page's pkgHolesFromLabel: how many holes a
+    championship package buys, read from its label when `holes` is unset."""
+    s_ = str(label or "").lower()
+    if re.search(r"\b(full weekend|all three|three[- ]days?|3[- ]days?)\b", s_):
+        return 54
+    rounds = 0
+    if re.search(r"\b(both days|two[- ]days?|2[- ]days?)\b", s_):
+        rounds = 2
+    elif re.search(r"\b(one day|single[- ]day|1[- ]day)\b", s_):
+        rounds = 1
+    if re.search(r"\bpractice\b", s_):
+        rounds += 1
+    return rounds * 18 if rounds else None
+
+
+_SIDE_GAMES_ORDER = ("Net", "Gross", "Both", "None")
+
+
+def _norm_side_games(val) -> str | None:
+    """items.side_games in its many spellings → Net / Gross / Both / None."""
+    v = str(val or "").strip().upper()
+    if not v or v in ("NONE", "NO", "N/A", "-", "—"):
+        return "None"
+    has_net, has_gross = "NET" in v, "GROSS" in v
+    if v == "BOTH" or (has_net and has_gross):
+        return "Both"
+    if has_net:
+        return "Net"
+    if has_gross:
+        return "Gross"
+    return None
+
+
+def add_player_options(event_id: int, db_path: str | Path | None = None) -> dict | None:
+    """What the Add Player modal may offer for THIS event.
+
+    Kerry 2026-09-21: "I would like to see any of these Add Player modal
+    selection be responsive to what is actually available based on the
+    event, rather than a standard list of selections that make me
+    choose." Principle 1 — derive, don't ask.
+
+    holes       the event's FORMAT decides: a nine offers 9, an 18 offers
+                18, a combo offers both; plus every hole count the event's
+                packages sell (36 / 54 on a championship).
+    side_games  the vocabulary this event's registrations actually carry
+                (what the order form offered), plus None; the full list
+                only while nothing is known (empty roster).
+    tees        the bands the course record designates — the starter
+                sheet's own legend — each with its tee name; the standard
+                four when the course has no tee card.
+    A single option is offered as the answer, not as a choice.
+    """
+    with _connect(db_path) as conn:
+        row = conn.execute(
+            "SELECT id, item_name, format, course_id, event_date FROM events WHERE id = ?",
+            (event_id,)).fetchone()
+        if not row:
+            return None
+        ev = dict(row)
+        fmt = (ev.get("format") or "").lower()
+        holes_type = _event_holes_type(ev["item_name"], ev.get("format"))
+        holes = ["9", "18"] if "combo" in fmt else [str(holes_type)]
+        pkgs = ((_event_packages_all(db_path).get(str(int(event_id))) or {}).get("packages") or [])
+        for p in pkgs:
+            h = p.get("holes") or _package_holes_from_label(p.get("label"))
+            if h and str(h) not in holes:
+                holes.append(str(h))
+        holes.sort(key=int)
+        seen: list = []
+        try:
+            for r in conn.execute(
+                    """SELECT DISTINCT i.side_games FROM items i
+                        WHERE (i.event_id = ? OR (i.event_id IS NULL AND i.item_name = ? COLLATE NOCASE))
+                          AND i.parent_item_id IS NULL
+                          AND COALESCE(i.transaction_status, 'active')
+                              NOT IN ('credited', 'refunded', 'transferred', 'wd', 'rsvp_only')""",
+                    (event_id, ev["item_name"])).fetchall():
+                v = _norm_side_games(r[0])
+                if v and v not in seen:
+                    seen.append(v)
+        except sqlite3.OperationalError:
+            seen = []
+        side_games = [o for o in _SIDE_GAMES_ORDER if o in seen] if seen else list(_SIDE_GAMES_ORDER)
+        if "None" not in side_games:
+            side_games.append("None")
+        legend = []
+        try:
+            legend = event_tee_legend(conn, event_id, ev) or []
+        except Exception:
+            legend = []
+        if legend:
+            tees = [{"value": t["band"], "label": f'{t["band_label"]} · {t["tee_name"]}'} for t in legend]
+        else:
+            tees = [{"value": b, "label": b} for b in TEE_BANDS]
+        return {"event_id": int(event_id), "holes_type": holes_type,
+                "holes": holes, "side_games": side_games, "tees": tees,
+                "sources": {"holes": "format" + (" + packages" if pkgs else ""),
+                            "side_games": "roster" if seen else "default",
+                            "tees": "course record" if legend else "standard bands"}}
+
+
 def _first_event_as_member(conn, roster_row: dict, event_date: str) -> bool:
     """NEW badge rule (Kerry 2026-09-18): the member's membership started
     on or before `event_date` and they have played NO event between that

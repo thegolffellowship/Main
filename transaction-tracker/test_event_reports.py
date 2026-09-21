@@ -443,6 +443,8 @@ check("the alphabetical handicap columns are centred",
       and ".arow .aph, .arow .atn { width: 24px; text-align: center;" in _ss3)
 check("NEW means new member, and both badges may show",
       "first event as a member" in _ss3 and "wears both" in _ss3)
+check("the sheet footer carries a printed-at stamp (Kerry 2026-09-21: 'Yes')",
+      'class="pstamp">Printed ' in _ss3)
 check("a blind row's tag follows the game too — never a hard-coded 'team' on a Cart Net sheet",
       "<span class=\"tee\">team</span>" not in open("templates/starter_sheet.html").read())
 check("the explanation names each column and how it was computed",
