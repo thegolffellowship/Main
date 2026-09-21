@@ -175,8 +175,10 @@ nine-hole sibling. A combo set has no plain sibling and waits for the
 CRDB numbers: the seed shape now takes an optional 8th element
 `(y18, yf, yb)` per set (bridge JSON `[name, gender, r18, s18, bogey,
 [fr, fs], [br, bs], [y18, yf, yb]]`). Live after the heal: every
-imported / carded set had yardage already; of the 13 CRDB-only sets, 9
-took it from their other-gender twin and the 4 combos wait.
+imported / carded set had yardage already; of the 13 CRDB-only sets, 7
+took it from their other-gender twin (Kissing Tree Forward M, Back /
+KT / Legends F; Forest Creek Red M, White / Green F) and the 6 Kissing
+Tree combos wait for the CRDB numbers.
 
 **TGF tee designation (v2.467.0, Kerry 2026-09-20).** "Master name is
 what USGA/course call it. GG should just be an alias. The GG names were

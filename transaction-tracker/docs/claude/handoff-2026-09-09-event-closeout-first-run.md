@@ -579,6 +579,23 @@ some 3- for women based on tee availability."
   until its yardages arrive (a course card or the CRDB pull's yardage
   column — add it to the seed shape when the next course comes in).
 
+### 3p. The yardages we have (Kerry 2026-09-21, v2.468.0 / v2.468.1)
+
+Kerry: "Seems like you need to incorporate the yardages we have. Show
+me the updated schema." Yardage is the physical tee's, not the rating's:
+`_heal_tee_yardages` (boot + after card / store / seed) fills a set from
+its holes, then from its other-gender twin of the same master name, and
+gives every rating row its own yardage (`tee_set_ratings.yardage`, total
+/ front / back). The CRDB seed shape takes an optional `[y18, yf, yb]`.
+Live: every imported / carded set already had yardage; 7 of 13 CRDB-only
+sets filled from their twin; the 6 Kissing Tree combos wait for the
+CRDB numbers (Kerry's pull). Schema block rewritten in schema.md.
+Advisory finding: Forest Creek's women's Green (5542) now satisfies the
+4800 floor, so the standard proposes Green F for Forward over Red F
+(4780); designation unchanged. Blocked from the sandbox: ncrdb.usga.org
+is not reachable (network policy), so a CRDB reader would have to run on
+Railway behind a widened SSRF allow-list — Kerry's call.
+
 ## 4. NOT done, and why
 
 - **Wednesday-AM TGF Insider auto-draft (mailbox #453).** BUILT in

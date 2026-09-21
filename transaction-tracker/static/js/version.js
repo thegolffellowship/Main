@@ -1,10 +1,17 @@
-window.TGF_VERSION = "2.468.0";
+window.TGF_VERSION = "2.468.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.468.1",
+    date: "2026-09-21",
+    changes: [
+      "Docs only: the v2.468.0 count corrected from the live record (7 twins filled, 6 combos waiting, not 9 / 4); handoff \u00a73p. Live finding worth Kerry\u2019s eye: with Forest Creek\u2019s women\u2019s Green now carrying 5542 yards, the yardage standard proposes Green (F) for Forward rather than Red (F) at 4780 \u2014 the record keeps Kerry\u2019s Red designation until he says otherwise.",
+    ],
+  },
   {
     version: "2.468.0",
     date: "2026-09-21",
     changes: [
-      "THE YARDAGES WE HAVE (Kerry 2026-09-21). Yardage belongs to the physical tee, not to the rating: `_heal_tee_yardages` runs on boot and after every card import, nine store and CRDB seed, writing only NULLs \u2014 a set\u2019s total from its hole rows; a set with none from the same course\u2019s set of the same master name rated for the other gender (Kissing Tree \u2018Back\u2019 F is the box GG calls \u20181 - Black Tee\u2019, 6484); and a new `tee_set_ratings.yardage` per rating row (the 18, the front nine, the back nine \u2014 from holes 1\u20139 / 10\u201318 or the Tuesday nine-hole sibling). Combo sets have no plain twin and wait for the CRDB numbers: the seed shape takes an optional 8th element [y18, yf, yb] per set, written onto the set and its three rating rows. `get_courses` publishes the rating-row yardage. Live effect: every imported / carded set already had yardage; 9 of the 13 CRDB-only sets take it from their twin, the 4 combos stay empty and hidden.",
+      "THE YARDAGES WE HAVE (Kerry 2026-09-21). Yardage belongs to the physical tee, not to the rating: `_heal_tee_yardages` runs on boot and after every card import, nine store and CRDB seed, writing only NULLs \u2014 a set\u2019s total from its hole rows; a set with none from the same course\u2019s set of the same master name rated for the other gender (Kissing Tree \u2018Back\u2019 F is the box GG calls \u20181 - Black Tee\u2019, 6484); and a new `tee_set_ratings.yardage` per rating row (the 18, the front nine, the back nine \u2014 from holes 1\u20139 / 10\u201318 or the Tuesday nine-hole sibling). Combo sets have no plain twin and wait for the CRDB numbers: the seed shape takes an optional 8th element [y18, yf, yb] per set, written onto the set and its three rating rows. `get_courses` publishes the rating-row yardage. Live effect: every imported / carded set already had yardage; 7 of the 13 CRDB-only sets take it from their twin, the 6 Kissing Tree combos stay empty and hidden.",
     ],
   },
   {
