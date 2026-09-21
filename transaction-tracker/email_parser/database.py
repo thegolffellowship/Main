@@ -59748,7 +59748,8 @@ def add_player_options(event_id: int, db_path: str | Path | None = None) -> dict
     """
     with _connect(db_path) as conn:
         row = conn.execute(
-            "SELECT id, item_name, format, course_id, event_date FROM events WHERE id = ?",
+            "SELECT id, item_name, format, course_id, event_date, side_game_fee, side_game_fee_9, "
+            "side_game_fee_18, per_game_addon FROM events WHERE id = ?",
             (event_id,)).fetchone()
         if not row:
             return None
@@ -59776,13 +59777,41 @@ def add_player_options(event_id: int, db_path: str | Path | None = None) -> dict
                     seen.append(v)
         except sqlite3.OperationalError:
             seen = []
-        # The order form offers Net / Gross / Both / None on every regular
-        # event, so the four are always there (Kerry 2026-09-21 on s9.25
-        # Canyon Springs, three registrations in: "Side Games should be
-        # showing Net, Gross, Both, None as options"). A roster that
-        # carries a vocabulary beyond the four (a championship's YES/SAT/
-        # SUN) adds it after them.
-        side_games = list(_SIDE_GAMES_ORDER) + [v for v in seen if v not in _SIDE_GAMES_ORDER]
+        # WHAT THE EVENT SETUP OFFERS decides the list (Kerry 2026-09-21:
+        # "It should be based on what's offered in the Event Setup, not
+        # just a standard"):
+        #   - an event with bucket accounts (the championship) speaks its
+        #     own day-games vocabulary (YES / SAT / SUN / NO — the games
+        #     axis, ratified 2026-08-07);
+        #   - an event whose setup carries a games fee (Inc. Games $ on
+        #     the event, per nine on a combo, or the 27-hole per-game add)
+        #     offers Net / Gross / Both / None — that is what its order
+        #     form sells;
+        #   - an event with no games fee at all sells no games: None only.
+        # A vocabulary the roster carries beyond that is appended, never
+        # dropped.
+        def _fee(k):
+            try:
+                return float(ev.get(k) or 0)
+            except (TypeError, ValueError):
+                return 0.0
+        games_fee = max(_fee("side_game_fee"), _fee("side_game_fee_9"), _fee("side_game_fee_18"),
+                        _fee("per_game_addon"))
+        axis = None
+        try:
+            axis = (get_event_games_axis(db_path) or {}).get(str(int(event_id)))
+        except Exception:
+            axis = None
+        if axis and axis.get("vocabulary"):
+            side_games = [str(v) for v in axis["vocabulary"]]
+            sg_source = "event setup: day-games vocabulary"
+        elif games_fee > 0:
+            side_games = list(_SIDE_GAMES_ORDER)
+            sg_source = f"event setup: games fee ${games_fee:g}"
+        else:
+            side_games = ["None"]
+            sg_source = "event setup: no games fee"
+        side_games += [v for v in seen if v not in side_games]
         legend = []
         try:
             legend = event_tee_legend(conn, event_id, ev) or []
@@ -59795,7 +59824,7 @@ def add_player_options(event_id: int, db_path: str | Path | None = None) -> dict
         return {"event_id": int(event_id), "holes_type": holes_type,
                 "holes": holes, "side_games": side_games, "tees": tees,
                 "sources": {"holes": "format" + (" + packages" if pkgs else ""),
-                            "side_games": "standard" + (" + roster" if any(v not in _SIDE_GAMES_ORDER for v in seen) else ""),
+                            "side_games": sg_source + (" + roster" if any(v not in side_games[:4] for v in seen) and len(side_games) > (4 if games_fee > 0 else 1) else ""),
                             "tees": "course record" if legend else "standard bands"}}
 
 

@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.473.2";
+window.TGF_VERSION = "2.473.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.473.3",
+    date: "2026-09-21",
+    changes: [
+      "Add Player: the Side Games list follows the EVENT SETUP (Kerry 2026-09-21: \u2018It should be based on what's offered in the Event Setup, not just a standard\u2019). A bucket-account event (the championship) speaks its own day-games vocabulary; an event whose setup carries a games fee \u2014 Inc. Games $, the per-nine fee on a combo, or the 27-hole per-game add \u2014 offers Net / Gross / Both / None, which is what its order form sells; an event with no games fee sells no games and offers None only. The result reports which setup fact decided it.",
+    ],
+  },
   {
     version: "2.473.2",
     date: "2026-09-21",

@@ -2163,7 +2163,7 @@ database.py) is read when the modal opens:
 | Select | Derived from | Single option |
 |---|---|---|
 | Holes | the event's `format` (nine → 9, 18 → 18, combo → both) + every hole count its packages sell (36/54) | preselected |
-| Side Games | the standard Net / Gross / Both / None on every regular event (the order form always offers them — v2.473.2, Kerry on s9.25 three registrations in), plus any vocabulary the roster carries beyond the four (a championship's YES/SAT/SUN) | preselected when one |
+| Side Games | WHAT THE EVENT SETUP OFFERS (v2.473.3, Kerry: "based on what's offered in the Event Setup, not just a standard"): a bucket-account event speaks its day-games vocabulary (YES/SAT/SUN/NO); an event whose setup carries a games fee (Inc. Games $, per-nine on a combo, or the 27-hole per-game add) offers Net / Gross / Both / None; an event with no games fee offers None only. A roster vocabulary beyond that is appended, never dropped | preselected when one |
 | Tee Choice | `event_tee_legend` — the course record's designated bands with their tee names; the standard four when the course has no card | — |
 
 The static lists in the HTML stay as the fallback (a failed fetch never

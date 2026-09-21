@@ -22,11 +22,12 @@ with db._connect(DB) as conn:
     conn.executemany("INSERT INTO course_tees (course_id, tee_name, gender, holes, rating, slope, tgf_bands) VALUES (?,?,?,?,?,?,?)", [
         (501, "Blue", "M", 18, 69.1, 118, "<50"), (501, "White", "M", 18, 67.0, 112, "50-64,65+"),
         (501, "Red", "F", 18, 69.5, 115, "Forward")])
-    conn.executemany("INSERT INTO events (id, item_name, event_date, chapter, status, format, course, course_id) VALUES (?,?,?,?,?,?,?,?)", [
-        (9101, "s9.24 Brackenridge", "2026-09-22", "San Antonio", "active", "9 Holes", "Brackenridge Park", 501),
-        (9102, "s18.12 Somewhere", "2026-10-03", "San Antonio", "active", "18 Holes", "No Card GC", None),
-        (9103, "a9.27 Combo Night", "2026-10-06", "Austin", "active", "Combo", "No Card GC", None),
-        (9104, "2026 TGF CHAMPIONSHIP", "2026-08-14", "San Antonio", "active", "18 Holes", "Lost Pines", None)])
+    conn.executemany("INSERT INTO events (id, item_name, event_date, chapter, status, format, course, course_id, side_game_fee, side_game_fee_9, per_game_addon) VALUES (?,?,?,?,?,?,?,?,?,?,?)", [
+        (9101, "s9.24 Brackenridge", "2026-09-22", "San Antonio", "active", "9 Holes", "Brackenridge Park", 501, 7.0, None, None),
+        (9102, "s18.12 Somewhere", "2026-10-03", "San Antonio", "active", "18 Holes", "No Card GC", None, 14.0, None, None),
+        (9103, "a9.27 Combo Night", "2026-10-06", "Austin", "active", "Combo", "No Card GC", None, None, 7.0, None),
+        (9104, "2026 TGF CHAMPIONSHIP", "2026-08-14", "San Antonio", "active", "18 Holes", "Lost Pines", None, 14.0, None, None),
+        (9105, "SOCIAL | Range Night", "2026-10-10", "San Antonio", "active", "9 Holes", "No Card GC", None, None, None, None)])
     for i, (cid, sg, st) in enumerate([(1, "NET", "active"), (2, "BOTH", "active"), (3, "NONE", "active"),
                                        (4, "GROSS", "credited"), (5, "Net", "active")]):
         conn.execute("INSERT INTO items (customer, customer_id, item_name, event_id, holes, side_games, transaction_status, order_date, order_id, email_uid, merchant) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
@@ -36,11 +37,13 @@ db.set_event_packages(9104, [{"label": "Both Days + Games", "price": 300}, {"lab
 
 o = db.add_player_options(9101, DB)
 check("a nine offers 9 and only 9", o["holes"] == ["9"], o["holes"])
-check("side games = the standard four on a regular event, whatever the roster has bought so far (Kerry: s9.25 three registrations in)",
+check("side games follow the EVENT SETUP: a games fee on the event offers Net / Gross / Both / None whatever the roster has bought so far",
       o["side_games"] == ["Net", "Gross", "Both", "None"], o["side_games"])
+check("an event with NO games fee in its setup offers None only", db.add_player_options(9105, DB)["side_games"] == ["None"], db.add_player_options(9105, DB))
+check("a combo's per-nine fee counts as a games fee", db.add_player_options(9103, DB)["side_games"] == ["Net", "Gross", "Both", "None"])
 check("tees = the course record's designated bands, each with its tee name",
       [t["value"] for t in o["tees"]] == ["<50", "50-64", "65+", "Forward"] and o["tees"][0]["label"] == "Men <50 · Blue Tees", o["tees"])
-check("sources say where each list came from", o["sources"] == {"holes": "format", "side_games": "standard", "tees": "course record"}, o["sources"])
+check("sources say where each list came from", o["sources"] == {"holes": "format", "side_games": "event setup: games fee $7", "tees": "course record"}, o["sources"])
 o2 = db.add_player_options(9102, DB)
 check("an 18 offers 18 only", o2["holes"] == ["18"], o2["holes"])
 check("an empty roster offers the same four", o2["side_games"] == ["Net", "Gross", "Both", "None"], o2["side_games"])
