@@ -42,6 +42,11 @@ CLOSEOUT_LOOKBACK_DAYS = 21
 # A first timer stays on the attribution card this long. Past that,
 # nobody remembers who brought them and asking is noise.
 ATTRIBUTION_WINDOW_DAYS = 60
+# Email triage looks back this far. The table holds ~3,100 open rows
+# going back to the feature's first day; an unscoped count is an archive,
+# not a to-do list, and an archive on a landing page trains you to look
+# past it.
+TRIAGE_WINDOW_DAYS = 14
 
 _TONES = {"do", "watch", "info"}
 
@@ -207,14 +212,32 @@ def _expense_queue(conn, today):
 
 def _action_items(conn, today):
     """ABSORBED from the COO page (Kerry: 'absorb the action items').
-    The table stays — nine code paths write it and it is how the system
-    reports what it found. Only the front door moves."""
-    n = conn.execute("SELECT COUNT(*) c FROM action_items "
-                     "WHERE status = 'open'").fetchone()["c"]
-    if not n:
+
+    This is the AI email triage — mail that wants a reply: a course
+    asking about a reservation, a member inquiry, a partner pitch. The
+    table stays (nine code paths write it); only the front door moves.
+
+    SCOPED, and the scope is the whole point. There are ~3,100 rows open,
+    a backlog going back to the feature's first day, and a card reading
+    3,151 teaches Kerry to ignore the page — which is exactly why he
+    stopped opening the COO dashboard. HIGH urgency inside the window is
+    the cut that makes it a today list instead of an archive.
+    """
+    from datetime import date, timedelta
+    start = (date.fromisoformat(today) - timedelta(days=TRIAGE_WINDOW_DAYS)).isoformat()
+    rows = conn.execute(
+        "SELECT id, subject, from_name, email_date FROM action_items "
+        "WHERE status = 'open' AND urgency = 'high' AND email_date >= ? "
+        "ORDER BY email_date DESC, id DESC", (start,)).fetchall()
+    if not rows:
         return None
-    return _card("action_items", "Data issues found", n, "/coo",
-                 "the system flagged these", "watch")
+    items = [{"label": (r["subject"] or "(no subject)")[:70],
+              "meta": " · ".join(filter(None, [
+                  (r["from_name"] or "").strip(),
+                  _when(_days(r["email_date"], today))])),
+              "href": "/coo"} for r in rows]
+    return _card("action_items", "Email needing a reply", len(rows), "/coo",
+                 f"high priority, last {TRIAGE_WINDOW_DAYS} days", "do", items)
 
 
 def _ca_queue(conn, today):

@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.471.0";
+window.TGF_VERSION = "2.471.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.471.1",
+    date: "2026-09-21",
+    changes: [
+      "The dashboard's absorbed COO card was wrong twice over on its first live read and is fixed. It was titled 'Data issues found' — it is actually the AI email triage, mail that wants a reply (a course asking about a reservation, a member inquiry, a partner pitch), so it now reads 'Email needing a reply' and lists the subjects. And it counted 3,151, because ~3,100 rows have been open since the feature's first day and nobody has ever worked them. It is now scoped to HIGH urgency inside 14 days. An unscoped count is an archive, not a to-do list, and an archive on a landing page is exactly what trained Kerry to stop opening the COO dashboard in the first place — shipping it that way would have reproduced the failure the page exists to fix. Standing question for any future card over a long-lived table: is this a queue or a pile?",
+    ],
+  },
   {
     version: "2.471.0",
     date: "2026-09-21",

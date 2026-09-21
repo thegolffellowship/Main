@@ -46,8 +46,17 @@ still works; it is no longer the front door.
 | `attribute` | 1st TIMER customers (last 60d) with no `referred_by_customer_id` | `/admin/leads` |
 | `renewals` | latest membership per customer: lapsed, or expiring in 30d | `/customers` |
 | `expenses` | `expense_transactions.review_status = 'pending'` | `/accounting` |
-| `action_items` | open `action_items` — **absorbed from COO** | `/coo` |
+| `action_items` | open `action_items`, **urgency high, last 14 days** — absorbed from COO | `/coo` |
 | `ca_queue` | open `ca_queue` rows | `/admin/ca-queue` |
+
+**Why `action_items` is scoped and the others are not.** That table is
+the AI email triage — mail that wants a reply. It holds ~3,100 open rows
+going back to the feature's first day, because nobody has ever worked it.
+An unscoped count renders as `3151`, which is an archive, not a to-do
+list, and an archive on a landing page is precisely what trained Kerry to
+stop opening the COO dashboard. High urgency inside 14 days is the cut
+that makes it today's list. **Any future card over a long-lived table
+needs the same question asked of it: is this a queue or a pile?**
 
 `attribute` is the Ty Bubela card. It counts today and will gain its
 one-tap confirmation once the referral schema is ratified — see
