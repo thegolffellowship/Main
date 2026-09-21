@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import html as html_mod
 import os
 import re
 from datetime import timedelta
@@ -77,10 +78,13 @@ def build_event_print_pack(render, event_id: int, static_dir: str,
     if not ev:
         return None
     htmls: list[tuple[str, str]] = []
+    sheet_pack = None
     for slug, template, builder, key in PRINT_PACK_PARTS:
         ctx = getattr(db, builder)(int(event_id), db_path=db_path)
         if not ctx:
             continue
+        if slug == "starter-sheet":
+            sheet_pack = ctx
         try:
             htmls.append((slug, render(template, **{key: ctx})))
         except Exception:
@@ -111,7 +115,7 @@ def build_event_print_pack(render, event_id: int, static_dir: str,
             return {"error": f"PDF engine unavailable: {exc2}", "sha": sha, "engine_note": engine_note,
                     "parts": [{"slug": s_, "pages": None} for s_, _ in htmls], "event": ev}
     return {"pdf": pdf, "parts": parts, "sha": sha, "event": ev, "engine": engine,
-            "engine_note": engine_note,
+            "engine_note": engine_note, "pack": sheet_pack,
             "assets": sorted(set(getattr(_render_pdf_chromium, "last_served", []))) if engine == "chromium" else None,
             "filename": f"{code} — print pack — {ev.get('event_date')}.pdf"}
 
@@ -227,6 +231,76 @@ def print_pack_recipient() -> str | None:
             or os.getenv("EMAIL_ADDRESS"))
 
 
+def _esc(v) -> str:
+    return html_mod.escape("" if v is None else str(v), quote=True)
+
+
+def _fmt_num(v):
+    if v is None or v == "":
+        return "—"
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        return _esc(v)
+    return f"{f:g}" if f != int(f) else str(int(f))
+
+
+def print_pack_email_body(built: dict) -> str:
+    """The sheet's essentials IN THE MAIL (Kerry 2026-09-21: "Yes, build the
+    email body for the next pack"): first tee, every group with its
+    players — index · PH · cart/team — the blinds, and the badge notes,
+    so the night reads on a phone without opening the PDF. The PDF is
+    unchanged and stays the thing to print."""
+    ev = built.get("event") or {}
+    pack = built.get("pack") or {}
+    pev = pack.get("event") or {}
+    unit = "CART" if pack.get("team_unit") == "cart" else "TEAM"
+    holes_key = pack.get("holes_key") or ""
+    parts = ", ".join(f"{p['slug'].replace('-', ' ')} ({p['pages']} pp)" for p in built.get("parts") or [])
+    out = [f'<p style="margin:0 0 1em;"><strong>{_esc(ev.get("item_name"))}</strong> — '
+           f'{_esc(ev.get("event_date"))} · {_esc(ev.get("course") or "")}'
+           f'{" · " + _esc(pev.get("chapter")) if pev.get("chapter") else ""}</p>']
+    if pev.get("start_label"):
+        out.append(f'<p style="margin:0 0 1em;font-size:1.1em;"><strong>{_esc(pev["start_label"])}</strong>'
+                   f'{" · " + _esc(pev.get("start_type")) if pev.get("start_type") else ""}'
+                   f'{" · 18s " + _esc(pev.get("start_label_18")) if pev.get("start_label_18") else ""}</p>')
+    groups = pack.get("groups") or []
+    if groups:
+        rows = []
+        for g in groups:
+            label = g.get("start_line") or g.get("hole_label") or g.get("slot_label") or ""
+            names = []
+            for pl in g.get("players") or []:
+                badges = ("".join(
+                    f' <span style="font-size:0.75em;font-weight:700;color:#fff;background:{c};'
+                    f'padding:0 4px;border-radius:3px;">{t}</span>'
+                    for t, c, on in (("1T", "#E87C3E", pl.get("is_first_timer")),
+                                     ("NEW", "#15803D", pl.get("is_new"))) if on))
+                names.append(
+                    f'<div><strong>{_esc(pl.get("name"))}</strong>{badges} '
+                    f'<span style="color:#6B7280;">'
+                    f'{_esc(pl.get("tee_choice") or "")} · idx {_fmt_num(pl.get("handicap_index_display", pl.get("handicap_index")))}'
+                    f' · PH {_fmt_num(pl.get("playing_handicap"))} · {unit} {_fmt_num(pl.get("team_handicap"))}</span></div>')
+            for b in g.get("blinds") or []:
+                names.append(f'<div style="color:#6B7280;font-style:italic;">BLIND · {_esc(b.get("name"))}</div>')
+            rows.append(f'<tr><td style="padding:6px 10px 6px 0;vertical-align:top;white-space:nowrap;">'
+                        f'<strong>{_esc(label)}</strong></td>'
+                        f'<td style="padding:6px 0;vertical-align:top;">{"".join(names)}</td></tr>')
+        out.append('<table style="border-collapse:collapse;font-family:-apple-system,Helvetica,Arial,sans-serif;'
+                   'font-size:14px;margin:0 0 1em;">' + "".join(rows) + "</table>")
+    notes = [f"<strong>1T</strong> first TGF event ever · <strong>NEW</strong> new member playing their first event as a member (both can show)",
+             f"<strong>idx</strong> TGF index ({holes_key}-hole) · <strong>PH</strong> playing handicap at 100%"
+             + (f" ({_esc(pack['ph_basis'])})" if pack.get("ph_basis") else "")]
+    if pack.get("team_basis"):
+        notes.append(f"<strong>{unit}</strong> {_esc(pack['team_basis'])}")
+    if pack.get("ph_note"):
+        notes.append(f'<span style="color:#B45309;">{_esc(pack["ph_note"])}</span>')
+    out.append('<p style="margin:0 0 1em;font-size:12px;color:#6B7280;">' + "<br>".join(notes) + "</p>")
+    out.append(f'<p style="margin:0 0 1em;font-size:12px;color:#6B7280;">Attached: {_esc(parts)}, bound in print order. '
+               f'Sent the evening before; sent again only if the sheet changes. Print from the attachment.</p>')
+    return "".join(out)
+
+
 def send_event_print_pack(built: dict, to_address: str | None = None,
                           db_path=None) -> dict:
     """Mail a built pack as an attachment and record its hash."""
@@ -238,12 +312,7 @@ def send_event_print_pack(built: dict, to_address: str | None = None,
     if not to_address or not all(creds.values()):
         return {"sent": False, "why": "mail credentials or recipient not set"}
     ev = built["event"]
-    parts = ", ".join(f"{p['slug']} ({p['pages']} pp)" for p in built["parts"])
-    html = (f"<p>Print pack for <strong>{ev.get('item_name')}</strong> — "
-            f"{ev.get('event_date')} · {ev.get('course') or ''}.</p>"
-            f"<p>Bound in print order: {parts}.</p>"
-            f"<p>Sent automatically the evening before; you get it again only if the "
-            f"sheet changes. Print from the attachment.</p>")
+    html = print_pack_email_body(built)
     ok = send_mail_graph(tenant_id=creds["AZURE_TENANT_ID"], client_id=creds["AZURE_CLIENT_ID"],
                          client_secret=creds["AZURE_CLIENT_SECRET"],
                          from_address=creds["EMAIL_ADDRESS"], to_address=to_address,

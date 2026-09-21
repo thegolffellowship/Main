@@ -51,6 +51,11 @@ check("the logo was actually served to the renderer (root-relative /static/ refs
 check("the content hash ignores the printed-at stamp (a clock is not a change)",
       bool(built) and appmod.build_print_pack_for_event(9001)["sha"] == built["sha"]
       and pp._hash_view('<p>x</p><span class="pstamp">Printed Mon 9/21 12:30 PM.</span>') == "<p>x</p>")
+_body = pp.print_pack_email_body(built) if built else ""
+check("the mail body carries the first tee, every seated player and the blinds (Kerry 2026-09-21: 'build the email body')",
+      all(n in _body for n in ("Jeff Rideout", "Mary Wade", "Gus Vasquez", "Dan Stich")) and "8:10 AM" in _body
+      and "1T" in _body and "Attached:" in _body, _body[:400])
+check("…and is escaped HTML with no template leftovers", "{{" not in _body and "<script" not in _body)
 check("the filename names the event and the date",
       bool(built) and "s18.11 CEDAR CREEK" in built["filename"] and "2026-09-19" in built["filename"])
 check("unknown event → None", appmod.build_print_pack_for_event(424242) is None)

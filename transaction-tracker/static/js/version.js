@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.468.2";
+window.TGF_VERSION = "2.468.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.468.3",
+    date: "2026-09-21",
+    changes: [
+      "Print pack email carries the sheet's essentials in the BODY (Kerry 2026-09-21: \u2018Yes, build the email body for the next pack\u2019): the first tee, every group with its players \u2014 tee, index, PH, CART/TEAM handicap, 1T/NEW badges \u2014 the blinds, and the legend notes, so the night reads on a phone without opening the PDF. The PDF is unchanged and stays the thing to print. `print_pack_email_body`; the build result now carries the starter-sheet `pack`.",
+    ],
+  },
   {
     version: "2.468.2",
     date: "2026-09-21",

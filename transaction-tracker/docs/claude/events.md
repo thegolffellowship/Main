@@ -2231,6 +2231,10 @@ emailed to me."
   since our last event" (missed Bear Clarkson) and "first-year member"
   (tagged Lewis, Wallace and Schneider, who had all played as members).
   Guard: `test_new_badge.py`.
+- **Mail body (v2.468.3):** `print_pack_email_body(built)` — first tee,
+  each group with players (tee · idx · PH · CART/TEAM, 1T/NEW badges),
+  blinds, legend notes, then the attachment list. Reads on a phone
+  without opening the PDF; the PDF is unchanged.
 - **Mail:** `send_mail_graph(..., attachments=[(name, bytes, mime)])`
   sends Graph `fileAttachment`s (inline base64, under Graph's 3 MB).
 - Test: `test_print_pack.py` (builds a real PDF, serves the route,
