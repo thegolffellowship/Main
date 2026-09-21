@@ -75,6 +75,9 @@ check("both modals carry the NET / GROSS checkboxes with the bundle's games besi
       all(f'id="{p}-event-offer-{k}"' in html for p in ("edit", "add") for k in ("NET", "GROSS")) and 'class="offer-desc"' in html)
 check("edit sends games_offered only when it changed; add always sends it",
       'changes.games_offered = offersFromForm("edit")' in html and 'games_offered: offersFromForm("add")' in html)
+check("unchecking a bundle re-renders the pricing display at once (Kerry: 'If unchecked, the Pricing Display should adjust accordingly')",
+      'el.addEventListener("change", () => {\n                updatePricingPreview(prefix);' in html
+      and html.count("offered: offersFromForm(prefix)") == 3)
 check("pricing tiers carry the bundle names and follow what is offered",
       "With NET or GROSS (+$" in html and "With BOTH (+$" in html and "With ${offered[0]} (+$" in html
       and "offered: offersFromForm(prefix)" in html)

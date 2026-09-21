@@ -13061,7 +13061,7 @@
             html += `<div style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:6px; padding:0.35rem;">`;
             html += `<div style="font-weight:700; font-size:0.72rem; color:#166534; margin-bottom:0.1rem;">9-Hole Pricing</div>`;
             if (sub9 > 0) {
-                html += renderPlayerPricingGrid(cc9, mu9, sg9, tf, "9/18 Combo", { compact: true });
+                html += renderPlayerPricingGrid(cc9, mu9, sg9, tf, "9/18 Combo", { compact: true, offered: offersFromForm(prefix) });
             } else {
                 html += `<div style="font-size:0.72rem; color:var(--text-muted); padding:0.5rem 0; text-align:center;">Enter pricing above</div>`;
             }
@@ -13070,7 +13070,7 @@
             html += `<div style="background:#eff6ff; border:1px solid #bfdbfe; border-radius:6px; padding:0.35rem;">`;
             html += `<div style="font-weight:700; font-size:0.72rem; color:#1e40af; margin-bottom:0.1rem;">18-Hole Pricing</div>`;
             if (sub18 > 0) {
-                html += renderPlayerPricingGrid(cc18, mu18, sg18, tf, "9/18 Combo", { memberOnly: true, compact: true });
+                html += renderPlayerPricingGrid(cc18, mu18, sg18, tf, "9/18 Combo", { memberOnly: true, compact: true, offered: offersFromForm(prefix) });
             } else {
                 html += `<div style="font-size:0.72rem; color:var(--text-muted); padding:0.5rem 0; text-align:center;">Enter pricing above</div>`;
             }
@@ -13096,6 +13096,15 @@
         ["tgf_markup", "side_game_fee", "transaction_fee_pct", "per_game_addon"].forEach(field => {
             const el = document.getElementById(prefix + "-event-" + field);
             if (el) el.addEventListener("input", () => updatePricingPreview(prefix));
+        });
+        // GAMES OFFERED drives the tiers too (Kerry 2026-09-21: "If
+        // unchecked, the Pricing Display should adjust accordingly").
+        ["NET", "GROSS"].forEach(k => {
+            const el = document.getElementById(`${prefix}-event-offer-${k}`);
+            if (el) el.addEventListener("change", () => {
+                updatePricingPreview(prefix);
+                if (typeof _updateComboPricingPreviewInner === "function") _updateComboPricingPreviewInner(prefix);
+            });
         });
     });
     // Live preview on pricing input change — combo format

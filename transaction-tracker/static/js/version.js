@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.475.0";
+window.TGF_VERSION = "2.475.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.475.1",
+    date: "2026-09-21",
+    changes: [
+      "Event Setup: unchecking NET or GROSS re-renders the pricing display at once, on the single and the combo previews (Kerry 2026-09-21: \u2018If unchecked, the Pricing Display should adjust accordingly\u2019). The checkboxes had no change listener, so the tiers only followed on the next price edit.",
+    ],
+  },
   {
     version: "2.475.0",
     date: "2026-09-21",
