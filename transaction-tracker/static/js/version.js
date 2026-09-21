@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.472.1";
+window.TGF_VERSION = "2.472.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.472.2",
+    date: "2026-09-21",
+    changes: [
+      "Payouts \u2192 GOLFERS rail: each golfer's average won PER EVENT PLAYED sits under the total in the same small type as the event count (Kerry 2026-09-21: \u2018total/events played... not total / events won something\u2019). The denominator is every event the golfer held a live registration for (`events_entered`), never the count of events that paid. Guard: `test_tgf_golfer_avg.js`. (The code shipped in the previous commit; this entry records it.)",
+    ],
+  },
   {
     version: "2.472.1",
     date: "2026-09-21",
