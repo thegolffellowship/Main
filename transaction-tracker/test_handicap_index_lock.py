@@ -171,7 +171,8 @@ check("_roster_handicap_index_map no longer averages differentials itself",
 for name, needle in (("get_event_pairings", "_event_index_as_of("),
                      ("generate_event_pairings", "_event_index_as_of(ev)"),
                      ("get_event_print_pack", "as_of=_event_index_as_of(ev)"),
-                     ("event_flights_report", "as_of=_event_index_as_of(ev)"),
+                     # the printed report is a VIEW of the board (v2.469.0)
+                     ("event_flights_board", "as_of=_event_index_as_of(ev)"),
                      ("get_all_events", '"handicap_as_of"')):
     j = src.index(f"def {name}("); fb = src[j:src.index("\ndef ", j + 1)]
     check(f"{name} honours the lock", needle in fb)

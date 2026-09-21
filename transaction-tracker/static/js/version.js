@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.470.0";
+window.TGF_VERSION = "2.470.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.470.1",
+    date: "2026-09-21",
+    changes: [
+      "GAMES and FLIGHTS tabs STACK LEFT (Kerry 2026-09-21: \u2018Allow justification to stack left, not go full width\u2026 everything should shorten to the widest requirement\u2019). The games table is exactly the sum of its columns (47.5rem, fixed layout) and long winner lines wrap inside it; the FLIGHTS panel is as wide as the widest game's row of 300px flight boxes, and every header bar and text line takes that width and wraps within it \u2014 a two-flight game sets a two-box-wide page.",
+      "Places by flight size are a DIAL (Kerry: \u2018Matrix should govern placewinners for [Net]. 1/10/20 for Gross yes. Probably just needs to be part of the matrix as well based on players in a flight\u2019): `gross_places_by_flight_size` in app_settings (JSON rows of min / max / split) overrides the FLIGHT_RULES seed for Individual Gross; Individual Net keeps the matrix columns; the board reports `places_source`. Freeze action ratified as a FREEZE BUTTON on the tab; the snapshot schema itself still awaits Kerry.",
+      "A nine-hole PH from an 18-hole set: `_event_tee_rows` reads the nine's rating and slope off `tee_set_ratings` (front / back) when the course record holds only 18-hole sets \u2014 the CRDB / Golf Genius tee-setup shape. Brackenridge (Tue 9/22) was seeded from Kerry's GG screenshots that afternoon (Blue 69.8/129, White 67.3/123, Gold 65.0/119, Red 64.0/117 with their nines and yardages; designated <50 / 50-64 / 65+ / Forward) and neither the starter sheet nor the FLIGHTS tab could print a PH until this. Guards: `test_flights_board.py`; the handicap-lock guard now names `event_flights_board`, the computation the printed report is a view of.",
+    ],
+  },
   {
     version: "2.470.0",
     date: "2026-09-21",

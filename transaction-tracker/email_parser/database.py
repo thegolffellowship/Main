@@ -58019,8 +58019,10 @@ def event_flights_board(event_id: int, db_path=None) -> dict | None:
         ev = dict(ev)
         buyers_by_kind = {k: _event_game_buyers(conn, ev["item_name"], k)
                           for k in ("NET", "GROSS")}
+        # THE LOCK: the index in effect the morning the event began
+        # (test_handicap_index_lock guards this literal on every surface).
+        idx18 = _handicap_index_18_by_customer(db_path, as_of=_event_index_as_of(ev))
         as_of = _event_index_as_of(ev)
-        idx18 = _handicap_index_18_by_customer(db_path, as_of=as_of)
         ph_map, ph_basis, ph_note = _event_player_ph_map(conn, ev, idx18)
         gg = _event_gg_recorded_purses(conn, ev["id"])
     holes = _event_holes_type(ev["item_name"], ev.get("format"))
