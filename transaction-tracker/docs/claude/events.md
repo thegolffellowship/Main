@@ -2163,14 +2163,17 @@ database.py) is read when the modal opens:
 | Select | Derived from | Single option |
 |---|---|---|
 | Holes | the event's `format` (nine → 9, 18 → 18, combo → both) + every hole count its packages sell (36/54) | preselected |
-| Side Games | the Net / Gross / Both vocabulary the event's ACTIVE registrations carry (what the order form offered) + None; the full list only while the roster is empty | preselected |
+| Side Games | the standard Net / Gross / Both / None on every regular event (the order form always offers them — v2.473.2, Kerry on s9.25 three registrations in), plus any vocabulary the roster carries beyond the four (a championship's YES/SAT/SUN) | preselected when one |
 | Tee Choice | `event_tee_legend` — the course record's designated bands with their tee names; the standard four when the course has no card | — |
 
 The static lists in the HTML stay as the fallback (a failed fetch never
 blanks the modal); a package's hole count is added to the list rather
-than dropped (`apEnsureOption`); a person's last tee on file prefills an
-empty tee when the course offers that band (`apPrefillFromPerson`, on
-the typed name and the manager pick). Status was already prefilled from
+than dropped (`apEnsureOption`); HISTORY prefills the blanks
+(`apPrefillFromPerson`, on the typed name and the manager pick — Kerry
+2026-09-21: "if there's history, then should autofill that based on
+typical selections too"): the person's last tee on file when the course
+offers that band, and their MOST FREQUENT side-games choice when the
+event offers it; never over a value already chosen. Status was already prefilled from
 the person. Handicap is NOT prefilled on purpose: `items.handicap` is a
 snapshot; the index lives in `handicap_rounds`. Guards:
 `test_add_player_options.py` / `.js`.

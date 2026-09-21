@@ -59776,9 +59776,13 @@ def add_player_options(event_id: int, db_path: str | Path | None = None) -> dict
                     seen.append(v)
         except sqlite3.OperationalError:
             seen = []
-        side_games = [o for o in _SIDE_GAMES_ORDER if o in seen] if seen else list(_SIDE_GAMES_ORDER)
-        if "None" not in side_games:
-            side_games.append("None")
+        # The order form offers Net / Gross / Both / None on every regular
+        # event, so the four are always there (Kerry 2026-09-21 on s9.25
+        # Canyon Springs, three registrations in: "Side Games should be
+        # showing Net, Gross, Both, None as options"). A roster that
+        # carries a vocabulary beyond the four (a championship's YES/SAT/
+        # SUN) adds it after them.
+        side_games = list(_SIDE_GAMES_ORDER) + [v for v in seen if v not in _SIDE_GAMES_ORDER]
         legend = []
         try:
             legend = event_tee_legend(conn, event_id, ev) or []
@@ -59791,7 +59795,7 @@ def add_player_options(event_id: int, db_path: str | Path | None = None) -> dict
         return {"event_id": int(event_id), "holes_type": holes_type,
                 "holes": holes, "side_games": side_games, "tees": tees,
                 "sources": {"holes": "format" + (" + packages" if pkgs else ""),
-                            "side_games": "roster" if seen else "default",
+                            "side_games": "standard" + (" + roster" if any(v not in _SIDE_GAMES_ORDER for v in seen) else ""),
                             "tees": "course record" if legend else "standard bands"}}
 
 

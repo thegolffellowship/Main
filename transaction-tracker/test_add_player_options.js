@@ -23,6 +23,10 @@ check("the person's last tee prefills an empty tee field, only if the course off
     /function apPrefillFromPerson\(\)/.test(html) && /some\(o => o\.value === last\)/.test(html));
 check("…on the typed name and on the manager pick", /apPrefillFromPerson\(\);\s*\}\s*renderApNameSuggest/.test(html)
     && html.includes('getElementById("add-player-manager").addEventListener("change", apPrefillFromPerson)'));
+check("history prefills an empty Side Games field with the person's MOST FREQUENT choice, only when the event offers it",
+    /function apNormSideGames\(v\)/.test(html) && /const typical = Object\.entries\(tally\)\.sort\(\(a, b\) => b\[1\] - a\[1\]\)\[0\];/.test(html)
+    && /if \(typical && \[\.\.\.sgSel\.options\]\.some\(o => o\.value === typical\[0\]\)\) sgSel\.value = typical\[0\];/.test(html));
+check("…and never overwrites a value already chosen", /if \(sgSel && !sgSel\.value\) \{/.test(html) && /if \(teeSel && !teeSel\.value\) \{/.test(html));
 check("the static fallback lists are still in the HTML", html.includes('<option value="36">36 (two days)</option>') && html.includes('<option value="Forward">Forward</option>'));
 console.log("\n" + (failures ? failures + " FAILURE(S)" : "ALL PASS"));
 process.exit(failures ? 1 : 0);

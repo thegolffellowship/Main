@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.473.1";
+window.TGF_VERSION = "2.473.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.473.2",
+    date: "2026-09-21",
+    changes: [
+      "Add Player: Side Games offers Net / Gross / Both / None on every regular event (Kerry 2026-09-21 on s9.25 Canyon Springs, three registrations in: \u2018should be showing Net, Gross, Both, None as options\u2019) \u2014 v2.468.2 had narrowed the list to what the roster had bought so far, which on a fresh event was almost nothing. A roster vocabulary beyond the four (a championship's YES/SAT/SUN) is added after them.",
+      "Add Player: history fills the blanks (Kerry: \u2018if there's history, then should autofill that based on typical selections too\u2019). Beside the last tee on file, the person's MOST FREQUENT side-games choice across their registrations prefills an empty Side Games field when the event offers it \u2014 on the typed name and on the manager pick; never over a value already chosen.",
+    ],
+  },
   {
     version: "2.473.1",
     date: "2026-09-21",

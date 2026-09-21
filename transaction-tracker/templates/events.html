@@ -13858,15 +13858,41 @@
             ? document.getElementById("add-player-manager").value
             : document.getElementById("add-player-name").value.trim();
     }
+    // Net / Gross / Both / None in its many order-form spellings.
+    function apNormSideGames(v) {
+        const s = String(v || "").trim().toUpperCase();
+        if (!s || s === "NONE" || s === "NO") return "None";
+        const net = s.includes("NET"), gross = s.includes("GROSS");
+        if (s === "BOTH" || (net && gross)) return "Both";
+        if (net) return "Net";
+        if (gross) return "Gross";
+        return "";
+    }
+    // History answers the blanks (Kerry 2026-09-21: "if there's history,
+    // then should autofill that based on typical selections too"): the
+    // person's LAST tee on file, and their MOST FREQUENT side-games
+    // choice — only into an empty field, only when the event offers it.
     function apPrefillFromPerson() {
         const name = (apPersonName() || "").toLowerCase();
         if (!name) return;
+        const mine = allItems.filter(i => (i.customer || "").toLowerCase() === name);
         const teeSel = document.getElementById("add-player-tee");
-        if (!teeSel || teeSel.value) return;
-        const rows = allItems.filter(i => (i.customer || "").toLowerCase() === name && i.tee_choice)
-            .sort((a, b) => String(b.order_date || "").localeCompare(String(a.order_date || "")));
-        const last = rows.length ? rows[0].tee_choice : "";
-        if (last && [...teeSel.options].some(o => o.value === last)) teeSel.value = last;
+        if (teeSel && !teeSel.value) {
+            const rows = mine.filter(i => i.tee_choice)
+                .sort((a, b) => String(b.order_date || "").localeCompare(String(a.order_date || "")));
+            const last = rows.length ? rows[0].tee_choice : "";
+            if (last && [...teeSel.options].some(o => o.value === last)) teeSel.value = last;
+        }
+        const sgSel = document.getElementById("add-player-side-games");
+        if (sgSel && !sgSel.value) {
+            const tally = {};
+            mine.filter(i => i.holes || i.event_id).forEach(i => {
+                const k = apNormSideGames(i.side_games);
+                if (k) tally[k] = (tally[k] || 0) + 1;
+            });
+            const typical = Object.entries(tally).sort((a, b) => b[1] - a[1])[0];
+            if (typical && [...sgSel.options].some(o => o.value === typical[0])) sgSel.value = typical[0];
+        }
     }
 
     function apPkgList() {

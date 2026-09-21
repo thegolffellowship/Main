@@ -36,14 +36,14 @@ db.set_event_packages(9104, [{"label": "Both Days + Games", "price": 300}, {"lab
 
 o = db.add_player_options(9101, DB)
 check("a nine offers 9 and only 9", o["holes"] == ["9"], o["holes"])
-check("side games = the vocabulary the roster carries (Net, Both, None) — a credited Gross buyer does not count",
-      o["side_games"] == ["Net", "Both", "None"], o["side_games"])
+check("side games = the standard four on a regular event, whatever the roster has bought so far (Kerry: s9.25 three registrations in)",
+      o["side_games"] == ["Net", "Gross", "Both", "None"], o["side_games"])
 check("tees = the course record's designated bands, each with its tee name",
       [t["value"] for t in o["tees"]] == ["<50", "50-64", "65+", "Forward"] and o["tees"][0]["label"] == "Men <50 · Blue Tees", o["tees"])
-check("sources say where each list came from", o["sources"] == {"holes": "format", "side_games": "roster", "tees": "course record"}, o["sources"])
+check("sources say where each list came from", o["sources"] == {"holes": "format", "side_games": "standard", "tees": "course record"}, o["sources"])
 o2 = db.add_player_options(9102, DB)
 check("an 18 offers 18 only", o2["holes"] == ["18"], o2["holes"])
-check("an empty roster falls back to the full side-games list", o2["side_games"] == ["Net", "Gross", "Both", "None"], o2["side_games"])
+check("an empty roster offers the same four", o2["side_games"] == ["Net", "Gross", "Both", "None"], o2["side_games"])
 check("no course card → the standard four bands", [t["value"] for t in o2["tees"]] == list(db.TEE_BANDS), o2["tees"])
 o3 = db.add_player_options(9103, DB)
 check("a combo offers both nines and eighteens", o3["holes"] == ["9", "18"], o3["holes"])
