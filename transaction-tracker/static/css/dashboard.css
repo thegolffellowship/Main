@@ -1850,6 +1850,12 @@ tr.order-item.order-item-hidden {
     margin: 0.5rem 0 0.75rem 0;
     display: inline-block;
     min-width: 0;
+    /* STACK LEFT (Kerry 2026-09-21): the panel is as wide as its widest
+       requirement — the games table's own columns, the flight boxes on
+       the FLIGHTS tab — never the full row. Everything inside (header
+       bars, text lines) takes that width and wraps within it. */
+    max-width: 100%;
+    vertical-align: top;
 }
 .games-panel-header {
     font-weight: 700;
@@ -1880,10 +1886,21 @@ tr.order-item.order-item-hidden {
     font-size: 0.8rem;
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
-    width: 100%;
+    /* The table is exactly the sum of its columns (fixed layout needs a
+       width that is not auto): 14 + 5.5 + 4.5 + 3.5 + 4 x 5 = 47.5rem. A
+       winner line or a section label that is longer than that WRAPS
+       inside it instead of stretching the panel across the row. */
+    width: 47.5rem;
+    max-width: 100%;
+    table-layout: fixed;
 }
 /* Column sizing */
-.games-table col.gc-game   { width: auto; }
+.games-table col.gc-game   { width: 14rem; }
+.games-table td:first-child,
+.games-table .games-section-row td,
+.games-table .games-row-sub td,
+.games-table .games-winner-row td,
+.games-table .games-row-disabled td { white-space: normal; }
 .games-table col.gc-fund   { width: 5.5rem; }
 .games-table col.gc-mwp    { width: 4.5rem; }
 .games-table col.gc-flights { width: 3.5rem; }
