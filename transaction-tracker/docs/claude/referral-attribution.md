@@ -83,10 +83,40 @@ Kerry's words, so the UI cannot silently guess wrong: *"Could be a
 referral, could be someone that found via another means, but would be good
 to track."*
 
-**Where the card lives:** the Leads page, as an `UNATTRIBUTED FIRST
-TIMERS` band under the funnel stages (v2.371.0 gave that page the stage
-model already), plus a line in the event closeout where Kerry already
-reviews first-timers by name for the Insider.
+**Where the card lives — RATIFIED (Kerry, 2026-09-21): the Leads page**,
+as an `UNATTRIBUTED FIRST TIMERS` band under the funnel stages (v2.371.0
+gave that page the stage model already). *"Leads page band seems the
+best."*
+
+### The landing-page question Kerry raised alongside it
+
+*"perhaps a cue on the landing page (Currently EVENTS)...or maybe I
+should be landing on a DASHBOARD page that summarizes anything current
+that I can go to with a click. Could be this week's events that I could
+click to work...new players that need to be denoted like Ty Bubela for
+potential lead development...perhaps checklists, etc."*
+
+Not ratified. The counsel on the record, so the next session does not
+re-derive it:
+
+- **TGF already has three "what needs me" surfaces**: the COO dashboard's
+  `action_items`, the CA Queue (`/admin/ca-queue`), and the daily digest
+  email. A fourth makes the problem worse unless it absorbs or replaces
+  one. This is the same accretion Kerry's own UX directive
+  (`ux-directive-work-surfaces.md`) was written about.
+- **A dashboard earns its place only as a ROUTER, never a workspace.**
+  Every card is a count and a link to the surface that owns the work.
+  Nothing is worked on it. The moment you can act on a card, it competes
+  with the page it links to and they drift.
+- **A card with nothing in it does not render.** A dashboard that always
+  shows twelve cards becomes wallpaper by the second week; one that shows
+  three today and six tomorrow keeps being read.
+- The feeds all already compute: this week's events, unattributed first
+  timers, follow-ups due, unpaid payouts, the expense queue, renewals
+  due, CA Queue rows. Nothing new needs deriving — this is assembly.
+- Strategic fit is good: a page that says *who needs you today* is the
+  people-manager model made visible, and it is the thing a future chapter
+  leader lands on.
 
 ## 4. What it unlocks
 
