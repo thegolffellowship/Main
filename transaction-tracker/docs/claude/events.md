@@ -2151,6 +2151,27 @@ manual (`import_gg_scorecards` / the `scoring-import` bridge). Nothing
 polls GG on a timer, so "how often does the leaderboard update" is "when
 someone runs the import".
 
+## Event Setup: GAMES OFFERED (v2.475.0, Kerry ratified 2026-09-21)
+
+Kerry: "Yes, add a Games Offered setting to Event Setup. I guess we've
+only operated with a 'With One Game' cost and a 'With Both Games' cost
+for pricing purposes, not tied actual game bundle names into from a
+what's offered standpoint. We definitely need to do that as that's how
+the future TGF Platform was set to operate."
+
+- Edit Event and Add Event carry a **Games Offered** block under the
+  pricing fields: NET and GROSS checkboxes, each labelled with the games
+  inside the bundle and the price it implies (from `GET
+  /api/games/bundles`); BOTH is offered when both are checked, never
+  asked. Saved through `games_offered: ["NET","GROSS"]` on PATCH/POST
+  `/api/events` → `event_bundle_offers` (schema.md "Games offered").
+- The pricing tiers are named by bundle and follow the checkboxes: "With
+  NET or GROSS (+$16)" and "With BOTH (+$32)" when both are offered; a
+  single bundle shows its own tier only.
+- Add Player's Side Games list reads the setting (table below).
+- Every existing event was backfilled from its games fee, so nothing
+  changed on the day it shipped; the setting is now explicit per event.
+
 ## Add Player: the modal offers what the EVENT has (v2.468.2)
 
 Kerry 2026-09-21: "I would like to see any of these Add Player modal
@@ -2163,7 +2184,7 @@ database.py) is read when the modal opens:
 | Select | Derived from | Single option |
 |---|---|---|
 | Holes | the event's `format` (nine → 9, 18 → 18, combo → both) + every hole count its packages sell (36/54) | preselected |
-| Side Games | WHAT THE EVENT SETUP OFFERS (v2.473.3, Kerry: "based on what's offered in the Event Setup, not just a standard"): a bucket-account event speaks its day-games vocabulary (YES/SAT/SUN/NO); an event whose setup carries a games fee (Inc. Games $, per-nine on a combo, or the 27-hole per-game add) offers Net / Gross / Both / None; an event with no games fee offers None only. A roster vocabulary beyond that is appended, never dropped | preselected when one |
+| Side Games | the GAMES OFFERED setting (v2.475.0; v2.473.3 derived it from the games fee): a bucket-account event speaks its day-games vocabulary (YES/SAT/SUN/NO); otherwise the bundles Event Setup offers — NET → Net, GROSS → Gross, both → Both too — plus None. A roster vocabulary beyond that is appended, never dropped | preselected when one |
 | Tee Choice | `event_tee_legend` — the course record's designated bands with their tee names; the standard four when the course has no card | — |
 
 The static lists in the HTML stay as the fallback (a failed fetch never

@@ -5898,9 +5898,28 @@ def api_update_event(event_id):
     err = _validate_update_fields(data)
     if err:
         return jsonify({"error": err}), 400
+    # GAMES OFFERED (v2.475.0) lives in its own junction, not on events.
+    offers = None
+    if "games_offered" in data:
+        offers = data.pop("games_offered")
+        if not isinstance(offers, list):
+            return jsonify({"error": "games_offered must be a list of bundle keys"}), 400
+        from email_parser.database import set_event_bundle_offers
+        set_event_bundle_offers(event_id, offers)
+    if not data:
+        return jsonify({"status": "ok"})
     if update_event(event_id, data):
         return jsonify({"status": "ok"})
     return jsonify({"error": "not found or no valid fields"}), 404
+
+
+@app.route("/api/games/bundles")
+@require_role("view-only")
+def api_game_bundles():
+    """The bundle catalog: each bundle and the games inside it, with the
+    price it implies (SUM of buy-ins + markup). Event Setup's labels."""
+    from email_parser.database import get_bundle_catalog
+    return jsonify(get_bundle_catalog())
 
 
 @app.route("/api/events/<int:event_id>", methods=["DELETE"])
@@ -7184,6 +7203,12 @@ def api_create_event():
         _spot = (data.get("fellowship_spot") or "").strip()
         if _spot:
             extras["fellowship_spot"] = _spot
+        if event.get("id") and isinstance(data.get("games_offered"), list):
+            try:
+                from email_parser.database import set_event_bundle_offers
+                event["games_offered"] = set_event_bundle_offers(event["id"], data["games_offered"])["offered"]
+            except Exception:
+                logger.exception("Could not set games_offered on new event")
         if extras and event.get("id"):
             try:
                 update_event(event["id"], extras)

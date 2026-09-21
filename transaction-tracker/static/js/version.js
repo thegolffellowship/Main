@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.474.0";
+window.TGF_VERSION = "2.475.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.475.0",
+    date: "2026-09-21",
+    changes: [
+      "GAMES OFFERED in Event Setup (Kerry ratified 2026-09-21: \u2018Yes, add a Games Offered setting to Event Setup\u2019). Edit Event and Add Event carry NET and GROSS checkboxes, each labelled with the games inside the bundle and the price it implies; BOTH is offered when both are, never asked. The pricing tiers now carry the bundle names \u2014 \u2018With NET or GROSS (+$16)\u2019, \u2018With BOTH (+$32)\u2019 \u2014 and follow the checkboxes. Add Player's Side Games list reads the setting.",
+      "Schema: the Platform's commerce entities land in the Tracker \u2014 `games` (master library, no scoring columns), `bundles` / `bundle_games` (price = SUM of buy-ins + markup, never stored) seeded from the ratified side-games split (NET = Individual Net + MVP; GROSS = Skins + Individual Gross; BOTH = all four), and `event_bundle_offers`, the event\u2194bundle junction. Every existing event was backfilled from its games fee, so nothing changed on the day it shipped. `GET /api/games/bundles`; `games_offered` on PATCH/POST /api/events. Guard: `test_games_offered.py`.",
+    ],
+  },
   {
     version: "2.474.0",
     date: "2026-09-21",

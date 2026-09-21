@@ -1,7 +1,7 @@
 # Transaction Email Tracker — Claude Context
 
 Before working on a specific area, Read the relevant sub-doc:
-- `docs/claude/schema.md` (database/FKs)
+- `docs/claude/schema.md` (database/FKs; **Games offered** — `games` / `bundles` / `bundle_games` / `event_bundle_offers`, the Platform's commerce entities in the Tracker, v2.475.0)
 - `docs/claude/unified-financial-model.md` (acct_transactions, GoDaddy model, P&L)
 - `docs/claude/bank-reconciliation.md` (bank match queue, cash flow)
 - `docs/claude/duplicate-detective.md` (ledger cleanup admin tool — see below)

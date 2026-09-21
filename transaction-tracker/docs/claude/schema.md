@@ -325,6 +325,31 @@ event_flight_snapshot_members  snapshot_id FK, game, variant, flight_no,
 - No payout row is read or written by any of it; Golf Genius stays the
   payer of record.
 
+## Games offered — the Platform's commerce entities (v2.475.0, Kerry ratified 2026-09-21)
+
+Kerry: "Yes, add a Games Offered setting to Event Setup … There's schema
+for each bundle and each game within the bundles for full allocation
+and tracking purposes." Mirrors the LOCKED Platform model
+(game-engine.md, mailbox #16): `games` (master library — NO scoring
+columns), `bundles` / `bundle_games` (price = SUM(buy-ins) + markup,
+never stored), and the event↔bundle junction.
+
+| Table | Columns | Notes |
+|---|---|---|
+| `games` | `game_key` PK, `name`, `category` (included/net/gross), `buy_in_9`, `buy_in_18`, `requires_handicap`, `sort` | seeded from side-games.md: team_net 4/8, ctp 2/4, hio 1/2, ind_net 9/18, mvp 4/8, skins 9/18, ind_gross 4/8 |
+| `bundles` | `bundle_key` PK, `name`, `markup_9`, `markup_18`, `members_only`, `sort` | NET (3/4, members), GROSS (3/4), BOTH (6/8, members) |
+| `bundle_games` | `bundle_key` FK, `game_key` FK | NET = ind_net + mvp; GROSS = skins + ind_gross; BOTH = all four |
+| `event_bundle_offers` | `event_id` FK events, `bundle_key` FK bundles, `offered`, `updated_at`; PK (event_id, bundle_key) | the GAMES OFFERED setting. NET / GROSS are set; BOTH is DERIVED (offered when both are) |
+
+Boot backfill `_backfill_event_bundle_offers`: every event without rows
+gets them — offered when its setup carries a games fee (Inc. Games $,
+per-nine on a combo, 27-hole per-game add), not offered otherwise.
+Readers: `get_event_bundle_offers`, `_event_bundle_offers_map` (the
+events list's `games_offered`), `get_bundle_catalog` (`GET
+/api/games/bundles`). Writer: `set_event_bundle_offers` (PATCH/POST
+`/api/events` `games_offered: ["NET","GROSS"]`). `INSERT OR IGNORE`
+seeds, so a bundle Kerry edits later is never overwritten at boot.
+
 ## `events` table — recent column additions
 
 | Column | Type | Notes |

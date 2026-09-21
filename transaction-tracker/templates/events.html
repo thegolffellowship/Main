@@ -1166,6 +1166,15 @@
                             <label style="font-weight:600; font-size:0.82rem;">Inc. Games ($)<input type="number" id="edit-event-side_game_fee" class="modal-input" min="0" step="0.01" placeholder="e.g., 7.00"></label>
                             <label style="font-weight:600; font-size:0.82rem;">Transaction Fee (%)<input type="number" id="edit-event-transaction_fee_pct" class="modal-input" min="0" max="100" step="0.1" placeholder="3.5"></label>
                         </div>
+                        <!-- GAMES OFFERED (v2.475.0, Kerry 2026-09-21): what the order
+                             form sells — the bundles, each named with the games inside
+                             it. BOTH follows NET + GROSS; it is never asked. -->
+                        <div id="edit-games-offered" style="margin-top:0.6rem; padding:0.5rem 0.65rem; border:1px solid var(--border); border-radius:8px;">
+                            <div style="font-weight:600; font-size:0.82rem; margin-bottom:0.25rem;">Games Offered <span style="font-weight:400; color:var(--text-muted); font-size:0.75rem;">— what the order form sells</span></div>
+                            <label style="display:block; font-size:0.82rem; margin:0.15rem 0;"><input type="checkbox" id="edit-event-offer-NET" checked> <strong>NET</strong> <span class="offer-desc" data-bundle="NET" style="color:var(--text-muted); font-size:0.75rem;"></span></label>
+                            <label style="display:block; font-size:0.82rem; margin:0.15rem 0;"><input type="checkbox" id="edit-event-offer-GROSS" checked> <strong>GROSS</strong> <span class="offer-desc" data-bundle="GROSS" style="color:var(--text-muted); font-size:0.75rem;"></span></label>
+                            <div style="color:var(--text-muted); font-size:0.75rem; margin-top:0.2rem;"><strong>BOTH</strong> is offered when NET and GROSS both are.</div>
+                        </div>
                         <!-- Per-Game Add ($) — only shown for 27 Holes events -->
                         <div id="edit-per_game_addon-wrap" style="display:none; margin-top:0.5rem;">
                             <label style="font-weight:600; font-size:0.82rem;">Per Game Add ($) <span style="font-weight:400; color:var(--text-muted); font-size:0.75rem;">— amount added per side game</span><input type="number" id="edit-event-per_game_addon" class="modal-input" min="0" step="0.01" placeholder="e.g., 27.00"></label>
@@ -1997,6 +2006,15 @@
                             <label style="font-weight:600; font-size:0.82rem;">TGF Markup ($)<input type="number" id="add-event-tgf_markup" class="modal-input" min="0" step="0.01" placeholder="e.g., 15.00"></label>
                             <label style="font-weight:600; font-size:0.82rem;">Inc. Games ($)<input type="number" id="add-event-side_game_fee" class="modal-input" min="0" step="0.01" placeholder="e.g., 7.00"></label>
                             <label style="font-weight:600; font-size:0.82rem;">Transaction Fee (%)<input type="number" id="add-event-transaction_fee_pct" class="modal-input" min="0" max="100" step="0.1" placeholder="3.5"></label>
+                        </div>
+                        <!-- GAMES OFFERED (v2.475.0, Kerry 2026-09-21): what the order
+                             form sells — the bundles, each named with the games inside
+                             it. BOTH follows NET + GROSS; it is never asked. -->
+                        <div id="add-games-offered" style="margin-top:0.6rem; padding:0.5rem 0.65rem; border:1px solid var(--border); border-radius:8px;">
+                            <div style="font-weight:600; font-size:0.82rem; margin-bottom:0.25rem;">Games Offered <span style="font-weight:400; color:var(--text-muted); font-size:0.75rem;">— what the order form sells</span></div>
+                            <label style="display:block; font-size:0.82rem; margin:0.15rem 0;"><input type="checkbox" id="add-event-offer-NET" checked> <strong>NET</strong> <span class="offer-desc" data-bundle="NET" style="color:var(--text-muted); font-size:0.75rem;"></span></label>
+                            <label style="display:block; font-size:0.82rem; margin:0.15rem 0;"><input type="checkbox" id="add-event-offer-GROSS" checked> <strong>GROSS</strong> <span class="offer-desc" data-bundle="GROSS" style="color:var(--text-muted); font-size:0.75rem;"></span></label>
+                            <div style="color:var(--text-muted); font-size:0.75rem; margin-top:0.2rem;"><strong>BOTH</strong> is offered when NET and GROSS both are.</div>
                         </div>
                         <!-- Per-Game Add ($) — only shown for 27 Holes events -->
                         <div id="add-per_game_addon-wrap" style="display:none; margin-top:0.5rem;">
@@ -3640,6 +3658,32 @@
     // classification (bundle packages + the single-day dial/order notes)
     // instead of items.side_games. Same shape as the hole tabs: the
     // vocabulary comes from the EVENT, not a global enum.
+    // The bundle catalog names each bundle's games on the Event Setup
+    // checkboxes ("NET — Individual Net + MVP · $16 (9h) / $30 (18h)").
+    let BUNDLE_CATALOG = null;
+    fetch("/api/games/bundles").then(r => r.ok ? r.json() : null)
+        .then(d => { BUNDLE_CATALOG = d; renderOfferDescs(); }).catch(() => {});
+    function renderOfferDescs() {
+        if (!BUNDLE_CATALOG) return;
+        const gname = {}; (BUNDLE_CATALOG.games || []).forEach(g => { gname[g.game_key] = g.name; });
+        document.querySelectorAll(".offer-desc").forEach(el => {
+            const b = (BUNDLE_CATALOG.bundles || []).find(x => x.bundle_key === el.dataset.bundle);
+            if (!b) return;
+            el.textContent = `— ${b.games.map(k => gname[k] || k).join(" + ")} · $${b.price_9} (9h) / $${b.price_18} (18h)`;
+        });
+    }
+    function offersFromForm(prefix) {
+        return ["NET", "GROSS"].filter(k => { const el = document.getElementById(`${prefix}-event-offer-${k}`); return el && el.checked; });
+    }
+    function setOffersOnForm(prefix, offered) {
+        const set = new Set(offered || []);
+        ["NET", "GROSS"].forEach(k => { const el = document.getElementById(`${prefix}-event-offer-${k}`); if (el) el.checked = set.has(k); });
+    }
+    // Bundles that would be sold given NET/GROSS checks — BOTH follows.
+    function offeredWithBoth(offered) {
+        const o = (offered || []).filter(k => k === "NET" || k === "GROSS");
+        return o.length === 2 ? ["NET", "GROSS", "BOTH"] : o;
+    }
     let EVENT_GAMES_AXIS = {};
     fetch("/api/events/games-axis")
         .then(r => r.ok ? r.json() : {})
@@ -12922,11 +12966,17 @@
         const colCount = players.length;
         // Event Only includes Inc. Games (sg) in base
         // Game tiers add PER_GAME_ADDON on top
-        const tiers = [
-            { label: 'Event Only', addon: 0, guestNA: false, ftNA: false },
-            { label: `With One Game (+$${addon})`, addon: addon, guestNA: false, ftNA: false },
-            { label: `With Both Games (+$${addon * 2})`, addon: addon * 2, guestNA: true, ftNA: true }
-        ];
+        // Tiers carry the BUNDLE names (Kerry 2026-09-21: "tie actual game
+        // bundle names in") and follow what the event offers: one bundle
+        // → its tier only; NET + GROSS → the single-bundle tier and BOTH.
+        const offered = (opts && Array.isArray(opts.offered)) ? opts.offered.filter(k => k === "NET" || k === "GROSS") : ["NET", "GROSS"];
+        const tiers = [{ label: 'Event Only', addon: 0, guestNA: false, ftNA: false }];
+        if (offered.length === 2) {
+            tiers.push({ label: `With NET or GROSS (+$${addon})`, addon: addon, guestNA: false, ftNA: false });
+            tiers.push({ label: `With BOTH (+$${addon * 2})`, addon: addon * 2, guestNA: true, ftNA: true });
+        } else if (offered.length === 1) {
+            tiers.push({ label: `With ${offered[0]} (+$${addon})`, addon: addon, guestNA: offered[0] === "NET", ftNA: offered[0] === "NET" });
+        }
         const cardSize = compact ? '0.6rem' : '0.72rem';
         const priceSize = compact ? '0.78rem' : '0.88rem';
         let html = '';
@@ -12980,7 +13030,7 @@
 
         const subtotal = cc + mu + sg;
         if (subtotal > 0) {
-            summaryEl.innerHTML = renderPlayerPricingGrid(cc, mu, sg, tf, format, { perGameAddon });
+            summaryEl.innerHTML = renderPlayerPricingGrid(cc, mu, sg, tf, format, { perGameAddon, offered: offersFromForm(prefix) });
             previewEl.style.display = "block";
         } else {
             previewEl.style.display = "none";
@@ -13657,6 +13707,7 @@
         try {
             const payload = {
                 item_name: name,
+                games_offered: offersFromForm("add"),
                 event_date: document.getElementById("add-event-date").value || null,
                 course: document.getElementById("add-event-course").value.trim() || null,
                 chapter: document.getElementById("add-event-chapter").value || null,
@@ -14662,6 +14713,8 @@
         document.getElementById("edit-event-side_game_fee").value = ev.side_game_fee != null ? ev.side_game_fee : "";
         document.getElementById("edit-event-transaction_fee_pct").value = ev.transaction_fee_pct != null ? ev.transaction_fee_pct : 3.5;
         document.getElementById("edit-event-per_game_addon").value = ev.per_game_addon != null ? ev.per_game_addon : "";
+        setOffersOnForm("edit", ev.games_offered);
+        renderOfferDescs();
         // Pricing fields — combo format
         document.getElementById("edit-event-tgf_markup_9").value = ev.tgf_markup_9 != null ? ev.tgf_markup_9 : "";
         document.getElementById("edit-event-side_game_fee_9").value = ev.side_game_fee_9 != null ? ev.side_game_fee_9 : "";
@@ -14736,6 +14789,10 @@
         if (!ev) return;
 
         const changes = {};
+        // GAMES OFFERED — its own junction, sent only when it changed.
+        const offNow = offeredWithBoth(offersFromForm("edit"));
+        const offWas = offeredWithBoth((ev.games_offered || []).filter(k => k !== "BOTH"));
+        if (offNow.join(",") !== offWas.join(",")) changes.games_offered = offersFromForm("edit");
         // Standard text/date/select fields (non-start-time)
         ["item_name", "event_date", "course", "chapter"].forEach(field => {
             const input = document.getElementById("edit-event-" + field);

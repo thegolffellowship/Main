@@ -43,7 +43,7 @@ check("an event with NO games fee in its setup offers None only", db.add_player_
 check("a combo's per-nine fee counts as a games fee", db.add_player_options(9103, DB)["side_games"] == ["Net", "Gross", "Both", "None"])
 check("tees = the course record's designated bands, each with its tee name",
       [t["value"] for t in o["tees"]] == ["<50", "50-64", "65+", "Forward"] and o["tees"][0]["label"] == "Men <50 · Blue Tees", o["tees"])
-check("sources say where each list came from", o["sources"] == {"holes": "format", "side_games": "event setup: games fee $7", "tees": "course record"}, o["sources"])
+check("sources say where each list came from", o["sources"] == {"holes": "format", "side_games": "event setup: games offered NET/GROSS/BOTH", "tees": "course record"}, o["sources"])
 o2 = db.add_player_options(9102, DB)
 check("an 18 offers 18 only", o2["holes"] == ["18"], o2["holes"])
 check("an empty roster offers the same four", o2["side_games"] == ["Net", "Gross", "Both", "None"], o2["side_games"])

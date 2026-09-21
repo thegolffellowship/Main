@@ -15719,6 +15719,10 @@ def _ensure_scoring_tables(conn: sqlite3.Connection) -> None:
     # v2.466.0 (mailbox #576, Kerry-ratified): a live DB still on the old
     # shape is rebuilt in place; the ratings table is created and seeded.
     _migrate_course_tees_v2(conn)
+    try:
+        _backfill_event_bundle_offers(conn)
+    except Exception:
+        logger.warning("games-offered backfill failed", exc_info=True)
     conn.execute("""CREATE TABLE IF NOT EXISTS scoring_rounds (
         id               INTEGER PRIMARY KEY AUTOINCREMENT,
         customer_id      INTEGER REFERENCES customers(customer_id),
@@ -27983,8 +27987,10 @@ def get_all_events(db_path: str | Path | None = None) -> list[dict]:
         results = []
         from .event_links import link_state as _link_state
         _today = today_central()
+        _offers = _event_bundle_offers_map(conn)
         for r in rows:
             d = dict(r)
+            d["games_offered"] = _offers.get(d["id"], ["NET", "GROSS", "BOTH"] if _event_games_fee(d) > 0 else [])
             # THE HANDICAP LOCK DATE, published on every event (v2.462.0):
             # None until the event tees off, then its own date — the page
             # reads the index in effect that morning for a started event.
@@ -59826,12 +59832,14 @@ def add_player_options(event_id: int, db_path: str | Path | None = None) -> dict
         if axis and axis.get("vocabulary"):
             side_games = [str(v) for v in axis["vocabulary"]]
             sg_source = "event setup: day-games vocabulary"
-        elif games_fee > 0:
-            side_games = list(_SIDE_GAMES_ORDER)
-            sg_source = f"event setup: games fee ${games_fee:g}"
         else:
-            side_games = ["None"]
-            sg_source = "event setup: no games fee"
+            # The GAMES OFFERED setting (v2.475.0): the bundles this
+            # event's order form sells, BOTH following NET + GROSS.
+            _off = get_event_bundle_offers(int(event_id), db_path)
+            _map = {"NET": "Net", "GROSS": "Gross", "BOTH": "Both"}
+            side_games = [_map[k] for k in ("NET", "GROSS", "BOTH") if k in _off["offered"]] + ["None"]
+            sg_source = ("event setup: games offered " + "/".join(_off["offered"])) if _off["offered"] \
+                        else "event setup: no games offered"
         side_games += [v for v in seen if v not in side_games]
         legend = []
         try:
@@ -59845,7 +59853,7 @@ def add_player_options(event_id: int, db_path: str | Path | None = None) -> dict
         return {"event_id": int(event_id), "holes_type": holes_type,
                 "holes": holes, "side_games": side_games, "tees": tees,
                 "sources": {"holes": "format" + (" + packages" if pkgs else ""),
-                            "side_games": sg_source + (" + roster" if any(v not in side_games[:4] for v in seen) and len(side_games) > (4 if games_fee > 0 else 1) else ""),
+                            "side_games": sg_source,
                             "tees": "course record" if legend else "standard bands"}}
 
 
@@ -60043,6 +60051,168 @@ def renumber_nine_hole_course(course_id: int, apply: bool = False, db_path=None)
             conn.commit()
         return {"course_id": course_id, "name": course["name"], "applied": bool(apply),
                 "tees": tee_moves, "rounds": round_moves}
+
+
+# ---------------------------------------------------------------------------
+# GAMES OFFERED — the Platform's commerce entities in the Tracker
+# (Kerry 2026-09-21: "Yes, add a Games Offered setting to Event Setup …
+# There's schema for each bundle and each game within the bundles for
+# full allocation and tracking purposes.") Mirrors the LOCKED Platform
+# model (game-engine.md, mailbox #16): `games` (master library),
+# `bundles` / `bundle_games` (price = SUM(buy-ins) + markup, never
+# stored), and the event↔bundle junction `event_bundle_offers`. Seeded
+# from side-games.md's ratified buy-in split.
+# ---------------------------------------------------------------------------
+GAME_LIBRARY_SEED = (
+    # game_key, name, category, buy_in_9, buy_in_18, requires_handicap, sort
+    ("team_net",  "Team Net",        "included", 4.0, 8.0,  1, 10),
+    ("ctp",       "Closest to Pin",  "included", 2.0, 4.0,  0, 20),
+    ("hio",       "Hole-in-One",     "included", 1.0, 2.0,  0, 30),
+    ("ind_net",   "Individual Net",  "net",      9.0, 18.0, 1, 40),
+    ("mvp",       "MVP",             "net",      4.0, 8.0,  1, 50),
+    ("skins",     "Skins",           "gross",    9.0, 18.0, 0, 60),
+    ("ind_gross", "Individual Gross","gross",    4.0, 8.0,  0, 70),
+)
+BUNDLE_SEED = (
+    # bundle_key, name, markup_9, markup_18, members_only, sort, games
+    ("NET",   "NET",   3.0, 4.0, 1, 10, ("ind_net", "mvp")),
+    ("GROSS", "GROSS", 3.0, 4.0, 0, 20, ("skins", "ind_gross")),
+    ("BOTH",  "BOTH",  6.0, 8.0, 1, 30, ("ind_net", "mvp", "skins", "ind_gross")),
+)
+#: The bundles an order form can sell; BOTH is derived (offered when NET
+#: and GROSS both are), never asked.
+OFFERABLE_BUNDLES = ("NET", "GROSS")
+
+
+def _ensure_game_offer_tables(conn: sqlite3.Connection) -> None:
+    conn.execute("""CREATE TABLE IF NOT EXISTS games (
+        game_key          TEXT PRIMARY KEY,
+        name              TEXT NOT NULL,
+        category          TEXT NOT NULL,
+        buy_in_9          REAL,
+        buy_in_18         REAL,
+        requires_handicap INTEGER NOT NULL DEFAULT 0,
+        sort              INTEGER NOT NULL DEFAULT 0)""")
+    conn.execute("""CREATE TABLE IF NOT EXISTS bundles (
+        bundle_key   TEXT PRIMARY KEY,
+        name         TEXT NOT NULL,
+        markup_9     REAL,
+        markup_18    REAL,
+        members_only INTEGER NOT NULL DEFAULT 0,
+        sort         INTEGER NOT NULL DEFAULT 0)""")
+    conn.execute("""CREATE TABLE IF NOT EXISTS bundle_games (
+        bundle_key TEXT NOT NULL REFERENCES bundles(bundle_key),
+        game_key   TEXT NOT NULL REFERENCES games(game_key),
+        PRIMARY KEY (bundle_key, game_key))""")
+    conn.execute("""CREATE TABLE IF NOT EXISTS event_bundle_offers (
+        event_id   INTEGER NOT NULL REFERENCES events(id),
+        bundle_key TEXT NOT NULL REFERENCES bundles(bundle_key),
+        offered    INTEGER NOT NULL DEFAULT 1,
+        updated_at TEXT DEFAULT (datetime('now')),
+        PRIMARY KEY (event_id, bundle_key))""")
+    for g in GAME_LIBRARY_SEED:
+        conn.execute("INSERT OR IGNORE INTO games (game_key, name, category, buy_in_9, buy_in_18, requires_handicap, sort) "
+                     "VALUES (?, ?, ?, ?, ?, ?, ?)", g)
+    for key, name, m9, m18, mo, sort, games in BUNDLE_SEED:
+        conn.execute("INSERT OR IGNORE INTO bundles (bundle_key, name, markup_9, markup_18, members_only, sort) "
+                     "VALUES (?, ?, ?, ?, ?, ?)", (key, name, m9, m18, mo, sort))
+        for gk in games:
+            conn.execute("INSERT OR IGNORE INTO bundle_games (bundle_key, game_key) VALUES (?, ?)", (key, gk))
+
+
+def _event_games_fee(ev: dict) -> float:
+    def _f(k):
+        try:
+            return float(ev.get(k) or 0)
+        except (TypeError, ValueError):
+            return 0.0
+    return max(_f("side_game_fee"), _f("side_game_fee_9"), _f("side_game_fee_18"), _f("per_game_addon"))
+
+
+def _backfill_event_bundle_offers(conn: sqlite3.Connection) -> int:
+    """Release-checklist backfill rule: every event that predates the
+    setting gets explicit rows — offered when its setup carries a games
+    fee (what its order form sold), not offered otherwise. Idempotent:
+    only events with no rows."""
+    _ensure_game_offer_tables(conn)
+    n = 0
+    for r in conn.execute("""SELECT e.id, e.side_game_fee, e.side_game_fee_9, e.side_game_fee_18, e.per_game_addon
+                               FROM events e
+                              WHERE NOT EXISTS (SELECT 1 FROM event_bundle_offers o WHERE o.event_id = e.id)""").fetchall():
+        offered = 1 if _event_games_fee(dict(r)) > 0 else 0
+        for key in ("NET", "GROSS", "BOTH"):
+            conn.execute("INSERT OR IGNORE INTO event_bundle_offers (event_id, bundle_key, offered) VALUES (?, ?, ?)",
+                         (r["id"], key, offered))
+        n += 1
+    return n
+
+
+def _event_bundle_offers_map(conn: sqlite3.Connection) -> dict:
+    """{event_id: ["NET", "GROSS", "BOTH"]} for every event with rows."""
+    out: dict = {}
+    try:
+        for r in conn.execute("SELECT event_id, bundle_key FROM event_bundle_offers WHERE offered = 1 "
+                              "ORDER BY event_id, CASE bundle_key WHEN 'NET' THEN 1 WHEN 'GROSS' THEN 2 ELSE 3 END").fetchall():
+            out.setdefault(r["event_id"], []).append(r["bundle_key"])
+        for r in conn.execute("SELECT DISTINCT event_id FROM event_bundle_offers").fetchall():
+            out.setdefault(r["event_id"], [])
+    except sqlite3.OperationalError:
+        pass
+    return out
+
+
+def get_event_bundle_offers(event_id: int, db_path=None) -> dict:
+    """{"offered": [...], "source": "setup"|"derived"} — the rows when the
+    event has them, else derived from its games fee (an event created
+    before this process backfilled)."""
+    with _connect(db_path) as conn:
+        _ensure_game_offer_tables(conn)
+        rows = conn.execute("SELECT bundle_key, offered FROM event_bundle_offers WHERE event_id = ?", (event_id,)).fetchall()
+        if rows:
+            order = {"NET": 1, "GROSS": 2, "BOTH": 3}
+            return {"offered": sorted([r["bundle_key"] for r in rows if r["offered"]], key=lambda k: order.get(k, 9)),
+                    "source": "setup"}
+        ev = conn.execute("SELECT side_game_fee, side_game_fee_9, side_game_fee_18, per_game_addon FROM events WHERE id = ?",
+                          (event_id,)).fetchone()
+        if not ev:
+            return {"offered": [], "source": "missing"}
+        return {"offered": ["NET", "GROSS", "BOTH"] if _event_games_fee(dict(ev)) > 0 else [], "source": "derived"}
+
+
+def set_event_bundle_offers(event_id: int, offered, db_path=None) -> dict:
+    """Write the Games Offered setting: NET / GROSS as given; BOTH follows
+    (offered only when both are). Unknown keys are ignored."""
+    want = {str(k).upper() for k in (offered or []) if str(k).upper() in OFFERABLE_BUNDLES}
+    both = 1 if want == set(OFFERABLE_BUNDLES) else 0
+    with _connect(db_path) as conn:
+        _ensure_game_offer_tables(conn)
+        for key in ("NET", "GROSS"):
+            conn.execute("INSERT INTO event_bundle_offers (event_id, bundle_key, offered, updated_at) VALUES (?, ?, ?, datetime('now')) "
+                         "ON CONFLICT(event_id, bundle_key) DO UPDATE SET offered = excluded.offered, updated_at = excluded.updated_at",
+                         (event_id, key, 1 if key in want else 0))
+        conn.execute("INSERT INTO event_bundle_offers (event_id, bundle_key, offered, updated_at) VALUES (?, 'BOTH', ?, datetime('now')) "
+                     "ON CONFLICT(event_id, bundle_key) DO UPDATE SET offered = excluded.offered, updated_at = excluded.updated_at",
+                     (event_id, both))
+        conn.commit()
+    return get_event_bundle_offers(event_id, db_path)
+
+
+def get_bundle_catalog(db_path=None) -> dict:
+    """The bundles and the games inside each — for Event Setup's labels
+    and for anything that needs to know what a NET buyer is in."""
+    with _connect(db_path) as conn:
+        _ensure_game_offer_tables(conn)
+        games = {r["game_key"]: dict(r) for r in conn.execute("SELECT * FROM games ORDER BY sort").fetchall()}
+        bundles = []
+        for b in conn.execute("SELECT * FROM bundles ORDER BY sort").fetchall():
+            gk = [r["game_key"] for r in conn.execute(
+                "SELECT bg.game_key FROM bundle_games bg JOIN games g ON g.game_key = bg.game_key "
+                "WHERE bg.bundle_key = ? ORDER BY g.sort", (b["bundle_key"],)).fetchall()]
+            row = dict(b); row["games"] = gk
+            row["price_9"] = round(sum(games[k]["buy_in_9"] or 0 for k in gk) + (b["markup_9"] or 0), 2)
+            row["price_18"] = round(sum(games[k]["buy_in_18"] or 0 for k in gk) + (b["markup_18"] or 0), 2)
+            bundles.append(row)
+        return {"games": list(games.values()), "bundles": bundles}
 
 
 def _first_event_as_member(conn, roster_row: dict, event_date: str) -> bool:
