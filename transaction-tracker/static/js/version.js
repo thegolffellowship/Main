@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.468.5";
+window.TGF_VERSION = "2.469.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.469.0",
+    date: "2026-09-21",
+    changes: [
+      "DIVISIONS / FLIGHTS tab under every event (Kerry 2026-09-21, mailbox #582: \u2018need to see the divisions/flights breakdown\u2019). The RATIFIED flighting and payout rule set (#571\u2013#575 as revised by #581/#582) now lives as data in `email_parser/flighting.py` \u2014 ladders <6.0 / 6.0\u201311.9 / 12.0+ (four flights add 12.0\u201317.9 / 18.0+), exclusive upper bounds so 12.0 goes UP and cut lines never move; NO minimum flight size and NO merging (a flight of one simply is that size; an empty band is still a numbered flight); places by FLIGHT size (1\u20139 one place, 10\u201319 two at 2/3\u20131/3, 20+ three at 50/30/20, ties pool and split to the cent); the Individual Gross pot as 10% off the top to OVERALL LOW GROSS plus 90% by headcount ($7.20 / $3.60 a head); flight labels derived from actual membership (P2-6). Skins keeps the matrix pot split equally per flight; Individual Net keeps the equal-size cut under 12.0 and the matrix place columns.",
+      "Two layers, as B5 requires: `build()` produces SELECTION (which games run incl. every matrix game-selection threshold, flight count, band edges, each player's flight \u2014 the layer that FREEZES) and AMOUNTS (pots, places, bonus \u2014 the layer that RECOMPUTES); `settle()` keeps a frozen selection, places a late add by the frozen edges, drops a credited WD from the headcount, recomputes the money and reports the delta per flight. The tab shows both, per game, with each member's IDX (locked as-of) and PH (the starter sheet's own number), an empty band greyed, the unflighted apart, and beside each game what Golf Genius RECORDED with rule \u2212 GG \u2014 so a published-vs-paid question answers itself. State reads LIVE; FROZEN / SETTLED wait on the snapshot schema proposed in #584 (rule 3b). DRY RUN: nothing here pays anyone; Golf Genius stays the payer of record.",
+      "`GET /api/events/<id>/flights-board` (manager+) and bridge `scoring-flights-board:<event_id>`; the printed Divisions & Flights page is now a VIEW of the same board (one computation per fact) and its footer states the no-merge rule. `SEED_FLIGHT_CONFIG.min_flight_size` is 0 by ruling \u2014 the Flighting Lab dial remains to show what merging would do. Guards: `test_flighting.py` (every #572/#573 worked example by number, Landa Park 6/5/4, Cedar Creek's T1\u00d73, 300 random fields to the cent) and `test_flights_board.py` (roster \u2192 rules \u2192 route \u2192 bridge).",
+    ],
+  },
   {
     version: "2.468.5",
     date: "2026-09-21",
