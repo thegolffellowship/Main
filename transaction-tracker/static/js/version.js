@@ -11,6 +11,7 @@ window.TGF_CHANGELOG = [
     version: "2.469.1",
     date: "2026-09-21",
     changes: [
+      "`scoring-hcp-round-retag`: a miss answers with the course names actually stored on that date (`courses_on_date`), matching ignores spacing and case, and `*` as the from-course takes every row on the date. The first live run found 0 rows for 'Hill Country | Lakes' because the stored spelling differs from what the page prints.",
       "Docs only: `docs/claude/handoff-2026-09-21-flighting.md` \u2014 the FLIGHTING lane record: what shipped in v2.469.0 and where it is guarded, how the #571\u2013#582 rulings were read (the assumptions on the record: B4 pot + 1/10/20 places are Individual Gross; Skins unaffected; Individual Net on the matrix columns), the rule-3b freeze schema PROPOSED in mailbox #584 and not built, the first dry-run findings (Cedar Creek's 4/4 skins cut vs the 5/3 ladder; Landa Park's 48/36/36 vs the ratified 43.20/36/28.80 + $12 Overall Low Gross), how to verify with `scoring-flights-board:<event_id>`, and what is open for Kerry (the freeze button question).",
     ],
   },
