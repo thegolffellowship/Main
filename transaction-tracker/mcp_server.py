@@ -1772,7 +1772,7 @@ def _scoring_dispatch(url: str, extract: str):
       scoring-margin-gaps[:<limit>]  pre-cutover events: booked vs residual-would-book, with reasons (measure-only)
       scoring-leaderboard-events[:add=<codes>|set=<codes>|clear]  the EVENTS leaderboard dial (admin pilot); reports which codes still await scorecards
       scoring-hcp-2nines:<event>[|auto|<json>][|apply]  post an 18-hole event as two nines; ratings read off the course record (v2.465.17), JSON overrides
-      scoring-hcp-round-retag:<date>;<from>;<to>;<slope>[;<rating>][;apply]  re-tag a date's handicap rounds to the nine actually played
+      scoring-hcp-round-retag:<date>;<from>;<to>;<slope>|course=<id>[;<rating>][;apply]  re-tag a date's handicap rounds to the nine actually played (course= reads each tee's rating/slope off the record)
       scoring-course-renine:<course_id>[|apply]  a named nine numbers its holes 1–9 (tee holes + rounds moved down from 10–18)
       scoring-tee-nines-store:<full_tee_id>|<fr>,<fs>|<br>,<bs>[|apply]  front/back rating rows (each with its slope) on an 18-hole tee set (refuses a pair that does not sum to the 18)
       scoring-crdb-seed:<course_id>[|<json>][|apply]  write a course's USGA CRDB tee sets (gender, par, bogey, total/front/back, optional yardages) onto the record; JSON row = [name, gender, r18, s18, bogey, [fr, fs], [br, bs], [y18, yf, yb]]
@@ -3039,6 +3039,22 @@ def _scoring_dispatch(url: str, extract: str):
                                     f"updated={res.get('updated')} "
                                     f"matched={res.get('matched')} "
                                     f"missing={res.get('missing_in_brevo')}")
+            return json.dumps(res, indent=2, default=str)
+        if cmd == "scoring-brevo-add":
+            # "<email>[|dry]" — put ONE Tracker-known customer on the
+            # Brevo list. The nightly sync's create scope ("recent")
+            # deliberately skips a customer who has been quiet 12 months;
+            # this is the named exception, one person at a time (Kerry
+            # 2026-09-21, Britton Reger). Refuses an address the Tracker
+            # does not already hold, so a typo cannot mint a contact.
+            from email_parser.brevo import add_contact
+            _p = [x.strip() for x in arg.split("|")]
+            _dry = len(_p) > 1 and _p[1].lower() in ("dry", "preview")
+            res = add_contact(_p[0], dry_run=_dry)
+            if not _dry and "error" not in res:
+                _audit("scoring-brevo-add",
+                       f"{_p[0]} -> list {res.get('list_id')} "
+                       f"created={res.get('created')}")
             return json.dumps(res, indent=2, default=str)
         if cmd == "scoring-leads-poll":
             # On-demand HubSpot lead poll (scheduler runs it every 45 min;
@@ -5069,8 +5085,14 @@ def _scoring_dispatch(url: str, extract: str):
                 _p = _p[:-1]
             if len(_p) < 4:
                 return json.dumps({"error": "usage: scoring-hcp-round-retag:<date>;<from course>;<to course>;<slope>[;<rating>][;apply]"})
-            _rating = float(_p[4]) if len(_p) > 4 and _p[4] else None
-            _res = db.retag_handicap_rounds(_p[0], _p[1], _p[2], int(_p[3]), rating=_rating, apply=_apply)
+            # 4th part: a slope, or "course=<id>" to take each row's tee
+            # rating/slope from that course record (per tee, per gender).
+            if _p[3].lower().startswith("course="):
+                _res = db.retag_handicap_rounds(_p[0], _p[1], _p[2], apply=_apply,
+                                                course_id=int(_p[3].split("=", 1)[1]))
+            else:
+                _rating = float(_p[4]) if len(_p) > 4 and _p[4] else None
+                _res = db.retag_handicap_rounds(_p[0], _p[1], _p[2], int(_p[3]), rating=_rating, apply=_apply)
             if _apply:
                 _audit("scoring-hcp-round-retag", f"{_p[0]}: {_p[1]} -> {_p[2]} slope={_p[3]} rows={_res.get('rows')}")
             return json.dumps(_res, indent=2, default=str)

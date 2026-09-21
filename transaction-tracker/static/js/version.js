@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.469.3";
+window.TGF_VERSION = "2.470.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.470.0",
+    date: "2026-09-21",
+    changes: [
+      "Bridge scoring-brevo-add:<email>[|dry] puts ONE Tracker-known customer on the Brevo list. The nightly sync's create scope is 'recent' (active members plus anyone who played inside 12 months), which correctly skips a customer quiet longer than that and just as incorrectly keeps them off the list once Kerry names one — Britton Reger, last order March. The add REFUSES any address that is not already a Tracker customer email, because the list is a mirror of the Tracker and a typo must never mint a contact. Audited like every other MCP write. Guard: test_brevo_add.py, 12 checks.",
+    ],
+  },
   {
     version: "2.469.3",
     date: "2026-09-21",

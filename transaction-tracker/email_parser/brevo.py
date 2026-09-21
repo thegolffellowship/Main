@@ -417,6 +417,45 @@ def _import_missing(key: str, rows: list[dict], list_id: int,
     return created
 
 
+def add_contact(email: str, db_path: str | Path | None = None,
+                dry_run: bool = False) -> dict:
+    """Put ONE Tracker-known customer onto the Brevo list, by email.
+
+    The nightly sync only CREATES contacts the `brevo_sync_create_missing`
+    scope covers (today "recent" = active members plus anyone who played
+    in the last 12 months). A real customer who has been quiet longer than
+    that is correct to skip in a bulk pass and wrong to leave off the list
+    when Kerry names them — Britton Reger, 2026-09-21, last order March.
+    This is that named exception, one person at a time, audited by the
+    caller.
+
+    Refuses an address the Tracker does not already know: the list is a
+    mirror of the Tracker's customers, so a typo must not mint a contact.
+    """
+    email = (email or "").strip().lower()
+    if not email:
+        return {"error": "need an email"}
+    key = _api_key()
+    if not key:
+        return {"error": "BREVO_API_KEY is not set"}
+    targets = tracker_contact_targets(db_path)
+    t = targets.get(email)
+    if not t:
+        return {"error": f"{email} is not a customer email in the Tracker — "
+                         "add the customer first, or fix the address"}
+    from . import database as db
+    list_id = int(_dial(db, "brevo_sync_list_id", db_path) or DEFAULT_LIST_ID)
+    row = {"email": email, "attributes": _import_attrs_for(t)}
+    out = {"email": email, "list_id": list_id, "attributes": row["attributes"],
+           "status": t["status"], "dry_run": dry_run}
+    if dry_run:
+        return out
+    errors: list = []
+    out["created"] = _import_missing(key, [row], list_id, errors)
+    out["errors"] = errors
+    return out
+
+
 def sync_member_status(db_path: str | Path | None = None,
                        dry_run: bool = False) -> dict:
     """Stamp TGF_MEMBER_STATUS / TGF_CHAPTER onto Brevo contacts.

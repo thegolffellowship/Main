@@ -74,6 +74,21 @@ check("applied: course, slope and differential follow; rating and tee stay", k["
 check("another date is untouched", other["course_name"].startswith("Silverhorn") and other["slope"] == 125)
 miss = db.retag_handicap_rounds("2026-06-09", "Hill Country | Lakes", "Hill Country | Oaks", 131, apply=False, db_path=DB)
 check("a miss answers with the course names actually stored on that date", miss["rows"] == 0 and miss["courses_on_date"] == ["Silverhorn Golf Club Of Texas - Front"], miss)
+# Per-tee from the course record: the night had Blue, White and Red (women) players.
+with db._connect(DB) as conn:
+    conn.execute("INSERT INTO course_tees (tee_id, course_id, tee_name, gender, holes, rating, slope) VALUES (77, 22360, 'White', 'M', 9, 33.9, 128)")
+    conn.execute("INSERT INTO course_tees (tee_id, course_id, tee_name, gender, holes, rating, slope) VALUES (93, 22360, 'Red', 'F', 9, 34.2, 120)")
+    conn.executemany("INSERT INTO handicap_rounds (player_name, round_date, course_name, tee_name, adjusted_score, rating, slope, differential) VALUES (?,?,?,?,?,?,?,?)", [
+        ("STICH, Dan", "2026-06-17", "Hyatt Hill Country | Lakes/Oaks", "2 - White", 45, 34.1, 122, 10.1),
+        ("WADE, Mary", "2026-06-17", "Hyatt Hill Country | Lakes/Oaks", "3 - Red (L)", 46, 34.3, 116, 11.4),
+        ("NIESTER, Kerry", "2026-06-17", "Hyatt Hill Country | Lakes/Oaks", "1 - Blue", 42, 35.7, 125, 5.7),
+        ("ODD, Player", "2026-06-17", "Hyatt Hill Country | Lakes/Oaks", "4 - Gold", 44, 34.0, 120, 9.4)])
+    conn.commit()
+per = db.retag_handicap_rounds("2026-06-17", "Hyatt Hill Country | Lakes/Oaks", "Hyatt Hill Country | Oaks", apply=False, db_path=DB, course_id=22360)
+got = {p["player_name"]: (p["rating_after"], p["slope_after"], p["differential_after"]) for p in per["plan"]}
+check("course= takes each row's tee rating/slope off the record: Blue 35.7/131, White 33.9/128, Red (women) 34.2/120",
+      got.get("NIESTER, Kerry") == (35.7, 131, 5.4) and got.get("STICH, Dan") == (33.9, 128, 9.8) and got.get("WADE, Mary") == (34.2, 120, 11.1), got)
+check("a tee the record does not carry is reported and left alone", [u["player_name"] for u in per["unmatched_tees"]] == ["ODD, Player"], per["unmatched_tees"])
 check("matching ignores spacing and case", db.retag_handicap_rounds("2026-06-09", "silverhorn golf club of texas  -  front", "X", 125, apply=False, db_path=DB)["rows"] == 1)
 try: os.unlink(DB)
 except OSError: pass
