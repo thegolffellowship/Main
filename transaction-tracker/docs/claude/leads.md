@@ -1145,6 +1145,18 @@ async).
   `scoring-lead-edit:<id>|<field>|<value>`, `scoring-leads-poll`.
 - Dials via `scoring-setting-get/-set` (see Config table above).
 
+### Adding ONE person Brevo's create scope skips
+
+`brevo_sync_create_missing` is "recent" — active members plus anyone who
+played in the last 12 months — so the nightly pass deliberately does not
+create a contact for a real customer who has been quiet longer than that.
+That is right for a bulk pass and wrong once Kerry names the person.
+`add_contact(email)` / bridge **`scoring-brevo-add:<email>[|dry]`** is the
+named exception: one person, audited, and **refused unless the address is
+already a Tracker customer email** — the list mirrors the Tracker, so a
+typo must not mint a contact. First use: Britton Reger, 2026-09-21, last
+order March. Guard: `test_brevo_add.py`.
+
 ## Deliberate choices
 
 - Email ping only (no SMS): the Tracker has no SMS provider; Graph mail

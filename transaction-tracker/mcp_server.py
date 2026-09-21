@@ -3040,6 +3040,22 @@ def _scoring_dispatch(url: str, extract: str):
                                     f"matched={res.get('matched')} "
                                     f"missing={res.get('missing_in_brevo')}")
             return json.dumps(res, indent=2, default=str)
+        if cmd == "scoring-brevo-add":
+            # "<email>[|dry]" — put ONE Tracker-known customer on the
+            # Brevo list. The nightly sync's create scope ("recent")
+            # deliberately skips a customer who has been quiet 12 months;
+            # this is the named exception, one person at a time (Kerry
+            # 2026-09-21, Britton Reger). Refuses an address the Tracker
+            # does not already hold, so a typo cannot mint a contact.
+            from email_parser.brevo import add_contact
+            _p = [x.strip() for x in arg.split("|")]
+            _dry = len(_p) > 1 and _p[1].lower() in ("dry", "preview")
+            res = add_contact(_p[0], dry_run=_dry)
+            if not _dry and "error" not in res:
+                _audit("scoring-brevo-add",
+                       f"{_p[0]} -> list {res.get('list_id')} "
+                       f"created={res.get('created')}")
+            return json.dumps(res, indent=2, default=str)
         if cmd == "scoring-leads-poll":
             # On-demand HubSpot lead poll (scheduler runs it every 45 min;
             # no-ops with an error note until HUBSPOT_TOKEN is set).
