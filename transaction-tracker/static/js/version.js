@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.468.6";
+window.TGF_VERSION = "2.468.7";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.468.7",
+    date: "2026-09-21",
+    changes: [
+      "`scoring-hcp-round-retag`: a miss answers with the course names actually stored on that date (`courses_on_date`), matching ignores spacing and case, and `*` as the from-course takes every row on the date. The first live run found 0 rows for 'Hill Country | Lakes' because the stored spelling differs from what the page prints.",
+    ],
+  },
   {
     version: "2.468.6",
     date: "2026-09-21",

@@ -59389,12 +59389,17 @@ def retag_handicap_rounds(round_date: str, from_course: str, to_course: str,
     course name, slope, optionally rating; the differential is recomputed
     from the row's own adjusted score. All players on that date (rule 3d
     — the whole field played the same nine), dry run unless apply."""
+    def _norm(v):                       # "Hill Country |  Lakes" == "hill country | lakes"
+        return " ".join(str(v or "").split()).lower()
     with _connect(db_path) as conn:
-        rows = [dict(r) for r in conn.execute(
+        on_date = [dict(r) for r in conn.execute(
             """SELECT id, player_name, round_date, course_name, tee_name, adjusted_score,
                       rating, slope, differential FROM handicap_rounds
-                WHERE round_date = ? AND course_name = ? COLLATE NOCASE
-                ORDER BY player_name""", (round_date, from_course)).fetchall()]
+                WHERE round_date = ? ORDER BY player_name""", (round_date,)).fetchall()]
+        rows = [r for r in on_date if from_course == "*" or _norm(r["course_name"]) == _norm(from_course)]
+        # A miss is answered with what IS on that date, so the caller can
+        # see the exact stored spelling instead of guessing at it.
+        candidates = sorted({(r["course_name"] or "") for r in on_date})
         plan = []
         for r in rows:
             new_rating = float(rating) if rating is not None else float(r["rating"])
@@ -59411,7 +59416,8 @@ def retag_handicap_rounds(round_date: str, from_course: str, to_course: str,
                              (to_course, p["rating_after"], p["slope_after"], p["differential_after"], p["id"]))
             conn.commit()
         return {"round_date": round_date, "from_course": from_course, "to_course": to_course,
-                "rows": len(plan), "applied": bool(apply), "plan": plan}
+                "rows": len(plan), "applied": bool(apply), "plan": plan,
+                "courses_on_date": candidates, "rows_on_date": len(on_date)}
 
 
 def renumber_nine_hole_course(course_id: int, apply: bool = False, db_path=None) -> dict:
