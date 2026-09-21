@@ -2051,12 +2051,28 @@ def _validate_update_fields(data: dict) -> str | None:
 # ---------------------------------------------------------------------------
 @app.route("/")
 def index():
-    # EVENTS is the landing page (Kerry, 2026-07-08). Old transaction
-    # deep-links (/?txn=123) keep working by continuing to the
-    # Transactions page with their query intact.
+    # DASHBOARD is the landing page (Kerry, 2026-09-21: "Dashboard
+    # replaces COO as landing, absorb the action items — I don't use the
+    # current what needs me today stuff at all right now"). EVENTS held
+    # this slot from 2026-07-08. Old transaction deep-links (/?txn=123)
+    # keep working by continuing to the Transactions page with their
+    # query intact.
     if request.args:
         return redirect("/transactions?" + request.query_string.decode())
-    return redirect("/events")
+    return redirect("/dashboard")
+
+
+@app.route("/dashboard")
+@require_role("manager")
+def dashboard_page():
+    return render_template("dashboard.html")
+
+
+@app.route("/api/dashboard")
+@require_role("manager")
+def api_dashboard():
+    from email_parser.dashboard import build
+    return jsonify(build())
 
 
 @app.route("/transactions")

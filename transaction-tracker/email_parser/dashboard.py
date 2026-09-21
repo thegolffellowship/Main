@@ -1,0 +1,265 @@
+"""The Dashboard feed — what needs Kerry today, as counts and links.
+
+Kerry, 2026-09-21: *"maybe I should be landing on a DASHBOARD page that
+summarizes anything current that I can go to with a click"* and then
+*"Dashboard replaces COO as landing, absorb the action items — I don't
+use the current what needs me today stuff at all right now, so let's
+ditch those for the new comprehensive dashboard."*
+
+TWO RULES, ratified in the same breath as the page:
+
+1. **It is a ROUTER, never a workspace.** Every card is a count and a
+   link to the surface that owns the work. Nothing is worked here. The
+   moment a card can be acted on it starts competing with the page it
+   points at, and the two drift.
+2. **A card with nothing in it does not render.** A page that always
+   shows every card becomes wallpaper by the second week; one that shows
+   three things today and six tomorrow keeps being read. `build()`
+   returns only the cards with something in them — the caller renders
+   what it is given and nothing else.
+
+Why the COO surface is being retired rather than the `action_items`
+TABLE: nine code paths write that table (discrepancy sweeps, parse
+warnings, the GG history ingest), so it is the mechanism by which the
+system reports the problems it found. Kerry does not read the page. The
+fix is to surface the COUNT where he will see it and link to the page
+that works them — not to stop detecting.
+
+Every feed is independently wrapped: a broken query costs its own card,
+never the page. A dashboard that 500s is worse than one missing a row.
+"""
+from __future__ import annotations
+
+import logging
+from pathlib import Path
+
+logger = logging.getLogger(__name__)
+
+# How far out "this week" looks, and how far back an event stays
+# "awaiting closeout" before it stops being this week's problem.
+WEEK_AHEAD_DAYS = 7
+CLOSEOUT_LOOKBACK_DAYS = 21
+# A first timer stays on the attribution card this long. Past that,
+# nobody remembers who brought them and asking is noise.
+ATTRIBUTION_WINDOW_DAYS = 60
+
+_TONES = {"do", "watch", "info"}
+
+
+def _card(key, title, count, href, detail="", tone="do", items=None):
+    return {"key": key, "title": title, "count": count, "href": href,
+            "detail": detail, "tone": tone if tone in _TONES else "info",
+            "items": items or []}
+
+
+def _days(a: str, b: str) -> int | None:
+    from datetime import date
+    try:
+        y1, m1, d1 = (int(x) for x in str(a)[:10].split("-"))
+        y2, m2, d2 = (int(x) for x in str(b)[:10].split("-"))
+        return (date(y1, m1, d1) - date(y2, m2, d2)).days
+    except Exception:
+        return None
+
+
+def _when(days: int | None) -> str:
+    if days is None:
+        return ""
+    if days == 0:
+        return "today"
+    if days == 1:
+        return "tomorrow"
+    if days < 0:
+        return f"{abs(days)}d ago"
+    return f"in {days}d"
+
+
+# ── feeds ───────────────────────────────────────────────────────────
+# Each takes (conn, today) and returns a card or None. None means
+# "nothing to show", which is how a card stays off the page.
+
+def _events_this_week(conn, today):
+    from datetime import date, timedelta
+    end = (date.fromisoformat(today) + timedelta(days=WEEK_AHEAD_DAYS)).isoformat()
+    rows = conn.execute(
+        "SELECT e.id, e.item_name, e.event_date, e.chapter, "
+        "  (SELECT COUNT(*) FROM items i WHERE i.event_id = e.id "
+        "     AND COALESCE(i.transaction_status,'active') = 'active') AS regs "
+        "FROM events e "
+        "WHERE e.event_date >= ? AND e.event_date <= ? "
+        "  AND COALESCE(e.event_type,'event') = 'event' "
+        "ORDER BY e.event_date, e.item_name", (today, end)).fetchall()
+    if not rows:
+        return None
+    items = [{"label": r["item_name"],
+              "meta": f"{_when(_days(r['event_date'], today))} · "
+                      f"{r['regs']} in" + (f" · {r['chapter']}" if r["chapter"] else ""),
+              "href": f"/events?event={r['id']}"} for r in rows]
+    return _card("events_week", "Events this week", len(rows), "/events",
+                 "tee sheets to work", "do", items)
+
+
+def _events_awaiting_closeout(conn, today):
+    """Played, and the money is not finished: payouts recorded but not
+    all paid, or a field with scorecards and no payouts at all."""
+    from datetime import date, timedelta
+    start = (date.fromisoformat(today)
+             - timedelta(days=CLOSEOUT_LOOKBACK_DAYS)).isoformat()
+    rows = conn.execute(
+        "SELECT e.id, e.item_name, e.event_date, "
+        "  (SELECT COUNT(*) FROM tgf_payouts p JOIN tgf_events te ON te.id = p.event_id "
+        "     WHERE te.events_id = e.id AND p.paid_at IS NULL) AS unpaid "
+        "FROM events e "
+        "WHERE e.event_date >= ? AND e.event_date < ? "
+        "  AND COALESCE(e.event_type,'event') = 'event' "
+        "ORDER BY e.event_date DESC", (start, today)).fetchall()
+    open_rows = [r for r in rows if (r["unpaid"] or 0) > 0]
+    if not open_rows:
+        return None
+    items = [{"label": r["item_name"],
+              "meta": f"{r['unpaid']} payout{'' if r['unpaid'] == 1 else 's'} unpaid "
+                      f"· {_when(_days(r['event_date'], today))}",
+              "href": f"/events?event={r['id']}"} for r in open_rows]
+    return _card("closeout", "Events to close out", len(open_rows), "/tgf",
+                 "played, money not settled", "do", items)
+
+
+def _new_leads(conn, today):
+    n = conn.execute(
+        "SELECT COUNT(*) c FROM leads WHERE status = 'new' "
+        "AND merged_into IS NULL").fetchone()["c"]
+    if not n:
+        return None
+    return _card("leads_new", "New leads", n, "/admin/leads?f=new",
+                 "nobody has touched them", "do")
+
+
+def _followups_due(conn, today):
+    n = conn.execute(
+        "SELECT COUNT(*) c FROM leads WHERE merged_into IS NULL "
+        "AND status NOT IN ('dismissed','converted') "
+        "AND follow_up_at IS NOT NULL AND follow_up_at <= ?",
+        (today,)).fetchone()["c"]
+    if not n:
+        return None
+    return _card("leads_due", "Follow-ups due", n, "/admin/leads?f=due",
+                 "the 48-hour gate", "do")
+
+
+def _first_timers_to_attribute(conn, today):
+    """WHO BROUGHT THEM — the Ty Bubela card (Kerry 2026-09-21).
+
+    A recent first-timer registration whose customer has nobody recorded
+    as having brought them. The CONFIRMATION lives on the Leads page
+    band; this only says how many are waiting. Deliberately quiet about
+    the mechanism because the referral schema is not ratified yet
+    (docs/claude/referral-attribution.md) — the count is true either way.
+    """
+    from datetime import date, timedelta
+    start = (date.fromisoformat(today)
+             - timedelta(days=ATTRIBUTION_WINDOW_DAYS)).isoformat()
+    rows = conn.execute(
+        "SELECT DISTINCT c.customer_id, "
+        "  TRIM(COALESCE(c.first_name,'') || ' ' || COALESCE(c.last_name,'')) AS name, "
+        "  MIN(i.order_date) AS first_order "
+        "FROM items i JOIN customers c ON c.customer_id = i.customer_id "
+        "WHERE UPPER(COALESCE(i.user_status,'')) LIKE '%1ST TIMER%' "
+        "  AND COALESCE(i.transaction_status,'active') = 'active' "
+        "  AND i.order_date >= ? "
+        "  AND c.referred_by_customer_id IS NULL "
+        "GROUP BY c.customer_id ORDER BY first_order DESC", (start,)).fetchall()
+    if not rows:
+        return None
+    items = [{"label": r["name"] or f"customer {r['customer_id']}",
+              "meta": f"first played {_when(_days(r['first_order'], today))}",
+              "href": f"/customers?cid={r['customer_id']}"} for r in rows]
+    return _card("attribute", "First timers to attribute", len(rows),
+                 "/admin/leads", "who brought them?", "watch", items)
+
+
+def _renewals(conn, today):
+    from datetime import date, timedelta
+    soon = (date.fromisoformat(today) + timedelta(days=30)).isoformat()
+    row = conn.execute(
+        "SELECT SUM(CASE WHEN expires_at < ? THEN 1 ELSE 0 END) AS lapsed, "
+        "       SUM(CASE WHEN expires_at >= ? AND expires_at <= ? THEN 1 ELSE 0 END) AS soon "
+        "FROM (SELECT customer_id, MAX(expires_at) AS expires_at "
+        "        FROM customer_memberships GROUP BY customer_id)",
+        (today, today, soon)).fetchone()
+    lapsed, due = (row["lapsed"] or 0), (row["soon"] or 0)
+    if not due and not lapsed:
+        return None
+    detail = " · ".join(filter(None, [
+        f"{due} expiring in 30d" if due else "",
+        f"{lapsed} already lapsed" if lapsed else ""]))
+    return _card("renewals", "Memberships", due + lapsed, "/customers",
+                 detail, "watch")
+
+
+def _expense_queue(conn, today):
+    n = conn.execute("SELECT COUNT(*) c FROM expense_transactions "
+                     "WHERE review_status = 'pending'").fetchone()["c"]
+    if not n:
+        return None
+    return _card("expenses", "Expenses to review", n, "/accounting",
+                 "nothing books until they are", "watch")
+
+
+def _action_items(conn, today):
+    """ABSORBED from the COO page (Kerry: 'absorb the action items').
+    The table stays — nine code paths write it and it is how the system
+    reports what it found. Only the front door moves."""
+    n = conn.execute("SELECT COUNT(*) c FROM action_items "
+                     "WHERE status = 'open'").fetchone()["c"]
+    if not n:
+        return None
+    return _card("action_items", "Data issues found", n, "/coo",
+                 "the system flagged these", "watch")
+
+
+def _ca_queue(conn, today):
+    n = conn.execute("SELECT COUNT(*) c FROM ca_queue "
+                     "WHERE status = 'open'").fetchone()["c"]
+    if not n:
+        return None
+    return _card("ca_queue", "Open decisions", n, "/admin/ca-queue",
+                 "waiting on you", "info")
+
+
+FEEDS = (
+    _events_this_week,
+    _events_awaiting_closeout,
+    _followups_due,
+    _new_leads,
+    _first_timers_to_attribute,
+    _renewals,
+    _expense_queue,
+    _action_items,
+    _ca_queue,
+)
+
+
+def build(db_path: str | Path | None = None, today: str | None = None) -> dict:
+    """{cards: [...], skipped: [...], as_of: 'YYYY-MM-DD'}.
+
+    Only cards with something in them are returned (rule 2). A feed that
+    raises is named in `skipped` and costs nothing else — the page still
+    renders.
+    """
+    from . import database as db
+    from .timezone_utils import today_central_str
+    today = today or today_central_str()
+    cards, skipped = [], []
+    with db._connect(db_path) as conn:
+        for feed in FEEDS:
+            name = feed.__name__.lstrip("_")
+            try:
+                c = feed(conn, today)
+            except Exception as e:
+                logger.warning("dashboard feed %s failed", name, exc_info=True)
+                skipped.append({"feed": name, "error": str(e)[:200]})
+                continue
+            if c and c.get("count"):
+                cards.append(c)
+    return {"as_of": today, "cards": cards, "skipped": skipped,
+            "total": sum(c["count"] for c in cards)}

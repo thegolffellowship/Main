@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.470.0";
+window.TGF_VERSION = "2.471.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.471.0",
+    date: "2026-09-21",
+    changes: [
+      "THE DASHBOARD IS THE LANDING PAGE. Kerry, 2026-09-21: 'maybe I should be landing on a DASHBOARD page that summarizes anything current that I can go to with a click', then 'Dashboard replaces COO as landing, absorb the action items — I don't use the current what needs me today stuff at all right now, so let's ditch those'. `/` now redirects to /dashboard; EVENTS held that slot since 2026-07-08. Nine cards: this week's events, events to close out, follow-ups due, new leads, first timers to attribute (the Ty Bubela card), memberships lapsed or expiring, expenses to review, data issues found (absorbed from COO), open decisions.",
+      "Two rules make it stay useful. It is a ROUTER, never a workspace — every card is a count and a link to the surface that owns the work, and the peek list is five rows and a '+N more'. And a card with nothing in it does not render: build() returns only non-zero cards, so a page that shows three things today and six tomorrow keeps being read instead of becoming wallpaper. No cards at all reads 'Nothing needs you right now' — a result, not an empty state.",
+      "The COO page is retired as the FRONT DOOR, not as a feature, and the action_items table is untouched: nine code paths write it and it is how the system reports the problems it finds. The dashboard shows the count and links to /coo, which still works. Each feed is independently wrapped — one that raises is named on the page rather than silently dropped, because a dashboard that quietly loses a card is worse than one that admits it. Read-only bridge scoring-dashboard. Guards: test_dashboard_feeds.py, test_dashboard.js.",
+    ],
+  },
   {
     version: "2.470.0",
     date: "2026-09-21",

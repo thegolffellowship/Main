@@ -35,6 +35,7 @@ Before working on a specific area, Read the relevant sub-doc:
 - `docs/claude/hubspot-decommission-directive.md` (**Kerry's HubSpot decommission + Meta-direct lead ingest scope, 2026-09-03** — live HubSpot inventory (1,453 contacts back to Feb 2023, 469 emails, 118 tasks, 24 calls, 15 hand-written notes, 0 deals), extraction-as-a-gate, dual-run cutover, and the definition of "safely viable". READ BEFORE touching the lead pipe)
 - `docs/claude/ux-directive-work-surfaces.md` (**Kerry's UX directive to CA + CD, 2026-09-03** — the Lead Center header accretion problem counted, the job-to-be-done, the three-tier disclosure target, deliverables for design-claude, acceptance criteria, and the standing tier rule for every future control. Pilot = Lead Center, pattern then rolls to Events / Transactions / Customers. READ BEFORE adding any control to a work surface)
 - `docs/claude/ca-queue.md` (**CA QUEUE — Kerry's admin-only interactive open-items checklist**, 2026-09-11, mailbox #473/#474: `/admin/ca-queue` page, `ca_queue` table with append-only notes_log, done-never-deletes + reopen-keeps-history semantics, MCP tools `list/upsert/note/close_ca_queue_item` for platform-claude, `scoring-ca-queue*` bridges for lanes. Kerry works it; platform-claude maintains it)
+- `docs/claude/dashboard.md` (**THE LANDING PAGE**, v2.471.0, Kerry-ratified 2026-09-21: `/` → `/dashboard`, replacing EVENTS. A ROUTER — counts and links, nothing worked there; a card with nothing in it does not render. Absorbs the COO action-items count; `/coo` stays as the page you work them on. `email_parser/dashboard.py` `FEEDS`, each independently wrapped)
 - `docs/claude/referral-attribution.md` (PROPOSAL 2026-09-21, unratified: widening `customers.referred_by_customer_id` from "I paid for their spot" to "who brought them" + `referred_by_source` / `found_us_via`, and the 1st-Timer referral guesser with confirmation. Holds Ty Bubela ← Justin Angelone pending ratification)
 - `docs/claude/facebook-events.md` (Facebook Event description standard + where each fact comes from; revived 2026-09-14)
 - `docs/claude/leads.md` (NEW LEADS queue — Facebook/Meta leads polled from HubSpot every 45 min, 48-hour-touch audit at `/admin/leads`, email pings to Kerry + chapter manager, editable survey selections with re-sync-proof overrides, ratified first-touch SMS presets (#388/#389) picked per lead behind the 💬 Text ▾; `email_parser/leads.py`; campaign entity + 📊 Stats view with CPL / CPP / CPMem current + 30-day trailing (#391, `email_parser/campaigns.py`, Meta insights idle until `META_ACCESS_TOKEN`); idle until `HUBSPOT_TOKEN` env is set. Also the Tracker→Brevo member-status sync — `email_parser/brevo.py`, nightly, idle until `BREVO_API_KEY` is set)
@@ -261,8 +262,8 @@ No Python or local install needed — Claude Desktop connects directly to Railwa
   `docs/claude/expense-workflow.md` → **Dedup & Cost Control**. Boot logs
   a loud warning if `DATABASE_PATH` is unset (dedup memory is ephemeral
   without a Railway volume → re-bills the backfill window every redeploy).
-- **Landing page is EVENTS** (v2.44.0, Kerry): `/` 302-redirects to
-  `/events` (or to `/transactions?<qs>` when query params are present, so
+- **Landing page is the DASHBOARD** (v2.471.0, Kerry 2026-09-21 — EVENTS held it from v2.44.0): `/` 302-redirects to
+  `/dashboard` (or to `/transactions?<qs>` when query params are present, so
   old `/?txn=` deep links keep working); the Transactions dashboard lives
   at `/transactions` (search, filter, sort, CSV export). auth.js's
   fresh-launch redirect and manifest.json start_url also point at
