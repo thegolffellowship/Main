@@ -47,9 +47,10 @@ dial, GG purses) is untouched.
   exclusive upper bound = the next flight's lowest index) so a late add after
   the freeze lands by the same line.
 
-## 3. Rule 3b — the freeze schema, PROPOSED, NOT BUILT
+## 3. Rule 3b — the freeze schema: RATIFIED and BUILT (v2.471.0)
 
-From #584, awaiting "Kerry ratifies":
+Kerry 2026-09-21 ~2:20 PM CDT: "Yes, build the freeze tables and the button."
+Built as proposed in #584 (`board_json` holds both layers instead of two JSON columns; see schema.md "Flight snapshots"). The freeze is the FREEZE button on the tab; SETTLE and Unfreeze sit beside it; bridges `scoring-flights-freeze|settle|unfreeze:<id>[|apply]`. The proposal, as it was ratified:
 
 - `event_flight_snapshots(id, event_id FK events, state 'frozen'|'settled',
   taken_at, taken_by, trigger 'freeze_button'|'final_pairings_send'|'closeout',
@@ -141,11 +142,9 @@ screenshots and designated; nine-hole PH now reads per-nine rating rows.
 
 ## 7. Open / carried forward
 
-- Kerry: the freeze button question; ratify §3 schema; the 1/10/20-on-Net
-  question.
-- After ratification: snapshot tables + freeze / unfreeze / settle actions +
-  bridges; closeout writes the settled snapshot; the Final Pairings send
-  offers the freeze.
+- Next: the Final Pairings send OFFERS the freeze when the event is not
+  frozen; the closeout routine writes the settled snapshot; a Matrix-page
+  editor for `gross_places_by_flight_size`.
 - P2-6 item 4 (a label/assignment mismatch on a future event raises a
   followups CA Queue item) is NOT built: it is the closeout comparison of
   `gg_game_flights` against the FROZEN selection, so it follows the schema.

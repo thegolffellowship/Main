@@ -57995,23 +57995,14 @@ def _event_gg_recorded_purses(conn, event_id: int) -> dict:
     return out
 
 
-def event_flights_board(event_id: int, db_path=None) -> dict | None:
-    """The DIVISIONS / FLIGHTS board for one event — the ratified flighting
-    and payout rule set (`email_parser/flighting.py`) computed from Tracker
-    data, in its two layers.
-
-    Buy-ins from the ROSTER (`_event_game_buyers` — wd_credits decides who
-    is a buyer), the index of record by customer_id locked as-of for a
-    started event (`_event_index_as_of`), each player's PH as the starter
-    sheet computes it, the flight count and the game variant from the LIVE
-    matrix, the cut from the ratified ladders, pots and places from the
-    ratified rules. Beside it, what Golf Genius recorded (a completed
-    event's published-vs-paid answer).
-
-    STATE is LIVE until the freeze action exists (rule 3b — the snapshot
-    schema is proposed in mailbox #584 and waits for Kerry). DRY RUN:
-    nothing here writes a payout; GG stays the payer of record."""
+def _flights_board_inputs(event_id: int, db_path=None) -> dict | None:
+    """Everything the flighting rules need for one event, read once:
+    the event row, the bundle buyers per kind with index of record and
+    PH, the matrix row lookup, the rules in effect, GG's recorded purses,
+    and the state flags. Shared by the LIVE board, FREEZE and SETTLE so
+    the three can never disagree about the field."""
     from . import flighting as _fl
+    import copy as _copy
     with _connect(db_path) as conn:
         ev = conn.execute("SELECT * FROM events WHERE id = ?", (event_id,)).fetchone()
         if not ev:
@@ -58031,10 +58022,6 @@ def event_flights_board(event_id: int, db_path=None) -> dict | None:
     matrix = m18 if holes_key == "18" else m9
     matrix_source = ("app_settings (live)" if get_app_setting(
         f"games_matrix_{holes_key}", db_path=db_path) else "repo seed (games-matrix.js)")
-
-    def _row_for(n: int):
-        return matrix.get(str(int(n)))
-
     field_by_kind = {}
     for kind, res in buyers_by_kind.items():
         field_by_kind[kind] = [
@@ -58047,7 +58034,6 @@ def event_flights_board(event_id: int, db_path=None) -> dict | None:
     # — a JSON list of {min, max, split} rows — overrides the seed in
     # FLIGHT_RULES; the board reports which it used. Individual Net's
     # places stay the matrix's own columns (same ruling).
-    import copy as _copy
     rules = _copy.deepcopy(_fl.FLIGHT_RULES)
     places_source = "seed (flighting.FLIGHT_RULES)"
     try:
@@ -58062,38 +58048,329 @@ def event_flights_board(event_id: int, db_path=None) -> dict | None:
             places_source = "app_settings gross_places_by_flight_size (live dial)"
     except (TypeError, ValueError):
         pass
-    board = _fl.build(field_by_kind, holes_key, _row_for, rules=rules)
-    board["places_source"] = places_source
-    board["places_by_flight_size"] = rules["places_by_flight_size"]
+    no_cid = sorted({n for r in buyers_by_kind.values() for n in r["no_customer_id"]})
+    started = _event_started(ev)
+    today = today_central_str()
+    completed = bool((ev.get("event_date") or "") and ev["event_date"][:10] < today)
+    return {
+        "ev": ev, "field_by_kind": field_by_kind, "holes_key": holes_key,
+        "matrix": matrix, "matrix_source": matrix_source, "rules": rules,
+        "places_source": places_source, "gg": gg, "as_of": as_of,
+        "ph_basis": ph_basis, "ph_note": ph_note, "no_customer_id": no_cid,
+        "started": started, "completed": completed,
+    }
+
+
+def _flights_row_for(matrix: dict):
+    def _row_for(n: int):
+        return matrix.get(str(int(n)))
+    return _row_for
+
+
+def _decorate_flights_board(board: dict, inp: dict) -> dict:
+    """The event facts, the GG side and the dry-run stamp on a board."""
+    ev = inp["ev"]
     for entry in board["games"]:
         for f in entry["selection"]["flights"]:
             for m in f["members"]:
                 m["sort_name"] = _sort_name(m.get("name"))
         for u in entry["selection"].get("unflighted") or []:
             u["sort_name"] = _sort_name(u.get("name"))
-        entry["gg_recorded"] = gg.get(entry["game"]) or {"rows": [], "total": 0.0}
-    no_cid = sorted({n for r in buyers_by_kind.values() for n in r["no_customer_id"]})
-    started = _event_started(ev)
-    today = today_central_str()
-    completed = bool((ev.get("event_date") or "") and ev["event_date"][:10] < today)
+        entry["gg_recorded"] = inp["gg"].get(entry["game"]) or {"rows": [], "total": 0.0}
     board.update({
-        "event_id": ev["id"], "event": ev, "event_name": ev.get("item_name"),
+        "event_id": ev["id"], "event_name": ev.get("item_name"),
         "event_date": ev.get("event_date"), "chapter": ev.get("chapter"),
         "course": ev.get("course"),
-        "buyers": {k: len(v) for k, v in field_by_kind.items()},
-        "no_customer_id": no_cid,
-        "handicap_as_of": as_of,
+        "buyers": {k: len(v) for k, v in inp["field_by_kind"].items()},
+        "no_customer_id": inp["no_customer_id"],
+        "handicap_as_of": inp["as_of"],
         "index_basis": "18-hole TGF index (twice the nine-hole index)"
-                       + (f", locked as of {as_of}" if as_of else ""),
-        "ph_basis": ph_basis, "ph_note": ph_note,
-        "matrix_source": matrix_source,
-        "event_started": started, "event_completed": completed,
-        "freeze": None,            # populated once the snapshot schema is ratified
+                       + (f", locked as of {inp['as_of']}" if inp["as_of"] else ""),
+        "ph_basis": inp["ph_basis"], "ph_note": inp["ph_note"],
+        "matrix_source": inp["matrix_source"],
+        "places_source": inp["places_source"],
+        "places_by_flight_size": inp["rules"]["places_by_flight_size"],
+        "event_started": inp["started"], "event_completed": inp["completed"],
         "dry_run": True,
         "payer_of_record": "Golf Genius",
         "file_stub": print_file_stub(ev),
     })
     return board
+
+
+def _compute_live_flights_board(inp: dict) -> dict:
+    from . import flighting as _fl
+    board = _fl.build(inp["field_by_kind"], inp["holes_key"],
+                      _flights_row_for(inp["matrix"]), rules=inp["rules"])
+    board["freeze"] = None
+    board["settled"] = None
+    return _decorate_flights_board(board, inp)
+
+
+# ---------------------------------------------------------------------------
+# The FREEZE (B5, mailbox #571/#572/#582; schema proposed #584, Kerry
+# ratified 2026-09-21: "Yes, build the freeze tables and the button.")
+#
+# An explicit EVENT STATE set by an ACTION, never a clock. One row per
+# transition in `event_flight_snapshots` carrying the whole board as it
+# stood; one row per player-in-a-flight in `event_flight_snapshot_members`
+# with customer_id (principle 6). The state is READ from the rows: LIVE =
+# no unvoided frozen row; FROZEN = an unvoided frozen row and no settled
+# row; SETTLED = an unvoided settled row. Unfreezing VOIDS (keeps) the rows.
+# Nothing here pays anyone.
+# ---------------------------------------------------------------------------
+
+def _ensure_flight_snapshot_tables(conn: sqlite3.Connection) -> None:
+    conn.execute("""CREATE TABLE IF NOT EXISTS event_flight_snapshots (
+        id             INTEGER PRIMARY KEY AUTOINCREMENT,
+        event_id       INTEGER NOT NULL REFERENCES events(id),
+        state          TEXT NOT NULL CHECK (state IN ('frozen', 'settled')),
+        taken_at       TEXT DEFAULT (datetime('now')),
+        taken_by       TEXT,
+        trigger        TEXT,
+        handicap_as_of TEXT,
+        holes_key      TEXT,
+        matrix_source  TEXT,
+        rules_version  INTEGER,
+        board_json     TEXT NOT NULL,
+        note           TEXT,
+        voided_at      TEXT,
+        voided_by      TEXT)""")
+    conn.execute("""CREATE TABLE IF NOT EXISTS event_flight_snapshot_members (
+        snapshot_id      INTEGER NOT NULL REFERENCES event_flight_snapshots(id),
+        game             TEXT NOT NULL,
+        variant          TEXT,
+        flight_no        INTEGER,
+        flight_label     TEXT,
+        customer_id      INTEGER REFERENCES customers(customer_id),
+        customer_name    TEXT,
+        index_18         REAL,
+        playing_handicap REAL,
+        buyer_kind       TEXT,
+        PRIMARY KEY (snapshot_id, game, customer_id))""")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_event_flight_snapshots_event "
+                 "ON event_flight_snapshots(event_id, state, voided_at)")
+
+
+def _flight_snapshot_meta(row) -> dict | None:
+    if not row:
+        return None
+    local = to_central(row["taken_at"])
+    return {"id": row["id"], "state": row["state"], "taken_at": row["taken_at"],
+            "taken_at_local": (local.strftime("%a %-m/%-d %-I:%M %p") if local else None),
+            "taken_by": row["taken_by"], "trigger": row["trigger"],
+            "note": row["note"], "rules_version": row["rules_version"],
+            "handicap_as_of": row["handicap_as_of"]}
+
+
+def _active_flight_snapshots(conn, event_id: int) -> dict:
+    """{"frozen": row|None, "settled": row|None} — the unvoided rows, the
+    newest of each state."""
+    _ensure_flight_snapshot_tables(conn)
+    out = {"frozen": None, "settled": None}
+    for r in conn.execute(
+            "SELECT * FROM event_flight_snapshots WHERE event_id = ? AND voided_at IS NULL "
+            "ORDER BY id DESC", (event_id,)).fetchall():
+        if out.get(r["state"]) is None:
+            out[r["state"]] = r
+    return out
+
+
+def _write_flight_snapshot(conn, event_id: int, state: str, board: dict,
+                           by: str, trigger: str, note: str | None) -> int:
+    stored = {k: v for k, v in board.items() if k != "event"}
+    cur = conn.execute(
+        """INSERT INTO event_flight_snapshots
+               (event_id, state, taken_by, trigger, handicap_as_of, holes_key,
+                matrix_source, rules_version, board_json, note)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (event_id, state, (by or "")[:80], (trigger or "")[:40],
+         board.get("handicap_as_of"), board.get("holes_key"),
+         board.get("matrix_source"), board.get("rules_version"),
+         json.dumps(stored, default=str), (note or None)))
+    sid = cur.lastrowid
+    for entry in board["games"]:
+        sel = entry["selection"]
+        variant = ((sel.get("variant") or {}).get("name")) if sel.get("variant") else None
+        seen: set = set()
+        for f in sel.get("flights") or []:
+            for m in f["members"]:
+                cid = m.get("customer_id")
+                if cid is None or int(cid) in seen:
+                    continue
+                seen.add(int(cid))
+                conn.execute(
+                    """INSERT INTO event_flight_snapshot_members
+                           (snapshot_id, game, variant, flight_no, flight_label,
+                            customer_id, customer_name, index_18, playing_handicap, buyer_kind)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (sid, entry["game"], variant, f["flight_no"], f.get("label"),
+                     int(cid), m.get("name"), m.get("index"), m.get("ph"), entry["kind"]))
+        for u in sel.get("unflighted") or []:
+            cid = u.get("customer_id")
+            if cid is None or int(cid) in seen:
+                continue
+            seen.add(int(cid))
+            conn.execute(
+                """INSERT INTO event_flight_snapshot_members
+                       (snapshot_id, game, variant, flight_no, flight_label,
+                        customer_id, customer_name, index_18, playing_handicap, buyer_kind)
+                   VALUES (?, ?, ?, NULL, NULL, ?, ?, ?, ?, ?)""",
+                (sid, entry["game"], variant, int(cid), u.get("name"),
+                 u.get("index"), u.get("ph"), entry["kind"]))
+    return sid
+
+
+def event_flights_board(event_id: int, db_path=None) -> dict | None:
+    """The DIVISIONS / FLIGHTS board for one event — the ratified flighting
+    and payout rule set (`email_parser/flighting.py`) computed from Tracker
+    data, in its two layers, in the event's STATE:
+
+      LIVE     — SELECTION and AMOUNTS both from the roster as it stands.
+      FROZEN   — the SELECTION stored at the freeze; AMOUNTS recomputed
+                 from the roster now, with the delta since the freeze
+                 (who added / dropped, pot then vs now). Nothing written.
+      SETTLED  — served from the stored settled snapshot, never recomputed
+                 (principle 4: past events are frozen).
+
+    Buy-ins from the ROSTER (`_event_game_buyers` — wd_credits decides who
+    is a buyer), the index of record by customer_id locked as-of for a
+    started event, each player's PH as the starter sheet computes it, the
+    flight count and the game variant from the LIVE matrix, pots and places
+    from the ratified rules. Beside it, what Golf Genius recorded. DRY RUN:
+    nothing here writes a payout; GG stays the payer of record."""
+    from . import flighting as _fl
+    inp = _flights_board_inputs(event_id, db_path=db_path)
+    if not inp:
+        return None
+    with _connect(db_path) as conn:
+        snaps = _active_flight_snapshots(conn, event_id)
+    frozen_meta = _flight_snapshot_meta(snaps["frozen"])
+    settled_meta = _flight_snapshot_meta(snaps["settled"])
+    if snaps["settled"]:
+        board = json.loads(snaps["settled"]["board_json"])
+        board["state"] = "settled"
+        board["freeze"], board["settled"] = frozen_meta, settled_meta
+        board["event"] = inp["ev"]
+        # GG's side keeps refreshing — it is the comparison, not the record.
+        for entry in board["games"]:
+            entry["gg_recorded"] = inp["gg"].get(entry["game"]) or {"rows": [], "total": 0.0}
+        return board
+    if snaps["frozen"]:
+        frozen = json.loads(snaps["frozen"]["board_json"])
+        rules = dict(inp["rules"])
+        if frozen.get("places_by_flight_size"):
+            rules["places_by_flight_size"] = frozen["places_by_flight_size"]
+        board = _fl.settle(frozen, inp["field_by_kind"],
+                           _flights_row_for(inp["matrix"]), rules=rules, state="frozen")
+        board = _decorate_flights_board(board, inp)
+        board["state"] = "frozen"
+        board["freeze"], board["settled"] = frozen_meta, None
+        board["event"] = inp["ev"]
+        return board
+    board = _compute_live_flights_board(inp)
+    board["event"] = inp["ev"]
+    return board
+
+
+def freeze_event_flights(event_id: int, by: str = "manager",
+                         trigger: str = "freeze_button", note: str | None = None,
+                         db_path=None, dry_run: bool = False) -> dict:
+    """FREEZE: stamp the LIVE board as the event's selection of record.
+    Refuses when a freeze already stands (unfreeze first — a re-press must
+    never silently re-freeze). Audited. Pays nobody."""
+    inp = _flights_board_inputs(event_id, db_path=db_path)
+    if not inp:
+        return {"ok": False, "error": f"event {event_id} not found"}
+    with _connect(db_path) as conn:
+        snaps = _active_flight_snapshots(conn, event_id)
+        if snaps["frozen"] or snaps["settled"]:
+            return {"ok": False, "error": "already frozen — unfreeze first",
+                    "state": "settled" if snaps["settled"] else "frozen",
+                    "freeze": _flight_snapshot_meta(snaps["frozen"])}
+        board = _compute_live_flights_board(inp)
+        if dry_run:
+            return {"ok": True, "dry_run": True, "would": "freeze",
+                    "buyers": board["buyers"],
+                    "games": [{"game": g["game"], "active": g["active"],
+                               "flights": [f["players"] for f in g["selection"]["flights"]]}
+                              for g in board["games"]]}
+        sid = _write_flight_snapshot(conn, event_id, "frozen", board, by, trigger, note)
+        conn.commit()
+    try:
+        log_agent_action(by or "manager", "flights_freeze",
+                         f"event {event_id} {inp['ev'].get('item_name')}: frozen "
+                         f"(snapshot {sid}, {trigger}) NET {board['buyers'].get('NET')} "
+                         f"GROSS {board['buyers'].get('GROSS')}", db_path=db_path)
+    except Exception:                                    # noqa: BLE001
+        logger.warning("flights freeze audit row failed for event %s", event_id)
+    out = event_flights_board(event_id, db_path=db_path)
+    out["ok"] = True
+    return out
+
+
+def settle_event_flights(event_id: int, by: str = "manager",
+                         trigger: str = "settle_button", note: str | None = None,
+                         db_path=None, dry_run: bool = False) -> dict:
+    """SETTLE: the frozen SELECTION against the roster now — AMOUNTS
+    recomputed from actual buyers, the delta recorded — stored as the
+    record. Requires a standing freeze. Audited. Pays nobody."""
+    inp = _flights_board_inputs(event_id, db_path=db_path)
+    if not inp:
+        return {"ok": False, "error": f"event {event_id} not found"}
+    with _connect(db_path) as conn:
+        snaps = _active_flight_snapshots(conn, event_id)
+        if snaps["settled"]:
+            return {"ok": False, "error": "already settled — unfreeze to redo",
+                    "state": "settled"}
+        if not snaps["frozen"]:
+            return {"ok": False, "error": "not frozen — freeze first", "state": "live"}
+        board = event_flights_board(event_id, db_path=db_path)   # frozen + delta
+        if dry_run:
+            return {"ok": True, "dry_run": True, "would": "settle",
+                    "buyers": board["buyers"],
+                    "delta": {g["game"]: g.get("delta") for g in board["games"]}}
+        sid = _write_flight_snapshot(conn, event_id, "settled", board, by, trigger, note)
+        conn.commit()
+    try:
+        log_agent_action(by or "manager", "flights_settle",
+                         f"event {event_id} {inp['ev'].get('item_name')}: settled "
+                         f"(snapshot {sid}) NET {board['buyers'].get('NET')} "
+                         f"GROSS {board['buyers'].get('GROSS')}", db_path=db_path)
+    except Exception:                                    # noqa: BLE001
+        logger.warning("flights settle audit row failed for event %s", event_id)
+    out = event_flights_board(event_id, db_path=db_path)
+    out["ok"] = True
+    return out
+
+
+def unfreeze_event_flights(event_id: int, by: str = "manager",
+                           note: str | None = None, db_path=None,
+                           dry_run: bool = False) -> dict:
+    """UNFREEZE: void the standing frozen and settled rows (kept for the
+    audit, never deleted) so the board reads LIVE again. Audited."""
+    with _connect(db_path) as conn:
+        snaps = _active_flight_snapshots(conn, event_id)
+        ids = [r["id"] for r in (snaps["frozen"], snaps["settled"]) if r]
+        if not ids:
+            return {"ok": False, "error": "nothing to unfreeze — the board is LIVE",
+                    "state": "live"}
+        if dry_run:
+            return {"ok": True, "dry_run": True, "would": "void", "snapshots": ids}
+        conn.execute(
+            f"UPDATE event_flight_snapshots SET voided_at = datetime('now'), voided_by = ?, "
+            f"note = COALESCE(?, note) WHERE id IN ({','.join('?' * len(ids))})",
+            ((by or "")[:80], note, *ids))
+        conn.commit()
+    try:
+        log_agent_action(by or "manager", "flights_unfreeze",
+                         f"event {event_id}: voided snapshots {ids}", db_path=db_path)
+    except Exception:                                    # noqa: BLE001
+        logger.warning("flights unfreeze audit row failed for event %s", event_id)
+    out = event_flights_board(event_id, db_path=db_path)
+    out["ok"] = True
+    out["voided"] = ids
+    return out
 
 
 def event_flights_report(event_id: int, db_path=None) -> dict | None:

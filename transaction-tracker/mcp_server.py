@@ -1782,6 +1782,9 @@ def _scoring_dispatch(url: str, extract: str):
       scoring-per-nine-audit[:all]   every course with an 18-hole row: nines resolved / unresolved and why
       scoring-tee-nines[:<course_id>]  label each course tee row front/back/full from the 18-hole card's yardages; reports what it could not decide
       scoring-event-report:<event_id>|flights|proximity  the two PAIRINGS printables as data (Divisions & Flights / CTP markers)
+      scoring-flights-freeze:<event_id>[|apply]  FREEZE the board (B5 selection of record); dry run says what would freeze
+      scoring-flights-settle:<event_id>[|apply]  SETTLE a frozen board: amounts from actual buyers + the delta, stored as the record
+      scoring-flights-unfreeze:<event_id>[|apply]  void (keep) the frozen/settled rows so the board reads LIVE
       scoring-flights-board:<event_id>  the DIVISIONS/FLIGHTS board as data — ratified flighting + payout rules (SELECTION and AMOUNTS layers) beside what GG recorded; dry run, read-only
       scoring-pairings-counts:<event_id>[|<year>]  saved sheet scored against played history: times each pair has played together this year INCLUDING this event
       scoring-liabilities          payouts owed, credits held, LSC shirt fund by Cup year, HIO pot, tax reserve by month
@@ -2653,6 +2656,22 @@ def _scoring_dispatch(url: str, extract: str):
                                 f"decided={_res['n_decided']} "
                                 f"unresolved={_res['n_unresolved']}")
             return _j.dumps(_res, indent=2, default=str)
+        if cmd in ("scoring-flights-freeze", "scoring-flights-settle",
+                   "scoring-flights-unfreeze"):
+            # The B5 freeze as an action (Kerry 2026-09-21 ratified the
+            # tables + the button). Dry run unless |apply. Audited as
+            # mcp-claude. Pays nobody.
+            _p = [x.strip() for x in arg.split("|") if x.strip()]
+            if not _p or not _p[0].isdigit():
+                return json.dumps({"error": f"usage: {cmd}:<event_id>[|apply]"})
+            _apply = len(_p) > 1 and _p[-1].lower() == "apply"
+            _fn = {"scoring-flights-freeze": db.freeze_event_flights,
+                   "scoring-flights-settle": db.settle_event_flights,
+                   "scoring-flights-unfreeze": db.unfreeze_event_flights}[cmd]
+            _res = _fn(int(_p[0]), by="mcp-claude", dry_run=not _apply)
+            _res = dict(_res)
+            _res.pop("event", None)
+            return json.dumps(_res, indent=2, default=str)
         if cmd == "scoring-flights-board":
             # The DIVISIONS/FLIGHTS board (mailbox #582/#584) as data:
             # the ratified rule set from `email_parser/flighting.py` on

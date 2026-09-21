@@ -5431,9 +5431,53 @@
             SETTLED: { bg: "#f3f4f6", fg: "#374151", bd: "#d1d5db" },
         }[st] || { bg: "#f3f4f6", fg: "#374151", bd: "#d1d5db" };
         let txt = st;
-        if (st === "FROZEN" && board.freeze && board.freeze.taken_at) txt += " " + escapeHtml(board.freeze.taken_at);
+        if (st === "FROZEN" && board.freeze) txt += " " + escapeHtml(board.freeze.taken_at_local || board.freeze.taken_at || "");
+        if (st === "SETTLED" && board.settled) txt += " " + escapeHtml(board.settled.taken_at_local || board.settled.taken_at || "");
         if (st === "LIVE") txt += board.event_completed ? " · recomputed now" : " · recomputing";
         return `<span style="display:inline-block;padding:0.15rem 0.6rem;border-radius:999px;border:1px solid ${palette.bd};background:${palette.bg};color:${palette.fg};font-size:0.7rem;font-weight:700;letter-spacing:0.05em;">${txt}</span>`;
+    }
+    // The FREEZE / SETTLE / UNFREEZE buttons (Kerry 2026-09-21: "Let's go
+    // with the button for now" / "Yes, build the freeze tables and the
+    // button"). Each is a confirmed POST; the board reloads after.
+    function fbActionButtons(board) {
+        if (!canSeeFlights()) return "";
+        const btn = (act, label, style) => `<button type="button" data-flights-act="${act}" style="margin-left:auto;font-size:0.72rem;padding:0.2rem 0.7rem;border-radius:99px;border:1px solid ${style.bd};background:${style.bg};color:${style.fg};font-weight:700;cursor:pointer;">${label}</button>`;
+        const dark = { bd: "#1B1B1B", bg: "#1B1B1B", fg: "#fff" };
+        const line = { bd: "#9CA3AF", bg: "#fff", fg: "#374151" };
+        if (board.state === "live") return btn("freeze", "FREEZE", dark);
+        if (board.state === "frozen") return btn("settle", "SETTLE", dark) + btn("unfreeze", "Unfreeze", line).replace("margin-left:auto;", "margin-left:0.4rem;");
+        if (board.state === "settled") return btn("unfreeze", "Unfreeze", line);
+        return "";
+    }
+    const FB_CONFIRM = {
+        freeze: "Freeze the flights for this event?\n\nWhich games run, the flight counts, the cut lines and each player's flight lock now. Pots and places keep recomputing from actual buyers until settlement. Nothing pays anyone.",
+        settle: "Settle this event's flights?\n\nThe frozen selection is priced from today's buyers and stored as the record with what changed since the freeze. Nothing pays anyone.",
+        unfreeze: "Unfreeze this event?\n\nThe frozen (and any settled) snapshot is voided but kept for the audit, and the board goes back to LIVE.",
+    };
+    function attachFlightsHandlers(container, ev) {
+        container.querySelectorAll("[data-flights-act]").forEach(b => {
+            b.addEventListener("click", async (e) => {
+                e.stopPropagation();
+                const act = b.dataset.flightsAct;
+                if (!confirm(FB_CONFIRM[act] || `${act}?`)) return;
+                b.disabled = true;
+                try {
+                    const res = await fetch(`/api/events/${ev.id}/flights/${act}`, {
+                        method: "POST", headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({}) });
+                    const data = await res.json().catch(() => ({}));
+                    if (!res.ok || !data.ok) {
+                        showToast((data && data.error) || `Could not ${act} (HTTP ${res.status})`, "error");
+                    } else {
+                        showToast(act === "freeze" ? "Flights frozen" : act === "settle" ? "Flights settled" : "Board back to LIVE");
+                    }
+                } catch (err) {
+                    showToast(`Could not ${act}: ${err && err.message || err}`, "error");
+                }
+                await loadFlightsBoard(ev.id);
+                rerenderDetail(container, ev);
+            });
+        });
     }
     function fbPlacesText(flight) {
         const pl = (flight.places || []);
@@ -5460,7 +5504,14 @@
             <span>DIVISIONS / FLIGHTS &mdash; ${board.holes_key} holes</span>
             ${fbStateBadge(board)}
             <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text-muted);font-size:0.72rem;">dry run &middot; ${escapeHtml(board.payer_of_record || "Golf Genius")} is the payer of record</span>
+            ${fbActionButtons(board)}
         </div>`;
+        if (board.freeze) {
+            html += `<div style="width:0;min-width:100%;box-sizing:border-box;font-size:0.74rem;color:#78350f;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;padding:0.35rem 0.6rem;margin:0.35rem 0 0;">
+                Frozen ${escapeHtml(board.freeze.taken_at_local || board.freeze.taken_at || "")} by ${escapeHtml(board.freeze.taken_by || "")}${board.freeze.note ? ` &mdash; ${escapeHtml(board.freeze.note)}` : ""}.
+                ${board.settled ? ` Settled ${escapeHtml(board.settled.taken_at_local || board.settled.taken_at || "")} by ${escapeHtml(board.settled.taken_by || "")} &mdash; this board is the record and no longer recomputes.` : " Selection is locked; pots and places keep recomputing from actual buyers until settlement."}
+            </div>`;
+        }
         html += `<div style="width:0;min-width:100%;box-sizing:border-box;font-size:0.74rem;color:var(--text-muted);margin:0.35rem 0 0.6rem;line-height:1.5;">
             Buyers: NET <strong>${b.NET || 0}</strong> &middot; GROSS <strong>${b.GROSS || 0}</strong>
             &middot; ${escapeHtml(board.index_basis || "")}
@@ -9055,6 +9106,10 @@
         // PAYOUTS panel handlers (expand rows, screenshot paste)
         if (payoutsOpenForEvent[ev.id]) {
             attachPayoutsHandlers(container, ev);
+        }
+        // FLIGHTS panel: FREEZE / SETTLE / UNFREEZE
+        if (flightsOpenForEvent[ev.id]) {
+            attachFlightsHandlers(container, ev);
         }
 
         // PLAYERS / PAIRINGS / GAMES view toggle
