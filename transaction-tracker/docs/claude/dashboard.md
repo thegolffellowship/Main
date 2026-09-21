@@ -107,3 +107,37 @@ must return `None` (or a zero count) when there is nothing to show, and
 it must link to a surface that already owns the work. If there is no
 such surface, build that first — a card with nowhere to go is a card
 that teaches Kerry to ignore the page.
+
+## AMENDMENT (Kerry, 2026-09-21): a row the dashboard can ANSWER is answered there
+
+The router rule was ratified in the morning and amended by lunchtime, by
+the person who ratified it:
+
+> "I'd also like a modal to directly update that info in the dashboard,
+> because going to the customers board then clicking info then choosing
+> is way too many steps."
+
+He is right, and the rule was too broad. The corrected form:
+
+**The dashboard routes you to WORK. It answers QUESTIONS in place.**
+
+A question is something with a small, closed set of answers that the
+dashboard already knows it is missing — "who brought this person?" has
+exactly three shapes (a name, a channel, nothing) and needs no context
+beyond the name on the row. Work is everything else: pricing an event,
+closing a queue item, chasing a lead. Work still routes.
+
+The test that keeps this from becoming "the dashboard is a workspace
+after all": **if answering needs anything the card does not already
+show, it is work, and it routes.** The moment a modal needs a second
+field fetched to make sense, it has stopped being an answer.
+
+The modal hosts the SHARED control (`/static/js/referral_control.js`),
+never a copy. Three surfaces now render it — the customer Info tab, this
+modal, and the Leads band — and `test_referred_by_ui.js` asserts that
+none of them keeps a private copy of the vocabulary. A control that
+means one thing on the dashboard and another on the customer record is
+worse than the three navigations it replaced.
+
+Saving reloads the dashboard, because answering removes the person from
+the queue and the count behind the modal is stale the instant it saves.

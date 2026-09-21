@@ -1,5 +1,16 @@
-window.TGF_VERSION = "2.473.3";
+window.TGF_VERSION = "2.474.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.474.0",
+    date: "2026-09-21",
+    changes: [
+      "ATTRIBUTION IS NOW ONE CLICK. Kerry: 'going to the customers board then clicking info then choosing is way too many steps.' The dashboard's first-timer rows open a MODAL that answers 'who brought them' in place, and the Leads page gets the attribution BAND above the funnel — the question that decides which funnel a person belongs to sits above the stages, not inside one. Both host the same control, now /static/js/referral_control.js, so the customer Info tab, the modal and the band cannot drift apart. This is a deliberate AMENDMENT to the dashboard's ROUTER rule, recorded in docs/claude/dashboard.md: a row the dashboard can ANSWER is answered there.",
+      "NAMING SOMEONE NOW ADDS THEM TO THE LEAD CENTER. Kerry, on Zac Hammond and Geoff Hightower: 'they were random guests, but they still show as leads to track in the Leads center.' They do — as manual leads with no campaign. Ty Bubela did not, because he arrived as a paid registration the lead system never saw. Attributing someone now mints a lead row with source 'referral' and campaign_id NULL: Rick Billeaud's exact shape when Logan brought him. That places them in the ORGANIC bucket and keeps them OUT of Return on Ad Spend, per Kerry's 2026-09-10 ruling. Idempotent, and an existing lead is adopted by customer_id rather than duplicated.",
+      "A first timer already tied to a lead CAMPAIGN no longer appears in the attribute queue (Kerry: 'if they're already tied to a lead campaign, then they shouldn't be on the first timers list to attribute') — asking who brought someone Facebook is invoicing for is the card asking a question the Tracker can already answer. Organic leads still appear: no campaign means nobody has said who brought them. A Tracker with no leads table degrades to the old behaviour rather than dropping the whole card.",
+      "New: GET /api/leads/attribute-queue (the band reuses the dashboard's own feed, so the two surfaces can never disagree about who is waiting) and GET /api/customers/roster ({customer_id, customer_name} only — the picker must resolve a typed name back to an id, which the older /api/customers/names cannot do, and a modal should not pull a third of a megabyte of customer records to fill a datalist).",
+      "Guards: test_attribute_queue.py (22 checks — the campaign exclusion, the organic case, the missing-leads-table fallback, and lead minting including idempotency and not rewriting an organic lead's source) and test_referred_by_ui.js, rewritten to exercise the REAL shipped module and to assert all three surfaces load it and none keeps a private copy of the vocabulary.",
+    ],
+  },
   {
     version: "2.473.3",
     date: "2026-09-21",

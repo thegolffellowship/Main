@@ -163,6 +163,22 @@ def _first_timers_to_attribute(conn, today):
     from datetime import date, timedelta
     start = (date.fromisoformat(today)
              - timedelta(days=ATTRIBUTION_WINDOW_DAYS)).isoformat()
+    # Someone whose lead row carries a campaign id is already answered:
+    # the ad brought them, and asking Kerry "who brought them?" about a
+    # person Facebook is invoicing him for is the card asking a question
+    # the Tracker can answer itself (Kerry 2026-09-21: "if they're
+    # already tied to a lead campaign, then they shouldn't be on the
+    # first timers list to attribute"). A leads table is not guaranteed
+    # (a bare transactions DB has none), so the clause is conditional
+    # rather than letting the whole card fall over rule 2.
+    has_leads = conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='leads'"
+    ).fetchone()
+    campaign_clause = (
+        "  AND NOT EXISTS (SELECT 1 FROM leads l "
+        "                    WHERE l.customer_id = c.customer_id "
+        "                      AND l.campaign_id IS NOT NULL) "
+        if has_leads else "")
     rows = conn.execute(
         "SELECT DISTINCT c.customer_id, "
         "  TRIM(COALESCE(c.first_name,'') || ' ' || COALESCE(c.last_name,'')) AS name, "
@@ -172,12 +188,14 @@ def _first_timers_to_attribute(conn, today):
         "  AND COALESCE(i.transaction_status,'active') = 'active' "
         "  AND i.order_date >= ? "
         "  AND c.referred_by_customer_id IS NULL "
+        + campaign_clause +
         "GROUP BY c.customer_id ORDER BY first_order DESC", (start,)).fetchall()
     if not rows:
         return None
     items = [{"label": r["name"] or f"customer {r['customer_id']}",
               "meta": f"first played {_when(_days(r['first_order'], today))}",
-              "href": f"/customers?cid={r['customer_id']}"} for r in rows]
+              "href": f"/customers?cid={r['customer_id']}",
+              "attribute_cid": r["customer_id"]} for r in rows]
     return _card("attribute", "First timers to attribute", len(rows),
                  "/admin/leads", "who brought them?", "watch", items)
 

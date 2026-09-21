@@ -163,3 +163,70 @@ re-derive it:
 2026-09-21. No longer held: §2 shipped, and the record now says
 `member_claim`, which is true (Kerry told us) where `bought_spot` would
 not have been.
+
+## §6 — Residual ROI: what the Billeaud precedent actually was (2026-09-21)
+
+Kerry: *"I tied Justin Angelone to Ty, but shouldn't Ty automatically
+add to the campaign Justin comes from as a sub-lead residual ROI? I
+thought we crossed that bridge in another situation with Logan Billeaud
+bringing his father."*
+
+**Checked, and the bridge we crossed was a narrower one.** Production,
+2026-09-21:
+
+| | source | campaign_id |
+|---|---|---|
+| Logan Billeaud (791) | `hubspot` | **1 — Fall 2026 Leads** |
+| Rick Billeaud (795) | `referral` | **NULL** |
+| Zac Hammond (819) | `organic` | NULL |
+| Geoff Hightower (818) | `organic` | NULL |
+
+What was built for Logan and Rick was *recording the relationship*:
+`add_manual_lead(source="referral", referred_by=…)`, with the referrer
+parked as TEXT in `payload["_referred_by"]` precisely because the
+referral model was not ratified. Rick's campaign_id is NULL. **Logan's
+campaign has never been credited with Rick.** No residual ROI exists
+anywhere in `campaigns.py`; the word "residual" in that file is about
+allocation dates, not referrals.
+
+So this is a new rule, not an existing one, and it is a rule-3b change:
+it alters what Return on Ad Spend means.
+
+### What shipped now (the safe half)
+
+Attributing someone mints them a lead: `source='referral'`,
+`campaign_id=NULL` — Rick's shape exactly. They become trackable in the
+Lead Center and land in the ORGANIC bucket, which is where Kerry put
+Hammond and Hightower on 2026-09-10 so they could not inflate ROAS.
+Nothing about ad spend changed.
+
+### What needs Kerry's ruling (NOT built)
+
+Crediting Justin's campaign with Ty means setting a referred person's
+`campaign_id` to their referrer's, or carrying a second field the ROI
+math reads. Either way ROAS moves, so the mechanics need answering
+first:
+
+1. **Gate.** Kerry: *"A referral only comes when the person buys a
+   membership."* So the credit switches on at membership purchase, not
+   at signup. Ty is a first timer today; the credit would be $0 until he
+   joins. Agreed — but it means the feature is dormant on arrival.
+2. **Shown how?** Merging referral margin into the campaign's number
+   silently changes a figure Kerry has been reading all season. The
+   recommendation is a SEPARATE line — "direct" and "+ referred" — so
+   the ROAS he has been tracking stays comparable to itself and the
+   residual is visible rather than baked in.
+3. **How deep?** If Ty later brings someone, does that third person also
+   credit campaign 1? Recommendation: ONE hop. Second-order credit is
+   defensible; infinite chains make every campaign eventually responsible
+   for all of TGF.
+4. **How long?** A campaign that ran in March collecting margin from a
+   referral in November is arguably true and arguably meaningless.
+   Recommendation: no time limit on the credit, but the residual line
+   carries the date so an old campaign's tail is legible.
+5. **Whose margin?** All of Ty's spend, or only his membership? The
+   membership is what triggers it; counting everything he ever spends is
+   the honest measure of what the ad bought.
+
+Until those are answered, `ensure_referral_lead` deliberately writes
+`campaign_id=NULL`, and Ty stays in ORGANIC.

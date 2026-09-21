@@ -213,7 +213,21 @@
             .ld-toolbar { margin-top: 0.25rem; }
             .ld-sortsel { margin-left: 0; }
         }
-    </style>
+            /* WHO BROUGHT THEM — the attribution band (Kerry 2026-09-21).
+           Above the funnel because it is the question that decides which
+           funnel a person belongs to, not a stage within it. */
+        .ld-attrband { border:1px solid #FDE68A; background:#FFFBEB; border-radius:8px;
+            padding:10px 12px; margin:0 0 12px; }
+        .ld-attrband h3 { margin:0 0 2px; font-size:.86rem; font-weight:700; }
+        .ld-attrband .ld-ab-sub { font-size:.76rem; color:#92400E; margin-bottom:8px; }
+        .ld-attrband .ld-ab-row { border-top:1px solid #FDE68A; padding:6px 0; }
+        .ld-attrband .ld-ab-row:first-of-type { border-top:0; }
+        .ld-attrband .ld-ab-name { background:none; border:0; padding:0; cursor:pointer;
+            font:inherit; font-weight:600; color:#1F2937; text-align:left; }
+        .ld-attrband .ld-ab-meta { color:#92400E; font-size:.75rem; margin-left:8px; }
+        .ld-attrband .ld-ab-ctl { margin-top:6px; }
+        .ld-attrband .ld-ab-more { font-size:.76rem; color:#92400E; margin-top:6px; }
+</style>
 </head>
 <body>
     {% if shell_v2 %}
@@ -235,6 +249,7 @@
             <div class="ld-card" data-f="converted" onclick="setStatusFilter('converted')"><div class="lbl">Converted</div><div class="val" id="ld-count-converted">–</div><div class="sub" id="ld-conv-sub"></div></div>
             <div class="ld-card" data-f="late" onclick="setStatusFilter('late')"><div class="lbl">Past 48h untouched</div><div class="val ld-late" id="ld-count-late">–</div></div>
         </div>
+        <div class="ld-attrband" id="ld-attrband" style="display:none;"></div>
         <div class="ld-msummary" id="ld-msummary"></div>
         <div class="ld-toolbar">
             <span class="ld-seg" id="ld-chapseg">
@@ -381,6 +396,7 @@
     </main>
     <script src="/static/js/auth.js"></script>
     <script src="/static/js/shell.js"></script>
+    <script src="/static/js/referral_control.js?v={{ app_version }}"></script>
     <script>
     initAuth();
     const esc = s => (s == null ? "" : String(s).replace(/[&<>"']/g,
@@ -491,6 +507,75 @@
         sortKey = parts[0]; sortDir = +parts[1];
         renderLeads();
     }
+    // ── WHO BROUGHT THEM (band) ─────────────────────────────────────
+    // Kerry 2026-09-21: "Add the band to the Leads page too." Same feed
+    // as the dashboard card (/api/leads/attribute-queue), same control
+    // (/static/js/referral_control.js) — the Leads page is simply where
+    // he already is when he thinks about where people came from.
+    const AB_PEEK = 8;
+    let AB_ITEMS = [], AB_SHOWN = AB_PEEK;
+
+    function renderAttrBand() {
+        const el = document.getElementById("ld-attrband");
+        if (!el) return;
+        if (!AB_ITEMS.length) { el.style.display = "none"; return; }
+        el.style.display = "";
+        const rows = AB_ITEMS.slice(0, AB_SHOWN).map(it => {
+            const cid = it.attribute_cid;
+            return '<div class="ld-ab-row" data-ab-row="' + cid + '">' +
+                '<button type="button" class="ld-ab-name" data-ab-open="' + cid + '">' +
+                    esc(it.label) + '</button>' +
+                '<span class="ld-ab-meta">' + esc(it.meta || "") + '</span>' +
+                '<div class="ld-ab-ctl" data-ab-ctl="' + cid + '"></div>' +
+            '</div>';
+        }).join("");
+        const extra = AB_ITEMS.length - AB_SHOWN;
+        el.innerHTML = '<h3>' + AB_ITEMS.length + ' first timer' +
+            (AB_ITEMS.length === 1 ? "" : "s") + ' to attribute</h3>' +
+            '<div class="ld-ab-sub">Who brought them? Naming someone also adds ' +
+            'them to the Lead Center as a referral.</div>' + rows +
+            (extra > 0 ? '<div class="ld-ab-more"><a href="#" data-ab-more>+' +
+                extra + ' more</a></div>' : "");
+    }
+
+    async function loadAttrBand() {
+        try {
+            const r = await fetch("/api/leads/attribute-queue");
+            if (!r.ok) return;
+            const card = await r.json();
+            AB_ITEMS = (card.items || []).filter(i => i.attribute_cid);
+            AB_SHOWN = AB_PEEK;
+            renderAttrBand();
+        } catch (e) { /* the band is an extra; never break the queue */ }
+    }
+
+    document.addEventListener("click", function (ev) {
+        if (ev.target.matches && ev.target.matches("[data-ab-more]")) {
+            ev.preventDefault();
+            AB_SHOWN = AB_ITEMS.length;
+            renderAttrBand();
+            return;
+        }
+        const btn = ev.target.closest && ev.target.closest("[data-ab-open]");
+        if (!btn) return;
+        const cid = parseInt(btn.getAttribute("data-ab-open"), 10);
+        const slot = document.querySelector('[data-ab-ctl="' + cid + '"]');
+        if (!slot) return;
+        if (slot.innerHTML) { slot.innerHTML = ""; return; }   // toggle shut
+        slot.innerHTML = window.TGFRef
+            ? window.TGFRef.render({ customer_id: cid }, { compact: true, heading: "" })
+            : "";
+        if (window.TGFRef) window.TGFRef.ensurePeople();
+        const input = slot.querySelector("[data-refinput]");
+        if (input) input.focus();
+    });
+
+    // An answered person leaves the queue, so re-read it rather than
+    // guessing which rows are still open.
+    if (window.TGFRef) {
+        window.TGFRef.onSaved(function () { setTimeout(loadAttrBand, 800); });
+    }
+
     function renderLeads() {
         const leads = (ALL.leads || []).slice();
         // Per-ad-set breakdown moved off the queue header into 📊 Stats
@@ -1932,6 +2017,7 @@
         if (by || note) mark(id, "edit", by, note);
     }
     loadLeads();
+    loadAttrBand();
     </script>
 </body>
 </html>

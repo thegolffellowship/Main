@@ -4690,9 +4690,55 @@ def api_set_referred_by(customer_id):
         if "error" in r:
             return jsonify(r), 400
         out.update(r)
+        # Naming who brought someone is the moment they become a lead
+        # worth tracking (Kerry 2026-09-21, on Zac Hammond and Geoff
+        # Hightower: "they still show as leads to track in the Leads
+        # center"). Source `referral`, no campaign — Rick Billeaud's
+        # shape exactly, which keeps them out of Return on Ad Spend.
+        if rid is not None:
+            from email_parser.leads import ensure_referral_lead
+            made = ensure_referral_lead(
+                customer_id, referrer_name=r.get("referred_by_name") or "",
+                author=session.get("username") or "auto")
+            out["lead_created"] = bool(made.get("ok"))
+            if made.get("lead_id"):
+                out["lead_id"] = made["lead_id"]
     if not out:
         return jsonify({"error": "need referrer_customer_id or found_us_via"}), 400
     return jsonify({"status": "ok", **out})
+
+
+@app.route("/api/leads/attribute-queue")
+@require_role("manager")
+def api_attribute_queue():
+    """The same queue the dashboard card counts, for the Leads band.
+
+    One feed, two surfaces (Kerry 2026-09-21: "Add the band to the Leads
+    page too") — reusing the dashboard's function rather than writing a
+    second query means the band and the card can never disagree about
+    who is still waiting to be attributed.
+    """
+    from email_parser import database as db
+    from email_parser.dashboard import _first_timers_to_attribute
+    from email_parser.timezone_utils import now_central
+    today = now_central().strftime("%Y-%m-%d")
+    with db._connect() as conn:
+        card = _first_timers_to_attribute(conn, today)
+    return jsonify(card or {"count": 0, "items": []})
+
+
+@app.route("/api/customers/roster")
+@require_role("view-only")
+def api_customer_roster():
+    """{customer_id, customer_name} only — the attribution picker's roster.
+
+    Deliberately NOT /api/customers/names, which is an older endpoint
+    returning bare name strings off `items.customer`. The picker has to
+    resolve a typed name back to a customer_id (principle 6), and a list
+    of strings cannot do that.
+    """
+    from email_parser.database import get_customer_names
+    return jsonify(get_customer_names())
 
 
 @app.route("/api/customers/<int:customer_id>/pace", methods=["POST"])

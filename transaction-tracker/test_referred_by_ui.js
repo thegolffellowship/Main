@@ -1,43 +1,43 @@
 /**
- * The "Who brought them" control on the customer Info tab.
+ * The "Who brought them" control — /static/js/referral_control.js.
  *
  * Kerry 2026-09-21: "How am I supposed to attribute him to Justin
- * Angelone?" This exercises the page's REAL renderer and its real click
- * handler, because the previous thing shipped on this surface was a
- * dashboard that rendered fine and never ran its loader.
+ * Angelone?" This exercises the REAL shipped module, because the
+ * previous thing shipped on this surface was a dashboard that rendered
+ * fine and never ran its loader.
+ *
+ * The control is shared by three surfaces (customer Info tab, dashboard
+ * modal, Leads band), so this also checks each host actually loads it
+ * rather than keeping a private copy that can drift.
  */
 const fs = require("fs"), path = require("path");
 const FAIL = [];
 const check = (l, c, d) => { console.log((c ? "  PASS  " : "  FAIL  ") + l + (c ? "" : "  " + (d || ""))); if (!c) FAIL.push(l); };
 
-const html = fs.readFileSync(path.join(__dirname, "templates/customers.html"), "utf8");
-// Pull only the functions under test — the page script is ~5k lines and
-// drags in the whole app otherwise.
-const grab = name => {
-    const i = html.indexOf("function " + name + "(");
-    if (i < 0) throw new Error("not found: " + name);
-    let d = 0, started = false;
-    for (let j = i; j < html.length; j++) {
-        if (html[j] === "{") { d++; started = true; }
-        else if (html[j] === "}") { d--; if (started && d === 0) return html.slice(i, j + 1); }
-    }
-    throw new Error("unbalanced: " + name);
-};
-const consts = html.slice(html.indexOf("const FOUND_US_LABELS"),
-                          html.indexOf("function renderReferredByBlock"));
-const src = "function escapeHtml(s){return String(s==null?'':s).replace(/[&<>\"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',\"'\":'&#39;'}[c]));}\n"
-    + consts + grab("renderReferredByBlock") + "\n" + grab("refPeopleOptions") + "\n" + grab("refResolveName")
-    + "\nglobal.__R = { renderReferredByBlock, refPeopleOptions, refResolveName };";
-global.window = {};
-eval(src);
-const R = global.__R;
+const read = f => fs.readFileSync(path.join(__dirname, f), "utf8");
+const js = read("static/js/referral_control.js");
+const html = read("templates/customers.html");
+const dash = read("templates/dashboard.html");
+const leadsHtml = read("templates/leads.html");
 
-window.__custAll = [
+// The module registers document listeners at load; give it just enough
+// DOM to do that without a browser.
+global.window = {};
+global.document = { addEventListener() {} };
+require("./static/js/referral_control.js");
+const T = window.TGFRef;
+const R = {
+    renderReferredByBlock: c => T.render(c),
+    refPeopleOptions: id => T.peopleOptions(id),
+    refResolveName: (t, id) => T.resolveName(t, id),
+};
+
+T.setPeople([
     { customer_id: 829, customer_name: "Ty Bubela" },
     { customer_id: 709, customer_name: "Justin Angelone" },
     { customer_id: 31, customer_name: "Robert Straiton" },
     { customer_id: 999, customer_name: "" },
-];
+]);
 
 console.log("The block");
 let out = R.renderReferredByBlock({ customer_id: 829 });
@@ -78,13 +78,28 @@ check("you cannot resolve to yourself", R.refResolveName("Ty Bubela", 829) === n
 
 console.log("Wiring");
 check("the save handler posts to the referred-by endpoint",
-      /\/api\/customers\/\$\{cid\}\/referred-by/.test(html));
+      /"\/api\/customers\/" \+ cid \+ "\/referred-by"/.test(js));
 check("Save sends a customer_id, never a name string",
-      /referrer_customer_id: rid/.test(html));
-check("Clear sends nulls for BOTH answers", /referrer_customer_id: null, found_us_via: null/.test(html));
-check("the channel dropdown posts on change", /data-refvia/.test(html) && /found_us_via: ev\.target\.value \|\| null/.test(html));
-check("the people index is filled from the one canonical fetch",
-      /window\.__custAll = canonList/.test(html));
+      /referrer_customer_id: rid/.test(js));
+check("Clear sends nulls for BOTH answers", /referrer_customer_id: null, found_us_via: null/.test(js));
+check("the channel dropdown posts on change",
+      /data-refvia/.test(js) && /found_us_via: ev\.target\.value \|\| null/.test(js));
+
+console.log("One control, three surfaces");
+check("the customer Info tab loads the shared module", /referral_control\.js/.test(html));
+check("...and seeds the picker from the one canonical fetch it already does",
+      /TGFRef\.setPeople\(canonList/.test(html));
+check("the dashboard loads it", /referral_control\.js/.test(dash));
+check("the Leads page loads it", /referral_control\.js/.test(leadsHtml));
+check("no page keeps a private copy of the vocabulary",
+      !/const FOUND_US_LABELS/.test(html) && !/const FOUND_US_LABELS/.test(dash)
+      && !/const FOUND_US_LABELS/.test(leadsHtml));
+
+console.log("Re-rendering after a save (no regex over our own markup)");
+check("currentHtml is a function, not a scrape", typeof T.currentHtml === "function");
+check("...and renders the saved answer", T.currentHtml(
+      { referred_by_name: "Justin Angelone", referred_by_source: "member_claim" })
+      .includes("Justin Angelone"));
 
 console.log(FAIL.length ? `\n${FAIL.length} FAILURE(S): ${FAIL}` : "\nALL PASS");
 process.exit(FAIL.length ? 1 : 0);

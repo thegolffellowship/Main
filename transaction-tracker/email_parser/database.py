@@ -38683,6 +38683,27 @@ def set_referred_by(customer_id: int, referrer_customer_id: int | None,
             "cleared": referrer_customer_id is None}
 
 
+def get_customer_names(db_path: str | Path | None = None) -> list[dict]:
+    """Every customer as {customer_id, customer_name} and nothing else.
+
+    The attribution picker needs a roster, not records. /api/customers
+    returns the whole canonical customer set with emails and phones
+    attached, which is the right answer for the Customers page and a
+    third of a megabyte of the wrong one for a modal that only wants to
+    turn a typed name back into an id.
+    """
+    with _connect(db_path) as conn:
+        rows = conn.execute(
+            "SELECT customer_id, "
+            "  TRIM(COALESCE(first_name,'') || ' ' || COALESCE(last_name,'')) "
+            "    AS customer_name "
+            "FROM customers "
+            "WHERE TRIM(COALESCE(first_name,'') || COALESCE(last_name,'')) <> '' "
+            "ORDER BY customer_name").fetchall()
+    return [{"customer_id": r["customer_id"],
+             "customer_name": r["customer_name"]} for r in rows]
+
+
 def get_starting_handicaps(db_path: str | Path | None = None) -> dict:
     """{customer_id: {"index_18", "index_9", "set_at", "set_by", "note"}}."""
     with _connect(db_path) as conn:

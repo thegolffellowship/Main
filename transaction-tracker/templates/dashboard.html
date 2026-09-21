@@ -43,6 +43,14 @@
         .db-items li:last-child a { border-bottom:0; }
         .db-items li a:hover { background:#FCFCFA; }
         .db-items .meta { color:var(--muted,#6B7280); white-space:nowrap; font-size:.8rem; }
+        .db-modal-back { display:none; position:fixed; inset:0; background:rgba(17,24,39,.45);
+            align-items:flex-start; justify-content:center; z-index:900; padding:10vh 16px 16px; }
+        .db-modal { background:#fff; border-radius:10px; max-width:540px; width:100%;
+            box-shadow:0 12px 40px rgba(0,0,0,.2); padding:18px 20px 20px; }
+        .db-modal h3 { margin:0 0 2px; font-size:1.05rem; }
+        .db-modal .sub { color:var(--muted,#6B7280); font-size:.82rem; margin-bottom:12px; }
+        .db-modal-x { float:right; border:0; background:none; font-size:1.3rem; line-height:1;
+            cursor:pointer; color:var(--muted,#6B7280); }
         .db-more { padding:7px 16px; font-size:.8rem; color:var(--muted,#6B7280); }
         .db-clear { border:1px dashed var(--border,#E5E7EB); border-radius:10px; padding:28px;
                     text-align:center; color:var(--muted,#6B7280); }
@@ -77,9 +85,18 @@
         <div class="db-skip" id="db-skip" style="display:none;"></div>
     </main>
 
+    <div class="db-modal-back" id="db-modal">
+        <div class="db-modal">
+            <button type="button" class="db-modal-x" data-attr-close aria-label="Close">&times;</button>
+            <h3 id="db-modal-title"></h3>
+            <div class="sub">Who brought them? Saving also adds them to the Lead Center.</div>
+            <div id="db-modal-body"></div>
+        </div>
+    </div>
     <script src="/static/js/version.js"></script>
     <script src="/static/js/auth.js"></script>
     <script src="/static/js/shell.js"></script>
+    <script src="/static/js/referral_control.js?v={{ app_version }}"></script>
     <script>
     (function () {
         const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g,
@@ -90,8 +107,17 @@
 
         function cardHtml(c) {
             const items = (c.items || []).slice(0, PEEK).map(it =>
-                `<li><a href="${esc(it.href || c.href)}"><span>${esc(it.label)}</span>` +
-                `<span class="meta">${esc(it.meta || "")}</span></a></li>`).join("");
+                // Kerry 2026-09-21: "going to the customers board then
+                // clicking info then choosing is way too many steps."
+                // A row the dashboard can ANSWER opens the answer here;
+                // the ROUTER rule is amended, not ignored (see
+                // docs/claude/dashboard.md).
+                (it.attribute_cid
+                    ? `<li><a href="#" data-attr-cid="${esc(it.attribute_cid)}" ` +
+                      `data-attr-name="${esc(it.label)}"><span>${esc(it.label)}</span>` +
+                      `<span class="meta">${esc(it.meta || "")}</span></a></li>`
+                    : `<li><a href="${esc(it.href || c.href)}"><span>${esc(it.label)}</span>` +
+                      `<span class="meta">${esc(it.meta || "")}</span></a></li>`)).join("");
             const extra = (c.items || []).length - PEEK;
             return `<div class="db-card ${esc(c.tone || "info")}">` +
                 `<a class="top" href="${esc(c.href)}">` +
@@ -121,6 +147,49 @@
                 sk.style.display = "";
                 sk.textContent = "Could not load: " + d.skipped.map(s => s.feed).join(", ");
             } else { sk.style.display = "none"; }
+        }
+
+        // ── ANSWER IN PLACE ─────────────────────────────────────
+        // The modal is the whole point of the amendment: attribution is
+        // one click from the card instead of three navigations. It
+        // hosts the SHARED control, so what Kerry sees here and on the
+        // customer record cannot drift apart.
+        function openAttrModal(cid, name) {
+            const back = document.getElementById("db-modal");
+            const body = document.getElementById("db-modal-body");
+            document.getElementById("db-modal-title").textContent = name || ("Customer " + cid);
+            body.innerHTML = window.TGFRef
+                ? window.TGFRef.render({ customer_id: cid }, { compact: true })
+                : "<p>Attribution control failed to load.</p>";
+            back.style.display = "flex";
+            if (window.TGFRef) window.TGFRef.ensurePeople();
+            const input = body.querySelector("[data-refinput]");
+            if (input) input.focus();
+        }
+        function closeAttrModal() {
+            document.getElementById("db-modal").style.display = "none";
+        }
+        document.addEventListener("click", function (ev) {
+            const row = ev.target.closest && ev.target.closest("[data-attr-cid]");
+            if (row) {
+                ev.preventDefault();
+                openAttrModal(parseInt(row.getAttribute("data-attr-cid"), 10),
+                              row.getAttribute("data-attr-name"));
+                return;
+            }
+            if (ev.target.id === "db-modal" || ev.target.matches("[data-attr-close]")) {
+                closeAttrModal();
+            }
+        });
+        document.addEventListener("keydown", function (ev) {
+            if (ev.key === "Escape") closeAttrModal();
+        });
+        // Answering removes them from the queue, so the count behind the
+        // modal is stale the moment it saves. Reload once it closes.
+        if (window.TGFRef) {
+            window.TGFRef.onSaved(function () {
+                setTimeout(function () { closeAttrModal(); load(); }, 700);
+            });
         }
 
         async function load() {

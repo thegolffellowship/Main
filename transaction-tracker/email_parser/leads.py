@@ -2467,6 +2467,111 @@ def add_manual_lead(first_name: str, last_name: str = "", phone: str = "",
             "answers_missing": sorted(set(MANUAL_ANSWER_KEYS) - set(answers))}
 
 
+def ensure_referral_lead(customer_id: int, referrer_name: str = "",
+                         author: str = "", db_path: str | Path | None = None,
+                         ) -> dict:
+    """Give a referred customer a lead row, if they haven't got one.
+
+    Kerry 2026-09-21: "Zac Hammond and Geoff Hightower were random
+    guests, but they still show as leads to track in the Leads center."
+    They do — as manual leads, source `organic`, no campaign. Ty Bubela
+    did not, because he arrived as a paid registration and the lead
+    system never saw him. Naming who brought someone is the moment we
+    learn they belong in the funnel, so that is where the row gets made.
+
+    Source is `referral` and campaign_id stays NULL, which is exactly
+    what Rick Billeaud got when Logan brought him. That places them in
+    the ORGANIC bucket and keeps them out of Return on Ad Spend — Kerry
+    2026-09-10: people who "did not come thru the lead form" are not
+    ROAS. Whether a referral should instead earn its referrer's campaign
+    a residual is an open question (docs/claude/referral-attribution.md)
+    and deliberately NOT decided here.
+
+    Idempotent, and never touches a lead that already exists.
+    """
+    import re
+
+    from . import database as db
+    from .timezone_utils import now_central
+
+    with db._connect(db_path) as conn:
+        ensure_leads_table(conn)
+        cust = conn.execute(
+            "SELECT customer_id, first_name, last_name, phone, chapter "
+            "FROM customers WHERE customer_id = ?", (customer_id,)).fetchone()
+        if not cust:
+            return {"ok": False, "reason": f"customer {customer_id} not found"}
+
+        existing = conn.execute(
+            "SELECT id FROM leads WHERE customer_id = ? AND merged_into IS NULL",
+            (customer_id,)).fetchone()
+        if existing:
+            return {"ok": False, "reason": "already a lead",
+                    "lead_id": existing["id"]}
+
+        email = None
+        try:
+            row = conn.execute(
+                "SELECT email FROM customer_emails WHERE customer_id = ? "
+                "ORDER BY is_primary DESC, email_id LIMIT 1",
+                (customer_id,)).fetchone()
+            email = (row["email"] or "").strip() or None if row else None
+        except sqlite3.OperationalError:
+            pass
+        phone = (cust["phone"] or "").strip() or None
+
+        # The same contact reaching us twice is one person (principle 6),
+        # so an unlinked lead with their email or number gets adopted
+        # rather than duplicated.
+        dupe = None
+        if email:
+            dupe = conn.execute(
+                "SELECT id FROM leads WHERE LOWER(TRIM(COALESCE(email,''))) = ? "
+                "AND merged_into IS NULL", (email.lower(),)).fetchone()
+        if dupe is None and phone:
+            digits = re.sub(r"\D", "", phone)[-10:]
+            if digits:
+                for r in conn.execute(
+                        "SELECT id, phone FROM leads WHERE phone IS NOT NULL "
+                        "AND phone != '' AND merged_into IS NULL"):
+                    if re.sub(r"\D", "", r["phone"] or "")[-10:] == digits:
+                        dupe = r
+                        break
+        if dupe:
+            conn.execute("UPDATE leads SET customer_id = ? WHERE id = ?",
+                         (customer_id, dupe["id"]))
+            conn.commit()
+            return {"ok": False, "reason": "linked an existing lead",
+                    "lead_id": dupe["id"], "linked": True}
+
+        now = now_central()
+        payload = {}
+        if (referrer_name or "").strip():
+            payload["_referred_by"] = referrer_name.strip()
+        cur = conn.execute(
+            "INSERT INTO leads (source, external_id, first_name, last_name, "
+            " email, phone, chapter, source_label, arrived_at, status, "
+            " customer_id, payload) "
+            "VALUES ('referral',?,?,?,?,?,?,?,?, 'converted', ?, ?)",
+            (f"referral-cust-{customer_id}",
+             cust["first_name"], (cust["last_name"] or "").strip() or None,
+             email, phone, (cust["chapter"] or "").strip() or None,
+             MANUAL_LEAD_SOURCES["referral"],
+             now.strftime("%Y-%m-%d %H:%M:%S"), customer_id,
+             json.dumps(payload)))
+        lead_id = cur.lastrowid
+        why = (f"referred by {referrer_name.strip()}"
+               if (referrer_name or "").strip() else "recorded as a referral")
+        conn.execute(
+            "INSERT INTO lead_notes (lead_id, author, note) VALUES (?,?,?)",
+            (lead_id, (author or "auto").strip()[:12],
+             f"Added from the attribution control ({why}) "
+             f"{now.strftime('%-m/%-d, %-I:%M %p')}"))
+        conn.commit()
+    return {"ok": True, "lead_id": lead_id, "source": "referral",
+            "campaign_id": None}
+
+
 def set_lead_answers(lead_id: int, answers: dict | None = None,
                      city: str | None = None, chapter: str | None = None,
                      author: str = "", db_path: str | Path | None = None,
