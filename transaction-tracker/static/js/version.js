@@ -1,16 +1,24 @@
-window.TGF_VERSION = "2.469.2";
+window.TGF_VERSION = "2.469.3";
 window.TGF_CHANGELOG = [
   {
-    version: "2.469.2",
+    version: "2.469.3",
     date: "2026-09-21",
     changes: [
       "Docs only: the flighting handoff carries the LIVE dry run \u2014 Landa Park's Individual Net reproduces what Golf Genius paid to the cent ($394, both tie pools), the Skins-cut finding (GG cut Skins by equal halves on both completed 18s, not at 12.0 as #572 states \u2014 the board cuts at 12.0 forward-only and the digest asks Kerry which GG runs at Brackenridge), Brackenridge's empty tee legend (no PH on either the starter sheet or the tab \u2014 the course record), and the open items: the freeze button, the snapshot schema, 1/10/20 on Net, the P2-6 closeout comparison that follows the schema.",
     ],
   },
   {
+    version: "2.469.2",
+    date: "2026-09-21",
+    changes: [
+      "Docs only: docs/claude/referral-attribution.md — the #413/#416 referral model written up against a real case (Kerry: 'Ty Bubela signed up on his own, but he is a referral from lead member convert Justin Angelone'). Finding: customers.referred_by_customer_id today means 'I paid for this person's spot' and is written from one place only, so no surface can record that Justin brought Ty. Proposal: widen the field to 'who brought them' with referred_by_source for provenance and found_us_via for 'not a referral', leaving referral_fees and acquisition_source untouched; plus a 1st-Timer guesser over seven ranked signals that writes nothing and confirms everything. UNRATIFIED — rule 3b.",
+    ],
+  },
+  {
     version: "2.469.1",
     date: "2026-09-21",
     changes: [
+      "`scoring-hcp-round-retag`: a miss answers with the course names actually stored on that date (`courses_on_date`), matching ignores spacing and case, and `*` as the from-course takes every row on the date. The first live run found 0 rows for 'Hill Country | Lakes' because the stored spelling differs from what the page prints.",
       "Docs only: `docs/claude/handoff-2026-09-21-flighting.md` \u2014 the FLIGHTING lane record: what shipped in v2.469.0 and where it is guarded, how the #571\u2013#582 rulings were read (the assumptions on the record: B4 pot + 1/10/20 places are Individual Gross; Skins unaffected; Individual Net on the matrix columns), the rule-3b freeze schema PROPOSED in mailbox #584 and not built, the first dry-run findings (Cedar Creek's 4/4 skins cut vs the 5/3 ladder; Landa Park's 48/36/36 vs the ratified 43.20/36/28.80 + $12 Overall Low Gross), how to verify with `scoring-flights-board:<event_id>`, and what is open for Kerry (the freeze button question).",
     ],
   },

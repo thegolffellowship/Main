@@ -72,6 +72,9 @@ with db._connect(DB) as conn:
 check("applied: course, slope and differential follow; rating and tee stay", k["course_name"] == "Hill Country | Oaks" and k["slope"] == 131
       and k["differential"] == 5.4 and k["rating"] == 35.7 and k["tee_name"] == "1 - Blue", k)
 check("another date is untouched", other["course_name"].startswith("Silverhorn") and other["slope"] == 125)
+miss = db.retag_handicap_rounds("2026-06-09", "Hill Country | Lakes", "Hill Country | Oaks", 131, apply=False, db_path=DB)
+check("a miss answers with the course names actually stored on that date", miss["rows"] == 0 and miss["courses_on_date"] == ["Silverhorn Golf Club Of Texas - Front"], miss)
+check("matching ignores spacing and case", db.retag_handicap_rounds("2026-06-09", "silverhorn golf club of texas  -  front", "X", 125, apply=False, db_path=DB)["rows"] == 1)
 try: os.unlink(DB)
 except OSError: pass
 print("\n" + ("ALL PASS" if not F else f"{len(F)} FAILURE(S): " + "; ".join(F)))

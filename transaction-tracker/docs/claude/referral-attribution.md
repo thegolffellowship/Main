@@ -1,0 +1,105 @@
+# Who brought this player — referral attribution (PROPOSAL, 2026-09-21)
+
+Kerry, on Ty Bubela: *"How can I add a customer/transaction as a sub-lead
+from a lead player? Ty Bubela signed up on his own, but he is a referral
+from lead member convert Justin Angelone. And how could we have something
+automated for 1st Timers to guess at it and have confirmation for tagging
+correctly. Could be a referral, could be someone that found via another
+means, but would be good to track."*
+
+This is the #413/#416 referral model, deferred twice, now with a concrete
+case. **Nothing below is built. Rule 3b — schema + member-facing data.**
+
+## 1. What exists today
+
+| Fact | Where it lives | Who writes it |
+|---|---|---|
+| Who brought them | `customers.referred_by_customer_id` + `referred_at` | `set_referred_by()`, called from ONE place: assigning a guest off a member's purchase |
+| Referral FEE owed/paid | `referral_fees` (coupon \| receipt \| manual) | coupon scan, receipt scan, `scoring-referral-add` |
+| Channel they arrived through | `customers.acquisition_source` | parser (`godaddy`, etc.) |
+| Who they asked to play with | `items.partner_request` | order form |
+| Referrer named on a manual lead | `leads.payload._referred_by` (TEXT) | Add Lead form |
+
+**The collision.** `referred_by_customer_id` today means *"I paid for this
+person's spot."* Kerry means *"this person brought them to TGF."* Justin
+did not pay for Ty, so writing it today would be a false sentence. That is
+why `add_lead` deliberately parks its Referred-by in `payload` as text
+(leads.py ~2409) instead of on the customer.
+
+Consequence: **there is no way, in any surface, to record that Justin
+brought Ty.** Ty's `referred_by_customer_id` is NULL and there is no
+control that would set it.
+
+## 2. Proposal — widen the field, record the provenance
+
+One fact, one field. `referred_by_customer_id` becomes *who brought this
+player*, and a new sibling column says **how we know**:
+
+```
+customers.referred_by_source  TEXT   -- bought_spot | coupon | partner_request
+                                     -- | lead_form | member_claim | kerry
+customers.referred_by_note    TEXT   -- free text, Kerry's words
+```
+
+- The paid-spot case keeps working; it just stamps `bought_spot`.
+- `referral_fees` is untouched. **Recording a relationship still never
+  mints a liability** — the ratified rule from 2026-07-30 holds.
+- `acquisition_source` is untouched. Channel and person are independent
+  facts; a transaction can be both (Kerry, 2026-07-30).
+- `leads.payload._referred_by` gets resolved to a customer_id on
+  conversion and stops being a dead-end string.
+
+Also needed, because "not a referral" is a real answer Kerry named:
+
+```
+customers.found_us_via  TEXT  -- referral | facebook_ad | instagram | search
+                              -- | drove_by | event_flyer | other | unknown
+```
+
+## 3. Proposal — the 1st Timer guesser
+
+Trigger: a registration whose `user_status` is `1st TIMER`, or any
+customer's first purchase. Produce ONE ranked candidate list; write
+nothing.
+
+| # | Signal | Strength |
+|---|---|---|
+| 1 | Guest item on another customer's order | certain — already auto-derived |
+| 2 | `coupon_code` = `tgf-referral-<name>` | certain — already parsed |
+| 3 | The first timer's `partner_request` names a member | strong |
+| 4 | A member's `partner_request` on the same event names the first timer | strong |
+| 5 | Lead record's `_referred_by`, or the survey's "How did you find out about TGF?" | strong |
+| 6 | Shared surname + address/zip with an existing customer (family) | strong — would have caught Duncan Fieber as Scott's son |
+| 7 | Same event, same zip / same fellowship group | weak — offers a pick list, never auto-fills |
+
+**Confirmation, never auto-write.** A card per unattributed first timer
+with three possible answers, matching Kerry's own framing:
+
+1. a **person** (tap the guessed name, or search),
+2. a **channel** (found us another way → `found_us_via`),
+3. **unknown** (parked, re-offered next time, never nagged twice).
+
+Kerry's words, so the UI cannot silently guess wrong: *"Could be a
+referral, could be someone that found via another means, but would be good
+to track."*
+
+**Where the card lives:** the Leads page, as an `UNATTRIBUTED FIRST
+TIMERS` band under the funnel stages (v2.371.0 gave that page the stage
+model already), plus a line in the event closeout where Kerry already
+reviews first-timers by name for the Insider.
+
+## 4. What it unlocks
+
+- Member-sourced growth becomes a number next to ad-sourced growth. Today
+  the Lead Center's ORGANIC view is a shrug; this names the member.
+- The referral FEE program gets a candidate feed instead of waiting for a
+  coupon nobody redeemed (`#413`: the word-of-mouth referral Kerry knows
+  about but never saw a coupon for).
+- Ambassadors: `customers.ambassador` exists and is unused. Who brings
+  people is the input that column was waiting for.
+
+## 5. Pending, not lost
+
+**Ty Bubela (cid 829) was referred by Justin Angelone (cid 709)** —
+Kerry, 2026-09-21. Held here rather than written, because today's field
+would assert Justin paid for Ty's spot. Goes in the moment §2 is ratified.
