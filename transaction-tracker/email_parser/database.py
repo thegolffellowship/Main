@@ -58793,7 +58793,7 @@ def _event_team_unit(n_players: int, holes_key: str, db_path=None) -> tuple[str,
     return ("cart" if n_players < 16 else "group"), team_type
 
 
-def team_handicaps_for_groups(groups: list, allowance: float, unit: str) -> None:
+def team_handicaps_for_groups(groups: list, allowance: float, unit: str) -> dict:
     """Set `team_handicap` on every player who has `course_handicap_raw`
     (v2.464.16). The allowance is applied to the UNROUNDED course handicap
     and rounded ONCE (WHS: "rounding is performed only once and as the
@@ -58812,7 +58812,7 @@ def team_handicaps_for_groups(groups: list, allowance: float, unit: str) -> None
             p["team_allowed"] = _wr(p["course_handicap_raw"] * allowance)
             allowed.append(p["team_allowed"])
     if not allowed:
-        return
+        return {"low": 0, "lowest": [], "applied": False}
     # OFF THE LOWEST never RAISES anyone (Kerry 2026-09-22 Brackenridge:
     # "Some are higher than the PH. That can't be with a 75% application
     # for Team One Ball"). With a plus player in the field the lowest is
@@ -58825,6 +58825,12 @@ def team_handicaps_for_groups(groups: list, allowance: float, unit: str) -> None
         for p in g["players"]:
             if p.get("team_allowed") is not None:
                 p["team_handicap"] = p["team_allowed"] - low
+    # Who the field's lowest is, so the sheet can SAY so (Kerry 2026-09-21:
+    # "Need to make a more visible note to the field to explain that.
+    # Maybe a red asterisk next to each team handicap").
+    lowest = sorted({p.get("name") or "" for g in groups for p in g["players"]
+                     if p.get("team_allowed") is not None and p["team_allowed"] == min(allowed)})
+    return {"low": low, "lowest": [n for n in lowest if n], "applied": low > 0}
 
 
 def event_team_net_dial(conn, ev: dict) -> tuple[int, float, str]:
@@ -60523,7 +60529,7 @@ def get_event_print_pack(event_id: int, db_path=None) -> dict | None:
                       f"of the course handicap (rounded once), off the lowest in the field")
     elif _pct is None:
         team_basis = team_basis + " (dial fallback — no ruled allowance for this size)"
-    team_handicaps_for_groups(groups, team_allowance, team_unit)
+    team_off_lowest = team_handicaps_for_groups(groups, team_allowance, team_unit)
 
     # ALPHA LIST (Kerry 2026-09-08): the starter's other job is answering
     # "where am I?" for a player who walks up knowing only their own
@@ -60597,6 +60603,7 @@ def get_event_print_pack(event_id: int, db_path=None) -> dict | None:
         "ph_basis": ph_basis,
         "ph_note": ph_note if _bands_short else "",
         "team_basis": team_basis,
+        "team_off_lowest": team_off_lowest,
         "team_balls": team_balls,
         "team_unit": team_unit,
         "team_allowance": team_allowance,
@@ -63551,13 +63558,23 @@ def _event_rsvp_only_players(conn, event_id: int) -> list[dict]:
                     # isn't he showing that on his pairing even though he's
                     # only an RSVP?"). The row was hard-coded None.
                     roles["pace_rating"] = crow["pace_rating"]
+                # A CUSTOMER's tee is on file (Kerry 2026-09-21: "Jeff Young
+                # should have his info in there because he's a customer"):
+                # the last tee he registered with stands until the roster
+                # says otherwise, so his PH and team handicap print.
+                _tee = conn.execute(
+                    """SELECT tee_choice FROM items
+                        WHERE customer_id = ? AND tee_choice IS NOT NULL AND TRIM(tee_choice) != ''
+                        ORDER BY order_date DESC, id DESC LIMIT 1""", (cid,)).fetchone()
+                if _tee and _tee["tee_choice"]:
+                    roles["tee_choice"] = _tee["tee_choice"]
             except sqlite3.OperationalError:
                 cps = None
         received = r.get("received_at") or None
         out.append({
             "name": name, "customer": name,
             "customer_id": cid, "customer_email": email or None,
-            "holes": "", "tee_choice": None, "user_status": "",
+            "holes": "", "tee_choice": roles.get("tee_choice"), "user_status": "",
             "current_player_status": cps, "pace_rating": roles.get("pace_rating"),
             "partner_request": None, "id": None,
             # An RSVP is a signup: its arrival time is its place in the

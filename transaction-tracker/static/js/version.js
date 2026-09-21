@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.476.1";
+window.TGF_VERSION = "2.476.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.476.2",
+    date: "2026-09-21",
+    changes: [
+      "Starter sheet: when OFF THE LOWEST took strokes off the field, every CART / TEAM cell prints the allowance figure, a slash, then the number actually played IN RED, and a red footnote explains it (Kerry 2026-09-21: \u2018show the pre-off-lowest number, the 75%, then a / and the adjusted off-lowest in red with an explanation\u2019). The pack email prints the same form. A field whose lowest is a plus player (nothing subtracted) prints the single number. `team_handicaps_for_groups` now reports the low, the names and whether it applied.",
+      "An RSVP-only player who is a customer plays off the last tee he registered with (Kerry 2026-09-21: \u2018Jeff Young should have his info in there because he's a customer\u2019) \u2014 so his PH and team handicap print instead of dashes. The roster's own tee still wins when one is set; a first-timer with no history stays blank until his tee is chosen.",
+    ],
+  },
   {
     version: "2.476.1",
     date: "2026-09-21",

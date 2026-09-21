@@ -92,6 +92,16 @@ check("the plus player keeps his plus (it comes off the round, per the plus rule
 _groups2 = [{"players": [{"name": "A", "course_handicap_raw": 4.0}, {"name": "B", "course_handicap_raw": 12.0}]}]
 db.team_handicaps_for_groups(_groups2, 0.75, "group")
 check("a positive lowest is still subtracted as before", [p["team_handicap"] for p in _groups2[0]["players"]] == [0, 6])
+_r2 = db.team_handicaps_for_groups(_groups2, 0.75, "group")
+check("the engine reports WHO the lowest is and how many strokes came off, so the sheet can say so (Kerry: 'a red asterisk next to each team handicap')",
+      _r2 == {"low": 3, "lowest": ["A"], "applied": True}, _r2)
+_r3 = db.team_handicaps_for_groups(_groups, 0.75, "group")
+check("…and reports nothing applied when the lowest is a plus player (floored at zero)", _r3["applied"] is False and _r3["low"] == 0, _r3)
+_ss = open("templates/starter_sheet.html").read()
+check("the sheet prints allowance / adjusted-in-red on every team handicap and explains it when off-the-lowest applied (Kerry: 'the 75%, then a / and the adjusted off-lowest in red with an explanation')",
+      '{{ a.team_allowed }} / <span class="tadj">{{ a.team_handicap }}</span>' in _ss and 'class="fnote offlow"' in _ss
+      and "the number in red is the one you play" in _ss)
+check("…and prints the single number when nothing was subtracted", "{% else %}{{ a.team_handicap }}{% endif %}{% else %}&mdash;" in _ss)
 
 print("\n" + ("ALL PASS" if not F else f"{len(F)} FAILURE(S): " + "; ".join(F)))
 sys.exit(1 if F else 0)

@@ -267,6 +267,15 @@ def print_pack_email_body(built: dict) -> str:
     groups = pack.get("groups") or []
     if groups:
         rows = []
+        _offlow = bool((pack.get("team_off_lowest") or {}).get("applied"))
+
+        def _team_cell(pl):
+            if pl.get("team_handicap") is None:
+                return "—"
+            if _offlow:
+                return (f'{_fmt_num(pl.get("team_allowed"))} / '
+                        f'<span style="color:#B91C1C;font-weight:700;">{_fmt_num(pl.get("team_handicap"))}</span>')
+            return _fmt_num(pl.get("team_handicap"))
         for g in groups:
             label = g.get("start_line") or g.get("hole_label") or g.get("slot_label") or ""
             names = []
@@ -282,7 +291,7 @@ def print_pack_email_body(built: dict) -> str:
                     f'<div style="padding:0 0 5px;"><strong>{_esc(pl.get("name"))}</strong>{badges}'
                     f'<br><span style="color:#6B7280;font-size:12px;">'
                     f'{_esc(pl.get("tee_choice") or "")} · idx {_fmt_num(pl.get("handicap_index_display", pl.get("handicap_index")))}'
-                    f' · PH {_fmt_num(pl.get("playing_handicap"))} · {unit} {_fmt_num(pl.get("team_handicap"))}</span></div>')
+                    f' · PH {_fmt_num(pl.get("playing_handicap"))} · {unit} {_team_cell(pl)}</span></div>')
             for b in g.get("blinds") or []:
                 names.append(f'<div style="color:#6B7280;font-style:italic;">BLIND · {_esc(b.get("name"))}</div>')
             rows.append(f'<tr><td style="padding:8px 12px 8px 0;vertical-align:top;white-space:nowrap;border-top:1px solid #E5E7EB;">'
@@ -295,6 +304,11 @@ def print_pack_email_body(built: dict) -> str:
              + (f" ({_esc(pack['ph_basis'])})" if pack.get("ph_basis") else "")]
     if pack.get("team_basis"):
         notes.append(f"<strong>{unit}</strong> {_esc(pack['team_basis'])}")
+    _ol = pack.get("team_off_lowest") or {}
+    if _ol.get("applied"):
+        notes.append(f'<span style="color:#B91C1C;font-weight:600;">{unit} prints as allowance / OFF THE LOWEST — the number in red '
+                     f'is the one you play: {_ol["low"]} stroke{"" if _ol["low"] == 1 else "s"} less, because the field\'s lowest '
+                     f'({_esc(", ".join(_ol.get("lowest") or []))}) plays at 0 and everyone else plays off them.</span>')
     if pack.get("ph_note"):
         notes.append(f'<span style="color:#B45309;">{_esc(pack["ph_note"])}</span>')
     out.append('<p style="margin:0 0 1em;font-size:12px;color:#6B7280;">' + "<br>".join(notes) + "</p>")

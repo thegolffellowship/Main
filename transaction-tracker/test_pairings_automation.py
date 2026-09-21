@@ -85,6 +85,13 @@ jy = rows.get("Jeff Young")
 check("an RSVP-only player is on the roster", jy is not None and jy.get("rsvp_only"), list(rows)[:3])
 check("…and carries the pace rating from his customer profile (was hard-coded None)", jy is not None and jy.get("pace_rating") == 3, jy)
 check("an order-row player carries it too (same fact, same path)", rows["P1 Test9201"].get("pace_rating") == 3)
+with db._connect(DB) as conn:
+    conn.execute("INSERT INTO items (customer, customer_id, item_name, event_id, holes, tee_choice, transaction_status, order_date, order_id, email_uid, merchant) VALUES ('Jeff Young', 800999, 's9.20 Earlier', NULL, '9', '50-64', 'active', '2026-08-01', 'R-jy-old', 'manual-jy-old', 'GoDaddy')")
+    conn.execute("INSERT INTO items (customer, customer_id, item_name, event_id, holes, tee_choice, transaction_status, order_date, order_id, email_uid, merchant) VALUES ('Jeff Young', 800999, 's9.22 Later', NULL, '9', '<50', 'active', '2026-09-08', 'R-jy-new', 'manual-jy-new', 'GoDaddy')")
+    conn.commit()
+    rows = {r["name"]: r for r in db._event_roster_rows(conn, 9201)}
+check("…and the customer's LAST tee on file (Kerry: 'Jeff Young should have his info in there because he's a customer')",
+      rows["Jeff Young"].get("tee_choice") == "<50", rows["Jeff Young"].get("tee_choice"))
 try: os.unlink(DB)
 except OSError: pass
 print("\n" + ("ALL PASS" if not F else f"{len(F)} FAILURE(S): " + "; ".join(F)))
