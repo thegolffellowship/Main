@@ -1,5 +1,1230 @@
-window.TGF_VERSION = "2.398.1";
+window.TGF_VERSION = "2.469.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.469.1",
+    date: "2026-09-21",
+    changes: [
+      "Docs only: `docs/claude/handoff-2026-09-21-flighting.md` \u2014 the FLIGHTING lane record: what shipped in v2.469.0 and where it is guarded, how the #571\u2013#582 rulings were read (the assumptions on the record: B4 pot + 1/10/20 places are Individual Gross; Skins unaffected; Individual Net on the matrix columns), the rule-3b freeze schema PROPOSED in mailbox #584 and not built, the first dry-run findings (Cedar Creek's 4/4 skins cut vs the 5/3 ladder; Landa Park's 48/36/36 vs the ratified 43.20/36/28.80 + $12 Overall Low Gross), how to verify with `scoring-flights-board:<event_id>`, and what is open for Kerry (the freeze button question).",
+    ],
+  },
+  {
+    version: "2.469.0",
+    date: "2026-09-21",
+    changes: [
+      "DIVISIONS / FLIGHTS tab under every event (Kerry 2026-09-21, mailbox #582: \u2018need to see the divisions/flights breakdown\u2019). The RATIFIED flighting and payout rule set (#571\u2013#575 as revised by #581/#582) now lives as data in `email_parser/flighting.py` \u2014 ladders <6.0 / 6.0\u201311.9 / 12.0+ (four flights add 12.0\u201317.9 / 18.0+), exclusive upper bounds so 12.0 goes UP and cut lines never move; NO minimum flight size and NO merging (a flight of one simply is that size; an empty band is still a numbered flight); places by FLIGHT size (1\u20139 one place, 10\u201319 two at 2/3\u20131/3, 20+ three at 50/30/20, ties pool and split to the cent); the Individual Gross pot as 10% off the top to OVERALL LOW GROSS plus 90% by headcount ($7.20 / $3.60 a head); flight labels derived from actual membership (P2-6). Skins keeps the matrix pot split equally per flight; Individual Net keeps the equal-size cut under 12.0 and the matrix place columns.",
+      "Two layers, as B5 requires: `build()` produces SELECTION (which games run incl. every matrix game-selection threshold, flight count, band edges, each player's flight \u2014 the layer that FREEZES) and AMOUNTS (pots, places, bonus \u2014 the layer that RECOMPUTES); `settle()` keeps a frozen selection, places a late add by the frozen edges, drops a credited WD from the headcount, recomputes the money and reports the delta per flight. The tab shows both, per game, with each member's IDX (locked as-of) and PH (the starter sheet's own number), an empty band greyed, the unflighted apart, and beside each game what Golf Genius RECORDED with rule \u2212 GG \u2014 so a published-vs-paid question answers itself. State reads LIVE; FROZEN / SETTLED wait on the snapshot schema proposed in #584 (rule 3b). DRY RUN: nothing here pays anyone; Golf Genius stays the payer of record.",
+      "`GET /api/events/<id>/flights-board` (manager+) and bridge `scoring-flights-board:<event_id>`; the printed Divisions & Flights page is now a VIEW of the same board (one computation per fact) and its footer states the no-merge rule. `SEED_FLIGHT_CONFIG.min_flight_size` is 0 by ruling \u2014 the Flighting Lab dial remains to show what merging would do. Guards: `test_flighting.py` (every #572/#573 worked example by number, Landa Park 6/5/4, Cedar Creek's T1\u00d73, 300 random fields to the cent) and `test_flights_board.py` (roster \u2192 rules \u2192 route \u2192 bridge).",
+    ],
+  },
+  {
+    version: "2.468.6",
+    date: "2026-09-21",
+    changes: [
+      "Customers snapshot: ACTIVE members (Kerry 2026-09-21: \u2018counts of number (per chapter) of who's played in the last 60 days, and a percentage\u2019). The MEMBERS card shows the active count and share overall and per chapter. Played = an active registration for an event whose date has passed (cancelled events and credited rows do not count), a posted scoring round, or a handicap round through the player link \u2014 keyed by customer_id. The window is the `members_active_days` dial (60). `GET /api/customers/activity[?days=]`, PII-free. Guard: `test_members_active.py`.",
+      "Auto-pairings dial carries a LEAD per weekday (Kerry: \u2018Add sat to the auto-pairings dial too, but make it for Thursday nights at 5:00p\u2019): `pairings_auto_weekdays` = `tue:1,sat:2` by default \u2014 Tuesday nights pair Monday 5 PM, Saturday 18s pair Thursday 5 PM. Friday's run leaves Saturday alone.",
+      "Two data bridges for the s9.14 Hill Country night (Kerry: \u2018We played the Oaks 9 that night. And even though GG may have shown 10-18, each 9 is just 1-9, same as Comanche Trace's 27 holes\u2019): `scoring-hcp-round-retag:<date>;<from>;<to>;<slope>[;<rating>][;apply]` re-tags every handicap round posted on a date under the wrong course and recomputes the differential from the row's own adjusted score; `scoring-course-renine:<course_id>[|apply]` moves a named nine's tee holes and its rounds' holes down from 10\u201318 to 1\u20139 and refuses a course record that carries an 18-hole tee (a real back nine is 10\u201318). Both dry-run by default. Guard: `test_nine_numbering.py`.",
+    ],
+  },
+  {
+    version: "2.468.5",
+    date: "2026-09-21",
+    changes: [
+      "Pairings auto-generate the day before (Kerry 2026-09-21: \u2018Generate Pairings automatically at 5:00p on Mondays for Tuesday events. Only if they aren't run already.\u2019): a 5:00 PM Central routine runs the generator the way the Generate button does by default (Random, partner requests honoured, history on) for every active event dated tomorrow on the dialled weekdays and SAVES the sheet \u2014 an event already paired is left exactly as it is. The weekdays are a dial (`pairings_auto_weekdays`, default `tue`; add `sat` to cover the 18s without code). Both chapters (rule 3d). Logged to the agent action log. Guard: `test_pairings_automation.py`.",
+      "An RSVP-only player carries the pace rating from his customer profile on the pairings card (Kerry: \u2018Jeff Young is a 3 for pace of play on his customer profile. Why isn't he showing that on his pairing even though he's only an RSVP?\u2019). `_event_rsvp_only_players` hard-coded it None while reading the other profile facts from the same row.",
+      "Print pack goes out the MORNING OF, not the evening before (Kerry: \u2018probably shouldn't be sent until 6:00a day of\u2019): the routine checks at 6:05, 7:05, 8:05 and 9:05 AM Central for events dated today; the first check sends, the later ones re-send only a sheet that changed. Why the old note said \u20185\u201310 PM\u2019: the routine was an hourly check in that window, so the pack arrived at the first check (about 5:05 PM), and the rest of the window existed to catch a sheet edited later that evening.",
+      "SEND PACK button on the pairings toolbar (beside Starter Sheet and Cart Signs, on a saved sheet): mails the bound pack now, records the hash so the morning routine leaves that sheet alone. `POST /api/events/<id>/print-pack/send`.",
+    ],
+  },
+  {
+    version: "2.468.4",
+    date: "2026-09-21",
+    changes: [
+      "Print pack mail body: each player's numbers sit on their own line under the name and groups are ruled apart — at phone width the one-line row wrapped mid-number.",
+    ],
+  },
+  {
+    version: "2.468.3",
+    date: "2026-09-21",
+    changes: [
+      "Print pack email carries the sheet's essentials in the BODY (Kerry 2026-09-21: \u2018Yes, build the email body for the next pack\u2019): the first tee, every group with its players \u2014 tee, index, PH, CART/TEAM handicap, 1T/NEW badges \u2014 the blinds, and the legend notes, so the night reads on a phone without opening the PDF. The PDF is unchanged and stays the thing to print. `print_pack_email_body`; the build result now carries the starter-sheet `pack`.",
+    ],
+  },
+  {
+    version: "2.468.2",
+    date: "2026-09-21",
+    changes: [
+      "Add Player modal follows the EVENT (Kerry 2026-09-21: \u2018responsive to what is actually available based on the event, rather than a standard list of selections that make me choose\u2019). `GET /api/events/<id>/add-player-options` derives HOLES from the event's format and packages (a nine offers 9, an 18 offers 18, a combo both, a championship adds its 36/54), SIDE GAMES from the vocabulary its roster actually carries (what the order form offered) plus None, and TEES from the course record's designated bands with their tee names \u2014 the starter sheet's own legend. A single option is preselected, an answer rather than a choice; the static lists stay as the fallback when the fetch fails; a package's hole count is added to the list rather than dropped; the person's last tee on file prefills an empty tee when the course offers that band (status already prefilled). Handicap is deliberately not prefilled \u2014 items.handicap is a snapshot, the index lives in handicap_rounds. Guards: `test_add_player_options.py`, `test_add_player_options.js`.",
+      "Starter sheet footer carries a printed-at stamp (Central time) so two copies in hand on the day tell which is current. The print pack's once-per-change hash strips it \u2014 a clock is never a change, so the evening routine does not re-mail an unchanged sheet.",
+    ],
+  },
+  {
+    version: "2.468.1",
+    date: "2026-09-21",
+    changes: [
+      "Docs only: the v2.468.0 count corrected from the live record (7 twins filled, 6 combos waiting, not 9 / 4); handoff \u00a73p. Live finding worth Kerry\u2019s eye: with Forest Creek\u2019s women\u2019s Green now carrying 5542 yards, the yardage standard proposes Green (F) for Forward rather than Red (F) at 4780 \u2014 the record keeps Kerry\u2019s Red designation until he says otherwise.",
+    ],
+  },
+  {
+    version: "2.468.0",
+    date: "2026-09-21",
+    changes: [
+      "THE YARDAGES WE HAVE (Kerry 2026-09-21). Yardage belongs to the physical tee, not to the rating: `_heal_tee_yardages` runs on boot and after every card import, nine store and CRDB seed, writing only NULLs \u2014 a set\u2019s total from its hole rows; a set with none from the same course\u2019s set of the same master name rated for the other gender (Kissing Tree \u2018Back\u2019 F is the box GG calls \u20181 - Black Tee\u2019, 6484); and a new `tee_set_ratings.yardage` per rating row (the 18, the front nine, the back nine \u2014 from holes 1\u20139 / 10\u201318 or the Tuesday nine-hole sibling). Combo sets have no plain twin and wait for the CRDB numbers: the seed shape takes an optional 8th element [y18, yf, yb] per set, written onto the set and its three rating rows. `get_courses` publishes the rating-row yardage. Live effect: every imported / carded set already had yardage; 7 of the 13 CRDB-only sets take it from their twin, the 6 Kissing Tree combos stay empty and hidden.",
+    ],
+  },
+  {
+    version: "2.467.1",
+    date: "2026-09-20",
+    changes: [
+      "Two-nines dedupe no longer keys on the tee\u2019s printed name. `derive_18hole_rounds_as_two_nines` recognised an already-posted nine by matching `handicap_rounds.tee_name` text (\u20181 - White Tee \u2014 Front 9\u2019); after v2.467.0 the label reads \u2018White \u2014 Front 9\u2019 and the live dry run for s18.11 Cedar Creek showed all 30 nines as unposted (0 skipped). Nothing was written \u2014 that path only runs by hand \u2014 but an |apply would have double-posted the field. Already-posted is now player + day + course + NINE, whatever the label says.",
+      "`scoring-tee-bands` Forward proposal: a course whose women\u2019s sets are all under the 4800 floor (Forest Creek Red F 4780) is reported UNPLACED with the nearest women\u2019s sets, never handed a men\u2019s set; the men\u2019s fallback is only for a course that rates no women\u2019s tee at all (Brackenridge).",
+    ],
+  },
+  {
+    version: "2.467.0",
+    date: "2026-09-20",
+    changes: [
+      "TGF TEE DESIGNATION (Kerry 2026-09-20: \u2018Master name is what USGA/course call it. GG should just be an alias. \u2026 there\u2019s never more than four sets of tees that we use on a course. The rest can and should be hidden.\u2019). Three columns on the tee set: `tee_name` is now the MASTER name every member-facing surface prints (\u2018White\u2019, \u2018Red\u2019, the CRDB\u2019s \u2018KT\u2019); `gg_alias` keeps Golf Genius\u2019s name (\u20183 - Red (L) Tee\u2019) for admin / GG coordination only; `tgf_bands` says which band(s) play the set (<50 / 50-64 / 65+ / Forward, or hidden). The number Kerry typed in front of a GG tee name was a designation, not a name \u2014 the boot step reads it (1/2/3/4, \u201823\u2019 for one tee serving both older bands, 0 for the tips, a women\u2019s 3 is Forward), moves the GG name to the alias and sets the master + bands, once per row; every existing course comes through already designated.",
+      "Selection is a RULE as data: `tee_yardage_standards` (Kerry verbatim: <50 6300\u20136799, 50\u201364 5800\u20136299, 65+ 5300\u20135799, Women = shortest tee not under 4800; combo tees last resort). `scoring-tee-bands:<course_id>` proposes the four for any course (a new course = one CRDB seed, one proposal, one apply); `scoring-tee-bands-set:<tee_id>|<bands|hide>[|apply]` designates or hides a set, one set per band per course; `scoring-tee-bands-apply:<course_id>[|apply]` writes the proposal and hides the rest.",
+      "The starter-sheet band legend, the leaderboard tee circles and the PH projection print ONLY designated sets on a designated course (the typed-number-then-yardage derivation stays as the fallback for an undesignated card, now with every band filled and the standards as its ruler). Ladies is read from the set\u2019s gender column, not from \u2018(L)\u2019 in a name. Both GG writers match on the alias OR the master and adopt an unaliased set by gender + slope + rating. `get_courses` publishes the three columns. Tests: test_hcp_2nines_auto.py (alias/master/bands migration, alias import, designated legend, the proposal, displacement, apply, idempotence), test_event_reports.py, test_tee_legend_pairing.js.",
+    ],
+  },
+  {
+    version: "2.466.3",
+    date: "2026-09-20",
+    changes: [
+      "Docs only: handicap-projection.md R1 said \u2018Not yet applied\u2019 while the \u00d70.96 multiplier has been out of the index since 2026-08-03 (v2.193.0; the live dial reads 1.0). Mailbox #574 re-ratified it as \u2018apply now\u2019 on the strength of that stale line; the doc now records the apply date, the sweep numbers and the H-2 freeze that protected every completed result.",
+    ],
+  },
+  {
+    version: "2.466.2",
+    date: "2026-09-20",
+    changes: [
+      "A course-card DRY RUN no longer renames the CRDB set it would adopt \u2014 the v2.466.1 adoption wrote GG\u2019s name during the preview (harmless, the apply does the same, but a dry run must not write). The seed + cards + staged tees are on the live record: Kissing Tree 14 sets, Forest Creek 7 (+ the Gold card tee), Falconhead / Vaaler Creek / Lost Pines nines stored, Avery Ranch and Cedar Creek 18-hole sets from their cards; `scoring-per-nine-audit` 29 \u2192 60+ tees resolved.",
+    ],
+  },
+  {
+    version: "2.466.1",
+    date: "2026-09-20",
+    changes: [
+      "A CRDB-seeded tee set is ONE set with the Golf Genius one. The USGA seed names a set the way the CRDB does (\u2018Green\u2019); Golf Genius names the same set \u20183 - Green Tee\u2019, so the next scorecard import or course card would have inserted a second row with identical numbers. Both GG writers (`_upsert_course_tee`, `import_course_card`) now fall back from the exact name to `_adopt_crdb_tee_set`: an 18-hole row of the same course, gender, slope and rating that still carries its CRDB label as its name IS the set \u2014 it takes GG\u2019s name, keeps `usga_tee_label`, keeps its tee_id. Found on the live dry run of the Forest Creek card right after the v2.466.0 seed; covered in test_hcp_2nines_auto.py.",
+    ],
+  },
+  {
+    version: "2.466.0",
+    date: "2026-09-20",
+    changes: [
+      "THE COURSE RECORD IS THE USGA/WHS SHAPE (mailbox #576, Kerry-ratified: \u2018the full standard shape in one pass\u2019). `course_tees` is rebuilt IN PLACE on boot \u2014 same table, same tee_id, so every scoring round and reader keeps working \u2014 as one row per TEE SET: tee + GENDER (M|F) + holes (9|18) + nine (full|front|back), with par, bogey rating, is_combo, gg_tee_id, usga_tee_label, source (import|course_card|usga_crdb|admin) and the dated version columns. New `tee_set_ratings` carries each set\u2019s TOTAL / FRONT / BACK course rating, slope and bogey the way ncrdb.usga.org publishes them. Natural key now includes gender and nine: a men\u2019s and a women\u2019s set share a name, and identical halves (Forest Creek White, 35.2/125 both ways) are two rating rows on one set \u2014 the v2.465.21 BLOCK is gone. Existing rows migrate with source=import, gender from the (L) flag, holes from the rating.",
+      "Readers and writers follow: the scorecard import dedupes on the new key and sets gender/holes; `scoring-course-card` writes the card\u2019s front/back rating rows onto the 18-hole set (no more \u2018both\u2019 merge); `resolve_per_nine_from_course_tees` reads rating rows first and pairs Tuesday nine-hole rows (same name AND gender) only as a fallback; `scoring-tee-nines-store` writes rating rows, not sibling tees; `get_courses` / `/api/course-tees` publish gender, holes, nine, par, bogey, source and the ratings list.",
+      "USGA Course Rating Database is the source of record: `scoring-crdb-seed:<course_id>[|<json>][|apply]` writes a course\u2019s CRDB tee sets (gender, par, bogey, total/front/back with slopes) onto the record, matching an existing 18-hole row by gender + rating/slope, then name, and inserting the rest (combo tees flagged). Seeds in `USGA_CRDB_SEEDS`: Kissing Tree (14 sets, Fall Championship 10/31) and Forest Creek (7 sets) from Kerry\u2019s pull, every front+back sum re-checked before a row is written. Tests: test_hcp_2nines_auto.py (rewritten for the new shape: migration, resolver, store, seed, import).",
+    ],
+  },
+  {
+    version: "2.465.21",
+    date: "2026-09-20",
+    changes: [
+      "Course record: `store_tee_nines` reports BLOCKED instead of raising when a tee\u2019s halves rate identically \u2014 `course_tees` is UNIQUE(course_id, tee_name, slope, rating), a natural key with no `nine`, so Forest Creek White (35.2/125 both nines) cannot hold both rows until the key is rebuilt (schema change, Kerry\u2019s go). The v2.465.20 test passed only because its fixture lacked the constraint; it carries it now. schema.md corrected: tee_id and course_id are always Tracker-assigned \u2014 Golf Genius ids are not stored anywhere.",
+    ],
+  },
+  {
+    version: "2.465.20",
+    date: "2026-09-19",
+    changes: [
+      "Course record: `store_tee_nines` counts one row as ONE nine. The live dry run on Forest Creek\u2019s White (35.2/125 front AND back) reported its single Tuesday row as both halves \u2018kept\u2019 and would have left the tee unresolved; the second identical half is now inserted.",
+    ],
+  },
+  {
+    version: "2.465.19",
+    date: "2026-09-19",
+    changes: [
+      "Course record: `scoring-tee-nines-store:<full_tee_id>|<fr>,<fs>|<br>,<bs>[|apply]` puts a tee\u2019s front and back nine ON the course record beside its 18-hole row (Kerry: \u2018Why wouldn\u2019t those tees be on the course record? \u2026 I want to make sure we have all the data\u2019). `course_tees` only ever accreted from imported rounds, so a course played only as an 18 had no nines and its ratings lived in a JSON paste-in. Refuses a pair that does not sum to the 18-hole rating; keeps a half already on record; copies the 18\u2019s holes so the labeller agrees. `scoring-per-nine-audit[:all]` (read-only) lists every course with an 18-hole row, next event first, with each tee resolved or unresolved and why.",
+    ],
+  },
+  {
+    version: "2.465.18",
+    date: "2026-09-19",
+    changes: [
+      "Handicaps: v2.465.17 failed live with \u2018No item with that key\u2019 \u2014 the `course_id` column had been added to the 9-hole preview\u2019s query instead of the 18-hole posting\u2019s (identical SELECT text, first match). Moved; the 9-hole query is back as it was. Proven end to end on a local scoring DB before shipping.",
+    ],
+  },
+  {
+    version: "2.465.17",
+    date: "2026-09-19",
+    changes: [
+      "Handicaps: an 18-hole posting reads its front/back course rating + slope OFF THE COURSE RECORD (Kerry: \u2018Aren\u2019t we checking course_ids and their information for ratings and indexes as a standard?\u2019). `resolve_per_nine_from_course_tees` pairs each 18-hole tee with the course\u2019s Tuesday nine-hole rows of the same tee (labelled front/back by `label_course_tee_nines`) and accepts a pair only when front + back equals the 18-hole rating; two fitting pairs are reported as ambiguous, never picked. `scoring-hcp-2nines:<event>[|auto|<json>][|apply]` \u2014 the JSON map is now optional and only overrides; the result carries `per_nine_source` with the derivation and anything unresolved. Cedar Creek s18.11 was asked for its ratings twice before this; test_hcp_2nines_auto.py.",
+    ],
+  },
+  {
+    version: "2.465.16",
+    date: "2026-09-19",
+    changes: [
+      "Handicaps: posting an 18-hole event as two nines (`scoring-hcp-2nines … |apply`) now sends the chapter-manager recap email like the 9-hole posting path always has. Cedar Creek s18.11 posted 30 rounds with no recap and Kerry had to ask; the result carries `recap_email` so the send is visible. `scoring-hcp-recap:<event>` remains the manual resend.",
+    ],
+  },
+  {
+    version: "2.465.15",
+    date: "2026-09-18",
+    changes: [
+      "Starter sheet: the BLIND row's tag follows the game like the column heading does — `cart` on a Cart Net sheet, `team` on Team Net. It was hard-coded `team`, the one place the v2.465.2 CART/TEAM rule had not reached (Cedar Creek's 8:10 box).",
+    ],
+  },
+  {
+    version: "2.465.14",
+    date: "2026-09-18",
+    changes: [
+      "Print pack: the logo renders. Chromium loads each part with set_content() at about:blank, where a root-relative `/static/tgf-logo-r.svg` resolves to nothing and no request is made — the first Chromium pack printed the alt text (Kerry: \u2018the logo is not rendering\u2019). Every /static/ reference now gets a host the route answers; the build result and the bridge list the `assets` actually served, and `test_print_pack.py` fails if the logo is not among them.",
+    ],
+  },
+  {
+    version: "2.465.13",
+    date: "2026-09-18",
+    changes: [
+      "Build: libstdc++ and zlib from Nix on the library path (`stdenv.cc.cc.lib`, `zlib` in nixLibs). The v2.465.12 diagnostic showed the pack falling back to WeasyPrint on Railway because `import playwright` could not load libstdc++.so.6 under the Nix Python — Chromium itself was found at /root/.nix-profile/bin/chromium.",
+    ],
+  },
+  {
+    version: "2.465.12",
+    date: "2026-09-18",
+    changes: [
+      "Print pack: when Chromium cannot render, the build result and the bridge carry `engine_note` — the exception and the executable found — so the fallback to WeasyPrint is never silent. On Railway the v2.465.9 pack still came back `engine: weasyprint`; this is the diagnostic for it.",
+    ],
+  },
+  {
+    version: "2.465.11",
+    date: "2026-09-18",
+    changes: [
+      "`scoring-pairings:sheet|<id>` lists each seated player's starter-sheet badges (1T / NEW) so a lane can verify the NEW rule against live members without a login.",
+    ],
+  },
+  {
+    version: "2.465.10",
+    date: "2026-09-18",
+    changes: [
+      "`scoring-print-pack-pdf:<id>` reports `engine` (chromium / weasyprint) beside parts, hash and size, so a lane can confirm which renderer produced a pack on Railway before mailing it.",
+    ],
+  },
+  {
+    version: "2.465.9",
+    date: "2026-09-18",
+    changes: [
+      "NEW = A MEMBER PLAYING THEIR FIRST EVENT AS A MEMBER (Kerry 2026-09-18, confirmed: \u2018Correct on your NEW badge understanding. Ship it.\u2019). Membership started on or before the event and no event played between that start and this one \u2014 by registration or by a posted round. Not \u2018joined since our last event\u2019 (missed Bear Clarkson), not \u2018first-year member\u2019 (tagged Wade Lewis, Will Wallace and Louis Schneider, who had all played as members). 1T stays independent \u2014 first TGF event ever \u2014 and a first-timer who is already a member wears both. Legend reworded. Test: `test_new_badge.py`.",
+    ],
+  },
+  {
+    version: "2.465.8",
+    date: "2026-09-18",
+    changes: [
+      "THE PRINT PACK RENDERS THROUGH CHROMIUM (Kerry 2026-09-18: \u2018Formatting for your PDF email is really bad compared to the PDF downloads on the Tracker\u2019). The first pack went out through WeasyPrint, which lays out the print templates\u2019 flex and grid wrong \u2014 the alphabetical columns collapsed and the cart signs broke. The Tracker\u2019s own Download PDF is the browser\u2019s print pipeline, so the pack now renders each part in headless Chromium (Playwright driving the Nix-provided browser, print media, the template\u2019s own @page size) and binds them with pypdf \u2014 identical to the download. WeasyPrint stays only as the fallback when no browser is on the box, and the result says which engine drew it. `test_print_pack.py` asserts Chromium.",
+    ],
+  },
+  {
+    version: "2.465.7",
+    date: "2026-09-18",
+    changes: [
+      "PDF engine, second try: v2.465.4 built, but the running app could not load \u2018gobject-2.0-0\u2019 \u2014 the Nix-provided Python on Railway does not see libraries installed with apt. The libraries WeasyPrint needs (glib, pango, harfbuzz, fontconfig, cairo, gdk-pixbuf, libffi) now come from Nix via nixpacks\u2019 `nixLibs`, which is what puts them on the app\u2019s library path; apt keeps the fonts. Still one commit to revert if it fails.",
+    ],
+  },
+  {
+    version: "2.465.6",
+    date: "2026-09-18",
+    changes: [
+      "RULE 15h \u2014 A CART NET BLIND IS THE OTHER CART OF THE SAME FOURSOME (Kerry 2026-09-18: \u2018On Cart Net, when there are OPEN slots in need of a Blind, the blind is from the other cart in the foursome\u2026 In Team Net, it is randomly from the field outside of their group like we\u2019ve had it\u2019). The draw asks the matrix which game the field plays; on a cart night an open seat takes the eligible player from the other cart of its own group (fewest blinds this year first, one blind per person), falling back to the field only when that cart has nobody eligible \u2014 and the row says where it came from. Team Net is unchanged. `docs/claude/pairings.md` rule 15h; `test_blind_draws.py` covers both nights.",
+    ],
+  },
+  {
+    version: "2.465.5",
+    date: "2026-09-18",
+    changes: [
+      "The PDF bridge is `scoring-print-pack-pdf:<id>[|send[|to]]` / `:due` \u2014 v2.465.0 named it `scoring-print-pack`, which an older read-only bridge (the JSON print pack) already owns and dispatches first, so the PDF branch never ran on the live app. Renamed; nothing else changes.",
+    ],
+  },
+  {
+    version: "2.465.4",
+    date: "2026-09-18",
+    changes: [
+      "PDF ENGINE RETRY, isolated: `weasyprint==62.3` + `pydyf==0.11.0` as real requirement lines, and the libraries WeasyPrint loads by name at runtime (Pango, PangoFT2, HarfBuzz + subset, FontConfig, GObject via glib, Cairo, GdkPixbuf, FFI, shared-mime-info, DejaVu) as apt packages in nixpacks.toml. If this build fails it is this one commit to revert; if it succeeds the print pack mails tonight.",
+    ],
+  },
+  {
+    version: "2.465.3",
+    date: "2026-09-18",
+    changes: [
+      "THE BUILD FAILURE WAS A TYPO, NOT THE PACKAGES. The v2.465.0 script wrote a literal backslash-n into requirements.txt, so pip read one bogus line (\u2018\\nweasyprint==62.3\\npydyf==0.11.0\u2019) and every build since 4:19 PM failed at the install step \u2014 the v2.465.1 back-out removed lines STARTING with weasyprint and missed it. Removed; main deploys again. The PDF engine retry (real package lines + Pango/Cairo) follows as its own commit so a second failure is isolated and reversible.",
+    ],
+  },
+  {
+    version: "2.465.2",
+    date: "2026-09-18",
+    changes: [
+      "STARTER SHEET, three asks from Kerry 2026-09-18: (1) the foursome boxes print the playing handicap beside the index \u2014 the Cart/Team number stays in the alphabetical list only; (2) NEW means a NEW MEMBER (the roster\u2019s first-year rule, the same fact the pairings cards badge 1Y), no longer \u2018joined since our last event\u2019 \u2014 a first-timer who is already a member wears both NEW and 1T (Bear Clarkson), and the legend says so; (3) the legend\u2019s last label follows the game (CART on a Cart Net night, TEAM otherwise) to match the column heading, and the IDX / PH / CART numbers are centred in their columns.",
+    ],
+  },
+  {
+    version: "2.465.1",
+    date: "2026-09-18",
+    changes: [
+      "v2.465.0 FAILED TO BUILD ON RAILWAY (the Pango/Cairo apt packages + WeasyPrint added for the print pack). Production stayed on v2.464.16. This release backs the packaging out so main deploys again \u2014 carrying the v2.465.0 code (print pack route, routine, bridge, Graph attachments) and, more urgently, the starter-sheet fix for an index-less player (v2.464.15 read a key the pack set only for players with an index; under strict templates a sheet with one such player would not render). The PDF engine is loaded lazily: until it ships, `/events/<id>/print-pack.pdf` and `scoring-print-pack` answer 503 \u2018PDF engine unavailable\u2019 and the evening routine logs the same. Retry plan in events.md.",
+    ],
+  },
+  {
+    version: "2.465.0",
+    date: "2026-09-18",
+    changes: [
+      "THE EVENT PRINT PACK \u2014 ONE BOUND PDF, MAILED THE EVENING BEFORE (Kerry 2026-09-18: \u2018a bound PDF with all of them in one that I could print, rather than each separately\u2019 / \u2018Build the PDF routine and have it emailed to me\u2019). Starter Sheet, Cart Signs, Divisions & Flights and Proximity Markers \u2014 the same templates the browser prints \u2014 are rendered server-side by WeasyPrint and bound in print order: `GET /events/<id>/print-pack.pdf`. A routine runs hourly 5\u201310 PM Central and mails every active event dated TOMORROW as a PDF attachment to `PRINT_PACK_EMAIL_TO` (falling back to the daily-report address); a content hash of the rendered parts is recorded so a pack goes once, and again only if the sheet changes after it went. On demand: `scoring-print-pack:<id>[|send[|to]]` and `scoring-print-pack:due`. Graph mail learned attachments. WeasyPrint + Pango/Cairo added to the deploy; the engine loads lazily so a deploy without it still boots and says so. Test: `test_print_pack.py` (a real PDF, the route, the routine once / unchanged / changed).",
+    ],
+  },
+  {
+    version: "2.464.16",
+    date: "2026-09-18",
+    changes: [
+      "OFF LOWEST IS THE WHOLE FIELD (Kerry 2026-09-18: \u2018OFF Lowest is not per cart. OFF Lowest is lowest in the whole field. For 1/2 Net Skins it is field too. Team Net is field too.\u2019). The starter sheet\u2019s CART/TEAM column now plays every player off the lowest allowed handicap in the FIELD \u2014 one zero for the night \u2014 not the lowest in their cart (v2.464.15) or their group (before). The scoring engine already took the field minimum (`game_handicaps(field, \u2026)`), so board and sheet now agree. Basis text and side-games.md carry the ruling verbatim.",
+    ],
+  },
+  {
+    version: "2.464.15",
+    date: "2026-09-18",
+    changes: [
+      "THE TEAM COLUMN IS THE GAME BEING PLAYED, COMPUTED THE WHS WAY (Kerry 2026-09-18, s18.11 Cedar Creek: \u2018the cart net handicaps do not all look correct\u2026 Larry Anthis and Richard Palacios. We have Cart Net going tomorrow which is 85% handicaps\u2019). The starter sheet computed a foursome\u2019s Team Net \u2014 75%, off the lowest in the GROUP \u2014 on a Cart Net night, and applied the allowance to the already-rounded PH, the double-rounding CA Queue #7 found. The sheet now asks the matrix which team game the field plays (below 16 players it is CART Net), takes the allowance from the codified ladder (Cart 85% / 100%, four-player 75/85/100/100), applies it to the UNROUNDED course handicap, rounds once, and plays each unit off its own lowest \u2014 the cart (seats 1\u20132 / 3\u20134) for Cart Net, the group for Team Net. The column is headed CART on a Cart Net sheet and the footnote states the game, the percentage and the unit.",
+      "THE INDEX PRINTS ON THE EVENT\u2019S SCALE (Kerry: \u2018For an 18 hole event, the TGF Handicap to be shown should be the 18 hole handicap\u2019). IDX on the starter sheet and the index on the pairings cards show the 18-hole index (twice the nine) on an 18-hole night and the nine on a nine; PH and TEAM were already on the card\u2019s scale. Test: `test_team_handicaps.py`.",
+    ],
+  },
+  {
+    version: "2.464.14",
+    date: "2026-09-18",
+    changes: [
+      "CUSTOMER_ID IS KING, ENFORCED (Kerry 2026-09-18: \u2018EVERY person gets a customer_id, no matter what their role is\u2026 everything remotely related to a customer needs to be tied to that customer\u2019). An audit of the REAL schema (init_db, PRAGMA table_info) found 23 tables that name a person; 22 already carry the id (Match Play\u2019s under player_id / winner_id), one did not \u2014 `name_parse_failures`, a parser log that predated the rule. It now carries `customer_id`, filled on write and backfilled at boot. On the page, the seed picker seated a person by name alone; it now carries the id from the roster. Two guards make the rule structural: `test_customer_id_everywhere.py` fails on any person-naming column without a sibling id (allow-list empty), and `test_seat_carries_identity.js` fails on any seat object built or moved without customer_id. The ruling is in CLAUDE.md principle 6 verbatim.",
+    ],
+  },
+  {
+    version: "2.464.13",
+    date: "2026-09-18",
+    changes: [
+      "`scoring-pairings:swap|<event>|<name A>|<name B>[|apply]` \u2014 swap two seated players\u2019 seats on a saved sheet through the normal save: the whole person moves and the seat stays (tees, ids and the locked index travel with the names; blinds re-seat). Dry-run unless apply. Built so a seat change Kerry names in chat (s18.11: \u2018You with Jeff\u2019) goes through the same path as the page, not a hand edit.",
+    ],
+  },
+  {
+    version: "2.464.12",
+    date: "2026-09-18",
+    changes: [
+      "THE ROSTER\u2019S TEE WINS OVER THE ROW\u2019S SNAPSHOT. v2.464.11 corrected the seat ids on s18.11 Cedar Creek, but the swapped tees stayed: the row\u2019s saved tee was wrong and non-blank, and the read only ever filled a blank. Kerry\u2019s rule is that the tee comes from the ROSTER, so `get_event_pairings` now takes the roster\u2019s tee first (by customer_id, then name) and the seat\u2019s saved tee only for a player the roster cannot name \u2014 the same order the locked index already uses. Rideout and Angelone read their own tees again on the next open, no re-save needed.",
+    ],
+  },
+  {
+    version: "2.464.11",
+    date: "2026-09-18",
+    changes: [
+      "THE WHOLE PERSON MOVES, THE SEAT STAYS (Kerry 2026-09-18, s18.11 Cedar Creek: \u2018pairings switched Jeff Rideout and Justin Angelone\u2019s tees when I swapped their cart assignments\u2019). The Player and Cart Pair swaps moved name, tee and index between seats and left `customer_id` behind, so after Save the row read \u2018Jeff Rideout\u2019 with Angelone\u2019s id \u2014 and the server, which since v2.462.0 resolves the tee and the locked index BY customer_id, handed back the other man\u2019s tee. Every field a seat carries is the person\u2019s except the seat number; the swaps now move all of it, and a player seated from Unassigned carries the roster entry whole.",
+      "Two boundary checks so the class cannot recur from any page: the save resolves each seat\u2019s customer_id from the NAME the manager sees (a payload id is kept only when it names the same person, never handed to a guest), and the read corrects a stale id already on file \u2014 so Cedar Creek\u2019s sheet reads right on its next open without a re-save. Tests: `test_pairings_swap_identity.js`, `test_pairings_seat_identity.py`.",
+    ],
+  },
+  {
+    version: "2.464.10",
+    date: "2026-09-18",
+    changes: [
+      "Insider scorecard (Friday Routine, first run): the issue trend table now lives in event-recaps.md on the per-list Brevo basis — #1 24 clickers, #2 21, #3 15 at +48h with real reads under half of #2's; by-group split and link ranking recorded per issue; one non-member registration after the #3 send. Recommendation on record: rotate off money headlines to the first-timer angle with a person-and-moment subject.",
+    ],
+  },
+  {
+    version: "2.464.9",
+    date: "2026-09-18",
+    changes: [
+      "ONE EXPAND ARROW, EVERYWHERE. `/me` and Money Flow each carried a grey glyph of their own \u2014 the \u2018two off-standard chevrons\u2019 on the carry-forward list since Kerry\u2019s 2026-09-15 ruling that the standard chevron is orange. Both now use the house arrow (`.tgf-exp`: \u25b6, TGF orange, rotates open); `/me` takes the values because it does not load dashboard.css, and rotates by class instead of swapping glyphs. Guard: `test_chevron_standard.js`.",
+      "`docs/claude/state-of-the-tracker.md` REWRITTEN IN FULL at v2.464.8 (it had described v2.296 with wave sections appended). Now: the subsystem map with a doc per row, the RULES OF RECORD the Platform implements (league mechanics, the handicap system and lock, the plus rule, the allowance ladder and the \u2018GG rules until untethered\u2019 tie-breaker, money-waits-for-the-field, pairings 1\u201315g, ONE ORDER ONE FEE), game day as it runs, the data estate incl. the participation finding, every open decision, ten paid-for lessons for the Platform, a timeline of waves as pointers, and the stack ruling for live leaderboards.",
+    ],
+  },
+  {
+    version: "2.464.8",
+    date: "2026-09-18",
+    changes: [
+      "`scoring-chapter-guesses:confirm` applies the confirmations BEFORE listing what is still a guess, so the reply shows the list as it stands after the write. v2.464.7 listed it first and a just-confirmed customer still appeared as guessed (its own test caught it; shipped past a gate that did not stop on the failure \u2014 fixed the gate too).",
+    ],
+  },
+  {
+    version: "2.464.7",
+    date: "2026-09-18",
+    changes: [
+      "CHAPTER GUESSES, LISTED WITH THEIR EVIDENCE (Kerry 2026-09-16, item B: \u2018Give me a list of customers you guessed on that didn\u2019t already have chapters and I\u2019ll confirm\u2019 / \u2018Do it\u2019). `customers.chapter` is the HOME chapter and is never written from an order (an order\u2019s chapter is where the event was); the handicap card and roster fall back to the latest order\u2019s chapter when the profile is blank, which is a guess. New read-only bridge `scoring-chapter-guesses` lists every handicap-linked customer with a blank profile chapter: the guess in use, the orders by chapter behind it, whether the evidence is unanimous, and the majority. `scoring-chapter-guesses:confirm|<cid>=<chapter>;\u2026` writes the profile chapter for those ids only, blank ones only, real chapters only \u2014 Kerry\u2019s per-person confirmation is the one path by which a guess becomes the record. Test: `test_chapter_guesses.py` (10 checks).",
+    ],
+  },
+  {
+    version: "2.464.6",
+    date: "2026-09-18",
+    changes: [
+      "A REMEMBERED PAIRINGS TAB COMES BACK ON A PHONE TOO (Kerry 2026-09-18, iPhone: \u2018Had generated pairings, tweaked, saved, then added blinds, then clicked Starter Sheet, then clicked back. Now it\u2019s stuck on LOADING\u2019). iOS reloads the tab on return; the restore-on-load path (v2.432.0) re-opened the event on PAIRINGS, loaded the sheet, and repainted the DESKTOP container by id. The phone\u2019s container has a different id, so the data arrived and nothing repainted \u2014 the panel sat on \u2018Loading\u2026\u2019 with the sheet already in hand. One helper now resolves the open event\u2019s container in either layout and every after-the-fact repaint (restore, post-action refresh) goes through it. Nothing was lost: the saved sheet and the blinds were on the server the whole time, and tapping ROSTER then PAIRINGS would have repainted it. Test: `test_events_restore_mobile.js`.",
+      "Blinds need no Save: the draw is recorded the moment it is confirmed, and the sheet re-reads it. The Save button is for seats.",
+    ],
+  },
+  {
+    version: "2.464.5",
+    date: "2026-09-18",
+    changes: [
+      "Kerry's 2022 question (mailbox #555: 'I want to know what happened in 2022. We had our most members that year.'): scoring-gg-history:cohort[=<A>-<B>] → cohort_analysis(). Per chapter, from gg_history alone: season A → B retention of the field-walk population (returned next season / never seen again through 2026 / came back later), for all players, for the member-ever subset and for the roster start_year <= A subset (the season-dated proxy the public widgets allow), with the prior season as the control; Tuesday fields by calendar month for A and B (did 2023 drop in spring with the league split or through the year); rounds-per-player profiles (1 / 2–3 / 4–6 / 7+) for A, B and 2025; and whether season-A standings pages print an Affiliation column (they do — but GG renders today's affiliation on archived widgets, so it is not that season's membership). Players keyed by printed GG name, not customer_id, so uneven linking rates across seasons cannot split one person in two. Participation series doc now reaches 2016.",
+    ],
+  },
+  {
+    version: "2.464.4",
+    date: "2026-09-18",
+    changes: [
+      "Participation series reaches 2016 (Kerry #553: 'Ingest and Run the other years in that spin off'). classify_round_label learns the 2016–2018 San Antonio era: Tuesdays were coded 'e1'…'e12' and 2017 wrote its match-play rounds 'M61 - PLAYBACK SEMIFINAL'; both land in the right bucket. Query-time only.",
+      "Archive HOLES walk: the INDIVIDUAL-board fallback (the known gap since v2.74). The first 2019–2024 holes runs imported 88 cards for SA 2024 and none for Austin 2024 because the walker read only ALL Net / ALL Gross boards, which appear in fall 2024 and not at all in 2016–2018 or Austin 2024. _pick_hole_boards now falls back to the same per-round individual boards the field walk trusts (_is_field_board), Net-style boards first so playing handicaps ride with the cards; import_gg_scorecards' (player, date, round_key) dedupe keeps a player on three boards to one card. scoring-gg-history:holes-reset=<subdomain> re-queues only the rounds that produced no scorecards (nothing deleted, imported rounds stay done) so the earlier walks can be finished without re-fetching what worked.",
+    ],
+  },
+  {
+    version: "2.464.3",
+    date: "2026-09-17",
+    changes: [
+      "Insider writer: WHAT ENTRY INCLUDES is now a rule in PUBLIC_RULES (Kerry 2026-09-17 + the Tracker's event pricing model) — every entrant is in the team game, closest-to-the-pin and the hole-in-one pot; the individual Net/Gross games are an add-on a member can skip any week; no dollar figures, never a dig at buyers, members get no free drink. Written for the 'too competitive to feel comfortable' retention leak Kerry named (two departures). The exact member-facing sentence awaits his ratification (event-recaps.md).",
+    ],
+  },
+  {
+    version: "2.464.2",
+    date: "2026-09-17",
+    changes: [
+      "Participation series: classify_round_label learns 2023. That season SA split its Tuesdays into EAST and WEST league nights ('east | SILVERHORN front', 'east/west | …') and Austin into NORTH and SOUTH; the fall used unnumbered 's9 OLMOS BASIN front | The Dogfather' / 'a9 FOREST CREEK front'; match rounds were written 'MATCH - HANSON v CHANDLER' with no number. All of those now land in the right bucket (tuesday9 / match) and 'MATCHES - … Match Play' boards stay 'other'. Query-time only — no walk had to be redone.",
+    ],
+  },
+  {
+    version: "2.464.1",
+    date: "2026-09-17",
+    changes: [
+      "GG history field walk: the calendar widget is PAGINATED (SA 2024 shows 30 rounds on page 1 and a 'Next →' to page=2; the results selector has 32) — fetch_calendar_rounds() now walks page=1,2,… (show_registration=false, follows only while the page advertises a higher page number, stops when a page adds nothing new), archives every page, and both the sync and the read-only calendar= bridge use it. Course text no longer carries GG's leading '|'. Tests cover pagination, the no-Next case and the HTTP-error case.",
+      "Field walk fallback is an ALLOW-list now. The first SA 2024 pass showed the round view also lists the season's points and cup boards ('SAN ANTONIO Net', 'THE FELLOWSHIP CUP', 'APRIL Points', 'as18.6 FALL POINTS - …'); a union that includes them is not a round's field. Rounds without ALL boards (every 2024 round before the ALL boards appeared, and all of 2019–2023) now take only the per-round individual boards — after an optional event-code prefix: INDIVIDUAL / SKINS / SCORES / GROSS / NET / ALL, never team, cart, MVP, points, race, cup or proximity boards (_is_field_board; the deny-list reads the board's own name before ' - ', so 's8f SCORES net - FALL POINTS net' passes and 'as18.6 FALL POINTS - SAN ANTONIO Fall' does not). The same rule runs at query time in _field_names, so boards already banked on an event by any walk are counted only if they pass it — no re-walk needed for the rounds done tonight. scoring-gg-history:field-reset=<subdomain> marks a portal's field rounds 'redo' (nothing deleted; boards are replaced per label on the next walk) for when a rule change needs the boards themselves refetched.",
+    ],
+  },
+  {
+    version: "2.464.0",
+    date: "2026-09-17",
+    title: "GG history: the FIELD walk + the participation series (2019–2026) — Kerry's 'participation was higher before 2023' measured, not remembered",
+    changes: [
+      "Historical GG ingester lane (spun off the Insider writer 2026-09-17, mailbox #547/#548). Phase A standings for every SA + Austin portal 2019–2024 ran tonight (12 portals, 4,151 standings rows; the runs are data, this entry is the code). The archive HOLES walk could not follow: it needs a round DATE to scope its dedupe, 2019–2024 have no GG exports, and Golf Genius truncates the round selector's labels ('s9.26 THE QUARRY (Tue, Oct…'). Two findings fixed that. (1) The portal's public CALENDAR widget (/leagues/<id>/widgets/calendar?shared=false) lists every round in full — date, untruncated name, course, and the round_id in its Tee Sheet/Results links. parse_calendar_widget() reads it; sync_portal_calendar() upserts dated gg_history_events rows by (portal, gg_round_id), filling event_date/label/course only where NULL (export-channel values are never overwritten). (2) Participation does not need scorecards: the FIELD of a round is the ALL Net / ALL Gross board — the same boards the holes walk imports, so 'played' means the same thing in both.",
+      "New Phase-B walk: scoring-gg-history:field=<subdomain>[@budget] (and field-bg= in a daemon thread, poll holes-status) → ingest_portal_field(): calendar sync, then per selector round the ALL Net + ALL Gross boards → gg_history_results rows under the board's verbatim label, name split from GG's appended affiliation ('ROHRMANN, Lance TGF San Antonio' → name + aff, aff kept in raw_row JSON), identity via the same _resolve_identity cascade. Eras before ALL boards (2019–2021 print INDIVIDUAL Gross / MEMBER Games instead) fall back to the union of every individual (non-team, non-proximity, non-match) board and the walk-state row records basis 'fallback' so the series can say so. Walk state = gg_history_pages 'field:<round_id>' rows (resumable; empty rounds mark done). The games walk's idempotent delete now spares 'ALL %' rows so the two walks coexist. scoring-gg-history:calendar=<subdomain> is the read-only parse for verification.",
+      "scoring-gg-history:participation[=<from>-<to>] → participation_series(): ONE table, season × chapter, from the field walk — events (all, and Tuesday nines by round label: s9.N/a9.N, or s1..s15/s8f in the 2019–2022 numbering), mean/median players per event, player-rounds, distinct players, distinct member-ever (board affiliation TGF*/Former — GG prints TODAY's affiliation, so it is 'was ever a member', not 'was a member that season'), distinct customer-linked, and how many events sat on the fallback basis. Match-play rounds ('MATCH 63 - X v Y'), POINTS RESET rounds and empty rounds are excluded. Beside it, for 2025+, the Tracker's own items-based rows (the /participation page definition) so the two definitions reconcile in a line — _participation_event_filter_sql moved from app.py to email_parser/database.py so the MCP layer and the page share the one definition (participation.md rule: reuse it so it can't drift).",
+      "Tests: test_gg_history_field.py (calendar parser incl. the postponed-row case, the round classifier across both numbering eras, the board picker + fallback, the affiliation split, the season aggregation on a scratch DB, the Tracker rows incl. stale-membership and child-row exclusions). Docs: gg-history.md gains the field-walk section and, once the walks finish, the 'Participation series' table.",
+    ],
+  },
+  {
+    version: "2.463.3",
+    date: "2026-09-17",
+    changes: [
+      "Insider writer: faith stays implicit in the public voice (Kerry's founding stance, 2026-09-17, verbatim in event-recaps.md — 'preparing a field for people of any background… I don't want that to be a stumbling block… a barrier of religiosity'). PUBLIC_RULES carries the stance; validate() refuses religious language (God/Christ/Jesus/Lord, scripture references, church, prayer, blessed) and lets plain encouragement through; a new catalogue angle built-for-this ('We were built for this' — connection over isolation, in human words, anchored on one real moment) is available but NOT on the rotation dial until Kerry adds it.",
+    ],
+  },
+  {
+    version: "2.463.2",
+    date: "2026-09-17",
+    changes: [
+      "TGF Insider: the JOIN OFFER may be printed (Kerry-ratified 2026-09-17 — 'Yes' — the first exception to the #381 no-prices guardrail). Dial insider_join_offer holds the price line verbatim (set: '$50 to join through September 30, then $75. 365 days from purchase. No monthly dues.' — the CA round-two price card); the fact sheet carries it, the writer prints it once, verbatim, linked to membership; validate() allows only the dial's dollar figures and refuses a paraphrase ('just $50'); lint() and the approve path allow the same figures via _allowed_dollars(). Blank dial = no price, as before. Kerry edits the dial when the promo ends on Oct 1.",
+    ],
+  },
+  {
+    version: "2.463.1",
+    date: "2026-09-17",
+    changes: [
+      "Insider writer, first machine sample read as the editor (three Sonnet drafts on s9.23/a9.23, mailbox #544): three slips became rules + checks. A Tuesday is NINE holes (the fellowship draft had 'the banter starts on the 18th green') — validate() refuses 18th/eighteenth when the week's events are nines. Never expose bookkeeping ('No fellowship spot was on the books') — refused, the rule says write around it. Logistics only from the fact sheet, per chapter ('usually a 5:00 PM shotgun' was written for both cities; Austin runs tee times) — every event and next-Tuesday button now carries a format line from events.start_time (event_format(): SA shotgun, Austin late-afternoon tee times, Saturdays 18 with morning tee times) and gather_week() carries start_time. Kerry ratified the angle order the same day ('Go with your order. Push to main.'); v2.463.0 is live and the order is on the dial.",
+    ],
+  },
+  {
+    version: "2.463.0",
+    date: "2026-09-16",
+    title: "TGF Insider: the writer — a Claude-written weekly draft on a rotating angle, options for Kerry, Brevo only from his approved text",
+    changes: [
+      "The Wednesday Insider is now WRITTEN, not assembled (Kerry 2026-09-16: 'I want it to be creative though. I don't necessarily want the same format each time with the 3 things… We need to explore more of The Golf Fellowship and what it provides'). New email_parser/insider_writer.py: one Claude call a week (Sonnet route, parser.py's client pattern, billing alert on auth/credit failures) fed the week's facts in public form, the chosen ANGLE, the ratified public rules, the member-recap house style for voice, and Kerry's sent Insiders as examples (docs/claude/templates/insider-voice-examples.md). It returns the headline plus two alternates, the lede, a story box of 1–4 beats, the Celebrate line, the close header, and a one-line 'why this angle this week'.",
+      "Angle rotation as data: ten angles in a catalogue (a Tuesday story, a first-timer's night, the fellowship afterward, how the handicap makes a 20 and a scratch equal, the Saturday 18s and road trips, the season contests explained, the Hole-In-One pot, twenty seasons of TGF, a course of the week, a member's own words). Dial insider_angles sets the order (Kerry to ratify), insider_angle_force picks one for the next run, insider_angle_history keeps any angle from repeating until the rest have had a turn; an angle whose facts are missing this week is skipped, never faked. Read-only view: scoring-insider-angles.",
+      "The gate holds on the writer's output: tags whitelisted, links only from the allow-list, no full surname from the week's roster, no banned word, no dollar figure but the pot, no 'alone', no recent headline — then lint() on the rendered HTML. One retry with the problems fed back, then the deterministic compose() is the fallback and the review email says so, so the 8:00 email always goes out. Dial insider_writer=off keeps the composer only.",
+      "Review email (dial insider_autodraft=review, set 2026-09-16 1:19 PM): the banner now carries the angle, why this angle, the three headline/subject options and who wrote it; the mailbox post carries the same digest. scoring-brevo-draft:samples|a,b,c writes several angles and emails them to Kerry as ONE message — the 'options to choose from'. The Brevo DRAFT is created only from Kerry's approved text (scoring-insider-approve:<subject>|<html>, lint-gated, merge tags checked, logged as insider-approved so the headline rotation sees it). Nothing sends itself.",
+      "Insider #3 lesson folded (Kerry's Brevo edit): with no fellowship spot on record the Celebrate line is 'Stick around for food, drink, and banter after the round.' Tests: test_insider_writer.py (60 checks, Anthropic call mocked); test_insider.py and test_insider_headline.py unchanged and green.",
+    ],
+  },
+  {
+    version: "2.462.6",
+    date: "2026-09-17",
+    changes: [
+      "Brevo campaign audience split (Kerry 2026-09-17, on Insider #3: 'do the split by group'): scoring-brevo-campaign-split:<campaign_id> reports a sent campaign's recipients, openers, clickers and unsubscribes by TGF status — active_member / former_member / prospect (the nightly sync's map) / unknown (no Tracker customer with that email: never bought, or pre-Tracker). Brevo only exposes per-recipient data through its async export (POST exportRecipients → poll /processes → CSV), which the bridge drives; read-only, nothing on a contact or campaign changes. Test: test_brevo_campaign_split.py.",
+    ],
+  },
+  {
+    version: "2.462.5",
+    date: "2026-09-16",
+    changes: [
+      "TGF Insider headline order: the fraction title ('Half the Field Won Money!') now ranks above the par/bogey skins story — Kerry chose it over 'A par won money' for the 9/16 draft.",
+    ],
+  },
+  {
+    version: "2.462.4",
+    date: "2026-09-16",
+    changes: [
+      "TGF Insider: the headline never repeats last week's (Kerry 2026-09-16: 'We copied the Brevo title from last week' — two drafts in a row led 'First round. First payday.' because a first-timer cashed both weeks). compose() now ranks candidates — first-timer cashed → a par/bogey won a skin → the beat-1 fraction as a title ('Half the Field Won Money!', Kerry's edit) → the ratified default — and skips the one that matches the previous draft's subject in message_log. Test: test_insider_headline.py.",
+    ],
+  },
+  {
+    version: "2.462.3",
+    date: "2026-09-16",
+    title: "Cart Net and fivesome allowances ruled; the 9s-vs-18s stroke question opened",
+    changes: [
+      "RULED (Kerry): CART Net is 85% for one ball and 100% for two. The one-ball figure also matches USGA\u2019s Four-Ball Stroke Play allowance independently. Recorded with an honest caveat in the code itself \u2014 no Cart Net settings screenshot reached this session, so both rows rest on the ruling rather than on a Golf Genius screen, and their `source` says \u2018NOT screenshot-verified\u2019. If a Cart Net event ever fails to reproduce GG, check that screen first.",
+      "RULED (Kerry): a FIVESOME playing Best 1 stays at 75%, \u2018but will need a dial specifically for that\u2019. It is its OWN entry rather than a fall-through to the four-player row \u2014 the two carry the same number today, and a fall-through would make that coincidence load-bearing instead of leaving two numbers that happen to agree. Flagged `provisional`: a holding position, not a settled allowance.",
+      "Allowances now resolve through `team_allowance_pct(game_cfg, team_size, balls)`, which reads BOTH the team size and the ball count and REFUSES with a named reason where nothing is ruled \u2014 a five-player Best 2, or any unruled team size, reports rather than borrowing a neighbouring row. Pairing rule 15f made team size follow the group, so sizes other than four are now reachable by ratified rule.",
+      "OPENED CA Queue #11, at Kerry\u2019s request, on how strokes apply to 9s vs 18s. Checking the arithmetic first: Golf Genius does NOT halve the index for nine-hole play. Melchor\u2019s 6.888 is a course handicap on the 18-hole stroke scale (18-hole-scale slope, nine-hole rating-minus-par adjustment). The nine-hole discount happens in the ALLOCATION \u2014 strokes spread across the full 18-hole stroke-index card and the player collects only those landing on the nine he plays.",
+      "A coincidence recorded before it misleads someone: on a HALF-NET game the 50% allowance and the nine-hole halving are the same arithmetic \u2014 6.888 \u00d7 50% and (5.6 \u00f7 2) \u00d7 139/113 are both 3.444. They come apart on any other game. a9.23 does discriminate and picks GG\u2019s reading: halving first and then applying the allowance drops Zapata\u2019s hole 7, the $13. So the shipped behaviour is verified, not assumed.",
+      "The two consequences now written down, because neither appears to have been said out loud in TGF before. (1) A NINE PAYS FEWER STROKES THAN THE PRINTED PLAYING HANDICAP \u2014 Melchor\u2019s card says PH 3 and he receives 2, because stroke index 2 is on the back nine. (2) THE FRONT NINE PAYS MORE THAN THE BACK \u2014 front holds the odd indexes, back the even, so on every odd playing handicap the front gives one extra stroke; a 3-handicap gets 2 on the front and 1 on the back. Same player, same course, different nine.",
+      "NOTHING CHANGED in the stroke-application code. GG\u2019s behaviour is coherent, a9.23 confirms we match it, and we stay tethered (\u2018until we detach from GG, GG rules\u2019). CA Queue #11 holds the discussion and should be settled together with CA Queue #10 \u2014 they are the same question at two layers.",
+      "Tests: `test_half_net_skins.py` extended to 63 checks, including that an unruled combination refuses and names what IS ruled, that the fivesome dial is a separate entry rather than a fall-through, and that the Cart Net rows keep their \u2018NOT screenshot-verified\u2019 provenance.",
+    ],
+  },
+  {
+    version: "2.462.2",
+    date: "2026-09-16",
+    changes: [
+      "A TEE ROW\u2019S NINE IS DECIDED BY THE ROUNDS ALREADY PLAYED OFF IT (Kerry 2026-09-16, on Avery Ranch: \u2018I submitted ALL Avery Ranch tees, ratings and info last night. Is this fixed now?\u2019). Avery\u2019s card has two nine-hole rows per tee and no 18-hole row, so `label_course_tee_nines`\u2019 yardage strategies could not tell front from back and every future Avery sheet would have printed no handicap until an 18-hole card was imported. But each round we hold off a row was scored on a night whose nine we recorded (`events.nine_side`) and posted as a handicap round naming its nine (`handicap_rounds.nine`). Unanimous history now labels the row \u2014 permanently, for every future event at the course \u2014 and a row played as both front and back stays unresolved and says so. v2.462.0\u2019s per-event fallback still covers the night itself. Test: `test_tee_nine_from_history.py` (8 checks).",
+    ],
+  },
+  {
+    version: "2.462.1",
+    date: "2026-09-16",
+    changes: [
+      "The starter sheet\u2019s \u2018No playing handicap for some tees\u2019 note is about the tees ON THE SHEET. a9.23 Avery Ranch printed it after v2.462.0 had restored every player\u2019s PH, because the Green tees were still unresolved \u2014 and nobody was playing Green. An unlabelled tee no seated player uses is not a missing handicap; the note now prints only when a player\u2019s own tee yielded none.",
+    ],
+  },
+  {
+    version: "2.462.0",
+    date: "2026-09-16",
+    changes: [
+      "THE HANDICAP LOCK (Kerry 2026-09-16: \u2018ROSTER handicaps need to lock after an event begins. Past events should not update to current handicap indexes.\u2019). Every event now carries `handicap_as_of` \u2014 null until it tees off (`_event_started`, the same clock the blind re-seat uses), then its own date \u2014 and every handicap surface reads the index IN EFFECT that morning: the same computation over the rounds posted BEFORE that day, with the lookback measured back from it. Nothing is stored; the rounds that decided a past index do not change, so recomputing them yields the same number every time (principles 1 and 4). `get_all_handicap_players(as_of=)` is the one computation; `/api/handicaps/index-map?as_of=` serves it; the events page fetches that day\u2019s map when a started event is expanded and reads it in place of the live one for ROSTER and PAIRINGS alike.",
+      "PAIRINGS AND ROSTER ARE THE SAME NUMBER (Kerry: \u2018PAIRINGS handicap indexes are not matching those in ROSTER. PAIRINGS handicaps are not correct, which then affects the Starter Sheet handicaps\u2019). `_roster_handicap_index_map` \u2014 what PAIRINGS, the generator and the starter sheet\u2019s IDX column read \u2014 was its own query: a plain AVERAGE of the last twenty differentials, while the ROSTER showed the TGF index (`compute_handicap_index`: best-N of twenty, \u00d70.96, WHS adjustment). An average of all twenty is always higher than an average of the best eight, so every PAIRINGS index read two to four strokes above the ROSTER (Rideout 16.3 vs 13.6, South 6.8 vs 4.2), the starter sheet printed those, and a first-timer with two rounds got a number the ROSTER rightly refused him. The map is now a view of the one computation, locked to the event, and a saved sheet\u2019s `handicap_index` snapshot is the fallback rather than the answer \u2014 so every sheet already saved with the wrong number reads right without being re-saved.",
+      "AVERY RANCH PRINTS A PLAYING HANDICAP AGAIN (Kerry: \u2018Avery Ranch doesn\u2019t even show PH or TEAM (Cart) handicaps\u2019). Its card holds two nine-hole rows per tee and no 18-hole row to label them from, so the sheet, refusing to guess, printed none. Once the night\u2019s scorecards are in, the tee row Golf Genius scored the round off IS the nine that was played \u2014 a recorded fact \u2014 and the print pack now lets THIS EVENT\u2019s own rounds decide an otherwise unlabelled card. A future event at such a course still prints the note until its 18-hole card is imported.",
+      "New read-only bridge `scoring-pairings:sheet|<event_id>` returns the saved sheet as the page and starter sheet read it (locked index, roster tee, hole label) plus the print pack\u2019s PH basis and note, so a lane can verify a sheet without a login.",
+      "Test: `test_handicap_index_lock.py` (28 checks) \u2014 the as-of index counts only rounds before the day and differs from today\u2019s; the pairings map equals the roster index, keyed by customer_id, and is not the old average; a two-round player has no index anywhere; the lock date for past / future / today-before-tee; `/api/events` publishes it; a saved sheet reads the locked index over its own stale snapshot; and structural checks that every consumer honours the lock.",
+    ],
+  },
+  {
+    version: "2.461.0",
+    date: "2026-09-16",
+    title: "half-Net Skins reproduces Golf Genius exactly \u2014 the bug was ours",
+    changes: [
+      "CLOSED CA Queue #7, and it was never a rounding-mode question. Two bugs, both ours. (1) We applied the 50% allowance to the ROUNDED playing handicap, which double-rounds. Golf Genius states the rule on its own settings page \u2014 \u201cThe World Handicap System requires full precision to be maintained in intermediary calculations. Rounding is performed only once and as the last step\u201d \u2014 and its worked example for Eduardo Melchor shows it: course handicap 5.6 \u00d7 139/113 = 6.888 unrounded, \u00d7 50% = 3.444, rounded ONCE to 3. We were computing round(6.888) = 7, then 7 \u00d7 50% = 3.5. (2) Stroke allocation was re-ranked over the holes played; GG\u2019s league setting is \u201cfull card Stroke Index Allocation\u201d.",
+      "The consequence of bug (1) is the whole mystery: Melchor and Zapata BOTH land on a playing handicap of 3. The \u201c2.5 and 3.5\u201d this lane spent its time trying to round correctly never existed \u2014 they were artifacts of our own double-rounding, which is why no independent rounding of them could reproduce GG\u2019s board and why every one of them paid Melchor a fifth skin GG did not pay.",
+      "The engine now reproduces GG\u2019s PUBLISHED PLAYING HANDICAP COLUMN for all four a9.23 players from index and tee \u2014 Straiton 0, Zapata 3, Melchor 3, Youngs 0 \u2014 as well as its skins board and its dollars. Matching the board alone could be luck; matching the column GG printed cannot, which is what closed the item.",
+      "game_handicaps now takes the UNROUNDED course handicap, applies the allowance to it, rounds once, then applies \u2018off lowest\u2019 to the rounded figure in GG\u2019s printed order. Where no unrounded handicap is available it falls back to the rounded one and REPORTS precision_loss with a warning on the board, rather than quietly computing a number GG would not have used. course_handicap is a new optional field on the player/card shape.",
+      "Rounding is half-up, ratified from the GG settings screen: \u201cRound up\u201d there means round HALF up, not ceiling (its tooltip reads \u201cA handicap allowance 50% applied to a CH of 13 becomes 7\u201d). This does NOT conflict with the CA Queue #5 plus-handicap ruling \u2014 that is a round-level deduction, a different mechanism.",
+      "allocate_strokes gains a mode dial: \u201cfull_card\u201d (a stroke lands where the 18-hole index is \u2264 the handicap) vs \u201csubset\u201d (re-rank over the holes played). Worth knowing, because it is money and nobody has said it out loud: under full-card allocation on a nine, a playing handicap of 3 delivers only TWO strokes \u2014 index 2 is on the back nine and is not played. That is the setting working correctly.",
+      "GUARD: two stroke-index conventions exist in our data \u2014 a9.23 carries real GG indexes (1, 3, 5 \u2026 17 on a front nine) while some rounds carry them re-ranked to 1..N. Applying full-card to a re-ranked nine would cap every handicap above 9 at one stroke per hole and silently under-allocate. allocate_strokes now RAISES on that combination instead, turning a silent money bug into a loud failure.",
+      "The card path (build_cards) is deliberately left on \u2018subset\u2019 rather than flipped to the league setting: no real GG event has yet discriminated the two there, and flipping it blind broke four test files. Carried as CA Queue #10, with the plus-handicap interaction noted for checking against a real plus card.",
+      "RATIFIED GOVERNING RULE (Kerry): \u201cUntil we detach from GG, GG rules. When untethered, obviously we rule everything.\u201d Recorded in side-games.md as the tie-breaker whenever our rules and Golf Genius\u2019s disagree \u2014 which is why the half-Net allowance and the plus deduction round differently on purpose.",
+      "Documented what is ratified BY WHAT, because \u2018we are sure\u2019 and \u2018we think\u2019 must not look alike in money code: the unrounded-handicap pipeline is proven by replay; half-up rounding is confirmed by the settings screen; full-card allocation rests on the settings screen ALONE, since a9.23 does not discriminate it. test_half_net_skins.py asserts that non-discrimination explicitly so nobody later cites this event as evidence for a dial it never tested.",
+      "Tests: test_half_net_skins.py (56 checks), including an assertion that double-rounding breaks Melchor\u2019s column and is reported as precision loss \u2014 the bug cannot come back silently. Full suite unchanged against baseline (11 pre-existing failures, none from this lane).",
+    ],
+  },
+  {
+    version: "2.460.0",
+    date: "2026-09-16",
+    changes: [
+      "HALF-NET SKINS, AND THE BUY-IN COUNT THAT SILENTLY CHANGES WHICH GAME IS PLAYED. a9.23 Avery Ranch, $52 of skins: only four players bought the gross bundle on a nine, so the side-games matrix switched Skins to \u2018SKINS 1/2 Net $\u2019 \u2014 a NET game. Our engine computed GROSS skins, found three skins all to Luke Youngs, and reported that Golf Genius was contradicting itself about Carlos Zapata\u2019s hole 7. GOLF GENIUS WAS RIGHT AND WE WERE WRONG. Zapata made gross 4 on a par 4, received a stroke there under the 50% allowance and netted an outright birdie \u2014 exactly what GG\u2019s own detail line says. Kerry, 2026-09-16: \u2018the game shifted due to buy ins based off of the side game matrix built in. That is the 1st level governing factor for game decision\u2026 Needs to be codified into the Tracker along with all other game settings.\u2019 No money moves: a9.23 is settled and was always paid correctly.",
+      "THE MATRIX IS NOW THE GOVERNING LAYER, IN DATA. `skins` carries VARIANTS \u2014 each with its own basis, its own handicap dials and Golf Genius\u2019s own name for it \u2014 and `select_variant` picks one from the buyer count and REPORTS the decision with its reason. The old config had `half_net_below` sitting beside a comment saying the engine did not implement it, and then computed gross anyway behind a warning nobody acted on. A rule that only warns is not a rule.",
+      "POPS ARE A PROPERTY OF THE GAME, NOT OF THE CARD. Every game now DECLARES `pops_per_hole`. Round-level games (Individual Net, Individual Gross) are gross total minus playing handicap \u2014 Kerry, 2026-09-16: \u2018Individual Net is not a pops per hole game, so pops don\u2019t need to show on individual net views\u2019 \u2014 while Team Net best-ball, Stableford and half-Net Skins are hole-level because the hole cannot be decided otherwise. `game_handicaps` derives each game\u2019s OWN allocation from the playing handicap rather than borrowing whatever net game the card was built for. This is the mechanism behind the plus handicapper whose Individual Net view showed circle marks for a mechanic that game does not use.",
+      "ALLOWANCE % AND \u2018OFF THE LOWEST\u2019 ARE TWO SEPARATE DIALS and are stored that way. USGA\u2019s allowance is a percentage of each player\u2019s own Course Handicap; \u2018off the lowest in the group\u2019 is an additional TGF/GG convention, which USGA applies to MATCH play. Folding either into the other gets the maths wrong in one direction or the other.",
+      "`scoring-skins-audit` NOW ASKS THE GAME\u2019S ACTUAL QUESTION. It resolves the variant the matrix selected, derives that game\u2019s own strokes, and prints BOTH the gross and the pops on every hole alongside each buyer\u2019s playing handicap \u2014 so the gross question and the net question can never again be mistaken for each other. On a9.23 hole 7 now reads as Zapata\u2019s outright net hold instead of a tie.",
+      "WHAT IS PROVEN AND WHAT IS NOT, stated plainly because it is money. PROVEN: with the allocation GG\u2019s own detail strings pin, the engine independently reproduces GG\u2019s board hole for hole and dollar for dollar \u2014 Youngs holes 2/3/5, Zapata hole 7, $39/$13 of a $52 pot. NOT PROVEN: how the half stroke ROUNDS. GG calls Youngs\u2019 hole 5 an Eagle rather than an Albatross, so his 0.5 rounded DOWN and half-up is refuted outright; but nothing pins what Zapata\u2019s 2.5 and Melchor\u2019s 3.5 do, and every naive independent rounding awards Eduardo Melchor a fifth skin GG did not pay. Carried as CA Queue #7. Until Kerry rules, the board computes but DECLARES ITSELF PROVISIONAL, and a test asserts that none of the naive roundings reproduce GG so the gap cannot be quietly closed by guessing.",
+      "USGA APPENDIX C RECORDED AS DATA, WITH ITS VERIFICATION STATE. The four-player ladder (Best 1 of 4 75%, Best 2 of 4 85%, Best 3 of 4 100%, Best 4 of 4 100%) is confirmed and matches Kerry\u2019s ratified Team Net figures exactly, and Team Net\u2019s allowance now follows the BALL COUNT as data. The two-player CART Net rows are NOT confirmed \u2014 usga.org, randa.org and every mirror are blocked by this environment\u2019s network egress proxy, and a search snippet is not the Rules of Handicapping \u2014 so they carry NO number to fall back on rather than a guess. CA Queue #8 has the ask.",
+      "AND THE DIAL CANNOT BE CLOSED BY ANALOGY. Kerry ratified a TGF rounding convention the same day (CA Queue #5): the plus-handicap ROUND deduction rounds \u2018half away from zero\u2019. Applying that same convention to the \u00bd-Net allowance does NOT reproduce Golf Genius \u2014 it makes Youngs\u2019 hole 5 an Albatross where GG\u2019s own words say Eagle, and pays a fifth skin GG did not pay. That is not a contradiction in Kerry\u2019s rulings (a round-level deduction and a per-player allowance are different mechanisms), but it does mean TGF\u2019s own rounding convention and GG\u2019s observed behaviour disagree here \u2014 which makes CA Queue #7 the untether question in miniature: when our rules and GG\u2019s disagree, whose answer pays?",
+      "Tests: `test_half_net_skins.py` (46 checks) is built on a9.23\u2019s real cards, handicaps and stroke indexes, and drives the audit bridge end to end over an in-memory database. `test_live_scoring.py`\u2019s \u2018Skins 1/2 Net is flagged as NOT implemented\u2019 assertion is replaced by the behaviour that superseded it.",
+    ],
+  },
+  {
+    version: "2.459.0",
+    date: "2026-09-16",
+    changes: [
+      "IDENTITY: THE HANDICAP CARD SEND MATCHES PEOPLE BY `customer_id`, NEVER BY A NAME STRING (Kerry, 2026-09-15: \u2018What\u2019s the bug? We need to fix it\u2019). The event filter compared two per-order NAME SNAPSHOTS \u2014 `items.customer` against `handicap_player_links.customer_name` \u2014 so \u2018Mike Murphy\u2019 on the order and \u2018Michael Murphy\u2019 on the link were one man who resolved to nobody: he was classified \u2018no TGF handicap on record\u2019 and silently got no card, with a current index on file. A name proper-cased, married or corrected after the order did the same. `WHERE customer_name IS NOT NULL` compounded it by dropping any link that had a `customer_id` but no name label, and the route built its OWN roster from `get_all_items()` + aliases instead of `_event_roster_rows` \u2014 the ONE builder mandated in v2.410.0 \u2014 so a Golf Genius RSVP with no order row was invisible to it and was not even counted in `registered`. All three are gone: the roster is THE roster, and both sides of the match are `customer_id` sets.",
+      "THE REASON EVERY CALLER WAS FORCED ONTO NAMES: `get_handicap_export_data` never returned a `customer_id` at all. It does now, on every row \u2014 and it reaches email, chapter, first/last name and suffix through `handicap_player_links.customer_id` (canonical profile first, then the order row BY ID) rather than through `LOWER(items.customer) = LOWER(l.customer_name)`. The name join survives only as an explicit last resort for a link that genuinely has no id, and every such row is REPORTED in `name_fallbacks` and on the send result, so the unlinked population is visible rather than papered over. This was the bigger half: the same function feeds the Golf Genius CSV export.",
+      "MEMBERS-only is `customer_id` set membership too. It used to fall back to `c.first_name || \u2019 \u2019 || c.last_name = l.customer_name` and then match the result back by `player_name`, so a member whose profile name and link label differed by a nickname or a suffix read as \u2018not a member\u2019 and got nothing.",
+      "AN UNRECOGNISED AUDIENCE IS NOW REFUSED, NOT SENT TO. An `event_name` matching no event used to fall through to an empty filter; the composer hazard of 2026-09-08 mailed a whole roster exactly that way. It returns 400 and sends nothing.",
+      "A registrant with no customer record at all is its own named bucket (\u2018on the roster with no customer record to match\u2019) instead of being called \u2018no TGF handicap on record\u2019. v2.456.0 made the count COMPLETE; this makes the classification underneath it CORRECT \u2014 the buckets now reconcile for a reason rather than by luck.",
+      "NEW READ-ONLY AUDIT: `scoring-hcp-link-audit`. Handicap identity coverage by `customer_id`, every unlinked row NAMED, links whose label has drifted from the canonical profile name, `handicap_rounds` that reach no customer, and every plus-handicap round. Writes nothing. Run live before any of the above shipped: **279 `handicap_player_links` rows, exactly 1 with no `customer_id`, 0 orphans \u2014 99.6%** \u2014 which is why the join could be switched straight over instead of being backfilled first.",
+      "THE PLUS RULE NOW LIVES IN THE MECHANISM, NOT IN EACH CALLER. A plus handicap comes off the ROUND, never off a hole (Kerry, ratified 2026-09-15: \u2018For MVP nobody is allowed to have to add strokes on any given hole\u2026 But his +3 PH still stands\u2026 it should be applied across a round\u2019). v2.450.0 applied that at TWO of the eleven `compute_hole_derivations` call sites, locally \u2014 so the `/handicaps` scorecard and the Players Cup card were still adding a plus stroke hole by hole the next day. The rule moves INTO `compute_hole_derivations` behind an explicit `game=` flag, and the round deduction into `plus_round_deduction`; both local patches are deleted, so there is one implementation and a future caller cannot miss it.",
+      "PAT YOUNGS\u2019 QUARRY FRONT CARD, THE ONE KERRY SCREENSHOTTED: gross 4,4,3,3,5,4,4,2,4 = 33. It showed NET 4,4,4,4,5,4,4,3,4 = 36 with `\u25cb` marks on holes 3, 4 and 8 and NET PTS 1,1,0,1,1,1,1,1,1 = 8. Now no hole takes a give-back: the NET row equals the GROSS row, holes 4 and 8 score as the birdies they are, NET PTS reads 1,1,1,2,1,1,1,2,1 = 11, and his +3 comes off the round once \u2014 NET PTS 8, NET 36. The total is the same here because each affected hole sat in the linear part of the net table; the DISTRIBUTION is what was wrong, and it stops being wrong at the table edges too.",
+      "THE `\u25cb = plus stroke` MARK IS GONE from both renderers, along with its legend entry \u2014 there is no give-back on any hole to mark. In its place both cards state the adjustment once: \u2018Plus handicap +3: applied to the ROUND, not to any hole \u00b7 NET 36 \u00b7 NET PTS 8\u2019. Nothing renders for a player who is not a plus.",
+      "THE WHS / INDEX MATH IS DELIBERATELY UNTOUCHED, and the flag defaults OFF so those five call sites keep their behaviour by doing nothing: `get_differential_parity`, `get_scoring_handicap_preview`, `_two_nine_recap_rows`, `derive_18hole_rounds_as_two_nines`, `_nine_totals_for_card`. USGA net double bogey is `par + 2 + strokes_received`, and for a plus that legitimately lowers the cap \u2014 changing it would corrupt every differential and index we have posted. `adjusted_strokes` keeps the true allocation in BOTH modes. `get_scorecard` publishes the game view BESIDE the true one rather than replacing it, because `verify_scoring_round` compares Golf Genius\u2019s own circle/square markings against `net_vs_par` and GG marks a plus player\u2019s hole WITH the stroke \u2014 clamping it would have turned every plus round into a false parity failure. Pat\u2019s adjusted gross (33), differential (0.5) and index are provably unmoved; `test_plus_handicap_card.py` asserts it.",
+      "RULINGS APPLIED 2026-09-16, same release. (1) ROUNDING IS HALF AWAY FROM ZERO for the round deduction (Kerry: \u2018Standard rounding where .5 goes away from 0\u2019, CA Queue #5): `plus_round_deduction` no longer uses Python\u2019s banker\u2019s `round()` \u2014 a plus of 0.5 gives back 1, 2.5 gives back 3. (2) THE MVP READS THE GAME VIEW, FORWARD ONLY (Kerry: \u2018MVP - Proceed\u2019): `determine_tgf_mvp` takes `game_stableford_net_after_plus` for events on or after `PLUS_RULE_EFFECTIVE_DATE` (2026-09-15) and the frozen WHS `stableford_net` before it, so no MVP already decided can move. (3) GROSS \u2212 PH = NET READS ACROSS THE TOTALS (Kerry: \u2018Individual Net is not a pops per hole game... Gross Score - PH = Net Score\u2019, \u2018I accept your recommendation\u2019): the expanded scorecard gains PH and NET total columns beside OUT/IN, filled on the GROSS SCORE row of the block that closes the round; the hole columns do not move, so the expanded grid still lines up with the row above it.",
+      "Tests: `test_handicap_identity.py` (41 checks, end-to-end through the route with a Flask test client \u2014 a drifted-name registrant is SENT, a null-label link does not vanish, a GG-RSVP-only registrant is counted and sent, an unknown event is refused), `test_plus_handicap_card.py` (39, Pat\u2019s real card as the fixture plus the WHS regression), `test_plus_handicap_render.js` (39). `test_plus_handicap_points.py` and `test_handicap_card_counts.js` still pass off the mechanism rather than the deleted local patches.",
+    ],
+  },
+  {
+    version: "2.458.11",
+    date: "2026-09-16",
+    changes: [
+      "ONE WORD FOR THE WOMEN\u2019S TEE, ON BOTH LEGENDS (Kerry 2026-09-16: \u2018S1. Women\u2019s\u2019 / \u2018We need to sync up the two legends somehow to maintain consistency\u2019). The LEADERBOARD\u2019s played-tee legend and the STARTER SHEET\u2019s band legend are built by different code and had drifted to two spellings \u2014 \u2018Ladies - Red Tees\u2019 on the board, \u2018Women Red Tees\u2019 on the sheet. Both now compose the same two fields, `band_label` then `tee_name`, and the word lives in exactly one place: `TEE_LEGEND_WOMEN_WORD`. The tee\u2019s printed name is \u2018Red Tees\u2019 everywhere; who plays it is the band label\u2019s job. `test_tee_legend_pairing.js` (12 checks) fails either surface that spells it on its own.",
+      "The key already aligns to the board\u2019s RIGHT-MOST VISIBLE column (v2.446.0 `fitKeys`, re-measured on every hole/handicap toggle and on resize) \u2014 confirmed rather than rebuilt.",
+    ],
+  },
+  {
+    version: "2.458.10",
+    date: "2026-09-16",
+    changes: [
+      "AN INGEST MAY NOT ERASE WHAT IT DOES NOT CARRY. Kerry, the morning after s9.23: \u2018This shouldn\u2019t say Hole Group 1. It should just say Hole 1. Where\u2019s that coming from? Also, this lost the hole assignments that I had assigned yesterday.\u2019 One cause. The closeout applied the Golf Genius TEAM NET board to the finished event, and that board knows who rode together and in what FINISH order \u2014 nothing about which hole a group started on or which tee anyone played. `_write_event_pairings_from_groups` deleted the sheet and wrote the board back with \u2018Group N\u2019 labels, no tee and no customer_id; the starter sheet then prefixed \u2018Hole \u2019 onto \u2018Group 1\u2019, the PAIRINGS tab read a dash for every tee, and every seat-keyed blind pointed at a seat that no longer existed. The writer now remembers each group\u2019s hole label (by the PEOPLE in it), each player\u2019s tee, handicap and customer_id before the delete, and hands them back to any group the ingest left unlabelled. A label the ingest DOES carry (the tee-sheet route\u2019s 1A/1B) still wins.",
+      "THE TEE COMES FROM THE ROSTER, NOT THE SAVED ROW (Kerry: \u2018If the tees are in ROSTER, they should automatically show up in PAIRINGS\u2019). `get_event_pairings` now resolves a blank `tee_choice` from `_event_roster_rows` by customer_id \u2014 the same read-time lookup the sheet already does for names and handicap indexes \u2014 so PAIRINGS and ROSTER can no longer disagree about a tee. The saved row is a snapshot; the truth is looked up.",
+      "\u2018Group N\u2019 is never printed as \u2018Hole Group N\u2019. The starter-sheet `start_line` / `hole_label` composition leaves a generic label alone instead of dressing it up as a hole.",
+      "THE REPAIR: `relabel_event_pairings` + bridge `scoring-pairings:relabel|<event>|{current group_num: hole label}[|apply[|holes]]` gives a sheet its hole labels back and renumbers the groups in the order listed, THROUGH the normal save so the blinds re-seat with it and the roster tees persist. Nobody changes seats. Dry-run unless `apply`. Built for s9.23 (Kerry: \u2018Re-seat the pairings as necessary to match and fix blinds\u2019), where the GG tee-sheet widget no longer lists a played round, so Kerry\u2019s screenshot of the tee sheet is the record.",
+      "Test: `test_pairings_ingest_preserve.py` (12 checks) \u2014 label-less ingest keeps hole labels, tees and customer_ids; a carried label still wins; a blank row tee is read from the roster; the Group-N guard; the repair relabels, reorders, persists tees and re-seats a blind through the normal save.",
+    ],
+  },
+  {
+    version: "2.458.9",
+    date: "2026-09-16",
+    changes: [
+      "CORRECTING v2.458.8: the re-seat reached rows it had no business touching. The `gg`-sourced blinds \u2014 the ones Kerry enters straight into Golf Genius, read back out of the team string \u2014 are deliberately LOOSE, because as `draw_event_blinds` has always put it, \u2018we cannot know which slot each one covers, and it does not matter\u2019. v2.458.8 re-seated those too and handed them seats they were never meant to hold. The re-seat now touches only the app\u2019s own seat-keyed rows; a gg row keeps its shape and its `gg:` key.",
+      "ONE BLIND PER PERSON PER EVENT, ENFORCED AT THE BOUNDARY (rule 15, ratified 2026-09-16). s9.23 carries Pat Youngs TWICE in `blind_draws`, so a re-seat that merely moved rows around would have given one man two seats on the sheet. The second row is loosened instead \u2014 never deleted, so it still counts against his turn for the year \u2014 and the rule is now checked where the rows are written rather than trusted of the data.",
+      "What this does NOT do is clean the existing rows. s9.23 holds four app blinds for two open seats, Pat Youngs among them twice, alongside two gg rows for the same night. That is a data question with Kerry\u2019s name on it, not something to silently resolve: `scoring-blinds:<event>` prints the rows read-only and the fix waits on his word.",
+      "Test: `test_blind_reseat.py` grows to 11 checks \u2014 a gg row keeps its loose shape and key through a regenerate, and a duplicated person is seated exactly once with the duplicate kept.",
+    ],
+  },
+  {
+    version: "2.458.8",
+    date: "2026-09-16",
+    changes: [
+      "BLINDS SURVIVE THE SHEET BEING REGENERATED (Kerry: \u2018Lost blinds visually\u2019 \u2014 and, picking a name for an empty seat, \u2018Gus Vasquez is already a blind in this event\u2019 when no blind showed for him anywhere). Two symptoms, ONE cause: `blind_draws` rows are keyed to a SEAT (`holes:group_num:cart_pos`) and `save_event_pairings` rebuilt `event_pairings` from scratch without touching them. Regenerate the sheet and the seats move while the blind rows keep pointing at the old coordinates \u2014 so the card renders \u2018\u2014 open \u2014\u2019 because the blind is invisible, while the eligibility guard still counts that person because the blind is very much there. An orphan, visible to the rules and to nobody else.",
+      "A BLIND BELONGS TO THE EVENT AND THE PERSON; THE SEAT IS ONLY WHERE IT IS DISPLAYED. `_reseat_event_blinds` now runs inside `save_event_pairings`, moving every blind onto the sheet\u2019s CURRENT open seats in sheet order \u2014 the same order `draw_event_blinds` fills them, and the same treatment the loose rows Kerry enters straight into Golf Genius already get. Rule 15c is honoured on the way: a card never fills its own team, so a seat in that player\u2019s own group is skipped. Nothing is deleted \u2014 a blind with no open seat left is nulled to LOOSE, where it still counts against that member\u2019s turn for the year.",
+      "Two constraints the fix had to respect, both found by running it: `slot_key` is NOT NULL with UNIQUE(event_id, slot_key), and a re-seat can SWAP two blinds \u2014 writing A into B\u2019s seat while B still holds it trips the constraint. Every row is parked on a temporary key first, then the real ones are written. A loosened row takes a `loose:` key rather than a null, matching the `gg:` convention the backfill already uses.",
+      "Test: `test_blind_reseat.py` \u2014 reproduces the s9.23 case exactly (a blind in group 3 seat 4, then every seat moved), and asserts the blind stays on the sheet, lands somewhere that exists, avoids its own group, is never deleted when seats run short, and becomes loose instead. Its fixture uses NAMED columns on `events`, the trap that broke `test_pairing_rounds.py` on 09-15.",
+    ],
+  },
+  {
+    version: "2.458.7",
+    date: "2026-09-16",
+    changes: [
+      "THE LADIES\u2019 TEE GETS THE OUTLINE AGAIN, AND THE MEN\u2019S RED DOES NOT (Kerry: \u2018Mike is showing as that open circle and the ladies should be the open circle. So need to flip those\u2019). Not a config problem \u2014 a real pairing bug. The legend was BUILT in tee order, then re-sorted so the ladies\u2019 tee falls last, and only THEN zipped against the still-unsorted label list. After the sort the two sequences no longer line up, so every entry from the moved element onward paired with the wrong label. On a card carrying both \u20183 - Red Tee\u2019 and \u20183 - Red (L) Tee\u2019 that is an exact swap: Michelle DelCarmen played the ladies\u2019 tee and drew the men\u2019s filled dot, Mike Murphy played the men\u2019s and drew the ladies\u2019 outline. The pairing is now made BEFORE the sort; it is keyed by LABEL, so display order can change freely without touching it.",
+      "THE LADIES\u2019 TEE IS NAMED, NOT JUST RINGED (Kerry: \u2018Should show as Ladies - [color] Tees\u2019). `_tee_name_plural` now returns \u2018Ladies - Red Tees\u2019 where it returned \u2018Red Tees\u2019, so a board showing two Reds says which is which in words rather than relying on an outline the reader has to be told about. Men\u2019s tees are unchanged.",
+      "TWO LEGENDS, DELIBERATELY SPELLED DIFFERENTLY \u2014 caught by `test_event_reports.py` before this shipped. The first cut renamed the shared helper and trampled a RATIFIED rule: the BAND legend (starter sheet) already prints \u2018Women\u2019 beside the colour, and Kerry ruled on 2026-09-15 that it must therefore read plain \u2018Red Tees\u2019. The LEADERBOARD legend is built from the tees actually PLAYED and carries no band at all, which is exactly why it needs the words. `_tee_name_plural` is unchanged and keeps the ratified spelling; the new `_tee_legend_display_name` adds the prefix for the board alone.",
+      "Test: `test_tee_legend_pairing.js` \u2014 asserts the pairing happens before the sort (the ordering that caused the swap), that a ladies tee renders as \u2018Ladies - <colour> Tees\u2019 while a men\u2019s does not, and that the outline is still driven by the (L) marker and nothing else.",
+    ],
+  },
+  {
+    version: "2.458.6",
+    date: "2026-09-16",
+    changes: [
+      "SESSION CLOSED, EVERY OPEN ITEM HANDED OVER (Kerry: \u2018I want to close this session, so needs to be thorough\u2019 and \u2018Pass any open items to TGF Tracker Improvements 2 lane to pick up\u2019). The event-night handoff gains \u00a714: what shipped (v2.437.0 \u2192 v2.458.6), where every finding is documented, which mailbox posts carry it, the five CA Queue rows that hold Kerry\u2019s outstanding decisions, and what was passed to the successor lane. \u00a713f is corrected \u2014 earlier drafts said the skins question, the chapter-badge rule and the blind-draw ratifications stayed with this lane; per Kerry they did not.",
+      "THE PLATFORM-FACING BRIEF WAS 162 VERSIONS STALE. `docs/claude/state-of-the-tracker.md` \u2014 the document platform-claude reads through `get_tracker_docs` \u2014 still described v2.296 as current, so Platform planning was working from a picture that predated live game-day scoring entirely. Version stamped, a currency warning added at the top pointing at the mailbox and the handoff files, and a v2.347\u2192v2.458 section appended covering what changes the Platform picture: money that waits for the whole field, a polling loop on the event\u2019s own clock, the board recomputing rather than trusting Golf Genius, pairing rule 15 and the blind draws, a ratified scoring rule the incumbent cannot express, and identity as the live fault line. A full rewrite is still owed and was handed over with the rest.",
+    ],
+  },
+  {
+    version: "2.458.5",
+    date: "2026-09-16",
+    changes: [
+      "THE OPEN DECISIONS MOVED OUT OF THE TRANSCRIPT AND ONTO KERRY\u2019S OWN CHECKLIST. Five rows written to the CA Queue: the a9.23 skins question (Golf Genius\u2019s skins board pays Carlos Zapata a birdie on hole 7 while Golf Genius\u2019s own scorecard has him at par there \u2014 $52 and a posted handicap round hang on which is right), the five blind-draw specifics still running on inferred rules, the chapter-badge rule, how the plus-handicap deduction rounds when a nine-hole plus sits at \u22120.5 and rounds to zero, and the re-send of both events\u2019 handicap cards that went out with pre-round indexes. A decision living only in a chat is a decision nobody can find next week.",
+      "Docs caught up to the code: the event-night handoff now runs to v2.457.0 with a new \u00a713 covering the proxy-name change, the `scoring-skins-audit` bridge, the Golf Genius self-contradiction in full, the chapter-badge rule that has NOT been given yet (with the constraint that only the badge display may change \u2014 `customers.chapter` must never be overwritten from `items.chapter`), and the split of what went to the spin-off lane versus what stayed. The skins section of side-games.md now points at the audit bridge from the RULE, so the next person finds it without reading a handoff.",
+    ],
+  },
+  {
+    version: "2.458.4",
+    date: "2026-09-16",
+    changes: [
+      "docs: closeout skill 1.1/1.2 — the drop + keyed re-import recipe for a null-customer_id or tee-less card (refresh= does nothing for either), and the tee-sheet path for a cart-only team board (pass the event id; the sheet has no label). Skill OPEN 9 and 10 closed by Kerry's rulings 2026-09-16; a9.23 pairings applied from the tee sheet; Lee Vasquez posted; customer 821 is Guillermo Arevalo.",
+    ],
+  },
+  {
+    version: "2.458.3",
+    date: "2026-09-16",
+    changes: [
+      "docs: third live closeout run (s9.23 The Quarry + a9.23 Avery Ranch) in the closeout handoff §3k — the null-customer_id card GG's spelling created (alias, drop, keyed re-import, one handicap post), the tee-less Lee Vasquez card, the cart-only Austin pairings board; skill OPEN 9–11. Recap drafts for both chapters under docs/claude/recaps/.",
+    ],
+  },
+  {
+    version: "2.458.2",
+    date: "2026-09-16",
+    changes: [
+      "TGF Insider: the Hole-In-One pot line now prints the pot AS OF today — get_hio_pot() folds FUTURE events' registrations into its headline (closeout skill OPEN 8; Cedar Creek's 8 signups put $3,392 in the 9/16 draft when the pot after Tuesday's play was $3,384). The Insider takes the running total at the last PLAYED event instead.",
+    ],
+  },
+  {
+    version: "2.458.1",
+    date: "2026-09-16",
+    changes: [
+      "DOCS ONLY, no behaviour change. Kerry merged Luke Mazanec\u2019s two Golf Genius member records on GG\u2019s side, so the duplicate the v2.458.0 note described is gone at source: GG now returns ONE card (12135103), our standings row reads `merged_from: null`, and his total is 36 \u2014 the union of his five events \u2014 matching the rows in his expansion exactly. `scoring-race-dupes` reports zero unmerged and zero folded across all five races.",
+      "`docs/claude/customers.md` no longer reads that as a live open item. The summing fold (`{\u201cmethod\u201d: \u201csum\u201d}`) is still in the code and is now DORMANT rather than open \u2014 exercised by nobody, and it never produced a wrong number even when it was exercised, because with best 6 and five events the sum and the union agree. The note records what would make it bite (a duplicate whose cards hold more than `best_n` events between them), and what fixing it would cost (the refresh would have to fetch every card\u2019s detail to rebuild the union \u2014 a GG round-trip per duplicate per refresh, so a decision rather than a tidy-up). Kerry\u2019s preference is to resolve duplicates at Golf Genius, which makes our fold a fallback rather than the primary path.",
+    ],
+  },
+  {
+    version: "2.458.0",
+    date: "2026-09-16",
+    changes: [
+      "A PLAYER\u2019S OWN ROWS NOW ADD UP TO HIS OWN TOTAL (Kerry, on the SA FALL NET board on event night: \u2018Why aren\u2019t these points adding correctly?\u2019). Jeff Rideout\u2019s five counted rows read 11 + 10 + 8 + 6 + 1 = 36 above a total of 30 \u2014 and 30 was exactly those same rows MINUS the 9/15 Quarry line worth 6. Two caches on one page, roughly 72x apart: the row expansion is fetched live from Golf Genius and cached TEN MINUTES, while the total beside it came from the `gg_points_standings` snapshot on a TWELVE HOUR timer. Golf Genius awards season points when the manager closes an event out \u2014 hours after the snapshot that is still serving the page \u2014 so on event night the rows carried the night\u2019s points and the total did not. Every total on the board was short by that player\u2019s Quarry score (South 37 vs 38, Mazanec 33 vs 36, Rideout 30 vs 36).",
+      "THE GUARD WAS ARMED IN ONE DIRECTION ONLY \u2014 the pattern CLAUDE.md names, and the same shape as the late-signup bug in v2.430.0. `get_points_race_standings` already knew standings move with events: it had a check that let a TIME-STALE snapshot stand when no event had happened since. But nothing could ever make a time-FRESH snapshot stale, so the clock alone decided \u2014 and the clock cannot tell that a round finished twenty minutes ago. An event PLAYED on or after the snapshot\u2019s day (and not in the future \u2014 next week\u2019s fixture must never hold the board open, and a cancelled event awards nothing) now puts the race in a short window instead of the long one. It settles itself: the refresh moves `fetched_at` forward, so this costs one Golf Genius round-trip per window, not one per page load.",
+      "THE TIMEZONE TRAP IS WHY IT HID, AND IT WAS ALREADY IN THE OLD GUARD. `fetched_at` is stored naive UTC like every timestamp in this database; `events.event_date` is a CENTRAL calendar day. At 9 PM Central on a Tuesday the snapshot is ALREADY TOMORROW in UTC, so `event_date >= date(fetched_at)` silently excluded the event that had just finished \u2014 on exactly the night it mattered. Both the new test and the pre-existing one now read the snapshot\u2019s CENTRAL day through `to_central`, whose docstring describes this precise trap. Fixed across the board rather than only on the new code path (rule 3d).",
+      "The event-day window is a named rule, not a literal buried in a staleness test: `_POINTS_EVENT_DAY_REFRESH_HOURS` (0.25h) beside the race registry, with the ordinary window still `auto_refresh_hours=12`. Manual Refresh is unaffected and remains instant.",
+      "NOT FIXED, WRITTEN DOWN: a merged standings row sums the member cards\u2019 totals (`{\u201cmethod\u201d: \u201csum\u201d}`) \u2014 Luke Mazanec carries two Golf Genius member records. Summing two per-card best-N subtotals equals best-N-of-the-union only while neither card exceeds the cutoff; past it, it overcounts. `combine_member_detail_tables` already does the union correctly and the standings total does not use it. Not biting today (best 6, few events); recorded in `docs/claude/customers.md` for Kerry to rule on before it does.",
+      "Test: `test_points_race_staleness.py` (18 checks \u2014 the event-day refresh, the thrash guards for a future fixture and a cancelled event, the long window and the original guard still intact, and the 9:30 PM Central snapshot that reads as the event\u2019s day rather than the next).",
+    ],
+  },
+  {
+    version: "2.457.0",
+    date: "2026-09-16",
+    changes: [
+      "PROXY WINNERS READ LIKE EVERY OTHER BOARD (Kerry: \u2018Use same text for Proxy winners as the others\u2019). The Proxies tab was printing the raw Golf Genius string \u2014 GG\u2019s own casing, no board name cell, no card behind the name \u2014 so the one tab whose entire job is to name a winner was the one tab whose winner did not look like a player anywhere else on the page. The GG name now resolves back to the board row through the same \u2018LAST, First\u2019 flip the tee dots already use, OUR name is rendered in the standard name cell with its tee dot right-justified, and the row opens the winner\u2019s scorecard like every other row does.",
+      "NEW READ-ONLY AUDIT: `scoring-skins-audit:<event>` (Kerry: \u2018Carlos\u2019s skin isn\u2019t circled. Audit\u2019). It rebuilds exactly what the board does for its skins circles \u2014 outright low GROSS on a hole among the BUYERS in that flight \u2014 and prints the working: every buyer\u2019s stroke on every hole, the low, who held it, and why the hole did or did not pay, set against what is actually recorded as skins money. A player with money but no circled hole now produces a line you can read instead of a missing circle you have to guess at.",
+    ],
+  },
+  {
+    version: "2.456.1",
+    date: "2026-09-16",
+    changes: [
+      "SESSION DOCUMENTED \u2014 docs only, no behaviour change. `docs/claude/handoff-2026-09-15-event-night-leaderboard.md` records the whole event night, v2.437.0 \u2192 v2.456.0: pairing rule 15 (a credited or WD player leaves the sheet by himself, BLINDs drawn at random among the members with the fewest blinds this year), the money hold, the leaderboard wave, the starter-sheet tee circles, the plus-handicap rule, the Golf Genius re-pull chain that had made both chapters\u2019 winnings wrong, Apple Pay, one-modal Mark Paid, and the handicap-card counts that would not reconcile.",
+      "TWO OPEN BUGS WRITTEN DOWN RATHER THAN HALF-FIXED AT NIGHT. (1) The handicap-card event filter matches registrants to handicap links by NAME STRING \u2014 so \u2018Mike Murphy\u2019 against \u2018Michael Murphy\u2019 reads as \u2018no TGF handicap on record\u2019 and the player silently gets no card \u2014 and `get_handicap_export_data` never returns a `customer_id` at all, which is why every caller downstream is forced onto names. (2) The plus-handicap rule ratified this evening was applied at 2 of the 11 `compute_hole_derivations` call sites, so the `/handicaps` scorecard and the Players Cup card still add a plus stroke hole by hole. Both are spun off into their own session with the WHS call sites that must KEEP the plus stroke listed explicitly \u2014 touching those would corrupt every differential and index.",
+      "Both findings are the same failure the night already produced twice: the fix landed on the instance in front of us instead of on the mechanism. The Timezone trap in \u00a77 of the handoff is the third.",
+    ],
+  },
+  {
+    version: "2.456.0",
+    date: "2026-09-16",
+    changes: [
+      "EVERY REGISTRANT LANDS IN EXACTLY ONE BUCKET (Kerry: \u201821 registered and only 16 sent and 3 skipped. Seems to be 2 unaccounted for\u2019 \u2014 then the same on Austin, 12 registered, 9 sent, 2 skipped). Two `continue`s inside the handicap-card send loop \u2014 no email on file, and no NINE-hole index even though the player was otherwise eligible \u2014 dropped people with no counter and no name, so the arithmetic could not close and there was no way to find out who missed a card. Both are counted now, and every skipped player is NAMED with the reason.",
+      "The result line also publishes the arithmetic: \u2018N sent \u00b7 N skipped \u2026 of 21 registered\u2019, and if the buckets still do not add up it says so in red rather than leaving a gap to be spotted. A count that does not reconcile is worse than no count \u2014 it reads as authoritative.",
+    ],
+  },
+  {
+    version: "2.455.0",
+    date: "2026-09-16",
+    changes: [
+      "MARK PAID IS ONE MODAL, AND IT ARRIVES FILLED IN (Kerry: \u2018make it all one modal to Mark Paid so I can just click a button or select from a drop down, then auto enter today\u2019s date which would most likely be the date that I\u2019m marking it, and enter the appropriate note\u2019). It was three chained browser prompts \u2014 TYPE the method, TYPE the date, TYPE the note \u2014 for a payout whose method is one of eight, whose date is today, and whose note is already written on its own rows. Now: method is a row of buttons (Venmo first, Apple Pay beside it), the date opens on TGF\u2019s Central today, and the note arrives composed from what the player actually won \u2014 \u2018TEAM Net 1st + Skins Birdie on 8\u2019 \u2014 with the bookkeeping tails a human would not write stripped off. Nothing has to be typed to mark a payout paid; Enter confirms, Escape cancels, the backdrop closes it.",
+    ],
+  },
+  {
+    version: "2.454.0",
+    date: "2026-09-16",
+    changes: [
+      "APPLE PAY IS A PAYMENT METHOD (Kerry: \u2018Need to add Apple Pay as an option. Just sent Jesse\u2019s money that way\u2019). Added to the Mark Paid prompt and its server whitelist, and \u2014 protecting the class rather than the instance \u2014 to refunds, credit payouts and the customer payment-method field as well, since money leaves by all four doors. The recorded description and account read \u2018Apple Pay\u2019 rather than the capitalised slug.",
+      "The one thing that differs: an Apple Cash send leaves NO receipt email, so the expense classifier (which matches Venmo / PayPal / Cash App / Zelle receipts) has nothing to match on. An Apple Pay payout reconciles off the BANK line instead \u2014 it is not auto-verified the way a Venmo payout is, and the Mark Paid record is what carries it.",
+    ],
+  },
+  {
+    version: "2.453.0",
+    date: "2026-09-16",
+    changes: [
+      "A SNAPSHOT OF A ROUND IN PROGRESS NO LONGER OUTRANKS THE FINISHED BOARD (Kerry: \u2018all sorts of stuff about winnings is off because we pulled stuff too soon from GG\u2019). Team Net rows are filed two ways \u2014 `team_net` for the winners the payout assembly pays, `team_net_board` for the rest \u2014 and `game` was deliberately left out of the upsert, so whichever side a team landed on during a LIVE walk it stayed on for good. On s9.23 that put the actual winner (Burlingame / Saldana / Baker / Guerrero, $84) on the board side and a team that happened to lead mid-round on the winners side at $0. The classification now follows the latest walk, and a team no longer in the winner set is demoted rather than left where an early pull put it.",
+      "Re-walked both chapters\u2019 game boards for the completed rounds, so the CTPs, skins, flight winners and Team Net purses on s9.23 and a9.23 are GG\u2019s finished result rather than a half-played one.",
+    ],
+  },
+  {
+    version: "2.452.2",
+    date: "2026-09-16",
+    changes: [
+      "\u2018When scores were last posted\u2019 now means that. The money hold measures its ten-minute settle from `imported_at`, but a RE-import left that column alone \u2014 so the clock ran from whenever a card first appeared, and by the time the last hole landed the ten minutes had long since \u2018elapsed\u2019 and the pot would post the instant the field completed. A card whose score actually CHANGED restamps it now; an unchanged re-import deliberately does not, because a five-minute poll finding the same numbers would otherwise push the settle forward forever and the money would never post at all.",
+    ],
+  },
+  {
+    version: "2.452.1",
+    date: "2026-09-16",
+    changes: [
+      "The live poll asks for TGF\u2019S DAY, not the container\u2019s (Kerry: \u2018Leaderboard isn\u2019t updating again\u2019). Railway runs in UTC, so from 7pm Central the five-minute sweep was asking for events dated TOMORROW, finding none, and reporting a clean run \u2014 zero events checked \u2014 while a round was being played. Exactly the mistake fixed an hour earlier on the events list, made again on the server side; the repo\u2019s own timezone rule now covers both. A round that runs past midnight keeps polling while it is unfinished and something was posted in the last six hours, rather than being abandoned at 00:00, and \u2018has it started\u2019 reads the Central clock too.",
+    ],
+  },
+  {
+    version: "2.452.0",
+    date: "2026-09-16",
+    changes: [
+      "WHILE CARDS ARE STILL OUT, NOBODY IS A WINNER EITHER (Kerry: \u2018Why is Rob Burlingame showing as a Net Flight winner?\u2019 \u2014 he was not; he was tenth in his flight). Payouts recorded mid-round are a snapshot of a half-posted field, and the winner TINTS read off those recorded categories, so whoever happened to lead a flight when Record Payouts was tapped kept the winner\u2019s colour while the round played on. Blanking the dollars was never enough \u2014 a tinted total IS a claim about money. Every win flag is now cleared for as long as a single hole is missing, and they come back at the moment the field completes, which is also when the pot posts.",
+    ],
+  },
+  {
+    version: "2.451.1",
+    date: "2026-09-16",
+    changes: [
+      "The GAMES tab names only as many Team Net winners as the matrix actually PAYS (Kerry: \u20182nd Team net doesn\u2019t need to show if there\u2019s only one place paid\u2019). Golf Genius records the whole finishing order, and printing a runner-up beside a single-place pot reads as money that is not there.",
+    ],
+  },
+  {
+    version: "2.451.0",
+    date: "2026-09-16",
+    changes: [
+      "THE BLIND SITS IN THE SEAT IT FILLS (Kerry: \u2018They should also show in the OPEN spaces themselves, not below\u2019), so a group reads top to bottom in cart order. The row is still an open seat: pick a bullpen player from it and the blind goes with the seat \u2014 \u2018I should be able to add a player from the bullpen directly over a BLIND, or click the blind and add from bullpen\u2019 \u2014 and the same menu still offers redraw and remove.",
+      "THE SELECTOR IS FAST NOW (Kerry: \u2018Blind selector is really slow to show the list, and then when selected, it doesn\u2019t show up for like 20 seconds\u2019). Two causes, both fixed: eligibility was asked through the builder that assembles every player in the league with trends and placeholders \u2014 seconds of work to answer a yes/no question about sixteen people \u2014 and is now a single counting query (established = at least the minimum rounds posted inside the lookback window, which a starting handicap fails on its own). And the eligible field now rides in with the pairings panel, so CHOOSE opens from state with no round trip, while writing a blind patches the seat in place instead of re-reading the whole sheet.",
+      "NEW means JOINED SINCE THE LAST EVENT (Kerry: \u2018NEW should be joined since last event. And a player could be both a 1T and a NEW like Morris Allen\u2019) \u2014 it was \u2018within the last year\u2019, which is the pairings cards\u2019 1Y badge, a different idea that keeps its meaning there. On the sheet NEW answers \u2018who is here for the first time since we last played\u2019, and both badges now show when both are true.",
+      "The tee key reads \u2018Men <50 \u00b7 Gold Tees\u2019 and \u2018Women \u00b7 Red Tees\u2019 (Kerry: \u2018Tee should say Tees. Women should just be: Women (no colored Red) Red Tees\u2019). The ladies\u2019 marker is dropped from the name because the band already says Women, and the outline swatch is what tells two Reds apart. The card\u2019s own spelling is kept separately for matching rows, so renaming what people read cannot break which tee a playing handicap comes off.",
+    ],
+  },
+  {
+    version: "2.450.0",
+    date: "2026-09-16",
+    changes: [
+      "A PLUS HANDICAP COMES OFF THE ROUND, NEVER OFF A HOLE \u2014 the rule Golf Genius cannot express (Kerry, on Pat Youngs at +3: \u2018For MVP nobody is allowed to have to add strokes on any given hole, so there should be no pluses on any holes. But his +3 PH still stands. The way it works on our side is that his total points gets deducted that 3 strokes. It\u2019s not fair to make a player have to perform on any one hole, but it should be applied across a round.\u2019) GG allocates the plus onto the easiest holes, so the player has to birdie a particular hole just to score what a scratch player scores for a par. For POINTS every hole is now scored off no strokes, and the plus is subtracted from the round\u2019s total once. The aggregate lands in the same place; what changes is that no single hole decides it.",
+      "Individual Net and Team Net are deliberately untouched \u2014 there the total is the total either way, and Team Net\u2019s best ball is a ratified per-hole game. The EVENTS board and the scoring engine apply the identical two steps, so a number cannot mean one thing live and another at closeout, and both publish the deduction so the PTS row can print it beside the label: hole points that deliberately do not add up to the total would otherwise read as a bug.",
+    ],
+  },
+  {
+    version: "2.449.0",
+    date: "2026-09-16",
+    changes: [
+      "ESTABLISHED MEANS ESTABLISHED (Kerry: \u2018Christopher Espinosa is NOT an eligible blind because he doesn\u2019t have an established TGF Handicap yet\u2019). The pool was reading the number the pairings card shows \u2014 a plain average of whatever rounds exist, useful for seating a group, not a handicap. Eligibility now takes the index of RECORD, which only exists once the card\u2019s own minimum rounds are posted, and never a STARTING handicap, which is a stand-in. That is the difference between a number to look at and a number to play for money off. Guests were already out; they stay out.",
+      "ADD BLIND ON AN OPEN SEAT (Kerry: \u2018Need to be able to click an OPEN spot and be able to click ADD BLIND as option, then to select RANDOM or CHOOSE from eligible field\u2019). RANDOM draws from the eligible field; CHOOSE lists it, each name with how many blinds they have had this year and when the last one was, and says underneath who is NOT eligible and why \u2014 an absence with no reason reads as a bug. Clicking a blind already in a seat offers redraw or remove.",
+      "RANDOM IS ACTUALLY RANDOM (Kerry: \u2018RANDOM would choose players randomly who\u2019ve been blinds the least\u2019). It was deterministic \u2014 fewest blinds, then oldest, then a seat hash \u2014 which is fair on paper but picks the same person inside a tier every week. Fewest-first is still the rule; the choice within that tier is now a draw.",
+      "Tonight\u2019s events stayed in UPCOMING (Kerry, at 8pm Central: \u2018Tonight\u2019s events that are currently active, already switched to PAST events. Let\u2019s not allow that until midnight of the last day of event\u2019). The page compared dates against the browser\u2019s UTC day, so from 7pm Central every event dated today was already \u2018yesterday\u2019 and dropped out of UPCOMING while it was still being played. The league runs on Central time and the list now says so.",
+      "Pops are 50% larger (Kerry) \u2014 0.28em read as grit on the cell; they are a mark you can count now, still well short of the second number they used to look like.",
+    ],
+  },
+  {
+    version: "2.448.0",
+    date: "2026-09-16",
+    changes: [
+      "THE TEE COLUMN IS A CIRCLE, NOT A WORD (Kerry: \u2018Change all text in columns for tees to just simple color circles that correspond\u2019). Both the foursomes and the ALPHABETICAL list on the starter sheet now print the tee\u2019s own colour beside the name, keyed by the TEES legend above \u2014 which also answers \u2018Forward\u2019 being too long for the column. The legend\u2019s squares are circles too, matching the leaderboard.",
+      "THE LEGEND SAYS WHO PLAYS EACH TEE (Kerry: \u2018Change (L) to (Ladies) in legend, <50 to Men <50, 50-64 to Men 50-64, 65+ to Men 65+, and Forward to Women [Color]\u2019). A member should not have to know that \u2018(L)\u2019 or \u2018Forward\u2019 is the women\u2019s tee. It also sorts LAST, always, and prints as an OUTLINE in its own colour \u2014 on the leaderboard as well as the sheet \u2014 rather than only when another tee happens to share its paint.",
+      "NEW and 1T badges in the ALPHABETICAL list (Kerry), with a line under it saying what they mean: 1T is a first TGF event ever, NEW is joined within the year. A first timer outranks new \u2014 it is their first event either way, and two badges on one name is noise. The flags come from the ROSTER, the one place that decides them, so the sheet and the pairings cards can never disagree.",
+    ],
+  },
+  {
+    version: "2.447.0",
+    date: "2026-09-15",
+    changes: [
+      "GOLF GENIUS IS POLLED ON A TIMER NOW (Kerry: \u2018Looks like leaderboards have stopped updating\u2019 \u2014 they had not stopped; nothing had ever started them. The scorecard import ran when somebody asked it to, which is why the boards went quiet an hour after the last manual pull). Every 5 minutes the app re-imports today\u2019s cards, but ONLY for an event that has started and does not yet have every hole for every player \u2014 the same test the money hold uses \u2014 so a finished round stops being polled by itself and nothing hammers GG for a board nobody is watching. `scoring-live-poll[:force]` runs the same sweep on demand, and reports why it skipped an event rather than going quiet.",
+      "THE CLUB\u2019S OWN TEE NUMBER IS THE BAND MAPPING (Kerry: \u20181 - <50, 2 - 50-64, 3 - 65+, 3 (L) or 4 (L) - Forward (Ladies)\u2019). Golf Genius numbers the tees the way the club rates them, so the number IS the answer; the 6300-6800 yardage rule stays only as the fallback for a card that carries no numbers. Tee 0 is the tips, which TGF does not play.",
+      "COURSE CARDS CAN BE LOADED, NOT INFERRED. Kerry sent the Avery Ranch, Cedar Creek and Forest Creek cards \u2014 every tee\u2019s 18-hole rating and slope, its front and back ratings and slopes, and every hole\u2019s yardage, par and stroke index. `scoring-course-card:<course>[|apply]` writes them as three rows per tee (the 18, the front, the back with its real hole numbers 10-18), reusing any existing row so posted rounds keep their tee. A tee whose nines are rated identically is one row labelled \u2018both\u2019, because there is nothing to tell two such rows apart and either nine plays off those numbers. With a card loaded, `label_course_tee_nines` has nothing left to infer.",
+      "White tees print white (Kerry: \u2018For white tees, make it just a black outline with a white center\u2019). The swatch was grey so that it would show at all; a black outline does that job properly, and the chip\u2019s INK goes black separately \u2014 white text on white paper is nothing.",
+    ],
+  },
+  {
+    version: "2.446.0",
+    date: "2026-09-15",
+    changes: [
+      "TEE DOTS NOW COME FROM THE TEE ACTUALLY PLAYED (Kerry: \u2018Do we not have tee colors for the other courses on the leaderboard?\u2019). The Quarry had dots and Avery Ranch had none, and the difference was not the course: a SHOTGUN sheet we built carries each player\u2019s band, and an imported Golf Genius TEE-TIME sheet carries no band at all. `scoring_rounds.tee_id` is the tee of record for a played round, so the board reads that first and falls back to the sheet\u2019s band for anyone not yet imported. The key lists the tees actually in play, in the club\u2019s own tee order.",
+      "The tee key right-aligns with the board\u2019s right-most column (Kerry: \u2018Right align tee legend with right most column\u2019). The table is narrower than the panel, so pushing the key right parked it against the panel edge instead. It is measured off the table now, and re-measured whenever a toggle changes the table\u2019s width.",
+    ],
+  },
+  {
+    version: "2.445.0",
+    date: "2026-09-15",
+    changes: [
+      "THE TEAM CHEVRON\u2019S CARDS READ AS CARDS AGAIN (Kerry: \u2018Not good. Fix\u2019). Stacking whole scorecards \u2014 par, yards, stroke index, two points rows \u2014 and then forcing them onto the board\u2019s hole grid squashed the label column until \u2018GROSS SCORE\u2019 printed on top of hole 1. They are not row expansions; they render at their natural width.",
+      "And the alignment that DOES apply \u2014 a card opened under one player\u2019s row \u2014 now refuses to run off a hidden ruler. With hole-by-hole switched off the cell it measures reports a zero rect, and a zero lead collapsed the label column the same way. No ruler, no alignment.",
+      "Tee dots persist across views (Kerry: \u2018Tee color circles need to persist in all views\u2019). They hung off ONE page-level map, which belonged to whichever event loaded last \u2014 open two events and the first one\u2019s dots quietly vanished. Every board now reads its own event\u2019s map, matches GG\u2019s \u2018LAST, First\u2019 spelling as well as the sheet\u2019s, and the swatch also appears on the team list, the team cards, proxies and hole-in-one.",
+    ],
+  },
+  {
+    version: "2.444.0",
+    date: "2026-09-15",
+    changes: [
+      "TEE COLOUR KEY ABOVE THE BOARD (Kerry: \u2018Need to show legend up top for TEE colors. Right of the check boxes on the same row on desktop. move to row below if narrow or on mobile.\u2019). A swatch with no key is decoration. The key names each tee in the course\u2019s own colours \u2014 the same list the starter sheet prints, including the RING that marks two tees sharing a colour, so the ladies\u2019 rating of the red tee is never mistaken for the red \u2014 and it sits right of the toggles, dropping to its own line when the row cannot hold both.",
+      "The skins count header is \u2018#\u2019 (Kerry: \u2018SKINS not fitting in cell header. Maybe should just be #\u2019). The column is one tap under a tab that already says SKINS, so the word was paying for itself twice and losing; the full label rides on the tooltip.",
+    ],
+  },
+  {
+    version: "2.443.0",
+    date: "2026-09-15",
+    changes: [
+      "PH ON THE TEAM TAB IS THE TEAM HANDICAP (Kerry: \u2018For team/cart net, PH should show their team/cart net handicap for that game, not the 100% PH\u2019). It was showing the full playing handicap, which is not the number that played in this game \u2014 Team and Cart Net run the ratified allowance off the LOWEST in the team, and those are the strokes the best-ball actually used. Computed with the same dial and the same shape as the starter sheet, so the sheet a player held on the first tee and the board they read afterwards carry one number. Hovering says which allowance it used.",
+      "THE TEAM CHEVRON NOW OPENS EACH PLAYER\u2019S OWN CARD (Kerry: \u2018The Team chevron should not do what it\u2019s doing. It should expand each player in the group to see their cards. The current expansion is just showing the same thing.\u2019) \u2014 and he was right: the band already lists every player\u2019s holes with the counting ball highlighted and closes with the TEAM NET row, so expanding to a best-ball grid restated what was on screen. What you could NOT see was a player\u2019s scorecard \u2014 par, yards, stroke index, the pops, the nine\u2019s totals. That is what it opens now, one per member, through the same universal renderer every other expand uses.",
+      "Expanded cards line up (Kerry: \u2018not aligning perfectly\u2019). The lead column was measured from the ROW\u2019s left edge, but the card sits inside a cell carrying its own padding \u2014 so every hole column landed a few pixels right of the one above it. Measured from the card\u2019s own edge now, and applied to every card in a stack.",
+    ],
+  },
+  {
+    version: "2.442.0",
+    date: "2026-09-15",
+    changes: [
+      "SKINS CIRCLE WHILE THE ROUND IS STILL GOING (Kerry: \u2018Circle skins, even though the event is still going and even if they\u2019re temporary. Of course, remove circle if someone else covers them.\u2019). The circle keyed off the RECORDED payout category, which does not exist until the event is closed out \u2014 so mid-round the SKINS column counted two skins beside a name the board flatly refused to circle. It now draws from the live computation, which already drops a hole the moment a second player matches it: a covered skin un-circles itself on the next import, with no special case for it. While the field is incomplete the tooltip says \u2018skin so far \u2014 provisional until every card is in\u2019.",
+    ],
+  },
+  {
+    version: "2.441.0",
+    date: "2026-09-15",
+    changes: [
+      "EVERY HOLE OF THE EVENT IS A COLUMN, played or not (Kerry: \u2018Also need to show ALL holes that will be played for that event, whether or not that have been played\u2019). The grid was built from the holes that had SCORES on them, so it grew a column each time a group finished one \u2014 you could see who had posted, never who was behind. The column set now comes from the EVENT: its hole count and which nine it plays (`nine_side`), with the posted holes unioned in so a card that ran somewhere unexpected still shows. That also answers the reason the restriction existed \u2014 keeping a front-nine event from rendering 10-18 \u2014 by asking the event instead of inferring it from what happens to be posted.",
+      "PAR now reads off the TEES IN PLAY rather than off the holes already scored, so an unplayed hole still carries its par and the row is complete from the first group out.",
+      "PIN TO TOP LANDS UNDER THE WHOLE STICKY STACK (Kerry: \u2018Pin to top goes a little high on the LEADERBOARD\u2019). That page pins three bars \u2014 the dark header, the orange contests CTA and the top tabs \u2014 and the pin maths counted the header plus a `.tab-nav` that does not exist there, so an expanded event slid up under the tabs with its name half cut off. The offset is now measured from whatever is ACTUALLY sticky, which also fixes the same undershoot on the Match Play name jump.",
+    ],
+  },
+  {
+    version: "2.440.0",
+    date: "2026-09-15",
+    changes: [
+      "TEE COLOUR AS A DOT IN THE NAME CELL (Kerry: \u2018Show a simple colored circle right justified in name cells that corresponds to player\u2019s tees\u2019). One board mixes three tees and the number alone never says so. The swatch is the COURSE\u2019S own tee colour \u2014 the same `event_tee_legend` map the starter sheet prints \u2014 and the band comes from the saved sheet, so the leaderboard and the sheet can never disagree about which tee someone played. Drawn in the ONE shared name cell, so it appears on every tab at once; hovering names the tee. A pale tee gets a ring or it would be invisible.",
+      "NET AND GROSS ORDER BY \u00b1 WHILE THE ROUND IS IN PLAY (Kerry: \u2018Order Net and Gross by associated +/- column during event\u2019). Three holes in, 13 strokes leads the board over somebody who has played nine \u2014 the total is not a comparable number until every card is in, and the \u00b1 column is. The boards switch back to the total the moment the field is complete, which is also the moment the money posts. Same one fact driving both.",
+    ],
+  },
+  {
+    version: "2.439.0",
+    date: "2026-09-15",
+    changes: [
+      "EVERY HOLE, FOR EVERY PLAYER, BEFORE A DOLLAR SHOWS (Kerry, mid-round, looking at $63 beside a name with three holes posted: \u2018Winnings should not be showing. Not all scores are in. Every hole must be accounted for every player\u2019). The hold shipped an hour earlier trusted the clock alone \u2014 ten minutes since the last score was written \u2014 and a quiet ten minutes is not the end of a round: it is a group between nines, a phone in a pocket, a scorer who stopped to eat. The clock cannot tell those apart; the CARD can. Money is now held until every player in the field has a stroke on every hole of the event, and only THEN does the ten-minute settle start. A hole row with no strokes on it counts as missing, not as posted.",
+      "The banner says WHICH of the two reasons it is, and names names: \u2018Every hole must be posted for every player first \u2014 4 players are still short (137 of 189 holes in)\u2019, followed by each one and how far along they are. A manager chasing a card should not have to go hunting for who to chase. The events list badge reads SCORES OUT rather than POT PENDING while cards are still in play.",
+    ],
+  },
+  {
+    version: "2.438.1",
+    date: "2026-09-15",
+    changes: [
+      "A blind Kerry has ALREADY entered straight into Golf Genius now counts against the open seats instead of being drawn over. The backfill reads those out of the team string with no seat attached \u2014 which slot each covers is unknowable and does not matter; how many seats are already accounted for is what matters. They consume open seats in sheet order and only the remainder get a new pick, so tonight\u2019s draw asks for one name (Will Wallace\u2019s seat), not three.",
+    ],
+  },
+  {
+    version: "2.438.0",
+    date: "2026-09-15",
+    changes: [
+      "A CREDITED PLAYER LEAVES THE SHEET BY HIMSELF (Kerry, having credited Will Wallace after the shotgun had already gone off and then found him still seated: \u2018He should automatically be removed from the pairings when that happens unless you strongly suggest otherwise\u2019). A yes/no popup existed \u2014 on exactly two front-end paths, the credit modal and the WD modal \u2014 which is the whole problem: the same money action taken from the roster tab, the customer page, the MCP bridge or a bulk fix left the sheet stale, and an amber banner was the only thing that noticed. The removal now happens at the BOUNDARY, inside credit / WD / refund / transfer themselves, so no caller can forget. One guard stands in front of it: a player can hold several rows on an event (entry, side games, an add-on), so nobody is unseated while they still have an active row.",
+      "THE CLOCK DECIDES WHETHER THE GROUP RE-SEATS (Kerry: \u2018I could understand if it was before the event started. In this case the group would not be re-seated because the event starts\u2019). Before the start, seats close up per the TGF adjustment standard exactly as before. After it, the seat is left OPEN \u2014 the sheet is printed, the carts are numbered and the group is out on a hole; moving people on paper now only makes the paper wrong. An event dated today with no start time recorded counts as started, because a sheet already in someone\u2019s hands must never be reshuffled on a guess.",
+      "BLIND DRAWS, SPREAD OVER THE YEAR (Kerry, same message, a rule we had never written down: \u2018for any open spots like this, BLIND\u2019s from the field of Members with established handicaps only, should be added into those slots\u2026 Blind\u2019s should be auto generated based off of a history of who\u2019s been blinds too, so there\u2019s even distribution of who gets the benefit of being a blind for Team Net over the course of a year.\u2019) A short team borrows a card so it can still play best-ball, and our payout code already pays that slot its full share \u2014 so being a blind is worth money, and who gets it should not be whoever is standing nearest the first tee. Every open seat is now drawn from members IN THE FIELD with an established handicap index, fewest blinds this year first, then longest since their last one, then a seat hash so equal players are not separated by the alphabet. Never someone in that same group (a card cannot fill its own team), never twice in one night.",
+      "A blind is NOT a seat, and the code says so: it is never written into `event_pairings`, because that table is who rode with whom and the repeat counts are built straight off it \u2014 a blind there would invent a pairing that never happened. Blinds live in their own store keyed to the empty seat, ride alongside the sheet on the PAIRINGS cards (greyed, marked BLIND, no drag, no X) and print under the group on the starter sheet. The draw PREVIEWS first, naming each player, the seat they fill and how many blinds they have already had this year, and writes only on OK.",
+      "The year\u2019s existing blinds are read back out of Golf Genius \u2014 every recorded Team/Cart Net row carries its team string and a blind rides in it as \u2018Bl[LAST, First]\u2019 \u2014 so the distribution starts from the real history instead of from zero. Bridges: `scoring-blinds:<event>[|draw|apply|clear]` and `scoring-blinds-history[:<year>[|backfill]]`.",
+    ],
+  },
+  {
+    version: "2.437.0",
+    date: "2026-09-15",
+    changes: [
+      "WHICH NINE IS WHICH, FROM THE DATA (Kerry: \u2018That \u201cThe course card\u2026\u201d note WILL NOT fly. We can never do that. We need to get the calculations right.\u2019 He is right \u2014 a printed handicap that might be a stroke off is worse than no number). Golf Genius files a nine-hole round\u2019s card as its own tee row, named like the eighteen and numbered 1-9 either way, so a course accumulates several rows per tee with nothing saying front or back. The ANSWER WAS ALREADY IN THE DATA: the eighteen-hole row of the same tee carries holes 1-18 with their yardages, so a nine\u2019s own yardages match one half of it and not the other. `label_course_tee_nines` writes `course_tees.nine`, handles a nine that has been RE-RATED (same yardage, two ratings) and corroborates with the ratings, since front + back equals the eighteen. Proven on The Quarry: Gold 34.2/2873 front, 35.6/3255 back, 34.0/2873 front re-rated, 69.8 full \u2014 matching the live Golf Genius card exactly.",
+      "The starter sheet now picks the tee row OUR OWN imported rounds were played off when a nine carries more than one rating, because that is the rating the course is using today. And the caveat is gone: a tee whose nine cannot be established prints NO playing handicap and the sheet names the gap \u2014 import the 18-hole scorecard and reprint \u2014 rather than printing a number it is not sure of.",
+      "Run it anywhere with `scoring-tee-nines[:<course_id>]`, which reports every row it labelled and everything it could not, with the reason.",
+    ],
+  },
+  {
+    version: "2.436.0",
+    date: "2026-09-15",
+    changes: [
+      "WINNINGS WAIT FOR THE FIELD (Kerry: \u2018Winnings should not show until 10 minutes after last score is posted\u2019). Half a field posted is a wrong winner stated confidently, and the number is what a member remembers, not the caveat. Every dollar on the EVENTS leaderboard \u2014 the pot on the event row, the WON column, per-game money, proxies, hole-in-one \u2014 is withheld until 10 minutes after the last score was written for that event, with a line above the boards saying so and when it posts. Scores stay live throughout; only the money waits. The hold is a dial (`leaderboard_money_hold_minutes`), and the page blanks the boards in ONE place rather than in each of the seven that read money.",
+    ],
+  },
+  {
+    version: "2.435.0",
+    date: "2026-09-15",
+    changes: [
+      "TEAM NET ALLOWANCE FOLLOWS THE BALL COUNT, which is what the rules already said (Kerry: \u2018Team Net is not 100%. It is 85% for tonight\u2019s two ball net. It is 75% for normal one ball net. Needs to follow our rules and adjust to the games we play.\u2019). The ladder was ratified 2026-07-05 and is in side-games.md: Best 1 \u2192 75%, Best 2 \u2192 85%, Best 3 and 4 \u2192 100%. An event now carries its own `team_ball_count`; the default is Best 1 at 75%, and the sheet prints the GAME as well as the percentage \u2014 \u2018Best 2 net balls, 85% of PH, off the lowest in the group\u2019 \u2014 so a wrong dial reads as a wrong sentence. A manager override still wins and says on the sheet that it is an override. My 100% was a guess where a ratified rule already existed.",
+      "THE OPEN EVENT ROW ACTUALLY PINS NOW (Kerry: \u2018Open event is not moving it to the top to pin\u2019). The row was sticky against the wrong thing: the events table sits in an `overflow-x: auto` wrapper, and a box that scrolls on one axis counts as the scroll container on both, so the row stuck to a wrapper that never scrolls vertically. The wrapper goes `overflow: visible` while a row is open AND the table already fits, never when it would clip a wide table; opening also brings the row up under the nav, since pinning only helps once you are level with it.",
+      "Cart-sign names SHRINK to fit instead of clipping (Kerry: \u2018If names are longer, shrink to adjust rather than wrapping\u2019) \u2014 stepped down from 62px, floor 34px, re-fitted after the webfont loads and again before printing, because a name that fits in the fallback can overflow in Bitter.",
+      "Starter-sheet notes are one per ROW rather than a run-on paragraph (Kerry), and the PAIRINGS legend carries the \u2691 pennant that marks a requested pair as not a repeat.",
+    ],
+  },
+  {
+    version: "2.434.0",
+    date: "2026-09-15",
+    changes: [
+      "STARTER SHEET: cart letters OUT, handicaps IN (Kerry: \u2018Remove A/Bs from page altogether. Not necessary. Let\u2019s DO show 100% Playing Handicap for players in ALPHABETICAL after TGF Index. Then show Team Net Handicap in the next column. We\u2019ll need to add column headings and explanations below.\u2019). The A/B column and its two off-palette colours are gone. ALPHABETICAL now reads PLAYER \u00b7 TEE \u00b7 IDX \u00b7 PH \u00b7 TEAM \u00b7 HOLE, with the headings repeated at the top of the SECOND column on a forced break so a column can never be read under its neighbour\u2019s labels, and an explanation under the sheet naming each one.",
+      "PH is the playing handicap at 100%, computed from OUR index and the tee that player\u2019s BAND plays, through the same handicap_calc chain Task #16 parity-proved against Golf Genius \u2014 a nine-hole card takes the nine-hole index. TEAM is that number at the event\u2019s team allowance, off the LOWEST in the player\u2019s own group, the shape CA ratified for Cedar Creek. The allowance is a dial (`team_net_allowance`, default 100%) and the SHEET PRINTS which allowance and which course card it used, so a wrong dial is visible rather than silent. Where a course card stores every nine as holes 1-9 and cannot say which nine a rating belongs to, the sheet says that too.",
+      "CART SIGNS 15% LARGER throughout (Kerry), names at 62px, still never wrapping \u2014 \u2018Christopher ESPINOSA\u2019 measured clear.",
+      "THE OPEN EVENT ROW PINS under the header and tab bar so it stays in view while you work its panel (Kerry: \u2018pin to top but under any header navs so I can see the event row\u2019). The offset is measured from the real header and tab bar and re-measured on resize, because both change height by role and window width.",
+      "The events and customers row arrows are the house orange triangle (Kerry: \u2018Standard chevron is supposed to be orange\u2019) \u2014 they were a grey \u25b8 of their own, the third and fourth surfaces this pass to be quietly off the ratified standard.",
+    ],
+  },
+  {
+    version: "2.433.0",
+    date: "2026-09-15",
+    changes: [
+      "THE LEADERBOARD CHEVRONS ARE ORANGE AGAIN (Kerry: \u2018Standard chevron is supposed to be orange\u2019). The EVENTS tab set its own grey at its own size on three rules \u2014 exactly what the house standard forbids in as many words: \u2018Do NOT restyle arrows per-page \u2014 change the look HERE\u2019 (`.tgf-exp` in dashboard.css, TGF orange at 0.75rem, ratified 2026-08-06/08-14). The event rows, the team bands and the hole bands now carry `.tgf-exp` and keep only their layout and rotate hooks. Two pages still use a different glyph and colour (`/me` and Money Flow, both on \u25b8 rather than \u25b6); they are flagged, not silently rewritten mid-event.",
+      "The EVENTS leaderboard dial is now readable and settable from any session: `scoring-leaderboard-events[:add=s9.23,a9.23|set=\u2026|clear]`. It answers with which codes already have scorecards and which are still WAITING for them \u2014 the list only shows an event once its scorecards are imported, so adding a code the morning of is half the job.",
+    ],
+  },
+  {
+    version: "2.432.0",
+    date: "2026-09-15",
+    changes: [
+      "THE UNDER-50 TEE IS THE BACK TEE, CHOSEN BY LENGTH (Kerry, correcting me: \u2018Forward tee is NOT under 50. That is the back tee selected each time based on our yardage parameters for under 50 tees to be 6300-6800 yards for 18\u2019). The tee legend now picks the <50 tee as the men\u2019s tee that lands INSIDE 6300\u20136800 yards for 18, not simply the longest on the card; the older bands step down from there, and Forward is its own tee \u2014 the ladies\u2019 tee where the card has one \u2014 never the under-50 one. A course whose longest tee is under 6300 (The Quarry\u2019s Gold at 6128) still gets its back tee rather than none. A nine-hole card doubles so it is judged on the same ruler.",
+      "A REFRESH KEEPS THE ROW OPEN (Kerry: \u2018When I refresh from an open state under an event, can you make it so it stays on that open state? Frustrating when it refreshes to closed state each time.\u2019). The open event and the tab it was on are remembered for the browser tab\u2019s session and restored on load \u2014 once per load, never fighting an incoming deep link, and never re-opening a row that was just closed. Restoring onto PAIRINGS loads the sheet exactly as clicking the tab does. The four panel flags are now set in one place, used by both the toggle and the restore.",
+    ],
+  },
+  {
+    version: "2.431.0",
+    date: "2026-09-15",
+    changes: [
+      "HOW TGF STATES A START IS NOW A RULE (Kerry: \u2018When Shotgun, list Hole first | then Time. When Tee Times, List Tee Time | Hole\u2019). The group box on the Starter Sheet read a bare \u20181A\u2019; it now reads \u2018Hole 1A | 5:00 PM\u2019 on a shotgun and \u20188:10a | Hole 1\u2019 on tee times. The lead item is the one that VARIES between groups \u2014 on a shotgun everyone starts at the same minute and the hole is what distinguishes you, on tee times everyone starts at the same tee and the time is. A back-nine tee-time event starts at hole 10. Composed once on the server, so the Starter Sheet and the Cart Signs can never state a start differently.",
+      "TEE COLOURS FROM THE COURSE CARD, with a legend above the foursomes (Kerry: \u2018add colors for the tee assignments according to our course info\u2019). Each band\u2019s chip takes the colour of the tee it plays, in the group boxes and in the alphabetical list, and the legend prints the tee\u2019s own NAME beside the swatch \u2014 at The Quarry that reads <50 Gold, 50-64 Blue, 65+ Red, Forward Red (L), so a starter can send a player to the right markers. Two bands on the same paint (65+ Red and Forward Red (L)) never print as two identical swatches: the second is a ring. A course with no tee card prints no legend rather than invented colours.",
+      "The band-to-tee pairing is DERIVED from the club\u2019s own tee order in the course card (the \u20181 -\u2019, \u20182 -\u2019, \u20183 -\u2019 prefixes Golf Genius numbers tees by), longest first. That derivation is not ratified, which is exactly why the tee name prints beside each swatch \u2014 a wrong pairing is obvious on the sheet rather than on the first tee.",
+    ],
+  },
+  {
+    version: "2.430.0",
+    date: "2026-09-15",
+    changes: [
+      "A LATE SIGNUP NOW REACHES THE BULLPEN (Kerry: \u2018Just had a late signup... Justin Guerrero. He\u2019s not showing up as in the bullpen though.\u2019). His order was on the roster and in the database within a minute; the PAIRINGS panel simply never re-read it. The panel loaded its roster ONCE, the first time it was opened, and nothing refreshed it \u2014 and Unassigned is computed from that roster. The stale-player banner beside it was armed the other way round, flagging someone SEATED who had come off the roster, which is the same armed-in-one-direction mistake CLAUDE.md warns about.",
+      "Re-opening the PAIRINGS tab now re-reads the roster, and a \u2018Re-check roster\u2019 control sits on the bullpen itself for when the panel never closed. Both use a roster-ONLY refresh that never touches the groups: a manager may be mid-edit with an unsaved sheet, and losing that to a background refresh would be worse than a missing name. A refresh that turns up new players names them rather than silently redrawing.",
+      "The bullpen also stops disappearing when everyone is seated. It now reads \u2018Everyone on the roster is seated (22)\u2019 and keeps the re-check control, because that is exactly the moment a manager hunting a late signup needs it \u2014 no panel meant no answer and nowhere to click.",
+    ],
+  },
+  {
+    version: "2.429.0",
+    date: "2026-09-15",
+    changes: [
+      "CART SIGNS REBUILT ON THE GOLF GENIUS SHAPE, IN TGF STANDARDS (Kerry: \u2018Cart Signs need to be redone to match more of our current GG cart signs but with our standards\u2019). What we keep from GG is the shape that works on a windshield: letter portrait, TWO signs to a page, two enormous names over one line saying WHEN and WHERE. What we bring is ours \u2014 the official mark on every sign, Bitter at 54px for the names, and the print contract every other TGF sheet uses. Surnames set in caps with the given name as written (Daniel SOUTH), because at ten feet the surname is what a player scans for. No box around a sign; a hairline across the middle of the sheet where it gets cut, the same standard the proximity markers set. GG\u2019s event-id line is dropped \u2014 it addresses their system, not ours \u2014 and so are the old green and blue cart pills, which were never in the TGF palette.",
+      "The when/where line is composed server-side, so a TEE-TIME event never prints \u20188:10a | Hole 8:10a\u2019: on a shotgun it reads \u20185:00 PM | Hole 1A\u2019, on tee times the slot already IS the time.",
+      "DOWNLOADS ARE NAMED THE WAY KERRY NAMES THEM (his convention, given today): [YY]-[chapter acronym][holes]-[event number]-[file type], so s9.23 The Quarry saves as 26-s9-23-CartSigns, and a18.6 as 26-a18-6-CartSigns. All four print sheets \u2014 Starter Sheet, Cart Signs, Proxies, Divisions & Flights \u2014 title themselves that way, which is also what Save-as-PDF proposes. An event with no code in its name (the championship) is named after the event rather than a bare chapter letter.",
+      "Starter Sheet: the ALPHABETICAL list now reads in the same size and weight as the names in the foursomes above it (Kerry). One declaration covers both lists, so a player reads the same in the group box and in the list he looks himself up in.",
+    ],
+  },
+  {
+    version: "2.428.0",
+    date: "2026-09-15",
+    changes: [
+      "MARKER CARDS LOSE THE BOX AND GAIN A CUT LINE (Kerry: \u2018remove the border and add a thin cut line down center\u2019). The 2px rule around each card is gone; a hairline now runs down the middle of the SHEET, which is the only line that matters once these are printed \u2014 it is where the paper gets cut. It is marked print-exact so it cannot be dropped as decoration.",
+      "With the box gone the card breathes into the space it used to take: the logo is up to 100px, and both footer lines are up to 15.5px, still one size for the pair. The eight name lines pay for it \u2014 they take whatever height is left, so a larger footer simply tightens them, which is what Kerry asked for.",
+    ],
+  },
+  {
+    version: "2.427.0",
+    date: "2026-09-15",
+    changes: [
+      "HOUSE TYPE ON BOTH NEW SHEETS (Kerry: \u2018We need to use more of our standard fonts\u2019). Applied to the ratified rule rather than by taste (mailbox #44, 2026-07-09): Bitter serif for headings, labels, EYEBROWS and large numerals; dense data stays system sans with tabular figures, and Bitter stays judicious. On the marker card that means the course line, the event eyebrow, the contest title and both footer lines are Bitter; the numbered seats stay sans so eight of them line up. On Divisions & Flights the eyebrow and event name join the headings in Bitter, while every roster row stays sans with tabular figures, which is what keeps a column of handicaps readable.",
+      "The marker footer is now TWO lines at one size (Kerry): \u2018Only for participants of The Golf Fellowship\u2019s event\u2019 in red, and \u2018Ball must be on the green.\u2019 under it in black. The marker mechanics line is gone \u2014 who may claim and what makes a claim valid are the only two things a tee sign has to say.",
+      "Both sheets are with design-claude for review before they are called finished.",
+    ],
+  },
+  {
+    version: "2.426.0",
+    date: "2026-09-15",
+    changes: [
+      "PROXIMITY MARKER CARDS REWORKED after Kerry's first print. The logo is centred and half again as large (58 \u2192 87px) with the course and date stacked directly beneath it, because the sign is read from across a tee box and nothing should compete with the mark. The eight name lines now each take an equal share of whatever height is left, so they fill the card instead of bunching at the top.",
+      "The \u2018Par 3 \u00b7 107 yards \u00b7 closest to the hole wins\u2019 line is gone entirely (Kerry: the par and the object of the contest are obvious, and the yardage is wrong on its face because we always play multiple tees).",
+      "The footer now leads with \u2018Only for participants of The Golf Fellowship\u2019s event\u2019 in larger red type \u2014 the one line that stops a stranger\u2019s name going on the sheet \u2014 above larger notes that now carry the green rule: \u2018Ball must be on the green. Write your name only if you are inside the marker, then move the marker to your ball.\u2019 The red is marked print-exact so it does not fall back to grey on the way to the printer.",
+    ],
+  },
+  {
+    version: "2.425.1",
+    date: "2026-09-15",
+    changes: [
+      "A FLIGHT LABEL STATES THE RULE, NOT THE FIELD. On a fixed-band game the label now reads the configured edge \u2014 Skins flight 1 is \u2018HCP <12.0\u2019 even when the lowest player above the line happens to be 12.4 \u2014 because a 12.1 reading \u2018<12.4\u2019 would place himself in the wrong flight. Verified against the live s9.23 sheet, where the field label and the rule label differed. Equal-size flights (Individual Net) still describe the cut that was actually made, since there is no band to quote, and a merged ladder falls back to the field.",
+    ],
+  },
+  {
+    version: "2.425.0",
+    date: "2026-09-15",
+    changes: [
+      "TWO NEW PAIRINGS REPORTS, built from our own data instead of printed out of Golf Genius (Kerry: \u2018Create a Divisions & Flights report (per ROSTER buy ins, GAMES matrix, and flighting standards) and Proximity Markers per GAMES setup and course identification of par 3s. Add logos to these two\u2019). Both carry the official full logo and print with the Starter Sheet\u2019s margin contract.",
+      "DIVISIONS & FLIGHTS \u2014 NET, Skins and Gross on ONE page. Buy-ins come from the roster (the Games-tab eligibility rules, so credited, refunded and RSVP-only rows are out), the flight COUNT from the live games matrix, and the CUT from the ratified flighting standard: flight on the raw 18-hole TGF index, a break is the floor of the upper flight so 12.0 goes UP, equal indexes never split, thin flights merge. Each game runs the mode its config names, which reproduced Golf Genius exactly on s9.23 (net 13 of 13, skins 8 of 8). A game below its activation threshold is REPORTED as not running with the reason \u2014 Individual Gross needs 16 buyers on a nine \u2014 rather than printing invented flights, and a buyer with no index on file is listed by name instead of being dropped into a flight he did not earn. Indexes resolve by customer_id, so a player whose handicap link spells him differently is no longer lost.",
+      "PROXIMITY MARKERS \u2014 one tee sheet per contest, landscape, two to a page. Par 3s come from the COURSE card across every tee on file, narrowed to the nine being played; the games rule then applies as ratified: max two Closest-to-the-Pin per nine, the SHORTEST par 3s when there are more than slots, and a leftover entry becomes a Longest Putt on the last hole. No hole card on file prints nothing and says why, because a marker on the wrong tee is worse than no marker.",
+    ],
+  },
+  {
+    version: "2.424.0",
+    date: "2026-09-15",
+    changes: [
+      "THE HISTORY COUNTS NOW ACTUALLY ARRIVE (Kerry: \u2018This looks good, but actual counts aren\u2019t showing\u2019 \u2014 every pair read 1). The pairings GET called `db.get_connection()`, but `db` is not a bound name in app.py: the NameError went straight into a non-fatal except and the roster\u2019s prior counts shipped as an empty map, so the page had nothing to add tonight\u2019s +1 to. Fixed to the real imports, and `test_pairings_roster.js` now fails on ANY module-qualified `db.` call in app.py, because a silent except is exactly how this hid.",
+      "REQUESTED PAIRS ARE EXEMPT FROM THE REPEAT FLAG (Kerry: \u2018Yes, any requests should be exempted from the repeat flag\u2019). A partner request is a decision the manager already made, and rule 3 ranks below it \u2014 flagging Palacios + Anthis at 16 was the report arguing with its own instruction. A requested pair keeps its count, marked with a pennant, but reads muted instead of amber or red and never drives the group\u2019s \u21bb chip. Suppressed requests do not count as requests.",
+      "The legend above the cards now carries the three role marks \u2014 C group captain, A ambassador, 1Y first-year member (Kerry: \u2018Add the new symbols for Captain, Ambassador and 1Y to the legend above\u2019). It renders the card\u2019s own badge markup rather than a copy, so the legend can never drift from what is on the cards, and it shows even on a sheet with no standings bands.",
+    ],
+  },
+  {
+    version: "2.423.0",
+    date: "2026-09-15",
+    changes: [
+      "PAIRINGS ARE LINKED TO THE PERSON, NOT TO A NAME STRING (Kerry: \u2018I updated a Customer name and alias Jose to Joe Mejia. It updated on the ROSTER but not in the pairings. It needs to be directly linked in PAIRINGS to the ROSTER and Customer ID so it changes immediately if customer profile is changed\u2019). `event_pairings.player_name` was a snapshot taken when the sheet was saved, so the rename moved the roster and left the sheet reading Jose \u2014 which then missed every name-keyed lookup downstream: his handicap fell to a dash and his badges went with it. One root cause, four symptoms. The table now carries `customer_id`, saves resolve it, and reads serve the CURRENT canonical name through it. Guiding principle 6.",
+      "Sheets saved before the column existed are linked on the next read and on boot, by canonical name then by NAME alias, and written back; a row whose name belongs to nobody (a Golf Genius guest) stays as typed and is retried later. The page matches a seated player to his roster row by customer_id first, name second, so the badges, bands, points and handicap follow the person. The handicap index map is keyed on the canonical customer name too \u2014 `handicap_player_links.customer_name` is its own stale snapshot, and a rename used to orphan the number.",
+    ],
+  },
+  {
+    version: "2.422.0",
+    date: "2026-09-15",
+    changes: [
+      "HISTORY LINE UNDER EVERY NAME ON THE PAIRING CARDS (Kerry, after the s9.23 count report: \u2018I had no idea about the Group 5 repeats! Can we provide this info as a row underneath each name in a foursome that also has a check box to show Pairing History Count (History)?\u2019). Under each seat, the other players in that group by surname with the number of rounds together this year INCLUDING tonight \u2014 1 means tonight is the first time. Two and three read amber, four and up read red, and a group carrying a repeat gets a \u21bb chip on its header so it cannot hide behind four ordinary looking names. A History checkbox beside Points turns the whole thing on and off, default ON, remembered per browser.",
+      "The numbers recompute IN THE PAGE as you swap, drag and bullpen players \u2014 the /pairings GET ships the roster's prior counts once (`roster_pair_counts`) and the card adds tonight's +1, the same way the pace chip already works. Prior counts come from the one query the generator itself uses, so a card and a generated sheet can never disagree about who has played with whom: Golf Genius is the record of what was PLAYED, and the event never counts against itself.",
+    ],
+  },
+  {
+    version: "2.421.0",
+    date: "2026-09-15",
+    changes: [
+      "1ST TIMER NOW MEANS FIRST EVENT, not what the order said (Kerry, looking at the s9.23 sheet: \u2018any 1st Timer, even if they've become a member already and didn't select 1st timer should be highlighted as a first timer. So Morris Allen should be highlighted even though he joined already, because it's his first event\u2019). A membership purchase is a buy-in, not a round. `_mark_first_timers` sweeps the finished roster and marks anyone with no active order on an EARLIER event and no handicap round before this one \u2014 two independent proofs of having played, either is enough, and a row with no customer_id is left alone rather than invented into a 1st timer. On the pairing cards the orange 1ST TIMER band now outranks every other band, so a brand-new member reads orange instead of disappearing into the points-race green. Rule 14 follows it: these are the players an ambassador gets carted with.",
+      "PAIRINGS COUNT REPORT (Kerry: \u2018how many times has each player played with the others in their groups this year including tonight\u2019). `pairing_counts_report(event_id)` scores the SAVED sheet against played history: every pair in every group, a line per player naming his three mates and the count with each, the repeats pulled out, and a plain-text rendering for printing. Including tonight is the +1 \u2014 a pair reading 1 has never played together before today. History obeys the generator's own two rules: Golf Genius is the record of what was played, and the event never counts against itself. Read it from any session with the bridge `scoring-pairings-counts:<event_id>`.",
+    ],
+  },
+  {
+    version: "2.420.1",
+    date: "2026-09-15",
+    changes: [
+      "MERGE KEEPS THE DUPLICATE'S PROFILE FACTS. merge_customers re-pointed every FK and moved the emails but dropped the SOURCE row's own columns \u2014 the starting handicap Kerry set on Jose Mejia's duplicate an hour before the merge ran, his 1st-timer status, pace, roles, Venmo, DOB. Every customers column the target lacks and the source has now rides along (target wins, source fills gaps, the promise email/phone already had); identity and audit columns stay the target's.",
+    ],
+  },
+  {
+    version: "2.420.0",
+    date: "2026-09-15",
+    changes: [
+      "ONE PERSON, ONE PROFILE across a lead, a Golf Genius RSVP and an order (Kerry: \u2018Jose Mejia should have removed/merged with the Joe Mejia RSVP\u2019). A Facebook lead had made \u2018Joe Mejia\u2019 with one email; the same man bought as \u2018Jose Mejia\u2019 with another, and the order minted a second profile. Order-time matching now has a PHONE + SURNAME rung \u2014 one customer with the same ten digits and last name is that person, and the new email is filed on them \u2014 and RSVPs match orders by customer id, not only by the email typed. The two Mejia profiles are merged (canonical Jose, Joe kept as an alias) and his RSVP is bound to his order.",
+      "PAIRINGS RULE 14 (Kerry: \u20181st Timers also need to be paired up (carted) with an Ambassador of the same tees whenever possible\u2019). Every group holding a first-timer gets an ambassador, a same-tee one preferred, by the cheapest history swap that keeps rule 12; in the cart the first-timer rides beside the ambassador. No free ambassador leaves a note on the sheet.",
+    ],
+  },
+  {
+    version: "2.419.0",
+    date: "2026-09-15",
+    changes: [
+      "The OFFICIAL full round logo is in the repo (Kerry: \u2018Try one of these logos \u2026 We need to save these to the repository for use\u2019). The .ai, .eps and .pdf sources live under static/brand/; the PDF was converted to a clean vector SVG and a 576px PNG at static/tgf-logo-r.svg / .png, replacing the v2.418.0 rebuild. The Starter Sheet already reads that path, so it now prints the real artwork.",
+      "1Y is tighter (Kerry: \u2018There\u2019s a ton of them there that shouldn\u2019t have 1Y. If they have handicap records before 2026 then remove the 1Y\u2019). Membership rows were backfilled in 2026 for many long-standing members, so a 2026 membership start alone tagged half the field. A player with any handicap round before the event\u2019s year is not new, whatever their membership row says.",
+    ],
+  },
+  {
+    version: "2.418.0",
+    date: "2026-09-15",
+    changes: [
+      "The Starter Sheet carries the full round TGF logo left of the event and course (Kerry: \u2018This needs our full logo left of the event and course\u2019). The artwork is a rebuild of TGF-Logo-R from the emblem paths \u2014 the connector cannot deliver the OneDrive SVG \u2014 and every surface reads it from one file, so dropping the official file over it swaps it everywhere.",
+      "Leads are visible on the Customers page (Kerry: \u2018I thought Leads were creating customer_id\u2019s, but when I searched for Jose (Joe) Mejia, his name did not come up\u2019). They were: every lead gets a real customer row on arrival. The default This Year filter only counted purchases, so a lead with none was hidden. A customer created in the year now counts as activity.",
+    ],
+  },
+  {
+    version: "2.417.0",
+    date: "2026-09-15",
+    changes: [
+      "Pairing cards: names never wrap (Kerry: \u2018Nothing should make names wrap\u2019). The role tags are single letters now \u2014 C for captain, A for ambassador, a green 1Y for a first-year member \u2014 the card minimum is wider, and a name that still cannot fit is clipped rather than broken one letter per line. The wheel mark is gone: seats 1 and 3 drive by definition.",
+      "1Y means joined as a NEW MEMBER this year (earliest membership start in the event\u2019s year). Guests and long-standing members are not new; v2.416.0 had been calling anyone without an order before this year new, which tagged nearly the whole field.",
+      "The captain takes SEAT 1 (Kerry: \u2018Captains should be moved to seat 1 in group along with their request in seat 2 if partnered\u2019). Their partner rides in seat 2 when they have one; otherwise the newest player does.",
+    ],
+  },
+  {
+    version: "2.416.1",
+    date: "2026-09-15",
+    changes: [
+      "Ambassador seed: Rolando Campos (the customer row's spelling) \u2014 the v2.416.0 seed looked for \u2018Roland\u2019 and matched nobody.",
+    ],
+  },
+  {
+    version: "2.416.0",
+    date: "2026-09-15",
+    changes: [
+      "PAIRINGS RULE 12 \u2014 no lone back tee (Kerry-ratified). A <50 player is never the only <50 in their foursome unless flagged OK alone back; Forward and 65+ may be alone. The generator repairs it after the groups form and below everything that binds (Match Play, requests, locks, seeds), by the swap that costs the least history. If no legal swap exists the sheet says so in a note and the manager decides.",
+      "PAIRINGS RULE 13 \u2014 driver\u2019s seat. A group captain rides with the newest player in the group and drives (seats 1 and 3); a first-season player never drives; otherwise the more experienced player takes the wheel. A wheel mark on the card shows who drives. Rule 7 (spread ambassadors and captains across groups) is built alongside it so every group has a leader to seat.",
+      "Three role flags on the customer with the same one-tap editor as pace, on the Customers page: AMB (ambassador), CAPT (group captain), BACK (OK alone on the <50 tee). Seeded from Kerry\u2019s 2026-09-15 lists, fill-only-if-NULL, so a tap wins forever. Pairing cards show CAPT / AMB / NEW badges.",
+    ],
+  },
+  {
+    version: "2.415.0",
+    date: "2026-09-15",
+    changes: [
+      "Pace rulings (Kerry: \u2018Dan should not be a 1. He\u2019s at least a 2. Make Jeff a 2 as well\u2019): Dan Stich and Jeff Rideout are set to pace 2. Neither was in the ratified July seed \u2014 both carried an explicit 1 from a tap \u2014 so this writes an explicit 2 exactly as the Customers page one-tap editor would, once, and never again: a later tap is never undone by a deploy.",
+    ],
+  },
+  {
+    version: "2.414.0",
+    date: "2026-09-15",
+    changes: [
+      "A player seated FROM the bullpen keeps their handicap (Kerry: \u2018Why isn\u2019t Adam Baker\u2019s handicap showing?\u2019 after X-ing him out and picking him back in). The roster rows the Unassigned panel and picker are built from never carried an index \u2014 only the generator and the saved sheet looked one up, each with its own copy of the query \u2014 so anyone moved out of Unassigned arrived with a dash. The index now rides on every roster row, from ONE lookup all three surfaces share, so Unassigned and the picker show it too.",
+      "A <b>Points</b> checkbox beside Partner Requests hides the points column on the pairing cards (Kerry: \u2018Give me a checkbox to hide the points column\u2019). It appears whenever the race has points to show, defaults on, and is remembered per browser. Unchecking hides the numbers only \u2014 the colour bands and a STANDINGS order are untouched.",
+    ],
+  },
+  {
+    version: "2.413.0",
+    date: "2026-09-15",
+    changes: [
+      "HOLES ARE DEALT EVEN WHEN EDIT EVENT HAS NO GROUP COUNT (Kerry: \u2018why aren\u2019t holes being assigned to the foursomes?\u2019). Slot labels came only from the event\u2019s tee-time count, and with that at zero the sheet read \u2018Group 1, Group 2 \u2026\u2019 even on a shotgun with a start time. The roster now sizes the sheet: a shotgun deals 1A / 1B / 2A \u2026, tee times deal clock slots from the start time, and only an event with neither falls back to \u2018Group N\u2019. A typed count still wins.",
+      "The foursomes wrap to the WINDOW, not the table (Kerry: \u2018Make the foursomes wrap to window width so I can always see them\u2019). The detail panel lives inside the events table, which scrolls sideways on a narrow or zoomed window, so a third column of groups was sitting off-screen. The panel is now capped at the table wrapper\u2019s visible width and sticks to the left edge while the row scrolls.",
+      "The open-seat picker and the Unassigned panel read \u2018Last, First\u2019 like the request dropdowns (Kerry: \u2018flip the picker and unassigned panel too\u2019). Seated cards keep \u2018First Last\u2019.",
+      "A red \u2715 on every seated player sends them to the bullpen (Kerry: \u2018a simple red X to be able to put them in the bullpen for unassigned players\u2019). The seat opens, the player reappears under UNASSIGNED, and like every other edit it is unsaved until Save \u2014 Undo brings them straight back.",
+    ],
+  },
+  {
+    version: "2.412.0",
+    date: "2026-09-15",
+    changes: [
+      "The PAIRINGS request dropdowns now read \u2018Last, First\u2019 (Kerry: \u2018Change the list to display [Last Name], [First Name]\u2019) \u2014 the same formatter the Roster tab uses, suffix-aware, so \u2018Young, Jeff \u00b7 RSVP\u2019 sits where the last-name order put it. The value behind each entry is still the roster\u2019s own name, which is what the server matches on.",
+    ],
+  },
+  {
+    version: "2.411.0",
+    date: "2026-09-15",
+    changes: [
+      "Every name list on the PAIRINGS tab orders by LAST name (Kerry: \u2018Order name lists by last name\u2019): the add-a-request player and partner dropdowns, the no-match and multi-name fix pickers, the open-seat picker and the Unassigned panel. They were first-name order, which is how the roster arrives from the server and not how anyone looks a golfer up. Same last-name key the Roster tab already uses, suffix-aware (Jr, III).",
+    ],
+  },
+  {
+    version: "2.410.0",
+    date: "2026-09-15",
+    changes: [
+      "RSVP-only players are now FIRST-CLASS in pairings (Kerry: \u2018I need the ability to assign RSVP only\u2019s to groups and requests. Need them to run in pairings\u2019). Generate deals them into groups, a partner request naming one resolves, they can be picked as either side of an added request, and the manual-match fix accepts them. Before, they could only be seated by hand after the fact.",
+      "They are listed everywhere a roster name appears \u2014 the request dropdowns, the open-seat picker, the Unassigned panel and the seated card \u2014 and say so: an amber \u00b7 RSVP marker on the dropdown entry, the RSVP badge on the card. The manager is looking at a sheet that includes people who have not paid, and the sheet says which ones.",
+      "The roster is now built ONCE on the server and every consumer reads it: the pairings panel, the generator, the request list and the match validator. It used to be four separate copies of the same query, and the Golf Genius RSVPs were only ever merged in on the page, which is exactly why Generate could not see them. Both kinds of RSVP-only player are covered: a $0 RSVP-only order and a Golf Genius RSVP with no order at all.",
+    ],
+  },
+  {
+    version: "2.409.0",
+    date: "2026-09-15",
+    changes: [
+      "ONE mobile breakpoint, and it is lower (Kerry: \u2018Don\u2019t go to mobile view on desktop until the window gets much narrower\u2019). The hamburger, the drawer, the card lists and the \u22ef Actions sheet now start at 560px instead of 768px, so a zoomed-in or half-screen desktop window keeps the desktop layout. Phones are untouched \u2014 every phone in portrait is well under 560px.",
+      "The number lived in about forty-five places \u2014 media queries, matchMedia() calls and innerWidth checks across twenty files \u2014 and had already drifted (Leads decided \u2018mobile\u2019 at 720px while its own CSS decided at 768px). All of them now say 560, and a guard (test_breakpoint.js) fails the build if a 768 comes back.",
+      "Between 561px and about 1480px the admin nav no longer fits on one line, so instead of overflowing off the right edge it wraps: brand and the Admin / Two Man Tour / Log Out pills on row one, the page links on row two. The member shell does the same with its three tabs. Above 1480px nothing changes.",
+    ],
+  },
+  {
+    version: "2.408.0",
+    date: "2026-09-14",
+    changes: [
+      "A <b>Show All Players</b> checkbox on the four buy-in tabs \u2014 Net, Gross, Skins and MVP/Points (Kerry). Unchecked, the board shows the people actually in the game; checked, everyone comes back. Overall and Team don\u2019t get one: nobody buys into the overall picture, and Team Net comes with the entry.",
+      "Ticking it RE-RENDERS rather than hiding rows in CSS, because the # column ranks within a flight \u2014 a CSS hide would have left gaps like 1, 3, 6 and the board would read as broken rather than filtered. A flight left with no buyers drops its band along with its rows.",
+      "FLIGHT PLACEMENT NOW READS THE LABEL (Kerry: \u2018In SKINS, players aren\u2019t being flighted where they would have been like I requested\u2019). Non-buyers were being placed against a boundary derived from whoever happened to buy in \u2014 and on a skins board whose Flight 1 held three scratch players, that put the line at about 3, sweeping every mid-handicap non-buyer into Flight 2. The boundary now comes from the flight\u2019s own label (\u2018Flight 2 (HCP 12.0+)\u2019 \u2192 12.0), which is the actual definition of the band. Labels carrying no number, or that don\u2019t form a clean ascending ladder, still fall back to the derived midpoint rather than being half-trusted.",
+      "Worth knowing, because it is visible on s9.22: Golf Genius\u2019s own Flight 2 for that skins game contains buyers whose handicap is below the 12.0 its label states. Buyers always keep the flight GG recorded \u2014 we never re-flight a paid result \u2014 so where GG\u2019s assignment and GG\u2019s label disagree, a placed non-buyer can sit in a different band than a buyer with a similar handicap. That is GG\u2019s inconsistency showing through, not ours.",
+    ],
+  },
+  {
+    version: "2.407.0",
+    date: "2026-09-14",
+    changes: [
+      "Hole by hole now lands OPEN on OVERALL and CLOSED on every game tab (Kerry: \u2018OVERALL view is only one that should actually show Hole by Hole on landing\u2019) \u2014 correcting v2.406.0, which closed all six. The moment the box is touched it goes back to being one shared choice, so two open events can never disagree about what is on screen.",
+      "Players who did not buy in now settle where they WOULD have fallen (Kerry). They were already being placed into the right flight by handicap, but a tie in the sorted column left them heaped at the bottom of it; ties now fall back to the score the board is about \u2014 gross on Gross and Skins, net elsewhere \u2014 so a non-buyer sits among the buyers at their own score. The skins count also stopped being an empty string when zero, which was making that column sort as text.",
+      "The expanded scorecard\u2019s holes line up with the board\u2019s holes (Kerry: \u2018Hard to read if it\u2019s not\u2019). The card MEASURES the row it dropped out of \u2014 the distance to the first hole cell \u2014 and takes the board\u2019s own hole-width token, rather than assuming a width; the left block is content-sized, so there is no constant that could be right. Scoped to the leaderboard, so the universal scorecard renderer is unchanged everywhere else it is used.",
+      "OVERALL carries EVENT MVP and TGF MVP badges under the player\u2019s name (Kerry), in the Player Spotlight\u2019s badge shape and the ratified payout-category colours \u2014 City MVP purple, TGF MVP burnt orange, the same meaning those colours carry on every money surface. They read off what the player was actually PAID under, so a badge can never claim an award nobody was paid for.",
+    ],
+  },
+  {
+    version: "2.406.0",
+    date: "2026-09-14",
+    changes: [
+      "TEAM hole cells go back to GROSS with the pops marked (Kerry: \u2018show gross scores for each players hole scores. The pops then will signify what was subtracted to produce the net score used for team score on that hole\u2019). The column reads gross, the dots say what came off it, the green cell is the one whose NET was the team\u2019s best ball, and the TEAM NET row below carries that net. Each cell\u2019s tooltip spells the arithmetic out \u2014 \u20185 \u2212 1 = net 4\u2019 \u2014 so the chain from a player\u2019s gross to the team\u2019s score is readable without doing it in your head.",
+      "Every tab now shows only the score its own game is played in. GROSS drops the Net column and its to-par; MVP/POINTS drops the Gross column and its to-par; TEAM already dropped Gross. On a board with no Net column the # column re-ranks by gross rather than by a column that isn\u2019t there any more.",
+      "The SKINS count moves to sit directly right of WON (Kerry). Skins won and skins money are the same fact twice, so they now read together instead of at opposite ends of the board. OVERALL and MVP/POINTS keep Pts at the end.",
+      "Boards land with HOLE BY HOLE unselected (Kerry) \u2014 totals first, the hole grid one tap away. The per-player PTS rows ride with that checkbox, since a hole-by-hole breakdown has nothing to say while the holes are hidden; they stay in the page so the box brings them straight back. When they are showing, the Pts total is no longer repeated on them \u2014 it is already on the player\u2019s own row directly above.",
+      "Opening an event pins it to the top of the screen (Kerry). The scroll targets the card\u2019s top edge rather than its body, because the body loads a moment later and grows downward \u2014 the top edge doesn\u2019t move, so the landing place is the same either way. The offset is measured from the sticky header and tab bar rather than hard-coded, since their height changes with role and viewport.",
+    ],
+  },
+  {
+    version: "2.405.0",
+    date: "2026-09-14",
+    changes: [
+      "The flight band now runs the full width of the board (Kerry: \u2018Extend flight row background color to right edge of scoreboard\u2019). It was one column short on every flighted board \u2014 Net, Gross, Skins and Team \u2014 so the black Flight header stopped just before the last to-par column and left a white notch at the right edge.",
+      "The cause was a hand-maintained column count that had drifted from the header it is supposed to describe. It is now derived in one function from the same flags the header is built from, and \u2014 more to the point \u2014 the test asserts that count equals the REAL number of header cells on every tab, and that each band\u2019s colspan equals it too. An off-by-one here has no symptom except a band that stops short, which is precisely the kind of thing that survives for months; now it cannot.",
+    ],
+  },
+  {
+    version: "2.404.0",
+    date: "2026-09-14",
+    changes: [
+      "The TEAM tab drops the Gross score and its to-par column (Kerry). Team Net is played in net, the hole cells on that tab are already net, and a gross total sitting beside them is another game\u2019s number \u2014 the same reasoning that took the Pts column off this tab in v2.390.0. TEAM now speaks one currency end to end; every other tab keeps its gross.",
+      "The pair is dropped by a board flag rather than by editing one table, so the header, the PAR row, the player rows and the TEAM NET row all lose it together. A new check asserts every row type on the tab ends up with the SAME cell count \u2014 dropping a column from three builders out of four is the failure this guards against, and it would show up as a quietly shifted grid rather than an error.",
+      "The test harness\u2019s copy of the board config went stale again on this change \u2014 the fourth time. It now carries a note naming that copy as the last duplicated thing in the file, listing the four times it has drifted, and saying plainly that a pass there is not proof the page agrees.",
+    ],
+  },
+  {
+    version: "2.403.0",
+    date: "2026-09-14",
+    changes: [
+      "A black frame around every scoreboard (Kerry), at the same 2px weight as the rules that already bracket the column groups inside it \u2014 so the frame and the internal rules read as one drawing rather than two ideas. It sits on the shared .evlb-holes class, so the six board tabs and the team best-ball card all get it from one line.",
+      "WON now centres in its column \u2014 the header and the money together (Kerry). Centring the label on its own would have left \u2018WON\u2019 floating over a right-aligned column of figures, which is the thing the request was trying to fix.",
+    ],
+  },
+  {
+    version: "2.402.0",
+    date: "2026-09-14",
+    changes: [
+      "Every scoreboard now sizes to its CONTENT and sits left instead of being stretched across the page (Kerry: \u2018adjust left, not align full \u2026 should only be as wide as it needs to be\u2019). The app\u2019s global `table { width: 100% }` was pulling the Player and Won columns out to absurd widths to fill the row; the boards opt out of it, the same call Kerry already made for the team/proxy tables.",
+      "Column widths are now a STANDARD rather than whatever the numbers happened to need: one token sets every hole column and a second sets every score-block column \u2014 Gross, its \u00b1, Net, its \u00b1, and Pts. The grid stays even whatever is in it, a +13 no longer makes its column wider than an E two rows down, and two boards can never disagree about how wide a hole is.",
+      "The team best-ball card reads the same two tokens instead of carrying its own sizes, so tapping a team does not change the width of a hole. Change the standard in one place and every board and card follows.",
+      "Eighteen new checks pin it down: the board is width:auto, both tokens exist, hole cells read the hole token, and G / \u00b1 / N / \u00b1 / Pts all read the SAME score token \u2014 on all six tabs.",
+    ],
+  },
+  {
+    version: "2.401.0",
+    date: "2026-09-14",
+    changes: [
+      "Nav tidy-up (Kerry): CA QUEUE is now QUEUE, MEMBER VIEW is now MEMBERS and reads as a button, MEMBERS sits after QUEUE, and TWO MAN TOUR moves to the right of ADMIN. Desktop row and mobile drawer carry the same order and the same words.",
+      "MEMBERS gets a pill because it is a DOORWAY OUT of the Tracker into the member-facing app \u2014 the same reason Two Man Tour has one. It is a neutral light pill rather than a brand colour: TGF orange already means Admin, the gold already means Two Man Tour, and green now means bought-in app-wide, so a fourth meaning would have collided with one of them.",
+      "A trap this nearly walked into, worth knowing: auth.js reveals admin-only links by walking the nav LINK containers, and .shell-nav-right is not one of them \u2014 so simply moving Two Man Tour next to ADMIN would have hidden it from admins permanently. shell.js gated that group by naming the Admin link specifically; it now gates by the admin-nav CLASS, so this pill and the next one moved there are covered without anyone remembering to.",
+      "New test_shell_nav.js pins the whole thing down \u2014 the labels, the order in both the desktop row and the drawer, the pill and its colour, and specifically that the right-hand group is gated by class rather than by a link name. Fourteen checks.",
+    ],
+  },
+  {
+    version: "2.400.0",
+    date: "2026-09-14",
+    changes: [
+      "SEASON CONTESTS is now LEADERBOARD in the manager/admin nav (Kerry). Members have called that page the Leaderboard since 2026-07-14; the two sides now use the same word for the same page, which matters most when Kerry is looking at Member View and the real nav side by side. The desktop link, the mobile drawer, the mobile bar title and the kill-switch fallback header all follow \u2014 tapping \u2018Leaderboard\u2019 can never land on a page headed \u2018Season Contests\u2019.",
+      "The orange \u2018ENTER SEASON CONTESTS\u2019 call-to-action keeps its name on purpose. That button is the paid buy-in, not the board \u2014 renaming it would advertise standings where it actually sells entries. Flagged here rather than changed silently.",
+      "The desktop link also drops the responsive split that hid the word \u2018Contests\u2019 on a narrow bar; one word needs no abbreviating, so the label now reads the same at every width.",
+    ],
+  },
+  {
+    version: "2.399.0",
+    date: "2026-09-14",
+    changes: [
+      "DROPDOWNS NOW PAINT ABOVE EVERYTHING (Kerry: \u2018See how the actions dropdown is behind the action buttons below. All dropdowns should always be above everything.\u2019). The registrations table pins its ACTIONS column, and a pinned cell with a z-index creates its own stacking context \u2014 so a menu opened inside one was sealed in at the cell\u2019s level no matter how high its own z-index went, and the identical cells of the rows BELOW painted straight over it. position:fixed did not escape either, which is why the earlier \u2018lift it out of the table\u2019 fix held everywhere except here.",
+      "The fix is a shared auth.js helper, tgfOverlayLift / tgfOverlayDrop, that raises the ancestors forming those contexts while a menu is open and puts them back on close \u2014 rather than moving the menu into the body, which would have stripped the click handlers its items depend on. Wired into the Events actions menus, the pairings open-seat picker and the Lead Center row menus, so the rule holds for every dropdown that sits inside a table, not just the one that was reported.",
+      "PAYMENT LINK AS A BUTTON in Message Players (Kerry). New {pay_button} variable renders the event\u2019s store registration link as a tappable TGF-orange button, inline-styled so it survives every mail client. It carries the SAME refusal rule as {event_url} \u2014 a message asking for it will not send when the event has no verified link or has already been played, so a button that looks live can never reach a member pointing at a dead page.",
+      "The built-in Payment Reminder now uses it (\u2018You can take care of it right here:\u2019 + the button). The seed only ever INSERTS by name, so the shipped body is also recorded as a prior version \u2014 which means the LIVE template actually picks the button up instead of the change reaching only fresh deployments. A Payment Reminder Kerry has edited himself is left exactly as he wrote it.",
+      "RSVP Only (Unpaid) moves to the top of the Audience list and Payment Reminder to the top of the Template list (Kerry), so the most common send \u2014 chasing the unpaid \u2014 is two defaults rather than two scrolls.",
+    ],
+  },
   {
     version: "2.398.1",
     date: "2026-09-14",

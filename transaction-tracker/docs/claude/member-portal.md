@@ -641,6 +641,83 @@ legend shows only the flights that paid; MVP keeps the ratified
 purple. Backend: overall rows carry `net_flight` / `gross_flight` /
 `skins_flight` ordinals (`_flight_ordinals` over the sectioned
 boards — 1 = low flight, placed non-buyers included).
+**v2.408.0 — Show All Players, and flights read their own label.**
+  - **`evlbShowAll`** (default `false`) + a `data-ovr-all` checkbox on the
+    four `EVLB_BUYIN_GAMES` tabs only. `evlbBoardBody` filters
+    `r._buyer !== false` and **re-renders** — not CSS — because `#` ranks
+    within a band, so hiding rows in CSS would leave gaps (1, 3, 6). An
+    emptied section drops its band too.
+  - **`_label_bounds(labels)`** in `get_event_leaderboard`: flight
+    boundaries come from the LABELS (`"Flight 2 (HCP 12.0+)"` → 12.0;
+    cut points are the floors of every band after the first), falling
+    back to the buyer-derived midpoint only when the labels carry no
+    number or don't form an ascending ladder. Kerry 2026-09-14: the
+    derived midpoint put a skins line at ~3 because Flight 1 held three
+    scratch buyers, sweeping mid-handicap non-buyers into Flight 2.
+  - **Known upstream inconsistency:** GG's recorded Flight 2 on s9.22
+    skins contains buyers below its own stated 12.0 line. Buyers keep
+    the flight GG recorded (a paid result is never re-flighted), so a
+    PLACED non-buyer can land in a different band than a buyer of
+    similar handicap. Ours is consistent with the label; GG's is not.
+
+**v2.406.0 — one currency per tab; holes closed on landing; pin to top.**
+Kerry 2026-09-14, four asks in one wave.
+  - **TEAM hole cells are GROSS again** with pops marked; the green cell
+    is the one whose NET was the best ball, and the tooltip spells out
+    `gross − pops = net`. (Reverses the v2.391.0 net-cells call, which was
+    flagged reversible at the time.) The TEAM NET row still carries net.
+  - **`netCol: false`** joins `grossCol`/`gameCol` as a board flag: GROSS
+    drops the N pair, MVP/POINTS drops the G pair, TEAM already dropped
+    G. On a board with no N, the `#` header sorts by `gross`.
+  - **`gameColAfterWon: true`** on SKINS puts the count right of Won.
+    OVERALL/POINTS keep Pts at the end.
+  - **`evlbShowHoles` now starts `false`.** `.evlb-ovr.no-holes
+    tr.evlb-ptsrow { display:none }` rides the PTS rows with the holes
+    (CSS, not a re-render, so the checkbox brings them back), and the PTS
+    row's Pts slot is now EMPTY — the total is on the player row above.
+  - **`evlbPinToTop(el)`** scrolls an opened event card to the top, using
+    the MEASURED sticky header + tab-nav height, targeting the card's top
+    edge (stable while the body loads in below it).
+All five row builders now take `gameCol / grossCol / netCol / afterWon`;
+`evlbColCount` subtracts each. Guard: every row type on GROSS, POINTS and
+TEAM must end with the same cell count. 226 checks.
+
+**v2.404.0 — TEAM speaks NET only.** Kerry 2026-09-14: "Remove GROSS
+score columns from TEAM." A new board flag `grossCol: false` drops the
+`G` + gross-to-par pair; the team board sets it. Team Net is played in
+net, the tab's hole cells are already net (v2.391.0), and a gross total
+beside them is another game's number — the same reasoning as `gameCol:
+false` in v2.390.0. Every other tab keeps gross.
+The flag is read by the header AND all four row builders
+(`evlbOvrRowHtml` / `evlbParRow` / `evlbPtsRowHtml` / `evlbTeamTotalRow`)
+plus the band `colspan`, so nothing can lose the pair in three places
+out of four. Guard asserts every row type on TEAM ends with the same
+cell count, and that the other five tabs still carry `data-k="gross"`.
+
+**v2.403.0 — black frame + centred Won.** `border: 2px solid #1B1B1B` on
+`.evlb-holes` (same weight as the `.bl`/`.br` group rules, so frame and
+rules read as one drawing); `.won` centres header and money together.
+
+**v2.402.0 — boards size to content; column widths are a standard.**
+Kerry 2026-09-14: "Change all scoreboard leaderboard views to adjust
+left, not align full. Should only be as wide as it needs to be. Hole
+columns should be set at a standard width. Same for Gross, Net & Pts
+columns."
+  - `.evlb-holes { width: auto }` opts every board out of dashboard.css's
+    global `table { width: 100% }`, which had been stretching Player and
+    Won to fill the row. Same call already made for `.evlb-tbl`.
+  - **Two tokens on `.evlb-holes`**: `--evlb-hole-w` (30px) for every hole
+    column, `--evlb-score-w` (38px) for the whole score block — `td.sc`
+    (G and N), `td.tp` (both ±) and `td.gc` (Pts). Widths are declared by
+    CLASS, so all four row builders and the header stay in step.
+  - `evlbTeamCard` reads the same two tokens rather than carrying its own
+    sizes: tapping a team cannot change how wide a hole is.
+Guard: eighteen checks (width:auto, both tokens, hole cells on the hole
+token, G/±/N/±/Pts on the same score token, across all six tabs).
+
+**v2.401.0 — nav order + labels.** Queue / Members (pill) / Admin / Two
+Man Tour; see CLAUDE.md and `test_shell_nav.js`.
+
 **v2.398.0 — OVERALL's default order follows the event's state.** Kerry
 2026-09-14: "Set won money order as default landing for overall if event
 is completed. If not base it on points." `evlbOverallSort(d)` returns

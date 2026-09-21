@@ -205,7 +205,7 @@
         .ld-margintbl th:nth-child(-n+3), .ld-margintbl td:nth-child(-n+3) { text-align: left; white-space: nowrap; width: 1%; }
         .ld-panel .ld-foot { font-size: 11px; color: #6B7280; margin-top: 8px; }
         .ld-mnotes td { padding: 2px 6px; font-size: 12px; white-space: normal; }
-        @media (max-width: 768px) {
+        @media (max-width: 560px) {
             #ld-dlist { display: none; }
             #ld-mlist { display: block; }
             .ld-cards { display: none; }
@@ -467,7 +467,7 @@
     async function loadLeads() {
         const res = await fetch("/api/leads");
         if (!res.ok) {
-            // BOTH containers: #ld-dlist is display:none under 768px, so
+            // BOTH containers: #ld-dlist is display:none under 560px, so
             // writing the error only there meant a 500 rendered as a
             // blank page on the phone Kerry actually works from. A
             // failure must be visible on the surface it happened on.
@@ -1736,6 +1736,7 @@
 
     function closeAllMenus() {
         document.querySelectorAll(".ld-menu").forEach(m => m.style.display = "none");
+        if (window.tgfOverlayDrop) window.tgfOverlayDrop();
     }
     function toggleMenu(id) {
         const el = document.getElementById(id);
@@ -1743,6 +1744,10 @@
         const open = el.style.display === "block";
         closeAllMenus();
         el.style.display = open ? "none" : "block";
+        // a dropdown must paint above everything, and z-index alone
+        // cannot climb out of a positioned ancestor's stacking context
+        // (Kerry 2026-09-14) — auth.js lifts those while it is open
+        if (window.tgfOverlayLift && !open) window.tgfOverlayLift(el);
     }
     // Tapping Text / Call / Note used to leave the menu sitting over the
     // next card with no way to dismiss it (Kerry 2026-09-05: "it should
@@ -1869,7 +1874,7 @@
         if (!l) return;
         const opts = ALL.answer_options || {};
         const payload = l.payload || {};
-        const isMobile = window.matchMedia("(max-width: 720px)").matches;
+        const isMobile = window.matchMedia("(max-width: 560px)").matches;
         const box = document.getElementById((isMobile ? "ld-msel-" : "ld-sel-") + id);
         if (!box) return;
         if (isMobile) { const d = document.getElementById("ld-mdet-" + id); if (d) d.open = true; }

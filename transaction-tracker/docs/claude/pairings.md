@@ -99,6 +99,64 @@ matters too, not just the foursome.
     when someone signs up, notify whom they've requested.
 11. **A request from or for a person LOCKS both players** from further
     requests for that event, unless the other declines.
+12. **No lone back tee (Kerry-ratified 2026-09-15, v2.416.0).** A `<50`
+    player is never the only `<50` in their foursome unless flagged
+    `solo_back_ok`. Forward and 65+ may be alone. Applied AFTER groups
+    form and BELOW rules 1–6/8/11 (everything in `locked_names`):
+    `_repair_lone_back_tee` swaps an unlocked non-`<50` out for an
+    unlocked `<50` from a group that keeps a legal shape, cheapest
+    history first (rule 3 is the tiebreak, not the veto). No legal swap
+    → a note on the sheet, manager decides. `<50` detection is strict
+    (`_is_back_tee`); Kerry: "This only applies to the <50s."
+13. **Driver's seat (Kerry-ratified 2026-09-15, v2.416.0; v2.417.0).**
+    Seats 1 and 3 drive — no wheel mark, it is implied. The
+    `group_captain` takes SEAT 1 with their partner request in seat 2 if
+    partnered, else the NEWEST player beside them (weights 100 / 10 in
+    `_arrange_group_seats`: below Match Play, above a tee match; the
+    captain's cart is rotated to seats 1-2 after the permutation). A
+    first-year member (`is_new`) never drives; otherwise the more
+    experienced player (`experience` = order rows on file) takes the
+    wheel. `is_new` = joined as a NEW MEMBER this year (earliest
+    `customer_memberships.started_at` in the event's year) AND no
+    handicap round before that year (`handicap_rounds` via
+    `handicap_player_links.customer_id`) — Kerry: "NEW should only apply
+    to people who've joined as NEW members this year" and "If they have
+    handicap records before 2026 then remove the 1Y" (membership rows
+    were backfilled in 2026 for many long-standing members, so the
+    membership start alone over-tagged; v2.419.0). Guests and
+    long-standing members are not new. Card tags are
+    single letters: **C** captain, **A** ambassador, green **1Y**
+    first-year member; names never wrap (nowrap + ellipsis, grid minimum
+    340px). Rule 7 is built alongside (`_spread_leaders`:
+    a leaderless group takes a captain/ambassador from a group holding
+    two, cheapest history, never breaking rule 12).
+
+14. **First-timers ride with an ambassador (Kerry-ratified 2026-09-15,
+    v2.420.0).** "1st Timers also need to be paired up (carted) with an
+    Ambassador of the same tees whenever possible." `is_first_timer` =
+    order label `1ST TIMER`, profile status `first_timer`, **or the
+    player's first event ever** (v2.421.0 — see "1st timer means FIRST
+    EVENT" below). Composition:
+    `_pair_first_timers_with_ambassadors` gives every group holding a
+    first-timer an ambassador by the cheapest history swap that keeps
+    rule 12, a tee mismatch costing as much as a once-played repeat so a
+    same-tee ambassador wins whenever one is free; never strips a group
+    of the only ambassador riding with ITS first-timer; no candidate → a
+    note. Seating: `_arrange_group_seats` (weight 10) puts the first-timer
+    in the ambassador's cart; the driver rule (13) then seats the
+    ambassador at the wheel.
+
+**Role flags** (`customers.ambassador / group_captain / solo_back_ok`,
+seeded by `_PLAYER_ROLE_SEED` fill-only-if-NULL; one-tap chips AMB /
+CAPT / BACK on the Customers page write an explicit 0/1 via
+`POST /api/customers/<id>/roles`). Roster rows carry them plus `is_new`
+and `experience` (`_decorate_roster_roles`); the /pairings GET passes them
+to the page for the CAPT / AMB / NEW badges and the driver mark. Kerry's
+seed lists: ambassadors South, M. Wade, Marroquin, Mazanec, Anthis, Young,
+Callaway, Barna, J. Wade, Cloer, Straiton, Niester, Rolando Campos (+ Vasquez per
+his words); captains South, M. Wade, Young, Callaway, Baker, Sharitz,
+Wicker, Barna, J. Wade, Cloer, Straiton, Niester, Freund (+ Vasquez); OK
+alone back Young, Niester, Mazanec, Baker. Guard: `test_pairing_roles.py`.
 
 ## Ratified (Kerry, in-session 2026-07-12)
 
@@ -1006,6 +1064,128 @@ behaviour — empty seats were drop targets only, reachable via Move mode
 plus a click in the Unassigned panel at the bottom of the page — is
 unchanged when something IS already selected.
 
+## RSVP-only players are first-class (v2.410.0, Kerry 2026-09-15)
+
+> *"I need the ability to assign RSVP only's to groups and requests. Need
+> them to run in pairings."* / *"Need to show RSVPs in this list, but
+> highlighted as such."*
+
+**The roster is built once, on the server.** `_event_roster_rows(conn,
+event_id)` in `database.py` is THE pairings roster: one row per active
+order row (statuses in `PAIRING_INACTIVE_STATUSES` excluded) plus one per
+PLAYING Golf Genius RSVP with no order, from
+`_event_rsvp_only_players`. Every consumer reads it — `GET
+/api/events/<id>/pairings` (`event_players`), `generate_event_pairings`,
+`get_event_partner_requests`, and `_event_roster_players` (the
+manual-match / add-request validator). They used to be four copies of the
+same SQL, and the GG RSVPs were only merged in on the page
+(`rosterExtra`), which is exactly why Generate could not deal them and a
+request naming one could not resolve.
+
+**The derivation mirrors the Players tab rule for rule** (events.html
+`unmatchedPlaying`, "Frontend dedup"): a PLAYING RSVP is OUT when it is
+matched to an active item whose email agrees, when its email is overridden
+to `not_playing`, or when its email or resolved name belongs to an active
+registrant; everything else PLAYING is IN under its resolved name (the
+customers row via `customer_id`, else the player card by email, else the
+RSVP's own name). Cancelled/postponed events contribute nobody. Rows carry
+`rsvp_only: true` — also set on `rsvp_only` ORDER rows (the shop's $0
+RSVP-only item), since both are "playing, not paid". An RSVP's
+`received_at` is its `order_date`/`created_at`, so it takes its honest
+place in the first-come request order. `test_pairings_rsvp_roster.py`
+pins the derivation and that all four consumers agree, on the full
+`init_db` schema.
+
+**The page keeps `rosterExtra`** (the client-derived synthetic rows) as a
+belt-and-braces merge; `getUnassigned` dedupes by `pairPersonKey` with
+the server row first. `isRsvpOnlyPlayer(state, name)` answers "on the
+sheet without a payment" by identity, and drives the seated-card
+`pairing-rsvp-badge` and `rosterOptionHtml`, which renders every roster
+`<option>` in the request dropdowns (fix, multi-name link, add-request
+requester and partner) with an amber `· RSVP` text marker — text, because
+`<option>` styling is not honoured on every browser.
+
+**Every name list orders by LAST name (v2.411.0, Kerry: "Order name
+lists by last name").** `byLastName` keys through `lastNameSortKey` (the
+Roster tab's suffix-aware key) and is applied to the request dropdowns,
+the multi-name candidates, and `getUnassigned` (which feeds the Unassigned
+panel and the open-seat picker). The server roster is first-name ordered
+(`ORDER BY i.customer`); the page, not the server, owns display order.
+The dropdown TEXT is `displayName(name)` — "Last, First", suffix-aware
+(v2.412.0); the `<option>` VALUE stays the raw roster name because that is
+what `set_partner_request_match` resolves.
+The open-seat picker and the Unassigned panel read "Last, First" too
+(v2.413.0); seated cards keep "First Last"; `data-unassigned-name` and the
+picker's pick object carry the raw name.
+
+## One handicap-index lookup (v2.414.0, Kerry 2026-09-15)
+
+> *"Why isn't Adam Baker's handicap showing?"* — after X → bullpen → pick.
+
+`_roster_handicap_index_map(conn)` — `{customer_name.lower(): index}`,
+AVG of the last ≤20 differentials in 12 months via `handicap_player_links`
+— is THE index the pairings surface shows. Three readers: the saved-sheet
+enrichment in `get_event_pairings`, the generator's `hcp_map`, and the
+`/pairings` GET, which now puts `handicap_index` on every `event_players`
+row. Before, the roster rows carried no index at all, so a player seated
+from Unassigned (`_movePlayer` copies `found.handicap_index`) arrived with
+"—" while the generator's own seating had one; the generator and the
+saved sheet each had a private copy of the query. Never add a fourth.
+
+## Points column checkbox (v2.414.0)
+
+> *"Give me a checkbox to hide the points column."*
+
+`state.showPointsCol` (seeded from `pairingsPointsPref()`, localStorage
+`tgf_pairings_points_col`, default ON) gates only the `showPoints`
+column; `showBands` still reads `havePoints`, so hiding the numbers never
+hides who is in the race. The box renders beside Partner Requests only
+when `standingsPoints` is non-empty. A browser preference, not a sheet
+property — it is not saved with the pairings.
+
+## Slots are sized by the roster (v2.413.0, Kerry 2026-09-15)
+
+> *"Why aren't holes being assigned to the foursomes?"*
+
+`_pairing_time_slots(event, holes, needed=0)`: the event's
+`tee_time_count` is the manager's number and wins when set; when it is 0
+(nobody types a group count into Edit Event) the ROSTER's count is used —
+`_pairing_groups_needed(n_players, max_group, seeded_slots, saved_groups)`
+— so a shotgun still deals `1A 1B 2A …`, tee times with a start time deal
+clock slots, and only an event with neither falls back to `Group N`. The
+generator passes its per-holes roster + top seed index; the `/pairings`
+GET passes the roster split by normalised holes + the saved sheet's group
+count, so the seed picker and the saved sheet offer the same holes.
+Guard: `test_pairing_slots.py`.
+
+## Bullpen X (v2.413.0)
+
+> *"Need the ability to remove a player. Maybe just a simple red X to be
+> able to put them in the 'bullpen' for unassigned players."*
+
+Every seated row renders `.pairing-unseat` (`data-unseat`, keyed by
+holes / group_num / cart_pos). The handler splices the player out of the
+group's `players`, leaves the `cart_pos` gap (that is what `— open —`
+renders from), dirties the sheet, commits history and re-renders;
+`getUnassigned` lists the player again because they are on the roster and
+no longer seated. Purely client state until Save, like every other sheet
+edit — the server-side `remove_player_from_pairings` (used when a
+registration is credited/WD'd) is a different thing and untouched.
+
+## Detail panel wraps to the window (v2.413.0)
+
+> *"Make the foursomes wrap to window width so I can always see them."*
+
+The detail panel renders inside `.event-detail-row > td` of a nowrap
+table inside `.events-table-wrapper { overflow-x: auto }`; on a narrow or
+zoomed window the table is wider than the viewport, `auto-fit` reflows the
+foursomes to the TABLE width, and the third column sits off-screen. A
+`ResizeObserver` on the wrapper publishes its `clientWidth` as
+`--ev-detail-w`; `.event-detail-content` is `max-width: var(--ev-detail-w)`
+and `position: sticky; left: 0`, so the panel is always window-wide and
+stays in view when the row itself is scrolled.
+
+
 ## Menus inside tables (v2.342.0)
 
 > *"Can't read options in actions drop down menu."*
@@ -1025,3 +1205,616 @@ scroll and resize close them. The same technique backs
 this is the mechanism-level fix, not another per-case `overflow` patch.
 
 Test: `test_pairings_roster.js`.
+
+## "1st timer" means FIRST EVENT (v2.421.0)
+
+Kerry 2026-09-15, on the s9.23 sheet: "any 1st Timer, even if they've
+become a member already and didn't select 1st timer should be highlighted
+as a first timer. So Morris Allen should be highlighted even though he
+joined already, because it's his first event."
+
+A membership purchase is a buy-in, not a round, and the checkout label is
+what someone SELECTED — neither decides whether they have ever teed off
+with us. `_mark_first_timers(conn, event_id, rows)` runs as a second pass
+over the finished roster (`_event_roster_rows`) and marks every player
+with BOTH:
+
+- no active order row on an EARLIER event (joined the same three ways the
+  roster join uses: item name, event alias, `items.event_id`), and
+- no `handicap_rounds` row before this event's date (via
+  `handicap_player_links.customer_id`) — the Golf Genius / pre-Tracker
+  proof, the same one that stopped `is_new` over-tagging.
+
+A roster row with no `customer_id` is left alone: unknown identity is not
+evidence of a first event. The explicit label still stands on its own, so
+the flag only ever grows. On the cards the orange **1ST TIMER** band
+outranks every other band (`standingsBand`) — a new member reads orange
+rather than disappearing into the points-race green. The Players tab's
+registrant rows still colour by the ORDER LABEL: that table is about what
+was purchased and at which price tier, a different question.
+
+## Pairings count report (v2.421.0)
+
+Kerry: "produce a pairings count report ... how many times has each
+player played with the others in their groups this year including
+tonight." `pairing_counts_report(event_id, year=None)` reads the SAVED
+sheet (`event_pairings`) — the groups as the manager left them, not a
+fresh generation — and scores every pair against
+`get_pairing_history_counts`, so the report obeys the same two rules the
+generator obeys: Golf Genius is the record of what was PLAYED
+(`source <> 'app'`), and the event never scores against itself.
+
+**Including tonight is the +1.** A pair reading 1 has never played
+together before today; a pair reading 3 has played twice already. Returns
+per group: every pair with `prior` / `total` / `rode`, a `per_player` line
+(three mates and the count with each, plus the player's C / A / 1ST /
+1Y marks), the `repeats` (everything above 1) sorted worst-first, and
+`text` — the same report as a plain-text block for a print-out. Bridge:
+`scoring-pairings-counts:<event_id>[|<year>]` via `probe_golf_genius`.
+Guard: `test_pairing_counts.py`.
+
+## History line on the cards (v2.422.0)
+
+Kerry 2026-09-15, reading the first count report: "I had no idea about
+the Group 5 repeats! Can we provide this info as a row underneath each
+name in a foursome that also has a check box to show Pairing History
+Count (History)? I probably shouldn't have tweaked these pairings that
+much that put them together."
+
+Under every seated name, the OTHER players in that group in cart order,
+surname + rounds together this year INCLUDING tonight (1 = first time).
+Colour: 1 muted, 2–3 amber (`.ph-rep`), 4+ red (`.ph-hot`). The group
+header carries a `↻ N` chip naming the worst pair when any pair in the
+group is above 1. A **History** checkbox sits with Partner Requests and
+Points; default ON, remembered in `tgf_pairings_history_row`.
+
+**Requested pairs are exempt from the repeat flag** (Kerry 2026-09-15:
+"any requests should be exempted from the repeat flag"). A partner
+request is a decision the manager already made and rule 3 ranks below it,
+so a requested pair keeps its count (marked with a pennant) but reads
+muted and never drives the group chip. A SUPPRESSED request is not a
+request. The legend above the cards carries the C / A / 1Y marks in the
+card's own badge markup.
+
+**The counts have to arrive.** v2.422.0 shipped with every pair reading
+1: the GET called `db.get_connection()` and `db` is not a bound name in
+app.py, so the NameError went into a non-fatal `except` and the map
+shipped empty. `test_pairings_roster.js` fails on any module-qualified
+`db.` call in app.py — a silent except is how this hid.
+
+**It recomputes locally.** The `/pairings` GET ships `pair_counts` for
+the roster (`roster_pair_counts` → `_pair_counts_from_conn`, non-zero
+pairs only, keyed `"a|b"` on `_pair_key_name`); `pairPlayedTotal` adds
+tonight's +1 at render time, so a swap or a bullpen trip updates every
+number without a round trip — the pattern `groupPaceOf` already uses.
+`get_pairing_history_counts` (the generator) reads the SAME
+`_pair_counts_from_conn`, so the card and the sheet can never disagree.
+
+Two traps pinned by `test_pairings_roster.js`: the client key is
+`pairCountKey` (the `_pair_key_name` twin), **not** `pairPersonKey`
+(surname|initial — wrong grain, and its "|" collides with the key
+separator); and `flex-wrap` lives on a `.has-hist` MODIFIER, because
+wrapping `.pairing-player-row` itself would drop the handicap or the tee
+onto a second line on a narrow card.
+
+## The sheet is linked to the person (v2.423.0)
+
+Kerry 2026-09-15: "I updated a Customer name and alias Jose to Joe Mejia.
+It updated on the ROSTER but not in the pairings. It needs to be directly
+linked in PAIRINGS to the ROSTER and Customer ID so it changes immediately
+if customer profile is changed."
+
+`event_pairings.player_name` was a snapshot taken at save time. The rename
+moved the roster and left the sheet reading "Jose Mejia", which then
+missed every name-keyed lookup downstream — the handicap cell fell to a
+dash, the role badges vanished, the band went with them. ONE root cause,
+four symptoms, and exactly what guiding principle 6 exists to prevent.
+
+- `event_pairings.customer_id` (additive column, `_ensure_pairing_tables`).
+- `save_event_pairings` stores it: the id the page sent, else
+  `_pairing_cid_for_name` (canonical first+last, then a NAME alias
+  carrying an id; `merged` profiles excluded).
+- `get_event_pairings` serves the CURRENT canonical name through the id
+  and ships `customer_id` with every seat.
+- `_backfill_customer_id_on_event_pairings` fills NULLs — scoped to the
+  event on every read, whole-table on boot. A name nobody owns (a Golf
+  Genius guest) stays as typed and is retried next time, in case the
+  profile is created later.
+- The page's `rosterEntry(state, name, cid)` matches by id first.
+- `_roster_handicap_index_map` keys on the canonical customer name via
+  `handicap_player_links.customer_id`, because that table's
+  `customer_name` is its own stale snapshot.
+
+Guard: `test_pairings_identity.py`.
+
+## PAIRINGS reports: Divisions & Flights, Proximity Markers (v2.425.0)
+
+Kerry 2026-09-15, with the two Golf Genius originals attached: "Let's add
+to our Reports in our PAIRINGS tab. Create a Divisions & Flights report
+(per ROSTER buy ins, GAMES matrix, and flighting standards) and Proximity
+Markers per GAMES setup and course identification of par 3s. Add logos to
+these two. Divisions & Flights should produce all on one page for NET,
+SKINS, and GROSS as applicable."
+
+**Divisions & Flights** — `/events/<id>/divisions-flights`,
+`event_flights_report`, `templates/divisions_flights.html`. Three inputs,
+each from its own owner:
+
+- **Buy-ins**: `_event_game_buyers` (the Games-tab eligibility rules —
+  credited / refunded / transferred / rsvp_only out, child add-on rows
+  merged). NET buyers drive Individual Net; GROSS buyers drive Skins and
+  Individual Gross.
+- **Flight count**: the live games matrix (`SEED_LIVE_SCORING_CONFIG`
+  `flight_bands` / `min_buyers` via `_bands_lookup`).
+- **The cut**: `live_scoring.flight_plan` with `SEED_FLIGHT_CONFIG`, each
+  game in the mode its config names (net `equal_size`, skins and gross
+  `fixed_bands`). That pairing reproduced GG exactly on s9.23 — net
+  13/13, skins 8/8 — which is why the report does not re-litigate it.
+
+Flight labels name the break the way GG does (`Flight 1 (HCP <12.0)` /
+`Flight 2 (HCP 12.0+)`). A label states the RULE: on a fixed-band game it
+quotes the configured edge, because a 12.1 reading "<12.4" (the field's
+lowest player above the line) would place himself in the wrong flight.
+Equal-size flights quote the cut actually made — there is no band — and a
+ladder shortened by a merge falls back to the field. Indexes are the 18-hole index of RECORD (the WHS
+computation doubled), resolved **by customer_id**
+(`_handicap_index_18_by_customer`) — `ls_flight_lab` resolves by name and
+lost Jeff Rideout on s9.23. A plus handicap prints `+1.4`. A game under
+its threshold prints its REASON, not invented flights; a buyer with no
+index is named under the flights, never folded into one.
+
+**Proximity Markers** — `/events/<id>/proximity-markers`,
+`event_proximity_report`, `templates/proximity_markers.html`. The
+ratified CTP rule (side-games.md): flat entry for every player, **max 2
+CTPs per nine**, winner-take-all; more par-3s than slots → the SHORTEST
+are taken; fewer → each leftover entry becomes a **Longest Putt on the
+last hole**. Par-3s come from `_course_hole_table` (every tee on the
+course; par by agreement, yardage averaged and used only to rank length),
+narrowed to the nine in play. A Back nine stored as holes 1-9 falls back
+with a warning on the sheet. No hole card → nothing printed and the
+reason said.
+
+**The marker card** (Kerry 2026-09-15, after the first print): NO border
+around a card — a hairline down the centre of the sheet instead, marked
+print-exact, because the only line that matters on a printed sheet is
+where it gets cut; logo centred at 100px with the course and date stacked directly under it; the
+eight name lines each take an equal share of the remaining height so they
+fill the card; no par/yardage/closest-wins subline (obvious, and the
+yardage is wrong on its face when the field plays several tees); the
+footer leads with **"Only for participants of The Golf Fellowship's
+event"** in red (marked print-exact so it does not fall back to grey),
+over one rule at the SAME SIZE (15.5px): "Ball must be on the green." Who may
+claim and what makes a claim valid are the only two things a tee sign has
+to say (v2.427.0). **Type** follows the ratified rule (mailbox #44):
+Bitter for the course line, the eyebrow, the title and both footer lines;
+system sans with tabular figures for the numbered seats and, on the
+flights sheet, for every roster row. The report
+still computes yardage — it is what ranks the par-3s by length — it is
+simply not printed.
+
+Both read live through `scoring-event-report:<event_id>|flights|proximity`.
+Guard: `test_event_reports.py`.
+
+## Cart Signs + print file naming (v2.429.0)
+
+Kerry 2026-09-15: "Cart Signs need to be redone to match more of our
+current GG cart signs but with our standards."
+
+**The GG shape, kept:** letter portrait, TWO signs to a page, each one
+two enormous names over a single line saying when and where. **TGF
+standards, brought:** the official mark on every sign, Bitter 54px names
+that never wrap, the body-padding print contract, no box around a sign
+and a hairline across the middle of the sheet where it is cut (the
+standard the proximity markers set the same afternoon). Surnames print in
+CAPS with the given name as written (`_cart_sign_name`) — GG's convention,
+kept because at ten feet the surname is what a player scans for.
+**Dropped:** GG's event-id line (addresses their system) and the old
+green/blue cart pills (`#0b6` / `#06c` were never in the palette).
+
+`get_event_print_pack` composes `group.start_line` server-side —
+`"5:00 PM | Hole 1A"` on a shotgun, the slot label alone on a tee-time
+event, where the slot already IS the time and "Hole 8:10a" would be
+nonsense.
+
+**Download naming (Kerry's convention, 2026-09-15):**
+`[YY]-[chapter acronym][holes]-[event number]-[file type]` —
+`26-s9-23-StarterSheet`, `26-a18-6-CartSigns`, `25-s9-1-Proxies`,
+`27-a9-12-DivisionsFlights`. `print_file_stub(event)` builds the
+`26-s9-23` part off the EVENT NAME (which already carries chapter letter,
+holes and sequence) plus the year from the event date; each sheet appends
+its own file type in `<title>`, which is also what Save-as-PDF proposes.
+An event with no code in its name is named after the event, never after a
+bare chapter letter. NB the constant is `_PRINT_EVENT_CODE_RE`: plain
+`_EVENT_CODE_RE` is taken later in the same file and the later binding
+wins at import.
+
+**Starter Sheet:** the ALPHABETICAL names use the same size and weight as
+the foursome names, declared once (`.prow .pname, .arow .an`) so the two
+cannot drift.
+
+## Late signups and the bullpen (v2.430.0)
+
+Kerry 2026-09-15: "Just had a late signup... Justin Guerrero. He's not
+showing up as in the bullpen though." His order was active on the event
+inside a minute (item 2881, `event_id` 3302). The PAIRINGS panel loaded
+its roster ONCE — `if (val === "2" && !state.loaded) loadPairings(...)` —
+and nothing ever re-read it, while `getUnassigned` is computed from that
+roster. The stale-player banner right above was armed the OTHER way
+(seated, no longer on the roster): the class was protected in one
+direction only.
+
+- `refreshPairingsRoster(evId)` re-reads `/api/events/<id>/pairings` and
+  copies **only** the roster side — `event_players`, requests, MP
+  matches, standings, `pair_counts` — plus the lookups that hang off it
+  (`_paceMap`, `_reqPairs`). **It never touches groups**: a manager may
+  be mid-edit on an unsaved sheet, and losing that to a background
+  refresh is worse than a missing name.
+- Every RE-open of the tab refreshes; the first open still loads the
+  saved sheet.
+- A **Re-check roster** control sits on the bullpen for when the panel
+  never closed, and names anyone new instead of silently redrawing.
+- The bullpen no longer returns '' when everyone is seated — it reads
+  "Everyone on the roster is seated (N)" and keeps the control, because
+  that is the moment a manager hunting a late signup needs it.
+
+Guard: `test_pairings_roster.js`.
+
+## Stating a start, and tee colours (v2.431.0)
+
+**How TGF states a start is a rule** (Kerry 2026-09-15): "When Shotgun,
+list Hole first | then Time. When Tee Times, List Tee Time | Hole." The
+lead item is the one that VARIES between groups — on a shotgun everyone
+starts at the same minute and the hole distinguishes you; on tee times
+everyone starts at the same tee and the time does. `group.start_line` is
+composed once in `get_event_print_pack`, so the Starter Sheet and the
+Cart Signs can never state a start differently, and a tee-time event
+never reads "Hole 8:10a". A back-nine tee-time event starts at hole 10.
+
+**Tee colours come off the COURSE CARD** ("add colors for the tee
+assignments according to our course info. With a legend up above the
+foursomes"). `event_tee_legend(conn, event_id, ev)` reads
+`course_tees.tee_name`, which carries BOTH the colour word and the club's
+own tee ORDER (`"1 - Gold Tee"`, `"2 - Blue Tee"`, `"3 - Red Tee"`,
+`"3 - Red (L) Tee"` — how Golf Genius numbers them). **Kerry 2026-09-15, correcting an earlier reading:** "Forward tee is NOT
+under 50. That is the back tee selected each time based on our yardage
+parameters for under 50 tees to be 6300-6800 yards for 18."
+(`UNDER_50_YARDS_18`.) So `<50` is the BACK tee chosen by LENGTH: the
+men's tee whose 18-hole yardage lands inside the band, else the longest
+on the card (The Quarry's Gold is 6128 and still wins). `50-64` and `65+`
+step down from there by yardage, the club's tee-order prefix breaking
+ties and standing in whenever a card carries no yardage. `Forward` is its
+own tee — the ladies' tee where the card has one, else the shortest —
+never the under-50 one. A nine-hole row doubles (a rating under 50 is a
+nine-hole rating) so every tee is judged on one ruler.
+The chip takes that colour in the group boxes and the alpha list; the
+legend prints the tee NAME beside each swatch. A band landing on a colour
+already used gets `ring: True` so 65+ Red and Forward Red (L) are never
+one swatch. No course card → no legend, never invented colours.
+
+**The band→tee pairing is DERIVED, not ratified.** That is exactly why the
+tee name prints beside the swatch: a wrong pairing shows on the sheet
+rather than on the first tee. If Kerry corrects it, make the mapping data
+(`app_settings`, per course) rather than editing the derivation.
+
+Guard: `test_event_reports.py`.
+
+## The events page remembers where you were (v2.432.0)
+
+Kerry 2026-09-15: "When I refresh from an open state under an event, can
+you make it so it stays on that open state? Frustrating when it refreshes
+to closed state each time." The open event id and its tab live in
+`sessionStorage.tgf_events_open` — session, not local: this is where you
+are right now, not a preference, so a new browser tab starts clean.
+`rememberEventOpen` writes on expand and on every tab switch and CLEARS
+on collapse, so a refresh never re-opens a row that was just closed. The
+restore runs once a load (`_openRestored`) and stands down for an
+incoming `?event=` / `?item=` deep link. Restoring onto PAIRINGS loads the
+sheet the same way clicking the tab does. `applyDetailView` is the one
+place the four panel flags are set.
+
+## Starter Sheet columns: PH and TEAM (v2.434.0)
+
+Kerry 2026-09-15: "Remove A/Bs from page altogether. Not necessary. Let's
+DO show 100% Playing Handicap for players in ALPHABETICAL after TGF
+Index. Then show Team Net Handicap in the next column. We'll need to add
+column headings and explanations below."
+
+- **A/B gone**, along with `.cart-A`/`.cart-B` (`#0b6` / `#06c`, never in
+  the palette).
+- **ALPHABETICAL** = PLAYER · TEE · IDX · PH · TEAM · HOLE. The heading
+  row is repeated at the top of the second column on a forced
+  `break-before: column` at the midpoint, so a column can never be read
+  under its neighbour's labels.
+- **PH** = `handicap_calc.playing_handicap` at 100% from OUR index and
+  the tee that player's BAND plays (`_event_tee_rows`). A nine-hole card
+  takes the nine-hole index (half the 18). Same chain Task #16
+  parity-proved against GG.
+- **TEAM** = `whs_round(PH × allowance)` minus the LOWEST such value in
+  the player's own GROUP — the off-lowest shape CA ratified for Cedar
+  Creek (#502/#507). Allowance is the `team_net_allowance` dial, default
+  100%. **The sheet prints the allowance and the card it used**
+  (`team_basis`, `ph_basis`), so a wrong dial shows on the page.
+- **Which nine a tee row belongs to is DERIVED, never guessed**
+  (v2.437.0). Kerry 2026-09-15: "That 'The course card...' note WILL NOT
+  fly. We can never do that. We need to get the calculations right."
+  `label_course_tee_nines(conn, course_id)` writes `course_tees.nine`
+  ('front' / 'back' / 'full') by matching each nine-hole row's own hole
+  YARDAGES against the 18-hole row of the same tee, then against the
+  18's two halves by total, with the ratings corroborating (front + back
+  = the eighteen). A nine that has been re-rated (same yardage, two
+  ratings) is labelled correctly and `_event_tee_rows` picks whichever
+  row OUR imported rounds were actually played off — that is the rating
+  the course uses today. Verified on The Quarry against the live GG card:
+  Gold 34.2/2873 front, 35.6/3255 back, 34.0/2873 front (re-rated), 69.8
+  full. **A tee that cannot be resolved prints NO playing handicap** and
+  the sheet says to import the 18-hole scorecard. Bridge:
+  `scoring-tee-nines[:<course_id>]`.
+
+**The allowance follows the BALL COUNT** (Kerry 2026-09-15: "It is 85%
+for tonight's two ball net. It is 75% for normal one ball net. Needs to
+follow our rules and adjust to the games we play."). The ladder was
+already ratified 2026-07-05 (side-games.md, "Variant rules"):
+`TEAM_ALLOWANCE_BY_BALLS` = Best 1 → 75%, Best 2 → 85%, Best 3 → 100%,
+Best 4 → 100%, with the standard rotation every other event between Best
+1 and Best 2. `events.team_ball_count` carries it per event (additive
+column); `team_net_balls` is the default, `team_net_allowance` a manager
+override that wins and is LABELLED as an override on the sheet.
+`event_team_net_dial(conn, ev)` returns (balls, allowance, printable
+basis) and the sheet prints the GAME, not just the percentage, so a wrong
+dial reads as a wrong sentence.
+
+## The open event row pins under the navs (v2.434.0)
+
+Kerry: "When I open an event, pin to top but under any header navs so I
+can see the event row." `.event-row-clickable.expanded` is
+`position: sticky` at `--ev-sticky-top`, measured in JS from the real
+header + `.tab-nav` and re-measured on resize (both change height by role
+and window width). Cells take an explicit background — a sticky row over
+a scrolling table is transparent otherwise.
+
+**Why the first attempt did nothing:** `.events-table-wrapper` is
+`overflow-x: auto`, and a box that scrolls on one axis is the scroll
+container on BOTH as far as `position: sticky` is concerned — so the row
+stuck to a wrapper that never scrolls vertically. `setEventStickyTop`
+toggles `.ev-pin-ok` (`overflow: visible`) on the wrapper while a row is
+open and ONLY when the table already fits, because releasing it on a wide
+table would let the global `body { overflow-x: clip }` cut off columns
+with no way to reach them. Opening also scrolls the row up under the nav.
+
+**Chevrons:** the events and customers row arrows now use the house
+values (TGF orange, ▶, 0.75rem) to match `.tgf-exp`. `/me` and Money Flow
+still carry their own grey ▸ and are the remaining offenders.
+
+## Rule 15 — a credited player leaves the sheet, and a BLIND fills the seat (v2.438.0)
+
+Kerry, 2026-09-15, having credited Will Wallace after the s9.23 shotgun
+had already gone off and then found him still on the sheet:
+
+> "He should automatically be removed from the pairings when that happens
+> unless you strongly suggest otherwise. I could understand if it was
+> before the event started. In this case the group would not be
+> 're-seated' because the event starts. However, for games purposes, and
+> it's something we've never really discussed, is that for any open spots
+> like this, BLIND's from the field of Members with established handicaps
+> only, should be added into those slots. I've already added for the
+> previously open spots but not for Will's. Blind's should be auto
+> generated based off of a history of who's been blinds too, so there's
+> even distribution of who gets the benefit of being a blind for Team Net
+> over the course of a year."
+
+### 15a — the removal is automatic, and it happens at the boundary
+
+`_pairings_drop_if_off_roster(item_id, reason)` runs inside `credit_item`,
+`refund_item`, `wd_item` and `transfer_item`. The yes/no popup
+(`offerPairingRemoval`) stays for the two front-end paths that had it, but
+it is no longer what keeps the sheet honest: a credit taken from the
+roster tab, the customer page, the MCP bridge or a bulk fix now clears the
+sheet too. Protect the CLASS, not the instance.
+
+**The one guard.** A player can hold more than one active row on an event
+— entry, side games, a package add-on. Crediting ONE row must never unseat
+someone who is still playing, so the removal only fires once the player
+has no active row left on that event at all (`_event_roster_rows`).
+
+Transfers clear the SOURCE event's sheet, not the target's.
+
+### 15b — the clock decides whether the group re-seats
+
+`remove_player_from_pairings(..., reseat=None)` asks `_event_started(ev)`:
+
+* **before the start** — seats close up per the adjustment standard
+  (intact cart pairs keep the front seats, the leftover single slides
+  down). Unchanged.
+* **after the start** — the seat is left OPEN. The sheet is printed, the
+  carts are numbered, the group is on a hole; moving people on paper now
+  only makes the paper wrong.
+
+An event dated **today with no start time recorded counts as started**.
+The asymmetry is deliberate: re-seating a sheet that has not gone out
+costs nothing, and re-seating one that has is the expensive mistake.
+
+### 15c — what a blind is, and what it is not
+
+A short team cannot play a best-ball against full ones, so the empty slot
+borrows a **card**: a player already in the field is drawn and their score
+plays for that team as well as their own. Golf Genius writes it into the
+team string as `Bl[LAST, First]`, and `assemble_event_game_payouts` has
+paid that slot its equal share since v2.78.4. **Being a blind is worth
+money** — which is exactly why the draw is a rule and not a favour.
+
+**A blind is never written into `event_pairings`.** That table is who rode
+with whom, and `pairing_history` (the repeat counts on the cards) is built
+straight off it — a blind there would invent a pairing that never
+happened. Blinds live in `blind_draws`, keyed to the empty seat, and ride
+alongside the sheet: greyed and marked on the PAIRINGS cards (no drag, no
+X), printed under the group on the starter sheet, absent from cart signs
+because nobody by that name is in the cart.
+
+### 15d — eligibility and the draw order
+
+`event_blind_pool(conn, event_id)` applies three gates and **reports** each
+exclusion rather than silently dropping it:
+
+| gate | test |
+|---|---|
+| in the field | on this event's roster — a borrowed card has to exist |
+| member | `current_player_status` in `active_member` / `member_plus` |
+| established | has a TGF handicap index, which our own computation only issues at `min_rounds` (3) rounds or more |
+
+`draw_event_blinds(event_id)` fills every seat a full team would have and
+this group does not (`_blind_team_size`, dial `blind_team_size`, default
+4). Order:
+
+1. **fewest blinds this calendar year** — Kerry's distribution rule
+2. then **longest since their last one** (never drawn sorts first)
+3. then a **seat hash** — equal players must not be separated by surname,
+   or the benefit lands at the top of the alphabet every time
+
+Never drawn for a seat: anyone **in that group** (a card cannot fill its
+own team) and anyone **already blind elsewhere in this event** (one
+benefit per person per night). The draw is a **dry run by default** and
+previews every pick with its year-to-date count before anything is
+written.
+
+### 15f — RATIFIED (Kerry 2026-09-16), and a blind is not a seat
+
+All five specifics Rule 15 had been running on are now ruled, with one
+amendment:
+
+1. **Team size follows the GROUP, not a constant.** Kerry: *"Could be
+   more if fivesomes are selected."* `BLIND_TEAM_SIZE_DEFAULT` is the
+   fallback; where a group is a fivesome the blind fills to five.
+2. **Eligibility is field-only** — members with an established TGF index.
+   No guests, no unestablished members.
+3. **One blind per person per event.**
+4. **Counting is by calendar year, across chapters** — a blind in Austin
+   counts against that member's turn in San Antonio.
+5. **Our draw is a PROPOSAL Kerry enters into Golf Genius.** The Tracker
+   never writes to GG. Kerry: *"will obviously go away when we sunset
+   Golf Genius."*
+
+**A blind belongs to the EVENT and the PERSON; the seat is only where it
+is displayed (v2.458.8).** `blind_draws` rows are keyed to a seat
+(`holes:group_num:cart_pos`), and `save_event_pairings` rebuilds
+`event_pairings` from scratch. Before this fix, regenerating the sheet
+left every blind pointing at coordinates that might no longer be an open
+seat — invisible on the card, still counted by the eligibility guard.
+Kerry hit both halves at once: *"Lost blinds visually"*, then *"Gus
+Vasquez is already a blind in this event"* for a blind that showed
+nowhere.
+
+`_reseat_event_blinds` runs inside every save and moves blinds onto the
+current open seats in sheet order, skipping a seat in the player's own
+group (15c). Nothing is deleted: a blind with no seat left is nulled to
+LOOSE — the same shape as the rows read back out of Golf Genius team
+strings — where it still counts for the year. Guard:
+`test_blind_reseat.py`.
+
+### 15e — the history is real, not from zero
+
+`backfill_blind_draws_from_gg(year)` reads the year's blinds back out of
+Golf Genius: every recorded Team/Cart Net row carries its team string and
+a blind rides in it as `Bl[...]`. Those rows land as `source='gg'` and
+count exactly as ours do — the benefit was received either way.
+
+### 15g — an ingest may not erase what it does not carry (v2.458.10)
+
+The morning after s9.23 the sheet read "Hole Group 1", every tee on the
+PAIRINGS tab was a dash, and the blinds had vanished again. Kerry:
+"this lost the hole assignments that I had assigned yesterday. Why'd it
+screw everything up? ... If the tees are in ROSTER, they should
+automatically show up in PAIRINGS."
+
+The closeout had applied the Golf Genius TEAM NET board
+(`scoring-pairings:team|…|apply`) to the finished event. That board says
+who rode together and in what FINISH order; it knows nothing about start
+holes or tees. `_write_event_pairings_from_groups` deleted the sheet and
+wrote the board back with `slot=None` → "Group N", no `tee_choice`, no
+`customer_id` — and the seat-keyed blinds were orphaned a second time.
+
+Three rules now hold:
+
+1. **The writer preserves what the ingest does not carry.** Before the
+   delete it remembers each group's hole label (keyed by the SET of
+   people in it), and each player's tee, handicap index and customer_id;
+   any incoming group without a label, and any player without a tee,
+   gets them back. A label the ingest DOES carry (the tee-sheet route's
+   1A/1B) still wins.
+2. **The tee is read from the ROSTER at read time.** `get_event_pairings`
+   resolves a blank `tee_choice` from `_event_roster_rows` by
+   `customer_id`, exactly as it already does for names and handicap
+   indexes. The saved row is a snapshot; the truth is looked up.
+3. **"Group N" is never printed as "Hole Group N".** The starter-sheet
+   `start_line` leaves a generic label alone.
+
+Repair for a sheet already flattened: `scoring-pairings:relabel|<event>|
+{"5":"1A","4":"1B","2":"2","3":"3","6":"4","1":"5"}[|apply[|holes]]` —
+maps CURRENT group_num → hole label, renumbers in the order listed, and
+saves through `save_event_pairings` so the blinds re-seat and the roster
+tees persist. Nobody changes seats. Dry-run unless `apply`.
+
+Guard: `test_pairings_ingest_preserve.py`.
+
+### 15h — a CART Net blind is the other cart of the same foursome (v2.465.6)
+
+Kerry 2026-09-18, verbatim: *"On Cart Net, when there are OPEN slots in
+need of a Blind, the blind is from the other cart in the foursome (the
+one that meets the requirements of the random selection for Team Net).
+In Team Net, it is randomly from the field outside of their group like
+we've had it, because it doesn't make any sense and would be unfair if
+the random blind selected for a Team Net blind was from within their own
+foursome."*
+
+`draw_event_blinds` asks the matrix which game the field plays
+(`_event_team_unit`: below 16 players is CART Net). On a cart night an
+open seat's candidates are the ELIGIBLE players in the other cart of the
+same group (same eligibility rules — member with an established index,
+one blind per person per event, fewest blinds this year first); only
+when that cart has no eligible player does the draw fall back to the
+field, and the row says so (`drawn_from`). On a Team Net night the draw
+is the field outside the group, unchanged. `team_unit="cart"|"group"`
+overrides the matrix for tests or a one-off.
+
+### Surfaces
+
+* `POST /api/events/<id>/pairings/blinds` — `{apply, redraw, clear}`
+* 🎲 **Blinds** button on the PAIRINGS actions row
+* `scoring-blinds:<event>[|draw|apply|clear]`
+* `scoring-blinds-history[:<year>[|backfill]]`
+
+### Open for ratification (rule 3b)
+
+The draw feeds Team Net money, so these specifics are stated here rather
+than assumed: **team size 4**; **field-only** eligibility; **one blind per
+person per event**; **calendar-year** counting across both chapters; and
+the fact that our draw is a **proposal Kerry enters into GG** — the money
+still follows GG's recorded team string, so nothing pays off this table.
+
+**Blinds already entered in GG (v2.438.1).** The backfill reads them out
+of the team string with no seat attached — which slot each one covers is
+unknowable, and does not matter. They consume open seats in sheet order
+and only the remainder get a new pick, reported as `covered_by_existing`.
+
+
+## Auto-generate the day before (v2.468.5)
+
+Kerry 2026-09-21: "Create a timer to Generate Pairings automatically at
+5:00p on Mondays for Tuesday events. Only if they aren't run already."
+
+`auto_generate_pairings(db_path, today)` (database.py), scheduled daily
+at 5:00 PM Central (`pairings_auto_generate` job): for every ACTIVE event
+on a dialled weekday at that weekday's LEAD — the dial
+`pairings_auto_weekdays` (app_settings) is `<event weekday>[:<days
+ahead>]` per entry, default `tue:1,sat:2` (v2.468.6, Kerry: "Add sat to
+the auto-pairings dial too, but make it for Thursday nights at 5:00p"):
+Tuesday nights pair Monday 5 PM, Saturday 18s pair Thursday 5 PM — with
+NO saved pairings, run `generate_event_pairings(mode="random",
+protect_partner_requests=True)` — the Generate button's defaults — and
+`save_event_pairings`. An event with any saved seat is skipped ("already
+paired"); one event's error never blocks the other chapter (rule 3d).
+Each generation is written to the agent action log. Match Play pairs are
+NOT constrained by the routine (detection lives on the page); Kerry's
+hand-run Generate remains the way to seat confirmed matches. Guard:
+`test_pairings_automation.py`, which also holds the RSVP-only
+pace-rating fix (`_event_rsvp_only_players` now reads `pace_rating` from
+the customer row like every other profile fact).

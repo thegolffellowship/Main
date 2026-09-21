@@ -647,6 +647,30 @@ def get_customer_data_audit() -> str:
 # exact change and mutates nothing until a second call passes
 # confirm=True. Reads are untouched.
 
+def _bridge_event(query: str):
+    """Resolve an event-name fragment to its row for a bridge command.
+
+    Returns the row dict, or a JSON error string the caller returns as-is.
+    An exact name always wins: "s9.23 The Quarry" must not be ambiguous
+    just because "Excess credit — s9.23 The Quarry" also contains it."""
+    import email_parser.database as _db
+    q = (query or "").strip()
+    with _db._connect() as c:
+        rows = c.execute(
+            "SELECT id, item_name, event_date FROM events "
+            "WHERE item_name LIKE '%' || ? || '%' "
+            "ORDER BY event_date DESC", (q,)).fetchall()
+    if not rows:
+        return json.dumps({"error": f"no event matches '{q}'"})
+    exact = [r for r in rows if (r["item_name"] or "").lower() == q.lower()]
+    if exact:
+        return dict(exact[0])
+    if len(rows) > 1:
+        return json.dumps({"error": "ambiguous event",
+                           "matches": [r["item_name"] for r in rows]})
+    return dict(rows[0])
+
+
 _AGENT_NAME = "mcp-claude"
 
 
@@ -1746,6 +1770,20 @@ def _scoring_dispatch(url: str, extract: str):
       scoring-fee-splits-repair[:apply]  pro-rate multi-item orders' fee rows by price (dry by default)
       scoring-margin-rebook[:<since>[|apply]]  recompute allocations >= since so margin carries the fee spread
       scoring-margin-gaps[:<limit>]  pre-cutover events: booked vs residual-would-book, with reasons (measure-only)
+      scoring-leaderboard-events[:add=<codes>|set=<codes>|clear]  the EVENTS leaderboard dial (admin pilot); reports which codes still await scorecards
+      scoring-hcp-2nines:<event>[|auto|<json>][|apply]  post an 18-hole event as two nines; ratings read off the course record (v2.465.17), JSON overrides
+      scoring-hcp-round-retag:<date>;<from>;<to>;<slope>[;<rating>][;apply]  re-tag a date's handicap rounds to the nine actually played
+      scoring-course-renine:<course_id>[|apply]  a named nine numbers its holes 1–9 (tee holes + rounds moved down from 10–18)
+      scoring-tee-nines-store:<full_tee_id>|<fr>,<fs>|<br>,<bs>[|apply]  front/back rating rows (each with its slope) on an 18-hole tee set (refuses a pair that does not sum to the 18)
+      scoring-crdb-seed:<course_id>[|<json>][|apply]  write a course's USGA CRDB tee sets (gender, par, bogey, total/front/back, optional yardages) onto the record; JSON row = [name, gender, r18, s18, bogey, [fr, fs], [br, bs], [y18, yf, yb]]
+      scoring-tee-bands:<course_id>   which four sets TGF plays (current designation + the yardage-standards proposal; read-only)
+      scoring-tee-bands-set:<tee_id>|<band[,band]|hide>[|apply]  designate a tee set (<50 / 50-64 / 65+ / Forward) or hide it; one set per band per course
+      scoring-tee-bands-apply:<course_id>[|apply]  write the proposal: the four get their bands, every other set on the course is hidden
+      scoring-per-nine-audit[:all]   every course with an 18-hole row: nines resolved / unresolved and why
+      scoring-tee-nines[:<course_id>]  label each course tee row front/back/full from the 18-hole card's yardages; reports what it could not decide
+      scoring-event-report:<event_id>|flights|proximity  the two PAIRINGS printables as data (Divisions & Flights / CTP markers)
+      scoring-flights-board:<event_id>  the DIVISIONS/FLIGHTS board as data — ratified flighting + payout rules (SELECTION and AMOUNTS layers) beside what GG recorded; dry run, read-only
+      scoring-pairings-counts:<event_id>[|<year>]  saved sheet scored against played history: times each pair has played together this year INCLUDING this event
       scoring-liabilities          payouts owed, credits held, LSC shirt fund by Cup year, HIO pot, tax reserve by month
       scoring-membership-gap[:apply]  the membership gap group: booked vs today's decomposition by price/type/contests; apply rebooks membership rows only
       scoring-import-orders:<from>|<to>[|apply][|membership-only]  date-range import of "New Order" emails from the mailbox (dry-run counts; apply runs in the background, no member email)
@@ -1781,11 +1819,26 @@ def _scoring_dispatch(url: str, extract: str):
                                    board (GG duplicate member records folded;
                                    refresh re-fetches all races first)
       scoring-hcp-distribution     member handicap-index spread (18-hole equiv.)
-      scoring-brevo-draft[:dry|review|apply]  Wednesday TGF Insider: fill the
-                                   public recap template from the week's events;
-                                   dry (default) returns HTML; review emails Kerry
-                                   the preview + posts the mailbox; apply creates
-                                   the Brevo DRAFT + emails the link (never sends)
+      scoring-chapter-guesses[:confirm|<cid>=<chapter>;…]  linked customers whose chapter is a GUESS (blank profile) + evidence; confirm writes the profile chapter for those ids, blank ones only
+      scoring-hcp-link-audit       READ-ONLY: handicap identity coverage by customer_id,
+                                   who is unlinked, link-label name drift, plus-handicap rounds
+      scoring-brevo-draft[:dry|review|apply|samples][|<angle>|<a,b,c>][|nowriter]
+                                   Wednesday TGF Insider, WRITTEN by one Claude
+                                   call on a rotating angle (fallback: the
+                                   deterministic composer). dry returns HTML +
+                                   the headline options; review emails Kerry the
+                                   draft + posts the mailbox (the 8:00 job);
+                                   samples = several angles in ONE review email;
+                                   apply = legacy deterministic Brevo DRAFT.
+                                   Never sends.
+      scoring-brevo-campaign-split:<campaign_id>[|all,openers,clickers,unsubscribed]
+                                   READ-ONLY: a sent campaign's recipients /
+                                   openers / clickers / unsubs by TGF status
+                                   (active, former, prospect, unknown)
+      scoring-insider-angles       READ-ONLY: the angle rotation (order, history,
+                                   forced, next, unavailable this week) + dials
+      scoring-insider-approve:<subject>|<html>[|dry]  Kerry's APPROVED Insider
+                                   text → Brevo DRAFT (lint-gated, never sent)
       scoring-status-changes[:<since>][|<limit>]  customer status flips since a
                                    date with the status before (read-only)
       scoring-dedupe-rounds[:<event>|all][|apply]  duplicate scorecards
@@ -1796,7 +1849,22 @@ def _scoring_dispatch(url: str, extract: str):
                                    deletes the losers
       scoring-pairings-remove:<event>|<player>[|dry]  pull one player from
                                    the saved pairings + re-seat the group
-                                   per the TGF adjustment standard
+                                   per the TGF adjustment standard (a
+                                   started event leaves the seat OPEN)
+      scoring-live-poll[:force]    re-import today's live scorecards now
+                                   (the same sweep the 5-minute timer runs)
+      scoring-course-card:<course>[|apply]  load a club's own course card
+                                   (ratings, slopes, per-hole par /
+                                   yardage / stroke index, front+back)
+                                   from email_parser/course_cards.py
+      scoring-blinds:<event>[|draw|apply|clear|pool]  BLIND draws for the
+                                   open seats: no arg / draw = preview,
+                                   apply = write, clear = drop this
+                                   event's app-drawn blinds, pool = who is
+                                   eligible and who is not, with reasons
+      scoring-blinds-history[:<year>[|backfill]]  who has been a blind
+                                   this year (backfill reads the year's
+                                   Golf Genius team strings into the store)
       scoring-facilities           facility census (course registry v1)
       scoring-partial-credit       JSON {"item_id","amount","new_holes"?,
                                    "package_index"?,"note"?} — partial CREDIT
@@ -2515,6 +2583,101 @@ def _scoring_dispatch(url: str, extract: str):
                     f"applied {res.get('applied')} flag corrections: "
                     f"{[m['order_id'] for m in res.get('mismatches', [])]}")
             return json.dumps(res, indent=2, default=str)
+        if cmd == "scoring-pairings-counts":
+            # Kerry 2026-09-15: "how many times has each player played
+            # with the others in their groups this year including
+            # tonight." Reads the SAVED sheet, scores it against played
+            # history. arg = <event_id>[|<year>]. Read-only.
+            _parts = [x.strip() for x in arg.split("|") if x.strip()]
+            if not _parts:
+                return json.dumps({"error": "usage: scoring-pairings-counts:"
+                                            "<event_id>[|<year>]"})
+            _yr = int(_parts[1]) if len(_parts) > 1 else None
+            return json.dumps(db.pairing_counts_report(int(_parts[0]), year=_yr),
+                              indent=2, default=str)
+        if cmd == "scoring-leaderboard-events":
+            # The EVENTS leaderboard's dial (admin-only pilot). No arg
+            # reads it; "add=<codes>" appends; "set=<codes>" replaces;
+            # "clear" empties it (= every event with scorecards).
+            # An event only APPEARS once it has scorecards imported.
+            import json as _j
+            from email_parser.database import (
+                _events_leaderboard_codes, get_app_setting, set_app_setting)
+            cur = _events_leaderboard_codes()
+            a = arg.strip()
+            if a:
+                if a.lower() == "clear":
+                    new_codes = []
+                else:
+                    verb, _, rest = a.partition("=")
+                    codes = [c.strip() for c in rest.split(",") if c.strip()]
+                    if verb.strip().lower() == "add":
+                        new_codes = list(cur) + [c for c in codes if c not in cur]
+                    elif verb.strip().lower() == "set":
+                        new_codes = codes
+                    else:
+                        return _j.dumps({"error": "usage: scoring-leaderboard-"
+                                                  "events[:add=a,b|set=a,b|clear]",
+                                         "current": cur})
+                set_app_setting("events_leaderboard_events", _j.dumps(new_codes))
+                db.log_agent_action("mcp-claude", "scoring-leaderboard-events",
+                                    f"{cur} -> {new_codes}")
+                cur = new_codes
+            with db.get_connection() as _c:
+                played = {r["code"] for r in _c.execute(
+                    "SELECT LOWER(SUBSTR(e.item_name, 1, INSTR(e.item_name || ' ', ' ') - 1)) "
+                    "AS code FROM events e JOIN scoring_rounds sr ON sr.event_id = e.id "
+                    "GROUP BY e.id")}
+            return _j.dumps({
+                "codes": cur,
+                "with_scorecards": sorted(c for c in cur
+                                          if c.strip().lower() in played),
+                "awaiting_scorecards": sorted(c for c in cur
+                                              if c.strip().lower() not in played),
+                "note": "an event appears on the EVENTS tab only once its "
+                        "scorecards are imported (scoring_rounds).",
+            }, indent=2)
+        if cmd == "scoring-tee-nines":
+            # Label every course_tees row front/back/full from the data
+            # (the 18-hole card's own yardages, then the ratings). Says
+            # what it could NOT decide and why. arg = optional course_id.
+            import json as _j
+            _cidarg = arg.strip()
+            _c = db.get_connection()
+            try:
+                _res = db.label_course_tee_nines(
+                    _c, int(_cidarg) if _cidarg.isdigit() else None)
+            finally:
+                _c.close()
+            db.log_agent_action("mcp-claude", "scoring-tee-nines",
+                                f"decided={_res['n_decided']} "
+                                f"unresolved={_res['n_unresolved']}")
+            return _j.dumps(_res, indent=2, default=str)
+        if cmd == "scoring-flights-board":
+            # The DIVISIONS/FLIGHTS board (mailbox #582/#584) as data:
+            # the ratified rule set from `email_parser/flighting.py` on
+            # this event's roster, both layers, beside GG's recorded
+            # purses. Read-only; pays nobody.
+            _eid = arg.strip()
+            if not _eid.isdigit():
+                return json.dumps({"error": "usage: scoring-flights-board:<event_id>"})
+            _b = db.event_flights_board(int(_eid))
+            if not _b:
+                return json.dumps({"error": f"event {_eid} not found"})
+            _b = dict(_b)
+            _b.pop("event", None)
+            return json.dumps(_b, indent=2, default=str)
+        if cmd == "scoring-event-report":
+            # The two PAIRINGS printables as data, for checking a sheet
+            # without a browser. "scoring-event-report:<event_id>|flights"
+            # or "|proximity". Read-only.
+            _p = [x.strip() for x in arg.split("|") if x.strip()]
+            if len(_p) < 2 or _p[1] not in ("flights", "proximity"):
+                return json.dumps({"error": "usage: scoring-event-report:"
+                                            "<event_id>|flights|proximity"})
+            _fn = (db.event_flights_report if _p[1] == "flights"
+                   else db.event_proximity_report)
+            return json.dumps(_fn(int(_p[0])), indent=2, default=str)
         if cmd == "scoring-liabilities":
             # What TGF is holding for someone else or has earmarked:
             # prize payouts owed, credits held, LSC shirt fund by Cup
@@ -2855,6 +3018,15 @@ def _scoring_dispatch(url: str, extract: str):
             # Brevo key present / account reachable / last sync summary.
             from email_parser.brevo import brevo_status
             return json.dumps(brevo_status(), indent=2, default=str)
+        if cmd == "scoring-brevo-campaign-split":
+            # "<campaign_id>[|all,openers,clickers,unsubscribed]" — READ-ONLY:
+            # who opened / clicked a SENT campaign by TGF status (Kerry
+            # 2026-09-17: "do the split by group"). Uses Brevo's async
+            # recipient export; nothing on a contact or campaign changes.
+            from email_parser.brevo import SPLIT_TYPES, campaign_split
+            _cid, _, _types = (arg or "").partition("|")
+            _ts = tuple(t.strip() for t in _types.split(",") if t.strip() in SPLIT_TYPES) or SPLIT_TYPES
+            return json.dumps(campaign_split(int(_cid.strip()), _ts), indent=2, default=str)
         if cmd == "scoring-brevo-sync":
             # ":dry" previews (counts + sample) without writing to Brevo.
             # Real run stamps TGF_MEMBER_STATUS / TGF_CHAPTER (mailbox
@@ -3161,23 +3333,70 @@ def _scoring_dispatch(url: str, extract: str):
             from email_parser.insider import handicap_distribution
             return json.dumps(handicap_distribution(), indent=2, default=str)
         if cmd == "scoring-brevo-draft":
-            # "[dry|apply]" — the Wednesday-AM TGF Insider (#453). dry returns
-            # the rendered HTML + lint; apply creates the Brevo DRAFT and emails
-            # Kerry the link. Nothing here ever sends a campaign.
-            # "review" runs exactly what the Wednesday job does in review
-            # mode: preview email to Kerry + mailbox post, nothing in Brevo.
-            from email_parser.insider import build_public_recap_draft, send_review_preview
-            _mode = (arg or "").strip().lower()
+            # "[dry|review|apply|samples][|<angle or a,b,c>][|nowriter]" — the
+            # Wednesday-AM TGF Insider (#453; the WRITER since 2026-09-16).
+            # dry returns the rendered HTML + lint (+ the writer's options);
+            # review emails Kerry the draft + posts the mailbox (what the
+            # 8:00 job does), nothing in Brevo; samples writes SEVERAL
+            # angles and emails them as ONE review message; apply creates
+            # the Brevo DRAFT from the deterministic composer (legacy path —
+            # Kerry's approved text goes through scoring-insider-approve).
+            # Nothing here ever sends a campaign.
+            from email_parser.insider import (build_public_recap_draft, send_review_preview,
+                                              send_review_samples)
+            _p = [x.strip() for x in (arg or "").split("|")]
+            _mode = (_p[0] or "dry").lower()
+            _angle = _p[1].lower() if len(_p) > 1 and _p[1] else None
+            _nowriter = any(x.lower() == "nowriter" for x in _p[2:])
+            _writer = False if _nowriter else None
+            if _mode == "samples":
+                _angles = [a for a in (_angle or "").split(",") if a]
+                _results = [build_public_recap_draft(dry_run=True, angle=a, writer=_writer) for a in _angles]
+                _rv = send_review_samples(_results)
+                _audit("scoring-brevo-draft", f"samples angles={_angles} emailed={_rv.get('emailed')} "
+                       f"mailbox={_rv.get('mailbox_post')}")
+                for _r in _results:
+                    _r.pop("html", None)
+                return json.dumps({"samples": _rv, "drafts": _results}, indent=2, default=str)
             _apply = _mode == "apply"
-            _res = build_public_recap_draft(dry_run=not _apply)
+            _res = build_public_recap_draft(dry_run=not _apply, angle=_angle, writer=_writer)
             if _mode == "review" and not _res.get("skipped"):
                 _res["review"] = send_review_preview(_res)
                 _res.pop("html", None)
-                _audit("scoring-brevo-draft", f"review emailed={_res['review'].get('emailed')} "
+                _audit("scoring-brevo-draft", f"review angle={_res.get('angle')} "
+                       f"emailed={_res['review'].get('emailed')} "
                        f"mailbox={_res['review'].get('mailbox_post')}")
             if _apply:
                 _audit("scoring-brevo-draft", f"campaign_id={_res.get('campaign_id')} "
                        f"error={_res.get('error')} lint={_res.get('lint')}")
+            return json.dumps(_res, indent=2, default=str)
+        if cmd == "scoring-insider-angles":
+            # READ-ONLY: the angle rotation — order (dial insider_angles),
+            # history, the forced angle, what runs next, and which angles
+            # this week's facts cannot support.
+            from email_parser.insider import gather_week
+            from email_parser.insider_writer import rotation_status
+            _data = gather_week()
+            try:
+                _data["member_quote"] = json.loads(db.get_app_setting("insider_member_quote") or "null")
+            except Exception:
+                _data["member_quote"] = None
+            return json.dumps(rotation_status(_data), indent=2, default=str)
+        if cmd == "scoring-insider-approve":
+            # "<subject>|<html>[|dry]" — Kerry's APPROVED Insider text → the
+            # Brevo DRAFT (never sent). lint() gates his html too; the merge
+            # tags must survive. The subject may omit the "TGF Insider | "
+            # prefix. Audited.
+            from email_parser.insider import approve_insider
+            _subj, _, _rest = (arg or "").partition("|")
+            _html, _, _flag = _rest.rpartition("|")
+            if _flag.strip().lower() == "dry":
+                _dry = True
+            else:
+                _html, _dry = _rest, False
+            _res = approve_insider(_subj, _html, dry_run=_dry)
+            _audit("scoring-insider-approve", f"subject={_res.get('subject')} created={_res.get('created')} "
+                   f"campaign_id={_res.get('campaign_id')} lint={_res.get('lint')} dry={_dry}")
             return json.dumps(_res, indent=2, default=str)
         if cmd == "scoring-membership-terms-dedupe":
             # "[apply]" — one item, one term: delete the duplicate terms the
@@ -4174,6 +4393,52 @@ def _scoring_dispatch(url: str, extract: str):
                     parts[1],
                     apply=(len(parts) > 2 and parts[2].lower() == "apply")),
                     indent=2, default=str)
+            if sub == "sheet" and len(parts) >= 2:
+                # sheet|<event_id> — read-only: the saved sheet as the page
+                # and the starter sheet read it (locked index, roster tee,
+                # hole label), plus the print pack's PH basis + note.
+                _eid = int(parts[1])
+                _pk = db.get_event_print_pack(_eid) or {}
+                return json.dumps({
+                    "event_id": _eid,
+                    "handicap_as_of": next((e.get("handicap_as_of") for e in
+                                            db.get_all_events() if e["id"] == _eid), None),
+                    "pairings": db.get_event_pairings(_eid),
+                    "print_pack": {k: _pk.get(k) for k in
+                                   ("tee_basis", "tee_note", "ph_note", "note",
+                                    "tee_legend", "team_allowance")},
+                    "print_groups": [{"label": g.get("hole_label") or g.get("slot_label"),
+                                      "start_line": g.get("start_line"),
+                                      "players": [{"name": p.get("name"),
+                                                   "idx": p.get("handicap_index"),
+                                                   "ph": p.get("playing_handicap"),
+                                                   "team": p.get("team_handicap"),
+                                                   "tee": p.get("tee_choice"),
+                                                   "badges": [b for b, on in (("1T", p.get("is_first_timer")),
+                                                                              ("NEW", p.get("is_new"))) if on]}
+                                                  for p in g.get("players", [])]}
+                                     for g in (_pk.get("groups") or [])],
+                }, indent=1, default=str)
+            if sub == "swap" and len(parts) >= 4:
+                # swap|<event_id>|<name A>|<name B>[|apply] — swap two seated
+                # players' seats through the normal save (whole person
+                # moves, blinds re-seat). Dry-run unless "apply".
+                return json.dumps(db.swap_event_seats(
+                    int(parts[1]), parts[2], parts[3],
+                    apply=(len(parts) > 4 and parts[4].lower() == "apply")),
+                    indent=2, default=str)
+            if sub == "relabel" and len(parts) >= 3:
+                # relabel|<event_id>|<json {current group_num: hole label}>
+                #   [|apply[|<holes>]] — give a sheet its hole labels
+                # back and renumber the groups in the order listed, through
+                # the normal save so the blinds re-seat. Nobody changes
+                # seats. Dry-run unless "apply".
+                labels = json.loads(parts[2])
+                return json.dumps(db.relabel_event_pairings(
+                    int(parts[1]), (parts[4] if len(parts) > 4 else "9"),
+                    labels,
+                    apply=(len(parts) > 3 and parts[3].lower() == "apply")),
+                    indent=2, default=str)
             if sub == "manual" and len(parts) >= 3:
                 # manual|<event_id>|<json groups>[|apply] — groups from a
                 # tee sheet / starter sheet (lists of names, seat order)
@@ -4237,6 +4502,53 @@ def _scoring_dispatch(url: str, extract: str):
                     indent=2, default=str)
             return json.dumps({"error": "usage: scoring-pairings:rounds|<portal> "
                                "or round|<portal>|<id>[|apply] or all|<portal>[|apply]"})
+        if cmd == "scoring-print-pack-pdf":
+            # scoring-print-pack-pdf:<event_id>[|send[|<to>]] — build the bound
+            # PDF (parts + page counts + hash); "send" mails it as an
+            # attachment to <to> or the configured recipient and records
+            # the hash. scoring-print-pack-pdf:due lists tomorrow's events.
+            from email_parser.print_pack import (print_packs_due,
+                                                 send_event_print_pack)
+            if (arg or "").strip().lower() == "due":
+                return json.dumps([{"id": e["id"], "name": e["item_name"],
+                                    "date": e["event_date"]} for e in print_packs_due()],
+                                  indent=2)
+            parts = [p.strip() for p in (arg or "").split("|")]
+            from app import build_print_pack_for_event
+            built = build_print_pack_for_event(int(parts[0]))
+            if not built:
+                return json.dumps({"error": "event not found or nothing to print"})
+            summary = {k: built.get(k) for k in ("parts", "sha", "filename", "engine", "engine_note", "assets", "error")}
+            summary["bytes"] = len(built.get("pdf") or b"")
+            if len(parts) > 1 and parts[1].lower() == "send" and not built.get("error"):
+                db.log_agent_action("mcp-claude", "scoring-print-pack-pdf", arg)
+                summary["send"] = send_event_print_pack(
+                    built, to_address=(parts[2] if len(parts) > 2 else None))
+            return json.dumps(summary, indent=2, default=str)
+        if cmd == "scoring-chapter-guesses":
+            # scoring-chapter-guesses            READ-ONLY list of linked
+            #   customers whose chapter is a guess (blank profile, latest
+            #   order's chapter in use) with the orders behind each guess.
+            # scoring-chapter-guesses:confirm|<cid>=<chapter>;<cid>=…
+            #   sets the PROFILE chapter for those ids, blank ones only —
+            #   Kerry's per-person confirmation is the only write path.
+            _conf = None
+            if arg and arg.lower().startswith("confirm|"):
+                _conf = {}
+                for pair in arg.split("|", 1)[1].split(";"):
+                    if "=" in pair:
+                        k, v = pair.split("=", 1)
+                        _conf[int(k.strip())] = v.strip()
+                db.log_agent_action("mcp-claude", "scoring-chapter-guesses",
+                                    json.dumps(_conf))
+            return json.dumps(db.audit_chapter_guesses(_conf), indent=2, default=str)
+        if cmd == "scoring-hcp-link-audit":
+            # READ-ONLY identity audit (Kerry 2026-09-16): how much of the
+            # handicap layer resolves by customer_id, who does not, where
+            # the link label has drifted from the canonical name, and
+            # whether any live plus handicap is fractional. Writes nothing.
+            return json.dumps(db.audit_handicap_link_identity(),
+                              indent=2, default=str)
         if cmd == "scoring-hcp-audit":
             # READ-ONLY full-table audit: every handicap record classified
             # by how it reconciles with its scorecard (Kerry 2026-07-14).
@@ -4628,6 +4940,65 @@ def _scoring_dispatch(url: str, extract: str):
             # plus the 75% onboarding-rule validation.
             return json.dumps(db.ghin_comparison_analysis(),
                               indent=2, default=str)
+        if cmd == "scoring-live-poll":
+            # The same sweep the timer runs, on demand. "force" ignores
+            # the every-card-is-in test.
+            return json.dumps(db.poll_live_events(
+                force=(arg.strip().lower() == "force")), indent=2, default=str)
+        if cmd == "scoring-course-card":
+            # "<course>[|apply]" — load the club's own card (Kerry sent
+            # Avery Ranch, Cedar Creek and Forest Creek 2026-09-15). Dry
+            # run by default: it reports every row it would write, what
+            # it would reuse and what it would create.
+            _c, _, _m = arg.partition("|")
+            return json.dumps(db.import_course_card(
+                _c.strip(), dry_run=(_m.strip().lower() != "apply")),
+                indent=2, default=str)
+        if cmd == "scoring-blinds":
+            # "<event>[|draw|apply|clear]" — BLIND draws for the open
+            # seats on a saved sheet (Kerry 2026-09-15). Default and
+            # "draw" are dry runs; only "apply" writes. Event name is
+            # parsed from the LEFT because the mode words are fixed.
+            _parts = [x.strip() for x in arg.split("|")]
+            _evq = _parts[0]
+            _mode = (_parts[1].lower() if len(_parts) > 1 else "")
+            if not _evq:
+                return json.dumps({"error": "<event>[|draw|apply|clear]"})
+            _ev = _bridge_event(_evq)
+            if isinstance(_ev, str):
+                return _ev
+            if _mode == "clear":
+                return json.dumps({"event": _ev["item_name"],
+                                   "cleared": db.clear_event_blinds(_ev["id"])},
+                                  indent=2, default=str)
+            if _mode == "pool":
+                with db._connect() as _c2:
+                    return json.dumps(db.event_blind_pool(_c2, _ev["id"]),
+                                      indent=2, default=str)
+            out = db.draw_event_blinds(_ev["id"], dry_run=(_mode != "apply"),
+                                       redraw=(_mode == "apply"))
+            return json.dumps(out, indent=2, default=str)
+        if cmd == "scoring-blinds-history":
+            # "[<year>][|backfill|apply]" — the blind history the draw
+            # spreads itself over. backfill reads Golf Genius team
+            # strings ("Bl[LAST, First]") into blind_draws; it is a dry
+            # run unless "apply" follows.
+            _parts = [x.strip() for x in arg.split("|")] if arg.strip() else [""]
+            _yr = int(_parts[0]) if _parts[0].isdigit() else None
+            _mode = (_parts[1].lower() if len(_parts) > 1 else "")
+            if _parts[0].lower() == "backfill":
+                _mode = _mode or "backfill"
+            if _mode in ("backfill", "apply"):
+                return json.dumps(db.backfill_blind_draws_from_gg(
+                    year=_yr, dry_run=(_mode != "apply")), indent=2, default=str)
+            with db._connect() as _c:
+                hist = db.blind_draw_history(_c, year=_yr)
+            rows = sorted(hist.items(), key=lambda kv: (-kv[1]["count"],
+                                                        kv[1]["name"] or ""))
+            return json.dumps({"year": _yr or 2026, "players": len(rows),
+                               "history": [{"customer_id": k, **v}
+                                           for k, v in rows]},
+                              indent=2, default=str)
         if cmd == "scoring-pairings-remove":
             # "<event>|<player>[|dry]" — pull one player from the event's
             # SAVED pairings and re-seat the group per Kerry's adjustment
@@ -4672,14 +5043,132 @@ def _scoring_dispatch(url: str, extract: str):
             # read off GG course setup, never guessed (Vaaler precedent,
             # Kerry 2026-07-18). Default is a dry-run preview; "|apply"
             # writes. Generic successor to scoring-hcp-2nines-vaaler.
-            _p = arg.split("|")
-            if len(_p) < 2:
-                return json.dumps({"error": "<event>|<per_nine_json>[|apply]"})
-            _pn = {int(k): {"front": tuple(v["front"]), "back": tuple(v["back"])}
-                   for k, v in json.loads(_p[1]).items()}
-            _apply = len(_p) > 2 and _p[2].strip().lower() == "apply"
+            # Since v2.465.17 the map is OPTIONAL: "<event>[|auto][|apply]"
+            # reads front/back rating + slope off the course record
+            # (course_tees by course_id + tee, `resolve_per_nine_from_
+            # course_tees`); a JSON map, when given, overrides per tee.
+            _p = [x.strip() for x in arg.split("|")]
+            if not _p or not _p[0]:
+                return json.dumps({"error": "<event>[|auto|<per_nine_json>][|apply]"})
+            _apply = _p[-1].lower() == "apply" if len(_p) > 1 else False
+            _mid = _p[1:-1] if _apply else _p[1:]
+            _pn = None
+            if _mid and _mid[0] and _mid[0].lower() != "auto":
+                _pn = {int(k): {"front": tuple(v["front"]), "back": tuple(v["back"])}
+                       for k, v in json.loads(_mid[0]).items()}
             return json.dumps(db.derive_18hole_rounds_as_two_nines(
-                _p[0].strip(), _pn, dry_run=not _apply), indent=2, default=str)
+                _p[0], _pn, dry_run=not _apply), indent=2, default=str)
+        if cmd == "scoring-hcp-round-retag":
+            # "<date>;<from course>;<to course>;<slope>[;<rating>][;apply]"
+            # — ';' because course names carry '|' ("Hill Country | Lakes").
+            # Re-tags every handicap round on that date, differential
+            # recomputed. Dry run unless ;apply (Kerry 2026-09-21).
+            _p = [x.strip() for x in (arg or "").split(";")]
+            _apply = bool(_p) and _p[-1].lower() == "apply"
+            if _apply:
+                _p = _p[:-1]
+            if len(_p) < 4:
+                return json.dumps({"error": "usage: scoring-hcp-round-retag:<date>;<from course>;<to course>;<slope>[;<rating>][;apply]"})
+            _rating = float(_p[4]) if len(_p) > 4 and _p[4] else None
+            _res = db.retag_handicap_rounds(_p[0], _p[1], _p[2], int(_p[3]), rating=_rating, apply=_apply)
+            if _apply:
+                _audit("scoring-hcp-round-retag", f"{_p[0]}: {_p[1]} -> {_p[2]} slope={_p[3]} rows={_res.get('rows')}")
+            return json.dumps(_res, indent=2, default=str)
+        if cmd == "scoring-course-renine":
+            # "<course_id>[|apply]" — a named nine numbers 1–9: move the
+            # course's tee holes and its rounds' holes down from 10–18.
+            _p = [x.strip() for x in (arg or "").split("|")]
+            _apply = len(_p) > 1 and _p[1].lower() == "apply"
+            _res = db.renumber_nine_hole_course(int(_p[0]), apply=_apply)
+            if _apply:
+                _audit("scoring-course-renine", f"course={_p[0]} tees={len(_res.get('tees') or [])} rounds={len(_res.get('rounds') or [])}")
+            return json.dumps(_res, indent=2, default=str)
+        if cmd == "scoring-tee-nines-store":
+            # "<full_tee_id>|<front_rating>,<front_slope>|<back_rating>,<back_slope>[|apply]"
+            # Put a tee's front and back nine ON THE COURSE RECORD beside its
+            # 18-hole row (Kerry 2026-09-19: "Why wouldn't those tees be on
+            # the course record?"). Refuses a pair that does not sum to the
+            # 18-hole rating. Dry run unless |apply. Course data — Kerry's
+            # numbers, read off GG's course setup.
+            _p = [x.strip() for x in arg.split("|")]
+            if len(_p) < 3:
+                return json.dumps({"error": "<full_tee_id>|<fr>,<fs>|<br>,<bs>[|apply]"})
+            _fr = tuple(float(x) for x in _p[1].split(","))
+            _bk = tuple(float(x) for x in _p[2].split(","))
+            _apply = len(_p) > 3 and _p[3].lower() == "apply"
+            _c = db.get_connection()
+            try:
+                _res = db.store_tee_nines(_c, int(_p[0]), _fr, _bk, dry_run=not _apply)
+            finally:
+                _c.close()
+            return json.dumps(_res, indent=2, default=str)
+        if cmd == "scoring-crdb-seed":
+            # "<course_id>[|<json sets>][|apply]" — write a course's USGA
+            # Course Rating Database tee sets onto the record (mailbox #576:
+            # ncrdb.usga.org is the source of record). No JSON = the seed
+            # in database.USGA_CRDB_SEEDS. Dry run unless |apply.
+            _p = [x.strip() for x in arg.split("|")]
+            if not _p or not _p[0].isdigit():
+                return json.dumps({"error": "<course_id>[|<json sets>][|apply]",
+                                   "known": {k: v["course"] for k, v in db.USGA_CRDB_SEEDS.items()}})
+            _apply = len(_p) > 1 and _p[-1].lower() == "apply"
+            _mid = _p[1:-1] if _apply else _p[1:]
+            _sets = None
+            if _mid and _mid[0]:
+                _sets = [(x[0], x[1], float(x[2]), int(x[3]),
+                          (float(x[4]) if x[4] is not None else None),
+                          (float(x[5][0]), int(x[5][1])), (float(x[6][0]), int(x[6][1])),
+                          # optional 8th: [yards18, yardsFront, yardsBack]
+                          (tuple(int(y) if y is not None else None for y in x[7])
+                           if len(x) > 7 and x[7] else None))
+                         for x in json.loads(_mid[0])]
+            _c = db.get_connection()
+            try:
+                _res = db.seed_usga_crdb(_c, int(_p[0]), _sets, dry_run=not _apply)
+            finally:
+                _c.close()
+            return json.dumps(_res, indent=2, default=str)
+        if cmd in ("scoring-tee-bands", "scoring-tee-bands-apply"):
+            # Tee designation (Kerry 2026-09-20): the four sets TGF plays on
+            # a course, proposed from the yardage standards; -apply writes.
+            _p = [x.strip() for x in arg.split("|")]
+            if not _p or not _p[0].isdigit():
+                return json.dumps({"error": "<course_id>[|apply]"})
+            _c = db.get_connection()
+            try:
+                if cmd == "scoring-tee-bands":
+                    _res = db.propose_tgf_tees(_c, int(_p[0]))
+                else:
+                    _res = db.apply_tgf_tee_proposal(
+                        _c, int(_p[0]), dry_run=not (len(_p) > 1 and _p[-1].lower() == "apply"))
+            finally:
+                _c.close()
+            return json.dumps(_res, indent=2, default=str)
+        if cmd == "scoring-tee-bands-set":
+            # "<tee_id>|<band[,band]|hide>[|apply]"
+            _p = [x.strip() for x in arg.split("|")]
+            if len(_p) < 2 or not _p[0].isdigit():
+                return json.dumps({"error": "<tee_id>|<band[,band]|hide>[|apply]",
+                                   "bands": list(db.TEE_BANDS)})
+            _apply = len(_p) > 2 and _p[-1].lower() == "apply"
+            _bands = [] if _p[1].lower() in ("hide", "hidden", "none", "") else \
+                [b.strip() for b in _p[1].split(",")]
+            _c = db.get_connection()
+            try:
+                _res = db.set_tee_bands(_c, int(_p[0]), _bands, dry_run=not _apply)
+            finally:
+                _c.close()
+            return json.dumps(_res, indent=2, default=str)
+        if cmd == "scoring-per-nine-audit":
+            # READ-ONLY: every course with an 18-hole tee row — which tees
+            # resolve their nines off the record, which do not and why.
+            # ":all" includes courses never played with no upcoming event.
+            _c = db.get_connection()
+            try:
+                _res = db.audit_course_per_nine(_c, only_played=(arg.strip().lower() != "all"))
+            finally:
+                _c.close()
+            return json.dumps(_res, indent=2, default=str)
         if cmd == "scoring-hcp-2nines-vaaler":
             # Post the s18.8 Vaaler Creek 18-hole event as TWO 9-hole handicap
             # rounds per player (front + back), each with that nine's own course
@@ -4718,6 +5207,14 @@ def _scoring_dispatch(url: str, extract: str):
             #   scoring-gg-history:ingest=<subdomain>[@<budget_s>]
             #       Phase-A standings walk of one portal; resumable —
             #       repeat until pages_remaining == 0. url param unused.
+            #   scoring-gg-history:field=<subdomain>[@<budget_s>]
+            #       Phase-B FIELD walk (v2.464.0): per-round field off the
+            #       ALL Net/ALL Gross boards + calendar dates; field-bg=
+            #       runs it in a daemon thread (poll holes-status).
+            #   scoring-gg-history:calendar=<subdomain>   read-only parse
+            #   scoring-gg-history:participation[=<from>-<to>]
+            #       season × chapter participation series (docs:
+            #       gg-history.md "Participation series")
             from email_parser import gg_history as ggh
             sub, _, rest = arg.partition("=")
             sub = sub.strip().lower()
@@ -4741,12 +5238,45 @@ def _scoring_dispatch(url: str, extract: str):
                 dom, _, budget = rest.partition("@")
                 return json.dumps(ggh.ingest_portal_games(
                     dom.strip(), budget_seconds=int(budget or 240)), indent=2)
-            if sub in ("holes-bg", "games-bg") and rest:
+            if sub == "field" and rest:
+                # Phase B: FIELD walk (v2.464.0) — every round's ALL Net /
+                # ALL Gross board → gg_history_results, dates from the
+                # calendar widget. field=<subdomain>[@budget]; repeat
+                # until rounds_left == 0.
+                dom, _, budget = rest.partition("@")
+                return json.dumps(ggh.ingest_portal_field(
+                    dom.strip(), budget_seconds=int(budget or 240)), indent=2)
+            if sub == "cohort":
+                # cohort[=<A>-<B>] — Kerry's 2022 question (#555): season
+                # A → B retention, months, rounds-per-player profiles
+                a, _, b = rest.strip().partition("-")
+                return json.dumps(ggh.cohort_analysis(
+                    a or "2022", b or "2023"), indent=2, default=str)
+            if sub == "holes-reset" and rest:
+                # re-queue holes-walk rounds that yielded no cards (the
+                # pre-ALL-board rounds); nothing deleted
+                return json.dumps(ggh.reset_portal_holes(rest.strip()), indent=2)
+            if sub == "field-reset" and rest:
+                # re-walk a portal's rounds (walk-state → 'redo'; nothing
+                # deleted, boards replaced per label on the next walk)
+                return json.dumps(ggh.reset_portal_field(rest.strip()), indent=2)
+            if sub == "calendar" and rest:
+                # read-only: the portal's calendar widget parsed (rounds,
+                # full labels, dates) — verification for the field walk
+                return json.dumps(ggh.portal_calendar(rest.strip()), indent=2)
+            if sub == "participation":
+                # participation[=<from>-<to>] — season × chapter series
+                # from the field walk + the Tracker's items-based rows
+                a, _, b = rest.strip().partition("-")
+                return json.dumps(ggh.participation_series(
+                    a or "2019", b or "2026"), indent=2, default=str)
+            if sub in ("holes-bg", "games-bg", "field-bg") and rest:
                 # Same walks in a daemon thread (MCP clients time out
                 # ~60s; a portal walk wants minutes). Poll: holes-status.
                 import threading
-                fn = (ggh.ingest_portal_holes if sub == "holes-bg"
-                      else ggh.ingest_portal_games)
+                fn = {"holes-bg": ggh.ingest_portal_holes,
+                      "games-bg": ggh.ingest_portal_games,
+                      "field-bg": ggh.ingest_portal_field}[sub]
                 dom, _, budget = rest.partition("@")
                 dom, budget_s = dom.strip(), int(budget or 600)
                 key = f"{sub}:{dom}"
@@ -4813,6 +5343,11 @@ def _scoring_dispatch(url: str, extract: str):
             return json.dumps({"error": "usage: scoring-gg-history:seed | "
                                "status | ingest=<subdomain>[@<budget_s>] | "
                                "holes=<subdomain>[@<budget_s>] | "
+                               "field=<subdomain>[@<budget_s>] | "
+                               "field-bg=<subdomain>[@<budget_s>] | "
+                               "field-reset=<subdomain> | holes-reset=<subdomain> | "
+                               "calendar=<subdomain> | "
+                               "participation[=<from>-<to>] | cohort[=<A>-<B>] | "
                                "roster=report|apply"})
         if cmd == "scoring-payouts-bulk-paid":
             # "scoring-payouts-bulk-paid:<YYYY-MM-DD>" — one-time cleanup:
@@ -4917,6 +5452,12 @@ def _scoring_dispatch(url: str, extract: str):
             _ev, _, _gurl = arg.partition("|")
             return json.dumps(db.team_net_parity(_ev.strip(), _gurl.strip()),
                               indent=2, default=str)
+        if cmd == "scoring-skins-audit":
+            # "<event>" — why a hole is or is not a skin, per flight,
+            # with the recorded payouts beside it (Kerry 2026-09-15:
+            # "Carlos's skin isn't circled. Audit"). Read-only.
+            return json.dumps(db.skins_audit(arg.strip()), default=str)
+
         if cmd == "scoring-event-board":
             # "<event>" — compact read of the events-leaderboard TEAM
             # board for vetting: per team the GG position, GG posted

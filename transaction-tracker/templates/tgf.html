@@ -59,7 +59,7 @@
             font: 600 10px/1 'Bitter', serif; letter-spacing: 1.5px; text-transform: uppercase;
         }
         #btn-logout.tgf-logout:hover { color: #E87C3E; }
-        @media (max-width: 768px) {
+        @media (max-width: 560px) {
             header.tgf-nav { padding: 10px 14px; }
             .tgf-nav-right { gap: 12px; }
         }
@@ -147,13 +147,60 @@
         /* Mobile compaction (Kerry, 2026-07-09): shorter tab label, hide
            low-value columns, h-scroll tables */
         .tgf-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+        /* MARK PAID — one modal, not three prompts (Kerry 2026-09-16).
+           Method is a row of buttons, the date opens on TGF's today and
+           the note arrives written, so a payout is marked without typing
+           a character. */
+        .tgf-mp-wrap { position: fixed; inset: 0; z-index: 9500;
+            background: rgba(27,27,27,0.45); display: flex;
+            align-items: center; justify-content: center; padding: 16px; }
+        .tgf-mp { background: #fff; border-radius: 12px; width: 100%;
+            max-width: 520px; box-shadow: 0 18px 50px rgba(0,0,0,0.3);
+            overflow: hidden; }
+        .tgf-mp-head { background: var(--surface-dark, #1B1B1B); color: #fff;
+            padding: 12px 16px; }
+        .tgf-mp-title { font-family: "Bitter", Georgia, serif; font-weight: 700;
+            font-size: 1rem; letter-spacing: 0.04em; text-transform: uppercase; }
+        .tgf-mp-sub { font-size: 0.82rem; opacity: 0.9; margin-top: 2px; }
+        .tgf-mp-body { padding: 14px 16px 4px; }
+        .tgf-mp-lab { display: block; font-size: 0.68rem; font-weight: 700;
+            letter-spacing: 0.08em; text-transform: uppercase;
+            color: var(--text-muted, #6B7280); margin: 0 0 5px; }
+        .tgf-mp-methods { display: flex; flex-wrap: wrap; gap: 6px;
+            margin-bottom: 12px; }
+        .tgf-mp-m { border: 1px solid var(--border, #E5E7EB); background: #fff;
+            color: var(--text-body, #4B5563); border-radius: 999px;
+            padding: 6px 12px; font-size: 0.8rem; font-weight: 600;
+            cursor: pointer; }
+        .tgf-mp-m:hover { border-color: var(--primary, #E87C3E); }
+        .tgf-mp-m.on { background: var(--primary, #E87C3E); color: #fff;
+            border-color: var(--primary, #E87C3E); }
+        .tgf-mp-row { display: flex; gap: 10px; flex-wrap: wrap; }
+        .tgf-mp-grow { flex: 1 1 220px; }
+        .tgf-mp input { border: 1px solid var(--border, #E5E7EB);
+            border-radius: 8px; padding: 7px 9px; font-size: 0.85rem;
+            width: 100%; box-sizing: border-box; }
+        .tgf-mp input:focus { outline: 2px solid var(--primary, #E87C3E);
+            outline-offset: 1px; border-color: var(--primary, #E87C3E); }
+        .tgf-mp-foot { display: flex; justify-content: flex-end; gap: 8px;
+            padding: 14px 16px 16px; }
+        .tgf-mp-foot button { border-radius: 999px; padding: 8px 18px;
+            font-size: 0.85rem; font-weight: 700; cursor: pointer; }
+        .tgf-mp-cancel { background: #fff; color: var(--text-body, #4B5563);
+            border: 1px solid var(--border, #E5E7EB); }
+        .tgf-mp-ok { background: var(--money-green, #15803D); color: #fff;
+            border: 1px solid var(--money-green, #15803D); }
+        .tgf-mp-ok:focus { outline: 2px solid #1B1B1B; outline-offset: 2px; }
+        @media (max-width: 560px) {
+            .tgf-mp-row { flex-direction: column; }
+        }
         .mark-paid-btn {
             font-size: 0.72rem; padding: 2px 8px; border-radius: 99px;
             background: #dcfce7; color: #166534; border: 1px solid #86efac;
             font-weight: 600; cursor: pointer; margin-left: 4px;
         }
         .payout-table td.pay-cell { white-space: nowrap; }
-        @media (max-width: 768px) {
+        @media (max-width: 560px) {
             .tgf-hide-mobile { display: none; }
         }
         .cat-other           { background: #f1f5f9; color: #475569; }
@@ -186,7 +233,7 @@
         }
         .add-venmo-save:disabled { opacity: 0.6; cursor: default; }
         .add-venmo-msg { font-size: 0.7rem; color: #dc2626; }
-        @media (max-width: 768px) {
+        @media (max-width: 560px) {
             /* Mobile payout pills stay COMPACT page-wide (Kerry
                2026-08-17: "This uses too much space… Make those changes
                across all as well") — the wave-1 40px tap-target floor
@@ -461,7 +508,7 @@
             #unpaid-main .queue-act .mark-paid-btn { margin-left: 0 !important; margin-top: 3px; }
         }
         .ledger-back { display: none; }
-        @media (max-width: 768px) {
+        @media (max-width: 560px) {
             .ledger { flex-direction: column; min-height: 0; }
             .ledger-rail { width: 100%; max-height: none; position: static; }
             .ledger.has-selection .ledger-rail { display: none; }
@@ -484,7 +531,7 @@
         /* Rank column */
         .rank-col { width: 30px; text-align: center; color: var(--text-muted); font-size: 0.8rem; }
 
-        @media (max-width: 768px) {
+        @media (max-width: 560px) {
             .tgf-layout { flex-direction: column; }
             .tgf-sidebar { width: 100%; min-width: 100%; max-height: 200px; border-right: none; border-bottom: 1px solid var(--border); }
             .tgf-main { padding: 1rem; }
@@ -754,6 +801,22 @@
             return [...new Set(bits)].join(" + ");
         }
 
+        /** THE NOTE WRITES ITSELF (Kerry 2026-09-16: "enter the appropriate
+         *  note"). What a payout is FOR is already on its rows — "TEAM Net
+         *  1st (team split)", "Skins Birdie on 8" — so the modal opens with
+         *  that filled in rather than an empty box at midnight. */
+        function paidNoteFor(items) {
+            const bits = [...new Set((items || [])
+                .filter(p => p && p.description)
+                .map(p => stripAuto(p.description)
+                    .replace(/\s*\(GG \$\)\s*$/, "")
+                    .replace(/\s*\(team split\)\s*$/, "")
+                    .trim())
+                .filter(Boolean))];
+            const note = bits.join(" + ");
+            return note.length > 120 ? note.slice(0, 117) + "…" : note;
+        }
+
         function payAction(winData, amount, eventCode, eventName, golferName, detail) {
             if (!winData) return null;
             const method = (winData.payment_method
@@ -879,6 +942,11 @@
         // "auto:" is a storage marker (auto-recorded vs manual rows) —
         // never show it (Kerry, 2026-07-08: takes up space)
         function stripAuto(d) { return (d || "").replace(/^auto:\s*/i, ""); }
+        // This page does not load dashboard.js, so it carries its own.
+        function escapeHtml(str) {
+            return String(str ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+        }
 
         // Compact descriptions (Kerry, 2026-07-09): the category badge
         // already names the game, so show only "FLIGHT | Place" (ties as
@@ -907,7 +975,7 @@
         // Mobile-short category labels (Kerry, 2026-07-09)
         const CATEGORY_LABELS_SHORT = { individual_net: "Ind Net", individual_gross: "Ind Gross", closest_to_pin: "CTP" };
         function catBadge(cat) {
-            const mobile = window.innerWidth <= 768;
+            const mobile = window.innerWidth <= 560;
             const label = (mobile && CATEGORY_LABELS_SHORT[cat]) || CATEGORY_LABELS[cat] || cat;
             return `<span class="cat-badge cat-${cat}">${label}</span>`;
         }
@@ -1010,10 +1078,88 @@
                 : "";
             const isPending = g.payment_status !== "paid";
             const markPaidBtn = isPending
-                ? `<button class="mark-paid-btn" data-event-id="${ev.id}" data-customer-id="${g.golfer_id}" data-amount="${gPartial ? gDue.toFixed(2) : g.total}" data-name="${g.name.replace(/"/g, '&quot;')}" onclick="event.stopPropagation()">Mark Paid</button>`
+                ? `<button class="mark-paid-btn" data-event-id="${ev.id}" data-customer-id="${g.golfer_id}" data-amount="${gPartial ? gDue.toFixed(2) : g.total}" data-name="${g.name.replace(/"/g, '&quot;')}" data-event-name="${(ev.name || ev.code || "").replace(/"/g, '&quot;')}" data-note="${paidNoteFor(gPartial ? g.items.filter(p => p.payment_status !== "paid") : g.items).replace(/"/g, '&quot;')}" onclick="event.stopPropagation()">Mark Paid</button>`
                 : "";
             // badge AFTER the pay link (Kerry, 2026-07-08)
             return `${venmoHtml} ${markPaidBtn} ${statusBadge}${dueNote}`;
+        }
+
+        /** TGF'S DAY — the container and the browser may both be on
+         *  another one at 8pm Central. */
+        function tgfTodayCentral() {
+            try {
+                return new Intl.DateTimeFormat("en-CA", {
+                    timeZone: "America/Chicago", year: "numeric",
+                    month: "2-digit", day: "2-digit" }).format(new Date());
+            } catch (e) { return new Date().toISOString().slice(0, 10); }
+        }
+
+        const TGF_PAY_METHODS = [
+            ["venmo", "Venmo"], ["applepay", "Apple Pay"], ["paypal", "PayPal"],
+            ["zelle", "Zelle"], ["cashapp", "Cash App"], ["cash", "Cash"],
+            ["check", "Check"], ["other", "Other"],
+        ];
+
+        /** ONE MODAL, NOT THREE PROMPTS (Kerry 2026-09-16: "make it all one
+         *  modal to Mark Paid so I can just click a button or select from a
+         *  drop down, then auto enter today's date... and enter the
+         *  appropriate note"). Method is a row of buttons, the date opens
+         *  on TGF's today, and the note arrives written from the payout
+         *  rows. Nothing has to be typed to mark a payout paid.
+         *  Resolves {method, date, reference} or null if cancelled. */
+        function tgfMarkPaidDialog({name, amount, eventName, note}) {
+            return new Promise(resolve => {
+                const wrap = document.createElement("div");
+                wrap.className = "tgf-mp-wrap";
+                wrap.innerHTML = `
+                  <div class="tgf-mp" role="dialog" aria-modal="true" aria-label="Mark payout paid">
+                    <div class="tgf-mp-head">
+                      <div class="tgf-mp-title">Mark Paid</div>
+                      <div class="tgf-mp-sub">${escapeHtml(name)} &middot; <b>$${amount}</b>${
+                          eventName ? ` &middot; ${escapeHtml(eventName)}` : ""}</div>
+                    </div>
+                    <div class="tgf-mp-body">
+                      <label class="tgf-mp-lab">How</label>
+                      <div class="tgf-mp-methods">${TGF_PAY_METHODS.map(([v, l], i) =>
+                          `<button type="button" class="tgf-mp-m${i === 0 ? " on" : ""}" data-m="${v}">${l}</button>`
+                      ).join("")}</div>
+                      <div class="tgf-mp-row">
+                        <div><label class="tgf-mp-lab" for="tgf-mp-date">Date</label>
+                          <input id="tgf-mp-date" type="date" value="${tgfTodayCentral()}"></div>
+                        <div class="tgf-mp-grow"><label class="tgf-mp-lab" for="tgf-mp-note">Note</label>
+                          <input id="tgf-mp-note" type="text" value="${escapeHtml(note || "")}"
+                                 placeholder="what this covers"></div>
+                      </div>
+                    </div>
+                    <div class="tgf-mp-foot">
+                      <button type="button" class="tgf-mp-cancel">Cancel</button>
+                      <button type="button" class="tgf-mp-ok">Mark Paid</button>
+                    </div>
+                  </div>`;
+                document.body.appendChild(wrap);
+                let method = TGF_PAY_METHODS[0][0];
+                wrap.querySelectorAll(".tgf-mp-m").forEach(b =>
+                    b.addEventListener("click", () => {
+                        method = b.dataset.m;
+                        wrap.querySelectorAll(".tgf-mp-m").forEach(o =>
+                            o.classList.toggle("on", o === b));
+                    }));
+                const close = val => { wrap.remove(); document.removeEventListener("keydown", onKey); resolve(val); };
+                const submit = () => close({
+                    method,
+                    date: wrap.querySelector("#tgf-mp-date").value || "",
+                    reference: wrap.querySelector("#tgf-mp-note").value.trim(),
+                });
+                function onKey(e) {
+                    if (e.key === "Escape") close(null);
+                    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submit(); }
+                }
+                document.addEventListener("keydown", onKey);
+                wrap.querySelector(".tgf-mp-cancel").addEventListener("click", () => close(null));
+                wrap.querySelector(".tgf-mp-ok").addEventListener("click", submit);
+                wrap.addEventListener("click", e => { if (e.target === wrap) close(null); });
+                setTimeout(() => wrap.querySelector(".tgf-mp-ok").focus(), 0);
+            });
         }
 
         function attachMarkPaidHandlers(container) {
@@ -1024,14 +1170,15 @@
                     const customerId = btn.dataset.customerId;
                     const name = btn.dataset.name;
                     const amount = parseFloat(btn.dataset.amount).toFixed(2);
-                    const method = prompt(
-                        `Mark ${name}'s $${amount} payout as PAID.\n\n` +
-                        `Payment method (paypal / cashapp / cash / check / zelle / other):`,
-                        "paypal"
-                    );
-                    if (!method) return;
-                    const paidDate = prompt("Paid date (YYYY-MM-DD), leave blank for today:") || "";
-                    const reference = prompt("Reference/note (optional):") || "";
+                    const got = await tgfMarkPaidDialog({
+                        name, amount,
+                        eventName: btn.dataset.eventName || "",
+                        note: btn.dataset.note || "",
+                    });
+                    if (!got) return;
+                    const method = got.method;
+                    const paidDate = got.date;
+                    const reference = got.reference;
                     try {
                         const res = await fetch("/api/tgf/mark-paid", {
                             method: "POST",
@@ -1915,7 +2062,7 @@
                     </div>`;
                 if (open) {
                     ge.payouts.forEach(p => {
-                        const mobile = window.innerWidth <= 768;
+                        const mobile = window.innerWidth <= 560;
                         const catLabel = (mobile && CATEGORY_LABELS_SHORT[p.category])
                             || CATEGORY_LABELS[p.category] || p.category;
                         const detail = shortPayoutDesc(p.description, p.category) || "";

@@ -19,7 +19,8 @@ import logging
 from collections import defaultdict
 from datetime import datetime, timedelta
 from contextlib import contextmanager
-from .timezone_utils import now_central, today_central, today_central_str
+from .timezone_utils import (now_central, today_central, today_central_str,
+                              to_central)
 from pathlib import Path
 
 import anthropic as _anthropic
@@ -245,12 +246,17 @@ def _backfill_name_parts(conn: sqlite3.Connection) -> None:
             conn.execute("DELETE FROM name_parse_failures WHERE customer_name = ?", (name,))
         else:
             # Parse returned no first_name — record the failure
+            _npf_cid = conn.execute(
+                "SELECT customer_id FROM customers WHERE customer = ? COLLATE NOCASE "
+                "ORDER BY customer_id LIMIT 1", (name,)).fetchone()
             conn.execute(
-                """INSERT INTO name_parse_failures (customer_name, attempts, last_attempt)
-                   VALUES (?, 1, datetime('now'))
+                """INSERT INTO name_parse_failures (customer_name, attempts, last_attempt,
+                                                    customer_id)
+                   VALUES (?, 1, datetime('now'), ?)
                    ON CONFLICT(customer_name) DO UPDATE SET
-                   attempts = attempts + 1, last_attempt = datetime('now')""",
-                (name,),
+                   attempts = attempts + 1, last_attempt = datetime('now'),
+                   customer_id = COALESCE(name_parse_failures.customer_id, excluded.customer_id)""",
+                (name, _npf_cid["customer_id"] if _npf_cid else None),
             )
             # On 3rd failure, create a parse warning so admin sees it
             attempt_row = conn.execute(
@@ -1356,6 +1362,86 @@ _PACE_RATING_SEED = {
 }
 
 
+# Player ROLE flags, Kerry-ratified 2026-09-15 (pairings rules 12 + 13).
+#   ambassador   — welcoming and encouraging; spread across groups (rule 7)
+#   group_captain — rules, pace, looks out for the group; DRIVES and rides
+#                   with the newest player in the group (rule 13)
+#   solo_back_ok  — may be the only <50 player in a foursome (rule 12:
+#                   "no lone back tee" for everyone else)
+# Fill-only-if-NULL like the pace seed: a Customers-page tap (explicit 0
+# or 1) wins forever. Gus Vasquez is on both lists by Kerry's words in the
+# same session ("he's someone who I would consider an ambassador and good
+# as a group captain") even though the typed lists omitted him.
+_PLAYER_ROLE_SEED = {
+    "ambassador": [
+        "Daniel South", "Mary Wade", "Scott Marroquin", "Luke Mazanec",
+        "Larry Anthis", "Jeff Young", "Rob Callaway", "Kelly Barna",
+        "John Wade", "Neal Cloer", "Robert Straiton", "Kerry Niester",
+        # Kerry typed "Roland"; the customer row is "Rolando Campos" (296)
+        "Rolando Campos", "Gus Vasquez"],
+    "group_captain": [
+        "Daniel South", "Mary Wade", "Jeff Young", "Rob Callaway",
+        "Adam Baker", "Don Sharitz", "Fred Wicker", "Kelly Barna",
+        "John Wade", "Neal Cloer", "Robert Straiton", "Kerry Niester",
+        "Mark Freund", "Gus Vasquez"],
+    "solo_back_ok": [
+        "Jeff Young", "Kerry Niester", "Luke Mazanec", "Adam Baker"],
+}
+PLAYER_ROLE_FLAGS = ("ambassador", "group_captain", "solo_back_ok")
+
+
+def _seed_player_roles(conn: sqlite3.Connection) -> int:
+    """Seed the three role flags (fill-only-if-NULL). Returns rows set.
+    Name match is first+last like the pace seed; a name with no customer
+    row is logged, not invented."""
+    for flag in PLAYER_ROLE_FLAGS:
+        try:
+            conn.execute(f"ALTER TABLE customers ADD COLUMN {flag} INTEGER")
+        except sqlite3.OperationalError:
+            pass
+    seeded = 0
+    for flag, names in _PLAYER_ROLE_SEED.items():
+        for name in names:
+            cur = conn.execute(
+                f"""UPDATE customers SET {flag} = 1
+                    WHERE LOWER(TRIM(first_name || ' ' || last_name)) = LOWER(?)
+                      AND {flag} IS NULL""", (name,))
+            seeded += cur.rowcount
+            if cur.rowcount == 0:
+                hit = conn.execute(
+                    "SELECT 1 FROM customers WHERE "
+                    "LOWER(TRIM(first_name || ' ' || last_name)) = LOWER(?)",
+                    (name,)).fetchone()
+                if not hit:
+                    logger.warning("Role seed: no customer named %r for %s",
+                                   name, flag)
+    conn.commit()
+    if seeded:
+        logger.info("Player role seed: applied %d flag(s)", seeded)
+    return seeded
+
+
+def set_customer_role_flag(customer_id: int, flag: str, value: bool,
+                           db_path: str | Path = DB_PATH) -> dict:
+    """Manager one-tap role edit (Kerry 2026-09-15). Writes an EXPLICIT
+    0/1 — never NULL, so a cleared seeded player is not re-seeded on the
+    next deploy."""
+    if flag not in PLAYER_ROLE_FLAGS:
+        raise ValueError(f"flag must be one of {PLAYER_ROLE_FLAGS}")
+    with _connect(db_path) as conn:
+        try:
+            conn.execute(f"ALTER TABLE customers ADD COLUMN {flag} INTEGER")
+        except sqlite3.OperationalError:
+            pass
+        cur = conn.execute(
+            f"UPDATE customers SET {flag} = ? WHERE customer_id = ?",
+            (1 if value else 0, int(customer_id)))
+        if cur.rowcount == 0:
+            raise ValueError(f"customer {customer_id} not found")
+        conn.commit()
+    return {"customer_id": int(customer_id), flag: 1 if value else 0}
+
+
 def _seed_pace_ratings(conn: sqlite3.Connection) -> None:
     """Seed customers.pace_rating with Kerry's ratified initial values.
 
@@ -1390,6 +1476,108 @@ def _seed_pace_ratings(conn: sqlite3.Connection) -> None:
     conn.commit()
     if seeded:
         logger.info("Pace ratings seed: applied %d rating(s)", seeded)
+
+
+# Kerry 2026-09-15 (moved here from a Horizon session): "Why are Dan
+# Stich and Jeff Rideout ranked 1's on pace? ... Dan should not be a 1.
+# He's at least a 2. Make Jeff a 2 as well." Neither is in the ratified
+# seed above; both carry an explicit 1 with source 'manager' — a tap. An
+# explicit 2 is a real ruling (see set_customer_pace_rating), so this
+# writes 2/'manager' exactly as the Customers page one-tap editor would.
+_PACE_RULINGS_2026_09_15 = {298: 2, 6: 2}     # Dan Stich, Jeff Rideout
+
+
+def _repair_pace_rulings_2026_09_15(conn: sqlite3.Connection) -> int:
+    """ONE-SHOT: apply Kerry's 2026-09-15 pace rulings, then never again —
+    a later tap on the Customers page must not be undone by the next
+    deploy. Guarded by an app_settings flag; only a current 1 is changed,
+    so a value Kerry has already corrected is left alone. Returns rows
+    changed."""
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS app_settings (
+               key TEXT PRIMARY KEY, value TEXT NOT NULL,
+               updated_at TEXT DEFAULT (datetime('now')))""")
+    flag = "pace_rulings_2026_09_15_applied"
+    if conn.execute("SELECT 1 FROM app_settings WHERE key = ?",
+                    (flag,)).fetchone():
+        return 0
+    changed = 0
+    for cid, rating in _PACE_RULINGS_2026_09_15.items():
+        cur = conn.execute(
+            """UPDATE customers
+               SET pace_rating = ?, pace_rating_source = 'manager'
+               WHERE customer_id = ? AND pace_rating = 1""",
+            (rating, cid))
+        changed += cur.rowcount
+    conn.execute(
+        "INSERT INTO app_settings (key, value, updated_at) "
+        "VALUES (?, ?, datetime('now'))", (flag, str(changed)))
+    conn.commit()
+    if changed:
+        logger.info("Pace rulings 2026-09-15: %d rating(s) set to 2", changed)
+    return changed
+
+
+def _repair_mejia_identity(conn: sqlite3.Connection, db_path=None) -> int:
+    """ONE-SHOT (Kerry 2026-09-15: "Jose Mejia should have removed/merged
+    with the Joe Mejia RSVP"). The Facebook lead made customer 729 "Joe
+    Mejia" (jmejiasat@yahoo.com, 703-309-8234); his GoDaddy order for
+    s9.23 The Quarry arrived as "Jose Mejia" with jmejiasat@mac.com and
+    minted customer 824. Same phone, same man. Merge 824 → 729, make the
+    canonical first name Jose (GoDaddy and Golf Genius both say Jose; the
+    lead form said Joe → alias), then re-run the RSVP match so his GG RSVP
+    binds to the order. Guarded by an app_settings flag."""
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS app_settings (
+               key TEXT PRIMARY KEY, value TEXT NOT NULL,
+               updated_at TEXT DEFAULT (datetime('now')))""")
+    flag = "mejia_identity_2026_09_15_applied"
+    if conn.execute("SELECT 1 FROM app_settings WHERE key = ?", (flag,)).fetchone():
+        return 0
+    CANON, DUP = 729, 824
+    canon = conn.execute("SELECT customer_id, first_name, last_name FROM customers "
+                         "WHERE customer_id = ?", (CANON,)).fetchone()
+    if not canon or (canon["last_name"] or "").strip().lower() != "mejia":
+        logger.warning("Mejia repair: canonical %d missing or not Mejia — skipping", CANON)
+        return 0
+    done = 0
+    dup = conn.execute("SELECT customer_id, first_name, last_name FROM customers "
+                       "WHERE customer_id = ?", (DUP,)).fetchone()
+    if dup and (dup["last_name"] or "").strip().lower() == "mejia":
+        conn.commit()      # merge_customers opens its own connection
+        try:
+            merge_customers("Jose Mejia", "Jose Mejia", db_path=db_path,
+                            source_customer_id=DUP, target_customer_id=CANON)
+            done += 1
+            logger.info("Mejia repair: merged customer %d -> %d", DUP, CANON)
+        except ValueError as e:
+            logger.warning("Mejia repair: merge failed: %s", e)
+    conn.execute("UPDATE customers SET first_name = 'Jose' WHERE customer_id = ?", (CANON,))
+    if not conn.execute(
+            "SELECT 1 FROM customer_aliases WHERE alias_type = 'name' "
+            "AND LOWER(alias_value) = 'joe mejia'").fetchone():
+        conn.execute(
+            "INSERT OR IGNORE INTO customer_aliases (customer_name, alias_value, alias_type, customer_id) "
+            "VALUES ('Jose Mejia', 'Joe Mejia', 'name', ?)", (CANON,))
+    conn.execute(
+        "INSERT OR IGNORE INTO customer_emails (customer_id, email, is_primary, label) "
+        "VALUES (?, 'jmejiasat@mac.com', 0, 'merged')", (CANON,))
+    # Bind his GG RSVP to the order by identity (Strategy 1c above).
+    for r in conn.execute(
+            "SELECT id, matched_event, player_email, player_name FROM rsvps "
+            "WHERE customer_id = ? AND matched_item_id IS NULL "
+            "AND response = 'PLAYING'", (CANON,)).fetchall():
+        conn.commit()
+        mid = match_rsvp_to_item(r["player_email"], r["player_name"],
+                                 r["matched_event"], db_path=db_path)
+        if mid:
+            conn.execute("UPDATE rsvps SET matched_item_id = ? WHERE id = ?", (mid, r["id"]))
+            done += 1
+    conn.execute("INSERT INTO app_settings (key, value, updated_at) VALUES (?, ?, datetime('now'))",
+                 (flag, str(done)))
+    conn.commit()
+    logger.info("Mejia repair: %d step(s) applied", done)
+    return done
 
 
 def _repair_massey_attribution(conn: sqlite3.Connection) -> None:
@@ -3388,9 +3576,18 @@ def init_db(db_path: str | Path | None = None) -> None:
             CREATE TABLE IF NOT EXISTS name_parse_failures (
                 customer_name TEXT PRIMARY KEY,
                 attempts      INTEGER DEFAULT 0,
-                last_attempt  TEXT DEFAULT (datetime('now'))
+                last_attempt  TEXT DEFAULT (datetime('now')),
+                customer_id   INTEGER REFERENCES customers(customer_id)
             )
         """)
+        # EVERY row that names a person carries customer_id (Kerry
+        # 2026-09-18: "EVERY person gets a customer_id, no matter what their
+        # role is... customer_id is king"). This log predated the rule.
+        try:
+            conn.execute("ALTER TABLE name_parse_failures ADD COLUMN customer_id INTEGER "
+                         "REFERENCES customers(customer_id)")
+        except sqlite3.OperationalError:
+            pass
 
         # Backfill: parse existing customer names into first/last name parts.
         # Only runs once — skips rows that already have first_name populated.
@@ -4148,7 +4345,8 @@ def init_db(db_path: str | Path | None = None) -> None:
                 "<p>Hi {player_name},</p>"
                 "<p>This is a friendly reminder that we have you down for "
                 "<strong>{event_name}</strong>, but we haven't received your payment yet.</p>"
-                "<p>Please complete your registration at your earliest convenience.</p>"
+                "<p>You can take care of it right here:</p>"
+                "{pay_button}"
                 "<p>Thanks,<br>The Golf Fellowship</p>",
                 None,
             ),
@@ -4377,6 +4575,33 @@ def init_db(db_path: str | Path | None = None) -> None:
             _seed_pace_ratings(conn)
         except Exception as e:
             logger.warning("Pace ratings seed failed: %s", e)
+        # One-shot pace rulings (Kerry 2026-09-15): Stich + Rideout -> 2
+        try:
+            _repair_pace_rulings_2026_09_15(conn)
+        except Exception as e:
+            logger.warning("Pace rulings 2026-09-15 failed: %s", e)
+        # Player role flags (Kerry-ratified 2026-09-15): fill-only-if-NULL
+        try:
+            _seed_player_roles(conn)
+        except Exception as e:
+            logger.warning("Player role seed failed: %s", e)
+        # One-shot identity repair (Kerry 2026-09-15): Jose/Joe Mejia
+        try:
+            _repair_mejia_identity(conn, db_path)
+        except Exception as e:
+            logger.warning("Mejia identity repair failed: %s", e)
+
+        # Saved tee sheets carry the PERSON, not a name string (Kerry
+        # 2026-09-15). Every sheet saved before the column existed is
+        # linked here; rows whose name matches nobody are retried on the
+        # next boot, in case the player is created later.
+        try:
+            _ensure_pairing_tables(conn)
+            _n = _backfill_customer_id_on_event_pairings(conn)
+            if _n:
+                logger.info("event_pairings: linked %d row(s) to a customer_id", _n)
+        except Exception as e:
+            logger.warning("event_pairings customer_id backfill failed: %s", e)
 
         # Always-run repair: merge twin Crystal Falls events 3267 → 3263
         # (Kerry 2026-07-14: same May 30 event, renamed mid-registration)
@@ -5894,6 +6119,7 @@ def init_db(db_path: str | Path | None = None) -> None:
         _backfill_customer_id_on_message_log(conn)
         _backfill_customer_id_on_rsvp_email_overrides(conn)
         _backfill_customer_id_on_action_items(conn)
+        _backfill_customer_id_on_name_parse_failures(conn)
 
         # Course registry v1 + gender (Kerry-ratified 2026-07-20): facility
         # layer, OLD-course merges w/ tee version tags, stub dedup, gender
@@ -6532,6 +6758,36 @@ def _emit_unlinked_partner_warning(
         logger.debug("Failed to insert UNLINKED_PARTNER warning for %r", customer_name)
 
 
+def _phone_digits(phone) -> str:
+    """Ten US digits or '' — the comparison key for phone identity."""
+    d = re.sub(r"\D", "", str(phone or ""))
+    if len(d) == 11 and d.startswith("1"):
+        d = d[1:]
+    return d if len(d) == 10 else ""
+
+
+def _lookup_customer_by_phone_surname(conn: sqlite3.Connection,
+                                      phone, last_name) -> int | None:
+    """The ONE customer whose stored phone has the same ten digits and
+    whose last name matches, else None (no phone, no surname, no match,
+    or more than one — a household sharing a phone is two people)."""
+    digits = _phone_digits(phone)
+    last = (last_name or "").strip().lower()
+    if not digits or not last:
+        return None
+    try:
+        rows = conn.execute(
+            """SELECT customer_id, phone FROM customers
+               WHERE phone IS NOT NULL AND phone != ''
+                 AND LOWER(TRIM(last_name)) = ?
+                 AND COALESCE(account_status, 'active') != 'merged'""",
+            (last,)).fetchall()
+    except sqlite3.OperationalError:
+        return None
+    hits = [r["customer_id"] for r in rows if _phone_digits(r["phone"]) == digits]
+    return hits[0] if len(hits) == 1 else None
+
+
 def _resolve_or_create_customer(
     conn: sqlite3.Connection,
     customer_name: str | None,
@@ -6588,6 +6844,30 @@ def _resolve_or_create_customer(
             return None
         first = first or parts[0]
         last = last or parts[-1]
+
+    # 3b. PHONE + SURNAME (Kerry 2026-09-15, the Joe/Jose Mejia case): a
+    # Facebook lead arrives as "Joe Mejia" with one email and a phone; the
+    # same man buys as "Jose Mejia" with a DIFFERENT email. Neither the
+    # email rungs nor the exact-name rung can see that, so the order minted
+    # a second profile. The phone is the same person's phone. A UNIQUE
+    # customer whose phone digits and last name both match is that
+    # person; the new email is filed on them so the next order matches
+    # by email like everyone else. Ambiguous (two customers) → fall
+    # through and create, as before.
+    cid = _lookup_customer_by_phone_surname(conn, phone, last)
+    if cid is not None:
+        if customer_email and customer_email.strip():
+            try:
+                conn.execute(
+                    """INSERT OR IGNORE INTO customer_emails
+                           (customer_id, email, is_primary, is_golf_genius, label)
+                       VALUES (?, ?, 0, 0, 'godaddy-phone-match')""",
+                    (cid, customer_email.strip()))
+            except Exception as e:
+                logger.warning("Phone-match email file failed for cid %d: %s", cid, e)
+        logger.info("Customer %r resolved by phone + surname to customer_id=%d "
+                    "(email %r filed)", customer_name, cid, customer_email)
+        return cid
 
     # 4. Wrap creation in try/except — never block a transaction save
     try:
@@ -7419,6 +7699,16 @@ _GG_SYNC_EXCLUDES: frozenset = frozenset(n.lower() for n in (
 # ?page_id=<page_id>) to the tracker contest it charges buy-ins for. The
 # Enrollment tab's "Points Race — Buy-in Status" panel joins these standings
 # against season_contests by customer_id to color-code who is bought in.
+# How long a standings snapshot is trusted on a day an event was PLAYED.
+# The long window is `get_points_race_standings(auto_refresh_hours=12)`;
+# this is the short one, because Golf Genius awards season points at
+# closeout and a board that is hours behind on event night is wrong in
+# front of the people who just played (Kerry 2026-09-16). Rules-based, not
+# magic (guiding principle 2) — one named number, not a literal buried in
+# the staleness test.
+_POINTS_EVENT_DAY_REFRESH_HOURS = 0.25
+
+
 _GG_POINTS_RACES: dict = {
     "san_antonio_net": {
         "label": "SAN ANTONIO Net 2026",
@@ -9881,9 +10171,16 @@ def fetch_champ_player_card(race_key: str, customer_id: int,
             h = (player.get("holes") or {}).get(n) or {}
             gross = h.get("strokes")
             dots = 0 if gross_mode else (h.get("dots") or 0)
+            # KERRY'S PLUS RULE (ratified 2026-09-15), v2.459.0. A NEGATIVE
+            # dot count is a stroke GIVEN BACK, and `gross - dots` ADDED it
+            # to that hole — so a plus player was charged twice over: once
+            # hole by hole here, and again by the flat `plus_adj` deduction
+            # below that this card has applied since 2026-08-01. No hole is
+            # ever made harder; the plus comes off the ROUND once.
+            play_dots = max(0, dots)
             par = pars.get(n)
             net = None if gross_mode else (
-                (gross - dots) if gross is not None else None)
+                (gross - play_dots) if gross is not None else None)
             if gross_mode:
                 pts = compute_hole_derivations(
                     par, gross, 0, gross_formulas)["stableford_gross"]
@@ -9894,7 +10191,11 @@ def fetch_champ_player_card(race_key: str, customer_id: int,
             if pts is not None:
                 computed = (computed or 0) + pts
             holes.append({"hole": n, "par": par, "gross": gross,
-                          "dots": dots, "net": net, "pts": pts,
+                          # `dots` is what the card DRAWS: a give-back is
+                          # no longer marked, because it no longer applies.
+                          "dots": play_dots,
+                          "strokes_given_back": -min(0, dots),
+                          "net": net, "pts": pts,
                           "yardage": ydss.get(n),
                           "stroke_index": sis.get(n)})
 
@@ -9935,7 +10236,7 @@ def fetch_champ_player_card(race_key: str, customer_id: int,
         plus_adj = (roster.get("plus_by_cid") or {}).get(int(customer_id))
         ph = player.get("playing_handicap")
         if plus_adj is None and ph is not None and ph < 0:
-            plus_adj = -ph
+            plus_adj = plus_round_deduction(ph)
         if gross_mode:
             plus_adj = None     # net-points rule only — see _champ_plus_adjustments
         computed_adj = (computed - plus_adj
@@ -10069,22 +10370,65 @@ def get_points_race_standings(race_key: str,
                FROM gg_points_standings WHERE race_key = ?""",
             (race_key,),
         ).fetchone()
+        # EVENT-DAY WINDOW (v2.458.0, Kerry 2026-09-16: "Why aren't these
+        # points adding correctly?"). Golf Genius awards season points when
+        # the manager closes an event out, which on a Tuesday is hours
+        # AFTER the snapshot that is still serving the page. The row
+        # expansion is fetched live (and cached 10 minutes); the total
+        # beside it was cached for 12 — so on event night the rows carried
+        # the night's points and the total did not, and a player's own
+        # five rows added to 36 over a total reading 30.
+        #
+        # The guard below already knew that standings move with events, but
+        # it was armed in ONE DIRECTION ONLY: "no event since" could let a
+        # time-stale snapshot stand, and nothing could make a time-fresh one
+        # stale. So the clock alone decided, and the clock cannot tell that
+        # a round finished twenty minutes ago.
+        #
+        # An event PLAYED on or after the snapshot's day (and not in the
+        # future — next week's fixture must never hold the board open) puts
+        # the race in a short window instead of the long one. It settles
+        # itself: the refresh moves `fetched_at` forward, so this costs one
+        # GG round-trip per window, not one per page load.
+        # `fetched_at` is stored NAIVE UTC like every timestamp here, and
+        # `events.event_date` is a CENTRAL calendar day. Taking date()
+        # straight off the stored value is the trap `to_central` exists to
+        # stop (and the one this codebase hit twice on 2026-09-15): at 9 PM
+        # Central on event night the snapshot is ALREADY TOMORROW in UTC,
+        # so "an event on or after the snapshot's day" silently excludes
+        # the event that just finished. Both tests below read the Central
+        # day of the snapshot.
+        snap_day = None
+        if stat["fetched_at"]:
+            _snap = to_central(stat["fetched_at"])
+            snap_day = _snap.date().isoformat() if _snap else None
+        played_since = None
+        if stat["n"] and snap_day:
+            played_since = conn.execute(
+                """SELECT 1 FROM events
+                    WHERE event_date IS NOT NULL
+                      AND event_date >= ?
+                      AND event_date <= ?
+                      AND COALESCE(status, 'active') = 'active'
+                    LIMIT 1""",
+                (snap_day, today_central_str())).fetchone()
+        window_hours = (_POINTS_EVENT_DAY_REFRESH_HOURS if played_since
+                        else auto_refresh_hours)
         stale = (
             stat["n"] == 0
             or stat["fetched_at"] is None
             or conn.execute(
                 "SELECT datetime(?) < datetime('now', ?)",
-                (stat["fetched_at"], f"-{auto_refresh_hours} hours"),
+                (stat["fetched_at"], f"-{window_hours} hours"),
             ).fetchone()[0] == 1
         )
         # Standings only change after events (Kerry, 2026-07-08): a stale
         # snapshot with NO event since it was taken is still current — skip
         # the GG round-trip. Manual Refresh (force_refresh) is unaffected.
-        if stale and stat["n"] and stat["fetched_at"]:
+        if stale and stat["n"] and snap_day:
             event_since = conn.execute(
                 "SELECT 1 FROM events WHERE event_date IS NOT NULL "
-                "AND event_date >= date(?) LIMIT 1",
-                (stat["fetched_at"],)).fetchone()
+                "AND event_date >= ? LIMIT 1", (snap_day,)).fetchone()
             if not event_since:
                 stale = False
 
@@ -13198,6 +13542,42 @@ def _events_leaderboard_codes(db_path=None) -> list[str]:
     return list(_EVENTS_LEADERBOARD_SEED)
 
 
+def _event_field_complete(conn, event_id: int, holes_n: int) -> dict:
+    """Is every hole accounted for, for every player in the field?
+
+    Kerry 2026-09-15, looking at $63 beside a name with three holes
+    posted: "Winnings should not be showing. Not all scores are in. Every
+    hole must be accounted for every player." A quiet ten minutes is not
+    the end of a round — it is a group between nines, a phone in a pocket,
+    a scorer who stopped to eat. The clock cannot tell those apart; the
+    CARD can.
+
+    A player's holes are the union across their scoring rounds (a GG
+    import writes one row per board, and the ALL Gross row carries no
+    net), counting only holes with an actual stroke on them.
+    """
+    rows = [dict(r) for r in conn.execute(
+        """SELECT COALESCE(CAST(sr.customer_id AS TEXT),
+                           'n:' || LOWER(TRIM(sr.player_name))) AS k,
+                  MAX(sr.player_name) AS nm,
+                  COUNT(DISTINCT CASE WHEN sh.strokes IS NOT NULL
+                                      THEN sh.hole_number END) AS n_holes
+             FROM scoring_rounds sr
+             LEFT JOIN scoring_holes sh ON sh.scoring_round_id = sr.id
+            WHERE sr.event_id = ?
+              AND COALESCE(sr.source, 'gg') NOT LIKE 'gg_history%'
+            GROUP BY k""", (event_id,))]
+    want = int(holes_n or 0) or 9
+    pending = [{"player": r["nm"], "holes": r["n_holes"], "of": want}
+               for r in rows if (r["n_holes"] or 0) < want]
+    pending.sort(key=lambda r: (r["holes"], r["player"] or ""))
+    return {"complete": bool(rows) and not pending,
+            "field": len(rows), "pending": pending,
+            "holes_wanted": want,
+            "holes_posted": sum(r["n_holes"] or 0 for r in rows),
+            "holes_needed": len(rows) * want}
+
+
 def get_events_leaderboard(chapter: str | None = None,
                            year: str | None = None,
                            db_path: str | Path = DB_PATH) -> dict:
@@ -13207,8 +13587,13 @@ def get_events_leaderboard(chapter: str | None = None,
     codes = _events_leaderboard_codes(db_path)
     with _connect(db_path) as conn:
         _ensure_scoring_tables(conn)
+        try:
+            _money_hold = int(_setting_via(conn, "leaderboard_money_hold_minutes") or 10)
+        except (TypeError, ValueError):
+            _money_hold = 10
         rows = [dict(r) for r in conn.execute(
             """SELECT e.id, e.item_name, e.event_date, e.course, e.chapter,
+                      e.format,
                       COUNT(DISTINCT COALESCE(sr.customer_id,
                                               'n:' || sr.player_name)) AS field
                FROM events e
@@ -13239,6 +13624,36 @@ def get_events_leaderboard(chapter: str | None = None,
                    WHERE LOWER(TRIM(te.code)) = ?""",
                 ((r["item_name"] or "").strip().lower(),)).fetchone()
             r["pot"] = pot["t"] if pot else 0
+            # Same hold as the board (Kerry 2026-09-15): no dollar shows
+            # until 10 minutes after the last score was posted.
+            _lr = conn.execute(
+                "SELECT MAX(imported_at) AS t FROM scoring_rounds WHERE event_id = ?",
+                (r["id"],)).fetchone()
+            r["last_score_at"] = (_lr["t"] if _lr else None) or None
+            r["money_visible"] = True
+            # EVERY HOLE FOR EVERY PLAYER FIRST (Kerry 2026-09-15). The
+            # clock alone let a quiet ten minutes mid-round look like the
+            # end of one; the card is what knows.
+            _fc = _event_field_complete(
+                conn, r["id"],
+                _event_holes_type(r["item_name"], r.get("format")))
+            r["field_complete"] = _fc["complete"]
+            r["players_pending"] = len(_fc["pending"])
+            if not _fc["complete"]:
+                r["money_visible"] = False
+                r["money_reason"] = "scores"
+            elif r["last_score_at"] and _money_hold > 0:
+                try:
+                    _rt = datetime.strptime(str(r["last_score_at"])[:19],
+                                            "%Y-%m-%d %H:%M:%S") + timedelta(minutes=_money_hold)
+                    r["money_visible"] = datetime.utcnow() >= _rt
+                    r["money_at"] = _rt.strftime("%Y-%m-%d %H:%M:%S")
+                    if not r["money_visible"]:
+                        r["money_reason"] = "hold"
+                except (ValueError, TypeError):
+                    pass
+            if not r["money_visible"]:
+                r["pot"] = 0
     return {"events": rows, "years": years,
             "pilot": bool(codes), "pilot_codes": codes}
 
@@ -13249,13 +13664,182 @@ def get_event_leaderboard(event_name: str,
     with _connect(db_path) as conn:
         _ensure_scoring_tables(conn)
         ev = conn.execute(
-            """SELECT id, item_name, event_date, course, chapter, format
+            """SELECT id, item_name, event_date, course, chapter, format,
+                      nine_side
                FROM events WHERE LOWER(item_name) = ?""",
             ((event_name or "").strip().lower(),)).fetchone()
         if not ev:
             return None
         ev = dict(ev)
         ev["holes"] = _event_holes_type(ev["item_name"], ev["format"])
+
+        # MONEY WAITS FOR THE FIELD (Kerry 2026-09-15: "Winnings should
+        # not show until 10 minutes after last score is posted"). Half a
+        # field posted is a wrong winner stated confidently, and a member
+        # reading $126 beside their name mid-round will remember the
+        # number, not the caveat. `imported_at` is stamped every time a
+        # round is written, so it IS "when scores were last posted"; the
+        # hold is a dial.
+        try:
+            _hold = int(_setting_via(conn, "leaderboard_money_hold_minutes") or 10)
+        except (TypeError, ValueError):
+            _hold = 10
+        _last = conn.execute(
+            "SELECT MAX(imported_at) AS t FROM scoring_rounds WHERE event_id = ?",
+            (ev["id"],)).fetchone()
+        last_score_at = (_last["t"] if _last else None) or None
+        # WHICH TEE EACH PLAYER IS ON, as a colour (Kerry 2026-09-15:
+        # "Show a simple colored circle right justified in name cells
+        # that corresponds to player's tees"). A net board mixes three
+        # tees and the number alone does not say so; the swatch does, at
+        # a glance, without a column. The colour is the COURSE's own tee
+        # colour (event_tee_legend, the same map the starter sheet
+        # prints), and the band comes from the saved sheet — so the
+        # leaderboard and the sheet can never disagree.
+        _evc = conn.execute("SELECT * FROM events WHERE id = ?",
+                            (ev["id"],)).fetchone()
+        tee_legend, tee_by_player = [], {}
+        try:
+            # THE TEE EACH PLAYER ACTUALLY PLAYED comes first. The saved
+            # sheet's BAND (<50 / 50-64 / 65+ / Forward) is how we assign
+            # a tee in advance, but an imported Golf Genius tee sheet
+            # carries no band at all — which is why Avery Ranch showed no
+            # dots while The Quarry did (Kerry 2026-09-15: "Do we not
+            # have tee colors for the other courses on the leaderboard?").
+            # `scoring_rounds.tee_id` is the tee of record for a played
+            # round, so the board reads that and falls back to the band.
+            played = [dict(r) for r in conn.execute(
+                """SELECT sr.customer_id, sr.player_name, ct.tee_name, ct.gender,
+                          ct.gg_alias
+                     FROM scoring_rounds sr
+                     JOIN course_tees ct ON ct.tee_id = sr.tee_id
+                    WHERE sr.event_id = ?
+                      AND COALESCE(sr.source, 'gg') NOT LIKE 'gg_history%'""",
+                (ev["id"],))]
+            _seen_color: dict = {}
+            _lbl_of: dict = {}
+            _gender_of: dict = {}
+            for r in played:
+                raw = " ".join((r["tee_name"] or "").split())
+                m = _TEE_ORDER_RE.match(raw)
+                label = _TEE_ORDER_RE.sub("", raw).strip() if m else raw
+                if not label:
+                    continue
+                # The ORDER (Kerry's typed number) lives on the GG alias
+                # since v2.467.0; the master name carries none.
+                _om = _TEE_ORDER_RE.match(" ".join((r.get("gg_alias") or "").split()))
+                _lbl_of[r["tee_name"]] = (label, int((_om or m).group(1)) if (_om or m) else 99)
+                _gender_of[label] = r.get("gender") or _gender_of.get(label)
+            for label, order in _lbl_of.values():
+                col = _tee_color_for(label)
+                _seen_color.setdefault(col, []).append(label)
+            for label, order in sorted(set(_lbl_of.values()),
+                                       key=lambda t: (t[1], t[0])):
+                col = _tee_color_for(label)
+                ladies = (_gender_of.get(label) == "F"
+                          or bool(re.search(r"\((?:l|lady|ladies)\)", label, re.I)))
+                tee_legend.append({
+                    "band": None,
+                    "tee_name": _tee_legend_display_name(label, ladies),
+                    "band_label": TEE_LEGEND_WOMEN_WORD if ladies else None,
+                    "color": col, "ladies": ladies,
+                    # An outline, always — the starter sheet's own mark
+                    # for the women's tee (Kerry 2026-09-15).
+                    "ring": ladies})
+            # THE LABEL PAIRING IS MADE BEFORE THE SORT (v2.458.6, Kerry
+            # 2026-09-16: "Mike is showing as that open circle and the
+            # ladies should be the open circle. So need to flip those").
+            #
+            # `tee_legend` was built in tee ORDER, then re-sorted so the
+            # ladies' tee falls last — and only THEN zipped against the
+            # still-unsorted label list. After the sort the two sequences
+            # no longer line up, so every entry from the moved element
+            # onward was paired with the wrong label. On a card carrying
+            # both "3 - Red Tee" and "3 - Red (L) Tee" that is an exact
+            # swap: Michelle DelCarmen played the ladies' tee and got the
+            # men's filled dot, Mike Murphy played the men's and got the
+            # ladies' outline.
+            #
+            # Zip first, sort after. The mapping is by LABEL, so the
+            # display order can then change freely without touching it.
+            _leg_by_label = {}
+            for t, (lbl, _o) in zip(tee_legend,
+                                    sorted(set(_lbl_of.values()),
+                                           key=lambda x: (x[1], x[0]))):
+                _leg_by_label[lbl] = t
+            # …and the ladies' tee sorts LAST, always.
+            tee_legend.sort(key=lambda t: 1 if t["ladies"] else 0)
+            for t in tee_legend:
+                _leg_by_label.setdefault(t["tee_name"], t)
+            for r in played:
+                lbl = _lbl_of.get(r["tee_name"])
+                _t = _leg_by_label.get(lbl[0]) if lbl else None
+                if not _t:
+                    continue
+                if r["customer_id"] is not None:
+                    tee_by_player[f"c:{r['customer_id']}"] = _t
+                if r["player_name"]:
+                    tee_by_player["n:" + r["player_name"].strip().lower()] = _t
+
+            # The BAND legend fills the gaps — a player with no imported
+            # round yet, and the whole legend when nothing is imported.
+            band_legend = event_tee_legend(conn, ev["id"],
+                                           dict(_evc) if _evc else {})
+            _by_band = {t["band"]: t for t in band_legend}
+            for _h, _groups in (get_event_pairings(ev["id"], db_path=db_path)
+                                or {}).items():
+                for _g in _groups:
+                    for _pl in (_g.get("players") or []):
+                        _t = _by_band.get(_pl.get("tee_choice"))
+                        if not _t:
+                            continue
+                        _rec = {"band": _pl.get("tee_choice"),
+                                "tee_name": _t.get("tee_name"),
+                                "color": _t.get("color"),
+                                "ring": bool(_t.get("ring"))}
+                        _ck = (f"c:{_pl['customer_id']}"
+                               if _pl.get("customer_id") else None)
+                        _nk = ("n:" + _pl["name"].strip().lower()
+                               if _pl.get("name") else None)
+                        if _ck and _ck not in tee_by_player:
+                            tee_by_player[_ck] = _rec
+                        if _nk and _nk not in tee_by_player:
+                            tee_by_player[_nk] = _rec
+            if not tee_legend:
+                tee_legend = band_legend
+        except Exception:
+            logger.exception("Non-fatal: tee colours unavailable for event %s",
+                             ev["id"])
+
+        # The TEAM tab's PH column is the TEAM handicap, not the 100%
+        # playing handicap (Kerry 2026-09-15: "For team/cart net, PH
+        # should show their team/cart net handicap for that game, not
+        # the 100% PH"). Same dial and same shape as the starter sheet —
+        # the ratified allowance ladder, off the LOWEST in the team — so
+        # the sheet a player held on the first tee and the board they
+        # read afterwards carry the same number.
+        try:
+            _tb, team_allowance, team_basis = event_team_net_dial(
+                conn, dict(_evc) if _evc else ev)
+        except Exception:
+            logger.exception("Non-fatal: team allowance unavailable for %s",
+                             ev["id"])
+            _tb, team_allowance, team_basis = 1, 1.0, ""
+
+        money_visible, money_at, money_reason = True, None, None
+        field_state = _event_field_complete(conn, ev["id"], ev["holes"])
+        if not field_state["complete"]:
+            money_visible, money_reason = False, "scores"
+        elif last_score_at and _hold > 0:
+            try:
+                _t = datetime.strptime(str(last_score_at)[:19], "%Y-%m-%d %H:%M:%S")
+                _ready = _t + timedelta(minutes=_hold)
+                money_visible = datetime.utcnow() >= _ready
+                money_at = _ready.strftime("%Y-%m-%d %H:%M:%S")
+                if not money_visible:
+                    money_reason = "hold"
+            except (ValueError, TypeError):
+                money_visible = True
 
         # one merged row per player: scoring_rounds carries one row per
         # imported GG board (the ALL Gross row has net/hcp NULL) — same
@@ -13384,21 +13968,22 @@ def get_event_leaderboard(event_name: str,
         # and publish a hole's par ONLY when they agree. A hole where
         # the tees disagree renders blank rather than asserting one
         # tee's par over another's — same rule as the to-par totals.
+        #
+        # Read off the TEES IN PLAY, not off the holes already scored
+        # (Kerry 2026-09-15: "Also need to show ALL holes that will be
+        # played for that event, whether or not that have been played").
+        # Hanging par off scoring_holes meant an unplayed hole had no par
+        # either, so the column it belongs in could not even be drawn.
         hole_par: dict = {}
         if rids:
             ph = ",".join("?" for _ in rids)
             seen: dict = {}
             for hp in conn.execute(
-                    f"""SELECT DISTINCT sh.hole_number AS hn,
-                                        cth.par AS par
-                         FROM scoring_holes sh
-                         JOIN scoring_rounds sr ON sr.id = sh.scoring_round_id
-                         JOIN course_tee_holes cth
-                           ON cth.tee_id = sr.tee_id
-                          AND cth.hole_number = sh.hole_number
-                        WHERE sh.scoring_round_id IN ({ph})
-                          AND sh.strokes IS NOT NULL
-                          AND cth.par IS NOT NULL""", list(rids)):
+                    f"""SELECT DISTINCT cth.hole_number AS hn, cth.par AS par
+                         FROM scoring_rounds sr
+                         JOIN course_tee_holes cth ON cth.tee_id = sr.tee_id
+                        WHERE sr.id IN ({ph}) AND cth.par IS NOT NULL""",
+                    list(rids)):
                 seen.setdefault(hp["hn"], set()).add(hp["par"])
             for hn_, pars_ in seen.items():
                 if len(pars_) == 1:
@@ -13495,6 +14080,26 @@ def get_event_leaderboard(event_name: str,
         hole_pts: dict = {}
         try:
             formulas = get_scoring_formulas(db_path)
+            # A PLUS HANDICAP COMES OFF THE ROUND, NEVER OFF A HOLE
+            # (Kerry 2026-09-16, the rule Golf Genius cannot express:
+            # "For MVP nobody is allowed to have to add strokes on any
+            # given hole, so there should be no pluses on any holes. But
+            # his +3 PH still stands. The way it works on our side is
+            # that his total points gets deducted that 3 strokes. It's
+            # not fair to make a player have to perform on any one hole,
+            # but it should be applied across a round.")
+            #
+            # For POINTS, then: a give-back stroke is clamped to zero on
+            # every hole, and the plus is subtracted from the TOTAL once.
+            # The arithmetic lands in the same place; what changes is
+            # that no single hole is made harder than the card says.
+            # Stroke-play NET is untouched — there the total is the total
+            # either way.
+            _plus: dict = {}
+            for pr in conn.execute(
+                    "SELECT id, playing_handicap FROM scoring_rounds "
+                    "WHERE event_id = ? AND playing_handicap < 0", (ev["id"],)):
+                _plus[pr["id"]] = plus_round_deduction(pr["playing_handicap"])
             for hr in conn.execute(
                     """SELECT sr.id AS rid, sh.hole_number, sh.strokes,
                               sh.strokes_received, cth.par
@@ -13506,9 +14111,12 @@ def get_event_leaderboard(event_name: str,
                        WHERE sr.event_id = ?
                          AND COALESCE(sr.source, 'gg') NOT LIKE 'gg_history%'""",
                     (ev["id"],)):
+                # game=True IS the clamp now — the local `max(0, _recv)`
+                # this used to do lived here and nowhere else, which is
+                # why two other surfaces never got the rule (v2.459.0).
                 d = compute_hole_derivations(hr["par"], hr["strokes"],
                                              hr["strokes_received"] or 0,
-                                             formulas)
+                                             formulas, game=True)
                 a = pts.setdefault(hr["rid"], {"net": 0, "gross": 0})
                 if d.get("stableford_net") is not None:
                     a["net"] += d["stableford_net"]
@@ -13516,6 +14124,10 @@ def get_event_leaderboard(event_name: str,
                         hr["hole_number"]] = d["stableford_net"]
                 if d.get("stableford_gross") is not None:
                     a["gross"] += d["stableford_gross"]
+            for rid, give in _plus.items():
+                if rid in pts:
+                    pts[rid]["net"] -= give
+                    pts[rid]["plus_adjust"] = -give
         except Exception:
             logger.warning("event leaderboard points failed", exc_info=True)
 
@@ -13535,7 +14147,36 @@ def get_event_leaderboard(event_name: str,
             "won": _won_cats(cid, won_cats) if cid is not None else [],
         }
 
+    def _label_bounds(labels):
+        """Boundaries read off the flight LABELS, low flight first, or
+        None when they don't all state one.
+
+        The cut points are the FLOORS of every band after the first:
+        "Flight 1 (HCP <12.0)" + "Flight 2 (HCP 12.0+)" -> [12.0], and
+        "<8.0" + "8.0-15.9" + "16.0+" -> [8.0, 16.0]. The labels are the
+        flight DEFINITION; a midpoint derived from whoever happened to
+        buy in is only a guess at it, and a bad one when a flight holds
+        few buyers (Kerry 2026-09-14: a skins Flight 1 of three scratch
+        players put the line at ~3 and swept every mid-handicap
+        non-buyer into Flight 2)."""
+        import re as _re
+        if len(labels) < 2:
+            return None
+        cuts = []
+        for lab in labels[1:]:
+            txt = str(lab or "")
+            m = (_re.search(r"(\d+(?:\.\d+)?)\s*(?:\+|and up|or (?:more|higher))",
+                            txt, _re.I)
+                 or _re.search(r"(\d+(?:\.\d+)?)\s*(?:-|\u2013|to)\s*\d+(?:\.\d+)?",
+                               txt))
+            if not m:
+                return None
+            cuts.append(float(m.group(1)))
+        # a clean ladder only: strictly ascending, or we don't trust it
+        return cuts if all(a < b for a, b in zip(cuts, cuts[1:])) else None
+
     def _flight_sections(rows, fmap):
+
         """Flight-SECTIONED board (Kerry 2026-09-11): buyers keep their
         GG flight label (gg_game_flights, never derived); every other
         player is PLACED into the flight their handicap would have put
@@ -13560,7 +14201,18 @@ def get_event_leaderboard(event_name: str,
                           min(known) if known else 0.0,
                           max(known) if known else 0.0))
         stats.sort(key=lambda s: s[1])            # low flight first
-        bounds = [(a[3] + b[2]) / 2.0 for a, b in zip(stats, stats[1:])]
+        # PREFER THE BOUNDARY THE LABEL STATES (Kerry 2026-09-14: "In
+        # SKINS, players aren't being flighted where they would have
+        # been"). A label like "Flight 1 (HCP <12.0)" / "Flight 2 (HCP
+        # 12.0+)" says where the line is; deriving a midpoint from the
+        # buyers present instead put the line at ~3 on a skins board
+        # whose Flight 1 happened to hold only three scratch players,
+        # so every mid-handicap non-buyer fell into Flight 2. The
+        # midpoint stays as the fallback for labels that carry no
+        # number ("LOW FLIGHT" / "HIGH FLIGHT").
+        label_bounds = _label_bounds([s[0] for s in stats])
+        bounds = label_bounds if label_bounds is not None else [
+            (a[3] + b[2]) / 2.0 for a, b in zip(stats, stats[1:])]
         out = [{"label": s[0], "rows": []} for s in stats]
         overflow = {"label": "UNFLIGHTED", "rows": []}
         for r in rows:
@@ -13621,6 +14273,7 @@ def get_event_leaderboard(event_name: str,
             "player_name": p["player_name"], "customer_id": cid,
             "scoring_round_id": p["scoring_round_id"],
             "net_pts": a.get("net"), "gross_pts": a.get("gross"),
+            "pts_plus_adjust": a.get("plus_adjust"),
             "net": p["net"], "gross": p["gross"],
             "buyer": cid in net_buyers if cid is not None else False,
             "won": _won_cats(cid, ("mvp", "tgf_mvp")) if cid is not None
@@ -13736,6 +14389,7 @@ def get_event_leaderboard(event_name: str,
                 if p["net"] is not None
                 and p["scoring_round_id"] in par_by_rid else None),
             "net_pts": a.get("net"),
+            "pts_plus_adjust": a.get("plus_adjust"),
             "win_net": "individual_net" in cats,
             "win_gross": "individual_gross" in cats,
             "win_skins": "skins" in cats,
@@ -13758,11 +14412,22 @@ def get_event_leaderboard(event_name: str,
     # see the team net scorecard like on Golf Genius") — grouped by
     # scoring_rounds.team_num; total = best NET ball per hole summed;
     # GG's recorded purse attaches by member-surname overlap ──
-    # only holes actually PLAYED (GG cards can carry empty rows for the
-    # unplayed nine — a front-9 event must not render 10-18, Kerry
-    # 2026-09-11)
-    hole_cols = sorted({h[0] for hs in cards.values() for h in hs
-                        if h[1] is not None})
+    # EVERY HOLE THE EVENT WILL PLAY, played or not (Kerry 2026-09-15:
+    # "Also need to show ALL holes that will be played for that event,
+    # whether or not that have been played"). A board that grows a column
+    # each time a group finishes a hole cannot be read at a glance —
+    # you cannot see who is behind, only who has posted. The set comes
+    # from the EVENT (hole count + which nine), not from the cards, and
+    # the played holes are unioned in so a card that ran somewhere
+    # unexpected still shows. The original restriction was there to stop
+    # a front-9 event rendering 10-18 (GG cards carry empty rows for the
+    # unplayed nine, Kerry 2026-09-11) — `nine_side` answers that
+    # directly instead of inferring it from what happens to be posted.
+    _back9 = (ev.get("nine_side") or "").strip().lower() == "back"
+    _expected = (list(range(1, 19)) if (ev["holes"] or 9) == 18
+                 else (list(range(10, 19)) if _back9 else list(range(1, 10))))
+    _played = {h[0] for hs in cards.values() for h in hs if h[1] is not None}
+    hole_cols = sorted(set(_expected) | _played)
 
     def _player_holes(rid):
         return {h[0]: (h[1], h[2]) for h in cards.get(rid, [])}
@@ -13801,11 +14466,12 @@ def get_event_leaderboard(event_name: str,
                                 "customer_id": (int(p["customer_id"])
                                                 if p["customer_id"] is not None
                                                 else None),
-                                "scoring_round_id": p["scoring_round_id"]})
+                                "scoring_round_id": p["scoring_round_id"],
+                                "hcp": p["hcp"]})
             else:
                 # on the sheet but no card (no-show / blind-draw slot)
                 members.append({"player_name": nm, "customer_id": None,
-                                "scoring_round_id": None})
+                                "scoring_round_id": None, "hcp": None})
         if not matched:
             continue
         total, any_hole = 0, False
@@ -13820,6 +14486,19 @@ def get_event_leaderboard(event_name: str,
             if nets:
                 total += min(nets)
                 any_hole = True
+        # TEAM handicap: each player's PH at the event's team allowance,
+        # then off the LOWEST in the team — the ratified shape, the same
+        # one the starter sheet prints.
+        try:
+            from email_parser.handicap_calc import whs_round as _wr
+            _raw = [(m, _wr((m["hcp"] or 0) * team_allowance))
+                    for m in members if m.get("hcp") is not None]
+            if _raw:
+                _low = min(v for _m, v in _raw)
+                for _m, v in _raw:
+                    _m["team_hcp"] = v - _low
+        except Exception:
+            logger.exception("Non-fatal: team handicaps unavailable")
         teams.append({
             "team_num": (f"{tn[0]}{tn[1]}" if isinstance(tn, tuple)
                          else tn),
@@ -13964,6 +14643,22 @@ def get_event_leaderboard(event_name: str,
         "event": {"name": ev["item_name"], "date": ev["event_date"],
                   "course": ev["course"], "chapter": ev["chapter"],
                   "holes": ev["holes"]},
+        "team_allowance": team_allowance,
+        "team_basis": team_basis,
+        "tee_by_player": tee_by_player,
+        "tee_legend": tee_legend,
+        "money_visible": money_visible,
+        "money_at": money_at,
+        "money_reason": money_reason,
+        "money_hold_minutes": _hold,
+        "field_complete": field_state["complete"],
+        "holes_posted": field_state["holes_posted"],
+        "holes_needed": field_state["holes_needed"],
+        # Named, not counted: "waiting on 4" makes a manager hunt. The
+        # board should say WHO and how far along they are.
+        "scores_pending": field_state["pending"][:12],
+        "scores_pending_total": len(field_state["pending"]),
+        "last_score_at": last_score_at,
         "field": len(plist),
         "pot": round(sum(w["cents"] for ws in won.values()
                          for w in ws) / 100.0, 2),
@@ -14744,19 +15439,276 @@ def get_player_spotlight(customer_id: int,
 #    re-parsed even if GG severs access.
 # ═══════════════════════════════════════════════════════════════════════
 
+# ── The course record, USGA/WHS shape (v2.466.0, mailbox #576) ─────────
+# Kerry 2026-09-19: "Yes we need the table rebuild… I think the full
+# standard shape in one pass." One row per TEE SET: a physical tee as
+# rated for ONE gender over 9 or 18 holes. Its own rating/slope stay on
+# the row (every existing reader joins them off scoring_rounds.tee_id);
+# tee_set_ratings carries the TOTAL / FRONT / BACK rating rows, each with
+# its own slope and the bogey rating, the way ncrdb.usga.org publishes
+# them. Natural key = course + name + gender + holes + nine + slope +
+# rating: a men's and a women's set share a name; front and back halves
+# that rate identically (Forest Creek White, 35.2/125 both ways) are two
+# rating rows on one 18-hole set, not sibling rows fighting a UNIQUE.
+COURSE_TEES_DDL = """(
+        tee_id        INTEGER PRIMARY KEY AUTOINCREMENT,
+        course_id     INTEGER NOT NULL REFERENCES courses(course_id),
+        tee_name      TEXT,
+        gender        TEXT NOT NULL DEFAULT 'M' CHECK (gender IN ('M', 'F')),
+        holes         INTEGER NOT NULL DEFAULT 18 CHECK (holes IN (9, 18)),
+        nine          TEXT CHECK (nine IS NULL OR nine IN ('full', 'front', 'back', 'both')),
+        par           INTEGER,
+        slope         INTEGER,
+        rating        REAL,
+        bogey_rating  REAL,
+        yardage_total INTEGER,
+        is_combo      INTEGER NOT NULL DEFAULT 0,
+        is_ladies     INTEGER DEFAULT 0,
+        gg_tee_id     TEXT,
+        gg_alias   TEXT,
+        usga_tee_label TEXT,
+        tgf_bands     TEXT,
+        source        TEXT NOT NULL DEFAULT 'import'
+                      CHECK (source IN ('import', 'course_card', 'usga_crdb', 'admin')),
+        version_label TEXT,
+        valid_from    TEXT,
+        valid_to      TEXT,
+        created_at    TEXT DEFAULT (datetime('now')),
+        UNIQUE(course_id, tee_name, gender, holes, nine, slope, rating))"""
+
+TEE_SET_RATINGS_DDL = """CREATE TABLE IF NOT EXISTS tee_set_ratings (
+        tee_id        INTEGER NOT NULL REFERENCES course_tees(tee_id),
+        rating_type   TEXT NOT NULL CHECK (rating_type IN ('total', 'front', 'back')),
+        course_rating REAL NOT NULL,
+        slope         INTEGER NOT NULL,
+        bogey_rating  REAL,
+        yardage       INTEGER,
+        source        TEXT NOT NULL DEFAULT 'import',
+        updated_at    TEXT DEFAULT (datetime('now')),
+        PRIMARY KEY (tee_id, rating_type))"""
+
+_COURSE_TEES_V2_COLS = ("gender", "holes", "source", "usga_tee_label", "bogey_rating",
+                        "is_combo", "gg_tee_id", "par")
+
+
+# ── TGF tee designation (Kerry 2026-09-20) ─────────────────────────────
+# "Master name is what USGA/course call it. GG should just be an alias.
+# The GG names were purely for Admin, not necessary for member facing."
+# The number Kerry typed in front of a Golf Genius tee name was a
+# DESIGNATION, not a name: 1 = men <50, 2 = men 50-64, 3 = men 65+ (or
+# the women's tee when the course's shortest suitable tee is that one —
+# "we also have some 3- for women based on tee availability"), 4 =
+# women, "23" = one tee serving both older bands, 0 / 00 = on the record
+# but not played. It now lives on the row as `tgf_bands`; the GG name is
+# kept on `gg_alias` for GG coordination only, and `tee_name` is the
+# master (USGA / course) name every member-facing surface prints.
+_GG_TEE_BANDS_BY_ORDER = {"1": ("<50",), "2": ("50-64",), "3": ("65+",),
+                          "4": ("Forward",), "12": ("<50", "50-64"),
+                          "23": ("50-64", "65+"), "34": ("65+", "Forward")}
+
+
+def _gg_tee_parts(name: str | None) -> dict:
+    """Split a Golf Genius tee name into what it carries: the ORDER Kerry
+    typed ("3"), the MASTER name ("Red"), the bands that order means for
+    that gender, and the gender flag. "3 - Red (L) Tee" → order "3",
+    master "Red", gender F, bands ("Forward",). "0 - Blue Tee" → hidden."""
+    raw = " ".join((name or "").split())
+    m = re.match(r"^\s*(\d+)\s*[-–]\s*", raw)
+    order = m.group(1) if m else None
+    gender = _tee_gender_from_name(raw)
+    master = raw[m.end():] if m else raw
+    master = re.sub(r"\s*\((?:l|f|lady|ladies)\)", "", master, flags=re.I)
+    master = re.sub(r"\s*\bTees?\b\s*$", "", master, flags=re.I).strip()
+    bands: tuple = ()
+    if order and order.strip("0"):
+        bands = _GG_TEE_BANDS_BY_ORDER.get(order.lstrip("0") or order, ())
+        if gender == "F" and order.lstrip("0") in ("3", "23"):
+            bands = ("Forward",)
+    looks_gg = bool(m) or bool(re.search(r"\bTees?\b\s*$|\((?:l|f|ladies)\)", raw, re.I))
+    return {"order": order, "master": master or raw, "gender": gender,
+            "bands": bands, "looks_gg": looks_gg}
+
+
+def _tee_bands(val) -> list:
+    """`course_tees.tgf_bands` ('50-64,65+') → ['50-64', '65+']."""
+    return [b.strip() for b in str(val or "").split(",") if b.strip() in TEE_BANDS]
+
+
+def _tee_gender_from_name(name: str | None, is_ladies=None) -> str:
+    n = (name or "")
+    if is_ladies == 1 or re.search(r"\((L|F)\)|\bLadies\b", n, re.I):
+        return "F"
+    return "M"
+
+
+def _migrate_course_tees_v2(conn: sqlite3.Connection) -> dict:
+    """Rebuild `course_tees` to the USGA/WHS shape IN PLACE (same table
+    name, same tee_id, so scoring_rounds / course_tee_holes / every
+    reader keep working), then create + seed `tee_set_ratings`.
+    Idempotent: a table that already has the v2 columns is left alone;
+    the ratings seed is a cheap INSERT OR IGNORE."""
+    cols = [r[1] for r in conn.execute("PRAGMA table_info(course_tees)").fetchall()]
+    out = {"rebuilt": False, "rows": 0}
+    if cols and not all(c in cols for c in _COURSE_TEES_V2_COLS):
+        have = set(cols)
+
+        def col(c, default="NULL"):
+            return c if c in have else default
+        gender_expr = (f"CASE WHEN {col('is_ladies', '0')} = 1 OR tee_name LIKE '%(L)%' "
+                       f"OR tee_name LIKE '%(F)%' OR tee_name LIKE '%Ladies%' "
+                       f"THEN 'F' ELSE 'M' END")
+        holes_expr = "CASE WHEN rating >= 50 THEN 18 ELSE 9 END"
+        nine_expr = (f"CASE WHEN rating >= 50 THEN 'full' "
+                     f"WHEN {col('nine')} IN ('front','back','both') THEN {col('nine')} "
+                     f"ELSE NULL END")
+        conn.execute("DROP TABLE IF EXISTS course_tees__v2")
+        conn.execute("CREATE TABLE course_tees__v2 " + COURSE_TEES_DDL)
+        n_before = conn.execute("SELECT COUNT(*) FROM course_tees").fetchone()[0]
+        conn.execute(f"""
+            INSERT OR IGNORE INTO course_tees__v2
+                (tee_id, course_id, tee_name, gender, holes, nine, slope, rating,
+                 yardage_total, is_ladies, source, version_label, valid_from,
+                 valid_to, created_at)
+            SELECT tee_id, course_id, tee_name, {gender_expr}, {holes_expr}, {nine_expr},
+                   slope, rating, {col('yardage_total')},
+                   CASE WHEN {gender_expr} = 'F' THEN 1 ELSE 0 END,
+                   'import', {col('version_label')}, {col('valid_from')},
+                   {col('valid_to')}, {col('created_at', "datetime('now')")}
+              FROM course_tees""")
+        n_after = conn.execute("SELECT COUNT(*) FROM course_tees__v2").fetchone()[0]
+        conn.execute("DROP TABLE course_tees")
+        conn.execute("ALTER TABLE course_tees__v2 RENAME TO course_tees")
+        out.update(rebuilt=True, rows=n_after, dropped=n_before - n_after)
+        logger.info("course_tees rebuilt to the USGA/WHS shape: %d rows (%d dropped)",
+                    n_after, n_before - n_after)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_course_tees_course ON course_tees(course_id)")
+    # `holes` follows the rating (a nine rates under 50): a writer that
+    # forgot to set it, or a fixture, gets healed here rather than read
+    # wrong — the rating is the fact, holes is its label.
+    conn.execute("""UPDATE course_tees
+                       SET holes = CASE WHEN rating >= 50 THEN 18 ELSE 9 END
+                     WHERE rating IS NOT NULL
+                       AND holes != CASE WHEN rating >= 50 THEN 18 ELSE 9 END""")
+    for ddl in ("ALTER TABLE courses ADD COLUMN gg_course_id TEXT",
+                "ALTER TABLE courses ADD COLUMN usga_course_id TEXT",
+                "ALTER TABLE course_tees ADD COLUMN gg_alias TEXT",
+                "ALTER TABLE course_tees ADD COLUMN tgf_bands TEXT"):
+        try:
+            conn.execute(ddl)
+        except sqlite3.OperationalError:
+            pass
+    # v2.467.0 — the GG name becomes the ALIAS, the master name is the
+    # USGA / course name, and the number Kerry typed becomes the
+    # designation. Runs once per row: a row whose alias is set is done.
+    n_named = 0
+    for r in conn.execute("""SELECT tee_id, tee_name, usga_tee_label FROM course_tees
+                              WHERE gg_alias IS NULL AND tee_name IS NOT NULL""").fetchall():
+        parts = _gg_tee_parts(r["tee_name"])
+        if not parts["looks_gg"]:
+            continue
+        master = r["usga_tee_label"] or parts["master"]
+        bands = ",".join(parts["bands"]) or None
+        try:
+            with conn:
+                conn.execute("""UPDATE course_tees SET gg_alias = ?, tee_name = ?,
+                                       tgf_bands = COALESCE(tgf_bands, ?) WHERE tee_id = ?""",
+                             (r["tee_name"], master, bands, r["tee_id"]))
+        except sqlite3.IntegrityError:
+            # Two GG-named rows collapse to one master name on the same
+            # numbers: keep this one's GG name as its name, still alias it.
+            conn.execute("""UPDATE course_tees SET gg_alias = ?,
+                                   tgf_bands = COALESCE(tgf_bands, ?) WHERE tee_id = ?""",
+                         (r["tee_name"], bands, r["tee_id"]))
+        n_named += 1
+    if n_named:
+        out["aliased"] = n_named
+        logger.info("course_tees: %d GG tee names moved to gg_alias (master + bands set)",
+                    n_named)
+    conn.execute(TEE_SET_RATINGS_DDL)
+    # Every tee set carries its own TOTAL rating row (front/back rows come
+    # from a course card, the USGA CRDB seed, or store_tee_nines).
+    conn.execute("""
+        INSERT OR IGNORE INTO tee_set_ratings (tee_id, rating_type, course_rating, slope, source)
+        SELECT ct.tee_id, 'total', ct.rating, ct.slope, ct.source
+          FROM course_tees ct
+         WHERE ct.rating IS NOT NULL AND ct.slope IS NOT NULL
+           AND NOT EXISTS (SELECT 1 FROM tee_set_ratings r
+                            WHERE r.tee_id = ct.tee_id AND r.rating_type = 'total')""")
+    _heal_tee_yardages(conn)
+    return out
+
+
+def _heal_tee_yardages(conn: sqlite3.Connection) -> dict:
+    """THE YARDAGES WE HAVE, onto every set that lacks one (v2.468.0,
+    Kerry 2026-09-21: "you need to incorporate the yardages we have").
+    Yardage is a property of the PHYSICAL tee, not of the rating, so:
+    1. a set with hole rows and no total gets the sum of its holes;
+    2. a set with no yardage takes it from the same course's set of the
+       same master name and holes rated for the OTHER gender (Kissing
+       Tree "Back" F is the same box as "Back" M = GG's "1 - Black Tee");
+    3. every rating row gets its yardage — total from the set, front /
+       back from holes 1-9 / 10-18 when the set has hole rows, else from
+       the Tuesday nine-hole sibling of the same name + gender.
+    Combo sets (Back/KT) have no plain sibling and stay empty until the
+    CRDB pull supplies them. Idempotent: only NULLs are written, and a
+    row is counted only when a value was actually found."""
+    try:
+        conn.execute("ALTER TABLE tee_set_ratings ADD COLUMN yardage INTEGER")
+    except sqlite3.OperationalError:
+        pass
+    out = {"from_holes": 0, "from_sibling": 0, "rating_rows": 0}
+    holes_ok = ("(SELECT COUNT(*) FROM course_tee_holes h WHERE h.tee_id = course_tees.tee_id "
+                "AND h.yardage IS NOT NULL) = course_tees.holes")
+    cur = conn.execute(f"""
+        UPDATE course_tees SET yardage_total = (
+            SELECT SUM(h.yardage) FROM course_tee_holes h WHERE h.tee_id = course_tees.tee_id)
+         WHERE yardage_total IS NULL AND {holes_ok}""")
+    out["from_holes"] = cur.rowcount
+    sibling = """(SELECT o.yardage_total FROM course_tees o
+             WHERE o.course_id = course_tees.course_id AND o.tee_id != course_tees.tee_id
+               AND o.gender != course_tees.gender AND o.holes = course_tees.holes
+               AND COALESCE(o.nine, '') = COALESCE(course_tees.nine, '')
+               AND LOWER(TRIM(o.tee_name)) = LOWER(TRIM(course_tees.tee_name))
+               AND o.yardage_total IS NOT NULL
+             ORDER BY o.tee_id LIMIT 1)"""
+    cur = conn.execute(f"""
+        UPDATE course_tees SET yardage_total = {sibling}
+         WHERE yardage_total IS NULL AND is_combo = 0 AND {sibling} IS NOT NULL""")
+    out["from_sibling"] = cur.rowcount
+    total_src = "(SELECT ct.yardage_total FROM course_tees ct WHERE ct.tee_id = tee_set_ratings.tee_id)"
+    cur = conn.execute(f"""
+        UPDATE tee_set_ratings SET yardage = {total_src}
+         WHERE yardage IS NULL AND rating_type = 'total' AND {total_src} IS NOT NULL""")
+    out["rating_rows"] += cur.rowcount
+    for rtype, lo, hi in (("front", 1, 9), ("back", 10, 18)):
+        n_holes = (f"(SELECT COUNT(*) FROM course_tee_holes h WHERE h.tee_id = tee_set_ratings.tee_id "
+                   f"AND h.hole_number BETWEEN {lo} AND {hi} AND h.yardage IS NOT NULL)")
+        cur = conn.execute(f"""
+            UPDATE tee_set_ratings SET yardage = (
+                SELECT SUM(h.yardage) FROM course_tee_holes h
+                 WHERE h.tee_id = tee_set_ratings.tee_id
+                   AND h.hole_number BETWEEN {lo} AND {hi})
+             WHERE yardage IS NULL AND rating_type = '{rtype}' AND {n_holes} = 9""")
+        out["rating_rows"] += cur.rowcount
+        nine_src = f"""(SELECT n.yardage_total FROM course_tees n
+                  JOIN course_tees ct ON ct.tee_id = tee_set_ratings.tee_id
+                 WHERE n.course_id = ct.course_id AND n.holes = 9 AND n.gender = ct.gender
+                   AND n.nine = '{rtype}' AND n.yardage_total IS NOT NULL
+                   AND LOWER(TRIM(n.tee_name)) = LOWER(TRIM(ct.tee_name))
+                 ORDER BY n.tee_id LIMIT 1)"""
+        cur = conn.execute(f"""
+            UPDATE tee_set_ratings SET yardage = {nine_src}
+             WHERE yardage IS NULL AND rating_type = '{rtype}' AND {nine_src} IS NOT NULL""")
+        out["rating_rows"] += cur.rowcount
+    if any(out.values()):
+        logger.info("tee yardages healed: %s", out)
+    return out
+
 def _ensure_scoring_tables(conn: sqlite3.Connection) -> None:
     # NB: courses / course_aliases / events.course_id already exist as the
     # canonical course registry (Events tab datalist reads it) — the scoring
     # layer ENRICHES that table with tees, never duplicates it.
-    conn.execute("""CREATE TABLE IF NOT EXISTS course_tees (
-        tee_id        INTEGER PRIMARY KEY AUTOINCREMENT,
-        course_id     INTEGER NOT NULL REFERENCES courses(course_id),
-        tee_name      TEXT,
-        slope         INTEGER,
-        rating        REAL,
-        yardage_total INTEGER,
-        created_at    TEXT DEFAULT (datetime('now')),
-        UNIQUE(course_id, tee_name, slope, rating))""")
+    conn.execute("CREATE TABLE IF NOT EXISTS course_tees " + COURSE_TEES_DDL)
     conn.execute("""CREATE TABLE IF NOT EXISTS course_tee_holes (
         tee_id       INTEGER NOT NULL REFERENCES course_tees(tee_id),
         hole_number  INTEGER NOT NULL,
@@ -14764,6 +15716,9 @@ def _ensure_scoring_tables(conn: sqlite3.Connection) -> None:
         yardage      INTEGER,
         stroke_index INTEGER,
         PRIMARY KEY (tee_id, hole_number))""")
+    # v2.466.0 (mailbox #576, Kerry-ratified): a live DB still on the old
+    # shape is rebuilt in place; the ratings table is created and seeded.
+    _migrate_course_tees_v2(conn)
     conn.execute("""CREATE TABLE IF NOT EXISTS scoring_rounds (
         id               INTEGER PRIMARY KEY AUTOINCREMENT,
         customer_id      INTEGER REFERENCES customers(customer_id),
@@ -14938,19 +15893,83 @@ def get_championship_formulas(base: dict | None = None,
     return f
 
 
+# THE DAY THE PLUS RULE TOOK EFFECT (Kerry, ratified 2026-09-15; MVP
+# adoption "Proceed" 2026-09-16, forward only). Scoring that decided
+# money or a title before this date is frozen as it was decided
+# (guiding principle 4); from this date on, every game surface reads the
+# game view. Named here so no surface carries its own copy of the date.
+PLUS_RULE_EFFECTIVE_DATE = "2026-09-15"
+
+
+def plus_round_deduction(playing_handicap) -> int:
+    """Strokes a PLUS handicap gives back across the ROUND (v2.459.0).
+
+    THE one implementation of the round half of Kerry's plus rule. Every
+    game surface calls this rather than writing `int(round(abs(ph)))`
+    again, so the leaderboard, the live cards, the `/handicaps` scorecard
+    and the Players Cup card can never disagree about what a plus costs.
+
+    ROUNDING IS HALF AWAY FROM ZERO (Kerry 2026-09-16, CA Queue #5:
+    "Standard rounding where .5 goes away from 0"): a plus of 0.5 gives
+    back 1, 1.5 gives back 2, 2.4 gives back 2. Python's `round()` is
+    banker's rounding and would have made -0.5 cost nothing and -2.5
+    cost 2 — so it is not used here. This is the ROUND-LEVEL deduction
+    only; the per-player allowance rounding in ½ Net Skins is a
+    different mechanism and is still open (CA Queue #7).
+    """
+    if playing_handicap is None:
+        return 0
+    try:
+        ph = float(playing_handicap)
+    except (TypeError, ValueError):
+        return 0
+    return int(abs(ph) + 0.5) if ph < 0 else 0
+
+
 def compute_hole_derivations(par: int | None, strokes: int | None,
-                             strokes_received: int, formulas: dict) -> dict:
+                             strokes_received: int, formulas: dict,
+                             game: bool = False) -> dict:
     """Derived per-hole values — never stored, always computed through the
-    formula settings so the admin can retune without touching facts."""
+    formula settings so the admin can retune without touching facts.
+
+    `game=True` applies KERRY'S PLUS RULE (ratified 2026-09-15): *"For MVP
+    nobody is allowed to have to add strokes on any given hole, so there
+    should be no pluses on any holes. But his +3 PH still stands… his
+    total points gets deducted that 3 strokes. It's not fair to make a
+    player have to perform on any one hole, but it should be applied
+    across a round."*
+
+    A NEGATIVE `strokes_received` is a stroke GIVEN BACK. Left alone it
+    makes `net = strokes - (-1)` ADD a stroke on that hole and drops
+    `stableford_net` a rung — which is exactly what the rule forbids. So
+    under `game=True` the per-hole `net` / `net_vs_par` / `stableford_net`
+    read a give-back as ZERO, and the caller takes the plus off the ROUND
+    once via `plus_round_deduction`.
+
+    `adjusted_strokes` ALWAYS keeps the true `strokes_received`, in both
+    modes: USGA net double bogey is `par + 2 + strokes_received`, and for
+    a plus that legitimately lowers the cap. Changing it would corrupt
+    every differential and every index we have posted.
+
+    The flag is EXPLICIT and defaults to False so the WHS/index call
+    sites keep their behaviour by doing nothing — v2.450.0 patched two
+    game call sites locally and left nine others to guess, which is how
+    the `/handicaps` scorecard and the Players Cup card were still adding
+    a plus stroke hole by hole a day later.
+    """
     out = {"vs_par": None, "net_vs_par": None, "adjusted_strokes": strokes,
            "stableford_net": None, "stableford_gross": None}
     if par is None or strokes is None:
         return out
+    sr_true = strokes_received or 0
+    # The split: the game half never makes a hole harder; the handicap
+    # half must see the real allocation.
+    sr_play = max(0, sr_true) if game else sr_true
     out["vs_par"] = strokes - par
-    net = strokes - (strokes_received or 0)
+    net = strokes - sr_play
     out["net_vs_par"] = net - par
     if formulas.get("adjusted_gross_method") == "whs_net_double_bogey":
-        out["adjusted_strokes"] = min(strokes, par + 2 + (strokes_received or 0))
+        out["adjusted_strokes"] = min(strokes, par + 2 + sr_true)
     def _tbl(table, diff):
         keys = sorted(int(k) for k in table)
         d = max(keys[0], min(keys[-1], diff))
@@ -14973,6 +15992,34 @@ def compute_hole_derivations(par: int | None, strokes: int | None,
     return out
 
 
+def _adopt_crdb_tee_set(conn: sqlite3.Connection, course_id, tee_name: str,
+                        gender: str, slope, rating, dry_run: bool = False):
+    """A set the USGA CRDB seed wrote carries no Golf Genius name; GG
+    calls the same set "3 - Green Tee". When a GG writer misses on the
+    name but an 18-hole row of the same course, gender, slope and rating
+    has no GG alias yet, that row IS the set: GG's name goes on
+    `gg_alias` (the alias, v2.467.0 — the master name stays the
+    USGA / course one), the typed number becomes its designation if it
+    has none, and its tee_id comes back. Anything else — an aliased row,
+    a nine — is left alone. Returns None when nothing qualifies."""
+    if not tee_name or slope is None or rating is None:
+        return None
+    row = conn.execute(
+        """SELECT tee_id FROM course_tees
+            WHERE course_id = ? AND gender = ? AND holes = 18
+              AND slope IS ? AND rating IS ? AND gg_alias IS NULL
+            ORDER BY tee_id LIMIT 1""",
+        (course_id, gender, slope, rating)).fetchone()
+    if not row:
+        return None
+    if not dry_run:
+        parts = _gg_tee_parts(tee_name)
+        conn.execute("""UPDATE course_tees SET gg_alias = ?,
+                               tgf_bands = COALESCE(tgf_bands, ?) WHERE tee_id = ?""",
+                     (tee_name, ",".join(parts["bands"]) or None, row["tee_id"]))
+    return row["tee_id"]
+
+
 def _upsert_course_tee(conn: sqlite3.Connection, tee: dict) -> tuple:
     """Course DB accretes passively from tee blocks. Returns (course_id, tee_id)."""
     course_name = (tee.get("course") or "").strip()
@@ -14990,16 +16037,40 @@ def _upsert_course_tee(conn: sqlite3.Connection, tee: dict) -> tuple:
         course_id = conn.execute("INSERT INTO courses (name) VALUES (?)",
                                  (course_name,)).lastrowid
     yd = tee.get("yardage") or {}
-    conn.execute(
-        """INSERT OR IGNORE INTO course_tees (course_id, tee_name, slope, rating, yardage_total)
-           VALUES (?, ?, ?, ?, ?)""",
-        (course_id, tee.get("tee_name"), tee.get("slope"), tee.get("rating"),
-         sum(v for v in yd.values() if v) or None))
-    tee_id = conn.execute(
-        """SELECT tee_id FROM course_tees WHERE course_id = ? AND tee_name IS ?
-           AND slope IS ? AND rating IS ?""",
-        (course_id, tee.get("tee_name"), tee.get("slope"), tee.get("rating")),
-    ).fetchone()["tee_id"]
+    rating, slope = tee.get("rating"), tee.get("slope")
+    gender = _tee_gender_from_name(tee.get("tee_name"))
+    holes = 18 if (rating or 0) >= 50 else 9
+    # One tee set = one row: reuse a row of the same course, name, gender,
+    # holes and numbers whatever its nine label (the labeller sets that
+    # later); only insert when none exists.
+    gg_name = tee.get("tee_name")
+    parts = _gg_tee_parts(gg_name)
+    row = conn.execute(
+        """SELECT tee_id FROM course_tees WHERE course_id = ?
+           AND (gg_alias IS ? OR tee_name IS ?)
+           AND gender = ? AND holes = ? AND slope IS ? AND rating IS ?
+           ORDER BY tee_id LIMIT 1""",
+        (course_id, gg_name, gg_name, gender, holes, slope, rating)).fetchone()
+    if row:
+        tee_id = row["tee_id"]
+    elif holes == 18 and (tee_id := _adopt_crdb_tee_set(
+            conn, course_id, gg_name, gender, slope, rating)):
+        pass
+    else:
+        tee_id = conn.execute(
+            """INSERT INTO course_tees (course_id, tee_name, gg_alias, tgf_bands, gender,
+                                        holes, nine, slope, rating, yardage_total,
+                                        is_ladies, source)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'import')""",
+            (course_id, parts["master"], gg_name, ",".join(parts["bands"]) or None,
+             gender, holes, "full" if holes == 18 else None, slope, rating,
+             sum(v for v in yd.values() if v) or None,
+             1 if gender == "F" else 0)).lastrowid
+        if rating is not None and slope is not None:
+            conn.execute(
+                """INSERT OR IGNORE INTO tee_set_ratings
+                       (tee_id, rating_type, course_rating, slope, source)
+                   VALUES (?, 'total', ?, ?, 'import')""", (tee_id, rating, slope))
     par, si = tee.get("par") or {}, tee.get("stroke_index") or {}
     for hole in sorted(set(list(yd) + list(par) + list(si))):
         conn.execute(
@@ -15008,6 +16079,26 @@ def _upsert_course_tee(conn: sqlite3.Connection, tee: dict) -> tuple:
                VALUES (?, ?, ?, ?, ?)""",
             (tee_id, hole, par.get(hole), yd.get(hole), si.get(hole)))
     return course_id, tee_id
+
+
+# ── Participation: the ONE definition of "played" (participation.md) ──
+# Moved here from app.py in v2.464.0 so gg_history.participation_series
+# (MCP, no Flask app import) and the /participation page cannot drift.
+
+def _participation_event_filter_sql(alias: str = "i") -> str:
+    """SQL fragment selecting event-participation items only.
+
+    Excludes membership renewals, season contest enrollments, and child
+    payment rows. Both paid (active) and RSVP-only rows count as
+    "played" for the purposes of last-event / frequency.
+    """
+    return f"""
+        {alias}.customer_id IS NOT NULL
+        AND COALESCE({alias}.transaction_status, 'active') IN ('active', 'rsvp_only')
+        AND UPPER(COALESCE({alias}.item_name, '')) NOT LIKE '%MEMBERSHIP%'
+        AND UPPER(COALESCE({alias}.item_name, '')) NOT LIKE '%SEASON CONTEST%'
+        AND {alias}.parent_item_id IS NULL
+    """
 
 
 def _resolve_scoring_player(conn: sqlite3.Connection, gg_name: str) -> int | None:
@@ -15485,9 +16576,23 @@ def determine_tgf_mvp(event_name: str, db_path: str | Path = DB_PATH) -> dict:
         buyers_by_event = {d["item_name"]: _event_net_buyers(conn, d["item_name"])
                            for d in day}
 
+    # THE MVP READS THE GAME VIEW FROM THE DAY THE PLUS RULE TOOK EFFECT
+    # (Kerry 2026-09-16: "MVP - Proceed"). Before it, a plus player's
+    # points were the WHS hole-by-hole net (a plus stroke added to a
+    # hole); those events decided their MVPs on that arithmetic and stay
+    # decided. From `PLUS_RULE_EFFECTIVE_DATE` the points are the game
+    # view — no hole made harder, the plus taken off the round once —
+    # the same number the leaderboard and the card show.
+    _game_view = (ev.get("event_date") or "") >= PLUS_RULE_EFFECTIVE_DATE
+
     def _round_points(rd: dict) -> dict:
         card = get_scorecard(rd["id"], db_path=db_path)
-        pts = card["derived_totals"]["stableford_net"] if card else None
+        pts = None
+        if card:
+            dt = card["derived_totals"]
+            pts = (dt.get("game_stableford_net_after_plus")
+                   if _game_view and dt.get("game_stableford_net_after_plus")
+                   is not None else dt["stableford_net"])
         gross = rd["gross"]
         if gross is None and card:
             gross = sum(h["strokes"] for h in card["holes"]
@@ -15994,6 +17099,191 @@ def determine_event_game_results(event_name: str, game: str,
         return out
 
 
+def skins_audit(event_query: str, db_path: str | Path | None = None) -> dict:
+    """Why a hole is or is not a skin, per flight, with the recorded
+    payouts beside it (Kerry 2026-09-15: "Carlos's skin isn't circled.
+    Audit").
+
+    Read-only, and it asks THE GAME THE MATRIX ACTUALLY SELECTED.
+
+    It used to ask the gross question unconditionally. On a9.23 Avery Ranch
+    four players bought the gross bundle on a nine, so the side-games matrix
+    ran "SKINS 1/2 Net $" — a NET game — and this audit computed gross skins,
+    found three skins to one player, and concluded Golf Genius was
+    contradicting itself about Carlos Zapata's hole 7. Golf Genius was right.
+    Zapata made gross 4 on a par 4, received a stroke there, and netted an
+    outright birdie. The buyer count had silently changed which game was
+    played, and the rules of that game lived only in a GG settings screen.
+
+    So the audit now resolves the variant through `live_scoring.select_variant`
+    (buyer count -> which game), derives that game's OWN stroke allocation
+    through `live_scoring.game_handicaps` (pops are a property of the GAME,
+    not of the card), and prints both the gross and the playing score for
+    every hole so the two questions can never again be confused for each
+    other.
+    """
+    from . import live_scoring as _ls_mod
+
+    d = get_event_leaderboard(event_query, db_path=db_path)
+    if not d:
+        return {"error": "event not found"}
+    hole_cols = d.get("hole_cols") or []
+    cards = d.get("cards") or {}
+
+    def _stroke(rid, hn):
+        for h in (cards.get(str(rid)) or []):
+            if h[0] == hn:
+                return h[1]
+        return None
+
+    # Playing handicap + this course/tee's stroke index, straight from the
+    # rounds, because the GAME derives its own pops and cannot borrow the
+    # card's (those belong to whatever net game the card was built for).
+    ph_by_rid: dict = {}
+    si_by_rid: dict = {}
+    conn = get_connection(db_path)
+    try:
+        for rid in list(cards.keys()):
+            row = conn.execute(
+                "SELECT playing_handicap, tee_id FROM scoring_rounds "
+                "WHERE id = ?", (int(rid),)).fetchone()
+            if not row:
+                continue
+            ph_by_rid[str(rid)] = row[0]
+            si = {}
+            for hn, sidx in conn.execute(
+                    "SELECT hole_number, stroke_index FROM course_tee_holes "
+                    "WHERE tee_id = ? AND stroke_index IS NOT NULL",
+                    (row[1],)):
+                if hn in hole_cols:
+                    si[hn] = sidx
+            si_by_rid[str(rid)] = si
+    finally:
+        conn.close()
+
+    n_gross_buyers = d.get("n_gross_buyers") or 0
+    holes_key = "18" if len(hole_cols) > 9 else "9"
+    gcfg = (_ls_mod.SEED_LIVE_SCORING_CONFIG["games"].get("skins") or {})
+    variant = _ls_mod.select_variant(gcfg, holes_key, n_gross_buyers)
+    hcfg = variant.get("handicap")
+
+    flights = []
+    for sec in (d.get("skins_board") or []):
+        buyers = [r for r in sec["rows"] if r.get("buyer")]
+        placed = [r for r in sec["rows"] if not r.get("buyer")]
+
+        # This flight's own allocation under the selected variant's dials.
+        si_union: dict = {}
+        for r in buyers:
+            si_union.update(si_by_rid.get(str(r["scoring_round_id"])) or {})
+        pseudo = [{"key": str(r["scoring_round_id"]),
+                   "playing_handicap": ph_by_rid.get(str(r["scoring_round_id"]))}
+                  for r in buyers]
+        hcaps = _ls_mod.game_handicaps(pseudo, hcfg, si_union)
+
+        def _pops(rid, hn):
+            return ((hcaps["by_key"].get(str(rid)) or {})
+                    .get("by_hole", {}).get(hn, 0) or 0)
+
+        holes = []
+        for hn in hole_cols:
+            scores, gross_scores, pops_at = {}, {}, {}
+            for r in buyers:
+                st = _stroke(r["scoring_round_id"], hn)
+                if st is None:
+                    continue
+                pops = _pops(r["scoring_round_id"], hn)
+                gross_scores[r["player_name"]] = st
+                pops_at[r["player_name"]] = pops
+                scores[r["player_name"]] = st - pops
+            if not scores:
+                holes.append({"hole": hn, "verdict": "no scores posted"})
+                continue
+            low = min(scores.values())
+            holders = [n for n, v in scores.items() if v == low]
+            entry = {
+                "hole": hn,
+                "gross": gross_scores,
+                "low": low,
+                "verdict": ("SKIN \u2014 " + holders[0]) if len(holders) == 1
+                           else "tied \u2014 " + ", ".join(sorted(holders)),
+                "winner": holders[0] if len(holders) == 1 else None,
+            }
+            if variant.get("basis") == "net":
+                entry["pops"] = {k: v for k, v in pops_at.items() if v}
+                entry["net"] = scores
+            else:
+                # Gross game: the playing score IS the gross. Keep the old
+                # key so existing readers of this bridge do not break.
+                entry["scores"] = gross_scores
+            holes.append(entry)
+        won = {}
+        for h in holes:
+            if h.get("winner"):
+                won[h["winner"]] = won.get(h["winner"], 0) + 1
+        flights.append({
+            "flight": sec.get("label"),
+            "buyers": [r["player_name"] for r in buyers],
+            "placed_non_buyers": [r["player_name"] for r in placed],
+            "playing_handicaps": {
+                r["player_name"]: {
+                    "playing_handicap": ph_by_rid.get(
+                        str(r["scoring_round_id"])),
+                    "game_strokes": (hcaps["by_key"].get(
+                        str(r["scoring_round_id"])) or {}).get("strokes"),
+                } for r in buyers},
+            "holes": holes,
+            "computed_skins": won,
+            "computed_total": sum(won.values()),
+        })
+
+    # What the board is actually SHOWING (the circles) and what money is
+    # recorded against skins, so the three can be compared in one read.
+    circles = {}
+    for sec in (d.get("skins_board") or []):
+        for r in sec["rows"]:
+            hl = (d.get("skin_cells") or {}).get(str(r["scoring_round_id"])) or []
+            if hl or r.get("win_skins"):
+                circles[r["player_name"]] = {
+                    "circled_holes": hl,
+                    "win_skins_recorded": bool(r.get("win_skins")),
+                    "money": round(sum(
+                        w["cents"] for w in (r.get("won") or [])
+                        if "skin" in (w.get("label") or "").lower()) / 100.0, 2),
+                }
+
+    warnings = []
+    if hcfg and not hcfg.get("rounding_ratified", True):
+        warnings.append(
+            "The half-stroke ROUNDING under this allowance is NOT ratified "
+            "(CA Queue #7) \u2014 the skins below are provisional. a9.23 proves "
+            "only that 0.5 rounds DOWN.")
+
+    note = ("computed_skins is the rule for THE GAME THE MATRIX SELECTED, "
+            "printed under `game` below \u2014 not gross unless gross is what "
+            "the buyer count selected. A player with money but no circled "
+            "hole means our board and the recorded payout disagree; check "
+            "`game` FIRST, then look at the tied holes.")
+    return {"event": d.get("event_name") or d.get("event") or event_query,
+            "holes_in_play": hole_cols,
+            "game": {
+                "variant": variant.get("name"),
+                "label": variant.get("label"),
+                "gg_name": variant.get("gg_name"),
+                "basis": variant.get("basis"),
+                "pops_per_hole": gcfg.get("pops_per_hole", True),
+                "gross_buyers": n_gross_buyers,
+                "selection": variant.get("selection"),
+                "handicap": hcfg,
+                "handicap_ratified": (
+                    True if not hcfg else hcfg.get("rounding_ratified", True)),
+            },
+            "flights": flights,
+            "board": circles,
+            "warnings": warnings,
+            "note": note}
+
+
 def _flight_skins(conn, group: list[dict]) -> dict:
     """Gross skins within one flight: a hole's outright lowest gross
     wins a skin; any tie kills the hole. Returns skins + per-player
@@ -16385,6 +17675,25 @@ def import_gg_game_results(widget_url: str, db_path: str | Path = DB_PATH,
                            DO UPDATE SET purse = excluded.purse,
                                          position = excluded.position,
                                          detail = excluded.detail,
+                                         -- WHICH SIDE OF THE BOARD A TEAM IS
+                                         -- ON MUST FOLLOW THE LATEST WALK
+                                         -- (Kerry 2026-09-16: "all sorts of
+                                         -- stuff about winnings is off because
+                                         -- we pulled stuff too soon from GG").
+                                         -- `game` was excluded from this
+                                         -- update, so a team stored during a
+                                         -- live round kept that label for
+                                         -- good: s9.23's real winner was
+                                         -- captured as a $0 board row early
+                                         -- on and stayed 'team_net_board'
+                                         -- even after GG posted their $84,
+                                         -- while a team that happened to lead
+                                         -- at the time stayed 'team_net' at
+                                         -- $0 — and the payout assembly reads
+                                         -- 'team_net'. A snapshot of a round
+                                         -- in progress must never outrank the
+                                         -- finished board.
+                                         game = excluded.game,
                                          customer_id = COALESCE(excluded.customer_id, gg_game_results.customer_id),
                                          event_id = COALESCE(excluded.event_id, gg_game_results.event_id)""",
                         (ev_id, ev_code, rid, tid, game, text,
@@ -16420,8 +17729,15 @@ def import_gg_game_results(widget_url: str, db_path: str | Path = DB_PATH,
                     for table in tstruct.get("tables") or []:
                         board.extend(r for r in _game_winners_from_table(
                             table, winners_only=False) if r["is_team"])
+                    # A team in the CURRENT winner set keeps its team_net
+                    # row; every other team is (re)filed as board — which
+                    # is how a former live-round "winner" gets demoted
+                    # once the real result posts.
+                    _winner_names = {w["player"] for w in fresh if w["is_team"]}
                     for b in board:
                         board_names.append(b["player"])
+                        if b["player"] in _winner_names:
+                            continue
                         conn.execute(
                             """INSERT INTO gg_game_results
                                    (event_id, event_code, gg_round_id,
@@ -16432,7 +17748,8 @@ def import_gg_game_results(widget_url: str, db_path: str | Path = DB_PATH,
                                ON CONFLICT (gg_tournament_id, player_name)
                                DO UPDATE SET purse = excluded.purse,
                                              position = excluded.position,
-                                             detail = excluded.detail""",
+                                             detail = excluded.detail,
+                                             game = excluded.game""",
                             (ev_id, ev_code, rid, tid, "team_net_board",
                              text, None, b["player"], 1, b["chapter"],
                              b["position"],
@@ -20232,7 +21549,370 @@ _VAALER_PER_NINE = {
 }
 
 
-def derive_18hole_rounds_as_two_nines(event_query: str, per_nine: dict,
+def resolve_per_nine_from_course_tees(conn, course_id: int) -> dict:
+    """Per-nine course rating + slope for every 18-hole tee of a course,
+    READ OFF THE COURSE RECORD — never asked for, never guessed.
+
+    Kerry 2026-09-19: "Aren't we checking course_ids and their information
+    for course info for ratings and indexes as a standard?" Yes. Golf
+    Genius files each nine-hole night as its own `course_tees` row (same
+    tee name, rating under 50), so a course TGF plays on Tuesdays already
+    carries front and back ratings beside its 18-hole row. Cedar Creek
+    s18.11 was asked for twice before this existed.
+
+    `label_course_tee_nines` decides which nine each row is (yardage,
+    then ratings, then the rounds played off it). This pairs one FRONT
+    and one BACK row with each FULL row of the same tee name and accepts
+    the pair only when front + back equals the 18-hole rating (± 0.15)
+    — the same corroboration the labeller uses. Two pairs that both fit
+    (a re-rated tee) are an ambiguity, reported, never picked.
+
+    Returns {"per_nine": {full_tee_id: {"front": (r, s), "back": (r, s)}},
+             "derivation": [...per full tee...], "unresolved": [...]}."""
+    # v2.466.0 (USGA/WHS shape, mailbox #576): the FRONT and BACK rating
+    # rows sit on the 18-hole set itself in tee_set_ratings (a course
+    # card, the USGA CRDB seed or store_tee_nines put them there). Only a
+    # set with none falls back to pairing the course's Tuesday nine-hole
+    # rows of the same tee name AND GENDER.
+    _migrate_course_tees_v2(conn)
+    label_course_tee_nines(conn, course_id)
+    rows = [dict(r) for r in conn.execute(
+        "SELECT tee_id, tee_name, gender, holes, rating, slope, yardage_total, nine, source "
+        "FROM course_tees WHERE course_id = ?", (course_id,)).fetchall()]
+    ratings: dict = {}
+    for r in conn.execute(
+            """SELECT r.tee_id, r.rating_type, r.course_rating, r.slope, r.source
+                 FROM tee_set_ratings r JOIN course_tees ct ON ct.tee_id = r.tee_id
+                WHERE ct.course_id = ?""", (course_id,)).fetchall():
+        ratings.setdefault(r["tee_id"], {})[r["rating_type"]] = dict(r)
+
+    def _key(r):
+        return (r.get("gender") or "M", _TEE_ORDER_RE.sub("", " ".join(
+            (r["tee_name"] or "").split())).strip().lower())
+
+    groups: dict = {}
+    for r in rows:
+        groups.setdefault(_key(r), []).append(r)
+    per_nine: dict = {}
+    derivation: list = []
+    unresolved: list = []
+    for key, grp in groups.items():
+        fulls = [r for r in grp if int(r["holes"] or 0) == 18 or (r["rating"] or 0) >= 50]
+        fronts = [r for r in grp if (r["nine"] or "") in ("front", "both")]
+        backs = [r for r in grp if (r["nine"] or "") in ("back", "both")]
+        for full in fulls:
+            if not full["rating"] or not full["slope"]:
+                unresolved.append({"tee_id": full["tee_id"], "tee_name": full["tee_name"],
+                                   "gender": full["gender"],
+                                   "why": "18-hole row has no rating/slope"})
+                continue
+            rr = ratings.get(full["tee_id"], {})
+            if "front" in rr and "back" in rr:
+                fr, bk = rr["front"], rr["back"]
+                per_nine[int(full["tee_id"])] = {
+                    "front": (float(fr["course_rating"]), int(fr["slope"])),
+                    "back": (float(bk["course_rating"]), int(bk["slope"]))}
+                derivation.append({
+                    "tee_id": full["tee_id"], "tee_name": full["tee_name"],
+                    "gender": full["gender"], "rating_18": full["rating"],
+                    "slope_18": full["slope"], "how": "tee_set_ratings",
+                    "front": {"rating": fr["course_rating"], "slope": fr["slope"],
+                              "source": fr["source"]},
+                    "back": {"rating": bk["course_rating"], "slope": bk["slope"],
+                             "source": bk["source"]},
+                    "check": f"{fr['course_rating']} + {bk['course_rating']} = "
+                             f"{round(fr['course_rating'] + bk['course_rating'], 1)} "
+                             f"vs {full['rating']}"})
+                continue
+            fits = []
+            for fr in fronts:
+                for bk in backs:
+                    if fr is bk and (fr["nine"] or "") != "both":
+                        continue
+                    if not (fr["rating"] and bk["rating"] and fr["slope"] and bk["slope"]):
+                        continue
+                    if abs((fr["rating"] + bk["rating"]) - full["rating"]) <= 0.15:
+                        fits.append((fr, bk))
+            if len(fits) > 1:
+                # A re-rated tee can leave two pairs that both sum to the
+                # 18; the slopes then have to agree with the 18's too.
+                fits = [(fr, bk) for fr, bk in fits
+                        if abs((fr["slope"] + bk["slope"]) / 2.0 - full["slope"]) <= 1.0] or fits
+            if len(fits) == 1:
+                fr, bk = fits[0]
+                per_nine[int(full["tee_id"])] = {
+                    "front": (float(fr["rating"]), int(fr["slope"])),
+                    "back": (float(bk["rating"]), int(bk["slope"]))}
+                derivation.append({
+                    "tee_id": full["tee_id"], "tee_name": full["tee_name"],
+                    "gender": full["gender"], "rating_18": full["rating"],
+                    "slope_18": full["slope"], "how": "paired nine-hole rows",
+                    "front": {"tee_id": fr["tee_id"], "rating": fr["rating"], "slope": fr["slope"]},
+                    "back": {"tee_id": bk["tee_id"], "rating": bk["rating"], "slope": bk["slope"]},
+                    "check": f"{fr['rating']} + {bk['rating']} = "
+                             f"{round(fr['rating'] + bk['rating'], 1)} vs {full['rating']}"})
+            elif not fits:
+                unresolved.append({
+                    "tee_id": full["tee_id"], "tee_name": full["tee_name"],
+                    "gender": full["gender"],
+                    "why": (f"no front/back rating rows on the set and no nine-hole pair "
+                            f"sums to the 18-hole rating {full['rating']} (fronts "
+                            f"{[f['rating'] for f in fronts]}, backs "
+                            f"{[b['rating'] for b in backs]})")})
+            else:
+                unresolved.append({
+                    "tee_id": full["tee_id"], "tee_name": full["tee_name"],
+                    "gender": full["gender"],
+                    "why": f"{len(fits)} front+back pairs fit the 18-hole rating "
+                           f"{full['rating']} — ambiguous, not guessing",
+                    "pairs": [[fr["tee_id"], bk["tee_id"]] for fr, bk in fits]})
+    return {"course_id": course_id, "per_nine": per_nine,
+            "derivation": derivation, "unresolved": unresolved}
+
+
+def store_tee_nines(conn, full_tee_id: int, front: tuple, back: tuple,
+                    dry_run: bool = True, note: str = "", bogey=None,
+                    source: str = "admin") -> dict:
+    """Put a tee set's FRONT and BACK ratings on the record — as rating
+    rows on the 18-hole tee set (USGA/WHS shape, v2.466.0), each with its
+    own slope. Refuses a pair that does not sum to the 18-hole rating
+    (± 0.15). Dry run by default; `source` is 'admin' (Kerry's read off
+    GG) or 'usga_crdb'. Identical halves are simply two rows now —
+    Kerry 2026-09-19: "I want to make sure we have all the data."."""
+    _migrate_course_tees_v2(conn)
+    full = conn.execute(
+        "SELECT tee_id, course_id, tee_name, gender, holes, rating, slope "
+        "FROM course_tees WHERE tee_id = ?", (full_tee_id,)).fetchone()
+    if not full:
+        return {"ok": False, "error": f"no course_tees row {full_tee_id}"}
+    if (full["rating"] or 0) < 50:
+        return {"ok": False, "error": f"tee {full_tee_id} ({full['tee_name']}) is a "
+                                      f"nine-hole set (rating {full['rating']}), not an 18"}
+    fr, fs = float(front[0]), int(front[1])
+    br, bs = float(back[0]), int(back[1])
+    if abs((fr + br) - float(full["rating"])) > 0.15:
+        return {"ok": False, "error": f"front {fr} + back {br} = {round(fr + br, 1)} does not "
+                                      f"equal the 18-hole rating {full['rating']} — not storing"}
+    out = {"ok": True, "dry_run": dry_run, "tee_id": full_tee_id,
+           "course_id": full["course_id"], "tee_name": full["tee_name"],
+           "gender": full["gender"], "rating_18": full["rating"],
+           "slope_18": full["slope"], "rows": []}
+    for rtype, (r, sl) in (("front", (fr, fs)), ("back", (br, bs))):
+        cur = conn.execute(
+            "SELECT course_rating, slope, source FROM tee_set_ratings "
+            "WHERE tee_id = ? AND rating_type = ?", (full_tee_id, rtype)).fetchone()
+        if cur and float(cur["course_rating"]) == r and int(cur["slope"]) == sl:
+            out["rows"].append({"rating_type": rtype, "rating": r, "slope": sl,
+                                "action": f"kept (already on record, source {cur['source']})"})
+            continue
+        action = (("would replace" if cur else "would insert") if dry_run
+                  else ("replaced" if cur else "inserted"))
+        if cur:
+            action += f" (was {cur['course_rating']}/{cur['slope']}, {cur['source']})"
+        if not dry_run:
+            conn.execute(
+                """INSERT OR REPLACE INTO tee_set_ratings
+                       (tee_id, rating_type, course_rating, slope, bogey_rating, source)
+                   VALUES (?, ?, ?, ?, NULL, ?)""", (full_tee_id, rtype, r, sl, source))
+        out["rows"].append({"rating_type": rtype, "rating": r, "slope": sl, "action": action})
+    if not dry_run:
+        conn.execute(
+            """INSERT OR IGNORE INTO tee_set_ratings
+                   (tee_id, rating_type, course_rating, slope, source)
+               VALUES (?, 'total', ?, ?, ?)""",
+            (full_tee_id, full["rating"], full["slope"], source))
+        if bogey is not None:
+            conn.execute("UPDATE tee_set_ratings SET bogey_rating = ? WHERE tee_id = ? "
+                         "AND rating_type = 'total'", (float(bogey), full_tee_id))
+            conn.execute("UPDATE course_tees SET bogey_rating = ? WHERE tee_id = ?",
+                         (float(bogey), full_tee_id))
+        try:
+            log_agent_action("mcp-claude", "store_tee_nines",
+                             f"tee {full_tee_id} {full['tee_name']} {full['gender']} "
+                             f"front {fr}/{fs} back {br}/{bs} {source} {note}".strip())
+        except Exception:
+            pass
+        _heal_tee_yardages(conn)
+        conn.commit()
+    return out
+
+
+# USGA Course Rating Database (ncrdb.usga.org) — the source of record for
+# course data (mailbox #576, Kerry 2026-09-19). Each set: name, gender,
+# 18 rating, 18 slope, bogey, (front rating, slope), (back rating, slope).
+# Numbers pulled by Kerry; every front+back sum checked by CA (#576) and
+# re-checked by seed_usga_crdb before a row is written. Keyed by the
+# Tracker course_id.
+USGA_CRDB_SEEDS = {
+    22362: {"course": "Kissing Tree Golf Club", "par": 72, "sets": [
+        ("Back", "M", 71.4, 143, 98.0, (35.6, 144), (35.8, 142)),
+        ("Back/KT", "M", 69.9, 135, 94.9, (35.1, 140), (34.8, 129)),
+        ("KT", "M", 69.4, 124, 92.3, (35.0, 125), (34.4, 122)),
+        ("KT/Legends", "M", 68.1, 121, 90.6, (34.3, 123), (33.8, 119)),
+        ("Legends", "M", 66.9, 118, 88.8, (33.6, 119), (33.3, 116)),
+        ("Legends/Forward", "M", 66.4, 110, 86.7, (33.3, 111), (33.1, 108)),
+        ("Forward", "M", 65.1, 101, 83.8, (32.4, 101), (32.7, 100)),
+        ("Back", "F", 78.3, 150, 113.7, (39.0, 149), (39.3, 151)),
+        ("Back/KT", "F", 76.6, 147, 111.1, (38.4, 147), (38.2, 146)),
+        ("KT", "F", 75.5, 145, 109.6, (37.7, 143), (37.8, 146)),
+        ("KT/Legends", "F", 73.4, 137, 105.8, (36.7, 132), (36.7, 142)),
+        ("Legends", "F", 71.3, 134, 102.8, (35.6, 134), (35.7, 133)),
+        ("Legends/Forward", "F", 70.2, 126, 99.8, (35.1, 126), (35.1, 126)),
+        ("Forward", "F", 68.7, 118, 96.5, (34.3, 120), (34.4, 116)),
+    ]},
+    29522: {"course": "Forest Creek Golf Club", "par": 72, "sets": [
+        ("Blue", "M", 72.2, 132, 96.8, (35.9, 133), (36.3, 131)),
+        ("White", "M", 70.4, 125, 93.6, (35.2, 125), (35.2, 125)),
+        ("Green", "M", 68.5, 120, 90.8, (34.3, 119), (34.2, 121)),
+        ("Red", "M", 65.2, 113, 86.1, (32.8, 111), (32.4, 114)),
+        ("White", "F", 75.6, 138, 108.0, (37.7, 139), (37.9, 136)),
+        ("Green", "F", 72.7, 133, 104.0, (36.2, 134), (36.5, 131)),
+        ("Red", "F", 68.5, 121, 97.0, (34.1, 121), (34.4, 120)),
+    ]},
+}
+
+
+def seed_usga_crdb(conn, course_id: int, sets: list | None = None,
+                   dry_run: bool = True) -> dict:
+    """Write a course's USGA CRDB tee sets onto the record. Each set is
+    (name, gender, r18, s18, bogey, (fr, fs), (br, bs)[, (y18, yf, yb)]) — from
+    USGA_CRDB_SEEDS when `sets` is None. An existing 18-hole row is
+    matched by (gender, rating, slope) first, then by name + gender; a
+    set with no row is inserted as a new tee set (source 'usga_crdb',
+    combo names like 'Back/KT' flagged is_combo). Every set gets its
+    total / front / back rating rows with bogey. Dry run by default."""
+    _migrate_course_tees_v2(conn)
+    seed = (USGA_CRDB_SEEDS.get(int(course_id)) if sets is None
+            else {"sets": sets, "par": None})
+    if not seed:
+        return {"ok": False, "error": f"no USGA CRDB seed for course {course_id}",
+                "known": {k: v["course"] for k, v in USGA_CRDB_SEEDS.items()}}
+    course = conn.execute("SELECT course_id, name FROM courses WHERE course_id = ?",
+                          (course_id,)).fetchone()
+    if not course:
+        return {"ok": False, "error": f"no courses row {course_id}"}
+    par = seed.get("par")
+    out = {"ok": True, "dry_run": dry_run, "course_id": course_id,
+           "course": course["name"], "sets": []}
+    existing = [dict(r) for r in conn.execute(
+        "SELECT tee_id, tee_name, gg_alias, gender, rating, slope, usga_tee_label "
+        "FROM course_tees WHERE course_id = ? AND holes = 18", (course_id,)).fetchall()]
+    used: set = set()
+
+    def _norm(n):
+        n = _TEE_ORDER_RE.sub("", " ".join((n or "").split())).strip().lower()
+        for junk in (" tee", "(l)", "(kt)", "(legends)"):
+            n = n.replace(junk, "")
+        return " ".join(n.split())
+
+    for row in seed["sets"]:
+        name, gender, r18, s18, bogey, (fr, fs), (br, bs) = row[:7]
+        # Optional 8th element: (yards 18, yards front, yards back) — the
+        # CRDB lists them beside the ratings; None where not supplied.
+        y18, yf, yb = (tuple(row[7]) + (None, None, None))[:3] if len(row) > 7 and row[7] else (None, None, None)
+        if abs((fr + br) - r18) > 0.15:
+            out["sets"].append({"name": name, "gender": gender,
+                                "error": f"front {fr} + back {br} != 18 {r18} — skipped"})
+            continue
+        match = next((e for e in existing if e["tee_id"] not in used
+                      and e["gender"] == gender and float(e["rating"] or 0) == r18
+                      and int(e["slope"] or 0) == s18), None)
+        how = "matched by gender + rating/slope" if match else None
+        if not match:
+            match = next((e for e in existing if e["tee_id"] not in used
+                          and e["gender"] == gender
+                          and (_norm(e["tee_name"]) == name.lower()
+                               or _norm(e["gg_alias"]) == name.lower()
+                               or (e["usga_tee_label"] or "").lower() == name.lower())), None)
+            how = "matched by name + gender" if match else None
+        entry = {"name": name, "gender": gender, "r18": r18, "s18": s18, "bogey": bogey,
+                 "front": [fr, fs], "back": [br, bs]}
+        if y18:
+            entry["yards"] = [y18, yf, yb]
+        tee_id = None
+        if match:
+            used.add(match["tee_id"])
+            tee_id = match["tee_id"]
+            entry.update(tee_id=tee_id, existing_name=match["tee_name"], action=how)
+            if float(match["rating"] or 0) != r18 or int(match["slope"] or 0) != s18:
+                entry["note"] = (f"record has {match['rating']}/{match['slope']}; CRDB says "
+                                 f"{r18}/{s18} — rating rows corrected, tee row kept")
+        else:
+            entry.update(action="would insert" if dry_run else "inserted",
+                         is_combo=1 if "/" in name else 0)
+            if not dry_run:
+                tee_id = conn.execute(
+                    """INSERT INTO course_tees (course_id, tee_name, gender, holes, nine, par,
+                                                slope, rating, bogey_rating, is_combo,
+                                                is_ladies, usga_tee_label, source)
+                       VALUES (?, ?, ?, 18, 'full', ?, ?, ?, ?, ?, ?, ?, 'usga_crdb')""",
+                    (course_id, name, gender, par, s18, r18, bogey, 1 if "/" in name else 0,
+                     1 if gender == "F" else 0, name)).lastrowid
+                entry["tee_id"] = tee_id
+        if not dry_run and tee_id is not None:
+            conn.execute("""UPDATE course_tees SET usga_tee_label = ?, bogey_rating = ?,
+                                   par = COALESCE(?, par),
+                                   yardage_total = COALESCE(?, yardage_total)
+                             WHERE tee_id = ?""",
+                         (name, bogey, par, y18, tee_id))
+            for rtype, cr, sl, bg, yd in (("total", r18, s18, bogey, y18),
+                                          ("front", fr, fs, None, yf),
+                                          ("back", br, bs, None, yb)):
+                conn.execute(
+                    """INSERT OR REPLACE INTO tee_set_ratings
+                           (tee_id, rating_type, course_rating, slope, bogey_rating, yardage, source)
+                       VALUES (?, ?, ?, ?, ?, COALESCE(?, (SELECT yardage FROM tee_set_ratings
+                                                          WHERE tee_id = ? AND rating_type = ?)),
+                               'usga_crdb')""", (tee_id, rtype, cr, sl, bg, yd, tee_id, rtype))
+        out["sets"].append(entry)
+    if not dry_run:
+        _heal_tee_yardages(conn)
+        try:
+            log_agent_action("mcp-claude", "seed_usga_crdb",
+                             f"course {course_id} {course['name']}: {len(out['sets'])} sets")
+        except Exception:
+            pass
+        conn.commit()
+    return out
+
+
+def audit_course_per_nine(conn, only_played: bool = True) -> dict:
+    """Every course with an 18-hole tee row: which tees resolve their
+    front/back nines off the record and which do not, with the reason.
+    Read-only (the labeller it runs writes only `course_tees.nine`).
+    Courses with upcoming events are listed first so the gap that
+    matters next is at the top."""
+    where = " WHERE ct.rating >= 50"
+    courses = [dict(r) for r in conn.execute(
+        f"""SELECT c.course_id, c.name,
+                   (SELECT COUNT(*) FROM scoring_rounds sr WHERE sr.course_id = c.course_id) AS n_rounds,
+                   (SELECT MIN(e.event_date) FROM events e
+                     WHERE e.course_id = c.course_id AND e.event_date >= date('now')) AS next_event_date,
+                   (SELECT e.item_name FROM events e
+                     WHERE e.course_id = c.course_id AND e.event_date >= date('now')
+                     ORDER BY e.event_date LIMIT 1) AS next_event
+              FROM courses c
+             WHERE EXISTS (SELECT 1 FROM course_tees ct WHERE ct.course_id = c.course_id {where.replace(' WHERE', ' AND')})
+             ORDER BY c.course_id""").fetchall()]
+    out = []
+    for c in courses:
+        if only_played and not c["n_rounds"] and not c["next_event"]:
+            continue
+        res = resolve_per_nine_from_course_tees(conn, int(c["course_id"]))
+        out.append({**c, "resolved": [
+            {"tee_id": d["tee_id"], "tee": d["tee_name"], "gender": d.get("gender"),
+             "how": d.get("how"), "front": d["front"], "back": d["back"],
+             "check": d["check"]} for d in res["derivation"]],
+            "unresolved": res["unresolved"]})
+    out.sort(key=lambda c: (c["next_event_date"] is None, c["next_event_date"] or "",
+                            -(c["n_rounds"] or 0)))
+    return {"courses": out,
+            "n_courses": len(out),
+            "n_tees_resolved": sum(len(c["resolved"]) for c in out),
+            "n_tees_unresolved": sum(len(c["unresolved"]) for c in out)}
+
+
+def derive_18hole_rounds_as_two_nines(event_query: str, per_nine: dict | None = None,
                                       dry_run: bool = True,
                                       db_path: str | Path = DB_PATH) -> dict:
     """Post an 18-hole event as TWO 9-hole handicap_rounds per player (front +
@@ -20241,8 +21921,11 @@ def derive_18hole_rounds_as_two_nines(event_query: str, per_nine: dict,
     path deliberately skips 18-hole rounds, and this is the companion for them.
 
     `per_nine` maps tee_id -> {"front": (rating, slope), "back": (rating, slope)}.
-    A round on a tee absent from `per_nine` is SKIPPED and listed — never guess
-    a rating. Same WHS math as the 9-hole path (per-hole net-double-bogey via
+    Pass None (the standard since v2.465.17) and the map is READ OFF THE
+    COURSE RECORD by `resolve_per_nine_from_course_tees` for every course
+    the event's rounds were played on; an explicit map is merged OVER it
+    (a hand-read value wins). A round on a tee absent from both is SKIPPED
+    and listed — never guess a rating. Same WHS math as the 9-hole path (per-hole net-double-bogey via
     compute_hole_derivations; differential = (adjusted_9 - rating_9)*113/slope_9)
     and the same identity-reuse + dedup rules; the two rows get distinct tee
     labels ("<tee> — Front 9" / "<tee> — Back 9") so re-runs dedupe cleanly.
@@ -20262,6 +21945,7 @@ def derive_18hole_rounds_as_two_nines(event_query: str, per_nine: dict,
         rounds = conn.execute(
             """SELECT sr.id AS srid, sr.player_name, sr.customer_id,
                       sr.round_date, sr.holes_played, sr.gross, sr.tee_id,
+                      sr.course_id,
                       COALESCE(sr.hcp_exclude, 0) AS hcp_exclude,
                       sr.hcp_exclude_note,
                       e.item_name AS event_name, c.name AS course_name,
@@ -20276,6 +21960,25 @@ def derive_18hole_rounds_as_two_nines(event_query: str, per_nine: dict,
         if not rounds:
             return {"error": f"no imported scoring rounds match event "
                              f"{event_query!r} — run the scorecard import first"}
+
+        # The course record is the source of the per-nine numbers; a map
+        # passed by hand only overrides it.
+        per_nine_source: dict = {"courses": [], "explicit_tee_ids": sorted(
+            int(k) for k in (per_nine or {}).keys())}
+        resolved: dict = {}
+        for cid in sorted({r["course_id"] for r in rounds
+                           if r["course_id"] and (r["holes_played"] or 0) > 9}):
+            try:
+                res = resolve_per_nine_from_course_tees(conn, int(cid))
+            except Exception as exc:  # never let the lookup sink the posting
+                logger.exception("per-nine resolve failed for course %s", cid)
+                res = {"course_id": cid, "per_nine": {}, "derivation": [],
+                       "unresolved": [{"why": f"resolver error: {exc}"}]}
+            resolved.update(res["per_nine"])
+            per_nine_source["courses"].append(
+                {"course_id": cid, "derivation": res["derivation"],
+                 "unresolved": res["unresolved"]})
+        per_nine = {**resolved, **{int(k): v for k, v in (per_nine or {}).items()}}
 
         for r in rounds:
             events_seen.add(r["event_name"])
@@ -20295,7 +21998,8 @@ def derive_18hole_rounds_as_two_nines(event_query: str, per_nine: dict,
                 skipped.append({"player_name": r["player_name"],
                                 "scoring_round_id": r["srid"],
                                 "reason": f"no per-nine rating for tee_id {r['tee_id']} "
-                                          f"({r['tee_name']}) — provide it, not guessing"})
+                                          f"({r['tee_name']}) on the course record — "
+                                          f"see per_nine_source; provide it, not guessing"})
                 continue
 
             hrows = conn.execute(
@@ -20363,12 +22067,19 @@ def derive_18hole_rounds_as_two_nines(event_query: str, per_nine: dict,
                         capped += 1
                 diff9 = round((adj - rating9) * 113.0 / slope9, 1)
                 tee_lbl = f"{r['tee_name']} — {nine}"
+                # ALREADY POSTED = same player, same day, same course, same
+                # NINE — never the tee's printed name (v2.467.1: the label
+                # changed from "1 - White Tee — Front 9" to "White — Front
+                # 9" when the master name replaced the GG name, and a
+                # text match would have re-posted every Cedar Creek nine).
                 dup = conn.execute(
                     """SELECT id FROM handicap_rounds
                        WHERE player_name = ? AND round_date = ? AND round_id IS NULL
                          AND COALESCE(course_name,'') = COALESCE(?,'')
-                         AND COALESCE(tee_name,'') = COALESCE(?,'')""",
-                    (target_name, r["round_date"], r["course_name"], tee_lbl)).fetchone()
+                         AND (COALESCE(tee_name,'') = COALESCE(?,'')
+                              OR tee_name LIKE '%— ' || ?)
+                       ORDER BY id LIMIT 1""",
+                    (target_name, r["round_date"], r["course_name"], tee_lbl, nine)).fetchone()
                 nines_out.append({
                     "nine": nine, "tee_name": tee_lbl, "rating": rating9,
                     "slope": slope9, "gross9": gross9, "adjusted9": adj,
@@ -20445,10 +22156,26 @@ def derive_18hole_rounds_as_two_nines(event_query: str, per_nine: dict,
             logger.info("Posted %d two-nine handicap rounds for %r (18-hole "
                         "event split, WHS NDB per nine)", len(plan), event_query)
 
+    # The chapter-manager recap goes out on every posting, whichever path
+    # posted it. The 9-hole path (derive_handicap_rounds_from_scoring) has
+    # sent it since the recap was built; this 18-hole path did not, so
+    # Cedar Creek s18.11 (2026-09-19) posted 30 rounds silently and Kerry
+    # had to ask "Was a handicap report summary sent to me as manager?"
+    recap = None
+    if not dry_run and plan:
+        try:
+            recap = send_handicap_recap_email(
+                (sorted(events_seen) or [event_query])[0], plan, db_path=db_path)
+        except Exception:
+            logger.exception("Non-fatal: two-nine handicap recap email failed")
+            recap = {"ok": False, "error": "exception (see logs)"}
+
     return {"event_query": event_query, "events_matched": sorted(events_seen),
             "dry_run": dry_run,
             ("would_write" if dry_run else "written"): plan,
             "skipped": skipped,
+            "recap_email": recap,
+            "per_nine_source": per_nine_source,
             "summary": {"planned": len(plan), "skipped": len(skipped),
                         "players": len(set(p["player_name"] for p in plan))},
             "standard": "WHS net double bogey per nine; each nine its own "
@@ -20818,6 +22545,127 @@ def repair_handicap_adjusted_scores(cells: list[dict], dry_run: bool = True,
             "skipped_reasons": dict(Counter(s["reason"] for s in skipped)),
             "skipped": skipped,
             "summary": {"planned": len(plan), "skipped": len(skipped)}}
+
+
+def audit_handicap_link_identity(db_path: str | Path = DB_PATH) -> dict:
+    """READ-ONLY: how much of the handicap layer can be resolved by
+    `customer_id`, and exactly who cannot (Kerry 2026-09-16).
+
+    Nothing is written. This exists so the size of the unlinked
+    population is KNOWN before any fallback hides it — a name-string
+    fallback that quietly works is indistinguishable from one that
+    quietly drops somebody, which is the whole defect this lane fixes.
+
+    Four sections:
+      links          — handicap_player_links coverage: rows with no
+                       customer_id, rows whose customer_id points at no
+                       customer, and rows whose customer_name disagrees
+                       with the canonical name on their customer_id
+                       (NAME DRIFT — harmless now, fatal under the old
+                       name-string join, and the reason Mike/Michael
+                       Murphy could read as two people).
+      rounds         — handicap_rounds reachable through a link, and the
+                       player_name values that reach no link at all.
+      export         — what get_handicap_export_data can resolve.
+      plus_handicaps — every scoring round played off a PLUS handicap,
+                       flagged when the playing handicap is FRACTIONAL.
+                       The round-level plus deduction is
+                       `int(round(abs(ph)))`, and Python rounds half to
+                       EVEN — so a -0.5 would deduct 0 and a -1.5 would
+                       deduct 2. Kerry rules on that; this says whether
+                       any live round is affected.
+    """
+    out: dict = {"read_only": True}
+    with _connect(db_path) as conn:
+        total = conn.execute(
+            "SELECT COUNT(*) AS n FROM handicap_player_links").fetchone()["n"]
+        no_id = conn.execute(
+            """SELECT player_name, customer_name FROM handicap_player_links
+               WHERE customer_id IS NULL ORDER BY player_name""").fetchall()
+        orphan = conn.execute(
+            """SELECT l.player_name, l.customer_name, l.customer_id
+               FROM handicap_player_links l
+               LEFT JOIN customers c ON c.customer_id = l.customer_id
+               WHERE l.customer_id IS NOT NULL AND c.customer_id IS NULL
+               ORDER BY l.player_name""").fetchall()
+        no_label = conn.execute(
+            """SELECT COUNT(*) AS n FROM handicap_player_links
+               WHERE customer_id IS NOT NULL
+                 AND (customer_name IS NULL OR TRIM(customer_name) = '')"""
+        ).fetchone()["n"]
+        drift = conn.execute(
+            """SELECT l.player_name, l.customer_name, l.customer_id,
+                      TRIM(COALESCE(c.first_name,'') || ' ' ||
+                           COALESCE(c.last_name,'')) AS canonical_name
+               FROM handicap_player_links l
+               JOIN customers c ON c.customer_id = l.customer_id
+               WHERE l.customer_name IS NOT NULL
+                 AND TRIM(l.customer_name) != ''
+                 AND LOWER(TRIM(l.customer_name)) !=
+                     LOWER(TRIM(COALESCE(c.first_name,'') || ' ' ||
+                                COALESCE(c.last_name,'')))
+               ORDER BY l.player_name""").fetchall()
+        out["links"] = {
+            "total": total,
+            "no_customer_id": len(no_id),
+            "no_customer_id_rows": [dict(r) for r in no_id],
+            "orphan_customer_id": len(orphan),
+            "orphan_rows": [dict(r) for r in orphan],
+            "customer_id_but_no_name_label": no_label,
+            "coverage_pct": round(100.0 * (total - len(no_id)) / total, 1) if total else None,
+            "name_drift": len(drift),
+            "name_drift_rows": [dict(r) for r in drift],
+        }
+
+        r_total = conn.execute(
+            "SELECT COUNT(*) AS n FROM handicap_rounds").fetchone()["n"]
+        r_unlinked = conn.execute(
+            """SELECT r.player_name, COUNT(*) AS rounds
+               FROM handicap_rounds r
+               LEFT JOIN handicap_player_links l
+                 ON l.player_name = r.player_name
+               WHERE l.player_name IS NULL OR l.customer_id IS NULL
+               GROUP BY r.player_name ORDER BY rounds DESC""").fetchall()
+        out["rounds"] = {
+            "total": r_total,
+            "rows_not_resolvable_to_a_customer_id":
+                sum(r["rounds"] for r in r_unlinked),
+            "player_names_not_resolvable": len(r_unlinked),
+            "worst": [dict(r) for r in r_unlinked[:25]],
+        }
+
+        plus = conn.execute(
+            """SELECT sr.id AS scoring_round_id, sr.player_name,
+                      sr.customer_id, sr.round_date, sr.playing_handicap,
+                      e.item_name AS event_name
+               FROM scoring_rounds sr
+               LEFT JOIN events e ON e.id = sr.event_id
+               WHERE sr.playing_handicap IS NOT NULL
+                 AND sr.playing_handicap < 0
+               ORDER BY sr.round_date DESC, sr.id DESC""").fetchall()
+    frac = [dict(r) for r in plus
+            if float(r["playing_handicap"]) != int(float(r["playing_handicap"]))]
+    out["plus_handicaps"] = {
+        "rounds": len(plus),
+        "fractional_playing_handicaps": len(frac),
+        "fractional_rows": frac[:25],
+        "recent": [dict(r) for r in plus[:25]],
+        "note": ("The round-level deduction is int(round(abs(ph))). Python "
+                 "rounds half to EVEN, so -0.5 -> 0 and -1.5 -> 2. Only "
+                 "fractional rows are affected; whole-number plus handicaps "
+                 "are exact."),
+    }
+
+    export = get_handicap_export_data(db_path=db_path)
+    out["export"] = {
+        "rows": len(export.get("rows") or []),
+        "rows_with_customer_id": sum(
+            1 for r in (export.get("rows") or []) if r.get("customer_id") is not None),
+        "name_fallbacks": export.get("name_fallbacks") or [],
+        "no_email": len(export.get("no_email") or []),
+        "no_index": len(export.get("no_index") or []),
+    }
+    return out
 
 
 def audit_handicap_bridges(db_path: str | Path = DB_PATH) -> dict:
@@ -21387,7 +23235,26 @@ def import_gg_scorecards(tournament_url: str, event_code: str | None = None,
             # stays read-only shadow until then.
             if existing:
                 srid = existing["id"]
+                # `imported_at` MEANS "when scores were last posted" — the
+                # money hold measures its settle from it (v2.436.0). A
+                # re-import used to leave it alone, so the clock ran from
+                # whenever the card FIRST appeared: by the time the last
+                # hole landed the ten minutes had long since "elapsed"
+                # and the pot would post instantly. It is stamped on a
+                # real CHANGE only — a five-minute poll that finds the
+                # same numbers must not keep pushing the settle forward,
+                # or the money would never post at all.
+                _before = conn.execute(
+                    "SELECT holes_played, gross, net FROM scoring_rounds "
+                    "WHERE id = ?", (srid,)).fetchone()
+                _changed = (not _before
+                            or (_before["holes_played"] or 0) != holes_played
+                            or _before["gross"] != p.get("gross")
+                            or _before["net"] != p.get("net"))
                 conn.execute("DELETE FROM scoring_holes WHERE scoring_round_id = ?", (srid,))
+                if _changed:
+                    conn.execute("UPDATE scoring_rounds SET imported_at = "
+                                 "datetime('now') WHERE id = ?", (srid,))
                 conn.execute(
                     """UPDATE scoring_rounds SET customer_id=?, event_id=?, gg_event_id=?,
                            gg_aggregate_id=?, gg_profile_id=?, round_date=?, course_id=?,
@@ -21702,17 +23569,51 @@ def get_scorecard(scoring_round_id: int, db_path: str | Path = DB_PATH) -> dict 
             (sr["tee_id"], scoring_round_id)).fetchall()
     formulas = get_scoring_formulas(db_path)
     out_holes = []
-    totals = {"stableford_net": 0, "stableford_gross": 0, "adjusted_gross": 0}
+    totals = {"stableford_net": 0, "stableford_gross": 0, "adjusted_gross": 0,
+              "game_stableford_net": 0, "game_net": 0}
+    # KERRY'S PLUS RULE ON THE CARD (v2.459.0, ratified 2026-09-15; Kerry
+    # looking at Pat Youngs' Quarry Front card: "We just determined this
+    # isn't how we do Net Points with pluses on holes").
+    #
+    # The card carries BOTH views, deliberately:
+    #   * the unflagged keys stay the TRUE WHS/GG derivation, because
+    #     `verify_scoring_round` compares GG's own circle/square markings
+    #     against `net_vs_par` and GG marks a plus player's hole WITH the
+    #     give-back stroke. Clamping them would turn every plus player's
+    #     round into a false parity failure.
+    #   * the `game_*` keys are what a PLAYER is shown and scored on: no
+    #     hole is ever made harder, and the plus comes off the round once.
+    _round_plus = plus_round_deduction(sr["playing_handicap"])
     for h in holes:
-        d = compute_hole_derivations(h["par"], h["strokes"],
-                                     h["strokes_received"] or 0, formulas)
+        sr_true = h["strokes_received"] or 0
+        d = compute_hole_derivations(h["par"], h["strokes"], sr_true, formulas)
+        g = compute_hole_derivations(h["par"], h["strokes"], sr_true, formulas,
+                                     game=True)
         row = dict(h) | d
+        # What the card RENDERS: a give-back stroke reads as no stroke,
+        # so no `○` mark is drawn and the NET cell equals the gross cell.
+        row["game_strokes_received"] = max(0, sr_true)
+        row["strokes_given_back"] = -min(0, sr_true)
+        row["game_net_vs_par"] = g["net_vs_par"]
+        row["game_stableford_net"] = g["stableford_net"]
         out_holes.append(row)
         if d["stableford_net"] is not None:
             totals["stableford_net"] += d["stableford_net"]
             totals["stableford_gross"] += d["stableford_gross"]
             totals["adjusted_gross"] += d["adjusted_strokes"] or 0
+        if g["stableford_net"] is not None:
+            totals["game_stableford_net"] += g["stableford_net"]
+        if h["strokes"] is not None:
+            totals["game_net"] += h["strokes"] - max(0, sr_true)
+    # The round-level half of the rule. Both are 0 for everyone who is
+    # not a plus, so the card is unchanged for the whole field but one.
+    totals["plus_points_adjust"] = -_round_plus
+    totals["plus_strokes_adjust"] = _round_plus
+    totals["game_stableford_net_after_plus"] = (
+        totals["game_stableford_net"] - _round_plus)
+    totals["game_net_after_plus"] = totals["game_net"] + _round_plus
     round_out = dict(sr)
+    round_out["plus_round_deduction"] = _round_plus
     # Play order for the scorecard renderers (Kerry 2026-08-03: SA champ
     # teed off on the back): first_hole 10 puts the IN block on top.
     round_out["first_hole"] = (
@@ -23078,11 +24979,26 @@ def list_courses(db_path: str | Path = DB_PATH) -> list:
                GROUP BY c.course_id ORDER BY c.name""").fetchall()
         out = []
         for r in rows:
-            tees = conn.execute(
-                """SELECT tee_id, tee_name, slope, rating, yardage_total
+            tees = [dict(t) for t in conn.execute(
+                """SELECT tee_id, tee_name, gg_alias, tgf_bands, gender, holes, nine,
+                          par, slope, rating, bogey_rating, yardage_total, is_combo,
+                          source, usga_tee_label
                    FROM course_tees WHERE course_id = ? ORDER BY tee_id""",
-                (r["course_id"],)).fetchall()
-            out.append(dict(r) | {"tees": [dict(t) for t in tees]})
+                (r["course_id"],)).fetchall()]
+            rr: dict = {}
+            for x in conn.execute(
+                    """SELECT r.tee_id, r.rating_type, r.course_rating, r.slope,
+                              r.bogey_rating, r.yardage, r.source
+                         FROM tee_set_ratings r JOIN course_tees ct ON ct.tee_id = r.tee_id
+                        WHERE ct.course_id = ? ORDER BY r.tee_id,
+                              CASE r.rating_type WHEN 'total' THEN 0 WHEN 'front' THEN 1 ELSE 2 END""",
+                    (r["course_id"],)).fetchall():
+                rr.setdefault(x["tee_id"], []).append(
+                    {k: x[k] for k in ("rating_type", "course_rating", "slope",
+                                       "bogey_rating", "yardage", "source")})
+            for t in tees:
+                t["ratings"] = rr.get(t["tee_id"], [])
+            out.append(dict(r) | {"tees": tees})
         return out
 
 
@@ -23965,6 +25881,28 @@ def _backfill_approved_expenses_to_ledger(conn: sqlite3.Connection) -> int:
         conn.commit()
         logger.info("Backfilled %d approved expenses into acct_transactions", count)
     return count
+
+
+def _backfill_customer_id_on_name_parse_failures(conn: sqlite3.Connection) -> int:
+    """Link the parse-failure log's names to their customer rows (principle
+    6; the table predated the rule). A name matching no customer stays
+    NULL and is retried next boot."""
+    try:
+        rows = conn.execute("SELECT customer_name FROM name_parse_failures "
+                            "WHERE customer_id IS NULL").fetchall()
+        n = 0
+        for r in rows:
+            cid = conn.execute(
+                "SELECT customer_id FROM customers WHERE customer = ? COLLATE NOCASE "
+                "ORDER BY customer_id LIMIT 1", (r["customer_name"],)).fetchone()
+            if cid:
+                n += conn.execute("UPDATE name_parse_failures SET customer_id = ? "
+                                  "WHERE customer_name = ?",
+                                  (cid["customer_id"], r["customer_name"])).rowcount
+        conn.commit()
+        return n
+    except sqlite3.OperationalError:
+        return 0
 
 
 def _backfill_customer_id_on_acct_transactions(conn: sqlite3.Connection) -> int:
@@ -26029,6 +27967,10 @@ def get_all_events(db_path: str | Path | None = None) -> list[dict]:
         _today = today_central()
         for r in rows:
             d = dict(r)
+            # THE HANDICAP LOCK DATE, published on every event (v2.462.0):
+            # None until the event tees off, then its own date — the page
+            # reads the index in effect that morning for a started event.
+            d["handicap_as_of"] = _event_index_as_of(d)
             # Convert aliases CSV to list
             d["aliases"] = [a for a in (d.get("aliases") or "").split(",") if a]
             # Store link as the modal and composer should read it —
@@ -26583,7 +28525,8 @@ def update_customer_info(customer_name: str, fields: dict,
     payment_method = safe.pop("payment_method", None)
     if payment_method is not None:
         payment_method = (payment_method or "").strip().lower()
-        allowed_pm = {"venmo", "paypal", "cashapp", "zelle", "cash", "check", ""}
+        allowed_pm = {"venmo", "paypal", "cashapp", "zelle", "cash", "check",
+                      "applepay", ""}
         if payment_method and payment_method not in allowed_pm:
             raise ValueError(f"Invalid payment_method: {payment_method}")
     payment_handle = safe.pop("payment_handle", None)
@@ -26976,8 +28919,10 @@ def get_all_customers(db_path=None) -> list[dict]:
                    c.account_status,
                    c.pace_rating,
                    c.pace_rating_source,
+                   c.ambassador, c.group_captain, c.solo_back_ok,
                    c.payment_method,
                    c.payment_handle,
+                   c.created_at, c.acquisition_source,
                    c.updated_at,
                    ce.email   AS primary_email,
                    ce.label   AS email_label
@@ -27830,6 +29775,37 @@ def add_custom_field(field_name: str, db_path: str | Path | None = None) -> bool
     return True
 
 
+# customers.* columns a merge never copies from the source row: identity,
+# audit stamps, and platform keys belong to the surviving row alone.
+_MERGE_KEEP_TARGET_COLUMNS = {
+    "customer_id", "first_name", "last_name", "middle_name", "suffix",
+    "created_at", "updated_at", "account_status", "platform_user_id",
+    "portal_token_version", "merged_into_id",
+}
+
+
+def _fill_profile_gaps_from_source(conn, source_cid: int, target_cid: int) -> list[str]:
+    """Copy every customers.* column that is NULL/'' on the target and set on
+    the source (except _MERGE_KEEP_TARGET_COLUMNS). Returns the columns
+    filled. Reads the live column list so a column added later is covered
+    without touching this function (protect the class)."""
+    cols = [r[1] for r in conn.execute("PRAGMA table_info(customers)").fetchall()]
+    src = conn.execute("SELECT * FROM customers WHERE customer_id = ?", (source_cid,)).fetchone()
+    tgt = conn.execute("SELECT * FROM customers WHERE customer_id = ?", (target_cid,)).fetchone()
+    if not src or not tgt:
+        return []
+    filled = []
+    for c in cols:
+        if c in _MERGE_KEEP_TARGET_COLUMNS:
+            continue
+        sv, tv = src[c], tgt[c]
+        if sv in (None, "") or tv not in (None, ""):
+            continue
+        conn.execute(f"UPDATE customers SET {c} = ? WHERE customer_id = ?", (sv, target_cid))
+        filled.append(c)
+    return filled
+
+
 def merge_customers(source_name: str, target_name: str,
                     db_path: str | Path | None = None,
                     source_customer_id: int | None = None,
@@ -27944,10 +29920,19 @@ def merge_customers(source_name: str, target_name: str,
                     pass
             conn.execute("DELETE FROM customer_emails WHERE customer_id = ?", (source_cid,))
 
+            # Profile facts the SOURCE row carried and the target lacks
+            # (starting handicap, player status, pace, roles, venmo, DOB,
+            # ...) ride along — target wins, source fills gaps, the same
+            # promise email/phone already had. Without this the v2.420.0
+            # Mejia merge would have dropped the starting handicap Kerry
+            # set on the duplicate an hour before the merge ran.
+            filled = _fill_profile_gaps_from_source(conn, source_cid, target_cid)
+
             # Delete the now-orphaned source customers row
             conn.execute("DELETE FROM customers WHERE customer_id = ?", (source_cid,))
-            logger.info("Merged customer_id %d → %d (FKs moved: %s; emails moved; source deleted)",
-                        source_cid, target_cid, moved or "none")
+            logger.info("Merged customer_id %d → %d (FKs moved: %s; emails moved; "
+                        "profile gaps filled: %s; source deleted)",
+                        source_cid, target_cid, moved or "none", filled or "none")
         elif not source_cust:
             # Source has no customers row — just reassign any items with source name
             conn.execute(
@@ -28124,6 +30109,89 @@ def get_item(item_id: int, db_path: str | Path | None = None) -> dict | None:
         return dict(row) if row else None
 
 
+def _pairings_drop_if_off_roster(item_id: int, reason: str,
+                                 event_name: str | None = None,
+                                 db_path: str | Path | None = None) -> dict | None:
+    """After a credit / WD / refund / transfer, pull the player off the
+    event's saved PAIRINGS — automatically.
+
+    Kerry 2026-09-15, having credited Will Wallace mid-round and then
+    found him still seated: "He should automatically be removed from the
+    pairings when that happens unless you strongly suggest otherwise."
+    The yes/no popup already existed on two front-end paths (the credit
+    modal and the WD modal), which is precisely the problem: a money
+    action taken anywhere else — the roster tab, the customer page, the
+    MCP bridge, a bulk fix — left the sheet stale, and the amber "Not on
+    the roster" banner was the only thing that noticed. Protect the
+    CLASS, at the boundary: the status change itself does the removal, so
+    no caller can forget to.
+
+    THE GUARD THAT MATTERS: a player can hold more than one row on an
+    event (entry, side games, a package add-on). Crediting ONE row must
+    never unseat someone who is still playing — so this only acts once
+    the player has no active row left on that event at all.
+
+    Re-seating is left to `remove_player_from_pairings`, which re-seats
+    before the start and leaves the seat OPEN after it (for a blind).
+    """
+    try:
+        with _connect(db_path) as conn:
+            it = conn.execute("SELECT * FROM items WHERE id = ?",
+                              (item_id,)).fetchone()
+            if not it:
+                return None
+            it = dict(it)
+            name = (it.get("customer") or "").strip()
+            if not name:
+                return None
+            ev = None
+            if event_name:
+                ev = conn.execute(
+                    """SELECT e.id, e.item_name FROM events e
+                       LEFT JOIN event_aliases ea
+                              ON ea.canonical_event_name = e.item_name
+                       WHERE e.item_name = ? COLLATE NOCASE
+                          OR ea.alias_name = ? COLLATE NOCASE
+                       LIMIT 1""", (event_name, event_name)).fetchone()
+            if ev is None and it.get("event_id"):
+                ev = conn.execute("SELECT id, item_name FROM events WHERE id = ?",
+                                  (it["event_id"],)).fetchone()
+            if ev is None and it.get("item_name"):
+                ev = conn.execute(
+                    """SELECT e.id, e.item_name FROM events e
+                       LEFT JOIN event_aliases ea
+                              ON ea.canonical_event_name = e.item_name
+                       WHERE e.item_name = ? COLLATE NOCASE
+                          OR ea.alias_name = ? COLLATE NOCASE
+                       LIMIT 1""",
+                    (it["item_name"], it["item_name"])).fetchone()
+            if ev is None:
+                return None
+            event_id = ev["id"]
+            still_playing = [
+                r for r in _event_roster_rows(conn, event_id)
+                if (r.get("customer_id") and it.get("customer_id")
+                    and r["customer_id"] == it["customer_id"])
+                or _cmp_person_key(r.get("name") or r.get("customer") or "")
+                   == _cmp_person_key(name)]
+        if still_playing:
+            return {"skipped": "still on the roster", "event_id": event_id,
+                    "name": name}
+        res = remove_player_from_pairings(event_id, name, db_path=db_path)
+        if res.get("found"):
+            logger.info("Pairings: %s removed from event %s after %s "
+                        "(re-seated=%s)", name, event_id, reason,
+                        res.get("reseated"))
+        res["event_id"] = event_id
+        res["event"] = ev["item_name"]
+        res["reason"] = reason
+        return res
+    except Exception:
+        logger.exception("Non-fatal: pairings auto-removal failed for item %s",
+                         item_id)
+        return None
+
+
 def credit_item(item_id: int, note: str = "", db_path: str | Path | None = None) -> bool:
     """Mark an item as credited (money held for future use). Cascades to child payments."""
     with _connect(db_path) as conn:
@@ -28138,7 +30206,11 @@ def credit_item(item_id: int, note: str = "", db_path: str | Path | None = None)
             (note or "Credit on account (cascaded from parent)", item_id),
         )
         conn.commit()
-        return cursor.rowcount > 0
+        changed = cursor.rowcount > 0
+    # Off the roster ⇒ off the sheet, automatically (Kerry 2026-09-15).
+    if changed:
+        _pairings_drop_if_off_roster(item_id, "credit", db_path=db_path)
+    return changed
 
 
 def refund_item(item_id: int, method: str = "", note: str = "",
@@ -28232,7 +30304,10 @@ def refund_item(item_id: int, method: str = "", note: str = "",
                 logger.warning("Failed to create flat accounting entry for refund %s", item_id, exc_info=True)
 
         conn.commit()
-        return cursor.rowcount > 0
+        changed = cursor.rowcount > 0
+    if changed:
+        _pairings_drop_if_off_roster(item_id, "refund", db_path=db_path)
+    return changed
 
 
 def payout_credit(
@@ -28432,7 +30507,10 @@ def wd_item(
                 logger.warning("Failed to create liability entry for WD %s", item_id, exc_info=True)
 
         conn.commit()
-        return cursor.rowcount > 0
+        changed = cursor.rowcount > 0
+    if changed:
+        _pairings_drop_if_off_roster(item_id, "wd", db_path=db_path)
+    return changed
 
 
 def transfer_item(item_id: int, target_event_name: str, note: str = "", db_path: str | Path | None = None) -> dict | None:
@@ -28583,7 +30661,11 @@ def transfer_item(item_id: int, target_event_name: str, note: str = "", db_path:
         conn.commit()
 
         new_values["id"] = new_id
-        return new_values
+    # The player left the SOURCE event — that is the sheet to clear.
+    _pairings_drop_if_off_roster(item_id, "transfer",
+                                 event_name=(orig.get("item_name") or None),
+                                 db_path=db_path)
+    return new_values
 
 
 def reverse_credit(item_id: int, db_path: str | Path | None = None) -> bool:
@@ -30040,6 +32122,29 @@ def match_rsvp_to_item(player_email: str | None, player_name: str | None,
                          AND item_name COLLATE NOCASE IN ({placeholders})
                          AND COALESCE(transaction_status, 'active') = 'active'""",
                     [alias_customer["customer_name"]] + name_list,
+                ).fetchone()
+                if row:
+                    return row["id"]
+
+        # Strategy 1c: IDENTITY (rule 6, Kerry 2026-09-15 — the Mejia case).
+        # The RSVP email resolves to a customer_id; an active item on this
+        # event carrying the same customer_id is the same person, whatever
+        # email he typed at checkout. This is what lets a lead-created
+        # profile, a GG RSVP under one email and a GoDaddy order under
+        # another all meet on one row.
+        if player_email:
+            cid_row = conn.execute(
+                """SELECT customer_id FROM customer_emails
+                   WHERE LOWER(email) = LOWER(?) AND customer_id IS NOT NULL
+                   LIMIT 1""", (player_email,)).fetchone()
+            if cid_row:
+                row = conn.execute(
+                    f"""SELECT id FROM items
+                       WHERE customer_id = ?
+                         AND item_name COLLATE NOCASE IN ({placeholders})
+                         AND COALESCE(transaction_status, 'active') = 'active'
+                       ORDER BY id DESC LIMIT 1""",
+                    [cid_row["customer_id"]] + name_list,
                 ).fetchone()
                 if row:
                     return row["id"]
@@ -34008,66 +36113,73 @@ def get_rsvps_for_event(event_name: str, db_path: str | Path | None = None) -> l
     by matching on player_email, and flags whether a player card was found.
     """
     with _connect(db_path) as conn:
-        rows = conn.execute(
-            """SELECT r1.*
-               FROM rsvps r1
-               INNER JOIN (
-                   SELECT player_email, MAX(received_at) AS max_date
-                   FROM rsvps
-                   WHERE matched_event = ?
-                     AND player_email IS NOT NULL AND player_email != ''
-                   GROUP BY player_email
-               ) r2 ON r1.player_email = r2.player_email AND r1.received_at = r2.max_date
-               WHERE r1.matched_event = ?
-               ORDER BY r1.player_name ASC""",
-            (event_name, event_name),
-        ).fetchall()
+        return _rsvps_for_event(conn, event_name)
 
-        # Resolve full names. Prefer the customers table via customer_id FK
-        # (authoritative for RSVP-only players who never bought a ticket);
-        # fall back to items.customer by email; last fall back to player_name.
-        results = []
-        for r in rows:
-            rsvp = dict(r)
-            rsvp["resolved_name"] = rsvp.get("player_name")
-            rsvp["has_player_card"] = False
-            rsvp["customer_status"] = None
-            cid = rsvp.get("customer_id")
-            if cid:
-                cust = conn.execute(
-                    """SELECT TRIM(COALESCE(c.first_name,'') || ' ' || COALESCE(c.last_name,'')) AS full_name,
-                              c.current_player_status,
-                              EXISTS(SELECT 1 FROM customer_roles r
-                                     WHERE r.customer_id = c.customer_id
-                                       AND r.role_type IN ('manager','owner','admin')) AS is_staff
-                       FROM customers c WHERE c.customer_id = ?""",
-                    (cid,),
-                ).fetchone()
-                if cust:
-                    if cust["full_name"]:
-                        rsvp["resolved_name"] = cust["full_name"]
-                    if cust["is_staff"]:
-                        rsvp["customer_status"] = "MANAGER"
-                    elif cust["current_player_status"] == "active_member":
-                        rsvp["customer_status"] = "MEMBER"
-                    elif cust["current_player_status"] == "member_plus":
-                        rsvp["customer_status"] = "MEMBER+"
-            email = (rsvp.get("player_email") or "").strip().lower()
-            if email:
-                card = conn.execute(
-                    """SELECT customer FROM items
-                       WHERE LOWER(customer_email) = ?
-                         AND customer IS NOT NULL AND customer != ''
-                       ORDER BY order_date DESC LIMIT 1""",
-                    (email,),
-                ).fetchone()
-                if card:
-                    if not cid:
-                        rsvp["resolved_name"] = card["customer"]
-                    rsvp["has_player_card"] = True
-            results.append(rsvp)
 
-        return results
+def _rsvps_for_event(conn: sqlite3.Connection, event_name: str) -> list[dict]:
+    """Body of get_rsvps_for_event on a caller-supplied connection, so the
+    pairings roster (`_event_rsvp_only_players`) can read the same resolved
+    RSVP list inside its own transaction instead of re-deriving it."""
+    rows = conn.execute(
+        """SELECT r1.*
+           FROM rsvps r1
+           INNER JOIN (
+               SELECT player_email, MAX(received_at) AS max_date
+               FROM rsvps
+               WHERE matched_event = ?
+                 AND player_email IS NOT NULL AND player_email != ''
+               GROUP BY player_email
+           ) r2 ON r1.player_email = r2.player_email AND r1.received_at = r2.max_date
+           WHERE r1.matched_event = ?
+           ORDER BY r1.player_name ASC""",
+        (event_name, event_name),
+    ).fetchall()
+
+    # Resolve full names. Prefer the customers table via customer_id FK
+    # (authoritative for RSVP-only players who never bought a ticket);
+    # fall back to items.customer by email; last fall back to player_name.
+    results = []
+    for r in rows:
+        rsvp = dict(r)
+        rsvp["resolved_name"] = rsvp.get("player_name")
+        rsvp["has_player_card"] = False
+        rsvp["customer_status"] = None
+        cid = rsvp.get("customer_id")
+        if cid:
+            cust = conn.execute(
+                """SELECT TRIM(COALESCE(c.first_name,'') || ' ' || COALESCE(c.last_name,'')) AS full_name,
+                          c.current_player_status,
+                          EXISTS(SELECT 1 FROM customer_roles r
+                                 WHERE r.customer_id = c.customer_id
+                                   AND r.role_type IN ('manager','owner','admin')) AS is_staff
+                   FROM customers c WHERE c.customer_id = ?""",
+                (cid,),
+            ).fetchone()
+            if cust:
+                if cust["full_name"]:
+                    rsvp["resolved_name"] = cust["full_name"]
+                if cust["is_staff"]:
+                    rsvp["customer_status"] = "MANAGER"
+                elif cust["current_player_status"] == "active_member":
+                    rsvp["customer_status"] = "MEMBER"
+                elif cust["current_player_status"] == "member_plus":
+                    rsvp["customer_status"] = "MEMBER+"
+        email = (rsvp.get("player_email") or "").strip().lower()
+        if email:
+            card = conn.execute(
+                """SELECT customer FROM items
+                   WHERE LOWER(customer_email) = ?
+                     AND customer IS NOT NULL AND customer != ''
+                   ORDER BY order_date DESC LIMIT 1""",
+                (email,),
+            ).fetchone()
+            if card:
+                if not cid:
+                    rsvp["resolved_name"] = card["customer"]
+                rsvp["has_player_card"] = True
+        results.append(rsvp)
+
+    return results
 
 
 def get_all_rsvps_bulk(db_path: str | Path | None = None) -> dict:
@@ -35982,6 +38094,76 @@ def delete_all_handicap_rounds_for_player(player_name: str,
         return rows_affected
 
 
+def audit_chapter_guesses(confirm: dict | None = None, db_path=None) -> dict:
+    """The handicap-linked customers whose CHAPTER is a guess, and the
+    evidence behind each guess (Kerry 2026-09-16, item B: "Give me a list
+    of customers you guessed on that didn't already have chapters and
+    I'll confirm" / "Do it").
+
+    `customers.chapter` is the member's HOME chapter and is never written
+    from `items.chapter` (an order's chapter is where the EVENT was, so
+    cross-chapter play would corrupt it — CLAUDE.md, identity drift). But
+    the handicap card and the roster fall back to the latest order's
+    chapter when the profile has none, which is a guess. This lists every
+    linked customer with a blank profile chapter: the guess in use, the
+    orders by chapter behind it, and whether the evidence is unanimous.
+
+    `confirm` = {customer_id: chapter} sets the PROFILE chapter for those
+    ids only, and only where it is still blank — Kerry's confirmation per
+    person is the one path by which a guess becomes the record.
+    """
+    out = {"guessed": [], "confirmed": [], "refused": []}
+    with _connect(db_path) as conn:
+        if confirm:
+            for cid, ch in confirm.items():
+                cid = int(cid); ch = (ch or "").strip()
+                cur = conn.execute("SELECT chapter FROM customers WHERE customer_id = ?",
+                                   (cid,)).fetchone()
+                if not cur:
+                    out["refused"].append({"customer_id": cid, "why": "no such customer"})
+                elif (cur["chapter"] or "").strip():
+                    out["refused"].append({"customer_id": cid,
+                                           "why": f"profile already says {cur['chapter']}"})
+                elif ch not in ("San Antonio", "Austin"):
+                    out["refused"].append({"customer_id": cid, "why": f"unknown chapter {ch!r}"})
+                else:
+                    conn.execute("UPDATE customers SET chapter = ? WHERE customer_id = ?",
+                                 (ch, cid))
+                    out["confirmed"].append({"customer_id": cid, "chapter": ch})
+            conn.commit()
+        rows = conn.execute(
+            """SELECT DISTINCT l.customer_id,
+                      TRIM(COALESCE(cu.first_name,'') || ' ' || COALESCE(cu.last_name,'')) AS name,
+                      cu.current_player_status AS status
+                 FROM handicap_player_links l
+                 JOIN customers cu ON cu.customer_id = l.customer_id
+                WHERE l.customer_id IS NOT NULL
+                  AND (cu.chapter IS NULL OR TRIM(cu.chapter) = '')
+                ORDER BY name COLLATE NOCASE""").fetchall()
+        for r in rows:
+            cid = r["customer_id"]
+            by_ch = {x["chapter"]: x["n"] for x in conn.execute(
+                """SELECT chapter, COUNT(*) AS n FROM items
+                    WHERE customer_id = ? AND chapter IS NOT NULL AND TRIM(chapter) != ''
+                    GROUP BY chapter ORDER BY n DESC""", (cid,)).fetchall()}
+            latest = conn.execute(
+                """SELECT chapter, order_date FROM items
+                    WHERE customer_id = ? AND chapter IS NOT NULL AND TRIM(chapter) != ''
+                    ORDER BY id DESC LIMIT 1""", (cid,)).fetchone()
+            if not by_ch:
+                continue          # nothing to guess from; the card shows no chapter
+            guess = latest["chapter"]
+            out["guessed"].append({
+                "customer_id": cid, "name": r["name"], "status": r["status"],
+                "guess": guess, "guess_from": f"latest order {latest['order_date']}",
+                "orders_by_chapter": by_ch,
+                "unanimous": len(by_ch) == 1,
+                "majority": max(by_ch, key=by_ch.get),
+            })
+    out["n_guessed"] = len(out["guessed"])
+    return out
+
+
 def get_handicap_export_data(chapter: str | None = None,
                              test_player_email: str | None = None,
                              db_path: str | Path | None = None) -> dict:
@@ -36001,20 +38183,42 @@ def get_handicap_export_data(chapter: str | None = None,
     Returns:
         {
           "rows": [{"email": ..., "player_name": ...,
+                    "customer_id": int | None,    # THE identity key
                     "handicap_index_9": float,   # raw 9-hole index
                     "handicap_index": float,      # ×2 for GG (18-hole)
                     "chapter": ...}],
           "no_email": [player_name, ...],   # have an index but no linked email
           "no_index": [player_name, ...],   # linked but N/A index
+          "name_fallbacks": [{player_name, customer_name, resolved_by}, ...],
           "chapter": chapter or "All",
         }
+
+    Every row carries `customer_id` (v2.459.0). Callers MUST match people
+    on it and never on `player_name` / `chapter` string equality — that is
+    the defect this function used to force on everything downstream.
     """
     players = get_all_handicap_players(db_path)
     player_map = {p["player_name"]: p for p in players}
 
+    # IDENTITY THROUGH `customer_id`, NOT THROUGH A NAME STRING (guiding
+    # principle 6; Kerry 2026-09-15: "What's the bug? We need to fix it").
+    #
+    # Every field below used to be reached with
+    # `LOWER(items.customer) = LOWER(l.customer_name)` — one historical
+    # per-order name snapshot compared against another name string. "Mike
+    # Murphy" on the order against "Michael Murphy" on the link is the
+    # same person and resolved to nothing, so the row came back with no
+    # email and the player read as having no handicap on record. The
+    # `WHERE l.customer_name IS NOT NULL` filter compounded it by dropping
+    # any link that had a `customer_id` but no name label at all.
+    #
+    # Now: `l.customer_id` is the join for every subquery, the row set is
+    # every link (named or not), and the name join survives ONLY as an
+    # explicit last resort for a link with no id — which is REPORTED in
+    # `name_fallbacks` rather than silently papering over the gap.
     with _connect(db_path) as conn:
         links = conn.execute(
-            """SELECT l.player_name, l.customer_name,
+            """SELECT l.player_name, l.customer_name, l.customer_id,
                       COALESCE(
                         -- Canonical first (v2.16.26): the customer profile's
                         -- designated Golf Genius email, then primary email,
@@ -36030,78 +38234,140 @@ def get_handicap_export_data(chapter: str | None = None,
                                   ce.email_id ASC
                          LIMIT 1),
                         (SELECT LOWER(TRIM(i1.customer_email)) FROM items i1
-                         WHERE LOWER(i1.customer) = LOWER(l.customer_name)
+                         WHERE i1.customer_id = l.customer_id
                            AND i1.customer_email IS NOT NULL AND TRIM(i1.customer_email) != ''
                          ORDER BY i1.id DESC LIMIT 1),
+                        -- LAST RESORT, unlinked rows only (reported):
+                        (SELECT LOWER(TRIM(i1b.customer_email)) FROM items i1b
+                         WHERE l.customer_id IS NULL
+                           AND LOWER(i1b.customer) = LOWER(l.customer_name)
+                           AND i1b.customer_email IS NOT NULL AND TRIM(i1b.customer_email) != ''
+                         ORDER BY i1b.id DESC LIMIT 1),
                         (SELECT LOWER(TRIM(ca.alias_value)) FROM customer_aliases ca
-                         WHERE LOWER(ca.customer_name) = LOWER(l.customer_name)
+                         WHERE l.customer_id IS NULL
+                           AND LOWER(ca.customer_name) = LOWER(l.customer_name)
                            AND ca.alias_type = 'email'
                          LIMIT 1),
                         ''
                       ) AS customer_email,
                       COALESCE(
+                        (SELECT cu0.chapter FROM customers cu0
+                         WHERE cu0.customer_id = l.customer_id
+                           AND cu0.chapter IS NOT NULL AND TRIM(cu0.chapter) != ''),
                         (SELECT i2.chapter FROM items i2
-                         WHERE LOWER(i2.customer) = LOWER(l.customer_name)
+                         WHERE i2.customer_id = l.customer_id
                            AND i2.chapter IS NOT NULL AND TRIM(i2.chapter) != ''
                          ORDER BY i2.id DESC LIMIT 1),
+                        (SELECT i2b.chapter FROM items i2b
+                         WHERE l.customer_id IS NULL
+                           AND LOWER(i2b.customer) = LOWER(l.customer_name)
+                           AND i2b.chapter IS NOT NULL AND TRIM(i2b.chapter) != ''
+                         ORDER BY i2b.id DESC LIMIT 1),
                         ''
                       ) AS chapter,
                       COALESCE(
+                        (SELECT cu1.last_name FROM customers cu1
+                         WHERE cu1.customer_id = l.customer_id
+                           AND cu1.last_name IS NOT NULL AND TRIM(cu1.last_name) != ''),
                         (SELECT i3.last_name FROM items i3
-                         WHERE LOWER(i3.customer) = LOWER(l.customer_name)
+                         WHERE i3.customer_id = l.customer_id
                            AND i3.last_name IS NOT NULL AND TRIM(i3.last_name) != ''
                          ORDER BY i3.id DESC LIMIT 1),
+                        (SELECT i3b.last_name FROM items i3b
+                         WHERE l.customer_id IS NULL
+                           AND LOWER(i3b.customer) = LOWER(l.customer_name)
+                           AND i3b.last_name IS NOT NULL AND TRIM(i3b.last_name) != ''
+                         ORDER BY i3b.id DESC LIMIT 1),
                         ''
                       ) AS last_name,
                       COALESCE(
+                        (SELECT cu2.first_name FROM customers cu2
+                         WHERE cu2.customer_id = l.customer_id
+                           AND cu2.first_name IS NOT NULL AND TRIM(cu2.first_name) != ''),
                         (SELECT i4.first_name FROM items i4
-                         WHERE LOWER(i4.customer) = LOWER(l.customer_name)
+                         WHERE i4.customer_id = l.customer_id
                            AND i4.first_name IS NOT NULL AND TRIM(i4.first_name) != ''
                          ORDER BY i4.id DESC LIMIT 1),
+                        (SELECT i4b.first_name FROM items i4b
+                         WHERE l.customer_id IS NULL
+                           AND LOWER(i4b.customer) = LOWER(l.customer_name)
+                           AND i4b.first_name IS NOT NULL AND TRIM(i4b.first_name) != ''
+                         ORDER BY i4b.id DESC LIMIT 1),
                         ''
                       ) AS first_name,
                       COALESCE(
+                        -- `customers` carries no suffix column; the order row
+                        -- is the only source, so this one reads `items` by id.
                         (SELECT i5.suffix FROM items i5
-                         WHERE LOWER(i5.customer) = LOWER(l.customer_name)
+                         WHERE i5.customer_id = l.customer_id
                            AND i5.suffix IS NOT NULL AND TRIM(i5.suffix) != ''
                          ORDER BY i5.id DESC LIMIT 1),
+                        (SELECT i5b.suffix FROM items i5b
+                         WHERE l.customer_id IS NULL
+                           AND LOWER(i5b.customer) = LOWER(l.customer_name)
+                           AND i5b.suffix IS NOT NULL AND TRIM(i5b.suffix) != ''
+                         ORDER BY i5b.id DESC LIMIT 1),
                         ''
                       ) AS suffix
-               FROM handicap_player_links l
-               WHERE l.customer_name IS NOT NULL""",
+               FROM handicap_player_links l""",
         ).fetchall()
 
-        # Also collect ALL chapters per customer for multi-chapter players
+        # ALL chapters per customer for multi-chapter players — keyed by
+        # `customer_id` so a player who bought under two name spellings is
+        # one person with two chapters, not two people with one each.
         all_chapters = conn.execute(
-            """SELECT DISTINCT LOWER(l.customer_name) AS cname_lower,
-                      i.chapter
+            """SELECT DISTINCT l.customer_id AS cid, i.chapter
+               FROM handicap_player_links l
+               JOIN items i ON i.customer_id = l.customer_id
+               WHERE l.customer_id IS NOT NULL
+                 AND i.chapter IS NOT NULL AND TRIM(i.chapter) != ''""",
+        ).fetchall()
+        # Unlinked rows only: the old name join, kept so an id-less link
+        # does not lose its chapter filtering outright.
+        all_chapters_by_name = conn.execute(
+            """SELECT DISTINCT LOWER(l.customer_name) AS cname_lower, i.chapter
                FROM handicap_player_links l
                JOIN items i ON LOWER(i.customer) = LOWER(l.customer_name)
-               WHERE l.customer_name IS NOT NULL
+               WHERE l.customer_id IS NULL AND l.customer_name IS NOT NULL
                  AND i.chapter IS NOT NULL AND TRIM(i.chapter) != ''""",
         ).fetchall()
 
-    # Build set of chapters per customer name (lowercase)
-    customer_chapters: dict[str, set[str]] = {}
+    customer_chapters: dict[int, set[str]] = {}
     for row in all_chapters:
-        customer_chapters.setdefault(row["cname_lower"], set()).add(
-            row["chapter"].lower()
-        )
+        customer_chapters.setdefault(row["cid"], set()).add(row["chapter"].lower())
+    name_chapters: dict[str, set[str]] = {}
+    for row in all_chapters_by_name:
+        name_chapters.setdefault(row["cname_lower"], set()).add(
+            row["chapter"].lower())
 
-    # Build a map: player_name → (email, chapter, all_chapters) from best linked record
+    # player_name → resolved identity. `customer_id` rides on every entry
+    # so no caller downstream is forced back onto a name string.
     link_map: dict[str, dict] = {}
+    name_fallbacks: list[dict] = []
     for lnk in links:
         pname = lnk["player_name"]
         if pname not in link_map:
             cname_lower = (lnk["customer_name"] or "").strip().lower()
+            cid = lnk["customer_id"]
+            if cid is None:
+                # The gap is NAMED, never silent (Kerry 2026-09-16: every
+                # registrant lands in exactly one bucket, and anyone
+                # skipped is named).
+                name_fallbacks.append({
+                    "player_name": pname,
+                    "customer_name": lnk["customer_name"],
+                    "resolved_by": "name" if cname_lower else "nothing",
+                })
             link_map[pname] = {
                 "email": (lnk["customer_email"] or "").strip().lower(),
                 "chapter": lnk["chapter"] or "",
-                "all_chapters": customer_chapters.get(cname_lower, set()),
+                "all_chapters": (customer_chapters.get(cid, set()) if cid is not None
+                                 else name_chapters.get(cname_lower, set())),
                 "last_name": (lnk["last_name"] or "").strip(),
                 "first_name": (lnk["first_name"] or "").strip(),
                 "suffix": (lnk["suffix"] or "").strip(),
                 "customer_name": cname_lower,
+                "customer_id": cid,
             }
 
     # Check if ANY linked player has chapter data; if not, skip chapter filtering
@@ -36193,6 +38459,12 @@ def get_handicap_export_data(chapter: str | None = None,
         rows.append({
             "email": email,
             "player_name": pname,
+            # THE identity key on every row (guiding principle 6). Its
+            # absence here is why every caller downstream — the card
+            # send, the event filter, members-only — was matching people
+            # by name string. `None` means a genuinely unlinked link row,
+            # which `name_fallbacks` also names.
+            "customer_id": info["customer_id"],
             "handicap_index_9": idx_9,   # kept for reference / display
             "handicap_index": idx_18,    # value written to CSV / sent to GG
             "chapter": info["chapter"],
@@ -36209,10 +38481,18 @@ def get_handicap_export_data(chapter: str | None = None,
         "no_email": sorted(no_email),
         "no_index": sorted(no_index),
         "excluded": sorted(excluded),  # admin-removed from GG, never exported
+        # Links with NO customer_id — resolved by name string or not at
+        # all. Reported rather than hidden so the size of the unlinked
+        # population is always visible to the caller.
+        "name_fallbacks": sorted(name_fallbacks,
+                                 key=lambda f: f["player_name"]),
         "chapter": chapter or "All",
         "_debug": {
             "total_players": len(player_map),
             "total_linked": len(link_map),
+            "linked_by_customer_id": sum(
+                1 for v in link_map.values() if v["customer_id"] is not None),
+            "name_fallback_count": len(name_fallbacks),
             "has_chapter_data": has_chapter_data,
             "chapter_filter": chapter,
             "duplicate_emails": duplicate_emails,
@@ -36359,17 +38639,34 @@ def get_starting_handicaps(db_path: str | Path | None = None) -> dict:
         "note": r["starting_handicap_note"]} for r in rows}
 
 
-def get_all_handicap_players(db_path: str | Path | None = None) -> list[dict]:
+def get_all_handicap_players(db_path: str | Path | None = None,
+                             as_of: str | None = None) -> list[dict]:
     """Return one record per player with current handicap index and round stats.
 
     Only rounds within the lookback_months window count toward the index.
+
+    `as_of` (YYYY-MM-DD) is THE HANDICAP LOCK (Kerry 2026-09-16: "ROSTER
+    handicaps need to lock after an event begins. Past events should not
+    update to current handicap indexes."). Given a date, the index is the
+    one IN EFFECT that morning: the same computation over the rounds
+    posted BEFORE that day (`round_date < as_of`), with the lookback
+    window measured back from it. Nothing is stored — the rounds that
+    decided a past index do not change, so recomputing them yields the
+    same number every time (principles 1 and 4). Trend is not computed
+    for an as-of index; it is a today-relative reading.
     """
     cfg = get_handicap_settings(db_path)
     lookback_months = int(cfg.get("lookback_months", 12))
 
-    # Cutoff date: today minus lookback_months
-    cutoff = datetime.now() - timedelta(days=lookback_months * 30.44)
+    # Cutoff date: the anchor (today, or the as-of day) minus lookback_months
+    if as_of:
+        anchor = datetime.strptime(str(as_of)[:10], "%Y-%m-%d")
+    else:
+        anchor = datetime.combine(today_central(), datetime.min.time())
+    cutoff = anchor - timedelta(days=lookback_months * 30.44)
     cutoff_str = cutoff.strftime("%Y-%m-%d")
+    before_sql = " AND round_date < ?" if as_of else ""
+    before_args = (str(as_of)[:10],) if as_of else ()
 
     with _connect(db_path) as conn:
         summary_rows = conn.execute(
@@ -36409,9 +38706,9 @@ def get_all_handicap_players(db_path: str | Path | None = None) -> list[dict]:
                    ) AS rn
             FROM handicap_rounds
             WHERE differential IS NOT NULL
-              AND round_date >= ?
+              AND round_date >= ?""" + before_sql + """
             """,
-            (cutoff_str,),
+            (cutoff_str, *before_args),
         ).fetchall()
 
     player_diffs: dict[str, list] = {}
@@ -36437,7 +38734,8 @@ def get_all_handicap_players(db_path: str | Path | None = None) -> list[dict]:
         prior = [df for dt, df in rows_nf if dt != latest_date][:20]
         index_prev = compute_handicap_index(prior, cfg) if prior else None
         trend = (round(index - index_prev, 1)
-                 if index is not None and index_prev is not None else None)
+                 if index is not None and index_prev is not None
+                 and not as_of else None)
         # Suppress the trend mark for players idle 30+ days (Kerry 2026-07-17):
         # a trend arrow off stale rounds is misleading, so drop it once the
         # player hasn't posted a round in over a month.
@@ -41110,6 +43408,20 @@ def set_app_setting(key: str, value: str, db_path: str | Path | None = None) -> 
 # whenever you change a system template's wording — never edit in place,
 # or the old version stops being recognised as unedited.
 _PRIOR_SYSTEM_TEMPLATE_BODIES = {
+    # v2.399.0: the payment link becomes a tappable button (Kerry
+    # 2026-09-14: "Can you work the payment link in as a button for these
+    # messages?"). The seed only INSERTS by name, so without listing the
+    # shipped body here the live row would keep the old wording forever
+    # and the feature would never reach the person who asked for it —
+    # the backfill rule. Kerry-edited copy still wins: the update only
+    # fires when the stored body is verbatim one of ours.
+    "Payment Reminder": {
+        "<p>Hi {player_name},</p>"
+        "<p>This is a friendly reminder that we have you down for "
+        "<strong>{event_name}</strong>, but we haven't received your payment yet.</p>"
+        "<p>Please complete your registration at your earliest convenience.</p>"
+        "<p>Thanks,<br>The Golf Fellowship</p>",
+    },
     # v2.344.0 → v2.345.0: Kerry trimmed the second paragraph to one line
     # and added the chapter manager's name and cell.
     "Fellowship \u2014 Where We're Meeting": {
@@ -54265,11 +56577,102 @@ def _nine_side(event: dict) -> str:
     return "Back" if side == "Back" else "Front"
 
 
-def _pairing_time_slots(event: dict, holes: str) -> list[str]:
+def _event_index_as_of(ev: dict | None) -> str | None:
+    """The date a started event's handicaps are locked to, or None for an
+    event that has not teed off (Kerry 2026-09-16: "ROSTER handicaps need
+    to lock after an event begins"). Started is `_event_started`'s answer
+    — the same clock the blind re-seat uses — and the lock is the event's
+    own date: the index in effect that morning, before the night's round
+    was posted. One helper so ROSTER, PAIRINGS, the starter sheet, the
+    flights report and the generator cannot disagree about WHEN."""
+    if not ev:
+        return None
+    return (ev.get("event_date") or "")[:10] or None if _event_started(ev) else None
+
+
+def _roster_handicap_index_map(conn, as_of: str | None = None,
+                               db_path=None) -> dict:
+    """{customer_name.lower(): handicap_index, ("c", customer_id): idx} —
+    THE index the pairings surfaces show, in one place: saved-sheet
+    enrichment, the generator, the /pairings GET's event_players and the
+    starter sheet all read it (Kerry 2026-09-15: "Why isn't Adam Baker's
+    handicap showing?").
+
+    IT IS THE SAME NUMBER AS THE ROSTER (v2.462.0, Kerry 2026-09-16:
+    "PAIRINGS handicap indexes are not matching those in ROSTER.
+    PAIRINGS handicaps are not correct, which then affects the Starter
+    Sheet handicaps"). This used to be its own query — a plain AVERAGE
+    of the last twenty differentials — while the ROSTER showed the TGF
+    index (`compute_handicap_index`: best-N of the last twenty, times
+    0.96, WHS adjustment). An average of all twenty is always higher
+    than an average of the best eight, so every PAIRINGS index read two
+    to four strokes above the ROSTER, the starter sheet printed those,
+    and a first-timer with two rounds got a number the ROSTER rightly
+    refused him. There is ONE index computation; this is a view of it,
+    locked to `as_of` for an event that has begun. `conn` is kept for
+    the callers' signature; the computation opens its own read.
+    """
+    if db_path is None:
+        # Read the SAME database the caller's connection is on — a test
+        # fixture or a secondary DB must not be answered from DB_PATH.
+        try:
+            for r in conn.execute("PRAGMA database_list").fetchall():
+                if r[1] == "main" and r[2]:
+                    db_path = r[2]
+                    break
+        except sqlite3.OperationalError:
+            db_path = None
+    try:
+        players = get_all_handicap_players(db_path, as_of=as_of)
+    except sqlite3.OperationalError:
+        return {}
+    # The CANONICAL name is a key too (test_pairings_identity: a customer
+    # renamed after the link was made must still be found by the roster's
+    # spelling), resolved through customer_id — principle 6.
+    canon: dict = {}
+    try:
+        cids = [int(p["customer_id"]) for p in players
+                if p.get("customer_id") is not None]
+        if cids:
+            qm = ",".join("?" * len(cids))
+            for r in conn.execute(
+                    f"""SELECT customer_id, TRIM(COALESCE(first_name,'') || ' ' ||
+                               COALESCE(last_name,'')) AS nm
+                          FROM customers WHERE customer_id IN ({qm})""",
+                    cids).fetchall():
+                if (r["nm"] or "").strip():
+                    canon[int(r["customer_id"])] = r["nm"].strip().lower()
+    except sqlite3.OperationalError:
+        canon = {}
+    out: dict = {}
+    for p in players:
+        idx = p.get("handicap_index")
+        if idx is None:
+            continue
+        cid = p.get("customer_id")
+        names = [canon.get(int(cid)) if cid is not None else None,
+                 p.get("customer_name"), p.get("player_name")]
+        for nm in names:
+            if nm:
+                out.setdefault(nm.strip().lower(), idx)
+        if cid is not None:
+            out.setdefault(("c", int(cid)), idx)
+    return out
+
+def _pairing_time_slots(event: dict, holes: str, needed: int = 0) -> list[str]:
     """Compute ordered slot labels for a given holes type (9 or 18).
 
     For tee-time events returns formatted clock strings ("8:00 AM", …).
     For shotgun events returns hole identifiers ("1A", "1B", "2A", …).
+
+    `needed` is how many groups the ROSTER makes (Kerry 2026-09-15: "why
+    aren't holes being assigned to the foursomes?"). The event's own
+    tee_time_count is the manager's number and wins when set; when it is
+    0 — the common case, nobody types a group count into Edit Event —
+    the roster's count is used instead, so a shotgun event still deals
+    1A / 1B / 2A … and a tee-time event with a start time still deals
+    clock slots. Only an event with no start type AND no start time
+    falls back to "Group N".
     """
     combo = (event.get("format") or "").strip() == "9/18 Combo"
     if combo and holes == "18":
@@ -54284,6 +56687,8 @@ def _pairing_time_slots(event: dict, holes: str) -> list[str]:
     interval = event.get("tee_time_interval") or 10
     count = int(count)
     interval = int(interval)
+    if count <= 0:
+        count = max(0, int(needed or 0))
 
     if count == 0:
         return []
@@ -54312,6 +56717,17 @@ def _pairing_time_slots(event: dict, holes: str) -> list[str]:
         label = t.strftime("%I:%M %p").lstrip("0") or "12:00 AM"
         slots.append(label)
     return slots
+
+
+def _pairing_groups_needed(n_players: int, max_group: int = 4,
+                           seeded_slots: int = 0, saved_groups: int = 0) -> int:
+    """How many slots a sheet needs: enough for every player at the
+    group ceiling, and never fewer than the seeds or the saved sheet
+    already occupy."""
+    n = int(n_players or 0)
+    per = max(1, int(max_group or 4))
+    by_roster = (n + per - 1) // per
+    return max(by_roster, int(seeded_slots or 0), int(saved_groups or 0))
 
 
 def _migrate_pairing_history_rounds(conn: sqlite3.Connection) -> bool:
@@ -54483,6 +56899,24 @@ def _ensure_pairing_tables(conn: sqlite3.Connection) -> None:
             conn.execute(f"ALTER TABLE pairing_history ADD COLUMN {col} {decl}")
         except sqlite3.OperationalError:
             pass  # already added
+    # THE SHEET IS LINKED TO THE PERSON, not to a name string (Kerry
+    # 2026-09-15: "I updated a Customer name and alias Jose to Joe Mejia.
+    # It updated on the ROSTER but not in the pairings. It needs to be
+    # directly linked in PAIRINGS to the ROSTER and Customer ID so it
+    # changes immediately if customer profile is changed."). Guiding
+    # principle 6. `player_name` stays as the display snapshot and the
+    # fallback for a name that matches nobody (a GG guest); the id is
+    # what the read resolves through.
+    try:
+        conn.execute("ALTER TABLE event_pairings ADD COLUMN customer_id INTEGER")
+    except sqlite3.OperationalError:
+        pass
+    # Which Team Net is being played (1 = Best 1 ball, 2 = Best 2, ...).
+    # The allowance follows it — TEAM_ALLOWANCE_BY_BALLS.
+    try:
+        conn.execute("ALTER TABLE events ADD COLUMN team_ball_count INTEGER")
+    except sqlite3.OperationalError:
+        pass
     _migrate_pairing_history_rounds(conn)
     # Manager-suppressed partner requests (Kerry 2026-07-21): a row here
     # means the generator ignores that requester's partner_request for
@@ -54536,7 +56970,124 @@ def _ensure_pairing_tables(conn: sqlite3.Connection) -> None:
         )
         """
     )
+    # BLIND DRAWS (Kerry 2026-09-15, the night Will Wallace was credited
+    # after the shotgun went off): "for any open spots like this, BLIND's
+    # from the field of Members with established handicaps only, should be
+    # added into those slots... Blind's should be auto generated based off
+    # of a history of who's been blinds too, so there's even distribution
+    # of who gets the benefit of being a blind for Team Net over the
+    # course of a year."
+    #
+    # A blind is NOT a seat in the group — nobody is physically there. It
+    # is a drawn player's CARD borrowed to complete a short team, which is
+    # why it never goes into event_pairings (that table is who is on the
+    # cart, and pairing_history is built from it — a blind would invent a
+    # pair that never happened). It lives here, keyed to the empty seat.
+    #
+    # slot_key is the dedupe key so one row can mean two different things
+    # without NULL columns defeating a UNIQUE index: an app-drawn blind is
+    # "<holes>:<group_num>:<cart_pos>"; a blind read back out of a Golf
+    # Genius team string (the 2026 history, where no seat is recorded) is
+    # "gg:<normalized name>".
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS blind_draws (
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            event_id     INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+            event_date   TEXT,
+            chapter      TEXT,
+            holes        TEXT,
+            group_num    INTEGER,
+            slot_label   TEXT,
+            cart_pos     INTEGER,
+            customer_id  INTEGER REFERENCES customers(customer_id),
+            player_name  TEXT NOT NULL,
+            slot_key     TEXT NOT NULL,
+            source       TEXT DEFAULT 'app',
+            note         TEXT,
+            created_at   TEXT DEFAULT (datetime('now')),
+            UNIQUE(event_id, slot_key)
+        )
+        """
+    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_blind_draws_cust "
+                 "ON blind_draws(customer_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_blind_draws_date "
+                 "ON blind_draws(event_date)")
     conn.commit()
+
+
+def _pairing_cid_for_name(conn, name: str) -> int | None:
+    """customer_id for a name on a tee sheet: the canonical
+    first+last, else a NAME alias that carries an id. Returns None for a
+    name nobody owns (a Golf Genius guest), which is left as typed."""
+    nm = " ".join((name or "").split())
+    if not nm:
+        return None
+    row = conn.execute(
+        """SELECT customer_id FROM customers
+            WHERE TRIM(COALESCE(first_name,'') || ' ' || COALESCE(last_name,'')) = ?
+              COLLATE NOCASE
+              AND COALESCE(account_status,'active') <> 'merged'
+            ORDER BY customer_id LIMIT 1""", (nm,)).fetchone()
+    if row:
+        return row["customer_id"]
+    try:
+        row = conn.execute(
+            """SELECT customer_id FROM customer_aliases
+                WHERE alias_type = 'name' AND alias_value = ? COLLATE NOCASE
+                  AND customer_id IS NOT NULL
+                ORDER BY id LIMIT 1""", (nm,)).fetchone()
+    except sqlite3.OperationalError:
+        row = None
+    return row["customer_id"] if row else None
+
+
+def _seat_customer_id(conn, name: str | None, payload_cid) -> int | None:
+    """The person in a seat (v2.464.11). A seat payload's `customer_id` is
+    whatever the page happened to carry — after a swap that moved the
+    name and not the id it was the OTHER player's. So: if the NAME on the
+    seat resolves to a customer, that customer is the person (a payload
+    id that disagrees is stale). If the name resolves to nobody — a
+    guest, or a name the profile has since moved on from (the Jose → Joe
+    Mejia rename, where the id is the truth and the name the snapshot) —
+    the payload id stands. Boundary check, principle 6."""
+    try:
+        resolved = _pairing_cid_for_name(conn, name)
+    except sqlite3.OperationalError:
+        resolved = None
+    if resolved:
+        return resolved
+    return int(payload_cid) if payload_cid else None
+
+
+def _backfill_customer_id_on_event_pairings(conn, event_id: int | None = None) -> int:
+    """Make `event_pairings.customer_id` agree with `player_name`, by name.
+    Fills a NULL, and CORRECTS a stale id when the seat's name resolves
+    to a DIFFERENT customer (v2.464.10: a swap that moved the name and
+    left the id put "Jeff Rideout" on Angelone's id, and the read-time
+    tee/index lookups then answered for the wrong man). A name that
+    resolves to nobody keeps whatever id it has — that is the rename
+    case, where the id is the truth and the name the stale snapshot.
+    Scoped to one event on a read, whole-table on boot. Idempotent."""
+    try:
+        q = ("SELECT id, player_name, customer_id FROM event_pairings"
+             + (" WHERE event_id = ?" if event_id else ""))
+        rows = conn.execute(q, (event_id,) if event_id else ()).fetchall()
+    except sqlite3.OperationalError:
+        return 0
+    n = 0
+    for r in rows:
+        try:
+            cid = _pairing_cid_for_name(conn, r["player_name"])
+        except sqlite3.OperationalError:
+            return n
+        if not cid or cid == r["customer_id"]:
+            continue
+        conn.execute("UPDATE event_pairings SET customer_id = ? WHERE id = ?",
+                     (cid, r["id"]))
+        n += 1
+    return n
 
 
 def get_event_pairings(event_id: int, db_path=None) -> dict:
@@ -54544,17 +57095,39 @@ def get_event_pairings(event_id: int, db_path=None) -> dict:
 
     Each value is a list of groups:
         [{"group_num": int, "slot_label": str, "players": [...]}, ...]
-    Players: {"name", "cart_pos", "tee_choice", "handicap_index"}
+    Players: {"name", "customer_id", "cart_pos", "tee_choice",
+              "handicap_index"}
+
+    THE NAME COMES FROM THE CUSTOMER, not from the saved row (Kerry
+    2026-09-15: "It needs to be directly linked in PAIRINGS to the ROSTER
+    and Customer ID so it changes immediately if customer profile is
+    changed"). `event_pairings.player_name` is the snapshot taken when
+    the sheet was saved; renaming Jose Mejia to Joe changed the roster
+    and left the sheet reading Jose, which then failed every name-keyed
+    lookup downstream — his handicap fell to a dash and his badges went
+    with it. Rows are resolved through `customer_id`, back-filled here
+    for sheets saved before the column existed, and only a name that
+    belongs to nobody is served as typed.
     """
     with _connect(db_path) as conn:
         _ensure_pairing_tables(conn)
+        try:
+            if _backfill_customer_id_on_event_pairings(conn, event_id):
+                conn.commit()
+        except Exception:
+            logger.exception("event_pairings customer_id backfill failed "
+                             "for event %s (non-fatal)", event_id)
         rows = conn.execute(
             """
-            SELECT holes, group_num, slot_label, player_name,
-                   cart_pos, tee_choice, handicap_index
-            FROM event_pairings
-            WHERE event_id = ?
-            ORDER BY holes, group_num, cart_pos
+            SELECT ep.holes, ep.group_num, ep.slot_label, ep.cart_pos,
+                   ep.tee_choice, ep.handicap_index, ep.customer_id,
+                   COALESCE(NULLIF(TRIM(COALESCE(c.first_name,'') || ' ' ||
+                                        COALESCE(c.last_name,'')), ''),
+                            ep.player_name) AS player_name
+            FROM event_pairings ep
+            LEFT JOIN customers c ON c.customer_id = ep.customer_id
+            WHERE ep.event_id = ?
+            ORDER BY ep.holes, ep.group_num, ep.cart_pos
             """,
             (event_id,),
         ).fetchall()
@@ -54566,36 +57139,43 @@ def get_event_pairings(event_id: int, db_path=None) -> dict:
         # same AVG-of-last-≤20-differentials-in-12-months the generator
         # uses — without writing back, so the saved rows stay a faithful
         # snapshot of what the import/save provided.
-        hcp_map: dict = {}
-        if any(r["handicap_index"] is None for r in rows):
+        # THE INDEX IS LOOKED UP, LOCKED TO THE EVENT (v2.462.0). The saved
+        # row's handicap_index is whatever the sheet carried when it was
+        # saved — for months that was the wrong average (see
+        # `_roster_handicap_index_map`) — so it is the fallback, never the
+        # answer, and a started event reads the index in effect that day.
+        _ev_row = conn.execute("SELECT * FROM events WHERE id = ?",
+                               (event_id,)).fetchone()
+        hcp_map = _roster_handicap_index_map(
+            conn, as_of=_event_index_as_of(dict(_ev_row) if _ev_row else None),
+            db_path=db_path)
+        # THE TEE COMES FROM THE ROSTER, NOT THE SAVED ROW (v2.458.10,
+        # Kerry 2026-09-16: "If the tees are in ROSTER, they should
+        # automatically show up in PAIRINGS"). `event_pairings.tee_choice`
+        # is the snapshot the save or the ingest happened to carry, and a
+        # Golf Genius board ingest carries none — so every seated player
+        # read "—" while the ROSTER tab, reading the order, showed <50 /
+        # 50-64 / 65+ / Forward for the same people. Resolved through
+        # customer_id first (principle 6), the name key only for a row
+        # that never resolved to a profile.
+        # THE ROSTER'S TEE WINS OVER THE ROW'S SNAPSHOT (v2.464.12): a
+        # swap that moved the name and not the tee left a wrong,
+        # non-blank tee on the seat (Rideout on <50, Angelone on 50-64 at
+        # s18.11), and a blank-only fill could not repair it. The seat's
+        # saved tee is the fallback for a player the roster cannot name.
+        tee_map: dict = {}
+        if rows:
             try:
-                hcp_rows = conn.execute(
-                    """
-                    SELECT l.customer_name, p.handicap_index
-                    FROM (
-                        SELECT player_name,
-                               AVG(differential) as handicap_index
-                        FROM (
-                            SELECT player_name, differential,
-                                   ROW_NUMBER() OVER (
-                                       PARTITION BY player_name
-                                       ORDER BY round_date DESC, id DESC
-                                   ) as rn
-                            FROM handicap_rounds
-                            WHERE differential IS NOT NULL
-                              AND round_date >= date('now', '-12 months')
-                        )
-                        WHERE rn <= 20
-                        GROUP BY player_name
-                    ) p
-                    JOIN handicap_player_links l ON l.player_name = p.player_name
-                    WHERE l.customer_name IS NOT NULL
-                    """
-                ).fetchall()
-                hcp_map = {r["customer_name"].lower(): r["handicap_index"]
-                           for r in hcp_rows}
+                for rr in _event_roster_rows(conn, event_id):
+                    t = (rr.get("tee_choice") or "").strip()
+                    if not t:
+                        continue
+                    if rr.get("customer_id") is not None:
+                        tee_map.setdefault(("c", int(rr["customer_id"])), t)
+                    tee_map.setdefault(("n", (rr.get("name") or "").strip().lower()), t)
             except Exception:
-                hcp_map = {}
+                logger.exception("roster tee lookup failed for event %s "
+                                 "(non-fatal)", event_id)
 
     result: dict = {}
     for r in rows:
@@ -54608,15 +57188,33 @@ def get_event_pairings(event_id: int, db_path=None) -> dict:
         if grp is None:
             grp = {"group_num": r["group_num"], "slot_label": r["slot_label"], "players": []}
             grp_list.append(grp)
-        hi = r["handicap_index"]
+        hi = (hcp_map.get(("c", r["customer_id"]))
+              if r["customer_id"] is not None else None)
         if hi is None:
             hi = hcp_map.get((r["player_name"] or "").lower())
+        if hi is None:
+            hi = r["handicap_index"]
+        tee = ((tee_map.get(("c", r["customer_id"]))
+                if r["customer_id"] is not None else None)
+               or tee_map.get(("n", (r["player_name"] or "").strip().lower()))
+               or (r["tee_choice"] or "").strip() or None)
         grp["players"].append({
             "name": r["player_name"],
+            "customer_id": r["customer_id"],
             "cart_pos": r["cart_pos"],
-            "tee_choice": r["tee_choice"],
+            "tee_choice": tee,
             "handicap_index": hi,
         })
+    # Blinds ride ALONGSIDE the seats, never in them (see the BLIND DRAWS
+    # section): a drawn card completing a short team, not a body in a cart.
+    try:
+        blinds = get_event_blinds(event_id, db_path=db_path)
+    except Exception:
+        logger.exception("Non-fatal: blind read failed for event %s", event_id)
+        blinds = {}
+    for h, grp_list in result.items():
+        for grp in grp_list:
+            grp["blinds"] = (blinds.get(h, {}).get(grp["group_num"]) or [])
     return result
 
 
@@ -54661,9 +57259,11 @@ def _reseat_group_after_removal(players: list) -> list:
 
 
 def remove_player_from_pairings(event_id: int, player_name: str,
-                                dry_run: bool = False, db_path=None) -> dict:
-    """Remove a player from an event's saved pairings and re-seat their
-    group(s) per Kerry's adjustment standard (_reseat_group_after_removal).
+                                dry_run: bool = False, reseat: bool | None = None,
+                                db_path=None) -> dict:
+    """Remove a player from an event's saved pairings, re-seating their
+    group(s) per Kerry's adjustment standard (_reseat_group_after_removal)
+    ONLY while the event has not started.
 
     Built for the roster→pairings sync (Kerry 2026-09-01: WD/credit must
     offer to pull the player from existing pairings). Matches by
@@ -54671,6 +57271,15 @@ def remove_player_from_pairings(event_id: int, player_name: str,
     'Paul Reed' finds 'Paul Reed III' too. dry_run=True reports what WOULD
     happen without writing. Groups emptied by the removal are dropped;
     remaining groups keep their slot labels/tee times.
+
+    `reseat` — None (default) asks the clock: re-seat before the event
+    starts, leave the seat OPEN once it has. Kerry 2026-09-15, having
+    credited a player after the shotgun: "In this case the group would
+    not be 're-seated' because the event starts." The sheet is out, the
+    carts are numbered, the group is on a hole — moving people on paper
+    now only makes the paper wrong. The open seat is then what a blind
+    draw fills (`draw_event_blinds`). Pass True/False to decide it
+    explicitly.
     """
     def _rm_key(nm: str):
         parts = (nm or "").strip().split()
@@ -54680,6 +57289,11 @@ def remove_player_from_pairings(event_id: int, player_name: str,
         return _cmp_person_key(" ".join(parts))
 
     pairings = get_event_pairings(event_id, db_path=db_path)
+    if reseat is None:
+        with _connect(db_path) as _c:
+            _ev = _c.execute("SELECT event_date, start_time, start_time_18 "
+                             "FROM events WHERE id = ?", (event_id,)).fetchone()
+        reseat = not _event_started(dict(_ev)) if _ev else True
     want = _rm_key(player_name)
     hits = []
     for holes, groups in pairings.items():
@@ -54693,15 +57307,18 @@ def remove_player_from_pairings(event_id: int, player_name: str,
     detail = []
     for holes, g, p in hits:
         remaining = [q for q in g["players"] if q is not p]
-        reseated = _reseat_group_after_removal(remaining)
-        g["players"] = reseated
+        if reseat:
+            remaining = _reseat_group_after_removal(remaining)
+        g["players"] = remaining
         detail.append({
             "holes": holes,
             "group_num": g["group_num"],
             "slot_label": g.get("slot_label"),
             "removed": p.get("name"),
+            "reseated": bool(reseat),
+            "open_seat": None if reseat else p.get("cart_pos"),
             "after": [{"name": q.get("name"), "cart_pos": q.get("cart_pos")}
-                      for q in reseated],
+                      for q in remaining],
         })
 
     if not dry_run:
@@ -54709,7 +57326,2261 @@ def remove_player_from_pairings(event_id: int, player_name: str,
                    for h, groups in pairings.items()}
         save_event_pairings(event_id, cleaned, db_path=db_path)
     return {"found": True, "removed": len(hits), "dry_run": bool(dry_run),
-            "groups": detail}
+            "reseated": bool(reseat), "groups": detail}
+
+
+# ── BLIND DRAWS ─────────────────────────────────────────────────────
+#    Kerry 2026-09-15, event night, after crediting Will Wallace once the
+#    shotgun had already gone off: "for any open spots like this, BLIND's
+#    from the field of Members with established handicaps only, should be
+#    added into those slots. I've already added for the previously open
+#    spots but not for Will's. Blind's should be auto generated based off
+#    of a history of who's been blinds too, so there's even distribution
+#    of who gets the benefit of being a blind for Team Net over the course
+#    of a year."
+#
+#    WHAT A BLIND IS. A short team cannot play a best-ball against full
+#    ones, so the missing slot borrows a CARD: a player already in the
+#    field is drawn, and their score plays for that team as well as their
+#    own. Golf Genius writes it into the team string as "Bl[LAST, First]",
+#    and our Team Net payout code already pays that slot its equal share
+#    (v2.78.4). So a blind is worth money to the drawn player — which is
+#    exactly why Kerry wants the draw spread evenly over the year rather
+#    than landing on whoever is standing nearest the first tee.
+#
+#    A BLIND IS NOT A SEAT. Nobody is physically in the cart, so a blind
+#    never enters event_pairings: that table is who rode with whom, and
+#    pairing_history is built straight off it — a blind written there
+#    would invent a pair that never happened and then feed the repeat
+#    counts. Blinds live in `blind_draws`, keyed to the empty seat, and
+#    ride alongside the sheet everywhere it is shown.
+
+BLIND_TEAM_SIZE_DEFAULT = 4          # SA foursomes; dial: blind_team_size
+BLIND_MEMBER_STATUSES = ("active_member", "member_plus")
+_BLIND_MARK_RE = re.compile(r"Bl\[([^\]]+)\]")
+
+
+def _blind_team_size(conn) -> int:
+    """Seats a team is meant to have. Four everywhere TGF plays today;
+    a dial rather than a literal because the day an event runs threesomes
+    on purpose, the answer is 3 and no code should have to change."""
+    try:
+        return max(2, int(_setting_via(conn, "blind_team_size") or
+                          BLIND_TEAM_SIZE_DEFAULT))
+    except (TypeError, ValueError):
+        return BLIND_TEAM_SIZE_DEFAULT
+
+
+def _event_started(ev: dict, now: datetime | None = None) -> bool:
+    """Has this event teed off?
+
+    Kerry's ruling the same night: "I could understand if it was before
+    the event started. In this case the group would not be 're-seated'
+    because the event starts." So the re-seat is conditional on this
+    answer, and the answer errs toward STARTED: a sheet already in
+    players' hands must never be reshuffled underneath them, while a
+    sheet that has not gone out yet costs nothing to regenerate. An event
+    dated today with no start time recorded therefore counts as started.
+    """
+    # Central, because event_date is a Central business date and the
+    # container clock is UTC (same rule as the poller).
+    now = now or now_central()
+    date_s = (ev.get("event_date") or "").strip()
+    if not date_s:
+        return False
+    try:
+        day = datetime.strptime(date_s[:10], "%Y-%m-%d").date()
+    except ValueError:
+        return False
+    if day < now.date():
+        return True
+    if day > now.date():
+        return False
+    times = []
+    for key in ("start_time", "start_time_18"):
+        t = (ev.get(key) or "").strip()
+        for fmt in ("%H:%M", "%H:%M:%S", "%I:%M %p", "%I:%M%p"):
+            try:
+                times.append(datetime.strptime(t.upper(), fmt).time())
+                break
+            except ValueError:
+                continue
+    if not times:
+        return True          # today, time unknown — treat as underway
+    return now.time() >= min(times)
+
+
+def _blind_slot_key(holes, group_num, cart_pos) -> str:
+    return f"{holes}:{group_num}:{cart_pos}"
+
+
+def get_event_blinds(event_id: int, conn=None, db_path=None) -> dict:
+    """Blinds drawn for one event: {holes: {group_num: [seat, ...]}}.
+
+    Each seat is {"cart_pos", "name", "customer_id", "source"}. Names
+    resolve through customer_id (guiding principle 6) so a rename reaches
+    the blind exactly as it reaches the sheet."""
+    def _run(c):
+        _ensure_pairing_tables(c)
+        rows = c.execute(
+            """SELECT b.holes, b.group_num, b.cart_pos, b.customer_id,
+                      b.source,
+                      COALESCE(NULLIF(TRIM(COALESCE(cu.first_name,'') || ' ' ||
+                                           COALESCE(cu.last_name,'')), ''),
+                               b.player_name) AS player_name
+                 FROM blind_draws b
+                 LEFT JOIN customers cu ON cu.customer_id = b.customer_id
+                WHERE b.event_id = ? AND b.group_num IS NOT NULL
+                ORDER BY b.holes, b.group_num, b.cart_pos""",
+            (event_id,)).fetchall()
+        out: dict = {}
+        for r in rows:
+            out.setdefault(r["holes"], {}).setdefault(r["group_num"], []).append({
+                "cart_pos": r["cart_pos"], "name": r["player_name"],
+                "customer_id": r["customer_id"], "source": r["source"]})
+        return out
+    if conn is not None:
+        return _run(conn)
+    with _connect(db_path) as c2:
+        return _run(c2)
+
+
+def blind_draw_history(conn, year: int | None = None,
+                       exclude_event_id: int | None = None) -> dict:
+    """{customer_id: {"count", "last_date", "name"}} — who has been a
+    blind, and when they last were. THE history the draw is spread over
+    (Kerry: "even distribution ... over the course of a year"). Rows from
+    Golf Genius (source 'gg') count exactly as ours do: the benefit was
+    received either way."""
+    _ensure_pairing_tables(conn)
+    y = year or datetime.now().year
+    sql = ["""SELECT b.customer_id, COUNT(*) AS n, MAX(b.event_date) AS last_date,
+                     MAX(COALESCE(NULLIF(TRIM(COALESCE(cu.first_name,'') || ' ' ||
+                                              COALESCE(cu.last_name,'')), ''),
+                                  b.player_name)) AS nm
+                FROM blind_draws b
+                LEFT JOIN customers cu ON cu.customer_id = b.customer_id
+               WHERE b.customer_id IS NOT NULL
+                 AND substr(COALESCE(b.event_date, ''), 1, 4) = ?"""]
+    params: list = [str(y)]
+    if exclude_event_id:
+        sql.append(" AND b.event_id <> ?")
+        params.append(exclude_event_id)
+    sql.append(" GROUP BY b.customer_id")
+    rows = conn.execute("".join(sql), params).fetchall()
+    return {r["customer_id"]: {"count": r["n"], "last_date": r["last_date"],
+                               "name": r["nm"]} for r in rows}
+
+
+def backfill_blind_draws_from_gg(year: int | None = None, dry_run: bool = True,
+                                 db_path=None) -> dict:
+    """Read the year's blinds back out of Golf Genius.
+
+    Every recorded Team/Cart Net row carries its team string, and a blind
+    fill rides in it as "Bl[LAST, First]". That is the only record of who
+    has already had the benefit, so the distribution starts from the real
+    history instead of from zero. Winner rows and board rows describe the
+    same team, so the dedupe key is per (event, drawn player)."""
+    y = year or datetime.now().year
+    found, written, unresolved = [], 0, []
+    with _connect(db_path) as conn:
+        _ensure_pairing_tables(conn)
+        rows = conn.execute(
+            """SELECT r.event_id, r.player_name, e.event_date, e.chapter
+                 FROM gg_game_results r
+                 JOIN events e ON e.id = r.event_id
+                WHERE r.is_team = 1 AND r.player_name LIKE '%Bl[%'
+                  AND substr(COALESCE(e.event_date,''), 1, 4) = ?""",
+            (str(y),)).fetchall()
+        for r in rows:
+            for raw in _BLIND_MARK_RE.findall(r["player_name"] or ""):
+                nm = raw.strip()
+                cid = _resolve_scoring_player(conn, nm)
+                rec = {"event_id": r["event_id"], "event_date": r["event_date"],
+                       "chapter": r["chapter"], "name": nm, "customer_id": cid}
+                found.append(rec)
+                if cid is None:
+                    unresolved.append(rec)
+                if dry_run:
+                    continue
+                cur = conn.execute(
+                    """INSERT OR IGNORE INTO blind_draws
+                           (event_id, event_date, chapter, player_name,
+                            customer_id, slot_key, source)
+                       VALUES (?, ?, ?, ?, ?, ?, 'gg')""",
+                    (r["event_id"], r["event_date"], r["chapter"], nm, cid,
+                     "gg:" + _cmp_person_key_str(nm)))
+                written += cur.rowcount
+        if not dry_run:
+            conn.commit()
+    return {"year": y, "dry_run": bool(dry_run), "rows_scanned": len(rows),
+            "blinds_found": len(found), "written": written,
+            "unresolved": unresolved, "found": found}
+
+
+def _cmp_person_key_str(name: str) -> str:
+    k = _cmp_person_key(name)
+    return "|".join(str(x) for x in k)
+
+
+def _established_index_by_customer(db_path=None) -> dict:
+    """{customer_id: index} for players with an ESTABLISHED TGF handicap.
+
+    Kerry 2026-09-15: "Christopher Espinosa is NOT an eligible blind
+    because he doesn't have an established TGF Handicap yet." He shows an
+    index on the pairings card because that number is a plain average of
+    whatever rounds exist — useful for seating, not a handicap. The
+    handicap of RECORD only exists once the card's own `min_rounds`
+    (3) are posted, and a STARTING handicap is a stand-in, never a
+    record. Both are excluded here, which is the difference between a
+    number to look at and a number to play for money off.
+    """
+    # Asked DIRECTLY rather than through get_all_handicap_players (Kerry
+    # 2026-09-16: "Blind selector is really slow to show the list"). That
+    # builder assembles every player in the league with trends and
+    # placeholders — seconds of work to answer a yes/no question about
+    # sixteen people. ESTABLISHED is exactly: at least `min_rounds`
+    # posted differentials inside the lookback window. A starting
+    # handicap has no rounds at all, so it fails this on its own.
+    out = {}
+    try:
+        cfg = get_handicap_settings(db_path)
+        min_rounds = int(cfg.get("min_rounds", 3))
+        months = int(cfg.get("lookback_months", 12))
+        cutoff = (datetime.now() - timedelta(days=months * 30.44)
+                  ).strftime("%Y-%m-%d")
+        with _connect(db_path) as conn:
+            for r in conn.execute(
+                    """SELECT l.customer_id AS cid, COUNT(*) AS n,
+                              AVG(r.differential) AS idx
+                         FROM handicap_rounds r
+                         JOIN handicap_player_links l
+                           ON l.player_name = r.player_name
+                        WHERE l.customer_id IS NOT NULL
+                          AND r.differential IS NOT NULL
+                          AND r.round_date >= ?
+                        GROUP BY l.customer_id""", (cutoff,)):
+                if (r["n"] or 0) >= min_rounds:
+                    out[int(r["cid"])] = round((r["idx"] or 0) * 2, 1)
+    except sqlite3.Error:
+        return out          # no handicap tables yet (fresh db, tests)
+    return out
+
+
+def event_blind_pool(conn, event_id: int, year: int | None = None,
+                     db_path=None) -> dict:
+    """Who may be drawn as a blind for this event, and who may not.
+
+    Kerry's eligibility, verbatim: "BLIND's from the field of Members with
+    established handicaps only". Three gates, each reported rather than
+    silently applied —
+      IN THE FIELD  : on tonight's roster (a borrowed card has to exist)
+      MEMBER        : active_member / member_plus (not guests, not
+                      first-timers, not former members)
+      ESTABLISHED   : has a TGF handicap index, which our own computation
+                      only issues at min_rounds (3) rounds or more
+    """
+    rows = _event_roster_rows(conn, event_id)
+    # The established-index read opens its own connection, so it needs to
+    # be told WHICH database — and a caller holding a conn should not
+    # have to remember that. Ask the connection itself.
+    if db_path is None:
+        try:
+            _f = conn.execute("PRAGMA database_list").fetchone()
+            db_path = (_f[2] if _f and len(_f) > 2 else None) or None
+        except sqlite3.Error:
+            db_path = None
+    hcp = _established_index_by_customer(db_path)
+    hist = blind_draw_history(conn, year=year, exclude_event_id=event_id)
+    eligible, excluded, seen = [], [], set()
+    for r in rows:
+        cid = r.get("customer_id")
+        nm = (r.get("name") or r.get("customer") or "").strip()
+        key = cid or nm.lower()
+        if not nm or key in seen:
+            continue
+        seen.add(key)
+        status = (r.get("current_player_status") or "").strip().lower()
+        idx = hcp.get(int(cid)) if cid else None
+        h = hist.get(cid) or {}
+        entry = {"customer_id": cid, "name": nm, "status": status,
+                 "handicap_index": idx, "blinds_ytd": h.get("count", 0),
+                 "last_blind": h.get("last_date")}
+        if cid is None:
+            excluded.append({**entry, "why": "no customer record"})
+        elif status not in BLIND_MEMBER_STATUSES:
+            excluded.append({**entry, "why": f"not a member ({status or 'unknown'})"})
+        elif idx is None:
+            excluded.append({**entry,
+                             "why": "no established TGF handicap yet"})
+        else:
+            eligible.append(entry)
+    eligible.sort(key=lambda e: (e["blinds_ytd"], e["last_blind"] or "",
+                                 e["name"].lower()))
+    return {"eligible": eligible, "excluded": excluded,
+            "year": year or datetime.now().year}
+
+
+def _blind_pick(cands: list) -> dict:
+    """Draw one name: RANDOM among those who have been a blind least.
+
+    Kerry 2026-09-15: "RANDOM would choose players randomly who've been
+    blinds the least." Fewest first is the fairness rule; the randomness
+    is what stops the same person inside that tier being picked every
+    week by whatever happens to sort first. A draw is meant to be a draw.
+    """
+    import random
+    fewest = min(c["blinds_ytd"] for c in cands)
+    tier = [c for c in cands if c["blinds_ytd"] == fewest]
+    return random.choice(tier)
+
+
+def draw_event_blinds(event_id: int, dry_run: bool = True, redraw: bool = False,
+                      year: int | None = None, db_path=None, team_unit: str | None = None) -> dict:
+    """Fill every open seat on the saved sheet with a blind.
+
+    An OPEN SEAT is a seat a full team would have and this group does not
+    (`_blind_team_size`, 4). Selection order is Kerry's distribution rule:
+    fewest blinds this year first, then longest since the last one (never
+    drawn sorts first), then a seat hash so equal players are separated by
+    something other than the alphabet.
+
+    Never drawn for a seat: anyone in that group (a card cannot fill its
+    own team) and anyone already blind elsewhere in this event (one
+    benefit per person per night). `redraw=True` clears this event's
+    app-drawn blinds first; GG-sourced history rows are never touched."""
+    with _connect(db_path) as conn:
+        _ensure_pairing_tables(conn)
+        ev = conn.execute("SELECT * FROM events WHERE id = ?",
+                          (event_id,)).fetchone()
+        if not ev:
+            return {"error": f"no event {event_id}"}
+        ev = dict(ev)
+        size = _blind_team_size(conn)
+        pairings = get_event_pairings(event_id, db_path=db_path)
+        pool = event_blind_pool(conn, event_id, year=year, db_path=db_path)
+        by_cid = {e["customer_id"]: e for e in pool["eligible"]}
+        existing = get_event_blinds(event_id, conn=conn)
+        if redraw and not dry_run:
+            conn.execute("DELETE FROM blind_draws WHERE event_id = ? "
+                         "AND source = 'app'", (event_id,))
+            conn.commit()
+            existing = get_event_blinds(event_id, conn=conn)
+        taken = {b["customer_id"] for hs in existing.values()
+                 for seats in hs.values() for b in seats
+                 if b["customer_id"] is not None}
+        # Blinds ALREADY recorded for this event with no seat against them
+        # — the ones Kerry entered straight into Golf Genius, read back out
+        # of the team string. We cannot know which slot each one covers,
+        # and it does not matter: what matters is how many open seats are
+        # already accounted for. They consume seats in sheet order, and
+        # only the remainder get a new pick.
+        loose = [dict(r) for r in conn.execute(
+            """SELECT b.customer_id, b.source,
+                      COALESCE(NULLIF(TRIM(COALESCE(cu.first_name,'') || ' ' ||
+                                           COALESCE(cu.last_name,'')), ''),
+                               b.player_name) AS name
+                 FROM blind_draws b
+                 LEFT JOIN customers cu ON cu.customer_id = b.customer_id
+                WHERE b.event_id = ? AND b.group_num IS NULL
+                ORDER BY b.id""", (event_id,)).fetchall()]
+        taken |= {r["customer_id"] for r in loose if r["customer_id"] is not None}
+        drawn, open_seats, unfilled, covered = [], 0, [], []
+        # CART NET DRAWS FROM THE OTHER CART OF THE SAME FOURSOME (rule 15h,
+        # Kerry 2026-09-18: "On Cart Net, when there are OPEN slots in need
+        # of a Blind, the blind is from the other cart in the foursome (the
+        # one that meets the requirements of the random selection for Team
+        # Net). In Team Net, it is randomly from the field outside of their
+        # group like we've had it"). The matrix says which game the field
+        # plays (`_event_team_unit`); the eligibility rules are the same.
+        _n_seated = sum(len(g.get("players") or []) for gs in pairings.values() for g in gs)
+        _unit, _ = _event_team_unit(_n_seated, "18" if "18" in pairings else "9",
+                                    db_path=db_path)
+        if team_unit in ("cart", "group"):        # explicit override (tests, a manager)
+            _unit = team_unit
+        for holes, groups in sorted(pairings.items()):
+            for g in sorted(groups, key=lambda x: x["group_num"]):
+                seated = {p.get("cart_pos") for p in (g.get("players") or [])}
+                here = {p.get("customer_id") for p in (g.get("players") or [])}
+                have = {b["cart_pos"] for b in
+                        (existing.get(holes, {}).get(g["group_num"]) or [])}
+                for pos in range(1, size + 1):
+                    if pos in seated or pos in have:
+                        continue
+                    open_seats += 1
+                    if loose:
+                        already = loose.pop(0)
+                        covered.append({"holes": holes,
+                                        "group_num": g["group_num"],
+                                        "slot_label": g.get("slot_label"),
+                                        "cart_pos": pos, **already})
+                        continue
+                    cands, source = [], "field"
+                    if _unit == "cart":
+                        other_cart = {p.get("customer_id") for p in (g.get("players") or [])
+                                      if ((p.get("cart_pos") or 0) <= 2) != (pos <= 2)}
+                        cands = [e for e in pool["eligible"]
+                                 if e["customer_id"] in other_cart
+                                 and e["customer_id"] not in taken]
+                        source = "other cart"
+                    if not cands:
+                        cands = [e for e in pool["eligible"]
+                                 if e["customer_id"] not in taken
+                                 and e["customer_id"] not in here]
+                        source = ("field (no eligible player in the other cart)"
+                                  if _unit == "cart" else "field")
+                    if not cands:
+                        unfilled.append({"holes": holes,
+                                         "group_num": g["group_num"],
+                                         "slot_label": g.get("slot_label"),
+                                         "cart_pos": pos,
+                                         "why": "no eligible player left"})
+                        continue
+                    pick = _blind_pick(cands)
+                    taken.add(pick["customer_id"])
+                    row = {"holes": holes, "group_num": g["group_num"],
+                           "slot_label": g.get("slot_label"), "cart_pos": pos,
+                           "customer_id": pick["customer_id"],
+                           "name": pick["name"],
+                           "blinds_ytd": pick["blinds_ytd"],
+                           "last_blind": pick["last_blind"],
+                           "drawn_from": source,
+                           "gg_text": f"Bl[{_sort_name(pick['name'])}]"}
+                    drawn.append(row)
+                    if dry_run:
+                        continue
+                    conn.execute(
+                        """INSERT OR REPLACE INTO blind_draws
+                               (event_id, event_date, chapter, holes, group_num,
+                                slot_label, cart_pos, customer_id, player_name,
+                                slot_key, source)
+                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'app')""",
+                        (event_id, ev.get("event_date"), ev.get("chapter"),
+                         holes, g["group_num"], g.get("slot_label"), pos,
+                         pick["customer_id"], pick["name"],
+                         _blind_slot_key(holes, g["group_num"], pos)))
+        if not dry_run:
+            conn.commit()
+    return {"event_id": event_id, "event": ev.get("item_name"),
+            "dry_run": bool(dry_run), "team_size": size,
+            "team_unit": _unit,
+            "open_seats": open_seats, "drawn": drawn, "unfilled": unfilled,
+            "covered_by_existing": covered,
+            "eligible": len(pool["eligible"]),
+            "excluded": pool["excluded"],
+            "already_drawn": [b for hs in existing.values()
+                              for seats in hs.values() for b in seats]}
+
+
+def set_event_blind(event_id: int, holes: str, group_num: int, cart_pos: int,
+                    customer_id: int | None = None, db_path=None) -> dict:
+    """Put a chosen player in ONE open seat — or clear that seat.
+
+    Kerry 2026-09-15: "Need to be able to click an OPEN spot and be able
+    to click ADD BLIND as option, then to select RANDOM or CHOOSE from
+    eligible field." RANDOM is `draw_event_blinds`; this is CHOOSE, and
+    it is also how a seat is emptied again (customer_id=None).
+
+    The eligibility gates still apply to a chosen name — a manager
+    picking from the list cannot pick someone the rules exclude, because
+    the list they are picking from IS the eligible pool.
+    """
+    with _connect(db_path) as conn:
+        _ensure_pairing_tables(conn)
+        ev = conn.execute("SELECT * FROM events WHERE id = ?",
+                          (event_id,)).fetchone()
+        if not ev:
+            return {"error": f"no event {event_id}"}
+        ev = dict(ev)
+        key = _blind_slot_key(holes, group_num, cart_pos)
+        if customer_id is None:
+            cur = conn.execute(
+                "DELETE FROM blind_draws WHERE event_id = ? AND slot_key = ?",
+                (event_id, key))
+            conn.commit()
+            return {"cleared": cur.rowcount, "seat": key}
+        pool = event_blind_pool(conn, event_id, db_path=db_path)
+        pick = next((e for e in pool["eligible"]
+                     if e["customer_id"] == int(customer_id)), None)
+        if not pick:
+            why = next((e["why"] for e in pool["excluded"]
+                        if e["customer_id"] == int(customer_id)),
+                       "not in this event's eligible field")
+            return {"error": f"not eligible: {why}"}
+        taken = [b for hs in get_event_blinds(event_id, conn=conn).values()
+                 for seats in hs.values() for b in seats
+                 if b["customer_id"] == int(customer_id)
+                 and b["cart_pos"] != cart_pos]
+        if taken:
+            return {"error": f"{pick['name']} is already a blind in this event"}
+        grp = next((g for g in (get_event_pairings(event_id, db_path=db_path)
+                                .get(holes) or [])
+                    if g["group_num"] == group_num), None)
+        if grp and any(p.get("customer_id") == int(customer_id)
+                       for p in (grp.get("players") or [])):
+            return {"error": f"{pick['name']} is in that group — a card "
+                             f"cannot fill its own team"}
+        slot_label = (grp or {}).get("slot_label")
+        conn.execute(
+            """INSERT OR REPLACE INTO blind_draws
+                   (event_id, event_date, chapter, holes, group_num,
+                    slot_label, cart_pos, customer_id, player_name,
+                    slot_key, source)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'app')""",
+            (event_id, ev.get("event_date"), ev.get("chapter"), holes,
+             group_num, slot_label, cart_pos, pick["customer_id"],
+             pick["name"], key))
+        conn.commit()
+        return {"seat": key, "name": pick["name"],
+                "customer_id": pick["customer_id"],
+                "blinds_ytd": pick["blinds_ytd"],
+                "gg_text": f"Bl[{_sort_name(pick['name'])}]"}
+
+
+def draw_one_blind(event_id: int, holes: str, group_num: int, cart_pos: int,
+                   db_path=None) -> dict:
+    """RANDOM for ONE seat — the same rule as the whole-sheet draw."""
+    with _connect(db_path) as conn:
+        _ensure_pairing_tables(conn)
+        pool = event_blind_pool(conn, event_id, db_path=db_path)
+        existing = get_event_blinds(event_id, conn=conn)
+        taken = {b["customer_id"] for hs in existing.values()
+                 for seats in hs.values() for b in seats
+                 if b["customer_id"] is not None and b["cart_pos"] != cart_pos}
+        taken |= {r["customer_id"] for r in conn.execute(
+            "SELECT customer_id FROM blind_draws WHERE event_id = ? "
+            "AND group_num IS NULL", (event_id,)) if r["customer_id"]}
+        grp = next((g for g in (get_event_pairings(event_id, db_path=db_path)
+                                .get(holes) or [])
+                    if g["group_num"] == group_num), None)
+        here = {p.get("customer_id") for p in ((grp or {}).get("players") or [])}
+    cands = [e for e in pool["eligible"]
+             if e["customer_id"] not in taken and e["customer_id"] not in here]
+    if not cands:
+        return {"error": "no eligible player left — members in the field "
+                         "with an established TGF handicap, not already a "
+                         "blind tonight, not in this group"}
+    pick = _blind_pick(cands)
+    return set_event_blind(event_id, holes, group_num, cart_pos,
+                           pick["customer_id"], db_path=db_path)
+
+
+def clear_event_blinds(event_id: int, db_path=None) -> int:
+    """Drop this event's app-drawn blinds (GG history rows stay)."""
+    with _connect(db_path) as conn:
+        _ensure_pairing_tables(conn)
+        cur = conn.execute("DELETE FROM blind_draws WHERE event_id = ? "
+                           "AND source = 'app'", (event_id,))
+        conn.commit()
+        return cur.rowcount
+
+
+# ── PAIRINGS REPORTS: Divisions & Flights, Proximity Markers ─────────
+#    Kerry 2026-09-15 (with the two Golf Genius originals): "Let's add to
+#    our Reports in our PAIRINGS tab. Create a Divisions & Flights report
+#    (per ROSTER buy ins, GAMES matrix, and flighting standards) and
+#    Proximity Markers per GAMES setup and course identification of par
+#    3s. Add logos to these two. Divisions & Flights should produce all
+#    on one page for NET, SKINS, and GROSS as applicable."
+
+_FLIGHT_REPORT_GAMES = (
+    # (game key, printed label, buyer kind)
+    ("individual_net", "Individual Net", "NET"),
+    ("skins", "Skins", "GROSS"),
+    ("individual_gross", "Individual Gross", "GROSS"),
+)
+
+
+def _index_text(idx) -> str:
+    """Golf's own notation for a plus handicap: -1.4 prints as +1.4."""
+    if idx is None:
+        return "—"
+    return f"+{abs(idx):.1f}" if idx < 0 else f"{idx:.1f}"
+
+
+def _sort_name(name: str) -> str:
+    """LAST, First — how a division sheet is read."""
+    parts = " ".join((name or "").split()).split(" ")
+    if len(parts) < 2:
+        return (name or "").upper()
+    return f"{parts[-1].upper()}, {' '.join(parts[:-1])}"
+
+
+def _handicap_index_18_by_customer(db_path=None, as_of: str | None = None) -> dict:
+    """{customer_id: 18-hole TGF index} — the index of RECORD (WHS
+    computation, doubled per Kerry's 2026-07-30 ruling that the 18-hole
+    TGF handicap is simply twice the nine). Keyed by customer_id, not by
+    name: `ls_flight_lab` resolves by name and loses anyone whose
+    handicap link spells them differently (Jeff Rideout on s9.23), which
+    is the same stale-name class as the pairings rename."""
+    out = {}
+    for p in get_all_handicap_players(db_path, as_of=as_of):
+        cid = p.get("customer_id")
+        if cid and p.get("handicap_index_18") is not None:
+            out[int(cid)] = p["handicap_index_18"]
+    return out
+
+
+def _event_player_ph_map(conn, ev: dict, idx18: dict) -> tuple[dict, str, str]:
+    """{customer_id: playing_handicap} for everyone on the roster — THE
+    starter sheet's own number (same tee band from the ROSTER row, same
+    course card row per band via `_event_tee_rows`, same
+    `handicap_calc.playing_handicap` chain), so the FLIGHTS tab and the
+    printed sheet cannot disagree about a PH. Returns (map, basis, note);
+    a player whose band has no resolved tee row gets no PH, never a
+    guess (Kerry 2026-09-15: "We need to get the calculations right")."""
+    from email_parser.handicap_calc import playing_handicap as _ph_fn
+    out: dict = {}
+    try:
+        legend = event_tee_legend(conn, ev["id"], ev)
+        tee_rows, basis, note = _event_tee_rows(conn, ev, legend)
+    except Exception as e:                       # noqa: BLE001 — a PH is optional
+        logger.warning("flights board: tee rows unavailable for event %s: %s",
+                       ev.get("id"), e)
+        return {}, "", "No course card on file, so no playing handicap could be computed."
+    if not tee_rows:
+        return {}, basis, note
+    bands: dict = {}
+    try:
+        for r in _event_roster_rows(conn, ev["id"]):
+            cid = r.get("customer_id")
+            band = (r.get("tee_choice") or "").strip()
+            if cid and band and int(cid) not in bands:
+                bands[int(cid)] = band
+    except sqlite3.OperationalError:
+        return {}, basis, note
+    for cid, idx in idx18.items():
+        tee = tee_rows.get(bands.get(int(cid), ""))
+        if idx is None or not tee:
+            continue
+        # A nine-hole card takes the nine-hole index (half the 18).
+        idx_scoped = idx if (tee["rating"] or 0) >= 50 else round(idx / 2.0, 1)
+        try:
+            out[int(cid)] = _ph_fn(idx_scoped, tee["slope"], tee["rating"], tee["par"])
+        except Exception:                        # noqa: BLE001
+            continue
+    return out, basis, note
+
+
+_BOARD_GG_GAMES = ("individual_net", "skins", "individual_gross")
+
+
+def _event_gg_recorded_purses(conn, event_id: int) -> dict:
+    """What Golf Genius RECORDED for the three flighted games — the
+    published-vs-paid side of the board on a completed event. Read-only;
+    an event with no GG board yet reports empty games, not an error."""
+    out = {g: {"rows": [], "total": 0.0} for g in _BOARD_GG_GAMES}
+    try:
+        _ensure_gg_game_results_tables(conn)
+        rows = conn.execute(
+            """SELECT game, player_name, customer_id, position, detail, purse
+                 FROM gg_game_results
+                WHERE event_id = ? AND game IN (?, ?, ?)
+                ORDER BY game, purse DESC, player_name""",
+            (event_id, *_BOARD_GG_GAMES)).fetchall()
+    except sqlite3.OperationalError:
+        return out
+    for r in rows:
+        g = out.get(r["game"])
+        if g is None:
+            continue
+        purse = round(float(r["purse"] or 0), 2)
+        if purse <= 0:
+            continue
+        g["rows"].append({"player_name": r["player_name"],
+                          "customer_id": r["customer_id"],
+                          "position": r["position"], "detail": r["detail"],
+                          "purse": purse})
+        g["total"] = round(g["total"] + purse, 2)
+    return out
+
+
+def event_flights_board(event_id: int, db_path=None) -> dict | None:
+    """The DIVISIONS / FLIGHTS board for one event — the ratified flighting
+    and payout rule set (`email_parser/flighting.py`) computed from Tracker
+    data, in its two layers.
+
+    Buy-ins from the ROSTER (`_event_game_buyers` — wd_credits decides who
+    is a buyer), the index of record by customer_id locked as-of for a
+    started event (`_event_index_as_of`), each player's PH as the starter
+    sheet computes it, the flight count and the game variant from the LIVE
+    matrix, the cut from the ratified ladders, pots and places from the
+    ratified rules. Beside it, what Golf Genius recorded (a completed
+    event's published-vs-paid answer).
+
+    STATE is LIVE until the freeze action exists (rule 3b — the snapshot
+    schema is proposed in mailbox #584 and waits for Kerry). DRY RUN:
+    nothing here writes a payout; GG stays the payer of record."""
+    from . import flighting as _fl
+    with _connect(db_path) as conn:
+        ev = conn.execute("SELECT * FROM events WHERE id = ?", (event_id,)).fetchone()
+        if not ev:
+            return None
+        ev = dict(ev)
+        buyers_by_kind = {k: _event_game_buyers(conn, ev["item_name"], k)
+                          for k in ("NET", "GROSS")}
+        as_of = _event_index_as_of(ev)
+        idx18 = _handicap_index_18_by_customer(db_path, as_of=as_of)
+        ph_map, ph_basis, ph_note = _event_player_ph_map(conn, ev, idx18)
+        gg = _event_gg_recorded_purses(conn, ev["id"])
+    holes = _event_holes_type(ev["item_name"], ev.get("format"))
+    holes_key = "18" if holes == 18 else "9"
+    m9, m18 = _load_games_matrix(db_path)
+    matrix = m18 if holes_key == "18" else m9
+    matrix_source = ("app_settings (live)" if get_app_setting(
+        f"games_matrix_{holes_key}", db_path=db_path) else "repo seed (games-matrix.js)")
+
+    def _row_for(n: int):
+        return matrix.get(str(int(n)))
+
+    field_by_kind = {}
+    for kind, res in buyers_by_kind.items():
+        field_by_kind[kind] = [
+            {"customer_id": int(cid), "name": nm, "index": idx18.get(int(cid)),
+             "ph": ph_map.get(int(cid))}
+            for cid, nm in res["buyers"].items()]
+    board = _fl.build(field_by_kind, holes_key, _row_for)
+    for entry in board["games"]:
+        for f in entry["selection"]["flights"]:
+            for m in f["members"]:
+                m["sort_name"] = _sort_name(m.get("name"))
+        for u in entry["selection"].get("unflighted") or []:
+            u["sort_name"] = _sort_name(u.get("name"))
+        entry["gg_recorded"] = gg.get(entry["game"]) or {"rows": [], "total": 0.0}
+    no_cid = sorted({n for r in buyers_by_kind.values() for n in r["no_customer_id"]})
+    started = _event_started(ev)
+    today = today_central_str()
+    completed = bool((ev.get("event_date") or "") and ev["event_date"][:10] < today)
+    board.update({
+        "event_id": ev["id"], "event": ev, "event_name": ev.get("item_name"),
+        "event_date": ev.get("event_date"), "chapter": ev.get("chapter"),
+        "course": ev.get("course"),
+        "buyers": {k: len(v) for k, v in field_by_kind.items()},
+        "no_customer_id": no_cid,
+        "handicap_as_of": as_of,
+        "index_basis": "18-hole TGF index (twice the nine-hole index)"
+                       + (f", locked as of {as_of}" if as_of else ""),
+        "ph_basis": ph_basis, "ph_note": ph_note,
+        "matrix_source": matrix_source,
+        "event_started": started, "event_completed": completed,
+        "freeze": None,            # populated once the snapshot schema is ratified
+        "dry_run": True,
+        "payer_of_record": "Golf Genius",
+        "file_stub": print_file_stub(ev),
+    })
+    return board
+
+
+def event_flights_report(event_id: int, db_path=None) -> dict | None:
+    """Divisions & Flights for one event — NET, SKINS and GROSS together,
+    as the PRINTED page reads it. A view of `event_flights_board` (one
+    computation per fact): the same buy-ins, the same locked index, the
+    same matrix-selected variant and flight count, the same ratified cut
+    (fixed bands for Skins and Individual Gross, the equal-size cut with
+    the 11.9 ceiling for Individual Net; NO merging — #572). A game below
+    its activation threshold is REPORTED as not running, with the reason.
+    Players with no index are listed apart rather than dropped into a
+    flight they did not earn."""
+    board = event_flights_board(event_id, db_path=db_path)
+    if not board:
+        return None
+    ev = board["event"]
+    games = []
+    for entry in board["games"]:
+        sel = entry["selection"]
+        g = {"game": entry["game"], "label": entry["label"], "kind": entry["kind"],
+             "buyers": sel["buyers_at_selection"], "flights": [], "unflighted": [],
+             "notes": list(sel.get("notes") or []), "active": entry["active"],
+             "inactive_reason": entry["inactive_reason"], "mode": sel.get("mode")}
+        if entry["active"]:
+            multi = len(sel["flights"]) > 1
+            for f in sel["flights"]:
+                band = f["band"]
+                # The printed name states the RULE the band holds ("HCP
+                # <12.0"), the derived range beside it is the field.
+                name = (f"Flight {f['flight_no']} (HCP {band})" if multi
+                        else f"Flight {f['flight_no']} ({band})")
+                g["flights"].append({
+                    "name": name, "players": f["players"],
+                    "label": f["label"],
+                    "members": [{"name": m["name"], "sort_name": m["sort_name"],
+                                 "index": m["index"], "index_text": m["index_text"]}
+                                for m in f["members"]],
+                })
+            g["unflighted"] = [{"name": u["name"], "sort_name": u["sort_name"],
+                                "index_text": "—"}
+                               for u in sorted(sel.get("unflighted") or [],
+                                               key=lambda x: x["sort_name"])]
+        games.append(g)
+    return {
+        "event": ev,
+        "event_name": ev.get("item_name"),
+        "event_date": ev.get("event_date"),
+        "chapter": ev.get("chapter"),
+        "course": ev.get("course"),
+        "holes_key": board["holes_key"],
+        "year": (ev.get("event_date") or "")[:4],
+        "games": games,
+        "index_basis": board["index_basis"],
+        "file_stub": board["file_stub"],
+    }
+
+def _course_hole_table(conn, course_id: int) -> dict:
+    """{hole_number: {"par": int, "yardage": int|None}} for a course.
+
+    Pars and yardages accrete per TEE from scorecard imports, so this
+    reads across every tee on the course: par is the value the tees
+    agree on (they do — par is a property of the hole), yardage is the
+    average, which is only used to rank par-3s by length."""
+    rows = conn.execute(
+        """SELECT cth.hole_number, cth.par, cth.yardage
+             FROM course_tee_holes cth
+             JOIN course_tees ct ON ct.tee_id = cth.tee_id
+            WHERE ct.course_id = ? AND cth.par IS NOT NULL""",
+        (course_id,)).fetchall()
+    acc: dict = {}
+    for r in rows:
+        h = acc.setdefault(int(r["hole_number"]), {"pars": {}, "yards": []})
+        h["pars"][r["par"]] = h["pars"].get(r["par"], 0) + 1
+        if r["yardage"]:
+            h["yards"].append(int(r["yardage"]))
+    out = {}
+    for hole, v in acc.items():
+        par = max(v["pars"], key=v["pars"].get)
+        out[hole] = {"par": int(par),
+                     "yardage": (round(sum(v["yards"]) / len(v["yards"]))
+                                 if v["yards"] else None)}
+    return out
+
+
+def event_proximity_report(event_id: int, db_path=None) -> dict | None:
+    """Closest-to-the-Pin marker sheets, one per contest.
+
+    THE RULE (side-games.md, ratified): Closest to Pin is a flat $2 (9h)
+    / $4 (18h) entry for every player, **max 2 CTPs per nine**, winner-
+    take-all each. More par-3s than slots → take the SHORTEST par-3s.
+    Fewer par-3s than slots → each leftover dollar becomes a LONGEST PUTT
+    contest on the last hole.
+
+    Par-3s are identified from the COURSE (`course_tee_holes` across the
+    course's tees), narrowed to the nine actually being played. If the
+    course carries no hole data the report says so and prints nothing —
+    a marker at the wrong tee is worse than no marker."""
+    with _connect(db_path) as conn:
+        ev = conn.execute("SELECT * FROM events WHERE id = ?", (event_id,)).fetchone()
+        if not ev:
+            return None
+        ev = dict(ev)
+        holes_tbl = {}
+        course_row = None
+        if ev.get("course_id"):
+            course_row = conn.execute(
+                "SELECT course_id, name, short_name FROM courses WHERE course_id = ?",
+                (ev["course_id"],)).fetchone()
+            holes_tbl = _course_hole_table(conn, ev["course_id"])
+    is18 = _event_holes_type(ev["item_name"], ev.get("format")) == 18
+    nine = (ev.get("nine_side") or "Front").strip().title()
+    slots = 4 if is18 else 2                     # max 2 per nine
+    notes = []
+
+    # Which hole numbers are in play. A nine-hole tee that was imported
+    # as holes 1-9 is still the nine that was played, so a Back-nine
+    # event with no 10-18 rows falls back to 1-9 and says so.
+    if is18:
+        want = [h for h in sorted(holes_tbl) if 1 <= h <= 18]
+    elif nine == "Back":
+        want = [h for h in sorted(holes_tbl) if 10 <= h <= 18]
+        if not want:
+            want = [h for h in sorted(holes_tbl) if 1 <= h <= 9]
+            if want:
+                notes.append("The course card is stored as holes 1-9, so the "
+                             "BACK nine is numbered 1-9 here — check the hole "
+                             "numbers against the scorecard before printing.")
+    else:
+        want = [h for h in sorted(holes_tbl) if 1 <= h <= 9]
+
+    par3 = [{"hole": h, "yardage": holes_tbl[h]["yardage"]}
+            for h in want if holes_tbl[h]["par"] == 3]
+    if not holes_tbl:
+        notes.append("No hole-by-hole card on file for this course, so the "
+                     "par-3s cannot be identified. Import a scorecard for "
+                     "the course and reprint.")
+    contests = []
+    # Shortest first when there are more par-3s than slots (ratified);
+    # then back into hole order for printing.
+    chosen = sorted(par3, key=lambda x: (x["yardage"] is None,
+                                         x["yardage"] or 0))[:slots]
+    if len(par3) > slots:
+        notes.append(f"{len(par3)} par-3s for {slots} CTP slot(s) — the "
+                     f"shortest were taken, per the games rule.")
+    for c in sorted(chosen, key=lambda x: x["hole"]):
+        contests.append({"kind": "ctp", "hole": c["hole"],
+                         "yardage": c["yardage"],
+                         "title": f"Closest to the Pin - Hole {c['hole']}"})
+    leftover = slots - len(chosen)
+    if leftover > 0 and want:
+        last = want[-1]
+        for _ in range(leftover):
+            contests.append({"kind": "longest_putt", "hole": last,
+                             "yardage": None,
+                             "title": f"Longest Putt - Hole {last}"})
+        notes.append(f"{len(chosen)} par-3(s) for {slots} slot(s) — the "
+                     f"remaining entry becomes a Longest Putt on the last "
+                     f"hole ({last}), per the games rule.")
+    return {
+        "event": ev,
+        "event_name": ev.get("item_name"),
+        "event_date": ev.get("event_date"),
+        "chapter": ev.get("chapter"),
+        "course_name": ((course_row["name"] if course_row else None)
+                        or ev.get("course") or ""),
+        "nine": nine, "holes_key": "18" if is18 else "9",
+        "slots": slots, "par3_found": len(par3),
+        "contests": contests, "notes": notes,
+        "file_stub": print_file_stub(ev),
+    }
+
+
+# Downloaded print files are named the way Kerry already names the Golf
+# Genius ones (2026-09-15): [YY]-[chapter acronym][holes]-[event number]-
+# [file type] — 26-s9-23-StarterSheet, 26-a18-6-CartSigns,
+# 25-s9-1-Proxies, 27-a9-12-DivisionsFlights. The stub comes off the
+# EVENT NAME, which already carries the chapter letter, the holes and
+# the sequence number ("s9.23 The Quarry"); the year comes off the event
+# date, so a file sorts with its season.
+# NOT _EVENT_CODE_RE — that name is already taken further down the file
+# and the later binding wins at import, which silently hands this one a
+# one-group pattern.
+_PRINT_EVENT_CODE_RE = re.compile(r"^\s*([sa])\s*(\d+)\s*\.\s*(\d+)", re.I)
+
+
+def print_file_stub(event: dict) -> str:
+    """"26-s9-23" for s9.23 The Quarry on 2026-09-15. A sheet appends its
+    own file type. Falls back to a slug of the name rather than inventing
+    a code, so a download is never named after an event it is not."""
+    ev = event or {}
+    yy = str(ev.get("event_date") or "")[2:4]
+    m = _PRINT_EVENT_CODE_RE.match(str(ev.get("item_name") or ""))
+    if m:
+        chap, holes, num = m.group(1).lower(), m.group(2), str(int(m.group(3)))
+        code = f"{chap}{holes}-{num}"
+    else:
+        # No event code in the name (the championship, a one-off). A bare
+        # chapter letter would name every such file the same, so use the
+        # NAME instead — long, but never wrong about which event it is.
+        code = re.sub(r"[^A-Za-z0-9]+", "-",
+                      str(ev.get("item_name") or "event")).strip("-")[:40] or "event"
+    return f"{yy}-{code}" if yy else code
+
+
+# TGF sells four tee bands; a course sells named tees. The colour on the
+# sheet comes from the COURSE CARD (Kerry 2026-09-15: "add colors for the
+# tee assignments according to our course info"), so a starter can tell a
+# player which markers to walk to.
+TEE_BANDS = ("<50", "50-64", "65+", "Forward")
+_TEE_COLOR_WORDS = {
+    "black": "#111111", "gold": "#B8860B", "blue": "#1D4ED8",
+    # White is white (Kerry 2026-09-15: "For white tees, make it just a
+    # black outline with a white center"). It was grey so a swatch would
+    # show at all; the outline does that job properly.
+    "white": "#FFFFFF", "green": "#15803D", "red": "#B91C1C",
+    "silver": "#64748B", "gray": "#6B7280", "grey": "#6B7280",
+    "yellow": "#CA8A04", "orange": "#C2410C", "purple": "#7E22CE",
+    "copper": "#B45309", "bronze": "#92400E", "maroon": "#7F1D1D",
+    "navy": "#1E3A8A", "teal": "#0F766E", "tan": "#A16207",
+    "pink": "#BE185D", "jade": "#047857", "burgundy": "#7F1D1D",
+}
+_TEE_ORDER_RE = re.compile(r"^\s*(\d+)\s*[-–]\s*")
+# KERRY 2026-09-15, correcting me: "Forward tee is NOT under 50. That is
+# the back tee selected each time based on our yardage parameters for
+# under 50 tees to be 6300-6800 yards for 18." So the <50 band is the
+# BACK tee, chosen by LENGTH, and Forward is a separate, most-forward
+# tee. Stated for 18; a nine is half of it.
+UNDER_50_YARDS_18 = (6300, 6800)
+
+# TEAM NET allowance follows the BALL COUNT, the standard USGA
+# recommendation, ratified 2026-07-05 (side-games.md "Variant rules"):
+# Best 1 -> 75%, Best 2 -> 85%, Best 3 -> 100%, Best 4 -> 100%, with a
+# standard rotation every other event between Best 1 and Best 2 and a
+# manager override. Kerry 2026-09-15: "Team Net is not 100%. It is 85%
+# for tonight's two ball net. It is 75% for normal one ball net. Needs
+# to follow our rules and adjust to the games we play."
+TEAM_ALLOWANCE_BY_BALLS = {1: 0.75, 2: 0.85, 3: 1.00, 4: 1.00}
+TEAM_BALLS_DEFAULT = 1                      # the normal one-ball net
+
+
+def _event_team_unit(n_players: int, holes_key: str, db_path=None) -> tuple[str, str]:
+    """("cart" | "group", team_type) — the team game the MATRIX says this
+    field plays (v2.464.15, Kerry 2026-09-18: "We have Cart Net going
+    tomorrow which is 85% handicaps"). Below 16 players the side-games
+    matrix runs CART Net — two-man cart teams — not foursomes; the matrix
+    row's teamType decides where it exists, the 16 threshold when it is
+    silent (same rule `determine_event_game_results` applies)."""
+    team_type = ""
+    try:
+        m9, m18 = _load_games_matrix(db_path=db_path)
+        mat = m9 if holes_key == "9" else m18
+        row = mat.get(str(n_players)) or mat.get(n_players) or {}
+        team_type = str(row.get("teamType") or "")
+    except Exception:
+        team_type = ""
+    # The matrix says "No Event" below four players and is silent above
+    # its last row; either way the 16 threshold decides.
+    _tt = team_type.lower()
+    if "cart" in _tt:
+        return "cart", team_type
+    if "team" in _tt:
+        return "group", team_type
+    return ("cart" if n_players < 16 else "group"), team_type
+
+
+def team_handicaps_for_groups(groups: list, allowance: float, unit: str) -> None:
+    """Set `team_handicap` on every player who has `course_handicap_raw`
+    (v2.464.16). The allowance is applied to the UNROUNDED course handicap
+    and rounded ONCE (WHS: "rounding is performed only once and as the
+    last step" — CA Queue #7 found the double-rounding), then every
+    player plays off the LOWEST IN THE WHOLE FIELD — not the cart, not
+    the group. Kerry 2026-09-18: "OFF Lowest is not per cart. OFF Lowest
+    is lowest in the whole field. For 1/2 Net Skins it is field too.
+    Team Net is field too." `unit` names the game (cart / group) for the
+    sheet; it no longer changes the arithmetic."""
+    from email_parser.handicap_calc import whs_round as _wr
+    allowed: list = []
+    for g in groups:
+        for p in g["players"]:
+            if p.get("course_handicap_raw") is None:
+                continue
+            p["team_allowed"] = _wr(p["course_handicap_raw"] * allowance)
+            allowed.append(p["team_allowed"])
+    if not allowed:
+        return
+    low = min(allowed)
+    for g in groups:
+        for p in g["players"]:
+            if p.get("team_allowed") is not None:
+                p["team_handicap"] = p["team_allowed"] - low
+
+
+def event_team_net_dial(conn, ev: dict) -> tuple[int, float, str]:
+    """(balls, allowance, printable basis) for this event's Team Net.
+
+    Order: the EVENT's own ball count, then the `team_net_balls` default,
+    then Best 1. `team_net_allowance` remains an explicit escape hatch
+    for a one-off that does not follow the ladder; when it is set it
+    wins and the sheet says the percentage came from an override."""
+    balls = None
+    try:
+        balls = ev.get("team_ball_count")
+    except AttributeError:
+        balls = None
+    if balls in (None, ""):
+        try:
+            balls = _setting_via(conn, "team_net_balls")
+        except Exception:
+            balls = None
+    try:
+        balls = int(balls)
+    except (TypeError, ValueError):
+        balls = TEAM_BALLS_DEFAULT
+    balls = balls if balls in TEAM_ALLOWANCE_BY_BALLS else TEAM_BALLS_DEFAULT
+    allowance = TEAM_ALLOWANCE_BY_BALLS[balls]
+    override = None
+    try:
+        override = _setting_via(conn, "team_net_allowance")
+    except Exception:
+        override = None
+    if override not in (None, ""):
+        try:
+            allowance = float(override)
+            return balls, allowance, (f"manager override {round(allowance * 100)}% "
+                                      f"of PH, off the lowest in the field")
+        except (TypeError, ValueError):
+            pass
+    return balls, allowance, (f"Best {balls} net ball{'' if balls == 1 else 's'}, "
+                              f"{round(allowance * 100)}% of PH, off the lowest "
+                              f"in the field")
+
+
+def _tee_name_plural(name: str) -> str:
+    """'3 - Red (L) Tee' -> 'Red Tees' (Kerry 2026-09-16). The order
+    prefix is bookkeeping, '(L)' is said better by the band label
+    ('Women'), and TGF says TEES.
+
+    NOTE: this is the BAND legend's spelling and it is RATIFIED (Kerry
+    2026-09-15: "Women should just be: Women (no colored Red) Red
+    Tees") — the band already says who plays it, so the colour does not
+    repeat it. The LEADERBOARD's played-tee legend says who plays it the same
+    way, through `band_label` — see `TEE_LEGEND_WOMEN_WORD`."""
+    n = _TEE_ORDER_RE.sub("", " ".join((name or "").split())).strip()
+    n = re.sub(r"\s*\((?:l|lady|ladies)\)", "", n, flags=re.I).strip()
+    n = re.sub(r"\bTees?\b\s*$", "", n, flags=re.I).strip()
+    return f"{n} Tees" if n else n
+
+
+# THE ONE WORD FOR THE WOMEN'S TEE, on every surface (Kerry 2026-09-16:
+# "S1. Women's" / "We need to sync up the two legends somehow to maintain
+# consistency"). The LEADERBOARD's played-tee legend and the STARTER
+# SHEET's band legend are built by different code and used to spell it
+# differently ("Ladies - Red Tees" vs "Women Red Tees"). Both now compose
+# the same two fields — `band_label` (this word, or the men's band) then
+# `tee_name` ("Red Tees") — and this constant is the only place the word
+# lives. `test_tee_legend_pairing.js` fails either surface that drifts.
+TEE_LEGEND_WOMEN_WORD = "Women"
+
+
+def _tee_legend_display_name(name: str, ladies: bool) -> str:
+    """The tee's printed name for ANY legend: "Red Tees". Who plays it is
+    `band_label`'s job (see `TEE_LEGEND_WOMEN_WORD`), never the name's —
+    so the two legends cannot say it two ways."""
+    return _tee_name_plural(name)
+
+def _tee_color_for(tee_name: str) -> str | None:
+    low = " ".join((tee_name or "").split()).lower()
+    for word, hexv in _TEE_COLOR_WORDS.items():
+        if re.search(rf"\b{word}\b", low):
+            return hexv
+    return None
+
+
+# THE YARDAGE STANDARDS (Kerry 2026-09-20, verbatim: "<50 6300-6799 /
+# 50-64 5800-6299 / 65+ 5300-5799 / Women - shortest tees not less than
+# 4800"), stored as DATA in app_settings `tee_yardage_standards` so a
+# non-developer can move a line; this is the seed. Combo tees are never
+# proposed while a plain tee fits ("as a default, we do not want to use
+# any combo tees, except as last resort").
+TEE_YARDAGE_STANDARDS_DEFAULT = {"<50": [6300, 6799], "50-64": [5800, 6299],
+                                 "65+": [5300, 5799], "Forward": [4800, None]}
+
+
+def tee_yardage_standards(conn=None) -> dict:
+    """{band: [min, max|None]} — the live dial, else the ratified seed."""
+    raw = None
+    try:
+        if conn is not None:
+            row = conn.execute("SELECT value FROM app_settings WHERE key = ?",
+                               ("tee_yardage_standards",)).fetchone()
+            raw = row["value"] if row else None
+        else:
+            raw = get_app_setting("tee_yardage_standards")
+    except Exception:
+        raw = None
+    out = {k: list(v) for k, v in TEE_YARDAGE_STANDARDS_DEFAULT.items()}
+    if raw:
+        try:
+            for k, v in (json.loads(raw) or {}).items():
+                if k in TEE_BANDS and isinstance(v, (list, tuple)) and len(v) == 2:
+                    out[k] = [v[0], v[1]]
+        except Exception:
+            pass
+    return out
+
+
+def _course_tee_sets_18(conn, course_id: int) -> list:
+    """Every 18-hole set on a course with the yardage it plays to (its
+    own, else the sum of its front + back nines by master name + gender)."""
+    rows = [dict(r) for r in conn.execute(
+        """SELECT tee_id, tee_name, gg_alias, gender, holes, nine, rating, slope,
+                  yardage_total, is_combo, tgf_bands, source, usga_tee_label
+             FROM course_tees WHERE course_id = ? ORDER BY tee_id""", (course_id,))]
+    nines: dict = {}
+    for r in rows:
+        if r["holes"] == 9 and r.get("yardage_total"):
+            k = (" ".join((r["tee_name"] or "").split()).lower(), r["gender"])
+            nines.setdefault(k, {})[r.get("nine") or f"n{r['tee_id']}"] = r["yardage_total"]
+    out = []
+    for r in rows:
+        if r["holes"] != 18:
+            continue
+        y = r.get("yardage_total")
+        if not y:
+            k = (" ".join((r["tee_name"] or "").split()).lower(), r["gender"])
+            halves = nines.get(k) or {}
+            if len(halves) >= 2:
+                y = sum(sorted(halves.values(), reverse=True)[:2])
+        out.append(r | {"y18": y or 0, "bands": _tee_bands(r.get("tgf_bands"))})
+    return out
+
+
+def propose_tgf_tees(conn, course_id: int) -> dict:
+    """Which four tee sets TGF plays on a course, by the yardage standards.
+    Men's bands take the LONGEST plain men's set inside the band's range;
+    Forward takes the SHORTEST women's set not under its floor (a men's
+    set only when the course rates no women's tee). A combo set is
+    proposed only when no plain set fits. Read-only — `set_tee_bands`
+    / `apply_tgf_tee_proposal` write."""
+    course = conn.execute("SELECT course_id, name FROM courses WHERE course_id = ?",
+                          (course_id,)).fetchone()
+    if not course:
+        return {"ok": False, "error": f"no courses row {course_id}"}
+    std = tee_yardage_standards(conn)
+    sets = _course_tee_sets_18(conn, course_id)
+    current = {}
+    for t in sets:
+        for b in t["bands"]:
+            current[b] = {"tee_id": t["tee_id"], "tee_name": t["tee_name"],
+                          "gender": t["gender"], "y18": t["y18"]}
+    proposal, unplaced = {}, []
+
+    def _fits(t, lo, hi):
+        return t["y18"] and (lo is None or t["y18"] >= lo) and (hi is None or t["y18"] <= hi)
+
+    for band in ("<50", "50-64", "65+"):
+        lo, hi = std[band]
+        men = [t for t in sets if t["gender"] == "M" and _fits(t, lo, hi)]
+        plain = [t for t in men if not t["is_combo"]]
+        pool = plain or men
+        if pool:
+            pick = max(pool, key=lambda t: t["y18"])
+            proposal[band] = {"tee_id": pick["tee_id"], "tee_name": pick["tee_name"],
+                              "gender": "M", "y18": pick["y18"], "is_combo": pick["is_combo"],
+                              "why": f"longest men's {'combo (no plain set fits)' if pick['is_combo'] else 'set'} in {lo}-{hi}"}
+        else:
+            near = sorted((t for t in sets if t["gender"] == "M" and t["y18"]),
+                          key=lambda t: min(abs(t["y18"] - lo), abs(t["y18"] - hi)))[:2]
+            unplaced.append({"band": band, "range": [lo, hi],
+                             "nearest": [{"tee_id": t["tee_id"], "tee_name": t["tee_name"],
+                                          "y18": t["y18"]} for t in near]})
+    lo, hi = std["Forward"]
+    women_all = [t for t in sets if t["gender"] == "F"]
+    women = [t for t in women_all if _fits(t, lo, hi)]
+    plain = [t for t in women if not t["is_combo"]]
+    pool = plain or women
+    note = None
+    if not pool and not women_all:
+        # A course that rates NO women's tee: the shortest men's set at or
+        # above the floor, and say so. A course that rates women's tees
+        # all under the floor is UNPLACED (Kerry decides), never a men's set.
+        men = [t for t in sets if t["gender"] == "M" and _fits(t, lo, hi)]
+        pool = [t for t in men if not t["is_combo"]] or men
+        note = "no women's set rated on this course — shortest men's set at or above the floor"
+    if pool:
+        pick = min(pool, key=lambda t: t["y18"])
+        proposal["Forward"] = {"tee_id": pick["tee_id"], "tee_name": pick["tee_name"],
+                               "gender": pick["gender"], "y18": pick["y18"],
+                               "is_combo": pick["is_combo"],
+                               "why": note or f"shortest women's set not under {lo}"}
+    else:
+        near = sorted((t for t in women_all if t["y18"]), key=lambda t: -t["y18"])[:2]
+        unplaced.append({"band": "Forward", "range": [lo, hi],
+                         "nearest": [{"tee_id": t["tee_id"], "tee_name": t["tee_name"],
+                                      "gender": "F", "y18": t["y18"]} for t in near],
+                         "note": "every women's set on record is under the floor or has no yardage"})
+    return {"ok": True, "course_id": course_id, "course": course["name"],
+            "standards": std, "sets": [{k: t[k] for k in ("tee_id", "tee_name", "gg_alias",
+                                                            "gender", "y18", "is_combo", "bands",
+                                                            "source")} for t in sets],
+            "current": current, "proposal": proposal, "unplaced": unplaced,
+            "changes": {b: p for b, p in proposal.items()
+                        if (current.get(b) or {}).get("tee_id") != p["tee_id"]}}
+
+
+def set_tee_bands(conn, tee_id: int, bands, dry_run: bool = True) -> dict:
+    """Designate a tee set for TGF bands (or hide it: bands empty/None).
+    One set per band per course: a band moved here is taken off the
+    set that had it (reported as `displaced`)."""
+    row = conn.execute("SELECT tee_id, course_id, tee_name, gender, tgf_bands FROM course_tees "
+                       "WHERE tee_id = ?", (tee_id,)).fetchone()
+    if not row:
+        return {"ok": False, "error": f"no tee {tee_id}"}
+    want = [b for b in (bands or []) if b in TEE_BANDS]
+    bad = [b for b in (bands or []) if b not in TEE_BANDS]
+    if bad:
+        return {"ok": False, "error": f"unknown band(s) {bad}; bands are {list(TEE_BANDS)}"}
+    displaced = []
+    for other in conn.execute("SELECT tee_id, tee_name, gender, tgf_bands FROM course_tees "
+                              "WHERE course_id = ? AND tee_id != ?",
+                              (row["course_id"], tee_id)).fetchall():
+        keep = [b for b in _tee_bands(other["tgf_bands"]) if b not in want]
+        if keep != _tee_bands(other["tgf_bands"]):
+            displaced.append({"tee_id": other["tee_id"], "tee_name": other["tee_name"],
+                              "gender": other["gender"],
+                              "was": _tee_bands(other["tgf_bands"]), "now": keep})
+            if not dry_run:
+                conn.execute("UPDATE course_tees SET tgf_bands = ? WHERE tee_id = ?",
+                             (",".join(keep) or None, other["tee_id"]))
+    if not dry_run:
+        conn.execute("UPDATE course_tees SET tgf_bands = ? WHERE tee_id = ?",
+                     (",".join(want) or None, tee_id))
+        conn.commit()
+        try:
+            log_agent_action("mcp-claude", "set_tee_bands",
+                             f"tee {tee_id} {row['tee_name']} ({row['gender']}) -> {want or 'hidden'}")
+        except Exception:
+            pass
+    return {"ok": True, "dry_run": dry_run, "tee_id": tee_id, "tee_name": row["tee_name"],
+            "gender": row["gender"], "was": _tee_bands(row["tgf_bands"]), "now": want,
+            "displaced": displaced}
+
+
+def apply_tgf_tee_proposal(conn, course_id: int, dry_run: bool = True) -> dict:
+    """Write `propose_tgf_tees` onto the record: the proposed four get their
+    bands, every other set on the course is hidden."""
+    prop = propose_tgf_tees(conn, course_id)
+    if not prop.get("ok"):
+        return prop
+    wanted: dict = {}
+    for band, p in prop["proposal"].items():
+        wanted.setdefault(p["tee_id"], []).append(band)
+    writes = []
+    for t in prop["sets"]:
+        new = [b for b in TEE_BANDS if b in wanted.get(t["tee_id"], [])]
+        if new != t["bands"]:
+            writes.append({"tee_id": t["tee_id"], "tee_name": t["tee_name"],
+                           "gender": t["gender"], "was": t["bands"], "now": new})
+            if not dry_run:
+                conn.execute("UPDATE course_tees SET tgf_bands = ? WHERE tee_id = ?",
+                             (",".join(new) or None, t["tee_id"]))
+    if not dry_run:
+        conn.commit()
+    return {"ok": True, "dry_run": dry_run, "course_id": course_id, "course": prop["course"],
+            "proposal": prop["proposal"], "unplaced": prop["unplaced"], "writes": writes}
+
+
+def event_tee_legend(conn, event_id: int, ev: dict) -> list:
+    """[{band, band_label, tee_name, tee_key, color, ladies, ring, tee_id,
+    source}] for the event's course.
+
+    DESIGNATED FIRST (v2.467.0, Kerry 2026-09-20): a course whose record
+    carries `tgf_bands` prints exactly those sets — the rest of the
+    record is hidden. A course nobody has designated yet falls back to
+    the derivation below: the number Kerry typed into the Golf Genius
+    name (now on `gg_alias`) is the mapping — 1 <50, 2 50-64, 3 65+,
+    the women's rating of a numbered tee is Forward — and the yardage
+    standards decide when a card carries no numbers. The tee names are
+    printed beside the swatches precisely so a wrong pairing is obvious
+    on the sheet rather than on the first tee. Returns [] when the
+    course has no tee card.
+    """
+    cid = ev.get("course_id")
+    if not cid:
+        return []
+    try:
+        rows = [dict(r) for r in conn.execute(
+            "SELECT tee_id, tee_name, gg_alias, gender, holes, rating, slope, "
+            "yardage_total, tgf_bands FROM course_tees WHERE course_id = ?",
+            (cid,)).fetchall()]
+    except sqlite3.OperationalError:
+        return []
+    picks: dict = {}
+    pick_ids: dict = {}
+    designated = any(_tee_bands(r.get("tgf_bands")) for r in rows)
+    if designated:
+        for r in sorted(rows, key=lambda r: (0 if (r.get("holes") or 18) == 18 else 1, r["tee_id"])):
+            for band in _tee_bands(r.get("tgf_bands")):
+                if band in picks:
+                    continue
+                label = " ".join((r.get("tee_name") or "").split())
+                picks[band] = label
+                pick_ids[band] = (r["tee_id"], r.get("gender") == "F")
+    else:
+        # One entry per NAMED tee, carrying its longest 18-hole equivalent.
+        # A course card holds several rows per tee (front nine, back nine,
+        # the 18); a rating under 50 is a NINE-hole rating, so that row's
+        # yardage doubles to compare like with like.
+        tees: dict = {}
+        for r in rows:
+            nm = " ".join((r.get("tee_name") or "").split())
+            gg = " ".join((r.get("gg_alias") or "").split())
+            m = _TEE_ORDER_RE.match(gg) or _TEE_ORDER_RE.match(nm)
+            label = _TEE_ORDER_RE.sub("", nm).strip() if _TEE_ORDER_RE.match(nm) else nm
+            if not label:
+                continue
+            order = int(m.group(1)) if m else 99
+            yds = r.get("yardage_total") or 0
+            rating = r.get("rating") or 0
+            y18 = (yds if rating >= 50 else yds * 2) or 0
+            ladies = (r.get("gender") == "F"
+                      or bool(re.search(r"\((?:l|lady|ladies)\)", label, re.I)))
+            t = tees.setdefault((label, ladies), {
+                "label": label, "order": order, "y18": 0, "ladies": ladies,
+                "tee_id": r["tee_id"]})
+            t["order"] = min(t["order"], order)
+            if y18 > t["y18"]:
+                t["y18"], t["tee_id"] = y18, r["tee_id"]
+        if not tees:
+            return []
+        std = tee_yardage_standards(conn)
+        mens_t = [t for t in tees.values() if not t["ladies"]]
+        ladies_t = [t for t in tees.values() if t["ladies"]]
+        mens_t.sort(key=lambda t: (-(t["y18"] or 0), t["order"]))
+        ladies_t.sort(key=lambda t: (-(t["y18"] or 0), t["order"]))
+
+        def _in(t, band):
+            lo, hi = std[band]
+            return t["y18"] and (lo is None or t["y18"] >= lo) and (hi is None or t["y18"] <= hi)
+        # Yardage is the ruler Kerry named; the club's own tee ORDER is
+        # the tiebreak, and the whole ranking when a card carries no
+        # yardage at all.
+        # Each men's band takes the longest tee inside its range that is
+        # not longer than the band above it; a band with nothing in range
+        # takes the next tee down (the last one when the card runs out).
+        by_yards: dict = {}
+        prev = -1
+        for band in ("<50", "50-64", "65+"):
+            idx = next((i for i, t in enumerate(mens_t) if i > prev and _in(t, band)), None)
+            if idx is None and mens_t:
+                idx = min(prev + 1, len(mens_t) - 1)
+            if idx is not None:
+                by_yards[band] = mens_t[idx]
+                prev = idx
+        fwd = next((t for t in reversed(ladies_t) if _in(t, "Forward")), None) or \
+              (ladies_t[0] if ladies_t else (mens_t[-1] if mens_t else None))
+        for band, t in list(by_yards.items()) + [("Forward", fwd)]:
+            if t:
+                picks[band] = t["label"]
+                pick_ids[band] = (t["tee_id"], t["ladies"])
+        # THE CLUB'S OWN TEE NUMBER IS THE MAPPING (Kerry 2026-09-15: "1 -
+        # <50 / 2 - 50-64 / 3 - 65+ / 3 (L) - Forward (Ladies), OR 4 (L) -
+        # Forward (Ladies)"). Tee 0 is the tips, which TGF does not play.
+        by_order: dict = {}
+        for t in tees.values():
+            if t["order"] == 99:
+                continue
+            key = (t["order"], t["ladies"])
+            cur = by_order.get(key)
+            if cur is None or (t["y18"] or 0) > (cur["y18"] or 0):
+                by_order[key] = t
+        numbered = {n: t for (n, lad), t in by_order.items() if not lad}
+        ladies_numbered = [t for (n, lad), t in sorted(by_order.items()) if lad]
+        if numbered:
+            for band, num in (("<50", 1), ("50-64", 2), ("65+", 3)):
+                t = numbered.get(num)
+                if t:
+                    picks[band] = t["label"]
+                    pick_ids[band] = (t["tee_id"], False)
+            if ladies_numbered:
+                picks["Forward"] = ladies_numbered[-1]["label"]
+                pick_ids["Forward"] = (ladies_numbered[-1]["tee_id"], True)
+    out = []
+    for band in TEE_BANDS:
+        nm = picks.get(band)
+        if not nm:
+            continue
+        col = _tee_color_for(nm) or "#374151"
+        # HOW THE LEGEND READS (Kerry 2026-09-15): "Change (L) to
+        # (Ladies) in legend, <50 to Men <50, 50-64 to Men 50-64, 65+ to
+        # Men 65+, and Forward to Women [Color]". A member should not
+        # have to know that "(L)" or "Forward" is the women's tee.
+        tee_id, ladies = pick_ids.get(band, (None, False))
+        ladies = ladies or bool(re.search(r"\((?:l|lady|ladies)\)", nm, re.I))
+        # "Tee should say Tees. Women should just be: Women (no colored
+        # 'Red') Red Tees" (Kerry 2026-09-16).
+        label = _tee_name_plural(nm)
+        raw_label = _TEE_ORDER_RE.sub("", nm).strip()
+        band_label = {"<50": "Men <50", "50-64": "Men 50-64",
+                      "65+": "Men 65+"}.get(
+            band, TEE_LEGEND_WOMEN_WORD if (ladies or band == "Forward")
+            else band)
+        out.append({"band": band, "band_label": band_label,
+                    "tee_name": label,
+                    # What the course record calls it — the printed name
+                    # is for people, this is for matching rows.
+                    "tee_key": raw_label, "color": col,
+                    "ladies": ladies, "tee_id": tee_id,
+                    "source": "designated" if designated else "derived",
+                    # The ladies' tee is an OUTLINE, always.
+                    "ring": ladies})
+    # The ladies' tee sorts LAST, always (Kerry).
+    out.sort(key=lambda t: (1 if t["ladies"] else 0,
+                            TEE_BANDS.index(t["band"])))
+    return out
+
+
+_NAME_SUFFIXES = {"jr", "jr.", "sr", "sr.", "ii", "iii", "iv", "v"}
+
+
+def _cart_sign_name(name: str) -> str:
+    """"Daniel SOUTH" — given name as written, SURNAME in caps.
+
+    Golf Genius's cart-sign convention, kept because it is doing real
+    work: on a windshield at ten feet the surname is what a player scans
+    for, and the caps carry it. A suffix rides with the surname."""
+    parts = " ".join((name or "").split()).split(" ")
+    if len(parts) < 2:
+        return (name or "").upper()
+    tail = []
+    while len(parts) > 1 and parts[-1].lower().strip(".") in {
+            s.strip(".") for s in _NAME_SUFFIXES}:
+        tail.insert(0, parts.pop())
+    last = parts.pop()
+    return " ".join(parts + [last.upper()] + [t.upper() for t in tail])
+
+
+def poll_live_events(force: bool = False, db_path=None) -> dict:
+    """Re-import today's scorecards from Golf Genius while a round is live.
+
+    Kerry 2026-09-15: "Poll GG on a timer, just like we were doing for
+    Match Play. I want to see it working live." — and later, when the
+    boards went quiet an hour after the last manual pull, "Looks like
+    leaderboards have stopped updating." They had not stopped; nothing
+    had ever started them. The scorecard import ran when somebody asked
+    it to.
+
+    WHEN IT POLLS. Only events dated TODAY, only after their start time,
+    and only until the field is COMPLETE — the same "every hole for every
+    player" test the money hold uses. A finished round stops being polled
+    by itself, so this never hammers Golf Genius for a board nobody is
+    watching. `force=True` ignores the completeness test (for a card
+    corrected after the fact).
+
+    It reports what it did per event, including why it skipped one, so a
+    quiet board is diagnosable instead of mysterious.
+    """
+    # TGF'S DAY, NOT THE CONTAINER'S (Kerry 2026-09-16, an hour after the
+    # same mistake on the events list: "Leaderboard isn't updating
+    # again"). Railway runs in UTC, so from 7pm Central the poller was
+    # asking for events dated TOMORROW and finding none — it reported a
+    # clean sweep of zero events every five minutes while a round was
+    # being played. The repo's own timezone rule, applied on the server
+    # this time.
+    today = today_central_str()
+    yday = (datetime.strptime(today, "%Y-%m-%d") - timedelta(days=1)
+            ).strftime("%Y-%m-%d")
+    out = {"checked": [], "imported": [], "skipped": [], "ran_at": today}
+    with _connect(db_path) as conn:
+        # Yesterday's event still polls while it is unfinished AND
+        # something was posted recently — a round that runs past midnight
+        # is rare, but abandoning it at 00:00 is the wrong answer.
+        evs = [dict(r) for r in conn.execute(
+            """SELECT id, item_name, chapter, format, event_date,
+                      start_time, start_time_18
+                 FROM events
+                WHERE event_date = ?
+                   OR (event_date = ? AND EXISTS (
+                         SELECT 1 FROM scoring_rounds sr
+                          WHERE sr.event_id = events.id
+                            AND sr.imported_at >= datetime('now', '-6 hours')))""",
+            (today, yday))]
+        for ev in evs:
+            code_m = _PRINT_EVENT_CODE_RE.match(ev["item_name"] or "")
+            code = (code_m.group(0).strip().replace(" ", "")
+                    if code_m else None)
+            portal = {"san antonio": "sa", "austin": "austin"}.get(
+                (ev.get("chapter") or "").strip().lower())
+            state = {"event": ev["item_name"], "event_id": ev["id"],
+                     "code": code, "portal": portal}
+            out["checked"].append(state)
+            if not code or not portal:
+                state["skipped"] = "no event code or chapter portal"
+                out["skipped"].append(state)
+                continue
+            if not _event_started(ev):
+                state["skipped"] = "has not started"
+                out["skipped"].append(state)
+                continue
+            fc = _event_field_complete(
+                conn, ev["id"], _event_holes_type(ev["item_name"], ev.get("format")))
+            state["field"] = fc["field"]
+            state["pending"] = len(fc["pending"])
+            if fc["complete"] and not force:
+                state["skipped"] = "every card is in"
+                out["skipped"].append(state)
+                continue
+            out["imported"].append(state)
+    # Imports open their own connections — never inside the read above.
+    for state in out["imported"]:
+        try:
+            res = import_event_scorecards_by_code(
+                _gg_results_widget(state["portal"]), state["code"])
+            state["result"] = {b.get("board"): {
+                "imported": b.get("imported"), "replaced": b.get("replaced")}
+                for b in (res.get("boards") or [])}
+        except Exception as e:
+            logger.exception("Live poll failed for %s (non-fatal)",
+                             state["event"])
+            state["error"] = str(e)
+    return out
+
+
+def import_course_card(key: str, dry_run: bool = True, db_path=None) -> dict:
+    """Load a club's own course card into `course_tees` + `course_tee_holes`.
+
+    Kerry has been sending these screen by screen since he ruled out
+    guessing ("That 'The course card...' note WILL NOT fly. We can never
+    do that. We need to get the calculations right."). Each card gives,
+    per tee: the 18-hole rating/slope, the FRONT and BACK rating/slope,
+    and every hole's yardage, par and stroke index. That is everything a
+    playing handicap needs and everything `label_course_tee_nines` was
+    having to infer — so with a card loaded, nothing is inferred.
+
+    Three rows per tee: the 18 (`nine='full'`, holes 1-18), the front
+    (`nine='front'`, holes 1-9) and the back (`nine='back'`, holes
+    10-18, numbered as they are actually played). An EXISTING row that
+    matches on (name, slope, rating) is reused and filled in, never
+    duplicated — the rounds already posted against it keep their tee.
+
+    Cards live in `email_parser/course_cards.py`, in the repo, so they
+    can be diffed and re-applied rather than living in a chat.
+    """
+    from .course_cards import COURSE_CARDS
+    card = COURSE_CARDS.get((key or "").strip().lower())
+    if not card:
+        return {"error": f"no card for '{key}'",
+                "known": sorted({c["course"] for c in COURSE_CARDS.values()})}
+    out = {"course": card["course"], "course_id": card["course_id"],
+           "dry_run": bool(dry_run), "rows": [], "holes_written": 0}
+    with _connect(db_path) as conn:
+        _ensure_scoring_tables(conn)
+        try:
+            conn.execute("ALTER TABLE course_tees ADD COLUMN nine TEXT")
+        except sqlite3.OperationalError:
+            pass
+        cid = card["course_id"]
+        for tee in card["tees"]:
+            gender = _tee_gender_from_name(tee["name"])
+            spans = (
+                ("full", tee["r18"], tee["s18"], list(range(1, 19)), 18),
+                ("front", tee["front"][0], tee["front"][1], list(range(1, 10)), 9),
+                ("back", tee["back"][0], tee["back"][1], list(range(10, 19)), 9),
+            )
+            full_tee_id = None
+            for nine, rating, slope, holes, nholes in spans:
+                yards = [tee["yards"][h - 1] for h in holes]
+                total = sum(yards)
+                # v2.466.0: the natural key carries gender, holes and nine,
+                # so a tee whose halves rate identically (Forest Creek
+                # White, 35.2/125 both ways) is simply two rows — the old
+                # 'both' merge is gone. Rows already labelled 'both' keep
+                # working (the resolver reads them as either half).
+                row = conn.execute(
+                    """SELECT tee_id FROM course_tees
+                        WHERE course_id = ? AND (gg_alias = ? OR tee_name = ?)
+                          AND gender = ? AND holes = ? AND slope = ? AND rating = ?
+                          AND (nine = ? OR nine IS NULL OR nine = 'both')
+                        ORDER BY CASE WHEN nine = ? THEN 0 ELSE 1 END, tee_id""",
+                    (cid, tee["name"], tee["name"], gender, nholes, slope, rating,
+                     nine, nine)).fetchone()
+                action = "existing"
+                tee_id = row["tee_id"] if row else None
+                if tee_id is None and nine == "full":
+                    tee_id = _adopt_crdb_tee_set(conn, cid, tee["name"], gender, slope, rating,
+                                                 dry_run=dry_run)
+                    if tee_id is not None:
+                        action = "existing (CRDB set, renamed)"
+                span_par = sum(tee["par"][h - 1] for h in holes)
+                if tee_id is None:
+                    action = "new"
+                    if not dry_run:
+                        _parts = _gg_tee_parts(tee["name"])
+                        cur = conn.execute(
+                            """INSERT INTO course_tees
+                                   (course_id, tee_name, gg_alias, tgf_bands, gender,
+                                    holes, nine, slope, rating, yardage_total, is_ladies,
+                                    source, par)
+                               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'course_card', ?)""",
+                            (cid, _parts["master"], tee["name"],
+                             ",".join(_parts["bands"]) or None, gender, nholes, nine,
+                             slope, rating, total, 1 if gender == "F" else 0, span_par))
+                        tee_id = cur.lastrowid
+                elif not dry_run:
+                    conn.execute(
+                        """UPDATE course_tees SET yardage_total = ?,
+                                  nine = CASE WHEN nine = 'both' THEN nine ELSE ? END,
+                                  par = ? WHERE tee_id = ?""",
+                        (total, nine, span_par, tee_id))
+                if nine == "full":
+                    full_tee_id = tee_id
+                n_holes = 0
+                if not dry_run and tee_id is not None:
+                    for h in holes:
+                        conn.execute(
+                            """INSERT OR REPLACE INTO course_tee_holes
+                                   (tee_id, hole_number, par, yardage,
+                                    stroke_index)
+                               VALUES (?, ?, ?, ?, ?)""",
+                            (tee_id, h, tee["par"][h - 1],
+                             tee["yards"][h - 1], tee["si"][h - 1]))
+                        n_holes += 1
+                    conn.execute(
+                        """INSERT OR REPLACE INTO tee_set_ratings
+                               (tee_id, rating_type, course_rating, slope, source)
+                           VALUES (?, 'total', ?, ?, 'course_card')""",
+                        (tee_id, rating, slope))
+                    # The card's front/back numbers live on the 18-hole set
+                    # too — the standard shape; no sibling row is needed to
+                    # post an 18-hole event as two nines.
+                    if nine in ("front", "back") and full_tee_id is not None:
+                        conn.execute(
+                            """INSERT OR REPLACE INTO tee_set_ratings
+                                   (tee_id, rating_type, course_rating, slope, source)
+                               VALUES (?, ?, ?, ?, 'course_card')""",
+                            (full_tee_id, nine, rating, slope))
+                out["holes_written"] += n_holes
+                out["rows"].append({
+                    "tee_name": tee["name"], "gender": gender, "nine": nine,
+                    "rating": rating, "slope": slope, "yardage_total": total,
+                    "tee_id": tee_id, "action": action, "holes": n_holes})
+        if not dry_run:
+            _heal_tee_yardages(conn)
+            conn.commit()
+    return out
+
+
+def label_course_tee_nines(conn, course_id: int | None = None) -> dict:
+    """Say which NINE each course_tees row belongs to, from the data.
+
+    Kerry 2026-09-15: "That 'The course card...' note WILL NOT fly. We can
+    never do that. We need to get the calculations right." He is right: a
+    printed handicap that might be off a stroke is worse than no number.
+
+    Golf Genius files a nine-hole round's card as its own tee row, named
+    the same as the eighteen and numbered holes 1-9 either way, so a
+    course accumulates several rows per tee with nothing on them saying
+    front or back. But the ANSWER IS IN THE DATA: the eighteen-hole row
+    of the same tee carries holes 1-18 with their yardages, so a nine's
+    own yardages match one half of it and not the other. Where there is
+    no eighteen to match against, the RATINGS settle it — front + back
+    equals the eighteen-hole rating.
+
+    Writes `course_tees.nine` ('front' | 'back' | 'full'); returns what
+    it decided and, for anything it could not, why. Idempotent."""
+    _migrate_course_tees_v2(conn)
+    where, args = "", []
+    if course_id:
+        where, args = " WHERE ct.course_id = ?", [course_id]
+    rows = [dict(r) for r in conn.execute(
+        "SELECT ct.tee_id, ct.course_id, ct.tee_name, ct.gender, ct.rating, ct.slope, "
+        "ct.yardage_total, ct.nine FROM course_tees ct" + where, args).fetchall()]
+    holes: dict = {}
+    for h in conn.execute(
+            "SELECT cth.tee_id, cth.hole_number, cth.yardage FROM course_tee_holes cth"
+            + (" JOIN course_tees ct ON ct.tee_id = cth.tee_id" + where if course_id else ""),
+            args).fetchall():
+        holes.setdefault(h["tee_id"], {})[int(h["hole_number"])] = h["yardage"]
+
+    def _key(r):
+        return (r["course_id"], r.get("gender") or "M", _TEE_ORDER_RE.sub("", " ".join(
+            (r["tee_name"] or "").split())).strip().lower())
+
+    groups: dict = {}
+    for r in rows:
+        groups.setdefault(_key(r), []).append(r)
+
+    decided, unresolved = [], []
+    for key, grp in groups.items():
+        full = [r for r in grp if (r["rating"] or 0) >= 50]
+        nines = [r for r in grp if (r["rating"] or 0) < 50]
+        for r in full:
+            r["_nine"] = "full"
+        anchor = full[0] if full else None
+        ah = holes.get(anchor["tee_id"], {}) if anchor else {}
+        front_y = [ah.get(i) for i in range(1, 10)]
+        back_y = [ah.get(i) for i in range(10, 19)]
+        have_anchor = all(y for y in front_y) and all(y for y in back_y)
+        for r in nines:
+            hy = [holes.get(r["tee_id"], {}).get(i) for i in range(1, 10)]
+            if have_anchor and all(y for y in hy):
+                if hy == front_y:
+                    r["_nine"] = "front"; continue
+                if hy == back_y:
+                    r["_nine"] = "back"; continue
+                # Same nine re-rated: fall through to the totals below.
+            tot = r["yardage_total"] or (sum(y for y in hy if y) or 0)
+            if have_anchor and tot:
+                fsum, bsum = sum(front_y), sum(back_y)
+                if tot == fsum and tot != bsum:
+                    r["_nine"] = "front"; continue
+                if tot == bsum and tot != fsum:
+                    r["_nine"] = "back"; continue
+        # A tee is commonly RE-RATED, so the same nine appears twice at
+        # the same yardage. Group what is left by yardage and match the
+        # groups to the 18's own two halves; the ratings then corroborate
+        # (front + back = the eighteen). Anything still unsettled stays
+        # unsettled — no coin flips on a number that decides money.
+        undone = [r for r in nines if not r.get("_nine")]
+        if undone and have_anchor:
+            fsum, bsum = sum(front_y), sum(back_y)
+            by_yards: dict = {}
+            for r in undone:
+                y = r["yardage_total"] or sum(
+                    v for v in (holes.get(r["tee_id"], {}) or {}).values() if v)
+                if y:
+                    by_yards.setdefault(int(y), []).append(r)
+            for y, grp_r in by_yards.items():
+                if y == fsum and y != bsum:
+                    for r in grp_r:
+                        r["_nine"] = "front"
+                elif y == bsum and y != fsum:
+                    for r in grp_r:
+                        r["_nine"] = "back"
+            # Two groups that ADD to the 18 but match neither half
+            # exactly (a re-measured card): the ratings still decide.
+            left = [r for r in undone if not r.get("_nine")]
+            if len(by_yards) == 2 and left and anchor and anchor["rating"]:
+                (ya, ga), (yb, gb) = sorted(by_yards.items())
+                if anchor["yardage_total"] and ya + yb == anchor["yardage_total"]:
+                    best = None
+                    for ra in ga:
+                        for rb in gb:
+                            if ra["rating"] and rb["rating"] and abs(
+                                    (ra["rating"] + rb["rating"]) - anchor["rating"]) <= 0.15:
+                                best = (ra, rb)
+                    if best:
+                        # Front is the half whose yardage matches the 18's
+                        # front; with no hole data that is unknowable, so
+                        # only proceed when the sums differ from each other
+                        # and one of them equals fsum.
+                        fa = ya if ya == fsum else (yb if yb == fsum else None)
+                        if fa is not None:
+                            for r in ga:
+                                r["_nine"] = "front" if ya == fa else "back"
+                            for r in gb:
+                                r["_nine"] = "front" if yb == fa else "back"
+        # THE ROUNDS ALREADY PLAYED OFF A ROW SAY WHICH NINE IT IS
+        # (v2.462.2, Kerry 2026-09-16: "I submitted ALL Avery Ranch tees,
+        # ratings and info last night. Is this fixed now?"). Avery has no
+        # 18-hole row to match against, so the yardage strategies above
+        # cannot label it — but every round we have imported off a tee
+        # row was scored on a night whose nine we recorded (`events.
+        # nine_side`) and posted as a handicap round that names its nine
+        # (`handicap_rounds.nine`). Unanimous history labels the row; a
+        # row played as both stays unresolved and says so. Data, not a
+        # guess: the same fact the print pack uses for one event, kept.
+        played_why: dict = {}
+        for r in [x for x in nines if not x.get("_nine")]:
+            sides: set = set()
+            try:
+                for h in conn.execute(
+                        """SELECT hr.nine AS hr_nine, e.nine_side AS ev_nine
+                             FROM scoring_rounds sr
+                             LEFT JOIN handicap_rounds hr
+                                    ON hr.scoring_round_id = sr.id
+                             LEFT JOIN events e ON e.id = sr.event_id
+                            WHERE sr.tee_id = ?""", (r["tee_id"],)).fetchall():
+                    for v in (h["hr_nine"], h["ev_nine"]):
+                        v = (v or "").strip().lower()
+                        if v in ("front", "back"):
+                            sides.add(v)
+            except sqlite3.OperationalError:
+                sides = set()
+            if len(sides) == 1:
+                r["_nine"] = sides.pop()
+            elif len(sides) > 1:
+                played_why[r["tee_id"]] = "played as both front and back"
+        for r in grp:
+            if r.get("_nine"):
+                if r["nine"] != r["_nine"]:
+                    conn.execute("UPDATE course_tees SET nine = ? WHERE tee_id = ?",
+                                 (r["_nine"], r["tee_id"]))
+                decided.append({"tee_id": r["tee_id"], "course_id": r["course_id"],
+                                "tee_name": r["tee_name"], "rating": r["rating"],
+                                "yards": r["yardage_total"], "nine": r["_nine"]})
+            else:
+                unresolved.append({"tee_id": r["tee_id"], "course_id": r["course_id"],
+                                   "tee_name": r["tee_name"], "rating": r["rating"],
+                                   "yards": r["yardage_total"],
+                                   "why": played_why.get(r["tee_id"]) or (
+                                           "no 18-hole row of this tee to match against, "
+                                           "and no round played off it yet"
+                                           if not anchor else
+                                           "yardages match neither nine and the ratings "
+                                           "do not add up to the 18")})
+    conn.commit()
+    return {"decided": decided, "unresolved": unresolved,
+            "n_decided": len(decided), "n_unresolved": len(unresolved)}
+
+
+def _event_tee_rows(conn, ev: dict, legend: list) -> tuple[dict, str, str]:
+    """Per BAND, the concrete tee row the playing handicap is computed on:
+    {band: {"slope", "rating", "par", "tee_name"}}, plus a one-line basis
+    and any caveat the sheet should print.
+
+    A course card carries several rows per named tee — the front nine, the
+    back nine, the 18 — and a rating under 50 IS a nine-hole rating. Where
+    the card's hole numbers tell the nines apart (1-9 vs 10-18) the right
+    one is used; where every nine-hole row is stored as holes 1-9, which
+    is common, they are indistinguishable and the MIDDLE rating is taken
+    and SAID SO on the sheet, because a silently wrong rating is a
+    silently wrong handicap."""
+    cid = ev.get("course_id")
+    if not cid or not legend:
+        return {}, "", "No course card on file, so no playing handicap could be computed."
+    is18 = _event_holes_type(ev.get("item_name"), ev.get("format")) == 18
+    nine = (ev.get("nine_side") or "Front").strip().lower()
+    try:
+        label_course_tee_nines(conn, cid)      # cheap, idempotent, self-healing
+        rows = [dict(r) for r in conn.execute(
+            "SELECT tee_id, tee_name, gg_alias, slope, rating, nine FROM course_tees "
+            "WHERE course_id = ?", (cid,)).fetchall()]
+    except sqlite3.OperationalError:
+        return {}, "", "No course card on file, so no playing handicap could be computed."
+    used_tees: dict = {}
+    # THIS EVENT'S OWN ROUNDS (v2.462.0, Kerry 2026-09-16: "Avery Ranch
+    # doesn't even show PH or TEAM (Cart) handicaps"). Avery's card holds
+    # two nine-hole rows per tee and no 18-hole row to label them from,
+    # so the sheet printed no handicap at all. But once the night's
+    # scorecards are in, the tee row Golf Genius scored the round off IS
+    # the nine that was played — a recorded fact, not a guess — and it
+    # decides an otherwise unlabelled card for that event.
+    event_used: set = set()
+    try:
+        for r in conn.execute(
+                "SELECT sr.tee_id, COUNT(*) AS n FROM scoring_rounds sr "
+                "WHERE sr.course_id = ? AND sr.tee_id IS NOT NULL GROUP BY sr.tee_id",
+                (cid,)).fetchall():
+            used_tees[r["tee_id"]] = r["n"]
+        if ev.get("id"):
+            event_used = {r["tee_id"] for r in conn.execute(
+                "SELECT DISTINCT tee_id FROM scoring_rounds "
+                "WHERE event_id = ? AND tee_id IS NOT NULL",
+                (ev["id"],)).fetchall()}
+    except sqlite3.OperationalError:
+        used_tees = {}
+    holes_by_tee: dict = {}
+    for r in conn.execute(
+            "SELECT cth.tee_id, cth.hole_number, cth.par FROM course_tee_holes cth "
+            "JOIN course_tees ct ON ct.tee_id = cth.tee_id WHERE ct.course_id = ?",
+            (cid,)).fetchall():
+        holes_by_tee.setdefault(r["tee_id"], {})[int(r["hole_number"])] = r["par"]
+
+    def _label(nm):
+        # MASTER name on both sides (v2.467.0): "1 - Gold Tee", "Gold Tee"
+        # and "Gold" are the same tee whether the row has been aliased yet
+        # or not, so the legend and the record cannot disagree mid-boot.
+        return _gg_tee_parts(nm)["master"].lower()
+
+    out, ambiguous = {}, False
+    for entry in legend:
+        _want = _label(entry.get("tee_key") or entry["tee_name"])
+        _want_id = entry.get("tee_id")
+        cands = [r for r in rows if (_label(r["tee_name"]) == _want
+                                     or _label(r.get("gg_alias")) == _want)
+                 and r["slope"] and r["rating"] is not None
+                 and ((r["rating"] >= 50) == is18)]
+        if is18 and _want_id and any(r["tee_id"] == _want_id for r in cands):
+            cands = [r for r in cands if r["tee_id"] == _want_id]
+        if not cands:
+            continue
+        pick = None
+        if is18:
+            pick = cands[0]
+        else:
+            # The nine is a LABEL now (label_course_tee_nines), derived
+            # from the 18-hole card's own yardages. Kerry 2026-09-15:
+            # "We need to get the calculations right" - so an unlabelled
+            # card yields NO playing handicap rather than a plausible one
+            # with a caveat under it.
+            want = "back" if nine == "back" else "front"
+            exact = [r for r in cands
+                     if (r.get("nine") or "") in (want, "both")]
+            if len(exact) == 1:
+                pick = exact[0]
+            elif len(exact) > 1:
+                # A nine gets RE-RATED, so one nine can have several rows.
+                # The one Golf Genius actually assigns is the one our own
+                # imported rounds were played off; that is the rating the
+                # course is using today. Nothing imported yet -> the
+                # original row, not the newest guess.
+                pick = sorted(exact, key=lambda r: (
+                    -(used_tees.get(r["tee_id"], 0)), r["tee_id"]))[0]
+            elif len(cands) == 1 and not cands[0].get("nine"):
+                pick = cands[0]        # one card, nothing to confuse it with
+            elif len([r for r in cands if r["tee_id"] in event_used]) == 1:
+                # the row this event's own scorecards were scored off
+                pick = [r for r in cands if r["tee_id"] in event_used][0]
+            else:
+                ambiguous = True
+                continue
+        pars = holes_by_tee.get(pick["tee_id"], {})
+        par = sum(p for p in pars.values() if p) or (72 if is18 else 36)
+        out[entry["band"]] = {"tee_name": entry["tee_name"], "slope": pick["slope"],
+                              "rating": pick["rating"], "par": par}
+    basis = ("18-hole card" if is18
+             else f"{'back' if nine == 'back' else 'front'} nine card")
+    # No guessing: a tee whose nine could not be established prints no
+    # playing handicap at all, and the sheet names the gap rather than
+    # pretending to a number (Kerry 2026-09-15).
+    note = ("No playing handicap for some tees - this course's card does not "
+            "say which nine those ratings belong to. Import the 18-hole "
+            "scorecard for the course and reprint."
+            if ambiguous else "")
+    return out, basis, note
+
+
+def _package_holes_from_label(label) -> int | None:
+    """Server twin of the page's pkgHolesFromLabel: how many holes a
+    championship package buys, read from its label when `holes` is unset."""
+    s_ = str(label or "").lower()
+    if re.search(r"\b(full weekend|all three|three[- ]days?|3[- ]days?)\b", s_):
+        return 54
+    rounds = 0
+    if re.search(r"\b(both days|two[- ]days?|2[- ]days?)\b", s_):
+        rounds = 2
+    elif re.search(r"\b(one day|single[- ]day|1[- ]day)\b", s_):
+        rounds = 1
+    if re.search(r"\bpractice\b", s_):
+        rounds += 1
+    return rounds * 18 if rounds else None
+
+
+_SIDE_GAMES_ORDER = ("Net", "Gross", "Both", "None")
+
+
+def _norm_side_games(val) -> str | None:
+    """items.side_games in its many spellings → Net / Gross / Both / None."""
+    v = str(val or "").strip().upper()
+    if not v or v in ("NONE", "NO", "N/A", "-", "—"):
+        return "None"
+    has_net, has_gross = "NET" in v, "GROSS" in v
+    if v == "BOTH" or (has_net and has_gross):
+        return "Both"
+    if has_net:
+        return "Net"
+    if has_gross:
+        return "Gross"
+    return None
+
+
+def add_player_options(event_id: int, db_path: str | Path | None = None) -> dict | None:
+    """What the Add Player modal may offer for THIS event.
+
+    Kerry 2026-09-21: "I would like to see any of these Add Player modal
+    selection be responsive to what is actually available based on the
+    event, rather than a standard list of selections that make me
+    choose." Principle 1 — derive, don't ask.
+
+    holes       the event's FORMAT decides: a nine offers 9, an 18 offers
+                18, a combo offers both; plus every hole count the event's
+                packages sell (36 / 54 on a championship).
+    side_games  the vocabulary this event's registrations actually carry
+                (what the order form offered), plus None; the full list
+                only while nothing is known (empty roster).
+    tees        the bands the course record designates — the starter
+                sheet's own legend — each with its tee name; the standard
+                four when the course has no tee card.
+    A single option is offered as the answer, not as a choice.
+    """
+    with _connect(db_path) as conn:
+        row = conn.execute(
+            "SELECT id, item_name, format, course_id, event_date FROM events WHERE id = ?",
+            (event_id,)).fetchone()
+        if not row:
+            return None
+        ev = dict(row)
+        fmt = (ev.get("format") or "").lower()
+        holes_type = _event_holes_type(ev["item_name"], ev.get("format"))
+        holes = ["9", "18"] if "combo" in fmt else [str(holes_type)]
+        pkgs = ((_event_packages_all(db_path).get(str(int(event_id))) or {}).get("packages") or [])
+        for p in pkgs:
+            h = p.get("holes") or _package_holes_from_label(p.get("label"))
+            if h and str(h) not in holes:
+                holes.append(str(h))
+        holes.sort(key=int)
+        seen: list = []
+        try:
+            for r in conn.execute(
+                    """SELECT DISTINCT i.side_games FROM items i
+                        WHERE (i.event_id = ? OR (i.event_id IS NULL AND i.item_name = ? COLLATE NOCASE))
+                          AND i.parent_item_id IS NULL
+                          AND COALESCE(i.transaction_status, 'active')
+                              NOT IN ('credited', 'refunded', 'transferred', 'wd', 'rsvp_only')""",
+                    (event_id, ev["item_name"])).fetchall():
+                v = _norm_side_games(r[0])
+                if v and v not in seen:
+                    seen.append(v)
+        except sqlite3.OperationalError:
+            seen = []
+        side_games = [o for o in _SIDE_GAMES_ORDER if o in seen] if seen else list(_SIDE_GAMES_ORDER)
+        if "None" not in side_games:
+            side_games.append("None")
+        legend = []
+        try:
+            legend = event_tee_legend(conn, event_id, ev) or []
+        except Exception:
+            legend = []
+        if legend:
+            tees = [{"value": t["band"], "label": f'{t["band_label"]} · {t["tee_name"]}'} for t in legend]
+        else:
+            tees = [{"value": b, "label": b} for b in TEE_BANDS]
+        return {"event_id": int(event_id), "holes_type": holes_type,
+                "holes": holes, "side_games": side_games, "tees": tees,
+                "sources": {"holes": "format" + (" + packages" if pkgs else ""),
+                            "side_games": "roster" if seen else "default",
+                            "tees": "course record" if legend else "standard bands"}}
+
+
+MEMBERS_ACTIVE_DAYS_KEY = "members_active_days"
+MEMBERS_ACTIVE_DAYS_DEFAULT = 60
+
+
+def members_active_days(db_path=None) -> int:
+    """How recent "played" must be for a member to count as ACTIVE on the
+    Customers snapshot — a DIAL (Kerry 2026-09-21: "who's played in the
+    last 60 days")."""
+    try:
+        return max(1, int(get_app_setting(MEMBERS_ACTIVE_DAYS_KEY, db_path=db_path) or MEMBERS_ACTIVE_DAYS_DEFAULT))
+    except (TypeError, ValueError):
+        return MEMBERS_ACTIVE_DAYS_DEFAULT
+
+
+def customers_last_played(db_path=None, today: str | None = None) -> dict:
+    """{customer_id: last_played ISO date} — the most recent day a person
+    PLAYED: an active event registration whose event date has passed
+    (by event_id, or by item name for rows never linked), a posted
+    scoring round, or a handicap round through the player link. Keyed by
+    customer_id (principle 6); a registration with no id is not a
+    person we can count."""
+    from email_parser.timezone_utils import today_central
+    today = today or today_central().isoformat()
+    out: dict = {}
+
+    def _take(cid, day):
+        if cid is None or not day:
+            return
+        day = str(day)[:10]
+        if day > today:
+            return
+        if out.get(cid) is None or day > out[cid]:
+            out[cid] = day
+    with _connect(db_path) as conn:
+        for r in conn.execute(
+                """SELECT i.customer_id AS cid, MAX(e.event_date) AS d
+                     FROM items i
+                     JOIN events e ON (e.id = i.event_id
+                                       OR (i.event_id IS NULL AND e.item_name = i.item_name COLLATE NOCASE))
+                    WHERE i.customer_id IS NOT NULL AND i.parent_item_id IS NULL
+                      AND COALESCE(i.transaction_status, 'active') NOT IN ('credited', 'refunded', 'transferred', 'wd')
+                      AND e.event_date IS NOT NULL AND e.event_date <= ?
+                      AND COALESCE(e.status, 'active') NOT IN ('cancelled', 'canceled', 'postponed')
+                    GROUP BY i.customer_id""", (today,)).fetchall():
+            _take(r["cid"], r["d"])
+        try:
+            for r in conn.execute("SELECT customer_id AS cid, MAX(round_date) AS d FROM scoring_rounds "
+                                  "WHERE customer_id IS NOT NULL GROUP BY customer_id").fetchall():
+                _take(r["cid"], r["d"])
+        except sqlite3.OperationalError:
+            pass
+        try:
+            for r in conn.execute(
+                    """SELECT l.customer_id AS cid, MAX(hr.round_date) AS d
+                         FROM handicap_rounds hr JOIN handicap_player_links l ON l.player_name = hr.player_name
+                        WHERE l.customer_id IS NOT NULL GROUP BY l.customer_id""").fetchall():
+                _take(r["cid"], r["d"])
+        except sqlite3.OperationalError:
+            pass
+    return out
+
+
+def customers_activity(days: int | None = None, db_path=None, today: str | None = None) -> dict:
+    """The Customers snapshot's ACTIVE members payload: per customer_id the
+    last day played and whether it falls inside the window."""
+    from email_parser.timezone_utils import today_central
+    today = today or today_central().isoformat()
+    days = int(days or members_active_days(db_path))
+    cutoff = (datetime.fromisoformat(today) - timedelta(days=days)).date().isoformat()
+    last = customers_last_played(db_path, today=today)
+    return {"days": days, "today": today, "cutoff": cutoff,
+            "customers": {str(cid): {"last_played": d, "active": d >= cutoff} for cid, d in last.items()}}
+
+
+def retag_handicap_rounds(round_date: str, from_course: str, to_course: str,
+                          slope: int, rating: float | None = None,
+                          apply: bool = False, db_path=None) -> dict:
+    """Re-tag every handicap round posted on ONE date under the wrong
+    course (Kerry 2026-09-21: "my handicap entry for the Hill Country
+    event is incorrectly tagged. We played the Oaks 9 that night") —
+    course name, slope, optionally rating; the differential is recomputed
+    from the row's own adjusted score. All players on that date (rule 3d
+    — the whole field played the same nine), dry run unless apply."""
+    with _connect(db_path) as conn:
+        rows = [dict(r) for r in conn.execute(
+            """SELECT id, player_name, round_date, course_name, tee_name, adjusted_score,
+                      rating, slope, differential FROM handicap_rounds
+                WHERE round_date = ? AND course_name = ? COLLATE NOCASE
+                ORDER BY player_name""", (round_date, from_course)).fetchall()]
+        plan = []
+        for r in rows:
+            new_rating = float(rating) if rating is not None else float(r["rating"])
+            new_diff = round((r["adjusted_score"] - new_rating) * 113.0 / int(slope), 1)
+            plan.append({"id": r["id"], "player_name": r["player_name"],
+                         "course_before": r["course_name"], "course_after": to_course,
+                         "rating_before": r["rating"], "rating_after": new_rating,
+                         "slope_before": r["slope"], "slope_after": int(slope),
+                         "differential_before": r["differential"], "differential_after": new_diff})
+        if apply:
+            for p in plan:
+                conn.execute("""UPDATE handicap_rounds SET course_name = ?, rating = ?, slope = ?,
+                                       differential = ? WHERE id = ?""",
+                             (to_course, p["rating_after"], p["slope_after"], p["differential_after"], p["id"]))
+            conn.commit()
+        return {"round_date": round_date, "from_course": from_course, "to_course": to_course,
+                "rows": len(plan), "applied": bool(apply), "plan": plan}
+
+
+def renumber_nine_hole_course(course_id: int, apply: bool = False, db_path=None) -> dict:
+    """A named nine of a multi-nine complex numbers its holes 1–9 (Kerry
+    2026-09-21: "even though GG may have shown 10-18, each 9 is just 1-9,
+    same as Comanche Trace's 27 holes"). Moves the course's tee hole
+    rows and every round's hole rows from 10–18 down to 1–9 when the
+    1–9 side is empty. Refuses a course record that carries an 18-hole
+    tee (a real back nine there IS 10–18). Dry run unless apply."""
+    with _connect(db_path) as conn:
+        course = conn.execute("SELECT course_id, name FROM courses WHERE course_id = ?", (course_id,)).fetchone()
+        if not course:
+            return {"error": "course not found", "course_id": course_id}
+        tees = [dict(r) for r in conn.execute(
+            "SELECT tee_id, tee_name, holes FROM course_tees WHERE course_id = ?", (course_id,)).fetchall()]
+        if any((t.get("holes") or 18) == 18 for t in tees):
+            return {"error": "course record carries an 18-hole tee — a back nine there is 10–18; not a named nine",
+                    "course_id": course_id, "name": course["name"]}
+        tee_moves, round_moves = [], []
+        for t in tees:
+            back = conn.execute("SELECT COUNT(*) FROM course_tee_holes WHERE tee_id = ? AND hole_number BETWEEN 10 AND 18",
+                                (t["tee_id"],)).fetchone()[0]
+            front = conn.execute("SELECT COUNT(*) FROM course_tee_holes WHERE tee_id = ? AND hole_number BETWEEN 1 AND 9",
+                                 (t["tee_id"],)).fetchone()[0]
+            if back and not front:
+                tee_moves.append({"tee_id": t["tee_id"], "tee_name": t["tee_name"], "holes_moved": back})
+        for r in conn.execute("SELECT id, player_name, round_date FROM scoring_rounds WHERE course_id = ?",
+                              (course_id,)).fetchall():
+            back = conn.execute("""SELECT COUNT(*) FROM scoring_holes WHERE scoring_round_id = ?
+                                    AND hole_number BETWEEN 10 AND 18 AND strokes IS NOT NULL""", (r["id"],)).fetchone()[0]
+            front = conn.execute("""SELECT COUNT(*) FROM scoring_holes WHERE scoring_round_id = ?
+                                     AND hole_number BETWEEN 1 AND 9 AND strokes IS NOT NULL""", (r["id"],)).fetchone()[0]
+            if back and not front:
+                round_moves.append({"scoring_round_id": r["id"], "player_name": r["player_name"],
+                                    "round_date": r["round_date"], "holes_moved": back})
+        if apply:
+            for t in tee_moves:
+                conn.execute("DELETE FROM course_tee_holes WHERE tee_id = ? AND hole_number BETWEEN 1 AND 9", (t["tee_id"],))
+                conn.execute("UPDATE course_tee_holes SET hole_number = hole_number - 9 WHERE tee_id = ? AND hole_number BETWEEN 10 AND 18",
+                             (t["tee_id"],))
+            for m in round_moves:
+                conn.execute("DELETE FROM scoring_holes WHERE scoring_round_id = ? AND hole_number BETWEEN 1 AND 9", (m["scoring_round_id"],))
+                conn.execute("UPDATE scoring_holes SET hole_number = hole_number - 9 WHERE scoring_round_id = ? AND hole_number BETWEEN 10 AND 18",
+                             (m["scoring_round_id"],))
+            conn.commit()
+        return {"course_id": course_id, "name": course["name"], "applied": bool(apply),
+                "tees": tee_moves, "rounds": round_moves}
+
+
+def _first_event_as_member(conn, roster_row: dict, event_date: str) -> bool:
+    """NEW badge rule (Kerry 2026-09-18): the member's membership started
+    on or before `event_date` and they have played NO event between that
+    start and this one — by registration (an active order for an event
+    dated in that window) or by a posted round in it."""
+    cid = roster_row.get("customer_id")
+    start = (roster_row.get("first_member_start") or "")[:10]
+    if not cid or not start or not event_date or start > event_date:
+        return False
+    try:
+        played = conn.execute(
+            """SELECT 1 FROM items i JOIN events e
+                 ON (e.id = i.event_id OR e.item_name = i.item_name COLLATE NOCASE)
+                WHERE i.customer_id = ? AND i.parent_item_id IS NULL
+                  AND COALESCE(i.transaction_status,'active') = 'active'
+                  AND e.event_date >= ? AND e.event_date < ?
+                LIMIT 1""", (cid, start, event_date)).fetchone()
+        if played:
+            return False
+        rnd = conn.execute(
+            """SELECT 1 FROM handicap_rounds hr
+                 JOIN handicap_player_links l ON l.player_name = hr.player_name
+                WHERE l.customer_id = ? AND hr.round_date >= ? AND hr.round_date < ?
+                LIMIT 1""", (cid, start, event_date)).fetchone()
+        return not rnd
+    except sqlite3.OperationalError:
+        return False
 
 
 def get_event_print_pack(event_id: int, db_path=None) -> dict | None:
@@ -54726,6 +59597,38 @@ def get_event_print_pack(event_id: int, db_path=None) -> dict | None:
         if not ev:
             return None
         ev = dict(ev)
+        tee_legend = event_tee_legend(conn, event_id, ev)
+        tee_rows, ph_basis, ph_note = _event_tee_rows(conn, ev, tee_legend)
+        team_balls, team_allowance, team_basis = event_team_net_dial(conn, ev)
+        # WHO IS NEW AND WHO HAS NEVER PLAYED (Kerry 2026-09-15: "Add NEW
+        # & 1st Timer (1T) badges to players in Alphabetical list"). The
+        # starter reads that list to answer "where am I?" — and it is the
+        # same list a captain scans before the shotgun to know who needs
+        # looking after. Flags come from the ROSTER, the one place that
+        # decides them (`_decorate_roster_roles` / `_mark_first_timers`),
+        # so the sheet and the pairings cards can never disagree.
+        # NEW means A MEMBER PLAYING THEIR FIRST EVENT AS A MEMBER (v2.465.9,
+        # Kerry 2026-09-18, confirmed: "Correct on your NEW badge
+        # understanding. Ship it."): membership started on or before this
+        # event, and no event played between that start and this one. Not
+        # "joined since our last event" (missed Bear Clarkson), not
+        # "first-year member" (tagged Lewis, Wallace and Schneider, who had
+        # all played as members). 1T = first TGF event ever. Independent;
+        # a first-timer who is already a member wears both.
+        _ev_date = (ev.get("event_date") or "")[:10]
+        _roles: dict = {}
+        try:
+            for _r in _event_roster_rows(conn, event_id):
+                _rec = {"is_new": _first_event_as_member(conn, _r, _ev_date),
+                        "is_first_timer": bool(_r.get("is_first_timer"))}
+                if _r.get("customer_id"):
+                    _roles[f"c:{_r['customer_id']}"] = _rec
+                if _r.get("name"):
+                    _roles["n:" + _pair_key_name(_r["name"])] = _rec
+        except Exception:
+            logger.exception("Non-fatal: roster flags unavailable for %s",
+                             event_id)
+    idx_map = _handicap_index_18_by_customer(db_path, as_of=_event_index_as_of(ev))
     pairings = get_event_pairings(event_id, db_path=db_path)
 
     def _carts(players: list) -> list:
@@ -54742,12 +59645,25 @@ def get_event_print_pack(event_id: int, db_path=None) -> dict | None:
         for g in (pairings.get(holes) or []):
             players = sorted(g.get("players") or [],
                              key=lambda p: p.get("cart_pos") or 0)
+            for pl in players:
+                pl["cart_name"] = _cart_sign_name(pl.get("name"))
+                _fl = (_roles.get(f"c:{pl.get('customer_id')}")
+                       or _roles.get("n:" + _pair_key_name(pl.get("name") or ""))
+                       or {})
+                pl["is_new"] = bool(_fl.get("is_new"))
+                pl["is_first_timer"] = bool(_fl.get("is_first_timer"))
             groups.append({
                 "holes": holes,
                 "group_num": g.get("group_num"),
                 "slot_label": g.get("slot_label") or f"Group {g.get('group_num')}",
                 "players": players,
                 "carts": _carts(players),
+                # The team's drawn cards for its empty seats. Printed on
+                # the starter sheet so the group knows what completes
+                # their Team Net — never on a cart sign, because nobody
+                # by that name is in the cart.
+                "blinds": [{**b, "sort_name": _sort_name(b.get("name") or "")}
+                           for b in (g.get("blinds") or [])],
             })
     # WHEN to be there, not just where (Kerry 2026-09-08: the starter
     # sheet "needs to show the time of the shotgun"). start_time is
@@ -54767,12 +59683,116 @@ def get_event_print_pack(event_id: int, db_path=None) -> dict | None:
     if _start:
         start_label = (f"Shotgun {_start}" if _st == "Shotgun"
                        else f"First tee {_start}")
+    # ONE LINE SAYING WHEN AND WHERE, and the order is a rule (Kerry
+    # 2026-09-15): "When Shotgun, list Hole first | then Time. When Tee
+    # Times, List Tee Time | Hole." The lead item is the one that varies
+    # between groups — on a shotgun everybody starts at the same minute
+    # and the HOLE is what distinguishes you; on tee times everybody
+    # starts at the same tee and the TIME is. Composed here so the
+    # starter sheet and the cart signs can never state a start
+    # differently, and so a tee-time event never reads "Hole 8:10a".
+    _shotgun = _st.lower().startswith("shotgun")
+    _first_tee = "10" if (ev.get("nine_side") or "").strip().lower() == "back" else "1"
+    for g in groups:
+        short = re.sub(r"^HOLE\s+", "", g["slot_label"], flags=re.I)
+        # A generic "Group N" label is not a hole (v2.458.10, Kerry: "This
+        # shouldn't say Hole Group 1. It should just say Hole 1"). The
+        # real fix is a sheet that carries its hole labels — see
+        # `_write_event_pairings_from_groups` — but a label that admits
+        # it knows no hole must not be dressed up as one.
+        _generic = bool(re.match(r"^group\s+\d+$", short, re.I))
+        if _shotgun and _generic:
+            g["start_line"] = short + (f" | {_start}" if _start else "")
+        elif _shotgun:
+            g["start_line"] = f"Hole {short}" + (f" | {_start}" if _start else "")
+        else:
+            # The slot label IS the tee time on a tee-time event; the hole
+            # is the first tee of the nine being played.
+            g["start_line"] = f"{short} | Hole {_first_tee}"
+        g["hole_label"] = (short if (_shotgun and _generic)
+                           else f"Hole {short}" if _shotgun
+                           else f"Hole {_first_tee}")
+
     _st18 = (ev.get("start_type_18") or "").strip()
     _start18 = _clock(ev.get("start_time_18"))
     start_label_18 = None
     if _start18 and (ev.get("format") or "").strip() == "9/18 Combo":
         start_label_18 = (f"Shotgun {_start18}" if _st18 == "Shotgun"
                           else f"First tee {_start18}")
+
+    # PLAYING HANDICAP at 100%, and the TEAM NET handicap off it (Kerry
+    # 2026-09-15: "Let's DO show 100% Playing Handicap for players in
+    # ALPHABETICAL after TGF Index. Then show Team Net Handicap in the
+    # next column."). PH comes from OUR index and the tee that player's
+    # BAND plays, through handicap_calc — the same chain Task #16
+    # parity-proved against Golf Genius. TEAM is that number at the
+    # event's team allowance, off the LOWEST in the player's own group,
+    # which is the shape CA ratified for Cedar Creek (#502/#507). The
+    # allowance is a dial (`team_net_allowance`, default 100%) and the
+    # sheet PRINTS which one it used, so a wrong dial is visible.
+    from email_parser.handicap_calc import (playing_handicap as _ph_fn,
+                                            course_handicap as _ch_fn)
+    ph_by_name: dict = {}
+    _is18 = _event_holes_type(ev.get("item_name"), ev.get("format")) == 18
+    # THE NOTE IS ABOUT THE TEES ON THIS SHEET (v2.462.1). An unlabelled
+    # tee nobody is playing tonight is not a missing handicap — a9.23's
+    # Green tees were unresolved and unused, and the sheet still warned.
+    _bands_short: set = set()
+    for g in groups:
+        for p in g["players"]:
+            cid = p.get("customer_id")
+            _band = (p.get("tee_choice") or "").strip()
+            tee = tee_rows.get(_band)
+            if _band and not tee:
+                _bands_short.add(_band)
+            idx = idx_map.get(int(cid)) if cid else None
+            # THE INDEX PRINTS ON THE EVENT'S SCALE (Kerry 2026-09-18: "For
+            # an 18 hole event, the TGF Handicap to be shown should be the
+            # 18 hole handicap"). `idx_map` is the 18-hole index of record
+            # (twice the nine); the sheet's IDX column shows that on an
+            # 18-hole night and the nine on a nine.
+            # Always present — the template reads it under StrictUndefined,
+            # and a player with no index must print a dash, not a 500.
+            p["handicap_index_display"] = (round(idx if _is18 else idx / 2.0, 1)
+                                           if idx is not None else None)
+            if idx is None or not tee:
+                continue
+            # A nine-hole card takes the nine-hole index (half the 18).
+            idx_scoped = idx if (tee["rating"] or 0) >= 50 else round(idx / 2.0, 1)
+            try:
+                p["playing_handicap"] = _ph_fn(idx_scoped, tee["slope"],
+                                               tee["rating"], tee["par"])
+                p["course_handicap_raw"] = _ch_fn(idx_scoped, tee["slope"],
+                                                  tee["rating"], tee["par"])
+            except Exception:
+                continue
+            ph_by_name[_pair_key_name(p.get("name"))] = p["playing_handicap"]
+    # THE TEAM COLUMN IS THE GAME BEING PLAYED (v2.464.15). Unit and
+    # allowance come from the matrix + the codified ladder
+    # (`live_scoring` team_net.allowance_pct_by_balls: 4-player 75/85/100/
+    # 100, CART 85/100), applied to the unrounded course handicap and
+    # rounded once; the dial's allowance is the fallback only when the
+    # ladder has no row, and the sheet SAYS which it used.
+    _n_seated = sum(len(g["players"]) for g in groups)
+    _holes_key = "18" if _is18 else "9"
+    team_unit, _team_type = _event_team_unit(_n_seated, _holes_key, db_path=db_path)
+    try:
+        from email_parser.live_scoring import (SEED_LIVE_SCORING_CONFIG as _LSC,
+                                               team_allowance_pct as _tap)
+        _res = _tap(_LSC["games"]["team_net"], 2 if team_unit == "cart" else 4,
+                    team_balls)
+        _pct = _res.get("pct")
+    except Exception:
+        _pct = None
+    if _pct is not None and "manager override" not in (team_basis or ""):
+        team_allowance = _pct / 100.0
+        team_basis = (f"{'Cart' if team_unit == 'cart' else 'Team'} Net: best "
+                      f"{team_balls} net ball{'' if team_balls == 1 else 's'} of "
+                      f"{2 if team_unit == 'cart' else 4}, {round(team_allowance * 100)}% "
+                      f"of the course handicap (rounded once), off the lowest in the field")
+    elif _pct is None:
+        team_basis = team_basis + " (dial fallback — no ruled allowance for this size)"
+    team_handicaps_for_groups(groups, team_allowance, team_unit)
 
     # ALPHA LIST (Kerry 2026-09-08): the starter's other job is answering
     # "where am I?" for a player who walks up knowing only their own
@@ -54788,6 +59808,14 @@ def get_event_print_pack(event_id: int, db_path=None) -> dict | None:
             last = parts[-1] if parts else nm
             first = " ".join(parts[:-1]) if len(parts) > 1 else ""
             alpha.append({
+                "playing_handicap": p.get("playing_handicap"),
+                "team_handicap": p.get("team_handicap"),
+                "handicap_index_display": p.get("handicap_index_display"),
+                "team_allowed": p.get("team_allowed"),
+                "course_handicap_raw": p.get("course_handicap_raw"),
+                "cart_pos": p.get("cart_pos"),
+                "is_new": bool(p.get("is_new")),
+                "is_first_timer": bool(p.get("is_first_timer")),
                 "name": nm,
                 "sort_name": f"{last}, {first}".strip().strip(","),
                 "slot_label": g["slot_label"],
@@ -54819,9 +59847,30 @@ def get_event_print_pack(event_id: int, db_path=None) -> dict | None:
             "start_time": ev.get("start_time"),
             "start_label": start_label,
             "start_label_18": start_label_18,
+            "start_clock": _start,
+            "start_clock_18": _start18,
+            "file_stub": print_file_stub(ev),
         },
         "groups": groups,
         "group_count": len(groups),
+        "tee_legend": tee_legend,
+        # The swatch colour and the INK colour are not the same thing:
+        # a white tee's chip must print black or it prints nothing
+        # (Kerry 2026-09-15).
+        "tee_colors": {t["band"]: (
+            "#1B1B1B" if (t["color"] or "").lower() in ("#ffffff", "#fff")
+            else t["color"]) for t in tee_legend},
+        "tee_swatches": {t["band"]: t["color"] for t in tee_legend},
+        # The women's tee prints as an OUTLINE wherever it appears.
+        "tee_ladies": {t["band"]: bool(t.get("ladies")) for t in tee_legend},
+        "ph_basis": ph_basis,
+        "ph_note": ph_note if _bands_short else "",
+        "team_basis": team_basis,
+        "team_balls": team_balls,
+        "team_unit": team_unit,
+        "team_allowance": team_allowance,
+        "holes_key": "18" if _event_holes_type(
+            ev.get("item_name"), ev.get("format")) == 18 else "9",
         "alpha": alpha,
         "player_count": len(alpha),
     }
@@ -54886,6 +59935,127 @@ def purge_app_pairing_history(dry_run: bool = True, db_path=None) -> dict:
         return out
 
 
+def _reseat_event_blinds(conn, event_id: int) -> dict:
+    """Move blinds onto the sheet's CURRENT open seats (v2.458.8).
+
+    Kerry 2026-09-16, after regenerating s9.23's sheet: "Lost blinds
+    visually" — and, picking a name for an empty seat, "Gus Vasquez is
+    already a blind in this event" when no blind showed for him anywhere.
+
+    Both symptoms, one cause. `blind_draws` rows are keyed to a SEAT
+    (`holes:group_num:cart_pos`), and `save_event_pairings` rebuilds
+    `event_pairings` from scratch without touching them. Regenerate the
+    sheet and the seats move while the blind rows keep pointing at
+    coordinates that may no longer be an open seat — so the card renders
+    "— open —" (the blind is invisible) while the eligibility guard still
+    counts that person (the blind is very much there). An orphan.
+
+    A blind belongs to the EVENT and the PERSON; the seat is only where
+    it is displayed. So on every save the blinds are re-seated into the
+    current open seats in sheet order — the same order `draw_event_blinds`
+    already fills them in, and the same treatment its `loose` rows (the
+    ones Kerry enters straight into Golf Genius) already get. Nobody is
+    dropped: a blind with no open seat left to take is nulled to loose
+    rather than deleted, so it still counts against that member's turn.
+    """
+    _ensure_pairing_tables(conn)
+    # ONLY the app's own seat-keyed rows (v2.458.9). The `gg` rows are the
+    # blinds Kerry enters straight into Golf Genius, read back out of the
+    # team string: they are deliberately LOOSE because, as
+    # `draw_event_blinds` puts it, "we cannot know which slot each one
+    # covers, and it does not matter". v2.458.8 re-seated them too, which
+    # handed them seats they were never meant to hold. Leave them alone.
+    rows = [dict(r) for r in conn.execute(
+        """SELECT id, customer_id, player_name, source, holes, group_num,
+                  cart_pos
+             FROM blind_draws
+            WHERE event_id = ? AND COALESCE(source, 'app') = 'app'
+            ORDER BY id""",
+        (event_id,)).fetchall()]
+    if not rows:
+        return {"reseated": 0, "loosened": 0}
+    size = _blind_team_size(conn)
+    # Read the sheet through THIS connection: `get_event_pairings` opens
+    # its own, and this runs inside `save_event_pairings`'s transaction —
+    # it would see the sheet as it was before the save.
+    groups: dict = {}
+    for r in conn.execute(
+            """SELECT holes, group_num, slot_label, cart_pos, customer_id
+                 FROM event_pairings WHERE event_id = ?
+                ORDER BY holes, group_num, cart_pos""", (event_id,)):
+        g = groups.setdefault((r["holes"], r["group_num"]),
+                              {"slot_label": r["slot_label"],
+                               "seated": set(), "here": set()})
+        g["seated"].add(r["cart_pos"])
+        if r["customer_id"] is not None:
+            g["here"].add(r["customer_id"])
+    open_seats = []
+    for (holes, group_num), g in sorted(
+            groups.items(), key=lambda kv: (kv[0][0], kv[0][1])):
+        for pos in range(1, size + 1):
+            if pos in g["seated"]:
+                continue
+            open_seats.append({"holes": holes, "group_num": group_num,
+                               "slot_label": g["slot_label"],
+                               "cart_pos": pos, "here": g["here"]})
+    plan = []
+    seated_cids: set = set()
+    for r in rows:
+        # ONE BLIND PER PERSON PER EVENT (rule 15, ratified 2026-09-16).
+        # Enforced HERE, at the boundary, rather than trusted of the rows:
+        # s9.23 carried Pat Youngs twice, and a re-seat that simply moved
+        # rows around would have given one man two seats on the sheet.
+        # The duplicate is loosened, never deleted — it still counts.
+        if r["customer_id"] is not None and r["customer_id"] in seated_cids:
+            plan.append((r, None))
+            continue
+        # A card can never fill its own team (rule 15c) — if the seat that
+        # comes up next is in that player's OWN group, skip past it.
+        seat = next((st for st in open_seats
+                     if r["customer_id"] not in st["here"]), None)
+        if seat is not None:
+            open_seats.remove(seat)
+            if r["customer_id"] is not None:
+                seated_cids.add(r["customer_id"])
+        plan.append((r, seat))
+    # `slot_key` is NOT NULL and UNIQUE(event_id, slot_key), and a re-seat
+    # can SWAP two blinds — writing A into B's seat while B still holds it
+    # trips the constraint. So park every row on a temporary key first,
+    # then write the real ones.
+    for r, _seat in plan:
+        conn.execute("UPDATE blind_draws SET slot_key = ? WHERE id = ?",
+                     (f"tmp:{r['id']}", r["id"]))
+    reseated = loosened = 0
+    for r, seat in plan:
+        if seat is None:
+            # No open seat left for this one. It is NOT deleted: a loose
+            # blind still counts against that member's turn, and the draw
+            # already knows how to read one (the rows Kerry enters
+            # straight into Golf Genius look exactly like this).
+            conn.execute(
+                """UPDATE blind_draws
+                      SET group_num = NULL, cart_pos = NULL,
+                          slot_label = NULL, slot_key = ?
+                    WHERE id = ?""",
+                (f"loose:{r['customer_id'] or _cmp_person_key_str(r['player_name'])}",
+                 r["id"]))
+            loosened += 1
+            continue
+        conn.execute(
+            """UPDATE blind_draws
+                  SET holes = ?, group_num = ?, slot_label = ?, cart_pos = ?,
+                      slot_key = ?
+                WHERE id = ?""",
+            (seat["holes"], seat["group_num"], seat["slot_label"],
+             seat["cart_pos"],
+             _blind_slot_key(seat["holes"], seat["group_num"],
+                             seat["cart_pos"]), r["id"]))
+        if (r["holes"], r["group_num"], r["cart_pos"]) != (
+                seat["holes"], seat["group_num"], seat["cart_pos"]):
+            reseated += 1
+    return {"reseated": reseated, "loosened": loosened}
+
+
 def save_event_pairings(event_id: int, groups_by_holes: dict, db_path=None) -> None:
     """Persist pairings for an event and rebuild pairing_history rows.
 
@@ -54910,17 +60080,23 @@ def save_event_pairings(event_id: int, groups_by_holes: dict, db_path=None) -> N
                 group_num = grp["group_num"]
                 slot_label = grp["slot_label"]
                 for p in grp["players"]:
+                    # Save the PERSON, not just the name they had today —
+                    # and the person is the NAME on the seat, never a
+                    # payload id that may have stayed behind in a swap.
+                    _cid = _seat_customer_id(conn, p.get("name"),
+                                             p.get("customer_id"))
                     conn.execute(
                         """
                         INSERT OR REPLACE INTO event_pairings
                             (event_id, holes, group_num, slot_label, player_name,
-                             cart_pos, tee_choice, handicap_index)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                             cart_pos, tee_choice, handicap_index, customer_id)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                         """,
                         (
                             event_id, holes, group_num, slot_label,
                             p["name"], p["cart_pos"],
                             p.get("tee_choice"), p.get("handicap_index"),
+                            _cid,
                         ),
                     )
 
@@ -54966,7 +60142,106 @@ def save_event_pairings(event_id: int, groups_by_holes: dict, db_path=None) -> N
                              1 if frozenset((a, b)) in rode_pairs else 0),
                         )
 
+        # The seats just moved; the blinds keyed to them have not. Re-seat
+        # them onto the sheet's current open seats before anything reads it
+        # again (v2.458.8) — otherwise a blind points at a seat that no
+        # longer exists: invisible on the card, still counted by the
+        # eligibility guard.
+        _reseat_event_blinds(conn, event_id)
         conn.commit()
+
+
+def swap_event_seats(event_id: int, name_a: str, name_b: str,
+                     apply: bool = False, db_path=None) -> dict:
+    """Swap two seated players' SEATS on a saved sheet, through the normal
+    save (v2.464.13, Kerry 2026-09-18 on s18.11: "You with Jeff"). The
+    whole person moves and the seat stays — the same rule the page's
+    swap now follows — so tees, ids and the locked index travel with the
+    names and the blinds re-seat. Names match by pair key (case and
+    spacing insensitive). Dry-run unless `apply`."""
+    pairings = get_event_pairings(event_id, db_path=db_path)
+    ka, kb = _pair_key_name(name_a), _pair_key_name(name_b)
+    found: dict = {}
+    for holes, groups in pairings.items():
+        for g in groups:
+            for p in g["players"]:
+                k = _pair_key_name(p.get("name"))
+                if k in (ka, kb):
+                    found[k] = (holes, g, p)
+    missing = [n for n, k in ((name_a, ka), (name_b, kb)) if k not in found]
+    if missing:
+        return {"error": f"not seated on this sheet: {missing}"}
+    (ha, ga, pa), (hb, gb, pb) = found[ka], found[kb]
+    if ha != hb:
+        return {"error": "cannot swap across the 9-hole and 18-hole sheets"}
+    plan = {"a": {"name": pa["name"], "from": f"{ga['slot_label']} seat {pa['cart_pos']}",
+                  "to": f"{gb['slot_label']} seat {pb['cart_pos']}"},
+            "b": {"name": pb["name"], "from": f"{gb['slot_label']} seat {pb['cart_pos']}",
+                  "to": f"{ga['slot_label']} seat {pa['cart_pos']}"}}
+    # swap everything but the seat number
+    seat_a, seat_b = pa["cart_pos"], pb["cart_pos"]
+    keys = set(pa) | set(pb); keys.discard("cart_pos")
+    va, vb = {k: pa.get(k) for k in keys}, {k: pb.get(k) for k in keys}
+    pa.clear(); pa.update(vb); pa["cart_pos"] = seat_a
+    pb.clear(); pb.update(va); pb["cart_pos"] = seat_b
+    out = {"event_id": int(event_id), "holes": ha, "applied": False, "plan": plan,
+           "groups_after": [{"slot": g["slot_label"],
+                             "players": [f"{p['cart_pos']}:{p['name']}" for p in g["players"]]}
+                            for g in pairings[ha] if g in (ga, gb)]}
+    if apply:
+        save_event_pairings(int(event_id), pairings, db_path=db_path)
+        out["applied"] = True
+        out["blinds"] = get_event_blinds(int(event_id), db_path=db_path)
+    return out
+
+
+def relabel_event_pairings(event_id: int, holes: str, labels: dict,
+                           apply: bool = False, db_path=None) -> dict:
+    """Give a saved sheet its hole labels back and put its groups in hole
+    order, through the normal save so the blinds re-seat with it.
+
+    `labels` maps CURRENT group_num -> hole label ({5: "1A", 4: "1B", …});
+    groups are renumbered in the order the mapping lists them. Nobody
+    moves seats; only the label and the group order change. Built for
+    s9.23 (Kerry 2026-09-16: "Re-seat the pairings as necessary to match
+    and fix blinds") after a Team Net board ingest rewrote the sheet in
+    finish order — the GG tee sheet is the record, and this is how a
+    manager applies it without retyping the groups.
+    """
+    pairings = get_event_pairings(event_id, db_path=db_path)
+    groups = {g["group_num"]: g for g in (pairings.get(holes) or [])}
+    missing = [k for k in labels if int(k) not in groups]
+    if missing:
+        return {"error": f"no such group(s) on the {holes}-hole sheet: {missing}",
+                "have": sorted(groups)}
+    unlisted = sorted(set(groups) - {int(k) for k in labels})
+    plan, new_groups = [], []
+    for new_num, (old_num, label) in enumerate(labels.items(), start=1):
+        g = groups[int(old_num)]
+        plan.append({"was_group": int(old_num), "was_label": g["slot_label"],
+                     "now_group": new_num, "now_label": str(label),
+                     "players": [p["name"] for p in g["players"]],
+                     "tees": [p.get("tee_choice") for p in g["players"]]})
+        new_groups.append({"group_num": new_num, "slot_label": str(label),
+                           "players": [dict(p) for p in g["players"]]})
+    for old_num in unlisted:      # anything not mentioned keeps its label, goes last
+        g = groups[old_num]
+        new_num = len(new_groups) + 1
+        plan.append({"was_group": old_num, "was_label": g["slot_label"],
+                     "now_group": new_num, "now_label": g["slot_label"],
+                     "players": [p["name"] for p in g["players"]],
+                     "tees": [p.get("tee_choice") for p in g["players"]]})
+        new_groups.append({"group_num": new_num, "slot_label": g["slot_label"],
+                           "players": [dict(p) for p in g["players"]]})
+    out = {"event_id": int(event_id), "holes": holes, "applied": False,
+           "plan": plan}
+    if apply:
+        other = {h: v for h, v in pairings.items() if h != holes}
+        save_event_pairings(int(event_id), {**other, holes: new_groups},
+                            db_path=db_path)
+        out["applied"] = True
+        out["blinds"] = get_event_blinds(int(event_id), db_path=db_path)
+    return out
 
 
 def delete_event_pairings(event_id: int, db_path=None) -> None:
@@ -55150,8 +60425,6 @@ def get_event_partner_requests(event_id: int, db_path=None) -> dict:
     too (matched=false) so the manager can see intent the generator
     can't act on.
     """
-    INACTIVE = ("credited", "refunded", "transferred", "wd")
-    ph = ",".join("?" * len(INACTIVE))
     with _connect(db_path) as conn:
         _ensure_pairing_tables(conn)
         # A very old events table may predate the column; a missing
@@ -55164,28 +60437,10 @@ def get_event_partner_requests(event_id: int, db_path=None) -> dict:
         except sqlite3.OperationalError:
             group_max = 4
         group_word = "fivesome" if group_max == 5 else "foursome"
-        rows = conn.execute(
-            f"""
-            SELECT DISTINCT i.customer, i.customer_id, i.holes,
-                            i.partner_request, i.id, i.order_date,
-                            i.created_at, i.notes, i.order_id,
-                            i.customer_email, i.user_status,
-                            c.current_player_status
-            FROM events e
-            LEFT JOIN event_aliases ea ON ea.canonical_event_name = e.item_name
-            JOIN items i ON (
-                i.item_name = e.item_name COLLATE NOCASE
-                OR i.item_name = ea.alias_name COLLATE NOCASE
-                OR i.event_id = e.id
-            )
-            LEFT JOIN customers c ON c.customer_id = i.customer_id
-            WHERE e.id = ?
-              AND COALESCE(i.transaction_status, 'active') NOT IN ({ph})
-              AND i.parent_item_id IS NULL
-            ORDER BY i.customer COLLATE NOCASE
-            """,
-            (event_id, *INACTIVE),
-        ).fetchall()
+        # THE roster, GG-RSVP-only players included, so a request naming
+        # one resolves and one can be added as a requester (Kerry
+        # 2026-09-15). Same rows the generator deals from.
+        rows = _event_roster_rows(conn, event_id)
         suppressed = {_pair_key_name(r["requester_name"]) for r in conn.execute(
             "SELECT requester_name FROM pairing_request_suppressions "
             "WHERE event_id = ?", (event_id,)).fetchall()}
@@ -55714,34 +60969,197 @@ def get_pairing_history_counts(year: int | None = None, db_path=None,
     being generated FOR is never its own history. The generator always
     passes it.
     """
+    with _connect(db_path) as conn:
+        return _pair_counts_from_conn(conn, year=year,
+                                      exclude_event_id=exclude_event_id)
+
+
+def _pair_counts_from_conn(conn, year: int | None = None,
+                           exclude_event_id: int | None = None) -> dict:
+    """The pair-count query itself, on a connection the caller already
+    holds. `get_pairing_history_counts` (generator) and the /pairings GET
+    (the History line on the cards) both read THIS — one set of rules
+    about what counts, so the sheet and the card can never disagree.
+    The docstring above is the contract."""
     if year is None:
         year = today_central().year
     year_start = f"{year}-01-01"
     year_end = f"{year}-12-31"
     today = today_central_str()
-
-    with _connect(db_path) as conn:
-        _ensure_pairing_tables(conn)
-        rows = conn.execute(
-            """
-            SELECT player_a, player_b, COUNT(*) as cnt
-            FROM pairing_history ph
-            WHERE event_date BETWEEN ? AND ?
-              AND (? IS NULL OR ph.event_id IS NULL OR ph.event_id <> ?)
-              AND ph.event_date < ?                  -- played, not planned
-              AND COALESCE(ph.source, 'app') <> 'app'  -- GG is the record
-            GROUP BY player_a, player_b
-            """,
-            (year_start, year_end, exclude_event_id, exclude_event_id,
-             today),
-        ).fetchall()
-
+    _ensure_pairing_tables(conn)
+    rows = conn.execute(
+        """
+        SELECT player_a, player_b, COUNT(*) as cnt
+        FROM pairing_history ph
+        WHERE event_date BETWEEN ? AND ?
+          AND (? IS NULL OR ph.event_id IS NULL OR ph.event_id <> ?)
+          AND ph.event_date < ?                  -- played, not planned
+          AND COALESCE(ph.source, 'app') <> 'app'  -- GG is the record
+        GROUP BY player_a, player_b
+        """,
+        (year_start, year_end, exclude_event_id, exclude_event_id, today),
+    ).fetchall()
     counts: dict = {}
     for r in rows:
         a, b = _pair_key_name(r["player_a"]), _pair_key_name(r["player_b"])
         key = (min(a, b), max(a, b))
         counts[key] = counts.get(key, 0) + r["cnt"]
     return counts
+
+
+def roster_pair_counts(conn, event_id: int, names,
+                       year: int | None = None) -> dict:
+    """Prior play counts BETWEEN the players on one event's roster, as
+    `{"a|b": n}` on normalized names, non-zero only.
+
+    Kerry 2026-09-15, after the s9.23 count report: "I had no idea about
+    the Group 5 repeats ... provide this info as a row underneath each
+    name in a foursome." The card has to keep telling the truth while he
+    drags players around, so the page gets the whole roster's counts once
+    and does the arithmetic itself — the same thing `groupPaceOf` does
+    for the pace chip. Only pairs with history are sent (~a few dozen);
+    a missing key means they have never played together, which the page
+    renders as tonight's 1.
+    """
+    keys = [_pair_key_name(n) for n in names if n]
+    want = set(k for k in keys if k)
+    if not want:
+        return {}
+    year = year or int((conn.execute(
+        "SELECT event_date FROM events WHERE id = ?",
+        (event_id,)).fetchone() or {"event_date": ""})["event_date"][:4]
+        or today_central().year)
+    out = {}
+    for (a, b), n in _pair_counts_from_conn(
+            conn, year=year, exclude_event_id=event_id).items():
+        if n and a in want and b in want:
+            out[f"{a}|{b}"] = n
+    return out
+
+
+def pairing_counts_report(event_id: int, year: int | None = None,
+                          db_path=None) -> dict:
+    """Kerry 2026-09-15: "how many times has each player played with the
+    others in their groups this year including tonight."
+
+    Scores the SAVED sheet (`event_pairings`) — the groups as the manager
+    left them, not a fresh generation — against `pairing_history` for the
+    year. INCLUDING TONIGHT means tonight is the +1: a pair reading 1 has
+    never played together before today, a pair reading 3 has played twice
+    already and is about to make it three. History obeys the same two
+    rules the generator obeys (`get_pairing_history_counts`): Golf Genius
+    is the record of what was played, and nothing counts until it has
+    been played — so the sheet never scores against itself.
+
+    Returns the groups with every pair counted, a per-player line for
+    each group (his three mates and the count with each), and the repeats
+    (pairs above 1) pulled out, which is the part a manager acts on.
+    """
+    with _connect(db_path) as conn:
+        _ensure_pairing_tables(conn)
+        ev = conn.execute(
+            "SELECT id, item_name, event_date, chapter FROM events WHERE id = ?",
+            (event_id,)).fetchone()
+        if not ev:
+            return {"error": f"no event {event_id}"}
+        ev = dict(ev)
+        roster = {_pair_key_name(r["name"]): r for r in _event_roster_rows(conn, event_id)}
+    if year is None:
+        year = int((ev.get("event_date") or today_central_str())[:4] or
+                   today_central().year)
+    counts = get_pairing_history_counts(year=year, db_path=db_path,
+                                        exclude_event_id=event_id)
+    sheet = get_event_pairings(event_id, db_path=db_path)
+
+    def _prior(a: str, b: str) -> int:
+        ka, kb = _pair_key_name(a), _pair_key_name(b)
+        return int(counts.get((min(ka, kb), max(ka, kb)), 0))
+
+    groups_out, repeats, worst = [], [], 0
+    for holes in sorted(sheet.keys(), key=lambda h: str(h)):
+        for grp in sorted(sheet[holes], key=lambda g: g.get("group_num") or 0):
+            players = sorted(grp.get("players") or [],
+                             key=lambda p: p.get("cart_pos") or 0)
+            names = [p["name"] for p in players]
+            carts = {}
+            for lo, hi in ((0, 1), (2, 3)):
+                if hi < len(names):
+                    carts[frozenset((names[lo], names[hi]))] = True
+            pairs = []
+            for i in range(len(names)):
+                for j in range(i + 1, len(names)):
+                    prior = _prior(names[i], names[j])
+                    worst = max(worst, prior + 1)
+                    pair = {"a": names[i], "b": names[j],
+                            "prior": prior, "total": prior + 1,
+                            "rode": bool(carts.get(frozenset((names[i], names[j]))))}
+                    pairs.append(pair)
+                    if prior:
+                        repeats.append(dict(pair, slot=grp.get("slot_label"),
+                                            holes=str(holes)))
+            per_player = []
+            for n in names:
+                mates = [{"name": m, "total": _prior(n, m) + 1,
+                          "rode": bool(carts.get(frozenset((n, m))))}
+                         for m in names if m != n]
+                row = roster.get(_pair_key_name(n)) or {}
+                per_player.append({
+                    "name": n,
+                    "tee": row.get("tee_choice"),
+                    "ambassador": bool(row.get("ambassador")),
+                    "group_captain": bool(row.get("group_captain")),
+                    "is_first_timer": bool(row.get("is_first_timer")),
+                    "is_new": bool(row.get("is_new")),
+                    "mates": mates,
+                    "max": max([m["total"] for m in mates], default=0),
+                })
+            groups_out.append({
+                "holes": str(holes),
+                "group_num": grp.get("group_num"),
+                "slot_label": grp.get("slot_label"),
+                "players": names,
+                "pairs": pairs,
+                "per_player": per_player,
+            })
+    return {
+        "event_id": event_id,
+        "event": ev.get("item_name"),
+        "event_date": ev.get("event_date"),
+        "chapter": ev.get("chapter"),
+        "year": year,
+        "counts_include_tonight": True,
+        "history_source": "played rounds only (Golf Genius), this event excluded",
+        "groups": groups_out,
+        "repeats": sorted(repeats, key=lambda r: -r["total"]),
+        "n_pairs": sum(len(g["pairs"]) for g in groups_out),
+        "n_repeat_pairs": len(repeats),
+        "highest_pair_count": worst,
+        "text": _format_pairing_counts(ev, year, groups_out, repeats),
+    }
+
+
+def _format_pairing_counts(ev: dict, year: int, groups: list, repeats: list) -> str:
+    """The same report as plain text, for a print-out or an email."""
+    L = [f"PAIRINGS COUNT REPORT — {ev.get('item_name')} "
+         f"({ev.get('event_date')}, {ev.get('chapter')})",
+         f"Times played together in {year}, INCLUDING tonight. 1 = first time together.",
+         ""]
+    for g in groups:
+        L.append(f"GROUP {g['slot_label'] or g['group_num']}"
+                 + (f"  ({g['holes']} holes)" if g.get("holes") else ""))
+        for pp in g["per_player"]:
+            marks = "".join([" C" if pp["group_captain"] else "",
+                             " A" if pp["ambassador"] else "",
+                             " 1ST" if pp["is_first_timer"] else ""])
+            mates = ", ".join(f"{m['name']} {m['total']}"
+                              + ("*" if m["rode"] else "") for m in pp["mates"])
+            L.append(f"  {pp['name']}{marks}: {mates}")
+        L.append("")
+    L.append(f"REPEATS ({len(repeats)}): "
+             + ("; ".join(f"{r['a']} + {r['b']} = {r['total']} ({r['slot']})"
+                          for r in repeats) or "none — every pair is a first"))
+    L.append("* = same cart")
+    return "\n".join(L)
 
 
 # ── GG tee-sheet pairings ingest (Kerry 2026-07-14, overnight directive:
@@ -56828,26 +62246,78 @@ def _write_event_pairings_from_groups(conn: sqlite3.Connection,
         nm = (ev["item_name"] or "") if ev else ""
         holes = "18" if ("18" in fmt and "9/18" not in fmt) or \
             re.match(r"^[a-z]18\b", nm, re.I) or "MATCHES" in nm.upper() else "9"
-        conn.execute("DELETE FROM event_pairings WHERE event_id = ?",
-                     (int(event_id),))
+        scope_sql, scope_args = "", ()
     else:
-        conn.execute("DELETE FROM event_pairings WHERE event_id = ? "
-                     "AND holes = ?", (int(event_id), holes))
+        scope_sql, scope_args = " AND holes = ?", (holes,)
+    # AN INGEST MAY NOT ERASE WHAT IT DOES NOT CARRY (v2.458.10, Kerry
+    # 2026-09-16: "this lost the hole assignments that I had assigned
+    # yesterday. Why'd it screw everything up?"). The Team Net board says
+    # who rode together and in what FINISH order; it says nothing about
+    # which hole a group started on or which tee anyone played. Applying
+    # it after the event rewrote s9.23's sheet in finish order with
+    # "Group N" labels and blank tees — the starter sheet then printed
+    # "Hole Group 1", the PAIRINGS tab showed a dash for every tee, and
+    # every seat-keyed blind was orphaned. So, before the delete: remember
+    # each existing group's hole label and each player's tee, keyed by the
+    # people in it, and hand them back to any incoming group the ingest
+    # left unlabelled. Same rule as the sheet's names and handicaps —
+    # the row is a snapshot; the truth is looked up.
+    prior = conn.execute(
+        f"""SELECT group_num, slot_label, player_name, customer_id,
+                   tee_choice, handicap_index
+              FROM event_pairings WHERE event_id = ?{scope_sql}
+             ORDER BY group_num, cart_pos""",
+        (int(event_id), *scope_args)).fetchall()
+    prior_groups: dict = {}
+    prior_tee: dict = {}
+    prior_hcp: dict = {}
+    prior_cid: dict = {}
+    for r in prior:
+        key = (r["player_name"] or "").strip().lower()
+        if r["customer_id"] is not None:
+            prior_tee[("c", r["customer_id"])] = r["tee_choice"]
+            prior_hcp[("c", r["customer_id"])] = r["handicap_index"]
+            prior_cid[key] = r["customer_id"]
+        prior_tee[("n", key)] = r["tee_choice"]
+        prior_hcp[("n", key)] = r["handicap_index"]
+        prior_groups.setdefault(r["group_num"], {"slot": r["slot_label"],
+                                                 "members": set()})
+        prior_groups[r["group_num"]]["members"].add(key)
+    # A prior group is recognised by its PEOPLE: the same set of names
+    # (blinds excluded on both sides) means the same foursome, so its hole
+    # label travels with it whatever order the ingest lists it in.
+    label_by_members = {frozenset(g["members"]): g["slot"]
+                        for g in prior_groups.values()
+                        if g["slot"] and not re.match(r"^group\s+\d+$",
+                                                      g["slot"], re.I)}
+    conn.execute(f"DELETE FROM event_pairings WHERE event_id = ?{scope_sql}",
+                 (int(event_id), *scope_args))
     n = 0
     for gi, g in enumerate(groups, start=1):
         seats = g["players"]
-        slot = g.get("slot") or f"Group {gi}"
+        members = frozenset((p["name"] or "").strip().lower()
+                            for p in seats[:5] if p and p.get("name"))
+        slot = g.get("slot") or label_by_members.get(members) or f"Group {gi}"
         # Fivesomes are legal since Kerry's 2026-07-31 ruling, and GG
         # sheets carry them — the old [:4] silently dropped the 5th.
         for idx, p in enumerate(seats[:5]):
             if not p:
                 continue
+            key = (p["name"] or "").strip().lower()
+            cid = p.get("cid") or p.get("customer_id") or prior_cid.get(key)
+            tee = (p.get("tee_choice")
+                   or (prior_tee.get(("c", cid)) if cid is not None else None)
+                   or prior_tee.get(("n", key)))
+            hcp = (p.get("handicap_index")
+                   or (prior_hcp.get(("c", cid)) if cid is not None else None)
+                   or prior_hcp.get(("n", key)))
             conn.execute(
                 """INSERT OR REPLACE INTO event_pairings
                    (event_id, holes, group_num, slot_label, player_name,
-                    cart_pos)
-                   VALUES (?, ?, ?, ?, ?, ?)""",
-                (int(event_id), holes, gi, slot, p["name"], idx + 1))
+                    cart_pos, customer_id, tee_choice, handicap_index)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (int(event_id), holes, gi, slot, p["name"], idx + 1,
+                 cid, tee, hcp))
             n += 1
     return n
 
@@ -57233,14 +62703,41 @@ def get_pairing_staging_rules(db_path=None) -> dict:
     return rules
 
 
-def _event_roster_players(conn, event_id: int) -> list[dict]:
-    """Active registrants for an event: name + customer_id (rule 6).
-    Same events → aliases → items join the generator uses."""
-    INACTIVE = ("credited", "refunded", "transferred", "wd")
-    ph = ",".join("?" * len(INACTIVE))
-    rows = conn.execute(
+PAIRING_INACTIVE_STATUSES = ("credited", "refunded", "transferred", "wd")
+
+
+def _event_rsvp_only_players(conn, event_id: int) -> list[dict]:
+    """PLAYING Golf Genius RSVPs on this event with NO active order row —
+    the people the Events tab renders as synthetic `gg_rsvp` rows.
+
+    Kerry 2026-09-15: "I need the ability to assign RSVP only's to groups
+    and requests. Need them to run in pairings." Until now these players
+    reached the pairings panel only through a CLIENT-side merge
+    (`rosterExtra`), so a manager could seat one by hand but Generate
+    never dealt them, a partner request naming one could not resolve, and
+    the manual-match validator refused them. The roster is built here,
+    once, on the server, and every consumer reads it.
+
+    The rules are the Players tab's `unmatchedPlaying` derivation, rule
+    for rule (events.html, "Frontend dedup"): an RSVP is OUT when it is
+    matched to an active item whose email agrees, when its email is
+    overridden to not_playing, when its email or resolved name belongs to
+    an active registrant, or — with no resolved name — when a registrant's
+    name starts with its first name. Everything else PLAYING is IN.
+    Cancelled/postponed events return nobody, as the page does.
+    """
+    ev = conn.execute(
+        "SELECT id, item_name, status FROM events WHERE id = ?",
+        (event_id,)).fetchone()
+    if not ev or not ev["item_name"]:
+        return []
+    if (ev["status"] or "active") != "active":
+        return []
+    event_name = ev["item_name"]
+    ph = ",".join("?" * len(PAIRING_INACTIVE_STATUSES))
+    active = conn.execute(
         f"""
-        SELECT DISTINCT i.customer AS name, i.customer_id
+        SELECT i.id, i.customer, i.customer_email
         FROM events e
         LEFT JOIN event_aliases ea ON ea.canonical_event_name = e.item_name
         JOIN items i ON (
@@ -57250,11 +62747,285 @@ def _event_roster_players(conn, event_id: int) -> list[dict]:
         )
         WHERE e.id = ?
           AND COALESCE(i.transaction_status, 'active') NOT IN ({ph})
-          AND i.parent_item_id IS NULL
         """,
-        (event_id, *INACTIVE),
+        (event_id, *PAIRING_INACTIVE_STATUSES),
     ).fetchall()
-    return [dict(r) for r in rows if r["name"]]
+    active_ids = {r["id"] for r in active}
+    item_email = {r["id"]: (r["customer_email"] or "").strip().lower()
+                  for r in active}
+    reg_emails = {(r["customer_email"] or "").strip().lower()
+                  for r in active if (r["customer_email"] or "").strip()}
+    reg_names = {(r["customer"] or "").strip().lower()
+                 for r in active if (r["customer"] or "").strip()}
+    try:
+        overrides = {(r["player_email"] or "").strip().lower(): r["status"]
+                     for r in conn.execute(
+                         "SELECT player_email, status FROM rsvp_email_overrides "
+                         "WHERE event_name = ?", (event_name,)).fetchall()}
+    except sqlite3.OperationalError:
+        overrides = {}
+    out: list[dict] = []
+    seen: set = set()
+    for r in _rsvps_for_event(conn, event_name):
+        if (r.get("response") or "").upper() != "PLAYING":
+            continue
+        email = (r.get("player_email") or "").strip().lower()
+        mid = r.get("matched_item_id")
+        if mid and mid in active_ids:
+            ie = item_email.get(mid, "")
+            if not (email and ie and email != ie):
+                continue          # a real match — the circle sits on that row
+        if email and overrides.get(email) == "not_playing":
+            continue
+        if email and email in reg_emails:
+            continue
+        resolved = (r.get("resolved_name") or "").strip()
+        first = (r.get("player_name") or "").strip()
+        if resolved and resolved.lower() in reg_names:
+            continue
+        if not resolved and first and any(
+                n.startswith(first.lower()) for n in reg_names):
+            continue
+        name = resolved or first
+        if not name or name.lower() == "unknown":
+            continue
+        key = _pair_key_name(name)
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        cps = None
+        roles: dict = {}
+        cid = r.get("customer_id")
+        if cid:
+            try:
+                crow = conn.execute(
+                    "SELECT current_player_status, ambassador, group_captain, "
+                    "solo_back_ok, pace_rating, "
+                    "(SELECT MIN(started_at) FROM customer_memberships "
+                    "WHERE customer_id = c.customer_id) AS first_member_start, "
+                    "(SELECT MIN(hr.round_date) FROM handicap_rounds hr "
+                    " JOIN handicap_player_links l ON l.player_name = hr.player_name "
+                    " WHERE l.customer_id = c.customer_id) AS first_round, "
+                    "(SELECT COUNT(*) FROM items WHERE customer_id = "
+                    "c.customer_id) AS n_orders "
+                    "FROM customers c WHERE c.customer_id = ?", (cid,)).fetchone()
+                if crow:
+                    cps = crow["current_player_status"]
+                    roles = {k: crow[k] for k in ("ambassador", "group_captain",
+                                                  "solo_back_ok", "first_member_start",
+                                                  "first_round", "n_orders")}
+                    # A PROFILE fact rides on the RSVP row exactly as it
+                    # rides on an order row (Kerry 2026-09-21: "Jeff Young
+                    # is a 3 for pace of play on his customer profile. Why
+                    # isn't he showing that on his pairing even though he's
+                    # only an RSVP?"). The row was hard-coded None.
+                    roles["pace_rating"] = crow["pace_rating"]
+            except sqlite3.OperationalError:
+                cps = None
+        received = r.get("received_at") or None
+        out.append({
+            "name": name, "customer": name,
+            "customer_id": cid, "customer_email": email or None,
+            "holes": "", "tee_choice": None, "user_status": "",
+            "current_player_status": cps, "pace_rating": roles.get("pace_rating"),
+            "partner_request": None, "id": None,
+            # An RSVP is a signup: its arrival time is its place in the
+            # first-come request order, exactly like an order row.
+            "order_date": (received or "")[:10] or None,
+            "created_at": received, "notes": None, "order_id": None,
+            "transaction_status": "gg_rsvp", "rsvp_only": True,
+            "rsvp_id": r.get("id"),
+            **roles,
+        })
+    return out
+
+
+def _event_roster_rows(conn, event_id: int) -> list[dict]:
+    """THE pairings roster: one row per active order row plus one per
+    PLAYING GG RSVP with no order (`_event_rsvp_only_players`). Every
+    consumer — the /pairings GET, the generator, the partner-request
+    list and the manual-match validator — reads this and nothing else,
+    so they can never disagree about who is playing (Kerry 2026-09-15).
+
+    Rows are NOT deduped by player here: the generator and the request
+    list want the EARLIEST row per player after sorting by signup time,
+    so they dedupe themselves; `_event_roster_players` dedupes for the
+    callers that only want identities. Both `name` and `customer` carry
+    the display name. `rsvp_only` is True for the GG-RSVP rows AND for
+    `rsvp_only` order rows (the shop's $0 RSVP-only item), which are
+    both "playing, not paid".
+    """
+    ph = ",".join("?" * len(PAIRING_INACTIVE_STATUSES))
+    rows = conn.execute(
+        f"""
+        SELECT DISTINCT i.customer, i.customer_id, i.holes, i.tee_choice,
+                        i.partner_request, i.id, i.order_date,
+                        i.created_at, i.notes, i.order_id,
+                        i.customer_email, i.user_status,
+                        i.transaction_status,
+                        c.current_player_status, c.pace_rating,
+                        c.ambassador, c.group_captain, c.solo_back_ok,
+                        (SELECT MIN(m.started_at) FROM customer_memberships m
+                          WHERE m.customer_id = i.customer_id) AS first_member_start,
+                        (SELECT MIN(hr.round_date) FROM handicap_rounds hr
+                           JOIN handicap_player_links l ON l.player_name = hr.player_name
+                          WHERE l.customer_id = i.customer_id) AS first_round,
+                        (SELECT COUNT(*) FROM items i3
+                          WHERE i3.customer_id = i.customer_id) AS n_orders
+        FROM events e
+        LEFT JOIN event_aliases ea ON ea.canonical_event_name = e.item_name
+        JOIN items i ON (
+            i.item_name = e.item_name COLLATE NOCASE
+            OR i.item_name = ea.alias_name COLLATE NOCASE
+            OR i.event_id = e.id
+        )
+        LEFT JOIN customers c ON c.customer_id = i.customer_id
+        WHERE e.id = ?
+          AND COALESCE(i.transaction_status, 'active') NOT IN ({ph})
+          AND i.parent_item_id IS NULL
+        ORDER BY i.customer COLLATE NOCASE
+        """,
+        (event_id, *PAIRING_INACTIVE_STATUSES),
+    ).fetchall()
+    ev_year = None
+    try:
+        evr = conn.execute("SELECT event_date FROM events WHERE id = ?",
+                           (event_id,)).fetchone()
+        ev_year = (evr["event_date"] or "")[:4] if evr else None
+    except sqlite3.OperationalError:
+        ev_year = None
+    out: list[dict] = []
+    keys: set = set()
+    for r in rows:
+        d = dict(r)
+        if not (d.get("customer") or "").strip():
+            continue
+        d["name"] = d["customer"]
+        d["rsvp_only"] = (d.get("transaction_status") or "active") == "rsvp_only"
+        _decorate_roster_roles(d, ev_year)
+        out.append(d)
+        keys.add(_pair_key_name(d["customer"]))
+    for d in _event_rsvp_only_players(conn, event_id):
+        if _pair_key_name(d["name"]) in keys:
+            continue
+        _decorate_roster_roles(d, ev_year)
+        out.append(d)
+    _mark_first_timers(conn, event_id, out)
+    return out
+
+
+def _mark_first_timers(conn, event_id: int, rows: list[dict]) -> None:
+    """Second pass over the finished roster: a player whose FIRST TGF
+    EVENT this is reads as a 1st timer, whatever they bought.
+
+    Kerry 2026-09-15: "any 1st Timer, even if they've become a member
+    already and didn't select 1st timer should be highlighted as a first
+    timer. So Morris Allen should be highlighted even though he joined
+    already, because it's his first event." A membership purchase is not
+    an event, and the checkout label is what someone SELECTED — neither
+    decides whether they have ever teed off with us.
+
+    Two independent proofs of having played, either one is enough:
+      * an active order row on an EARLIER event (joined the three ways
+        the roster join uses: item name, event alias, event_id), and
+      * a handicap round posted before this event's date, which covers
+        Golf Genius history and pre-Tracker play where no order row
+        exists — the same proof that stopped `is_new` over-tagging.
+
+    A roster row with no `customer_id` is left alone: unknown identity
+    is not evidence of a first event, and inventing a 1st timer would
+    send an ambassador after someone who does not need one (rule 14).
+    """
+    ids = sorted({int(r["customer_id"]) for r in rows if r.get("customer_id")})
+    if not ids:
+        return
+    try:
+        ev = conn.execute("SELECT event_date FROM events WHERE id = ?",
+                          (event_id,)).fetchone()
+    except sqlite3.OperationalError:
+        return
+    ev_date = (ev["event_date"] if ev else "") or ""
+    if not ev_date:
+        return
+    idph = ",".join("?" * len(ids))
+    stph = ",".join("?" * len(PAIRING_INACTIVE_STATUSES))
+    played: set = set()
+    try:
+        for r in conn.execute(
+                f"""SELECT DISTINCT i.customer_id AS cid
+                      FROM items i
+                      LEFT JOIN event_aliases ea ON ea.alias_name = i.item_name
+                      JOIN events e2 ON (e2.item_name = i.item_name COLLATE NOCASE
+                                         OR e2.item_name = ea.canonical_event_name COLLATE NOCASE
+                                         OR e2.id = i.event_id)
+                     WHERE i.customer_id IN ({idph})
+                       AND e2.id <> ?
+                       AND COALESCE(e2.event_date, '') < ?
+                       AND COALESCE(i.transaction_status, 'active') NOT IN ({stph})
+                       AND i.parent_item_id IS NULL""",
+                (*ids, event_id, ev_date, *PAIRING_INACTIVE_STATUSES)).fetchall():
+            played.add(int(r["cid"]))
+    except sqlite3.OperationalError as e:
+        logger.warning("first-timer sweep (orders) skipped: %s", e)
+        return
+    try:
+        for r in conn.execute(
+                f"""SELECT DISTINCT l.customer_id AS cid
+                      FROM handicap_rounds hr
+                      JOIN handicap_player_links l ON l.player_name = hr.player_name
+                     WHERE l.customer_id IN ({idph})
+                       AND COALESCE(hr.round_date, '') < ?""",
+                (*ids, ev_date)).fetchall():
+            played.add(int(r["cid"]))
+    except sqlite3.OperationalError:
+        pass
+    for r in rows:
+        cid = r.get("customer_id")
+        if cid and int(cid) not in played:
+            r["is_first_timer"] = True
+
+
+def _decorate_roster_roles(d: dict, ev_year: str | None) -> None:
+    """Rules 12/13 inputs on a roster row (Kerry-ratified 2026-09-15):
+    the three flags as plain booleans, `is_new` = joined as a NEW MEMBER
+    this year (Kerry: "NEW should only apply to people who've joined as
+    NEW members this year" — earliest customer_memberships.started_at in
+    the event's year; guests and long-standing members are not new), and
+    `experience` = order rows on file, the tiebreak for who drives when
+    no captain is in the cart."""
+    for flag in PLAYER_ROLE_FLAGS:
+        d[flag] = bool(d.get(flag))
+    first = (d.get("first_member_start") or "")[:4]
+    # Kerry 2026-09-15: "If they have handicap records before 2026 then
+    # remove the 1Y." Membership rows were backfilled in 2026 for many
+    # long-standing members, so the earliest membership start alone
+    # tagged half the field; a handicap round before the event's year is
+    # proof they were playing before it.
+    played_before = (d.get("first_round") or "")[:4]
+    d["is_new"] = (bool(first) and bool(ev_year) and first == ev_year
+                   and not (played_before and played_before < ev_year))
+    d["experience"] = int(d.get("n_orders") or 0)
+    # Rule 14 (Kerry 2026-09-15): a 1ST TIMER rides with an ambassador.
+    # The order label OR the profile status says so; _mark_first_timers
+    # then adds everyone whose FIRST EVENT this is, however they bought.
+    us = str(d.get("user_status") or "").strip().upper()
+    d["is_first_timer"] = us.startswith("1ST") or (
+        str(d.get("current_player_status") or "").strip().lower() == "first_timer")
+
+
+def _event_roster_players(conn, event_id: int) -> list[dict]:
+    """Roster identities for an event: name + customer_id (rule 6), one
+    per player, GG-RSVP-only players included. Reads `_event_roster_rows`."""
+    seen: set = set()
+    out: list[dict] = []
+    for r in _event_roster_rows(conn, event_id):
+        k = _pair_key_name(r["name"])
+        if not k or k in seen:
+            continue
+        seen.add(k)
+        out.append({"name": r["name"], "customer_id": r.get("customer_id"),
+                    "rsvp_only": bool(r.get("rsvp_only"))})
+    return out
 
 
 def detect_match_play_pairings(event_id: int, db_path=None) -> dict:
@@ -57394,6 +63165,92 @@ def detect_match_play_pairings(event_id: int, db_path=None) -> dict:
         return out
 
 
+PAIRINGS_AUTO_WEEKDAYS_KEY = "pairings_auto_weekdays"
+#: "<event weekday>[:<days ahead>]" per entry. Tuesday nights pair the
+#: evening before (Monday 5 PM); Saturday 18s pair two days ahead
+#: (Thursday 5 PM) — Kerry 2026-09-21: "Add sat to the auto-pairings dial
+#: too, but make it for Thursday nights at 5:00p."
+PAIRINGS_AUTO_WEEKDAYS_DEFAULT = "tue:1,sat:2"
+_WEEKDAY_NAMES = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
+
+
+def pairings_auto_weekdays(db_path=None) -> dict:
+    """{event weekday: days ahead} the 5 PM auto-generate covers — a DIAL
+    in app_settings. An entry without a lead ("tue") means the day
+    before; "sat:2" means two days before (Thursday for a Saturday)."""
+    raw = get_app_setting(PAIRINGS_AUTO_WEEKDAYS_KEY, db_path=db_path) or PAIRINGS_AUTO_WEEKDAYS_DEFAULT
+    out: dict = {}
+    for part in raw.split(","):
+        name, _, lead = part.strip().lower().partition(":")
+        name = name[:3]
+        if name not in _WEEKDAY_NAMES:
+            continue
+        try:
+            days = int(lead) if lead else 1
+        except ValueError:
+            days = 1
+        out[name] = max(1, days)
+    return out
+
+
+def _event_has_saved_pairings(event_id: int, db_path=None) -> bool:
+    saved = get_event_pairings(event_id, db_path=db_path) or {}
+    return any(g.get("players") for groups in saved.values() if isinstance(groups, list) for g in groups)
+
+
+def auto_generate_pairings(db_path=None, today=None) -> list[dict]:
+    """The 5 PM routine: for every ACTIVE event on a dialled weekday at
+    that weekday's lead (the day before for Tuesdays, two days before for
+    Saturdays) that has NO saved pairings, run the
+    generator the way the page's Generate button does by default (Random,
+    partner requests honoured, history on) and SAVE the result. An event
+    Kerry already paired is left exactly as it is ("Only if they aren't
+    run already"). Returns one row per event considered."""
+    from email_parser.timezone_utils import today_central
+    today = today or today_central()
+    # Every dialled weekday names its own lead: the target date for a
+    # "sat:2" entry is today + 2, and it only fires when that date IS a
+    # Saturday (so Thursday's run pairs Saturday; Friday's does not).
+    targets = set()
+    for wd, lead in pairings_auto_weekdays(db_path).items():
+        target = today + timedelta(days=lead)
+        if _WEEKDAY_NAMES[target.weekday()] == wd:
+            targets.add(target.isoformat())
+    if not targets:
+        return []
+    out = []
+    for ev in get_all_events(db_path):
+        if (ev.get("event_date") or "")[:10] not in targets:
+            continue
+        if (ev.get("status") or "active") != "active":
+            continue
+        row = {"event_id": ev["id"], "event": ev.get("item_name"), "chapter": ev.get("chapter")}
+        try:
+            if _event_has_saved_pairings(ev["id"], db_path):
+                row.update(generated=False, why="already paired")
+            else:
+                res = generate_event_pairings(ev["id"], mode="random",
+                                              protect_partner_requests=True, db_path=db_path)
+                groups = {k: res.get(k) or [] for k in ("9", "18")}
+                seated = sum(len(g.get("players") or []) for gs in groups.values() for g in gs)
+                if not seated:
+                    row.update(generated=False, why="nobody to seat")
+                else:
+                    save_event_pairings(ev["id"], groups, db_path=db_path)
+                    row.update(generated=True, seated=seated,
+                               groups=sum(len(gs) for gs in groups.values()))
+                    try:
+                        log_agent_action("scheduler", "pairings_auto_generate",
+                                         f"{ev.get('item_name')}: {seated} seated in {row['groups']} groups "
+                                         f"(random, partner requests honoured)", db_path=db_path)
+                    except Exception:
+                        pass
+        except Exception as e:                       # one event never blocks the rest
+            row.update(generated=False, why=f"error: {e}")
+        out.append(row)
+    return out
+
+
 def generate_event_pairings(
     event_id: int,
     mode: str = "random",
@@ -57448,32 +63305,13 @@ def generate_event_pairings(
         is_combo = fmt == "9/18 Combo"
 
         # ── Active players for this event ─────────────────────────────
-        # Start from events → aliases → items (mirrors get_all_events join order)
-        INACTIVE = ("credited", "refunded", "transferred", "wd")
+        # THE roster (`_event_roster_rows`): active order rows plus the
+        # PLAYING GG RSVPs that have no order, so RSVP-only players are
+        # dealt like everyone else (Kerry 2026-09-15). Same list the
+        # /pairings GET, the request panel and the match validator read.
+        INACTIVE = PAIRING_INACTIVE_STATUSES
         ph = ",".join("?" * len(INACTIVE))
-        items = conn.execute(
-            f"""
-            SELECT DISTINCT i.customer, i.holes, i.tee_choice,
-                            i.partner_request, i.id, i.order_date,
-                            i.created_at, i.notes, i.order_id,
-                            i.customer_email, i.customer_id,
-                            i.user_status, c.current_player_status
-            FROM events e
-            LEFT JOIN event_aliases ea ON ea.canonical_event_name = e.item_name
-            JOIN items i ON (
-                i.item_name = e.item_name COLLATE NOCASE
-                OR i.item_name = ea.alias_name COLLATE NOCASE
-                OR i.event_id = e.id
-            )
-            LEFT JOIN customers c ON c.customer_id = i.customer_id
-            WHERE e.id = ?
-              AND COALESCE(i.transaction_status, 'active') NOT IN ({ph})
-              AND i.parent_item_id IS NULL
-            ORDER BY i.customer COLLATE NOCASE
-            """,
-            (event_id, *INACTIVE),
-        ).fetchall()
-        items = [dict(r) for r in items]
+        items = _event_roster_rows(conn, event_id)
 
         # ── Signup-order priority (Kerry 2026-07-21) ──────────────────
         # Requests are honored FIRST-COME: sort the roster by when each
@@ -57527,31 +63365,9 @@ def generate_event_pairings(
             if k in _suppressed:
                 it["partner_request"] = None
 
-        # ── Handicap index map ────────────────────────────────────────
-        hcp_rows = conn.execute(
-            """
-            SELECT l.customer_name, p.handicap_index
-            FROM (
-                SELECT player_name,
-                       AVG(differential) as handicap_index
-                FROM (
-                    SELECT player_name, differential,
-                           ROW_NUMBER() OVER (
-                               PARTITION BY player_name
-                               ORDER BY round_date DESC, id DESC
-                           ) as rn
-                    FROM handicap_rounds
-                    WHERE differential IS NOT NULL
-                      AND round_date >= date('now', '-12 months')
-                )
-                WHERE rn <= 20
-                GROUP BY player_name
-            ) p
-            JOIN handicap_player_links l ON l.player_name = p.player_name
-            WHERE l.customer_name IS NOT NULL
-            """
-        ).fetchall()
-        hcp_map = {r["customer_name"].lower(): r["handicap_index"] for r in hcp_rows}
+        # ── Handicap index map (locked to the event once it has begun) ─
+        hcp_map = _roster_handicap_index_map(
+            conn, as_of=_event_index_as_of(ev), db_path=db_path)
 
         # ── Pace map for STAGING (task #23) ───────────────────────────
         # Keyed by the roster's own name via customer_id (rule 6 — also
@@ -57639,10 +63455,6 @@ def generate_event_pairings(
                         "ABCD groups were built without them.")
         valid_mp_pairs = []
 
-    # ── Generate slots ────────────────────────────────────────────────
-    slots_9 = _pairing_time_slots(ev, "9")
-    slots_18 = _pairing_time_slots(ev, "18")
-
     # ── Seed map: holes → {slot_index: {cart_pos: name}} ─────────────
     seed_map: dict[str, dict[int, dict[int, str]]] = {"9": {}, "18": {}}
     seeded_players: dict[str, set] = {"9": set(), "18": set()}
@@ -57654,6 +63466,16 @@ def generate_event_pairings(
         for sp in s.get("players", []):
             seed_map[h][si][sp["cart_pos"]] = sp["name"]
             seeded_players[h].add(sp["name"])
+
+    # ── Generate slots ────────────────────────────────────────────────
+    # Sized by the ROSTER when Edit Event carries no group count, so the
+    # foursomes get holes / tee times instead of "Group N" (Kerry
+    # 2026-09-15). A typed count still wins inside _pairing_time_slots.
+    def _needed(h, player_items):
+        top_seed = (max(seed_map[h]) + 1) if seed_map[h] else 0
+        return _pairing_groups_needed(len(player_items), max_group, top_seed)
+    slots_9 = _pairing_time_slots(ev, "9", needed=_needed("9", nines))
+    slots_18 = _pairing_time_slots(ev, "18", needed=_needed("18", eighteens))
 
     result: dict = {}
     # {normalized name | customer_id -> season points} for the chosen race,
@@ -57866,6 +63688,36 @@ def generate_event_pairings(
                     break
             groups_players = best_groups or []
 
+        # Rules 12 + 7 (Kerry-ratified 2026-09-15), AFTER the groups are
+        # formed and BELOW everything in locked_names: no lone <50 unless
+        # flagged, then spread captains/ambassadors so every group has a
+        # leader to seat. Both are cheapest-history swaps; unresolvable
+        # cases become notes the PAIRINGS tab shows.
+        solo_ok = {p["customer"] for p in player_items
+                   if p.get("customer") and p.get("solo_back_ok")}
+        captains = {p["customer"] for p in player_items
+                    if p.get("customer") and p.get("group_captain")}
+        leaders = captains | {p["customer"] for p in player_items
+                              if p.get("customer") and p.get("ambassador")}
+        newbies = {p["customer"] for p in player_items
+                   if p.get("customer") and p.get("is_new")}
+        experience = {_pair_key_name(p["customer"]): int(p.get("experience") or 0)
+                      for p in player_items if p.get("customer")}
+        groups_players, _lb_notes = _repair_lone_back_tee(
+            groups_players, tee_map, solo_ok, locked_names, pair_counts)
+        mp_notes.extend(_lb_notes)
+        groups_players, _sp_notes = _spread_leaders(
+            groups_players, leaders, locked_names, pair_counts, tee_map, solo_ok)
+        mp_notes.extend(_sp_notes)
+        ambassadors = {p["customer"] for p in player_items
+                       if p.get("customer") and p.get("ambassador")}
+        first_timers = {p["customer"] for p in player_items
+                        if p.get("customer") and p.get("is_first_timer")}
+        groups_players, _ft_notes = _pair_first_timers_with_ambassadors(
+            groups_players, ambassadors, first_timers, tee_map,
+            locked_names, pair_counts, solo_ok)
+        mp_notes.extend(_ft_notes)
+
         # Seat order within a settled group (foursomes already decided —
         # this only decides who RIDES with whom): every group runs the
         # exact seater. Priority when they conflict (Kerry 2026-07-21):
@@ -57873,10 +63725,15 @@ def generate_event_pairings(
         # request pairs in the SAME cart (requests supersede tees) >
         # same-tee players share a cart. The old sort-by-tee ordering
         # for unconstrained groups could split a tee pair across carts
-        # when a third tee was present — the seater can't.
+        # when a third tee was present — the seater can't. Rule 13 adds
+        # captain-with-newest and the driver order (seats 1 and 3).
         def _seat(names: list[str]) -> list[str]:
             return _arrange_group_seats(names, mp_opponents,
-                                        partner_adj, tee_map)
+                                        partner_adj, tee_map,
+                                        captains=captains, newbies=newbies,
+                                        experience=experience,
+                                        ambassadors=ambassadors,
+                                        first_timers=first_timers)
 
         is_shotgun = (ev.get("start_type" if holes == "9" else "start_type_18") == "Shotgun")
 
@@ -58143,8 +64000,204 @@ def _make_group_sizes(n: int, max_size: int = 4) -> list[int]:
         return [4] * q + [3]              # e.g. 7→[4,3], 11→[4,4,3]
 
 
+_BACK_TEE_RE = re.compile(r"^<\s*50$")
+
+
+def _is_back_tee(tee) -> bool:
+    """Rule 12 applies to the <50 tee ONLY (Kerry 2026-09-15: "This only
+    applies to the <50s") — Forward and 65+ players may be alone."""
+    return bool(_BACK_TEE_RE.match(str(tee or "").strip()))
+
+
+def _lone_back_offender(group: list[str], tee_map: dict, solo_ok: set):
+    """The one <50 player alone on the back in this group who is NOT
+    flagged OK-alone-back, else None."""
+    backs = [n for n in group if _is_back_tee(tee_map.get(n))]
+    if len(backs) == 1 and _pair_key_name(backs[0]) not in solo_ok:
+        return backs[0]
+    return None
+
+
+def _repair_lone_back_tee(groups: list[list[str]], tee_map: dict,
+                          solo_ok: set, locked: set, pair_counts: dict
+                          ) -> tuple[list[list[str]], list[str]]:
+    """Pairings rule 12 (Kerry-ratified 2026-09-15): a <50 player is never
+    the only <50 in their foursome unless flagged OK-alone-back. Runs
+    AFTER the groups are formed and BELOW everything that binds (Match
+    Play, requests/locks, seeds, host units — all in `locked`): swaps an
+    unlocked non-<50 out of the lone group for an unlocked <50 from a
+    group that keeps a legal shape afterwards, choosing the swap that
+    costs the least history (rule 3 is the tiebreak, not the veto). If
+    no legal swap exists the group is left alone and a note says so —
+    "in the end if it's necessary, then fine" — so the manager decides.
+    """
+    notes: list[str] = []
+    groups = [list(g) for g in groups]
+    solo_ok = {_pair_key_name(n) for n in solo_ok}
+    lockk = {_pair_key_name(n) for n in locked}
+
+    def _ok(g):
+        return _lone_back_offender(g, tee_map, solo_ok) is None
+
+    for _ in range(len(groups) * 2):
+        gi = next((i for i, g in enumerate(groups) if not _ok(g)), None)
+        if gi is None:
+            break
+        lone = _lone_back_offender(groups[gi], tee_map, solo_ok)
+        best = None
+        for hj, h in enumerate(groups):
+            if hj == gi:
+                continue
+            for xi, x in enumerate(h):
+                if not _is_back_tee(tee_map.get(x)) or _pair_key_name(x) in lockk:
+                    continue
+                for yi, y in enumerate(groups[gi]):
+                    if _is_back_tee(tee_map.get(y)) or _pair_key_name(y) in lockk:
+                        continue
+                    g2 = list(groups[gi]); h2 = list(h)
+                    g2[yi], h2[xi] = x, y
+                    if not (_ok(g2) and _ok(h2)):
+                        continue
+                    base = _group_score(groups[gi], pair_counts) + _group_score(h, pair_counts)
+                    cost = _group_score(g2, pair_counts) + _group_score(h2, pair_counts) - base
+                    if best is None or cost < best[0]:
+                        best = (cost, gi, hj, g2, h2, x, y)
+        if best is None:
+            notes.append(f"{lone} is alone on the <50 tee — no legal swap "
+                         "(Match Play, requests and locks kept). Hand-fix or "
+                         "flag them OK alone back.")
+            # mark handled so the loop moves on: treat as accepted
+            solo_ok.add(_pair_key_name(lone))
+            continue
+        _, gi, hj, g2, h2, x, y = best
+        groups[gi], groups[hj] = g2, h2
+    return groups, notes
+
+
+def _spread_leaders(groups: list[list[str]], leaders: set, locked: set,
+                    pair_counts: dict, tee_map: dict, solo_ok: set
+                    ) -> tuple[list[list[str]], list[str]]:
+    """Pairings rule 7 (ambassadors/captains spread across groups), built
+    2026-09-15 alongside rules 12/13 because rule 13 needs a captain IN
+    the group to have anyone to seat. Soft: a group with no leader takes
+    one from a group holding two or more, by the cheapest history swap
+    that keeps rule 12 intact. Never moves a locked player."""
+    notes: list[str] = []
+    groups = [list(g) for g in groups]
+    lead = {_pair_key_name(n) for n in leaders}
+    lockk = {_pair_key_name(n) for n in locked}
+    sok = {_pair_key_name(n) for n in solo_ok}
+
+    def _n(g):
+        return sum(1 for n in g if _pair_key_name(n) in lead)
+
+    for _ in range(len(groups)):
+        gi = next((i for i, g in enumerate(groups) if len(g) >= 2 and _n(g) == 0), None)
+        if gi is None:
+            break
+        best = None
+        for hj, h in enumerate(groups):
+            if hj == gi or _n(h) < 2:
+                continue
+            for xi, x in enumerate(h):
+                if _pair_key_name(x) not in lead or _pair_key_name(x) in lockk:
+                    continue
+                for yi, y in enumerate(groups[gi]):
+                    if _pair_key_name(y) in lockk:
+                        continue
+                    g2 = list(groups[gi]); h2 = list(h)
+                    g2[yi], h2[xi] = x, y
+                    if _lone_back_offender(g2, tee_map, sok) or _lone_back_offender(h2, tee_map, sok):
+                        continue
+                    base = _group_score(groups[gi], pair_counts) + _group_score(h, pair_counts)
+                    cost = _group_score(g2, pair_counts) + _group_score(h2, pair_counts) - base
+                    if best is None or cost < best[0]:
+                        best = (cost, hj, g2, h2)
+        if best is None:
+            break       # nobody spare to give; not worth a note per group
+        _, hj, g2, h2 = best
+        groups[gi], groups[hj] = g2, h2
+    return groups, notes
+
+
+def _pair_first_timers_with_ambassadors(groups: list[list[str]], ambassadors: set,
+                                        first_timers: set, tee_map: dict,
+                                        locked: set, pair_counts: dict,
+                                        solo_ok: set
+                                        ) -> tuple[list[list[str]], list[str]]:
+    """Pairings rule 14 (Kerry-ratified 2026-09-15): "1st Timers also need
+    to be paired up (carted) with an Ambassador of the same tees whenever
+    possible." Composition half: every group holding a first-timer gets
+    an ambassador, by the cheapest history swap that keeps rule 12, with
+    a same-tee ambassador preferred (a tee mismatch costs as much as a
+    once-played repeat, so history still breaks ties). Never moves a
+    locked player, never strips a group of the only ambassador riding
+    with ITS first-timer. The seating half lives in _arrange_group_seats.
+    """
+    notes: list[str] = []
+    groups = [list(g) for g in groups]
+    amb = {_pair_key_name(n) for n in ambassadors}
+    ft = {_pair_key_name(n) for n in first_timers}
+    lockk = {_pair_key_name(n) for n in locked}
+    sok = {_pair_key_name(n) for n in solo_ok}
+
+    def _tee(n):
+        return str(tee_map.get(n) or "").strip().lower()
+
+    def _n_amb(g):
+        return sum(1 for n in g if _pair_key_name(n) in amb)
+
+    def _has_ft(g):
+        return any(_pair_key_name(n) in ft for n in g)
+
+    for _ in range(len(groups)):
+        gi = next((i for i, g in enumerate(groups)
+                   if _has_ft(g) and _n_amb(g) == 0), None)
+        if gi is None:
+            break
+        ft_tees = {_tee(n) for n in groups[gi] if _pair_key_name(n) in ft}
+        best = None
+        for hj, h in enumerate(groups):
+            if hj == gi:
+                continue
+            spare = _n_amb(h) - (1 if _has_ft(h) else 0)
+            if spare < 1:
+                continue
+            for xi, x in enumerate(h):
+                if _pair_key_name(x) not in amb or _pair_key_name(x) in lockk:
+                    continue
+                for yi, y in enumerate(groups[gi]):
+                    yk = _pair_key_name(y)
+                    if yk in lockk or yk in ft or yk in amb:
+                        continue
+                    g2 = list(groups[gi]); h2 = list(h)
+                    g2[yi], h2[xi] = x, y
+                    if _lone_back_offender(g2, tee_map, sok) or _lone_back_offender(h2, tee_map, sok):
+                        continue
+                    base = _group_score(groups[gi], pair_counts) + _group_score(h, pair_counts)
+                    cost = _group_score(g2, pair_counts) + _group_score(h2, pair_counts) - base
+                    if _tee(x) and _tee(x) not in ft_tees:
+                        cost += 1001      # same tee "whenever possible"
+                    if best is None or cost < best[0]:
+                        best = (cost, hj, g2, h2)
+        if best is None:
+            who = ", ".join(n for n in groups[gi] if _pair_key_name(n) in ft)
+            notes.append(f"{who}: no ambassador free to ride with a 1st timer "
+                         "(requests, matches and locks kept).")
+            ft.difference_update(_pair_key_name(n) for n in groups[gi])
+            continue
+        _, hj, g2, h2 = best
+        groups[gi], groups[hj] = g2, h2
+    return groups, notes
+
+
 def _arrange_group_seats(names: list[str], mp_opponents: set,
-                         partner_adj: set, tee_map: dict) -> list[str]:
+                         partner_adj: set, tee_map: dict,
+                         captains: set | None = None,
+                         newbies: set | None = None,
+                         experience: dict | None = None,
+                         ambassadors: set | None = None,
+                         first_timers: set | None = None) -> list[str]:
     """Seat order for a settled group — foursomes are already decided;
     this only decides who RIDES with whom. Carts are seats 1&2 and 3&4
     (Kerry's cart-pair ruling).
@@ -58157,9 +64210,21 @@ def _arrange_group_seats(names: list[str], mp_opponents: set,
     - Same-tee cart-mates (weight 1) — tee compare is case/whitespace-
       insensitive so label drift can't split a tee pair.
 
+    - Rule 13 (Kerry-ratified 2026-09-15): a group captain rides with the
+      NEWEST player in the group (weight 10 — below a request, above a
+      tee match), and within each cart the DRIVER (seats 1 and 3) is the
+      captain, else the most experienced non-new player; a first-season
+      player never drives.
+
     Groups are ≤ 4 players (24 permutations), so brute force is exact.
     """
     from itertools import permutations
+
+    captains = {_pair_key_name(n) for n in (captains or set())}
+    newbies = {_pair_key_name(n) for n in (newbies or set())}
+    experience = experience or {}
+    ambassadors = {_pair_key_name(n) for n in (ambassadors or set())}
+    first_timers = {_pair_key_name(n) for n in (first_timers or set())}
 
     def _cart(idx: int) -> int:
         return 0 if idx < 2 else 1
@@ -58168,6 +64233,12 @@ def _arrange_group_seats(names: list[str], mp_opponents: set,
         return str(tee_map.get(name) or "").strip().lower()
 
     keys = {n: _pair_key_name(n) for n in names}
+    has_capt = any(keys[n] in captains for n in names)
+    newest = None
+    if has_capt:
+        cands = [n for n in names if keys[n] in newbies and keys[n] not in captains]
+        if cands:
+            newest = min(cands, key=lambda n: (experience.get(keys[n], 0), n))
     best, best_cost = list(names), None
     for perm in permutations(names):
         cost = 0
@@ -58184,10 +64255,44 @@ def _arrange_group_seats(names: list[str], mp_opponents: set,
                 ta, tb = _tee(perm[i]), _tee(perm[j])
                 if ta and tb and ta != tb:
                     cost += 1
+        if newest is not None:
+            ni = perm.index(newest)
+            if not any(_cart(k) == _cart(ni) and keys[perm[k]] in captains
+                       for k in range(len(perm)) if k != ni):
+                cost += 10
+        # Rule 14 seating half: a first-timer shares a cart with an
+        # ambassador when the group has one (weight 10, same as the
+        # captain-with-newest tie; the tee term below prefers a same-tee
+        # ambassador among equals).
+        for i in range(len(perm)):
+            if keys[perm[i]] in first_timers and keys[perm[i]] not in ambassadors:
+                if any(keys[perm[k]] in ambassadors for k in range(len(perm)) if k != i) and \
+                   not any(_cart(k) == _cart(i) and keys[perm[k]] in ambassadors
+                           for k in range(len(perm)) if k != i):
+                    cost += 10
         if best_cost is None or cost < best_cost:
             best, best_cost = list(perm), cost
         if best_cost == 0:
             break
+
+    # DRIVER order inside each settled cart (rule 13). Cart composition
+    # is decided above; this only says who takes the wheel.
+    def _rank(n):
+        k = keys[n]
+        return (1 if k in captains else 0,
+                0 if k in newbies else 1,
+                experience.get(k, 0))
+    # The captain takes SEAT 1 (Kerry 2026-09-15: "Captains should be
+    # moved to seat 1 in group along with their request in seat 2 if
+    # partnered"): their cart becomes seats 1-2 — the partner (weight
+    # 100 above) or the newest player (weight 10) is already beside them.
+    if has_capt and len(best) == 4:
+        top = max(best, key=_rank)
+        if best.index(top) >= 2:
+            best = best[2:] + best[:2]
+    for i, j in ((0, 1), (2, 3)):
+        if j < len(best) and _rank(best[j]) > _rank(best[i]):
+            best[i], best[j] = best[j], best[i]
     return best
 
 

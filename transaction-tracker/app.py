@@ -436,6 +436,15 @@ def _inject_shell_flag():
     return {"shell_v2": os.environ.get("SHELL_V2", "1").strip().lower() not in ("0", "false", "off")}
 
 
+@app.context_processor
+def _inject_print_stamp():
+    """`print_stamp()` — the Central time a print template was rendered
+    (starter sheet footer, v2.468.2). A function, so the value is taken
+    at render, not at import."""
+    from email_parser.timezone_utils import now_central
+    return {"print_stamp": lambda: now_central().strftime("%a %-m/%-d %-I:%M %p")}
+
+
 @app.errorhandler(500)
 def handle_500(e):
     """Return JSON instead of HTML for unhandled server errors."""
@@ -1428,6 +1437,37 @@ def start_scheduler():
     logger.info("Expense email classifier scheduled every %d minutes", expense_interval)
 
     # COO daily email — runs at 7:00 AM US/Central
+    # Print packs: every active event dated TODAY, mailed to Kerry from
+    # 6 AM on the day (checked hourly 6–9 AM Central; a content hash makes
+    # it once-per-change, so the first check sends and the later ones
+    # only re-send a sheet that changed). Kerry 2026-09-21: "shouldn't be
+    # sent until 6:00a day of". A SEND PACK button on the pairings toolbar
+    # sends on demand at any time. v2.468.5 (was the evening before).
+    scheduler.add_job(
+        send_due_print_packs_job,
+        "cron",
+        hour="6-9",
+        minute=5,
+        timezone="US/Central",
+        id="print_packs_day_of",
+        replace_existing=True,
+    )
+
+    # Pairings: 5:00 PM Central every day, generate + save the sheet for
+    # tomorrow's events on the dialled weekdays (default Tuesday) when
+    # nobody has paired them yet. Kerry 2026-09-21: "Generate Pairings
+    # automatically at 5:00p on Mondays for Tuesday events. Only if they
+    # aren't run already." v2.468.5.
+    scheduler.add_job(
+        auto_generate_pairings_job,
+        "cron",
+        hour=17,
+        minute=0,
+        timezone="US/Central",
+        id="pairings_auto_generate",
+        replace_existing=True,
+    )
+
     coo_email_to = os.getenv("COO_EMAIL_TO")
     if coo_email_to:
         scheduler.add_job(
@@ -1613,6 +1653,40 @@ def start_scheduler():
             coalesce=True,
         )
         logger.info("Auto pairings grab scheduled daily at 03:20 US/Central")
+
+    # ── LIVE SCORING POLL (Kerry 2026-09-15: "Poll GG on a timer, just
+    # like we were doing for Match Play. I want to see it working live",
+    # and then, an hour after the last manual pull, "Looks like
+    # leaderboards have stopped updating"). They had not stopped;
+    # nothing had ever started them. Every 5 minutes, and only for an
+    # event that is dated today, has started, and does not yet have every
+    # hole for every player — a finished round stops being polled by
+    # itself. Disable with AUTO_LIVE_POLL=0; interval via
+    # LIVE_POLL_MINUTES.
+    def auto_live_poll_job():
+        from email_parser.database import poll_live_events
+        try:
+            res = poll_live_events()
+            if res.get("imported"):
+                logger.info("Live poll: %s",
+                            [(s.get("event"), s.get("result") or s.get("error"))
+                             for s in res["imported"]])
+        except Exception:
+            logger.exception("Live scoring poll failed (non-fatal)")
+
+    if os.getenv("AUTO_LIVE_POLL", "1") != "0":
+        _lp_min = max(2, int(os.getenv("LIVE_POLL_MINUTES", "5") or 5))
+        scheduler.add_job(
+            auto_live_poll_job,
+            "interval",
+            minutes=_lp_min,
+            id="auto_live_poll",
+            replace_existing=True,
+            max_instances=1,
+            coalesce=True,
+            misfire_grace_time=120,
+        )
+        logger.info("Live scoring poll scheduled every %d minutes", _lp_min)
 
     # ── Nightly RSVP match audit (Kerry 2026-07-15) ──────────────────
     # Belt-and-braces sweep behind the per-ingest and on-open audits:
@@ -4541,6 +4615,24 @@ def api_set_customer_status(customer_id):
     return jsonify({"status": "ok", "id": new_id, "status_name": status_name})
 
 
+@app.route("/api/customers/<int:customer_id>/roles", methods=["POST"])
+@require_role("manager")
+def api_set_customer_role(customer_id):
+    """One-tap role flags (Kerry-ratified 2026-09-15, pairings rules
+    12/13): body { flag: ambassador|group_captain|solo_back_ok, value:
+    true|false }. Always writes an explicit 0/1 — the boot seed is
+    fill-only-if-NULL, so a cleared seeded player stays cleared."""
+    from email_parser.database import set_customer_role_flag
+    data = request.get_json(silent=True) or {}
+    flag = str(data.get("flag") or "").strip()
+    try:
+        result = set_customer_role_flag(customer_id, flag, bool(data.get("value")))
+    except ValueError as e:
+        code = 404 if "not found" in str(e) else 400
+        return jsonify({"error": str(e)}), code
+    return jsonify({"status": "ok", **result})
+
+
 @app.route("/api/customers/<int:customer_id>/pace", methods=["POST"])
 @require_role("manager")
 def api_set_customer_pace(customer_id):
@@ -5031,6 +5123,98 @@ def starter_sheet_page(event_id):
     return render_template("starter_sheet.html", pack=pack)
 
 
+def _print_pack_render(template, **ctx):
+    """Render a print template for the PDF engine — inside an app context
+    so the scheduler (no request) can do it too."""
+    with app.app_context():
+        return render_template(template, **ctx)
+
+
+def build_print_pack_for_event(event_id: int) -> dict | None:
+    from email_parser.print_pack import build_event_print_pack
+    return build_event_print_pack(_print_pack_render, event_id, app.static_folder)
+
+
+@app.route("/events/<int:event_id>/print-pack.pdf")
+@require_role("manager")
+def print_pack_pdf(event_id):
+    """Every print sheet for the event bound into one PDF (v2.465.0)."""
+    from flask import Response
+    built = build_print_pack_for_event(event_id)
+    if not built:
+        return "Event not found or nothing to print", 404
+    if built.get("error"):
+        return built["error"], 503
+    return Response(built["pdf"], mimetype="application/pdf",
+                    headers={"Content-Disposition":
+                             f'inline; filename="{built["filename"]}"'})
+
+
+def send_due_print_packs_job():
+    from email_parser.print_pack import send_due_print_packs
+    try:
+        res = send_due_print_packs(_print_pack_render, app.static_folder)
+        if res:
+            logger.info("print packs: %s", res)
+    except Exception:
+        logger.exception("print pack routine failed")
+
+
+def auto_generate_pairings_job():
+    from email_parser.database import auto_generate_pairings
+    try:
+        res = auto_generate_pairings()
+        if res:
+            logger.info("pairings auto-generate: %s", res)
+    except Exception:
+        logger.exception("pairings auto-generate failed")
+
+
+@app.route("/api/events/<int:event_id>/print-pack/send", methods=["POST"])
+@require_role("manager")
+def api_send_print_pack(event_id):
+    """SEND PACK on demand (Kerry 2026-09-21: "there should be a button to
+    SEND PACK"). Builds the pack now and mails it to the configured
+    recipient (or `to` in the body), recording the hash so the routine
+    does not send the same sheet again."""
+    from email_parser.print_pack import send_event_print_pack
+    data = request.get_json(silent=True) or {}
+    built = build_print_pack_for_event(event_id)
+    if not built:
+        return jsonify({"error": "Event not found or nothing to print"}), 404
+    if built.get("error"):
+        return jsonify({"error": built["error"]}), 503
+    res = send_event_print_pack(built, to_address=(data.get("to") or "").strip() or None)
+    res.update(parts=built["parts"], engine=built.get("engine"))
+    return jsonify(res), (200 if res.get("sent") else 502)
+
+
+@app.route("/events/<int:event_id>/divisions-flights")
+@require_role("manager")
+def divisions_flights_page(event_id):
+    """Print-optimized Divisions & Flights — NET, SKINS and GROSS on one
+    page, from the roster's buy-ins, the games matrix and the ratified
+    flighting standard (Kerry 2026-09-15)."""
+    from email_parser.database import event_flights_report
+    rep = event_flights_report(event_id)
+    if not rep:
+        return "Event not found", 404
+    return render_template("divisions_flights.html", rep=rep)
+
+
+@app.route("/events/<int:event_id>/proximity-markers")
+@require_role("manager")
+def proximity_markers_page(event_id):
+    """Print-optimized Closest-to-the-Pin markers, one per contest, from
+    the games setup (max 2 CTPs per nine, shortest par-3s, leftover slot
+    becomes a Longest Putt) and the course's own par-3s."""
+    from email_parser.database import event_proximity_report
+    rep = event_proximity_report(event_id)
+    if not rep:
+        return "Event not found", 404
+    return render_template("proximity_markers.html", rep=rep)
+
+
 @app.route("/events/<int:event_id>/cart-signs")
 @require_role("manager")
 def cart_signs_page(event_id):
@@ -5055,32 +5239,69 @@ def api_get_pairings(event_id):
             return jsonify({"error": "Event not found"}), 404
         ev = dict(ev)
         pairings = get_event_pairings(event_id)
-        slots_9 = _pairing_time_slots(ev, "9")
-        slots_18 = _pairing_time_slots(ev, "18")
-        # Current active player list — used by UI to detect unassigned players
-        INACTIVE = ("credited", "refunded", "transferred", "wd")
-        ph = ",".join("?" * len(INACTIVE))
+        # Current player list — used by UI to detect unassigned players.
+        # THE roster (`_event_roster_rows`): active order rows PLUS the
+        # PLAYING Golf Genius RSVPs with no order, one entry per person,
+        # so the panel, the generator and the request matcher all see the
+        # same people (Kerry 2026-09-15: "assign RSVP only's to groups
+        # and requests"). Rows carry `rsvp_only` for the badge.
+        from email_parser.database import (
+            _event_roster_rows, _pair_key_name, _roster_handicap_index_map,
+            _event_index_as_of, _event_holes_type)
         _pconn = get_connection()
         try:
-            player_rows = _pconn.execute(f"""
-                SELECT DISTINCT i.customer AS name, i.holes, i.tee_choice,
-                                c.pace_rating, c.current_player_status,
-                                i.user_status, i.customer_id
-                FROM events e
-                LEFT JOIN event_aliases ea ON ea.canonical_event_name = e.item_name
-                JOIN items i ON (
-                    i.item_name = e.item_name COLLATE NOCASE
-                    OR i.item_name = ea.alias_name COLLATE NOCASE
-                    OR i.event_id = e.id
-                )
-                LEFT JOIN customers c ON c.customer_id = i.customer_id
-                WHERE e.id = ?
-                  AND COALESCE(i.transaction_status,'active') NOT IN ({ph})
-                  AND i.parent_item_id IS NULL
-                ORDER BY i.customer COLLATE NOCASE
-            """, (event_id, *INACTIVE)).fetchall()
+            _seen_keys = set()
+            player_rows = []
+            # The index rides on the roster row so a player seated FROM
+            # Unassigned (picker, move, drag) keeps it — the same map the
+            # generator and the saved sheet read (Kerry 2026-09-15).
+            _pev = _pconn.execute("SELECT * FROM events WHERE id = ?",
+                                  (event_id,)).fetchone()
+            _hcp = _roster_handicap_index_map(
+                _pconn, as_of=_event_index_as_of(dict(_pev) if _pev else None))
+            for _r in _event_roster_rows(_pconn, event_id):
+                _k = _pair_key_name(_r["name"])
+                if not _k or _k in _seen_keys:
+                    continue
+                _seen_keys.add(_k)
+                player_rows.append({
+                    "name": _r["name"], "holes": _r.get("holes"),
+                    "tee_choice": _r.get("tee_choice"),
+                    "pace_rating": _r.get("pace_rating"),
+                    "current_player_status": _r.get("current_player_status"),
+                    "user_status": _r.get("user_status"),
+                    "customer_id": _r.get("customer_id"),
+                    "rsvp_only": bool(_r.get("rsvp_only")),
+                    "handicap_index": (_hcp.get(("c", _r.get("customer_id")))
+                                       if _r.get("customer_id") is not None else None)
+                                      if _hcp.get(("c", _r.get("customer_id"))) is not None
+                                      else _hcp.get((_r["name"] or "").lower()),
+                    # Rules 12/13 inputs for the card badges + driver mark
+                    "ambassador": bool(_r.get("ambassador")),
+                    "group_captain": bool(_r.get("group_captain")),
+                    "solo_back_ok": bool(_r.get("solo_back_ok")),
+                    "is_new": bool(_r.get("is_new")),
+                    "is_first_timer": bool(_r.get("is_first_timer")),
+                })
         finally:
             _pconn.close()
+        # Slot labels sized by the roster when Edit Event carries no group
+        # count (Kerry 2026-09-15: "why aren't holes being assigned to
+        # the foursomes?") — the same rule the generator applies, so the
+        # seed picker and the saved sheet offer the same holes.
+        from email_parser.database import _pairing_groups_needed
+        _fmt = (ev.get("format") or "").strip()
+        _default_h = "18" if _fmt in ("18 Holes", "27 Holes") else "9"
+        def _h_of(p):
+            h = str(p.get("holes") or "").strip()
+            return h if h in ("9", "18") else _default_h
+        _max_group = 5 if int(ev.get("allow_fivesomes") or 0) else 4
+        _n9 = sum(1 for p in player_rows if _h_of(p) == "9")
+        _n18 = sum(1 for p in player_rows if _h_of(p) == "18")
+        slots_9 = _pairing_time_slots(ev, "9", needed=_pairing_groups_needed(
+            _n9, _max_group, saved_groups=len(pairings.get("9") or [])))
+        slots_18 = _pairing_time_slots(ev, "18", needed=_pairing_groups_needed(
+            _n18, _max_group, saved_groups=len(pairings.get("18") or [])))
         # Player TIER for the pairing-card colour bands: 'member' |
         # 'alumni' | 'guest', from derive_member_financial_status_bulk —
         # the same D1 truth Player Rankings chips with, so a FORMER member
@@ -5148,17 +5369,52 @@ def api_get_pairings(event_id):
         except Exception:
             logger.exception("Standings points lookup failed for event %d "
                              "(non-fatal)", event_id)
+        # Prior-play counts between the people on THIS roster, so the
+        # History line under each name recomputes locally as the manager
+        # swaps and drags (Kerry 2026-09-15: "provide this info as a row
+        # underneath each name in a foursome").
+        pair_counts = {}
+        try:
+            from email_parser.database import roster_pair_counts
+            _hconn = get_connection()
+            try:
+                pair_counts = roster_pair_counts(
+                    _hconn, event_id, [d.get("name") for d in event_players])
+            finally:
+                _hconn.close()
+        except Exception:
+            logger.exception("Pair-count lookup failed for event %d "
+                             "(non-fatal)", event_id)
+        # The blind pool rides along with the panel (Kerry 2026-09-16:
+        # "Blind selector is really slow to show the list") — CHOOSE then
+        # renders from state with no round trip at all.
+        blind_pool = None
+        try:
+            from email_parser.database import event_blind_pool
+            _bconn = get_connection()
+            try:
+                blind_pool = event_blind_pool(_bconn, event_id)
+            finally:
+                _bconn.close()
+        except Exception:
+            logger.exception("Blind pool lookup failed for event %d "
+                             "(non-fatal)", event_id)
         return jsonify({
             "pairings": pairings,
+            "blind_pool": blind_pool,
             "slots_9": slots_9,
             "slots_18": slots_18,
             "event_players": event_players,
+            "pair_counts": pair_counts,
             "mp_matches": mp_matches,
             "partner_requests": partner_requests,
             "standings_points": standings_points,
             "standings_enrolled": standings_enrolled,
             "event": {
                 "format": ev.get("format"),
+                # The index on the EVENT's scale (Kerry 2026-09-18): 18 on
+                # an 18-hole night, 9 on a nine. The cards multiply.
+                "hcp_scale": 18 if _event_holes_type(ev.get("item_name"), ev.get("format")) == 18 else 9,
                 "start_type": ev.get("start_type"),
                 "start_type_18": ev.get("start_type_18"),
                 "tee_time_count": ev.get("tee_time_count"),
@@ -5262,6 +5518,61 @@ def api_pairings_remove_player(event_id):
     except Exception as e:
         logger.exception("Pairings removal failed for event %d / %s",
                          event_id, name)
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/events/<int:event_id>/pairings/blinds", methods=["POST"])
+@require_role("manager")
+def api_pairings_blinds(event_id):
+    """Draw BLINDs for the open seats on this event's saved sheet.
+
+    Kerry 2026-09-15: "for any open spots like this, BLIND's from the
+    field of Members with established handicaps only, should be added
+    into those slots... so there's even distribution of who gets the
+    benefit of being a blind for Team Net over the course of a year."
+
+    Body: {"apply": bool, "redraw": bool, "clear": bool}. Default is a
+    dry run — the draw is money-adjacent (a blind's card plays for a team
+    that can win Team Net), so nothing is written until asked.
+    """
+    from email_parser.database import (draw_event_blinds, clear_event_blinds,
+                                        draw_one_blind, set_event_blind,
+                                        event_blind_pool, get_connection)
+    data = request.get_json(silent=True) or {}
+    seat = data.get("seat") or {}
+    try:
+        if data.get("clear"):
+            return jsonify({"status": "ok",
+                            "cleared": clear_event_blinds(event_id)})
+        # ONE SEAT (Kerry 2026-09-15: "Need to be able to click an OPEN
+        # spot and be able to click ADD BLIND as option, then to select
+        # RANDOM or CHOOSE from eligible field").
+        if seat.get("holes") is not None:
+            holes = str(seat["holes"])
+            gnum = int(seat["group_num"])
+            cpos = int(seat["cart_pos"])
+            mode = (data.get("mode") or "").lower()
+            if mode == "pool":
+                conn = get_connection()
+                try:
+                    return jsonify(event_blind_pool(conn, event_id))
+                finally:
+                    conn.close()
+            if mode == "clear":
+                return jsonify(set_event_blind(event_id, holes, gnum, cpos,
+                                               None))
+            if mode == "choose":
+                cid = data.get("customer_id")
+                if cid is None:
+                    return jsonify({"error": "customer_id required"}), 400
+                return jsonify(set_event_blind(event_id, holes, gnum, cpos,
+                                               int(cid)))
+            return jsonify(draw_one_blind(event_id, holes, gnum, cpos))
+        return jsonify(draw_event_blinds(
+            event_id, dry_run=not data.get("apply"),
+            redraw=bool(data.get("redraw"))))
+    except Exception as e:
+        logger.exception("Blind draw failed for event %d", event_id)
         return jsonify({"error": str(e)}), 500
 
 
@@ -7244,7 +7555,7 @@ def api_refund_item(item_id):
     """Mark an item as refunded via GoDaddy or Venmo."""
     data = request.get_json(silent=True) or {}
     method = data.get("method", "")
-    if method and method not in ("GoDaddy", "Venmo", "Zelle", "PayPal", "Cash App"):
+    if method and method not in ("GoDaddy", "Venmo", "Zelle", "PayPal", "Cash App", "Apple Pay"):
         return jsonify({"error": "Invalid refund method. Must be GoDaddy, Venmo, Zelle, PayPal, or Cash App."}), 400
     if refund_item(item_id, method=method, note=data.get("note", "")):
         return jsonify({"status": "ok"})
@@ -7261,7 +7572,7 @@ def api_payout_credit(item_id):
     """
     data = request.get_json(silent=True) or {}
     method = (data.get("method") or "").strip()
-    if method and method not in ("GoDaddy", "Venmo", "Zelle", "Check", "PayPal", "Cash App"):
+    if method and method not in ("GoDaddy", "Venmo", "Zelle", "Check", "PayPal", "Cash App", "Apple Pay"):
         return jsonify({"error": "Invalid method. Must be GoDaddy, Venmo, Zelle, Check, PayPal, or Cash App."}), 400
     refund_date = (data.get("date") or "").strip()
     if refund_date:
@@ -7396,7 +7707,7 @@ def api_partial_refund_item(item_id):
     # "Credit" (Kerry 2026-07-14) keeps the money in the house: the child
     # row is a CREDITED item (picked up by get_player_credits → Apply
     # Credit / balance emails) instead of an outbound refund.
-    if method and method not in ("Credit", "GoDaddy", "Venmo", "Zelle", "PayPal", "Cash App"):
+    if method and method not in ("Credit", "GoDaddy", "Venmo", "Zelle", "PayPal", "Cash App", "Apple Pay"):
         return jsonify({"error": "Invalid refund method."}), 400
     from email_parser.database import apply_partial_refund
     res = apply_partial_refund(
@@ -7434,6 +7745,61 @@ def api_reverse_credit(item_id):
     if reverse_credit(item_id):
         return jsonify({"status": "ok"})
     return jsonify({"error": "Item not found or not in credited/transferred state."}), 400
+
+
+@app.route("/api/events/<int:event_id>/flights-board")
+@require_role("manager")
+def api_event_flights_board(event_id):
+    """The DIVISIONS / FLIGHTS board for one event (mailbox #582): the
+    ratified flighting and payout rule set computed from Tracker data in
+    its two layers — SELECTION (games, variant, flight count, edges, each
+    player's flight) and AMOUNTS (pots, places, the 10% overall low-gross
+    bonus) — beside what Golf Genius recorded. DRY RUN: read-only, pays
+    nobody; GG stays the payer of record."""
+    from email_parser.database import event_flights_board
+    try:
+        board = event_flights_board(event_id)
+    except Exception as e:
+        logger.exception("flights board failed for event %s", event_id)
+        return jsonify({"error": str(e)}), 500
+    if not board:
+        return jsonify({"error": "Event not found"}), 404
+    board = dict(board)
+    board.pop("event", None)          # the row carries course_cost/markup; the page has /api/events
+    return jsonify(board)
+
+
+@app.route("/api/customers/activity")
+@require_role("view-only")
+def api_customers_activity():
+    """ACTIVE members for the Customers snapshot (Kerry 2026-09-21: "counts
+    of number (per chapter) of who's played in the last 60 days, and a
+    percentage"). PII-free: {customer_id: {last_played, active}}; the
+    window is the `members_active_days` dial unless ?days= overrides."""
+    from email_parser.database import customers_activity
+    try:
+        days = request.args.get("days", type=int)
+        return jsonify(customers_activity(days=days))
+    except Exception as e:
+        logger.exception("customers activity failed")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/events/<int:event_id>/add-player-options")
+@require_role("manager")
+def api_add_player_options(event_id):
+    """Holes / side games / tees the Add Player modal may offer for THIS
+    event — derived from its format, packages, roster and course record
+    (Kerry 2026-09-21). The page keeps its static lists as the fallback."""
+    from email_parser.database import add_player_options
+    try:
+        opts = add_player_options(event_id)
+    except Exception as e:
+        logger.exception("add-player options failed for event %s", event_id)
+        return jsonify({"error": str(e)}), 500
+    if not opts:
+        return jsonify({"error": "Event not found"}), 404
+    return jsonify(opts)
 
 
 @app.route("/api/events/add-player", methods=["POST"])
@@ -7772,7 +8138,8 @@ def api_send_messages():
     # The store registration link, only while it is usable: verified (or
     # hand-typed) and the event not yet played. event_links.py owns the
     # rule; a past event's link is "expired", never deleted.
-    from email_parser.event_links import event_url_for_message
+    from email_parser.event_links import (event_url_for_message,
+                                          pay_button_html)
     _event_url, _event_url_problem = event_url_for_message(event_info or None)
     event_vars = {
         "event_name": event_name,
@@ -7782,6 +8149,9 @@ def api_send_messages():
         "manager_name": _mgr["name"],
         "manager_phone": _mgr["phone"],
         "event_url": _event_url,
+        # the same link as a tappable button (Kerry 2026-09-14) — blank
+        # whenever the link is blank, so the guard below catches both
+        "pay_button": pay_button_html(_event_url),
         # Where the group meets after THIS event — per event, not per
         # chapter (Kerry 2026-09-09). Blank = the send below refuses.
         "fellowship_spot": (event_info.get("fellowship_spot") or "").strip(),
@@ -7803,11 +8173,12 @@ def api_send_messages():
             "variable out of the message."}), 400
     # Same class of check for the registration link: a message that
     # carries {event_url} must not go out with a blank OR a dead link.
-    if "{event_url}" in (subject_tpl + body_tpl) and not _event_url:
-        return jsonify({"error":
-            f"{{event_url}} cannot be sent: {_event_url_problem}. "
-            "Verify the link in Edit Event, or take the variable out "
-            "of the message."}), 400
+    for _lv in ("event_url", "pay_button"):
+        if ("{%s}" % _lv) in (subject_tpl + body_tpl) and not _event_url:
+            return jsonify({"error":
+                f"{{{_lv}}} cannot be sent: {_event_url_problem}. "
+                "Verify the link in Edit Event, or take the variable out "
+                "of the message."}), 400
     if "{fellowship_spot}" in (subject_tpl + body_tpl) and not event_vars["fellowship_spot"]:
         return jsonify({"error":
             f"No fellowship spot is set for {event_name} — "
@@ -8074,8 +8445,15 @@ def api_preview_message():
     variables["manager_phone"] = _pmgr["phone"] or "(no number on file)"
     # The composer passes the event's usable link (or nothing); the
     # preview names the gap the send guard would refuse on.
-    variables["event_url"] = (data.get("event_url") or "").strip() \
-        or "(no registration link on file)"
+    _purl = (data.get("event_url") or "").strip()
+    variables["event_url"] = _purl or "(no registration link on file)"
+    # the preview shows the real button when the link is usable, and
+    # names the same gap the send guard refuses on when it is not
+    from email_parser.event_links import pay_button_html as _pbh
+    variables["pay_button"] = _pbh(_purl) or (
+        '<p style="margin:12px 0;color:#b91c1c;font-weight:600;">'
+        '(no registration link on file &mdash; this message cannot be '
+        'sent with a payment button)</p>')
     variables["fellowship_spot"] = (data.get("fellowship_spot") or "").strip() \
         or "(no fellowship spot set for this event)"
 
@@ -8585,8 +8963,11 @@ def api_handicap_index_map():
     """Return a map of customer_name (lowercase) → handicap_index for all linked players.
 
     Lightweight endpoint used by the events page to display live HCP values.
+    `?as_of=YYYY-MM-DD` returns the map IN EFFECT that morning — the
+    handicap lock for an event that has begun (Kerry 2026-09-16).
     """
-    players = get_all_handicap_players()
+    _as_of = (request.args.get("as_of") or "").strip()[:10] or None
+    players = get_all_handicap_players(as_of=_as_of)
     index_map = {}
     for p in players:
         cname = p.get("customer_name")
@@ -9124,13 +9505,21 @@ def api_handicap_link_debug():
 @app.route("/api/handicaps/unlinked-players")
 @require_role("admin")
 def api_handicap_unlinked_players():
-    """Return handicap players with no linked customer record."""
+    """Return handicap players with no linked customer record.
+
+    UNLINKED means no `customer_id` (v2.459.0, guiding principle 6), not
+    a missing display label. The old test was `customer_name IS NULL`,
+    which called a row with a real customer_id and a blank label
+    "unlinked" and a row with a name but no id "linked" — exactly
+    backwards, and the second kind is the one the card send could not
+    resolve.
+    """
     conn = get_connection()
     try:
         rows = conn.execute(
             """SELECT l.player_name, l.customer_name
                FROM handicap_player_links l
-               WHERE l.customer_name IS NULL"""
+               WHERE l.customer_id IS NULL"""
         ).fetchall()
     finally:
         conn.close()
@@ -9493,67 +9882,125 @@ def api_handicap_send_bulk_email():
 
     skipped_not_member = 0
     if members_only:
+        # MEMBERS by `customer_id`, never by a name string (v2.459.0,
+        # guiding principle 6). The old query fell back to
+        # `c.first_name || ' ' || c.last_name = l.customer_name` for a
+        # link with no id, then matched the RESULT back by player_name —
+        # so a member whose profile name and link label disagreed by a
+        # nickname, a suffix or a proper-casing read as "not a member"
+        # and quietly got no card.
         conn = get_connection()
         try:
-            member_names = {r["player_name"] for r in conn.execute(
-                """SELECT l.player_name
-                     FROM handicap_player_links l
-                     JOIN customers c
-                       ON (c.customer_id = l.customer_id
-                           OR (l.customer_id IS NULL
-                               AND c.first_name || ' ' || c.last_name
-                                   = l.customer_name))
+            member_ids = {r["customer_id"] for r in conn.execute(
+                """SELECT c.customer_id
+                     FROM customers c
                     WHERE c.current_player_status
                           IN ('active_member', 'member_plus')""")}
         finally:
             conn.close()
         before = len(eligible_rows)
         eligible_rows = [r for r in eligible_rows
-                         if r["player_name"] in member_names]
+                         if r.get("customer_id") in member_ids]
         skipped_not_member = before - len(eligible_rows)
 
     # If filtering by event, restrict to players registered for that event
     # and compute event-specific skip counts
+    # EVERY REGISTRANT LANDS IN EXACTLY ONE BUCKET (Kerry 2026-09-16:
+    # "Not sure how we have 21 registered and only 16 sent and 3 skipped.
+    # Seems to be 2 unaccounted for."). Two `continue`s inside the send
+    # loop — no email on file, and no NINE-hole index even though the
+    # player is otherwise eligible — dropped people silently, so the
+    # numbers could not add up and there was no way to find out who.
+    # They are counted now, and everyone skipped is NAMED.
     skipped_no_email = 0
     skipped_no_index = 0
+    skipped_names: list = []
+    registered = None
+    event_names: dict = {}
     if event_name:
-        all_items = get_all_items()
-        aliases = get_all_event_aliases()
-        # Collect customer names registered for this event (active only)
-        event_customers = set()
-        for item in all_items:
-            iname = item.get("item_name") or ""
-            if iname.lower() == event_name.lower() or (aliases.get(iname) or "").lower() == event_name.lower():
-                if item.get("transaction_status") in (None, "active", "rsvp_only", "gg_rsvp"):
-                    cname = (item.get("customer") or "").strip().lower()
-                    if cname:
-                        event_customers.add(cname)
-
-        # Build player_name → customer_name map from handicap links
+        # THE ROSTER, AND IDENTITY BY `customer_id` (v2.459.0).
+        #
+        # This block used to build a FIFTH roster out of get_all_items() +
+        # aliases — so a Golf Genius RSVP with no order row was invisible
+        # to it and was not even counted in `registered` — and then match
+        # `handicap_player_links.customer_name` against `items.customer`
+        # by string equality. Both sides are per-order historical name
+        # snapshots (CLAUDE.md "Identity drift watch"), so "Mike Murphy"
+        # against "Michael Murphy" classified a player with a current
+        # index as "no TGF handicap on record", and he silently got no
+        # card. `WHERE customer_name IS NOT NULL` dropped any link that
+        # had an id but no name label on top of that.
+        #
+        # Now: `_event_roster_rows` — the ONE roster builder mandated in
+        # v2.410.0 — and set membership on `customer_id`.
+        from email_parser.database import _event_roster_rows
         conn = get_connection()
         try:
-            links = conn.execute(
-                "SELECT player_name, customer_name FROM handicap_player_links "
-                "WHERE customer_name IS NOT NULL"
-            ).fetchall()
+            ev = conn.execute(
+                "SELECT id, item_name FROM events WHERE item_name = ? COLLATE NOCASE",
+                (event_name,)).fetchone()
+            if not ev:
+                ev = conn.execute(
+                    """SELECT e.id, e.item_name FROM events e
+                         JOIN event_aliases ea
+                           ON ea.canonical_event_name = e.item_name
+                        WHERE ea.alias_name = ? COLLATE NOCASE""",
+                    (event_name,)).fetchone()
+            if not ev:
+                # An unrecognised audience must NEVER fall through to a
+                # send — the composer hazard of 2026-09-08 (handoff §7)
+                # mailed a whole roster exactly that way. Refuse instead.
+                return jsonify({
+                    "error": f"No event matches {event_name!r} — nothing sent.",
+                }), 400
+            roster = _event_roster_rows(conn, ev["id"])
         finally:
             conn.close()
-        player_to_customer = {r["player_name"]: r["customer_name"] for r in links}
 
-        # Filter eligible rows to only those whose linked customer is in the event
-        eligible_rows = [
-            r for r in eligible_rows
-            if player_to_customer.get(r["player_name"], "").strip().lower() in event_customers
-        ]
+        # One entry per PERSON. Roster rows are per order row (entry,
+        # side games, an add-on), so a player can hold several; dedupe on
+        # customer_id where there is one, on the pairing name key where
+        # there is not.
+        roster_ids: set = set()
+        roster_unidentified: dict = {}
+        for r in roster:
+            cid = r.get("customer_id")
+            disp = (r.get("name") or r.get("customer") or "").strip()
+            if cid is not None:
+                roster_ids.add(int(cid))
+                event_names.setdefault(int(cid), disp)
+            elif disp:
+                roster_unidentified.setdefault(disp.lower(), disp)
 
-        # Count event-specific skips: event registrants not in eligible list
-        eligible_customers = {
-            player_to_customer.get(r["player_name"], "").strip().lower()
-            for r in eligible_rows
-        }
-        for cname_l in event_customers:
-            if cname_l not in eligible_customers:
+        # Filter eligible rows to the people on THIS event's roster, ONE
+        # card per person. A customer can hold two handicap links (a
+        # legacy Golf Genius name variant beside the current one); the
+        # export already collapses those that share an email, but two
+        # links on two addresses would otherwise each draw a card.
+        _by_cid: dict = {}
+        for r in eligible_rows:
+            cid = r.get("customer_id")
+            if cid is None or int(cid) not in roster_ids:
+                continue
+            _by_cid.setdefault(int(cid), r)
+        eligible_rows = list(_by_cid.values())
+        eligible_ids = set(_by_cid)
+
+        # Every registrant lands in exactly one bucket, and anyone skipped
+        # is NAMED (Kerry 2026-09-16). A registrant with no customer_id at
+        # all is its own bucket with its own reason — it is an identity
+        # gap, not a missing handicap, and calling it the latter is what
+        # made the old counts read as authoritative when they were wrong.
+        registered = len(roster_ids) + len(roster_unidentified)
+        for cid in sorted(roster_ids):
+            if cid not in eligible_ids:
                 skipped_no_index += 1  # no handicap, no link, or no email
+                skipped_names.append({"player": event_names.get(cid, f"customer {cid}"),
+                                      "why": "no TGF handicap on record"})
+        for disp in sorted(roster_unidentified.values()):
+            skipped_no_index += 1
+            skipped_names.append({"player": disp,
+                                  "why": "on the roster with no customer record to match"})
     else:
         skipped_no_email = len(export.get("no_email") or [])
         skipped_no_index = len(export.get("no_index") or [])
@@ -9567,11 +10014,16 @@ def api_handicap_send_bulk_email():
         pname = row["player_name"]
         email = row.get("email") or ""
         if not email:
+            skipped_no_email += 1
+            skipped_names.append({"player": pname, "why": "no email on file"})
             continue
 
         try:
             card_data = build_handicap_card_data(pname)
             if card_data.get("handicap_index_9") is None:
+                skipped_no_index += 1
+                skipped_names.append({"player": pname,
+                                      "why": "no nine-hole index to print"})
                 continue
 
             html = build_handicap_card_html(card_data)
@@ -9619,7 +10071,7 @@ def api_handicap_send_bulk_email():
         if i < len(eligible_rows) - 1:
             _time.sleep(0.3)
 
-    return jsonify({
+    out = {
         "status": "ok" if failed == 0 else "partial",
         "sent": sent,
         "failed": failed,
@@ -9627,8 +10079,23 @@ def api_handicap_send_bulk_email():
         "skipped_no_index": skipped_no_index,
         "skipped_not_member": skipped_not_member,
         "total_eligible": len(eligible_rows),
+        "skipped_players": skipped_names[:40],
         "errors": errors[:20],  # limit error details
-    })
+    }
+    # Handicap links that carry no customer_id — the population that can
+    # only be resolved by name string. Surfaced on every send so the gap
+    # stays visible instead of being papered over by the fallback.
+    _fallbacks = export.get("name_fallbacks") or []
+    if _fallbacks:
+        out["unlinked_handicap_players"] = [f["player_name"] for f in _fallbacks][:40]
+        out["unlinked_handicap_count"] = len(_fallbacks)
+    if registered is not None:
+        # The arithmetic is published, so a gap can never hide again.
+        out["registered"] = registered
+        out["accounted"] = (sent + failed + skipped_no_email
+                            + skipped_no_index + skipped_not_member)
+        out["unaccounted"] = registered - out["accounted"]
+    return jsonify(out)
 
 
 # ---------------------------------------------------------------------------
@@ -9670,20 +10137,10 @@ happy to help.</p>
 The Golf Fellowship</p>"""
 
 
-def _participation_event_filter_sql(alias: str = "i") -> str:
-    """SQL fragment selecting event-participation items only.
-
-    Excludes membership renewals, season contest enrollments, and child
-    payment rows. Both paid (active) and RSVP-only rows count as
-    "played" for the purposes of last-event / frequency.
-    """
-    return f"""
-        {alias}.customer_id IS NOT NULL
-        AND COALESCE({alias}.transaction_status, 'active') IN ('active', 'rsvp_only')
-        AND UPPER(COALESCE({alias}.item_name, '')) NOT LIKE '%MEMBERSHIP%'
-        AND UPPER(COALESCE({alias}.item_name, '')) NOT LIKE '%SEASON CONTEST%'
-        AND {alias}.parent_item_id IS NULL
-    """
+# _participation_event_filter_sql lives in email_parser.database since
+# v2.464.0 so the MCP participation series (gg_history.py) shares the
+# ONE definition of "played" with this page (participation.md).
+from email_parser.database import _participation_event_filter_sql  # noqa: E402
 
 
 def _get_participation_rows(conn: sqlite3.Connection) -> list[dict]:
@@ -14438,10 +14895,21 @@ def api_tgf_mark_paid():
     if not event_id or not customer_id or not payment_method:
         return jsonify({"error": "event_id, customer_id, and payment_method required"}), 400
 
-    # Whitelist allowed sources
-    ALLOWED_SOURCES = {"paypal", "cashapp", "cash", "check", "zelle", "other"}
+    # Whitelist allowed sources. Apple Pay added 2026-09-16 (Kerry paid
+    # Jesse Saldana's $21 that way) — an Apple Cash send leaves no receipt
+    # email for the expense classifier to match, so it reconciles off the
+    # BANK line rather than a provider receipt. It is a payment method
+    # like any other here; only the matching path differs.
+    ALLOWED_SOURCES = {"paypal", "cashapp", "cash", "check", "zelle",
+                       "applepay", "venmo", "other"}
     if payment_method not in ALLOWED_SOURCES:
         return jsonify({"error": f"payment_method must be one of {sorted(ALLOWED_SOURCES)}"}), 400
+    # The label a human reads — "Applepay" is not a word.
+    _METHOD_LABEL = {"applepay": "Apple Pay", "cashapp": "Cash App",
+                     "paypal": "PayPal", "zelle": "Zelle", "venmo": "Venmo",
+                     "cash": "Cash", "check": "Check", "other": "Other"}
+    method_label = _METHOD_LABEL.get(payment_method,
+                                     payment_method.capitalize())
 
     if not paid_date:
         from datetime import date as _date
@@ -14471,7 +14939,7 @@ def api_tgf_mark_paid():
         event_name = pending[0]["event_name"]
 
         # Create the real acct_transaction for the payment
-        description = f"{payment_method.upper()} payout: {customer_name} — {event_name}"
+        description = f"{method_label.upper()} payout: {customer_name} — {event_name}"
         if reference:
             description += f" (ref: {reference})"
 
@@ -14487,7 +14955,7 @@ def api_tgf_mark_paid():
                 customer_name,
                 f"MANUAL-PAYOUT-{event_id}-{customer_id}",
                 -total_amount,
-                payment_method.capitalize(),
+                method_label,
                 event_name,
             ),
         )

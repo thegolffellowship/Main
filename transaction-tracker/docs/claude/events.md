@@ -381,6 +381,17 @@ cards remain inline buttons.
   are NOT flagged
 
 ## Pairings printables — Starter Sheet + Cart Signs (B5, v2.116.0)
+
+**Tee legend = the DESIGNATED sets (v2.467.0, Kerry 2026-09-20).** The
+band legend on the starter sheet (and the tee circles + PH on the
+leaderboard) prints the sets the course record designates in
+`course_tees.tgf_bands` — never more than four, master (USGA / course)
+names, the GG name is an alias for admin only. A course with no
+designation yet falls back to the typed-number-then-yardage derivation.
+Designate with `scoring-tee-bands:<course_id>` (proposal from the
+yardage standards) → `scoring-tee-bands-apply:<course_id>|apply`, or one
+set at a time with `scoring-tee-bands-set`. Details: schema.md "TGF tee
+designation".
 Two print-optimized pages rendered from the SAVED pairings
 (`get_event_pairings`), assembled by `get_event_print_pack(event_id)` in
 `database.py` (event row + ordered groups + cart split — seats 1&2 = Cart A,
@@ -2087,3 +2098,215 @@ direction and approval by me."
   ACTUAL recipients from `recorded_rows` (never re-split down
   standings that moved since payday — the Hogue fold), and the strip
   reads "FINAL · Pot $X · as paid".
+
+
+## Message Players — {pay_button} (v2.399.0)
+
+Kerry 2026-09-14: "Can you work the payment link in as a button for these
+messages? Also, move RSVP Only (unpaid) to top of Audience selection and
+Payment Reminder (built-in) to top of Template selector."
+
+- **`{pay_button}`** renders the event's store registration link as a
+  TGF-orange call-to-action button. Built by `pay_button_html(url)` in
+  `email_parser/event_links.py` — inline styles only, because every mail
+  client strips `<style>`. One builder, used by both the send path
+  (`event_vars["pay_button"]`) and the preview route.
+- **Same refusal rule as `{event_url}`**, because it is the same link: the
+  send returns 400 when the event has no verified link or has already been
+  played. The guard now loops over both variables rather than naming one,
+  so a third link variable inherits it. A button that looks live must never
+  reach a member pointing at a dead page. The preview substitutes a red
+  "(no registration link on file…)" line in that case, so the composer
+  shows the same gap the send refuses on.
+- The built-in **Payment Reminder** body uses it. The seed only INSERTS by
+  name, so the previously shipped body is also listed in
+  `_PRIOR_SYSTEM_TEMPLATE_BODIES` — that is what lets the LIVE row pick the
+  button up instead of the change reaching only fresh deployments (the
+  backfill rule). A body Kerry has edited in the UI is left untouched:
+  the update fires only when the stored body is verbatim one of ours.
+- Ordering: **RSVP Only (Unpaid)** leads the Audience select and
+  **Payment Reminder** leads the Template select (client-side sort in
+  `populateTemplateDropdown`, so the server's list is unchanged).
+- `KNOWN_VARS` in the composer's pre-send blank guard includes
+  `pay_button` — an unknown `{tag}` still blocks the send.
+
+## Winnings wait for the field (v2.436.0)
+
+Kerry 2026-09-15, watching the s9.23 board mid-round with two cards in:
+"Winnings should not show until 10 minutes after last score is posted."
+Half a field posted is a wrong winner stated confidently, and the dollar
+figure is what a member remembers, not the caveat beside it.
+
+`get_event_leaderboard` and `get_events_leaderboard` both compute
+`money_visible` from `MAX(scoring_rounds.imported_at)` for the event plus
+`leaderboard_money_hold_minutes` (default 10). `imported_at` is stamped
+every time a round is written, so it IS "when scores were last posted".
+While held: the list row reads IN PLAY / POT PENDING instead of a pot,
+and the board's money is blanked client-side by `evlbBlankMoney` — ONE
+place, not in each of the seven boards that read money — with
+`evlbMoneyNotice` above the tabs saying when it posts. Scores stay live.
+
+NB the clock runs off the IMPORT, and the Golf Genius scorecard import is
+manual (`import_gg_scorecards` / the `scoring-import` bridge). Nothing
+polls GG on a timer, so "how often does the leaderboard update" is "when
+someone runs the import".
+
+## Add Player: the modal offers what the EVENT has (v2.468.2)
+
+Kerry 2026-09-21: "I would like to see any of these Add Player modal
+selection be responsive to what is actually available based on the
+event, rather than a standard list of selections that make me choose."
+
+`GET /api/events/<id>/add-player-options` (`add_player_options` in
+database.py) is read when the modal opens:
+
+| Select | Derived from | Single option |
+|---|---|---|
+| Holes | the event's `format` (nine → 9, 18 → 18, combo → both) + every hole count its packages sell (36/54) | preselected |
+| Side Games | the Net / Gross / Both vocabulary the event's ACTIVE registrations carry (what the order form offered) + None; the full list only while the roster is empty | preselected |
+| Tee Choice | `event_tee_legend` — the course record's designated bands with their tee names; the standard four when the course has no card | — |
+
+The static lists in the HTML stay as the fallback (a failed fetch never
+blanks the modal); a package's hole count is added to the list rather
+than dropped (`apEnsureOption`); a person's last tee on file prefills an
+empty tee when the course offers that band (`apPrefillFromPerson`, on
+the typed name and the manager pick). Status was already prefilled from
+the person. Handicap is NOT prefilled on purpose: `items.handicap` is a
+snapshot; the index lives in `handicap_rounds`. Guards:
+`test_add_player_options.py` / `.js`.
+
+## The DIVISIONS / FLIGHTS tab — the ratified flighting + payout rules, dry run (v2.469.0)
+
+Kerry 2026-09-21 (mailbox #582): "need to see the divisions/flights
+breakdown so probably will need a tab for it under each event." The
+FLIGHTING lane (spun off "TGF Tracker Improvements 2"; plan #584).
+
+- **Rules as data:** `email_parser/flighting.py` — pure, no DB —
+  carries the RATIFIED rule set (#571–#575 as revised by #581/#582):
+  ladders `<6.0 / 6.0–11.9 / 12.0+` (4 flights add `12.0–17.9 / 18.0+`;
+  exclusive upper bounds, 12.0 goes UP; cut lines never move); **no
+  minimum flight size, no merging, ever** (B2 superseded — a flight of
+  one simply is that size, an empty band is still a numbered flight);
+  **places by FLIGHT size** (1–9 one place; 10–19 two at 2/3–1/3; 20+
+  three at 50/30/20; ties combine the tied places and split, summing to
+  the pot); **Individual Gross pot** = 10% of the total off the top as the
+  OVERALL LOW GROSS bonus (whole field) + 90% split by headcount (share
+  = 0.9 × rate: $7.20 on an 18, $3.60 on a nine; flight pot = share ×
+  headcount; a solo flight's player gets his share, plus the bonus if he
+  is also low gross); **labels derived from actual membership** (P2-6).
+  Skins is unaffected (#572: matrix pot ÷ flights, per skin); Individual
+  Net keeps the equal-size cut with the 11.9 ceiling and the matrix
+  place columns (netLow/netHigh/netMid/net4th, the recorded-payouts
+  convention). ASSUMPTION on the record (#584, awaiting Kerry): the
+  1/10/20 places rule is Individual Gross only.
+- **Two layers, as B5 requires:** `build()` = SELECTION (which games run
+  incl. every matrix game-selection threshold via `select_variant`, the
+  flight count from the LIVE matrix, band edges, each player's flight)
+  + AMOUNTS (pots, places, bonus). `settle(frozen, field_now)` keeps the
+  SELECTION, places a late add by the FROZEN edges, drops a credited WD
+  from the headcount, recomputes AMOUNTS from actual buyers and reports
+  the DELTA (added / dropped, pot then vs now, places then vs now, per
+  flight). A game not running at the freeze stays not running; a ½ Net
+  Skins frozen at 7 buyers stays ½ Net when an 8th arrives. Guard:
+  `test_flighting.py` (every #572/#573 worked example by number, Landa
+  Park 6/5/4, Cedar Creek's T1×3, 300 random fields to the cent).
+- **The board from Tracker data:** `event_flights_board(event_id)` —
+  buy-ins from `_event_game_buyers` (wd_credits decides), the 18-hole
+  index of record by customer_id locked as-of for a started event
+  (`_event_index_as_of`), each buyer's PH as the STARTER SHEET computes
+  it (`_event_player_ph_map`: roster tee band → `_event_tee_rows` →
+  `handicap_calc.playing_handicap`), the matrix from `_load_games_matrix`
+  (source reported: app_settings vs seed), and beside each game what
+  Golf Genius RECORDED (`gg_game_results` purses for Ind Net / Skins /
+  Ind Gross) so published-vs-paid answers itself. `state` is LIVE until
+  the freeze schema is ratified (rule 3b — proposed in #584:
+  `event_flight_snapshots` + `event_flight_snapshot_members` with
+  customer_id; FROZEN / SETTLED derived from the rows; freeze by an
+  ACTION, never a clock). **Dry run: pays nobody; GG is the payer of
+  record.** The printed Divisions & Flights page (`event_flights_report`)
+  is now a VIEW of this board — one computation per fact.
+- **Surfaces:** FLIGHTS badge beside GAMES on every event with a hole
+  count (manager+, desktop and phone; `data-toggle-games="5"`,
+  `flightsOpenForEvent`, re-read on every open; survives a refresh like
+  PAIRINGS). Per game: the game bar, the SELECTION line (variant + why,
+  flight count + source, cut + edges), the AMOUNTS line (pot, bonus,
+  share), one box per flight (band · derived range · headcount · pot ·
+  places · members as LAST, First · IDX · PH; an empty band greyed), the
+  unflighted, the delta panel when frozen/settled, GG's recorded purses
+  with rule − GG. `GET /api/events/<id>/flights-board` (manager);
+  bridge `scoring-flights-board:<event_id>`. Guard: `test_flights_board.py`.
+- **Seed flip (ratified):** `live_scoring.SEED_FLIGHT_CONFIG.min_flight_size`
+  is 0 — the Flighting Lab dial still exists to SHOW what merging would
+  do; nothing merges by default any more.
+
+## The event PRINT PACK — one bound PDF, mailed the evening before (v2.465.0)
+
+Kerry 2026-09-18: "a bound PDF with all of them in one that I could
+print, rather than each separately" / "Build the PDF routine and have it
+emailed to me."
+
+- **What:** Starter Sheet, Cart Signs, Divisions & Flights, Proximity
+  Markers — the same templates the browser prints — rendered server-side
+  by **headless Chromium** (Playwright, `email_parser/print_pack.py`),
+  WeasyPrint as the fallback engine, and bound in that order (pypdf).
+  v2.465.8: the first pack went out through WeasyPrint and Kerry's
+  verdict was "really bad compared to the PDF downloads on the Tracker"
+  — WeasyPrint has no flex/grid, so the sheets the browser lays out
+  correctly came out stacked. Chromium prints them exactly as the
+  browser's Download PDF does. The build result reports `engine`.
+  `GET /events/<id>/print-pack.pdf` (manager) serves it; the page's
+  Download PDF stays the browser print dialog.
+- **Routine (v2.468.5 — the MORNING OF):** `send_due_print_packs_job`
+  runs at 6:05, 7:05, 8:05 and 9:05 AM Central. Every active event dated
+  TODAY gets its pack mailed as a PDF attachment to `PRINT_PACK_EMAIL_TO`
+  (→ `DAILY_REPORT_TO` → `EMAIL_ADDRESS`). A content hash of the
+  rendered parts is stored in `app_settings` (`print_pack_sent:<id>`),
+  so the first check sends and the later ones re-send only a sheet that
+  changed. (v2.465.0–2.468.4 sent the evening before, 5–10 PM; Kerry
+  2026-09-21: "probably shouldn't be sent until 6:00a day of".)
+- **SEND PACK (v2.468.5):** button on the pairings toolbar beside Starter
+  Sheet / Cart Signs (saved sheet only) → `POST
+  /api/events/<id>/print-pack/send` builds and mails the pack now and
+  records the hash, so the routine leaves that sheet alone.
+- **On demand:** `scoring-print-pack-pdf:<event_id>` builds and reports parts,
+  page counts, hash and size; `|send[|<to>]` mails it and records the
+  hash; `scoring-print-pack-pdf:due` lists tomorrow's events.
+- **Deploy:** `nixpacks.toml` installs `chromium` from Nix beside
+  Python (`nixPkgs`), the WeasyPrint libraries via `nixLibs` (apt libs
+  are invisible to the Nix Python — "cannot load library gobject-2.0-0"
+  was v2.465.6), DejaVu fonts via `aptPkgs`; requirements carry
+  `playwright` (client only — the browser is the Nix one, found through
+  `CHROMIUM_PATH` → `shutil.which` → the Playwright cache) and `pypdf`.
+  A current Chrome has removed the OLD headless mode Playwright asks
+  for by default, so the launch passes `--headless=new` explicitly.
+  `stdenv.cc.cc.lib` + `zlib` are in `nixLibs` too: without them
+  `import playwright` fails under the Nix Python with "libstdc++.so.6:
+  cannot open shared object file" and the pack falls back to WeasyPrint
+  (v2.465.12–13; the bridge's `engine_note` carries the reason whenever
+  a fallback happens — never trust a pack without reading `engine`).
+  Cedar Creek's Chromium pack went out 2026-09-18 5:31 PM CDT.
+- **Printed-at stamp (v2.468.2):** the starter sheet footer prints
+  `print_stamp()` (context processor, Central time). `_hash_view` strips
+  the `.pstamp` span before the once-per-change hash, so the clock never
+  reads as a change.
+  Lesson from v2.465.0–3: a literal `\n` written into requirements.txt
+  by a heredoc failed the Railway build twice; validate each line.
+- **NEW badge on the sheet (v2.465.9, Kerry-confirmed):** NEW = a
+  member playing their FIRST EVENT AS A MEMBER — membership started on
+  or before the event and no event played between that start and this
+  one (`_first_event_as_member`: an active registration for an event
+  dated in that window, or a posted round in it, means they have
+  played). 1T = first TGF event ever, independent; a first-timer who is
+  already a member wears both. Two wrong rules preceded it: "joined
+  since our last event" (missed Bear Clarkson) and "first-year member"
+  (tagged Lewis, Wallace and Schneider, who had all played as members).
+  Guard: `test_new_badge.py`.
+- **Mail body (v2.468.3):** `print_pack_email_body(built)` — first tee,
+  each group with players (tee · idx · PH · CART/TEAM, 1T/NEW badges),
+  blinds, legend notes, then the attachment list. Reads on a phone
+  without opening the PDF; the PDF is unchanged.
+- **Mail:** `send_mail_graph(..., attachments=[(name, bytes, mime)])`
+  sends Graph `fileAttachment`s (inline base64, under Graph's 3 MB).
+- Test: `test_print_pack.py` (builds a real PDF, serves the route,
+  runs the routine with a stubbed sender: once, unchanged → skipped,
+  changed → sent again).

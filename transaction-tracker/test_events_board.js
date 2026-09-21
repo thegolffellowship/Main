@@ -14,7 +14,10 @@ const code = 'const escapeHtml = s => String(s ?? "").replace(/&/g,"&amp;").repl
   + '\nglobalThis.evlbBoardBody = evlbBoardBody;'
   + '\nglobalThis.evlbOvOf = evlbOvOf;'
   + '\nglobalThis.evlbSecsFrom = evlbSecsFrom;'
-  + '\nglobalThis.evlbOverallSort = evlbOverallSort;';
+  + '\nglobalThis.evlbOverallSort = evlbOverallSort;'
+  + '\nglobalThis.evlbColCount = evlbColCount;'
+  // a setter, not a copy: the test flips the PAGE's own flag
+  + '\nglobalThis.evlbSetShowAll = v => { evlbShowAll = v; };';
 eval(code);
 
 // synthetic event: 4 players, 2 flights, 9 holes
@@ -66,16 +69,24 @@ const ovOf=(x,note)=>evlbOvOf(ovIx,x,note);
 const secsFrom=b=>evlbSecsFrom(ovIx,b);
 const skinsCount=(dd,r)=>((dd.skin_cells||{})[String(r.scoring_round_id)]||[]).length||"";
 
-// mirrors the page's boards object: `game` scopes a tab to its own
-// results/money/colors; gameCol:false drops the Pts slot on the tabs
-// whose own result isn't points
+// KNOWN LIMITATION, stated rather than hidden: this mirrors the page's
+// `boards` object by hand, because the real one is built inside
+// evlbEventHtml from a live payload and cannot be reached from here.
+// It is the last duplicated thing in this harness and it HAS gone stale
+// before (v2.389.0 team bands, v2.393.0 buy-in flags, v2.402.0/v2.403.0
+// grossCol). When you add a board flag, add it HERE in the same commit —
+// a silent pass on this file is not proof the page agrees with it.
+//
+// `game` scopes a tab to its own results/money/colors; gameCol:false
+// drops the Pts slot on tabs whose own result isn't points; grossCol:
+// false drops the G + to-par pair on TEAM, which is played in net.
 const boards={
   overall:{sections:[{label:null,rows:d.overall_board}],sort:'net'},
   net:{sections:secsFrom(d.net_board),sort:'net',game:'net',gameCol:false},
-  gross:{sections:secsFrom(d.gross_board),sort:'gross',game:'gross',gameCol:false},
-  skins:{sections:secsFrom(d.skins_board),sort:'gamecol',game:'skins',gameCol:{key:'skins',label:'Skins',value:skinsCount}},
-  points:{sections:[{label:null,rows:d.points_board.map(x=>ovOf(x,x.mvp_note)).filter(Boolean)}],sort:'keep',game:'points'},
-  team:{teamBands:true,teams:d.teams,game:'team',gameCol:false,sections:d.teams.map(t=>({label:`${t.position} · total ${t.gg_total}`,rows:t.players.map(x=>ovOf(x)).filter(Boolean)})),sort:'keep'},
+  gross:{sections:secsFrom(d.gross_board),sort:'gross',game:'gross',gameCol:false,netCol:false},
+  skins:{sections:secsFrom(d.skins_board),sort:'gamecol',game:'skins',gameCol:{key:'skins',label:'#',title:'Skins won',value:skinsCount},gameColAfterWon:true},
+  points:{sections:[{label:null,rows:d.points_board.map(x=>ovOf(x,x.mvp_note)).filter(Boolean)}],sort:'keep',game:'points',grossCol:false},
+  team:{teamBands:true,teams:d.teams,game:'team',gameCol:false,grossCol:false,sections:d.teams.map(t=>({label:`${t.position} · total ${t.gg_total}`,rows:t.players.map(x=>ovOf(x)).filter(Boolean)})),sort:'keep'},
 };
 
 let fails=0;
@@ -84,18 +95,50 @@ const ck=(l,c,dt='')=>{ if(c) console.log('  PASS  '+l); else { console.log('  F
 const colCount = h => (h.match(/<th /g)||[]).length;
 const htmls = {};
 for (const k of Object.keys(boards)) htmls[k] = evlbStdBoard(d, boards[k]);
+// the same boards with "Show All Players" ON — most of the older
+// assertions are about what a NON-buyer row looks like, which only
+// exists in that state now (Kerry 2026-09-14)
+evlbSetShowAll(true);
+const htmlsAll = {};
+for (const k of Object.keys(boards)) htmlsAll[k] = evlbStdBoard(d, boards[k]);
+evlbSetShowAll(false);
 
 console.log('== every tab is the same table ==');
 const base = colCount(htmls.overall);
-for (const k of ['overall','skins','points'])
+for (const k of ['overall','skins'])
   ck(`${k}: identical column count (${base})`, colCount(htmls[k]) === base, colCount(htmls[k]));
-for (const k of ['net','gross','team'])
-  ck(`${k}: drops the Pts slot, one column narrower`, colCount(htmls[k]) === base - 1, colCount(htmls[k]));
-ck('skins relabels the game column to Skins', /class="sortable bl br[^"]*">Skins</.test(htmls.skins), '');
-ck('points keeps Pts in that slot', /class="sortable bl br[^"]*">Pts</.test(htmls.points));
+// MVP/Points drops the gross pair (Kerry 2026-09-14)
+ck('points: drops the gross pair, two columns narrower',
+   colCount(htmls.points) === base - 2, colCount(htmls.points));
+ck('net: drops the Pts slot, one column narrower',
+   colCount(htmls.net) === base - 1, colCount(htmls.net));
+// GROSS drops Pts AND the net pair (Kerry 2026-09-14) — three narrower
+ck('gross: drops Pts and the net pair, three columns narrower',
+   colCount(htmls.gross) === base - 3, colCount(htmls.gross));
+// TEAM drops Pts AND the gross pair (Kerry 2026-09-14) — three narrower
+ck('team: drops Pts and the gross pair, three columns narrower',
+   colCount(htmls.team) === base - 3, colCount(htmls.team));
+// The SKINS count header is "#" under a tab that already says SKINS
+// (Kerry 2026-09-15: "SKINS not fitting in cell header"); the word rides
+// on the tooltip.
+ck('skins labels the count column # and names it on hover',
+   /title="Skins won"/.test(htmls.skins) && />#</.test(htmls.skins), '');
+ck('points keeps Pts in that slot', /title="Pts"[\s\S]{0,40}>Pts</.test(htmls.points));
 ck('net has no Pts column', !/>Pts</.test(htmls.net));
 for (const k of Object.keys(boards))
   ck(`${k}: has the hole-by-hole toggle`, htmls[k].includes('data-ovr-holes'));
+
+console.log('== the flight band reaches the right edge (Kerry 2026-09-14) ==');
+for (const k of Object.keys(boards)) {
+  const ths = (htmls[k].match(/<th /g)||[]).length;
+  ck(`${k}: the column count matches the real header`,
+     evlbColCount(d, boards[k]) === ths, `count ${evlbColCount(d, boards[k])} vs ${ths} <th>`);
+  const span = (htmls[k].match(/<tr class="evlb-band"[^>]*>\s*<td colspan="(\d+)"/)||[])[1];
+  if (span) ck(`${k}: the band spans every column, edge to edge`,
+               Number(span) === ths, `colspan ${span} vs ${ths} <th>`);
+}
+ck('a flighted board actually has bands to span',
+   /<tr class="evlb-band"/.test(htmls.net));
 
 console.log('== bands + order ==');
 ck('net board carries both flight bands',
@@ -105,7 +148,9 @@ ck('team bands are tappable', htmls.team.includes('data-team="0"'));
 ck('points keeps the MVP tiebreak note', htmls.points.includes('MVP tiebreak 2'));
 
 console.log('== rank runs within a band ==');
+evlbSetShowAll(true);
 const bodyNet = evlbBoardBody(Object.keys(EVLB_BOARDS).find(id=>EVLB_BOARDS[id].board===boards.net));
+evlbSetShowAll(false);
 const ranks = [...bodyNet.matchAll(/<tr class="evlb-plr[^"]*"[^>]*>\s*<td>([^<]*)<\/td>/g)].map(m=>m[1]);
 ck('each flight restarts at 1', JSON.stringify(ranks) === JSON.stringify(['1','2','1','2']), JSON.stringify(ranks));
 
@@ -133,7 +178,9 @@ ck('gross tab pays nobody (no gross game)', !/\$/.test(htmls.gross.replace(/<the
 console.log('== buy-in coloring on the NET/GROSS bundle tabs ==');
 for (const k of ['net','gross','skins','points']) {
   ck(`${k}: buyers get a green row`, /class="evlb-plr bought"/.test(htmls[k]));
-  ck(`${k}: non-buyers get a grey row`, /class="evlb-plr nobuy"/.test(htmls[k]));
+  ck(`${k}: non-buyers get a grey row once Show All is on`,
+     /class="evlb-plr nobuy"/.test(htmlsAll[k]));
+  ck(`${k}: and are hidden by default`, !/class="evlb-plr nobuy"/.test(htmls[k]));
   ck(`${k}: zebra stripe steps aside for the buy-in wash`,
      !/class="evlb-plr alt"/.test(htmls[k]));
 }
@@ -151,6 +198,37 @@ ck('_buyer is lifted off the game board row, not the overall row',
    && !('_buyer' in d.overall_board[0]),
    JSON.stringify(boards.net.sections.map(x=>x.rows.map(r=>r._buyer))));
 
+console.log('== boards size to content, columns to a standard (Kerry 2026-09-14) ==');
+{
+  const css = fs.readFileSync(require('path').join(__dirname,'templates/contests.html'),'utf8');
+  ck('the board is width:auto, not stretched by the global table rule',
+     /\.evlb-holes \{[^}]*width: auto/.test(css));
+  ck('every scoreboard carries a black frame (Kerry 2026-09-14)',
+     /\.evlb-holes \{[^}]*border: 2px solid #1B1B1B/.test(css));
+  ck('the frame is the same weight as the internal group rules',
+     /\.evlb-holes \{[^}]*border: 2px solid #1B1B1B/.test(css)
+     && /td\.bl[^{]*\{[^}]*border-left: 2px solid #1B1B1B/.test(css));
+  ck('Won is centred, header and money alike',
+     /td\.won, \.evlb-holes th\.won \{ text-align: center/.test(css));
+  ck('one hole width token, one score width token',
+     /--evlb-hole-w:\s*\d+px/.test(css) && /--evlb-score-w:\s*\d+px/.test(css));
+  ck('hole cells read the hole token',
+     /td\.h[^{]*\{[\s\S]{0,140}?width: var\(--evlb-hole-w\)/.test(css));
+  ck('G / N / Pts / to-par all read the SAME score token',
+     /td\.sc[\s\S]{0,200}?td\.tp[\s\S]{0,200}?td\.gc[\s\S]{0,160}?width: var\(--evlb-score-w\)/.test(css));
+  for (const k of Object.keys(boards)) {
+    // team shows net only; gross shows gross only
+    const want = (k === 'team' || k === 'gross' || k === 'points') ? 1 : 2;
+    ck(`${k}: the score cells carry the score class`,
+       ((htmls[k].match(/class="bl sc"/g)||[]).length >= want), '');
+    ck(`${k}: hole cells carry the hole class`, /<td class="h[ "]/.test(htmls[k]));
+  }
+  ck('the Pts column carries the score class too',
+     /class="bl br gc"/.test(htmls.overall));
+  ck('net/gross/team drop the Pts slot entirely, so none to size',
+     !/class="bl br gc"/.test(htmls.net) && !/class="bl br gc"/.test(htmls.team));
+}
+
 console.log("== OVERALL's default order: money once paid, points until then ==");
 ck('a completed event (pot recorded) lands on the money',
    evlbOverallSort({pot: 1220}) === 'won', evlbOverallSort({pot: 1220}));
@@ -167,7 +245,7 @@ ck('a missing pot is treated as not yet paid, not as an error',
      /data-k="won" class="won sortable br asc"/.test(paid),
      (paid.match(/data-k="won"[^>]*/)||[])[0]);
   ck('unpaid event: the Pts header carries it instead',
-     /data-k="gamecol" class="sortable bl br asc"/.test(unpaid)
+     /data-k="gamecol" class="sortable bl br gc asc"/.test(unpaid)
      && !/data-k="won" class="won sortable br asc"/.test(unpaid),
      (unpaid.match(/data-k="gamecol"[^>]*/)||[])[0]);
   const rank = h => [...h.matchAll(/<tr class="evlb-plr[^"]*"[^>]*>\s*<td>([^<]*)<\/td>\s*<td class="nm">([^<]*)/g)]
@@ -275,13 +353,16 @@ ck('PAR row carries no pops',
    !/evlb-pops/.test((htmls.overall.match(/<tr class="evlb-parrow">[\s\S]*?<\/tr>/)||[''])[0]));
 
 console.log('== PTS row per player on MVP/Points (Kerry 2026-09-13) ==');
-const ptsRows = htmls.points.match(/<tr class="evlb-ptsrow">[\s\S]*?<\/tr>/g) || [];
+const ptsRows = htmlsAll.points.match(/<tr class="evlb-ptsrow">[\s\S]*?<\/tr>/g) || [];
 ck('every player with points gets a PTS row', ptsRows.length === 3, ptsRows.length);
 ck('PTS row is labelled', /<td class="nm">PTS<\/td>/.test(ptsRows[0] || ''), ptsRows[0]);
 ck('PTS row carries the per-hole points (2 then 1)',
    /<td class="h">2<\/td><td class="h">1<\/td>/.test(ptsRows[0] || ''), ptsRows[0]);
-ck('PTS row repeats the total under the Pts column',
-   />11<\/td>/.test(ptsRows[0] || ''), ptsRows[0]);
+// the total lives on the player's own row above; repeating it here said
+// the same thing twice (Kerry 2026-09-14)
+ck('PTS row leaves the Pts slot empty — the total is on the row above',
+   /<td class="bl br gc"><\/td>/.test(ptsRows[0] || '')
+   && !/>11<\/td>/.test(ptsRows[0] || ''), ptsRows[0]);
 ck('PTS row has the same column count as a player row',
    ((ptsRows[0]||'').match(/<td/g)||[]).length
    === ((htmls.points.match(/<tr class="evlb-plr[\s\S]*?<\/tr>/)||[''])[0].match(/<td/g)||[]).length,
@@ -292,7 +373,7 @@ ck('PTS row is not tappable as a player row', !/evlb-plr/.test(ptsRows[0] || 'ev
 ck('a player with no points data grows no PTS row',
    ptsRows.length === Object.keys(d.hole_pts).length);
 ck('only the MVP/Points tab grows PTS rows',
-   ['overall','net','gross','skins','team'].every(k => !/evlb-ptsrow/.test(htmls[k])));
+   ['overall','net','gross','skins','team'].every(k => !/evlb-ptsrow/.test(htmlsAll[k])));
 
 console.log('== PAR row under the hole numbers (Kerry 2026-09-13) ==');
 for (const k of Object.keys(boards))
@@ -321,6 +402,185 @@ ck('complete par data totals to 36 under G and N',
 const dNoPar = Object.assign({}, d, {hole_par:{}});
 ck('no par data -> no PAR row at all',
    !/evlb-parrow/.test(evlbStdBoard(dNoPar, {sections:[{label:null,rows:d.overall_board}],sort:'net'})));
+
+console.log('== Show All Players (Kerry 2026-09-14) ==');
+for (const k of ['net','gross','skins','points']) {
+  ck(`${k}: has the Show All Players box`, /data-ovr-all/.test(htmls[k]));
+  ck(`${k}: it starts UNCHECKED, so the board opens on the buyers`,
+     /data-ovr-all>/.test(htmls[k]));
+  ck(`${k}: buyers are never hidden`, /class="evlb-plr bought"/.test(htmls[k]));
+}
+ck('OVERALL has no such box — nobody buys into the overall picture',
+   !/data-ovr-all/.test(htmls.overall));
+ck('TEAM has none either — the entry covers it',
+   !/data-ovr-all/.test(htmls.team));
+ck('the label reads "Show All Players"', /data-ovr-all[^>]*> Show All Players/.test(htmls.net));
+{
+  // ranks re-run over what is ON SCREEN — a CSS hide would have left
+  // gaps like 1, 3, 6 and the board would read as broken, not filtered
+  const ranksOf = h => [...h.matchAll(/<tr class="evlb-plr[^"]*"[^>]*>\s*<td>([^<]*)<\/td>/g)].map(m => m[1]);
+  const shown = ranksOf(htmls.net).filter(Boolean);
+  ck('hiding non-buyers re-ranks; no gaps left behind',
+     JSON.stringify(shown) === JSON.stringify(['1','2','1']), JSON.stringify(shown));
+  ck('a flight emptied of buyers drops its band too',
+     (htmls.net.match(/class="evlb-band"/g)||[]).length
+     <= (htmlsAll.net.match(/class="evlb-band"/g)||[]).length);
+  ck('turning it on brings everyone back',
+     ranksOf(htmlsAll.net).length > shown.length,
+     `${ranksOf(htmlsAll.net).length} vs ${shown.length}`);
+}
+
+console.log('== MVP badges under the name on OVERALL (Kerry 2026-09-14) ==');
+ck('the MVP winner gets a TGF MVP badge', /evlb-mvpbadge[^>]*>TGF MVP</.test(htmls.overall),
+   (htmls.overall.match(/evlb-mvpbadge[^<]*<\/span>/g)||[]).join('|'));
+ck('a player with no MVP money gets none',
+   ((htmls.overall.match(/evlb-mvpbadges/g)||[]).length === 1));
+ck('badges are OVERALL only, not repeated on the game tabs',
+   ['net','gross','skins','points','team'].every(k => !/evlb-mvpbadge/.test(htmls[k])));
+ck('the badge reads off won_by_cat, so it cannot claim an unpaid award',
+   /by\.tgf_mvp/.test(src) && /by\.mvp/.test(src));
+ck('badges use the ratified category colours',
+   /--cat-mvp/.test(src) && /--cat-tgf-mvp/.test(src));
+
+console.log('== the expanded card lines up with the board (Kerry 2026-09-14) ==');
+// Measured from the CARD's own edge, not the row's — the card sits in a
+// cell with its own padding (Kerry 2026-09-15: "not aligning perfectly").
+ck('the card measures the board rather than assuming a width',
+   /firstHole\.getBoundingClientRect\(\)\.left[\s\S]{0,160}card\.getBoundingClientRect\(\)\.left/.test(src));
+ck('and it refuses to align off a HIDDEN hole cell',
+   /const hr = firstHole\.getBoundingClientRect\(\);[\s\S]{0,60}if \(!hr\.width\) return;/.test(src));
+ck('it reuses the board\'s own hole-width token',
+   /getPropertyValue\("--evlb-hole-w"\)/.test(src));
+ck('the alignment CSS is scoped to the leaderboard card',
+   /\.evlb-card-align table\.evlb-aligned/.test(src));
+ck('so the shared scorecard renderer is untouched elsewhere',
+   !/tgfRenderScorecard[\s\S]{0,200}--evlb-hole-w/.test(src));
+
+console.log('== an opened event pins to the top (Kerry 2026-09-14) ==');
+{
+  const src2 = fs.readFileSync(require('path').join(__dirname,'templates/contests.html'),'utf8');
+  ck('opening an event scrolls it into place', /evlbPinToTop\(el\);/.test(src2));
+  ck('only on OPEN, not on collapse',
+     /if \(!el\.open\) return;[\s\S]{0,120}evlbPinToTop/.test(src2));
+  // The whole sticky stack, not two named pieces of it — this page pins
+  // three bars (Kerry 2026-09-15: "Pin to top goes a little high").
+  ck('the offset is MEASURED from whatever is actually sticky',
+     /function evlbStickyTop\(\)[\s\S]{0,400}cs\.position !== "sticky"/.test(src2));
+  ck('it targets the card top, which does not move as the body loads',
+     /el\.getBoundingClientRect\(\)\.top \+ window\.scrollY[\s\S]{0,60}evlbStickyTop\(\)/.test(src2));
+  ck('and it never scrolls to a negative offset', /Math\.max\(0, y\)/.test(src2));
+}
+
+console.log('== holes start CLOSED, and the PTS rows ride with them ==');
+{
+  const css = fs.readFileSync(require('path').join(__dirname,'templates/contests.html'),'utf8');
+  // Kerry 2026-09-14: "OVERALL view is only one that should actually
+  // show Hole by Hole on landing" — per BOARD, until the box is touched
+  ck('OVERALL lands with the hole grid open',
+     !/class="evlb-holes evlb-ovr[^"]*\bno-holes\b/.test(htmls.overall),
+     (htmls.overall.match(/class="evlb-holes evlb-ovr[^"]*"/)||[])[0]);
+  ck('OVERALL\'s Hole-by-hole box is checked to match',
+     /data-ovr-holes checked>/.test(htmls.overall));
+  for (const k of ['net','gross','skins','points','team'])
+    ck(`${k}: lands with the hole columns closed`,
+       /class="evlb-holes evlb-ovr[^"]*\bno-holes\b/.test(htmls[k]),
+       (htmls[k].match(/class="evlb-holes evlb-ovr[^"]*"/)||[])[0]);
+  ck('a game tab\'s box is unchecked to match', /data-ovr-holes>/.test(htmls.net));
+  ck('touching the box makes it ONE shared choice again',
+     /evlbHolesTouched = true;/.test(css)
+     && /evlbHolesTouched\s*\?\s*evlbShowHoles/.test(css));
+  ck('the PTS rows hide with the holes rather than being re-rendered',
+     /\.evlb-ovr\.no-holes tr\.evlb-ptsrow \{ display: none; \}/.test(css));
+  ck('but the PTS rows are still IN the DOM, so the checkbox brings them back',
+     /<tr class="evlb-ptsrow">/.test(htmls.points));
+}
+
+console.log('== MVP/POINTS speaks POINTS only (Kerry 2026-09-14) ==');
+ck('points header has no G column', !/data-k="gross"/.test(htmls.points));
+ck('points header has no gross to-par column', !/data-k="tpg"/.test(htmls.points));
+ck('points KEEPS net and the Pts column',
+   /data-k="net" class="sortable bl sc/.test(htmls.points) && /data-k="gamecol"/.test(htmls.points));
+ck('every row type on POINTS has the same cell count',
+   (() => {
+     const rows = [/<tr class="evlb-parrow">[\s\S]*?<\/tr>/, /<tr class="evlb-plr[\s\S]*?<\/tr>/,
+                   /<tr class="evlb-ptsrow">[\s\S]*?<\/tr>/]
+       .map(re => ((htmls.points.match(re)||[''])[0].match(/<td/g)||[]).length);
+     return rows.every(n => n === rows[0]) && rows[0] > 0;
+   })(), '');
+
+console.log('== GROSS speaks GROSS only (Kerry 2026-09-14) ==');
+ck('gross header has no N column', !/data-k="net" class="sortable bl sc/.test(htmls.gross));
+ck('gross header has no net to-par column', !/data-k="tpn"/.test(htmls.gross));
+ck('gross KEEPS the gross score and its to-par',
+   /data-k="gross"/.test(htmls.gross) && /data-k="tpg"/.test(htmls.gross));
+ck('the # column sorts by gross there, not by a column that is gone',
+   /<th data-k="gross" class="sortable">#<\/th>/.test(htmls.gross),
+   (htmls.gross.match(/<th data-k="[a-z]+" class="sortable">#/)||[])[0]);
+ck('every other tab still shows net', ['overall','net','skins','points','team']
+   .every(k => /data-k="tpn"/.test(htmls[k])));
+ck('every row type on GROSS has the same cell count',
+   (() => {
+     const rows = [/<tr class="evlb-parrow">[\s\S]*?<\/tr>/, /<tr class="evlb-plr[\s\S]*?<\/tr>/]
+       .map(re => ((htmls.gross.match(re)||[''])[0].match(/<td/g)||[]).length);
+     return rows.every(n => n === rows[0]) && rows[0] > 0;
+   })(), '');
+
+console.log('== SKINS count sits beside the money (Kerry 2026-09-14) ==');
+{
+  const heads = [...htmls.skins.matchAll(/<th [^>]*>([^<]*)<\/th>/g)].map(m => m[1]);
+  // The count column's label is "#" now, under a tab that already says
+  // SKINS (Kerry 2026-09-15); what matters here is that it sits right
+  // after the money.
+  ck('skins header order is # | Player | Won | #(skins)',
+     heads[2] === 'Won' && heads[3] === '#', heads.slice(0, 5).join(' | '));
+  const nth = (row, n) => ((row || '').match(/<td[^>]*>/g) || [])[n] || '';
+  const plr = (htmls.skins.match(/<tr class="evlb-plr[\s\S]*?<\/tr>/) || [''])[0];
+  ck('skins player row: the count cell is fourth, right after the money',
+     /class="bl br gc"/.test(nth(plr, 3)), nth(plr, 3));
+  ck('the PAR row keeps the same slot',
+     /class="bl br gc"/.test(nth((htmls.skins.match(/<tr class="evlb-parrow">[\s\S]*?<\/tr>/)||[''])[0], 3)));
+  ck('OVERALL keeps Pts at the END, not beside the money',
+     /class="bl br gc"/.test(((htmls.overall.match(/<tr class="evlb-plr[\s\S]*?<\/tr>/)||[''])[0]
+       .match(/<td[^>]*>/g)||[]).slice(-1)[0] || ''));
+  ck('skins column count is unchanged by the move', colCount(htmls.skins) === base);
+}
+
+console.log('== TEAM hole cells are GROSS with pops (Kerry 2026-09-14) ==');
+{
+  // rid 1: hole 1 gross 4 no pop, hole 2 gross 5 with one pop -> net 4
+  const plr = (htmls.team.match(/<tr class="evlb-plr[\s\S]*?<\/tr>/) || [''])[0];
+  ck('the cell shows GROSS, not the net it produces', />5<\/td>/.test(plr.replace(/<td class="won[\s\S]*?<\/td>/, '')), plr);
+  ck('the pop is still marked on the popped hole', /evlb-pops/.test(plr));
+  ck('the counting ball is judged on NET, not on the gross shown',
+     /class="h count"[^>]*title="5 \u2212 1 = net 4[^"]*counted/.test(plr),
+     (plr.match(/class="h count"[^>]*/)||[])[0]);
+  ck('a hole with no stroke says so in the tooltip',
+     /title="4 \(no stroke\)/.test(plr), (plr.match(/title="4[^"]*/)||[])[0]);
+  ck('the TEAM NET row still carries the NET best ball',
+     /<tr class="teamrow">[\s\S]*?<td class="h">4<\/td><td class="h">4<\/td>/.test(htmls.team));
+}
+
+console.log('== TEAM speaks NET only (Kerry 2026-09-14) ==');
+ck('team header has no G column', !/data-k="gross"/.test(htmls.team), '');
+ck('team header has no gross to-par column', !/data-k="tpg"/.test(htmls.team), '');
+ck('team KEEPS the net score and its to-par',
+   /data-k="net"/.test(htmls.team) && /data-k="tpn"/.test(htmls.team));
+ck('no gross totals leak into the team player rows',
+   ((htmls.team.match(/<tr class="evlb-plr[\s\S]*?<\/tr>/)||[''])[0]
+     .match(/class="bl sc"/g)||[]).length === 1);
+ck('the PAR row loses the gross total too, so the header still lines up',
+   ((htmls.team.match(/<tr class="evlb-parrow">[\s\S]*?<\/tr>/)||[''])[0]
+     .match(/class="bl sc"/g)||[]).length === 1);
+ck('every row type on TEAM has the same cell count',
+   (() => {
+     const rows = [/\<tr class="evlb-parrow">[\s\S]*?<\/tr>/, /<tr class="evlb-plr[\s\S]*?<\/tr>/,
+                   /<tr class="teamrow">[\s\S]*?<\/tr>/]
+       .map(re => ((htmls.team.match(re)||[''])[0].match(/<td/g)||[]).length);
+     return rows.every(n => n === rows[0]) && rows[0] > 0;
+   })(), '');
+// gross is off TEAM and off POINTS now; the rest still carry it
+ck('the tabs that should still show gross do',
+   ['overall','net','gross','skins'].every(k => /data-k="gross"/.test(htmls[k])));
 
 console.log('== TEAM NET total row (Kerry 2026-09-13) ==');
 const trow = (htmls.team.match(/<tr class="teamrow">[\s\S]*?<\/tr>/) || [''])[0];

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Starter Sheet — {{ pack.event.item_name }}</title>
+  <title>{{ pack.event.file_stub }}-StarterSheet</title>
   <link href="https://fonts.googleapis.com/css2?family=Bitter:wght@600;700&display=swap" rel="stylesheet">
   <style>
     * { box-sizing: border-box; }
@@ -20,7 +20,8 @@
        showing in preview as Black with white letters"). The group
        headers and the shaded B rows are how the sheet is read at a
        glance, so they are content, not decoration. */
-    html, body, .gbox-head, .prow {
+    html, body, .gbox-head, .prow, .tee-legend, .tee-legend .sw,
+    .tee-hot {
       -webkit-print-color-adjust: exact; print-color-adjust: exact;
     }
     /* WYSIWYG (Kerry 2026-09-08: "can you format the view to exactly
@@ -45,6 +46,8 @@
       display: flex; justify-content: space-between; align-items: flex-end;
       border-bottom: 3px solid #111; padding-bottom: 8px; margin-bottom: 12px;
     }
+    .sheet-brand { display: flex; align-items: center; gap: 14px; }
+    .sheet-logo { width: 68px; height: 68px; flex-shrink: 0; display: block; }
     .sheet-head h1 {
       font-family: "Bitter", Georgia, serif; font-weight: 700;
       font-size: 22px; margin: 0;
@@ -79,6 +82,28 @@
       font-size: 13px; letter-spacing: 0.02em;
     }
     .gbox-head .grp { font-size: 10px; color: #bbb; }
+    /* TEE LEGEND (Kerry 2026-09-15: "add colors for the tee assignments
+       according to our course info. With a legend up above the
+       foursomes"). The colour comes off the COURSE CARD, and the tee's
+       own name is printed beside it — a starter can send a player to the
+       right markers, and a wrong band/tee pairing is obvious here rather
+       than on the first tee. */
+    .tee-legend {
+      display: flex; flex-wrap: wrap; gap: 14px; align-items: center;
+      margin: 0 0 8px; padding: 5px 8px; border: 1px solid #E5E7EB;
+      border-radius: 4px; font-size: 11px;
+    }
+    .tee-legend .tl-lab { font-family: "Bitter", Georgia, serif; font-weight: 700;
+                          font-size: 10px; letter-spacing: 0.06em; color: #444; }
+    .tee-legend .tl { display: inline-flex; align-items: center; gap: 5px; }
+    .tee-legend .sw { width: 11px; height: 11px; border-radius: 50%; flex-shrink: 0; }
+    /* The tee column IS the swatch now. */
+    .tdot { display: inline-block; width: 9px; height: 9px; border-radius: 50%;
+            vertical-align: middle; }
+    .tdash { color: #999; }
+    .tee-legend .band { font-weight: 700; }
+    .tee-legend .tn { color: #555; }
+    .tee-hot { font-weight: 700; }
     .prow {
       display: flex; align-items: baseline; gap: 5px;
       padding: 3px 7px; border-top: 1px solid #e2e2e2; font-size: 11.5px;
@@ -88,13 +113,13 @@
        carts readable as two carts without another column of letters
        (Kerry 2026-09-08). */
     .prow.is-b { background: #efefef; }
-    .prow .pname { flex: 1; font-weight: 600; min-width: 0; }
-    .prow .tee { color: #444; width: 42px; text-align: right; white-space: nowrap; }
+    .prow .pname { flex: 1; min-width: 0; }
+    .prow .tee { color: #444; width: 22px; text-align: center; white-space: nowrap; }
+    /* Index then PH in the box (Kerry 2026-09-18); the Cart/Team number
+       stays in the alphabetical list only. */
+    .prow .ph { color: #111; font-weight: 700; width: 22px; text-align: center; }
     .prow .idx { color: #444; width: 30px; text-align: right;
                  font-variant-numeric: tabular-nums; white-space: nowrap; }
-    .prow .cart { width: 12px; text-align: center; font-weight: 700; }
-    .cart-A { color: #0b6; }
-    .cart-B { color: #06c; }
 
     /* ALPHA LIST — for the player who walks up knowing only their name. */
     .alpha-head {
@@ -114,15 +139,44 @@
             font-size: 11px; padding: 2px 0; border-bottom: 1px dotted #ccc;
             break-inside: avoid; }
     .arow .an { flex: 1; min-width: 0; }
-    .arow .atee { color: #444; width: 40px; text-align: right;
+    /* ONE name treatment for both lists (Kerry 2026-09-15: "For
+       ALPHABETICAL, make the name font the same size and type as the
+       foursomes above"). Declared once, so a player reads the same in
+       the group box and in the list he looks himself up in, and the two
+       cannot drift apart later. */
+    .prow .pname, .arow .an { font-size: 11.5px; font-weight: 600; }
+    .prow.blind-row { background: #fff; color: #666; font-style: italic; }
+    .prow.blind-row .pname { font-weight: 500; }
+    .arow .atee { color: #444; width: 22px; text-align: center;
                   white-space: nowrap; }
-    .arow .aidx { color: #444; width: 26px; text-align: right;
+    /* NEW / 1T beside the name (Kerry 2026-09-15). A first timer
+       outranks new — it is their first event either way, and two badges
+       on one name is noise. */
+    .abadge { display: inline-block; margin-left: 4px; padding: 0 3px;
+              border-radius: 3px; font-size: 7.5px; font-weight: 700;
+              letter-spacing: 0.04em; vertical-align: 1px; color: #fff; }
+    .abadge.ft { background: #B45309; }
+    .abadge.nw { background: #15803D; }
+    .arow .aidx { color: #444; width: 26px; text-align: center;
                   font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .arow .aph, .arow .atn { width: 24px; text-align: center; color: #111;
+                             font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .arow .atn { color: #444; }
+    /* The heading row is the same grid as the data, so a column can
+       never be labelled with its neighbour's name. */
+    .arow.ahead { border-bottom: 1.5px solid #111; padding-bottom: 3px;
+                  font-family: "Bitter", Georgia, serif; font-weight: 700;
+                  font-size: 8.5px; letter-spacing: 0.06em; color: #444;
+                  break-inside: avoid; }
+    .arow.ahead span { color: #444; font-weight: 700; }
+    .arow.ahead.colbreak { break-before: column; -webkit-column-break-before: column; }
     .arow .as { font-family: "Bitter", Georgia, serif; font-weight: 700;
                 width: 30px; text-align: right; white-space: nowrap; }
 
     .empty { color: #999; padding: 40px; text-align: center; font-style: italic; }
     .foot { margin-top: 14px; font-size: 9.5px; color: #888; }
+    .foot .fnote { margin-bottom: 2px; }
+    .foot .fnote.warn { color: #B45309; font-style: italic; }
     @media print {
       .noprint { display: none !important; }
       .groups { grid-template-columns: repeat(3, 1fr); }
@@ -161,10 +215,14 @@
   </div>
   <div class="sheet">
   <div class="sheet-head">
-    <div>
+    <div class="sheet-brand">
+      {# Full round logo left of the event + course (Kerry 2026-09-15) #}
+      <img class="sheet-logo" src="/static/tgf-logo-r.svg" alt="The Golf Fellowship">
+      <div>
       <h1>{{ pack.event.item_name }}</h1>
       <div class="sub">
         {{ pack.event.course or "" }}{% if pack.event.chapter %} · {{ pack.event.chapter }}{% endif %}
+      </div>
       </div>
     </div>
     <div class="meta">
@@ -183,19 +241,56 @@
   {% if not pack.groups %}
     <div class="empty">No pairings saved for this event yet. Generate &amp; save pairings first.</div>
   {% else %}
+  {% if pack.tee_legend %}
+  <div class="tee-legend">
+    <span class="tl-lab">TEES</span>
+    {% for t in pack.tee_legend %}
+      <span class="tl">
+        {# A WHITE tee prints as a black outline round white (Kerry
+           2026-09-15) — a white square on white paper is nothing — and
+           the women's tee as an outline in its own colour. #}
+        <span class="sw" style="{% if t.ring %}border:2px solid {{ t.color }};background:#fff;{% elif t.color|lower in ['#ffffff', '#fff'] %}border:1.5px solid #1B1B1B;background:#fff;{% else %}background:{{ t.color }};{% endif %}"></span>
+        <span class="band" style="color:{% if t.color|lower in ['#ffffff', '#fff'] %}#1B1B1B{% else %}{{ t.color }}{% endif %};">{{ t.band_label or t.band }}</span>
+        <span class="tn">{{ t.tee_name }}</span>
+      </span>
+    {% endfor %}
+  </div>
+  {% endif %}
+{# THE TEE IS A CIRCLE, not a word (Kerry 2026-09-15: "Change all
+   text in columns for tees to just simple color circles that
+   correspond"). The legend above the foursomes is the key. A women's
+   tee prints as an OUTLINE in its own colour; a white tee as a black
+   outline round white, or it prints as nothing at all. #}
+{% macro tee_dot(band) -%}
+  {%- set sw = pack.tee_swatches.get(band) -%}
+  {%- set lad = pack.tee_ladies.get(band) -%}
+  {%- if sw -%}
+    <span class="tdot" style="{% if lad %}background:#fff;border:2px solid {{ sw }};{% elif sw|lower in ['#ffffff', '#fff'] %}background:#fff;border:1.5px solid #1B1B1B;{% else %}background:{{ sw }};{% endif %}" title="{{ band }}"></span>
+  {%- else -%}<span class="tdash">&mdash;</span>{%- endif -%}
+{%- endmacro %}
   <div class="groups">
     {% for g in pack.groups %}
       <div class="gbox">
         <div class="gbox-head">
-          <span class="slot">{{ g.slot_label }}</span>
+          <span class="slot">{{ g.start_line or g.slot_label }}</span>
           <span class="grp">{{ g.group_num }}{% if g.holes == '18' %} · 18{% endif %}</span>
         </div>
         {% for p in g.players %}
           <div class="prow{% if (p.cart_pos or 0) not in [1,2] %} is-b{% endif %}">
             <span class="pname">{{ p.name }}</span>
-            <span class="tee">{{ p.tee_choice or "—" }}</span>
-            <span class="idx">{% if p.handicap_index is not none %}{{ "%.1f"|format(p.handicap_index) }}{% else %}—{% endif %}</span>
-            <span class="cart {% if (p.cart_pos or 0) in [1,2] %}cart-A{% else %}cart-B{% endif %}">{% if (p.cart_pos or 0) in [1,2] %}A{% else %}B{% endif %}</span>
+            <span class="tee">{{ tee_dot(p.tee_choice) }}</span>
+            <span class="idx">{% if p.handicap_index_display is not none %}{{ "%.1f"|format(p.handicap_index_display) }}{% elif p.handicap_index is not none %}{{ "%.1f"|format(p.handicap_index) }}{% else %}—{% endif %}</span>
+            <span class="ph">{% if p.playing_handicap is not none %}{{ p.playing_handicap }}{% else %}&mdash;{% endif %}</span>
+          </div>
+        {% endfor %}
+        {# A BLIND is not in the cart — it is the card that completes a
+           short cart (Cart Net) or team (Team Net). Printed under the
+           group, greyed and labelled with the unit it completes, so nobody
+           looks for a fourth who was never coming. #}
+        {% for b in g.blinds %}
+          <div class="prow blind-row">
+            <span class="pname">BLIND · {{ b.name }}</span>
+            <span class="tee">{% if pack.team_unit == 'cart' %}cart{% else %}team{% endif %}</span>
           </div>
         {% endfor %}
       </div>
@@ -205,12 +300,30 @@
   <div class="alpha-head">
     ALPHABETICAL <span>{{ pack.player_count }} PLAYER{{ "" if pack.player_count == 1 else "S" }}</span>
   </div>
+  {% set _ahead %}
+      <span class="an">PLAYER</span>
+      <span class="atee">TEE</span>
+      <span class="aidx">IDX</span>
+      <span class="aph">PH</span>
+      <span class="atn">{% if pack.team_unit == 'cart' %}CART{% else %}TEAM{% endif %}</span>
+      <span class="as">HOLE</span>
+  {% endset %}
+  {% set _mid = (pack.alpha|length + 1) // 2 %}
   <div class="alpha">
+    <div class="arow ahead">{{ _ahead }}</div>
     {% for a in pack.alpha %}
+      {# The list reads DOWN then across, so the second column needs its
+         own headings — and the break is forced here so the header can
+         never end up mid-column (Kerry 2026-09-15). #}
+      {% if loop.index0 == _mid %}<div class="arow ahead colbreak">{{ _ahead }}</div>{% endif %}
       <div class="arow">
-        <span class="an">{{ a.sort_name }}</span>
-        <span class="atee">{{ a.tee_choice or "—" }}</span>
-        <span class="aidx">{% if a.handicap_index is not none %}{{ "%.1f"|format(a.handicap_index) }}{% else %}—{% endif %}</span>
+        {# Both can be true and both show (Kerry 2026-09-16: "a player
+           could be both a 1T and a NEW like Morris Allen"). #}
+        <span class="an">{{ a.sort_name }}{% if a.is_first_timer %}<span class="abadge ft">1T</span>{% endif %}{% if a.is_new %}<span class="abadge nw">NEW</span>{% endif %}</span>
+        <span class="atee">{{ tee_dot(a.tee_choice) }}</span>
+        <span class="aidx">{% if a.handicap_index_display is not none %}{{ "%.1f"|format(a.handicap_index_display) }}{% elif a.handicap_index is not none %}{{ "%.1f"|format(a.handicap_index) }}{% else %}—{% endif %}</span>
+        <span class="aph">{% if a.playing_handicap is not none %}{{ a.playing_handicap }}{% else %}&mdash;{% endif %}</span>
+        <span class="atn">{% if a.team_handicap is not none %}{{ a.team_handicap }}{% else %}&mdash;{% endif %}</span>
         <span class="as">{{ a.slot_short }}</span>
       </div>
     {% endfor %}
@@ -218,7 +331,19 @@
   {% endif %}
 
   <div class="foot">
-    Cart A = seats 1&amp;2 · Cart B = seats 3&amp;4. &nbsp; Idx = 9-hole handicap index carried by pairings (not the playing handicap). &nbsp; The Golf Fellowship.
+    {# One note per ROW (Kerry 2026-09-15) — a run-on paragraph that
+       wraps where the column happens to end is not a key. #}
+    <div class="fnote"><span class="abadge ft">1T</span> &mdash; first TGF event ever. <span class="abadge nw">NEW</span> &mdash; new member, playing their first event as a member; a first-timer who is already a member wears both. The tee circle matches the TEES key above.</div>
+    <div class="fnote"><strong>IDX</strong> &mdash; TGF handicap index ({{ pack.holes_key }}-hole).</div>
+    <div class="fnote"><strong>PH</strong> &mdash; playing handicap at 100%, from that index and the tee played{% if pack.ph_basis %} ({{ pack.ph_basis }}){% endif %}.</div>
+    <div class="fnote"><strong>{% if pack.team_unit == 'cart' %}CART{% else %}TEAM{% endif %}</strong> &mdash; {% if pack.team_unit == 'cart' %}Cart{% else %}Team{% endif %} Net handicap{% if pack.team_basis %}: {{ pack.team_basis }}{% endif %}.</div>
+    {% if pack.ph_note %}<div class="fnote warn">{{ pack.ph_note }}</div>{% endif %}
+    <div class="fnote">The Golf Fellowship{% if pack.chapter %} &middot; {{ pack.chapter }}{% endif %}.
+      {# Printed-at stamp (Kerry 2026-09-21, "Yes"): with a once-per-change
+         routine two copies can be in hand on the day — the stamp says
+         which one is current. Wrapped in .pstamp so the print pack's
+         content hash can strip it (a clock must never look like a change). #}
+      <span class="pstamp">Printed {{ print_stamp() }}.</span></div>
   </div>
   </div><!-- /.sheet -->
   <script>
@@ -226,7 +351,7 @@
     // event and date instead of the URL, then put the title back.
     function downloadPdf() {
       var was = document.title;
-      document.title = {{ ((pack.event.item_name or "Starter Sheet") ~ " " ~ (pack.event.event_date or "")) | trim | tojson }};
+      document.title = {{ (pack.event.file_stub ~ "-StarterSheet") | tojson }};
       window.addEventListener("afterprint", function once() {
         document.title = was;
         window.removeEventListener("afterprint", once);

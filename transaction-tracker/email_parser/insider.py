@@ -15,11 +15,18 @@ Rules folded in (event-recaps.md, public variant):
   * recipients = list 3 minus segment 2 (Active members) — proven shape;
   * DRAFTS ONLY.
 
-Bridge: `scoring-brevo-draft[:dry|apply|review]`. Scheduler: Wednesday
-13:00 UTC (`weekly_insider_draft`). Dial `insider_autodraft`: draft
-(default — Brevo DRAFT + link to Kerry, who reviews it in Brevo and edits
-with the session lane), review (preview to Kerry + mailbox, nothing in
-Brevo), off. Skipped when no event was played in the window.
+Bridge: `scoring-brevo-draft[:dry|apply|review][|<angle>]`. Scheduler:
+Wednesday 13:00 UTC (`weekly_insider_draft`). Dial `insider_autodraft`:
+draft (Brevo DRAFT + link to Kerry), review (SET 2026-09-16 — the writer's
+suggestion emailed to Kerry + posted to the mailbox, nothing in Brevo),
+off. Skipped when no event was played in the window.
+
+THE WRITER (2026-09-16, `insider_writer.py`): in review mode the story is
+written by one Claude call on a rotating ANGLE (dial `insider_angles`),
+with two alternate headlines and a one-line "why this angle"; `lint()`
+still gates it; when the call fails the deterministic `compose()` below
+is the fallback so the 8:00 email always goes out. The Brevo DRAFT is
+created only from the text Kerry approves (`approve_insider`).
 """
 
 from __future__ import annotations
@@ -114,6 +121,35 @@ def _cap(s: str) -> str:
     return s[:1].upper() + s[1:] if s else s
 
 
+def _fraction_headline(n: int, m: int) -> str | None:
+    """Kerry's headline shape (2026-09-16, s9.23 week): "Half the Field Won
+    Money!" — the beat-1 fraction, capitalised, as the title."""
+    if not m:
+        return None
+    r = n / m
+    if r >= 0.66:
+        return "Two-Thirds of the Field Won Money!"
+    if r >= 0.5:
+        return "Half the Field Won Money!"
+    if r >= 0.33:
+        return "A Third of the Field Won Money!"
+    return None
+
+
+def pick_headline(candidates: list, last_headline: str | None) -> str:
+    """Strongest candidate that is NOT last week's title. Kerry 2026-09-16:
+    "We copied the Brevo title from last week" — two Insiders in a row led
+    "First round. First payday." because a first-timer cashed both weeks.
+    The last candidate is the ratified default and is allowed to repeat
+    only when nothing else is left."""
+    cands = [c for c in candidates if c]
+    last = (last_headline or "").strip().lower()
+    for c in cands:
+        if c.strip().lower() != last:
+            return c
+    return cands[-1] if cands else "TGF Insider"
+
+
 def _fraction_phrase(n: int, m: int) -> str:
     if not m:
         return ""
@@ -127,7 +163,48 @@ def _fraction_phrase(n: int, m: int) -> str:
     return f"{n} of {m} players"
 
 
+def _hio_pot_as_of(pot, as_of: date):
+    """The pot AS OF a date. get_hio_pot() adds every event's registrations
+    into the running total, FUTURE events included (closeout skill OPEN 8:
+    Cedar Creek's 8 signups were in the 9/16 figure). The Insider prints
+    what the pot IS today, so take the running total at the last PLAYED
+    event; fall back to the tool's headline when the event list is absent."""
+    if not isinstance(pot, dict):
+        return None
+    cutoff = as_of.isoformat()
+    played = [e for e in (pot.get("events") or [])
+              if (e.get("date") or "") <= cutoff and e.get("running") is not None]
+    if played:
+        return max(float(e["running"]) for e in played)
+    return pot.get("pot")
+
+
 # ── data ────────────────────────────────────────────────────────────────
+
+def last_insider_headline(db_path=None, before: date | None = None) -> str | None:
+    """The previous Insider's headline, from the draft ping logged to
+    message_log ('insider-draft', subject "TGF Insider | <headline>" or
+    "Insider draft ready — TGF Insider | <headline>"). Only drafts BEFORE
+    the as-of date count, so re-running today's draft does not rotate
+    itself away."""
+    from . import database as db
+    try:
+        with db._connect(db_path) as conn:
+            row = conn.execute(
+                """SELECT subject FROM message_log
+                    WHERE event_name = 'insider-draft' AND subject IS NOT NULL
+                      AND date(sent_at) < ?
+                    ORDER BY id DESC LIMIT 1""",
+                ((before or today_central()).isoformat(),)).fetchone()
+    except Exception:
+        logger.warning("insider: last headline unavailable", exc_info=True)
+        return None
+    if not row or not row[0]:
+        return None
+    subj = str(row[0])
+    marker = "TGF Insider | "
+    return subj.split(marker, 1)[1].strip() if marker in subj else subj.strip()
+
 
 def gather_week(db_path=None, as_of: date | None = None, days: int = 7) -> dict:
     """Everything the template needs, from Tracker data only.
@@ -145,7 +222,7 @@ def gather_week(db_path=None, as_of: date | None = None, days: int = 7) -> dict:
     with db._connect(db_path) as conn:
         played = [dict(r) for r in conn.execute(
             """SELECT e.id, e.item_name, e.event_date, e.course, e.chapter,
-                      e.fellowship_spot,
+                      e.fellowship_spot, e.start_time,
                       COUNT(sr.id) AS cards
                  FROM events e
                  JOIN scoring_rounds sr ON sr.event_id = e.id
@@ -255,6 +332,7 @@ def gather_week(db_path=None, as_of: date | None = None, days: int = 7) -> dict:
                 "hcp_min": hcp[0] if hcp else None, "hcp_max": hcp[1] if hcp else None,
                 "skins_story": skins_story,
                 "fellowship_spot": ev["fellowship_spot"],
+                "start_time": ev["start_time"],
                 "results_url": (f"{base}?round_id={round_id}" if base and round_id
                                 else base),
                 "holes": 18 if _EIGHTEEN_RE.match(ev["item_name"] or "") else 9,
@@ -273,7 +351,7 @@ def gather_week(db_path=None, as_of: date | None = None, days: int = 7) -> dict:
                     and ch not in out["next_tuesday"]:
                 out["next_tuesday"][ch] = {
                     "name": ev["item_name"], "course": ev["course"],
-                    "date": ev["event_date"], "url": url,
+                    "date": ev["event_date"], "url": url, "start_time": ev.get("start_time"),
                     "label": f"{ev['course'] or ev['item_name']} · {_fmt_day(ev['event_date'])}",
                 }
             elif _EIGHTEEN_RE.match(ev["item_name"] or "") and len(out["saturdays"]) < 4 \
@@ -284,9 +362,10 @@ def gather_week(db_path=None, as_of: date | None = None, days: int = 7) -> dict:
                 })
     try:
         pot = db.get_hio_pot(db_path=db_path)
-        out["hio_pot"] = pot.get("pot") if isinstance(pot, dict) else None
+        out["hio_pot"] = _hio_pot_as_of(pot, as_of)
     except Exception:
         logger.warning("insider: HIO pot unavailable", exc_info=True)
+    out["last_headline"] = last_insider_headline(db_path=db_path, before=as_of)
     try:
         out["hcp_dist"] = handicap_distribution(db_path=db_path)
     except Exception:
@@ -515,13 +594,17 @@ def compose(data: dict) -> dict:
             slots["BEAT_3_BODY"] = ("A TGF handicap keeps it fair, so a 20-handicap has the same "
                                     "shot as a scratch player.")
 
-    # Headline follows the strongest beat.
-    if cashed_firsts:
-        slots["HEADLINE"] = "First round. First payday."
-    elif story and story["skins_story"]["score"] == "bogey":
-        slots["HEADLINE"] = "A bogey won money Tuesday"
-    else:
-        slots["HEADLINE"] = "You don't have to be the best golfer out here to get paid"
+    # Headline follows the strongest beat — but never repeats last week's
+    # title (Kerry 2026-09-16). Candidates in strength order; the ratified
+    # default sits last and may repeat only when nothing else remains.
+    candidates = [
+        "First round. First payday." if cashed_firsts else None,
+        _fraction_headline(total_c, total_f),      # Kerry's pick, week 3
+        (f"A {story['skins_story']['score']} won money Tuesday"
+         if story and story["skins_story"]["score"] in ("bogey", "par") else None),
+        "You don't have to be the best golfer out here to get paid",
+    ]
+    slots["HEADLINE"] = pick_headline(candidates, data.get("last_headline"))
 
     slots["HIO_POT"] = _fmt_money(data.get("hio_pot")) if data.get("hio_pot") is not None else "growing"
 
@@ -563,8 +646,30 @@ def _ordinal(n: int) -> str:
     return f"{n}{'th' if 10 <= n % 100 <= 20 else {1: 'st', 2: 'nd', 3: 'rd'}.get(n % 10, 'th')}"
 
 
-def render(slots: dict, template_path: Path = TEMPLATE_PATH) -> str:
+_BEAT_BLOCK_RE = re.compile(
+    r'<p style="([^"]*)"><strong>\{\{BEAT_1_LEAD\}\}</strong> \{\{BEAT_1_BODY\}\}</p>\s*'
+    r'<p style="[^"]*"><strong>\{\{BEAT_2_LEAD\}\}</strong> \{\{BEAT_2_BODY\}\}</p>\s*'
+    r'<p style="([^"]*)"><strong>\{\{BEAT_3_LEAD\}\}</strong> \{\{BEAT_3_BODY\}\}</p>')
+
+
+def story_paragraphs_html(story: list, mid_style: str, last_style: str) -> str:
+    """The story box with 1–4 beats (the writer varies the count — Kerry:
+    not 'the same format each time with the 3 things')."""
+    out = []
+    for i, b in enumerate(story):
+        style = last_style if i == len(story) - 1 else mid_style
+        out.append(f'<p style="{style}"><strong>{_esc(b["lead"])}</strong> {b["body"]}</p>')
+    return "\n".join(out)
+
+
+def render(slots: dict, template_path: Path = TEMPLATE_PATH, story: list | None = None) -> str:
+    """Fill the template. `story` (a list of {lead, body}) replaces the
+    fixed three-beat box with as many beats as the writer produced."""
     tpl = Path(template_path).read_text(encoding="utf-8")
+    if story:
+        m = _BEAT_BLOCK_RE.search(tpl)
+        if m:
+            tpl = tpl[:m.start()] + story_paragraphs_html(story, m.group(1), m.group(2)) + tpl[m.end():]
     for k, v in slots.items():
         tpl = tpl.replace("{{" + k + "}}", str(v))
     tpl = tpl.replace("<title>TGF Fall Kicks Off</title>",
@@ -574,9 +679,20 @@ def render(slots: dict, template_path: Path = TEMPLATE_PATH) -> str:
     return tpl
 
 
-def lint(html_out: str) -> list:
+def _allowed_dollars(db_path=None) -> set:
+    """Dollar figures the dial `insider_join_offer` carries (Kerry 2026-09-17
+    ratified printing the join price); empty when the dial is blank."""
+    try:
+        from .insider_writer import dollars_in, join_offer_text
+        return dollars_in(join_offer_text(db_path=db_path))
+    except Exception:
+        return set()
+
+
+def lint(html_out: str, allowed_extra=()) -> list:
     """Boundary check before anything reaches Brevo: no unfilled slot, no
-    banned word, no dollar figure outside the two allowed."""
+    banned word, no dollar figure outside the allowed ones ($25 offer, the
+    pot line, and the join-offer figures on the dial)."""
     problems = []
     for m in re.findall(r"\{\{[A-Z0-9_]+\}\}", html_out):
         problems.append(f"unfilled slot {m}")
@@ -585,7 +701,7 @@ def lint(html_out: str) -> list:
         if re.search(rf"\b{re.escape(w)}\b", text, re.I):
             problems.append(f"banned word: {w}")
     dollars = re.findall(r"\$[\d,]+(?:\.\d\d)?", text)
-    allowed = {"$25"}
+    allowed = {"$25"} | set(allowed_extra or ())
     for d in dollars:
         if d in allowed:
             continue
@@ -616,23 +732,100 @@ def create_brevo_draft(html_out: str, subject: str, name: str) -> dict:
             "url": f"https://app.brevo.com/camp/classic/{cid}/setup" if cid else None}
 
 
+def compose_from_writer(data: dict, draft: dict) -> tuple:
+    """(slots, story) — the writer's text in the template's slots, with the
+    deterministic parts (eyebrow, highlight band, buttons, Saturdays, pot)
+    from compose(). The band follows the angle when the angle owns that
+    story (handicap-fair → skill, hio-pot → pot), else the weekly rotation."""
+    from .insider_writer import ANGLE_BY_KEY
+    slots = compose(data)
+    slots["HEADLINE"] = draft["headline"]
+    slots["LEDE_WITH_RESULTS_LINKS"] = draft["lede"]
+    slots["CELEBRATE_PROOF"] = _esc(draft["celebrate"])
+    slots["CLOSE_LEAD"] = _esc(draft["close_lead"])
+    band = (ANGLE_BY_KEY.get(draft.get("angle") or "") or {}).get("band")
+    if band:
+        slots["HIGHLIGHT_BLOCK"] = highlight_block({**data, "highlight_forced": band})
+    story = draft["story"]
+    for i in range(3):
+        b = story[i] if i < len(story) else {"lead": "", "body": ""}
+        slots[f"BEAT_{i + 1}_LEAD"] = b["lead"]
+        slots[f"BEAT_{i + 1}_BODY"] = b["body"]
+    return slots, story
+
+
 def build_public_recap_draft(dry_run: bool = True, db_path=None,
-                             as_of: date | None = None) -> dict:
+                             as_of: date | None = None, angle: str | None = None,
+                             writer: bool | None = None, record: bool = False) -> dict:
     """The Wednesday job. dry_run returns the rendered HTML and the facts;
-    apply creates the Brevo DRAFT and emails Kerry the link. Never sends."""
+    apply creates the Brevo DRAFT and emails Kerry the link. Never sends.
+
+    `angle` names the writer's angle (else the rotation picks; the dial
+    `insider_angle_force` wins). `writer` forces the writer on/off (None =
+    dial `insider_writer` + key present). `record=True` (the scheduled
+    run) writes the angle into the rotation history and consumes the
+    force dial. When the writer fails, `compose()` is the draft and
+    `out["writer"]["error"]` says why — the email still goes out."""
     from . import database as db
+    from . import insider_writer as iw
     data = gather_week(db_path=db_path, as_of=as_of)
     if not data["events"]:
         return {"skipped": "no event with scorecards in the window", "data": data}
-    slots = compose(data)
-    html_out = render(slots)
-    problems = lint(html_out)
+    try:
+        data["member_quote"] = json.loads(db.get_app_setting("insider_member_quote", db_path=db_path) or "null")
+    except Exception:
+        data["member_quote"] = None
+    use_writer = iw.writer_enabled(db_path=db_path) if writer is None else writer
+    forced = iw.forced_angle(db_path=db_path)
+    angle_key = angle or iw.pick_angle(iw.angle_order(db_path=db_path), iw.angle_history(db_path=db_path),
+                                       data, forced)
+    writer_info = {"enabled": bool(use_writer), "angle": angle_key,
+                   "angle_title": iw.ANGLE_BY_KEY.get(angle_key, {}).get("title"),
+                   "forced": bool(forced and forced == angle_key), "ok": False, "error": None}
+    story = None
+    draft = None
+    if use_writer:
+        try:
+            facts = iw.writer_facts(data, db_path=db_path)
+            draft = iw.write_insider(facts, angle_key, db_path=db_path)
+            slots, story = compose_from_writer(data, draft)
+            writer_info.update({"ok": True, "model": draft.get("model"), "attempts": draft.get("attempts"),
+                                "notes": draft.get("notes") or []})
+        except iw.WriterError as exc:
+            writer_info["error"] = str(exc)
+            logger.warning("insider writer fell back to compose(): %s", exc)
+            draft = None
+    if draft is None:
+        slots = compose(data)
+    extra = _allowed_dollars(db_path=db_path)
+    html_out = render(slots, story=story)
+    problems = lint(html_out, extra)
+    if problems and draft is not None:
+        # The gate holds even on the writer's output: fall back rather than ship a rule break.
+        writer_info.update({"ok": False, "error": f"lint after render: {'; '.join(problems)}"})
+        draft = None
+        story = None
+        slots = compose(data)
+        html_out = render(slots)
+        problems = lint(html_out, extra)
     subject = f"TGF Insider | {slots['HEADLINE']}"
-    out = {"dry_run": dry_run, "subject": subject, "slots": slots,
+    out = {"dry_run": dry_run, "subject": subject, "slots": slots, "story": story,
            "events": [{k: e[k] for k in ("name", "date", "field", "cashed", "results_url")}
                       for e in data["events"]],
            "first_timers": [f["short"] for e in data["events"] for f in e["first_timers"]],
-           "lint": problems, "html": html_out}
+           "lint": problems, "html": html_out,
+           "angle": angle_key, "writer": writer_info,
+           "alt_headlines": (draft or {}).get("alt_headlines") or [],
+           "why": (draft or {}).get("why") or ("deterministic draft — the writer did not run"
+                                                if not use_writer else
+                                                f"deterministic fallback — {writer_info.get('error')}")}
+    if record:
+        try:
+            iw.record_angle(angle_key, datetime.strptime(data["as_of"], "%Y-%m-%d").date(), db_path=db_path)
+            if forced:
+                iw.clear_forced_angle(db_path=db_path)
+        except Exception:
+            logger.warning("insider: angle history not recorded", exc_info=True)
     if dry_run:
         return out
     if problems:
@@ -652,9 +845,10 @@ def build_public_recap_draft(dry_run: bool = True, db_path=None,
     return out
 
 
-def _ping_kerry(subject: str, res: dict, data: dict, db_path=None) -> dict:
+def _ping_kerry(subject: str, res: dict, data: dict, db_path=None,
+                event_name: str = "insider-draft", intro: str | None = None) -> dict:
     """Email Kerry the draft link (Graph, same credentials as every other
-    outgoing mail). Logged to message_log under 'insider-draft'."""
+    outgoing mail). Logged to message_log under `event_name`."""
     from . import database as db
     from .fetcher import send_mail_graph
     tenant = os.getenv("AZURE_TENANT_ID"); client = os.getenv("AZURE_CLIENT_ID")
@@ -662,10 +856,10 @@ def _ping_kerry(subject: str, res: dict, data: dict, db_path=None) -> dict:
     to = (os.getenv("COO_EMAIL_TO") or frm or "").strip()
     if not all([tenant, client, secret, frm, to]):
         return {"sent": False, "reason": "mail not configured"}
-    evs = ", ".join(e["name"] for e in data["events"])
-    body = (f"<p>The Wednesday Insider draft is in Brevo, ready for your edit and send.</p>"
+    evs = ", ".join(e["name"] for e in data.get("events") or [])
+    body = (f"<p>{_esc(intro or 'The Wednesday Insider draft is in Brevo, ready for your edit and send.')}</p>"
             f"<p><a href=\"{_esc(res['url'])}\">Open campaign #{res['campaign_id']}</a></p>"
-            f"<p>Subject: {_esc(subject)}<br>Events: {_esc(evs)}<br>"
+            f"<p>Subject: {_esc(subject)}" + (f"<br>Events: {_esc(evs)}" if evs else "") + "<br>"
             f"Recipients: list {LIST_ID} minus segment {EXCLUDE_SEGMENT_ID} (Active members).</p>"
             f"<p>It will not send itself.</p>")
     try:
@@ -676,7 +870,7 @@ def _ping_kerry(subject: str, res: dict, data: dict, db_path=None) -> dict:
         ok = False
         logger.warning("insider ping failed: %s", exc)
     try:
-        db.log_message({"event_name": "insider-draft", "channel": "email",
+        db.log_message({"event_name": event_name, "channel": "email",
                         "recipient_name": "Kerry", "recipient_address": to,
                         "subject": subject, "body_preview": body[:200],
                         "status": "sent" if ok else "failed", "sent_by": "scheduler"},
@@ -699,14 +893,7 @@ def send_review_preview(res: dict, db_path=None) -> dict:
     evs = ", ".join(e["name"] for e in res.get("events", []))
     firsts = ", ".join(res.get("first_timers") or []) or "none"
     lint = res.get("lint") or []
-    banner = (
-        '<div style="font-family:Arial,sans-serif;font-size:14px;line-height:1.5;'
-        'background:#fff7ed;border:2px solid #e2773d;padding:12px 16px;margin:0 0 16px;">'
-        f'<strong>INSIDER DRAFT FOR REVIEW — not in Brevo yet.</strong><br>'
-        f'Events: {_esc(evs)}<br>First-timers named: {_esc(firsts)}<br>'
-        f'Lint: {_esc(", ".join(lint) if lint else "clean")}<br>'
-        'Reply with edits or say "go" in the Tracker session; the Brevo draft is created '
-        'with <code>scoring-brevo-draft:apply</code> only after that.</div>')
+    banner = review_banner(res, evs=evs, firsts=firsts)
     html_out = banner + (res.get("html") or "")
     out = {"emailed": False, "mailbox_post": None}
     tenant = os.getenv("AZURE_TENANT_ID"); client = os.getenv("AZURE_CLIENT_ID")
@@ -732,20 +919,157 @@ def send_review_preview(res: dict, db_path=None) -> dict:
     else:
         out["reason"] = "mail not configured"
     try:
-        slots = res.get("slots") or {}
-        body = (f"TO: kerry, Event closeout lane — INSIDER DRAFT FOR REVIEW (week of {week}). "
-                f"Subject: {subject}. Events: {evs}. First-timers: {firsts}. Lint: "
-                f"{', '.join(lint) if lint else 'clean'}.\n"
-                f"Beat 1: {re.sub('<[^>]+>', '', slots.get('BEAT_1_LEAD', ''))} {re.sub('<[^>]+>', '', slots.get('BEAT_1_BODY', ''))}\n"
-                f"Beat 2: {slots.get('BEAT_2_LEAD', '')} {slots.get('BEAT_2_BODY', '')}\n"
-                f"Beat 3: {slots.get('BEAT_3_LEAD', '')} {slots.get('BEAT_3_BODY', '')}\n"
-                f"Not in Brevo. Discuss with Kerry, then scoring-brevo-draft:apply. "
-                f"Re-render any time with scoring-brevo-draft (dry).")
+        body = (f"TO: kerry, Insider writer lane — INSIDER DRAFT FOR REVIEW (week of {week}). "
+                f"Events: {evs}. First-timers: {firsts}. Lint: {', '.join(lint) if lint else 'clean'}.\n"
+                + review_summary_text(res)
+                + "\nNot in Brevo. Kerry edits in chat; the lane folds the edits, then "
+                  "scoring-insider-approve:<subject>|<html> creates the Brevo DRAFT from his text. "
+                  "Re-render any time with scoring-brevo-draft:dry|<angle>.")
         post = db.post_platform_dialogue_entry("tracker-claude", body, topic="insider-review",
                                                db_path=db_path or db.DB_PATH)
         out["mailbox_post"] = post.get("id") if isinstance(post, dict) else True
     except Exception as exc:
         logger.warning("insider review mailbox post failed: %s", exc)
+    return out
+
+
+def review_summary_text(res: dict) -> str:
+    """Plain-text digest of one draft: angle, why, the headline options, the beats."""
+    w = res.get("writer") or {}
+    alts = res.get("alt_headlines") or []
+    lines = [f"Angle: {w.get('angle_title') or res.get('angle')} ({res.get('angle')}). "
+             f"Writer: {'ok, ' + str(w.get('model')) if w.get('ok') else 'deterministic fallback'}"
+             + (f" — {w.get('error')}" if w.get('error') else "") + ".",
+             f"Why this angle: {res.get('why') or ''}",
+             f"Headline options: 1) {res.get('subject', '').replace('TGF Insider | ', '')}"
+             + "".join(f"  {i + 2}) {a}" for i, a in enumerate(alts))]
+    story = res.get("story")
+    if story:
+        for i, b in enumerate(story):
+            lines.append(f"Beat {i + 1}: {b['lead']} {re.sub('<[^>]+>', '', b['body'])}")
+    else:
+        slots = res.get("slots") or {}
+        for i in (1, 2, 3):
+            lines.append(f"Beat {i}: {re.sub('<[^>]+>', '', slots.get(f'BEAT_{i}_LEAD', ''))} "
+                         f"{re.sub('<[^>]+>', '', slots.get(f'BEAT_{i}_BODY', ''))}")
+    return "\n".join(lines)
+
+
+def review_banner(res: dict, evs: str = "", firsts: str = "", label: str | None = None) -> str:
+    """The orange box above a draft in the review email: what it is, the
+    angle and why, the headline options, lint, what happens next."""
+    w = res.get("writer") or {}
+    lint_ = res.get("lint") or []
+    alts = res.get("alt_headlines") or []
+    head = res.get("subject", "").replace("TGF Insider | ", "")
+    opts = f"<ol style=\"margin:4px 0 0 18px;padding:0;\"><li><strong>{_esc(head)}</strong> (used below)</li>" \
+           + "".join(f"<li>{_esc(a)}</li>" for a in alts) + "</ol>"
+    writer_line = (f"Written by the Insider writer ({_esc(w.get('model') or '')})"
+                   if w.get("ok") else
+                   "Deterministic draft" + (f" — writer fell back: {_esc(w.get('error'))}" if w.get("error") else ""))
+    title = label or "INSIDER DRAFT FOR REVIEW — not in Brevo yet."
+    return (
+        '<div style="font-family:Arial,sans-serif;font-size:14px;line-height:1.5;'
+        'background:#fff7ed;border:2px solid #e2773d;padding:12px 16px;margin:0 0 16px;">'
+        f'<strong>{_esc(title)}</strong><br>'
+        f'<strong>Angle:</strong> {_esc(w.get("angle_title") or res.get("angle") or "")}'
+        f'{" (forced by dial)" if w.get("forced") else ""}<br>'
+        f'<strong>Why this angle this week:</strong> {_esc(res.get("why") or "")}<br>'
+        f'<strong>Headline / subject options:</strong>{opts}'
+        f'{writer_line}<br>'
+        + (f'Events: {_esc(evs)}<br>' if evs else '')
+        + (f'First-timers named: {_esc(firsts)}<br>' if firsts else '')
+        + f'Lint: {_esc(", ".join(lint_) if lint_ else "clean")}<br>'
+        'Reply with edits in the Tracker session (or pick a headline). The Brevo draft is created '
+        'only from the text you approve; nothing sends itself.</div>')
+
+
+def send_review_samples(results: list, db_path=None, subject: str | None = None) -> dict:
+    """Several angles in ONE review email (Kerry 2026-09-16: "an AI-written
+    draft with options to choose from"). Each draft gets its own banner;
+    the mailbox gets the digest of all of them. Nothing in Brevo."""
+    from . import database as db
+    from .fetcher import send_mail_graph
+    results = [r for r in results if r and not r.get("skipped")]
+    if not results:
+        return {"emailed": False, "reason": "no drafts"}
+    week = (results[0].get("events") or [{}])[0].get("date") or today_central().isoformat()
+    subject = subject or f"REVIEW: {len(results)} Insider angles — week of {week}"
+    parts = []
+    for i, r in enumerate(results):
+        parts.append(review_banner(r, label=f"OPTION {i + 1} of {len(results)} — not in Brevo."))
+        parts.append(r.get("html") or "")
+        if i < len(results) - 1:
+            parts.append('<hr style="border:0;border-top:6px solid #1b1b1b;margin:32px 0;">')
+    html_out = "".join(parts)
+    out = {"emailed": False, "mailbox_post": None, "angles": [r.get("angle") for r in results]}
+    tenant = os.getenv("AZURE_TENANT_ID"); client = os.getenv("AZURE_CLIENT_ID")
+    secret = os.getenv("AZURE_CLIENT_SECRET"); frm = os.getenv("EMAIL_ADDRESS")
+    to = (os.getenv("COO_EMAIL_TO") or frm or "").strip()
+    if all([tenant, client, secret, frm, to]):
+        try:
+            ok = send_mail_graph(tenant_id=tenant, client_id=client, client_secret=secret,
+                                 from_address=frm, to_address=to, subject=subject, html_body=html_out)
+        except Exception as exc:
+            ok = False
+            logger.warning("insider samples mail failed: %s", exc)
+        out["emailed"] = bool(ok); out["to"] = to
+        try:
+            db.log_message({"event_name": "insider-review", "channel": "email", "recipient_name": "Kerry",
+                            "recipient_address": to, "subject": subject,
+                            "body_preview": ", ".join(out["angles"])[:200],
+                            "status": "sent" if ok else "failed", "sent_by": "insider-writer"},
+                           db_path=db_path)
+        except Exception:
+            pass
+    else:
+        out["reason"] = "mail not configured"
+    try:
+        body = (f"TO: kerry, Insider writer lane — {len(results)} INSIDER OPTIONS FOR REVIEW (week of {week}), "
+                f"emailed as one message. Nothing in Brevo.\n\n"
+                + "\n\n".join(f"OPTION {i + 1}\n{review_summary_text(r)}" for i, r in enumerate(results))
+                + "\n\nKerry picks one (or mixes), edits in chat; the lane folds the edits into "
+                  "event-recaps.md + the voice examples, then scoring-insider-approve creates the Brevo DRAFT.")
+        post = db.post_platform_dialogue_entry("tracker-claude", body, topic="insider-review",
+                                               db_path=db_path or db.DB_PATH)
+        out["mailbox_post"] = post.get("id") if isinstance(post, dict) else True
+    except Exception as exc:
+        logger.warning("insider samples mailbox post failed: %s", exc)
+    return out
+
+
+def approve_insider(subject: str, html_out: str, db_path=None, dry_run: bool = False) -> dict:
+    """Kerry's approved text → the Brevo DRAFT (never sent). The lint gate
+    runs on HIS html too (banned words, stray dollars, unfilled slots,
+    the merge tags must survive); on any hit nothing is created. Logged as
+    'insider-approved' so the headline rotation sees it."""
+    from . import database as db
+    subject = (subject or "").strip()
+    if subject and not subject.lower().startswith("tgf insider |"):
+        subject = f"TGF Insider | {subject}"
+    problems = lint(html_out or "", _allowed_dollars(db_path=db_path))
+    for tag in ("{{ contact.FIRSTNAME }}", "{{ unsubscribe }}", "{{ update_profile }}"):
+        if tag not in (html_out or ""):
+            problems.append(f"merge tag missing: {tag}")
+    if not subject:
+        problems.append("subject is empty")
+    out = {"subject": subject, "lint": problems, "dry_run": dry_run, "created": False}
+    if problems or dry_run:
+        return out
+    week = today_central().isoformat()
+    res = create_brevo_draft(html_out, subject, f"TGF Insider {week} (approved)")
+    out.update(res)
+    try:
+        db.log_agent_action("insider-draft", "brevo-insider-approved",
+                            f"week={week} campaign_id={res.get('campaign_id')} error={res.get('error')}",
+                            db_path=db_path)
+    except Exception:
+        pass
+    if res.get("campaign_id"):
+        out["created"] = True
+        out["ping"] = _ping_kerry(subject, res, {"events": []}, db_path=db_path,
+                                  event_name="insider-approved",
+                                  intro="Your approved Insider is in Brevo as a DRAFT, ready to send.")
     return out
 
 
@@ -785,14 +1109,18 @@ def weekly_insider_draft() -> None:
         return
     try:
         if mode == "review":
-            res = build_public_recap_draft(dry_run=True)
+            # The writer runs here (angle from the rotation, recorded), the
+            # deterministic composer is its fallback; Kerry gets the email.
+            res = build_public_recap_draft(dry_run=True, record=True)
             if res.get("skipped"):
                 logger.info("Insider review: %s", res["skipped"])
                 return
             rv = send_review_preview(res)
             try:
                 db.log_agent_action("insider-draft", "brevo-insider-review",
-                                    f"subject={res.get('subject')} emailed={rv.get('emailed')} "
+                                    f"subject={res.get('subject')} angle={res.get('angle')} "
+                                    f"writer={(res.get('writer') or {}).get('ok')} "
+                                    f"emailed={rv.get('emailed')} "
                                     f"mailbox={rv.get('mailbox_post')} lint={res.get('lint')}")
             except Exception:
                 pass

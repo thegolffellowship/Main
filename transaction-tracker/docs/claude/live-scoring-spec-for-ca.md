@@ -109,6 +109,18 @@ Every threshold is data in `SEED_LIVE_SCORING_CONFIG`. Nothing is hard-coded
 
 ## 4. The flighting rule (Kerry, 2026-07-29) — `SEED_FLIGHT_CONFIG`
 
+> **STATUS 2026-09-21 — the UNKNOWNs below are RATIFIED** (mailbox
+> #571–#575, Kerry 2026-09-18/19, revised #582): minimum flight size
+> = NONE and no merging (B2 superseded); 3-flight ladder <6.0 / 6.0–11.9 /
+> 12.0+ (4 flights add 18.0); places by flight size 1/10/20; the pot
+> question in §5 ruled as the B4-revised Individual Gross pot (10%
+> Overall Low Gross bonus off the top, 90% by headcount); §6's lock
+> moment = an explicit FREEZE action (not a clock), amounts recompute at
+> settlement. The rule set as data: `email_parser/flighting.py`; the
+> per-event board: the FLIGHTS tab (`docs/claude/events.md`). The text
+> below is kept as the record of how the rule was taught.
+
+
 ### RATIFIED
 
 1. **Flight on the raw TGF handicap index**, not the playing handicap —
@@ -157,7 +169,7 @@ Every threshold is data in `SEED_LIVE_SCORING_CONFIG`. Nothing is hard-coded
 
 ---
 
-## 5. Pot split across flights — analysis, Kerry's call pending
+## 5. Pot split across flights — analysis (RULED 2026-09-19, #572: see §4 banner)
 
 Kerry asked: with fixed bands and vastly uneven counts, do we prorate the pots?
 
@@ -191,7 +203,7 @@ numbers (field size, bands used, resulting counts) as the case to encode against
 
 ---
 
-## 6. Flights freeze, money floats — scenario matrix (partly ruled)
+## 6. Flights freeze, money floats — scenario matrix (B5 RULED 2026-09-18/19; freeze = an action; built as `flighting.settle`)
 
 Kerry's stated principle: *no re-flighting on late WDs, but money gets
 adjusted; late adds add money and potentially flights.* Stated as a rule:

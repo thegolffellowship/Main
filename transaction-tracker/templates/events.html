@@ -151,7 +151,7 @@
         .ev-chapter-row .ev-tab.active[data-ev-chapter="Austin"] { background: var(--chapter-austin, #BF5700); border-color: var(--chapter-austin, #BF5700); color: #fff; }
         .ev-chapter-row .ev-tab.active[data-ev-chapter="San Antonio"] { background: var(--chapter-sa, #D3DDE4); border-color: var(--chapter-sa-alt, #8FA8B8); color: #1B1B1B; }
         /* PAYOUTS panel: drop Registered + Games columns on phones (Kerry, 2026-07-08) */
-        @media (max-width: 768px) {
+        @media (max-width: 560px) {
             .payout-hide-mobile { display: none; }
             .payout-breakdown-inner { padding: 0.4rem 0.5rem 0.6rem 0.75rem !important; }
         }
@@ -371,11 +371,25 @@
                columns with full names — 330px only fit two, and 220px
                (the original) truncated almost every name to "Kerry Nie…".
                A long name wraps to a second line rather than being cut. */
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
             margin-top: 0.25rem;
         }
         @media (max-width: 720px) {
             .pairings-groups-grid { grid-template-columns: 1fr; }
+        }
+        /* The detail panel lives in a <td colspan> of the events table,
+           whose columns are nowrap — so on a narrow or zoomed window the
+           TABLE is wider than the viewport and the wrapper scrolls
+           sideways. auto-fit then reflows the foursomes to the table's
+           width, not the window's, and the third column sits off-screen
+           (Kerry 2026-09-15: "Make the foursomes wrap to window width so
+           I can always see them"). --ev-detail-w is the wrapper's visible
+           width, set by a ResizeObserver; sticky-left keeps the panel in
+           view when the table row IS scrolled. */
+        .event-detail-content {
+            max-width: var(--ev-detail-w, 100%);
+            box-sizing: border-box;
+            position: sticky; left: 0;
         }
         .pairing-group-card {
             border: 1px solid var(--border); border-radius: 8px;
@@ -404,6 +418,25 @@
             transition: background 0.12s;
         }
         .pairing-player-row:hover { background: var(--bg-hover); }
+        /* A BLIND is a drawn card, not a body in the cart — greyed,
+           italic, and it never gets the drag cursor or an X. */
+        .pairing-empty-slot.pairing-blind-slot {
+            background: repeating-linear-gradient(45deg, #fafafa, #fafafa 6px, #f1f1f1 6px, #f1f1f1 12px);
+            color: var(--text-muted); font-style: italic;
+        }
+        .pairing-empty-slot.pairing-blind-slot .pairing-player-name {
+            font-weight: 600; letter-spacing: 0.02em;
+        }
+        .pairing-player-row.pairing-blind-row {
+            background: repeating-linear-gradient(45deg, #fafafa, #fafafa 6px, #f1f1f1 6px, #f1f1f1 12px);
+            color: var(--text-muted); font-style: italic; cursor: default;
+        }
+        .pairing-player-row.pairing-blind-row:hover {
+            background: repeating-linear-gradient(45deg, #fafafa, #fafafa 6px, #f1f1f1 6px, #f1f1f1 12px);
+        }
+        .pairing-player-row.pairing-blind-row .pairing-player-name {
+            font-weight: 600; letter-spacing: 0.02em;
+        }
         /* STANDINGS in/out bands — same convention as Player Rankings
            (Kerry 2026-07-31). Class-based, not inline, so :hover still
            gives feedback on a coloured row. */
@@ -426,11 +459,39 @@
         .pairing-cart-dot {
             width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
         }
+        /* HISTORY line under a name (Kerry 2026-09-15: "provide this info
+           as a row underneath each name in a foursome"). The wrap is put
+           on a MODIFIER, not on .pairing-player-row itself — every other
+           child is flex-shrink:0, so a blanket flex-wrap would drop the
+           handicap or the tee onto a second line on a narrow card. */
+        .pairing-player-row.has-hist { flex-wrap: wrap; row-gap: 0.1rem; }
+        .pairing-hist-row {
+            flex: 0 0 100%; padding-left: 1.05rem; margin-bottom: 0.1rem;
+            font-size: 0.68rem; color: var(--muted); line-height: 1.25;
+            font-variant-numeric: tabular-nums;
+            /* Same promise the name makes: never wrap, clip instead. */
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        .pairing-hist-row .ph-item { margin-right: 0.5rem; }
+        /* Twice is worth a look, four times is the Group 5 problem. */
+        .pairing-hist-row .ph-rep { color: #b45309; font-weight: 700; }
+        /* A requested pair is a decision, not a repeat (Kerry 2026-09-15). */
+        .pairing-hist-row .ph-req { color: var(--muted); font-weight: 400; }
+        .pairing-hist-row .ph-hot { color: #b91c1c; font-weight: 700; }
+        .pairing-repeat-chip {
+            float: right; margin-right: 0.5rem; font-weight: 700;
+            color: #7f1d1d; background: #fecaca; border-radius: 999px;
+            padding: 0 0.4rem; font-size: 0.72rem;
+        }
         .pairing-player-name {
             flex: 1; font-weight: 500; min-width: 0;
-            /* Full names, not "Kerry Nie…" — the card is sized to fit
-               them; a genuinely long one wraps rather than being cut. */
-            white-space: normal; overflow-wrap: anywhere;
+            /* Kerry 2026-09-15: "Nothing should make names wrap." The
+               card is sized to fit a full name (grid minimum below); the
+               badges are single letters; and if a name still cannot fit
+               it is clipped with an ellipsis rather than broken across
+               lines — v2.416.0's CAPT/AMB/NEW tags had "Mary Wade"
+               wrapping one letter per line. */
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
         }
         .pairing-points {
             font-size: 0.72rem; font-weight: 700; color: #0f766e;
@@ -472,6 +533,24 @@
         }
         .roster-hcp-prelim:hover { background: #ffedd5; border-color: #fb923c; }
         .pairing-tee { font-size: 0.72rem; color: var(--text-muted); width: 2.6rem; text-align: center; flex-shrink: 0; }
+        .pairing-role-badge {
+            flex-shrink: 0; font: 700 8.5px/1 'Bitter', serif; letter-spacing: 0.04em;
+            padding: 2px 4px; border-radius: 9999px; margin-left: 0.1rem; min-width: 1.1rem;
+            text-align: center;
+        }
+        .pairing-role-badge.role-capt { background: #1B1B1B; color: #fff; }
+        .pairing-role-badge.role-amb { background: #DBEAFE; color: #1E40AF; }
+        .pairing-role-badge.role-new { background: var(--buyin-green, #bbf7d0); color: var(--buyin-green-text, #166534); }
+        /* The bullpen X: quiet until the row is hovered, red on hover of
+           the X itself, never the row's drag/select target. */
+        .pairing-unseat {
+            flex-shrink: 0; margin-left: 0.15rem; width: 1.35rem; height: 1.35rem;
+            border: 1px solid transparent; border-radius: 9999px; background: none;
+            color: #b91c1c; opacity: 0.35; font-size: 0.72rem; line-height: 1;
+            cursor: pointer; padding: 0; transition: opacity .12s, background .12s;
+        }
+        .pairing-player-row:hover .pairing-unseat { opacity: 0.85; }
+        .pairing-unseat:hover { opacity: 1; background: #fee2e2; border-color: #fca5a5; }
         /* Drag-and-drop: a player can be dragged onto any group, and the
            rail that appears says what releasing does — including adding a
            5th, which is the manager-intent gate for an oversized group
@@ -675,7 +754,7 @@
             background: #f1f5f9;
         }
         /* Mobile: hide events table column toggle */
-        @media (max-width: 768px) {
+        @media (max-width: 560px) {
             .column-toggle-wrapper { display: none; }
             .event-summary .stat-card { min-width: 0; }
             .event-summary { gap: 0.25rem; }
@@ -2125,9 +2204,12 @@
                 <label style="display:block; margin-bottom:0.75rem;">
                     <span style="font-weight:600; font-size:0.82rem;">Audience</span>
                     <select id="compose-audience" class="modal-input" style="margin-top:0.3rem;">
+                        <!-- RSVP Only leads: chasing the unpaid is the
+                             most common reason this composer is opened
+                             (Kerry 2026-09-14) -->
+                        <option value="rsvp_only">RSVP Only (Unpaid)</option>
                         <option value="all">All Registered</option>
                         <option value="playing">Playing (RSVP Confirmed)</option>
-                        <option value="rsvp_only">RSVP Only (Unpaid)</option>
                         <option value="net">NET Players</option>
                         <option value="gross">GROSS Players</option>
                         <option value="both">BOTH (Net + Gross)</option>
@@ -2182,6 +2264,7 @@
                         <button type="button" class="btn btn-secondary compose-var-btn" data-var="manager_name" style="font-size:0.7rem; padding:0.15rem 0.4rem;" title="Chapter manager's name, from the chapter_managers setting">{manager_name}</button>
                         <button type="button" class="btn btn-secondary compose-var-btn" data-var="manager_phone" style="font-size:0.7rem; padding:0.15rem 0.4rem;" title="Chapter manager's cell, from the chapter_managers setting">{manager_phone}</button>
                         <button type="button" class="btn btn-secondary compose-var-btn" data-var="event_url" style="font-size:0.7rem; padding:0.15rem 0.4rem;" title="The event's store registration link (Edit Event → Registration link). Refused when the event has no verified link or has already been played.">{event_url}</button>
+                        <button type="button" class="btn btn-secondary compose-var-btn" data-var="pay_button" style="font-size:0.7rem; padding:0.15rem 0.4rem;" title="The registration link as a tappable orange button. Same link as {event_url} and the same rule: refused when the event has no verified link or has already been played.">{pay_button}</button>
                         <button type="button" class="btn btn-secondary compose-var-btn" data-var="fellowship_spot" style="font-size:0.7rem; padding:0.15rem 0.4rem;" title="Where the group meets after this event (Edit Event → Fellowship spot). Refused while blank.">{fellowship_spot}</button>
                     </div>
                     <textarea id="compose-body" class="modal-input" rows="8" style="margin-top:0.2rem; font-family:inherit; resize:vertical;" placeholder="Type your message here. Leave a blank line between paragraphs; wrap **words in stars** to bold them. Use the buttons above to insert personalization tags."></textarea>
@@ -2267,6 +2350,7 @@
     let allRsvpEmailOverrides = {};  // keyed by event_name → {email: status}
     let handicapIndexMap = {};  // keyed by lowercase customer_name → {index_9, index_18}
     let expandedEventId = null;
+    let _openRestored = false;      // the refresh-restore fires once a load
     let rsvpCreditMap = {};  // keyed by event_name → { customerName: creditInfo }
     let apCustomerNames = [];  // Add Player name typeahead pool (mobile-safe)
     let gamesOpenForEvent = {};  // keyed by event id → true if games panel is open
@@ -2274,11 +2358,30 @@
     let pairingsData = {};          // keyed by event id → {groups_9, groups_18, slots_9, slots_18, isDirty, mode, protectPartners, seeds, swapMode, selection, loaded}
     let financialOpenForEvent = {};  // keyed by event id → true if financial panel is open
     let payoutsOpenForEvent = {};  // keyed by event id → true if payouts panel is open
+    let flightsOpenForEvent = {};  // keyed by event id → true if the DIVISIONS/FLIGHTS panel is open
     let tgfPayoutData = { customers: [], events: [], winnings: {} };  // TGF payout data from /api/tgf
     let mvpUnlinks = new Set();  // event names unlinked from same-day TGF MVP combining
     let eventSortField = "event_date";
     let eventSortDir = "asc";
     let eventSearchQuery = "";
+    /** TGF'S OWN DAY, not the browser's UTC day (Kerry 2026-09-16, at
+     *  8pm Central on event night: "Tonight's events that are currently
+     *  active, already switched to PAST events. Let's not allow that
+     *  until midnight of the last day of event."). `toISOString()` is
+     *  UTC, so from 7pm Central onward every event dated today was
+     *  already "yesterday" and dropped out of UPCOMING while it was
+     *  still being played. The league runs on Central time; an event
+     *  stays upcoming until midnight of its own day. */
+    function tgfToday() {
+        try {
+            return new Intl.DateTimeFormat("en-CA", {
+                timeZone: "America/Chicago", year: "numeric",
+                month: "2-digit", day: "2-digit" }).format(new Date());
+        } catch (e) {
+            return new Date().toISOString().slice(0, 10);
+        }
+    }
+
     let eventTimeFilter = "upcoming";  // "all", "upcoming", "past"
     let eventChapterFilter = "all";   // "all", "Austin", "San Antonio"
 
@@ -2379,7 +2482,7 @@
     }
 
     function buildEvPickerOptions(events) {
-        const today = new Date().toISOString().split("T")[0];
+        const today = tgfToday();
         const upcoming = events.filter(e => e.event_date && e.event_date >= today).sort((a, b) => (a.event_date || "").localeCompare(b.event_date || ""));
         const past = events.filter(e => e.event_date && e.event_date < today).sort((a, b) => (b.event_date || "").localeCompare(a.event_date || ""));
         const noDate = events.filter(e => !e.event_date);
@@ -2632,6 +2735,18 @@
     // sits at its natural size, packed LEFT (Kerry 2026-09-04: "Allow
     // all columns to align left") instead of being stretched apart by
     // the table's width:100%.
+    // Publishes the events-table wrapper's VISIBLE width as --ev-detail-w
+    // so expanded detail panels (pairings foursomes, roster, games) wrap
+    // to the window instead of to the wider, sideways-scrolling table.
+    (function watchDetailWidth() {
+        const wrap = document.querySelector('.events-table-wrapper');
+        if (!wrap) return;
+        const set = () => wrap.style.setProperty('--ev-detail-w', wrap.clientWidth + 'px');
+        if (window.ResizeObserver) new ResizeObserver(set).observe(wrap);
+        else window.addEventListener('resize', set);
+        set();
+    })();
+
     function evColspan() {
         return visibleEvColumns().length + 1;
     }
@@ -2869,12 +2984,31 @@
     // name only as a fallback — a name key cannot survive one person being
     // spelled differently on an order row than on their profile, which is
     // how an edit made on one screen went missing on the other.
-    function hcpEntryFor(name, customerId) {
+    // THE HANDICAP LOCK (v2.462.0, Kerry 2026-09-16: "ROSTER handicaps
+    // need to lock after an event begins. Past events should not update
+    // to current handicap indexes"). Every event carries `handicap_as_of`
+    // from /api/events — null until it tees off, then its own date — and
+    // the index map IN EFFECT that morning is fetched once per date and
+    // read in place of the live map wherever an `ev` is known. A site
+    // with no event in hand reads the live map, as before.
+    const hcpAsOfMaps = {};
+    async function ensureHcpAsOf(ev) {
+        const d = ev && ev.handicap_as_of;
+        if (!d || hcpAsOfMaps[d]) return;
+        try {
+            const res = await fetch(`/api/handicaps/index-map?as_of=${encodeURIComponent(d)}`, {cache: "no-store"});
+            if (res.ok) hcpAsOfMaps[d] = await res.json();
+        } catch (err) {
+            console.error("ensureHcpAsOf:", err);
+        }
+    }
+    function hcpEntryFor(name, customerId, ev) {
+        const map = (ev && ev.handicap_as_of && hcpAsOfMaps[ev.handicap_as_of]) || handicapIndexMap;
         if (customerId) {
-            const byId = handicapIndexMap[`cid:${customerId}`];
+            const byId = map[`cid:${customerId}`];
             if (byId) return byId;
         }
-        return name ? handicapIndexMap[String(name).trim().toLowerCase()] : undefined;
+        return name ? map[String(name).trim().toLowerCase()] : undefined;
     }
 
     function patchLocalHandicapIndex(customerId, extraNames, index18) {
@@ -2981,7 +3115,7 @@
 
     function getFilteredSortedEvents() {
         let filtered = allEvents.filter(evInChapter);
-        const today = new Date().toISOString().split("T")[0];
+        const today = tgfToday();
 
         // Time filter (unless actively searching — search searches everything)
         if (!eventSearchQuery) {
@@ -3160,7 +3294,7 @@
             const fields = _mFp ? [
                 ["Chapter", _mFp.chapter || "\u2014"],
                 ["HCP", (() => {
-                    const lh = r.customer ? handicapIndexMap[(r.customer || "").toLowerCase()] : undefined;
+                    const lh = hcpEntryFor(r.customer, r.customer_id, ev);
                     if (lh === undefined) return r.handicap || "\u2014";
                     return showHcp18Only ? lh.index_18.toFixed(1) : (lh.index_9.toFixed(1) + 'N');
                 })()],
@@ -3182,7 +3316,7 @@
                 ["Order Date", r.order_date || "\u2014"],
                 ["Price", stripPriceSuffix(r.item_price) || "\u2014"],
                 ["HCP", (() => {
-                    const lh = r.customer ? handicapIndexMap[(r.customer || "").toLowerCase()] : undefined;
+                    const lh = hcpEntryFor(r.customer, r.customer_id, ev);
                     if (lh === undefined) return r.handicap || "\u2014";
                     return showHcp18Only ? lh.index_18.toFixed(1) : (lh.index_9.toFixed(1) + 'N');
                 })()],
@@ -3234,7 +3368,7 @@
         // All Events view: TGF-orange breakline (mirrors the desktop table)
         let mDividerAfterIdx = -1;
         if (eventTimeFilter === "all" && eventSortField === "event_date") {
-            const mToday = new Date().toISOString().split("T")[0];
+            const mToday = tgfToday();
             const mIsPast = e => !e.event_date || e.event_date < mToday;
             for (let i = 0; i < filtered.length - 1; i++) {
                 if (mIsPast(filtered[i]) !== mIsPast(filtered[i + 1])) { mDividerAfterIdx = i; break; }
@@ -3303,17 +3437,21 @@
                 const mobilePairingsView = pairingsOpenForEvent[ev.id];
                 const mobileFinancialView = financialOpenForEvent[ev.id];
                 const mobilePayoutsView = payoutsOpenForEvent[ev.id];
-                badgesHtml += `<span class="game-stat-badge ${!mobileGamesView && !mobilePairingsView && !mobileFinancialView && !mobilePayoutsView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="0">ROSTER <strong>${stats.players}</strong></span>`;
+                const mobileFlightsView = flightsOpenForEvent[ev.id];
+                badgesHtml += `<span class="game-stat-badge ${!mobileGamesView && !mobilePairingsView && !mobileFinancialView && !mobilePayoutsView && !mobileFlightsView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="0">ROSTER <strong>${stats.players}</strong></span>`;
                 badgesHtml += `<span class="game-stat-badge ${mobilePairingsView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="2">PAIRINGS</span>`;
                 if (mobileHolesType) {
                     badgesHtml += `<span class="game-stat-badge games-badge ${mobileGamesView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="1">GAMES</span>`;
+                }
+                if (mobileHolesType && canSeeFlights()) {
+                    badgesHtml += `<span class="game-stat-badge ${mobileFlightsView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="5" title="Divisions &amp; Flights — the ratified flighting and payout rules, dry run">FLIGHTS</span>`;
                 }
                 if (currentRole === 'admin') {
                     badgesHtml += `<span class="game-stat-badge ${mobilePayoutsView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="4">PAYOUTS</span>`;
                     badgesHtml += `<span class="game-stat-badge fin-badge-admin ${mobileFinancialView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="3">FINANCIAL</span>`;
                 }
                 badgesHtml += '</span>';
-                if (!mobileGamesView && !mobilePairingsView && !mobileFinancialView && !mobilePayoutsView) {
+                if (!mobileGamesView && !mobilePairingsView && !mobileFinancialView && !mobilePayoutsView && !mobileFlightsView) {
                     // Hole tabs — one per hole count this event actually sold
                     badgesHtml += holesTabsHtml(ev, registrants);
 
@@ -3340,6 +3478,8 @@
                     detailHtml = badgesHtml + renderPairingsPanel(ev, registrants, mGgRows);
                 } else if (mobilePayoutsView) {
                     detailHtml = badgesHtml + renderPayoutsPanel(ev, registrants);
+                } else if (mobileFlightsView) {
+                    detailHtml = badgesHtml + renderFlightsPanel(ev);
                 } else if (mobileFinancialView) {
                     detailHtml = badgesHtml + renderFinancialPanel(ev, registrants);
                 } else if (mobileGamesView) {
@@ -3754,7 +3894,7 @@
         const tbody = document.getElementById("events-body");
 
         // Summary stats (scoped to the selected chapter)
-        const today = new Date().toISOString().split("T")[0];
+        const today = tgfToday();
         const scoped = allEvents.filter(evInChapter);
         const upcoming = scoped.filter(e => e.event_date && e.event_date >= today);
         const past = scoped.filter(e => !e.event_date || e.event_date < today);
@@ -3880,16 +4020,43 @@
             const byId = allEvents.find(e => String(e.id) === String(evParam));
             if (byId) {
                 if (params.get("view") === "pairings") {
-                    pairingsOpenForEvent[byId.id] = true;
+                    applyDetailView(byId.id, "2");
                 }
+                _openRestored = true;
                 toggleEventDetail(byId.id);
+                return;
+            }
+        }
+        // Plain refresh with a row open: put it back, on the same tab
+        // (Kerry 2026-09-15). Once per page load, never fighting a deep
+        // link, and never re-opening a row the manager just closed.
+        if (!evParam && !itemParam && !_openRestored && expandedEventId === null) {
+            _openRestored = true;
+            const mem = readEventOpen();
+            if (mem && mem.id != null && allEvents.some(e => e.id === mem.id)) {
+                applyDetailView(mem.id, mem.view);
+                toggleEventDetail(mem.id).then(async () => {
+                    if (mem.view === "2") {
+                        const st = getPairingsState(mem.id);
+                        if (!st.loaded) await loadPairings(mem.id);
+                        const c = detailContainerFor(mem.id);
+                        const ev2 = allEvents.find(e => e.id === mem.id);
+                        if (c && ev2) rerenderDetail(c, ev2);
+                    }
+                    if (mem.view === "5") {
+                        await loadFlightsBoard(mem.id);
+                        const c = detailContainerFor(mem.id);
+                        const ev2 = allEvents.find(e => e.id === mem.id);
+                        if (c && ev2) rerenderDetail(c, ev2);
+                    }
+                });
                 return;
             }
         }
         if (itemParam && expandedEventId === null) {
             const fullMatch = allEvents.find(e => e.item_name === itemParam);
             if (fullMatch) {
-                const today = new Date().toISOString().split("T")[0];
+                const today = tgfToday();
                 const isPast = !fullMatch.event_date || fullMatch.event_date < today;
                 const desiredFilter = isPast ? "past" : "upcoming";
                 if (eventChapterFilter !== "all"
@@ -3912,6 +4079,77 @@
                 toggleEventDetail(fullMatch.id);
             }
         }
+    }
+
+    // ── Which event is open, and on which tab, ACROSS A REFRESH ──────
+    //    Kerry 2026-09-15: "When I refresh from an open state under an
+    //    event, can you make it so it stays on that open state?
+    //    Frustrating when it refreshes to closed state each time."
+    //    sessionStorage, not local: this is where you are right now, not
+    //    a preference, so a new tab starts clean.
+    const DETAIL_VIEWS = {"1": "games", "2": "pairings", "3": "financial", "4": "payouts"};
+
+    function applyDetailView(evId, val) {
+        gamesOpenForEvent[evId] = val === "1";
+        pairingsOpenForEvent[evId] = val === "2";
+        financialOpenForEvent[evId] = val === "3";
+        payoutsOpenForEvent[evId] = val === "4";
+        flightsOpenForEvent[evId] = val === "5";
+    }
+
+    function currentDetailView(evId) {
+        if (gamesOpenForEvent[evId]) return "1";
+        if (pairingsOpenForEvent[evId]) return "2";
+        if (financialOpenForEvent[evId]) return "3";
+        if (payoutsOpenForEvent[evId]) return "4";
+        if (flightsOpenForEvent[evId]) return "5";
+        return "0";
+    }
+
+    // Where the open row must stop: under the sticky header AND the
+    // sticky tab bar, both of which change height with role and window
+    // width (Kerry 2026-09-15: "pin to top but under any header navs").
+    function setEventStickyTop() {
+        try {
+            const h = document.querySelector("header");
+            const nav = document.querySelector(".tab-nav");
+            const top = (h ? h.offsetHeight : 0) + (nav ? nav.offsetHeight : 0);
+            document.documentElement.style.setProperty("--ev-sticky-top", top + "px");
+            // WHY THE PIN DID NOTHING (Kerry 2026-09-15: "Open event is
+            // not moving it to the top to pin"): .events-table-wrapper
+            // is `overflow-x: auto`, and a box that scrolls on ONE axis
+            // scrolls on both as far as sticky is concerned — so the row
+            // stuck to the wrapper, which never scrolls vertically,
+            // instead of to the page. The wrapper goes `overflow:
+            // visible` while a row is open, but only when the table
+            // already fits, because otherwise a wide table would be
+            // clipped by the global body overflow with no way to reach
+            // its right-hand side.
+            const wrap = document.querySelector(".events-table-wrapper");
+            const table = wrap && wrap.querySelector("table");
+            if (wrap && table) {
+                const fits = table.scrollWidth <= wrap.clientWidth + 1;
+                wrap.classList.toggle("ev-pin-ok",
+                                      fits && expandedEventId !== null);
+            }
+        } catch (e) { /* the CSS fallback stands */ }
+    }
+    window.addEventListener("resize", setEventStickyTop);
+    window.addEventListener("load", setEventStickyTop);
+
+    function rememberEventOpen(evId, val) {
+        try {
+            if (evId == null) sessionStorage.removeItem("tgf_events_open");
+            else sessionStorage.setItem("tgf_events_open",
+                JSON.stringify({id: evId, view: val || currentDetailView(evId)}));
+        } catch (e) { /* storage blocked — the refresh just won't restore */ }
+    }
+
+    function readEventOpen() {
+        try {
+            const raw = sessionStorage.getItem("tgf_events_open");
+            return raw ? JSON.parse(raw) : null;
+        } catch (e) { return null; }
     }
 
     // Track per-event game filter: null = all, "NET", "GROSS", "NO GAMES"
@@ -4035,7 +4273,7 @@
                 const cnt18 = refs.filter(r => isEighteenStyleHoles(r.holes)).length;
                 const use18 = cnt9 === 0 && cnt18 > 0;
                 const getHcp = r => {
-                    const lh = r.customer ? handicapIndexMap[(r.customer || "").toLowerCase()] : undefined;
+                    const lh = hcpEntryFor(r.customer, r.customer_id, ev);
                     if (lh !== undefined) return use18 ? lh.index_18 : lh.index_9;
                     return parseFloat(r.handicap) || null;
                 };
@@ -4977,7 +5215,7 @@
     };
     const PAYOUT_CAT_LABELS_SHORT = { individual_net: "Ind Net", individual_gross: "Ind Gross", closest_to_pin: "CTP" };
     function payoutCatBadge(cat) {
-        const mobile = window.innerWidth <= 768;
+        const mobile = window.innerWidth <= 560;
         const label = (mobile && PAYOUT_CAT_LABELS_SHORT[cat]) || PAYOUT_CAT_LABELS[cat] || cat;
         const c = PAYOUT_CAT_COLORS[cat] || "#f1f5f9;color:#475569";
         return `<span style="display:inline-block;padding:1px 8px;border-radius:99px;font-size:0.72rem;font-weight:600;background:${c};">${escapeHtml(label)}</span>`;
@@ -5158,6 +5396,180 @@
             if (msg) msg.textContent = (err && err.message) || "Save failed";
             if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = "Save"; }
         }
+    }
+
+    // ── DIVISIONS / FLIGHTS panel (mailbox #582 / #584, Kerry 2026-09-21) ──
+    // The ratified flighting + payout rule set (email_parser/flighting.py)
+    // on this event's roster, in its two layers: SELECTION (games, the
+    // variant the matrix picked, flight count, band edges, each player's
+    // flight — the layer that FREEZES) and AMOUNTS (pots, places, the 10%
+    // overall low-gross bonus — the layer that RECOMPUTES at settlement).
+    // Beside it, what Golf Genius recorded, so published-vs-paid answers
+    // itself. DRY RUN: nothing here pays anyone; GG is the payer of record.
+    const flightsBoards = {};   // event id → board payload | {error}
+    function canSeeFlights() {
+        return currentRole === 'admin' || currentRole === 'manager';
+    }
+    async function loadFlightsBoard(evId) {
+        try {
+            const res = await fetch(`/api/events/${evId}/flights-board`);
+            const data = await res.json().catch(() => ({}));
+            flightsBoards[evId] = res.ok ? data : { error: (data && data.error) || `HTTP ${res.status}` };
+        } catch (e) {
+            flightsBoards[evId] = { error: String(e && e.message || e) };
+        }
+    }
+    function fbMoney(v) {
+        const n = Number(v || 0);
+        return "$" + n.toFixed(2);
+    }
+    function fbStateBadge(board) {
+        const st = String(board.state || "live").toUpperCase();
+        const palette = {
+            LIVE:    { bg: "#ecfdf5", fg: "#065f46", bd: "#6ee7b7" },
+            FROZEN:  { bg: "#fffbeb", fg: "#92400e", bd: "#fcd34d" },
+            SETTLED: { bg: "#f3f4f6", fg: "#374151", bd: "#d1d5db" },
+        }[st] || { bg: "#f3f4f6", fg: "#374151", bd: "#d1d5db" };
+        let txt = st;
+        if (st === "FROZEN" && board.freeze && board.freeze.taken_at) txt += " " + escapeHtml(board.freeze.taken_at);
+        if (st === "LIVE") txt += board.event_completed ? " · recomputed now" : " · recomputing";
+        return `<span style="display:inline-block;padding:0.15rem 0.6rem;border-radius:999px;border:1px solid ${palette.bd};background:${palette.bg};color:${palette.fg};font-size:0.7rem;font-weight:700;letter-spacing:0.05em;">${txt}</span>`;
+    }
+    function fbPlacesText(flight) {
+        const pl = (flight.places || []);
+        if (!pl.length) return flight.paid ? escapeHtml(flight.paid) : (flight.players ? "—" : "no players");
+        return pl.map(p => `${p.place === 1 ? "1st" : p.place === 2 ? "2nd" : p.place === 3 ? "3rd" : p.place + "th"} ${fbMoney(p.amount)}`).join(" · ");
+    }
+    function renderFlightsPanel(ev) {
+        const board = flightsBoards[ev.id];
+        let html = '<div class="games-panel" style="white-space:normal;">';
+        if (board === undefined) {
+            html += `<div style="padding:1rem;color:var(--text-muted);font-size:0.85rem;">Loading the divisions &amp; flights board&hellip;</div></div>`;
+            return html;
+        }
+        if (board.error) {
+            html += `<div style="padding:1rem;color:#b91c1c;font-size:0.85rem;">Could not load the board: ${escapeHtml(board.error)}</div></div>`;
+            return html;
+        }
+        const b = board.buyers || {};
+        html += `<div class="games-panel-header" style="display:flex;align-items:center;gap:0.6rem;flex-wrap:wrap;">
+            <span>DIVISIONS / FLIGHTS &mdash; ${board.holes_key} holes</span>
+            ${fbStateBadge(board)}
+            <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text-muted);font-size:0.72rem;">dry run &middot; ${escapeHtml(board.payer_of_record || "Golf Genius")} is the payer of record</span>
+        </div>`;
+        html += `<div style="font-size:0.74rem;color:var(--text-muted);margin:0.35rem 0 0.6rem;line-height:1.5;">
+            Buyers: NET <strong>${b.NET || 0}</strong> &middot; GROSS <strong>${b.GROSS || 0}</strong>
+            &middot; ${escapeHtml(board.index_basis || "")}
+            ${board.ph_basis ? ` &middot; PH off the ${escapeHtml(board.ph_basis)}` : ""}
+            &middot; matrix: ${escapeHtml(board.matrix_source || "")}
+            &middot; rules v${board.rules_version} (${escapeHtml(board.rules_source || "")})
+        </div>`;
+        if (board.ph_note) {
+            html += `<div style="font-size:0.74rem;color:#92400e;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;padding:0.35rem 0.6rem;margin-bottom:0.6rem;">${escapeHtml(board.ph_note)}</div>`;
+        }
+        if ((board.no_customer_id || []).length) {
+            html += `<div style="font-size:0.74rem;color:#7c2d12;background:#fff7ed;border:1px dashed #b45309;border-radius:6px;padding:0.35rem 0.6rem;margin-bottom:0.6rem;">Buyers with no customer_id, not flighted: ${board.no_customer_id.map(escapeHtml).join(", ")}</div>`;
+        }
+        for (const g of (board.games || [])) {
+            const sel = g.selection || {};
+            const am = g.amounts;
+            html += `<div style="border:1px solid var(--border);border-radius:8px;margin-bottom:0.75rem;overflow:hidden;">`;
+            // Game bar
+            html += `<div style="display:flex;justify-content:space-between;align-items:baseline;gap:0.6rem;flex-wrap:wrap;background:${g.active ? "#1B1B1B" : "#6B7280"};color:#fff;padding:0.4rem 0.7rem;">
+                <span style="font-family:'Bitter',Georgia,serif;font-weight:700;font-size:0.9rem;">${escapeHtml(g.label)}</span>
+                <span style="font-size:0.72rem;opacity:0.9;font-variant-numeric:tabular-nums;">${sel.buyers_at_selection || 0} buyer${(sel.buyers_at_selection || 0) === 1 ? "" : "s"}${g.active ? ` &middot; ${sel.flight_count} flight${sel.flight_count === 1 ? "" : "s"} &middot; ${escapeHtml(sel.mode || "")}` : ""}</span>
+            </div>`;
+            if (!g.active) {
+                html += `<div style="padding:0.5rem 0.7rem;font-size:0.8rem;color:#4b5563;font-style:italic;">${escapeHtml(g.inactive_reason || "Not running.")}</div>`;
+                html += fbGgRecorded(g);
+                html += `</div>`;
+                continue;
+            }
+            // SELECTION line: the variant the matrix picked, and why
+            const v = sel.variant || {};
+            const vsel = v.selection || {};
+            html += `<div style="padding:0.4rem 0.7rem;font-size:0.74rem;color:var(--text-muted);border-bottom:1px solid var(--border);line-height:1.45;">
+                <strong style="color:var(--text);">Selection${board.state !== "live" ? " (frozen)" : ""}:</strong>
+                ${escapeHtml(v.label || g.label)}${vsel.reason ? ` &mdash; ${escapeHtml(vsel.reason)}` : ""}.
+                Flight count: ${sel.flight_count} (${escapeHtml(sel.count_source || "")}). Cut: ${escapeHtml(sel.edges_source || "")}${(sel.edges || []).length ? ` at ${sel.edges.map(e => e.toFixed(1)).join(" / ")}` : ""}.
+            </div>`;
+            // AMOUNTS header: total pot, bonus line for Ind Gross
+            if (am) {
+                html += `<div style="padding:0.4rem 0.7rem;font-size:0.78rem;border-bottom:1px solid var(--border);display:flex;gap:1rem;flex-wrap:wrap;align-items:baseline;">
+                    <span><strong>Amounts${board.state === "settled" ? " (settled)" : board.state === "frozen" ? " (as of freeze)" : ""}:</strong> pot ${fbMoney(am.total_pot)}${am.rate ? ` (${am.buyers} &times; ${fbMoney(am.rate)})` : ` at ${am.buyers} buyers`}</span>
+                    ${am.bonus !== undefined ? `<span style="color:#065f46;"><strong>${escapeHtml(am.bonus_label || "Overall Low Gross")}</strong> bonus ${fbMoney(am.bonus)} (${Math.round((am.bonus_pct || 0) * 100)}% off the top, whole field) &middot; share ${fbMoney(am.share)}/player</span>` : ""}
+                    <span style="color:var(--text-muted);">${escapeHtml(am.rule || "")}</span>
+                </div>`;
+            }
+            // Flights grid
+            const amBy = {};
+            for (const f of ((am && am.flights) || [])) amBy[f.flight_no] = f;
+            html += `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:0.6rem;padding:0.6rem 0.7rem;">`;
+            for (const f of (sel.flights || [])) {
+                const fa = amBy[f.flight_no] || { pot: 0, places: [] };
+                const d = ((g.delta || {}).flights || []).find(x => x.flight_no === f.flight_no);
+                html += `<div style="border:1.5px solid ${f.players ? "#1B1B1B" : "#d1d5db"};border-radius:6px;overflow:hidden;${f.players ? "" : "opacity:0.7;"}">
+                    <div style="display:flex;justify-content:space-between;align-items:baseline;gap:0.4rem;background:#E5E7EB;padding:0.3rem 0.5rem;border-bottom:1px solid #1B1B1B;">
+                        <span style="font-family:'Bitter',Georgia,serif;font-weight:700;font-size:0.8rem;">Flight ${f.flight_no} <span style="font-weight:400;color:#444;">${escapeHtml(f.band || "")}</span></span>
+                        <span style="font-size:0.7rem;color:#444;font-variant-numeric:tabular-nums;">${escapeHtml(f.label || "")} &middot; ${f.players} player${f.players === 1 ? "" : "s"}</span>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;gap:0.4rem;padding:0.25rem 0.5rem;font-size:0.74rem;background:#fafafa;border-bottom:1px solid #eee;font-variant-numeric:tabular-nums;">
+                        <span>pot <strong>${fbMoney(fa.pot)}</strong></span><span>${fbPlacesText(fa)}</span>
+                    </div>`;
+                if (d && d.changed) {
+                    html += `<div style="padding:0.2rem 0.5rem;font-size:0.7rem;color:#92400e;background:#fffbeb;border-bottom:1px solid #fde68a;">since freeze: ${d.players_before} &rarr; ${d.players_after} players, pot ${fbMoney(d.pot_before)} &rarr; ${fbMoney(d.pot_after)}${(d.places_before || []).join("/") !== (d.places_after || []).join("/") ? `, places ${(d.places_before || []).map(fbMoney).join(" / ") || "—"} &rarr; ${(d.places_after || []).map(fbMoney).join(" / ") || "—"}` : ""}</div>`;
+                }
+                if (!f.players) {
+                    html += `<div style="padding:0.3rem 0.5rem;font-size:0.74rem;color:var(--text-muted);font-style:italic;">no players in this band</div>`;
+                }
+                for (const m of (f.members || [])) {
+                    html += `<div style="display:flex;justify-content:space-between;gap:0.4rem;padding:0.15rem 0.5rem;border-bottom:1px solid #f1f1f1;font-size:0.76rem;">
+                        <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(m.sort_name || m.name || "")}</span>
+                        <span style="font-variant-numeric:tabular-nums;color:#333;white-space:nowrap;">IDX ${escapeHtml(m.index_text || "—")}${m.ph !== null && m.ph !== undefined ? ` &middot; PH ${m.ph}` : ""}</span>
+                    </div>`;
+                }
+                html += `</div>`;
+            }
+            html += `</div>`;
+            if ((sel.unflighted || []).length) {
+                html += `<div style="margin:0 0.7rem 0.6rem;padding:0.35rem 0.5rem;border:1px dashed #b45309;background:#fff7ed;color:#7c2d12;font-size:0.74rem;border-radius:6px;">No handicap index on file, not flighted: ${sel.unflighted.map(u => escapeHtml(u.sort_name || u.name)).join(", ")}</div>`;
+            }
+            // Delta panel (frozen / settled): who added, who dropped
+            const dl = g.delta;
+            if (dl && (dl.added || []).length + (dl.dropped || []).length) {
+                html += `<div style="margin:0 0.7rem 0.6rem;padding:0.4rem 0.6rem;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;font-size:0.74rem;color:#78350f;">
+                    <strong>Since the freeze:</strong> buyers ${dl.buyers_before} &rarr; ${dl.buyers_after}; pot ${fbMoney(dl.total_pot_before)} &rarr; ${fbMoney(dl.total_pot_after)}${dl.bonus_before !== undefined && dl.bonus_before !== null ? `; bonus ${fbMoney(dl.bonus_before)} &rarr; ${fbMoney(dl.bonus_after)}` : ""}.
+                    ${(dl.added || []).length ? ` Added: ${dl.added.map(a => escapeHtml(a.name) + (a.flight_no ? ` (F${a.flight_no})` : "")).join(", ")}.` : ""}
+                    ${(dl.dropped || []).length ? ` Dropped: ${dl.dropped.map(a => escapeHtml(a.name) + (a.flight_no ? ` (F${a.flight_no})` : "")).join(", ")}.` : ""}
+                </div>`;
+            }
+            if ((sel.notes || []).length) {
+                html += `<div style="margin:0 0.7rem 0.5rem;font-size:0.7rem;color:var(--text-muted);line-height:1.4;">${sel.notes.map(n => "&rsaquo; " + escapeHtml(n)).join("<br>")}</div>`;
+            }
+            html += fbGgRecorded(g);
+            html += `</div>`;
+        }
+        html += `<div style="font-size:0.72rem;color:var(--text-muted);line-height:1.5;">
+            Every number traces to a ratified rule (mailbox #571&ndash;#575 as revised by #582): ladders &lt;6.0 / 6.0&ndash;11.9 / 12.0+ (4 flights add 12.0&ndash;17.9 / 18.0+), no minimum flight size and no merging, places by flight size (1&ndash;9 one place; 10&ndash;19 two at 2/3&ndash;1/3; 20+ three at 50/30/20), Individual Gross pot = 90% of the buy-ins by headcount with 10% off the top to Overall Low Gross. Skins keeps the matrix pot split equally per flight; Individual Net keeps the matrix place columns. The board FREEZES its selection at the freeze action and RECOMPUTES amounts at settlement from actual buyers.
+            <strong>Dry run &mdash; nothing here pays anyone.</strong>
+        </div>`;
+        html += '</div>';
+        return html;
+    }
+    function fbGgRecorded(g) {
+        const gg = g.gg_recorded || { rows: [], total: 0 };
+        if (!(gg.rows || []).length) return "";
+        const am = g.amounts;
+        const rulePaid = am ? Number(am.total_pot || 0) : 0;
+        const diff = Math.round((rulePaid - Number(gg.total || 0)) * 100) / 100;
+        let h = `<div style="margin:0 0.7rem 0.6rem;border-top:1px dashed var(--border);padding-top:0.4rem;font-size:0.74rem;">
+            <div style="display:flex;justify-content:space-between;gap:0.5rem;flex-wrap:wrap;">
+                <span><strong>Golf Genius recorded</strong> ${fbMoney(gg.total)} across ${gg.rows.length} payout${gg.rows.length === 1 ? "" : "s"}</span>
+                <span style="color:${Math.abs(diff) < 0.005 ? "#065f46" : "#92400e"};">rule ${fbMoney(rulePaid)} &middot; rule &minus; GG = ${diff >= 0 ? "+" : "&minus;"}${fbMoney(Math.abs(diff))}</span>
+            </div>
+            <div style="color:var(--text-muted);margin-top:0.2rem;">${gg.rows.map(r => `${escapeHtml(r.player_name)}${r.position ? ` ${escapeHtml(r.position)}` : ""}${r.detail ? ` <span style="opacity:0.8;">(${escapeHtml(r.detail)})</span>` : ""} ${fbMoney(r.purse)}`).join(" &middot; ")}</div>
+        </div>`;
+        return h;
     }
 
     function renderPayoutsPanel(ev, registrants) {
@@ -5624,6 +6036,18 @@
                 slots_9: [], slots_18: [],
                 isDirty: false, loaded: false,
                 mode: 'random', protectPartners: true,
+                // Points column on the cards (Kerry 2026-09-15: "Give me a
+                // checkbox to hide the points column"). A viewing
+                // preference, not a sheet property, so it is remembered
+                // per browser rather than per event.
+                showPointsCol: pairingsPointsPref(),
+                // History line under each name + the repeat chip on the
+                // group header (Kerry 2026-09-15). Same kind of viewing
+                // preference as the points column. `pairCounts` is the
+                // roster's PRIOR counts from the server; tonight's +1 is
+                // added at render time by pairPlayedTotal.
+                showHistoryRow: pairingsHistoryPref(),
+                pairCounts: {},
                 // Undo/redo of GROUP edits (Kerry 2026-07-31). Snapshots of
                 // {groups_9, groups_18} with a cursor; `hist[histIdx]` is
                 // always what is on screen.
@@ -5853,17 +6277,37 @@
         return true;
     }
 
-    function rosterEntry(state, name) {
+    // Roster row for a seated player. The customer_id wins when the
+    // sheet carries one (Kerry 2026-09-15: "It needs to be directly
+    // linked in PAIRINGS to the ROSTER and Customer ID so it changes
+    // immediately if customer profile is changed") — a rename then moves
+    // the badges, the handicap and the bands with the person instead of
+    // stranding them on the old spelling. Name is the fallback, for a
+    // Golf Genius guest who has no profile.
+    function rosterEntry(state, name, cid) {
+        if (cid) {
+            const byId = (state.event_players || []).find(
+                x => x && x.customer_id && Number(x.customer_id) === Number(cid));
+            if (byId) return byId;
+        }
         if (!name) return null;
-        const k = String(name).trim().replace(/\s+/g, ' ').toLowerCase();
+        const k = pairCountKey(name);
         return (state.event_players || []).find(
-            x => String(x.name || '').trim().replace(/\s+/g, ' ').toLowerCase() === k) || null;
+            x => pairCountKey(x.name) === k) || null;
     }
 
     function standingsBand(state, name) {
         if (!name) return null;
         const k = String(name).trim().replace(/\s+/g, ' ').toLowerCase();
         const p = rosterEntry(state, name);
+        // 1ST TIMER outranks every other band (Kerry 2026-09-15: "any 1st
+        // Timer, even if they've become a member already and didn't
+        // select 1st timer should be highlighted as a first timer ...
+        // because it's his first event"). The server decides this from
+        // whether the player has EVER teed off with us, not from what
+        // the order said, so a brand-new member playing his first event
+        // reads orange here instead of disappearing into the green.
+        if (p && p.is_first_timer) return 'firsttimer';
         // Unknown tier is treated as MEMBER, matching the server's
         // fallback — never badge someone a non-member on missing data.
         const tier = (p && p.member_status) || 'member';
@@ -5911,6 +6355,24 @@
             : 'Unrated — reads as pace 2 (1 slow → 3 fast)';
         return `<span class="pairing-pace-badge" title="${title}" style="font-size:0.68rem;font-weight:700;color:${color};border:1px solid currentColor;border-radius:8px;padding:0 0.3rem;flex-shrink:0;min-width:1.8rem;text-align:center;opacity:${r != null ? '1' : '0.55'};">&#x23F1;${shown}</span>`;
     }
+
+    async function sendPrintPack(evId, btn) {
+        if (!confirm("Email the print pack for this event now?")) return;
+        const was = btn ? btn.textContent : "";
+        if (btn) { btn.disabled = true; btn.textContent = "Sending…"; }
+        try {
+            const res = await fetch(`/api/events/${evId}/print-pack/send`, {
+                method: "POST", headers: {"Content-Type": "application/json"}, body: "{}" });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok || !data.sent) { alert(data.error || data.why || "The pack was not sent."); return; }
+            alert(`Print pack sent to ${data.to} (${(data.parts || []).map(p => p.slug).join(", ")}).`);
+        } catch (err) {
+            alert("The pack was not sent.");
+        } finally {
+            if (btn) { btn.disabled = false; btn.textContent = was; }
+        }
+    }
+    window.sendPrintPack = sendPrintPack;
 
     function renderPairingsPanel(ev, registrants, rosterExtra) {
         const state = getPairingsState(ev.id);
@@ -6009,6 +6471,24 @@
             </label>`;
         }
 
+        // Points column toggle (Kerry 2026-09-15). Offered whenever the
+        // race has points to show; unchecked hides the column only —
+        // the standings ORDER and the colour bands are untouched.
+        if (state.standingsPoints && Object.keys(state.standingsPoints).length > 0) {
+            html += `<label class="pairings-toggle-label" style="cursor:pointer;display:flex;align-items:center;gap:0.35rem;font-size:0.82rem;">
+                <input type="checkbox" data-ev-id="${ev.id}" data-pairings-points="${ev.id}" ${state.showPointsCol ? 'checked' : ''} style="cursor:pointer;">
+                Points
+            </label>`;
+        }
+
+        // History row toggle (Kerry 2026-09-15). Always offered — a
+        // roster with no history at all still answers the question, it
+        // just answers "1" everywhere.
+        html += `<label class="pairings-toggle-label" style="cursor:pointer;display:flex;align-items:center;gap:0.35rem;font-size:0.82rem;" title="Show, under each name, how many times they have played with the others in their group this year (including tonight)">
+            <input type="checkbox" data-ev-id="${ev.id}" data-pairings-history="${ev.id}" ${state.showHistoryRow ? 'checked' : ''} style="cursor:pointer;">
+            History
+        </label>`;
+
         // Seed/lock toggle
         html += `<button class="pairings-seed-toggle" data-ev-id="${ev.id}" title="Pre-assign players to specific slots before generating">${state.showSeeds ? '&#x25B2; Locks' : '&#x25BC; Locks'}</button>`;
 
@@ -6064,6 +6544,18 @@
                 // Printables read the SAVED pairings — only offer when clean.
                 html += `<button class="pairings-action-btn" onclick="window.open('/events/${ev.id}/starter-sheet','_blank')" title="Print starter sheet">&#x1F5A8; Starter Sheet</button>`;
                 html += `<button class="pairings-action-btn" onclick="window.open('/events/${ev.id}/cart-signs','_blank')" title="Print cart signs">&#x1F5A8; Cart Signs</button>`;
+                // Kerry 2026-09-21: "there should be a button to SEND PACK"
+                // — the bound PDF (starter sheet, cart signs, divisions,
+                // proximity) mailed now, on demand; the 6 AM routine then
+                // leaves this sheet alone unless it changes.
+                html += `<button class="pairings-action-btn send-pack-btn" onclick="sendPrintPack(${ev.id}, this)" title="Email the bound print pack (starter sheet, cart signs, divisions & flights, proximity markers) now">&#x2709; Send Pack</button>`;
+                // Kerry 2026-09-15: "Let's add to our Reports in our
+                // PAIRINGS tab" — the two Golf Genius sheets he still
+                // prints from GG, now built from our own roster, games
+                // matrix and course card.
+                html += `<button class="pairings-action-btn" onclick="window.open('/events/${ev.id}/divisions-flights','_blank')" title="Print Divisions &amp; Flights — NET, Skins and Gross on one page">&#x1F5A8; Divisions &amp; Flights</button>`;
+                html += `<button class="pairings-action-btn" onclick="window.open('/events/${ev.id}/proximity-markers','_blank')" title="Print Closest-to-the-Pin markers for the par 3s">&#x1F5A8; Proximity</button>`;
+                html += `<button class="pairings-action-btn pairings-blinds-btn" title="Draw BLINDs for the open seats — members in the field with an established handicap, spread evenly over the year">&#x1F3B2; Blinds</button>`;
             }
         }
         html += '</div>'; // .pairings-actions
@@ -6136,10 +6628,10 @@
                     const rosterNames = (state.event_players || [])
                         .map(p => p.name)
                         .filter(n => n && n !== r.requester)
-                        .sort((a, b) => a.localeCompare(b));
+                        .sort(byLastName);
                     html += `<select class="request-match-select" data-ev-id="${ev.id}" data-requester="${escapeHtml(r.requester)}" title="No roster match — pick who this request meant" style="font-size:0.72rem;padding:0.1rem 0.2rem;max-width:10rem;border:1px solid var(--border);border-radius:9px;color:var(--text-muted);">
                         <option value="">no roster match &mdash; fix&hellip;</option>
-                        ${rosterNames.map(n => `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join('')}
+                        ${rosterNames.map(n => rosterOptionHtml(state, n)).join('')}
                     </select>`;
                 } else if (r.manual) {
                     html += `<button class="pairings-action-btn" data-ev-id="${ev.id}" data-request-match-clear="1" data-requester="${escapeHtml(r.requester)}" title="Manually linked by manager (signup text: &quot;${escapeHtml(r.request_text)}&quot;) — click to clear" style="font-size:0.72rem;padding:0 0.4rem;color:#6d28d9;border:1px solid #6d28d9;border-radius:9px;">&#x270E; manual &#x2715;</button>`;
@@ -6148,7 +6640,7 @@
                     // is honored. Amber picker links the intended one.
                     html += `<select class="request-match-select" data-ev-id="${ev.id}" data-requester="${escapeHtml(r.requester)}" title="Request names ${r.candidates.length} rostered players (&quot;${escapeHtml(r.request_text)}&quot;) — only one partner is honored. Link the intended one; honor the extras with manual moves after Generate." style="font-size:0.72rem;padding:0.1rem 0.2rem;max-width:10rem;border:1px solid #f59e0b;border-radius:9px;color:#b45309;font-weight:700;">
                         <option value="">${r.candidates.length} names &mdash; link one&hellip;</option>
-                        ${r.candidates.map(n => `<option value="${escapeHtml(n)}">${escapeHtml(n)}${n === r.partner ? ' (current)' : ''}</option>`).join('')}
+                        ${[...r.candidates].sort(byLastName).map(n => rosterOptionHtml(state, n, n === r.partner ? ' (current)' : '')).join('')}
                     </select>`;
                 }
                 // Where the request CAME from, when it wasn't typed at
@@ -6197,7 +6689,7 @@
             // offered — an existing request is edited on its own row.
             const allPlayerNames = (state.event_players || [])
                 .map(p => p.name).filter(Boolean)
-                .sort((a, b) => a.localeCompare(b));
+                .sort(byLastName);
             const haveReq = new Set(state.requests.map(r => r.requester));
             const canAdd = allPlayerNames.filter(n => !haveReq.has(n));
             if (canAdd.length && allPlayerNames.length > 1) {
@@ -6205,12 +6697,12 @@
                     <span style="font-size:0.78rem;font-weight:600;color:var(--text-muted);">&#x2795; Add a request:</span>
                     <select data-request-add-requester="${ev.id}" style="font-size:0.78rem;padding:0.15rem 0.25rem;max-width:11rem;border:1px solid var(--border);border-radius:9px;">
                         <option value="">player&hellip;</option>
-                        ${canAdd.map(n => `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join('')}
+                        ${canAdd.map(n => rosterOptionHtml(state, n)).join('')}
                     </select>
                     <span style="font-size:0.85rem;color:var(--text-muted);">&rarr;</span>
                     <select data-request-add-partner="${ev.id}" style="font-size:0.78rem;padding:0.15rem 0.25rem;max-width:11rem;border:1px solid var(--border);border-radius:9px;">
                         <option value="">wants to play with&hellip;</option>
-                        ${allPlayerNames.map(n => `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join('')}
+                        ${allPlayerNames.map(n => rosterOptionHtml(state, n)).join('')}
                     </select>
                     <button class="pairings-action-btn" data-ev-id="${ev.id}" data-request-add="1" title="Adds the request at this player's signup position — it takes its honest place in the priority order rather than jumping the queue." style="font-size:0.78rem;padding:0.15rem 0.6rem;font-weight:700;">Add</button>
                 </div>`;
@@ -6371,26 +6863,47 @@
         // which made the column disappear from a saved standings sheet
         // (Kerry 2026-07-31, "I don't see the points"); and knowing who is
         // in the race is useful on a Random sheet too.
-        const showPoints = state.standingsPoints
+        const havePoints = state.standingsPoints
             && Object.keys(state.standingsPoints).length > 0;
+        // The column can be hidden (Kerry 2026-09-15); the bands stay,
+        // because knowing who is in the race is a different fact from
+        // how many points they have.
+        const showPoints = havePoints && state.showPointsCol !== false;
         const showBands = (state.standingsEnrolled
-            && Object.keys(state.standingsEnrolled).length > 0) || showPoints;
+            && Object.keys(state.standingsEnrolled).length > 0) || havePoints;
         const _raceOpt = (state.raceOptions || []).find(
             o => o.race_key === (state.raceKey || (o.is_default ? o.race_key : null)));
         const raceLabel = (_raceOpt && _raceOpt.label) || 'points race';
 
-        if (showBands) {
-            const legend = [
-                ['in', `IN ${raceLabel.toUpperCase()}`],
-                ['notin', 'MEMBER, NOT IN'],
-                ['alumni', 'ALUMNI'],
-                ['guest', 'GUEST'],
-                ['firsttimer', '1ST TIMER'],
-            ].map(([k, txt]) =>
-                `<span style="display:inline-flex;align-items:center;gap:0.3rem;">
-                    <span style="width:11px;height:11px;border-radius:3px;background:${PAIR_BANDS[k].bg || '#fff'};border:1px solid ${PAIR_BANDS[k].dot};"></span>
-                    ${escapeHtml(txt)}</span>`).join('');
-            html += `<div style="display:flex;gap:0.9rem;flex-wrap:wrap;align-items:center;font-size:0.72rem;color:var(--text-muted);padding:0.15rem 0 0.35rem;">${legend}</div>`;
+        const bandLegend = !showBands ? '' : [
+            ['in', `IN ${raceLabel.toUpperCase()}`],
+            ['notin', 'MEMBER, NOT IN'],
+            ['alumni', 'ALUMNI'],
+            ['guest', 'GUEST'],
+            ['firsttimer', '1ST TIMER'],
+        ].map(([k, txt]) =>
+            `<span style="display:inline-flex;align-items:center;gap:0.3rem;">
+                <span style="width:11px;height:11px;border-radius:3px;background:${PAIR_BANDS[k].bg || '#fff'};border:1px solid ${PAIR_BANDS[k].dot};"></span>
+                ${escapeHtml(txt)}</span>`).join('');
+        // The three role marks, in the SAME badge markup the cards use
+        // (Kerry 2026-09-15: "Add the new symbols for Captain, Ambassador
+        // and 1Y to the legend above"). Rendering the real badge rather
+        // than a copy means the legend can never drift from the card.
+        // The pennant a requested pair carries on its history line
+        // (Kerry 2026-09-15: "Add flag icon to legend on PAIRINGS").
+        const flagLegend = `<span style="display:inline-flex;align-items:center;gap:0.3rem;">
+            <span style="font-size:0.72rem;color:var(--muted);">&#x2691;</span>
+            REQUESTED PAIR &mdash; NOT A REPEAT</span>`;
+        const roleLegend = [
+            ['role-capt', 'C', 'GROUP CAPTAIN'],
+            ['role-amb', 'A', 'AMBASSADOR'],
+            ['role-new', '1Y', 'FIRST-YEAR MEMBER'],
+        ].map(([cls, mark, txt]) =>
+            `<span style="display:inline-flex;align-items:center;gap:0.3rem;">
+                <span class="pairing-role-badge ${cls}">${mark}</span>
+                ${escapeHtml(txt)}</span>`).join('');
+        if (bandLegend || roleLegend) {
+            html += `<div style="display:flex;gap:0.9rem;flex-wrap:wrap;align-items:center;font-size:0.72rem;color:var(--text-muted);padding:0.15rem 0 0.35rem;">${bandLegend}${roleLegend}${state.showHistoryRow ? flagLegend : ''}</div>`;
         }
 
         // name -> customer_id, from BOTH sources, built once. Powers the
@@ -6417,7 +6930,20 @@
             const paceChip = livePace != null
                 ? `<span style="float:right;font-weight:600;opacity:0.9;" title="Group pace — average member rating, 1 slow &rarr; 3 fast (staging only). Recomputes as you swap/move players.">&#x23F1; ${livePace}</span>`
                 : '';
-            html += `<div class="pairing-group-header" data-slot-edit data-ev-id="${ev.id}" data-holes="${holes}" data-group-num="${grp.group_num}" title="Click to change this group's hole assignment">${escapeHtml(grp.slot_label)}${paceChip}</div>`;
+            // Repeat chip: the worst pair in this group, so a group that
+            // has been together before cannot hide behind four ordinary
+            // looking names (Kerry 2026-09-15: "I had no idea about the
+            // Group 5 repeats"). Rides with the History checkbox.
+            let repeatChip = '';
+            if (state.showHistoryRow) {
+                const rep = groupRepeatMax(state, grp);
+                if (rep.max >= 2) {
+                    repeatChip = `<span class="pairing-repeat-chip" title="${
+                        escapeHtml(rep.pair ? rep.pair.join(' + ') : '')} have played together ${
+                        rep.max - 1} time${rep.max - 1 === 1 ? '' : 's'} this year — tonight makes ${rep.max}">&#x21BB; ${rep.max}</span>`;
+                }
+            }
+            html += `<div class="pairing-group-header" data-slot-edit data-ev-id="${ev.id}" data-holes="${holes}" data-group-num="${grp.group_num}" title="Click to change this group's hole assignment">${escapeHtml(grp.slot_label)}${paceChip}${repeatChip}</div>`;
 
             // Render every seat: occupied rows + clickable open slots
             // (Kerry, 2026-07-08: open spots in short groups must be usable
@@ -6440,7 +6966,22 @@
                 }
                 const player = byPos[pos];
                 if (!player) {
-                    html += `<div class="pairing-empty-slot" title="Open spot — click to pick a player from the roster, or select a player/cart pair first and click here"
+                    // A BLIND SITS IN THE SEAT IT FILLS (Kerry
+                    // 2026-09-16: "They should also show in the OPEN
+                    // spaces themselves, not below"), so the group reads
+                    // top to bottom in cart order. The row is still an
+                    // open seat: a bullpen player dropped or clicked
+                    // onto it replaces the blind.
+                    const bl = (grp.blinds || []).find(b => b.cart_pos === pos);
+                    if (bl) {
+                        html += `<div class="pairing-empty-slot pairing-blind-slot" data-blind-seat="${holes}:${grp.group_num}:${pos}"
+                            title="BLIND — ${escapeHtml(bl.name || '')}'s card plays for this team. Nobody is in the cart. Click to redraw, remove, or seat a real player here."
+                            data-ev-id="${ev.id}" data-holes="${holes}" data-group-num="${grp.group_num}" data-cart-pos="${pos}">
+                            <span class="pairing-cart-dot" style="background:#bbb;"></span>
+                            <span class="pairing-player-name">BLIND &middot; ${escapeHtml(bl.name || '')}</span></div>`;
+                        continue;
+                    }
+                    html += `<div class="pairing-empty-slot" title="Open spot — click to pick a player from the roster or add a BLIND, or select a player/cart pair first and click here"
                         data-ev-id="${ev.id}" data-holes="${holes}" data-group-num="${grp.group_num}" data-cart-pos="${pos}">
                         <span class="pairing-cart-dot" style="background:var(--border);"></span>
                         <span class="pairing-player-name">— open —</span></div>`;
@@ -6468,13 +7009,15 @@
                 // handicapIndexMap is the same feed the roster reads and
                 // carries source='starting'; it is consulted ONLY as a
                 // fallback so no existing displayed number changes.
-                const _rEnt = player.name ? rosterEntry(state, player.name) : null;
+                const _rEnt = (player.name || player.customer_id)
+                    ? rosterEntry(state, player.name, player.customer_id) : null;
                 // customer_id can come from EITHER source: event_players
                 // (GET /pairings) or the registrations already loaded for
                 // this event.
                 const _rCid0 = (_rEnt && _rEnt.customer_id)
                     || (player.name ? _cidByName[_nk(player.name)] : null);
-                const _liveH = hcpEntryFor(player.name, _rCid0);
+                const _liveH = hcpEntryFor(player.name, _rCid0,
+                    allEvents.find(e => e.id === state.eventId));
                 const _prelimVal = (player.handicap_index != null)
                     ? null
                     : (player.prelim_handicap_18 != null
@@ -6487,7 +7030,9 @@
                 const _rCid = _rCid0;
                 let hcp;
                 if (player.handicap_index != null) {
-                    hcp = Number(player.handicap_index).toFixed(1);
+                    // The index on the EVENT's scale (Kerry 2026-09-18): the
+                    // stored index is the nine; an 18-hole night shows twice it.
+                    hcp = (Number(player.handicap_index) * (state.hcpScale === 18 ? 2 : 1)).toFixed(1);
                 } else if (_isPlaceholder) {
                     const pv = _prelimVal.toFixed(1);
                     // A placeholder IS editable — that is what it is for —
@@ -6520,12 +7065,21 @@
                                     : (b === 'firsttimer' ? '1ST TIMER' : 'GUEST')));
                     }
                 }
-                html += `<div class="pairing-player-row${bandCls}${isSelectedPlayer || isSelectedPair ? ' pairings-selected' : ''}"
+                const histHtml = (state.showHistoryRow && player.name)
+                    ? pairHistoryRowHtml(state, grp, player) : '';
+                html += `<div class="pairing-player-row${bandCls}${histHtml ? ' has-hist' : ''}${isSelectedPlayer || isSelectedPair ? ' pairings-selected' : ''}"
                     ${player.name ? 'draggable="true"' : ''}
                     ${bandTitle ? ` title="${escapeHtml(bandTitle)}"` : ''}
                     data-ev-id="${ev.id}" data-holes="${holes}" data-group-num="${grp.group_num}" data-cart-pos="${player.cart_pos}">`;
                 html += `<span class="pairing-cart-dot" style="background:${cartDot};"></span>`;
                 html += `<span class="pairing-player-name">${escapeHtml(player.name || '—')}</span>`;
+                if (player.name) html += roleBadgesHtml(state, player.name);
+                // A seated RSVP-only player keeps the badge the Unassigned
+                // panel gave them: the manager is looking at a sheet that
+                // includes people who have not paid (Kerry 2026-09-15).
+                if (player.name && isRsvpOnlyPlayer(state, player.name)) {
+                    html += '<span class="pairing-rsvp-badge" title="RSVP&#39;d, no payment on file">RSVP</span>';
+                }
                 const mpOpp = mpOpponentInGroup(state, grp, player);
                 if (mpOpp) {
                     html += `<span class="pairing-mp-badge" title="Match Play vs ${escapeHtml(mpOpp)}">&#x2694;&#xFE0F; MP</span>`;
@@ -6558,8 +7112,28 @@
                 if (player.name) {
                     html += paceBadge(state, player.name);
                 }
+                // Unseat into the bullpen (Kerry 2026-09-15: "a simple
+                // red X to be able to put them in the 'bullpen' for
+                // unassigned players"). Unsaved like every other edit on
+                // the sheet — Undo brings them back, Save makes it real.
+                if (player.name) {
+                    html += `<button type="button" class="pairing-unseat" data-unseat data-ev-id="${ev.id}" data-holes="${holes}" data-group-num="${grp.group_num}" data-cart-pos="${player.cart_pos}" title="Remove from this group (moves to Unassigned)" aria-label="Remove ${escapeHtml(player.name)} from this group">&#x2715;</button>`;
+                }
+                // LAST in the row: flex-basis 100% puts it on its own
+                // line under the name, leaving the X on line one.
+                html += histHtml;
                 html += '</div>';
             }
+
+            // A blind past the seat count (a sheet edited after the draw)
+            // still has to be visible rather than silently dropped.
+            (grp.blinds || []).filter(b => (b.cart_pos || 0) > seatCount)
+                .forEach(b => {
+                    html += `<div class="pairing-player-row pairing-blind-row" data-blind-seat="${holes}:${grp.group_num}:${b.cart_pos}" data-ev-id="${ev.id}" title="BLIND — ${escapeHtml(b.name || '')}'s card plays for this team.">`
+                        + '<span class="pairing-cart-dot" style="background:#bbb;"></span>'
+                        + `<span class="pairing-player-name">BLIND &middot; ${escapeHtml(b.name || '')}</span>`
+                        + '</div>';
+                });
 
             // Drop rail for drag-and-drop (Kerry 2026-07-31). Hidden
             // until a player is dragged over this card; the label says
@@ -6572,8 +7146,86 @@
         return html;
     }
 
+    /** BLIND DRAWS (Kerry 2026-09-15). Every open seat on the saved
+     *  sheet gets a drawn card so a short team can still play Team Net.
+     *  The draw is money-adjacent, so it PREVIEWS first: the dialog names
+     *  every player, the seat they fill, and how many blinds they have
+     *  already had this year — then writes only on OK. */
+    async function drawBlinds(evId, container, ev) {
+        try {
+            const res = await fetch(`/api/events/${evId}/pairings/blinds`, {
+                method: "POST", headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({}),
+            });
+            const d = await res.json();
+            if (!res.ok || d.error) { alert("Blind draw failed: " + (d.error || res.status)); return; }
+            const already = (d.already_drawn || []).length;
+            if (!d.drawn.length) {
+                alert(d.open_seats
+                    ? `${d.open_seats} open seat(s), but no eligible player left `
+                      + `(members in the field with an established handicap).`
+                    : `No open seats — every group is a full ${d.team_size}.`
+                      + (already ? `\n\n${already} blind(s) already drawn.` : ""));
+                return;
+            }
+            const lines = d.drawn.map(b =>
+                `  ${b.slot_label || "Group " + b.group_num} seat ${b.cart_pos}: `
+                + `${b.name}  (${b.blinds_ytd} blind${b.blinds_ytd === 1 ? "" : "s"} `
+                + `this year${b.last_blind ? ", last " + b.last_blind : ""})`).join("\n");
+            const ok = confirm(
+                `BLIND DRAW — ${d.drawn.length} open seat(s)\n\n${lines}\n\n`
+                + `Drawn from members in the field with an established handicap, `
+                + `fewest blinds this year first.\n\nRecord these?`);
+            if (!ok) return;
+            const w = await fetch(`/api/events/${evId}/pairings/blinds`, {
+                method: "POST", headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ apply: true, redraw: true }),
+            });
+            const wd = await w.json();
+            if (!w.ok || wd.error) { alert("Blind draw failed: " + (wd.error || w.status)); return; }
+            await loadPairings(evId);
+            if (container && ev) rerenderDetail(container, ev);
+        } catch (err) {
+            alert("Blind draw failed: " + err.message);
+        }
+    }
+
+    // ROSTER-ONLY REFRESH (Kerry 2026-09-15: "Just had a late signup...
+    // Justin Guerrero. He's not showing up as in the bullpen though.").
+    // The panel loaded its roster once, when it was first opened, and
+    // nothing re-read it — so an order that arrived afterwards was on the
+    // ROSTER tab and in the database but not in `state.event_players`,
+    // which is what Unassigned is computed from. The stale-player banner
+    // was armed the OTHER way (seated, no longer on the roster), the same
+    // one-direction mistake CLAUDE.md warns about.
+    //
+    // This re-reads the same endpoint and copies ONLY the roster side.
+    // Groups are never touched: a manager may be mid-edit with an unsaved
+    // sheet, and losing that to a background refresh would be far worse
+    // than a missing name. Returns the new roster size, or null on error.
+    async function refreshPairingsRoster(evId) {
+        try {
+            const res = await fetch(`/api/events/${evId}/pairings`);
+            const data = await res.json();
+            const state = getPairingsState(evId);
+            state.event_players = data.event_players || [];
+            state._paceMap = null;          // rebuilt from the fresh roster
+            state.requests = data.partner_requests || [];
+            state._reqPairs = null;
+            state.mpMatches = data.mp_matches || [];
+            state.standingsPoints = data.standings_points || {};
+            state.standingsEnrolled = data.standings_enrolled || {};
+            state.pairCounts = data.pair_counts || {};
+            state.blindPool = data.blind_pool || null;
+            return state.event_players.length;
+        } catch (e) {
+            return null;
+        }
+    }
+
     async function loadPairings(evId) {
         try {
+            await ensureHcpAsOf(allEvents.find(e => e.id === evId));
             const res = await fetch(`/api/events/${evId}/pairings`);
             const data = await res.json();
             const state = getPairingsState(evId);
@@ -6585,11 +7237,13 @@
             state._paceMap = null;  // rebuild pace lookup from fresh roster
             state.mpMatches = data.mp_matches || [];
             state.requests = data.partner_requests || [];
+            state._reqPairs = null;      // rebuilt on the next history line
             // AUTHORITATIVE seed for the pairing method: this response is
             // fetched when the panel opens, so it can't be stale the way
             // the events-list payload can (Kerry 2026-07-31 — the reason
             // STANDINGS kept reverting to Random on reopen).
             const evb = data.event || {};
+            state.hcpScale = Number(evb.hcp_scale) === 18 ? 18 : 9;
             const lsm = readLocalPairingMode(evId);
             const savedMode = String(evb.pairing_mode || lsm.mode || '').trim();
             if (savedMode === 'random' || savedMode === 'abcd' || savedMode === 'standings') {
@@ -6600,6 +7254,8 @@
             state._modeSeeded = true;
             state.standingsPoints = data.standings_points || {};
             state.standingsEnrolled = data.standings_enrolled || {};
+            state.pairCounts = data.pair_counts || {};
+            state.blindPool = data.blind_pool || null;
             state.isDirty = false;
             state.loaded = true;
             seedPairHistory(state);   // undo starts from what was saved
@@ -6799,9 +7455,13 @@
                 const g = sp.dataset.game;
                 const win = txt => `<span style="color:#059669;font-weight:600;" title="Recorded in GG">&#x1F3C6; ${txt}</span>`;
                 if (g === "team_net") {
-                    const teams = results.filter(r => r.game === "team_net");
+                    const places = Math.max(1, Number(sp.dataset.places || 1));
+                    const teams = results.filter(r => r.game === "team_net")
+                        .slice(0, places);
                     if (teams.length) {
-                        sp.innerHTML = win(teams.map(t => escapeHtml(_teamShort(t.player_name))).join(" &middot; 2nd: "));
+                        sp.innerHTML = win(teams.map((t, i) =>
+                            (i ? `${i + 1}${["st","nd","rd"][i] || "th"}: ` : "")
+                            + escapeHtml(_teamShort(t.player_name))).join(" &middot; "));
                         const row = sp.closest("tr.games-winner-row");
                         if (row) row.style.removeProperty("display");
                     }
@@ -7072,7 +7732,14 @@
             if (gEvent.teamTotal !== "NO_EVENT") {
                 inclMWP += numVal(gEvent.teamMWP);
                 html += `<tr><td><strong>${escapeHtml(teamType)}</strong></td><td>${fmt$(gEvent.teamTotal) || "—"}</td><td>${fmt$(gEvent.teamMWP) || "—"}</td><td></td><td>${fmt$(gEvent.team1st) || "—"}</td><td>${fmt$(gEvent.team2nd) || "—"}</td><td></td><td></td></tr>`;
-                html += `<tr class="games-row-sub games-winner-row" style="display:none;"><td class="games-indent" colspan="${C}"><span class="gg-det" data-event="${escapeHtml(ev.item_name)}" data-game="team_net"></span></td></tr>`;
+                // Only as many teams as the matrix actually PAYS (Kerry
+                // 2026-09-16: "2nd Team net doesn't need to show if
+                // there's only one place paid"). Golf Genius records the
+                // whole recorded order; naming a runner-up beside a
+                // single-place pot reads as money that isn't there.
+                const teamPlaces = Math.max(1,
+                    [gEvent.team1st, gEvent.team2nd].filter(v => numVal(v) > 0).length);
+                html += `<tr class="games-row-sub games-winner-row" style="display:none;"><td class="games-indent" colspan="${C}"><span class="gg-det" data-event="${escapeHtml(ev.item_name)}" data-game="team_net" data-places="${teamPlaces}"></span></td></tr>`;
             }
 
             const ctps = holes === 18 ? [gEvent.ctp1, gEvent.ctp2, gEvent.ctp3, gEvent.ctp4] : [gEvent.ctp1, gEvent.ctp2];
@@ -7412,6 +8079,7 @@
         const pairingsView = pairingsOpenForEvent[ev.id];
         const financialView = financialOpenForEvent[ev.id];
         const payoutsView = payoutsOpenForEvent[ev.id];
+        const flightsView = flightsOpenForEvent[ev.id];
         let html = '';
 
         // Status banner for cancelled/postponed events
@@ -7430,10 +8098,16 @@
 
         html += '<div class="event-game-stats">';
         html += '<span class="view-toggle-group">';
-        html += `<span class="game-stat-badge ${!gamesView && !pairingsView && !financialView && !payoutsView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="0">ROSTER <strong>${stats.players}</strong></span>`;
+        html += `<span class="game-stat-badge ${!gamesView && !pairingsView && !financialView && !payoutsView && !flightsView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="0">ROSTER <strong>${stats.players}</strong></span>`;
         html += `<span class="game-stat-badge ${pairingsView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="2">PAIRINGS</span>`;
         if (holesType) {
             html += `<span class="game-stat-badge games-badge ${gamesView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="1">GAMES</span>`;
+        }
+        if (holesType && canSeeFlights()) {
+            // DIVISIONS / FLIGHTS (Kerry 2026-09-21, mailbox #582): the
+            // ratified flighting + payout rules on this event's roster,
+            // manager+, dry run — Golf Genius stays the payer of record.
+            html += `<span class="game-stat-badge ${flightsView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="5" title="Divisions &amp; Flights — the ratified flighting and payout rules, dry run">FLIGHTS</span>`;
         }
         if (currentRole === 'admin') {
             html += `<span class="game-stat-badge ${payoutsView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="4">PAYOUTS</span>`;
@@ -7444,7 +8118,7 @@
         html += '</span>';
 
         // Sub-filter badges (only in PLAYERS view)
-        if (!gamesView && !pairingsView && !financialView && !payoutsView) {
+        if (!gamesView && !pairingsView && !financialView && !payoutsView && !flightsView) {
             // Hole tabs — one per hole count this event actually sold
             html += holesTabsHtml(ev, registrants);
 
@@ -7498,6 +8172,10 @@
         // ---- PAYOUTS VIEW ----
         if (payoutsView) {
             html += renderPayoutsPanel(ev, registrants);
+            return html;
+        }
+        if (flightsView) {
+            html += renderFlightsPanel(ev);
             return html;
         }
 
@@ -7850,7 +8528,7 @@
                 } else if (c.key === "handicap") {
                     // Show live handicap index from the handicap system, fall back to item field.
                     // 9-only or mixed events show 9-hole net; 18-only events show 18-hole.
-                    const liveHcp = hcpEntryFor(r.customer, r.customer_id);
+                    const liveHcp = hcpEntryFor(r.customer, r.customer_id, ev);
                     if (liveHcp !== undefined) {
                         // A PLACEHOLDER must never read like an established
                         // index. Golf Genius flights unhandicapped players
@@ -8186,12 +8864,30 @@
 
         // If clicking the same row, just collapse
         if (wasExpanded) {
+            rememberEventOpen(null);
             renderEventsMobile(getFilteredSortedEvents());
             return;
         }
 
         // Expand the clicked row
         expandedEventId = eventId;
+        rememberEventOpen(eventId);
+        setEventStickyTop();
+        // Bring the row itself under the nav straight away — pinning
+        // only helps once you are level with it.
+        setTimeout(() => {
+            try {
+                const row = document.querySelector(
+                    `.event-row-clickable[data-id="${eventId}"]`);
+                if (!row) return;
+                const off = parseInt(getComputedStyle(document.documentElement)
+                    .getPropertyValue("--ev-sticky-top")) || 96;
+                const y = row.getBoundingClientRect().top + window.scrollY - off - 4;
+                if (Math.abs(window.scrollY - y) > 8) {
+                    window.scrollTo({top: Math.max(0, y), behavior: "smooth"});
+                }
+            } catch (e) { /* not fatal */ }
+        }, 60);
         const ev = allEvents.find(e => e.id === eventId);
 
         // Fetch RSVPs first (needed for both desktop and mobile)
@@ -8201,6 +8897,7 @@
         if (ev) await Promise.all([
             fetchRsvpCreditMap(ev.item_name),
             fetchBalanceDueSendMap(ev.item_name),
+            ensureHcpAsOf(ev),
         ]);
 
         // Desktop: render detail into table row
@@ -8222,6 +8919,20 @@
 
     function isMobileContainer(container) {
         return container.id && container.id.startsWith("ev-mobile-detail-");
+    }
+
+    // THE OPEN EVENT'S CONTAINER, WHICHEVER LAYOUT DREW IT (v2.464.6,
+    // Kerry 2026-09-18 on a phone: "clicked Starter Sheet, then clicked
+    // back. Now it's stuck on LOADING"). iOS reloads the tab on return;
+    // the restore-on-load path then loaded the sheet and re-rendered
+    // `detail-content-<id>` — the DESKTOP container. On a phone that
+    // element does not exist, so the data arrived and nothing repainted,
+    // and the panel sat on "Loading…" with `state.loaded` true. Every
+    // after-the-fact repaint resolves the container through here;
+    // `rerenderDetail` already knows what to do with a mobile one.
+    function detailContainerFor(evId) {
+        return document.getElementById(`detail-content-${evId}`)
+            || document.getElementById(`ev-mobile-detail-${evId}`);
     }
 
     function rerenderDetail(container, ev) {
@@ -8249,12 +8960,20 @@
             m.classList.remove('menu-floating');
             m.style.top = m.style.left = m.style.minWidth = '';
         });
+        if (window.tgfOverlayDrop) window.tgfOverlayDrop();
     }
 
     function evOpenActionsMenu(btn) {
         const menu = btn.nextElementSibling;
         if (!menu || !menu.classList.contains('ev-actions-menu')) return;
         evCloseActionsMenus();
+        // The registrations table pins its ACTIONS column
+        // (position:sticky + z-index), so this menu lives inside a
+        // stacking context it cannot z-index its way out of — the rows
+        // below painted straight over it (Kerry 2026-09-14). Lift the
+        // ancestors that form the context for as long as the menu is
+        // open; evCloseActionsMenus puts them back.
+        if (window.tgfOverlayLift) window.tgfOverlayLift(menu);
         // Measure with the menu laid out but still invisible to the user.
         menu.classList.add('menu-floating');
         menu.style.visibility = 'hidden';
@@ -8335,14 +9054,25 @@
             badge.addEventListener("click", async (e) => {
                 e.stopPropagation();
                 const val = badge.dataset.toggleGames;
-                gamesOpenForEvent[ev.id] = val === "1";
-                pairingsOpenForEvent[ev.id] = val === "2";
-                financialOpenForEvent[ev.id] = val === "3";
-                payoutsOpenForEvent[ev.id] = val === "4";
+                applyDetailView(ev.id, val);
+                rememberEventOpen(ev.id, val);
                 rerenderDetail(container, ev);
-                // Load saved pairings on first open
-                if (val === "2" && !getPairingsState(ev.id).loaded) {
-                    await loadPairings(ev.id);
+                // Load the saved sheet on first open; on every RE-open
+                // re-read the roster, so a player added on the ROSTER tab
+                // a moment ago is in the bullpen when you come back
+                // (Kerry 2026-09-15, the Justin Guerrero late signup).
+                if (val === "2") {
+                    if (!getPairingsState(ev.id).loaded) {
+                        await loadPairings(ev.id);
+                    } else {
+                        await refreshPairingsRoster(ev.id);
+                    }
+                    rerenderDetail(container, ev);
+                }
+                if (val === "5") {
+                    // LIVE board: re-read on every open so a signup a
+                    // moment ago is already in its flight.
+                    await loadFlightsBoard(ev.id);
                     rerenderDetail(container, ev);
                 }
             });
@@ -9161,6 +9891,8 @@
             state.mpNotes = data.mp_notes || [];
             if (data.standings_points) state.standingsPoints = data.standings_points;
             if (data.standings_enrolled) state.standingsEnrolled = data.standings_enrolled;
+            if (data.pair_counts) state.pairCounts = data.pair_counts;
+            if (data.blind_pool) state.blindPool = data.blind_pool;
             state.isDirty = true;
             state.swapMode = null; state.selection = null;
             state.loaded = true;
@@ -9415,6 +10147,59 @@
         if (partnerChk) {
             partnerChk.addEventListener('change', e => {
                 state.protectPartners = partnerChk.checked;
+            });
+        }
+
+        // Points column toggle (Kerry 2026-09-15) — re-render, remember.
+        const pointsChk = container.querySelector(`[data-pairings-points="${ev.id}"]`);
+        if (pointsChk) {
+            pointsChk.addEventListener('change', e => {
+                state.showPointsCol = pointsChk.checked;
+                pairingsPointsPref(pointsChk.checked);
+                rerenderDetail(container, ev);
+            });
+        }
+
+        // BLINDS — draw a card for every open seat (Kerry 2026-09-15).
+        container.querySelectorAll('.pairings-blinds-btn').forEach(btn => {
+            btn.addEventListener('click', async e => {
+                e.stopPropagation();
+                const was = btn.textContent;
+                btn.textContent = 'Drawing…'; btn.disabled = true;
+                try { await drawBlinds(ev.id, container, ev); }
+                finally { btn.textContent = was; btn.disabled = false; }
+            });
+        });
+
+        // Re-check roster (Kerry 2026-09-15) — roster only, never groups.
+        container.querySelectorAll('.pairings-roster-refresh').forEach(btn => {
+            btn.addEventListener('click', async e => {
+                e.stopPropagation();
+                const was = btn.textContent;
+                btn.textContent = 'Checking…'; btn.disabled = true;
+                const before = new Set(getUnassigned(getPairingsState(ev.id))
+                    .map(p => pairPersonKey(p.name)));
+                const n = await refreshPairingsRoster(ev.id);
+                const state = getPairingsState(ev.id);
+                const added = getUnassigned(state)
+                    .filter(p => !before.has(pairPersonKey(p.name)));
+                rerenderDetail(container, ev);
+                if (n === null) {
+                    alert('Could not re-read the roster. Check the connection and try again.');
+                } else if (added.length) {
+                    alert('New on the roster: ' + added.map(p => p.name).join(', ')
+                          + '\n\nThey are in the bullpen now — click a name, then an open seat.');
+                }
+            });
+        });
+
+        // History row toggle (Kerry 2026-09-15) — re-render, remember.
+        const histChk = container.querySelector(`[data-pairings-history="${ev.id}"]`);
+        if (histChk) {
+            histChk.addEventListener('change', e => {
+                state.showHistoryRow = histChk.checked;
+                pairingsHistoryPref(histChk.checked);
+                rerenderDetail(container, ev);
             });
         }
 
@@ -9708,7 +10493,13 @@
                 const seed = state.seeds[si];
                 if (!seed) return;
                 seed.players = seed.players.filter(p => p.cart_pos !== cp);
-                if (name) seed.players.push({name, cart_pos: cp});
+                // A seat carries the PERSON (customer_id), never a name
+                // alone — principle 6, Kerry 2026-09-18.
+                if (name) {
+                    const _re = rosterEntry(state, name, null);
+                    seed.players.push({name, cart_pos: cp,
+                                       customer_id: _re ? (_re.customer_id ?? null) : null});
+                }
             });
         });
 
@@ -9897,6 +10688,19 @@
             });
         });
 
+        // A BLIND past the seat count still opens its own menu; a blind
+        // sitting IN a seat is handled by the empty-seat listener below,
+        // which also lets a bullpen player take the seat off it.
+        container.querySelectorAll('.pairing-blind-row[data-blind-seat]').forEach(row => {
+            row.addEventListener('click', e => {
+                e.stopPropagation();
+                const [bHoles, gnum, cpos] = row.dataset.blindSeat.split(':');
+                openPairingPicker(row, [], bHoles, () => {},
+                    {ev, holes: bHoles, groupNum: Number(gnum),
+                     cartPos: Number(cpos), container}, true);
+            });
+        });
+
         // Empty seat click — open spots in short groups are drop targets for
         // the selected player (Player/Move modes) or cart pair (Cart Pair
         // mode). Kerry, 2026-07-08: "treat open spots in a 3some, 2some or
@@ -9908,19 +10712,31 @@
                 const holes = slot.dataset.holes;
                 const groupNum = parseInt(slot.dataset.groupNum);
                 const cartPos = parseInt(slot.dataset.cartPos);
+                const onBlind = slot.classList.contains('pairing-blind-slot');
                 if (!state.selection) {
                     // Nothing picked up yet — offer the unassigned roster
                     // right at the seat (Kerry 2026-09-08). Before this the
                     // only way in was Move mode + a click in the Unassigned
                     // panel, which is a long way from the empty chair you
-                    // are looking at.
+                    // are looking at. On a seat holding a BLIND the same
+                    // menu also offers redraw / remove, and seating a real
+                    // player clears the blind (Kerry 2026-09-16: "I should
+                    // be able to add a player from the bullpen directly
+                    // over a BLIND").
                     openPairingPicker(slot, getUnassigned(state), holes, pick => {
                         _movePlayer(state, {unassigned: true, name: pick.name},
                                     holes, groupNum, cartPos);
                         state.isDirty = true; state.selection = null;
                         commitPairHistory(state);
-                        rerenderDetail(container, ev);
-                    });
+                        if (onBlind) {
+                            // A real player took the seat — the blind that
+                            // was standing in for them goes.
+                            blindSeat({ev, holes, groupNum, cartPos, container},
+                                      {mode: 'clear'});
+                        } else {
+                            rerenderDetail(container, ev);
+                        }
+                    }, {ev, holes, groupNum, cartPos, container}, onBlind);
                     return;
                 }
                 if (state.swapMode === 'cartpair') {
@@ -9949,7 +10765,14 @@
                     _movePlayer(state, state.selection, holes, groupNum, cartPos);
                 }
                 state.isDirty = true; state.selection = null; commitPairHistory(state);
-                rerenderDetail(container, ev);
+                if (onBlind) {
+                    // A real player just took the seat the blind was
+                    // holding — the blind goes with it.
+                    blindSeat({ev, holes, groupNum, cartPos, container},
+                              {mode: 'clear'});
+                } else {
+                    rerenderDetail(container, ev);
+                }
             });
         });
 
@@ -9972,6 +10795,30 @@
                 commitPairHistory(state);
                 rerenderDetail(container, ev);
             });
+        });
+
+        // Bullpen X: unseat one player (Kerry 2026-09-15). The seat is
+        // left open — the row's cart_pos gap is what "— open —" renders
+        // from — and getUnassigned lists the player again on the next
+        // render because they are on the roster and no longer seated.
+        container.querySelectorAll('[data-unseat]').forEach(btn => {
+            btn.addEventListener('click', e => {
+                e.stopPropagation();
+                e.preventDefault();
+                const grp = _findGroup(state, btn.dataset.holes, Number(btn.dataset.groupNum));
+                if (!grp) return;
+                const idx = grp.players.findIndex(p => p.cart_pos === Number(btn.dataset.cartPos));
+                if (idx === -1) return;
+                grp.players.splice(idx, 1);
+                state.isDirty = true;
+                state.swapMode = null; state.selection = null;
+                commitPairHistory(state);
+                rerenderDetail(container, ev);
+            });
+            // A row is draggable; the X must not start a drag or bubble
+            // the mousedown into the row's select handler.
+            btn.addEventListener('mousedown', e => e.stopPropagation());
+            btn.addEventListener('dragstart', e => { e.preventDefault(); e.stopPropagation(); });
         });
 
         // Unassigned player row click (move mode only)
@@ -10003,12 +10850,15 @@
     // who are on the roster but not in any group. Picking one seats them.
     function closePairingPicker() {
         document.querySelectorAll('.pairing-pick-menu').forEach(m => m.remove());
+        if (window.tgfOverlayDrop) window.tgfOverlayDrop();
     }
 
-    function openPairingPicker(anchor, players, holes, onPick) {
+    function openPairingPicker(anchor, players, holes, onPick, blindCtx, seated) {
         closePairingPicker();
         const menu = document.createElement('div');
         menu.className = 'pairing-pick-menu';
+        // A seat holding a BLIND still offers the bullpen — seating a
+        // real player is the whole point of the blind going away.
         let inner = '<div class="pairing-pick-head">Seat a player</div>';
         if (!players.length) {
             inner += '<div class="pairing-pick-empty">Everyone on the roster is already in a group.</div>';
@@ -10022,9 +10872,28 @@
                 const mismatch = ph && holes && ph !== String(holes)
                     ? ` <span style="color:#b45309;font-weight:700;">${escapeHtml(ph)}h</span>` : '';
                 inner += `<button type="button" class="pairing-pick-item" data-pick-idx="${i}">`
-                    + `<span>${escapeHtml(p.name)}${p.rsvp_only ? ' <span style="color:#d97706;font-size:0.7rem;font-weight:700;">RSVP</span>' : ''}${mismatch}</span>`
+                    + `<span>${escapeHtml(displayName(p.name))}${p.rsvp_only ? ' <span style="color:#d97706;font-size:0.7rem;font-weight:700;">RSVP</span>' : ''}${mismatch}</span>`
                     + `<span class="pairing-pick-meta">${hcp} &middot; ${tee}</span></button>`;
             });
+        }
+        // ADD BLIND — an open seat is a Team Net problem as much as a
+        // seating one (Kerry 2026-09-15). RANDOM draws from the members
+        // in the field with an established TGF handicap who have been a
+        // blind least; CHOOSE lists that same field, so a manager cannot
+        // pick someone the rules exclude.
+        if (blindCtx) {
+            inner += `<div class="pairing-pick-head" style="margin-top:2px;">${seated ? 'Change this blind' : 'Add a blind'}</div>`
+                + '<button type="button" class="pairing-pick-item" data-blind="random">'
+                + '<span>&#127922; RANDOM</span>'
+                + '<span class="pairing-pick-meta">fewest blinds this year</span></button>'
+                + '<button type="button" class="pairing-pick-item" data-blind="choose">'
+                + '<span>&#9998; CHOOSE&hellip;</span>'
+                + '<span class="pairing-pick-meta">eligible field</span></button>';
+            if (seated) {
+                inner += '<button type="button" class="pairing-pick-item" data-blind="clear">'
+                    + '<span style="color:#b91c1c;">&#10005; REMOVE</span>'
+                    + '<span class="pairing-pick-meta">leave the seat open</span></button>';
+            }
         }
         menu.innerHTML = inner;
         document.body.appendChild(menu);
@@ -10047,11 +10916,118 @@
                 if (pick) onPick(pick);
             });
         });
+        menu.querySelectorAll('[data-blind]').forEach(btn => {
+            btn.addEventListener('click', async e => {
+                e.stopPropagation();
+                const how = btn.dataset.blind;
+                closePairingPicker();
+                if (how === 'random') {
+                    await blindSeat(blindCtx, {mode: 'random'});
+                } else if (how === 'clear') {
+                    await blindSeat(blindCtx, {mode: 'clear'});
+                } else {
+                    await openBlindChooser(anchor, blindCtx);
+                }
+            });
+        });
         // Swallow the click that opened it, then close on the next one.
         setTimeout(() => {
             document.addEventListener('click', closePairingPicker, {once: true});
         }, 0);
     }
+    /** Write one blind into one seat and reload the sheet. */
+    async function blindSeat(ctx, body) {
+        try {
+            const res = await fetch(`/api/events/${ctx.ev.id}/pairings/blinds`, {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(Object.assign({
+                    seat: {holes: ctx.holes, group_num: ctx.groupNum,
+                           cart_pos: ctx.cartPos}}, body)),
+            });
+            const d = await res.json();
+            if (!res.ok || d.error) { alert(d.error || res.statusText); return; }
+            // Patch the sheet in place. Re-reading the whole panel took
+            // long enough that the seat looked broken (Kerry 2026-09-16:
+            // "when selected, it doesn't show up for like 20 seconds").
+            const st = getPairingsState(ctx.ev.id);
+            if (st.blindPool) st.blindPool = null;   // counts moved
+            const grp = _findGroup(st, ctx.holes, ctx.groupNum);
+            if (grp) {
+                grp.blinds = (grp.blinds || []).filter(
+                    b => b.cart_pos !== ctx.cartPos);
+                if (d.name) grp.blinds.push({cart_pos: ctx.cartPos,
+                    name: d.name, customer_id: d.customer_id, source: 'app'});
+            }
+            rerenderDetail(ctx.container, ctx.ev);
+        } catch (err) {
+            alert('Blind failed: ' + (err.message || err));
+        }
+    }
+
+    /** CHOOSE — the eligible field, fewest blinds first, each with the
+     *  count that put them there so the choice is informed. */
+    async function openBlindChooser(anchor, ctx) {
+        // The pool rides in with the panel, so the list is instant
+        // (Kerry 2026-09-16). The fetch is only the cold-start path.
+        let pool = getPairingsState(ctx.ev.id).blindPool;
+        if (!pool) {
+            try {
+                const res = await fetch(`/api/events/${ctx.ev.id}/pairings/blinds`, {
+                    method: 'POST', headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({mode: 'pool',
+                        seat: {holes: ctx.holes, group_num: ctx.groupNum,
+                               cart_pos: ctx.cartPos}}),
+                });
+                pool = await res.json();
+                if (!res.ok || pool.error) { alert(pool.error || res.statusText); return; }
+                getPairingsState(ctx.ev.id).blindPool = pool;
+            } catch (err) { alert('Could not load the eligible field.'); return; }
+        }
+        closePairingPicker();
+        const menu = document.createElement('div');
+        menu.className = 'pairing-pick-menu';
+        const elig = pool.eligible || [];
+        let inner = '<div class="pairing-pick-head">Choose a blind</div>';
+        if (!elig.length) {
+            inner += '<div class="pairing-pick-empty">Nobody in the field is '
+                + 'eligible — members with an established TGF handicap only.</div>';
+        } else {
+            elig.forEach((p, i) => {
+                inner += `<button type="button" class="pairing-pick-item" data-bidx="${i}">`
+                    + `<span>${escapeHtml(displayName(p.name))}</span>`
+                    + `<span class="pairing-pick-meta">${p.blinds_ytd} blind${p.blinds_ytd === 1 ? '' : 's'}`
+                    + `${p.last_blind ? ' &middot; ' + escapeHtml(p.last_blind) : ''}</span></button>`;
+            });
+        }
+        // Say who is NOT eligible and why — an absence with no reason
+        // reads as a bug (Kerry has asked that question twice tonight).
+        const ex = (pool.excluded || []).filter(e => e.name);
+        if (ex.length) {
+            inner += '<div class="pairing-pick-empty" style="border-top:1px solid var(--border);">'
+                + ex.map(e => `${escapeHtml(e.name)} — ${escapeHtml(e.why)}`).join('<br>')
+                + '</div>';
+        }
+        menu.innerHTML = inner;
+        document.body.appendChild(menu);
+        const b = anchor.getBoundingClientRect();
+        const m = menu.getBoundingClientRect();
+        const pad = 6;
+        menu.style.left = Math.max(pad, Math.min(b.left, window.innerWidth - m.width - pad)) + 'px';
+        menu.style.top = Math.max(pad, Math.min(b.bottom + 3,
+            window.innerHeight - m.height - pad)) + 'px';
+        menu.querySelectorAll('[data-bidx]').forEach(btn => {
+            btn.addEventListener('click', async e => {
+                e.stopPropagation();
+                const p = elig[Number(btn.dataset.bidx)];
+                closePairingPicker();
+                if (p) await blindSeat(ctx, {mode: 'choose', customer_id: p.customer_id});
+            });
+        });
+        setTimeout(() => {
+            document.addEventListener('click', closePairingPicker, {once: true});
+        }, 0);
+    }
+
     window.addEventListener('scroll', closePairingPicker, true);
     window.addEventListener('resize', closePairingPicker);
     document.addEventListener('keydown', e => {
@@ -10065,6 +11041,181 @@
 
     function _findPlayer(grp, cartPos) {
         return grp.players.find(p => p.cart_pos === cartPos);
+    }
+
+    // Roster lookup by identity (pairPersonKey, not string equality):
+    // is this player on the sheet without a payment? The server marks
+    // both GG-RSVP-only rows and $0 rsvp_only order rows.
+    function isRsvpOnlyPlayer(state, name) {
+        const k = pairPersonKey(name);
+        if (!k) return false;
+        const roster = [...(state.event_players || []), ...(state.rosterExtra || [])];
+        return roster.some(p => p.rsvp_only && pairPersonKey(p.name) === k);
+    }
+
+    // Every roster NAME LIST on the pairings panel — request dropdowns,
+    // the open-seat picker, the Unassigned panel — orders by LAST name
+    // (Kerry 2026-09-15: "Order name lists by last name"). The roster
+    // arrives first-name-ordered from the server (ORDER BY customer);
+    // lastNameSortKey is the same key the Roster tab and Add Payment use.
+    // Remembered per browser (a viewing preference, like the leaderboard's
+    // Hole-by-hole box). Read with no argument; write with a boolean.
+    // Default ON — the column has always shown when the race has points.
+    function pairingsPointsPref(v) {
+        try {
+            if (v === undefined) {
+                const raw = localStorage.getItem('tgf_pairings_points_col');
+                return raw === null ? true : raw === '1';
+            }
+            localStorage.setItem('tgf_pairings_points_col', v ? '1' : '0');
+        } catch (e) { /* storage blocked — session-only */ }
+        return v === undefined ? true : !!v;
+    }
+
+    // History row under each name (Kerry 2026-09-15, after the s9.23
+    // count report: "I had no idea about the Group 5 repeats"). Default
+    // ON — the whole point is that a repeat should be impossible to miss
+    // while you are dragging players around. Remembered per browser.
+    function pairingsHistoryPref(v) {
+        try {
+            if (v === undefined) {
+                const raw = localStorage.getItem('tgf_pairings_history_row');
+                return raw === null ? true : raw === '1';
+            }
+            localStorage.setItem('tgf_pairings_history_row', v ? '1' : '0');
+        } catch (e) { /* storage blocked — session-only */ }
+        return v === undefined ? true : !!v;
+    }
+
+    // Times these two have played together THIS YEAR INCLUDING TONIGHT.
+    // The server ships prior counts for the roster (`pair_counts`) and
+    // the page adds tonight's 1, so the number stays right through every
+    // swap, drag and bullpen trip without a round trip.
+    // JS twin of database._pair_key_name — collapsed whitespace,
+    // lowercase, NOTHING else. pairPersonKey is a different key
+    // ("surname|first-initial") built for the stale-player banner, and
+    // it would miss every count here AND collide with the "|" separator.
+    function pairCountKey(name) {
+        return String(name || '').trim().replace(/\s+/g, ' ').toLowerCase();
+    }
+
+    function pairPlayedTotal(state, a, b) {
+        const ka = pairCountKey(a), kb = pairCountKey(b);
+        if (!ka || !kb) return 1;
+        const key = ka < kb ? `${ka}|${kb}` : `${kb}|${ka}`;
+        return (Number((state.pairCounts || {})[key]) || 0) + 1;
+    }
+
+    // Surname alone — the line has to hold three names and three numbers
+    // without wrapping. Suffixes are dropped so "Wade Lewis Jr" reads
+    // "Lewis".
+    const _PH_SUFFIX = /^(jr|sr|ii|iii|iv|v)\.?$/i;
+    function pairShortName(name) {
+        const parts = String(name || '').trim().split(/\s+/).filter(Boolean);
+        while (parts.length > 1 && _PH_SUFFIX.test(parts[parts.length - 1])) parts.pop();
+        return parts.length ? parts[parts.length - 1] : '';
+    }
+
+    // Requested pairs, normalized both ways, built once per render pass.
+    // Kerry 2026-09-15: "any requests should be exempted from the repeat
+    // flag." A partner request is a DECISION, and rule 3 already ranks
+    // below it — flagging Palacios + Anthis at 16 as a problem is the
+    // report arguing with an instruction the manager gave it. The count
+    // still shows; it just stops shouting.
+    function requestedPairSet(state) {
+        const out = new Set();
+        (state.requests || []).forEach(r => {
+            if (!r || !r.partner || r.suppressed) return;
+            const a = pairCountKey(r.requester), b = pairCountKey(r.partner);
+            if (!a || !b) return;
+            out.add(a < b ? `${a}|${b}` : `${b}|${a}`);
+        });
+        return out;
+    }
+
+    function pairIsRequested(state, a, b) {
+        if (!state._reqPairs) state._reqPairs = requestedPairSet(state);
+        const ka = pairCountKey(a), kb = pairCountKey(b);
+        return state._reqPairs.has(ka < kb ? `${ka}|${kb}` : `${kb}|${ka}`);
+    }
+
+    // The HISTORY line for one seat: every OTHER player in the group, in
+    // seat order, with the count. Returns '' for a group of one.
+    function pairHistoryRowHtml(state, grp, player) {
+        const mates = (grp.players || [])
+            .filter(p => p && p.name && p.name !== player.name)
+            .sort((a, b) => (a.cart_pos || 0) - (b.cart_pos || 0));
+        if (!mates.length) return '';
+        const bits = mates.map(m => {
+            const n = pairPlayedTotal(state, player.name, m.name);
+            const req = pairIsRequested(state, player.name, m.name);
+            const cls = req ? ' ph-req' : (n >= 4 ? ' ph-hot' : (n >= 2 ? ' ph-rep' : ''));
+            const t = req
+                ? `${m.name} — requested partner, exempt from the repeat flag (${n} together this year)`
+                : `${m.name} — ${n} round${n === 1 ? '' : 's'} together this year including tonight`;
+            return `<span class="ph-item${cls}" title="${escapeHtml(t)}">${
+                escapeHtml(pairShortName(m.name))} ${n}${req ? '&#x2691;' : ''}</span>`;
+        }).join('');
+        return `<div class="pairing-hist-row">${bits}</div>`;
+    }
+
+    // Worst repeat in a group, for the header chip. 1 = nobody in this
+    // group has played together before.
+    function groupRepeatMax(state, grp) {
+        const names = (grp.players || []).map(p => p && p.name).filter(Boolean);
+        let worst = 1, pair = null;
+        for (let i = 0; i < names.length; i++) {
+            for (let j = i + 1; j < names.length; j++) {
+                if (pairIsRequested(state, names[i], names[j])) continue;
+                const n = pairPlayedTotal(state, names[i], names[j]);
+                if (n > worst) { worst = n; pair = [names[i], names[j]]; }
+            }
+        }
+        return {max: worst, pair: pair};
+    }
+
+    function byLastName(a, b) {
+        const an = typeof a === 'string' ? a : (a && a.name) || '';
+        const bn = typeof b === 'string' ? b : (b && b.name) || '';
+        return lastNameSortKey(an).localeCompare(lastNameSortKey(bn));
+    }
+
+    // One <option> for a roster name in the request dropdowns. An
+    // RSVP-only player is listed like everyone else but SAYS so: the
+    // text carries the marker because <option> styling is not honoured
+    // on every browser, and the amber colour rides along where it is
+    // (Kerry 2026-09-15: "show RSVPs in this list, but highlighted").
+    // Reads "Last, First" (Kerry 2026-09-15: "Change the list to display
+    // [Last Name], [First Name]") through displayName, the Roster tab's
+    // formatter, so the dropdown and the list it fills from agree. The
+    // option VALUE stays the roster's own "First Last" — that is the
+    // name the server matches on.
+    function rosterOptionHtml(state, name, suffix) {
+        const rsvp = isRsvpOnlyPlayer(state, name);
+        return `<option value="${escapeHtml(name)}"${rsvp ? ' class="opt-rsvp-only" style="color:#b45309;font-weight:700;"' : ''}>`
+            + `${escapeHtml(displayName(name))}${rsvp ? ' \u00b7 RSVP' : ''}${suffix || ''}</option>`;
+    }
+
+    // Rules 12/13 inputs off the roster row (event_players), by identity.
+    function rosterFlags(state, name) {
+        const k = pairPersonKey(name);
+        if (!k) return {};
+        return (state.event_players || []).find(p => pairPersonKey(p.name) === k) || {};
+    }
+    // CAPT / AMB / NEW tags after a name on the sheet. Kerry-ratified
+    // 2026-09-15: the captain drives and rides with the newest player,
+    // so the manager needs to SEE who is which at a glance.
+    // Single-letter badges (Kerry 2026-09-15: "Captain badge can be C.
+    // Ambassador badge can be A … green badge with 1Y"): C = group
+    // captain (seat 1), A = ambassador, 1Y = joined as a new member this
+    // year. Seats 1 and 3 drive by definition — no wheel mark.
+    function roleBadgesHtml(state, name) {
+        const f = rosterFlags(state, name);
+        let h = '';
+        if (f.group_captain) h += '<span class="pairing-role-badge role-capt" title="Group captain — seat 1, rides with their request or the newest player">C</span>';
+        if (f.ambassador) h += '<span class="pairing-role-badge role-amb" title="Ambassador">A</span>';
+        if (f.is_new) h += '<span class="pairing-role-badge role-new" title="First-year member — never drives">1Y</span>';
+        return h;
     }
 
     function getUnassigned(state) {
@@ -10088,15 +11239,29 @@
             seen.add(k);
             out.push(p);
         });
-        return out;
+        // Unassigned panel and the open-seat picker read this list.
+        return out.sort(byLastName);
     }
 
     function renderUnassignedPlayers(ev, state) {
         if (!state.loaded) return '';
         const unassigned = getUnassigned(state);
-        if (!unassigned.length) return '';
+        const rosterN = (state.event_players || []).length
+            + (state.rosterExtra || []).length;
+        // The panel STAYS when everyone is seated (Kerry 2026-09-15). It
+        // used to vanish, which is exactly the moment a manager looking
+        // for a late signup needs it: no panel meant no answer and
+        // nowhere to click. Empty, it says so and offers a re-read.
+        const refreshBtn = `<button type="button" class="pairings-roster-refresh"
+            data-ev-id="${ev.id}" title="Re-read the roster from the server — use after a late signup"
+            style="margin-left:0.6rem;padding:1px 9px;border:1px solid var(--border);border-radius:999px;background:#fff;color:var(--text-body);font-size:0.72rem;font-weight:600;cursor:pointer;">&#8635; Re-check roster</button>`;
+        if (!unassigned.length) {
+            if (!rosterN) return '';
+            return `<div style="margin-top:1rem;font-size:0.78rem;color:var(--text-muted);padding:0.4rem 0 0.3rem;">
+                Everyone on the roster is seated (${rosterN}).${refreshBtn}</div>`;
+        }
         let html = `<div style="margin-top:1rem;">`;
-        html += `<div style="font-weight:700;font-size:0.78rem;letter-spacing:0.06em;color:#d97706;padding:0.4rem 0 0.3rem;">&#9888; UNASSIGNED (${unassigned.length}) &mdash; Click player then a group to place</div>`;
+        html += `<div style="font-weight:700;font-size:0.78rem;letter-spacing:0.06em;color:#d97706;padding:0.4rem 0 0.3rem;">&#9888; UNASSIGNED (${unassigned.length}) &mdash; Click player then a group to place${refreshBtn}</div>`;
         html += '<div style="display:flex;flex-wrap:wrap;gap:0.4rem;">';
         unassigned.forEach(player => {
             const isSelected = state.swapMode === 'move' && state.selection &&
@@ -10106,7 +11271,12 @@
                 style="background:${isSelected ? '' : '#fffbeb'};border:1px solid #fcd34d;border-radius:6px;cursor:pointer;min-width:180px;"
                 data-ev-id="${ev.id}" data-unassigned-name="${escapeHtml(player.name)}">`;
             html += `<span class="pairing-cart-dot" style="background:#f59e0b;"></span>`;
-            html += `<span class="pairing-player-name">${escapeHtml(player.name || '—')}</span>`;
+            // "Last, First" like the request dropdowns (Kerry 2026-09-15:
+            // "flip the picker and unassigned panel too"); the seated
+            // cards keep "First Last". data-unassigned-name above stays
+            // the raw roster name — that is what _movePlayer seats.
+            html += `<span class="pairing-player-name">${escapeHtml(displayName(player.name))}</span>`;
+            if (player.name) html += roleBadgesHtml(state, player.name);
             if (player.rsvp_only) {
                 html += '<span class="pairing-rsvp-badge" title="RSVP&#39;d in Golf Genius — no order on file yet">RSVP</span>';
             }
@@ -10148,10 +11318,13 @@
             const unassigned = getUnassigned(state);
             const found = unassigned.find(p => p.name === src.name);
             if (!found) return;
-            // Unassigned players don't live in a real group; just add to
-            // dest. We reconstruct a minimal player object.
-            player = { name: found.name, tee_choice: found.tee_choice || null,
-                       handicap_index: found.handicap_index ?? null };
+            // Unassigned players don't live in a real group; the seat
+            // takes the roster entry WHOLE — customer_id included — so the
+            // save resolves the person, never just the name.
+            player = Object.assign({}, found);
+            delete player.cart_pos;
+            player.tee_choice = found.tee_choice || null;
+            player.handicap_index = found.handicap_index ?? null;
         } else {
             srcGroup = _findGroup(state, src.holes, src.group_num);
             if (!srcGroup) return;
@@ -10208,6 +11381,24 @@
         group.players = order;
     }
 
+    // THE WHOLE PERSON MOVES, THE SEAT STAYS (v2.464.11, Kerry 2026-09-18:
+    // "pairings switched Jeff Rideout and Justin Angelone's tees when I
+    // swapped their cart assignments"). The swaps used to move name, tee
+    // and index between seats and leave `customer_id` behind — so after
+    // Save the row read "Jeff Rideout" with Angelone's id, and the server,
+    // which resolves the tee and the locked index BY customer_id, handed
+    // back the other man's tee. Every field a seat carries is the person's
+    // except `cart_pos`, which is the seat's; swap everything else.
+    function _swapSeatPayloads(pA, pB) {
+        const keys = new Set([...Object.keys(pA), ...Object.keys(pB)]);
+        keys.delete('cart_pos');
+        keys.forEach(k => {
+            const va = pA[k], vb = pB[k];
+            if (vb === undefined) delete pA[k]; else pA[k] = vb;
+            if (va === undefined) delete pB[k]; else pB[k] = va;
+        });
+    }
+
     function _swapPlayers(state, a, b) {
         const grpA = _findGroup(state, a.holes, a.group_num);
         const grpB = _findGroup(state, b.holes, b.group_num);
@@ -10215,10 +11406,7 @@
         const pA = _findPlayer(grpA, a.cart_pos);
         const pB = _findPlayer(grpB, b.cart_pos);
         if (!pA || !pB) return;
-        // Swap names + metadata, keep cart positions in place
-        [pA.name, pB.name] = [pB.name, pA.name];
-        [pA.tee_choice, pB.tee_choice] = [pB.tee_choice, pA.tee_choice];
-        [pA.handicap_index, pB.handicap_index] = [pB.handicap_index, pA.handicap_index];
+        _swapSeatPayloads(pA, pB);      // everyone travels; the seats stay
     }
 
     function _swapCartPairs(state, a, b) {
@@ -10231,13 +11419,10 @@
         if (isCart1A === isCart1B && a.holes === b.holes && a.group_num === b.group_num) return; // same cart, no-op
         const pairsA = grpA.players.filter(p => isCart1A ? p.cart_pos <= 2 : p.cart_pos > 2);
         const pairsB = grpB.players.filter(p => isCart1B ? p.cart_pos <= 2 : p.cart_pos > 2);
-        // Swap player data between pairs (name, tee, hcp)
+        // Swap the PEOPLE between the pairs' seats — every field, not a
+        // hand-picked three (see _swapSeatPayloads).
         const minLen = Math.min(pairsA.length, pairsB.length);
-        for (let i = 0; i < minLen; i++) {
-            [pairsA[i].name, pairsB[i].name] = [pairsB[i].name, pairsA[i].name];
-            [pairsA[i].tee_choice, pairsB[i].tee_choice] = [pairsB[i].tee_choice, pairsA[i].tee_choice];
-            [pairsA[i].handicap_index, pairsB[i].handicap_index] = [pairsB[i].handicap_index, pairsA[i].handicap_index];
-        }
+        for (let i = 0; i < minLen; i++) _swapSeatPayloads(pairsA[i], pairsB[i]);
         // If sizes differ, move the extra player
         if (pairsA.length > pairsB.length) {
             const extra = pairsA[minLen];
@@ -10308,13 +11493,19 @@
         if (!tplSelect) return;
         const cur = tplSelect.value;
         tplSelect.innerHTML = '<option value="">Custom Message</option>';
-        composeTemplates.forEach(t => {
-            if (t.channel === "sms") return; // skip SMS-only templates
-            const opt = document.createElement("option");
-            opt.value = t.id;
-            opt.textContent = t.name + (t.is_system ? " (built-in)" : "");
-            tplSelect.appendChild(opt);
-        });
+        // Payment Reminder leads the list (Kerry 2026-09-14) — it pairs
+        // with the RSVP Only audience that now leads the other dropdown,
+        // so the most common send is two defaults away instead of two
+        // scrolls. Everything else keeps the order the server sent.
+        const _emailTpls = composeTemplates.filter(t => t.channel !== "sms");
+        const _isPay = t => /^payment reminder$/i.test((t.name || "").trim());
+        [..._emailTpls.filter(_isPay), ..._emailTpls.filter(t => !_isPay(t))]
+            .forEach(t => {
+                const opt = document.createElement("option");
+                opt.value = t.id;
+                opt.textContent = t.name + (t.is_system ? " (built-in)" : "");
+                tplSelect.appendChild(opt);
+            });
         if (cur) tplSelect.value = cur;
     }
 
@@ -10782,7 +11973,7 @@
         const KNOWN_VARS = ["player_name", "event_name", "event_date",
                             "course", "chapter",
                             "manager_name", "manager_phone", "event_url",
-                            "fellowship_spot"];
+                            "pay_button", "fellowship_spot"];
         const blanks = [];
         (subject + "\n" + body).replace(/\[[A-Z][A-Z0-9 _/-]{2,}\]/g,
             m => { if (!blanks.includes(m)) blanks.push(m); return m; });
@@ -12218,7 +13409,7 @@
             `<div><strong>${escapeHtml(playerName || "Player")}</strong> &middot; ${escapeHtml(eventName || "")}</div>` +
             `<div style="margin-top:0.25rem; color:#991b1b; font-weight:600;">Outstanding credit: ${escapeHtml(amount || "")}</div>`;
         document.getElementById("wd-payout-method").value = "Venmo";
-        const today = new Date().toISOString().slice(0, 10);
+        const today = tgfToday();
         document.getElementById("wd-payout-date").value = today;
         document.getElementById("wd-payout-note").value = "";
         const btn = document.getElementById("wd-payout-submit");
@@ -12537,6 +13728,84 @@
     // registration is PINNED to the package so the roster badge, the Holes
     // column, and the due math all read from it. Manual fields stay live
     // as the fallback (and for events with no packages).
+    // ---- Event-aware options (Kerry 2026-09-21: "responsive to what is
+    // actually available based on the event, rather than a standard list
+    // of selections that make me choose") -------------------------------
+    // /api/events/<id>/add-player-options derives HOLES from the event's
+    // format + packages, SIDE GAMES from the vocabulary its roster carries,
+    // TEES from the course record's designated bands. A single option is
+    // preselected — an answer, not a choice. The static lists in the HTML
+    // stay as the fallback when the fetch fails, so the modal never goes
+    // blank (check at the boundary, protect the class).
+    let apOptions = null;
+    let apOptionsSeq = 0;
+    function apRebuildSelect(id, options, placeholder) {
+        const sel = document.getElementById(id);
+        if (!sel) return;
+        const prev = sel.value;
+        const opts = (options || []).map(o => (typeof o === "string" ? { value: o, label: o } : o));
+        const single = opts.length === 1;
+        sel.innerHTML = (single ? "" : `<option value="">${escapeHtml(placeholder)}</option>`) +
+            opts.map(o => `<option value="${escapeHtml(o.value)}">${escapeHtml(o.label)}</option>`).join("");
+        if (single) sel.value = opts[0].value;
+        else if (prev && opts.some(o => o.value === prev)) sel.value = prev;
+        else sel.value = "";
+        sel.dataset.eventAware = single ? "single" : "list";
+    }
+    function apApplyOptions(opts) {
+        apOptions = opts || null;
+        if (!opts) return;
+        apRebuildSelect("add-player-holes", opts.holes, "Select…");
+        apRebuildSelect("add-player-side-games", opts.side_games, "Select…");
+        apRebuildSelect("add-player-tee", opts.tees, "—");
+    }
+    async function apLoadOptions(evId) {
+        apOptions = null;
+        if (evId == null) return;
+        const seq = ++apOptionsSeq;
+        try {
+            const res = await fetch(`/api/events/${evId}/add-player-options`, { cache: "no-store" });
+            if (!res.ok) return;
+            const opts = await res.json();
+            if (seq !== apOptionsSeq || addPlayerEventId !== evId) return;   // modal moved on
+            apApplyOptions(opts);
+            apPrefillFromPerson();
+        } catch (err) {
+            console.error("apLoadOptions:", err);   // static lists stand
+        }
+    }
+    // A select rebuilt from the event may lack a value a package or a
+    // person brings (36 holes on a two-day package) — add it rather than
+    // drop it silently.
+    function apEnsureOption(id, value, label) {
+        const sel = document.getElementById(id);
+        if (!sel || value == null || value === "") return;
+        if (![...sel.options].some(o => o.value === String(value))) {
+            const o = document.createElement("option");
+            o.value = String(value); o.textContent = label || String(value);
+            sel.appendChild(o);
+        }
+    }
+    // The person's own record answers TEE (their last tee on file) when
+    // the field is empty and the course offers that band. Handicap is
+    // NOT prefilled: items.handicap is a stale snapshot by design — the
+    // canonical index lives in handicap_rounds.
+    function apPersonName() {
+        return getAddPlayerMode() === "comp"
+            ? document.getElementById("add-player-manager").value
+            : document.getElementById("add-player-name").value.trim();
+    }
+    function apPrefillFromPerson() {
+        const name = (apPersonName() || "").toLowerCase();
+        if (!name) return;
+        const teeSel = document.getElementById("add-player-tee");
+        if (!teeSel || teeSel.value) return;
+        const rows = allItems.filter(i => (i.customer || "").toLowerCase() === name && i.tee_choice)
+            .sort((a, b) => String(b.order_date || "").localeCompare(String(a.order_date || "")));
+        const last = rows.length ? rows[0].tee_choice : "";
+        if (last && [...teeSel.options].some(o => o.value === last)) teeSel.value = last;
+    }
+
     function apPkgList() {
         if (addPlayerEventId == null) return [];
         const entry = pkgFor(addPlayerEventId);
@@ -12577,7 +13846,10 @@
         if (chosen) {
             const { pkg } = chosen;
             const holes = apPkgHoles(pkg);
-            if (holes) document.getElementById("add-player-holes").value = String(holes);
+            if (holes) {
+                apEnsureOption("add-player-holes", String(holes), holes > 18 ? `${holes} (${holes / 18} days)` : String(holes));
+                document.getElementById("add-player-holes").value = String(holes);
+            }
             // Current side_games vocabulary: a games-bundle buyer is in that
             // day's net AND gross games (ratified split, mailbox #276/#279)
             // → "Both"; no bundle → "None". Event-specific YES/SAT/SUN/NO
@@ -12704,6 +13976,7 @@
         document.getElementById("add-player-phone").value = "";
         document.getElementById("ap-contact-fields").style.display = "none";
         updateAddPlayerMode();
+        apLoadOptions(addPlayerEventId);
         document.getElementById("add-player-overlay").style.display = "flex";
     }
 
@@ -14613,9 +15886,11 @@
                     else if (statuses.includes("1ST TIMER")) statusSelect.value = "1ST TIMER";
                     else statusSelect.value = "";
                 }
+                apPrefillFromPerson();
             }
             renderApNameSuggest(name);
         });
+        document.getElementById("add-player-manager").addEventListener("change", apPrefillFromPerson);
 
         // Custom player-name typeahead — replaces the native <datalist>, which
         // shows no dropdown on iOS Safari (Kerry 2026-07-16: roster autofill
@@ -15784,11 +17059,8 @@
             await fetchItems();
             const ev = allEvents.find(e => e.item_name === eventName);
             if (ev) {
-                const container = document.getElementById(`detail-content-${ev.id}`);
-                if (container) {
-                    container.innerHTML = renderDetailContent(ev);
-                    attachDetailHandlers(container, ev);
-                }
+                const container = detailContainerFor(ev.id);
+                if (container) rerenderDetail(container, ev);
             }
         } catch (err) {
             alert('Error: ' + err.message);
@@ -15894,11 +17166,8 @@
                     fetchBalanceDueSendMap(evName).then(() => {
                         const ev = allEvents.find(e => e.item_name === evName);
                         if (ev) {
-                            const container = document.getElementById(`detail-content-${ev.id}`);
-                            if (container) {
-                                container.innerHTML = renderDetailContent(ev);
-                                attachDetailHandlers(container, ev);
-                            }
+                            const container = detailContainerFor(ev.id);
+                            if (container) rerenderDetail(container, ev);
                         }
                     });
                 }
@@ -15949,8 +17218,8 @@
                 const ev = allEvents.find(ev2 => ev2.item_name === eventName);
                 if (ev) {
                     await fetchRsvps(eventName);
-                    const container = document.getElementById(`detail-content-${ev.id}`);
-                    if (container) { container.innerHTML = renderDetailContent(ev); attachDetailHandlers(container, ev); }
+                    const container = detailContainerFor(ev.id);
+                    if (container) rerenderDetail(container, ev);
                 }
             } catch (err) {
                 alert('Error: ' + err.message);

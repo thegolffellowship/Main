@@ -390,6 +390,212 @@ Recap draft:
 `docs/claude/recaps/2026-09-12-a18.5-forest-creek.{txt,html}` — three
 Kerry blanks (fellowship, tee times, the Luke-not-bought-in line).
 
+### 3k. Third live run — s9.23 THE QUARRY + a9.23 AVERY RANCH (Tue 2026-09-15), run Wed 6:50–7:20 AM
+
+Kerry: "Yeah do closeout for last nights events. Like you said, much was
+done last night." True — the improvements + handicap-surfaces lanes had
+already posted every handicap (21 SA, 11 of 12 Austin) and emailed the
+cards twice (01:52 and 02:06 UTC, the second after the index fix), and
+Kerry had paid every payout (14 SA rows, 12 Austin, all PAID by 9/15).
+What the run added:
+
+- **Identity:** GG spelled "AREVALO, Guillermo"; the store row is
+  "Guilermo Arevalo" (821). The card AND its posted handicap round carried
+  customer_id NULL (rule 6 breach, one row). Alias added; `refresh=` on the
+  keyed import dropped nothing (`refreshed_players_dropped: []` — the
+  stale-card matcher does not treat a null-cid card as stale), so the fix
+  was `scoring-round-drop:3526|unpost|apply` → keyed re-import (card 3528,
+  cid 821) → `scoring-hcp-import:a9.23|apply` (1 row, index 7.8, recap
+  mail to Kerry + Robert for that one row). Which spelling is canonical is
+  Kerry's call (his email is guillermoarevalo25@).
+- **Lee Vasquez (card 3518) has NO tee or course** — GG served the card
+  without a tee row, so par, dots-vs-par and the handicap post are blocked
+  (`no_tee_slope_rating`). Not guessed. Registration says <50, which at
+  Avery Ranch was Blue (885) for everyone else in that band — Kerry
+  confirms, then the card needs a tee stamped (no bridge; skill OPEN 9)
+  and one more `scoring-hcp-import:a9.23|apply`.
+- **Pairings:** SA TEAM Net board applied (6 groups, 3 blind seats, 21
+  rows, 28 pairs). Austin's only team board is **CART Net** (6 pairs of 2)
+  — the foursomes are on no GG board, so NOT applied (skill OPEN 10).
+- Cards = field both chapters (21, 12); parity all_ok Baker 3498 +
+  Youngs 3519; MVP Baker 12 (TGF MVP over Youngs 10), GG agrees both;
+  financials verified 100% both; Avery Ranch bill $714.45 alerted 9/15 =
+  course_fees exactly; **The Quarry bill ($886.57 expected) has not alerted
+  yet**; contests sync enrolled 0; HIO pot $3,384 after Tuesday (Cedar
+  Creek's 8 pre-registrations make the tool say 3,392 — OPEN 8; the Insider
+  prints the as-of figure since v2.458.2).
+- Jeff King (776, Austin first-timer, facebook_lead) had chapter NULL →
+  set Austin.
+- Recap drafts: `docs/claude/recaps/2026-09-15-s9.23-quarry-a9.23-avery-ranch.md`
+  (one per chapter; blanks = fellowship headcounts, tee times, deadlines).
+
+**7:20 AM follow-up (Kerry's three answers).** (1) Lee Vasquez: GG's
+results page DID show his tee (Blue 139/36.0) — the auto-sync's card had
+lost it; drop 3518 + keyed re-import came back as 3529 WITH the tee,
+handicap posted (diff 7.3, index 7.3 unchanged). (2) Austin pairings from
+the TEE SHEET with the event id passed: 3 foursomes at 4:57 / 5:06 /
+5:15 PM, applied. (3) "Guillermo is correct" — customer 821 renamed
+(3 items rows followed); "Guilermo Arevalo" still resolves to 821.
+
+### 3l. a18.5 correction, 2026-09-16 2:30 PM — Luke Youngs 71 → 70
+
+Robert (Austin manager), via Kerry: "there was a scoring error and Luke
+shot 70." GG had corrected the card after our 9/12 import (back nine
+33 → 32). Dropped card 3479 (unposting hr 15644/15645), keyed re-import
+→ card 3530 (70 / 67 net, MVP flag kept), two nines re-posted (front 38
+diff 1.8, back 32 diff −3.7; index 0.9 → 0.1). GG boards and all 17
+PAID payout rows unchanged (the skins GG paid were already right).
+Skill OPEN 12 raised: a post-import GG edit is invisible to the Tracker.
+
+### 3m. Fourth live run — s18.11 CEDAR CREEK (Sat 2026-09-19, SA, 18 holes), run 1:30–2:30 PM CDT
+
+Single-event day (Austin off). Mailbox read #541–#565 first. Field 15 =
+15 cards (auto-sync 12:57–1:32 PM), every cid set, no null-cid or
+tee-less card. Parity all_ok on Palacios 10793 and Wade 10799. MVP:
+Palacios 15 pts on the gross tiebreak over Stich and Wade (all 75 net).
+Tee-sheet ingest applied FIRST (skill 1.2): `scoring-pairings:round|sa|
+1708030|apply|3310` → 4 groups (3/4/4/4), 15 rows, 21 pairs; the CART
+Net board was NOT applied as groups. Financials verified (15 × 90.65 =
+1,359.75, coverage 100). Contests sync enrolled 0. Card emails: none
+since 9/16 (`scoring-message-log:handicap-card`). Course bill: no
+Cedar Creek chase alert yet ($100 Alamo City deposit booked 9/19 per
+the earlier split); a $100 expense row dated 9/17 carries event_name
+s18.11 under "Luke Mazanec" — noted, not touched.
+
+**Handicaps — asked for twice, posted 5:40 PM.** The 2 PM run read
+`no_per_nine_rating` (skipped all 15) as "ask Kerry" and reported it so.
+Kerry: "I thought I'd already given you Cedar Creek's breakdown for
+tees ratings and indexes. No?" He had: the Tuesday 9-hole tee rows
+(`scoring-tee-nines:35670` decides each row's nine) carry them — White
+717 = 4433 F 35.5/126 + 2971 B 35.9/123 (= 71.4/125); Gold 711 = 4436
+F 34.8/116 + 2973 B 34.6/119 (= 69.4/118); Red (L) 710 = 2441 F
+36.4/124 + 2978 B 36.5/116 (= 72.9/120); front/back yardages match the
+cards. `scoring-hcp-2nines:s18.11 CEDAR CREEK|{...}|apply` → 30 rounds,
+0 skipped, no flags (Palacios 7.7 → 8.2, Straiton 0.6 → 1.1, Wade 7.5
+→ 7.3). Now in the ratings-of-record table and skill 3.1c. Card emails
+(3.3) and the GG upload (3.4) remain Kerry's.
+
+**The 2 PM money findings were a snapshot, not defects (skill 1.3).**
+At 2 PM the walk saw two boards at purse 0.0, no Skins board, and
+matrix-fallback rows (12 rows $490; the three-way Ind Net tie split
+two ways, Wade missing). Kerry then entered the money and the boards
+went up; by 5:30 PM the hourly refresh had re-recorded 18 rows, $622,
+all GG-backed: Ind Net T1 $54 ×3, City MVP $72 (Palacios, gross
+tiebreak — the tiebreak decides MVP, the purse still splits), Cart Net
+$60/$60 + four $15 (T2 Mazanec+Pearson, Palacios+Anthis), Skins Gross
+$208 (Schneider 13 and 15 — the shadow read had also given him 18).
+All PENDING. No CTP board — Kerry: none was run. Kerry's other read of
+my report ("both got $81 for MVP") was my wording: the $81s were the
+Ind Net purse, not MVP. Lesson: say which game a dollar belongs to.
+
+Recap draft: `docs/claude/recaps/2026-09-19-s18.11-cedar-creek.md` +
+Word file via tools/recap_docx.js (SA only, Kerry's signature). Fall
+race standings fetched 2:04 PM still show Tuesday's numbers (Wade on
+20 with a tied-1st net) — GG had not posted Saturday's points; monthly
+cache 05:30 pre-round. Both flagged as blanks.
+
+### 3n. The course record rebuilt to the USGA/WHS shape (mailbox #576, 2026-09-19 evening → 2026-09-20 00:10 CDT, v2.466.0 → v2.466.2)
+
+Kerry, #576: "the full standard shape in one pass … Migrate existing
+rows with source='import' … then correct from CRDB … the rebuild is the
+blocker for the 13 staged tees in #569." Done in that order.
+
+- **v2.466.0** — `course_tees` rebuilt IN PLACE on boot (same table,
+  same tee_id): gender M|F, holes 9|18, nine, par, bogey_rating,
+  is_combo, gg_tee_id, usga_tee_label, source, version columns; natural
+  key `(course_id, tee_name, gender, holes, nine, slope, rating)`; new
+  `tee_set_ratings(tee_id, rating_type total|front|back, …)`; `courses`
+  gains gg_course_id / usga_course_id. The migration ran on the live DB
+  at 04:57 UTC — `scoring-per-nine-audit` immediately reported gender
+  and `how` per tee, 29 resolved / 85 unresolved, exactly the pre-rebuild
+  count (nothing lost, nothing yet corrected). Shape: schema.md.
+- **Seeds applied** (`scoring-crdb-seed:22362|apply`, `…:29522|apply`):
+  Kissing Tree — 4 existing sets matched by gender + rating/slope
+  (Black=Back, Red (KT)=KT, Gold (Legends)=Legends, Green (L)=Forward F),
+  10 inserted (tee_ids 14646–14655; three men's combos, six women's
+  sets, men's Forward). Forest Creek — Blue/White/Red (L) matched, 4
+  inserted (14656–14659: Green M, Red M, White F, Green F). Every set
+  now carries total + front + back rating rows with bogey.
+- **The 13 staged tees (#569)** → 10 stored as rating rows with
+  `scoring-tee-nines-store:<id>|…|apply` (Falconhead 3956/3959/3961,
+  Vaaler 2491/2492/2509, Lost Pines 8730/8729/8742/8741); the other
+  three of the 13 were Forest Creek's, covered by the seed.
+- **Kerry's course cards applied** (`scoring-course-card:<id>|apply`,
+  the 2026-09-15 GG course-setup reads): Avery Ranch — five 18-hole sets
+  created (Black/Blue/White/Green M, Green (L) F, 14667–14673) with the
+  nines the Tuesday rows already had; Cedar Creek — Blue 18 + its front
+  nine created, the rest existing; Forest Creek — Gold M created, the
+  back nines created, and **Green M adopted the CRDB-seeded row**.
+- **v2.466.1** — the gap that adoption fixes: the seed names a set the
+  USGA way ("Green"), GG names it "3 - Green Tee"; the exact-name match
+  in both GG writers would have inserted a twin with identical numbers.
+  `_adopt_crdb_tee_set` claims a CRDB-named 18-hole row of the same
+  gender + slope + rating, takes GG's name, keeps the label and tee_id.
+  Found on the Forest Creek card's live dry run, one minute after the
+  seed. **v2.466.2** — the adoption no longer writes on a dry run.
+- **Audit after:** 34 courses, 67 resolved / 68 unresolved. EVERY course
+  with an upcoming event resolves every tee: Canyon Springs, ShadowGlen,
+  Olympia Hills, The Quarry (paired Tuesday rows), Avery Ranch, Forest
+  Creek, Kissing Tree (rating rows). `scoring-hcp-2nines:s18.11 CEDAR
+  CREEK` dry run: 30 skipped "already posted", 0 planned — the dedupe
+  held through the rebuild; the per-nine source now reads
+  `how: paired nine-hole rows` for all four Cedar Creek tees.
+- **Still unresolved (68 tees):** 18 courses with no upcoming event
+  and no CRDB pull yet (Landa Park, La Cantera, Delaware Springs,
+  Crystal Falls, Flying L, The Bandit, Willow Springs, Morris Williams,
+  Squaw Valley, Comanche Trace ×2, plus nine archived "(OLD)" GG
+  courses), Vaaler White (L) 2514, Falconhead Red (L) 3958, and Cedar
+  Creek's three OLDER-rating rows (2198/2189/2190 at 74.2/71.2/73.4 —
+  a previous rating version; rounds may point at them). The recipe for
+  each is one CRDB pull → `scoring-crdb-seed:<course_id>|<json>|apply`.
+- **Not populated yet:** gg_tee_id, gg_course_id, usga_course_id — the
+  GG import does not carry its ids today; a follow-up when it does.
+
+### 3o. Tee designation — master name, GG alias, the four sets TGF plays (Kerry 2026-09-20 morning, v2.467.0)
+
+Kerry, after the #576 rebuild: "Master name is what USGA/course call it.
+GG should just be an alias. The GG names were purely for Admin, not
+necessary for member facing… there's never more than four sets of tees
+that we use on a course. The rest can and should be hidden. If we bring
+in a New course then there needs to be understanding to identify which
+tees we'll choose based on our standard yardage parameters. And as a
+default, we do not want to use any combo tees, except as last resort."
+Yardage standards, verbatim: <50 6300-6799 · 50-64 5800-6299 · 65+
+5300-5799 · Women — shortest tees not less than 4800. "We also have
+some 3- for women based on tee availability."
+
+- `course_tees.tee_name` = master; `gg_alias` = GG's name; `tgf_bands` =
+  designation. Boot step aliases every GG-style name once (the typed
+  number → bands). Writers match alias-or-master; adoption by numbers
+  generalised to any unaliased set.
+- Standards as data (`tee_yardage_standards`), proposer, setter, apply;
+  three bridges. Legend / tee circles / PH read designation first.
+- Also fixed on the way: the R1 ×0.96 line in handicap-projection.md was
+  stale (applied 2026-08-03) — #578 records it; P2-4 closed.
+- NOT done: the Courses admin page still lists every set (right for
+  admin); no member-facing tee PICKER exists yet (orders carry the band,
+  not a tee), so nothing member-facing needed a filter today. The CRDB
+  seed tuples carry no yardage, so a CRDB-only course cannot be proposed
+  until its yardages arrive (a course card or the CRDB pull's yardage
+  column — add it to the seed shape when the next course comes in).
+
+### 3p. The yardages we have (Kerry 2026-09-21, v2.468.0 / v2.468.1)
+
+Kerry: "Seems like you need to incorporate the yardages we have. Show
+me the updated schema." Yardage is the physical tee's, not the rating's:
+`_heal_tee_yardages` (boot + after card / store / seed) fills a set from
+its holes, then from its other-gender twin of the same master name, and
+gives every rating row its own yardage (`tee_set_ratings.yardage`, total
+/ front / back). The CRDB seed shape takes an optional `[y18, yf, yb]`.
+Live: every imported / carded set already had yardage; 7 of 13 CRDB-only
+sets filled from their twin; the 6 Kissing Tree combos wait for the
+CRDB numbers (Kerry's pull). Schema block rewritten in schema.md.
+Advisory finding: Forest Creek's women's Green (5542) now satisfies the
+4800 floor, so the standard proposes Green F for Forward over Red F
+(4780); designation unchanged. Blocked from the sandbox: ncrdb.usga.org
+is not reachable (network policy), so a CRDB reader would have to run on
+Railway behind a widened SSRF allow-list — Kerry's call.
+
 ## 4. NOT done, and why
 
 - **Wednesday-AM TGF Insider auto-draft (mailbox #453).** BUILT in

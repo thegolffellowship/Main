@@ -436,6 +436,27 @@ check("cards + hole_cols feed the grids",
       evd["hole_cols"] == [10, 11] and "101" in evd["cards"])
 # PAR row (Kerry 2026-09-13): par per HOLE for the board headers,
 # published only where the tees in play agree
+# ── flight placement reads the LABEL's boundary (Kerry 2026-09-14) ──
+import inspect as _insp, textwrap as _tw
+_ls = _insp.getsource(db.get_event_leaderboard).split("\n")
+_i = next(k for k, l in enumerate(_ls) if l.strip().startswith("def _label_bounds"))
+_j = next(k for k in range(_i + 1, len(_ls))
+          if _ls[k].strip().startswith("def ") and not _ls[k].startswith(" " * 8))
+_ns = {}
+exec(_tw.dedent("\n".join(_ls[_i:_j])), _ns)
+_lb = _ns["_label_bounds"]
+check("flight boundary comes off the label, not from who bought in",
+      _lb(["Flight 1 (HCP <12.0)", "Flight 2 (HCP 12.0+)"]) == [12.0],
+      repr(_lb(["Flight 1 (HCP <12.0)", "Flight 2 (HCP 12.0+)"])))
+check("three labelled bands give two cuts",
+      _lb(["A (HCP <8.0)", "B (HCP 8.0-15.9)", "C (HCP 16.0+)"]) == [8.0, 16.0])
+check("labels with no number fall back to the derived midpoint",
+      _lb(["LOW FLIGHT", "HIGH FLIGHT"]) is None)
+check("labels that aren't a clean ladder are not trusted",
+      _lb(["A (<20)", "B (20+)", "C (5+)"]) is None)
+check("a single flight has no boundary to read",
+      _lb(["Flight 1 (HCP <12.0)"]) is None)
+
 check("hole_par carries the per-hole par for the header row",
       evd["hole_par"] == {"10": 4, "11": 4}, repr(evd.get("hole_par")))
 check("Individual Gross inactive notice from the live matrix (16 on 9h)",

@@ -179,6 +179,17 @@
                 z-index: 55; box-shadow: 0 1px 0 var(--border);
             }
         }
+        /* Role chips (Kerry-ratified 2026-09-15): AMB / CAPT / BACK */
+        .role-chips { display: inline-flex; gap: 3px; margin-left: 0.35rem; vertical-align: middle; }
+        .role-chip {
+            font: 700 9px/1 'Bitter', serif; letter-spacing: 0.08em; padding: 3px 6px;
+            border-radius: 9999px; border: 1px solid #D1D5DB; background: #fff; color: #9CA3AF;
+            cursor: pointer; transition: background .12s, color .12s, border-color .12s;
+        }
+        .role-chip:disabled { cursor: default; }
+        .role-chip.on.role-ambassador { background: #DBEAFE; color: #1E40AF; border-color: #93C5FD; }
+        .role-chip.on.role-group_captain { background: #1B1B1B; color: #fff; border-color: #1B1B1B; }
+        .role-chip.on.role-solo_back_ok { background: #FEF3C7; color: #92400E; border-color: #FCD34D; }
     </style>
 
         <!-- Customer list view (default) -->
@@ -702,6 +713,50 @@
         </div>`;
     }
 
+    // Role flags (Kerry-ratified 2026-09-15, pairings rules 12/13):
+    // AMB = ambassador (welcoming; spread across groups), CAPT = group
+    // captain (rules/pace; drives, rides with the newest player),
+    // BACK = OK alone on the <50 tee. One tap toggles; an explicit 0/1
+    // is stored so a cleared seed stays cleared. Managers only.
+    const ROLE_CHIPS = [
+        ["ambassador", "AMB", "Ambassador — welcoming and encouraging; spread across groups"],
+        ["group_captain", "CAPT", "Group captain — rules, pace, looks out for the group; drives and rides with the newest player"],
+        ["solo_back_ok", "BACK", "OK alone on the <50 tee (rule 12 otherwise keeps two <50s together)"],
+    ];
+    function renderRoleChips(c) {
+        const isMgr = currentRole === "manager" || currentRole === "admin";
+        if (!c.customer_id) return '';
+        return `<div class="role-chips" data-customer-id="${c.customer_id}" onclick="event.stopPropagation()">`
+            + ROLE_CHIPS.map(([flag, label, title]) => {
+                const on = !!c[flag];
+                if (!isMgr && !on) return '';
+                return `<button type="button" class="role-chip role-${flag}${on ? ' on' : ''}" data-role-flag="${flag}"
+                    title="${escapeHtml(title)}" ${isMgr ? '' : 'disabled'}>${label}</button>`;
+            }).join('') + '</div>';
+    }
+    async function _tapRole(btn) {
+        const wrap = btn.closest(".role-chips");
+        const cid = parseInt(wrap.dataset.customerId);
+        const flag = btn.dataset.roleFlag;
+        const value = !btn.classList.contains("on");
+        wrap.querySelectorAll(".role-chip").forEach(b => { b.disabled = true; });
+        try {
+            const res = await fetch(`/api/customers/${cid}/roles`, {
+                method: "POST", headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ flag, value }),
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) { alert(data.error || "Failed to save role."); return; }
+            allCustomers.forEach(c => { if (c.customer_id === cid) c[flag] = value ? 1 : 0; });
+            document.querySelectorAll(`.role-chips[data-customer-id="${cid}"] .role-chip[data-role-flag="${flag}"]`)
+                .forEach(b => b.classList.toggle("on", value));
+        } catch (e) {
+            alert("Failed to save role.");
+        } finally {
+            wrap.querySelectorAll(".role-chip").forEach(b => { b.disabled = false; });
+        }
+    }
+
     async function _tapPace(btn) {
         const seg = btn.closest(".pace-seg");
         const cid = parseInt(seg.dataset.customerId);
@@ -734,6 +789,9 @@
     }
 
     function attachPaceHandlers(rootEl) {
+        rootEl.querySelectorAll(".role-chips .role-chip").forEach(btn => {
+            btn.addEventListener("click", e => { e.stopPropagation(); _tapRole(btn); });
+        });
         rootEl.querySelectorAll(".pace-seg .pace-btn").forEach(btn => {
             btn.addEventListener("click", e => {
                 e.stopPropagation();
@@ -967,14 +1025,22 @@
         // Activity year filter (default: this calendar year). Counts any
         // membership purchase or event registration in the target year;
         // excludes RSVP-only items and admin/roster-import placeholders.
+        // A LEAD is activity too (Kerry 2026-09-15: "I thought Leads were
+        // creating customer_id's, but when I searched for Jose (Joe)
+        // Mejia, his name did not come up in CUSTOMERS") — every lead
+        // gets a real customers row on arrival, with no purchases, and
+        // this filter was hiding all of them. A row CREATED in the target
+        // year counts, whatever its purchases.
         if (activityFilter === "this_year" || activityFilter === "last_year") {
             const targetYear = String(new Date().getFullYear() - (activityFilter === "last_year" ? 1 : 0));
             const SKIP_TX = new Set(["rsvp_only", "gg_rsvp"]);
-            filtered = filtered.filter(c => (c.items || []).some(i =>
-                (i.order_date || "").startsWith(targetYear)
-                && !SKIP_TX.has(i.transaction_status)
-                && !PLACEHOLDER_MERCHANTS.has(i.merchant)
-            ));
+            filtered = filtered.filter(c =>
+                (c.created_at || "").startsWith(targetYear)
+                || (c.items || []).some(i =>
+                    (i.order_date || "").startsWith(targetYear)
+                    && !SKIP_TX.has(i.transaction_status)
+                    && !PLACEHOLDER_MERCHANTS.has(i.merchant)
+                ));
         }
 
         if (query) {
@@ -1070,19 +1136,45 @@
         renderCustomers();
     }
 
+    // ACTIVE members (Kerry 2026-09-21): who has PLAYED inside the window
+    // (60 days by default — the `members_active_days` dial), per chapter,
+    // with the share. /api/customers/activity is keyed by customer_id.
+    let memberActivity = null;
+    async function loadMemberActivity() {
+        try {
+            const res = await fetch("/api/customers/activity", { cache: "no-store" });
+            if (res.ok) { memberActivity = await res.json(); renderStats(); }
+        } catch (err) { console.error("loadMemberActivity:", err); }
+    }
+    function isActiveMember(m) {
+        if (!memberActivity || !m.customer_id) return false;
+        const row = memberActivity.customers[String(m.customer_id)];
+        return !!(row && row.active);
+    }
+    function pct(n, d) { return d ? Math.round(100 * n / d) + "%" : "—"; }
+
     function renderStats() {
         document.getElementById("stat-customers").textContent = allCustomers.length;
         const members = allCustomers.filter(c => c.status === "MEMBER" || c.status === "MEMBER+");
         document.getElementById("stat-members").textContent = members.length;
-        // Chapter breakdown for current members
+        // Chapter breakdown for current members: total · active (share)
         const byChapter = {};
+        let activeAll = 0;
         members.forEach(m => {
             const ch = (m.chapter || "").trim() || "—";
-            byChapter[ch] = (byChapter[ch] || 0) + 1;
+            const row = byChapter[ch] || (byChapter[ch] = { n: 0, active: 0 });
+            row.n += 1;
+            if (isActiveMember(m)) { row.active += 1; activeAll += 1; }
         });
-        const breakdown = Object.entries(byChapter)
-            .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-            .map(([ch, n]) => `<span style="display:inline-block; margin:0 0.5rem 0.15rem 0;">${escapeHtml(ch)}: <strong style="color:var(--text);">${n}</strong></span>`)
+        const days = memberActivity ? memberActivity.days : null;
+        const activeLine = memberActivity
+            ? `<div style="margin-bottom:0.2rem;"><strong style="color:var(--buyin-green-text, #15803D);">${activeAll} active</strong> · ${pct(activeAll, members.length)} played in the last ${days} days</div>`
+            : "";
+        const breakdown = activeLine + Object.entries(byChapter)
+            .sort((a, b) => b[1].n - a[1].n || a[0].localeCompare(b[0]))
+            .map(([ch, r]) => `<span style="display:inline-block; margin:0 0.5rem 0.15rem 0;">${escapeHtml(ch)}: <strong style="color:var(--text);">${r.n}</strong>`
+                + (memberActivity ? ` <span style="color:var(--buyin-green-text, #15803D);">${r.active} active</span> <span>(${pct(r.active, r.n)})</span>` : "")
+                + `</span>`)
             .join("");
         document.getElementById("stat-members-breakdown").innerHTML = breakdown;
         document.getElementById("stat-total-items").textContent = allItems.length;
@@ -1301,6 +1393,7 @@
                         ${currentRole === "admin" ? `<button class="btn btn-edit" data-merge-customer="${escapeHtml(c.name)}" style="font-size:0.65rem; padding:0.1rem 0.3rem; margin-left:0.25rem; vertical-align:middle;" onclick="event.stopPropagation(); openCustMergeModal('${escapeHtml(c.name).replace(/'/g, "\\'")}')">Merge</button>` : ''}
                         <br><span class="mc-event">${meta.join(" &bull; ")}</span>
                         <span style="margin-left:0.4rem; vertical-align:middle;">${renderPaceControl(c)}</span>
+                        <span style="margin-left:0.4rem; vertical-align:middle;">${renderRoleChips(c)}</span>
                     </div>
                     <span class="mc-chevron" ${isExpanded ? 'style="transform:rotate(90deg)"' : ''}>&#9656;</span>
                 </div>
@@ -1558,7 +1651,7 @@
                 <td style="font-size:0.78rem; font-weight:600; color:${c.handicapIndex !== null ? (c.handicapIndex < 0 ? '#16a34a' : '#2563eb') : 'var(--text-muted)'};">${c.handicapIndex !== null ? (c.handicapIndex < 0 ? '+' + Math.abs(c.handicapIndex).toFixed(1) : c.handicapIndex.toFixed(1)) + '<span style="font-size:0.85em;color:#94a3b8;font-weight:500;margin-left:2px;">N</span><span style="font-size:0.9em;color:#64748b;font-weight:500;"> / ' + (c.handicapIndex < 0 ? '+' + Math.abs(c.handicapIndex * 2).toFixed(1) : (c.handicapIndex * 2).toFixed(1)) + '</span>' : '\u2014'}</td>
                 <td style="font-size:0.78rem;">${renderRenewalCell(c)}</td>
                 <td style="font-size:0.78rem; color:var(--text-muted);">${escapeHtml(c.latestDate || "\u2014")}</td>
-                <td>${renderPaceControl(c)}</td>
+                <td>${renderPaceControl(c)}${renderRoleChips(c)}</td>
             </tr>
             <tr class="cust-detail-row ${isExpanded ? 'visible' : ''}" data-detail-for="${escapeHtml(c.name)}">
                 <td colspan="11">
@@ -2453,7 +2546,7 @@
             // dates to M/D so the six columns pack close together and the
             // scroll is short (Kerry 2026-07-19). Desktop keeps its roomier
             // layout with right-aligned numerics.
-            const isMobile = !!(window.matchMedia && window.matchMedia('(max-width: 768px)').matches);
+            const isMobile = !!(window.matchMedia && window.matchMedia('(max-width: 560px)').matches);
             const pad = isMobile ? '0.25rem 0.4rem' : '0.3rem 0.6rem';
             const alignNum = isMobile ? 'left' : 'right';
             const alignCtr = isMobile ? 'left' : 'center';
@@ -4279,6 +4372,7 @@
             const res = await fetch("/api/items");
             allItems = await res.json();
             allCustomers = buildCustomers(allItems);
+            loadMemberActivity();   // the ACTIVE counts arrive and repaint the snapshot
             populateChapterFilter();
             // chapter managers land scoped to their chapter (Kerry)
             if (typeof currentChapter !== 'undefined' && currentChapter) {
@@ -4468,7 +4562,7 @@
                         requestAnimationFrame(() => {
                             const mobileCard = document.querySelector(`.mobile-card[data-cust-name="${escapeHtml(match.name)}"]`);
                             const desktopRow = document.querySelector(`.cust-row-clickable[data-name="${escapeHtml(match.name)}"]`);
-                            if (mobileCard && window.innerWidth <= 768) {
+                            if (mobileCard && window.innerWidth <= 560) {
                                 mobileCard.scrollIntoView({ behavior: "smooth", block: "center" });
                             } else if (desktopRow) {
                                 desktopRow.classList.add("expanded");

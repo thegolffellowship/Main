@@ -162,6 +162,32 @@ def link_state(ev: dict, today: date | None = None) -> dict:
             "checked_at": ev.get("registration_url_checked_at")}
 
 
+# The {pay_button} variable (Kerry 2026-09-14: "Can you work the payment
+# link in as a button for these messages?"). Same link and the SAME
+# refusal rule as {event_url} — it is the store registration page — so a
+# dead or expired link can never reach a member wearing a button that
+# looks live. Inline styles only: every mail client strips <style>.
+PAY_BUTTON_LABEL = "Complete Registration"
+
+
+def pay_button_html(url: str, label: str = PAY_BUTTON_LABEL) -> str:
+    """One TGF-orange call-to-action button for an outgoing email.
+    Returns "" for a blank url so callers can guard on falsiness the
+    same way they already guard {event_url}."""
+    url = (url or "").strip()
+    if not url:
+        return ""
+    return (
+        '<p style="margin:18px 0;text-align:center;">'
+        '<a href="%s" '
+        'style="display:inline-block;background:#E87C3E;color:#ffffff;'
+        'font-weight:700;font-size:16px;line-height:1;'
+        'padding:14px 28px;border-radius:999px;'
+        'text-decoration:none;font-family:Helvetica,Arial,sans-serif;">'
+        '%s</a></p>' % (url, label)
+    )
+
+
 def event_url_for_message(ev: dict | None, today: date | None = None) -> tuple[str, str]:
     """(url, problem) for the {event_url} variable. url is "" whenever the
     link must not go out; problem says why, for the send guard."""

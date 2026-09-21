@@ -14,14 +14,14 @@ Before working on a specific area, Read the relevant sub-doc:
 - `docs/claude/scoring.md` (scorecards, course DB w/ tees, formula layer, GG extraction)
 - `docs/claude/member-portal.md` (member-facing profile + email summaries — proposed design)
 - `docs/claude/customer-merge-repair.md` (playbook for fixing absorbed customer profiles)
-- `docs/claude/state-of-the-tracker.md` (Platform-facing brief for the claude.ai Golf Fellowship Project — refresh after major build waves)
-- `docs/claude/side-games.md` (side-games RATIFIED SPEC v1.0 — buy-ins, game rules, prize-matrix derivation; open flags at bottom)
+- `docs/claude/state-of-the-tracker.md` (Platform-facing brief for the claude.ai Golf Fellowship Project — **rewritten in full 2026-09-18 at v2.464.8**: subsystem map, RULES OF RECORD, open decisions, Platform lessons; refresh after major build waves)
+- `docs/claude/side-games.md` (side-games RATIFIED SPEC v1.0 — buy-ins, game rules, prize-matrix derivation; open flags at bottom. **THE BUY-IN COUNT SELECTS WHICH GAME IS PLAYED** (a9.23, ratified 2026-09-16) — below 8 gross buyers on a nine the matrix runs Skins ½ Net, a NET game, and computing gross instead is what made us report that Golf Genius contradicted itself when it was right. Also **pops are a property of the GAME, not of the card** (round-level Individual Net/Gross vs hole-level Team Net/Stableford/½-Net Skins), and the **USGA Appendix C allowance table with its verification state** — the four-player ladder confirmed, the two-player CART Net rows NOT confirmed and deliberately carrying no fallback value)
 - `docs/claude/game-engine.md` (Game Creator engine + untether-from-GG staging — versioned game/season-contest definitions; design of record)
 - `docs/claude/live-scoring-test-center.md` (admin sandbox at `/admin/test-center` — the Stage-1 shadow leaderboard + GG parity gate; pure engine in `email_parser/live_scoring.py`; live in-place GG refresh + the course-coverage guard)
 - `docs/claude/live-scoring-spec-for-ca.md` (**end-to-end spec for CA** — the scoring engine, the FLIGHTING rule as taught by Kerry 2026-07-29, the pot-split analysis, the flights-freeze/money-floats scenario matrix, and an explicit ratified / derived / UNKNOWN split. Start here for the whole picture)
 - `docs/claude/runbook-tgf-championship-2026-08-14.md` (2026 TGF CHAMPIONSHIP at Lost Pines — pre-flight findings incl. the empty course row + the event-link fix, verified bucket purses, Thursday + game-day checklists)
 - `docs/claude/runbook-sa-championship-2026-08-01.md` (first live shadow: SA CHAMPIONSHIP at The Quarry — pre-flight, per-nine tee merge, buyer counts that decide which games activate, and what to record on the day)
-- `docs/claude/gg-history.md` (GG archive coverage map: 29 portals SA 2016–2025 / Austin 2019–2025 / DFW 2020–2024 / Houston 2021–2024 / one-offs, the proven widget-route ingest recipe, and the proposed gg_history_* schema — schema pending Kerry rule-3b ratification)
+- `docs/claude/gg-history.md` (GG archive: 59-portal coverage map SA 2016–2025 / Austin 2019–2025 / DFW / Houston / one-offs, the proven widget-route recipe, the RATIFIED gg_history_* schema, the ingest engine — Phase A standings, Phase B holes / games / **FIELD walk** (v2.464.0: the calendar widget is the date source, the ALL Net/ALL Gross board is the field), the master-roster map — and the **Participation series** 2019–2026 by season × chapter (Kerry 2026-09-17: "Before 2023, participation rates were higher, significantly" — measured there). Companion: `handoff-2026-09-17-gg-history-2019-2024.md`)
 - `docs/claude/pairings.md` (TGF Pairing Standards — Kerry's ruleset of record for the pairings engine, 2026-07-12; CA docs merge + pairing_history amendment pending)
 - `docs/claude/handoff-2026-08-01-live-standings.md` (**session handoff** — live City Points standings, the GG championship POINTS boards, what is verified vs unverified, and the traps: duplicate `id`s on the double-rendered events page, silent `.catch()`, the games-matrix seed-vs-app_settings drift)
 - `docs/claude/handoff-2026-08-07-event-specific-entry-refunds.md` (**session handoff** — the championship's 14 day-combination packages, the ratified side-games bundle split, why hole counts are display-derived from packages rather than stored, the boot-heal 36/54 exemption, and the three carry-forwards: Add Player event options, per-day Credit/Partial Refund, and event-specific GAME options (YES/SAT/SUN/NO). Companion prompt: `docs/claude/session-prompt-2026-08-07-event-specific.md`)
@@ -43,10 +43,18 @@ Before working on a specific area, Read the relevant sub-doc:
 - `docs/claude/handoff-2026-09-09-event-closeout-first-run.md` (**session record, 2026-09-09, v2.347.2** — the first live run of the closeout routine on s9.22 Silverhorn + a9.22 ShadowGlen: what the auto-sync had already done, what was applied per chapter, the Donovan identity fix, what was deliberately NOT done, and the OPEN items 1–8 for Kerry)
 - `docs/claude/session-prompt-financial-audit.md` (**paste-in start prompt for the FINANCE lane** Kerry asked for 2026-09-09 — audit every dollar's path, design the liability ledger with inflows AND outflows and the account that holds each bucket, collapse the overlapping finance surfaces; one decision at a time)
 - `docs/claude/session-prompt-2026-09-10-next.md` (**paste-in start prompt for the next session** — the two asks Kerry owes, the OPEN rulings, #428, and the open queue)
+- `docs/claude/handoff-2026-09-15-event-night-leaderboard.md` (**session record, 2026-09-15 event night, v2.437.0→v2.457.0** — PAIRING RULE 15 (a credited/WD player leaves the sheet by himself; BLINDs drawn at random among the members with the fewest blinds this year; `blind_draws` table), the money hold (`_event_field_complete` — every hole of every player before a dollar or a win tint shows), the leaderboard wave (tee circles, all holes as columns, live skins, team handicap in PH, team cards on the chevron), the starter-sheet tee circles + NEW/1T badges, **the PLUS-HANDICAP MVP rule** (a plus comes off the round, never off a hole), the GG re-pull chain that had made both chapters' winnings wrong, Apple Pay + one-modal Mark Paid, and the handicap-card counts that would not reconcile. §7 is the TIMEZONE trap hit TWICE in one night; §10 carries the open rule-3b ratifications and the handicap-card identity bug; **§13 is the after-the-close-out section** — proxy winners rendered as board names, the new read-only `scoring-skins-audit` bridge, the a9.23 finding where Golf Genius's skins board and Golf Genius's own scorecard disagree by one stroke on Carlos Zapata's hole 7 ($52), the chapter-badge rule Kerry has not given yet, and the five CA Queue rows every open decision now lives on)
+- `docs/claude/session-prompt-2026-09-16-handicap-card-identity.md` (**spin-off contract, two items** — (1) the handicap-card event filter matches registrants to handicap links by NAME STRING, drops links with a null `customer_name`, and re-derives its own roster instead of `_event_roster_rows`; `get_handicap_export_data` never returns a `customer_id` at all. (2) The ratified PLUS rule was applied at 2 of the 11 `compute_hole_derivations` call sites, so `get_scorecard` and `fetch_champ_player_card` still add a plus stroke hole by hole — with the WHS/index call sites that must KEEP it listed explicitly. Kerry 2026-09-15: "What's the bug? We need to fix it" / "this isn't how we do Net Points with pluses on holes")
+- `docs/claude/events.md` → **"The DIVISIONS / FLIGHTS tab"** (the RATIFIED flighting + payout rule set as data in `email_parser/flighting.py` — ladders, no minimum / no merge, places by flight size, the Individual Gross pot with the 10% Overall Low Gross bonus, derived labels — in its two layers SELECTION (freezes) / AMOUNTS (recomputes); the per-event FLIGHTS tab, dry run, GG pays; the freeze schema awaiting rule 3b in mailbox #584)
+- `docs/claude/handoff-2026-09-21-flighting.md` (**session record, 2026-09-21, the FLIGHTING lane, v2.469.0** — the ratified flighting + payout rules as data and the DIVISIONS/FLIGHTS tab; the assumptions on the record; the rule-3b freeze schema proposed in #584; dry-run findings vs GG; the freeze-button question open for Kerry)
+- `docs/claude/handoff-2026-09-18-handicap-surfaces-lock.md` (**session record, 2026-09-16→18, v2.458.0→v2.464.9** — the HANDICAP LOCK (every surface reads the index in effect when the event began, derived not stored), PAIRINGS = ROSTER (the one-day-old AVG map), an ingest may not erase what it does not carry, Avery Ranch nines from played history, the plus rule in the mechanism with half-away rounding and MVP forward-only, chapter guesses confirmed, the phone repaint after reload; §3 root causes, §4 what is still open incl. design-claude #517/#520)
 - `../.claude/skills/event-closeout/SKILL.md` — **REPO ROOT**, not this directory (**the post-event routine** — Phase 0 what the auto-sync already did, then data in (scorecards + identity check, the FINAL GG pairing ingest that nobody remembers, GG winners/MVP cross-check), verify (parity, payouts recorded vs PAID, roster truth, HIO pot), handicaps (preview → post → email the players), money + standings, the story. §OPEN lists what Kerry has not ruled on. Invoked by "close out" / "closeout". Tracked since 2026-09-09; the 2026-09-08 original was lost to `.gitignore`)
 - `docs/claude/recaps/` (recap DRAFTS per event, written by the closeout routine for Kerry to send — each carries a verify-before-sending section)
 - `docs/claude/handoff-2026-09-02-lead-selections-brevo-sync.md` (**session record, 2026-09-02→03, v2.287.0→v2.290.2** — Lead Center Edit selections with re-sync-proof overrides; the Tracker→Brevo nightly sync (status / chapter / last-played, create scope "recent", CITY-only chapter fallback — area codes DEAD by ruling); Kerry's 16 Brevo segments; the proven API recipe for excluding Active members; TGF Insider #15 numbers. OPEN: the Wednesday-AM auto-draft is ratified but NOT built and the weekly cadence lapsed 9/9 — companion prompt `session-prompt-2026-09-02-brevo-next.md`)
-- `docs/claude/event-recaps.md` (**news-reporter event recaps for the GG roster blast — Kerry's house style of record**: comparative highlighting, MVP-money-only dollars + "% cashed" angle, Gross/Net(±) score format, humor-borne buy-in nudges, new-member spotlights, fellowship close. Read BEFORE writing any recap)
+- `docs/claude/event-recaps.md` (**news-reporter event recaps for the GG roster blast — Kerry's house style of record**: comparative highlighting, MVP-money-only dollars + "% cashed" angle, Gross/Net(±) score format, humor-borne buy-in nudges, new-member spotlights, fellowship close. Read BEFORE writing any recap. Also the **TGF Insider** (public Brevo send): the CA/Kerry-ratified guardrails, the BUILT block for `email_parser/insider.py`, and **THE WRITER** (v2.463.0 — `email_parser/insider_writer.py`: angle rotation as a dial, one Claude call a week with two alternate headlines, lint-gated, deterministic fallback, review email + `samples`, Brevo DRAFT only from Kerry's approved text via `scoring-insider-approve`). Voice memory: `docs/claude/templates/insider-voice-examples.md`)
+- `docs/claude/crews.md` (**PROPOSAL, not ratified, 2026-09-17** — crews of ~12 with a member leader texting Monday, the Tracker pre-writing the text; October pilot design with a control group; the participation-RATE lever for the 2027 targets. Rule 3b: schema + member-facing → Kerry ratifies; builds in a Tracker lane)
+- `docs/claude/tgf-history-2022-2025.md` (**Kerry's own account of 2022→2025, verbatim, 2026-09-17** — the 2023 geographic split + $200 bundled membership landing on the post-COVID return-to-work and golf's double inflation; who was lost (time- and money-constrained members); the 2025 rebuild; 2026 holding steady with almost no paid acquisition. Beside it the archive participation numbers. READ before any 2027 model/pricing proposal)
+- `docs/claude/handoff-2026-09-16-insider-writer.md` (**session record, 2026-09-16, the Insider Writer lane** — what the writer is, the ten-angle rotation proposed to Kerry and awaiting his order, the dials, the review/samples/approve flow, what could not be run from the sandbox (no Anthropic key: the three-angle sample runs on production via `scoring-brevo-draft:samples`), and the feedback loop that folds his edits into event-recaps.md + the voice examples)
 
 ## Guiding Principles
 
@@ -79,7 +87,7 @@ These are durable design principles that apply to **every** feature in this app 
 3. **Portable to TGF Platform.** Anything we build here should be implementable on the Platform backend with minimal rework. Avoid baking SQLite-specific quirks or Flask-specific shapes into the domain model. When the same concept exists in both products (e.g. side games matrix), cross-reference the Platform docs and keep the data model aligned.
 4. **Past events are frozen.** Anything that affects how an event was scored, paid, or invoiced must snapshot the rules in effect at the time. Editing a template later must never silently change historical events.
 5. **Admin-edits, manager-runs, customer-views.** Three layers of access. Admins configure (templates, rules, rates, permissions). Managers operate (run events, see auto-computed numbers). Customers view (their own data, public schedules). Build pages with the layer in mind.
-6. **`customer_id` is the one true identity key — use it as the lookup standard everywhere.** No table may track a customer by name alone. Any table row that refers to a customer — enrollment, pool membership, match result, score, prize, RSVP, bracket slot, or anything else — **must** include a `customer_id` column that is a FK to `customers(customer_id)`. A `customer_name` column may exist alongside it as a display label and parse-time snapshot, but **`customer_id` is the authoritative identity for every query, dedup, cleanup, and cross-table join**. Specific rules:
+6. **`customer_id` is the one true identity key — use it as the lookup standard everywhere.** Kerry, 2026-09-18, verbatim: *"EVERY person gets a customer_id, no matter what their role is. We have a different term for customer planned for the TGF Platform, but customer_id is king. There are other top level ids too, but everything remotely related to a customer needs to be tied to that customer."* This applies to CODE PATHS as much as tables: any object that represents a person in transit — a pairings seat, a swap, a seed, a payload — carries `customer_id`, and the boundary that receives it resolves the person from it (`_seat_customer_id`). Guards: `test_customer_id_everywhere.py` (every person-naming column has a sibling id; the allow-list is empty) and `test_seat_carries_identity.js`. No table may track a customer by name alone. Any table row that refers to a customer — enrollment, pool membership, match result, score, prize, RSVP, bracket slot, or anything else — **must** include a `customer_id` column that is a FK to `customers(customer_id)`. A `customer_name` column may exist alongside it as a display label and parse-time snapshot, but **`customer_id` is the authoritative identity for every query, dedup, cleanup, and cross-table join**. Specific rules:
    - **New tables**: add `customer_id INTEGER REFERENCES customers(customer_id)` at design time. Never add it later as a migration afterthought.
    - **Lookups**: when checking whether "Stuart Kirksey" and "Stu Kirksey" are the same person, join through `customer_id` — never compare name strings. Name aliases live in `customer_aliases`; `customer_id` is what makes two rows the same person.
    - **Dedup / cleanup**: any reconciliation pass that collapses duplicate rows or removes orphaned records must group/filter by `customer_id`, not by `customer_name`. The `season_contests` sync cleanup is the canonical example: it groups by `(customer_id, contest_type, season)` and resolves to the canonical name from `customers.customer_name`.
@@ -287,7 +295,7 @@ No Python or local install needed — Claude Desktop connects directly to Railwa
   with 7 metrics (total items, active items, open parse warnings, open action items,
   credited duplicates, membership mashups, items missing customer ID) plus delta arrows
   (↑/↓) vs the previous day's snapshot.
-- **Auth** — PIN-based with roles ranked `member` < `view-only` < `manager` < `admin`; `@require_role(minimum)` enforces the hierarchy (as of v2.16.15). **`member` is the PUBLIC read tier (v2.53.0, Kerry)**: `@require_role("member")` endpoints serve anonymous visitors with no PIN — only PII-free GET reads may declare it (season contests, points races, monthly points, handicaps, scoring reads, match-play GETs). `/api/customers` (emails/phones) and `/api/events` (course_cost/markup) must stay at view-only+. The pinless member pages live at `/member` → **lands on `/member/spotlight`** (Kerry 2026-07-14, v2.85.0: member view is player-first) + `/member/contests` + `/member/handicaps` (spotlight.html/contests.html/handicaps.html rendered with `member_mode=True`): `window.MEMBER_MODE` makes auth.js skip the login modal (currentRole stays null so manager/admin UI stays hidden), the member nav is **SPOTLIGHT | LEADERBOARD | HANDICAPS** (LEADERBOARD is the Season-Contests page relabeled for members; the admin/manager nav keeps "Season Contests", and the paid "Enter Season Contests" signup CTA is unchanged), and player-name links to /customers render as plain text. `manifest-member.json` start_url + the first-visit welcome nudge (member-nudges.js) follow the landing to Spotlight. PINs (v2.47.0, Kerry): `ADMIN_PIN`→admin; `AUSTIN_MANAGER_PIN`/`SA_MANAGER_PIN`→manager with `session["chapter"]` set (chapter managers land pre-scoped: Events chapter tab, Contests race, Customers filter, Participation chapter); `VIEWONLY_PIN`→view-only; the LEGACY shared `MANAGER_PIN` is demoted to view-only. View-only nav = EVENTS | CONTESTS | HANDICAPS only; /transactions, /customers, /rsvps, /participation redirect view-only sessions to /events. Login rate limiter keys on the LAST X-Forwarded-For hop (Railway-appended; the first entry is client-spoofable)
+- **Auth** — PIN-based with roles ranked `member` < `view-only` < `manager` < `admin`; `@require_role(minimum)` enforces the hierarchy (as of v2.16.15). **`member` is the PUBLIC read tier (v2.53.0, Kerry)**: `@require_role("member")` endpoints serve anonymous visitors with no PIN — only PII-free GET reads may declare it (season contests, points races, monthly points, handicaps, scoring reads, match-play GETs). `/api/customers` (emails/phones) and `/api/events` (course_cost/markup) must stay at view-only+. The pinless member pages live at `/member` → **lands on `/member/spotlight`** (Kerry 2026-07-14, v2.85.0: member view is player-first) + `/member/contests` + `/member/handicaps` (spotlight.html/contests.html/handicaps.html rendered with `member_mode=True`): `window.MEMBER_MODE` makes auth.js skip the login modal (currentRole stays null so manager/admin UI stays hidden), the member nav is **SPOTLIGHT | LEADERBOARD | HANDICAPS** (LEADERBOARD is the Season-Contests page relabeled for members). **As of v2.400.0 the manager/admin nav says LEADERBOARD too** (Kerry 2026-09-14: "Change SEASON CONTESTS to LEADERBOARD") — same page, same word on both sides, and `SHELL_TITLE` on contests.html follows it. The paid **"Enter Season Contests" signup CTA keeps its name**: that is the buy-in, a different thing from the board, and player-name links to /customers render as plain text. `manifest-member.json` start_url + the first-visit welcome nudge (member-nudges.js) follow the landing to Spotlight. PINs (v2.47.0, Kerry): `ADMIN_PIN`→admin; `AUSTIN_MANAGER_PIN`/`SA_MANAGER_PIN`→manager with `session["chapter"]` set (chapter managers land pre-scoped: Events chapter tab, Contests race, Customers filter, Participation chapter); `VIEWONLY_PIN`→view-only; the LEGACY shared `MANAGER_PIN` is demoted to view-only. View-only nav = EVENTS | CONTESTS | HANDICAPS only; /transactions, /customers, /rsvps, /participation redirect view-only sessions to /events. Login rate limiter keys on the LAST X-Forwarded-For hop (Railway-appended; the first entry is client-spoofable)
 - **`initAuth()`** must be called on every page for nav link visibility (DATABASE link, etc.)
 - **External links open in a new window (Kerry-ratified 2026-07-20).** A capture-phase click handler at the bottom of `auth.js` stamps `target="_blank" rel="noopener"` on any off-origin http(s) anchor app-wide — do NOT add per-link `target` attributes for external URLs (and don't remove the handler). Protocol handoffs (`venmo://`, `mailto:`, `tel:`) are deliberately excluded.
 
@@ -362,12 +370,14 @@ No Python or local install needed — Claude Desktop connects directly to Railwa
 - `email_parser/database.py` — schema, CRUD, audit queries, customer matching, COO context, bank reconciliation (~12000+ lines)
 - `email_parser/memberships.py` — `customer_memberships` schema/backfill, renewal detection, reminder email templates, daily scheduler job, signed roster opt-in/out tokens
 - `email_parser/match_play.py` — pure Match Play engine (versioned-config evaluation: structure, seeded bracket w/ byes, exact-cents payout ladders); seed = the ratified 29-column matrix; tests in `test_match_play.py`; see `docs/claude/game-engine.md`
-- `email_parser/live_scoring.py` — pure live-scoring engine (Individual Net/Gross, Team Net, Skins, MVP, CTP/HIO) computed from RAW GROSS HOLE SCORES alone; rules-as-data in `SEED_LIVE_SCORING_CONFIG` from the ratified side-games spec; reuses `compute_hole_derivations` + `handicap_calc.allocate_strokes` rather than reimplementing them. Powers the admin Test Center; tests in `test_live_scoring.py` / `test_live_scoring_center.py`; see `docs/claude/live-scoring-test-center.md`
+- `email_parser/live_scoring.py` — pure live-scoring engine (Individual Net/Gross, Team Net, Skins, MVP, CTP/HIO) computed from RAW GROSS HOLE SCORES alone; rules-as-data in `SEED_LIVE_SCORING_CONFIG` from the ratified side-games spec; reuses `compute_hole_derivations` + `handicap_calc.allocate_strokes` rather than reimplementing them. **The matrix is the governing layer (v2.459.0):** a game carries VARIANTS, each with its own basis and handicap dials, and `select_variant` picks one from the BUYER COUNT and REPORTS the decision — the buy-in count changes which game is played, not just the pot. Every game DECLARES `pops_per_hole`, and `game_handicaps` derives each game's OWN stroke allocation (allowance → rounding → off-lowest → stroke index) rather than borrowing the card's. Allowance % and 'off the lowest' are two SEPARATE dials. Powers the admin Test Center; tests in `test_live_scoring.py` / `test_live_scoring_center.py` / `test_half_net_skins.py`; see `docs/claude/live-scoring-test-center.md` and `docs/claude/side-games.md`
+- `email_parser/flighting.py` — pure flighting + payout rules (v2.469.0, mailbox #571–#575/#582 RATIFIED): `FLIGHT_RULES` as data (ladders, no min / no merge, places by flight size, gross bonus + share), `build()` = SELECTION + AMOUNTS from one field, `settle()` = frozen SELECTION + recomputed AMOUNTS + delta; `event_flights_board` in database.py feeds it the roster; tests `test_flighting.py` / `test_flights_board.py`; see events.md
 - `email_parser/fetcher.py` — Microsoft Graph email fetching; also `render_msg_template` and **`normalize_email_html()` / `EMAIL_P_STYLE`** (v2.346.0 — the house paragraph-spacing standard for outgoing mail, applied on the SEND and PREVIEW paths so templates predating it get it too)
 - `email_parser/fee_splits.py` — ONE ORDER, ONE FEE (v2.349.0, Kerry-ratified 2026-09-09): `prorate` (the only per-item fee apportionment — by item price, to the cent), `order_fee_from_items`, `fee_split_integrity` (audit check), `repair_multi_item_fee_splits` (bridge `scoring-fee-splits-repair[:apply]`). Read before touching `godaddy_order_splits` or `acct_allocations.godaddy_fee`
 - `email_parser/order_import.py` — date-range import of "New Order" emails (v2.357.0): preview / background apply / status through bridges `scoring-import-orders:<from>|<to>[|apply][|membership-only]` and `scoring-import-status`; de-dups by message id AND order number; same pipeline as the inbox check; pre-stamps membership notices so a historical import never mails a member
 - `email_parser/contest_flags.py` — `contest_flags_audit` (v2.356.0): stored NET / GROSS / Match Play / FALL flags vs the option lines printed on the ORDER EMAIL, Graph fetch, no AI; bridge `scoring-contest-flags-audit[:apply][|all]`. Companion rule in `sync_season_contests_from_items`: REMOVED STAYS REMOVED — a purchase covered by a later `season_contest_removals` row never re-enrolls, and removals no longer erase the purchase flag
 - `email_parser/margin_ledger.py` — `lsc_fund_year` (Aug–Jul sales → the Cup played that OCTOBER), `margin_gaps` (pre-cutover events: booked vs residual-would-book with reasons; measure-only; bridge `scoring-margin-gaps`), `liability_buckets` (payouts owed, credits held, shirt fund by Cup year, HIO pot, tax reserve by month; bridge `scoring-liabilities`), `membership_gap` (gap group 1 — memberships by price/type/contests, booked vs today's decomposition, fits/misfits; bridge `scoring-membership-gap[:apply]`, apply Kerry-gated)
+- `email_parser/print_pack.py` — the event PRINT PACK (v2.465.0): Starter Sheet + Cart Signs + Divisions & Flights + Proximity bound into one PDF by headless Chromium (Playwright; WeasyPrint fallback); `GET /events/<id>/print-pack.pdf`; evening-before routine 5–10 PM Central mails tomorrow's packs once per change (`print_pack_sent:<id>` hash); bridge `scoring-print-pack-pdf:<id>[|send]`. See events.md
 - `email_parser/report.py` — Daily digest email builder + sender
 - `email_parser/rsvp_parser.py` — Golf Genius RSVP email parser (regex, no AI)
 - `templates/index.html` — Transactions dashboard
@@ -422,6 +432,7 @@ No Python or local install needed — Claude Desktop connects directly to Railwa
 - `mcp_server.py` — MCP server (70 tools for Claude direct DB access)
 - `email_parser/timezone_utils.py` — `now_central()`/`today_central()`/
   `today_central_str()` (pytz America/Chicago, naive). See **Timezone** below.
+- `email_parser/insider.py` + `email_parser/insider_writer.py` — the Wednesday **TGF Insider** (public Brevo send, DRAFTS ONLY): gather → (writer | compose) → render → lint → review email / Brevo draft. The writer (v2.463.0) is one Claude call a week on a rotating angle (dials `insider_angles`, `insider_angle_force`, `insider_writer`, `insider_model`, `insider_member_quote`), with `compose()` as its fallback; Kerry's approved text goes to Brevo through `approve_insider`. Rules + lessons: `docs/claude/event-recaps.md`; voice memory: `docs/claude/templates/insider-voice-examples.md`
 - `email_parser/ops_alerts.py` — `maybe_alert_anthropic_billing(exc)`:
   call it from any "Claude call failed" except handler. Emails the owner
   (env `ANTHROPIC_ALERT_EMAIL_TO` → `COO_EMAIL_TO` → `EMAIL_ADDRESS`) when
@@ -485,7 +496,22 @@ on mobile — **ops never go in the drawer**; one global dropdown pattern
 (`.shell-menu`). auth.js drives role gating for shell links
 (`.shell-nav-links a`, `.shell-drawer-nav a`) and calls
 `window.shellApplyRole`. Official TGF icon marks: `static/tgf-icon.svg`
-+ `static/tgf-icon-white.svg`. shell.js also provides **pull-to-refresh**
++ `static/tgf-icon-white.svg`. **Official FULL round logo (v2.419.0):**
+`static/tgf-logo-r.svg` (vector, converted from Kerry's PDF) +
+`static/tgf-logo-r.png` (576px); the .ai / .eps / .pdf sources are in
+`static/brand/`. Print sheets (Starter Sheet) read the SVG — reference
+that one path, never copy the artwork. **Nav order + labels (Kerry 2026-09-14):**
+… Leads | Payouts | **Queue** | **Members** (pill) | **Admin** (pill) |
+**Two Man Tour** (pill) | Log Out — desktop row and mobile drawer alike;
+guard `test_shell_nav.js`. Pills mark DOORWAYS OUT of the Tracker
+(Members → the pinless member app, Two Man Tour → the sibling brand) plus
+Admin; each is a different colour because orange means Admin, gold means
+Two Man Tour, and green means bought-in. **Anything admin-only placed in
+`.shell-nav-right` must be gated in `shell.js` `shellApplyRole` — auth.js's
+`updateNavForRole` walks only `.tab-nav a, .shell-nav-links a,
+.shell-drawer-nav a`, so a link moved into that group is invisible to
+admins unless shell.js covers it** (it now selects `.shell-nav-right
+.admin-nav` by class, not by link name). shell.js also provides **pull-to-refresh**
 (v2.82.0): app-wide, but gated to the iOS installed PWA
 (`navigator.standalone`) where the native gesture is absent — a mobile
 browser and Android already have native PTR, so custom PTR there would
@@ -513,6 +539,63 @@ exceptions. **Admin table density is the app-wide default**: global
 `thead th` 4px / `tbody td` 5px vertical padding, 10px horizontal — the
 ratified TGF-console density ("functional, not all this beautiful white
 space"). Pages with their own table CSS keep their local values.
+
+## The ONE mobile breakpoint is 560px (v2.409.0)
+
+**Kerry 2026-09-15: "Don't go to mobile view on desktop until the window
+gets much narrower."** Every "is this a phone?" decision — the shell's
+drawer + mobile bar, `mobile-card-list` vs table, the ⋯ Actions sheet,
+handicaps/customers/events/tgf/contests mobile branches, `course-label.js`
+short names — is `(max-width: 560px)` in CSS, `matchMedia("(max-width:
+560px)")` or `innerWidth <= 560` in JS, and desktop-only blocks pair at
+`(min-width: 561px)`. It used to be 768 in ~45 places across twenty files
+and had drifted (leads.html decided at 720 while its CSS decided at 768).
+**Never introduce a second number for this decision**; `test_breakpoint.js`
+fails on any 768/769 media query, matchMedia or innerWidth test. Widths
+that are NOT layout-mode switches (640px scorecard/points density, 700/720/
+760px grid collapses, 900px split panes) are cosmetic and stay as they are.
+Because the desktop layout now runs down to 561px, `shell.css` wraps the
+header into two rows between 561px and 1479px (brand + right-hand pills on
+row 1, links on row 2; member shell: brand + CTA, then the three tabs) —
+above 1480px the single row is unchanged.
+
+## Handicap identity: `customer_id` (v2.459.0)
+
+`get_handicap_export_data` publishes `customer_id` on every row and
+resolves email/chapter/name through `handicap_player_links.customer_id`
+(canonical profile, then the order row BY ID). The name join survives
+only as a reported last resort for a link with no id. The handicap-card
+send (`api_handicap_send_bulk_email`) reads `_event_roster_rows` and
+matches on `customer_id` sets — never `player_name` or `items.customer`
+string equality, which used to classify "Mike Murphy" vs "Michael
+Murphy" as "no TGF handicap on record" and silently send no card. Audit
+coverage read-only with `scoring-hcp-link-audit`. Details + the class
+sweep (what was left alone and why): `docs/claude/handicaps.md`.
+
+## The plus rule lives in the mechanism (v2.459.0)
+
+A plus handicap comes off the ROUND, never off a hole (Kerry, ratified
+2026-09-15). `compute_hole_derivations(..., game=True)` reads a negative
+`strokes_received` as zero for `net` / `net_vs_par` / `stableford_net`;
+`adjusted_strokes` keeps the TRUE value in both modes. The round half is
+`plus_round_deduction()`, written once. The flag defaults OFF so the five
+WHS/index call sites keep their behaviour by doing nothing — changing
+those would corrupt every differential and index. `get_scorecard`
+publishes the `game_*` view BESIDE the true one because
+`verify_scoring_round` compares GG's markings against `net_vs_par`.
+Details + the full call-site table: `docs/claude/side-games.md`.
+
+## Pairings roster: ONE builder (v2.410.0)
+
+`_event_roster_rows(conn, event_id)` is the only source of "who is on
+this event's tee sheet": active order rows plus PLAYING Golf Genius RSVPs
+with no order (`_event_rsvp_only_players`, mirroring the Players tab's
+`unmatchedPlaying` rule for rule). The `/pairings` GET, the generator, the
+partner-request list and the match validator ALL read it — never write a
+fifth `events → aliases → items` roster query. Rows carry `rsvp_only`
+(both GG RSVPs and $0 `rsvp_only` order rows); the page badges and marks
+them wherever a roster name appears. Guard: `test_pairings_rsvp_roster.py`.
+Details: `docs/claude/pairings.md`.
 
 ## Standard color palette (v2.49.0)
 
@@ -570,6 +653,30 @@ wrapped (events financial tables, contests enrollments/removals, cashflow,
 tgf import preview + `.tgf-scroll`, test_center `.tc-scroll`, gg_history
 `.ggh-scroll`, points-render.js `.pr-scroll`) — new wide tables must follow
 the same pattern.
+
+## Global CSS gotcha: z-index cannot escape a stacking context (IMPORTANT)
+
+**Kerry 2026-09-14: "All dropdowns should always be above everything."**
+A dropdown that renders inside a table can be painted over by the rows
+BELOW it, no matter how high its z-index. `z-index` only ranks an element
+against its siblings inside the nearest ancestor that *creates a stacking
+context* — and `position: sticky` (or relative/absolute/fixed) **with a
+z-index** creates one. `.registrants-table td:last-child` pins the ACTIONS
+column at `z-index: 2`, so every row's actions cell is its own context: a
+menu inside one is sealed in at level 2, and the next row's identical cell
+(later in DOM order, same level) wins. **`position: fixed` does not escape
+it either** — a fixed element still paints inside the context it lives in,
+which is why the v2.336.0 "measured fixed layer" fix held everywhere
+except here.
+
+**Use `window.tgfOverlayLift(el)` / `window.tgfOverlayDrop()` (auth.js,
+app-wide).** Lift raises every positioned-with-z-index ancestor while the
+overlay is open and drop restores them. Do NOT "fix" this by moving the
+menu into `document.body` — the menu items rely on handlers delegated
+from their container, and reparenting silently breaks them. Wired into
+the Events actions menus + pairings open-seat picker (`templates/events.html`)
+and the Lead Center row menus (`templates/leads.html`); any NEW dropdown
+that can render inside a table must call it too.
 
 ## Jinja gotcha in inline CSS (IMPORTANT)
 

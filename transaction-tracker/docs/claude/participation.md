@@ -12,7 +12,7 @@ A row in `items` qualifies as an event participation when ALL of these hold:
 - `UPPER(item_name)` does **not** contain `'SEASON CONTEST'` (enrollments are not playing).
 - `parent_item_id IS NULL` (child payment rows skipped — they're payments against an existing event registration, not new participations).
 
-The single source-of-truth for this filter is `_participation_event_filter_sql(alias)` in `app.py`. Reuse it if you add another participation-style endpoint so the definition can't drift.
+The single source-of-truth for this filter is `_participation_event_filter_sql(alias)` in `email_parser/database.py` (moved there from `app.py` in v2.464.0 so the MCP layer can share it; `app.py` imports it). Reuse it if you add another participation-style endpoint so the definition can't drift — `gg_history.participation_series` (the 2019–2026 season × chapter series, gg-history.md) does.
 
 ### "When" they played = event date, not purchase date
 
@@ -98,3 +98,13 @@ top the list). A "Played" filter select (any / this calendar year /
 has played / never) sits next to the status filter. Users can change
 everything; defaults apply once per page load. Participation is a
 sub-tab of CUSTOMERS (top-level nav tab removed in v2.47.0).
+
+## Re-engagement exclusions (Kerry, 2026-09-17)
+
+Randy Copper (Austin) and Brian Parch (San Antonio) left because the group
+felt overly competitive to them and have said they are not coming back.
+They are never on a re-engagement or "we miss you" send from the Tracker;
+Kerry reaches them himself if at all. Kerry's read on why the rest stop
+mid-season (busy, vacations, injuries, heat, money, moves, other groups)
+and the rules for the note are in `event-recaps.md` under "WHY MEMBERS
+STOP SHOWING UP".

@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ rep.file_stub }}-DivisionsFlights</title>
+  <link href="https://fonts.googleapis.com/css2?family=Bitter:wght@600;700&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; }
+    /* Same print contract as the Starter Sheet (Kerry 2026-09-08): the
+       margin lives in body padding, never in @page, because the browser's
+       own Margins setting overrides @page and the sheet printed edge to
+       edge. WYSIWYG on screen — a real page on a grey desk. */
+    @page { size: letter portrait; margin: 0; }
+    html, body, .fbox-head, .gbar { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    body {
+      margin: 0; padding: 0; background: #EFEFEC; color: #111;
+      font-family: "Helvetica Neue", Arial, system-ui, sans-serif; font-size: 12px;
+    }
+    .sheet {
+      width: 8.5in; min-height: 11in; padding: 0.5in; margin: 0 auto 24px;
+      background: #fff; border: 1px solid #C9C9C4; box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+    }
+    .sheet-head {
+      display: flex; justify-content: space-between; align-items: flex-end;
+      border-bottom: 3px solid #111; padding-bottom: 8px; margin-bottom: 12px;
+    }
+    .sheet-brand { display: flex; align-items: center; gap: 14px; }
+    .sheet-logo { width: 68px; height: 68px; flex-shrink: 0; display: block; }
+    .sheet-head h1 { font-family: "Bitter", Georgia, serif; font-weight: 700; font-size: 22px; margin: 0; }
+    /* Eyebrow and event name in Bitter; every roster row below stays
+       system sans with tabular figures (ratified type rule, mailbox #44
+       — "be judicious with Bitter"). */
+    .sheet-head .sub { font-family: "Bitter", Georgia, serif; font-weight: 600;
+                       color: #444; font-size: 12.5px; margin-top: 2px; }
+    .sheet-head .meta { text-align: right; font-size: 11.5px; color: #444; }
+    .sheet-head .meta strong { font-family: "Bitter", Georgia, serif; font-weight: 700;
+                               color: #111; display: block; font-size: 13px; }
+
+    .gsec { margin-bottom: 13px; break-inside: avoid; page-break-inside: avoid; }
+    .gbar {
+      display: flex; justify-content: space-between; align-items: baseline;
+      background: #111; color: #fff; padding: 4px 8px; border-radius: 3px 3px 0 0;
+    }
+    .gbar .gname { font-family: "Bitter", Georgia, serif; font-weight: 700; font-size: 14px; letter-spacing: 0.02em; }
+    .gbar .gmeta { font-size: 10.5px; opacity: 0.85; font-variant-numeric: tabular-nums; }
+    .gbar.off { background: #6B7280; }
+    .goff { border: 1px solid #D1D5DB; border-top: 0; padding: 6px 8px; color: #4B5563; font-size: 11.5px; font-style: italic; }
+
+    .flights { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; align-items: start;
+               border: 1px solid #111; border-top: 0; padding: 8px; }
+    .flights.one { grid-template-columns: 1fr; }
+    .fbox { border: 1.5px solid #111; border-radius: 4px; overflow: hidden; break-inside: avoid; }
+    .fbox-head {
+      display: flex; justify-content: space-between; align-items: baseline;
+      background: #E5E7EB; padding: 3px 7px; border-bottom: 1px solid #111;
+    }
+    .fbox-head .fname { font-family: "Bitter", Georgia, serif; font-weight: 700; font-size: 11.5px; }
+    .fbox-head .fn { font-size: 10px; color: #444; font-variant-numeric: tabular-nums; }
+    .prow { display: flex; justify-content: space-between; gap: 6px; padding: 2px 7px; border-bottom: 1px solid #EEE; }
+    .prow:last-child { border-bottom: 0; }
+    .prow .pn { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .prow .px { font-variant-numeric: tabular-nums; color: #333; flex-shrink: 0; }
+    .unflighted { padding: 5px 8px; border: 1px dashed #B45309; border-top: 0; color: #7C2D12;
+                  font-size: 11px; background: #FFF7ED; }
+    .notes { margin-top: 10px; font-size: 10px; color: #6B7280; line-height: 1.45; }
+    .notes li { margin-bottom: 2px; }
+    .foot { margin-top: 14px; border-top: 1px solid #DDD; padding-top: 6px;
+            font-size: 9.5px; color: #9CA3AF; display: flex; justify-content: space-between; }
+    @media print {
+      body { background: #fff; }
+      .sheet { width: auto; min-height: 0; margin: 0; border: 0; box-shadow: none; padding: 0.5in; }
+    }
+  </style>
+</head>
+<body>
+<div class="sheet">
+  <div class="sheet-head">
+    <div class="sheet-brand">
+      <img class="sheet-logo" src="/static/tgf-logo-r.svg" alt="The Golf Fellowship">
+      <div>
+        <h1>Divisions / Flights</h1>
+        <div class="sub">TGF {{ rep.chapter }} {{ rep.year }}</div>
+      </div>
+    </div>
+    <div class="meta">
+      <strong>{{ rep.event_name }}</strong>
+      {{ rep.event_date }}{% if rep.course %} &middot; {{ rep.course }}{% endif %}<br>
+      {{ rep.holes_key }} holes &middot; {{ rep.index_basis }}
+    </div>
+  </div>
+
+  {% for g in rep.games %}
+  <div class="gsec">
+    <div class="gbar{% if not g.active %} off{% endif %}">
+      <span class="gname">{{ g.label }}</span>
+      <span class="gmeta">
+        {{ g.buyers }} buyer{{ '' if g.buyers == 1 else 's' }}
+        {%- if g.active %} &middot; {{ g.flights|length }} flight{{ '' if g.flights|length == 1 else 's' }}{% endif %}
+      </span>
+    </div>
+    {% if not g.active %}
+      <div class="goff">{{ g.inactive_reason }}</div>
+    {% else %}
+      <div class="flights{% if g.flights|length == 1 %} one{% endif %}">
+        {% for f in g.flights %}
+        <div class="fbox">
+          <div class="fbox-head">
+            <span class="fname">{{ f.name }}</span>
+            <span class="fn">{{ f.players }}</span>
+          </div>
+          {% for m in f.members %}
+          <div class="prow"><span class="pn">{{ m.sort_name }}</span><span class="px">{{ m.index_text }}</span></div>
+          {% endfor %}
+        </div>
+        {% endfor %}
+      </div>
+      {% if g.unflighted %}
+      <div class="unflighted">
+        No handicap index on file, not flighted:
+        {% for u in g.unflighted %}{{ u.sort_name }}{{ ", " if not loop.last }}{% endfor %}
+      </div>
+      {% endif %}
+    {% endif %}
+  </div>
+  {% endfor %}
+
+  <ul class="notes">
+    {% for g in rep.games %}{% for n in g.notes %}<li><strong>{{ g.label }}:</strong> {{ n }}</li>{% endfor %}{% endfor %}
+    <li>Buy-ins from the event roster. Flight counts and the game each buyer count selects from the games
+        matrix. Cuts from the ratified TGF flighting standard: flight on the raw 18-hole index, a break is the
+        floor of the upper flight (12.0 goes up), equal indexes never split, no minimum flight size and no
+        merging &mdash; a flight is whatever the ladder produces.</li>
+  </ul>
+
+  <div class="foot">
+    <span>The Golf Fellowship &middot; {{ rep.chapter }}</span>
+    <span>Divisions &amp; Flights</span>
+  </div>
+</div>
+</body>
+</html>

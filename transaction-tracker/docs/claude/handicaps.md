@@ -665,12 +665,60 @@ Rules of record:
   `{"3447":{"front":[35.9,133],"back":[36.3,131]},"3448":{"front":[35.2,125],
   "back":[35.2,125]},"3462":{"front":[34.1,121],"back":[34.4,120]}}`.
 
+### Per-nine ratings: THE COURSE RECORD is the source (v2.465.17 → v2.466.0)
+
+**v2.466.0 (mailbox #576):** the record is the USGA/WHS shape — see
+schema.md "Course record". An 18-hole tee set carries its FRONT and
+BACK rating rows (each with its own slope) in `tee_set_ratings`, written
+by a course card, the USGA CRDB seed (`scoring-crdb-seed:<course_id>
+|apply`, source of record) or `scoring-tee-nines-store` (Kerry's GG
+read). The resolver reads those first; pairing the Tuesday nine-hole
+rows (same tee name AND gender) is the fallback. Gender is a rating
+dimension: a woman's round posts off the women's set of the same tee.
+
+### (history) v2.465.17
+
+Kerry 2026-09-19: "Aren't we checking course_ids and their information
+for course info for ratings and indexes as a standard?" Yes — as of
+v2.465.17 the 18-hole posting path (`derive_18hole_rounds_as_two_nines`,
+bridge `scoring-hcp-2nines:<event>[|auto|<json>][|apply]`) reads every
+tee's front and back rating + slope off `course_tees` by course_id:
+`resolve_per_nine_from_course_tees` runs `label_course_tee_nines`, pairs
+each 18-hole row with one front and one back row of the same tee name,
+and accepts the pair only when front + back equals the 18-hole rating
+(± 0.15; slopes break a tie between two fitting pairs, and two that
+still fit are reported as ambiguous, never picked). The result's
+`per_nine_source` shows the derivation per course and every tee it
+could not resolve; a round on an unresolved tee is skipped with the
+reason. A JSON map passed to the bridge only OVERRIDES per tee — the
+place for a number read off GG's course setup for a course with no
+nine-hole rows on file. The table below is now a mirror of what the
+course record holds, kept for the reader; the code does not read it.
+
+**Why a course can lack its nines (Kerry 2026-09-19: "Why wouldn't those
+tees be on the course record?"):** `course_tees` accretes from scorecard
+imports — a tee row exists only for a tee somebody played a round off.
+A course TGF plays only as an 18 (Kissing Tree, Landa Park, Lost Pines,
+Vaaler, La Cantera…) has 18-hole rows and nothing else; Forest Creek has
+its Austin-Tuesday FRONT rows and no backs because no back-nine Tuesday
+was ever played there. `scoring-tee-nines-store:<full_tee_id>|<fr>,<fs>|
+<br>,<bs>[|apply]` (v2.465.19) puts the halves on the record beside the
+18 (refuses a pair that does not sum to the 18-hole rating; keeps a half
+already there; copies the 18's holes). `scoring-per-nine-audit[:all]`
+lists every course with an 18-hole row, next event first, resolved /
+unresolved per tee. Storing is course data — Kerry's numbers, read off
+GG's course setup, on his go.
+
 ### Per-nine ratings of record (do not ask Kerry twice)
 
 Every 18-hole course TGF plays, once its numbers have been read off GG,
 lives here until the ratings live in `course_tees` (OPEN — schema, rule
 3b). A closeout on one of these courses reuses the row; a NEW course is
-the only time to ask.
+the only time to ask — and before asking, run `scoring-tee-nines:<course_id>`:
+a course TGF plays on Tuesdays already HAS its per-nine numbers as the
+9-hole tee rows (Cedar Creek 2026-09-19: Kerry "I thought I'd already
+given you Cedar Creek's breakdown" — he had, as 9-hole rows; front and
+back sum to the 18-hole rating and the yardage matches the card).
 
 | Course | Tee (tee_id) | Front (R/S) | Back (R/S) | 18 (R/S) | Read |
 |---|---|---|---|---|---|
@@ -678,6 +726,9 @@ the only time to ask.
 | Forest Creek GC | White (3448) | 35.2/125 | 35.2/125 | 70.4/125 | 2026-09-12 |
 | Forest Creek GC | Green (—) | 34.3/119 | 34.2/121 | 68.5/120 | 2026-09-12 |
 | Forest Creek GC | Red (L) (3462) | 34.1/121 | 34.4/120 | 68.5/121 | 2026-09-12 |
+| Cedar Creek GC | White (717) | 35.5/126 | 35.9/123 | 71.4/125 | 2026-09-19 (from 9-hole tee rows 4433 / 2971) |
+| Cedar Creek GC | Gold (711) | 34.8/116 | 34.6/119 | 69.4/118 | 2026-09-19 (4436 / 2973) |
+| Cedar Creek GC | Red (L) (710) | 36.4/124 | 36.5/116 | 72.9/120 | 2026-09-19 (2441 / 2978) |
 | Forest Creek GC | Gold (—) | 37.2/140 | 37.6/137 | 74.8/139 | 2026-09-12 |
 | The Quarry | Gold | 34.2/117 | 35.6/128 | — | 2026-08-03 |
 | The Quarry | Blue | 32.5/103 | 34.2/115 | —/113 | 2026-08-03 |
@@ -703,3 +754,181 @@ the card (dry run first). A card whose SCORES were wrong is a different
 case: `scoring-round-drop:<id>|unpost|apply` deletes the card and its
 differentials so the corrected card can post (Aguilera / Ayala, whose
 8/29 import predated Kerry's manual score entry on GG).
+
+
+## Identity: `customer_id`, never a name string (v2.459.0, 2026-09-16)
+
+**Kerry, 2026-09-15:** *"What's the bug? We need to fix it."*
+
+The handicap-card send matched event registrants to handicap links by
+comparing two NAME STRINGS. `items.customer` is a per-order historical
+snapshot (CLAUDE.md "Identity drift watch") and
+`handicap_player_links.customer_name` is another one, so **"Mike Murphy"
+on the order and "Michael Murphy" on the link were one man who resolved
+to nobody** — classified *"no TGF handicap on record"* and silently given
+no card, with a current index on file. A name proper-cased, married, or
+corrected after the order did exactly the same. This violated guiding
+principle 6 outright.
+
+Three compounding defects, all fixed:
+
+1. **Name-string identity on both sides.** Both are now `customer_id`
+   sets.
+2. **`WHERE customer_name IS NOT NULL`** dropped any link that had a
+   `customer_id` but no name label. The links query now takes every row.
+3. **A fifth roster.** The route built its own from `get_all_items()` +
+   `get_all_event_aliases()` instead of `_event_roster_rows(conn,
+   event_id)` — the ONE builder mandated in v2.410.0 — so a Golf Genius
+   RSVP with no order row was invisible to it and was not even counted in
+   `registered`.
+
+### `get_handicap_export_data` — the bigger half
+
+It returned **no `customer_id` at all**, which is why every caller
+downstream was forced back onto names. It now publishes `customer_id` on
+every row, and resolves email / chapter / first name / last name / suffix
+through `handicap_player_links.customer_id`: the canonical `customers`
+profile first, then the order row **by id**. The old
+`LOWER(items.customer) = LOWER(l.customer_name)` join survives only as an
+explicit last resort for a link that genuinely has no id, and every such
+row is reported in `name_fallbacks` (and surfaced on the send result as
+`unlinked_handicap_count`). **The same function feeds the Golf Genius CSV
+export**, so fixing only the send would have left the export on the old
+footing.
+
+Callers MUST match on `customer_id`. Matching on `player_name` or
+`chapter` string equality is the defect this function used to force.
+
+### The send route
+
+`api_handicap_send_bulk_email`:
+
+- reads `_event_roster_rows` and dedupes **per person** (roster rows are
+  per ORDER row — entry, side games, an add-on — so one player can hold
+  several);
+- filters eligible rows by `customer_id` set membership;
+- classifies a registrant with no customer record as its own NAMED bucket
+  (*"on the roster with no customer record to match"*) rather than
+  calling it a missing handicap. v2.456.0 made the count COMPLETE; this
+  makes the classification underneath it CORRECT;
+- **refuses an unrecognised `event_name` with a 400** instead of falling
+  through to an empty filter. The composer hazard of 2026-09-08 (handoff
+  §7) mailed a whole roster exactly that way;
+- MEMBERS-only is `customer_id` set membership. It used to fall back to
+  `c.first_name || ' ' || c.last_name = l.customer_name` and then match
+  the result back by `player_name`, so a member whose profile name and
+  link label differed by a nickname or a suffix read as "not a member".
+
+Tests: `test_handicap_identity.py` (end-to-end through the route),
+`test_handicap_card_counts.js` (the v2.456.0 accounting).
+
+### `scoring-hcp-link-audit` — READ-ONLY
+
+`audit_handicap_link_identity()`. Writes nothing. Four sections:
+
+- **links** — coverage by `customer_id`, every unlinked row NAMED, rows
+  whose `customer_id` points at no customer, rows with an id but no name
+  label, and **name drift**: a link whose `customer_name` disagrees with
+  the canonical name on its own `customer_id`. Drift is harmless now and
+  was fatal under the name join.
+- **rounds** — `handicap_rounds` that reach no `customer_id`.
+- **export** — what `get_handicap_export_data` can resolve.
+- **plus_handicaps** — every scoring round played off a plus handicap,
+  flagging any FRACTIONAL playing handicap (see side-games.md OPEN 1).
+
+**Run live 2026-09-16, before any of the above shipped: 279
+`handicap_player_links` rows, exactly 1 with no `customer_id`, 0
+orphans — 99.6% coverage.** That is why the join was switched straight
+over rather than backfilled first. `handicap_rounds` is the weaker half:
+~1,713 of 15,549 rows (11%) carry no `customer_id` and are reachable only
+through `player_name`.
+
+### The class — what was swept, and what was deliberately left
+
+Signature: a join from `handicap_player_links` or `handicap_rounds` to a
+person by name, typically `LOWER(i.customer) = LOWER(l.customer_name)`.
+
+**Fixed**
+
+| Site | What changed |
+|---|---|
+| `get_handicap_export_data` | every join re-pointed to `customer_id`; publishes it; reports fallbacks |
+| `api_handicap_send_bulk_email` | roster + identity + members-only, all `customer_id` |
+| `api_handicap_unlinked_players` | "unlinked" now means **no `customer_id`**, not a missing label — the old test called a row with a real id and a blank label "unlinked", and a row with a name but no id "linked", which is exactly backwards |
+
+**Deliberately left alone, with reasons**
+
+| Site | Why |
+|---|---|
+| `api_create_customers_for_unlinked` (`app.py`) | a WRITE path that CREATES customer records. Re-pointing its selector to `customer_id IS NULL` would change which rows it writes for, and it can create duplicate profiles. Needs Kerry's word (rule 3b) — **open**. |
+| `_log_gg_export_email_changes` | boot-time LOG only. Its name join IS the "legacy" side of a canonical-vs-legacy diff; removing it would remove the thing being compared. |
+| `_roster_handicap_index_map` | returns a map KEYED BY NAME because its caller matches roster display names. It already resolves the name through `l.customer_id` → `customers`, so the drift case is handled; only the key is a string. |
+| `analyze_pairing_staging` | offline analysis of historical pairings, no member-facing output, no money. |
+| `get_all_handicap_players` | already joins `l.customer_id` → `customers`; it selects `customer_name` only as a display label. |
+
+`handicap_rounds.player_name` remains the bridge between a Golf Genius
+card and a person — that is the table's design, and `_resolve_scoring_
+player` resolves it through `handicap_player_links` first. The 11% of
+rows with no `customer_id` are the residue worth backfilling next; the
+audit measures it.
+
+## The handicap lock, and ONE index on every surface (v2.462.0)
+
+Kerry 2026-09-16: "ROSTER handicaps need to lock after an event begins.
+Past events should not update to current handicap indexes." And:
+"PAIRINGS handicap indexes are not matching those in ROSTER. PAIRINGS
+handicaps are not correct, which then affects the Starter Sheet
+handicaps."
+
+**One computation.** `get_all_handicap_players(db_path, as_of=None)` is
+the TGF index (`compute_handicap_index`: best-N of the last twenty
+differentials in the lookback window, ×0.96, WHS adjustment). Every
+surface is a view of it:
+
+| Surface | Reads | Lock |
+|---|---|---|
+| ROSTER (events page HCP column) | `/api/handicaps/index-map[?as_of=]` | page fetches the as-of map for a started event (`ensureHcpAsOf`) and `hcpEntryFor(name, cid, ev)` reads it |
+| PAIRINGS cards, Unassigned, generator | `_roster_handicap_index_map(conn, as_of=)` | `_event_index_as_of(ev)` |
+| Saved sheet (`get_event_pairings`) | the map first, the row's `handicap_index` snapshot only as fallback | same |
+| Starter sheet IDX / PH / TEAM, flights report | `_handicap_index_18_by_customer(db_path, as_of=)` | same |
+
+**The lock.** `_event_index_as_of(ev)` returns the event's own date once
+`_event_started(ev)` says it has teed off (past date; today at/after
+`start_time`; today with no time recorded), else None. With `as_of`, the
+index is computed over rounds with `round_date < as_of`, lookback
+measured back from that day, no trend. Nothing is stored — the rounds
+posted before a date do not change, so the number does not either
+(principles 1 and 4). If a round is back-dated or deleted later, the
+as-of index follows the data; a stored snapshot would need schema (rule
+3b) and was not built.
+
+**What was wrong before.** `_roster_handicap_index_map` was a plain
+`AVG(differential)` of the last twenty — always above the best-eight
+average the ROSTER showed, and it gave a two-round first-timer an index.
+The saved sheets carry those numbers in `event_pairings.handicap_index`;
+they are now ignored in favour of the computed value.
+
+Guard: `test_handicap_index_lock.py`.
+
+
+## A named nine numbers 1–9; re-tagging a night's rounds (v2.468.6)
+
+Kerry 2026-09-21, on his s9.14 Hill Country entry: "We played the Oaks 9
+that night. And even though GG may have shown 10-18, each 9 is just 1-9,
+same as Comanche Trace's 27 holes."
+
+- **The rule:** a named nine of a multi-nine complex (Hill Country
+  Oaks/Lakes/Creeks, Comanche Trace Valley/Hills/Creeks) numbers its holes
+  1–9 whatever Golf Genius printed. A course record that carries an
+  18-hole tee is an 18-hole course, and a back nine there IS 10–18.
+- `scoring-course-renine:<course_id>[|apply]` → `renumber_nine_hole_course`:
+  moves the course's tee hole rows and every round's hole rows from 10–18
+  down to 1–9 when the 1–9 side is empty; refuses a record with an
+  18-hole tee. Dry run by default.
+- `scoring-hcp-round-retag:<date>;<from course>;<to course>;<slope>[;<rating>][;apply]`
+  → `retag_handicap_rounds`: every handicap round posted on that date
+  under the wrong course gets the right course name, slope (and rating
+  when given); the differential is recomputed from the row's own
+  adjusted score. All players on the date (rule 3d). `;` separates
+  because GG course names carry `|`. Dry run by default.
+- Guard: `test_nine_numbering.py`.

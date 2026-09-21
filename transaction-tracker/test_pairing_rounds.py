@@ -40,8 +40,9 @@ def main():
     with db._connect(p) as conn:
         conn.execute("CREATE TABLE events (id INTEGER PRIMARY KEY, "
                      "item_name TEXT, event_date TEXT, format TEXT)")
-        conn.execute("INSERT INTO events VALUES "
-                     "(3291, '2026 TGF CHAMPIONSHIP', '2026-08-15', '18 Holes')")
+        conn.execute("INSERT INTO events (id, item_name, event_date, format) "
+                     "VALUES (3291, '2026 TGF CHAMPIONSHIP', '2026-08-15', "
+                     "'18 Holes')")
         conn.execute("""
             CREATE TABLE pairing_history (
                 id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -100,8 +101,8 @@ def main():
 
     # A single-round event still behaves exactly as before.
     with db._connect(p) as conn:
-        conn.execute("INSERT INTO events VALUES "
-                     "(3289, 'SA CHAMP', '2026-08-01', '18 Holes')")
+        conn.execute("INSERT INTO events (id, item_name, event_date, format) "
+                     "VALUES (3289, 'SA CHAMP', '2026-08-01', '18 Holes')")
         for _ in range(2):
             conn.execute(
                 "INSERT OR IGNORE INTO pairing_history "

@@ -98,6 +98,177 @@ where available. Backfills are idempotent (skip rows where `event_id IS NOT NULL
 See `PROJECT.md → Technical Debt & Known Concessions` for SQLite FK limitations and
 the full migration checklist for Supabase/PostgreSQL.
 
+## Course record — the USGA/WHS shape (v2.466.0 → v2.468.0, mailbox #576 / #579)
+
+Kerry 2026-09-19: "Yes we need the table rebuild… I think the full
+standard shape in one pass." Rebuilt IN PLACE by `_migrate_course_tees_v2`
+(called from `_ensure_scoring_tables`, so any live DB migrates on boot):
+same table name, same `tee_id`, so `scoring_rounds.tee_id`,
+`course_tee_holes` and every reader keep working. One row per TEE SET —
+a physical tee as rated for one gender over 9 or 18 holes. Three facts
+live on it and are never confused: what the tee IS (USGA identity:
+name, gender, rating, slope, nines), what Golf Genius CALLS it (the
+alias), and what TGF DOES with it (the designation).
+
+```
+courses
+  course_id      INTEGER PK AUTOINCREMENT   (Tracker-assigned)
+  name           VARCHAR(200) NOT NULL UNIQUE
+  short_name, chapter_id, city, state, status, created_at
+  facility_id    REFERENCES facilities        (multi-course properties)
+  gg_course_id   TEXT                        (v2.466.0; not yet populated)
+  usga_course_id TEXT                        (v2.466.0; not yet populated)
+
+course_tees                                  -- ONE ROW PER TEE SET
+  tee_id         INTEGER PK AUTOINCREMENT   (Tracker-assigned; GG's id is not stored)
+  course_id      NOT NULL REFERENCES courses
+  tee_name       TEXT                       MASTER name — what the USGA / course call it
+                                            ("White", "Red", Kissing Tree's "KT"); member-facing
+  gg_alias       TEXT                       Golf Genius's name ("3 - Red (L) Tee") — admin / GG only
+  usga_tee_label TEXT                       the CRDB's label when the set came from / matched the CRDB
+  tgf_bands      TEXT                       TGF designation: '<50' | '50-64' | '65+' | 'Forward',
+                                            comma-joined for one tee serving two bands; NULL = hidden
+  gender         TEXT NOT NULL 'M'|'F'      (a rating dimension, not a name)
+  holes          INTEGER NOT NULL 9|18      (follows the rating: a nine rates < 50)
+  nine           TEXT NULL|'full'|'front'|'back'|'both'
+  par            INTEGER
+  slope          INTEGER                    (this set's own — 9 or 18)
+  rating         REAL                       (this set's own — 9 or 18)
+  bogey_rating   REAL                       (stored for completeness, used by nothing)
+  yardage_total  INTEGER                    the PHYSICAL tee's length (see "Yardage" below)
+  is_combo       INTEGER NOT NULL 0|1       (Kissing Tree "Back/KT": rated as its own set)
+  is_ladies      INTEGER                    (legacy mirror of gender = 'F')
+  gg_tee_id      TEXT                       (not yet populated)
+  source         TEXT NOT NULL import|course_card|usga_crdb|admin
+  version_label, valid_from, valid_to       (a re-rating keeps the old row, dated)
+  created_at
+  UNIQUE(course_id, tee_name, gender, holes, nine, slope, rating)
+
+tee_set_ratings                              -- the ratings BY TYPE, per set
+  tee_id         NOT NULL REFERENCES course_tees
+  rating_type    'total'|'front'|'back'
+  course_rating  REAL NOT NULL
+  slope          INTEGER NOT NULL           (each nine has its OWN slope)
+  bogey_rating   REAL
+  yardage        INTEGER                    (v2.468.0: the 18 / the front nine / the back nine)
+  source         TEXT NOT NULL
+  updated_at
+  PRIMARY KEY (tee_id, rating_type)
+
+course_tee_holes                             -- the card behind each set
+  tee_id, hole_number (1-18 on an 18, 1-9 on a nine), par, yardage, stroke_index
+  PRIMARY KEY (tee_id, hole_number)
+
+app_settings.tee_yardage_standards           -- the selection RULE, as data
+  {"<50": [6300, 6799], "50-64": [5800, 6299], "65+": [5300, 5799], "Forward": [4800, null]}
+```
+
+**Yardage (v2.468.0, Kerry 2026-09-21: "incorporate the yardages we
+have").** Yardage belongs to the physical tee, not to the rating, so
+`_heal_tee_yardages` (every boot, after every card import / nine store /
+CRDB seed; only NULLs are written) fills: a set's `yardage_total` from
+its hole rows; a set with none from the same course's set of the same
+master name + holes rated for the OTHER gender (Kissing Tree "Back" F is
+the box GG calls "1 - Black Tee"); every rating row's `yardage` — total
+from the set, front / back from holes 1–9 / 10–18, else from the Tuesday
+nine-hole sibling. A combo set has no plain sibling and waits for the
+CRDB numbers: the seed shape now takes an optional 8th element
+`(y18, yf, yb)` per set (bridge JSON `[name, gender, r18, s18, bogey,
+[fr, fs], [br, bs], [y18, yf, yb]]`). Live after the heal: every
+imported / carded set had yardage already; of the 13 CRDB-only sets, 7
+took it from their other-gender twin (Kissing Tree Forward M, Back /
+KT / Legends F; Forest Creek Red M, White / Green F) and the 6 Kissing
+Tree combos wait for the CRDB numbers.
+
+**TGF tee designation (v2.467.0, Kerry 2026-09-20).** "Master name is
+what USGA/course call it. GG should just be an alias. The GG names were
+purely for Admin, not necessary for member facing… there's never more
+than four sets of tees that we use on a course. The rest can and should
+be hidden." Three more columns on the tee set:
+
+```
+  tee_name       the MASTER name ("White", "Red", the CRDB's "KT") — what members see
+  gg_alias       Golf Genius's name for the set ("3 - Red (L) Tee") — admin / GG coordination only
+  tgf_bands      which TGF band(s) play it: '<50' | '50-64' | '65+' | 'Forward', comma-joined
+                 ('50-64,65+' = one tee serving both older bands); NULL = on the record, hidden
+```
+
+The number Kerry typed in front of a GG tee name was a designation, not
+a name: 1 = <50, 2 = 50-64, 3 = 65+ (or Forward on a women's rating —
+"some 3- for women based on tee availability"), 4 = Forward, 23 = both
+older bands, 0/00 = not played. `_gg_tee_parts` reads it; the boot step
+in `_migrate_course_tees_v2` moves every GG-style `tee_name` to
+`gg_alias`, sets the master (the CRDB label when one exists, else the
+name stripped of number / "(L)" / "Tee") and the bands, once per row.
+Both GG writers match on the alias OR the master, then adopt an
+unaliased set by gender + slope + rating (v2.466.1 generalised).
+
+Selection is a RULE, as data: `tee_yardage_standards` in app_settings
+(seed `TEE_YARDAGE_STANDARDS_DEFAULT`, Kerry verbatim: <50 6300–6799,
+50–64 5800–6299, 65+ 5300–5799, Women = shortest tee not under 4800;
+combo tees only as a last resort). `propose_tgf_tees` picks the four
+(longest plain men's set in each band's range; shortest women's set at
+or above the floor), `set_tee_bands` designates or hides one set (one
+set per band per course — a moved band is taken off the set that had
+it), `apply_tgf_tee_proposal` writes the proposal and hides the rest.
+Bridges: `scoring-tee-bands:<course_id>`,
+`scoring-tee-bands-set:<tee_id>|<bands|hide>[|apply]`,
+`scoring-tee-bands-apply:<course_id>[|apply]`.
+
+`event_tee_legend` (starter sheet, leaderboard tee circles, PH
+projection) prints ONLY designated sets on a designated course; a
+course nobody has designated yet falls back to the number-then-yardage
+derivation. `list_courses` / `/api/courses/tees` publish all three
+columns. NOT yet filtered by designation: the Courses admin page (shows
+every set, which is right for admin) and the order-form tee choice,
+which already offers the four BANDS, not tee names.
+
+**Why the row's own rating/slope stay on `course_tees`:** thirty-odd
+readers join them off `scoring_rounds.tee_id` (a card knows its tee),
+and `handicap_rounds` snapshots them per posted round (past rounds are
+frozen). `tee_set_ratings` is where the 18-hole set's FRONT and BACK
+live — a 9-hole night still points at its own nine-hole set, which is
+also a real tee set in USGA terms.
+
+**Writers:** `_upsert_course_tee` (GG scorecard import: gender from the
+"(L)" name, holes from the rating, dedupes on the new key, source
+import; v2.466.1: when the exact name misses, `_adopt_crdb_tee_set`
+claims a CRDB-seeded 18-hole row of the same gender + slope + rating
+that is still named by its CRDB label — GG's name goes on, the label
+stays, the tee_id stays; the card importer does the same for its
+18-hole row); `import_course_card` (a club's own card from
+`email_parser/course_cards.py`: three rows per tee AND the front/back
+rating rows on the 18, source course_card — the old 'both' merge is
+gone, rows already labelled 'both' still read as either half);
+`seed_usga_crdb` (bridge `scoring-crdb-seed`, source usga_crdb — the
+SOURCE OF RECORD per #576: matches an 18-hole row by gender + rating/
+slope, then name + gender, inserts the rest, writes total/front/back
+with bogey; seeds in `USGA_CRDB_SEEDS`); `store_tee_nines` (bridge
+`scoring-tee-nines-store`, source admin — Kerry's GG read as rating
+rows, refuses a pair that does not sum to the 18).
+
+**Readers:** `resolve_per_nine_from_course_tees` (rating rows first,
+then pairs Tuesday nine-hole rows of the same name AND gender);
+`label_course_tee_nines` (which nine a 9-hole row is, grouped by
+gender); `audit_course_per_nine` (`scoring-per-nine-audit`);
+`list_courses` (`get_courses` / `/api/course-tees`: every column plus
+the ratings list); the print pack / starter sheet / PH projection.
+
+**Migration rules** (`_migrate_course_tees_v2`): gender = F where
+is_ladies or the name carries "(L)", "(F)" or "Ladies"; holes = 18 where
+rating ≥ 50 else 9 (and healed on every boot — the rating is the fact);
+nine = 'full' for 18s, kept where front/back/both, else NULL; source =
+import; every set gets its 'total' rating row. Old key ⊂ new key, so no
+row can collide; the count is logged. Not yet populated: gg_tee_id,
+gg_course_id, usga_course_id (the import does not carry GG's ids today).
+
+Example, Forest Creek 29522 after the CRDB seed: seven 18-hole sets
+(M Blue/White/Green/Red, F White/Green/Red), each with total + front +
+back rating rows and bogey; White M = 70.4/125 with 35.2/125 both ways.
+
+Related: `course_aliases` (name variants → course_id), `facilities` +
+`course_combos` / combo tees (a 27-hole facility's nine-pairings).
+
 ## Data-Hygiene Migrations (idempotent, run on every `init_db`)
 
 These run from `init_db()` and are safe to re-run on every startup. Each only touches

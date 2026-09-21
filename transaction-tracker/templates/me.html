@@ -31,7 +31,13 @@
   table.list td { border-bottom: 1px solid #f1f5f9; padding: 0.45rem 0.4rem; }
   tr[data-srid] { cursor: pointer; }
   tr[data-srid]:active { background: #f8fafc; }
-  .chev { color: #94a3b8; font-size: 0.7rem; }
+  /* The house expand arrow — the same glyph, colour and motion as
+     `.tgf-exp` in dashboard.css (Kerry 2026-09-15: "Standard chevron is
+     supposed to be orange"). This page does not load dashboard.css, so it
+     takes the values, not the class. */
+  .chev { display:inline-block; color:#E87C3E; font-size:0.75rem; line-height:1;
+          vertical-align:-2px; transition:transform 0.15s; }
+  .chev.open { transform: rotate(90deg); }
   .err { background: #fef2f2; border: 1px solid #fecaca; color: #b91c1c;
          border-radius: 10px; padding: 1rem; margin: 1rem 0; }
   .muted { color: #64748b; }
@@ -134,7 +140,7 @@
                 <tr><th>Date</th><th>Event</th><th>Gross</th><th>Net</th></tr>
                 ${rounds.map(r => `<tr data-srid="${r.id}">
                     <td style="white-space:nowrap;">${esc(r.round_date || "")}</td>
-                    <td><span class="chev">&#9656;</span> ${esc(r.event_name || r.course_name || "")}</td>
+                    <td><span class="chev">&#9654;</span> ${esc(r.event_name || r.course_name || "")}</td>
                     <td><strong>${r.gross ?? ""}</strong></td><td>${r.net ?? ""}</td></tr>`).join("")}
             </table>`;
             $("cards").classList.remove("muted");
@@ -144,14 +150,14 @@
                     const chev = row.querySelector(".chev");
                     if (next && next.classList.contains("sc-detail")) {
                         next.remove();
-                        if (chev) chev.innerHTML = "&#9656;";
+                        if (chev) chev.classList.remove("open");
                         return;
                     }
                     const det = document.createElement("tr");
                     det.className = "sc-detail";
                     det.innerHTML = `<td colspan="4" style="background:#fff;padding:0.5rem 0.2rem;"><span class="muted">Loading…</span></td>`;
                     row.after(det);
-                    if (chev) chev.innerHTML = "&#9662;";
+                    if (chev) chev.classList.add("open");
                     try {
                         const card = await api("/api/me/scorecard/" + row.dataset.srid);
                         det.firstElementChild.innerHTML = window.tgfRenderScorecard(card);

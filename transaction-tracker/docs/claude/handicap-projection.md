@@ -33,8 +33,16 @@ rounds THEN caps; our spec caps THEN rounds. Equivalent at integer caps —
 deleted by WHS; TGF follows WHS except deliberate deviations, and this was
 inherited not chosen. Removal raises the field's indexes ~4% (Kerry: current
 system favors low handicappers too much). SEQUENCED: impact sweep (I-2)
-FIRST → report → then apply under the retroactivity boundary. **Not yet
-applied.**
+FIRST → report → then apply under the retroactivity boundary. **APPLIED
+2026-08-03 (v2.192.3 / v2.193.0):** the live `handicap_settings`
+multiplier dial and the code default are both 1.0; the sweep that day
+moved 158 of 168 indexes (mean +0.31, max +0.8). Re-ratified by Kerry
+2026-09-19 (mailbox #574, "apply now") — it was already in effect; the
+2026-09-20 re-run of `scoring-hcp-r1-impact` confirmed `current_multiplier
+1.0` (155 indexed players; 148 would differ if the factor came back).
+Every completed result kept its numbers (`scoring_rounds.playing_handicap`
+is event-time-frozen, H-2). Because the flip predates the fall races, no
+race is scored on two index bases.
 
 **R2 — 12-month lookback window is a DELIBERATE deviation, ratified**
 (introduced 2026 for volatility / stale conditions). In the deviation

@@ -71,6 +71,15 @@ Do not assume it — read it — but do not redo it either.
     `scoring-alias-add:<canonical name>|<GG-style name>`, then re-pull the
     card: `scoring-import-event:<code>@<round_id>|refresh=<surname>`.
     Never post handicaps or pairings for a null-cid row (CLAUDE.md rule 6).
+    **`refresh=` does nothing for a null-cid card** (AREVALO, Guillermo,
+    2026-09-16: `refreshed_players_dropped: []`) — use
+    `scoring-round-drop:<id>|unpost|apply` then the keyed import
+    `scoring-import-event:<code>@<round_id>` (no refresh=), then
+    `scoring-hcp-import:<event>|apply` for the one re-created card.
+    **A card GG served without a tee** (Lee Vasquez, same run: course_id
+    and tee_id NULL, `no_tee_slope_rating`) is fixed the same way — the
+    drop + keyed re-import came back WITH the tee. Neither needs Kerry's
+    tee; check GG's results page first (his tee was printed there).
     **Which spelling is canonical is Kerry's call** (2026-09-09: "Tom
     Donovan" is the member's name, "Thomas Donovan" the alias) — ask
     before renaming a customers row; the rename itself is
@@ -83,11 +92,36 @@ Do not assume it — read it — but do not redo it either.
     GG is the only source of pairing history; app rows are plans. Blind
     draw seats never count. Both rounds of a multi-day event are applied
     separately on the same event.
+    **Small field / cart-only board (a9.23 Avery Ranch, 12 players,
+    2026-09-16 — Kerry: "You should be able to see pairings in the portal
+    in tee sheet"):** when the only team board is CART Net (pairs of 2),
+    do NOT apply it as groups. Read the TEE SHEET instead:
+    `scoring-pairings:round|<sa|austin>|<round_id>|dry|<event_id>` — the
+    sheet carries no round label, so the event id MUST be passed or it
+    errors "no Tracker event matched label ''"; then `…|apply|<event_id>`.
+    Groups come back with their tee-time slots.
+    **Order matters (mailbox #534, 2026-09-16):** run the TEE-SHEET ingest
+    FIRST, while the round is still on the tee-sheet widget — once GG
+    archives a played round off it, only a screenshot +
+    `scoring-pairings:relabel|<event>|{group: hole}[|apply]` can restore
+    hole labels. The TEAM Net board knows who rode together, not start
+    holes or tees; before v2.458.10 applying it after the fact wiped the
+    saved hole assignments and tees (s9.23, repaired by the improvements
+    lane). Since v2.458.10 the writer keeps labels/tees the ingest does
+    not carry, so the team ingest is safe — but the tee sheet is still
+    the richer source and goes first.
 
 1.3 **GG winners + MVP cross-check.** `scoring-gg-results:<event>` — the
     boards GG has posted, with purses. Rows with `purse: 0.0` mean Kerry
     has not entered money on GG yet; the payout layer then falls back to
-    the matrix. A game with NO board at all (no CTP row, no Skins row)
+    the matrix. **A same-day walk is a snapshot, not the verdict** (s18.11,
+    2026-09-19): at 2 PM the walk saw two boards with purse 0.0, no Skins
+    board, and matrix-fallback payouts that split a three-way Ind Net tie
+    two ways; by 5:30 PM Kerry had entered the money, the Skins board
+    was up, and the hourly refresh had re-recorded all 18 rows from GG.
+    Before reporting a "missing board" or a wrong split, check
+    `<widget>&round=<round_id>` (`summary`) for the board list and re-run
+    the walk; say which time the numbers are from. A game with NO board at all (no CTP row, no Skins row)
     means GG has nothing for it — the tracker may still have
     SHADOW-computed it (payout descriptions without "(GG $)"). Say which
     is which. `scoring-mvp-import` with url = `<widget>&round=<round_id>`
@@ -127,6 +161,29 @@ Do not assume it — read it — but do not redo it either.
     bridged; the preview then shows them `hcp_excluded`. A card whose
     scores were WRONG (GG edited after our import) is
     `scoring-round-drop:<id>|unpost|apply` + re-import, not an exclusion.
+3.1c **18-hole events post per nine** — `scoring-hcp-2nines:<event>`
+    (dry) then `scoring-hcp-2nines:<event>|apply`. Since v2.465.17 the
+    front/back rating + slope come OFF THE COURSE RECORD (course_tees by
+    course_id + tee; the Tuesday nine-hole rows, paired and checked
+    against the 18-hole rating) — Kerry 2026-09-19: "Aren't we checking
+    course_ids and their information for ratings and indexes as a
+    standard?" Read `per_nine_source` in the result: it shows the
+    derivation per tee and anything unresolved. A tee it could not
+    resolve (no nine-hole rows on file, or two re-rated pairs that both
+    fit) is skipped with the reason; ONLY THEN fetch the course from the
+    USGA Course Rating Database (ncrdb.usga.org — the source of record,
+    #576) and seed it: `scoring-crdb-seed:<course_id>|<json>|apply`
+    (or `scoring-tee-nines-store:<full_tee_id>|<fr>,<fs>|<br>,<bs>|apply`
+    for a single set read off GG; Kerry's go — course data), then re-run;
+    the JSON override
+    (`…|{"<tee_id>":{"front":[r,s],"back":[r,s]}}|apply`) is the
+    one-off. `scoring-per-nine-audit` before an 18-hole day says whether
+    its course will resolve. Cedar Creek 2026-09-19 was asked for twice
+    before this existed.
+    Since v2.465.16 the `|apply` also mails the chapter-manager recap
+    (result key `recap_email`); before that only the 9-hole path did, and
+    Cedar Creek's 30 rounds posted silently — `scoring-hcp-recap:<event>`
+    is the manual resend either way.
 3.2 `scoring-hcp-import:<event>|apply` — writes one handicap round per
     9-hole card (WHS NDB adjusted gross, Kerry-ratified 2026-07-14) and
     auto-emails the chapter recap to `hcp_recap_email_<chapter>` →
@@ -177,7 +234,15 @@ Do not assume it — read it — but do not redo it either.
     v2.357.0; `scoring-event-links` shows the state) — do not hand-build
     a slug when the row already carries a verified URL.
     Save the draft under `transaction-tracker/docs/claude/recaps/`.
-    Kerry sends — OPEN 2.
+    **Then render each chapter's draft as a Word file and hand both
+    over** (Robert 2026-09-16: "I really would love if it could almost
+    duplicate the spacing, where I bold, etc." — Kerry: "It can and
+    will."): `node tools/recap_docx.js <recap.md> --section "SAN ANTONIO"
+    -o TGF_Recap_<code>.docx` (needs `npm i docx` once in the sandbox;
+    **bold**, [links](url), "- " bullets, CAPS-with-period heads and
+    [__ blanks __] all survive as Word formatting). Austin's carries
+    Robert's signature block (lesson 39); SA's carries Kerry's. Kerry
+    sends SA; Robert sends Austin — OPEN 2 answered in practice.
     **Draft-time inputs the s9.22 send taught (event-recaps.md 20–29):**
     the headliner's PREVIOUS event (card + payout) for a trend; the Team
     Net team score; `customers.acquisition_source` for every first-timer;
@@ -239,3 +304,23 @@ Raised 2026-09-09, on the first run:
    GG posts, or hold them?
 8. **HIO pot pre-counting future events** (2.4). Cosmetic today; wrong the
    day a registration is refunded before the event.
+
+Raised 2026-09-16, on the third run (s9.23 / a9.23):
+
+9. ~~A bridge to stamp course/tee on a tee-less card~~ — CLOSED 2026-09-16:
+   drop + keyed re-import re-served the card WITH its tee (1.1). Open
+   question remains WHY the hourly auto-sync's first pass dropped it.
+10. ~~Cart-only GG boards~~ — CLOSED 2026-09-16 by Kerry: read the tee
+   sheet (`scoring-pairings:round|…|<event_id>`), recipe in 1.2.
+12. **A GG score correction after our import is invisible** (a18.5
+   Forest Creek, found 2026-09-16 by Robert: Luke Youngs 71 → 70, GG
+   fixed a scoring error after Saturday's import; the recap, the
+   handicap post and the leaderboard all carried 71 for four days).
+   The hourly auto-sync only re-walks an event on its day and the day
+   after. Proposal: a weekly re-verify of the last 7 days' cards (gross
+   vs GG's current board), reporting any drift to the closeout lane;
+   the fix is 3.1b (drop + keyed re-import + re-post).
+11. **A null-customer_id card is not "stale" to `refresh=`.** The alias +
+   re-pull recipe in 1.1 silently did nothing for AREVALO, Guillermo;
+   drop + keyed re-import was needed. Either teach refresh to drop
+   null-cid cards or say so in 1.1.
