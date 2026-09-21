@@ -276,16 +276,18 @@ def print_pack_email_body(built: dict) -> str:
                     f'padding:0 4px;border-radius:3px;">{t}</span>'
                     for t, c, on in (("1T", "#E87C3E", pl.get("is_first_timer")),
                                      ("NEW", "#15803D", pl.get("is_new"))) if on))
+                # Name on its own line, the numbers under it — at phone
+                # width a one-line row wrapped mid-number.
                 names.append(
-                    f'<div><strong>{_esc(pl.get("name"))}</strong>{badges} '
-                    f'<span style="color:#6B7280;">'
+                    f'<div style="padding:0 0 5px;"><strong>{_esc(pl.get("name"))}</strong>{badges}'
+                    f'<br><span style="color:#6B7280;font-size:12px;">'
                     f'{_esc(pl.get("tee_choice") or "")} · idx {_fmt_num(pl.get("handicap_index_display", pl.get("handicap_index")))}'
                     f' · PH {_fmt_num(pl.get("playing_handicap"))} · {unit} {_fmt_num(pl.get("team_handicap"))}</span></div>')
             for b in g.get("blinds") or []:
                 names.append(f'<div style="color:#6B7280;font-style:italic;">BLIND · {_esc(b.get("name"))}</div>')
-            rows.append(f'<tr><td style="padding:6px 10px 6px 0;vertical-align:top;white-space:nowrap;">'
+            rows.append(f'<tr><td style="padding:8px 12px 8px 0;vertical-align:top;white-space:nowrap;border-top:1px solid #E5E7EB;">'
                         f'<strong>{_esc(label)}</strong></td>'
-                        f'<td style="padding:6px 0;vertical-align:top;">{"".join(names)}</td></tr>')
+                        f'<td style="padding:8px 0 4px;vertical-align:top;border-top:1px solid #E5E7EB;">{"".join(names)}</td></tr>')
         out.append('<table style="border-collapse:collapse;font-family:-apple-system,Helvetica,Arial,sans-serif;'
                    'font-size:14px;margin:0 0 1em;">' + "".join(rows) + "</table>")
     notes = [f"<strong>1T</strong> first TGF event ever · <strong>NEW</strong> new member playing their first event as a member (both can show)",

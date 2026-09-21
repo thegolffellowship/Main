@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.468.3";
+window.TGF_VERSION = "2.468.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.468.4",
+    date: "2026-09-21",
+    changes: [
+      "Print pack mail body: each player's numbers sit on their own line under the name and groups are ruled apart — at phone width the one-line row wrapped mid-number.",
+    ],
+  },
   {
     version: "2.468.3",
     date: "2026-09-21",
