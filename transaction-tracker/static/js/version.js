@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.472.0";
+window.TGF_VERSION = "2.472.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.472.1",
+    date: "2026-09-21",
+    changes: [
+      "THE B5 FREEZE, built (Kerry 2026-09-21: \u2018Yes, build the freeze tables and the button.\u2019 \u2014 the schema proposed in mailbox #584). A FREEZE button on the FLIGHTS tab (manager+, confirmed) stamps the LIVE board into `event_flight_snapshots` \u2014 one row per transition carrying the whole board, both layers \u2014 and `event_flight_snapshot_members`, one row per player per game with customer_id (principle 6). The event's state is READ from the rows, never stored on events: LIVE with no unvoided freeze; FROZEN once one stands (badge with the Central time and who pressed it; the tab shows the stored selection priced from today's buyers with the \u2018since freeze\u2019 delta \u2014 a late add lands by the FROZEN cut lines, a credited WD leaves the headcount, pots and places move, the structure never does); SETTLED after SETTLE (confirmed) stores that recomputed board as the record \u2014 it never recomputes again, a later signup does not move it. Unfreeze voids (keeps) the rows and the board reads LIVE. A second FREEZE refuses; settle without a freeze refuses. Every action is audited. Routes `POST /api/events/<id>/flights/freeze|settle|unfreeze`; bridges `scoring-flights-freeze|settle|unfreeze:<id>[|apply]` (dry run by default). Nothing pays anyone; Golf Genius stays the payer of record. Guards: `test_flights_board.py` (freeze \u2192 late add \u2192 delta \u2192 settle \u2192 served from storage \u2192 unfreeze \u2192 audit rows), `test_customer_id_everywhere.py` (the new person table carries its id).",
+    ],
+  },
   {
     version: "2.472.0",
     date: "2026-09-21",
