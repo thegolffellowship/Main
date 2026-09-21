@@ -54,6 +54,18 @@ change, so the number does not). ROSTER, PAIRINGS, generator, starter
 sheet and flights report are views of the one computation; a saved
 sheet's `handicap_index` is a fallback, never the answer.
 
+**Flighting & payouts (2026-09-18/19, revised #582; as data in
+`email_parser/flighting.py`).** Ladders <6.0 / 6.0–11.9 / 12.0+ (4
+flights add 12.0–17.9 / 18.0+), exclusive upper bounds, cut lines never
+move; NO minimum flight size, NO merging; flight labels derive from
+actual membership; places by FLIGHT size (1–9 → 1; 10–19 → 2/3–1/3;
+20+ → 50/30/20; ties pool and split to the pot); Individual Gross pot =
+10% off the top as the Overall Low Gross bonus + 90% by headcount;
+Skins keeps the matrix pot ÷ flights; Individual Net keeps the equal-size
+cut under 12.0 and the matrix place columns. SELECTION freezes at an
+explicit action; AMOUNTS recompute at settlement from actual buyers.
+Visible per event on the FLIGHTS tab — dry run, GG pays.
+
 **The plus rule (2026-09-15/16).** A plus handicap comes off the ROUND,
 never off a hole: no hole is ever made harder than the card says, and
 the give-back is deducted once from the round's net and points.
@@ -167,8 +179,11 @@ course. What that night forced, and what the Platform needs on day one:
 - Handicap lock is derived, not stored; a back-dated or deleted round
   moves an as-of index. A stored snapshot needs schema (3b).
 - Eric Pollard's home chapter (only order was DFW).
-- Which nine the index is for flighting (9 vs 18) is a setting, never
-  assumed; minimum flight size and 3-/4-flight ladders remain open.
+- The flighting FREEZE needs schema (rule 3b, proposed #584):
+  `event_flight_snapshots` + `event_flight_snapshot_members`; and which
+  button carries the freeze (Final Pairings send vs a FREEZE button).
+  Also whether the 1/10/20 places rule applies to Individual Net or
+  only to Individual Gross.
 
 ## 6. What the Platform must carry forward (lessons, each paid for)
 

@@ -127,9 +127,10 @@
 
   <ul class="notes">
     {% for g in rep.games %}{% for n in g.notes %}<li><strong>{{ g.label }}:</strong> {{ n }}</li>{% endfor %}{% endfor %}
-    <li>Buy-ins from the event roster. Flight counts from the games matrix. Cuts from the TGF flighting
-        standard: flight on the raw 18-hole index, a break is the floor of the upper flight, equal indexes
-        never split, thin flights merge.</li>
+    <li>Buy-ins from the event roster. Flight counts and the game each buyer count selects from the games
+        matrix. Cuts from the ratified TGF flighting standard: flight on the raw 18-hole index, a break is the
+        floor of the upper flight (12.0 goes up), equal indexes never split, no minimum flight size and no
+        merging &mdash; a flight is whatever the ladder produces.</li>
   </ul>
 
   <div class="foot">
