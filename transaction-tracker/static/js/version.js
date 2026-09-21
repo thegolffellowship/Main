@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.473.0";
+window.TGF_VERSION = "2.473.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.473.1",
+    date: "2026-09-21",
+    changes: [
+      "Guard for the 'Who brought them' control: test_referred_by_ui.js, 25 checks against the page's REAL renderer, picker and wiring — the block in each of its three states, the picker excluding the person themselves and nameless shells, a typed name resolving to a customer_id (never a name string on the wire), and Clear sending nulls for both answers. Written because the last thing shipped on this surface was a dashboard that rendered perfectly and never ran its loader; a control nobody can click is not shipped.",
+    ],
+  },
   {
     version: "2.473.0",
     date: "2026-09-21",

@@ -80,7 +80,10 @@ So the split is:
 
 `POST /api/customers/<id>/referred-by` takes `{referrer_customer_id,
 source?, note?}` or `{found_us_via}` or `{referrer_customer_id: null}`.
-Guard: `test_referred_by.py`.
+Guards: `test_referred_by.py` (the data rule, 19 checks) and
+`test_referred_by_ui.js` (the page's real renderer, picker and wiring, 25
+checks — written because the previous thing shipped on this surface was a
+dashboard that rendered fine and never ran its loader).
 
 ## 3. Proposal — the 1st Timer guesser
 
