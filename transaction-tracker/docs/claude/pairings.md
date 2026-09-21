@@ -1794,3 +1794,24 @@ still follows GG's recorded team string, so nothing pays off this table.
 of the team string with no seat attached — which slot each one covers is
 unknowable, and does not matter. They consume open seats in sheet order
 and only the remainder get a new pick, reported as `covered_by_existing`.
+
+
+## Auto-generate the day before (v2.468.5)
+
+Kerry 2026-09-21: "Create a timer to Generate Pairings automatically at
+5:00p on Mondays for Tuesday events. Only if they aren't run already."
+
+`auto_generate_pairings(db_path, today)` (database.py), scheduled daily
+at 5:00 PM Central (`pairings_auto_generate` job): for every ACTIVE event
+dated TOMORROW whose weekday is in the dial `pairings_auto_weekdays`
+(app_settings; default `tue`, e.g. `tue,sat` to cover the 18s), with NO
+saved pairings, run `generate_event_pairings(mode="random",
+protect_partner_requests=True)` — the Generate button's defaults — and
+`save_event_pairings`. An event with any saved seat is skipped ("already
+paired"); one event's error never blocks the other chapter (rule 3d).
+Each generation is written to the agent action log. Match Play pairs are
+NOT constrained by the routine (detection lives on the page); Kerry's
+hand-run Generate remains the way to seat confirmed matches. Guard:
+`test_pairings_automation.py`, which also holds the RSVP-only
+pace-rating fix (`_event_rsvp_only_players` now reads `pace_rating` from
+the customer row like every other profile fact).

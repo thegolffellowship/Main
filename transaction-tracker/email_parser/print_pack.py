@@ -328,12 +328,14 @@ def send_event_print_pack(built: dict, to_address: str | None = None,
 
 
 def print_packs_due(db_path=None) -> list[dict]:
-    """Active events dated TOMORROW (Central)."""
+    """Active events dated TODAY (Central). Kerry 2026-09-21: the packs
+    "probably shouldn't be sent until 6:00a day of" — the routine runs
+    from 6 AM on the event day, not the evening before (v2.465.0)."""
     from email_parser import database as db
     from email_parser.timezone_utils import today_central
-    tomorrow = (today_central() + timedelta(days=1)).isoformat()
+    today = today_central().isoformat()
     return [e for e in db.get_all_events(db_path)
-            if (e.get("event_date") or "")[:10] == tomorrow
+            if (e.get("event_date") or "")[:10] == today
             and (e.get("status") or "active") == "active"]
 
 

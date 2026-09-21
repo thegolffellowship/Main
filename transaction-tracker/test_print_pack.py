@@ -74,7 +74,12 @@ from datetime import timedelta
 with db._connect(DB) as conn:
     conn.execute("UPDATE events SET event_date = ? WHERE id = 9001", ((tz.today_central() + timedelta(days=1)).isoformat(),))
     conn.commit()
-check("an event dated tomorrow is due", [e["id"] for e in pp.print_packs_due()] == [9001])
+check("an event dated TOMORROW is no longer due — packs go out the morning of (Kerry 2026-09-21)",
+      [e["id"] for e in pp.print_packs_due()] == [])
+with db._connect(DB) as conn:
+    conn.execute("UPDATE events SET event_date = ? WHERE id = 9001", (tz.today_central().isoformat(),))
+    conn.commit()
+check("an event dated today is due", [e["id"] for e in pp.print_packs_due()] == [9001])
 sent = []
 def fake_send(**kw):
     sent.append(kw); return True
@@ -84,7 +89,7 @@ for k, v in (("AZURE_TENANT_ID", "t"), ("AZURE_CLIENT_ID", "c"), ("AZURE_CLIENT_
              ("EMAIL_ADDRESS", "tracker@example.test"), ("PRINT_PACK_EMAIL_TO", "kerry@example.test")):
     os.environ[k] = v
 res = pp.send_due_print_packs(appmod._print_pack_render, appmod.app.static_folder)
-check("the routine sends tomorrow's pack once", len(sent) == 1 and res and res[0].get("sent") is True, res)
+check("the routine sends today's pack once", len(sent) == 1 and res and res[0].get("sent") is True, res)
 check("…as a PDF attachment to the configured recipient",
       sent and sent[0]["to_address"] == "kerry@example.test"
       and sent[0]["attachments"][0][2] == "application/pdf" and sent[0]["attachments"][0][1][:4] == b"%PDF")
@@ -94,13 +99,22 @@ db.save_event_pairings(9001, {"18": [{"group_num": 1, "slot_label": "8:20 AM", "
     {"name": "Jeff Rideout", "cart_pos": 1, "customer_id": 777001, "tee_choice": "50-64", "handicap_index": None}]}]})
 res3 = pp.send_due_print_packs(appmod._print_pack_render, appmod.app.static_folder)
 check("a changed sheet is sent again", len(sent) == 2 and res3[0].get("sent") is True, res3)
+c2 = appmod.app.test_client()
+with c2.session_transaction() as s_:
+    s_["role"] = "manager"; s_["authenticated"] = True
+r_send = c2.post("/events/9001/print-pack/send".replace("/events/", "/api/events/"), json={})
+check("SEND PACK on demand: POST /api/events/<id>/print-pack/send mails it now",
+      r_send.status_code == 200 and r_send.get_json().get("sent") is True and len(sent) == 3, (r_send.status_code, r_send.get_data()[:200]))
+check("…and the routine then leaves that sheet alone",
+      pp.send_due_print_packs(appmod._print_pack_render, appmod.app.static_folder)[0].get("why") == "unchanged since last send")
+check("the pairings toolbar offers the button", 'onclick="sendPrintPack(${ev.id}, this)"' in open("templates/events.html").read())
 fetcher.send_mail_graph = orig
 
 print("4. Graph attachments")
 src = open("email_parser/fetcher.py", encoding="utf-8").read()
 check("send_mail_graph takes attachments as fileAttachment", "#microsoft.graph.fileAttachment" in src and "attachments: list | None = None" in src)
 asrc = open("app.py", encoding="utf-8").read()
-check("the evening-before routine is scheduled 5–10 PM Central", 'id="print_packs_evening_before"' in asrc and 'hour="17-22"' in asrc)
+check("the routine is scheduled the MORNING OF, 6–9 AM Central (Kerry 2026-09-21)", 'id="print_packs_day_of"' in asrc and 'hour="6-9"' in asrc and 'print_packs_evening_before' not in asrc)
 try: os.unlink(DB)
 except OSError: pass
 print("\n" + ("ALL PASS" if not F else f"{len(F)} FAILURE(S): " + "; ".join(F)))

@@ -2256,12 +2256,18 @@ emailed to me."
   browser's Download PDF does. The build result reports `engine`.
   `GET /events/<id>/print-pack.pdf` (manager) serves it; the page's
   Download PDF stays the browser print dialog.
-- **Routine:** `send_due_print_packs_job` runs hourly 5–10 PM Central.
-  Every active event dated TOMORROW gets its pack mailed as a PDF
-  attachment to `PRINT_PACK_EMAIL_TO` (→ `DAILY_REPORT_TO` →
-  `EMAIL_ADDRESS`). A content hash of the rendered parts is stored in
-  `app_settings` (`print_pack_sent:<event_id>`), so a pack is sent once
-  and again only if the sheet changed after the first send.
+- **Routine (v2.468.5 — the MORNING OF):** `send_due_print_packs_job`
+  runs at 6:05, 7:05, 8:05 and 9:05 AM Central. Every active event dated
+  TODAY gets its pack mailed as a PDF attachment to `PRINT_PACK_EMAIL_TO`
+  (→ `DAILY_REPORT_TO` → `EMAIL_ADDRESS`). A content hash of the
+  rendered parts is stored in `app_settings` (`print_pack_sent:<id>`),
+  so the first check sends and the later ones re-send only a sheet that
+  changed. (v2.465.0–2.468.4 sent the evening before, 5–10 PM; Kerry
+  2026-09-21: "probably shouldn't be sent until 6:00a day of".)
+- **SEND PACK (v2.468.5):** button on the pairings toolbar beside Starter
+  Sheet / Cart Signs (saved sheet only) → `POST
+  /api/events/<id>/print-pack/send` builds and mails the pack now and
+  records the hash, so the routine leaves that sheet alone.
 - **On demand:** `scoring-print-pack-pdf:<event_id>` builds and reports parts,
   page counts, hash and size; `|send[|<to>]` mails it and records the
   hash; `scoring-print-pack-pdf:due` lists tomorrow's events.

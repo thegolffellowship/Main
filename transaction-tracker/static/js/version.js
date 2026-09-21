@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.468.4";
+window.TGF_VERSION = "2.468.5";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.468.5",
+    date: "2026-09-21",
+    changes: [
+      "Pairings auto-generate the day before (Kerry 2026-09-21: \u2018Generate Pairings automatically at 5:00p on Mondays for Tuesday events. Only if they aren't run already.\u2019): a 5:00 PM Central routine runs the generator the way the Generate button does by default (Random, partner requests honoured, history on) for every active event dated tomorrow on the dialled weekdays and SAVES the sheet \u2014 an event already paired is left exactly as it is. The weekdays are a dial (`pairings_auto_weekdays`, default `tue`; add `sat` to cover the 18s without code). Both chapters (rule 3d). Logged to the agent action log. Guard: `test_pairings_automation.py`.",
+      "An RSVP-only player carries the pace rating from his customer profile on the pairings card (Kerry: \u2018Jeff Young is a 3 for pace of play on his customer profile. Why isn't he showing that on his pairing even though he's only an RSVP?\u2019). `_event_rsvp_only_players` hard-coded it None while reading the other profile facts from the same row.",
+      "Print pack goes out the MORNING OF, not the evening before (Kerry: \u2018probably shouldn't be sent until 6:00a day of\u2019): the routine checks at 6:05, 7:05, 8:05 and 9:05 AM Central for events dated today; the first check sends, the later ones re-send only a sheet that changed. Why the old note said \u20185\u201310 PM\u2019: the routine was an hourly check in that window, so the pack arrived at the first check (about 5:05 PM), and the rest of the window existed to catch a sheet edited later that evening.",
+      "SEND PACK button on the pairings toolbar (beside Starter Sheet and Cart Signs, on a saved sheet): mails the bound pack now, records the hash so the morning routine leaves that sheet alone. `POST /api/events/<id>/print-pack/send`.",
+    ],
+  },
   {
     version: "2.468.4",
     date: "2026-09-21",

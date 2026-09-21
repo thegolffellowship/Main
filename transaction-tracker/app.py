@@ -1437,16 +1437,34 @@ def start_scheduler():
     logger.info("Expense email classifier scheduled every %d minutes", expense_interval)
 
     # COO daily email — runs at 7:00 AM US/Central
-    # Print packs: every active event dated tomorrow, mailed to Kerry the
-    # evening before (5–10 PM Central, hourly; a content hash makes it
-    # once-per-change). v2.465.0.
+    # Print packs: every active event dated TODAY, mailed to Kerry from
+    # 6 AM on the day (checked hourly 6–9 AM Central; a content hash makes
+    # it once-per-change, so the first check sends and the later ones
+    # only re-send a sheet that changed). Kerry 2026-09-21: "shouldn't be
+    # sent until 6:00a day of". A SEND PACK button on the pairings toolbar
+    # sends on demand at any time. v2.468.5 (was the evening before).
     scheduler.add_job(
         send_due_print_packs_job,
         "cron",
-        hour="17-22",
+        hour="6-9",
         minute=5,
         timezone="US/Central",
-        id="print_packs_evening_before",
+        id="print_packs_day_of",
+        replace_existing=True,
+    )
+
+    # Pairings: 5:00 PM Central every day, generate + save the sheet for
+    # tomorrow's events on the dialled weekdays (default Tuesday) when
+    # nobody has paired them yet. Kerry 2026-09-21: "Generate Pairings
+    # automatically at 5:00p on Mondays for Tuesday events. Only if they
+    # aren't run already." v2.468.5.
+    scheduler.add_job(
+        auto_generate_pairings_job,
+        "cron",
+        hour=17,
+        minute=0,
+        timezone="US/Central",
+        id="pairings_auto_generate",
         replace_existing=True,
     )
 
@@ -5140,6 +5158,35 @@ def send_due_print_packs_job():
             logger.info("print packs: %s", res)
     except Exception:
         logger.exception("print pack routine failed")
+
+
+def auto_generate_pairings_job():
+    from email_parser.database import auto_generate_pairings
+    try:
+        res = auto_generate_pairings()
+        if res:
+            logger.info("pairings auto-generate: %s", res)
+    except Exception:
+        logger.exception("pairings auto-generate failed")
+
+
+@app.route("/api/events/<int:event_id>/print-pack/send", methods=["POST"])
+@require_role("manager")
+def api_send_print_pack(event_id):
+    """SEND PACK on demand (Kerry 2026-09-21: "there should be a button to
+    SEND PACK"). Builds the pack now and mails it to the configured
+    recipient (or `to` in the body), recording the hash so the routine
+    does not send the same sheet again."""
+    from email_parser.print_pack import send_event_print_pack
+    data = request.get_json(silent=True) or {}
+    built = build_print_pack_for_event(event_id)
+    if not built:
+        return jsonify({"error": "Event not found or nothing to print"}), 404
+    if built.get("error"):
+        return jsonify({"error": built["error"]}), 503
+    res = send_event_print_pack(built, to_address=(data.get("to") or "").strip() or None)
+    res.update(parts=built["parts"], engine=built.get("engine"))
+    return jsonify(res), (200 if res.get("sent") else 502)
 
 
 @app.route("/events/<int:event_id>/divisions-flights")

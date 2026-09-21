@@ -62645,7 +62645,8 @@ def _event_rsvp_only_players(conn, event_id: int) -> list[dict]:
             try:
                 crow = conn.execute(
                     "SELECT current_player_status, ambassador, group_captain, "
-                    "solo_back_ok, (SELECT MIN(started_at) FROM customer_memberships "
+                    "solo_back_ok, pace_rating, "
+                    "(SELECT MIN(started_at) FROM customer_memberships "
                     "WHERE customer_id = c.customer_id) AS first_member_start, "
                     "(SELECT MIN(hr.round_date) FROM handicap_rounds hr "
                     " JOIN handicap_player_links l ON l.player_name = hr.player_name "
@@ -62658,6 +62659,12 @@ def _event_rsvp_only_players(conn, event_id: int) -> list[dict]:
                     roles = {k: crow[k] for k in ("ambassador", "group_captain",
                                                   "solo_back_ok", "first_member_start",
                                                   "first_round", "n_orders")}
+                    # A PROFILE fact rides on the RSVP row exactly as it
+                    # rides on an order row (Kerry 2026-09-21: "Jeff Young
+                    # is a 3 for pace of play on his customer profile. Why
+                    # isn't he showing that on his pairing even though he's
+                    # only an RSVP?"). The row was hard-coded None.
+                    roles["pace_rating"] = crow["pace_rating"]
             except sqlite3.OperationalError:
                 cps = None
         received = r.get("received_at") or None
@@ -62665,7 +62672,7 @@ def _event_rsvp_only_players(conn, event_id: int) -> list[dict]:
             "name": name, "customer": name,
             "customer_id": cid, "customer_email": email or None,
             "holes": "", "tee_choice": None, "user_status": "",
-            "current_player_status": cps, "pace_rating": None,
+            "current_player_status": cps, "pace_rating": roles.get("pace_rating"),
             "partner_request": None, "id": None,
             # An RSVP is a signup: its arrival time is its place in the
             # first-come request order, exactly like an order row.
@@ -63001,6 +63008,70 @@ def detect_match_play_pairings(event_id: int, db_path=None) -> dict:
                             "player2_id": b["customer_id"],
                         })
         return out
+
+
+PAIRINGS_AUTO_WEEKDAYS_KEY = "pairings_auto_weekdays"
+PAIRINGS_AUTO_WEEKDAYS_DEFAULT = "tue"
+_WEEKDAY_NAMES = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
+
+
+def pairings_auto_weekdays(db_path=None) -> set:
+    """Event weekdays the day-before auto-generate covers — a DIAL in
+    app_settings ("tue" by default: Kerry 2026-09-21, "Generate Pairings
+    automatically at 5:00p on Mondays for Tuesday events"). Add "sat" to
+    cover the Saturday 18s without a code change."""
+    raw = get_app_setting(PAIRINGS_AUTO_WEEKDAYS_KEY, db_path=db_path) or PAIRINGS_AUTO_WEEKDAYS_DEFAULT
+    return {w.strip().lower()[:3] for w in raw.split(",") if w.strip().lower()[:3] in _WEEKDAY_NAMES}
+
+
+def _event_has_saved_pairings(event_id: int, db_path=None) -> bool:
+    saved = get_event_pairings(event_id, db_path=db_path) or {}
+    return any(g.get("players") for groups in saved.values() if isinstance(groups, list) for g in groups)
+
+
+def auto_generate_pairings(db_path=None, today=None) -> list[dict]:
+    """The 5 PM day-before routine: for every ACTIVE event dated TOMORROW
+    whose weekday is in the dial and that has NO saved pairings, run the
+    generator the way the page's Generate button does by default (Random,
+    partner requests honoured, history on) and SAVE the result. An event
+    Kerry already paired is left exactly as it is ("Only if they aren't
+    run already"). Returns one row per event considered."""
+    from email_parser.timezone_utils import today_central
+    today = today or today_central()
+    tomorrow = today + timedelta(days=1)
+    if _WEEKDAY_NAMES[tomorrow.weekday()] not in pairings_auto_weekdays(db_path):
+        return []
+    out = []
+    for ev in get_all_events(db_path):
+        if (ev.get("event_date") or "")[:10] != tomorrow.isoformat():
+            continue
+        if (ev.get("status") or "active") != "active":
+            continue
+        row = {"event_id": ev["id"], "event": ev.get("item_name"), "chapter": ev.get("chapter")}
+        try:
+            if _event_has_saved_pairings(ev["id"], db_path):
+                row.update(generated=False, why="already paired")
+            else:
+                res = generate_event_pairings(ev["id"], mode="random",
+                                              protect_partner_requests=True, db_path=db_path)
+                groups = {k: res.get(k) or [] for k in ("9", "18")}
+                seated = sum(len(g.get("players") or []) for gs in groups.values() for g in gs)
+                if not seated:
+                    row.update(generated=False, why="nobody to seat")
+                else:
+                    save_event_pairings(ev["id"], groups, db_path=db_path)
+                    row.update(generated=True, seated=seated,
+                               groups=sum(len(gs) for gs in groups.values()))
+                    try:
+                        log_agent_action("scheduler", "pairings_auto_generate",
+                                         f"{ev.get('item_name')}: {seated} seated in {row['groups']} groups "
+                                         f"(random, partner requests honoured)", db_path=db_path)
+                    except Exception:
+                        pass
+        except Exception as e:                       # one event never blocks the rest
+            row.update(generated=False, why=f"error: {e}")
+        out.append(row)
+    return out
 
 
 def generate_event_pairings(

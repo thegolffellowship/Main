@@ -6356,6 +6356,24 @@
         return `<span class="pairing-pace-badge" title="${title}" style="font-size:0.68rem;font-weight:700;color:${color};border:1px solid currentColor;border-radius:8px;padding:0 0.3rem;flex-shrink:0;min-width:1.8rem;text-align:center;opacity:${r != null ? '1' : '0.55'};">&#x23F1;${shown}</span>`;
     }
 
+    async function sendPrintPack(evId, btn) {
+        if (!confirm("Email the print pack for this event now?")) return;
+        const was = btn ? btn.textContent : "";
+        if (btn) { btn.disabled = true; btn.textContent = "Sending…"; }
+        try {
+            const res = await fetch(`/api/events/${evId}/print-pack/send`, {
+                method: "POST", headers: {"Content-Type": "application/json"}, body: "{}" });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok || !data.sent) { alert(data.error || data.why || "The pack was not sent."); return; }
+            alert(`Print pack sent to ${data.to} (${(data.parts || []).map(p => p.slug).join(", ")}).`);
+        } catch (err) {
+            alert("The pack was not sent.");
+        } finally {
+            if (btn) { btn.disabled = false; btn.textContent = was; }
+        }
+    }
+    window.sendPrintPack = sendPrintPack;
+
     function renderPairingsPanel(ev, registrants, rosterExtra) {
         const state = getPairingsState(ev.id);
         // The pairings roster must be the SAME roster the Players tab
@@ -6526,6 +6544,11 @@
                 // Printables read the SAVED pairings — only offer when clean.
                 html += `<button class="pairings-action-btn" onclick="window.open('/events/${ev.id}/starter-sheet','_blank')" title="Print starter sheet">&#x1F5A8; Starter Sheet</button>`;
                 html += `<button class="pairings-action-btn" onclick="window.open('/events/${ev.id}/cart-signs','_blank')" title="Print cart signs">&#x1F5A8; Cart Signs</button>`;
+                // Kerry 2026-09-21: "there should be a button to SEND PACK"
+                // — the bound PDF (starter sheet, cart signs, divisions,
+                // proximity) mailed now, on demand; the 6 AM routine then
+                // leaves this sheet alone unless it changes.
+                html += `<button class="pairings-action-btn send-pack-btn" onclick="sendPrintPack(${ev.id}, this)" title="Email the bound print pack (starter sheet, cart signs, divisions & flights, proximity markers) now">&#x2709; Send Pack</button>`;
                 // Kerry 2026-09-15: "Let's add to our Reports in our
                 // PAIRINGS tab" — the two Golf Genius sheets he still
                 // prints from GG, now built from our own roster, games
