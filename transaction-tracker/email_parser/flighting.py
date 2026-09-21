@@ -42,8 +42,10 @@ THE RULES (verbatim intent, #582):
   SKINS IS UNAFFECTED (#572): separate buy-in, flight split at 12.0, ½ Net
       under 8 buyers on a nine; its pot stays the matrix rule (skins pot ÷
       flights, paid per skin).
-  INDIVIDUAL NET: equal-size cuts, the low flight never reaches 12.0
-      (#571: "net flights are equal-size cuts and unaffected except B2");
+  INDIVIDUAL NET: the SAME fixed ladder as Skins (<12.0 / 12.0+ for two
+      flights) — Kerry 2026-09-21: "Flights for Individual Net is supposed
+      to be same as Skins at <12.0 and 12.0+, not 12.4" (supersedes the
+      #571 equal-size reading; equal_size remains a dial on FLIGHT_RULES);
       AMOUNTS from the live matrix columns.
 
 Nothing here pays anyone. Golf Genius stays the payer of record until Kerry
@@ -93,8 +95,12 @@ FLIGHT_RULES: dict = {
         "rate": {"9": 4.0, "18": 8.0},
     },
     "net": {
-        "mode": "equal_size",
-        "low_flight_ceiling": 12.0,      # exclusive: 12.0 is pushed up
+        # KERRY 2026-09-21 (Brackenridge board printed "Flight 1 (HCP
+        # <12.4)"): "Flights for Individual Net is supposed to be same as
+        # Skins at <12.0 and 12.0+, not 12.4." Individual Net cuts on the
+        # SAME fixed ladder as Skins; equal_size stays available as a dial.
+        "mode": "fixed_bands",
+        "low_flight_ceiling": 12.0,      # exclusive: 12.0 is pushed up (equal_size mode only)
         "amounts": "matrix",
     },
     "skins": {"amounts": "matrix_equal_per_flight"},
@@ -441,7 +447,7 @@ def select_game(game: str, label: str, kind: str, field: list[dict],
         sel["notes"].append(
             f"{len(unknown)} player(s) have no handicap index and cannot be "
             f"flighted: {', '.join(sorted(p.get('name') or '' for p in unknown))}.")
-    if game == "individual_net":
+    if game == "individual_net" and r["net"]["mode"] == "equal_size":
         sel["mode"] = r["net"]["mode"]
         groups, edges, notes = _net_plan(known, count, r)
         sel["edges"], sel["edges_source"] = edges, "equal-size cut (next flight's lowest index)"

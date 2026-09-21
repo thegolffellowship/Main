@@ -602,7 +602,9 @@ SEED_FLIGHT_CONFIG: dict = {
     "min_flight_size": 0,
     "tie_direction": "even",         # "even" | "up" | "down"
     "modes": {
-        "individual_net": "equal_size",
+        # Kerry 2026-09-21: Individual Net cuts on the same fixed ladder
+        # as Skins (<12.0 / 12.0+), not an equal-size split.
+        "individual_net": "fixed_bands",
         "individual_gross": "fixed_bands",
         "skins": "fixed_bands",
     },

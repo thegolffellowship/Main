@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.476.2";
+window.TGF_VERSION = "2.476.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.476.3",
+    date: "2026-09-21",
+    changes: [
+      "Divisions / Flights: Individual Net cuts on the SAME fixed ladder as Skins \u2014 <12.0 / 12.0+ for two flights \u2014 not an equal-size split with a moved ceiling (Kerry 2026-09-21 on tomorrow's Brackenridge board, which printed \u2018Flight 1 (HCP <12.4)\u2019: \u2018Flights for Individual Net is supposed to be same as Skins at <12.0 and 12.0+, not 12.4\u2019). `FLIGHT_RULES.net.mode` and the live-scoring seed both read `fixed_bands`; equal_size stays a dial. The printed page in the 6:05 AM pack and the FLIGHTS tab follow. Guards updated: `test_flighting.py`, `test_flights_board.py`.",
+    ],
+  },
   {
     version: "2.476.2",
     date: "2026-09-21",

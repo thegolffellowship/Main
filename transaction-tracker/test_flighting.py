@@ -196,10 +196,10 @@ check("Landa Park Ind Gross: 15 buyers → 3 flights on the ladder, 6/5/4",
 check("...bands read <6.0 / 6.0–11.9 / 12.0+", [f["band"] for f in s["flights"]] == ["<6.0", "6.0–11.9", "12.0+"])
 net14 = [P(i, f"N{i}", x) for i, x in enumerate([-1.0, 1.6, 11.0, 11.2, 12.4, 13.8, 14.6, 15.8, 16.4, 16.6, 18.0, 24.0, 27.2, 34.0], start=100)]
 s = fl.select_game("individual_net", "Individual Net", "NET", net14, "9", M9[14], cfg["individual_net"])
-check("Brackenridge Ind Net: 14 buyers on a nine → equal-size 2 flights, low flight under 12.0 (4/10)",
-      s["mode"] == "equal_size" and [f["players"] for f in s["flights"]] == [4, 10], str(s["flights"]))
-check("...the equal-size cut records its edge (12.4) so a late add lands by the frozen line",
-      s["edges"] == [12.4], str(s["edges"]))
+check("Brackenridge Ind Net: 14 buyers on a nine → 2 flights on the SAME fixed ladder as Skins, <12.0 / 12.0+ (4/10) — Kerry 2026-09-21: 'same as Skins at <12.0 and 12.0+, not 12.4'",
+      s["mode"] == "fixed_bands" and [f["players"] for f in s["flights"]] == [4, 10], str(s["flights"]))
+check("...the cut line is the ladder's 12.0, never a moved ceiling, so a late add lands by the frozen line",
+      s["edges"] == [12.0] and [f["band"] for f in s["flights"]] == ["<12.0", "12.0+"], (s["edges"], [f["band"] for f in s["flights"]]))
 s = fl.select_game("individual_net", "Individual Net", "NET", net14 + [P(200, "X", None)], "9", M9[14], cfg["individual_net"])
 check("a player with no index is listed apart, never dropped into a flight",
       [u["name"] for u in s["unflighted"]] == ["X"] and any("no handicap index" in n for n in s["notes"]))
