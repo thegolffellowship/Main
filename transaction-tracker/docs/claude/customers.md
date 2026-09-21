@@ -1382,3 +1382,20 @@ copied (read from `PRAGMA table_info`, so new columns are covered); identity
 and audit columns (`_MERGE_KEEP_TARGET_COLUMNS`) stay the target's. Found
 because Kerry set a starting handicap on the Mejia duplicate before the
 one-shot ran and the merge would have dropped it.
+
+
+## ACTIVE members on the snapshot (v2.468.6)
+
+Kerry 2026-09-21: "I would like to show an active MEMBERS count for the
+MEMBERS snapshot amounts. Basically counts of number (per chapter) of
+who's played in the last 60 days, and a percentage."
+
+`customers_last_played` / `customers_activity` (database.py) → `GET
+/api/customers/activity[?days=]` (view-only, PII-free: `{customer_id:
+{last_played, active}}`). PLAYED = an active registration for an event
+whose date has passed (cancelled events and credited/refunded/
+transferred/wd rows do not count), a posted scoring round, or a
+handicap round through the player link — all by `customer_id`. The
+window is the `members_active_days` dial (default 60). The Customers
+page's MEMBERS card shows "N active · P% played in the last 60 days" and,
+per chapter, "total · active (share)". Guard: `test_members_active.py`.

@@ -1772,6 +1772,8 @@ def _scoring_dispatch(url: str, extract: str):
       scoring-margin-gaps[:<limit>]  pre-cutover events: booked vs residual-would-book, with reasons (measure-only)
       scoring-leaderboard-events[:add=<codes>|set=<codes>|clear]  the EVENTS leaderboard dial (admin pilot); reports which codes still await scorecards
       scoring-hcp-2nines:<event>[|auto|<json>][|apply]  post an 18-hole event as two nines; ratings read off the course record (v2.465.17), JSON overrides
+      scoring-hcp-round-retag:<date>;<from>;<to>;<slope>[;<rating>][;apply]  re-tag a date's handicap rounds to the nine actually played
+      scoring-course-renine:<course_id>[|apply]  a named nine numbers its holes 1–9 (tee holes + rounds moved down from 10–18)
       scoring-tee-nines-store:<full_tee_id>|<fr>,<fs>|<br>,<bs>[|apply]  front/back rating rows (each with its slope) on an 18-hole tee set (refuses a pair that does not sum to the 18)
       scoring-crdb-seed:<course_id>[|<json>][|apply]  write a course's USGA CRDB tee sets (gender, par, bogey, total/front/back, optional yardages) onto the record; JSON row = [name, gender, r18, s18, bogey, [fr, fs], [br, bs], [y18, yf, yb]]
       scoring-tee-bands:<course_id>   which four sets TGF plays (current designation + the yardage-standards proposal; read-only)
@@ -5056,6 +5058,31 @@ def _scoring_dispatch(url: str, extract: str):
                        for k, v in json.loads(_mid[0]).items()}
             return json.dumps(db.derive_18hole_rounds_as_two_nines(
                 _p[0], _pn, dry_run=not _apply), indent=2, default=str)
+        if cmd == "scoring-hcp-round-retag":
+            # "<date>;<from course>;<to course>;<slope>[;<rating>][;apply]"
+            # — ';' because course names carry '|' ("Hill Country | Lakes").
+            # Re-tags every handicap round on that date, differential
+            # recomputed. Dry run unless ;apply (Kerry 2026-09-21).
+            _p = [x.strip() for x in (arg or "").split(";")]
+            _apply = bool(_p) and _p[-1].lower() == "apply"
+            if _apply:
+                _p = _p[:-1]
+            if len(_p) < 4:
+                return json.dumps({"error": "usage: scoring-hcp-round-retag:<date>;<from course>;<to course>;<slope>[;<rating>][;apply]"})
+            _rating = float(_p[4]) if len(_p) > 4 and _p[4] else None
+            _res = db.retag_handicap_rounds(_p[0], _p[1], _p[2], int(_p[3]), rating=_rating, apply=_apply)
+            if _apply:
+                _audit("scoring-hcp-round-retag", f"{_p[0]}: {_p[1]} -> {_p[2]} slope={_p[3]} rows={_res.get('rows')}")
+            return json.dumps(_res, indent=2, default=str)
+        if cmd == "scoring-course-renine":
+            # "<course_id>[|apply]" — a named nine numbers 1–9: move the
+            # course's tee holes and its rounds' holes down from 10–18.
+            _p = [x.strip() for x in (arg or "").split("|")]
+            _apply = len(_p) > 1 and _p[1].lower() == "apply"
+            _res = db.renumber_nine_hole_course(int(_p[0]), apply=_apply)
+            if _apply:
+                _audit("scoring-course-renine", f"course={_p[0]} tees={len(_res.get('tees') or [])} rounds={len(_res.get('rounds') or [])}")
+            return json.dumps(_res, indent=2, default=str)
         if cmd == "scoring-tee-nines-store":
             # "<full_tee_id>|<front_rating>,<front_slope>|<back_rating>,<back_slope>[|apply]"
             # Put a tee's front and back nine ON THE COURSE RECORD beside its

@@ -1803,9 +1803,12 @@ Kerry 2026-09-21: "Create a timer to Generate Pairings automatically at
 
 `auto_generate_pairings(db_path, today)` (database.py), scheduled daily
 at 5:00 PM Central (`pairings_auto_generate` job): for every ACTIVE event
-dated TOMORROW whose weekday is in the dial `pairings_auto_weekdays`
-(app_settings; default `tue`, e.g. `tue,sat` to cover the 18s), with NO
-saved pairings, run `generate_event_pairings(mode="random",
+on a dialled weekday at that weekday's LEAD — the dial
+`pairings_auto_weekdays` (app_settings) is `<event weekday>[:<days
+ahead>]` per entry, default `tue:1,sat:2` (v2.468.6, Kerry: "Add sat to
+the auto-pairings dial too, but make it for Thursday nights at 5:00p"):
+Tuesday nights pair Monday 5 PM, Saturday 18s pair Thursday 5 PM — with
+NO saved pairings, run `generate_event_pairings(mode="random",
 protect_partner_requests=True)` — the Generate button's defaults — and
 `save_event_pairings`. An event with any saved seat is skipped ("already
 paired"); one event's error never blocks the other chapter (rule 3d).

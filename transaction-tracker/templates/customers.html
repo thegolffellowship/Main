@@ -1136,19 +1136,45 @@
         renderCustomers();
     }
 
+    // ACTIVE members (Kerry 2026-09-21): who has PLAYED inside the window
+    // (60 days by default — the `members_active_days` dial), per chapter,
+    // with the share. /api/customers/activity is keyed by customer_id.
+    let memberActivity = null;
+    async function loadMemberActivity() {
+        try {
+            const res = await fetch("/api/customers/activity", { cache: "no-store" });
+            if (res.ok) { memberActivity = await res.json(); renderStats(); }
+        } catch (err) { console.error("loadMemberActivity:", err); }
+    }
+    function isActiveMember(m) {
+        if (!memberActivity || !m.customer_id) return false;
+        const row = memberActivity.customers[String(m.customer_id)];
+        return !!(row && row.active);
+    }
+    function pct(n, d) { return d ? Math.round(100 * n / d) + "%" : "—"; }
+
     function renderStats() {
         document.getElementById("stat-customers").textContent = allCustomers.length;
         const members = allCustomers.filter(c => c.status === "MEMBER" || c.status === "MEMBER+");
         document.getElementById("stat-members").textContent = members.length;
-        // Chapter breakdown for current members
+        // Chapter breakdown for current members: total · active (share)
         const byChapter = {};
+        let activeAll = 0;
         members.forEach(m => {
             const ch = (m.chapter || "").trim() || "—";
-            byChapter[ch] = (byChapter[ch] || 0) + 1;
+            const row = byChapter[ch] || (byChapter[ch] = { n: 0, active: 0 });
+            row.n += 1;
+            if (isActiveMember(m)) { row.active += 1; activeAll += 1; }
         });
-        const breakdown = Object.entries(byChapter)
-            .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-            .map(([ch, n]) => `<span style="display:inline-block; margin:0 0.5rem 0.15rem 0;">${escapeHtml(ch)}: <strong style="color:var(--text);">${n}</strong></span>`)
+        const days = memberActivity ? memberActivity.days : null;
+        const activeLine = memberActivity
+            ? `<div style="margin-bottom:0.2rem;"><strong style="color:var(--buyin-green-text, #15803D);">${activeAll} active</strong> · ${pct(activeAll, members.length)} played in the last ${days} days</div>`
+            : "";
+        const breakdown = activeLine + Object.entries(byChapter)
+            .sort((a, b) => b[1].n - a[1].n || a[0].localeCompare(b[0]))
+            .map(([ch, r]) => `<span style="display:inline-block; margin:0 0.5rem 0.15rem 0;">${escapeHtml(ch)}: <strong style="color:var(--text);">${r.n}</strong>`
+                + (memberActivity ? ` <span style="color:var(--buyin-green-text, #15803D);">${r.active} active</span> <span>(${pct(r.active, r.n)})</span>` : "")
+                + `</span>`)
             .join("");
         document.getElementById("stat-members-breakdown").innerHTML = breakdown;
         document.getElementById("stat-total-items").textContent = allItems.length;
@@ -4346,6 +4372,7 @@
             const res = await fetch("/api/items");
             allItems = await res.json();
             allCustomers = buildCustomers(allItems);
+            loadMemberActivity();   // the ACTIVE counts arrive and repaint the snapshot
             populateChapterFilter();
             // chapter managers land scoped to their chapter (Kerry)
             if (typeof currentChapter !== 'undefined' && currentChapter) {
