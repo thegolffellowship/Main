@@ -148,11 +148,59 @@ check("...and the app_settings dial overrides it: a flight of 8 now pays two pla
       str(ig3["amounts"]["flights"][2]))
 db.set_app_setting("gross_places_by_flight_size", "", db_path=tmp)
 
+print("\n== FREEZE / SETTLE / UNFREEZE (Kerry 2026-09-21: 'Yes, build the freeze tables and the button.') ==")
+r = db.freeze_event_flights(EV, by="test", db_path=tmp)
+check("freeze returns the board FROZEN with its stamp",
+      r.get("ok") and r["state"] == "frozen" and r["freeze"]["taken_by"] == "test" and r["freeze"]["trigger"] == "freeze_button", str({k: r.get(k) for k in ("ok", "state", "freeze", "error")}))
+n_fro = c.execute("SELECT COUNT(*) FROM event_flight_snapshots WHERE event_id = ? AND state = 'frozen' AND voided_at IS NULL", (EV,)).fetchone()[0]
+check("one frozen snapshot row", n_fro == 1, str(n_fro))
+mem = c.execute("SELECT COUNT(*), SUM(customer_id IS NULL) FROM event_flight_snapshot_members m JOIN event_flight_snapshots s ON s.id = m.snapshot_id WHERE s.event_id = ? AND s.state = 'frozen'", (EV,)).fetchone()
+check("member rows carry customer_id, one per player per game (13 net + 16 skins + 16 gross = 45)", mem[0] == 45 and (mem[1] or 0) == 0, str(tuple(mem)))
+r2 = db.freeze_event_flights(EV, by="test", db_path=tmp)
+check("a second press refuses rather than re-freezing", not r2.get("ok") and "already" in (r2.get("error") or ""), str(r2.get("error")))
+# A late GROSS signup at index 3.0 after the freeze: lands in flight 1 by the
+# FROZEN edges, the pot recomputes, the selection does not move.
+c.execute("INSERT INTO customers (customer_id, first_name, last_name, chapter, account_status) VALUES (319, 'Late', 'Low', 'San Antonio', 'active')")
+c.execute("INSERT INTO handicap_player_links (player_name, customer_name, customer_id) VALUES ('Low, Late', 'Late Low', 319)")
+for _d in (10, 20, 30):
+    c.execute("INSERT INTO handicap_rounds (player_name, round_date, adjusted_score, rating, slope, differential) VALUES ('Low, Late', date('now', ?), 45, 34.5, 120, 3.5)", (f"-{_d} days",))
+c.execute("INSERT INTO items (id, email_uid, merchant, customer, customer_id, item_name, order_date, transaction_status, event_id, side_games, user_status, tee_choice) "
+          "VALUES (901, 'u901', 'The Golf Fellowship', 'Late Low', 319, 's9.24 Brackenridge', '2026-09-11', 'active', ?, 'GROSS', 'MEMBER', '<50')", (EV,))
+c.commit()
+fb = db.event_flights_board(EV, db_path=tmp)
+igf = next(g for g in fb["games"] if g["game"] == "individual_gross")
+check("the FROZEN board keeps the selection (3 flights, edges 6/12) and places the late add in flight 1: 5/4/8",
+      fb["state"] == "frozen" and igf["selection"]["edges"] == [6.0, 12.0] and [f["players"] for f in igf["selection"]["flights"]] == [5, 4, 8], str([f["players"] for f in igf["selection"]["flights"]]))
+check("...the pot recomputes from 17 buyers: flight 1 $18.00, bonus $6.80",
+      igf["amounts"]["flights"][0]["pot"] == 18.0 and igf["amounts"]["bonus"] == 6.8, str(igf["amounts"]))
+check("...and the delta names him", [a["name"] for a in igf["delta"]["added"]] == ["Late Low"] and igf["delta"]["added"][0]["flight_no"] == 1 and igf["delta"]["changed"], str(igf["delta"]))
+sk_f = next(g for g in fb["games"] if g["game"] == "skins")
+check("Skins on the frozen board: still 2 flights, the late add in flight 1 (9/8), pot at 17 buyers", [f["players"] for f in sk_f["selection"]["flights"]] == [9, 8] and sk_f["amounts"]["buyers"] == 17, str(sk_f["amounts"]))
+st = db.settle_event_flights(EV, by="test", db_path=tmp)
+check("settle returns SETTLED with both stamps", st.get("ok") and st["state"] == "settled" and st["settled"]["taken_by"] == "test" and st["freeze"], str({k: st.get(k) for k in ("ok", "state", "error")}))
+c.execute("INSERT INTO customers (customer_id, first_name, last_name, chapter, account_status) VALUES (320, 'Even', 'Later', 'San Antonio', 'active')")
+c.execute("INSERT INTO items (id, email_uid, merchant, customer, customer_id, item_name, order_date, transaction_status, event_id, side_games, user_status, tee_choice) "
+          "VALUES (902, 'u902', 'The Golf Fellowship', 'Even Later', 320, 's9.24 Brackenridge', '2026-09-11', 'active', ?, 'GROSS', 'MEMBER', '<50')", (EV,))
+c.commit()
+sb = db.event_flights_board(EV, db_path=tmp)
+check("a SETTLED board is served from storage — a later signup does not move it (17 gross, not 18)",
+      sb["state"] == "settled" and sb["buyers"]["GROSS"] == 17, str(sb["buyers"]))
+check("...and cannot be settled twice", not db.settle_event_flights(EV, db_path=tmp).get("ok"))
+u = db.unfreeze_event_flights(EV, by="test", db_path=tmp)
+check("unfreeze voids both rows and the board reads LIVE with 18 gross buyers",
+      u.get("ok") and u["state"] == "live" and len(u["voided"]) == 2 and u["buyers"]["GROSS"] == 18, str({k: u.get(k) for k in ("ok", "state", "voided", "buyers")}))
+kept = c.execute("SELECT COUNT(*) FROM event_flight_snapshots WHERE event_id = ? AND voided_at IS NOT NULL", (EV,)).fetchone()[0]
+check("...the voided rows are kept for the audit", kept == 2, str(kept))
+check("settle without a freeze refuses", not db.settle_event_flights(EV, db_path=tmp).get("ok"))
+check("unfreeze on a LIVE board refuses", not db.unfreeze_event_flights(EV, db_path=tmp).get("ok"))
+au = c.execute("SELECT COUNT(*) FROM agent_action_log WHERE action_type IN ('flights_freeze', 'flights_settle', 'flights_unfreeze')").fetchone()[0]
+check("every action is audited", au == 3, str(au))
+
 print("\n== the printed Divisions & Flights page is a view of the same board ==")
 rep = db.event_flights_report(EV, db_path=tmp)
 rg = {x["game"]: x for x in rep["games"]}
-check("same buyers", rg["individual_gross"]["buyers"] == 16 and rg["individual_net"]["buyers"] == 13)
-check("same cut on Individual Gross (4/4/8)", [f["players"] for f in rg["individual_gross"]["flights"]] == [4, 4, 8])
+check("same buyers (18 gross after the two late signups above, 13 net)", rg["individual_gross"]["buyers"] == 18 and rg["individual_net"]["buyers"] == 13, str((rg["individual_gross"]["buyers"], rg["individual_net"]["buyers"])))
+check("same cut on Individual Gross (5/4/8; the index-less signup is listed apart)", [f["players"] for f in rg["individual_gross"]["flights"]] == [5, 4, 8] and len(rg["individual_gross"]["unflighted"]) == 1, str([f["players"] for f in rg["individual_gross"]["flights"]]))
 check("the printed name states the band the flight holds",
       rg["individual_gross"]["flights"][1]["name"] == "Flight 2 (HCP 6.0–11.9)", rg["individual_gross"]["flights"][1]["name"])
 check("...and the derived range rides along", rg["individual_gross"]["flights"][1]["label"] == "6.0–11.8")
@@ -173,11 +221,24 @@ check("...with both layers per game and no event pricing row",
       str(list(payload.keys())))
 r = client.get("/api/events/999999/flights-board")
 check("an unknown event is a 404", r.status_code == 404, str(r.status_code))
+r = client.post(f"/api/events/{EV}/flights/freeze", json={"note": "route"})
+check("POST flights/freeze as a manager freezes (200, state frozen, note kept)",
+      r.status_code == 200 and (r.get_json() or {}).get("state") == "frozen" and (r.get_json() or {})["freeze"]["note"] == "route", str((r.status_code, (r.get_json() or {}).get("error"))))
+r = client.post(f"/api/events/{EV}/flights/freeze", json={})
+check("...a second POST is a 409, not a re-freeze", r.status_code == 409, str(r.status_code))
+r = client.post(f"/api/events/{EV}/flights/bogus", json={})
+check("...an unknown action is a 404", r.status_code == 404, str(r.status_code))
 import mcp_server as mcp  # noqa: E402
 out = json.loads(mcp._scoring_dispatch("https://tgf-sa.golfgenius.com/", f"scoring-flights-board:{EV}"))
-check("scoring-flights-board:<event_id> returns the same board", out.get("event_id") == EV and out.get("state") == "live", str(list(out.keys())[:8]))
+check("scoring-flights-board:<event_id> returns the same board (FROZEN by the route above)", out.get("event_id") == EV and out.get("state") == "frozen", str((out.get("event_id"), out.get("state"))))
 out = json.loads(mcp._scoring_dispatch("https://tgf-sa.golfgenius.com/", "scoring-flights-board:abc"))
 check("...and refuses a bad id with a usage line", "usage" in (out.get("error") or ""), str(out))
+out = json.loads(mcp._scoring_dispatch("https://tgf-sa.golfgenius.com/", f"scoring-flights-unfreeze:{EV}"))
+check("scoring-flights-unfreeze dry run says what it would void", out.get("dry_run") and out.get("would") == "void" and out["snapshots"], str(out))
+out = json.loads(mcp._scoring_dispatch("https://tgf-sa.golfgenius.com/", f"scoring-flights-unfreeze:{EV}|apply"))
+check("...|apply voids and the board reads LIVE", out.get("ok") and out.get("state") == "live", str({k: out.get(k) for k in ("ok", "state", "error")}))
+out = json.loads(mcp._scoring_dispatch("https://tgf-sa.golfgenius.com/", f"scoring-flights-freeze:{EV}"))
+check("scoring-flights-freeze dry run reports the flights it would freeze", out.get("dry_run") and out.get("would") == "freeze" and out["games"], str(out)[:200])
 
 print()
 if F:

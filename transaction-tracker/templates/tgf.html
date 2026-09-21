@@ -424,6 +424,7 @@
         }
         .glf-row.active .glf-name { color: #fff; }
         .glf-sub { font-size: 11px; color: #8A8A8A; margin-top: 1px; }
+        .glf-avg { white-space: nowrap; font-variant-numeric: tabular-nums; }
         .glf-total {
             font: 700 13px/1 'Bitter', serif; color: #67C99A;
             font-variant-numeric: tabular-nums; white-space: nowrap;
@@ -1925,6 +1926,15 @@
         let golferSearch = "";
         let openEvents = new Set();   // expanded event ids for the selected golfer
 
+        // Average won PER EVENT PLAYED (Kerry 2026-09-21: "total/events
+        // played... not total / events won something"): the denominator is
+        // events_entered — every event the golfer held a live registration
+        // for — never the count of events that paid them.
+        function railAvg(g) {
+            const played = g.events_entered || g.events_played || 0;
+            return played ? g.total_winnings / played : 0;
+        }
+
         function renderGolfersSidebar() {
             const el = $("#golfers-list");
             const sorted = Object.values(DATA.winnings).sort((a, b) => b.total_winnings - a.total_winnings);
@@ -1945,7 +1955,10 @@
                                 <div class="glf-sub">${g.events_played} event${g.events_played !== 1 ? 's' : ''}</div>
                             </div>
                         </div>
-                        <div class="glf-total">${fmt(g.total_winnings)}</div>
+                        <div style="text-align:right;">
+                            <div class="glf-total">${fmt(g.total_winnings)}</div>
+                            <div class="glf-sub glf-avg">${fmt(railAvg(g))} avg / event</div>
+                        </div>
                     </div>`;
             });
             el.innerHTML = rows || '<div class="empty-state"><p>No golfers match your search</p></div>';

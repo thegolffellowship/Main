@@ -2235,6 +2235,22 @@ FLIGHTING lane (spun off "TGF Tracker Improvements 2"; plan #584).
   unflighted, the delta panel when frozen/settled, GG's recorded purses
   with rule − GG. `GET /api/events/<id>/flights-board` (manager);
   bridge `scoring-flights-board:<event_id>`. Guard: `test_flights_board.py`.
+- **THE FREEZE, built (v2.471.0, Kerry 2026-09-21: "Yes, build the freeze
+  tables and the button."):** a FREEZE button on the tab (manager+),
+  confirmed, stamps the LIVE board into `event_flight_snapshots` (+ one
+  member row per player per game with customer_id); the badge reads
+  FROZEN with the Central time and who pressed it; while FROZEN the tab
+  shows the stored selection priced from today's buyers with the "since
+  freeze" delta per flight and per game (who added, who dropped, pot then
+  vs now). SETTLE (confirmed) stores that recomputed board as the record
+  — SETTLED never recomputes, a later signup does not move it. Unfreeze
+  voids (keeps) the rows and the board reads LIVE. A second FREEZE press
+  refuses ("already frozen — unfreeze first"); settle without a freeze
+  refuses. Every action is audited. Schema: `docs/claude/schema.md` "Flight
+  snapshots". Guard: `test_flights_board.py` (freeze → late add lands by
+  the frozen edges and the delta names him → settle → served from storage
+  → unfreeze). Not yet: the Final Pairings send offering the freeze, and
+  the closeout writing the settled snapshot — both are one call each.
 - **Kerry's rulings 2026-09-21 (on the #584 questions):** the freeze is a
   FREEZE BUTTON on the tab ("Let's go with the button for now"); Individual
   Net places are the MATRIX's; Individual Gross places are 1/10/20 and

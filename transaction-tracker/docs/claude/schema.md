@@ -63,6 +63,7 @@ column:
 - `items.customer_id` — FK linking transactions to the `customers` table
 - `acct_transactions.customer_id` — FK linking ledger entries to `customers` (backfilled via 5-step cascade)
 - `handicap_player_links.customer_id` — FK linking Golf Genius player rows to `customers`
+- `event_flight_snapshot_members.customer_id` — FK: one row per player-in-a-flight at a FREEZE or SETTLE (v2.471.0, see "Flight snapshots" below)
 - `rsvps.customer_id` — FK backfilled at startup
 - `season_contests.customer_id` — FK stamped from the source item at insert (v2.16.32); backfill remains for legacy rows
 - `season_contest_removals.customer_id` — FK snapshotted from the enrollment at removal time
@@ -288,6 +289,41 @@ rows that don't already match the canonical state.
 | `_heal_items_identity_fields` (Phase 1B) | Flattens `items.customer_email` / `customer_phone` / `chapter` / `first_name` / `last_name` to match the linked `customers` / `customer_emails` record. Captures stale emails as aliases first; overwrites other fields silently. |
 | `repair_orphan_pay_children` | Heals `+PAY` children whose parent is missing, `rsvp_only`, or `transferred`: re-points `parent_item_id` at an active sibling parent for the same customer + event when one exists, otherwise converts the child to a standalone `credited` item with a descriptive `credit_note`. |
 | `backfill_missing_godaddy_orders` | Targeted, idempotent helper that finds every GoDaddy order whose items exist but lack an active `godaddy-order-{id}` `acct_transactions` row, then calls `_write_godaddy_order_entry` for each. Wired into the startup block unconditionally (replaces the old `if-empty` gate that meant any order whose post-save write failed stayed un-promoted forever). |
+
+## Flight snapshots — the B5 FREEZE as data (v2.471.0, Kerry ratified 2026-09-21)
+
+Mailbox #571/#572/#582 (B5: freeze-and-prorate), schema proposed #584,
+Kerry 2026-09-21: "Yes, build the freeze tables and the button." Created
+lazily by `_ensure_flight_snapshot_tables` on first read.
+
+```
+event_flight_snapshots         id, event_id FK events, state 'frozen'|'settled',
+                               taken_at (UTC), taken_by, trigger
+                               ('freeze_button'|'settle_button'|…), handicap_as_of,
+                               holes_key, matrix_source, rules_version,
+                               board_json (the whole board as it stood — both
+                               layers, the rules used, GG's side), note,
+                               voided_at, voided_by
+event_flight_snapshot_members  snapshot_id FK, game, variant, flight_no,
+                               flight_label, customer_id FK customers,
+                               customer_name, index_18, playing_handicap,
+                               buyer_kind; PK (snapshot_id, game, customer_id)
+```
+
+- One row per transition; UNFREEZE sets `voided_at` / `voided_by` and keeps
+  the row (audit). Nothing is ever deleted.
+- The event's STATE is READ from the rows, never stored on `events`:
+  LIVE = no unvoided frozen row; FROZEN = an unvoided frozen row and no
+  settled row; SETTLED = an unvoided settled row.
+- Readers: `event_flights_board` (LIVE computes; FROZEN = stored selection
+  + amounts recomputed now + delta, nothing written; SETTLED = served from
+  `board_json`, never recomputed — principle 4). Writers:
+  `freeze_event_flights`, `settle_event_flights`, `unfreeze_event_flights`
+  (each audited in `agent_action_log` as flights_freeze / flights_settle /
+  flights_unfreeze). Routes `POST /api/events/<id>/flights/freeze|settle|
+  unfreeze` (manager+); bridges `scoring-flights-freeze|settle|unfreeze:<id>[|apply]`.
+- No payout row is read or written by any of it; Golf Genius stays the
+  payer of record.
 
 ## `events` table — recent column additions
 

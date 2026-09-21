@@ -7847,6 +7847,39 @@ def api_customers_activity():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/events/<int:event_id>/flights/<action>", methods=["POST"])
+@require_role("manager")
+def api_event_flights_action(event_id, action):
+    """FREEZE / SETTLE / UNFREEZE the DIVISIONS / FLIGHTS board (B5; Kerry
+    2026-09-21: "Yes, build the freeze tables and the button."). An explicit
+    event state set by an action, never a clock: freeze stamps the
+    selection of record, settle recomputes the amounts from actual buyers
+    and stores the record with the delta, unfreeze voids (keeps) the rows.
+    Audited. Pays nobody; GG stays the payer of record."""
+    from email_parser.database import (freeze_event_flights, settle_event_flights,
+                                        unfreeze_event_flights)
+    data = request.get_json(silent=True) or {}
+    by = session.get("role") or "manager"
+    if session.get("chapter"):
+        by = f"{by}:{session.get('chapter')}"
+    note = (data.get("note") or "").strip() or None
+    try:
+        if action == "freeze":
+            res = freeze_event_flights(event_id, by=by, trigger="freeze_button", note=note)
+        elif action == "settle":
+            res = settle_event_flights(event_id, by=by, trigger="settle_button", note=note)
+        elif action == "unfreeze":
+            res = unfreeze_event_flights(event_id, by=by, note=note)
+        else:
+            return jsonify({"error": "unknown action"}), 404
+    except Exception as e:
+        logger.exception("flights %s failed for event %s", action, event_id)
+        return jsonify({"ok": False, "error": str(e)}), 500
+    res = dict(res)
+    res.pop("event", None)
+    return jsonify(res), (200 if res.get("ok") else 409)
+
+
 @app.route("/api/events/<int:event_id>/add-player-options")
 @require_role("manager")
 def api_add_player_options(event_id):
