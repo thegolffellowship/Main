@@ -7747,6 +7747,22 @@ def api_reverse_credit(item_id):
     return jsonify({"error": "Item not found or not in credited/transferred state."}), 400
 
 
+@app.route("/api/customers/activity")
+@require_role("view-only")
+def api_customers_activity():
+    """ACTIVE members for the Customers snapshot (Kerry 2026-09-21: "counts
+    of number (per chapter) of who's played in the last 60 days, and a
+    percentage"). PII-free: {customer_id: {last_played, active}}; the
+    window is the `members_active_days` dial unless ?days= overrides."""
+    from email_parser.database import customers_activity
+    try:
+        days = request.args.get("days", type=int)
+        return jsonify(customers_activity(days=days))
+    except Exception as e:
+        logger.exception("customers activity failed")
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/events/<int:event_id>/add-player-options")
 @require_role("manager")
 def api_add_player_options(event_id):

@@ -57,6 +57,21 @@ check("a Tuesday 'today' (Wednesday event) is outside the dial — nothing runs"
 db.set_app_setting(db.PAIRINGS_AUTO_WEEKDAYS_KEY, "tue, wed", db_path=DB)
 res3 = db.auto_generate_pairings(DB, today=tuesday)
 check("the weekdays are a DIAL — adding wed covers the Wednesday event without code", [r["event_id"] for r in res3] == [9203] and res3[0].get("generated") is True, res3)
+db.set_app_setting(db.PAIRINGS_AUTO_WEEKDAYS_KEY, db.PAIRINGS_AUTO_WEEKDAYS_DEFAULT, db_path=DB)
+check("the default dial is tue:1, sat:2 (Kerry: 'Add sat… but make it for Thursday nights at 5:00p')",
+      db.pairings_auto_weekdays(DB) == {"tue": 1, "sat": 2}, db.pairings_auto_weekdays(DB))
+saturday = date(2026, 9, 26); thursday = saturday - timedelta(days=2); friday = saturday - timedelta(days=1)
+with db._connect(DB) as conn:
+    conn.execute("INSERT INTO events (id, item_name, event_date, chapter, status, format, start_time, start_type, course) VALUES (9204, 's18.12 Saturday', ?, 'San Antonio', 'active', '18 Holes', '8:00 AM', 'Tee Times', 'Somewhere')", (saturday.isoformat(),))
+    for i in range(4):
+        n += 1
+        conn.execute("INSERT INTO customers (customer_id, first_name, last_name, current_player_status) VALUES (?,?,?,'active_member')", (800000 + n, f"P{n}", "Test9204"))
+        conn.execute("INSERT INTO items (customer, customer_id, item_name, event_id, holes, tee_choice, transaction_status, order_date, order_id, email_uid, merchant, user_status) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                     (f"P{n} Test9204", 800000 + n, "s18.12 Saturday", 9204, "18", "<50", "active", "2026-09-10", f"R{n}", f"manual-{n}", "GoDaddy", "MEMBER"))
+    conn.commit()
+check("Friday's run does NOT touch Saturday (its lead is two days)", db.auto_generate_pairings(DB, today=friday) == [])
+res4 = db.auto_generate_pairings(DB, today=thursday)
+check("Thursday's run pairs Saturday", [r["event_id"] for r in res4] == [9204] and res4[0].get("generated") is True, res4)
 check("the routine is registered in the scheduler at 5:00 PM Central",
       'id="pairings_auto_generate"' in open("app.py").read() and "hour=17," in open("app.py").read().split('id="pairings_auto_generate"')[0][-400:])
 

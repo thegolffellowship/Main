@@ -909,3 +909,26 @@ The saved sheets carry those numbers in `event_pairings.handicap_index`;
 they are now ignored in favour of the computed value.
 
 Guard: `test_handicap_index_lock.py`.
+
+
+## A named nine numbers 1–9; re-tagging a night's rounds (v2.468.6)
+
+Kerry 2026-09-21, on his s9.14 Hill Country entry: "We played the Oaks 9
+that night. And even though GG may have shown 10-18, each 9 is just 1-9,
+same as Comanche Trace's 27 holes."
+
+- **The rule:** a named nine of a multi-nine complex (Hill Country
+  Oaks/Lakes/Creeks, Comanche Trace Valley/Hills/Creeks) numbers its holes
+  1–9 whatever Golf Genius printed. A course record that carries an
+  18-hole tee is an 18-hole course, and a back nine there IS 10–18.
+- `scoring-course-renine:<course_id>[|apply]` → `renumber_nine_hole_course`:
+  moves the course's tee hole rows and every round's hole rows from 10–18
+  down to 1–9 when the 1–9 side is empty; refuses a record with an
+  18-hole tee. Dry run by default.
+- `scoring-hcp-round-retag:<date>;<from course>;<to course>;<slope>[;<rating>][;apply]`
+  → `retag_handicap_rounds`: every handicap round posted on that date
+  under the wrong course gets the right course name, slope (and rating
+  when given); the differential is recomputed from the row's own
+  adjusted score. All players on the date (rule 3d). `;` separates
+  because GG course names carry `|`. Dry run by default.
+- Guard: `test_nine_numbering.py`.

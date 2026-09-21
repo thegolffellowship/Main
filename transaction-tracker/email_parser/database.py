@@ -59306,6 +59306,161 @@ def add_player_options(event_id: int, db_path: str | Path | None = None) -> dict
                             "tees": "course record" if legend else "standard bands"}}
 
 
+MEMBERS_ACTIVE_DAYS_KEY = "members_active_days"
+MEMBERS_ACTIVE_DAYS_DEFAULT = 60
+
+
+def members_active_days(db_path=None) -> int:
+    """How recent "played" must be for a member to count as ACTIVE on the
+    Customers snapshot — a DIAL (Kerry 2026-09-21: "who's played in the
+    last 60 days")."""
+    try:
+        return max(1, int(get_app_setting(MEMBERS_ACTIVE_DAYS_KEY, db_path=db_path) or MEMBERS_ACTIVE_DAYS_DEFAULT))
+    except (TypeError, ValueError):
+        return MEMBERS_ACTIVE_DAYS_DEFAULT
+
+
+def customers_last_played(db_path=None, today: str | None = None) -> dict:
+    """{customer_id: last_played ISO date} — the most recent day a person
+    PLAYED: an active event registration whose event date has passed
+    (by event_id, or by item name for rows never linked), a posted
+    scoring round, or a handicap round through the player link. Keyed by
+    customer_id (principle 6); a registration with no id is not a
+    person we can count."""
+    from email_parser.timezone_utils import today_central
+    today = today or today_central().isoformat()
+    out: dict = {}
+
+    def _take(cid, day):
+        if cid is None or not day:
+            return
+        day = str(day)[:10]
+        if day > today:
+            return
+        if out.get(cid) is None or day > out[cid]:
+            out[cid] = day
+    with _connect(db_path) as conn:
+        for r in conn.execute(
+                """SELECT i.customer_id AS cid, MAX(e.event_date) AS d
+                     FROM items i
+                     JOIN events e ON (e.id = i.event_id
+                                       OR (i.event_id IS NULL AND e.item_name = i.item_name COLLATE NOCASE))
+                    WHERE i.customer_id IS NOT NULL AND i.parent_item_id IS NULL
+                      AND COALESCE(i.transaction_status, 'active') NOT IN ('credited', 'refunded', 'transferred', 'wd')
+                      AND e.event_date IS NOT NULL AND e.event_date <= ?
+                      AND COALESCE(e.status, 'active') NOT IN ('cancelled', 'canceled', 'postponed')
+                    GROUP BY i.customer_id""", (today,)).fetchall():
+            _take(r["cid"], r["d"])
+        try:
+            for r in conn.execute("SELECT customer_id AS cid, MAX(round_date) AS d FROM scoring_rounds "
+                                  "WHERE customer_id IS NOT NULL GROUP BY customer_id").fetchall():
+                _take(r["cid"], r["d"])
+        except sqlite3.OperationalError:
+            pass
+        try:
+            for r in conn.execute(
+                    """SELECT l.customer_id AS cid, MAX(hr.round_date) AS d
+                         FROM handicap_rounds hr JOIN handicap_player_links l ON l.player_name = hr.player_name
+                        WHERE l.customer_id IS NOT NULL GROUP BY l.customer_id""").fetchall():
+                _take(r["cid"], r["d"])
+        except sqlite3.OperationalError:
+            pass
+    return out
+
+
+def customers_activity(days: int | None = None, db_path=None, today: str | None = None) -> dict:
+    """The Customers snapshot's ACTIVE members payload: per customer_id the
+    last day played and whether it falls inside the window."""
+    from email_parser.timezone_utils import today_central
+    today = today or today_central().isoformat()
+    days = int(days or members_active_days(db_path))
+    cutoff = (datetime.fromisoformat(today) - timedelta(days=days)).date().isoformat()
+    last = customers_last_played(db_path, today=today)
+    return {"days": days, "today": today, "cutoff": cutoff,
+            "customers": {str(cid): {"last_played": d, "active": d >= cutoff} for cid, d in last.items()}}
+
+
+def retag_handicap_rounds(round_date: str, from_course: str, to_course: str,
+                          slope: int, rating: float | None = None,
+                          apply: bool = False, db_path=None) -> dict:
+    """Re-tag every handicap round posted on ONE date under the wrong
+    course (Kerry 2026-09-21: "my handicap entry for the Hill Country
+    event is incorrectly tagged. We played the Oaks 9 that night") —
+    course name, slope, optionally rating; the differential is recomputed
+    from the row's own adjusted score. All players on that date (rule 3d
+    — the whole field played the same nine), dry run unless apply."""
+    with _connect(db_path) as conn:
+        rows = [dict(r) for r in conn.execute(
+            """SELECT id, player_name, round_date, course_name, tee_name, adjusted_score,
+                      rating, slope, differential FROM handicap_rounds
+                WHERE round_date = ? AND course_name = ? COLLATE NOCASE
+                ORDER BY player_name""", (round_date, from_course)).fetchall()]
+        plan = []
+        for r in rows:
+            new_rating = float(rating) if rating is not None else float(r["rating"])
+            new_diff = round((r["adjusted_score"] - new_rating) * 113.0 / int(slope), 1)
+            plan.append({"id": r["id"], "player_name": r["player_name"],
+                         "course_before": r["course_name"], "course_after": to_course,
+                         "rating_before": r["rating"], "rating_after": new_rating,
+                         "slope_before": r["slope"], "slope_after": int(slope),
+                         "differential_before": r["differential"], "differential_after": new_diff})
+        if apply:
+            for p in plan:
+                conn.execute("""UPDATE handicap_rounds SET course_name = ?, rating = ?, slope = ?,
+                                       differential = ? WHERE id = ?""",
+                             (to_course, p["rating_after"], p["slope_after"], p["differential_after"], p["id"]))
+            conn.commit()
+        return {"round_date": round_date, "from_course": from_course, "to_course": to_course,
+                "rows": len(plan), "applied": bool(apply), "plan": plan}
+
+
+def renumber_nine_hole_course(course_id: int, apply: bool = False, db_path=None) -> dict:
+    """A named nine of a multi-nine complex numbers its holes 1–9 (Kerry
+    2026-09-21: "even though GG may have shown 10-18, each 9 is just 1-9,
+    same as Comanche Trace's 27 holes"). Moves the course's tee hole
+    rows and every round's hole rows from 10–18 down to 1–9 when the
+    1–9 side is empty. Refuses a course record that carries an 18-hole
+    tee (a real back nine there IS 10–18). Dry run unless apply."""
+    with _connect(db_path) as conn:
+        course = conn.execute("SELECT course_id, name FROM courses WHERE course_id = ?", (course_id,)).fetchone()
+        if not course:
+            return {"error": "course not found", "course_id": course_id}
+        tees = [dict(r) for r in conn.execute(
+            "SELECT tee_id, tee_name, holes FROM course_tees WHERE course_id = ?", (course_id,)).fetchall()]
+        if any((t.get("holes") or 18) == 18 for t in tees):
+            return {"error": "course record carries an 18-hole tee — a back nine there is 10–18; not a named nine",
+                    "course_id": course_id, "name": course["name"]}
+        tee_moves, round_moves = [], []
+        for t in tees:
+            back = conn.execute("SELECT COUNT(*) FROM course_tee_holes WHERE tee_id = ? AND hole_number BETWEEN 10 AND 18",
+                                (t["tee_id"],)).fetchone()[0]
+            front = conn.execute("SELECT COUNT(*) FROM course_tee_holes WHERE tee_id = ? AND hole_number BETWEEN 1 AND 9",
+                                 (t["tee_id"],)).fetchone()[0]
+            if back and not front:
+                tee_moves.append({"tee_id": t["tee_id"], "tee_name": t["tee_name"], "holes_moved": back})
+        for r in conn.execute("SELECT id, player_name, round_date FROM scoring_rounds WHERE course_id = ?",
+                              (course_id,)).fetchall():
+            back = conn.execute("""SELECT COUNT(*) FROM scoring_holes WHERE scoring_round_id = ?
+                                    AND hole_number BETWEEN 10 AND 18 AND strokes IS NOT NULL""", (r["id"],)).fetchone()[0]
+            front = conn.execute("""SELECT COUNT(*) FROM scoring_holes WHERE scoring_round_id = ?
+                                     AND hole_number BETWEEN 1 AND 9 AND strokes IS NOT NULL""", (r["id"],)).fetchone()[0]
+            if back and not front:
+                round_moves.append({"scoring_round_id": r["id"], "player_name": r["player_name"],
+                                    "round_date": r["round_date"], "holes_moved": back})
+        if apply:
+            for t in tee_moves:
+                conn.execute("DELETE FROM course_tee_holes WHERE tee_id = ? AND hole_number BETWEEN 1 AND 9", (t["tee_id"],))
+                conn.execute("UPDATE course_tee_holes SET hole_number = hole_number - 9 WHERE tee_id = ? AND hole_number BETWEEN 10 AND 18",
+                             (t["tee_id"],))
+            for m in round_moves:
+                conn.execute("DELETE FROM scoring_holes WHERE scoring_round_id = ? AND hole_number BETWEEN 1 AND 9", (m["scoring_round_id"],))
+                conn.execute("UPDATE scoring_holes SET hole_number = hole_number - 9 WHERE scoring_round_id = ? AND hole_number BETWEEN 10 AND 18",
+                             (m["scoring_round_id"],))
+            conn.commit()
+        return {"course_id": course_id, "name": course["name"], "applied": bool(apply),
+                "tees": tee_moves, "rounds": round_moves}
+
+
 def _first_event_as_member(conn, roster_row: dict, event_date: str) -> bool:
     """NEW badge rule (Kerry 2026-09-18): the member's membership started
     on or before `event_date` and they have played NO event between that
@@ -62918,17 +63073,31 @@ def detect_match_play_pairings(event_id: int, db_path=None) -> dict:
 
 
 PAIRINGS_AUTO_WEEKDAYS_KEY = "pairings_auto_weekdays"
-PAIRINGS_AUTO_WEEKDAYS_DEFAULT = "tue"
+#: "<event weekday>[:<days ahead>]" per entry. Tuesday nights pair the
+#: evening before (Monday 5 PM); Saturday 18s pair two days ahead
+#: (Thursday 5 PM) — Kerry 2026-09-21: "Add sat to the auto-pairings dial
+#: too, but make it for Thursday nights at 5:00p."
+PAIRINGS_AUTO_WEEKDAYS_DEFAULT = "tue:1,sat:2"
 _WEEKDAY_NAMES = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
 
 
-def pairings_auto_weekdays(db_path=None) -> set:
-    """Event weekdays the day-before auto-generate covers — a DIAL in
-    app_settings ("tue" by default: Kerry 2026-09-21, "Generate Pairings
-    automatically at 5:00p on Mondays for Tuesday events"). Add "sat" to
-    cover the Saturday 18s without a code change."""
+def pairings_auto_weekdays(db_path=None) -> dict:
+    """{event weekday: days ahead} the 5 PM auto-generate covers — a DIAL
+    in app_settings. An entry without a lead ("tue") means the day
+    before; "sat:2" means two days before (Thursday for a Saturday)."""
     raw = get_app_setting(PAIRINGS_AUTO_WEEKDAYS_KEY, db_path=db_path) or PAIRINGS_AUTO_WEEKDAYS_DEFAULT
-    return {w.strip().lower()[:3] for w in raw.split(",") if w.strip().lower()[:3] in _WEEKDAY_NAMES}
+    out: dict = {}
+    for part in raw.split(","):
+        name, _, lead = part.strip().lower().partition(":")
+        name = name[:3]
+        if name not in _WEEKDAY_NAMES:
+            continue
+        try:
+            days = int(lead) if lead else 1
+        except ValueError:
+            days = 1
+        out[name] = max(1, days)
+    return out
 
 
 def _event_has_saved_pairings(event_id: int, db_path=None) -> bool:
@@ -62937,20 +63106,28 @@ def _event_has_saved_pairings(event_id: int, db_path=None) -> bool:
 
 
 def auto_generate_pairings(db_path=None, today=None) -> list[dict]:
-    """The 5 PM day-before routine: for every ACTIVE event dated TOMORROW
-    whose weekday is in the dial and that has NO saved pairings, run the
+    """The 5 PM routine: for every ACTIVE event on a dialled weekday at
+    that weekday's lead (the day before for Tuesdays, two days before for
+    Saturdays) that has NO saved pairings, run the
     generator the way the page's Generate button does by default (Random,
     partner requests honoured, history on) and SAVE the result. An event
     Kerry already paired is left exactly as it is ("Only if they aren't
     run already"). Returns one row per event considered."""
     from email_parser.timezone_utils import today_central
     today = today or today_central()
-    tomorrow = today + timedelta(days=1)
-    if _WEEKDAY_NAMES[tomorrow.weekday()] not in pairings_auto_weekdays(db_path):
+    # Every dialled weekday names its own lead: the target date for a
+    # "sat:2" entry is today + 2, and it only fires when that date IS a
+    # Saturday (so Thursday's run pairs Saturday; Friday's does not).
+    targets = set()
+    for wd, lead in pairings_auto_weekdays(db_path).items():
+        target = today + timedelta(days=lead)
+        if _WEEKDAY_NAMES[target.weekday()] == wd:
+            targets.add(target.isoformat())
+    if not targets:
         return []
     out = []
     for ev in get_all_events(db_path):
-        if (ev.get("event_date") or "")[:10] != tomorrow.isoformat():
+        if (ev.get("event_date") or "")[:10] not in targets:
             continue
         if (ev.get("status") or "active") != "active":
             continue

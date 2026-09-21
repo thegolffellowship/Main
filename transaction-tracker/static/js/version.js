@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.468.5";
+window.TGF_VERSION = "2.468.6";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.468.6",
+    date: "2026-09-21",
+    changes: [
+      "Customers snapshot: ACTIVE members (Kerry 2026-09-21: \u2018counts of number (per chapter) of who's played in the last 60 days, and a percentage\u2019). The MEMBERS card shows the active count and share overall and per chapter. Played = an active registration for an event whose date has passed (cancelled events and credited rows do not count), a posted scoring round, or a handicap round through the player link \u2014 keyed by customer_id. The window is the `members_active_days` dial (60). `GET /api/customers/activity[?days=]`, PII-free. Guard: `test_members_active.py`.",
+      "Auto-pairings dial carries a LEAD per weekday (Kerry: \u2018Add sat to the auto-pairings dial too, but make it for Thursday nights at 5:00p\u2019): `pairings_auto_weekdays` = `tue:1,sat:2` by default \u2014 Tuesday nights pair Monday 5 PM, Saturday 18s pair Thursday 5 PM. Friday's run leaves Saturday alone.",
+      "Two data bridges for the s9.14 Hill Country night (Kerry: \u2018We played the Oaks 9 that night. And even though GG may have shown 10-18, each 9 is just 1-9, same as Comanche Trace's 27 holes\u2019): `scoring-hcp-round-retag:<date>;<from>;<to>;<slope>[;<rating>][;apply]` re-tags every handicap round posted on a date under the wrong course and recomputes the differential from the row's own adjusted score; `scoring-course-renine:<course_id>[|apply]` moves a named nine's tee holes and its rounds' holes down from 10\u201318 to 1\u20139 and refuses a course record that carries an 18-hole tee (a real back nine is 10\u201318). Both dry-run by default. Guard: `test_nine_numbering.py`.",
+    ],
+  },
   {
     version: "2.468.5",
     date: "2026-09-21",
