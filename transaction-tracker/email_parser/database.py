@@ -15825,7 +15825,25 @@ def _ensure_scoring_tables(conn: sqlite3.Connection) -> None:
             # mint a liability.
             ("referred_by_customer_id",
              "INTEGER REFERENCES customers(customer_id)"),
-            ("referred_at", "TEXT")):
+            ("referred_at", "TEXT"),
+            # WIDENED 2026-09-21 (Kerry, on Ty Bubela: "How am I supposed
+            # to attribute him to Justin Angelone?"). The column used to
+            # mean ONLY "I paid for this person's spot" because that was
+            # the one path that wrote it. It now means WHO BROUGHT THEM,
+            # and the provenance travels beside it rather than being
+            # implied by the single writer — so the paid-spot case is one
+            # source among several instead of the definition.
+            #   bought_spot | coupon | partner_request | lead_form
+            #   | member_claim | kerry
+            ("referred_by_source", "TEXT"),
+            ("referred_by_note", "TEXT"),
+            # "Not a referral" is a real answer, and it is a DIFFERENT
+            # question from who brought them (Kerry: "Could be a referral,
+            # could be someone that found via another means"). Kept apart
+            # from acquisition_source, which is the CHANNEL a transaction
+            # came through — a person can arrive through the store and
+            # through a friend at the same time.
+            ("found_us_via", "TEXT")):
         try:
             conn.execute(f"ALTER TABLE customers ADD COLUMN {col} {ddl}")
         except sqlite3.OperationalError:
@@ -28924,9 +28942,17 @@ def get_all_customers(db_path=None) -> list[dict]:
                    c.payment_handle,
                    c.created_at, c.acquisition_source,
                    c.updated_at,
+                   -- WHO BROUGHT THEM (Kerry 2026-09-21). The name is
+                   -- resolved here rather than on the page so the id
+                   -- stays the identity and the label is a read (#6).
+                   c.referred_by_customer_id, c.referred_by_source,
+                   c.referred_by_note, c.referred_at, c.found_us_via,
+                   TRIM(COALESCE(rb.first_name,'') || ' '
+                        || COALESCE(rb.last_name,'')) AS referred_by_name,
                    ce.email   AS primary_email,
                    ce.label   AS email_label
                FROM customers c
+               LEFT JOIN customers rb ON rb.customer_id = c.referred_by_customer_id
                LEFT JOIN customer_emails ce
                       ON ce.customer_id = c.customer_id AND ce.is_primary = 1
                LEFT JOIN customer_statuses cs_latest
@@ -38570,7 +38596,35 @@ def set_starting_handicap(customer_id: int, index_18: float | None,
             "cleared": index_18 is None}
 
 
+REFERRED_BY_SOURCES = ("bought_spot", "coupon", "partner_request",
+                       "lead_form", "member_claim", "kerry")
+# What a person says when they did NOT come from a member. Free text is
+# deliberately not allowed: a column of one-off spellings cannot be
+# counted, and counting is the entire point of asking.
+FOUND_US_VIA = ("facebook_ad", "instagram", "search", "website",
+                "drove_by", "event_flyer", "work", "other", "unknown")
+
+
+def set_found_us_via(customer_id: int, value: str | None,
+                     db_path: str | Path | None = None) -> dict:
+    """How they found TGF when nobody brought them. Independent of
+    `referred_by_customer_id` — answering one does not clear the other,
+    because a person can be brought by a friend AND have seen the ad."""
+    v = (value or "").strip().lower() or None
+    if v is not None and v not in FOUND_US_VIA:
+        return {"error": f"{v!r} is not one of {list(FOUND_US_VIA)}"}
+    with _connect(db_path) as conn:
+        if not conn.execute("SELECT 1 FROM customers WHERE customer_id = ?",
+                            (customer_id,)).fetchone():
+            return {"error": f"customer {customer_id} not found"}
+        conn.execute("UPDATE customers SET found_us_via = ? WHERE customer_id = ?",
+                     (v, customer_id))
+        conn.commit()
+    return {"customer_id": customer_id, "found_us_via": v}
+
+
 def set_referred_by(customer_id: int, referrer_customer_id: int | None,
+                    source: str | None = None, note: str | None = None,
                     db_path: str | Path | None = None) -> dict:
     """Record who brought a player in. Relationship only — never a fee.
 
@@ -38601,18 +38655,31 @@ def set_referred_by(customer_id: int, referrer_customer_id: int | None,
             if not r:
                 return {"error": f"referrer {referrer_customer_id} not found"}
             ref_name = (r["customer_name"] or "").strip() or None
+        src = (source or "").strip().lower() or None
+        if referrer_customer_id is not None and src is None:
+            # Never store WHO without HOW WE KNOW. An un-sourced row is
+            # the state this column spent two months in, and it is what
+            # made widening it a schema question instead of an edit.
+            src = "member_claim"
+        if src is not None and src not in REFERRED_BY_SOURCES:
+            return {"error": f"{src!r} is not one of {list(REFERRED_BY_SOURCES)}"}
         conn.execute(
             """UPDATE customers
                SET referred_by_customer_id = ?,
+                   referred_by_source = CASE WHEN ? IS NULL THEN NULL ELSE ? END,
+                   referred_by_note = CASE WHEN ? IS NULL THEN NULL ELSE ? END,
                    referred_at = CASE WHEN ? IS NULL THEN NULL
                                       ELSE COALESCE(referred_at, datetime('now')) END
                WHERE customer_id = ?""",
-            (referrer_customer_id, referrer_customer_id, customer_id))
+            (referrer_customer_id, referrer_customer_id, src,
+             referrer_customer_id, (note or "").strip() or None,
+             referrer_customer_id, customer_id))
         conn.commit()
     return {"customer_id": customer_id,
             "customer_name": (row["customer_name"] or "").strip(),
             "referred_by_customer_id": referrer_customer_id,
             "referred_by_name": ref_name,
+            "referred_by_source": src,
             "cleared": referrer_customer_id is None}
 
 

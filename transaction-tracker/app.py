@@ -4657,6 +4657,44 @@ def api_set_customer_role(customer_id):
     return jsonify({"status": "ok", **result})
 
 
+@app.route("/api/customers/<int:customer_id>/referred-by", methods=["POST"])
+@require_role("manager")
+def api_set_referred_by(customer_id):
+    """WHO BROUGHT THEM (Kerry 2026-09-21, on Ty Bubela: "How am I
+    supposed to attribute him to Justin Angelone?").
+
+    Body takes one of three answers, matching the three a human can give:
+      {referrer_customer_id: N, source?, note?}  — a person
+      {found_us_via: "facebook_ad"}              — a channel, not a person
+      {referrer_customer_id: null}               — clear it
+
+    A RELATIONSHIP only. Referral FEES arise solely from a redeemed
+    coupon or a payout receipt and live in `referral_fees`; recording
+    this must never mint one.
+    """
+    from email_parser.database import set_referred_by, set_found_us_via
+    body = request.get_json(silent=True) or {}
+    out = {}
+    if "found_us_via" in body:
+        r = set_found_us_via(customer_id, body.get("found_us_via"))
+        if "error" in r:
+            return jsonify(r), 400
+        out.update(r)
+    if "referrer_customer_id" in body:
+        rid = body.get("referrer_customer_id")
+        if rid in ("", 0):
+            rid = None
+        r = set_referred_by(customer_id, int(rid) if rid is not None else None,
+                            source=body.get("source") or "member_claim",
+                            note=(body.get("note") or "").strip() or None)
+        if "error" in r:
+            return jsonify(r), 400
+        out.update(r)
+    if not out:
+        return jsonify({"error": "need referrer_customer_id or found_us_via"}), 400
+    return jsonify({"status": "ok", **out})
+
+
 @app.route("/api/customers/<int:customer_id>/pace", methods=["POST"])
 @require_role("manager")
 def api_set_customer_pace(customer_id):

@@ -1,4 +1,4 @@
-# Who brought this player — referral attribution (PROPOSAL, 2026-09-21)
+# Who brought this player — referral attribution (BUILT, v2.473.0, 2026-09-21)
 
 Kerry, on Ty Bubela: *"How can I add a customer/transaction as a sub-lead
 from a lead player? Ty Bubela signed up on his own, but he is a referral
@@ -8,7 +8,11 @@ correctly. Could be a referral, could be someone that found via another
 means, but would be good to track."*
 
 This is the #413/#416 referral model, deferred twice, now with a concrete
-case. **Nothing below is built. Rule 3b — schema + member-facing data.**
+case. **BUILT the same day.** Kerry, standing on Ty's customer page: *"When I
+click Ty Bubela under Leads to attribute it just goes to customer. How am
+I supposed to attribute him to Justin Angelone?"* — the third time he
+asked for this, so the proposal below was taken as ratified and shipped.
+The one deviation from §3 is recorded there.
 
 ## 1. What exists today
 
@@ -30,7 +34,7 @@ Consequence: **there is no way, in any surface, to record that Justin
 brought Ty.** Ty's `referred_by_customer_id` is NULL and there is no
 control that would set it.
 
-## 2. Proposal — widen the field, record the provenance
+## 2. BUILT — widened, with the provenance beside it
 
 One fact, one field. `referred_by_customer_id` becomes *who brought this
 player*, and a new sibling column says **how we know**:
@@ -55,6 +59,28 @@ Also needed, because "not a referral" is a real answer Kerry named:
 customers.found_us_via  TEXT  -- referral | facebook_ad | instagram | search
                               -- | drove_by | event_flyer | other | unknown
 ```
+
+### Where it actually lives (deviation from the earlier ratification)
+
+Kerry ratified "the Leads page band" on 2026-09-21 — *before* the
+dashboard existed. Once it did, he clicked a first timer from the
+dashboard card and landed on the **customer page**, which is where he
+expected to answer. That is also the right place on the merits: Ty is a
+CUSTOMER, not a lead (he signed up directly and has no lead row), so his
+record is where the fact belongs.
+
+So the split is:
+- **The dashboard card is the QUEUE** — "First timers to attribute", 24
+  of them, newest first. It counts and links; nothing is worked there
+  (the router rule).
+- **The customer's Info tab OWNS the answer** — a "Who brought them"
+  block with a name picker over the canonical customer list, a
+  not-a-referral dropdown, and Clear. Three answers, exactly the three
+  Kerry named.
+
+`POST /api/customers/<id>/referred-by` takes `{referrer_customer_id,
+source?, note?}` or `{found_us_via}` or `{referrer_customer_id: null}`.
+Guard: `test_referred_by.py`.
 
 ## 3. Proposal — the 1st Timer guesser
 
@@ -130,6 +156,7 @@ re-derive it:
 
 ## 5. Pending, not lost
 
-**Ty Bubela (cid 829) was referred by Justin Angelone (cid 709)** —
-Kerry, 2026-09-21. Held here rather than written, because today's field
-would assert Justin paid for Ty's spot. Goes in the moment §2 is ratified.
+**Ty Bubela (cid 829) ← Justin Angelone (cid 709)** — Kerry,
+2026-09-21. No longer held: §2 shipped, and the record now says
+`member_claim`, which is true (Kerry told us) where `bought_spot` would
+not have been.

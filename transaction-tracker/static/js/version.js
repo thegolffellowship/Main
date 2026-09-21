@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.472.0";
+window.TGF_VERSION = "2.473.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.473.0",
+    date: "2026-09-21",
+    changes: [
+      "YOU CAN NOW ANSWER 'WHO BROUGHT THEM'. Kerry, on the dashboard's first-timer card: 'When I click Ty Bubela under Leads to attribute it just goes to customer. How am I supposed to attribute him to Justin Angelone?' The customer Info tab gets a 'Who brought them' block with three answers, exactly the three a person can give: a NAME (typeahead over the canonical customer list), a CHANNEL for when it was not a referral at all (Facebook ad, Instagram, search, drove by, flyer, work, other, don't know), or Clear. POST /api/customers/<id>/referred-by.",
+      "customers.referred_by_customer_id is WIDENED from 'I paid for this person's spot' to 'who brought them', because one code path wrote it and that single writer had become its definition. referred_by_source now carries the provenance beside the id (bought_spot | coupon | partner_request | lead_form | member_claim | kerry) so the paid-spot case is one source among several, and naming a person without a source is impossible — it defaults to member_claim rather than storing WHO with no HOW WE KNOW. found_us_via is a separate column because 'not a referral' is a different question, and naming a person does not clear it: someone can be brought by a friend AND have seen the ad. acquisition_source is untouched — channel and person are independent facts (Kerry's 2026-07-30 ruling).",
+      "Recording a relationship still mints no referral FEE. Fees arise only from a redeemed coupon or a payout receipt and live in referral_fees, per the 2026-07-30 rule — the guard asserts the fee table stays empty across every write. The dashboard card remains the QUEUE and the customer record owns the answer, which keeps the router rule intact. Guard: test_referred_by.py, 19 checks.",
+    ],
+  },
   {
     version: "2.472.0",
     date: "2026-09-21",

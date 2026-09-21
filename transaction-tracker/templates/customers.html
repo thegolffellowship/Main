@@ -1734,6 +1734,145 @@
         return [line1, line2].filter(Boolean).join(", ");
     }
 
+    // ── WHO BROUGHT THEM ────────────────────────────────────────────
+    // Kerry 2026-09-21. The dashboard's "First timers to attribute" card
+    // is the QUEUE; this is where the answer is recorded, on the person's
+    // own record. Free text is deliberately not offered for the channel:
+    // a column of one-off spellings cannot be counted, and counting is
+    // the whole reason for asking.
+    const FOUND_US_LABELS = {
+        facebook_ad: "Facebook ad", instagram: "Instagram", search: "Search",
+        website: "Website", drove_by: "Drove by / saw us", event_flyer: "Flyer at an event",
+        work: "Work / colleague", other: "Other", unknown: "Don't know",
+    };
+    const REFERRED_SOURCE_LABELS = {
+        bought_spot: "bought their spot", coupon: "referral coupon",
+        partner_request: "asked to play with them", lead_form: "said so on the form",
+        member_claim: "told us", kerry: "Kerry",
+    };
+
+    function renderReferredByBlock(customer) {
+        const cid = customer.customer_id;
+        if (!cid) return "";
+        const name = (customer.referred_by_name || "").trim();
+        const src = customer.referred_by_source || "";
+        const via = customer.found_us_via || "";
+        let current;
+        if (name) {
+            current = `<strong>${escapeHtml(name)}</strong>` +
+                (REFERRED_SOURCE_LABELS[src] ? ` <span style="color:var(--text-muted);">(${escapeHtml(REFERRED_SOURCE_LABELS[src])})</span>` : "");
+        } else if (via) {
+            current = `<span>Not a referral \u2014 ${escapeHtml(FOUND_US_LABELS[via] || via)}</span>`;
+        } else {
+            current = '<span style="color:var(--text-muted);">Nobody recorded yet</span>';
+        }
+        const opts = Object.keys(FOUND_US_LABELS).map(k =>
+            `<option value="${k}"${k === via ? " selected" : ""}>${escapeHtml(FOUND_US_LABELS[k])}</option>`).join("");
+        return `<div style="margin-top:0.75rem; padding-top:0.5rem; border-top:1px solid var(--border); max-width:500px;" data-refblock="${cid}">
+            <div style="font-weight:600; font-size:0.7rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.03em; margin-bottom:0.3rem;">Who brought them</div>
+            <div style="font-size:0.82rem; min-height:1.2em;" data-refcurrent>${current}</div>
+            <div style="margin-top:0.45rem; display:flex; flex-wrap:wrap; gap:6px; align-items:center;">
+                <input list="ref-people-${cid}" data-refinput placeholder="Type a member's name\u2026"
+                       autocomplete="off" style="flex:1; min-width:170px; padding:5px 8px; font-size:0.82rem; border:1px solid var(--border); border-radius:6px;">
+                <datalist id="ref-people-${cid}"></datalist>
+                <button type="button" class="btn-small" data-refsave>Save</button>
+            </div>
+            <div style="margin-top:0.4rem; display:flex; flex-wrap:wrap; gap:6px; align-items:center;">
+                <span style="font-size:0.75rem; color:var(--text-muted);">or not a referral:</span>
+                <select data-refvia style="padding:4px 8px; font-size:0.8rem; border:1px solid var(--border); border-radius:6px;">
+                    <option value="">\u2014</option>${opts}
+                </select>
+                ${(name || via) ? '<button type="button" class="btn-small" data-refclear style="margin-left:auto;">Clear</button>' : ""}
+            </div>
+            <div data-refmsg style="margin-top:0.35rem; font-size:0.76rem; min-height:1em;"></div>
+        </div>`;
+    }
+
+    // People index for the picker, built once from the loaded customers.
+    function refPeopleOptions(excludeId) {
+        return (window.__custAll || [])
+            .filter(c => c.customer_id && c.customer_id !== excludeId && (c.customer_name || "").trim())
+            .map(c => `<option value="${escapeHtml(c.customer_name)}" data-cid="${c.customer_id}"></option>`)
+            .join("");
+    }
+
+    function refResolveName(text, excludeId) {
+        const t = (text || "").trim().toLowerCase();
+        if (!t) return null;
+        const hit = (window.__custAll || []).find(c =>
+            c.customer_id !== excludeId && (c.customer_name || "").trim().toLowerCase() === t);
+        return hit ? hit.customer_id : null;
+    }
+
+    async function refPost(cid, body, block) {
+        const msg = block.querySelector("[data-refmsg]");
+        msg.style.color = "var(--text-muted)";
+        msg.textContent = "Saving\u2026";
+        try {
+            const res = await fetch(`/api/customers/${cid}/referred-by`, {
+                method: "POST", headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(body) });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || ("HTTP " + res.status));
+            msg.style.color = "#15803D";
+            msg.textContent = "Saved.";
+            // Keep the loaded copy in step so re-opening the card shows
+            // the new answer without a full page reload.
+            const c = (window.__custAll || []).find(x => x.customer_id === cid);
+            if (c) {
+                if ("referred_by_customer_id" in data) {
+                    c.referred_by_customer_id = data.referred_by_customer_id;
+                    c.referred_by_name = data.referred_by_name || "";
+                    c.referred_by_source = data.referred_by_source || "";
+                }
+                if ("found_us_via" in data) c.found_us_via = data.found_us_via || "";
+            }
+            const cur = block.querySelector("[data-refcurrent]");
+            if (cur && c) cur.innerHTML = renderReferredByBlock(c)
+                .match(/data-refcurrent>([\s\S]*?)<\/div>/)[1];
+        } catch (e) {
+            msg.style.color = "#dc2626";
+            msg.textContent = e.message;
+        }
+    }
+
+    // Delegated so it works for every card, including ones drawn later.
+    document.addEventListener("click", function (ev) {
+        const block = ev.target.closest && ev.target.closest("[data-refblock]");
+        if (!block) return;
+        const cid = parseInt(block.getAttribute("data-refblock"), 10);
+        if (ev.target.matches("[data-refsave]")) {
+            const input = block.querySelector("[data-refinput]");
+            const rid = refResolveName(input.value, cid);
+            const msg = block.querySelector("[data-refmsg]");
+            if (!rid) {
+                msg.style.color = "#dc2626";
+                msg.textContent = input.value.trim()
+                    ? "No customer by that name \u2014 pick one from the list."
+                    : "Type a name first.";
+                return;
+            }
+            refPost(cid, { referrer_customer_id: rid, source: "member_claim" }, block);
+        } else if (ev.target.matches("[data-refclear]")) {
+            refPost(cid, { referrer_customer_id: null, found_us_via: null }, block);
+        }
+    });
+    document.addEventListener("change", function (ev) {
+        const block = ev.target.closest && ev.target.closest("[data-refblock]");
+        if (!block || !ev.target.matches("[data-refvia]")) return;
+        const cid = parseInt(block.getAttribute("data-refblock"), 10);
+        refPost(cid, { found_us_via: ev.target.value || null }, block);
+    });
+    // Fill the datalist the first time a card's picker is focused —
+    // building 440 options for every card up front is wasted work.
+    document.addEventListener("focusin", function (ev) {
+        if (!ev.target.matches || !ev.target.matches("[data-refinput]")) return;
+        const block = ev.target.closest("[data-refblock]");
+        const cid = parseInt(block.getAttribute("data-refblock"), 10);
+        const dl = block.querySelector("datalist");
+        if (dl && !dl.innerHTML) dl.innerHTML = refPeopleOptions(cid);
+    });
+
     function renderCustInfoPanel(customer) {
         const infoFields = [
             { key: "first_name", label: "First Name", value: customer.first_name || "" },
@@ -1794,6 +1933,14 @@
             <div style="font-weight:600; font-size:0.7rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.03em; margin-bottom:0.3rem;">Roles</div>
             <div style="font-size:0.82rem; min-height:1.2em;">${rolesHtml}</div>
         </div>`;
+
+        // WHO BROUGHT THEM (Kerry 2026-09-21, on Ty Bubela: "How am I
+        // supposed to attribute him to Justin Angelone?"). Three answers,
+        // matching the three a human can actually give: a PERSON, a
+        // CHANNEL, or nothing yet. A relationship only — referral FEES
+        // come from a redeemed coupon or a payout receipt and are not
+        // touched here.
+        html += renderReferredByBlock(customer);
 
         // Member Status section — uses the same deriveStatus() logic as the list badge
         // so the badge and this field are always in sync.
@@ -4418,6 +4565,10 @@
             try {
                 const canonRes = await fetch("/api/customers");
                 const canonList = await canonRes.json();
+                // The canonical list doubles as the people index for the
+                // "Who brought them" picker (Kerry 2026-09-21) — one
+                // fetch, not a second one per card.
+                window.__custAll = canonList;
                 const canonById = {};   // customer_id → canonical record
                 const canonByName = {}; // lowercase name → canonical record
                 canonList.forEach(c => {
@@ -4428,6 +4579,12 @@
                     const canon = (c.customer_id && canonById[c.customer_id])
                         || canonByName[c.name.toLowerCase()];
                     if (!canon) return;
+                    // WHO BROUGHT THEM travels with the canonical record
+                    // (Kerry 2026-09-21); the Info tab reads it from here.
+                    c.referred_by_customer_id = canon.referred_by_customer_id || null;
+                    c.referred_by_name = canon.referred_by_name || "";
+                    c.referred_by_source = canon.referred_by_source || "";
+                    c.found_us_via = canon.found_us_via || "";
                     // Canonical email, phone, and name always win. first_name/last_name
                     // display on the Info tab; update_customer_info() writes name
                     // corrections to items keyed by exact customer-string match, so an
