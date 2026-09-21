@@ -59473,9 +59473,25 @@ def customers_activity(days: int | None = None, db_path=None, today: str | None 
             "customers": {str(cid): {"last_played": d, "active": d >= cutoff} for cid, d in last.items()}}
 
 
+def _course_nine_tees_by_color(conn, course_id: int) -> dict:
+    """{'blue': (rating, slope, gender), ...} — the 9-hole tee rows of a
+    course record keyed by the colour word in the tee name, so a handicap
+    row's '1 - Blue' / 'Red (L)' can find its own rating and slope."""
+    out: dict = {}
+    for r in conn.execute("SELECT tee_name, gender, holes, rating, slope FROM course_tees "
+                          "WHERE course_id = ? AND COALESCE(holes, 18) = 9 ORDER BY tee_id", (course_id,)).fetchall():
+        words = re.findall(r"[a-z]+", (r["tee_name"] or "").lower())
+        for w in words:
+            if w in ("tee", "tees", "l", "f", "m", "ladies", "men", "women"):
+                continue
+            key = (w, "F" if (r["gender"] == "F") else "M")
+            out.setdefault(key, (float(r["rating"]), int(r["slope"])))
+    return out
+
+
 def retag_handicap_rounds(round_date: str, from_course: str, to_course: str,
-                          slope: int, rating: float | None = None,
-                          apply: bool = False, db_path=None) -> dict:
+                          slope: int | None = None, rating: float | None = None,
+                          apply: bool = False, db_path=None, course_id: int | None = None) -> dict:
     """Re-tag every handicap round posted on ONE date under the wrong
     course (Kerry 2026-09-21: "my handicap entry for the Hill Country
     event is incorrectly tagged. We played the Oaks 9 that night") —
@@ -59493,14 +59509,32 @@ def retag_handicap_rounds(round_date: str, from_course: str, to_course: str,
         # A miss is answered with what IS on that date, so the caller can
         # see the exact stored spelling instead of guessing at it.
         candidates = sorted({(r["course_name"] or "") for r in on_date})
-        plan = []
+        # Per-tee from the COURSE RECORD when course_id is given (the night
+        # had Blue, White and Red players — one slope cannot serve them all):
+        # the row's tee word + the women's marker pick the nine's rating/slope.
+        by_color = _course_nine_tees_by_color(conn, int(course_id)) if course_id else {}
+        plan, unmatched = [], []
         for r in rows:
-            new_rating = float(rating) if rating is not None else float(r["rating"])
-            new_diff = round((r["adjusted_score"] - new_rating) * 113.0 / int(slope), 1)
-            plan.append({"id": r["id"], "player_name": r["player_name"],
+            if by_color:
+                tee_words = re.findall(r"[a-z]+", (r["tee_name"] or "").lower())
+                ladies = bool(re.search(r"\((L|F)\)|ladies|women|forward", r["tee_name"] or "", re.I))
+                hit = None
+                for w in tee_words:
+                    hit = by_color.get((w, "F" if ladies else "M")) or (by_color.get((w, "F")) if ladies else None)
+                    if hit:
+                        break
+                if not hit:
+                    unmatched.append({"id": r["id"], "player_name": r["player_name"], "tee_name": r["tee_name"]})
+                    continue
+                new_rating, new_slope = hit
+            else:
+                new_rating = float(rating) if rating is not None else float(r["rating"])
+                new_slope = int(slope)
+            new_diff = round((r["adjusted_score"] - new_rating) * 113.0 / new_slope, 1)
+            plan.append({"id": r["id"], "player_name": r["player_name"], "tee_name": r["tee_name"],
                          "course_before": r["course_name"], "course_after": to_course,
                          "rating_before": r["rating"], "rating_after": new_rating,
-                         "slope_before": r["slope"], "slope_after": int(slope),
+                         "slope_before": r["slope"], "slope_after": new_slope,
                          "differential_before": r["differential"], "differential_after": new_diff})
         if apply:
             for p in plan:
@@ -59509,7 +59543,8 @@ def retag_handicap_rounds(round_date: str, from_course: str, to_course: str,
                              (to_course, p["rating_after"], p["slope_after"], p["differential_after"], p["id"]))
             conn.commit()
         return {"round_date": round_date, "from_course": from_course, "to_course": to_course,
-                "rows": len(plan), "applied": bool(apply), "plan": plan,
+                "rows": len(plan), "applied": bool(apply), "plan": plan, "unmatched_tees": unmatched,
+                "course_tees": {f"{k[0]} ({k[1]})": v for k, v in by_color.items()},
                 "courses_on_date": candidates, "rows_on_date": len(on_date)}
 
 

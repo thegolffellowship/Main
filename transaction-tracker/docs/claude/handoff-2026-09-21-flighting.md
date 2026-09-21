@@ -87,8 +87,17 @@ freeze" panel per flight and per game) from the same payload shape
   flights 4/10 (equal-size, ceiling moved 3 up); Skins 10 → 3/7 at 12.0; Ind
   Gross off (10 < 16). a9.24 Teravista — Ind Net 7 → 1 flight; Skins 5 on a
   nine → Skins ½ Net; Ind Gross off.
-- The live boards for these four (via `scoring-flights-board:<id>` on the
-  deployed build) are posted in the closing digest.
+- **Live boards (deployed build, `scoring-flights-board`, 2026-09-21 1 PM):**
+  Landa Park Ind Net 19 → 10/9 (cut at 11.8); matrix 98.50/59.10/39.40 per
+  flight = $394 and **GG paid $394 to the cent** (LOW T1×2 at $78.80, HIGH
+  T3×2 at $19.70 — the tie rule reproduces GG). Cedar Creek Ind Net likewise.
+  **Skins cut finding:** on BOTH completed 18s GG cut Skins by EQUAL HALVES
+  (Cedar Creek 4/4, Landa Park 8/7 — Wade 9.4 / Vasquez 11.2 / Hogue 11.8
+  upstairs), not at 12.0 as #572 states; the board cuts at 12.0 (P2-6,
+  forward only) and the digest asks Kerry which GG runs tomorrow
+  (Brackenridge: 3/7 by the ladder vs 5/5 by GG's habit). Brackenridge
+  prints no PH: the course record's tee legend is empty (the starter-sheet
+  bridge shows the same) — the parent lane's course-record item.
 
 ## 5. How to verify without a login
 
@@ -123,6 +132,10 @@ index / PH), `amounts` (pot, bonus, share, per-flight pots and places),
 - After ratification: snapshot tables + freeze / unfreeze / settle actions +
   bridges; closeout writes the settled snapshot; the Final Pairings send
   offers the freeze.
+- P2-6 item 4 (a label/assignment mismatch on a future event raises a
+  followups CA Queue item) is NOT built: it is the closeout comparison of
+  `gg_game_flights` against the FROZEN selection, so it follows the schema.
+- Kerry: which Skins cut GG runs tomorrow (12.0 ladder vs equal halves).
 - The Flighting Lab (`ls_flight_lab`) still runs `flight_plan` with the
   seed's dials — fine as a lab; the board is the rule.
 - Not this lane: Kissing Tree combo yardages (Event Closeout lane), handicap

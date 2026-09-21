@@ -8,6 +8,13 @@ window.TGF_CHANGELOG = [
     ],
   },
   {
+    version: "2.469.3",
+    date: "2026-09-21",
+    changes: [
+      "Docs only: the flighting handoff carries the LIVE dry run \u2014 Landa Park's Individual Net reproduces what Golf Genius paid to the cent ($394, both tie pools), the Skins-cut finding (GG cut Skins by equal halves on both completed 18s, not at 12.0 as #572 states \u2014 the board cuts at 12.0 forward-only and the digest asks Kerry which GG runs at Brackenridge), Brackenridge's empty tee legend (no PH on either the starter sheet or the tab \u2014 the course record), and the open items: the freeze button, the snapshot schema, 1/10/20 on Net, the P2-6 closeout comparison that follows the schema.",
+    ],
+  },
+  {
     version: "2.469.2",
     date: "2026-09-21",
     changes: [

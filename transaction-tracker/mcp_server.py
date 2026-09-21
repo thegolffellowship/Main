@@ -1772,7 +1772,7 @@ def _scoring_dispatch(url: str, extract: str):
       scoring-margin-gaps[:<limit>]  pre-cutover events: booked vs residual-would-book, with reasons (measure-only)
       scoring-leaderboard-events[:add=<codes>|set=<codes>|clear]  the EVENTS leaderboard dial (admin pilot); reports which codes still await scorecards
       scoring-hcp-2nines:<event>[|auto|<json>][|apply]  post an 18-hole event as two nines; ratings read off the course record (v2.465.17), JSON overrides
-      scoring-hcp-round-retag:<date>;<from>;<to>;<slope>[;<rating>][;apply]  re-tag a date's handicap rounds to the nine actually played
+      scoring-hcp-round-retag:<date>;<from>;<to>;<slope>|course=<id>[;<rating>][;apply]  re-tag a date's handicap rounds to the nine actually played (course= reads each tee's rating/slope off the record)
       scoring-course-renine:<course_id>[|apply]  a named nine numbers its holes 1–9 (tee holes + rounds moved down from 10–18)
       scoring-tee-nines-store:<full_tee_id>|<fr>,<fs>|<br>,<bs>[|apply]  front/back rating rows (each with its slope) on an 18-hole tee set (refuses a pair that does not sum to the 18)
       scoring-crdb-seed:<course_id>[|<json>][|apply]  write a course's USGA CRDB tee sets (gender, par, bogey, total/front/back, optional yardages) onto the record; JSON row = [name, gender, r18, s18, bogey, [fr, fs], [br, bs], [y18, yf, yb]]
@@ -5085,8 +5085,14 @@ def _scoring_dispatch(url: str, extract: str):
                 _p = _p[:-1]
             if len(_p) < 4:
                 return json.dumps({"error": "usage: scoring-hcp-round-retag:<date>;<from course>;<to course>;<slope>[;<rating>][;apply]"})
-            _rating = float(_p[4]) if len(_p) > 4 and _p[4] else None
-            _res = db.retag_handicap_rounds(_p[0], _p[1], _p[2], int(_p[3]), rating=_rating, apply=_apply)
+            # 4th part: a slope, or "course=<id>" to take each row's tee
+            # rating/slope from that course record (per tee, per gender).
+            if _p[3].lower().startswith("course="):
+                _res = db.retag_handicap_rounds(_p[0], _p[1], _p[2], apply=_apply,
+                                                course_id=int(_p[3].split("=", 1)[1]))
+            else:
+                _rating = float(_p[4]) if len(_p) > 4 and _p[4] else None
+                _res = db.retag_handicap_rounds(_p[0], _p[1], _p[2], int(_p[3]), rating=_rating, apply=_apply)
             if _apply:
                 _audit("scoring-hcp-round-retag", f"{_p[0]}: {_p[1]} -> {_p[2]} slope={_p[3]} rows={_res.get('rows')}")
             return json.dumps(_res, indent=2, default=str)
