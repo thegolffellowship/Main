@@ -3059,6 +3059,14 @@ def _scoring_dispatch(url: str, extract: str):
                                     f"matched={res.get('matched')} "
                                     f"missing={res.get('missing_in_brevo')}")
             return json.dumps(res, indent=2, default=str)
+        if cmd == "scoring-dashboard":
+            # Read-only: the landing dashboard's payload (Kerry
+            # 2026-09-21). Only cards with something in them come back —
+            # an empty list means every queue is clear, not a failure.
+            # `skipped` names any feed that raised; a broken query costs
+            # its own card and never the page.
+            from email_parser.dashboard import build
+            return json.dumps(build(), indent=2, default=str)
         if cmd == "scoring-brevo-add":
             # "<email>[|dry]" — put ONE Tracker-known customer on the
             # Brevo list. The nightly sync's create scope ("recent")

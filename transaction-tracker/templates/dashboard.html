@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+    <title>TGF — Dashboard</title>
+    <link rel="stylesheet" href="/static/css/dashboard.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Bitter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/shell.css">
+    <link rel="manifest" href="/static/manifest.json">
+    <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="/static/icon-180.png">
+    <meta name="theme-color" content="#E87C3E">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="TGF Tracker">
+    <style>
+        /* A ROUTER, not a workspace (Kerry 2026-09-21). Every tile is a
+           count and a link; nothing is worked here. A card with nothing
+           in it never reaches the page — the server omits it. */
+        .db-head { display:flex; align-items:baseline; gap:12px; flex-wrap:wrap; margin: 4px 0 16px; }
+        .db-head h2 { font-family:'Bitter',serif; font-size:1.5rem; margin:0; }
+        .db-asof { color: var(--muted, #6B7280); font-size:.85rem; }
+        .db-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:14px; }
+        .db-card { border:1px solid var(--border,#E5E7EB); border-radius:10px; background:#fff;
+                   overflow:hidden; display:flex; flex-direction:column; }
+        .db-card .top { display:block; padding:14px 16px 12px; text-decoration:none; color:inherit;
+                        border-left:4px solid transparent; }
+        .db-card .top:hover { background:#FCFCFA; }
+        .db-card.do   .top { border-left-color:#DC2626; }
+        .db-card.watch .top { border-left-color: var(--primary,#E87C3E); }
+        .db-card.info  .top { border-left-color:#6B7280; }
+        .db-n { font-family:'Bitter',serif; font-size:2rem; font-weight:700; line-height:1;
+                font-variant-numeric:tabular-nums; }
+        .db-t { font-family:'Bitter',serif; font-weight:600; margin-top:6px; }
+        .db-d { color:var(--muted,#6B7280); font-size:.85rem; margin-top:2px; }
+        .db-items { border-top:1px solid var(--border,#E5E7EB); margin:0; padding:0; list-style:none; }
+        .db-items li a { display:flex; justify-content:space-between; gap:10px; padding:8px 16px;
+                         text-decoration:none; color:inherit; font-size:.88rem;
+                         border-bottom:1px solid #F3F4F6; }
+        .db-items li:last-child a { border-bottom:0; }
+        .db-items li a:hover { background:#FCFCFA; }
+        .db-items .meta { color:var(--muted,#6B7280); white-space:nowrap; font-size:.8rem; }
+        .db-more { padding:7px 16px; font-size:.8rem; color:var(--muted,#6B7280); }
+        .db-clear { border:1px dashed var(--border,#E5E7EB); border-radius:10px; padding:28px;
+                    text-align:center; color:var(--muted,#6B7280); }
+        .db-clear .big { font-family:'Bitter',serif; font-size:1.2rem; color:#1B1B1B; }
+        .db-skip { margin-top:14px; font-size:.8rem; color:#B91C1C; }
+        @media (max-width:560px) { .db-grid { grid-template-columns:1fr; } }
+    </style>
+</head>
+<body>
+    {% if shell_v2 %}
+    {% set SHELL_TITLE = 'Dashboard' %}{% set SHELL_ACTIVE = 'dashboard' %}
+    {% include '_shell_nav.html' %}
+    {% else %}
+    <header>
+        <div class="header-content">
+            <h1>TGF Transaction Tracker</h1>
+            <p class="subtitle">Dashboard — what needs you today</p>
+            <a href="/changelog" class="version-link" id="version-badge" title="View changelog">v2.0.0</a>
+        </div>
+        <div class="header-actions">
+            <span id="role-badge" class="role-badge" style="display:none;"></span>
+        </div>
+    </header>
+    {% endif %}
+
+    <main>
+        <div class="db-head">
+            <h2 id="db-title">What needs you today</h2>
+            <span class="db-asof" id="db-asof"></span>
+        </div>
+        <div id="db-body"><div class="db-asof">Loading…</div></div>
+        <div class="db-skip" id="db-skip" style="display:none;"></div>
+    </main>
+
+    <script src="/static/js/version.js"></script>
+    <script src="/static/js/auth.js"></script>
+    <script src="/static/js/shell.js"></script>
+    <script>
+    (function () {
+        const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g,
+            c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+        // Kerry's rule: the list under a card is a PEEK, not the page.
+        // Five rows and a "+N more" that goes to the surface that owns it.
+        const PEEK = 5;
+
+        function cardHtml(c) {
+            const items = (c.items || []).slice(0, PEEK).map(it =>
+                `<li><a href="${esc(it.href || c.href)}"><span>${esc(it.label)}</span>` +
+                `<span class="meta">${esc(it.meta || "")}</span></a></li>`).join("");
+            const extra = (c.items || []).length - PEEK;
+            return `<div class="db-card ${esc(c.tone || "info")}">` +
+                `<a class="top" href="${esc(c.href)}">` +
+                `<div class="db-n">${esc(c.count)}</div>` +
+                `<div class="db-t">${esc(c.title)}</div>` +
+                (c.detail ? `<div class="db-d">${esc(c.detail)}</div>` : "") +
+                `</a>` +
+                (items ? `<ul class="db-items">${items}</ul>` : "") +
+                (extra > 0 ? `<div class="db-more"><a href="${esc(c.href)}">+${extra} more</a></div>` : "") +
+                `</div>`;
+        }
+
+        function render(d) {
+            const body = document.getElementById("db-body");
+            document.getElementById("db-asof").textContent = d.as_of || "";
+            if (!d.cards || !d.cards.length) {
+                // Nothing open is a RESULT, not an empty state.
+                body.innerHTML = `<div class="db-clear"><div class="big">Nothing needs you right now.</div>` +
+                    `<div>Every queue is clear.</div></div>`;
+            } else {
+                body.innerHTML = `<div class="db-grid">${d.cards.map(cardHtml).join("")}</div>`;
+            }
+            // A feed that failed is SAID so, never silently missing — a
+            // dashboard that quietly drops a card is worse than no card.
+            const sk = document.getElementById("db-skip");
+            if (d.skipped && d.skipped.length) {
+                sk.style.display = "";
+                sk.textContent = "Could not load: " + d.skipped.map(s => s.feed).join(", ");
+            } else { sk.style.display = "none"; }
+        }
+
+        async function load() {
+            try {
+                const r = await fetch("/api/dashboard");
+                if (!r.ok) throw new Error("HTTP " + r.status);
+                render(await r.json());
+            } catch (e) {
+                document.getElementById("db-body").innerHTML =
+                    `<div class="db-clear"><div class="big">Dashboard could not load.</div>` +
+                    `<div>${esc(e.message)}</div></div>`;
+            }
+        }
+
+        // Exposed so the headless guard calls the REAL renderer rather
+        // than restating it (the lesson from test_events_board.js).
+        window.__dbRender = render;
+
+        // initAuth() must be called on every page (CLAUDE.md) — it is what
+        // gates the nav links by role. The first cut of this page set
+        // window.onAuthReady and never called initAuth, so the callback
+        // never fired, load() never ran, and the page sat on "Loading…"
+        // forever with an ungated nav. Kerry, 2026-09-21: "Stuck on perma
+        // load." LOAD UNCONDITIONALLY and let auth run alongside: the
+        // fetch carries the session cookie by itself, so the data never
+        // needs to wait on the nav.
+        window.onAuthReady = function () { /* nav gating handled by auth.js */ };
+        load();
+        if (window.initAuth) initAuth();
+    })();
+    </script>
+</body>
+</html>

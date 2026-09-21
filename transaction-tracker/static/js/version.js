@@ -1,5 +1,30 @@
-window.TGF_VERSION = "2.470.1";
+window.TGF_VERSION = "2.472.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.472.0",
+    date: "2026-09-21",
+    changes: [
+      "THE DASHBOARD IS ADMIN ONLY (Kerry, 2026-09-21). Both nav entries carry admin-nav and start hidden, the API is admin-gated, and the page route REDIRECTS a non-admin to /events rather than answering require_role's JSON 403 — a page that replies with raw JSON is a dead end for anyone on a stale link or a bookmarked PWA start URL. The landing redirect is now role-aware too: admin to /dashboard, everyone else to /events, so a manager is never bounced off their own home page.",
+      "FIXED the perma-load (Kerry: 'Stuck on perma load'). The page set window.onAuthReady = () => load() and never called initAuth(), so nothing ever fired the callback: load() never ran and the nav was never role-gated. It now calls load() at top level and runs initAuth() alongside — the fetch carries the session cookie by itself, so the data never needs to wait on the nav.",
+      "Protecting the CLASS, not the instance: the sweep for other pages that load auth.js and never call initAuth() found participation.html doing the same thing, with a quieter symptom — its data loaded but its nav was never gated, so an admin saw no admin links there. Fixed, and test_auth_init.js now fails any template that loads auth.js without calling initAuth (directly or through a script it loads), plus pins the dashboard's load-at-top-level shape and all three admin gates.",
+    ],
+  },
+  {
+    version: "2.471.1",
+    date: "2026-09-21",
+    changes: [
+      "The dashboard's absorbed COO card was wrong twice over on its first live read and is fixed. It was titled 'Data issues found' — it is actually the AI email triage, mail that wants a reply (a course asking about a reservation, a member inquiry, a partner pitch), so it now reads 'Email needing a reply' and lists the subjects. And it counted 3,151, because ~3,100 rows have been open since the feature's first day and nobody has ever worked them. It is now scoped to HIGH urgency inside 14 days. An unscoped count is an archive, not a to-do list, and an archive on a landing page is exactly what trained Kerry to stop opening the COO dashboard in the first place — shipping it that way would have reproduced the failure the page exists to fix. Standing question for any future card over a long-lived table: is this a queue or a pile?",
+    ],
+  },
+  {
+    version: "2.471.0",
+    date: "2026-09-21",
+    changes: [
+      "THE DASHBOARD IS THE LANDING PAGE. Kerry, 2026-09-21: 'maybe I should be landing on a DASHBOARD page that summarizes anything current that I can go to with a click', then 'Dashboard replaces COO as landing, absorb the action items — I don't use the current what needs me today stuff at all right now, so let's ditch those'. `/` now redirects to /dashboard; EVENTS held that slot since 2026-07-08. Nine cards: this week's events, events to close out, follow-ups due, new leads, first timers to attribute (the Ty Bubela card), memberships lapsed or expiring, expenses to review, data issues found (absorbed from COO), open decisions.",
+      "Two rules make it stay useful. It is a ROUTER, never a workspace — every card is a count and a link to the surface that owns the work, and the peek list is five rows and a '+N more'. And a card with nothing in it does not render: build() returns only non-zero cards, so a page that shows three things today and six tomorrow keeps being read instead of becoming wallpaper. No cards at all reads 'Nothing needs you right now' — a result, not an empty state.",
+      "The COO page is retired as the FRONT DOOR, not as a feature, and the action_items table is untouched: nine code paths write it and it is how the system reports the problems it finds. The dashboard shows the count and links to /coo, which still works. Each feed is independently wrapped — one that raises is named on the page rather than silently dropped, because a dashboard that quietly loses a card is worse than one that admits it. Read-only bridge scoring-dashboard. Guards: test_dashboard_feeds.py, test_dashboard.js.",
+    ],
+  },
   {
     version: "2.470.1",
     date: "2026-09-21",
