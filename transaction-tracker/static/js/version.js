@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.469.1";
+window.TGF_VERSION = "2.469.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.469.2",
+    date: "2026-09-21",
+    changes: [
+      "Docs only: docs/claude/referral-attribution.md — the #413/#416 referral model written up against a real case (Kerry: 'Ty Bubela signed up on his own, but he is a referral from lead member convert Justin Angelone'). Finding: customers.referred_by_customer_id today means 'I paid for this person's spot' and is written from one place only, so no surface can record that Justin brought Ty. Proposal: widen the field to 'who brought them' with referred_by_source for provenance and found_us_via for 'not a referral', leaving referral_fees and acquisition_source untouched; plus a 1st-Timer guesser over seven ranked signals that writes nothing and confirms everything. UNRATIFIED — rule 3b.",
+    ],
+  },
   {
     version: "2.469.1",
     date: "2026-09-21",
