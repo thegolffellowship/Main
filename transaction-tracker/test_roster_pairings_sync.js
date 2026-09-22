@@ -19,7 +19,7 @@ check("every money path hands the API answer to the sync (credit / refund / tran
       /offerPairingRemoval\(_pairCtx\.ev, _pairCtx\.name, _pairInfo\)/.test(html) && /offerPairingRemoval\(_pairCtx\.ev, _pairCtx\.name, _wdData\.pairings\)/.test(html));
 const submit = html.slice(html.indexOf("async function submitEvCredit("), html.indexOf("async function reverseEvCredit("));
 check("the transfer sends the excess choice and opens Venmo in the click when 'Venmo back' is chosen",
-      /excess_action, excess_venmo/.test(submit) && /window\.open\(venmoPayHref\(handle, _pv\.excess, memo\), "_blank"\)/.test(submit));
+      /excess_action, excess_venmo, apply_credit_ids/.test(submit) && /window\.open\(venmoPayHref\(handle, _net\.excess, memo\), "_blank"\)/.test(submit));
 check("a SHORT transfer opens the prepared balance-due email for the NEW row",
       /openVenmoEmailModal\(_newItem\.id\)/.test(submit) && /Number\(_pc\.amount_owed\) > 0\.005/.test(submit));
 check("picking a target event prices the move (transfer-preview) and a stale answer is ignored",

@@ -751,6 +751,12 @@ def check_expense_inbox(force=False, days_back=None):
             if email_type == "unknown":
                 continue
 
+            if email_type == "p2p_request":
+                # A money request moves no money (Kerry 2026-09-22:
+                # Straiton's $22). If it gets paid, the payment email
+                # books it; the request itself is only marked seen.
+                continue
+
             if email_type == "chase_transaction_alert":
                 merchant_ctx = None
                 extracted = parse_chase_alert(
@@ -805,6 +811,13 @@ def check_expense_inbox(force=False, days_back=None):
                     body_text,
                     provider=_prov_label,
                 )
+                if (extracted.get("transaction_type") or "").lower() == "request":
+                    # parse_p2p_payment tagged it: a request email that
+                    # slipped past classification — no money moved, so
+                    # nothing to save (it is already marked seen).
+                    logger.info("P2P request email skipped (no money "
+                                "moved): %s", email_data.get("subject", ""))
+                    continue
                 if extracted.get("confidence", 0) > 0:
                     memo_txt = extracted.get("memo", "") or ""
                     event_name = match_event_from_memo(memo_txt, conn)
@@ -5697,7 +5710,8 @@ def api_pairings_blinds(event_id):
             return jsonify(draw_one_blind(event_id, holes, gnum, cpos))
         return jsonify(draw_event_blinds(
             event_id, dry_run=not data.get("apply"),
-            redraw=bool(data.get("redraw"))))
+            redraw=bool(data.get("redraw")),
+            picks=data.get("picks") or None))
     except Exception as e:
         logger.exception("Blind draw failed for event %d", event_id)
         return jsonify({"error": str(e)}), 500
@@ -7967,7 +7981,8 @@ def api_transfer_item(item_id):
         return jsonify({"error": "excess_action must be 'keep' or 'venmo'"}), 400
     probe = _pairings_seat_probe(item_id)
     new_item = transfer_item(item_id, data["target_event"], note=data.get("note", ""),
-                             excess_action=excess_action)
+                             excess_action=excess_action,
+                             apply_credit_ids=data.get("apply_credit_ids") or [])
     if new_item:
         pc = new_item.get("price_check") or {}
         if excess_action == "venmo" and pc.get("excess_credit_id"):

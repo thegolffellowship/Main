@@ -30987,8 +30987,30 @@ def transfer_preview(item_id: int, target_event_name: str,
                                                sel["side_games"]) if target else None)
     subtotal = breakdown["subtotal"] if breakdown else None
     owed = round(subtotal - credit, 2) if subtotal is not None else None
+    # Credit already sitting on the account (Kerry 2026-09-22: "Sharitz
+    # already had $6 of credit on his account, so adjustment needs to be
+    # made there or a radial button to include that $6 towards the
+    # transfer event") — offered, never applied silently.
+    available = []
+    try:
+        for cr in get_player_credits(orig.get("customer") or "", db_path=db_path,
+                                     customer_id=orig.get("customer_id")):
+            if cr["id"] == item_id or str(cr.get("parent_item_id") or "") == str(item_id):
+                continue
+            amt = round(float(cr.get("credit_amount") or 0), 2)
+            if amt <= 0:
+                continue
+            available.append({"id": cr["id"], "amount": amt,
+                              "label": cr.get("item_name") or "",
+                              "origin_event": cr.get("origin_event") or cr.get("item_name") or "",
+                              "order_date": cr.get("order_date") or "",
+                              "kind": "wd" if (cr.get("transaction_status") or "") == "wd" else "credit"})
+    except Exception:
+        logger.warning("transfer preview: credit lookup failed for item %s", item_id, exc_info=True)
     return {
         "item_id": item_id, "customer": orig.get("customer"),
+        "available_credits": available,
+        "available_credits_total": round(sum(a["amount"] for a in available), 2),
         "customer_id": orig.get("customer_id"),
         "source_event": orig.get("item_name"), "target_event": target_event_name,
         "target_found": bool(target),
@@ -31004,7 +31026,8 @@ def transfer_preview(item_id: int, target_event_name: str,
 
 def transfer_item(item_id: int, target_event_name: str, note: str = "",
                   db_path: str | Path | None = None,
-                  excess_action: str = "keep") -> dict | None:
+                  excess_action: str = "keep",
+                  apply_credit_ids: list | None = None) -> dict | None:
     """
     Transfer an item to a different event.
 
@@ -31108,18 +31131,70 @@ def transfer_item(item_id: int, target_event_name: str, note: str = "",
                 (new_id, ch["id"]),
             )
 
+        # ── EXISTING CREDIT applied toward the move (Kerry 2026-09-22,
+        # Sharitz's $6): only the rows the manager ticked, only this
+        # player's, only while still unapplied. Marked the way Apply
+        # Credit marks a consumed credit, tagged so a reversal can put
+        # them back.
+        applied_total, applied_rows = 0.0, []
+        _today = datetime.utcnow().strftime("%Y-%m-%d")
+        for cid_ in (apply_credit_ids or []):
+            try:
+                cid_ = int(cid_)
+            except (TypeError, ValueError):
+                continue
+            if cid_ == item_id:
+                continue
+            cr = conn.execute("SELECT * FROM items WHERE id = ?", (cid_,)).fetchone()
+            if not cr:
+                continue
+            cr = dict(cr)
+            same_person = ((orig.get("customer_id") is not None
+                            and cr.get("customer_id") == orig.get("customer_id"))
+                           or (cr.get("customer") or "").strip().lower()
+                           == (orig.get("customer") or "").strip().lower())
+            st_ = (cr.get("transaction_status") or "").lower()
+            if not same_person or st_ not in ("credited", "wd"):
+                continue
+            amt = round(_item_credit_value(conn, cr), 2)
+            if amt <= 0:
+                continue
+            if st_ == "wd":
+                conn.execute(
+                    """UPDATE items SET credit_amount = NULL, transferred_to_id = ?,
+                       credit_note = ? WHERE id = ?""",
+                    (new_id, f"Applied via transfer to {target_event_name} on {_today} "
+                             f"— ${amt:.2f} WD credit", cid_))
+            else:
+                conn.execute(
+                    """UPDATE items SET transaction_status = 'transferred',
+                       transferred_to_id = ?, credit_note = ? WHERE id = ?""",
+                    (new_id, f"Applied via transfer to {target_event_name} on {_today} "
+                             f"— ${amt:.2f}", cid_))
+            applied_total = round(applied_total + amt, 2)
+            applied_rows.append({"id": cid_, "amount": amt, "label": cr.get("item_name")})
+        total_credit = round(combined_amt + applied_total, 2)
+        if applied_total > 0:
+            new_values["credit_note"] = (f"{new_values['credit_note']} + ${applied_total:.2f} "
+                                         f"credit applied")
+            conn.execute("UPDATE items SET item_price = ?, credit_note = ? WHERE id = ?",
+                         (f"${total_credit:.2f} (credit)", new_values["credit_note"], new_id))
+            new_values["item_price"] = f"${total_credit:.2f} (credit)"
+
         # ── THE PRICE CHECK (Kerry 2026-09-22) ──
         sel = _transfer_selections(orig, target_event)
         breakdown = (_calc_event_pricing_breakdown(
             target_event, sel["user_status"], sel["holes"], sel["side_games"])
             if target_event else None)
         subtotal = breakdown["subtotal"] if breakdown else None
-        price_check = {"credit": combined_amt, "target_subtotal": subtotal,
+        price_check = {"credit": total_credit, "credit_from_source": combined_amt,
+                       "credits_applied": applied_total, "credits_applied_rows": applied_rows,
+                       "target_subtotal": subtotal,
                        "amount_owed": None, "excess": 0.0,
                        "excess_credit_id": None, "excess_action": excess_action,
                        "selections": sel}
         if subtotal is not None:
-            owed = round(subtotal - combined_amt, 2)
+            owed = round(subtotal - total_credit, 2)
             price_check["amount_owed"] = owed
             if owed < -0.005:
                 excess = round(-owed, 2)
@@ -31240,6 +31315,29 @@ def reverse_credit(item_id: int, db_path: str | Path | None = None) -> bool:
             transferred_to_id = item["transferred_to_id"]
             # Delete the destination item
             conn.execute("DELETE FROM items WHERE id = ?", (transferred_to_id,))
+            # ...and the excess-credit row the transfer's price check may
+            # have posted (v2.478.1), while it is still unapplied credit.
+            # An excess already applied elsewhere (status no longer
+            # 'credited') is money in play and stays.
+            conn.execute(
+                """DELETE FROM items WHERE email_uid LIKE ?
+                   AND COALESCE(transaction_status, '') = 'credited'""",
+                (f"transfer-excess-{item_id}-%",))
+            # ...and put back any existing credit the transfer applied.
+            for cr in conn.execute(
+                    """SELECT id, credit_note, transaction_status FROM items
+                       WHERE transferred_to_id = ? AND credit_note LIKE 'Applied via transfer%'""",
+                    (transferred_to_id,)).fetchall():
+                m = re.search(r"\$([0-9]+(?:\.[0-9]{1,2})?)\s*WD credit", cr["credit_note"] or "")
+                if m:
+                    conn.execute("UPDATE items SET credit_amount = ?, transferred_to_id = NULL, "
+                                 "credit_note = 'Restored after transfer reversal' WHERE id = ?",
+                                 (f"${float(m.group(1)):.2f}", cr["id"]))
+                else:
+                    conn.execute("UPDATE items SET transaction_status = 'credited', "
+                                 "transferred_to_id = NULL, "
+                                 "credit_note = 'Restored after transfer reversal' WHERE id = ?",
+                                 (cr["id"],))
             # Clean up accounting entries for this transfer
             try:
                 conn.execute("DELETE FROM acct_splits WHERE transaction_id IN (SELECT id FROM acct_transactions WHERE source_ref LIKE ?)", (f"xfer-{item_id}-%",))
@@ -58351,7 +58449,8 @@ def _event_blind_unit(pairings: dict, db_path=None) -> str:
 
 
 def draw_event_blinds(event_id: int, dry_run: bool = True, redraw: bool = False,
-                      year: int | None = None, db_path=None, team_unit: str | None = None) -> dict:
+                      year: int | None = None, db_path=None, team_unit: str | None = None,
+                      picks: list | None = None) -> dict:
     """Fill every open seat on the saved sheet with a blind.
 
     An OPEN SEAT is a seat a full team would have and this group does not
@@ -58363,7 +58462,14 @@ def draw_event_blinds(event_id: int, dry_run: bool = True, redraw: bool = False,
     Never drawn for a seat: anyone in that group (a card cannot fill its
     own team) and anyone already blind elsewhere in this event (one
     benefit per person per night). `redraw=True` clears this event's
-    app-drawn blinds first; GG-sourced history rows are never touched."""
+    app-drawn blinds first; GG-sourced history rows are never touched. A
+    dry run with redraw=True previews the same thing without deleting.
+
+    `picks` (Kerry 2026-09-22: the OK wrote different names than the
+    popup showed — the preview and the apply were two separate random
+    draws): [{holes, group_num, cart_pos, customer_id}] from the dry
+    run; a seat named there takes that player when he is still a legal
+    candidate for it, so what was shown is what is written."""
     with _connect(db_path) as conn:
         _ensure_pairing_tables(conn)
         ev = conn.execute("SELECT * FROM events WHERE id = ?",
@@ -58381,6 +58487,17 @@ def draw_event_blinds(event_id: int, dry_run: bool = True, redraw: bool = False,
                          "AND source = 'app'", (event_id,))
             conn.commit()
             existing = get_event_blinds(event_id, conn=conn)
+        elif redraw:
+            # Preview of a redraw: the app-drawn blinds are as good as gone.
+            existing = {h: {g: [b for b in seats if b.get("source") != "app"]
+                            for g, seats in hs.items()}
+                        for h, hs in existing.items()}
+        pick_map = {}
+        for pk in (picks or []):
+            try:
+                pick_map[(str(pk["holes"]), int(pk["group_num"]), int(pk["cart_pos"]))] = int(pk["customer_id"])
+            except (KeyError, TypeError, ValueError):
+                continue
         taken = {b["customer_id"] for hs in existing.values()
                  for seats in hs.values() for b in seats
                  if b["customer_id"] is not None}
@@ -58436,7 +58553,11 @@ def draw_event_blinds(event_id: int, dry_run: bool = True, redraw: bool = False,
                                          "cart_pos": pos,
                                          "why": "no eligible player left"})
                         continue
-                    pick = _blind_pick(cands)
+                    wanted = pick_map.get((str(holes), int(g["group_num"]), int(pos)))
+                    pick = next((c for c in cands if c["customer_id"] == wanted), None) \
+                        if wanted is not None else None
+                    if pick is None:
+                        pick = _blind_pick(cands)
                     taken.add(pick["customer_id"])
                     row = {"holes": holes, "group_num": g["group_num"],
                            "slot_label": g.get("slot_label"), "cart_pos": pos,

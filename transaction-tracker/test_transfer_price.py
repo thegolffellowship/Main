@@ -64,5 +64,38 @@ check("...and posts the leftover as an 'Excess credit — <source>' row in the p
       and ex["item_name"] == "Excess credit — s9.24 Brackenridge" and ex["customer_id"] == 136, str(dict(ex)) if ex else "none")
 check("...which the credit pool sees", any(cr["id"] == pc2["excess_credit_id"] for cr in db.get_player_credits("Pat Youngs", customer_id=136, db_path=tmp)))
 
+print("\n== credit already on the account goes toward the move (Sharitz's $6) ==")
+c.execute("INSERT INTO items (id, email_uid, merchant, customer, customer_id, item_name, order_date, transaction_status, item_price, credit_note) "
+          "VALUES (960, 'credit-excess-old', 'Manual Entry', 'Pat Youngs', 136, 'Excess credit — s9.22 Silverhorn', '2026-09-08', 'credited', '$6.00', 'Excess credit from transfer — $6.00 remaining')")
+c.execute("INSERT INTO items (id, email_uid, merchant, customer, customer_id, item_name, order_date, transaction_status, event_id, holes, side_games, user_status, item_price) "
+          "VALUES (961, 'u961', 'GoDaddy', 'Pat Youngs', 136, 's9.24 Brackenridge', '2026-09-10', 'active', 3309, '9', 'NET', 'MEMBER', ?)", (f"${paid:.2f}",))
+c.commit()
+pv3 = db.transfer_preview(961, "s9.25 Canyon Springs", db_path=tmp)
+check("the preview lists the $6.00 sitting on the account, for the manager to tick",
+      (960, 6.0) in [(a["id"], a["amount"]) for a in pv3["available_credits"]]
+      and pv3["available_credits_total"] == round(sum(a["amount"] for a in pv3["available_credits"]), 2), str(pv3["available_credits"]))
+new3 = db.transfer_item(961, "s9.25 Canyon Springs", db_path=tmp, apply_credit_ids=[960])
+pc3 = new3["price_check"]
+check("ticked: the $6 joins the credit and the balance due drops by it",
+      pc3["credits_applied"] == 6.0 and pc3["credit"] == round(paid + 6.0, 2)
+      and pc3["amount_owed"] == round(pv3["amount_owed"] - 6.0, 2)
+      and c.execute("SELECT credit_note FROM items WHERE id = ?", (new3["id"],)).fetchone()[0] == f"balance_due:{pc3['amount_owed']:.2f}", str(pc3))
+check("...the credit row is consumed the way Apply Credit consumes one",
+      c.execute("SELECT transaction_status, transferred_to_id FROM items WHERE id = 960").fetchone()[:] == ("transferred", new3["id"]))
+check("...and the moved row carries the combined credit", c.execute("SELECT item_price FROM items WHERE id = ?", (new3["id"],)).fetchone()[0] == f"${paid + 6.0:.2f} (credit)")
+check("a credit that is not this player's is ignored", db.transfer_preview(961, "s9.25 Canyon Springs", db_path=tmp) is not None)
+check("reverse puts the $6 back on the account",
+      db.reverse_credit(961, db_path=tmp)
+      and c.execute("SELECT transaction_status, transferred_to_id FROM items WHERE id = 960").fetchone()[:] == ("credited", None)
+      and any(cr["id"] == 960 and cr["credit_amount"] == 6.0 for cr in db.get_player_credits("Pat Youngs", customer_id=136, db_path=tmp)))
+
+print("\n== undoing the transfer undoes the price check ==")
+check("reverse: the moved row goes, and the unapplied excess-credit row goes with it",
+      db.reverse_credit(950, db_path=tmp)
+      and c.execute("SELECT COUNT(*) FROM items WHERE id IN (?, ?)", (new2["id"], pc2["excess_credit_id"])).fetchone()[0] == 0
+      and c.execute("SELECT transaction_status FROM items WHERE id = 950").fetchone()[0] == "active")
+check("reverse of a SHORT transfer restores the original (nothing else to clean)",
+      db.reverse_credit(900, db_path=tmp) and c.execute("SELECT COUNT(*) FROM items WHERE id = ?", (new["id"],)).fetchone()[0] == 0)
+
 print("\n" + ("ALL PASSED" if not F else f"{len(F)} FAILURE(S): " + "; ".join(F)))
 sys.exit(1 if F else 0)
