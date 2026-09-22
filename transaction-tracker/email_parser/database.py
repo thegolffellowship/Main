@@ -4338,6 +4338,26 @@ def init_db(db_path: str | Path | None = None) -> None:
                                 AND TRIM(i2.shirt_size) != '')""")
         except sqlite3.OperationalError:
             pass
+        # Roster picks made BEFORE the write-through existed live only
+        # in the oneoff_shirts dial — copy them onto empty profiles
+        # too (a pick is Kerry's explicit word, so it outranks the
+        # items seed above, which runs first only for ordering; both
+        # honor the never-overwrite rule).
+        try:
+            _shirt_row = conn.execute(
+                "SELECT value FROM app_settings WHERE key = "
+                "'oneoff_shirts'").fetchone()
+            for _ev_sel in (json.loads(_shirt_row[0]) or {}).values() \
+                    if _shirt_row and _shirt_row[0] else []:
+                for _cid_s, _size in (_ev_sel or {}).items():
+                    if _size and str(_size).strip():
+                        conn.execute(
+                            "UPDATE customers SET shirt_size = ? "
+                            "WHERE customer_id = ? AND (shirt_size IS "
+                            "NULL OR TRIM(shirt_size) = '')",
+                            (str(_size).strip(), int(_cid_s)))
+        except Exception:
+            logger.exception("Non-fatal: oneoff_shirts dial seed failed")
 
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_customer_emails_customer "
