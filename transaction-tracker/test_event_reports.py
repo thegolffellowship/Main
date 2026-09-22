@@ -59,6 +59,70 @@ check("the yardage rides along for the tee sign", rep["contests"][0]["yardage"] 
 check("the choice is explained on the sheet",
       any("shortest" in n for n in rep["notes"]), str(rep["notes"]))
 
+# THE ENTRIES CROSS-CHECK (Kerry 2026-09-22): the games matrix at the
+# event's player count decides whether a CTP runs and how many.
+check("no entries -> no matrix row, the 2-slot rule applies without a purse",
+      rep["players"] == 0 and rep["slots_offered"] is None
+      and any("No games-matrix row" in n for n in rep["notes"]), str(rep["notes"]))
+def _entries(n, start):
+    for i in range(n):
+        c.execute("INSERT INTO items (id, email_uid, merchant, customer, item_name, order_date, transaction_status, event_id, user_status) "
+                  "VALUES (?, ?, 'The Golf Fellowship', ?, 's9.23 The Quarry', '2026-09-10', 'active', ?, 'MEMBER')",
+                  (start + i, f"u{start+i}", f"Player {start+i}", EV))
+    c.commit()
+_entries(3, 900)
+rep_e = db.event_proximity_report(EV, db_path=tmp)
+check("3 entries -> the included games do not run, nothing printed",
+      rep_e["players"] == 3 and rep_e["contests"] == []
+      and any("do not run under 4" in n for n in rep_e["notes"]), str(rep_e["notes"]))
+_entries(1, 903)
+rep_e = db.event_proximity_report(EV, db_path=tmp)
+check("4 entries -> the matrix funds no CTP yet, nothing printed",
+      rep_e["players"] == 4 and rep_e["slots_offered"] == 0 and rep_e["contests"] == []
+      and any("funds no CTP" in n for n in rep_e["notes"]), str(rep_e["notes"]))
+_entries(12, 904)
+rep_e = db.event_proximity_report(EV, db_path=tmp)
+check("16 entries -> two CTPs, each carrying the matrix purse ($16)",
+      rep_e["players"] == 16 and rep_e["slots"] == 2
+      and [x["hole"] for x in rep_e["contests"]] == [3, 8]
+      and [x["purse"] for x in rep_e["contests"]] == [16.0, 16.0], str(rep_e["contests"]))
+c.execute("DELETE FROM items WHERE id >= 900"); c.commit()
+
+# THE TWIN RECORD (Brackenridge, Kerry 2026-09-22): the event points at a
+# registry twin that carries tee ratings and no hole card; the par-3s are
+# read off the twin that has one.
+TWIN = 9101
+c.execute("INSERT INTO courses (course_id, name, short_name, status) VALUES (?, 'Brackenridge Park Golf Course', 'The Quarry', 'active')", (TWIN,))
+c.execute("UPDATE events SET course_id = ? WHERE id = ?", (TWIN, EV)); c.commit()
+rep_t = db.event_proximity_report(EV, db_path=tmp)
+check("a course with no hole card reads its twin's (same short name)",
+      rep_t["par3_found"] == 3 and rep_t["holes_course_id"] == COURSE
+      and [x["hole"] for x in rep_t["contests"]] == [3, 8], str(rep_t))
+check("…and the sheet says which record supplied the card",
+      any("twin record" in n for n in rep_t["notes"]), str(rep_t["notes"]))
+
+# scoring-course-merge: dry run reports, apply folds.
+c.execute("INSERT INTO course_tees (tee_id, course_id, tee_name, slope, rating) VALUES (81, ?, 'Gold', 120, 34.5)", (TWIN,))
+c.execute("INSERT INTO course_tees (tee_id, course_id, tee_name, slope, rating) VALUES (82, ?, 'Black', 130, 36.0)", (TWIN,))
+c.commit()
+mp = db.merge_course_records(TWIN, COURSE, db_path=tmp)
+check("merge dry run: the identical-spec tee collapses, the new one moves, the event is counted",
+      mp["dry_run"] and [t["tee_id"] for t in mp["tees_collapse"]] == [81]
+      and [t["tee_id"] for t in mp["tees_move"]] == [82] and mp["loser"]["events"] == 1
+      and "Brackenridge Park Golf Course" in mp["aliases_added"], str(mp))
+check("…and writes nothing",
+      c.execute("SELECT course_id FROM events WHERE id = ?", (EV,)).fetchone()[0] == TWIN)
+mp = db.merge_course_records(TWIN, COURSE, apply=True, db_path=tmp)
+c2 = sqlite3.connect(tmp); c2.row_factory = sqlite3.Row
+check("merge apply: the event re-points, the loser row is gone, its name is an alias",
+      mp["merged"] and c2.execute("SELECT course_id FROM events WHERE id = ?", (EV,)).fetchone()[0] == COURSE
+      and c2.execute("SELECT COUNT(*) FROM courses WHERE course_id = ?", (TWIN,)).fetchone()[0] == 0
+      and c2.execute("SELECT course_id FROM course_aliases WHERE alias_name = 'Brackenridge Park Golf Course'").fetchone()[0] == COURSE
+      and c2.execute("SELECT course_id FROM course_tees WHERE tee_id = 82").fetchone()[0] == COURSE
+      and c2.execute("SELECT COUNT(*) FROM course_tees WHERE tee_id = 81").fetchone()[0] == 0, str(mp))
+c2.close()
+c.close(); c = sqlite3.connect(tmp); c.row_factory = sqlite3.Row
+
 # Fewer par-3s than slots -> the leftover entry becomes a Longest Putt.
 c.execute("UPDATE course_tee_holes SET par = 4 WHERE hole_number IN (5, 8)"); c.commit()
 rep2 = db.event_proximity_report(EV, db_path=tmp)

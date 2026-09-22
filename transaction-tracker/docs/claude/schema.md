@@ -246,7 +246,12 @@ SOURCE OF RECORD per #576: matches an 18-hole row by gender + rating/
 slope, then name + gender, inserts the rest, writes total/front/back
 with bogey; seeds in `USGA_CRDB_SEEDS`); `store_tee_nines` (bridge
 `scoring-tee-nines-store`, source admin — Kerry's GG read as rating
-rows, refuses a pair that does not sum to the 18).
+rows, refuses a pair that does not sum to the 18); `merge_course_records`
+(bridge `scoring-course-merge:<loser>|<winner>[|apply]`, v2.476.6 — the
+registry rule on demand: dry run lists tees that collapse into an
+identical-spec tee on the winner vs move across, the rounds / events /
+items that re-point and the aliases added; apply runs
+`_merge_course_into` in one transaction, audited).
 
 **Readers:** `resolve_per_nine_from_course_tees` (rating rows first,
 then pairs Tuesday nine-hole rows of the same name AND gender);

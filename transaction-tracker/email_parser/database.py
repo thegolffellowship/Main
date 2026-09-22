@@ -26255,6 +26255,71 @@ def _merge_course_into(conn, loser_id: int, winner_id: int,
     return True
 
 
+def merge_course_records(loser_id: int, winner_id: int, apply: bool = False,
+                         db_path=None) -> dict:
+    """Fold a duplicate courses row into the canonical one — the registry
+    rule ("one course_id per real course per city forever"), on demand.
+
+    Dry run by default: reports every tee that would COLLAPSE into an
+    identical-spec tee on the winner (same name, slope and rating —
+    rounds re-pin, holes fill gaps, the duplicate row goes) and every
+    tee that would MOVE across as its own row, plus the rounds, events
+    and items that would re-point and the aliases that would be added.
+    `apply` runs `_merge_course_into` inside one transaction."""
+    with _connect(db_path) as conn:
+        lrow = conn.execute("SELECT * FROM courses WHERE course_id = ?",
+                            (loser_id,)).fetchone()
+        wrow = conn.execute("SELECT * FROM courses WHERE course_id = ?",
+                            (winner_id,)).fetchone()
+        if not lrow or not wrow:
+            return {"error": "course not found",
+                    "loser_id": loser_id, "winner_id": winner_id}
+        if loser_id == winner_id:
+            return {"error": "loser and winner are the same course"}
+
+        def _n(table, col, cid):
+            try:
+                return conn.execute(f"SELECT COUNT(*) FROM {table} WHERE {col} = ?",
+                                    (cid,)).fetchone()[0]
+            except sqlite3.OperationalError:
+                return 0
+        collapse, move = [], []
+        for t in conn.execute("SELECT * FROM course_tees WHERE course_id = ?",
+                              (loser_id,)).fetchall():
+            dup = conn.execute(
+                """SELECT tee_id FROM course_tees WHERE course_id = ?
+                   AND tee_name IS ? AND slope IS ? AND rating IS ?""",
+                (winner_id, t["tee_name"], t["slope"], t["rating"])).fetchone()
+            row = {"tee_id": t["tee_id"], "tee_name": t["tee_name"],
+                   "holes": t["holes"], "slope": t["slope"], "rating": t["rating"],
+                   "rounds": _n("scoring_rounds", "tee_id", t["tee_id"]),
+                   "hole_rows": _n("course_tee_holes", "tee_id", t["tee_id"])}
+            if dup:
+                row["into_tee_id"] = dup["tee_id"]
+                collapse.append(row)
+            else:
+                move.append(row)
+        out = {
+            "dry_run": not apply,
+            "loser": {"course_id": loser_id, "name": lrow["name"],
+                      "rounds": _n("scoring_rounds", "course_id", loser_id),
+                      "events": _n("events", "course_id", loser_id),
+                      "items": _n("items", "course_id", loser_id)},
+            "winner": {"course_id": winner_id, "name": wrow["name"],
+                       "rounds": _n("scoring_rounds", "course_id", winner_id),
+                       "events": _n("events", "course_id", winner_id),
+                       "hole_rows": len(_course_hole_table(conn, winner_id))},
+            "tees_collapse": collapse, "tees_move": move,
+            "aliases_added": sorted({a.strip() for a in (lrow["name"], lrow["short_name"])
+                                     if a and a.strip().lower()
+                                     != (wrow["name"] or "").strip().lower()}),
+        }
+        if apply:
+            out["merged"] = _merge_course_into(conn, loser_id, winner_id)
+            conn.commit()
+        return out
+
+
 def _migrate_course_registry_v1(conn: sqlite3.Connection) -> None:
     """Kerry-ratified course-table restructure (2026-07-20 session):
 
@@ -58618,6 +58683,51 @@ def _course_hole_table(conn, course_id: int) -> dict:
     return out
 
 
+def _course_hole_table_any(conn, course_id: int) -> tuple[dict, dict | None]:
+    """`_course_hole_table` for a course, falling back to its TWIN record.
+
+    One real course can sit on the registry twice — Brackenridge (Kerry
+    2026-09-22, "Brack isn't automatically recognizing/creating the
+    CTPs"): the rounds and the full hole card live on 22371 "Brackenridge
+    Golf Course", while the event points at 25402 "Brackenridge Park Golf
+    Course", the USGA CRDB seed that carries tee ratings and no holes. A
+    hole card is a property of the ground, not of the registry row, so
+    when the event's own record has no holes the card is read off a twin:
+    same facility, same short name, or a row whose name is aliased to
+    this one — the un-archived twin with the most rounds first.
+
+    Returns (table, source_row): source_row is None when the table came
+    off the course itself, else the twin's {course_id, name}."""
+    own = _course_hole_table(conn, course_id)
+    if own:
+        return own, None
+    me = conn.execute("SELECT course_id, name, short_name, facility_id "
+                      "FROM courses WHERE course_id = ?", (course_id,)).fetchone()
+    if not me:
+        return {}, None
+    try:
+        twins = [dict(r) for r in conn.execute(
+            """SELECT c.course_id, c.name,
+                      (SELECT COUNT(*) FROM scoring_rounds sr
+                        WHERE sr.course_id = c.course_id) AS n_rounds
+                 FROM courses c
+                WHERE c.course_id != ?
+                  AND ((? IS NOT NULL AND c.facility_id = ?)
+                       OR (? IS NOT NULL AND LOWER(c.short_name) = LOWER(?))
+                       OR c.course_id IN (SELECT course_id FROM course_aliases
+                                           WHERE LOWER(alias_name) = LOWER(?)))
+                ORDER BY (c.name LIKE '%Archived%') ASC, n_rounds DESC""",
+            (course_id, me["facility_id"], me["facility_id"],
+             me["short_name"], me["short_name"], me["name"])).fetchall()]
+    except sqlite3.OperationalError:
+        twins = []
+    for t in twins:
+        tbl = _course_hole_table(conn, t["course_id"])
+        if tbl:
+            return tbl, {"course_id": t["course_id"], "name": t["name"]}
+    return {}, None
+
+
 def event_proximity_report(event_id: int, db_path=None) -> dict | None:
     """Closest-to-the-Pin marker sheets, one per contest.
 
@@ -58638,15 +58748,57 @@ def event_proximity_report(event_id: int, db_path=None) -> dict | None:
         ev = dict(ev)
         holes_tbl = {}
         course_row = None
+        twin = None
         if ev.get("course_id"):
             course_row = conn.execute(
                 "SELECT course_id, name, short_name FROM courses WHERE course_id = ?",
                 (ev["course_id"],)).fetchone()
-            holes_tbl = _course_hole_table(conn, ev["course_id"])
+            holes_tbl, twin = _course_hole_table_any(conn, ev["course_id"])
+        # THE ENTRIES CROSS-CHECK (Kerry 2026-09-22: "cross-checked that
+        # the number of entries allow for CTPs and how many?"): the games
+        # matrix row at the event's player count says whether the included
+        # games run at all (NO_EVENT under 4), whether a CTP is funded at
+        # this count (NO_GAME through 15 on a nine) and how many — an
+        # 18-hole field of 16 funds two, not four. The count is the Games
+        # tab's own (parents, less credits / WD / not-playing).
+        try:
+            counts = _event_player_counts(conn, ev["item_name"])
+        except sqlite3.OperationalError:
+            counts = {"players": 0, "net": 0, "gross": 0}
     is18 = _event_holes_type(ev["item_name"], ev.get("format")) == 18
     nine = (ev.get("nine_side") or "Front").strip().title()
     slots = 4 if is18 else 2                     # max 2 per nine
     notes = []
+    players = int(counts.get("players") or 0)
+    try:
+        m9, m18 = _load_games_matrix(db_path)
+    except Exception:                            # matrix unreadable: rule only
+        m9, m18 = {}, {}
+    mrow = (m18 if is18 else m9).get(str(players)) or {}
+    ctp_keys = ("ctp1", "ctp2", "ctp3", "ctp4") if is18 else ("ctp1", "ctp2")
+    ctp_purse = [_matrix_num(mrow.get(k)) for k in ctp_keys]
+    slots_offered = None
+    if mrow:
+        slots_offered = sum(1 for v in ctp_purse if v > 0)
+        if any(mrow.get(k) == "NO_EVENT" for k in ctp_keys):
+            notes.append(f"{players} entries — the included games (Team Net, "
+                         f"CTP, Hole-in-One) do not run under 4 players, so "
+                         f"there is no CTP to print.")
+        elif slots_offered == 0:
+            notes.append(f"{players} entries — the games matrix funds no CTP "
+                         f"at this count, so there is no CTP to print.")
+        elif slots_offered < slots:
+            notes.append(f"{players} entries fund {slots_offered} CTP(s) per "
+                         f"the games matrix, not {slots}.")
+        slots = min(slots, slots_offered)
+    else:
+        notes.append(f"No games-matrix row for {players} entries — the "
+                     f"{slots}-slot rule is applied without a purse.")
+    if twin:
+        notes.append(f"Par-3s read from the course's twin record "
+                     f"\"{twin['name']}\" ({twin['course_id']}) — this "
+                     f"event's course record has tee ratings but no hole "
+                     f"card.")
 
     # Which hole numbers are in play. A nine-hole tee that was imported
     # as holes 1-9 is still the nine that was played, so a Back-nine
@@ -58678,16 +58830,20 @@ def event_proximity_report(event_id: int, db_path=None) -> dict | None:
     if len(par3) > slots:
         notes.append(f"{len(par3)} par-3s for {slots} CTP slot(s) — the "
                      f"shortest were taken, per the games rule.")
-    for c in sorted(chosen, key=lambda x: x["hole"]):
+    funded = [v for v in ctp_purse if v > 0]
+    for i, c in enumerate(sorted(chosen, key=lambda x: x["hole"])):
         contests.append({"kind": "ctp", "hole": c["hole"],
                          "yardage": c["yardage"],
+                         "purse": (funded[i] if i < len(funded) else None),
                          "title": f"Closest to the Pin - Hole {c['hole']}"})
     leftover = slots - len(chosen)
     if leftover > 0 and want:
         last = want[-1]
-        for _ in range(leftover):
+        for j in range(leftover):
+            k = len(chosen) + j
             contests.append({"kind": "longest_putt", "hole": last,
                              "yardage": None,
+                             "purse": (funded[k] if k < len(funded) else None),
                              "title": f"Longest Putt - Hole {last}"})
         notes.append(f"{len(chosen)} par-3(s) for {slots} slot(s) — the "
                      f"remaining entry becomes a Longest Putt on the last "
@@ -58701,6 +58857,11 @@ def event_proximity_report(event_id: int, db_path=None) -> dict | None:
                         or ev.get("course") or ""),
         "nine": nine, "holes_key": "18" if is18 else "9",
         "slots": slots, "par3_found": len(par3),
+        "players": players, "slots_offered": slots_offered,
+        "ctp_purse": ctp_purse,
+        "holes_course_id": (twin["course_id"] if twin else ev.get("course_id")),
+        "holes_course_name": (twin["name"] if twin else
+                              (course_row["name"] if course_row else None)),
         "contests": contests, "notes": notes,
         "file_stub": print_file_stub(ev),
     }

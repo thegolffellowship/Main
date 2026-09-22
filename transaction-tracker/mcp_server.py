@@ -1774,6 +1774,7 @@ def _scoring_dispatch(url: str, extract: str):
       scoring-hcp-2nines:<event>[|auto|<json>][|apply]  post an 18-hole event as two nines; ratings read off the course record (v2.465.17), JSON overrides
       scoring-hcp-round-retag:<date>;<from>;<to>;<slope>|course=<id>[;<rating>][;apply]  re-tag a date's handicap rounds to the nine actually played (course= reads each tee's rating/slope off the record)
       scoring-course-renine:<course_id>[|apply]  a named nine numbers its holes 1–9 (tee holes + rounds moved down from 10–18)
+      scoring-course-merge:<loser_id>|<winner_id>[|apply]  fold a duplicate course row into the canonical one (tees collapse/move, rounds/events/items re-point, names aliased); dry run by default
       scoring-tee-nines-store:<full_tee_id>|<fr>,<fs>|<br>,<bs>[|apply]  front/back rating rows (each with its slope) on an 18-hole tee set (refuses a pair that does not sum to the 18)
       scoring-crdb-seed:<course_id>[|<json>][|apply]  write a course's USGA CRDB tee sets (gender, par, bogey, total/front/back, optional yardages) onto the record; JSON row = [name, gender, r18, s18, bogey, [fr, fs], [br, bs], [y18, yf, yb]]
       scoring-tee-bands:<course_id>   which four sets TGF plays (current designation + the yardage-standards proposal; read-only)
@@ -5122,6 +5123,22 @@ def _scoring_dispatch(url: str, extract: str):
                 _res = db.retag_handicap_rounds(_p[0], _p[1], _p[2], int(_p[3]), rating=_rating, apply=_apply)
             if _apply:
                 _audit("scoring-hcp-round-retag", f"{_p[0]}: {_p[1]} -> {_p[2]} slope={_p[3]} rows={_res.get('rows')}")
+            return json.dumps(_res, indent=2, default=str)
+        if cmd == "scoring-course-merge":
+            # "<loser_id>|<winner_id>[|apply]" — one real course, one
+            # registry row (Brackenridge 25402 → 22371, Kerry 2026-09-22:
+            # the CRDB twin carried ratings and no hole card, so the CTP
+            # markers found no par-3s). Dry run unless |apply.
+            _p = [x.strip() for x in arg.split("|") if x.strip()]
+            if len(_p) < 2 or not _p[0].isdigit() or not _p[1].isdigit():
+                return json.dumps({"error": "<loser_id>|<winner_id>[|apply]"})
+            _apply = len(_p) > 2 and _p[2].lower() == "apply"
+            _res = db.merge_course_records(int(_p[0]), int(_p[1]), apply=_apply)
+            if _apply and not _res.get("error"):
+                _audit("scoring-course-merge",
+                       f"{_p[0]} -> {_p[1]} merged={_res.get('merged')} "
+                       f"collapse={len(_res.get('tees_collapse') or [])} "
+                       f"move={len(_res.get('tees_move') or [])}")
             return json.dumps(_res, indent=2, default=str)
         if cmd == "scoring-course-renine":
             # "<course_id>[|apply]" — a named nine numbers 1–9: move the

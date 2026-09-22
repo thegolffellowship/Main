@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.476.5";
+window.TGF_VERSION = "2.476.6";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.476.6",
+    date: "2026-09-22",
+    changes: [
+      "Proximity Markers find the par-3s again when the event's course record is a registry TWIN (Kerry 2026-09-22, Brackenridge: \u2018Brack isn't automatically recognizing/creating the CTPs. Don't we have hole by hole info?\u2019). The event pointed at 25402 \u2018Brackenridge Park Golf Course\u2019 \u2014 the USGA CRDB seed that carries tee ratings and no hole card \u2014 while the rounds and the full card (par 3s at 2 and 8) live on 22371 \u2018Brackenridge Golf Course\u2019. `_course_hole_table_any` reads the card off a twin (same facility, same short name, or aliased name; the un-archived twin with the most rounds first) and the sheet says which record supplied it.",
+      "The markers now CROSS-CHECK the entries (Kerry 2026-09-22): the games matrix row at the event's player count \u2014 the Games tab's own count \u2014 decides whether a CTP runs and how many. Under 4 the included games do not run; a nine funds no CTP through 15 entries; an 18-hole field of 16 funds TWO, not four. Each printed contest carries its purse; the report says why when nothing prints (`players`, `slots_offered`, `ctp_purse`). Bridge `scoring-event-report:<id>|proximity` shows it all.",
+      "New bridge `scoring-course-merge:<loser_id>|<winner_id>[|apply]` (`merge_course_records`): fold a duplicate course row into the canonical one under the registry rule (one course_id per real course). Dry run lists the tees that collapse into an identical-spec tee on the winner and the ones that move, the rounds / events / items that re-point and the aliases added; apply runs the existing `_merge_course_into` in one transaction and is audited. Guards in `test_event_reports.py`.",
+    ],
+  },
   {
     version: "2.476.5",
     date: "2026-09-21",

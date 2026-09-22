@@ -2296,6 +2296,12 @@ FLIGHTING lane (spun off "TGF Tracker Improvements 2"; plan #584).
   Brackenridge was seeded from Kerry's GG screenshots that day
   (`scoring-crdb-seed:25402`, tee_ids 14676–14679, designated Blue <50 /
   White 50-64 / Gold 65+ / Red Forward) and printed no PH until this.
+  **The same seed hid the CTPs (v2.476.6):** 25402 has ratings and no
+  hole card, so the Proximity Markers found no par-3s ("Brack isn't
+  automatically recognizing/creating the CTPs"). The markers now read the
+  card off the twin 22371 (pairings.md "Proximity Markers"), and
+  `scoring-course-merge:25402|22371` (dry run; `|apply` on Kerry's word)
+  is the registry-rule fix: one course_id per real course.
 - **Seed flip (ratified):** `live_scoring.SEED_FLIGHT_CONFIG.min_flight_size`
   is 0 — the Flighting Lab dial still exists to SHOW what merging would
   do; nothing merges by default any more.

@@ -1372,7 +1372,21 @@ last hole**. Par-3s come from `_course_hole_table` (every tee on the
 course; par by agreement, yardage averaged and used only to rank length),
 narrowed to the nine in play. A Back nine stored as holes 1-9 falls back
 with a warning on the sheet. No hole card → nothing printed and the
-reason said.
+reason said. **Twin records (v2.476.6):** `_course_hole_table_any` reads
+the card off a registry twin (same facility, same short name, or a name
+aliased to this one; un-archived, most rounds first) when the event's own
+course row has none — Brackenridge's event sat on the CRDB seed 25402
+(ratings, no holes) while the card lives on 22371 — and the sheet names
+the record it read (`holes_course_id` / `holes_course_name`). The durable
+fix is the registry rule: `scoring-course-merge:<loser>|<winner>[|apply]`.
+**Entries cross-check (v2.476.6, Kerry 2026-09-22):** the games-matrix
+row at the event's player count (`_event_player_counts`, the Games tab's
+own) decides whether a CTP runs and HOW MANY: `NO_EVENT` under 4 →
+nothing; `NO_GAME` (a nine through 15 entries) → nothing; an 18-hole
+field of 16 funds `ctp1`/`ctp2` only → two markers, not four. `slots` is
+the lesser of the per-nine cap and the funded count; each contest
+carries its `purse`; no matrix row (0 entries, or past the table) → the
+cap applies and the note says no purse was found.
 
 **The marker card** (Kerry 2026-09-15, after the first print): NO border
 around a card — a hairline down the centre of the sheet instead, marked
