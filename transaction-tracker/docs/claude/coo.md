@@ -137,3 +137,43 @@ DIALS (app_settings): `daily_briefing_detail_cap` (default 10),
 `daily_briefing_expiry_window` (days ahead, default 30),
 `daily_briefing_recent_window` (days back, default 7).
 Subject format: "TGF Daily Briefing — <day> | N new · M open".
+
+## Tracker Health — the daily digest files COO action items (Tracker Health lane, 2026-09-22)
+
+Kerry: *"an agent specifically designed for this that will log things
+and report back to you and the COO for you to pick up. Should be a
+standard once a day routine."*
+
+`email_parser/health.py` is that agent. Once a day, at or after the
+dialled time (`health_digest_time`, default 05:45 Central; the check
+runs every 15 minutes 4–9 AM and the dial takes effect without a
+restart), `run_health_digest()`:
+
+1. builds `build_health_report(days=1)` from `perf_samples` — p50 / p95 /
+   max per route / job / bridge, the slow-open list with breakdowns and
+   what else was running, job durations and failures, error rows in the
+   agent action log, database size and growth, the handicap cache's hit
+   rate, a live probe of a bare connection — and applies the FINDINGS
+   rules (`health.RULES`): a route whose p95 is over its line (high), a
+   failed job (high), a slow job (medium), file growth over 20 MB/day
+   (medium), a slow bare connect/read (high), error rows (medium);
+2. posts it to the mailbox, topic `tracker-health`, author
+   `tracker-claude`, addressed to the Handicap Surfaces lane (whose 6:30
+   routine reads it) and Kerry;
+3. files each high/medium finding as an `action_items` row — subject
+   `HEALTH: <finding key>`, `from_name` "Tracker Health", category
+   `other`, urgency = severity. The subject is stable per finding, and
+   `save_action_item` de-dupes on subject + category while an item is
+   open, so the same problem on two mornings is ONE open item; a closed
+   item that recurs is filed again. It reaches the COO dashboard and the
+   landing page's action-items count like any other;
+4. prunes samples older than 30 days and logs `health-agent /
+   daily_digest`.
+
+The same report backs **`/admin/health`** (admin page: cards, findings,
+route / job / bridge tables, the slow list, "Preview digest" / "Post
+digest now") and the bridges **`scoring-health[:<days>]`** (the report)
+and **`scoring-health-digest[:<days>][|post]`** (the text; `post` runs
+the real routine). `/health` remains the unauthenticated Railway probe.
+`HEALTH_DIGEST=0` switches the routine off. Guards: `test_perf.py`,
+`test_health_digest.py`.

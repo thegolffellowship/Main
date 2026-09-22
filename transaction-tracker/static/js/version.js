@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.484.4";
+window.TGF_VERSION = "2.485.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.485.0",
+    date: "2026-09-22",
+    changes: [
+      "The Tracker measures itself (Kerry 2026-09-22: ‘We need to add in those types of elements across the Tracker so that we can track and improve performance… an agent specifically designed for this that will log things and report back to you and the COO’). One shared stopwatch (email_parser/perf.py) times every heavy request — PAIRINGS, the EVENTS landing loads, the roster reads, the flights board, the print pack, Customers, the Dashboard, the handicap index map, the COO chat and its briefing — plus every scheduler job and every MCP bridge, into a new perf_samples table (30 days). A path over its line is SLOW and lands in the agent action log with its breakdown, and every sample records the box's load and what else was running at the time, so a slow open can say whether it was the code or the company it kept.",
+      "The DAILY HEALTH DIGEST: at 05:45 Central (dial health_digest_time, no deploy needed) the health agent posts the last 24 hours — p50/p95/max per route, job and bridge, the slow opens with where the time went, job failures, database size and growth, a live probe of a bare database touch — to the mailbox (topic tracker-health, for the Handicap Surfaces lane and Kerry) and files each finding as a COO action item (one open item per finding, never a duplicate). The same numbers are on the new admin page /admin/health and the bridge scoring-health[:<days>].",
+      "PAIRINGS open, server side: the roster was read three to five times per open and is now read once; the v2.484.3 handicap cache had NEVER hit (its signature asked the wrong table for the never-post flag, so every read recomputed the whole club) and now does; the roster builder scanned the items table twice per row and now uses three new indexes; a read never waits on Golf Genius even with no standings snapshot; the WAL pragma runs once per file instead of on every one of ~18 connections a request opens. On a realistic fixture the open went from 980 ms to 56 ms. Live numbers are what the digest reports next.",
+    ],
+  },
   {
     version: "2.484.4",
     date: "2026-09-22",

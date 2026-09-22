@@ -280,6 +280,7 @@ from email_parser.database import (
     reverse_duplicate_merge,
 )
 from email_parser.database import DB_PATH, get_connection
+from email_parser import perf
 from email_parser.timezone_utils import now_central, today_central_str
 from email_parser.fetcher import (
     fetch_transaction_emails, fetch_all_emails, fetch_email_by_id,
@@ -1405,7 +1406,17 @@ def require_role(role):
 # ---------------------------------------------------------------------------
 # Scheduler
 # ---------------------------------------------------------------------------
-scheduler = BackgroundScheduler(daemon=True)
+class _TimedScheduler(BackgroundScheduler):
+    """Every job added here runs under a perf stopwatch (email_parser/perf.py):
+    one `perf_samples` row per run, status error on an exception (which
+    still propagates to APScheduler's own logging exactly as before). The
+    job id is the sample name."""
+    def add_job(self, func, *args, **kwargs):
+        jid = kwargs.get("id") or getattr(func, "__name__", "job")
+        return super().add_job(perf.timed_job(func, jid), *args, **kwargs)
+
+
+scheduler = _TimedScheduler(daemon=True)
 
 
 def start_scheduler():
@@ -1878,6 +1889,35 @@ def start_scheduler():
                     "" if os.getenv("AZURE_TENANT_ID")
                     else " (idle — AZURE_* creds not set)")
 
+    # ── Tracker Health digest (Kerry 2026-09-22: "a standard once a day
+    #    routine"). Checked every 15 minutes from 4 to 9 AM Central and
+    #    run ONCE, at or after the dialled time (app_settings
+    #    `health_digest_time`, default 05:45 — before the 6:30 mailbox
+    #    read and the 7:00 COO email). The dial takes effect without a
+    #    restart because the check reads it each time. HEALTH_DIGEST=0
+    #    switches the routine off.
+    if os.getenv("HEALTH_DIGEST", "1") != "0":
+        def health_digest_job():
+            from email_parser.health import health_digest_check
+            try:
+                res = health_digest_check()
+                if res:
+                    logger.info("Tracker Health digest posted: mailbox #%s, %d finding(s), "
+                                "%d action item(s)", res.get("posted"),
+                                len(res.get("findings") or []),
+                                len(res.get("action_items") or []))
+            except Exception:
+                logger.exception("Tracker Health digest failed (non-fatal)")
+        scheduler.add_job(
+            health_digest_job,
+            "cron", hour="4-9", minute="*/15",
+            timezone="US/Central",
+            id="health_digest",
+            replace_existing=True,
+            max_instances=1, coalesce=True,
+        )
+        logger.info("Tracker Health digest scheduled (dial health_digest_time, default 05:45 Central)")
+
     scheduler.start()
     logger.info("Scheduler started — checking inbox every %d minutes", interval)
 
@@ -2106,6 +2146,7 @@ def dashboard_page():
 
 @app.route("/api/dashboard")
 @require_role("admin")
+@perf.timed_route("dashboard_api")
 def api_dashboard():
     from email_parser.dashboard import build
     return jsonify(build())
@@ -2123,6 +2164,7 @@ def transactions_page():
 # ---------------------------------------------------------------------------
 @app.route("/api/items")
 @require_role("view-only")
+@perf.timed_route("items_list")
 def api_items():
     """Return all item rows as JSON — or, with ?event_id=<id>, only the
     rows one event's roster is built from (the page refreshes a single
@@ -2131,6 +2173,8 @@ def api_items():
     ev_id = request.args.get("event_id", type=int)
     if ev_id:
         from email_parser.database import get_event_items
+        if perf.current():
+            perf.current().name, perf.current().event_id = "items_event", ev_id
         return jsonify(get_event_items(ev_id))
     items = get_all_items()
     return jsonify(items)
@@ -4279,6 +4323,7 @@ def customers_page():
 
 @app.route("/api/customers")
 @require_role("view-only")
+@perf.timed_route("customers_list")
 def api_customers_canonical():
     """Return all customer records from the canonical customers + customer_emails tables.
 
@@ -5219,6 +5264,7 @@ def api_create_course():
 
 @app.route("/api/events")
 @require_role("view-only")
+@perf.timed_route("events_list")
 def api_events():
     """Return all events with registration counts and aliases."""
     return jsonify(get_all_events())
@@ -5226,6 +5272,7 @@ def api_events():
 
 @app.route("/api/events/<int:event_id>", methods=["GET"])
 @require_role("view-only")
+@perf.timed_route("event_one")
 def api_event_one(event_id):
     """One event in the same shape as the list — the page refreshes a
     single row in place after a roster action."""
@@ -5296,6 +5343,7 @@ def build_print_pack_for_event(event_id: int) -> dict | None:
 
 @app.route("/events/<int:event_id>/print-pack.pdf")
 @require_role("manager")
+@perf.timed_route("print_pack_pdf")
 def print_pack_pdf(event_id):
     """Every print sheet for the event bound into one PDF (v2.465.0)."""
     from flask import Response
@@ -5386,47 +5434,44 @@ def cart_signs_page(event_id):
     return render_template("cart_signs.html", pack=pack)
 
 
-def _pairings_timings(event_id: int, tm: dict, lap) -> dict:
-    """Close the pairings GET's stopwatch; log a slow open with its breakdown."""
-    lap("blind_pool")
-    total = sum(tm.values())
-    tm["total"] = total
-    if total > 4000:
-        try:
-            from email_parser.database import log_agent_action
-            worst = ", ".join(f"{k} {v} ms" for k, v in sorted(
-                ((k, v) for k, v in tm.items() if k != "total"),
-                key=lambda kv: -kv[1])[:4])
-            log_agent_action("app", "pairings_get_slow",
-                             f"event {event_id}: {total} ms — {worst}")
-        except Exception:
-            pass
-    return tm
-
-
 @app.route("/api/events/<int:event_id>/pairings", methods=["GET"])
 @require_role("view-only")
+@perf.timed_route("pairings_get")
 def api_get_pairings(event_id):
     """Return saved pairings for an event plus the computed tee-time slots."""
     try:
+        # WHERE THE TIME GOES (Kerry 2026-09-22: "Just took 41 seconds to
+        # load pairings"): each section is a lap on the shared stopwatch
+        # (email_parser/perf.py); the answer carries `timings_ms`, every
+        # open is a perf_samples row, and a slow one (> 4 s) is written to
+        # the agent action log with the breakdown.
+        _sw = perf.current()
+        _lap = _sw.lap if _sw else (lambda label: 0)
         from email_parser.database import _connect
         with _connect() as conn:
             ev = conn.execute("SELECT * FROM events WHERE id = ?", (event_id,)).fetchone()
         if not ev:
             return jsonify({"error": "Event not found"}), 404
         ev = dict(ev)
-        # WHERE THE TIME GOES (Kerry 2026-09-22: "Just took 41 seconds to
-        # load pairings"): each section is timed; the answer carries
-        # `timings_ms`, and a slow open (> 4 s) is written to the agent
-        # action log with the breakdown so it can be read afterwards.
-        _t0 = time.perf_counter()
-        _tm: dict = {}
-        def _lap(label):
-            nonlocal _t0
-            now = time.perf_counter()
-            _tm[label] = round((now - _t0) * 1000)
-            _t0 = now
-        pairings = get_event_pairings(event_id)
+        _lap("connect")
+        # THE ROSTER IS READ ONCE (Tracker Health lane, 2026-09-22). The
+        # saved sheet's tee fill, this list and the blind pool all read
+        # `_event_roster_rows`; each open ran it three times. It is read
+        # here, first, and handed to both.
+        from email_parser.database import (
+            _event_roster_rows, _pair_key_name, _roster_handicap_index_map,
+            _event_index_as_of, _event_holes_type)
+        _pconn = get_connection()
+        try:
+            _hcp = _roster_handicap_index_map(
+                _pconn, as_of=_event_index_as_of(ev))
+            _lap("index_map")
+            _roster_rows = _event_roster_rows(_pconn, event_id)
+            _lap("roster_rows")
+        finally:
+            _pconn.close()
+        pairings = get_event_pairings(event_id, roster_rows=_roster_rows,
+                                      hcp_map=_hcp)
         _lap("saved_sheet")
         # Current player list — used by UI to detect unassigned players.
         # THE roster (`_event_roster_rows`): active order rows PLUS the
@@ -5434,47 +5479,36 @@ def api_get_pairings(event_id):
         # so the panel, the generator and the request matcher all see the
         # same people (Kerry 2026-09-15: "assign RSVP only's to groups
         # and requests"). Rows carry `rsvp_only` for the badge.
-        from email_parser.database import (
-            _event_roster_rows, _pair_key_name, _roster_handicap_index_map,
-            _event_index_as_of, _event_holes_type)
-        _pconn = get_connection()
-        try:
-            _seen_keys = set()
-            player_rows = []
-            # The index rides on the roster row so a player seated FROM
-            # Unassigned (picker, move, drag) keeps it — the same map the
-            # generator and the saved sheet read (Kerry 2026-09-15).
-            _pev = _pconn.execute("SELECT * FROM events WHERE id = ?",
-                                  (event_id,)).fetchone()
-            _hcp = _roster_handicap_index_map(
-                _pconn, as_of=_event_index_as_of(dict(_pev) if _pev else None))
-            for _r in _event_roster_rows(_pconn, event_id):
-                _k = _pair_key_name(_r["name"])
-                if not _k or _k in _seen_keys:
-                    continue
-                _seen_keys.add(_k)
-                player_rows.append({
-                    "name": _r["name"], "holes": _r.get("holes"),
-                    "tee_choice": _r.get("tee_choice"),
-                    "pace_rating": _r.get("pace_rating"),
-                    "current_player_status": _r.get("current_player_status"),
-                    "user_status": _r.get("user_status"),
-                    "customer_id": _r.get("customer_id"),
-                    "rsvp_only": bool(_r.get("rsvp_only")),
-                    "handicap_index": (_hcp.get(("c", _r.get("customer_id")))
-                                       if _r.get("customer_id") is not None else None)
-                                      if _hcp.get(("c", _r.get("customer_id"))) is not None
-                                      else _hcp.get((_r["name"] or "").lower()),
-                    # Rules 12/13 inputs for the card badges + driver mark
-                    "ambassador": bool(_r.get("ambassador")),
-                    "group_captain": bool(_r.get("group_captain")),
-                    "solo_back_ok": bool(_r.get("solo_back_ok")),
-                    "is_new": bool(_r.get("is_new")),
-                    "is_first_timer": bool(_r.get("is_first_timer")),
-                })
-        finally:
-            _pconn.close()
-        _lap("roster_and_index")
+        _seen_keys = set()
+        player_rows = []
+        # The index rides on the roster row so a player seated FROM
+        # Unassigned (picker, move, drag) keeps it — the same map the
+        # generator and the saved sheet read (Kerry 2026-09-15).
+        for _r in _roster_rows:
+            _k = _pair_key_name(_r["name"])
+            if not _k or _k in _seen_keys:
+                continue
+            _seen_keys.add(_k)
+            player_rows.append({
+                "name": _r["name"], "holes": _r.get("holes"),
+                "tee_choice": _r.get("tee_choice"),
+                "pace_rating": _r.get("pace_rating"),
+                "current_player_status": _r.get("current_player_status"),
+                "user_status": _r.get("user_status"),
+                "customer_id": _r.get("customer_id"),
+                "rsvp_only": bool(_r.get("rsvp_only")),
+                "handicap_index": (_hcp.get(("c", _r.get("customer_id")))
+                                   if _r.get("customer_id") is not None else None)
+                                  if _hcp.get(("c", _r.get("customer_id"))) is not None
+                                  else _hcp.get((_r["name"] or "").lower()),
+                # Rules 12/13 inputs for the card badges + driver mark
+                "ambassador": bool(_r.get("ambassador")),
+                "group_captain": bool(_r.get("group_captain")),
+                "solo_back_ok": bool(_r.get("solo_back_ok")),
+                "is_new": bool(_r.get("is_new")),
+                "is_first_timer": bool(_r.get("is_first_timer")),
+            })
+        _lap("player_rows")
         # Slot labels sized by the roster when Edit Event carries no group
         # count (Kerry 2026-09-15: "why aren't holes being assigned to
         # the foursomes?") — the same rule the generator applies, so the
@@ -5527,7 +5561,8 @@ def api_get_pairings(event_id):
         mp_matches = []
         try:
             from email_parser.database import detect_match_play_pairings
-            mp_matches = detect_match_play_pairings(event_id).get("matches", [])
+            mp_matches = detect_match_play_pairings(
+                event_id, roster_rows=_roster_rows).get("matches", [])
         except Exception:
             logger.exception("MP detection failed for event %d (non-fatal)", event_id)
         # Partner-request list (who asked for whom + suppression state)
@@ -5537,7 +5572,8 @@ def api_get_pairings(event_id):
         partner_requests = []
         try:
             from email_parser.database import get_event_partner_requests
-            partner_requests = get_event_partner_requests(event_id).get("requests", [])
+            partner_requests = get_event_partner_requests(
+                event_id, roster_rows=_roster_rows).get("requests", [])
         except Exception:
             logger.exception("Partner-request list failed for event %d (non-fatal)", event_id)
         # Season points for the STANDINGS view's points column, so a SAVED
@@ -5589,16 +5625,18 @@ def api_get_pairings(event_id):
             from email_parser.database import event_blind_pool
             _bconn = get_connection()
             try:
-                blind_pool = event_blind_pool(_bconn, event_id)
+                blind_pool = event_blind_pool(_bconn, event_id,
+                                              roster_rows=_roster_rows)
             finally:
                 _bconn.close()
         except Exception:
             logger.exception("Blind pool lookup failed for event %d "
                              "(non-fatal)", event_id)
+        _lap("blind_pool")
         return jsonify({
             "pairings": pairings,
             "blind_pool": blind_pool,
-            "timings_ms": _pairings_timings(event_id, _tm, _lap),
+            "timings_ms": _sw.snapshot() if _sw else {},
             "slots_9": slots_9,
             "slots_18": slots_18,
             "event_players": event_players,
@@ -8061,6 +8099,7 @@ def api_reverse_credit(item_id):
 
 @app.route("/api/events/<int:event_id>/flights-board")
 @require_role("manager")
+@perf.timed_route("flights_board")
 def api_event_flights_board(event_id):
     """The DIVISIONS / FLIGHTS board for one event (mailbox #582): the
     ratified flighting and payout rule set computed from Tracker data in
@@ -8898,6 +8937,7 @@ def api_rsvps_for_event(event_name):
 
 @app.route("/api/rsvps/bulk")
 @require_role("view-only")
+@perf.timed_route("rsvps_bulk")
 def api_rsvps_bulk():
     """Return all RSVPs, overrides, and email overrides grouped by event.
 
@@ -9316,6 +9356,7 @@ def api_handicap_for_customer():
 
 @app.route("/api/handicaps/index-map")
 @require_role("member")
+@perf.timed_route("hcp_index_map")
 def api_handicap_index_map():
     """Return a map of customer_name (lowercase) → handicap_index for all linked players.
 
@@ -12422,6 +12463,43 @@ def api_member_metric():
     return jsonify({"ok": True})
 
 
+# ---------------------------------------------------------------------------
+# TRACKER HEALTH (email_parser/perf.py + health.py, Tracker Health lane
+# 2026-09-22). /health stays the unauthenticated Railway probe; the admin
+# page is /admin/health. The digest job posts the same report to the
+# mailbox once a day and files findings as COO action items.
+# ---------------------------------------------------------------------------
+@app.route("/admin/health")
+def health_page():
+    if session.get("role") != "admin":
+        return redirect("/events")
+    return render_template("health.html")
+
+
+@app.route("/api/admin/health")
+@require_role("admin")
+def api_admin_health():
+    from email_parser.health import build_health_report
+    days = request.args.get("days", type=float) or 1
+    days = max(0.04, min(days, 30))
+    try:
+        perf.flush()
+    except Exception:
+        logger.debug("perf flush before /api/admin/health failed", exc_info=True)
+    return jsonify(build_health_report(days))
+
+
+@app.route("/api/admin/health/digest", methods=["POST"])
+@require_role("admin")
+def api_admin_health_digest():
+    """Run the daily digest now (posts to the mailbox + files action items)."""
+    from email_parser.health import run_health_digest
+    d = request.get_json(silent=True) or {}
+    out = run_health_digest(post=bool(d.get("post", True)),
+                            days=float(d.get("days") or 1))
+    return jsonify({k: v for k, v in out.items() if k != "body"} | {"body": out["body"]})
+
+
 @app.route("/api/member-traffic")
 @require_role("admin")
 def api_member_traffic():
@@ -14355,6 +14433,7 @@ def api_coo_review_queue():
 
 @app.route("/api/coo/chat", methods=["POST"])
 @require_role("admin")
+@perf.timed_route("coo_chat")
 def api_coo_chat():
     """COO Chat — routes to specialist agent, responds as Chief of Staff.
     Now persists all messages to coo_chat_sessions/coo_chat_messages so the AI
@@ -14401,7 +14480,7 @@ def api_coo_chat():
     try:
         # Build full business context from all tracker modules
         try:
-            full_context = build_coo_full_context()
+            full_context = perf.timed_call("route", "coo_context", build_coo_full_context)
         except Exception:
             full_context = "(Business intelligence temporarily unavailable)"
 

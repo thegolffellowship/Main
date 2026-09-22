@@ -1910,3 +1910,62 @@ as it is, so a draw Kerry made or a seat he chose to leave open after one
 survives. The row reports `blinds` / `blinds_unfilled` / `blinds_why`
 ("already drawn", "no open seats", "no eligible player"); each draw is
 logged (`blinds_auto_draw`) with seat, name and source.
+
+## The PAIRINGS open measures itself, and reads the roster once (Tracker Health lane, 2026-09-22)
+
+Kerry 2026-09-22: *"Just took 41 seconds to load pairings under s9.24
+BRACKENRIDGE. That is ridiculous."* — and after v2.484.3's cache, *"it
+took 11 seconds to load PAIRINGS page that time."*
+
+**Instrumented.** `GET /api/events/<id>/pairings` runs under the shared
+stopwatch (`email_parser/perf.py`, `@perf.timed_route("pairings_get")`).
+Its sections, in order: `connect` (the event row), `index_map` (the
+roster index map, cached), `roster_rows` (`_event_roster_rows`),
+`saved_sheet` (`get_event_pairings`), `player_rows`, `slots_and_tiers`,
+`match_play`, `partner_requests`, `standings`, `pair_counts`,
+`blind_pool`. The answer carries them as `timings_ms`; every open is a
+`perf_samples` row (with the box's load average and whatever else was
+running); an open over 4 s writes `pairings_get_slow` to the agent action
+log with the worst four sections. Read them at `/admin/health` or with
+bridge `scoring-health`.
+
+**What the first profile found (fixture: 2,069 items, 1,111 customers,
+13,424 rounds, a 24-player sheet) and what changed:**
+
+1. **The roster was read THREE times per open** — once inside
+   `get_event_pairings` (the roster's tee wins over the seat's snapshot),
+   once for the panel's own player list, once inside `event_blind_pool`;
+   and `detect_match_play_pairings` / `get_event_partner_requests` read
+   it again. It is now read ONCE, first, and handed to all of them
+   (`roster_rows=` / `hcp_map=` parameters; each answers exactly as it
+   did without — `test_perf.py`).
+2. **The v2.484.3 handicap cache never hit.** Its signature query asked
+   `handicap_rounds` for `hcp_exclude`, a column that lives on
+   `scoring_rounds`; the query raised on every call, the signature
+   became a fresh timestamp, and every read recomputed the whole field
+   (0 hits / 14 misses on the fixture — and Kerry's second 11-second
+   open ten seconds after the first). The exclude total is now read from
+   `scoring_rounds`, guarded on its own; the cache hits (93% on the
+   fixture), and rows are copied per row instead of `deepcopy`'d.
+3. **`_event_roster_rows` scanned the items table** for the name arm of
+   its join (the name index is BINARY; the join compares COLLATE NOCASE)
+   and again per roster row for the orders count (nothing indexed
+   `items.customer_id`). Three indexes, no query change:
+   `idx_items_item_name_nocase`, `idx_items_customer_id`,
+   `idx_handicap_player_links_customer`. The plan is MULTI-INDEX OR on
+   all three arms; the builder went from 149 ms to 4 ms.
+4. **`no_network` was not absolute.** With no standings snapshot at all
+   the read still called Golf Genius inline (0.28 s on the fixture,
+   inside a proxy; a real timeout on a bad day). It now queues the
+   refresh and serves what it has, always.
+5. **`get_connection` ran `PRAGMA journal_mode=WAL` on every open** — 18
+   opens per PAIRINGS request, 28 of 64 ms on the fixture. journal_mode
+   is persistent in the file; it is now set once per (path, inode) per
+   process.
+
+Fixture numbers, warm open: **980 ms → 56 ms** (cold 104 ms). The live
+numbers are what the digest reports; the 11-second opens on 2026-09-22
+spread their time evenly across four unrelated sections, which the
+fixture cannot reproduce — the samples' `concurrent` / `load1` and the
+`connect` lap are there to say whether that was contention with a
+scheduler job or the volume.

@@ -474,3 +474,36 @@ the negative-deposit auto-match branch both require. A one-time idempotent backf
   user". Not exploitable today (only `admin` and `manager` logins exist), but if a
   view-only login is ever introduced, the decorator needs a true hierarchy check
   before extending its surface.
+
+## `perf_samples` — the Tracker measures itself (Tracker Health lane, 2026-09-22)
+
+One row per timed request, scheduler job or MCP bridge call
+(`email_parser/perf.py`; proposed on the mailbox in #609 under rule 3b).
+
+| column | meaning |
+|---|---|
+| `id` | PK |
+| `at` | UTC `YYYY-MM-DD HH:MM:SS` when the sample STARTED |
+| `kind` | `route` \| `job` \| `bridge` |
+| `name` | the path's short name (`pairings_get`, `events_list`, `items_list`, `items_event`, `event_one`, `flights_board`, `print_pack_pdf`, `customers_list`, `dashboard_api`, `hcp_index_map`, `rsvps_bulk`, `coo_chat`, `coo_context`); a job's scheduler id; a bridge's command word |
+| `event_id` | the event, when the path has one |
+| `total_ms` | wall time |
+| `breakdown` | JSON `{section: ms}` — the laps; `_rest` is time after the last lap |
+| `status` | `ok` \| `slow` (over the path's line) \| `error` |
+| `role` | the session role (`admin` / `manager` / …), `scheduler`, or `mcp` |
+| `detail` | JSON: `load1` (1-min load average), `concurrent` (the other stopwatches running when this one started), `http`, `error`, a bridge's `arg` |
+
+Indexes: `(at)`, `(name, at)`. Retention 30 days, pruned by the daily
+digest. Written by a daemon flusher every 3 s, never on the request
+thread. The SLOW line per name lives in `perf.SLOW_MS` and can be
+overridden without a deploy by the `perf_slow_ms` app setting (JSON
+`{name: ms}`). `PERF_SAMPLES=0` switches sampling off.
+
+Dials added with it (`app_settings`): `health_digest_time` (HH:MM
+Central, default `05:45`), `health_digest_last` (the once-a-day mark),
+`health_db_size_history` (the file size per day, for the growth line).
+
+**Indexes added the same day** (from the PAIRINGS profile, no query
+changed): `idx_items_customer_id ON items(customer_id)`,
+`idx_items_item_name_nocase ON items(item_name COLLATE NOCASE)`,
+`idx_handicap_player_links_customer ON handicap_player_links(customer_id)`.
