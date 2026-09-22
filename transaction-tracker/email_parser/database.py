@@ -11381,6 +11381,13 @@ def freeze_lsc_final_roster(db_path: str | Path = DB_PATH) -> dict:
                 s["seat"] = (f"{abbr} NET"
                              + (f" · {place}" if place else ""))
                 s["note"] = "City NET final standings — team captain"
+        # A FINAL roster has no empty chairs: an unfilled seat template
+        # (player TBD after a withdrawal — McCrary 2026-09-22 left a
+        # blank "DFW/HOUSTON · 2" on the SA card) is dropped from the
+        # snapshot; re-freeze after the replacement is picked and the
+        # seat comes back filled.
+        ch["seats"] = [s for s in ch.get("seats", [])
+                       if s.get("customer_id")]
     frozen = {
         "frozen_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "season": d.get("season"),
