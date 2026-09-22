@@ -1007,6 +1007,25 @@ original order; leftover singles slide into the next seats down. The
 group keeps its slot label / tee time; a group emptied entirely is
 dropped from the sheet.
 
+**AUTOMATIC, no popup (v2.478.1, Kerry 2026-09-22 — Pat Youngs
+transferred off s9.24: "It popped up after about 15 seconds asking
+whether I wanted to remove and reseat, but when I clicked yes it said he
+wasn't in pairings, and then didn't reseat Michael Murphy. It should all
+be automated if I remove a player from the ROSTER").** The server has
+dropped the player inside the money action since v2.4xx
+(`_pairings_drop_if_off_roster` in credit / refund / wd / transfer);
+the yes/no popup the page still ran AFTERWARDS raced it — its dry run
+came 15 s late, its removal found nobody, and nothing redrew. Now the
+credit / refund / wd / transfer routes probe the seat before the
+action (`_pairings_seat_probe`) and answer with `pairings`
+{removed, reseated, groups}; `offerPairingRemoval(event, name, info)`
+only reports it (toast) and redraws the PAIRINGS panel in place when
+it is open. No confirm, no second removal. The re-seat itself is still
+the clock rule (`_event_started`): before the start the group re-seats,
+after it the seat stays open for a blind. Guard:
+`test_roster_pairings_sync.js`; the server path stays pinned in
+`test_blind_draws.py`.
+
 **Pieces:**
 - `database._reseat_group_after_removal(players)` — the pure reseat
   (unit-tested against every Kerry example incl. threesome/fivesome).

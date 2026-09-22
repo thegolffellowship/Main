@@ -6778,7 +6778,13 @@ def _build_balance_due_email(item_id: int) -> dict | None:
             return {"error": "Item not found"}
         item = dict(item)
 
-        if (item.get("merchant") or "") != "Paid Separately (Credit Transfer)":
+        # A credit applied to an RSVP (merchant says so) OR a row moved by
+        # a TRANSFER (v2.476.9: the transfer's price check stamps the
+        # shortfall the same way) — both are credit transfers.
+        _is_transfer_row = bool(item.get("transferred_from_id")) and \
+            "(credit" in (item.get("item_price") or "")
+        if (item.get("merchant") or "") != "Paid Separately (Credit Transfer)" \
+                and not _is_transfer_row:
             return {"error": "Item is not a credit transfer"}
         cnote = item.get("credit_note") or ""
         if not cnote.startswith("balance_due:"):
@@ -7648,13 +7654,59 @@ def api_resolve_parse_warning(warning_id):
 # ---------------------------------------------------------------------------
 # Routes — Credit / Transfer
 # ---------------------------------------------------------------------------
+def _pairings_seat_probe(item_id: int) -> dict | None:
+    """Where the item's player sits on the event's saved sheet BEFORE a
+    money action — so the response can say what the automatic drop did
+    (Kerry 2026-09-22: "It should all be automated if I remove a player
+    from the ROSTER"). Read-only; None when nothing is seated."""
+    try:
+        from email_parser.database import get_item, remove_player_from_pairings, _connect
+        it = get_item(item_id)
+        if not it or not it.get("customer"):
+            return None
+        with _connect() as conn:
+            ev = conn.execute(
+                """SELECT e.id, e.item_name FROM events e
+                   LEFT JOIN event_aliases ea ON ea.canonical_event_name = e.item_name
+                   WHERE e.item_name = ? COLLATE NOCASE OR ea.alias_name = ? COLLATE NOCASE
+                   LIMIT 1""", (it.get("item_name"), it.get("item_name"))).fetchone()
+        if not ev:
+            return None
+        dry = remove_player_from_pairings(ev["id"], it["customer"], dry_run=True)
+        if not dry.get("found"):
+            return None
+        return {"event_id": ev["id"], "event": ev["item_name"], "player": it["customer"],
+                "groups": [g.get("slot_label") or f"Group {g.get('group_num')}"
+                           for g in dry.get("groups") or []],
+                "reseats": bool(dry.get("reseated"))}
+    except Exception:
+        logger.warning("pairings seat probe failed for item %s", item_id, exc_info=True)
+        return None
+
+
+def _pairings_sync_result(probe: dict | None) -> dict | None:
+    """After the action: did the automatic drop take the seated player off?"""
+    if not probe:
+        return None
+    try:
+        from email_parser.database import remove_player_from_pairings
+        after = remove_player_from_pairings(probe["event_id"], probe["player"], dry_run=True)
+        out = dict(probe)
+        out["removed"] = not after.get("found")
+        out["reseated"] = out["removed"] and probe.get("reseats", False)
+        return out
+    except Exception:
+        return None
+
+
 @app.route("/api/items/<int:item_id>/credit", methods=["POST"])
 @require_role("manager")
 def api_credit_item(item_id):
     """Mark an item as credited (money held for future event)."""
     data = request.get_json(silent=True) or {}
+    probe = _pairings_seat_probe(item_id)
     if credit_item(item_id, note=data.get("note", "")):
-        return jsonify({"status": "ok"})
+        return jsonify({"status": "ok", "pairings": _pairings_sync_result(probe)})
     return jsonify({"error": "Item not found or already credited/transferred."}), 400
 
 
@@ -7666,8 +7718,9 @@ def api_wd_item(item_id):
     note = data.get("note", "")
     credits = data.get("credits")  # dict like {"included_games": 14, ...}
     credit_amount = data.get("credit_amount", "")
+    probe = _pairings_seat_probe(item_id)
     if wd_item(item_id, note=note, credits=credits, credit_amount=credit_amount):
-        return jsonify({"status": "ok"})
+        return jsonify({"status": "ok", "pairings": _pairings_sync_result(probe)})
     return jsonify({"error": "Item not found or already credited/transferred/WD."}), 400
 
 
@@ -7690,8 +7743,9 @@ def api_refund_item(item_id):
     method = data.get("method", "")
     if method and method not in ("GoDaddy", "Venmo", "Zelle", "PayPal", "Cash App", "Apple Pay"):
         return jsonify({"error": "Invalid refund method. Must be GoDaddy, Venmo, Zelle, PayPal, or Cash App."}), 400
+    probe = _pairings_seat_probe(item_id)
     if refund_item(item_id, method=method, note=data.get("note", "")):
-        return jsonify({"status": "ok"})
+        return jsonify({"status": "ok", "pairings": _pairings_sync_result(probe)})
     return jsonify({"error": "Item not found or already credited/transferred."}), 400
 
 
@@ -7858,16 +7912,50 @@ def api_partial_refund_item(item_id):
     return jsonify(res)
 
 
+@app.route("/api/items/<int:item_id>/transfer-preview")
+@require_role("manager")
+def api_transfer_preview(item_id):
+    """The PRICE CHECK before a transfer (Kerry 2026-09-22): what was paid
+    at the source vs what the target costs for the same package — owes or
+    excess — so the CREDIT / TRANSFER modal can say so and offer the same
+    options Apply Credit does."""
+    from email_parser.database import transfer_preview
+    target = (request.args.get("target") or "").strip()
+    if not target:
+        return jsonify({"error": "target is required"}), 400
+    try:
+        pv = transfer_preview(item_id, target)
+    except Exception as e:
+        logger.exception("transfer preview failed for item %s", item_id)
+        return jsonify({"error": str(e)}), 500
+    if not pv:
+        return jsonify({"error": "Item not found"}), 404
+    return jsonify(pv)
+
+
 @app.route("/api/items/<int:item_id>/transfer", methods=["POST"])
 @require_role("manager")
 def api_transfer_item(item_id):
-    """Transfer an item to a different event."""
+    """Transfer an item to a different event. Carries the price check
+    (excess posted to credit or Venmo'd back per `excess_action`; a
+    shortfall stamped as balance_due for the Venmo email) and what the
+    automatic pairings drop did on the source sheet."""
     data = request.get_json(silent=True)
     if not data or not data.get("target_event"):
         return jsonify({"error": "target_event is required."}), 400
-    new_item = transfer_item(item_id, data["target_event"], note=data.get("note", ""))
+    excess_action = (data.get("excess_action") or "keep")
+    if excess_action not in ("keep", "venmo"):
+        return jsonify({"error": "excess_action must be 'keep' or 'venmo'"}), 400
+    probe = _pairings_seat_probe(item_id)
+    new_item = transfer_item(item_id, data["target_event"], note=data.get("note", ""),
+                             excess_action=excess_action)
     if new_item:
-        return jsonify({"status": "ok", "new_item": new_item})
+        pc = new_item.get("price_check") or {}
+        if excess_action == "venmo" and pc.get("excess_credit_id"):
+            _arm_excess_venmo_watch({"excess_credit_id": pc["excess_credit_id"],
+                                     "excess": pc.get("excess")}, data)
+        return jsonify({"status": "ok", "new_item": new_item,
+                        "pairings": _pairings_sync_result(probe)})
     return jsonify({"error": "Item not found or already credited/transferred."}), 400
 
 

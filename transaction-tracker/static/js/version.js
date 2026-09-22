@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.478.0";
+window.TGF_VERSION = "2.478.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.478.1",
+    date: "2026-09-22",
+    changes: [
+      "Roster \u2192 pairings is AUTOMATIC, no popup (Kerry 2026-09-22, Pat Youngs off s9.24: \u2018It popped up after about 15 seconds\u2026 when I clicked yes it said he wasn't in pairings, and then didn't reseat Michael Murphy. It should all be automated\u2019). The server already dropped the player inside the credit / refund / WD / transfer; the page's late yes/no popup raced it. The routes now answer with what the drop did (`pairings`: removed, re-seated, which groups) and the page reports it and redraws the PAIRINGS panel in place. Re-seat stays the clock rule: before the start the group re-seats, after it the seat stays open for a blind.",
+      "Transfer PRICE CHECK (Kerry 2026-09-22: \u2018surely there's a price difference either for or against, but I'm not seeing any information about that in the CREDIT / TRANSFER modal\u2019). Picking a target prices the move: what was paid vs the target's subtotal for the same package \u2014 \u2018owes $X\u2019 with the balance-due Venmo email opening prepared after the transfer, or \u2018excess $X\u2019 with keep-as-credit / Venmo-back (Venmo opens in the click, refund watch armed), the Apply Credit options. `transfer_preview`, `GET /api/items/<id>/transfer-preview`, `transfer_item(excess_action)` \u2014 excess posted as an \u2018Excess credit \u2014 <source>\u2019 row, shortfall stamped balance_due. Guards: `test_transfer_price.py`, `test_roster_pairings_sync.js`.",
+      "The events page defines its own toast: the FLIGHTS handlers called showToast, which did not exist there, so every error path threw instead of speaking.",
+    ],
+  },
   {
     version: "2.478.0",
     date: "2026-09-22",
