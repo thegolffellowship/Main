@@ -99,6 +99,34 @@ the GIL is.
 - **Digest hour:** 05:00 Central (Kerry, #611); the Handicap Surfaces
   lane reads at 5:15.
 
+## 2d. The first live report of the new build (v2.486.1, 4:02 PM CDT)
+
+- **WHERE THE BYTES ARE:** `gg_raw_archive` **364 MB of the 431 MB file**
+  (already-zlib'd raw Golf Genius pages, the gg-history lane's verbatim
+  hedge; `gg_history_results` 7 MB; everything else under 4 MB); free
+  pages 0. Reads of other tables do not touch those pages, but the
+  nightly backup (`VACUUM INTO` → gzip → OneDrive) copies 431 MB every
+  night, and the file is 6× what the business data needs. DECISION FOR
+  KERRY / the gg-history lane: move the archive to its own SQLite file
+  (ATTACH) or to OneDrive as files, and the main DB drops to ~65 MB.
+  The CTO digest files it as `db_big_table:gg_raw_archive`.
+- **The EVENTS page polls every 30 s** and each tick pulls `/api/items`
+  (every order row, ~2.6 MB; p50 523 ms on the live box, 25 samples in
+  18 minutes from one tab), the index map, payouts, events, RSVPs. Fixed
+  the cheap half (a hidden tab no longer refreshes — v2.486.3); the
+  cadence and what a tick should fetch are the events page's call
+  (flighting lane / Kerry). This is also a steady write-lock-free load on
+  the single process that every PAIRINGS open competes with.
+- **Load:** load1 105 on 48 visible cpus (host figure) — ratio 2.2,
+  under the 4.0 rule; the box is busy, not proven starved.
+- **Jobs on the same process:** `expense_inbox_check` ~5.2 s every 2 min,
+  `inbox_check` ~4.5 s every 5 min, `rsvp_inbox_check` ~1.3 s, live poll
+  9 ms. With the once-per-process DDL guard those no longer hold a
+  PAIRINGS read on the lock; their samples sit beside the route samples
+  so the next slow open's `concurrent` says whether one was running.
+- No `pairings_get` sample yet on the new build — Kerry has not opened
+  PAIRINGS since the deploy. The first one is the before/after.
+
 ## 2c. The agent is the CTO
 
 Kerry 2026-09-22 (~4 PM): *"I think we would define your Agent Role as

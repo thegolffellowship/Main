@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.486.2";
+window.TGF_VERSION = "2.486.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.486.3",
+    date: "2026-09-22",
+    changes: [
+      "EVENTS page: the 30-second auto-refresh no longer runs for a tab nobody is looking at. The first live health report showed one open tab pulling every order row ever written (2.6 MB) plus the index map, payouts, events and RSVPs 25 times in 18 minutes; a hidden tab now waits and catches up on its next tick once it is visible. Nothing changes while you are looking at the page.",
+    ],
+  },
   {
     version: "2.486.2",
     date: "2026-09-22",

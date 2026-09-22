@@ -23,6 +23,12 @@ ck("the shell include loads /static/js/loading.js", i >= 0);
 ck("...before any markup or other script (first tag after the header comment)", i >= 0 && !/<(script|header|nav|div)\b/.test(tpl.slice(0, i)));
 ck("...and NOT deferred (fetch must be wrapped before page scripts run)", !/loading\.js"[^>]*defer/.test(tpl));
 
+console.log("== the events page does not refresh a hidden tab ==");
+const ev = read("templates/events.html");
+const ar = ev.indexOf("Auto-refresh every 30s");
+ck("the 30 s auto-refresh returns at once when document.hidden (no 2.6 MB pull for a tab nobody is looking at)",
+   ar >= 0 && /setInterval\(async \(\) => \{\s*if \(document\.hidden\) return;/.test(ev.slice(ar, ar + 800)));
+
 console.log("== the script under a DOM stub ==");
 const src = read("static/js/loading.js");
 ck("no 768/769 breakpoint (the ONE mobile breakpoint is 560)", !/76[89]px/.test(src));

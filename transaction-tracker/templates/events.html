@@ -17143,8 +17143,14 @@
         // the data endpoints require auth, so nothing is fetched until the
         // session is authenticated (no wasted 401s behind the login modal).
 
-        // Auto-refresh every 30s to keep multiple users in sync
+        // Auto-refresh every 30s to keep multiple users in sync.
+        // Not for a tab nobody is looking at (Tracker Health lane
+        // 2026-09-22): every tick re-pulls every order row ever written
+        // (/api/items, ~2.6 MB) plus the index map, payouts and events —
+        // 25 full loads in 18 minutes from one open tab on the live box.
+        // A hidden tab catches up on its next tick once it is visible.
         setInterval(async () => {
+            if (document.hidden) return;
             try {
                 const anyModalOpen = [
                     "edit-event-overlay", "ev-credit-overlay", "wd-overlay", "add-event-overlay",
