@@ -920,6 +920,37 @@ price, balance-due or excess handling), and applies the credit.
 Uses idempotent uid `manual-credit-{credit_item_id}` to prevent double-apply.
 All three rendering paths on the Customers page (inline expand, detail panel, mobile card) updated.
 
+## Credit / Transfer modal — the transfer PRICE CHECK (v2.478.1, Kerry 2026-09-22)
+
+Kerry: "I transferred Don SHARITZ and Pat YOUNGS to next week's s9.25
+CANYON SPRINGS event, but surely there's a price difference either for
+or against, but I'm not seeing any information about that in the CREDIT
+/ TRANSFER modal. There needs to be some additional info … the same as
+when we apply a credit directly in an event, where it identifies if
+there's a difference in the cost of the selected event and gives options
+to Venmo them the difference, apply the credit to their account or if
+it's short $ then send them an email with a prepared Venmo link."
+
+- **Preview:** picking a target event calls `GET /api/items/<id>/
+  transfer-preview?target=` (`transfer_preview`): the CREDIT is what was
+  paid at the source (parent + active +PAY children); the cost is the
+  target's SUBTOTAL for the same package — status and games off the row,
+  holes per the target's format — never the card fee (a difference
+  settles by Venmo, the Apply Credit rule). The modal says "owes $X" or
+  "excess $X" with the Apply Credit options: keep as credit / Venmo back
+  (opens Venmo in the click, arms the refund watch); a shortfall says the
+  balance-due email is coming.
+- **Transfer:** `transfer_item(…, excess_action)` stamps the moved row —
+  excess: the row is worth the target's subtotal and the leftover is an
+  "Excess credit — <source>" row in the player's pool (`price_check.
+  excess_credit_id`); short: `credit_note = balance_due:<amount>` and
+  `_build_balance_due_email` accepts a transferred row, so the prepared
+  Venmo email modal opens on the NEW row right after the transfer for
+  Kerry to send. `price_check` rides on the API answer.
+- The customers page's transfer goes through the same server path
+  (excess kept as credit, shortfall stamped) without the modal preview.
+- Guard: `test_transfer_price.py`, `test_roster_pairings_sync.js`.
+
 ## Apply Credit modal — holes default + multi-credit + Venmo handle inline entry
 
 - **Holes default from event format.** For non-combo events, `apply_credit_to_rsvp` and the
