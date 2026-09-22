@@ -1,12 +1,20 @@
-window.TGF_VERSION = "2.478.6";
+window.TGF_VERSION = "2.478.7";
 window.TGF_CHANGELOG = [
   {
-    version: "2.478.6",
+    version: "2.478.7",
     date: "2026-09-22",
     changes: [
       "Transfer price check: credit already on the player's account is offered toward the move (Kerry 2026-09-22: \u2018Sharitz already had $6 of credit on his account, so adjustment needs to be made there or a radial button to include that $6 towards the transfer event\u2019). The preview lists each unapplied credit as a tick box, ticked by default when the move is short, and the owes / excess line follows the ticks; the transfer consumes the ticked rows the way Apply Credit does and reversal puts them back. Guard: `test_transfer_price.py`.",
       "Balance-due email: the confirmation read \u2018Sent to undefined\u2019 (the page looked for a field the send does not return); it now names the recipient. The email itself was sending correctly.",
       "BLINDS button: what the popup shows is what OK writes (Kerry 2026-09-22: it named Richard Palacios and wrote Michael Murphy \u2014 the preview and the apply were two separate random draws). The apply now carries the previewed picks. And with blinds already on the sheet it asks: keep them and fill only the open seat(s), or replace all with a fresh draw \u2014 it used to redraw everything silently. Guards: `test_blind_draws.py`, `test_blinds_ui.js`.",
+    ],
+  },
+  {
+    version: "2.478.6",
+    date: "2026-09-22",
+    changes: [
+      "A money REQUEST is not a transaction (Kerry 2026-09-22: ‘The Robert Straiton $22 was a REQUEST for reimbursement’). The classifier booked Venmo request emails as money received — no money had moved, and a request email carries no transaction id. Requests (Venmo out/in + reminders, PayPal money requests, bank-borne Zelle requests) now classify as p2p_request and are skipped; a request that slips past classification is tagged by the parser (request wording + no id) and the save path refuses it. When the request gets PAID, the real payment email books normally. Guard: test_p2p_request_emails.py.",
+      "Backfill sweep over every Venmo received row found two booked phantoms, both fixed: Straiton's $22 (expense 2561 ignored, its Forest Creek ledger row reversed) and Daniel South's $74 (expense 1626 — his 7/16 REQUEST for the Cedar Creek refund; the real $74 payout was expense 1665 on 7/20 and stays).",
     ],
   },
   {

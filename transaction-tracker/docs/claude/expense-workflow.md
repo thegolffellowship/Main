@@ -214,7 +214,26 @@ lookup of which `customer_id` most frequently maps to a given keyword rule.
 
 `email_parser/expense_parser.py` uses Claude Haiku to classify and extract financial
 emails. Classification types: `godaddy_order`, `golf_genius_rsvp`, `chase_transaction_alert`,
-`venmo_payment`, `expense_receipt`, `action_required`, `unknown`.
+`venmo_payment`, `expense_receipt`, `action_required`, `unknown`, `p2p_request`.
+
+**A money REQUEST is not a transaction (v2.478.6, Kerry 2026-09-22).**
+Straiton's $22 Venmo *request* for reimbursement was classified as a
+payment and booked as income on Forest Creek — no money had moved, and
+a request email carries **no transaction id** (that absence is the
+class marker; every real Venmo payment has one). Three layers now:
+(1) a classify_email fast-path sends any P2P-provider subject
+containing "request" to `p2p_request` (no LLM call) — Venmo
+outgoing/incoming requests and reminders, PayPal money requests,
+bank-borne Zelle requests; `check_expense_inbox` marks them seen and
+skips. (2) `parse_p2p_payment` tags a request that slips past
+classification (`request` wording + empty transaction_id) with
+`transaction_type: "request"`. (3) the inbox save path skips a
+"request"-tagged extraction. When the request is later PAID, the real
+payment email arrives with an id and books normally. Guard:
+`test_p2p_request_emails.py`. Backfill sweep 2026-09-22 found two
+booked phantoms, both ignored with notes: expense 2561 (Straiton $22,
+ledger row 15476 reversed) and 1626 (South's $74 refund request; the
+real payout was 1665).
 
 Each extraction function (`parse_chase_alert`, `parse_expense_receipt`) returns a dict.
 **Null field safety:** both functions guard against the LLM returning `null` for

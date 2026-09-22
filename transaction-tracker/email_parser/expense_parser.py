@@ -106,6 +106,19 @@ def classify_email(subject: str, from_addr: str, body_text: str) -> dict:
             or "you sent" in subject_lower or "payment" in subject_lower):
             return {"type": "chase_transaction_alert", "confidence": 95}
 
+    # A money REQUEST is not a transaction (Kerry 2026-09-22: Straiton's
+    # $22 booked as "received" was a Venmo request for reimbursement —
+    # no money moved, and a request email carries no transaction id).
+    # Venmo "You requested $X from NAME" / "NAME requests $X" and their
+    # reminders, PayPal money requests, and bank-borne Zelle requests
+    # all classify here; the inbox marks them seen and moves on. When a
+    # request is PAID, a real payment email arrives and books normally.
+    _p2p_source = ("venmo" in from_lower or "paypal.com" in from_lower
+                   or "cash.app" in from_lower or "square.com" in from_lower
+                   or "cashapp" in from_lower or "zelle" in subject_lower)
+    if _p2p_source and "request" in subject_lower:
+        return {"type": "p2p_request", "confidence": 97}
+
     if "venmo" in from_lower and (
         "you paid" in subject_lower or "you sent" in subject_lower
         or "paid you" in subject_lower or "completed" in subject_lower
@@ -278,6 +291,14 @@ Return ONLY the JSON object."""
     result.setdefault("transaction_type", "payout")
     if "amount" in result:
         result["amount"] = abs(float(result["amount"]))
+
+    # Belt for a request email that slips past classification (the LLM
+    # route can still land one here): "request" in the subject with no
+    # transaction id means no money moved — tag it so the inbox skips
+    # it instead of booking phantom income (Straiton $22, 2026-09-22).
+    if ("request" in (subject or "").lower()
+            and not str(result.get("transaction_id") or "").strip()):
+        result["transaction_type"] = "request"
 
     # DETERMINISTIC PREFIX RESTORE (v2.189.7 — Chuck Fehlis, 2026-08-02):
     # the prompt orders the model to keep the memo's "Name - " payee prefix
