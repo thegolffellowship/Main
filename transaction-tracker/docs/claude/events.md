@@ -2030,11 +2030,38 @@ staying). Dial shape:
                     "lodging_dial": "lsc_lodging"}}  # optional
 
 Kerry teaches what amounts mean as they come in → record them as
-overrides. A payment equal to the player's lodging `paid` amount counts
-as lodging, not golf. Backend `get_oneoff_roster_finance()` in
+overrides. Backend `get_oneoff_roster_finance()` in
 database.py; route `GET /api/events/<id>/oneoff-finance` (manager+);
 frontend `ONEOFF_DETAIL_COLUMNS` in events.html (desktop + mobile).
 Unconfigured events keep the standard columns untouched.
+
+**v2.477.0 additions (Kerry 2026-09-22):**
+
+- **Lodging vs golf money**: one Venmo can carry both (Sharp's $630 =
+  $100 golf + $530 bed), so PAID (golf) = total received − the lodging
+  `paid` amount from the lodging dial, floored at 0 (the old
+  exact-equality special case is gone). `lodging_deducted` on the
+  player says how much moved.
+- **TEAM column** (sortable, default-visible; CHAPTER now defaults
+  hidden but stays in the Columns menu): config key `team_dial` names a
+  dial shaped like `lsc_roster_final`; the player's team is the chapter
+  CARD they sit on (A = Austin burnt orange, SA = San Antonio slate),
+  so DFW/HOU bonus players show the team they play for. Column
+  defaults honor `default:false` via `colVisible()` — saved prefs win,
+  unsaved keys fall back to the column's own default.
+- **SHIRT column** (config key `shirts: true`): click-to-select
+  `<select>` per player. Options split by gender —
+  `shirt_size_options` dial `{"M": [...], "F": [...]}`, seeded
+  S/M/L/XL/2XL/3XL and W-XS…W-XL. Gender is DISCERNED (customers has
+  no gender column): majority tee gender over the player's
+  scoring_rounds (course_tees.gender), tie-broken by "Women's" text in
+  their known shirt size, default M. A size already on file (latest
+  items.shirt_size from any order) pre-fills amber; a pick made here
+  saves to the `oneoff_shirts` dial (`{"<eid>": {"<cid>": "L"}}`) via
+  `POST /api/events/<id>/oneoff-shirt` (manager+,
+  `set_oneoff_shirt()`) and shows green. Empty pick clears back to the
+  known size. Read-only bridge `scoring-lsc-shirts:<event_id>` reports
+  coverage (gender/team/selected/known per player).
 
 ## Lone Star Cup page: final-roster freeze + member view (v2.373.0)
 

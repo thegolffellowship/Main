@@ -3310,7 +3310,9 @@
             // picture replaces the order-centric fields.
             const _mFp = oneoffPlayerFin(ev.id, r);
             const fields = _mFp ? [
-                ["Chapter", _mFp.chapter || "\u2014"],
+                ["Team", _mFp.team === "A" ? "AUSTIN (A)"
+                    : _mFp.team === "SA" ? "SAN ANTONIO (SA)"
+                    : (_mFp.team || "\u2014")],
                 ["HCP", (() => {
                     const lh = hcpEntryFor(r.customer, r.customer_id, ev);
                     if (lh === undefined) return r.handicap || "\u2014";
@@ -3329,6 +3331,8 @@
                     const paidFull = lg.cost && (lg.paid || 0) >= lg.cost;
                     return `${lg.unit || "bed TBD"}${cost}${paidFull ? " \u2713" : (lg.cost ? " (owes)" : "")}`;
                 })()],
+                ["Shirt", (_mFp.shirt
+                    && (_mFp.shirt.selected || _mFp.shirt.known)) || "\u2014"],
                 ["Notes", r.notes || "\u2014"],
             ] : [
                 ["Order Date", r.order_date || "\u2014"],
@@ -4231,11 +4235,17 @@
     const ONEOFF_DETAIL_COLUMNS = [
         { key: "rsvp", label: "", default: true },
         { key: "customer", label: "Customer", default: true },
-        { key: "oo_chapter", label: "Chapter", default: true },
+        // TEAM replaces Chapter as the visible default (Kerry
+        // 2026-09-22: "Add a TEAM column for AUSTIN (A) | SAN ANTONIO
+        // (SA) so I can sort by those. Hide the Chapter column") —
+        // Chapter stays in the Columns menu for the DFW/HOU players.
+        { key: "oo_team", label: "Team", default: true },
+        { key: "oo_chapter", label: "Chapter", default: false },
         { key: "handicap", label: "HCP", default: true },
         { key: "oo_paid", label: "Paid", default: true },
         { key: "oo_balance", label: "Balance Due", default: true },
         { key: "oo_lodging", label: "Lodging", default: true },
+        { key: "oo_shirt", label: "Shirt", default: true },
         { key: "actions", label: "Actions", default: true },
     ];
     // event_id -> oneoff-finance payload ({oneoff:false} when the event
@@ -4264,7 +4274,8 @@
         side_games: "center", fall_race: "center", tee_choice: "center",
         user_status: "center", order_date: "center", item_price: "right",
         actions: "center", oo_chapter: "center", oo_paid: "right",
-        oo_balance: "right", oo_lodging: "center" };
+        oo_balance: "right", oo_lodging: "center", oo_team: "center",
+        oo_shirt: "center" };
     // "2026-08-30" → "8/30" (2-digit year appended only when it isn't
     // the current year).
     function fmtShortDate(d) {
@@ -4288,12 +4299,56 @@
         try { localStorage.setItem("tgf_detail_visible_columns", JSON.stringify(detailVisibleColumns)); } catch (e) {}
     }
 
+    // Column visibility: a saved pref wins; a column never toggled falls
+    // back to its own default (lets oo_chapter default to hidden while
+    // everything else defaults to shown — saved prefs predate oo_ keys).
+    function colVisible(c) {
+        const saved = detailVisibleColumns[c.key];
+        if (saved !== undefined) return saved !== false;
+        return c.default !== false;
+    }
+
     function sortRegistrants(registrants, allRegs, ev) {
         const sorted = [...registrants];
         const asc = detailSortDir === "asc";
         sorted.sort((a, b) => {
             let va = a[detailSortField] || "";
             let vb = b[detailSortField] || "";
+            if (ev && detailSortField.startsWith("oo_")) {
+                // One-off columns live in the oneoff-finance payload,
+                // not on the registrant row (Kerry 2026-09-22: TEAM
+                // column "so I can sort by those"). Blanks sink to the
+                // bottom in either direction.
+                const val = r => {
+                    const fp = oneoffPlayerFin(ev.id, r);
+                    if (!fp) return null;
+                    switch (detailSortField) {
+                        case "oo_team": return fp.team || null;
+                        case "oo_chapter": return fp.chapter || null;
+                        case "oo_paid": return fp.paid || null;
+                        case "oo_balance":
+                            return fp.expected == null ? null : fp.balance;
+                        case "oo_lodging":
+                            return fp.lodging
+                                ? (fp.lodging.own ? "zz-own"
+                                   : fp.lodging.out ? "zz-out"
+                                   : (fp.lodging.unit || "z-tbd")) : null;
+                        case "oo_shirt":
+                            return (fp.shirt
+                                && (fp.shirt.selected || fp.shirt.known))
+                                || null;
+                    }
+                    return null;
+                };
+                const xa = val(a), xb = val(b);
+                if (xa == null && xb == null) return 0;
+                if (xa == null) return 1;
+                if (xb == null) return -1;
+                if (typeof xa === "number" && typeof xb === "number")
+                    return asc ? xa - xb : xb - xa;
+                const sa = String(xa).toLowerCase(), sb = String(xb).toLowerCase();
+                return asc ? sa.localeCompare(sb) : sb.localeCompare(sa);
+            }
             if (detailSortField === "item_price") {
                 va = parseFloat((String(va) || "0").replace(/[$,]/g, "")) || 0;
                 vb = parseFloat((String(vb) || "0").replace(/[$,]/g, "")) || 0;
@@ -8419,14 +8474,14 @@
         html += '<button class="column-toggle-btn detail-col-toggle-btn" style="font-size:0.75rem; padding:0.3rem 0.6rem;">Columns &#9662;</button>';
         html += '<div class="column-toggle-dropdown detail-col-dropdown">';
         html += DCOLS.filter(c => c.key !== "rsvp").map(c => {
-            const checked = detailVisibleColumns[c.key] !== false ? "checked" : "";
+            const checked = colVisible(c) ? "checked" : "";
             return `<label><input type="checkbox" data-detail-col="${c.key}" ${checked}> ${c.label}</label>`;
         }).join("");
         html += '</div></div></div>';
 
         html += '<table class="registrants-table"><thead><tr>';
         DCOLS.forEach(c => {
-            const vis = detailVisibleColumns[c.key] !== false;
+            const vis = colVisible(c);
             if (c.key === "rsvp") {
                 html += '<th class="rsvp-col" title="RSVP Status"></th>';
                 return;
@@ -8523,7 +8578,7 @@
             html += `<tr${rowClass} ${hasExtraInfo ? `data-expand-player="${r.id}"` : ''}>`;
 
             DCOLS.forEach(c => {
-                const vis = detailVisibleColumns[c.key] !== false;
+                const vis = colVisible(c);
                 const _ustat = (_cleanStatus(r.user_status) || '').toUpperCase();
                 const isGuestRow = _ustat === 'GUEST';
                 const isFirstTimerRow = _ustat === '1ST TIMER';
@@ -8783,6 +8838,41 @@
                     html += `<td class="fall-col" style="${style}">${inFallRace(r)
                         ? '<span style="color:#059669;font-weight:700;">YES</span>'
                         : '<span style="color:#9CA3AF;">\u2014</span>'}</td>`;
+                } else if (c.key === "oo_team") {
+                    // TEAM = the frozen-roster card the player sits on
+                    // (DFW/HOU bonus players carry a team their chapter
+                    // isn't) — Austin burnt orange, SA slate, same as
+                    // the Lone Star Cup page.
+                    const fp = oneoffPlayerFin(ev.id, r);
+                    const tm = fp && fp.team;
+                    if (!tm) {
+                        html += `<td style="${style}; color:#9CA3AF;">—</td>`;
+                    } else {
+                        const tcol = tm === "A" ? "#BF5700" : "#4B6274";
+                        const tfull = tm === "A" ? "Team Austin" : tm === "SA" ? "Team San Antonio" : tm;
+                        html += `<td style="${style}; color:${tcol}; font-weight:800;" title="${escapeHtml(tfull)}">${escapeHtml(tm)}</td>`;
+                    }
+                } else if (c.key === "oo_shirt") {
+                    // Click-to-select shirt size (Kerry 2026-09-22).
+                    // Options list follows the player's discerned
+                    // gender; a size already on file from order history
+                    // pre-fills amber, a pick made here saves via
+                    // /oneoff-shirt and shows green.
+                    const fp = oneoffPlayerFin(ev.id, r);
+                    const sh = fp && fp.shirt;
+                    if (!sh || !r.customer_id) {
+                        html += `<td style="${style}; color:#9CA3AF;">—</td>`;
+                    } else {
+                        const dOO = oneoffFinance[ev.id] || {};
+                        const opts = (((dOO.config || {}).shirt_options || {})[fp.gender === "F" ? "F" : "M"]) || ["S", "M", "L", "XL", "2XL", "3XL"];
+                        const eff = sh.selected || sh.known || "";
+                        const list = opts.slice();
+                        if (eff && !list.includes(eff)) list.unshift(eff);
+                        const optHtml = ['<option value="">—</option>'].concat(
+                            list.map(o => `<option value="${escapeHtml(o)}"${o === eff ? " selected" : ""}>${escapeHtml(o)}</option>`)).join("");
+                        const src = sh.selected ? "picked here" : (sh.known ? `from order history (${sh.known})` : "not on file");
+                        html += `<td style="${style}"><select class="oo-shirt-select" data-event-id="${ev.id}" data-cid="${r.customer_id}" title="Shirt size — ${escapeHtml(src)}${fp.gender === 'F' ? ' · women’s sizes' : ''}" style="font-size:0.78rem; padding:2px 4px; border:1px solid #d1d5db; border-radius:6px; cursor:pointer; background:${sh.selected ? '#ECFDF5' : (sh.known ? '#FFF7ED' : '#fff')};">${optHtml}</select></td>`;
+                    }
                 } else if (c.key === "oo_chapter") {
                     const fp = oneoffPlayerFin(ev.id, r);
                     const chp = (fp && fp.chapter) || "";
@@ -8838,7 +8928,7 @@
             html += '</tr>';
             // Expandable detail row for notes/partner/fellowship
             if (hasExtraInfo) {
-                const colCount = DCOLS.filter(c => detailVisibleColumns[c.key] !== false).length;
+                const colCount = DCOLS.filter(colVisible).length;
                 html += `<tr class="player-expand-row" data-expand-for="${r.id}"><td colspan="${colCount + 1}" style="padding:0;">`;
                 html += '<div class="player-detail-panel">';
                 // Contact first — left of any transaction info (Kerry 2026-08-31)
@@ -8869,7 +8959,7 @@
                 const payColor = isRefundRow ? "#dc2626" : "#059669";
                 html += `<tr class="child-payment-row" style="background:${childBg};${childSt !== 'active' ? 'opacity:0.6;' : ''}">`;
                 DCOLS.forEach(c => {
-                    const vis = detailVisibleColumns[c.key] !== false;
+                    const vis = colVisible(c);
                     const style = (vis ? '' : 'display:none;') + 'font-size:0.78rem;color:#6b7280;'
                         + (COL_ALIGN[c.key] ? `text-align:${COL_ALIGN[c.key]};` : '');
                     if (c.key === "rsvp") {
@@ -9316,6 +9406,34 @@
                 });
             });
         }
+
+        // One-off shirt-size pickers (Kerry 2026-09-22): save the pick,
+        // update the cached finance payload so the cell turns green
+        // without a refetch. stopPropagation keeps the row's
+        // expand-on-click from firing when the select is tapped.
+        container.querySelectorAll(".oo-shirt-select").forEach(sel => {
+            sel.addEventListener("click", (e) => e.stopPropagation());
+            sel.addEventListener("change", async (e) => {
+                e.stopPropagation();
+                const evId = sel.dataset.eventId, cid = sel.dataset.cid;
+                const size = sel.value;
+                try {
+                    const resp = await fetch(`/api/events/${evId}/oneoff-shirt`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ customer_id: cid, size: size }),
+                    });
+                    if (!resp.ok) throw new Error("save failed");
+                    const d = oneoffFinance[evId];
+                    const p = d && d.players && d.players[String(cid)];
+                    if (p && p.shirt) p.shirt.selected = size || null;
+                    sel.style.background = size ? "#ECFDF5"
+                        : (p && p.shirt && p.shirt.known ? "#FFF7ED" : "#fff");
+                } catch (err) {
+                    alert("Could not save shirt size — try again.");
+                }
+            });
+        });
 
         // RSVP circle tap-to-toggle
         container.querySelectorAll(".rsvp-circle").forEach(circle => {

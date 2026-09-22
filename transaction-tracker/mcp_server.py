@@ -3202,6 +3202,27 @@ def _scoring_dispatch(url: str, extract: str):
             db.log_agent_action("mcp-claude", "scoring-lsc-freeze",
                                 f"frozen at {res.get('frozen_at')}")
             return json.dumps(res, indent=2)
+        if cmd == "scoring-lsc-shirts":
+            # "<event_id>" — read-only shirt-size coverage for a
+            # one-off event (Kerry 2026-09-22 shirt column): per player
+            # the picked size, the size known from order history, and
+            # the discerned gender, so coverage can be reported without
+            # scraping the UI.
+            _eid = int(arg.strip())
+            fin = db.get_oneoff_roster_finance(_eid)
+            if fin is None:
+                return json.dumps({"error": f"event {_eid} is not "
+                                   "configured in oneoff_charges"})
+            out = {}
+            for cid, p in (fin.get("players") or {}).items():
+                sh = p.get("shirt") or {}
+                out[cid] = {"gender": p.get("gender"),
+                            "team": p.get("team"),
+                            "selected": sh.get("selected"),
+                            "known": sh.get("known")}
+            return json.dumps({"event_id": _eid, "players": out,
+                               "options": (fin.get("config") or {})
+                               .get("shirt_options")}, indent=2)
         if cmd == "scoring-expense-promote":
             # "<expense_id>" — promote an expense_transactions row into
             # the acct_transactions ledger via the standard

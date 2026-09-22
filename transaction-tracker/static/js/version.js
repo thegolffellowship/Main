@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.476.8";
+window.TGF_VERSION = "2.477.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.477.0",
+    date: "2026-09-22",
+    changes: [
+      "One-off roster (Lone Star Cup): TEAM column — A in Austin burnt orange, SA in slate, sortable, from the frozen roster card each player sits on so the DFW/Houston picks show the team they play for; Chapter now starts hidden but stays in the Columns menu (Kerry 2026-09-22: ‘Add a TEAM column for AUSTIN (A) | SAN ANTONIO (SA) so I can sort by those. Hide the Chapter column’).",
+      "One-off roster: SHIRT column — click-to-select size per player, saved instantly (green when picked here, amber when pre-filled from the size already on a past order). The size list follows the player's gender, discerned from the tees they've actually played with the shirt text as tie-breaker, since the member records carry no gender field. Lists ship as the shirt_size_options dial (S→3XL men, W-XS→W-XL women).",
+      "One-off roster: PAID (golf) now subtracts the lodging share the lodging dial says the player paid, so one combined Venmo (Sharp's $630 = $100 golf + $530 Bed 3) lands $100 in PAID and the bed money in LODGING instead of inflating the golf tally.",
+      "Read-only bridge scoring-lsc-shirts:<event_id> reports shirt coverage (gender · team · picked · known-from-orders per player).",
+    ],
+  },
   {
     version: "2.476.8",
     date: "2026-09-22",

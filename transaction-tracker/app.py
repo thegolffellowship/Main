@@ -10997,6 +10997,28 @@ def api_oneoff_finance(event_id):
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/events/<int:event_id>/oneoff-shirt", methods=["POST"])
+@require_role("manager")
+def api_oneoff_shirt(event_id):
+    """Save one player's shirt size for a one-off event (Kerry
+    2026-09-22: click-to-select shirt column on the Lone Star Cup
+    roster). Body: {customer_id, size} — empty size clears the pick so
+    the row falls back to the size known from the player's orders."""
+    from email_parser.database import set_oneoff_shirt
+    data = request.get_json(silent=True) or {}
+    try:
+        cid = int(data.get("customer_id"))
+    except (TypeError, ValueError):
+        return jsonify({"error": "customer_id required"}), 400
+    size = (data.get("size") or "").strip()
+    try:
+        out = set_oneoff_shirt(event_id, cid, size)
+        return jsonify(out)
+    except Exception as e:
+        logger.exception("oneoff shirt save failed for event %s", event_id)
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/scoring/import", methods=["POST"])
 @require_role("admin")
 def api_import_scorecards():
