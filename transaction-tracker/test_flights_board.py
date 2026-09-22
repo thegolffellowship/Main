@@ -61,7 +61,7 @@ for i, (cid, f, l, idx18) in enumerate(players):
     for _d in (10, 20, 30):
         c.execute("INSERT INTO handicap_rounds (player_name, round_date, adjusted_score, rating, slope, differential) "
                   "VALUES (?, date('now', ?), 45, 34.5, 120, ?)", (f"{l}, {f}", f"-{_d} days", diff))
-    sg = "NET & GROSS" if i < 12 else ("GROSS" if i < 16 else "NET")
+    sg = "BOTH" if i < 12 else ("GROSS" if i < 16 else "NET")
     c.execute("INSERT INTO items (id, email_uid, merchant, customer, customer_id, item_name, order_date, transaction_status, event_id, side_games, user_status, tee_choice) "
               "VALUES (?, ?, 'The Golf Fellowship', ?, ?, 's9.24 Brackenridge', '2026-09-10', 'active', ?, ?, 'MEMBER', '<50')",
               (800 + i, f"u{800+i}", f"{f} {l}", cid, EV, sg))
@@ -162,8 +162,8 @@ check("clicking EVEN re-cuts from scratch and clears the moves (moves_cleared re
 db.set_event_flight_mode(EV, "skins", None, by="test", db_path=tmp)
 check("a move to a flight not on the board is refused", db.move_event_flight_player(EV, "skins", _low["customer_id"], 5, db_path=tmp).get("ok") is False)
 check("a player not flighted in that game is refused", "not flighted" in db.move_event_flight_player(EV, "skins", 999999, 1, db_path=tmp).get("error", ""))
-check("a game not running is refused", db.move_event_flight_player(EV, "individual_gross", _low["customer_id"], 1, db_path=tmp).get("ok") is False
-      or next(x for x in db.event_flights_board(EV, db_path=tmp)["games"] if x["game"] == "individual_gross")["active"])
+check("the moves left nothing behind: every game is back on its default cut", db.event_flight_modes(EV, db_path=tmp) == {}, str(db.event_flight_modes(EV, db_path=tmp)))
+db.set_event_flight_mode(EV, "skins", None, db_path=tmp)
 check("...amounts from the matrix columns (netLow / netHigh)",
       inn["amounts"]["total_pot"] > 0 and inn["amounts"]["flights"][1]["matrix_column"] == "netHigh", str(inn["amounts"]))
 
@@ -264,6 +264,16 @@ check("...with both layers per game and no event pricing row",
       str(list(payload.keys())))
 r = client.get("/api/events/999999/flights-board")
 check("an unknown event is a 404", r.status_code == 404, str(r.status_code))
+_gm = next((x for x in payload["games"] if x["active"] and x["selection"]["flight_count"] >= 2 and x["selection"]["flights"][1]["members"]), None)
+_mcid = _gm["selection"]["flights"][1]["members"][0]["customer_id"] if _gm else None
+r = client.post(f"/api/events/{EV}/flights/move", json={"game": _gm["game"] if _gm else "skins", "customer_id": _mcid, "flight_no": 1})
+check("POST flights/move as a manager on a LIVE board: 200 and the board comes back CUSTOM with the move",
+      _gm is not None and r.status_code == 200 and (r.get_json() or {}).get("moved", {}).get("to_flight") == 1
+      and next(x for x in r.get_json()["games"] if x["game"] == _gm["game"])["selection"]["mode"] == "custom",
+      str((r.status_code, (r.get_json() or {}).get("error"), _gm and _gm["game"])))
+r = client.post(f"/api/events/{EV}/flights/move", json={"game": _gm["game"] if _gm else "skins", "customer_id": _mcid, "flight_no": 2})
+check("...dropping him back on his rule flight clears it (200, cleared)", r.status_code == 200 and (r.get_json() or {}).get("moved", {}).get("cleared") is True, str(r.get_json() and r.get_json().get("moved")))
+db.set_event_flight_mode(EV, _gm["game"] if _gm else "skins", None, db_path=tmp)
 r = client.post(f"/api/events/{EV}/flights/freeze", json={"note": "route"})
 check("POST flights/freeze as a manager freezes (200, state frozen, note kept)",
       r.status_code == 200 and (r.get_json() or {}).get("state") == "frozen" and (r.get_json() or {})["freeze"]["note"] == "route", str((r.status_code, (r.get_json() or {}).get("error"))))
@@ -286,16 +296,14 @@ out = json.loads(mcp._scoring_dispatch("https://tgf-sa.golfgenius.com/", f"scori
 check("...|apply voids and the board reads LIVE", out.get("ok") and out.get("state") == "live", str({k: out.get(k) for k in ("ok", "state", "error")}))
 out = json.loads(mcp._scoring_dispatch("https://tgf-sa.golfgenius.com/", f"scoring-flights-freeze:{EV}"))
 check("scoring-flights-freeze dry run reports the flights it would freeze", out.get("dry_run") and out.get("would") == "freeze" and out["games"], str(out)[:200])
-_sk = next(x for x in db.event_flights_board(EV, db_path=tmp)["games"] if x["game"] == "skins")["selection"]
-_cid = _sk["flights"][1]["members"][0]["customer_id"]
-out = json.loads(mcp._scoring_dispatch("https://tgf-sa.golfgenius.com/", f"scoring-flights-move:{EV}|skins|{_cid}|1"))
-check("scoring-flights-move:<id>|skins|<cid>|1 moves him (LIVE again) and reports the custom cut",
-      out.get("ok") and out["moved"]["customer_id"] == _cid and next(g for g in out["games"] if g["game"] == "skins")["mode"] == "custom", str(out)[:300])
+_gm = next((x for x in db.event_flights_board(EV, db_path=tmp)["games"]
+            if x["active"] and x["selection"]["flight_count"] >= 2 and x["selection"]["flights"][1]["members"]), None)
+_bcid = _gm["selection"]["flights"][1]["members"][0]["customer_id"] if _gm else 0
+out = json.loads(mcp._scoring_dispatch("https://tgf-sa.golfgenius.com/", f"scoring-flights-move:{EV}|{_gm['game'] if _gm else 'skins'}|{_bcid}|1"))
+check("bridge scoring-flights-move:<id>|<game>|<cid>|1 moves him (LIVE) and reports the custom cut",
+      _gm is not None and out.get("ok") and out["moved"]["customer_id"] == _bcid and next(g for g in out["games"] if g["game"] == _gm["game"])["mode"] == "custom", str(out)[:300])
 out = json.loads(mcp._scoring_dispatch("https://tgf-sa.golfgenius.com/", "scoring-flights-move:abc"))
 check("...and refuses a bad call with a usage line", "usage" in (out.get("error") or ""), str(out))
-r = client.post(f"/api/events/{EV}/flights/move", json={"game": "skins", "customer_id": _cid, "flight_no": 2})
-check("POST flights/move as a manager on a LIVE board: 200, the board comes back, the move cleared (dropped on his rule flight)",
-      r.status_code == 200 and (r.get_json() or {}).get("moved", {}).get("cleared") is True, str((r.status_code, (r.get_json() or {}).get("error"))))
 
 print()
 if F:

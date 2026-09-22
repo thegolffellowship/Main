@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.477.1";
+window.TGF_VERSION = "2.478.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.478.0",
+    date: "2026-09-22",
+    changes: [
+      "FLIGHTS tab: the cut is one shared EVEN | HCP control per game bar in the ROSTER | PAIRINGS | GAMES | FLIGHTS style — no more pill buttons; hover text carries the explanation (even split down the middle vs the ratified handicap bands), the default is dotted, and a CUSTOM segment appears once a name has been moved (Kerry 2026-09-22, mailbox #599).",
+      "FLIGHTS tab: drag a name to another flight and the game becomes CUSTOM on its base cut — the drop is the save. The moved player is tagged MOVED, the Selection line says who moved from where in words, the flight label follows who is actually in it, and the printed Divisions & Flights page follows the board. Clicking EVEN or HCP re-cuts from scratch and clears the moves. Stored per event in flight_modes:<event_id> keyed by customer_id; a frozen board refuses. Bridge scoring-flights-move:<event_id>|<game>|<customer_id>|<flight_no>.",
+      "PAIRINGS tab: auto-save. Changes save in the background about a second after your last drag, swap or move — never mid-drag, never blocking the sheet; a 'Saved h:mm' stamp replaces the plain Saved; Save stays as the manual flush and as the fallback if the background save fails twice. Undo/redo unchanged (Kerry: 'Don't make me click SAVE each time').",
+    ],
+  },
   {
     version: "2.477.1",
     date: "2026-09-22",
