@@ -4065,7 +4065,10 @@
                 course: `<td data-col="course">${escapeHtml(ev.course || "\u2014")}</td>`,
                 chapter: `<td data-col="chapter">${escapeHtml(ev.chapter || "\u2014")}</td>`,
                 pricing: `<td data-col="pricing" class="ev-price-cell">${evPriceCell(ev)}</td>`,
-                registrations: `<td data-col="registrations"><span class="reg-count">${getEventTotalPlayers(ev)}/${ev.registrations || 0}</span></td>`,
+                // One-off events (Kerry 2026-09-22): the second number
+                // is FULLY PAID from the money picture, not the count
+                // of order rows — the cup's roster is placeholders.
+                registrations: `<td data-col="registrations"><span class="reg-count" title="players / paid">${getEventTotalPlayers(ev)}/${ev.oneoff_paid != null ? ev.oneoff_paid : (ev.registrations || 0)}</span></td>`,
                 actions: `<td data-col="actions">
                     <button class="btn btn-edit" data-edit-event="${ev.id}">Edit</button>
                     ${currentRole === "admin" ? `<button class="btn btn-edit" data-merge-event="${ev.id}" title="Merge into another event">Merge</button>` : ''}

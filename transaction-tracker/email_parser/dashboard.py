@@ -269,12 +269,33 @@ def _renewals(conn, today):
 
 
 def _expense_queue(conn, today):
-    n = conn.execute("SELECT COUNT(*) c FROM expense_transactions "
-                     "WHERE review_status = 'pending'").fetchone()["c"]
-    if not n:
+    """Mirrors the Accounting review queue (Kerry 2026-09-22: "there
+    should also be a review queue mirrored in the DASHBOARD"). The
+    card leads with UNMATCHED INCOMING MONEY — the rows his Venmo
+    ruling earmarks for review (a received payment whose memo matched
+    nothing gets no event and stays pending) — because those are the
+    ones that cost him when they sit. Tagging happens on /accounting,
+    whose modal carries the Event / Category / Customer pickers."""
+    rows = conn.execute(
+        "SELECT id, merchant, amount, transaction_type, source_type, "
+        "transaction_date, event_id FROM expense_transactions "
+        "WHERE review_status = 'pending' "
+        "ORDER BY transaction_date DESC, id DESC").fetchall()
+    if not rows:
         return None
-    return _card("expenses", "Expenses to review", n, "/accounting",
-                 "nothing books until they are", "watch")
+    incoming = [r for r in rows
+                if (r["transaction_type"] or "") == "received"
+                and not r["event_id"]]
+    items = [{"label": (f"${(r['amount'] or 0):,.2f} "
+                        f"{(r['source_type'] or '').replace('_', ' ')}"
+                        f" — {(r['merchant'] or '?')[:40]} · no event"),
+              "meta": _when(_days(r["transaction_date"], today)),
+              "href": "/accounting"} for r in incoming[:8]]
+    detail = "nothing books until they are"
+    if incoming:
+        detail += f" · {len(incoming)} incoming with no event"
+    return _card("expenses", "Expenses to review", len(rows),
+                 "/accounting", detail, "watch", items or None)
 
 
 def _action_items(conn, today):

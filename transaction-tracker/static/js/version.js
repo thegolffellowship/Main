@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.483.0";
+window.TGF_VERSION = "2.484.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.484.0",
+    date: "2026-09-22",
+    changes: [
+      "LSC PRACTICE ROUND displays like a normal event (Kerry 2026-09-22): its rows are plain ACTIVE registrations — white, standard columns, no Remind, no MANUAL badge — because the $110 is billed on the cup through the FRI column. The FRI toggle now creates/removes these rows as auto-sync registrations (never touching a paid or Golf Genius row), each carrying a ‘paid via the parent event’ note.",
+      "Event-row badge counts FULLY PAID on one-off events (Kerry 2026-09-22: ‘LONE STAR CUP should be 27/# fully paid’): the second number comes from the money picture (balance ≤ 0) instead of counting order rows — the cup's roster is placeholders, so it read 27/1 while sixteen had paid. The practice round reads 6/6 from its now-active rows.",
+      "The DASHBOARD's ‘Expenses to review’ card is now a real mirror of the review queue (Kerry 2026-09-22): it lists the unmatched incoming money rows — amount, source, who, ‘no event’ — the Venmo ruling earmarks, linking to the Accounting queue where the Event/Category/Customer pickers live.",
+    ],
+  },
   {
     version: "2.483.0",
     date: "2026-09-22",

@@ -11518,7 +11518,8 @@ def get_lsc_final_roster(db_path: str | Path = DB_PATH) -> dict | None:
 
 
 def get_oneoff_roster_finance(event_id: int,
-                              db_path: str | Path = DB_PATH) -> dict | None:
+                              db_path: str | Path = DB_PATH,
+                              include_shirts: bool = True) -> dict | None:
     """Per-player money picture for a ONE-OFF event (Kerry 2026-09-11:
     the Lone Star Cup / TGF Championship / Hill Country Matches class,
     where money arrives by Venmo/Zelle instead of store orders and the
@@ -11652,7 +11653,9 @@ def get_oneoff_roster_finance(event_id: int,
     # (shirt_size_options dial, seed below). `known` prefills from the
     # latest shirt size the player ever put on an order (memberships
     # collect one), so most of the roster starts filled in.
-    shirts_on = bool(cfg.get("shirts"))
+    # include_shirts=False is the LEAN path (the events-list paid badge):
+    # shirt + gender lookups are per-player queries the badge never needs.
+    shirts_on = bool(cfg.get("shirts")) and include_shirts
     shirt_sel: dict = {}
     if shirts_on:
         try:
@@ -11839,11 +11842,19 @@ def set_oneoff_addon(event_id: int, customer_id: int, key: str,
 def _sync_addon_roster_row(link_event_id: int, customer_id: int, on: bool,
                            db_path: str | Path = DB_PATH) -> dict:
     """Keep the linked event's roster in step with an addon toggle.
-    ON: create an RSVP placeholder unless the player already has ANY
-    live row there. OFF: delete only a money-free manual-rsvp
-    placeholder — a paid or GG-sourced row stays."""
+
+    ON: create an ACTIVE, money-free row (Kerry 2026-09-22: the
+    practice round "should display like a normal event... shouldn't
+    have Remind's because they've already been paid for in the other
+    regular event page") — status active so there's no Remind and no
+    amber, email_uid prefix 'auto-oneoff-addon' (NOT manual-*) so the
+    row carries no MANUAL badge or blue tint, price empty because the
+    money is billed on the parent event, and a note saying so.
+    OFF: delete only a row this sync created (the auto uid prefix) or
+    a leftover money-free manual-rsvp placeholder — a paid or
+    GG-sourced row stays."""
     with _connect(db_path) as conn:
-        evrow = conn.execute("SELECT id, item_name FROM events "
+        evrow = conn.execute("SELECT id, item_name, course FROM events "
                              "WHERE id = ?", (link_event_id,)).fetchone()
         if not evrow:
             return {"error": f"linked event {link_event_id} not found"}
@@ -11853,32 +11864,44 @@ def _sync_addon_roster_row(link_event_id: int, customer_id: int, on: bool,
                  AND COALESCE(transaction_status, 'active')
                      NOT IN ('credited', 'refunded', 'transferred')""",
             (link_event_id, customer_id)).fetchall()
-        if on:
-            if rows:
-                return {"event_id": link_event_id, "action": "none",
-                        "reason": "already on the roster"}
-            crow = conn.execute(
-                "SELECT first_name, last_name FROM customers "
-                "WHERE customer_id = ?", (customer_id,)).fetchone()
-            if not crow:
-                return {"error": f"customer {customer_id} not found"}
-            name = " ".join(x for x in (crow["first_name"],
-                                        crow["last_name"]) if x)
-        else:
-            victims = [r for r in rows
-                       if (r["transaction_status"] or "") == "rsvp_only"
-                       and not r["item_price"]
-                       and (r["email_uid"] or "").startswith("manual-rsvp")]
+        if not on:
+            victims = [r for r in rows if not r["item_price"] and (
+                (r["email_uid"] or "").startswith("auto-oneoff-addon")
+                or ((r["transaction_status"] or "") == "rsvp_only"
+                    and (r["email_uid"] or "").startswith("manual-rsvp")))]
             for r in victims:
                 conn.execute("DELETE FROM items WHERE id = ?", (r["id"],))
             conn.commit()
             return {"event_id": link_event_id, "action": "removed",
                     "removed_item_ids": [r["id"] for r in victims]}
-    # add_player_to_event manages its own connection
-    item = add_player_to_event(evrow["item_name"], name, mode="rsvp",
-                               db_path=db_path)
-    return {"event_id": link_event_id, "action": "added",
-            "item_id": (item or {}).get("id")}
+        if rows:
+            return {"event_id": link_event_id, "action": "none",
+                    "reason": "already on the roster"}
+        crow = conn.execute(
+            "SELECT first_name, last_name, chapter FROM customers "
+            "WHERE customer_id = ?", (customer_id,)).fetchone()
+        if not crow:
+            return {"error": f"customer {customer_id} not found"}
+        name = " ".join(x for x in (crow["first_name"],
+                                    crow["last_name"]) if x)
+        import time as _time
+        cur = conn.execute(
+            """INSERT INTO items (email_uid, item_index, merchant,
+                   customer, first_name, last_name, order_date,
+                   item_name, chapter, course, user_status,
+                   transaction_status, notes, customer_id, event_id)
+               VALUES (?, 0, ?, ?, ?, ?, ?, ?, ?, ?, 'MEMBER',
+                       'active', ?, ?, ?)""",
+            (f"auto-oneoff-addon-{int(_time.time() * 1000)}",
+             "Included (bundled buy-in)", name,
+             crow["first_name"], crow["last_name"],
+             today_central_str(), evrow["item_name"],
+             crow["chapter"], evrow["course"],
+             "Paid via the parent event's buy-in column (auto-sync)",
+             customer_id, link_event_id))
+        conn.commit()
+        return {"event_id": link_event_id, "action": "added",
+                "item_id": cur.lastrowid}
 
 
 def set_oneoff_lodging(event_id: int, customer_id: int, choice: str,
@@ -28623,6 +28646,30 @@ def get_all_events(db_path: str | Path | None = None) -> list[dict]:
             d["registration_url_state"] = _ls["state"]
             d["registration_url_suggested"] = _ls["suggested_url"]
             results.append(d)
+        # One-off events: the badge's PAID count comes from the money
+        # picture, not from active-order rows (Kerry 2026-09-22: "LONE
+        # STAR CUP should be 27/# fully paid") — the cup's roster is
+        # placeholders, so `registrations` reads 1 while 16 have paid.
+        try:
+            _oo_cfg = json.loads(get_app_setting(
+                "oneoff_charges", db_path=db_path) or "{}")
+            for _eid_s in (_oo_cfg or {}):
+                _d = next((x for x in results
+                           if str(x.get("id")) == str(_eid_s)), None)
+                if not _d:
+                    continue
+                _fin = get_oneoff_roster_finance(
+                    int(_eid_s), db_path=(db_path or DB_PATH),
+                    include_shirts=False)
+                if _fin:
+                    _pl = _fin.get("players") or {}
+                    _d["oneoff_paid"] = sum(
+                        1 for p in _pl.values()
+                        if p.get("expected") is not None
+                        and (p.get("balance") or 0) <= 0.005)
+                    _d["oneoff_total"] = len(_pl)
+        except Exception:
+            logger.exception("Non-fatal: oneoff paid-count enrich failed")
         return results
 
 
