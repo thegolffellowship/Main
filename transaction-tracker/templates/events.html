@@ -7286,7 +7286,27 @@
             });
             const wd = await w.json();
             if (!w.ok || wd.error) { alert("Blind draw failed: " + (wd.error || w.status)); return; }
-            await loadPairings(evId);
+            // Patch the sheet in place and redraw NOW (Kerry 2026-09-22:
+            // "nothing showed up in the open spot until I collapsed and
+            // reopened the event"). Re-reading the whole panel takes
+            // seconds on the live Tracker (MP detection, standings, pair
+            // counts, the blind pool) — the wait the single-seat path
+            // stopped doing on 2026-09-16. The apply response names every
+            // seat and the card that fills it, which is all the cards need.
+            const st = getPairingsState(evId);
+            if (st.blindPool) st.blindPool = null;   // counts moved
+            // redraw:true cleared the event's app-drawn blinds first —
+            // mirror that, keep the Golf Genius-sourced ones.
+            [...(st.groups_9 || []), ...(st.groups_18 || [])].forEach(g => {
+                g.blinds = (g.blinds || []).filter(b => b.source && b.source !== 'app');
+            });
+            (wd.drawn || []).concat(wd.covered_by_existing || []).forEach(b => {
+                const grp = _findGroup(st, String(b.holes), b.group_num);
+                if (!grp) return;
+                grp.blinds = (grp.blinds || []).filter(x => x.cart_pos !== b.cart_pos);
+                grp.blinds.push({cart_pos: b.cart_pos, name: b.name,
+                                 customer_id: b.customer_id, source: b.source || 'app'});
+            });
             if (container && ev) rerenderDetail(container, ev);
         } catch (err) {
             alert("Blind draw failed: " + err.message);

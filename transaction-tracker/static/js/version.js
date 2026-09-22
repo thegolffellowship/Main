@@ -1,5 +1,16 @@
-window.TGF_VERSION = "2.476.6";
+window.TGF_VERSION = "2.476.7";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.476.7",
+    date: "2026-09-22",
+    changes: [
+      "BLINDS button: the cards show in their seats the moment you click OK (Kerry 2026-09-22: \u2018nothing showed up in the open spot until I collapsed and reopened the event\u2019). The button re-read the whole pairings panel after the draw \u2014 seconds on the live Tracker \u2014 where the single-seat RANDOM had patched the sheet in place since 2026-09-16. Now the apply response (every seat and the card that fills it) patches the groups and the detail redraws at once. Verified in a driven browser: the seat reads \u2018BLIND \u00b7 name\u2019 within a second of OK.",
+      "The single-seat RANDOM and the BLINDS button are ONE rule (Kerry 2026-09-22: \u2018They should basically do the same thing\u2019): `_blind_seat_candidates` serves both \u2014 on Cart Net the other cart of the same foursome first (rule 15h), on Team Net the field outside the group; never a second blind for one person, never a card for its own team. The single seat never had the Cart Net rule and CHOOSE refused the other cart on a Cart Net night; both fixed. Guards: `test_blind_draws.py`.",
+      "The 5 PM routine draws the BLINDS too (Kerry 2026-09-22): after pairing (or on a sheet Kerry paired himself) every open seat gets its card, once \u2014 an event with any blind already drawn is left exactly as it is. Logged per event (`blinds_auto_draw`). Guard: `test_pairings_automation.py`.",
+      "Austin print packs go to Robert Straiton as well (Kerry 2026-09-22): the To: line is Kerry plus the chapter's extras from the `print_pack_chapter_recipients` dial (JSON {chapter: addresses}; seeded Austin \u2192 robert@thegolffellowship.com). Routine and Send Pack alike. Guard: `test_print_pack.py`.",
+      "Course twins can no longer be seeded (Kerry 2026-09-22: \u2018how can we avoid that happening in future?\u2019): `_find_course_loose` resolves a new spelling to the existing row by exact name, alias, normalized key or pinned short name and aliases it, at boot seeding and at scorecard import alike. Brackenridge 25402 was merged into 22371 (`scoring-course-merge`, applied on Kerry's word): the Forward band now computes off the women's Red rating (34.7/120, the F set on the played record) instead of the CRDB men's Red (32.6/115) \u2014 the three women on tonight's sheet gained 2 strokes each; the men are unchanged. Guard: `test_course_twins.py`.",
+    ],
+  },
   {
     version: "2.476.6",
     date: "2026-09-22",

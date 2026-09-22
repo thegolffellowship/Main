@@ -259,5 +259,26 @@ check("on a Team Net night the same seat draws from the field outside the group"
       _seat4t is not None and _seat4t["name"] not in ("Jeff Rideout", "Will Wallace", "Mary Wade")
       and _seat4t["drawn_from"] == "field", _seat4t)
 
+print("\n== the single-seat RANDOM is the same rule as the button (Kerry 2026-09-22) ==")
+db.save_event_pairings(EV, SHEET, db_path=tmp)
+db.remove_player_from_pairings(EV, "Will Wallace", reseat=False, db_path=tmp)
+db.clear_event_blinds(EV, db_path=tmp)
+# Six seated on the sheet: the matrix runs CART Net below 16, so rule 15h
+# applies — the other cart of the same foursome first. Group 2 holds
+# Jeff Rideout (seat 1) and Mary Wade (seat 3).
+one = db.draw_one_blind(EV, "9", 2, 2, db_path=tmp)
+check("seat 2 (cart 1) draws from the OTHER cart — Mary Wade, not the field",
+      one.get("name") == "Mary Wade" and one.get("drawn_from") == "other cart"
+      and one.get("team_unit") == "cart", str(one))
+two = db.draw_one_blind(EV, "9", 2, 4, db_path=tmp)
+check("seat 4 (cart 2) draws Jeff Rideout from cart 1 the same way",
+      two.get("name") == "Jeff Rideout" and two.get("drawn_from") == "other cart", str(two))
+db.clear_event_blinds(EV, db_path=tmp)
+whole = db.draw_event_blinds(EV, dry_run=True, db_path=tmp)
+check("…and the BLINDS button reads the same unit and the same sources for those seats",
+      whole.get("team_unit") == "cart"
+      and {(d["group_num"], d["cart_pos"]): d["drawn_from"] for d in whole["drawn"]}
+      == {(2, 2): "other cart", (2, 4): "other cart"}, str(whole.get("drawn")))
+
 print("\n" + ("ALL PASS" if not F else f"{len(F)} FAILURE(S): " + "; ".join(F)))
 sys.exit(1 if F else 0)

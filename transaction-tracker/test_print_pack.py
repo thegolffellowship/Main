@@ -93,6 +93,17 @@ check("the routine sends today's pack once", len(sent) == 1 and res and res[0].g
 check("…as a PDF attachment to the configured recipient",
       sent and sent[0]["to_address"] == "kerry@example.test"
       and sent[0]["attachments"][0][2] == "application/pdf" and sent[0]["attachments"][0][1][:4] == b"%PDF")
+check("an AUSTIN pack also goes to Robert Straiton (Kerry 2026-09-22), Kerry first",
+      pp.print_pack_recipient({"chapter": "Austin"}) == "kerry@example.test, robert@thegolffellowship.com",
+      pp.print_pack_recipient({"chapter": "Austin"}))
+check("a San Antonio pack goes to Kerry alone",
+      pp.print_pack_recipient({"chapter": "San Antonio"}) == "kerry@example.test")
+db.set_app_setting(pp.PRINT_PACK_CHAPTER_RECIPIENTS_KEY, '{"San Antonio": "sa@example.test, kerry@example.test"}')
+check("the per-chapter list is a DIAL (app_settings JSON), de-duplicated against Kerry",
+      pp.print_pack_recipient({"chapter": "San Antonio"}) == "kerry@example.test, sa@example.test"
+      and pp.print_pack_recipient({"chapter": "Austin"}) == "kerry@example.test",
+      pp.print_pack_recipient({"chapter": "San Antonio"}))
+db.set_app_setting(pp.PRINT_PACK_CHAPTER_RECIPIENTS_KEY, "")
 res2 = pp.send_due_print_packs(appmod._print_pack_render, appmod.app.static_folder)
 check("an unchanged sheet is not sent again", len(sent) == 1 and res2[0].get("why") == "unchanged since last send", res2)
 db.save_event_pairings(9001, {"18": [{"group_num": 1, "slot_label": "8:20 AM", "players": [

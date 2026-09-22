@@ -1789,6 +1789,23 @@ field, and the row says so (`drawn_from`). On a Team Net night the draw
 is the field outside the group, unchanged. `team_unit="cart"|"group"`
 overrides the matrix for tests or a one-off.
 
+**One rule, two doors (v2.476.7, Kerry 2026-09-22: "Is the Blinds button
+programmed differently than clicking the OPEN spot and clicking RANDOM?
+… They should basically do the same thing except the BLINDS button does
+it for all blinds at the same time").** `_blind_seat_candidates(eligible,
+taken, group, pos, unit)` is the per-seat rule and BOTH paths call it:
+the button (`draw_event_blinds`, every open seat, `redraw=True` clears
+the event's app-drawn blinds first) and the open-seat RANDOM
+(`draw_one_blind`, one seat). Until then the single seat drew from the
+field only and CHOOSE refused a same-foursome pick outright; now
+`set_event_blind` refuses the same CART on a Cart Net night and the same
+GROUP on Team Net. The single-seat response carries `team_unit` and
+`drawn_from`. **The button shows its cards at once:** `drawBlinds` patches
+the groups from the apply response (`drawn` + `covered_by_existing`) and
+redraws the detail, instead of re-reading the whole panel (Kerry: "nothing
+showed up in the open spot until I collapsed and reopened the event").
+Guards: `test_blind_draws.py`, `test_blinds_ui.js`.
+
 ### Surfaces
 
 * `POST /api/events/<id>/pairings/blinds` — `{apply, redraw, clear}`
@@ -1832,3 +1849,14 @@ hand-run Generate remains the way to seat confirmed matches. Guard:
 `test_pairings_automation.py`, which also holds the RSVP-only
 pace-rating fix (`_event_rsvp_only_players` now reads `pace_rating` from
 the customer row like every other profile fact).
+
+**Blinds ride the routine (v2.476.7, Kerry 2026-09-22: "Make the BLINDS
+run on the 5:00p day before auto generate pairings as well").** After the
+pairing step — whether the routine paired the event or Kerry already had
+— every open seat on the saved sheet gets its card through
+`draw_event_blinds(dry_run=False)`, ONCE: an event with any blind already
+recorded (`_event_has_blinds`, app-drawn or read from GG) is left exactly
+as it is, so a draw Kerry made or a seat he chose to leave open after one
+survives. The row reports `blinds` / `blinds_unfilled` / `blinds_why`
+("already drawn", "no open seats", "no eligible player"); each draw is
+logged (`blinds_auto_draw`) with seat, name and source.

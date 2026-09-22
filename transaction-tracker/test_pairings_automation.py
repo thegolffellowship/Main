@@ -42,9 +42,25 @@ db.save_event_pairings(9202, {"9": [{"group_num": 1, "slot_label": "5:00 PM", "p
     {"name": "P9 Test9202", "cart_pos": 1, "customer_id": 800009, "tee_choice": "<50", "handicap_index": None},
     {"name": "P10 Test9202", "cart_pos": 2, "customer_id": 800010, "tee_choice": "<50", "handicap_index": None}]}]})
 
+# One Teravista player on the roster but NOT seated, with an established
+# TGF handicap: the only card the routine may draw as a blind.
+with db._connect(DB) as conn:
+    conn.execute("INSERT INTO customers (customer_id, first_name, last_name, current_player_status) VALUES (800100, 'Blind', 'Card', 'active_member')")
+    conn.execute("INSERT INTO items (customer, customer_id, item_name, event_id, holes, tee_choice, transaction_status, order_date, order_id, email_uid, merchant, user_status) VALUES ('Blind Card', 800100, 'a9.24 Teravista', 9202, '9', '<50', 'active', '2026-09-10', 'R-bc', 'manual-bc', 'GoDaddy', 'MEMBER')")
+    conn.execute("INSERT INTO handicap_player_links (player_name, customer_name, customer_id) VALUES ('Card, Blind', 'Blind Card', 800100)")
+    for _d in (10, 20, 30):
+        conn.execute("INSERT INTO handicap_rounds (player_name, round_date, adjusted_score, rating, slope, differential) VALUES ('Card, Blind', date('now', ?), 45, 34.5, 120, 6.0)", (f"-{_d} days",))
+    conn.commit()
+
 print("1. The 5 PM day-before routine")
 res = db.auto_generate_pairings(DB, today=monday)
 by = {r["event_id"]: r for r in res}
+check("BLINDS ride the routine (Kerry 2026-09-22): the hand-paired sheet's open seat gets the one eligible card",
+      by[9202].get("blinds") == 1 and by[9202].get("blinds_unfilled") == 1, by.get(9202))
+check("…recorded as an app draw on the event",
+      db._event_has_blinds(9202, DB) and [b["name"] for b in db.get_event_pairings(9202, DB)["9"][0]["blinds"]] == ["Blind Card"],
+      db.get_event_pairings(9202, DB)["9"][0].get("blinds"))
+check("a full sheet has no open seat, so no blind", by[9201].get("blinds") == 0 and by[9201].get("blinds_why") == "no open seats", by.get(9201))
 check("both chapters' Tuesday events are considered, the Wednesday one is not (rule 3d)", set(by) == {9201, 9202}, res)
 check("an unpaired Tuesday event is generated and SAVED", by[9201].get("generated") is True and by[9201].get("seated") == 8, by.get(9201))
 check("…as saved pairings the page will load", sum(len(g["players"]) for g in db.get_event_pairings(9201, DB).get("9", [])) == 8)
@@ -53,6 +69,8 @@ check("an event Kerry already paired is left exactly as it was ('Only if they ar
       and [p["name"] for p in db.get_event_pairings(9202, DB)["9"][0]["players"]] == ["P9 Test9202", "P10 Test9202"], by.get(9202))
 res2 = db.auto_generate_pairings(DB, today=monday)
 check("a second run changes nothing", all(r.get("generated") is False for r in res2), res2)
+check("…and draws no second blind ('only if they aren't run already')",
+      all(r.get("blinds") == 0 for r in res2) and {r["event_id"]: r.get("blinds_why") for r in res2}[9202] == "already drawn", res2)
 check("a Tuesday 'today' (Wednesday event) is outside the dial — nothing runs", db.auto_generate_pairings(DB, today=tuesday) == [])
 db.set_app_setting(db.PAIRINGS_AUTO_WEEKDAYS_KEY, "tue, wed", db_path=DB)
 res3 = db.auto_generate_pairings(DB, today=tuesday)

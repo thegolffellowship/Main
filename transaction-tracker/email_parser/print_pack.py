@@ -16,7 +16,8 @@ failing silently.
 The routine (`send_due_print_packs`) runs hourly 5–10 PM Central and
 mails the pack for every active event dated TOMORROW to
 `PRINT_PACK_EMAIL_TO` (falls back to `DAILY_REPORT_TO`, then
-`EMAIL_ADDRESS`). A content hash of the rendered parts is recorded in
+`EMAIL_ADDRESS`), plus the chapter's extra recipients (dial
+`print_pack_chapter_recipients`; Austin → Robert Straiton). A content hash of the rendered parts is recorded in
 `app_settings` (`print_pack_sent:<event_id>`), so a pack is sent once —
 and sent AGAIN only if the sheet changed after the first send. Kerry
 sends nothing here; the pack goes to Kerry.
@@ -226,9 +227,51 @@ def _render_pdf_weasyprint(htmls, static_dir: str):
     return docs[0].copy(pages).write_pdf(), parts, "weasyprint"
 
 
-def print_pack_recipient() -> str | None:
-    return (os.getenv("PRINT_PACK_EMAIL_TO") or os.getenv("DAILY_REPORT_TO")
+# Per-CHAPTER extra recipients (Kerry 2026-09-22: "Make sure AUSTIN Send
+# Pack sends to Robert Straiton at robert@thegolffellowship.com as well as
+# me"). The app_settings dial `print_pack_chapter_recipients` is a JSON
+# object {chapter: "addr[, addr]"}; unset, the seed below applies. The
+# configured recipient (Kerry) is always first; extras are appended.
+PRINT_PACK_CHAPTER_RECIPIENTS_KEY = "print_pack_chapter_recipients"
+PRINT_PACK_CHAPTER_RECIPIENTS_DEFAULT = {"Austin": "robert@thegolffellowship.com"}
+
+
+def print_pack_chapter_recipients(db_path=None) -> dict:
+    """{chapter: [addr, ...]} — the dial, else the seed."""
+    import json
+    raw = None
+    try:
+        from email_parser import database as db
+        raw = db.get_app_setting(PRINT_PACK_CHAPTER_RECIPIENTS_KEY, db_path=db_path)
+    except Exception:
+        raw = None
+    src = PRINT_PACK_CHAPTER_RECIPIENTS_DEFAULT
+    if raw:
+        try:
+            parsed = json.loads(raw)
+            if isinstance(parsed, dict):
+                src = parsed
+        except (TypeError, ValueError):
+            pass
+    out = {}
+    for ch, v in src.items():
+        addrs = v if isinstance(v, list) else str(v or "").split(",")
+        out[str(ch).strip().lower()] = [a.strip() for a in addrs if a and a.strip()]
+    return out
+
+
+def print_pack_recipient(ev: dict | None = None, db_path=None) -> str | None:
+    """Comma-separated To: line — the configured recipient, then the
+    event's chapter extras (none for a chapter-less or TGF-wide event)."""
+    base = (os.getenv("PRINT_PACK_EMAIL_TO") or os.getenv("DAILY_REPORT_TO")
             or os.getenv("EMAIL_ADDRESS"))
+    addrs = [a.strip() for a in (base or "").split(",") if a.strip()]
+    if ev:
+        for a in print_pack_chapter_recipients(db_path).get(
+                (ev.get("chapter") or "").strip().lower(), []):
+            if a.lower() not in {x.lower() for x in addrs}:
+                addrs.append(a)
+    return ", ".join(addrs) or None
 
 
 def _esc(v) -> str:
@@ -323,7 +366,7 @@ def send_event_print_pack(built: dict, to_address: str | None = None,
     """Mail a built pack as an attachment and record its hash."""
     from email_parser import database as db
     from email_parser.fetcher import send_mail_graph
-    to_address = to_address or print_pack_recipient()
+    to_address = to_address or print_pack_recipient(built.get("event"), db_path=db_path)
     creds = {k: os.getenv(k) for k in ("AZURE_TENANT_ID", "AZURE_CLIENT_ID",
                                        "AZURE_CLIENT_SECRET", "EMAIL_ADDRESS")}
     if not to_address or not all(creds.values()):

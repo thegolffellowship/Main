@@ -2301,7 +2301,19 @@ FLIGHTING lane (spun off "TGF Tracker Improvements 2"; plan #584).
   automatically recognizing/creating the CTPs"). The markers now read the
   card off the twin 22371 (pairings.md "Proximity Markers"), and
   `scoring-course-merge:25402|22371` (dry run; `|apply` on Kerry's word)
-  is the registry-rule fix: one course_id per real course.
+  is the registry-rule fix: one course_id per real course. **Applied
+  2026-09-22 (v2.476.7)** — Blue/White 18 collapsed into 2254/2253, Gold/
+  Red 18 moved across, the event re-pointed. Consequence on the sheet:
+  the Forward band now computes off the WOMEN'S Red rating (tee 557, F,
+  34.7/120) instead of the CRDB men's Red (14679, M, 32.6/115) — the
+  gender rule, handicaps.md — so DelCarmen / McCormick / Wade each gained
+  two strokes; men unchanged. Twins that remain (dry runs, awaiting
+  Kerry): Lost Pines 22819→53554, Silverhorn 25399→22366 and
+  54840→22366, Star Ranch 55562→22375 and 50887→22375, Twin Creeks
+  63784→29587. **Prevention:** `_find_course_loose` (exact → alias →
+  normalized key → pinned short name, most rounds wins, spelling aliased)
+  gates the boot seeding and `_upsert_course_tee`. Guard:
+  `test_course_twins.py`.
 - **Seed flip (ratified):** `live_scoring.SEED_FLIGHT_CONFIG.min_flight_size`
   is 0 — the Flighting Lab dial still exists to SHOW what merging would
   do; nothing merges by default any more.
@@ -2335,6 +2347,14 @@ emailed to me."
   Sheet / Cart Signs (saved sheet only) → `POST
   /api/events/<id>/print-pack/send` builds and mails the pack now and
   records the hash, so the routine leaves that sheet alone.
+- **Recipients (v2.476.7, Kerry 2026-09-22: "Make sure AUSTIN Send Pack
+  sends to Robert Straiton at robert@thegolffellowship.com as well as
+  me"):** `print_pack_recipient(ev)` = the configured address (Kerry)
+  first, then the event chapter's extras from the app_settings dial
+  `print_pack_chapter_recipients` (JSON `{chapter: "addr[, addr]"}`;
+  seed `{"Austin": "robert@thegolffellowship.com"}` when unset),
+  de-duplicated. Routine and Send Pack share it; `|send|<to>` on the
+  bridge still overrides.
 - **On demand:** `scoring-print-pack-pdf:<event_id>` builds and reports parts,
   page counts, hash and size; `|send[|<to>]` mails it and records the
   hash; `scoring-print-pack-pdf:due` lists tomorrow's events.

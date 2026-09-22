@@ -2316,6 +2316,10 @@ def _migrate_create_dim_tables(conn: sqlite3.Connection) -> None:
         if canonical.strip().lower() in known_aliases:
             continue
         try:
+            # A twin by normalized name or pinned short name is the SAME
+            # course (v2.476.7, Brackenridge): alias it, never seed it.
+            if _find_course_loose(conn, canonical):
+                continue
             conn.execute(
                 "INSERT OR IGNORE INTO courses (name, chapter_id) VALUES (?, ?)",
                 (canonical, course_chapter.get(canonical)),
@@ -16047,15 +16051,8 @@ def _upsert_course_tee(conn: sqlite3.Connection, tee: dict) -> tuple:
     course_name = (tee.get("course") or "").strip()
     if not course_name:
         return None, None
-    row = conn.execute("SELECT course_id FROM courses WHERE LOWER(name) = LOWER(?)",
-                       (course_name,)).fetchone()
-    if not row:
-        row = conn.execute(
-            """SELECT course_id FROM course_aliases
-               WHERE LOWER(alias_name) = LOWER(?)""", (course_name,)).fetchone()
-    if row:
-        course_id = row["course_id"]
-    else:
+    course_id = _find_course_loose(conn, course_name)     # exact, alias, or twin
+    if not course_id:
         course_id = conn.execute("INSERT INTO courses (name) VALUES (?)",
                                  (course_name,)).lastrowid
     yd = tee.get("yardage") or {}
@@ -25163,6 +25160,74 @@ def apply_course_short_name_pins(db_path: str | Path = DB_PATH) -> dict:
     ]
     return {"updated": updated, "already_set": unchanged,
             "created_from_round_history": inserted, "pins_without_a_course": missed}
+
+
+def _course_short_pin(name: str) -> str:
+    """The short name a course name would be pinned to (Kerry's pins
+    first, the generic deriver otherwise) — a name's identity for the
+    twin check below."""
+    low = (name or "").lower()
+    for pat, short in _COURSE_SHORT_PINS:
+        if re.search(pat, low):
+            return short
+    return derive_course_short_name(name or "")
+
+
+def _find_course_loose(conn, name: str) -> int | None:
+    """The course row a name belongs to, BEFORE anything creates one.
+
+    Brackenridge (Kerry 2026-09-22): "Brackenridge Park Golf Course" on a
+    Golf Genius event became course 25402 beside the 22371 "Brackenridge
+    Golf Course" that held every round and the hole card, and the CTP
+    markers went blind. Exact name and alias first, then the same
+    normalized key (`_course_dedup_key`) or the same pinned short name
+    against the active, un-archived rows — the one with the most rounds
+    wins and the new spelling is aliased to it, so the next lookup is
+    exact. Returns None when the name is genuinely new."""
+    n = (name or "").strip()
+    if not n:
+        return None
+    row = conn.execute("SELECT course_id FROM courses WHERE LOWER(name) = LOWER(?)",
+                       (n,)).fetchone()
+    if row:
+        return row["course_id"]
+    try:
+        row = conn.execute("SELECT course_id FROM course_aliases "
+                           "WHERE LOWER(alias_name) = LOWER(?)", (n,)).fetchone()
+        if row:
+            return row["course_id"]
+    except sqlite3.OperationalError:
+        pass
+    key, pin = _course_dedup_key(n), _course_short_pin(n).strip().lower()
+    if not key:
+        return None
+    try:
+        rows = [dict(r) for r in conn.execute(
+            """SELECT c.course_id, c.name, c.short_name,
+                      (SELECT COUNT(*) FROM scoring_rounds sr
+                        WHERE sr.course_id = c.course_id) AS n_rounds
+                 FROM courses c WHERE COALESCE(c.status, 'active') = 'active'""")]
+    except sqlite3.OperationalError:
+        rows = [dict(r) | {"n_rounds": 0} for r in conn.execute(
+            "SELECT course_id, name, short_name FROM courses")]
+    best = None
+    for r in rows:
+        if "archived" in (r["name"] or "").lower():
+            continue
+        same = (_course_dedup_key(r["name"]) == key
+                or (pin and (r.get("short_name") or "").strip().lower() == pin))
+        if same and (best is None or r["n_rounds"] > best["n_rounds"]):
+            best = r
+    if not best:
+        return None
+    try:
+        conn.execute("INSERT OR IGNORE INTO course_aliases (course_id, alias_name) "
+                     "VALUES (?, ?)", (best["course_id"], n))
+    except sqlite3.OperationalError:
+        pass
+    logger.info("Course registry: '%s' resolves to existing course %s (%r) — aliased, not created",
+                n, best["course_id"], best["name"])
+    return best["course_id"]
 
 
 def _course_dedup_key(n) -> str:
@@ -57863,6 +57928,40 @@ def _blind_pick(cands: list) -> dict:
     return random.choice(tier)
 
 
+def _blind_seat_candidates(eligible: list, taken: set, group: dict, pos: int,
+                           unit: str) -> tuple[list, str]:
+    """Who may fill THIS seat, in rule order — the ONE rule for the
+    whole-sheet draw and the single-seat RANDOM (Kerry 2026-09-22: "They
+    should basically do the same thing except the BLINDS button does it
+    for all blinds at the same time").
+
+    CART NET (rule 15h, Kerry 2026-09-18): the blind comes from the OTHER
+    cart of the same foursome when someone there is eligible; TEAM NET
+    (and a cart with nobody eligible): the field outside the group. Never
+    anyone already a blind tonight, never a card filling its own team."""
+    players = group.get("players") or []
+    here = {p.get("customer_id") for p in players}
+    if unit == "cart":
+        other_cart = {p.get("customer_id") for p in players
+                      if ((p.get("cart_pos") or 0) <= 2) != (pos <= 2)}
+        cands = [e for e in eligible
+                 if e["customer_id"] in other_cart and e["customer_id"] not in taken]
+        if cands:
+            return cands, "other cart"
+    cands = [e for e in eligible
+             if e["customer_id"] not in taken and e["customer_id"] not in here]
+    return cands, ("field (no eligible player in the other cart)"
+                   if unit == "cart" else "field")
+
+
+def _event_blind_unit(pairings: dict, db_path=None) -> str:
+    """cart | group — what the matrix says this sheet's field plays."""
+    n_seated = sum(len(g.get("players") or []) for gs in pairings.values() for g in gs)
+    unit, _ = _event_team_unit(n_seated, "18" if "18" in pairings else "9",
+                               db_path=db_path)
+    return unit
+
+
 def draw_event_blinds(event_id: int, dry_run: bool = True, redraw: bool = False,
                       year: int | None = None, db_path=None, team_unit: str | None = None) -> dict:
     """Fill every open seat on the saved sheet with a blind.
@@ -57921,15 +58020,12 @@ def draw_event_blinds(event_id: int, dry_run: bool = True, redraw: bool = False,
         # Net). In Team Net, it is randomly from the field outside of their
         # group like we've had it"). The matrix says which game the field
         # plays (`_event_team_unit`); the eligibility rules are the same.
-        _n_seated = sum(len(g.get("players") or []) for gs in pairings.values() for g in gs)
-        _unit, _ = _event_team_unit(_n_seated, "18" if "18" in pairings else "9",
-                                    db_path=db_path)
+        _unit = _event_blind_unit(pairings, db_path=db_path)
         if team_unit in ("cart", "group"):        # explicit override (tests, a manager)
             _unit = team_unit
         for holes, groups in sorted(pairings.items()):
             for g in sorted(groups, key=lambda x: x["group_num"]):
                 seated = {p.get("cart_pos") for p in (g.get("players") or [])}
-                here = {p.get("customer_id") for p in (g.get("players") or [])}
                 have = {b["cart_pos"] for b in
                         (existing.get(holes, {}).get(g["group_num"]) or [])}
                 for pos in range(1, size + 1):
@@ -57943,20 +58039,8 @@ def draw_event_blinds(event_id: int, dry_run: bool = True, redraw: bool = False,
                                         "slot_label": g.get("slot_label"),
                                         "cart_pos": pos, **already})
                         continue
-                    cands, source = [], "field"
-                    if _unit == "cart":
-                        other_cart = {p.get("customer_id") for p in (g.get("players") or [])
-                                      if ((p.get("cart_pos") or 0) <= 2) != (pos <= 2)}
-                        cands = [e for e in pool["eligible"]
-                                 if e["customer_id"] in other_cart
-                                 and e["customer_id"] not in taken]
-                        source = "other cart"
-                    if not cands:
-                        cands = [e for e in pool["eligible"]
-                                 if e["customer_id"] not in taken
-                                 and e["customer_id"] not in here]
-                        source = ("field (no eligible player in the other cart)"
-                                  if _unit == "cart" else "field")
+                    cands, source = _blind_seat_candidates(
+                        pool["eligible"], taken, g, pos, _unit)
                     if not cands:
                         unfilled.append({"holes": holes,
                                          "group_num": g["group_num"],
@@ -58041,13 +58125,22 @@ def set_event_blind(event_id: int, holes: str, group_num: int, cart_pos: int,
                  and b["cart_pos"] != cart_pos]
         if taken:
             return {"error": f"{pick['name']} is already a blind in this event"}
-        grp = next((g for g in (get_event_pairings(event_id, db_path=db_path)
-                                .get(holes) or [])
+        pairings = get_event_pairings(event_id, db_path=db_path)
+        grp = next((g for g in (pairings.get(holes) or [])
                     if g["group_num"] == group_num), None)
-        if grp and any(p.get("customer_id") == int(customer_id)
-                       for p in (grp.get("players") or [])):
-            return {"error": f"{pick['name']} is in that group — a card "
-                             f"cannot fill its own team"}
+        me = next((p for p in ((grp or {}).get("players") or [])
+                   if p.get("customer_id") == int(customer_id)), None)
+        if me:
+            # A card cannot fill its own TEAM. On Cart Net (rule 15h) the
+            # team is the cart, so the other cart of the foursome is
+            # exactly where the blind comes from; on Team Net the whole
+            # group is the team.
+            unit = _event_blind_unit(pairings, db_path=db_path)
+            same_cart = ((me.get("cart_pos") or 0) <= 2) == (int(cart_pos) <= 2)
+            if unit != "cart" or same_cart:
+                return {"error": f"{pick['name']} is in that "
+                                 f"{'cart' if unit == 'cart' else 'group'} — a "
+                                 f"card cannot fill its own team"}
         slot_label = (grp or {}).get("slot_label")
         conn.execute(
             """INSERT OR REPLACE INTO blind_draws
@@ -58078,19 +58171,22 @@ def draw_one_blind(event_id: int, holes: str, group_num: int, cart_pos: int,
         taken |= {r["customer_id"] for r in conn.execute(
             "SELECT customer_id FROM blind_draws WHERE event_id = ? "
             "AND group_num IS NULL", (event_id,)) if r["customer_id"]}
-        grp = next((g for g in (get_event_pairings(event_id, db_path=db_path)
-                                .get(holes) or [])
+        pairings = get_event_pairings(event_id, db_path=db_path)
+        grp = next((g for g in (pairings.get(holes) or [])
                     if g["group_num"] == group_num), None)
-        here = {p.get("customer_id") for p in ((grp or {}).get("players") or [])}
-    cands = [e for e in pool["eligible"]
-             if e["customer_id"] not in taken and e["customer_id"] not in here]
+        unit = _event_blind_unit(pairings, db_path=db_path)
+    cands, source = _blind_seat_candidates(pool["eligible"], taken, grp or {},
+                                           int(cart_pos), unit)
     if not cands:
         return {"error": "no eligible player left — members in the field "
                          "with an established TGF handicap, not already a "
                          "blind tonight, not in this group"}
     pick = _blind_pick(cands)
-    return set_event_blind(event_id, holes, group_num, cart_pos,
-                           pick["customer_id"], db_path=db_path)
+    out = set_event_blind(event_id, holes, group_num, cart_pos,
+                          pick["customer_id"], db_path=db_path)
+    if not out.get("error"):
+        out.update(team_unit=unit, drawn_from=source)
+    return out
 
 
 def clear_event_blinds(event_id: int, db_path=None) -> int:
@@ -64184,8 +64280,50 @@ def auto_generate_pairings(db_path=None, today=None) -> list[dict]:
                         pass
         except Exception as e:                       # one event never blocks the rest
             row.update(generated=False, why=f"error: {e}")
+        # BLINDS ride the same routine (Kerry 2026-09-22: "Make the BLINDS
+        # run on the 5:00p day before auto generate pairings as well").
+        # Every open seat on the saved sheet gets its card that evening,
+        # whether the routine paired the event or Kerry did — but only
+        # when NO blind has been drawn for the event yet, so a draw he
+        # already made (or a seat he chose to leave open after one) is
+        # left exactly as it is. Same rule as the button: one draw.
+        try:
+            if _event_has_blinds(ev["id"], db_path):
+                row.update(blinds=0, blinds_why="already drawn")
+            else:
+                bd = draw_event_blinds(ev["id"], dry_run=False, db_path=db_path)
+                if bd.get("error"):
+                    row.update(blinds=0, blinds_why=bd["error"])
+                elif bd.get("drawn"):
+                    row.update(blinds=len(bd["drawn"]),
+                               blinds_unfilled=len(bd.get("unfilled") or []))
+                    try:
+                        log_agent_action(
+                            "scheduler", "blinds_auto_draw",
+                            f"{ev.get('item_name')}: {len(bd['drawn'])} blind(s) drawn — "
+                            + "; ".join(f"{b.get('slot_label') or b['group_num']} seat "
+                                        f"{b['cart_pos']}: {b['name']} ({b.get('drawn_from')})"
+                                        for b in bd["drawn"]), db_path=db_path)
+                    except Exception:
+                        pass
+                else:
+                    row.update(blinds=0, blinds_why=("no eligible player"
+                                                     if bd.get("open_seats")
+                                                     else "no open seats"))
+        except Exception as e:
+            row.update(blinds=0, blinds_why=f"error: {e}")
         out.append(row)
     return out
+
+
+def _event_has_blinds(event_id: int, db_path=None) -> bool:
+    """Any blind recorded for the event — app-drawn or read from GG."""
+    with _connect(db_path) as conn:
+        try:
+            return conn.execute("SELECT 1 FROM blind_draws WHERE event_id = ? LIMIT 1",
+                                (event_id,)).fetchone() is not None
+        except sqlite3.OperationalError:
+            return False
 
 
 def generate_event_pairings(
