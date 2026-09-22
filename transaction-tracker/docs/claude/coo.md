@@ -145,7 +145,7 @@ and report back to you and the COO for you to pick up. Should be a
 standard once a day routine."*
 
 `email_parser/health.py` is that agent. Once a day, at or after the
-dialled time (`health_digest_time`, default 05:45 Central; the check
+dialled time (`health_digest_time`, default 05:00 Central; the check
 runs every 15 minutes 4–9 AM and the dial takes effect without a
 restart), `run_health_digest()`:
 

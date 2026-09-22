@@ -71,6 +71,7 @@ FLUSH_INTERVAL_S = 3.0
 MAX_BREAKDOWN_KEYS = 24
 
 _QUEUE: deque = deque()
+_ENSURED_PATHS: set = set()   # files whose perf_samples table this process has created
 _LOCK = threading.Lock()
 _INFLIGHT: dict = {}          # id(stopwatch) -> stopwatch
 _FLUSHER: threading.Thread | None = None
@@ -337,7 +338,9 @@ def flush(db_path=None) -> int:
     try:
         conn = sqlite3.connect(target, timeout=10)
         try:
-            ensure_table(conn)
+            if target not in _ENSURED_PATHS:
+                ensure_table(conn)
+                _ENSURED_PATHS.add(target)
             conn.executemany(
                 """INSERT INTO perf_samples
                    (at, kind, name, event_id, total_ms, breakdown, status, role, detail)
@@ -544,6 +547,38 @@ def db_size(db_path=None) -> dict:
         out["wal_bytes"] = os.path.getsize(p + "-wal")
     except OSError:
         pass
+    return out
+
+
+def db_layout(db_path=None, top: int = 12) -> dict:
+    """WHERE the bytes are: page size / count, FREE pages (space deleted
+    rows left behind — a VACUUM candidate when large), and the biggest
+    tables + indexes by bytes via the dbstat virtual table (present in
+    every CPython build; reported as unavailable otherwise). The live file
+    read 431 MB for ~2,300 orders on 2026-09-22 — this is how the digest
+    says which table that is."""
+    out = {"page_size": None, "page_count": None, "freelist_pages": None,
+           "free_bytes": None, "tables": [], "dbstat": True}
+    conn = sqlite3.connect(str(_db_path(db_path)), timeout=10)
+    try:
+        ps = conn.execute("PRAGMA page_size").fetchone()[0]
+        pc = conn.execute("PRAGMA page_count").fetchone()[0]
+        fl = conn.execute("PRAGMA freelist_count").fetchone()[0]
+        out.update(page_size=ps, page_count=pc, freelist_pages=fl, free_bytes=ps * fl)
+        try:
+            rows = conn.execute(
+                "SELECT name, SUM(pgsize) AS bytes, COUNT(*) AS pages FROM dbstat "
+                "GROUP BY name ORDER BY bytes DESC LIMIT ?", (top,)).fetchall()
+            kinds = {r[0]: r[1] for r in conn.execute(
+                "SELECT name, type FROM sqlite_master WHERE type IN ('table','index')")}
+            out["tables"] = [{"name": r[0], "bytes": int(r[1] or 0), "pages": r[2],
+                              "type": kinds.get(r[0], "?")} for r in rows]
+        except sqlite3.Error:
+            out["dbstat"] = False
+    except sqlite3.Error:
+        pass
+    finally:
+        conn.close()
     return out
 
 

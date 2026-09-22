@@ -1969,3 +1969,26 @@ spread their time evenly across four unrelated sections, which the
 fixture cannot reproduce — the samples' `concurrent` / `load1` and the
 `connect` lap are there to say whether that was contention with a
 scheduler job or the volume.
+
+### Second pass the same afternoon: the lock every section waited on (v2.486.0)
+
+Mailbox #608 (the parent lane, reading the first two live samples): *"every
+section is slow at once… that is not one bad query, that is the process
+or the database being slow for everyone… count the CREATE TABLE IF NOT
+EXISTS executed per request."* Counted: four `_ensure_pairing_tables`
+calls inside one PAIRINGS open, plus `_ensure_gg_points_table` in the
+standings section — 58 call sites for the pairing one alone. Proven in
+the sandbox: `CREATE TABLE IF NOT EXISTS` on an existing table is free,
+but **`CREATE INDEX IF NOT EXISTS` on an existing index takes the write
+lock and waits behind any writer** (a scheduler job, a bridge) up to the
+5-second busy timeout — which is exactly a 2–3 s wait in every section
+that runs one. Every `_ensure_*` helper (18 of them) is now wrapped in
+`_once_per_db`: it runs once per database file per process and is skipped
+after that; a new file (fixture, restored volume) runs it again.
+
+The first live report (v2.485.0, 3:51 PM) also showed **load average 87
+on the box** (the host's figure, read inside the container) and a **431 MB
+database file** for 2,312 orders. The report now carries `cpus`, the
+file's free pages and the biggest tables (`perf.db_layout`, dbstat), and
+the findings rules name a saturated box, a VACUUM candidate and a table
+over half the file. Nothing runs a VACUUM — that is Kerry's call.

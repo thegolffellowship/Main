@@ -1892,8 +1892,9 @@ def start_scheduler():
     # ── Tracker Health digest (Kerry 2026-09-22: "a standard once a day
     #    routine"). Checked every 15 minutes from 4 to 9 AM Central and
     #    run ONCE, at or after the dialled time (app_settings
-    #    `health_digest_time`, default 05:45 — before the 6:30 mailbox
-    #    read and the 7:00 COO email). The dial takes effect without a
+    #    `health_digest_time`, default 05:00 Central — Kerry's hour, #611;
+    #    the Handicap Surfaces lane reads it at 5:15). Scheduled in
+    #    US/Central, so DST is not our problem. The dial takes effect without a
     #    restart because the check reads it each time. HEALTH_DIGEST=0
     #    switches the routine off.
     if os.getenv("HEALTH_DIGEST", "1") != "0":
@@ -1916,7 +1917,7 @@ def start_scheduler():
             replace_existing=True,
             max_instances=1, coalesce=True,
         )
-        logger.info("Tracker Health digest scheduled (dial health_digest_time, default 05:45 Central)")
+        logger.info("Tracker Health digest scheduled (dial health_digest_time, default 05:00 Central)")
 
     scheduler.start()
     logger.info("Scheduler started — checking inbox every %d minutes", interval)

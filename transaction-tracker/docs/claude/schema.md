@@ -500,8 +500,17 @@ overridden without a deploy by the `perf_slow_ms` app setting (JSON
 `{name: ms}`). `PERF_SAMPLES=0` switches sampling off.
 
 Dials added with it (`app_settings`): `health_digest_time` (HH:MM
-Central, default `05:45`), `health_digest_last` (the once-a-day mark),
+Central, default `05:00`), `health_digest_last` (the once-a-day mark),
 `health_db_size_history` (the file size per day, for the growth line).
+
+**Lazy DDL runs once per database per process (v2.486.0).** Every
+`_ensure_*` helper is wrapped in `_once_per_db` (database.py): the first
+call against a file runs the idempotent CREATE / guarded ALTER set and
+records `(helper, path)`; later calls return at once. Reason: `CREATE
+INDEX IF NOT EXISTS` on an existing index takes the write lock and waits
+behind a concurrent writer (proven; up to the 5 s busy timeout), and
+reads called these helpers on every open. A new helper must be
+decorated the same way and stay idempotent.
 
 **Indexes added the same day** (from the PAIRINGS profile, no query
 changed): `idx_items_customer_id ON items(customer_id)`,

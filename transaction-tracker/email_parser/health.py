@@ -4,8 +4,8 @@ designed for this that will log things and report back to you and the
 COO for you to pick up. Should be a standard once a day routine."*).
 
 What it does, once a day at the dialled time (`health_digest_time`,
-HH:MM Central, default 05:45 — before the Handicap Surfaces lane's 6:30
-read of the mailbox and the 7:00 COO email):
+HH:MM Central, default 05:00 — Kerry's hour, #611: the Handicap Surfaces
+lane's 5:15 pick-up reads it, and Kerry wakes to a brief):
 
   1. `build_health_report(days=1)` — p50 / p95 / max per route, job and
      bridge from `perf_samples`; the slow-open list with breakdowns and
@@ -37,7 +37,10 @@ from . import perf
 
 logger = logging.getLogger(__name__)
 
-DIGEST_TIME_DEFAULT = "05:45"
+# Kerry 2026-09-22 (#611): "5:00am for the central digest and subsequent
+# response work so that anything is updated by the time I wake up." The
+# Handicap Surfaces lane picks it up at 5:15, so it must be posted by 5:10.
+DIGEST_TIME_DEFAULT = "05:00"
 DIGEST_TOPIC = "tracker-health"
 DIGEST_AUTHOR = "tracker-claude"
 ACTION_FROM = "Tracker Health"
@@ -51,6 +54,8 @@ RULES = {
     "probe_read_ms": 150,
     "error_log_rows": 5,                  # agent-log error rows in the window
     "min_samples_expected": 1,            # fewer than this = nothing measured
+    "free_pages_pct": 20,                 # freelist over this % of the file → VACUUM candidate
+    "load_per_cpu": 4.0,                  # load1 / cpus over this → the box is saturated
 }
 
 
@@ -176,9 +181,12 @@ def build_health_report(days: float = 1, db_path=None, record_size: bool = False
         "jobs": sorted(jobs.values(), key=lambda j: (-j["errors"], -j["max_ms"])),
         "log_errors": _log_errors(days, db_path),
         "db": {**size, "growth_bytes": growth, "history": hist[-14:],
-               "counts": _table_counts(db_path)},
+               "counts": _table_counts(db_path), "layout": perf.db_layout(db_path)},
         "probe": perf.probe_db_ms(db_path),
+        # Inside a container os.getloadavg() is the HOST's number, so it is
+        # read beside the cpu count; a ratio, not the raw figure, is the tell.
         "load1": perf._load1(),
+        "cpus": os.cpu_count(),
         "hcp_cache": _hcp_cache_stats(),
         "sample_count": sum(r["count"] for k in summary for r in summary[k]),
     }
@@ -229,6 +237,26 @@ def find(report: dict) -> list[dict]:
                             f"{pr.get('connect_ms')} ms, pragma {pr.get('pragma_ms')} ms, "
                             f"read {pr.get('read_ms')} ms — every section of every "
                             f"request pays this"})
+    lay = (report["db"].get("layout") or {})
+    if lay.get("page_count") and lay.get("freelist_pages") is not None:
+        pct = 100.0 * lay["freelist_pages"] / max(1, lay["page_count"])
+        if pct > RULES["free_pages_pct"]:
+            out.append({"severity": "medium", "key": "db_free_pages",
+                        "text": f"{pct:.0f}% of the database file is free pages "
+                                f"({lay['free_bytes']/1048576:.0f} MB of {report['db']['bytes']/1048576:.0f} MB) — "
+                                f"deleted rows' space never reclaimed; a VACUUM (off-hours, Kerry's call) "
+                                f"would shrink the file every read pays for"})
+    big = [t for t in (lay.get("tables") or []) if t["type"] == "table"]
+    if big and report["db"]["bytes"] and big[0]["bytes"] > 0.5 * report["db"]["bytes"] and big[0]["bytes"] > 50 * 1048576:
+        out.append({"severity": "medium", "key": f"db_big_table:{big[0]['name']}",
+                    "text": f"table {big[0]['name']} is {big[0]['bytes']/1048576:.0f} MB — over half the file"})
+    if report.get("load1") is not None and report.get("cpus"):
+        ratio = report["load1"] / max(1, report["cpus"])
+        if ratio > RULES["load_per_cpu"]:
+            out.append({"severity": "high", "key": "box_load",
+                        "text": f"the box is saturated: load average {report['load1']} over "
+                                f"{report['cpus']} cpu(s) (host figure inside the container) — "
+                                f"every request waits for CPU before its first query"})
     n_err = sum(report["log_errors"].values())
     if n_err >= RULES["error_log_rows"]:
         top = ", ".join(f"{k} ×{v}" for k, v in list(report["log_errors"].items())[:4])
@@ -287,9 +315,14 @@ def render_markdown(report: dict) -> str:
              + (f" (+{g/1048576:.2f} MB since last digest)" if g is not None else "")
              + f", WAL {db['wal_bytes']/1048576:.1f} MB; rows: "
              + ", ".join(f"{k} {v}" for k, v in (db.get("counts") or {}).items() if v is not None))
+    lay = db.get("layout") or {}
+    if lay.get("tables"):
+        L.append("**WHERE THE BYTES ARE:** " + ", ".join(
+            f"{t['name']} {t['bytes']/1048576:.0f} MB" for t in lay["tables"][:8])
+            + (f"; free pages {lay['free_bytes']/1048576:.0f} MB" if lay.get("free_bytes") else ""))
     pr = report["probe"]
     L.append(f"**PROBE now:** connect {pr['connect_ms']} ms · pragma {pr['pragma_ms']} ms · "
-             f"read {pr['read_ms']} ms · load1 {report.get('load1')}")
+             f"read {pr['read_ms']} ms · load1 {report.get('load1')} on {report.get('cpus')} cpu(s)")
     hc = report["hcp_cache"]
     L.append(f"**HANDICAP CACHE** since boot: {hc['hits']} hits / {hc['misses']} misses"
              + (f" ({hc['hit_rate']*100:.0f}%)" if hc.get("hit_rate") is not None else ""))

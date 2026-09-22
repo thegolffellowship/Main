@@ -381,6 +381,51 @@ def managed_connection(db_path: str | Path | None = None):
 _connect = managed_connection
 
 
+# ── lazy DDL runs ONCE per database per process (Tracker Health lane,
+#    2026-09-22, mailbox #608). Every `_ensure_*` helper is idempotent DDL
+#    (CREATE TABLE / INDEX IF NOT EXISTS, guarded ALTERs) that reads call
+#    on every open — `_ensure_pairing_tables` alone from 58 sites, four of
+#    them inside one PAIRINGS request. CREATE TABLE IF NOT EXISTS on an
+#    existing table is free, but CREATE INDEX IF NOT EXISTS on an existing
+#    index takes the WRITE lock and WAITS (up to the 5 s busy timeout)
+#    behind any writer — a scheduler job, a bridge — which is how every
+#    section of Kerry's 11-second opens was slow at once. After the first
+#    successful run against a file nothing has changed, so the helper is
+#    skipped; a new file (test fixture, restored volume) runs it again.
+_ENSURED: set = set()
+_ENSURED_LOCK = threading.Lock()
+
+
+def _conn_main_path(conn) -> str | None:
+    try:
+        for r in conn.execute("PRAGMA database_list").fetchall():
+            if r[1] == "main":
+                return r[2] or None
+    except sqlite3.Error:
+        return None
+    return None
+
+
+def _once_per_db(fn):
+    """Run an idempotent `_ensure_*(conn, ...)` helper once per database
+    file per process. An in-memory database (no path) always runs it."""
+    import functools as _ft
+
+    @_ft.wraps(fn)
+    def wrapper(conn, *a, **kw):
+        path = _conn_main_path(conn)
+        key = (fn.__name__, path)
+        if path and key in _ENSURED:
+            return None
+        out = fn(conn, *a, **kw)
+        if path:
+            with _ENSURED_LOCK:
+                _ENSURED.add(key)
+        return out
+    wrapper._ensure_inner = fn
+    return wrapper
+
+
 def _migrate_eliminate_tgf_golfers(conn: sqlite3.Connection) -> None:
     """Migrate tgf_payouts.golfer_id → tgf_payouts.customer_id, then drop tgf_golfers.
 
@@ -8041,6 +8086,7 @@ def substitute_gg_tournament_names(tables: list,
     return out
 
 
+@_once_per_db
 def _ensure_gg_points_table(conn: sqlite3.Connection) -> None:
     """Lazy-create the persisted GG standings snapshot (pairings pattern)."""
     conn.execute(
@@ -13821,6 +13867,7 @@ CA_QUEUE_SECTIONS = ("kerry_decision", "ca_owed", "cc_build",
 _CA_QUEUE_STATUSES = ("open", "blocked", "done")
 
 
+@_once_per_db
 def _ensure_ca_queue(conn: sqlite3.Connection) -> None:
     conn.execute("""CREATE TABLE IF NOT EXISTS ca_queue (
         id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -16214,6 +16261,7 @@ def _heal_tee_yardages(conn: sqlite3.Connection) -> dict:
         logger.info("tee yardages healed: %s", out)
     return out
 
+@_once_per_db
 def _ensure_scoring_tables(conn: sqlite3.Connection) -> None:
     # NB: courses / course_aliases / events.course_id already exist as the
     # canonical course registry (Events tab datalist reads it) — the scoring
@@ -16659,6 +16707,7 @@ _MVP_RETRO_BOUNDARY = "2026-07-14"
 # "TGF MVP $" game (can be shared). Winners are the purse>0 rows; when an
 # MVP table carries no purse at all we fall back to the outright Pos 1 row.
 
+@_once_per_db
 def _ensure_mvp_tables(conn: sqlite3.Connection) -> None:
     conn.execute("""CREATE TABLE IF NOT EXISTS event_mvps (
         id                INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -17867,6 +17916,7 @@ _GG_GAME_PATTERNS = [
 ]
 
 
+@_once_per_db
 def _ensure_gg_game_results_tables(conn: sqlite3.Connection) -> None:
     conn.execute("""CREATE TABLE IF NOT EXISTS gg_game_results (
         id                INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -18422,6 +18472,7 @@ def _flight_sections_from_leaderboard(tables: list) -> dict:
     return out
 
 
+@_once_per_db
 def _ensure_gg_game_flights_tables(conn: sqlite3.Connection) -> None:
     conn.execute("""CREATE TABLE IF NOT EXISTS gg_game_flights (
         id                INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -19265,6 +19316,7 @@ def _repair_matrix_gross_totals(conn) -> None:
 # through MCP tools; the admin triggers each side's turn. created_at is
 # a UTC audit stamp (see CLAUDE.md Timezone rules).
 
+@_once_per_db
 def _ensure_platform_dialogue_table(conn) -> None:
     conn.execute(
         """CREATE TABLE IF NOT EXISTS platform_dialogue (
@@ -19347,6 +19399,7 @@ def _seed_platform_dialogue(conn) -> None:
 # instead of waiting on live portal fetches. Refreshed by a daily
 # scheduler job and on demand (Refresh button / ?force=1).
 
+@_once_per_db
 def _ensure_gg_snapshot_table(conn) -> None:
     conn.execute(
         """CREATE TABLE IF NOT EXISTS gg_data_snapshots (
@@ -21789,6 +21842,7 @@ def _snapshot_marks(db_path=None) -> dict:
 # prefetch pixels, so "opened" is a floor-of-truth signal, and clients
 # that block images never report an open at all.
 
+@_once_per_db
 def _ensure_email_tracking_tables(conn) -> None:
     conn.execute("""CREATE TABLE IF NOT EXISTS email_sends (
         token TEXT PRIMARY KEY,
@@ -24266,6 +24320,7 @@ def verify_scoring_round(scoring_round_id: int,
 # carries customer_id as a FK to customers(customer_id).
 # ═══════════════════════════════════════════════════════════════════════
 
+@_once_per_db
 def _ensure_live_scoring_tables(conn: sqlite3.Connection) -> None:
     conn.execute("""CREATE TABLE IF NOT EXISTS ls_test_sessions (
         id            INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -25906,6 +25961,7 @@ def ensure_courses_from_history(dry_run: bool = True,
 # Anonymous, PII-free: event ('open'|'click'), path, and a short label.
 # No customer reference by design — the member tier is anonymous.
 
+@_once_per_db
 def _ensure_member_analytics_table(conn: sqlite3.Connection) -> None:
     conn.execute(
         """CREATE TABLE IF NOT EXISTS member_analytics (
@@ -34805,6 +34861,7 @@ def get_unpaid_payout_groups(db_path=None) -> dict:
 # manual Record Refund. Memo format (Kerry):
 # "[First Name] [Last Name] - Credit for [Event Name]".
 
+@_once_per_db
 def _ensure_refund_watch_table(conn: sqlite3.Connection) -> None:
     conn.execute(
         """CREATE TABLE IF NOT EXISTS refund_watches (
@@ -35181,6 +35238,7 @@ _REFERRAL_COUPON_RE = re.compile(r"^tgf-?referr?al-?(.+)$", re.I)
 _REFERRAL_MEMO_RE = re.compile(r"referr?al\s+fee\s+for\s+(.+?)\s*$", re.I)
 
 
+@_once_per_db
 def _ensure_referral_tables(conn: sqlite3.Connection) -> None:
     conn.execute("""CREATE TABLE IF NOT EXISTS referral_fees (
         id                    INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -35751,6 +35809,7 @@ def auto_match_refund_watches(expense_ids: list[int] | None= None,
     return summary
 
 
+@_once_per_db
 def _ensure_tgf_overpayments(conn) -> None:
     """Overpaid winnings ledger (v2.141.0, Kerry — the Hogue a9.19 case:
     Robert awarded Jay both CTPs, Kerry paid $98.50, GG then re-awarded one
@@ -47661,6 +47720,7 @@ def get_acct_allocations(month: str | None = None, event: str | None = None,
     return {"allocations": records, "totals": totals}
 
 
+@_once_per_db
 def _ensure_recurring_payments(conn) -> None:
     """Recurring payment registry (Kerry 2026-07-28: 'keep track of
     recurring payments too — annual and monthly. Aura is annual')."""
@@ -57982,6 +58042,7 @@ def _migrate_pairing_history_rounds(conn: sqlite3.Connection) -> bool:
     return True
 
 
+@_once_per_db
 def _ensure_pairing_tables(conn: sqlite3.Connection) -> None:
     """Create pairing tables if they don't exist (handles live DB migration)."""
     conn.execute(
@@ -59532,6 +59593,7 @@ def move_event_flight_player(event_id: int, game: str, customer_id, flight_no,
 # Nothing here pays anyone.
 # ---------------------------------------------------------------------------
 
+@_once_per_db
 def _ensure_flight_snapshot_tables(conn: sqlite3.Connection) -> None:
     conn.execute("""CREATE TABLE IF NOT EXISTS event_flight_snapshots (
         id             INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -61554,6 +61616,7 @@ BUNDLE_SEED = (
 OFFERABLE_BUNDLES = ("NET", "GROSS")
 
 
+@_once_per_db
 def _ensure_game_offer_tables(conn: sqlite3.Connection) -> None:
     conn.execute("""CREATE TABLE IF NOT EXISTS games (
         game_key          TEXT PRIMARY KEY,

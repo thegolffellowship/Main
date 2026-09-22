@@ -54,6 +54,14 @@ check("findings are ordered high → medium → info", [f["severity"] for f in r
 check("the slow list carries breakdown + what else ran + load", rep["slow"][0]["name"] == "pairings_get" and rep["slow"][0]["breakdown"]["saved_sheet"] == 4500 and rep["slow"][0]["detail"]["concurrent"] == ["job:auto_live_poll"])
 check("jobs: runs / errors / last status", next(j for j in rep["jobs"] if j["name"] == "db_backup")["errors"] == 1 and next(j for j in rep["jobs"] if j["name"] == "auto_live_poll")["last_status"] == "ok")
 check("db size, counts and the live probe are on the report", rep["db"]["bytes"] > 0 and rep["db"]["counts"]["items"] == 1 and "connect_ms" in rep["probe"])
+lay = rep["db"]["layout"]
+check("the layout says where the bytes are (page count, free pages, biggest tables via dbstat)",
+      lay["page_count"] > 0 and lay["freelist_pages"] is not None and (lay["dbstat"] is False or lay["tables"]), str(lay)[:200])
+fake = dict(rep); fake["db"] = dict(rep["db"], bytes=400 * 1048576, layout={"page_count": 100, "freelist_pages": 40, "free_bytes": 160 * 1048576, "tables": [{"name": "big", "bytes": 300 * 1048576, "type": "table"}]}); fake["load1"] = 87.4; fake["cpus"] = 8
+fk = {f["key"]: f for f in health.find(fake)}
+check("FINDING medium: free pages over 20% of the file → VACUUM candidate (Kerry's call, never run by the agent)", "db_free_pages" in fk and "VACUUM" in fk["db_free_pages"]["text"], str(fk))
+check("FINDING medium: one table over half the file", fk.get("db_big_table:big", {}).get("severity") == "medium")
+check("FINDING high: the box saturated (load per cpu over the rule)", fk.get("box_load", {}).get("severity") == "high")
 
 md = health.render_markdown(rep)
 check("markdown is addressed to tracker-claude + kerry and leads with the findings",
@@ -66,7 +74,7 @@ db.set_app_setting("health_digest_time", "05:45", db_path=tmp)
 check("digest_due honours the dial: not due at 05:30", health.digest_due(now=datetime(2026, 9, 23, 5, 30), db_path=tmp) is False)
 check("...due at 05:45", health.digest_due(now=datetime(2026, 9, 23, 5, 45), db_path=tmp) is True)
 db.set_app_setting("health_digest_time", "garbage", db_path=tmp)
-check("a bad dial value falls back to the default 05:45", health.digest_time(tmp) == "05:45")
+check("a bad dial value falls back to the default 05:00 (Kerry #611)", health.digest_time(tmp) == "05:00")
 db.set_app_setting("health_digest_time", "06:00", db_path=tmp)
 check("the dial can move the hour (06:00)", health.digest_time(tmp) == "06:00" and health.digest_due(now=datetime(2026, 9, 23, 5, 50), db_path=tmp) is False)
 
