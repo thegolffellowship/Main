@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+    <title>TGF — Tracker Health</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Bitter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/dashboard.css">
+    <link rel="stylesheet" href="/static/css/shell.css">
+    <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="/static/icon-180.png">
+    <style>
+        /* The Tracker measures itself (Tracker Health lane, 2026-09-22).
+           One report (email_parser/health.py) feeds this page, the daily
+           mailbox digest and the scoring-health bridge. */
+        .hl-head { display:flex; align-items:baseline; gap:12px; flex-wrap:wrap; margin:4px 0 12px; }
+        .hl-head h2 { font-family:'Bitter',serif; font-size:1.5rem; margin:0; }
+        .hl-head .asof { color:var(--text-muted,#6B7280); font-size:.85rem; }
+        .hl-head select { margin-left:auto; }
+        .hl-cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; margin:0 0 1rem; }
+        .hl-card { background:#fff; border:1px solid var(--border,#E5E7EB); border-radius:12px; padding:12px 16px; }
+        .hl-card .lbl { font:700 9.5px/1 'Bitter',serif; letter-spacing:1.5px; text-transform:uppercase; color:var(--text-muted,#6B7280); }
+        .hl-card .val { font:700 22px/1 'Bitter',serif; margin-top:7px; font-variant-numeric:tabular-nums; }
+        .hl-card .sub { color:var(--text-muted,#6B7280); font-size:.78rem; margin-top:4px; }
+        .hl-find { border-radius:10px; padding:10px 14px; margin:0 0 1rem; border:1px solid var(--border,#E5E7EB); background:#fff; }
+        .hl-find ul { margin:6px 0 0; padding-left:18px; }
+        .hl-find li { margin:3px 0; font-size:.9rem; white-space:normal; }
+        .sev { display:inline-block; font:700 9px/1 'Bitter',serif; letter-spacing:1px; padding:3px 6px; border-radius:4px; margin-right:6px; vertical-align:middle; }
+        .sev-high { background:#FEE2E2; color:#B91C1C; }
+        .sev-medium { background:#FEF3C7; color:#92400E; }
+        .sev-info { background:#F3F4F6; color:#374151; }
+        .hl-section h4 { font:700 11px/1.3 'Bitter',serif; letter-spacing:1px; text-transform:uppercase; color:var(--text-muted,#6B7280); margin:1.1rem 0 .5rem; }
+        .hl-scroll { overflow-x:auto; }
+        .hl-table { width:100%; border-collapse:collapse; }
+        .hl-table th { text-align:left; font:700 10px/1.3 'Bitter',serif; letter-spacing:1px; text-transform:uppercase; color:#9CA3AF; padding:8px 8px 6px; border-bottom:1px solid var(--border,#E5E7EB); }
+        .hl-table td { padding:6px 8px; border-bottom:1px solid #F3F2EF; font-size:13px; font-variant-numeric:tabular-nums; }
+        .hl-table td.n, .hl-table th.n { text-align:right; }
+        .hl-table td.bd { white-space:normal; font-size:12px; color:#4B5563; }
+        .over { color:#B91C1C; font-weight:700; }
+        .st-slow { color:#B45309; font-weight:600; }
+        .st-error { color:#B91C1C; font-weight:600; }
+        .hl-note { font-size:12px; color:var(--text-muted,#6B7280); margin-top:1rem; white-space:normal; }
+        .hl-actions { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+        @media (max-width:560px) { .hl-cards { grid-template-columns:1fr 1fr; } }
+    </style>
+</head>
+<body>
+    {% if shell_v2 %}
+    {% set SHELL_TITLE = 'Tracker Health' %}{% set SHELL_ACTIVE = 'admin' %}
+    {% include '_shell_nav.html' %}
+    {% else %}
+    <header>
+        <div class="header-content">
+            <h1>TGF Transaction Tracker</h1>
+            <p class="subtitle">Tracker Health</p>
+            <a href="/changelog" class="version-link" id="version-badge" title="View changelog">v2.0.0</a>
+        </div>
+        <div class="header-actions">
+            <span id="role-badge" class="role-badge" style="display:none;"></span>
+            <button id="btn-logout" class="btn btn-secondary" title="Log out" style="display:none;">Log Out</button>
+        </div>
+    </header>
+    {% endif %}
+
+    <main>
+        <nav class="admin-subnav">
+            <a href="/accounting">Accounting</a>
+            <a href="/coo">COO</a>
+            <a href="/audit">Audit Log</a>
+            <a href="/matrix">Matrix</a>
+            <a href="/courses">Courses</a>
+            <a href="/traffic">Traffic</a>
+            <a href="/admin/health" class="active">Health</a>
+            <a href="/spotlight">Spotlight</a>
+            <a href="/admin/gg-history">GG History</a>
+            <a href="/admin/test-center">Test Center</a>
+        </nav>
+
+        <div class="hl-head">
+            <h2>Tracker Health</h2>
+            <span class="asof" id="hl-asof">Loading…</span>
+            <select id="hl-days" aria-label="Window">
+                <option value="0.25">last 6 hours</option>
+                <option value="1" selected>last 24 hours</option>
+                <option value="3">last 3 days</option>
+                <option value="7">last 7 days</option>
+                <option value="30">last 30 days</option>
+            </select>
+        </div>
+
+        <div class="hl-cards" id="hl-cards"></div>
+        <div class="hl-find" id="hl-find"></div>
+
+        <div class="hl-section"><h4>Routes — p50 · p95 · max against each path's line</h4>
+            <div class="hl-scroll"><table class="hl-table" id="hl-routes"></table></div></div>
+        <div class="hl-section"><h4>Scheduler jobs</h4>
+            <div class="hl-scroll"><table class="hl-table" id="hl-jobs"></table></div></div>
+        <div class="hl-section"><h4>Bridges (MCP)</h4>
+            <div class="hl-scroll"><table class="hl-table" id="hl-bridges"></table></div></div>
+        <div class="hl-section"><h4>Slow and failed samples — where the time went</h4>
+            <div class="hl-scroll"><table class="hl-table" id="hl-slow"></table></div></div>
+
+        <div class="hl-actions" style="margin-top:1rem;">
+            <button class="btn btn-secondary" id="hl-digest-preview" type="button">Preview digest</button>
+            <button class="btn btn-secondary" id="hl-digest-post" type="button" title="Posts to the mailbox and files COO action items now">Post digest now</button>
+        </div>
+        <pre id="hl-digest" style="display:none; white-space:pre-wrap; font-size:12px; background:#fff; border:1px solid var(--border,#E5E7EB); border-radius:10px; padding:12px; margin-top:10px;"></pre>
+
+        <p class="hl-note">Every timed request, scheduler job and MCP bridge writes a <code>perf_samples</code> row
+            (kept 30 days). A path over its line is SLOW and also lands in the agent action log. The daily digest
+            posts this report to the mailbox (topic <code>tracker-health</code>) at the dialled time
+            (<code>health_digest_time</code>, default 05:45 Central) and files findings as COO action items.
+            Bridge: <code>scoring-health[:&lt;days&gt;]</code>.</p>
+    </main>
+
+    <script src="/static/js/version.js"></script>
+    <script src="/static/js/auth.js"></script>
+    <script src="/static/js/shell.js"></script>
+    <script>
+    (function () {
+        const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g,
+            c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+        const ms = v => v == null ? "—" : (v >= 1000 ? (v / 1000).toFixed(1) + " s" : v + " ms");
+        const mb = b => (b / 1048576).toFixed(1) + " MB";
+
+        function cards(r) {
+            const db = r.db || {}, pr = r.probe || {}, hc = r.hcp_cache || {};
+            const growth = db.growth_bytes == null ? "" : ((db.growth_bytes >= 0 ? "+" : "") + (db.growth_bytes / 1048576).toFixed(2) + " MB since last digest");
+            const c = [
+                ["Samples", r.sample_count, "in the window"],
+                ["Findings", (r.findings || []).length, (r.findings || []).filter(f => f.severity === "high").length + " high"],
+                ["Database", mb(db.bytes || 0), growth || ("WAL " + mb(db.wal_bytes || 0))],
+                ["DB touch now", ms(pr.connect_ms + pr.pragma_ms + pr.read_ms), "connect " + pr.connect_ms + " · pragma " + pr.pragma_ms + " · read " + pr.read_ms],
+                ["Load (1 min)", r.load1 == null ? "—" : r.load1, "box load average"],
+                ["Handicap cache", hc.hit_rate == null ? "—" : Math.round(hc.hit_rate * 100) + "%", hc.hits + " hits / " + hc.misses + " misses"],
+            ];
+            document.getElementById("hl-cards").innerHTML = c.map(([l, v, s]) =>
+                `<div class="hl-card"><div class="lbl">${esc(l)}</div><div class="val">${esc(v)}</div><div class="sub">${esc(s)}</div></div>`).join("");
+        }
+        function findings(r) {
+            const f = r.findings || [];
+            document.getElementById("hl-find").innerHTML = f.length
+                ? `<strong>Findings</strong><ul>${f.map(x => `<li><span class="sev sev-${esc(x.severity)}">${esc(x.severity)}</span>${esc(x.text)}</li>`).join("")}</ul>`
+                : `<strong>Findings:</strong> none — every measured path inside its line.`;
+        }
+        function summaryTable(id, rows) {
+            const t = document.getElementById(id);
+            if (!rows || !rows.length) { t.innerHTML = `<tr><td class="bd">nothing measured in the window</td></tr>`; return; }
+            t.innerHTML = `<tr><th>name</th><th class="n">n</th><th class="n">p50</th><th class="n">p95</th><th class="n">max</th><th class="n">slow</th><th class="n">err</th><th class="n">line</th></tr>` +
+                rows.map(x => `<tr><td>${esc(x.name)}</td><td class="n">${x.count}</td><td class="n">${ms(x.p50)}</td>` +
+                    `<td class="n ${x.p95 > x.slow_ms ? "over" : ""}">${ms(x.p95)}</td><td class="n ${x.max > x.slow_ms ? "over" : ""}">${ms(x.max)}</td>` +
+                    `<td class="n">${x.slow}</td><td class="n">${x.errors}</td><td class="n">${ms(x.slow_ms)}</td></tr>`).join("");
+        }
+        function jobsTable(r) {
+            const t = document.getElementById("hl-jobs"), rows = r.jobs || [];
+            if (!rows.length) { t.innerHTML = `<tr><td class="bd">no job runs in the window</td></tr>`; return; }
+            t.innerHTML = `<tr><th>job</th><th class="n">runs</th><th class="n">avg</th><th class="n">max</th><th class="n">errors</th><th>last</th></tr>` +
+                rows.map(j => `<tr><td>${esc(j.name)}</td><td class="n">${j.runs}</td><td class="n">${ms(j.avg_ms)}</td><td class="n">${ms(j.max_ms)}</td>` +
+                    `<td class="n ${j.errors ? "over" : ""}">${j.errors}</td><td class="bd">${esc(j.last_at)} <span class="st-${esc(j.last_status)}">${esc(j.last_status)}</span>${j.last_error ? " — " + esc(j.last_error) : ""}</td></tr>`).join("");
+        }
+        function slowTable(r) {
+            const t = document.getElementById("hl-slow"), rows = r.slow || [];
+            if (!rows.length) { t.innerHTML = `<tr><td class="bd">no slow or failed samples in the window</td></tr>`; return; }
+            t.innerHTML = `<tr><th>at (UTC)</th><th>what</th><th class="n">total</th><th>status</th><th>breakdown · context</th></tr>` +
+                rows.map(s => {
+                    const bd = Object.entries(s.breakdown || {}).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([k, v]) => `${esc(k)} ${ms(v)}`).join(", ");
+                    const d = s.detail || {};
+                    const ctx = [d.concurrent && d.concurrent.length ? "while " + d.concurrent.join(", ") : "", d.load1 != null ? "load " + d.load1 : "", d.error ? esc(d.error) : ""].filter(Boolean).join(" · ");
+                    return `<tr><td>${esc(s.at)}</td><td>${esc(s.kind)} ${esc(s.name)}${s.event_id ? " · event " + s.event_id : ""}${s.role ? " · " + esc(s.role) : ""}</td>` +
+                        `<td class="n">${ms(s.total_ms)}</td><td class="st-${esc(s.status)}">${esc(s.status)}</td><td class="bd">${bd}${ctx ? "<br>" + ctx : ""}</td></tr>`;
+                }).join("");
+        }
+        function render(r) {
+            document.getElementById("hl-asof").textContent = `generated ${r.generated_at} Central · last ${r.window_days} day(s)`;
+            cards(r); findings(r);
+            summaryTable("hl-routes", (r.summary || {}).route);
+            summaryTable("hl-bridges", (r.summary || {}).bridge);
+            jobsTable(r); slowTable(r);
+        }
+        async function load() {
+            const days = document.getElementById("hl-days").value;
+            try {
+                const res = await fetch(`/api/admin/health?days=${encodeURIComponent(days)}`, { cache: "no-store" });
+                if (!res.ok) { document.getElementById("hl-asof").textContent = `HTTP ${res.status}`; return; }
+                render(await res.json());
+            } catch (e) {
+                document.getElementById("hl-asof").textContent = "failed to load: " + e;
+            }
+        }
+        async function digest(post) {
+            const pre = document.getElementById("hl-digest");
+            pre.style.display = ""; pre.textContent = post ? "Posting…" : "Building…";
+            try {
+                const res = await fetch("/api/admin/health/digest", { method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ post: !!post, days: document.getElementById("hl-days").value }) });
+                const d = await res.json();
+                pre.textContent = (post ? `Posted mailbox #${d.posted}; ${(d.action_items || []).length} action item(s); ${d.pruned} old sample(s) pruned.\n\n` : "") + (d.body || JSON.stringify(d));
+                if (post) load();
+            } catch (e) { pre.textContent = "failed: " + e; }
+        }
+        window.__healthRender = render;
+        document.getElementById("hl-days").addEventListener("change", load);
+        document.getElementById("hl-digest-preview").addEventListener("click", () => digest(false));
+        document.getElementById("hl-digest-post").addEventListener("click", () => {
+            if (confirm("Post today's health digest to the mailbox and file its findings as COO action items now?")) digest(true);
+        });
+        load();
+        initAuth();
+    })();
+    </script>
+</body>
+</html>

@@ -342,13 +342,28 @@ ITEM_COLUMNS = [
 ]
 
 
+# Files already switched to WAL by this process, keyed by (path, inode):
+# journal_mode is PERSISTENT in the file, so asking for it on every one of
+# the ~18 connections a single PAIRINGS open makes is 18 lock-taking
+# round-trips for nothing (Tracker Health lane, 2026-09-22: 28 of 64 ms
+# on the fixture). A replaced file (restore, new volume) has a new inode
+# and is switched on its first open.
+_WAL_SET: set = set()
+
+
 def get_connection(db_path: str | Path | None = None) -> sqlite3.Connection:
     path = str(db_path or DB_PATH)
     # Ensure parent directory exists (Railway persistent volume may need creation)
     Path(path).parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(path)
     conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
+    try:
+        key = (path, os.stat(path).st_ino)
+    except OSError:
+        key = (path, None)
+    if key not in _WAL_SET:
+        conn.execute("PRAGMA journal_mode=WAL")
+        _WAL_SET.add(key)
     return conn
 
 
@@ -3710,6 +3725,19 @@ def init_db(db_path: str | Path | None = None) -> None:
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_items_event_id ON items(event_id)"
         )
+        # Tracker Health lane (2026-09-22): the roster builder's plan
+        # (`_event_roster_rows`) read as SCAN items for the name arm of
+        # its join — the name index is BINARY and the join compares
+        # COLLATE NOCASE, so it could not be used — and SCAN items again
+        # per roster row for the orders count, because nothing indexed
+        # items.customer_id. Two indexes, no query change.
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_items_customer_id ON items(customer_id)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_items_item_name_nocase "
+            "ON items(item_name COLLATE NOCASE)"
+        )
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_events_event_date ON events(event_date DESC)"
         )
@@ -3985,6 +4013,11 @@ def init_db(db_path: str | Path | None = None) -> None:
             conn.execute("ALTER TABLE handicap_player_links ADD COLUMN customer_id INTEGER")
         except sqlite3.OperationalError:
             pass
+        # links are looked up BY customer_id on every roster row (first
+        # round, established index) — Tracker Health lane 2026-09-22.
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_handicap_player_links_customer "
+            "ON handicap_player_links(customer_id)")
 
         # Handicap settings — configurable calculation parameters
         conn.execute(
@@ -5851,6 +5884,15 @@ def init_db(db_path: str | Path | None = None) -> None:
         )
         conn.execute("CREATE INDEX IF NOT EXISTS idx_agent_log_name ON agent_action_log(agent_name)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_agent_log_date ON agent_action_log(created_at)")
+
+        # ── perf_samples: the Tracker measures itself (email_parser/perf.py,
+        #    Tracker Health lane 2026-09-22). One row per timed request /
+        #    scheduler job / MCP bridge; the daily health digest reads it.
+        try:
+            from . import perf as _perf
+            _perf.ensure_table(conn)
+        except Exception:
+            logger.warning("perf_samples table setup failed (non-fatal)", exc_info=True)
 
         # ── COO Chat Sessions ───────────────────────────────────────
         conn.execute(
@@ -10516,7 +10558,12 @@ def get_points_race_standings(race_key: str,
                 stale = False
 
     queued_refresh = False
-    if (force_refresh or stale) and no_network and stat["n"]:
+    if (force_refresh or stale) and no_network:
+        # ...and with NO snapshot at all the read still does not wait:
+        # the board comes back empty once, the refresh runs behind it
+        # (Tracker Health lane, 2026-09-22 — the fixture's PAIRINGS open
+        # spent 0.28 s of 0.98 s inside a Golf Genius round-trip that
+        # `no_network` was meant to forbid).
         # A READ must never wait on Golf Genius (Kerry 2026-09-22: "the
         # pages (especially PAIRINGS) take WAY too long to load back up").
         # On event day the short window above made every PAIRINGS open a
@@ -39710,21 +39757,36 @@ def get_starting_handicaps(db_path: str | Path | None = None) -> dict:
 # round, retag or re-link changes the key and the next read recomputes.
 _HCP_PLAYERS_CACHE: dict = {}
 _HCP_PLAYERS_TTL_S = 120.0
+# Hit / miss counters since boot — the daily health digest reports the
+# rate (Tracker Health lane, 2026-09-22).
+_HCP_CACHE_STATS: dict = {"hits": 0, "misses": 0}
 
 
 def _hcp_players_signature(db_path) -> tuple:
     try:
         with _connect(db_path) as conn:
-            # Count + last id catch a posted round; the two sums catch an
-            # in-place edit (a retag's new differential, an exclude flag).
+            # Count + last id catch a posted round; the differential sum
+            # catches an in-place edit (a retag's new differential).
             r = conn.execute("SELECT COUNT(*), MAX(id), MAX(round_date), "
-                             "ROUND(TOTAL(differential), 3), TOTAL(COALESCE(hcp_exclude, 0)) "
+                             "ROUND(TOTAL(differential), 3) "
                              "FROM handicap_rounds").fetchone()
             l = conn.execute("SELECT COUNT(*), TOTAL(COALESCE(customer_id, 0)) "
                              "FROM handicap_player_links").fetchone()
             st = conn.execute("SELECT COUNT(*), MAX(starting_handicap_set_at) FROM customers "
                               "WHERE starting_handicap_18 IS NOT NULL").fetchone()
-        return (tuple(r), tuple(l), tuple(st))
+            # The never-post flag is on scoring_rounds (v2.368.0), not on
+            # handicap_rounds. v2.484.3 asked handicap_rounds for it, the
+            # query raised, and the signature became a fresh timestamp on
+            # EVERY call — the cache never hit once (Tracker Health lane,
+            # 2026-09-22: 0 hits / 14 misses on the fixture, and Kerry's
+            # second 11-second open ten seconds after the first). Guarded
+            # on its own so a database without the column still caches.
+            try:
+                ex = conn.execute("SELECT TOTAL(COALESCE(hcp_exclude, 0)) "
+                                  "FROM scoring_rounds").fetchone()
+            except sqlite3.OperationalError:
+                ex = (0,)
+        return (tuple(r), tuple(l), tuple(st), tuple(ex))
     except sqlite3.OperationalError:
         return ("nosig", _time_mod.time())
 
@@ -39740,13 +39802,18 @@ def get_all_handicap_players(db_path: str | Path | None = None,
     key = (str(db_path or DB_PATH), str(as_of or ""), _hcp_players_signature(db_path))
     hit = _HCP_PLAYERS_CACHE.get(key)
     now = _time_mod.time()
+    # Rows are FLAT dicts (strings, numbers, None) — a per-row copy gives
+    # the caller the same "mutate freely" guarantee as deepcopy at a
+    # fraction of the cost (deepcopy of 1,100 rows was 25 ms per read).
     if hit and now - hit[0] < _HCP_PLAYERS_TTL_S:
-        return _copy.deepcopy(hit[1])
+        _HCP_CACHE_STATS["hits"] += 1
+        return [dict(p) for p in hit[1]]
+    _HCP_CACHE_STATS["misses"] += 1
     players = _get_all_handicap_players_uncached(db_path, as_of=as_of)
     # Keep the cache small: one live map + a handful of as-of maps.
     if len(_HCP_PLAYERS_CACHE) > 12:
         _HCP_PLAYERS_CACHE.clear()
-    _HCP_PLAYERS_CACHE[key] = (now, _copy.deepcopy(players))
+    _HCP_PLAYERS_CACHE[key] = (now, [dict(p) for p in players])
     return players
 
 
@@ -58201,8 +58268,15 @@ def _backfill_customer_id_on_event_pairings(conn, event_id: int | None = None) -
     return n
 
 
-def get_event_pairings(event_id: int, db_path=None) -> dict:
+def get_event_pairings(event_id: int, db_path=None, roster_rows=None,
+                       hcp_map=None) -> dict:
     """Return saved pairings for an event keyed by holes ('9' / '18').
+
+    `roster_rows` / `hcp_map`: a caller that has ALREADY read the event's
+    roster (`_event_roster_rows`) and index map (`_roster_handicap_index_map`)
+    passes them in so this read does not do it again. The pairings GET
+    read the roster three times per open (here, for its own player list,
+    and inside the blind pool) — Tracker Health lane, 2026-09-22.
 
     Each value is a list of groups:
         [{"group_num": int, "slot_label": str, "players": [...]}, ...]
@@ -58255,11 +58329,12 @@ def get_event_pairings(event_id: int, db_path=None) -> dict:
         # saved — for months that was the wrong average (see
         # `_roster_handicap_index_map`) — so it is the fallback, never the
         # answer, and a started event reads the index in effect that day.
-        _ev_row = conn.execute("SELECT * FROM events WHERE id = ?",
-                               (event_id,)).fetchone()
-        hcp_map = _roster_handicap_index_map(
-            conn, as_of=_event_index_as_of(dict(_ev_row) if _ev_row else None),
-            db_path=db_path)
+        if hcp_map is None:
+            _ev_row = conn.execute("SELECT * FROM events WHERE id = ?",
+                                   (event_id,)).fetchone()
+            hcp_map = _roster_handicap_index_map(
+                conn, as_of=_event_index_as_of(dict(_ev_row) if _ev_row else None),
+                db_path=db_path)
         # THE TEE COMES FROM THE ROSTER, NOT THE SAVED ROW (v2.458.10,
         # Kerry 2026-09-16: "If the tees are in ROSTER, they should
         # automatically show up in PAIRINGS"). `event_pairings.tee_choice`
@@ -58277,7 +58352,8 @@ def get_event_pairings(event_id: int, db_path=None) -> dict:
         tee_map: dict = {}
         if rows:
             try:
-                for rr in _event_roster_rows(conn, event_id):
+                for rr in (roster_rows if roster_rows is not None
+                           else _event_roster_rows(conn, event_id)):
                     t = (rr.get("tee_choice") or "").strip()
                     if not t:
                         continue
@@ -58679,8 +58755,11 @@ def _established_index_by_customer(db_path=None) -> dict:
 
 
 def event_blind_pool(conn, event_id: int, year: int | None = None,
-                     db_path=None) -> dict:
+                     db_path=None, roster_rows=None) -> dict:
     """Who may be drawn as a blind for this event, and who may not.
+
+    `roster_rows`: the caller's already-read `_event_roster_rows`, so the
+    pairings GET reads the roster once per open, not three times.
 
     Kerry's eligibility, verbatim: "BLIND's from the field of Members with
     established handicaps only". Three gates, each reported rather than
@@ -58691,7 +58770,7 @@ def event_blind_pool(conn, event_id: int, year: int | None = None,
       ESTABLISHED   : has a TGF handicap index, which our own computation
                       only issues at min_rounds (3) rounds or more
     """
-    rows = _event_roster_rows(conn, event_id)
+    rows = roster_rows if roster_rows is not None else _event_roster_rows(conn, event_id)
     # The established-index read opens its own connection, so it needs to
     # be told WHICH database — and a caller holding a conn should not
     # have to remember that. Ask the connection itself.
@@ -62484,7 +62563,8 @@ def _host_units(host_of: dict, players: list[str],
     return units
 
 
-def get_event_partner_requests(event_id: int, db_path=None) -> dict:
+def get_event_partner_requests(event_id: int, db_path=None,
+                               roster_rows=None) -> dict:
     """Who requested whom on this event's roster (Kerry 2026-07-21).
 
     One entry per rostered player carrying a partner_request: the raw
@@ -62510,7 +62590,8 @@ def get_event_partner_requests(event_id: int, db_path=None) -> dict:
         # THE roster, GG-RSVP-only players included, so a request naming
         # one resolves and one can be added as a requester (Kerry
         # 2026-09-15). Same rows the generator deals from.
-        rows = _event_roster_rows(conn, event_id)
+        rows = (roster_rows if roster_rows is not None
+                else _event_roster_rows(conn, event_id))
         suppressed = {_pair_key_name(r["requester_name"]) for r in conn.execute(
             "SELECT requester_name FROM pairing_request_suppressions "
             "WHERE event_id = ?", (event_id,)).fetchall()}
@@ -65098,12 +65179,14 @@ def _decorate_roster_roles(d: dict, ev_year: str | None) -> None:
         str(d.get("current_player_status") or "").strip().lower() == "first_timer")
 
 
-def _event_roster_players(conn, event_id: int) -> list[dict]:
+def _event_roster_players(conn, event_id: int, roster_rows=None) -> list[dict]:
     """Roster identities for an event: name + customer_id (rule 6), one
-    per player, GG-RSVP-only players included. Reads `_event_roster_rows`."""
+    per player, GG-RSVP-only players included. Reads `_event_roster_rows`
+    (or the caller's already-read copy)."""
     seen: set = set()
     out: list[dict] = []
-    for r in _event_roster_rows(conn, event_id):
+    for r in (roster_rows if roster_rows is not None
+              else _event_roster_rows(conn, event_id)):
         k = _pair_key_name(r["name"])
         if not k or k in seen:
             continue
@@ -65113,7 +65196,8 @@ def _event_roster_players(conn, event_id: int) -> list[dict]:
     return out
 
 
-def detect_match_play_pairings(event_id: int, db_path=None) -> dict:
+def detect_match_play_pairings(event_id: int, db_path=None,
+                               roster_rows=None) -> dict:
     """Rule 8 as AMENDED (Kerry 2026-07-14, 'Match Play is king'): find the
     potential Match Play matches the season state implies between players
     on this event's roster. The Generate Pairings flow shows each one to
@@ -65150,7 +65234,7 @@ def detect_match_play_pairings(event_id: int, db_path=None) -> dict:
             out["notes"].append("Event has no chapter — cannot scope Match Play state.")
             return out
 
-        roster = _event_roster_players(conn, event_id)
+        roster = _event_roster_players(conn, event_id, roster_rows=roster_rows)
         roster_ids = {r["customer_id"] for r in roster if r.get("customer_id")}
         roster_names = {_pair_key_name(r["name"]): r["name"] for r in roster}
 

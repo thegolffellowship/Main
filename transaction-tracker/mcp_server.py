@@ -1745,6 +1745,29 @@ MARGIN_CUTOVER_DEFAULT = "2026-09-05"
 
 
 def _scoring_dispatch(url: str, extract: str):
+    """Every bridge call is a perf sample (email_parser/perf.py, Tracker
+    Health lane 2026-09-22): kind 'bridge', name = the command word, the
+    argument in the detail. A value that is not a bridge (a real portal
+    URL probe) leaves no sample. The inner function is the dispatcher."""
+    cmd, _, arg = extract.partition(":")
+    if not cmd.startswith("scoring-"):
+        return _scoring_dispatch_inner(url, extract)
+    from email_parser import perf
+    sw = perf.Stopwatch("bridge", cmd)
+    sw.note(arg=arg.strip()[:120])
+    try:
+        out = _scoring_dispatch_inner(url, extract)
+    except Exception as exc:
+        sw.finish(error=repr(exc))
+        raise
+    if out is None:
+        sw.discard()
+    else:
+        sw.finish()
+    return out
+
+
+def _scoring_dispatch_inner(url: str, extract: str):
     """Bridge for MCP sessions whose cached tool inventory predates the
     v2.23 scoring tools (client sessions freeze the tool list at session
     start). Special extract values on probe_golf_genius reach the scoring
@@ -1873,6 +1896,13 @@ def _scoring_dispatch(url: str, extract: str):
                                    this year (backfill reads the year's
                                    Golf Genius team strings into the store)
       scoring-facilities           facility census (course registry v1)
+      scoring-health[:<days>]      Tracker Health: p50/p95/max per route / job /
+                                   bridge from perf_samples, slow opens with
+                                   breakdowns, job failures, DB size, live probe,
+                                   findings (read-only)
+      scoring-health-digest[:<days>][|post]  the daily health digest text; |post
+                                   runs the real routine (mailbox `tracker-health`
+                                   + COO action items + prune)
       scoring-partial-credit       JSON {"item_id","amount","new_holes"?,
                                    "package_index"?,"note"?} — partial CREDIT
                                    (bridge twin of partial_credit_transaction)
@@ -3108,6 +3138,39 @@ def _scoring_dispatch(url: str, extract: str):
                                     f"matched={res.get('matched')} "
                                     f"missing={res.get('missing_in_brevo')}")
             return json.dumps(res, indent=2, default=str)
+        if cmd == "scoring-health":
+            # scoring-health[:<days>] — the Tracker Health report (perf
+            # samples p50/p95/max per route/job/bridge, slow list, jobs,
+            # DB size, probe, findings). Read-only.
+            from email_parser import perf as _perf
+            from email_parser.health import build_health_report
+            try:
+                _days = float(arg) if arg else 1.0
+            except ValueError:
+                return json.dumps({"error": "usage: scoring-health[:<days>]"})
+            try:
+                _perf.flush()
+            except Exception:
+                pass
+            return json.dumps(build_health_report(max(0.04, min(_days, 30))),
+                              indent=2, default=str)
+        if cmd == "scoring-health-digest":
+            # scoring-health-digest[:<days>][|post] — the daily digest
+            # text; `post` runs the real routine (mailbox post + COO
+            # action items + prune), which is what the 05:45 job does.
+            from email_parser.health import run_health_digest
+            _p = [x.strip() for x in arg.split("|")] if arg else []
+            _post = "post" in _p
+            _dv = next((x for x in _p if x and x != "post"), "")
+            try:
+                _days = float(_dv) if _dv else 1.0
+            except ValueError:
+                return json.dumps({"error": "usage: scoring-health-digest[:<days>][|post]"})
+            _res = run_health_digest(post=_post, days=_days)
+            if _post:
+                _audit("scoring-health-digest", f"posted mailbox #{_res.get('posted')}, "
+                       f"{len(_res.get('action_items') or [])} action item(s)")
+            return json.dumps(_res, indent=2, default=str)
         if cmd == "scoring-dashboard":
             # Read-only: the landing dashboard's payload (Kerry
             # 2026-09-21). Only cards with something in them come back —

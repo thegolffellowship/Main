@@ -2661,3 +2661,23 @@ emailed to me."
 - Test: `test_print_pack.py` (builds a real PDF, serves the route,
   runs the routine with a stubbed sender: once, unchanged → skipped,
   changed → sent again).
+
+## The EVENTS landing load is measured (Tracker Health lane, 2026-09-22)
+
+Kerry 2026-09-22: *"EVENTS page (landing) took a long time too."* The
+page's first paint waits on `fetchItems()` (`GET /api/items` — every
+order row ever written) and `fetchEvents()` (`GET /api/events` +
+`/api/rsvps/bulk` + `/api/events/mvp-unlinks`), then the index map.
+Those routes now run under the shared stopwatch as `items_list`,
+`events_list`, `rsvps_bulk`, `hcp_index_map` (and the in-place refresh
+reads as `items_event` / `event_one`), so `/admin/health` shows what the
+server side costs on the live box.
+
+On the fixture (2,069 items, 266 events) the server side is small —
+`/api/events` 20 ms, `/api/items` 94 ms — but `/api/items` is a **2.6 MB
+JSON body** (gzip'd by flask-compress on the wire) that the page then
+walks to build every roster. If the live samples come back small too,
+the wait is the payload and the client render, not the queries, and the
+next step is the page asking for the rows it needs (`?event_id=` per
+open event, or a `since=` window) — that is events.html work, to be
+coordinated with the flighting lane (#603), not a server fix.
