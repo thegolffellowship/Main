@@ -2884,7 +2884,7 @@
             items.push({cls: 'btn-delete-manual', label: 'Delete', danger: true,
                 attrs: `data-delete-id="${r.id}" ${delName}`});
         } else if (f.txStatus === 'active') {
-            const isCreditTransfer = (r.merchant || '') === 'Paid Separately (Credit Transfer)';
+            const isCreditTransfer = isCreditTransferRow(r);
             if (isCreditTransfer) {
                 const cnote = r.credit_note || '';
                 if (cnote.startsWith('balance_due:')) {
@@ -5439,6 +5439,17 @@
     // (Kerry, 2026-07-08). The native venmo:// scheme is parsed directly by
     // the app and %20 decodes to real spaces — use it where the app handles
     // the tap (phones/tablets); desktop keeps the web link.
+    /** A row that carries a credit into an event — an RSVP registered by
+     *  Apply Credit (merchant says so) or a row MOVED by a transfer
+     *  (v2.478.8, Kerry 2026-09-22: "Transfers also need to show
+     *  remaining amount badges, just like when we credit people into an
+     *  event"). Same badges, same Venmo email, same incoming-payment
+     *  matching for both. Mirrors the server predicate. */
+    function isCreditTransferRow(r) {
+        if (!r) return false;
+        if ((r.merchant || '') === 'Paid Separately (Credit Transfer)') return true;
+        return !!r.transferred_from_id && /\(credit/.test(String(r.item_price || ''));
+    }
     function venmoPayHref(handle, amount, note) {
         const amt = Number(amount).toFixed(2);
         const encoded = encodeURIComponent(note);
@@ -9024,7 +9035,7 @@
                         }
                     }
                     // Balance-due / paid badge for active credit-transfer rows
-                    if (r.transferred_from_id && r.merchant === 'Paid Separately (Credit Transfer)') {
+                    if (isCreditTransferRow(r)) {
                         const cnote = r.credit_note || '';
                         if (cnote.startsWith('balance_due:')) {
                             const owed = parseFloat(cnote.split(':')[1]) || 0;

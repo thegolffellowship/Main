@@ -28,5 +28,8 @@ check("picking a target event prices the move (transfer-preview) and a stale ans
 check("the preview offers keep-as-credit / Venmo-back on an excess and says the email is coming on a shortfall",
       /name="ev-transfer-excess" value="keep"/.test(html) && /name="ev-transfer-excess" value="venmo"/.test(html) && /balance-due Venmo email opens/.test(html));
 check("the page defines a toast of its own (FLIGHTS handlers already called one)", /window\.showToast = function/.test(html));
+check("a transferred row wears the balance-due / paid badge and gets the Venmo email action like an Apply-Credit row (one predicate)",
+      /function isCreditTransferRow\(r\)/.test(html) && (html.match(/isCreditTransferRow\(r\)/g) || []).length >= 3
+      && !/r\.merchant === 'Paid Separately \(Credit Transfer\)'/.test(html));
 console.log("\n" + (failures ? failures + " FAILURE(S)" : "ALL PASS"));
 process.exit(failures ? 1 : 0);

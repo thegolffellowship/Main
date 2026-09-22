@@ -14060,7 +14060,8 @@ def api_admin_venmo_debug():
                 """SELECT id, customer, customer_id, item_name, credit_note,
                           item_price, transaction_status
                    FROM items
-                   WHERE merchant = 'Paid Separately (Credit Transfer)'
+                   WHERE (merchant = 'Paid Separately (Credit Transfer)'
+                                  OR (transferred_from_id IS NOT NULL AND item_price LIKE '%(credit%'))
                      AND credit_note LIKE 'balance_due:%'
                      AND (customer LIKE ? COLLATE NOCASE)
                    LIMIT 20""",

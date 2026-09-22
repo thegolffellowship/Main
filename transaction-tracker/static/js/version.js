@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.484.0";
+window.TGF_VERSION = "2.484.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.484.1",
+    date: "2026-09-22",
+    changes: [
+      "A transferred registration wears the same remainder badge as a credit applied into an event (Kerry 2026-09-22: \u2018Transfers also need to show remaining amount badges, just like when we credit people into an event. Same system of display and notifications actions and monitoring Venmo or Paypal incoming to match up and then display the green $\u2019). Every surface that keyed on the Apply-Credit merchant \u2014 the roster badge (-$owed / green $), the Send Venmo Email / Remind action, the inbound Venmo and PayPal matcher, the orphan-payment sweep and the balance lookup \u2014 now also recognises a row moved by a transfer (transferred_from_id + a (credit) price). Sharitz and Youngs at s9.25 show their balances at once. Guards: `test_transfer_price.py`, `test_roster_pairings_sync.js`.",
+    ],
+  },
   {
     version: "2.484.0",
     date: "2026-09-22",

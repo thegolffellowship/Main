@@ -36389,7 +36389,8 @@ def auto_match_venmo_inbound_to_balance_due(
                 # expense has no handle or the handle isn't on any customer.
                 _BALANCE_DUE_SQL = """SELECT id, customer, item_name, credit_note, item_price
                            FROM items
-                           WHERE merchant = 'Paid Separately (Credit Transfer)'
+                           WHERE (merchant = 'Paid Separately (Credit Transfer)'
+                                  OR (transferred_from_id IS NOT NULL AND item_price LIKE '%(credit%'))
                              AND COALESCE(transaction_status, 'active') = 'active'
                              AND credit_note LIKE 'balance_due:%'
                              AND customer = ? COLLATE NOCASE"""
@@ -36419,7 +36420,8 @@ def auto_match_venmo_inbound_to_balance_due(
                             dict(r) for r in conn.execute(
                                 """SELECT id, customer, item_name, credit_note, item_price
                                    FROM items
-                                   WHERE merchant = 'Paid Separately (Credit Transfer)'
+                                   WHERE (merchant = 'Paid Separately (Credit Transfer)'
+                                  OR (transferred_from_id IS NOT NULL AND item_price LIKE '%(credit%'))
                                      AND COALESCE(transaction_status, 'active') = 'active'
                                      AND credit_note LIKE 'balance_due:%'
                                      AND customer_id = ?""",
@@ -36495,7 +36497,8 @@ def auto_match_venmo_inbound_to_balance_due(
                             """SELECT id, customer, customer_id, item_name,
                                       credit_note, item_price
                                FROM items
-                               WHERE merchant = 'Paid Separately (Credit Transfer)'
+                               WHERE (merchant = 'Paid Separately (Credit Transfer)'
+                                  OR (transferred_from_id IS NOT NULL AND item_price LIKE '%(credit%'))
                                  AND COALESCE(transaction_status, 'active') = 'active'
                                  AND credit_note LIKE 'balance_due:%'"""
                         ).fetchall()]
@@ -36933,7 +36936,8 @@ def reconcile_orphan_venmo_payments(
         parents = conn.execute(
             """SELECT id, customer, customer_email, item_name, chapter, credit_note
                FROM items
-               WHERE merchant = 'Paid Separately (Credit Transfer)'
+               WHERE (merchant = 'Paid Separately (Credit Transfer)'
+                                  OR (transferred_from_id IS NOT NULL AND item_price LIKE '%(credit%'))
                  AND COALESCE(transaction_status, 'active') = 'active'
                  AND credit_note LIKE 'balance_due:%'"""
         ).fetchall()

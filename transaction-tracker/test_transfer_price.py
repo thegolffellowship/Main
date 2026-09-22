@@ -97,5 +97,16 @@ check("reverse: the moved row goes, and the unapplied excess-credit row goes wit
 check("reverse of a SHORT transfer restores the original (nothing else to clean)",
       db.reverse_credit(900, db_path=tmp) and c.execute("SELECT COUNT(*) FROM items WHERE id = ?", (new["id"],)).fetchone()[0] == 0)
 
+print("\n== a transferred row wears the same remainder badge and takes the same Venmo (Kerry 2026-09-22) ==")
+new4 = db.transfer_item(900, "s9.25 Canyon Springs", db_path=tmp)
+owed4 = new4["price_check"]["amount_owed"]
+c.execute("INSERT INTO expense_transactions (id, source_type, transaction_type, merchant, amount, transaction_date, review_status, notes, other_party_handle, created_at) "
+          "VALUES (7001, 'venmo', 'received', 'Pat Youngs', ?, '2026-09-23', 'approved', 'Canyon Springs balance', '', '2026-09-23 12:00:00')", (owed4,))
+c.commit()
+r = db.auto_match_venmo_inbound_to_balance_due([7001], tmp)
+note4 = c.execute("SELECT credit_note, merchant FROM items WHERE id = ?", (new4["id"],)).fetchone()
+check("an incoming Venmo for the balance flips the TRANSFERRED row to paid (it is not the Apply-Credit merchant, and that no longer matters)",
+      (note4["credit_note"] or "").startswith("paid_at:") and note4["merchant"] != "Paid Separately (Credit Transfer)", str(dict(note4)) + " / " + str(r))
+
 print("\n" + ("ALL PASSED" if not F else f"{len(F)} FAILURE(S): " + "; ".join(F)))
 sys.exit(1 if F else 0)

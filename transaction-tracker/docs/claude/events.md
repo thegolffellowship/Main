@@ -957,6 +957,18 @@ it's short $ then send them an email with a prepared Venmo link."
   Apply Credit does (status transferred → the new row; a WD credit has
   its `credit_amount` cleared), tagged "Applied via transfer …" so
   `reverse_credit` puts them back. `price_check.credits_applied`.
+- **Same badges, same matching (v2.484.1):** a transferred row is a
+  credit-transfer row for every downstream surface. The predicate is ONE
+  thing in two places — JS `isCreditTransferRow(r)` (Apply-Credit
+  merchant OR `transferred_from_id` + a "(credit" price) and the SQL
+  `(merchant = 'Paid Separately (Credit Transfer)' OR (transferred_from_id
+  IS NOT NULL AND item_price LIKE '%(credit%'))` in
+  `auto_match_venmo_inbound_to_balance_due` (all three lookups),
+  `reconcile_orphan_venmo_payments` and the app's payer lookup. So the
+  roster shows `-$owed` then the green `$` when the Venmo / PayPal lands,
+  the actions menu offers Send Venmo Email / Remind, and the inbound
+  matcher flips `balance_due:` to `paid_at:` — for transfers exactly as
+  for Apply Credit.
 - The customers page's transfer goes through the same server path
   (excess kept as credit, shortfall stamped) without the modal preview.
 - Guard: `test_transfer_price.py`, `test_roster_pairings_sync.js`.
