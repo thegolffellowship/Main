@@ -301,7 +301,7 @@ check("there is a roster-only refresh that never touches the groups",
     && !/function refreshPairingsRoster[\s\S]{0,900}state\.groups_9 =/.test(html));
 check("it rebuilds the lookups that hang off the roster",
     /refreshPairingsRoster[\s\S]{0,900}state\._paceMap = null;[\s\S]{0,300}state\._reqPairs = null;[\s\S]{0,300}state\.pairCounts = data\.pair_counts/.test(html));
-check("re-opening the PAIRINGS tab re-reads the roster (behind the cached sheet, v2.478.8); first open still loads the sheet",
+check("re-opening the PAIRINGS tab re-reads the roster (behind the cached sheet, v2.479.1); first open still loads the sheet",
     /if \(!st\.loaded\) \{\s*await loadPairings\(ev\.id\);\s*rerenderDetailBody\(container, ev\);\s*\} else \{\s*const before = pairingsRosterSig\(st\);\s*await refreshPairingsRoster\(ev\.id\);/.test(html));
 check("the bullpen no longer disappears when everyone is seated",
     /Everyone on the roster is seated/.test(html)

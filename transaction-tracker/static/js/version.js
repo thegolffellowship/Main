@@ -1,12 +1,20 @@
-window.TGF_VERSION = "2.478.8";
+window.TGF_VERSION = "2.479.1";
 window.TGF_CHANGELOG = [
   {
-    version: "2.478.8",
+    version: "2.479.1",
     date: "2026-09-22",
     changes: [
       "PAIRINGS pops right back up: opening the tab no longer waits on Golf Genius. The pairings read was fetching the points race live on event day (a 15-minute window made every open a GG round-trip); it now serves the snapshot it has and refreshes it behind the page. A saved sheet shows at once from the cache; the roster is re-read in the background and the panel only redraws if something changed (Kerry 2026-09-22: 'I've already SAVED the PAIRINGS. It should pop right back up').",
       "PAIRINGS and ROSTER partial updates: every pairings action (drag, swap, move, undo, label, remove, the background save) redraws the card's body only — the tab header and its handlers stay put. The events table reuses rows that did not change instead of rebuilding every row, and a roster action (credit, WD, add player, add payment, delete, guest assign, side-games edit, reverse, assign member) refreshes that one event in place instead of reloading every order row ever written.",
       "SETTLE is the closeout's job now: the button is gone from the FLIGHTS tab. The hourly post-event sync settles the DIVISIONS / FLIGHTS board of every event played today or yesterday that has scorecards in (a live board is frozen first). Bridge scoring-flights-close:<event_id>[|apply]; the closeout skill's Phase 0 and 2.2b carry it. Nothing pays anyone; Golf Genius stays the payer of record.",
+    ],
+  },
+  {
+    version: "2.479.0",
+    date: "2026-09-22",
+    changes: [
+      "A spot bought FOR someone is now recorded as bought_spot, not member_claim. The guest-assignment path has derived the referral since 2026-07-30, but it called set_referred_by without a source, so an omitted source defaulted it to 'told us' — throwing away the fact that the Tracker WATCHED the purchase happen. Derived evidence and a human's claim are not the same strength and no longer read the same.",
+      "New diagnostic bridges: scoring-lead-lookup:<text> returns every leads row matching a name, email or phone INCLUDING merged and dismissed ones plus the customer's own campaign stamp (the Lead Center filters merged rows out, which is exactly why a lead that has 'disappeared' cannot be diagnosed from it); scoring-refer:<customer_id>|<referrer_id>[|source] records an attribution from the MCP side, the same call the modal makes, and mints the referral lead with it.",
     ],
   },
   {

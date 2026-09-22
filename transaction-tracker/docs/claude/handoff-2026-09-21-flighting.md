@@ -184,7 +184,7 @@ carries the resulting selection.
    (snapshot 2 voided) — the freeze had landed on the server while the
    page showed nothing.
 
-## 6e. v2.478.8 — PAIRINGS / ROSTER partial updates, no GG wait, SETTLE at closeout
+## 6e. v2.479.1 — PAIRINGS / ROSTER partial updates, no GG wait, SETTLE at closeout
 
 Kerry 2026-09-22 ~1 PM: "Do the same partial update for PAIRINGS and
 ROSTER… the pages (especially PAIRINGS) take WAY too long to load back up.
