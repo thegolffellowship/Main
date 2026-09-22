@@ -2129,6 +2129,23 @@ Unconfigured events keep the standard columns untouched.
 - **Credit display**: a negative balance renders `CR $X` (green) in
   Balance Due instead of a bare PAID ✓ — Kerry holds overpayments as
   credits (Jeff Young's $150, 2026-09-22).
+- **Addon → linked-event roster sync** (Kerry 2026-09-22: "if they're
+  marked YES for the FRIDAY practice round, they also need to show on
+  the LSC PRACTICE ROUND event"): an addon catalog entry may carry
+  `"event_id"` — toggling it ON creates an RSVP placeholder on that
+  event's roster (skipped when the player already has any live row
+  there), toggling OFF deletes only a money-free `manual-rsvp`
+  placeholder; a paid or GG-sourced row is never touched
+  (`_sync_addon_roster_row`). Bridge
+  `scoring-oneoff-addon:<eid>|<cid>|<key>|<on|off>` drives the same
+  path. The practice-round event's own oneoff default is 0 — the $110
+  lives in the CUP's expected via the friday addon, so the 3330 roster
+  is a who's-playing list, not a second bill.
+- **Paid players lose the Remind badge** (Kerry 2026-09-22): on a
+  one-off event a player whose balance is ≤ 0 shows a green `Paid ✓`
+  chip (buyin-green tokens, no click) instead of the Remind tag —
+  desktop and mobile. The auto reminder job was already excluded via
+  `payment_reminder_exclude_events`.
 - **LODGING click-to-select** (Kerry 2026-09-22 third round: "'Own
   plans' and anything remaining in our AirBNB...if there is"): the
   cell is a `<select>` of — / Own plans / every unit with a spot left

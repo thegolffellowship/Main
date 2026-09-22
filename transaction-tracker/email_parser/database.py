@@ -11789,7 +11789,14 @@ def set_oneoff_addon(event_id: int, customer_id: int, key: str,
     """Toggle one player's add-on buy-in (friday / skins) for a one-off
     event in the oneoff_addons dial ({"<event_id>": {"<cid>":
     ["friday", "skins"]}}). Expected recomputes from the config's addon
-    catalog on the next read."""
+    catalog on the next read.
+
+    An addon whose catalog entry carries "event_id" is a ROUND, not
+    just money (Kerry 2026-09-22: "if they're marked YES for the
+    FRIDAY practice round, they also need to show on the LSC PRACTICE
+    ROUND event"): toggling ON puts an RSVP placeholder on that event's
+    roster, toggling OFF removes it — placeholder rows only, a row
+    with money or any other status is never touched."""
     try:
         allv = json.loads(get_app_setting("oneoff_addons",
                                           db_path=db_path) or "{}")
@@ -11804,8 +11811,74 @@ def set_oneoff_addon(event_id: int, customer_id: int, key: str,
     else:
         ev.pop(str(customer_id), None)
     set_app_setting("oneoff_addons", json.dumps(allv), db_path=db_path)
+
+    roster_sync = None
+    try:
+        cfgs = json.loads(get_app_setting("oneoff_charges",
+                                          db_path=db_path) or "{}")
+        addon = next((a for a in ((cfgs.get(str(event_id)) or {})
+                                  .get("addons") or [])
+                      if a.get("key") == key), None)
+        link_ev = int(addon["event_id"]) if addon and addon.get("event_id") \
+            else None
+    except Exception:
+        link_ev = None
+    if link_ev:
+        try:
+            roster_sync = _sync_addon_roster_row(
+                link_ev, customer_id, bool(on), db_path=db_path)
+        except Exception:
+            logger.exception("addon roster sync failed (event %s cid %s)",
+                             link_ev, customer_id)
+            roster_sync = {"error": "roster sync failed — see logs"}
     return {"event_id": event_id, "customer_id": customer_id,
-            "key": key, "on": bool(on), "selected": sel, "saved": True}
+            "key": key, "on": bool(on), "selected": sel,
+            "roster_sync": roster_sync, "saved": True}
+
+
+def _sync_addon_roster_row(link_event_id: int, customer_id: int, on: bool,
+                           db_path: str | Path = DB_PATH) -> dict:
+    """Keep the linked event's roster in step with an addon toggle.
+    ON: create an RSVP placeholder unless the player already has ANY
+    live row there. OFF: delete only a money-free manual-rsvp
+    placeholder — a paid or GG-sourced row stays."""
+    with _connect(db_path) as conn:
+        evrow = conn.execute("SELECT id, item_name FROM events "
+                             "WHERE id = ?", (link_event_id,)).fetchone()
+        if not evrow:
+            return {"error": f"linked event {link_event_id} not found"}
+        rows = conn.execute(
+            """SELECT id, email_uid, item_price, transaction_status
+               FROM items WHERE event_id = ? AND customer_id = ?
+                 AND COALESCE(transaction_status, 'active')
+                     NOT IN ('credited', 'refunded', 'transferred')""",
+            (link_event_id, customer_id)).fetchall()
+        if on:
+            if rows:
+                return {"event_id": link_event_id, "action": "none",
+                        "reason": "already on the roster"}
+            crow = conn.execute(
+                "SELECT first_name, last_name FROM customers "
+                "WHERE customer_id = ?", (customer_id,)).fetchone()
+            if not crow:
+                return {"error": f"customer {customer_id} not found"}
+            name = " ".join(x for x in (crow["first_name"],
+                                        crow["last_name"]) if x)
+        else:
+            victims = [r for r in rows
+                       if (r["transaction_status"] or "") == "rsvp_only"
+                       and not r["item_price"]
+                       and (r["email_uid"] or "").startswith("manual-rsvp")]
+            for r in victims:
+                conn.execute("DELETE FROM items WHERE id = ?", (r["id"],))
+            conn.commit()
+            return {"event_id": link_event_id, "action": "removed",
+                    "removed_item_ids": [r["id"] for r in victims]}
+    # add_player_to_event manages its own connection
+    item = add_player_to_event(evrow["item_name"], name, mode="rsvp",
+                               db_path=db_path)
+    return {"event_id": link_event_id, "action": "added",
+            "item_id": (item or {}).get("id")}
 
 
 def set_oneoff_lodging(event_id: int, customer_id: int, choice: str,

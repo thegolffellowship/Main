@@ -3236,7 +3236,13 @@
             const isManual = isManualEmailUid || !!r.transferred_from_id;
             const isComp = (r.email_uid || "").startsWith("manual-comp");
             let tag = '';
-            if (isRsvpOnly) tag = `<span class="rsvp-only-tag" data-item-id="${r.id}" data-customer-email="${escapeHtml(r.customer_email || '')}" title="Click for options">Remind</span>`;
+            // One-off events: PAID players show a green Paid chip
+            // instead of Remind (Kerry 2026-09-22) — mobile mirror.
+            const _ooFpM = oneoffPlayerFin(ev.id, r);
+            const _ooPaidM = !!(_ooFpM && _ooFpM.expected != null
+                && _ooFpM.balance <= 0.005);
+            if (_ooPaidM && (isRsvpOnly || isGgRsvp)) tag = `<span class="oo-paid-tag" style="display:inline-block; margin-left:6px; padding:1px 7px; border-radius:9px; font-size:0.62rem; font-weight:800; background:var(--buyin-green, #bbf7d0); color:var(--buyin-green-text, #15803D);" title="Paid in full — no reminder needed">Paid &#10003;</span>`;
+            else if (isRsvpOnly) tag = `<span class="rsvp-only-tag" data-item-id="${r.id}" data-customer-email="${escapeHtml(r.customer_email || '')}" title="Click for options">Remind</span>`;
             else if (isGgRsvp && r.has_player_card === false) tag = `<span class="rsvp-only-tag rsvp-tag-no-card" data-item-id="${r.id}" data-customer-email="${escapeHtml(r.customer_email || '')}" title="No player card found — click for options">Remind</span>`;
             else if (isGgRsvp) tag = `<span class="rsvp-only-tag" data-item-id="${r.id}" data-customer-email="${escapeHtml(r.customer_email || '')}" title="Click for options">Remind</span>`;
             else if (txStatus === "credited") tag = '<span class="status-tag status-tag-credited">Credit</span>';
@@ -8964,7 +8970,14 @@
                     html += `<td class="rsvp-col"><span class="rsvp-circle${circleClass}" data-item-id="${r.id}" data-event-name="${escapeHtml(ev.item_name)}" data-rsvp-state="${circleState}" data-circle-source="${circleSource}" data-player-email="${escapeHtml(r.customer_email || '')}" title="${circleTitle}"></span></td>`;
                 } else if (c.key === "customer") {
                     let tag = "";
-                    if (isRsvpOnly) tag = `<span class="rsvp-only-tag" data-item-id="${r.id}" data-customer-email="${escapeHtml(r.customer_email || '')}" title="Click for options">Remind</span>`;
+                    // One-off events: nobody who is PAID gets a Remind
+                    // badge (Kerry 2026-09-22) — the chip flips to a
+                    // green Paid, no click, no reminder.
+                    const _ooFp = oneoffPlayerFin(ev.id, r);
+                    const _ooPaid = !!(_ooFp && _ooFp.expected != null
+                        && _ooFp.balance <= 0.005);
+                    if (_ooPaid && (isRsvpOnly || isGgRsvp)) tag = `<span class="oo-paid-tag" style="display:inline-block; margin-left:6px; padding:1px 7px; border-radius:9px; font-size:0.62rem; font-weight:800; background:var(--buyin-green, #bbf7d0); color:var(--buyin-green-text, #15803D);" title="Paid in full — no reminder needed">Paid &#10003;</span>`;
+                    else if (isRsvpOnly) tag = `<span class="rsvp-only-tag" data-item-id="${r.id}" data-customer-email="${escapeHtml(r.customer_email || '')}" title="Click for options">Remind</span>`;
                     else if (isGgRsvp && r.has_player_card === false) tag = `<span class="rsvp-only-tag rsvp-tag-no-card" data-item-id="${r.id}" data-customer-email="${escapeHtml(r.customer_email || '')}" title="No player card found — click for options">Remind</span>`;
                     else if (isGgRsvp) tag = `<span class="rsvp-only-tag" data-item-id="${r.id}" data-customer-email="${escapeHtml(r.customer_email || '')}" title="Click for options">Remind</span>`;
                     else if (txStatus === "credited") tag = '<span class="status-tag status-tag-credited">Credit</span>';

@@ -3231,6 +3231,23 @@ def _scoring_dispatch(url: str, extract: str):
             db.log_agent_action("mcp-claude", "scoring-lsc-freeze",
                                 f"frozen at {res.get('frozen_at')}")
             return json.dumps(res, indent=2)
+        if cmd == "scoring-oneoff-addon":
+            # "<event_id>|<customer_id>|<key>|<on|off>" — toggle a
+            # player's add-on buy-in on a one-off event, same path the
+            # roster's FRI/SKINS click uses (set_oneoff_addon), incl.
+            # the linked-event roster sync for addons that carry an
+            # event_id (Friday practice round). Audited.
+            _p = [x.strip() for x in arg.split("|")]
+            if len(_p) != 4:
+                return json.dumps({"error": "expected <event_id>|"
+                                   "<customer_id>|<key>|<on|off>"})
+            _on = _p[3].lower() in ("on", "1", "true", "yes")
+            res = db.set_oneoff_addon(int(_p[0]), int(_p[1]), _p[2], _on)
+            db.log_agent_action(
+                "mcp-claude", "scoring-oneoff-addon",
+                f"event {_p[0]} cid {_p[1]} {_p[2]} -> "
+                f"{'ON' if _on else 'OFF'} (sync: {res.get('roster_sync')})")
+            return json.dumps(res, indent=2, default=str)
         if cmd == "scoring-lsc-shirts":
             # "<event_id>" — read-only shirt-size coverage for a
             # one-off event (Kerry 2026-09-22 shirt column): per player

@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.481.1";
+window.TGF_VERSION = "2.482.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.482.0",
+    date: "2026-09-22",
+    changes: [
+      "One-off roster: a player who is PAID no longer shows a Remind badge (Kerry 2026-09-22: ‘we don't need to remind anyone that is paid’) — the chip flips to a green Paid ✓, no click, desktop and mobile. Whoever still owes keeps the Remind button; the automated reminder job was already off for the cup.",
+      "FRI YES now puts the player on the LSC PRACTICE ROUND roster too (Kerry 2026-09-22): the Friday add-on carries the practice-round event in the catalog, so toggling it ON creates their RSVP placeholder there and toggling it OFF removes it — placeholder rows only, a paid or Golf Genius row is never touched. The practice round's own expected is $0: the $110 is billed on the cup through the FRI column, the practice-round roster is the who's-playing list.",
+      "Bridge scoring-oneoff-addon:<event>|<cid>|<key>|<on|off> drives the same toggle path server-side, roster sync included.",
+    ],
+  },
   {
     version: "2.481.1",
     date: "2026-09-22",
