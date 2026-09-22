@@ -3823,6 +3823,50 @@ def _scoring_dispatch(url: str, extract: str):
             return json.dumps(db.clear_event_auto_payouts(
                 _ev.strip(), include_manual=(_mode.strip().lower() == "all")),
                 indent=2, default=str)
+        if cmd == "scoring-refer":
+            # "<customer_id>|<referrer_customer_id>[|source]" — record who
+            # referred someone, the same call the modal makes. Passing
+            # "none" as the referrer clears it.
+            _p = [x.strip() for x in arg.split("|")]
+            if len(_p) < 2:
+                return json.dumps({"error": "usage: scoring-refer:"
+                                            "<customer_id>|<referrer_id>[|source]"})
+            _rid = None if _p[1].lower() in ("none", "null", "") else int(_p[1])
+            _r = db.set_referred_by(int(_p[0]), _rid,
+                                    source=(_p[2] if len(_p) > 2 else None))
+            if "error" not in _r and _rid is not None:
+                from email_parser.leads import ensure_referral_lead
+                _r["lead"] = ensure_referral_lead(
+                    int(_p[0]), referrer_name=_r.get("referred_by_name") or "",
+                    author="mcp-claude")
+            db.log_agent_action("mcp-claude", "scoring-refer", arg, str(_r))
+            return json.dumps(_r, indent=2, default=str)
+        if cmd == "scoring-lead-lookup":
+            # "<text>" — every leads row matching a name/email/phone
+            # fragment INCLUDING merged and dismissed ones, plus the
+            # customer's own campaign stamp. The lead centre filters
+            # merged rows out, which is exactly why a lead that has
+            # "disappeared" cannot be diagnosed from it.
+            from email_parser import database as _db2
+            _q = f"%{arg.strip().lower()}%"
+            with _db2._connect() as _c:
+                _rows = [dict(r) for r in _c.execute(
+                    "SELECT id, source, first_name, last_name, email, phone, "
+                    "  status, campaign_id, customer_id, merged_into, "
+                    "  arrived_at, external_id "
+                    "FROM leads WHERE LOWER(COALESCE(first_name,'') || ' ' || "
+                    "  COALESCE(last_name,'')) LIKE ? "
+                    "   OR LOWER(COALESCE(email,'')) LIKE ? "
+                    "   OR COALESCE(phone,'') LIKE ? ORDER BY id",
+                    (_q, _q, _q)).fetchall()]
+                _cust = [dict(r) for r in _c.execute(
+                    "SELECT customer_id, first_name, last_name, "
+                    "  acquisition_source, referred_by_customer_id, "
+                    "  referred_by_source "
+                    "FROM customers WHERE LOWER(COALESCE(first_name,'') || ' ' "
+                    "  || COALESCE(last_name,'')) LIKE ?", (_q,)).fetchall()]
+            return json.dumps({"leads": _rows, "customers": _cust},
+                              indent=2, default=str)
         if cmd == "scoring-referrals":
             # Referral fee tracking (v2.140.0): sync (coupon scan => comped
             # — the redeemed coupon IS the compensation, Kerry 2026-07-28;

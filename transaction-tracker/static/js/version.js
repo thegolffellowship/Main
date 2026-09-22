@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.478.7";
+window.TGF_VERSION = "2.479.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.479.0",
+    date: "2026-09-22",
+    changes: [
+      "A spot bought FOR someone is now recorded as bought_spot, not member_claim. The guest-assignment path has derived the referral since 2026-07-30, but it called set_referred_by without a source, so an omitted source defaulted it to 'told us' — throwing away the fact that the Tracker WATCHED the purchase happen. Derived evidence and a human's claim are not the same strength and no longer read the same.",
+      "New diagnostic bridges: scoring-lead-lookup:<text> returns every leads row matching a name, email or phone INCLUDING merged and dismissed ones plus the customer's own campaign stamp (the Lead Center filters merged rows out, which is exactly why a lead that has 'disappeared' cannot be diagnosed from it); scoring-refer:<customer_id>|<referrer_id>[|source] records an attribution from the MCP side, the same call the modal makes, and mints the referral lead with it.",
+    ],
+  },
   {
     version: "2.478.7",
     date: "2026-09-22",

@@ -2271,7 +2271,12 @@ def api_assign_guest(item_id):
         # coupon or a payout receipt, and recording this must never mint one.
         if guest_cid and item.get("customer_id"):
             from email_parser.database import set_referred_by
-            ref = set_referred_by(guest_cid, item["customer_id"])
+            # source='bought_spot': this is DERIVED from a purchase, not
+            # claimed by anyone. Defaulting it to member_claim (which is
+            # what an omitted source does) threw away the fact that the
+            # Tracker watched it happen.
+            ref = set_referred_by(guest_cid, item["customer_id"],
+                                  source="bought_spot")
             if "error" not in ref:
                 out["referred_by_customer_id"] = ref["referred_by_customer_id"]
                 out["referred_by_name"] = ref["referred_by_name"]
