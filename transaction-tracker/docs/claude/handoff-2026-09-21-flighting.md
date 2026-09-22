@@ -159,7 +159,7 @@ Rule 3b: the storage shape was proposed in the ack (same app_settings
 key, no new table) and built in-session; the freeze snapshot already
 carries the resulting selection.
 
-## 6d. Kerry's follow-up on v2.478.0 (2026-09-22 afternoon) → v2.478.1
+## 6d. Kerry's follow-up on v2.478.0 (2026-09-22 afternoon) → v2.478.2
 
 1. **Even split, odd field:** the smaller half is Flight 1 (13 → 6/7);
    ties are never split and a tie group on the cut goes UP. Built in

@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.478.1";
+window.TGF_VERSION = "2.478.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.478.2",
+    date: "2026-09-22",
+    changes: [
+      "EVEN split rule (Kerry 2026-09-22): an odd field puts the SMALLER half in Flight 1 (13 players → 6/7; 16 in three flights → 5/5/6) so the low flight is protected, and tied handicaps are never split — a tie group sitting on the cut goes UP whole. The Selection notes say so.",
+      "FLIGHTS tab: FREEZE now visibly freezes. The events page never had the toast helper it was calling, so every FREEZE / toggle / drag call threw before the board reloaded ('nothing updates'). The page carries its own toast; FREEZE / SETTLE / Unfreeze show FREEZING… the instant they are clicked and the response is the board — no second round trip.",
+      "FLIGHTS tab: dragging a name is now immediate — the card moves on the drop (optimistic), the badge reads 'saving…' until the server confirms and re-prices, and the server's board replaces the guess. EVEN | HCP lights the segment before the server answers. The move and toggle endpoints read the expensive board inputs once instead of twice.",
+    ],
+  },
   {
     version: "2.478.1",
     date: "2026-09-22",

@@ -2263,7 +2263,7 @@ Kerry 2026-09-21 (mailbox #582): "need to see the divisions/flights
 breakdown so probably will need a tab for it under each event." The
 FLIGHTING lane (spun off "TGF Tracker Improvements 2"; plan #584).
 
-- **The even split's odd-field and tie rule; page speed (v2.478.1, Kerry
+- **The even split's odd-field and tie rule; page speed (v2.478.2, Kerry
   2026-09-22):** "If an odd number of players the lower number should go
   to the Flight 1, and the higher to the Flight 2. That way the lower
   handicaps are protected from higher handicaps sneaking in… Tied
