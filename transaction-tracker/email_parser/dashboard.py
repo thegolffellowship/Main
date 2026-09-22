@@ -174,23 +174,24 @@ def _first_timers_to_attribute(conn, today):
     has_leads = conn.execute(
         "SELECT 1 FROM sqlite_master WHERE type='table' AND name='leads'"
     ).fetchone()
-    campaign_clause = (
-        "  AND NOT EXISTS (SELECT 1 FROM leads l "
-        "                    WHERE l.customer_id = c.customer_id "
-        "                      AND l.campaign_id IS NOT NULL) "
-        if has_leads else "")
-    # A lead row is not the only proof a campaign brought someone.
-    # Kerry, seeing Hector Hinojosa on this card: "Isn't Hector Hinojosa
-    # a campaign lead?" He is — customers.acquisition_source reads
-    # 'facebook_lead' — but his leads row is gone, so the clause above
-    # missed him. That stamp is only ever written to a customer who was
-    # linked to a lead (leads.py, both write sites), so it is proof of
-    # campaign origin that OUTLIVES the lead row itself. Anything else,
-    # 'godaddy' included, is a store channel and says nothing about who
-    # brought them.
-    campaign_clause += (
-        "  AND COALESCE(c.acquisition_source,'') <> 'facebook_lead' ")
-    rows = conn.execute(
+    # ONE predicate, written once and used both ways below: true when a
+    # campaign already accounts for this person.
+    #
+    # A lead row is not the only proof. Kerry, seeing Hector Hinojosa on
+    # this card: "Isn't Hector Hinojosa a campaign lead?" He is — his
+    # customers.acquisition_source reads 'facebook_lead' — and that stamp
+    # is only ever written to a customer who was linked to a lead
+    # (leads.py, both write sites), so it holds even when the lead row's
+    # campaign_id does not. Anything else, 'godaddy' included, is a store
+    # channel and says nothing about who brought them.
+    parts = ["COALESCE(c.acquisition_source,'') = 'facebook_lead'"]
+    if has_leads:
+        parts.append("EXISTS (SELECT 1 FROM leads l "
+                     "WHERE l.customer_id = c.customer_id "
+                     "AND l.campaign_id IS NOT NULL)")
+    CAMPAIGN_KNOWN = "(" + " OR ".join(parts) + ")"
+
+    BASE = (
         "SELECT DISTINCT c.customer_id, "
         "  TRIM(COALESCE(c.first_name,'') || ' ' || COALESCE(c.last_name,'')) AS name, "
         "  MIN(i.order_date) AS first_order "
@@ -199,16 +200,53 @@ def _first_timers_to_attribute(conn, today):
         "  AND COALESCE(i.transaction_status,'active') = 'active' "
         "  AND i.order_date >= ? "
         "  AND c.referred_by_customer_id IS NULL "
-        + campaign_clause +
-        "GROUP BY c.customer_id ORDER BY first_order DESC", (start,)).fetchall()
-    if not rows:
+        "  AND {campaign} "
+        "GROUP BY c.customer_id ORDER BY first_order DESC")
+
+    # The blank question: nobody has said, and no campaign accounts for
+    # them either (Kerry: "if they're already tied to a lead campaign,
+    # then they shouldn't be on the first timers list to attribute").
+    rows = conn.execute(BASE.format(campaign="NOT " + CAMPAIGN_KNOWN),
+                        (start,)).fetchall()
+    # ...but a campaign lead can STILL have a referrer worth paying.
+    # Kerry 2026-09-22, on Justin Angelone: "The campaign connection is
+    # still real, because he filled out the form and that's how I
+    # responded to him, but we also need to honor the referral and pay
+    # out to Isaac." So campaign-tied people are excluded from the BLANK
+    # question only. Where their own order names somebody, they come back
+    # as a CONFIRMATION — which is what Kerry asked for: "He should only
+    # show up on a 1st Timer attribution list to confirm it was Jeff,
+    # with an option to switch in worst case."
+    suggested = conn.execute(BASE.format(campaign=CAMPAIGN_KNOWN),
+                             (start,)).fetchall()
+
+    from .attribution import suggest_referrer
+    seen = {r["customer_id"] for r in rows}
+    merged = list(rows) + [r for r in suggested if r["customer_id"] not in seen]
+
+    items = []
+    for r in merged:
+        try:
+            hint = suggest_referrer(r["customer_id"], conn)
+        except Exception:
+            hint = None
+        if r["customer_id"] not in seen and not hint:
+            continue        # campaign-tied AND nothing to confirm: stay out
+        row = {"label": r["name"] or f"customer {r['customer_id']}",
+               "meta": (f"{hint['referrer_name']}?" if hint
+                        else f"first played {_when(_days(r['first_order'], today))}"),
+               "href": f"/customers?cid={r['customer_id']}",
+               "attribute_cid": r["customer_id"]}
+        if hint:
+            row["suggest"] = hint
+        items.append(row)
+    if not items:
         return None
-    items = [{"label": r["name"] or f"customer {r['customer_id']}",
-              "meta": f"first played {_when(_days(r['first_order'], today))}",
-              "href": f"/customers?cid={r['customer_id']}",
-              "attribute_cid": r["customer_id"]} for r in rows]
-    return _card("attribute", "First timers to attribute", len(rows),
-                 "/admin/leads", "who referred them?", "watch", items)
+    n_confirm = sum(1 for i in items if i.get("suggest"))
+    return _card("attribute", "First timers to attribute", len(items),
+                 "/admin/leads",
+                 (f"{n_confirm} just need confirming" if n_confirm
+                  else "who referred them?"), "watch", items)
 
 
 def _renewals(conn, today):

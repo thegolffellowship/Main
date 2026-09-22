@@ -286,3 +286,64 @@ coupon is never topped up with cash.
 
 Guard: `test_referral_fee_membership.py` (16 checks), including that the
 relationship alone still mints nothing.
+
+## §8 — Two facts at once, and confirm-don't-ask (2026-09-22)
+
+### A campaign lead can also be a referral
+
+Kerry, on Justin Angelone: *"I know that Justin Angelone came from our
+Lead Campaign. But on a new member form he mentions Isaac Reyes (member
+in Austin) as a referral. So I need two things to be true here. The
+campaign connection is still real, because he filled out the form and
+that's how I responded to him, but we also need to honor the referral
+and pay out to Isaac."*
+
+The schema already allowed this — Kerry's own 2026-07-30 ruling put the
+CHANNEL (`acquisition_source`, the lead row's `campaign_id`) and the
+PERSON (`referred_by_customer_id`) in separate columns precisely because
+they answer different questions. Recording Justin → Isaac left lead 14
+and its `campaign_id = 1` untouched. Isaac is owed $25; campaign 1 keeps
+Justin as direct value.
+
+**ROI consequence, decided here:** a person counts DIRECTLY for their own
+campaign and is never also residual credit for somebody else's. Justin's
+margin belongs to campaign 1; it does not additionally flow to whatever
+campaign Isaac came from. Direct attribution wins, and the aggregate can
+never double-count. The FEE is a separate question and is unaffected —
+Isaac is paid either way.
+
+### The queue asks blank questions only
+
+Kerry, on Shahyan Javed: *"Shahyan Javed should have automatically been
+attributed to Jeff Young because Jeff purchased him. He should only show
+up on a 1st Timer attribution list to confirm it was Jeff, with an
+option to switch in worst case."*
+
+His order named Jeff three times: `notes` read "Purchased by Jeff
+Young", `coupon_code` was `tgf-jeff`, and there was a partner request.
+`email_parser/attribution.py` now reads those signals, strongest first:
+
+| signal | source recorded | confidence |
+|---|---|---|
+| `items.referred_by` / `items.referral` (the form asked) | `lead_form` | high |
+| `notes` "Purchased by X" | `bought_spot` | high |
+| `coupon_code` `tgf-referral-<name>` | `coupon` | high |
+| `coupon_code` `tgf-<name>`, one match only | `coupon` | med |
+
+It **never writes**. A suggestion is evidence plus a name; a person still
+says yes, because a wrong guess is now a $25 payout to the wrong member.
+Two Jeffs means no suggestion at all — a coupon token is a nickname, not
+an identity.
+
+This also reconciles the two rules Kerry gave a day apart. Campaign-tied
+people are excluded from the BLANK question ("if they're already tied to
+a lead campaign, then they shouldn't be on the first timers list"), but
+come back as a CONFIRMATION when their own order names somebody — which
+is the only way the Justin/Isaac case could ever have surfaced.
+
+Also fixed: the guest-assignment path has derived the referral since
+2026-07-30 but called `set_referred_by` with no source, so it defaulted
+to `member_claim`. Derived evidence and a human's claim are not the same
+strength and no longer read the same.
+
+Guards: `test_attribution_suggest.py` (16), `test_attribute_queue.py` (29).

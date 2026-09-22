@@ -29,9 +29,12 @@ def build(with_leads=True):
             referred_by_customer_id INTEGER, referred_by_source TEXT,
             referred_by_note TEXT, referred_at TEXT, found_us_via TEXT,
             acquisition_source TEXT);
+        CREATE TABLE customer_emails (email_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            customer_id INTEGER, email TEXT, is_primary INTEGER);
         CREATE TABLE items (
             id INTEGER PRIMARY KEY, customer_id INTEGER, order_date TEXT,
-            user_status TEXT, transaction_status TEXT DEFAULT 'active');
+            user_status TEXT, transaction_status TEXT DEFAULT 'active',
+            notes TEXT, coupon_code TEXT, referred_by TEXT, referral TEXT);
     """)
     if with_leads:
         conn.execute("CREATE TABLE leads (id INTEGER PRIMARY KEY, "
@@ -80,6 +83,29 @@ check("each row carries the customer id the modal keys on",
       all(i.get("attribute_cid") for i in card["items"]), card["items"])
 check("...and still carries an href, so the Customers page remains reachable",
       all(i.get("href") for i in card["items"]))
+
+print("A campaign lead whose order names a referrer comes BACK, as a confirm")
+# Kerry 2026-09-22 on Justin Angelone: "The campaign connection is still
+# real ... but we also need to honor the referral and pay out to Isaac."
+conn = build()
+conn.execute("INSERT INTO customers (customer_id, first_name, last_name, "
+             "acquisition_source) VALUES (427,'Isaac','Reyes','godaddy')")
+conn.execute("UPDATE items SET referred_by = 'Isaac Reyes' WHERE customer_id = 791")
+conn.commit()
+card = _first_timers_to_attribute(conn, TODAY)
+by_name = {i["label"]: i for i in card["items"]}
+check("Logan Billeaud is back although the campaign already claims him",
+      "Logan Billeaud" in by_name, list(by_name))
+check("...as a SUGGESTION naming Isaac, not a blank question",
+      by_name.get("Logan Billeaud", {}).get("suggest", {}).get("referrer_name")
+      == "Isaac Reyes", by_name.get("Logan Billeaud"))
+check("...and the row reads as a confirmation",
+      by_name.get("Logan Billeaud", {}).get("meta") == "Isaac Reyes?",
+      by_name.get("Logan Billeaud"))
+check("the card detail counts what needs confirming",
+      "confirming" in (card.get("detail") or ""), card.get("detail"))
+check("Hector, campaign-tied with NOTHING in his order, stays out",
+      "Hector Hinojosa" not in by_name, list(by_name))
 
 print("A Tracker with no leads table at all")
 card = _first_timers_to_attribute(build(with_leads=False), TODAY)

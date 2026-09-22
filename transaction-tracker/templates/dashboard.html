@@ -104,6 +104,8 @@
         // Kerry's rule: the list under a card is a PEEK, not the page.
         // Five rows and a "+N more" that goes to the surface that owns it.
         const PEEK = 5;
+        // Suggestions travel with the card; the modal needs them by cid.
+        const SUGGEST = {};
 
         function cardHtml(c) {
             const items = (c.items || []).slice(0, PEEK).map(it =>
@@ -113,9 +115,10 @@
                 // the ROUTER rule is amended, not ignored (see
                 // docs/claude/dashboard.md).
                 (it.attribute_cid
-                    ? `<li><a href="#" data-attr-cid="${esc(it.attribute_cid)}" ` +
+                    ? (SUGGEST[it.attribute_cid] = it.suggest || null,
+                       `<li><a href="#" data-attr-cid="${esc(it.attribute_cid)}" ` +
                       `data-attr-name="${esc(it.label)}"><span>${esc(it.label)}</span>` +
-                      `<span class="meta">${esc(it.meta || "")}</span></a></li>`
+                      `<span class="meta">${esc(it.meta || "")}</span></a></li>`)
                     : `<li><a href="${esc(it.href || c.href)}"><span>${esc(it.label)}</span>` +
                       `<span class="meta">${esc(it.meta || "")}</span></a></li>`)).join("");
             const extra = (c.items || []).length - PEEK;
@@ -159,7 +162,9 @@
             const body = document.getElementById("db-modal-body");
             document.getElementById("db-modal-title").textContent = name || ("Customer " + cid);
             body.innerHTML = window.TGFRef
-                ? window.TGFRef.render({ customer_id: cid }, { compact: true })
+                ? window.TGFRef.render(
+                    { customer_id: cid, suggest: SUGGEST[cid] || null },
+                    { compact: true })
                 : "<p>Attribution control failed to load.</p>";
             back.style.display = "flex";
             if (window.TGFRef) window.TGFRef.ensurePeople();

@@ -102,12 +102,31 @@
             ? "max-width:500px;"
             : "margin-top:0.75rem; padding-top:0.5rem; " +
               "border-top:1px solid var(--border); max-width:500px;";
+        // A SUGGESTION is a confirm, not a question (Kerry 2026-09-22:
+        // "He should only show up on a 1st Timer attribution list to
+        // confirm it was Jeff, with an option to switch in worst case").
+        // The evidence is shown because a one-click $25 payout should
+        // say what it is based on.
+        var sg = customer.suggest;
+        var suggestHtml = (!sg || name) ? "" :
+            '<div style="margin:0.4rem 0; padding:0.45rem 0.55rem; background:#F0FDF4; ' +
+                'border:1px solid #BBF7D0; border-radius:6px; font-size:0.8rem;">' +
+                "<div><b>" + esc(sg.referrer_name) + "</b> \u2014 " +
+                    esc(sg.evidence) + "</div>" +
+                '<div style="margin-top:0.35rem; display:flex; gap:6px; align-items:center;">' +
+                    '<button type="button" class="btn-small" data-refconfirm="' +
+                        esc(sg.referrer_customer_id) + '" data-refsource="' +
+                        esc(sg.source) + '">Confirm ' + esc(sg.referrer_name) +
+                    "</button>" +
+                    '<span style="color:var(--text-muted); font-size:0.75rem;">' +
+                        "or pick someone else below</span>" +
+                "</div></div>";
         return '<div style="' + frame + '" data-refblock="' + cid + '">' +
             '<div style="font-weight:600; font-size:0.7rem; color:var(--text-muted); ' +
                 'text-transform:uppercase; letter-spacing:0.03em; margin-bottom:0.3rem;">' +
                 esc(opts.heading || "Who referred them") + "</div>" +
             '<div style="font-size:0.82rem; min-height:1.2em;" data-refcurrent>' +
-                currentHtml(customer) + "</div>" +
+                currentHtml(customer) + "</div>" + suggestHtml +
             '<div style="margin-top:0.45rem; display:flex; flex-wrap:wrap; gap:6px; align-items:center;">' +
                 '<input list="ref-people-' + cid + '" data-refinput ' +
                     'placeholder="Type a member’s name…" autocomplete="off" ' +
@@ -194,7 +213,13 @@
         var block = ev.target.closest && ev.target.closest("[data-refblock]");
         if (!block) return;
         var cid = parseInt(block.getAttribute("data-refblock"), 10);
-        if (ev.target.matches("[data-refsave]")) {
+        if (ev.target.matches("[data-refconfirm]")) {
+            post(cid, {
+                referrer_customer_id: parseInt(
+                    ev.target.getAttribute("data-refconfirm"), 10),
+                source: ev.target.getAttribute("data-refsource") || "member_claim"
+            }, block);
+        } else if (ev.target.matches("[data-refsave]")) {
             var input = block.querySelector("[data-refinput]");
             var rid = resolveName(input.value, cid);
             if (!rid) {

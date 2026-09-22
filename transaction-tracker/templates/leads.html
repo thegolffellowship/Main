@@ -522,6 +522,7 @@
     function setRoiMode(m) { roiMode = m; renderStats(); }
 
     const AB_PEEK = 8;
+    const AB_SUGGEST = {};
     let AB_ITEMS = [], AB_SHOWN = AB_PEEK;
 
     function renderAttrBand() {
@@ -553,6 +554,7 @@
             if (!r.ok) return;
             const card = await r.json();
             AB_ITEMS = (card.items || []).filter(i => i.attribute_cid);
+            AB_ITEMS.forEach(i => { AB_SUGGEST[i.attribute_cid] = i.suggest || null; });
             AB_SHOWN = AB_PEEK;
             renderAttrBand();
         } catch (e) { /* the band is an extra; never break the queue */ }
@@ -572,7 +574,9 @@
         if (!slot) return;
         if (slot.innerHTML) { slot.innerHTML = ""; return; }   // toggle shut
         slot.innerHTML = window.TGFRef
-            ? window.TGFRef.render({ customer_id: cid }, { compact: true, heading: "" })
+            ? window.TGFRef.render(
+                { customer_id: cid, suggest: AB_SUGGEST[cid] || null },
+                { compact: true, heading: "" })
             : "";
         if (window.TGFRef) window.TGFRef.ensurePeople();
         const input = slot.querySelector("[data-refinput]");

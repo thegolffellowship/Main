@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.479.1";
+window.TGF_VERSION = "2.480.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.480.0",
+    date: "2026-09-22",
+    changes: [
+      "THE QUEUE NOW CONFIRMS INSTEAD OF ASKING. Kerry, on Shahyan Javed: 'Shahyan Javed should have automatically been attributed to Jeff Young because Jeff purchased him. He should only show up on a 1st Timer attribution list to confirm it was Jeff, with an option to switch in worst case.' His order named Jeff THREE times — notes read 'Purchased by Jeff Young', the coupon was tgf-jeff, and there was a partner request. New email_parser/attribution.py reads those signals strongest-first (the form's referred_by/referral field, then a 'Purchased by' note, then a referral coupon, then a named coupon on an unambiguous first name) and the card, modal and band render a one-click Confirm WITH THE EVIDENCE shown. It never writes: a wrong guess is now a $25 payout to the wrong member, so a person still says yes. Two Jeffs means no suggestion at all — a coupon token is a nickname, not an identity.",
+      "A CAMPAIGN LEAD CAN ALSO BE A REFERRAL, and both facts now survive. Kerry on Justin Angelone: 'The campaign connection is still real, because he filled out the form and that's how I responded to him, but we also need to honor the referral and pay out to Isaac.' Recording Justin → Isaac Reyes left his lead row and its campaign_id untouched, and raised Isaac's $25. This also reconciles the two rules given a day apart: campaign-tied people are excluded from the BLANK question, but come back as a CONFIRMATION when their own order names somebody — the only way the Justin/Isaac case could ever have surfaced. ROI rule decided with it: a person counts DIRECTLY for their own campaign and is never also residual credit for another, so the aggregate cannot double-count. The fee is unaffected.",
+      "Diagnosis for Kerry's question 'How did Hector get removed from a LEAD?' — he was NOT removed. Lead 65 is live, converted and linked to him; it simply carries campaign_id = NULL, so it was never tied to Fall 2026 Leads. Justin's lead 14 DOES carry campaign 1. Both were invisible in the earlier Lead Center pull because that view is windowed, not because the rows were gone. Hector's missing campaign_id is a data question for Kerry, not a code bug.",
+      "Guards: test_attribution_suggest.py (16 checks, including that the suggester never writes) and test_attribute_queue.py extended to 29.",
+    ],
+  },
   {
     version: "2.479.1",
     date: "2026-09-22",
