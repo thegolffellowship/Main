@@ -10,6 +10,10 @@
    Rollback: SHELL_V2 env var → shell_v2 flag; legacy header lives in
    each page's {% else %} branch until the cleanup release.
    ═══════════════════════════════════════════════════════════════ #}
+{# LOADING… (Kerry 2026-09-22): the page-wide in-flight indicator. Loaded
+   FIRST and without defer so window.fetch is wrapped before any page
+   script runs — every request on every page lights the top bar. #}
+<script src="/static/js/loading.js"></script>
 {% if member_mode %}
 <header class="shell-nav shell-member">
     <div class="shell-brand">

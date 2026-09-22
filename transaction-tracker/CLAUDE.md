@@ -380,7 +380,7 @@ No Python or local install needed — Claude Desktop connects directly to Railwa
 - `email_parser/contest_flags.py` — `contest_flags_audit` (v2.356.0): stored NET / GROSS / Match Play / FALL flags vs the option lines printed on the ORDER EMAIL, Graph fetch, no AI; bridge `scoring-contest-flags-audit[:apply][|all]`. Companion rule in `sync_season_contests_from_items`: REMOVED STAYS REMOVED — a purchase covered by a later `season_contest_removals` row never re-enrolls, and removals no longer erase the purchase flag
 - `email_parser/margin_ledger.py` — `lsc_fund_year` (Aug–Jul sales → the Cup played that OCTOBER), `margin_gaps` (pre-cutover events: booked vs residual-would-book with reasons; measure-only; bridge `scoring-margin-gaps`), `liability_buckets` (payouts owed, credits held, shirt fund by Cup year, HIO pot, tax reserve by month; bridge `scoring-liabilities`), `membership_gap` (gap group 1 — memberships by price/type/contests, booked vs today's decomposition, fits/misfits; bridge `scoring-membership-gap[:apply]`, apply Kerry-gated)
 - `email_parser/perf.py` — the Tracker measures itself (Tracker Health lane 2026-09-22): `Stopwatch` / `@timed_route` / `timed_job` / `timed_call` → `perf_samples` (schema.md); SLOW lines in `SLOW_MS` + the `perf_slow_ms` dial; a slow sample also writes `agent_action_log` (`<name>_slow`). `app.py`'s `_TimedScheduler` wraps every job; `mcp_server._scoring_dispatch` wraps every bridge. Read with `/admin/health`, `scoring-health`
-- `email_parser/health.py` — the DAILY HEALTH DIGEST agent: `build_health_report` → findings (`RULES`) → mailbox post (`tracker-health`) + COO action items (`HEALTH: <key>`, de-duped while open) + prune; dial `health_digest_time` (default 05:45 Central), checked every 15 min 4–9 AM; see coo.md
+- `email_parser/health.py` — the DAILY HEALTH DIGEST agent: `build_health_report` → findings (`RULES`) → mailbox post (`tracker-health`) + COO action items (`HEALTH: <key>`, de-duped while open) + prune; dial `health_digest_time` (default 05:00 Central), checked every 15 min 4–9 AM; see coo.md
 - `email_parser/print_pack.py` — the event PRINT PACK (v2.465.0): Starter Sheet + Cart Signs + Divisions & Flights + Proximity bound into one PDF by headless Chromium (Playwright; WeasyPrint fallback); `GET /events/<id>/print-pack.pdf`; evening-before routine 5–10 PM Central mails tomorrow's packs once per change (`print_pack_sent:<id>` hash); bridge `scoring-print-pack-pdf:<id>[|send]`. See events.md
 - `email_parser/report.py` — Daily digest email builder + sender
 - `email_parser/rsvp_parser.py` — Golf Genius RSVP email parser (regex, no AI)
@@ -431,6 +431,7 @@ No Python or local install needed — Claude Desktop connects directly to Railwa
 - `static/js/games-matrix.js` — Prize matrix data (9-hole & 18-hole, 2-64 players)
 - `static/js/points-render.js` — Shared Points Races drill-down renderers (Contests page + Customers Points tab); injects its own table CSS
 - `static/js/tgf-standards.js` — UNIVERSAL display standards (Kerry 2026-08-03): `TGF_CARD_STYLE` (every hole-by-hole scorecard grid) + `TGF_STAT_COL` (110px/50px, 6px-padding stat columns). Load before points-render.js / scorecard-render.js; change look-and-feel HERE, never inline in a renderer
+- `static/js/loading.js` — LOADING… (Kerry 2026-09-22): wraps `window.fetch`, a slim orange top bar while any request is in flight (after 150 ms) + a “Loading…” pill after 800 ms; `window.tgfLoading.start()/end()` for non-fetch waits; `.tgf-loading` panel placeholder class. Loaded FIRST by `_shell_nav.html`, never deferred; guard `test_loading.js`
 - `static/js/version.js` — Version number + changelog data
 - `static/js/chat-widget.js` — Support/feedback chat widget
 - `golf_genius_sync.py` — Golf Genius handicap sync via HTTP
@@ -446,6 +447,18 @@ No Python or local install needed — Claude Desktop connects directly to Railwa
   `expense_parser._call_llm`, `parser.parse_emails`, and
   `app._check_inbox_background` — add a call to any new recurring
   Anthropic path you introduce.
+
+## Lazy DDL is once per database (v2.486.0, IMPORTANT for every `_ensure_*`)
+
+`CREATE INDEX IF NOT EXISTS` on an index that already exists takes the
+WRITE lock and waits behind any writer — a scheduler job, a bridge — up
+to sqlite3's 5 s busy timeout. The `_ensure_*` helpers ran on every read
+(`_ensure_pairing_tables` from 58 sites, four inside one PAIRINGS open),
+which is how every section of Kerry's 11-second opens was slow at once
+(mailbox #608). All 18 helpers are wrapped in `_once_per_db`
+(database.py) and run once per file per process. A NEW lazy-table helper
+must be decorated the same way, stay idempotent, and never be relied on
+to re-create a table dropped mid-process. See schema.md.
 
 ## Timezone (IMPORTANT — Railway runs in UTC)
 

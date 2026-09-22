@@ -99,6 +99,8 @@
             <div class="hl-scroll"><table class="hl-table" id="hl-jobs"></table></div></div>
         <div class="hl-section"><h4>Bridges (MCP)</h4>
             <div class="hl-scroll"><table class="hl-table" id="hl-bridges"></table></div></div>
+        <div class="hl-section"><h4>Where the bytes are — biggest tables and indexes</h4>
+            <div class="hl-scroll"><table class="hl-table" id="hl-layout"></table></div></div>
         <div class="hl-section"><h4>Slow and failed samples — where the time went</h4>
             <div class="hl-scroll"><table class="hl-table" id="hl-slow"></table></div></div>
 
@@ -111,7 +113,7 @@
         <p class="hl-note">Every timed request, scheduler job and MCP bridge writes a <code>perf_samples</code> row
             (kept 30 days). A path over its line is SLOW and also lands in the agent action log. The daily digest
             posts this report to the mailbox (topic <code>tracker-health</code>) at the dialled time
-            (<code>health_digest_time</code>, default 05:45 Central) and files findings as COO action items.
+            (<code>health_digest_time</code>, default 05:00 Central) and files findings as COO action items.
             Bridge: <code>scoring-health[:&lt;days&gt;]</code>.</p>
     </main>
 
@@ -133,7 +135,8 @@
                 ["Findings", (r.findings || []).length, (r.findings || []).filter(f => f.severity === "high").length + " high"],
                 ["Database", mb(db.bytes || 0), growth || ("WAL " + mb(db.wal_bytes || 0))],
                 ["DB touch now", ms(pr.connect_ms + pr.pragma_ms + pr.read_ms), "connect " + pr.connect_ms + " · pragma " + pr.pragma_ms + " · read " + pr.read_ms],
-                ["Load (1 min)", r.load1 == null ? "—" : r.load1, "box load average"],
+                ["Load (1 min)", r.load1 == null ? "—" : r.load1, "host load average · " + (r.cpus || "?") + " cpu(s) visible"],
+                ["Free pages", db.layout && db.layout.free_bytes != null ? mb(db.layout.free_bytes) : "—", db.layout && db.layout.page_count ? Math.round(100 * db.layout.freelist_pages / db.layout.page_count) + "% of the file" : "space deleted rows left behind"],
                 ["Handicap cache", hc.hit_rate == null ? "—" : Math.round(hc.hit_rate * 100) + "%", hc.hits + " hits / " + hc.misses + " misses"],
             ];
             document.getElementById("hl-cards").innerHTML = c.map(([l, v, s]) =>
@@ -172,12 +175,19 @@
                         `<td class="n">${ms(s.total_ms)}</td><td class="st-${esc(s.status)}">${esc(s.status)}</td><td class="bd">${bd}${ctx ? "<br>" + ctx : ""}</td></tr>`;
                 }).join("");
         }
+        function layoutTable(r) {
+            const t = document.getElementById("hl-layout"), lay = (r.db || {}).layout || {}, rows = lay.tables || [];
+            if (!rows.length) { t.innerHTML = `<tr><td class="bd">${lay.dbstat === false ? "dbstat not available in this build" : "no layout data"}</td></tr>`; return; }
+            const total = (r.db || {}).bytes || 1;
+            t.innerHTML = `<tr><th>name</th><th>type</th><th class="n">size</th><th class="n">share</th></tr>` +
+                rows.map(x => `<tr><td>${esc(x.name)}</td><td>${esc(x.type)}</td><td class="n">${mb(x.bytes)}</td><td class="n">${Math.round(100 * x.bytes / total)}%</td></tr>`).join("");
+        }
         function render(r) {
             document.getElementById("hl-asof").textContent = `generated ${r.generated_at} Central · last ${r.window_days} day(s)`;
             cards(r); findings(r);
             summaryTable("hl-routes", (r.summary || {}).route);
             summaryTable("hl-bridges", (r.summary || {}).bridge);
-            jobsTable(r); slowTable(r);
+            jobsTable(r); slowTable(r); layoutTable(r);
         }
         async function load() {
             const days = document.getElementById("hl-days").value;

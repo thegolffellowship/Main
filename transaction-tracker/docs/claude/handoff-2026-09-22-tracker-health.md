@@ -41,7 +41,7 @@ routine on your part I think."*
   the findings rules, the markdown, the mailbox post (topic
   `tracker-health`, to tracker-claude + Kerry), COO action items (one
   open item per finding key), retention prune, the once-a-day gate on a
-  dial (`health_digest_time`, default 05:45 Central; the job checks
+  dial (`health_digest_time`, default 05:00 Central; the job checks
   every 15 min 4–9 AM so the dial is live without a restart).
 - **`/admin/health`** (admin page) + `GET /api/admin/health?days=` +
   `POST /api/admin/health/digest {post}`; bridges `scoring-health[:<days>]`
@@ -74,6 +74,31 @@ app and look at the pairings_get samples' `connect` lap, `load1` and
 volume is the story; if `concurrent` names a job on every slow open,
 the GIL is.
 
+## 2b. Second pass (v2.486.0): the lock, the load, the file
+
+- **The lock (#608's "count the CREATE TABLE IF NOT EXISTS per request").**
+  `CREATE INDEX IF NOT EXISTS` on an existing index waits on the write
+  lock (proven in the sandbox: 1,003 ms behind a writer with a 1 s
+  timeout). Four `_ensure_pairing_tables` per PAIRINGS open + the
+  standings table's ensure = every section waiting on whichever job was
+  writing. All 18 `_ensure_*` helpers now run once per file per process
+  (`_once_per_db`).
+- **The first live report (3:51 PM CDT):** load average **87.4** on the
+  box (host figure), database file **431 MB** for 2,312 orders / 15,580
+  rounds / 10,700 scoring rounds, `items_list` p50 532 ms live (94 ms on
+  the fixture), `hcp_index_map` max 838 ms. The report now carries
+  `cpus`, free pages and the biggest tables (`perf.db_layout`); findings
+  for a saturated box, a VACUUM candidate (>20% free pages) and a table
+  over half the file. **The next session reads `scoring-health:1` and
+  acts on WHERE THE BYTES ARE** — a 431 MB file on a network volume is
+  the cold-cache cost every section pays; if free pages dominate, a
+  VACUUM is Kerry's decision (off-hours; the file is copied during it).
+- **LOADING… (Kerry 3:27 PM):** `static/js/loading.js`, loaded first by
+  the shell include — top bar after 150 ms in flight, "Loading…" pill
+  after 800 ms, `.tgf-loading` placeholder class; guard `test_loading.js`.
+- **Digest hour:** 05:00 Central (Kerry, #611); the Handicap Surfaces
+  lane reads at 5:15.
+
 ## 3. EVENTS landing
 
 Measured, not yet changed (events.md). Server side on the fixture is
@@ -97,7 +122,7 @@ fix is the page asking for less — coordinate with the flighting lane.
   in-session; nothing else depends on its exact columns).
 - Three plain indexes — no data shape change, no behaviour change; named
   in schema.md.
-- The digest hour — defaulted to 05:45 Central, ASKED in #609. Change it
+- The digest hour — 05:00 Central — Kerry's ruling in #611 (asked in #609). Change it
   with the `health_digest_time` dial (HH:MM), no deploy.
 
 ## 6. Open / carried forward
