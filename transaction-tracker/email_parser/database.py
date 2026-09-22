@@ -11466,6 +11466,37 @@ def get_oneoff_roster_finance(event_id: int,
     except Exception:
         overrides = {}
 
+    # ADD-ONS (Kerry 2026-09-22: "Need columns for Friday Practice
+    # Round ($110) inclusion and the weekend games (Skins $75)").
+    # Config carries the catalog — rules as data:
+    #   "addons": [{"key": "friday", "label": "FRI", "amount": 110},
+    #              {"key": "skins",  "label": "SKINS", "amount": 75}]
+    # Per-player buy-ins live in the oneoff_addons dial
+    # ({"<event_id>": {"<cid>": ["friday", "skins"]}}), and EXPECTED
+    # derives itself: default + the amounts of the add-ons the player
+    # is in for. An explicit override still wins as the full expected
+    # (for the one-off exception Kerry prices by hand).
+    addons_cat = [a for a in (cfg.get("addons") or [])
+                  if isinstance(a, dict) and a.get("key")]
+    addon_sel: dict = {}
+    if addons_cat:
+        try:
+            addon_sel = (json.loads(get_app_setting(
+                "oneoff_addons", db_path=db_path) or "{}")
+                .get(str(event_id)) or {})
+        except Exception:
+            addon_sel = {}
+
+    def _expected_for(cid: int) -> float:
+        if cid in overrides:
+            return overrides[cid]
+        exp = default_expected
+        sel = addon_sel.get(str(cid)) or []
+        for a in addons_cat:
+            if a["key"] in sel:
+                exp += float(a.get("amount") or 0)
+        return exp
+
     # Lodging map from the named dial (the lsc_lodging shape)
     lodging_by_cid: dict = {}
     if cfg.get("lodging_dial"):
@@ -11577,12 +11608,16 @@ def get_oneoff_roster_finance(event_id: int,
 
         def _blank(cid: int, chapter=None):
             ks = _known_shirt(cid) if shirts_on else None
+            sel = addon_sel.get(str(cid)) or []
             return {
                 "chapter": chapter,
                 "gender": _gender_of(cid, ks) if shirts_on else None,
                 "team": team_by_cid.get(cid),
                 "paid": 0.0, "payments": [],
-                "expected": overrides.get(cid, default_expected),
+                "expected": _expected_for(cid),
+                "addons": ({a["key"]: (a["key"] in sel)
+                            for a in addons_cat}
+                           if addons_cat else None),
                 "lodging": lodging_by_cid.get(cid),
                 "shirt": ({"selected": shirt_sel.get(str(cid)),
                            "known": ks}
@@ -11625,8 +11660,33 @@ def get_oneoff_roster_finance(event_id: int,
                        "lodging_dial": cfg.get("lodging_dial"),
                        "team_dial": cfg.get("team_dial"),
                        "shirts": shirts_on,
-                       "shirt_options": shirt_opts},
+                       "shirt_options": shirt_opts,
+                       "addons": addons_cat},
             "players": {str(k): v for k, v in players.items()}}
+
+
+def set_oneoff_addon(event_id: int, customer_id: int, key: str,
+                     on: bool, db_path: str | Path = DB_PATH) -> dict:
+    """Toggle one player's add-on buy-in (friday / skins) for a one-off
+    event in the oneoff_addons dial ({"<event_id>": {"<cid>":
+    ["friday", "skins"]}}). Expected recomputes from the config's addon
+    catalog on the next read."""
+    try:
+        allv = json.loads(get_app_setting("oneoff_addons",
+                                          db_path=db_path) or "{}")
+    except Exception:
+        allv = {}
+    ev = allv.setdefault(str(event_id), {})
+    sel = [s for s in (ev.get(str(customer_id)) or []) if s != key]
+    if on:
+        sel.append(key)
+    if sel:
+        ev[str(customer_id)] = sel
+    else:
+        ev.pop(str(customer_id), None)
+    set_app_setting("oneoff_addons", json.dumps(allv), db_path=db_path)
+    return {"event_id": event_id, "customer_id": customer_id,
+            "key": key, "on": bool(on), "selected": sel, "saved": True}
 
 
 def set_oneoff_shirt(event_id: int, customer_id: int, size: str,

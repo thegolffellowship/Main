@@ -2094,6 +2094,24 @@ Unconfigured events keep the standard columns untouched.
   known size. Read-only bridge `scoring-lsc-shirts:<event_id>` reports
   coverage (gender/team/selected/known per player).
 
+**v2.478.0 additions (Kerry 2026-09-22, second round):**
+
+- **ADD-ON columns** (FRI $110 practice round, SKINS $75): the config
+  gains an `addons` catalog (`[{"key": "friday", "label": "FRI",
+  "amount": 110}, ...]`) and per-player buy-ins live in the
+  `oneoff_addons` dial (`{"<eid>": {"<cid>": ["friday", "skins"]}}`,
+  `set_oneoff_addon()`, `POST /api/events/<id>/oneoff-addon`). Each
+  addon renders as its own sortable click-to-toggle YES/— column
+  (inserted before PAID, columns derive from the catalog so a future
+  one-off event with different add-ons needs no code change), and
+  **EXPECTED derives itself**: `default + selected addon amounts`. An
+  explicit override still wins as the full expected, for hand-priced
+  exceptions only — with the catalog in place the LSC overrides map is
+  empty.
+- **Credit display**: a negative balance renders `CR $X` (green) in
+  Balance Due instead of a bare PAID ✓ — Kerry holds overpayments as
+  credits (Jeff Young's $150, 2026-09-22).
+
 ## Lone Star Cup page: final-roster freeze + member view (v2.373.0)
 
 - **Freeze**: bridge `scoring-lsc-freeze` snapshots the live projection
