@@ -2030,11 +2030,38 @@ staying). Dial shape:
                     "lodging_dial": "lsc_lodging"}}  # optional
 
 Kerry teaches what amounts mean as they come in → record them as
-overrides. A payment equal to the player's lodging `paid` amount counts
-as lodging, not golf. Backend `get_oneoff_roster_finance()` in
+overrides. Backend `get_oneoff_roster_finance()` in
 database.py; route `GET /api/events/<id>/oneoff-finance` (manager+);
 frontend `ONEOFF_DETAIL_COLUMNS` in events.html (desktop + mobile).
 Unconfigured events keep the standard columns untouched.
+
+**v2.477.0 additions (Kerry 2026-09-22):**
+
+- **Lodging vs golf money**: one Venmo can carry both (Sharp's $630 =
+  $100 golf + $530 bed), so PAID (golf) = total received − the lodging
+  `paid` amount from the lodging dial, floored at 0 (the old
+  exact-equality special case is gone). `lodging_deducted` on the
+  player says how much moved.
+- **TEAM column** (sortable, default-visible; CHAPTER now defaults
+  hidden but stays in the Columns menu): config key `team_dial` names a
+  dial shaped like `lsc_roster_final`; the player's team is the chapter
+  CARD they sit on (A = Austin burnt orange, SA = San Antonio slate),
+  so DFW/HOU bonus players show the team they play for. Column
+  defaults honor `default:false` via `colVisible()` — saved prefs win,
+  unsaved keys fall back to the column's own default.
+- **SHIRT column** (config key `shirts: true`): click-to-select
+  `<select>` per player. Options split by gender —
+  `shirt_size_options` dial `{"M": [...], "F": [...]}`, seeded
+  S/M/L/XL/2XL/3XL and W-XS…W-XL. Gender is DISCERNED (customers has
+  no gender column): majority tee gender over the player's
+  scoring_rounds (course_tees.gender), tie-broken by "Women's" text in
+  their known shirt size, default M. A size already on file (latest
+  items.shirt_size from any order) pre-fills amber; a pick made here
+  saves to the `oneoff_shirts` dial (`{"<eid>": {"<cid>": "L"}}`) via
+  `POST /api/events/<id>/oneoff-shirt` (manager+,
+  `set_oneoff_shirt()`) and shows green. Empty pick clears back to the
+  known size. Read-only bridge `scoring-lsc-shirts:<event_id>` reports
+  coverage (gender/team/selected/known per player).
 
 ## Lone Star Cup page: final-roster freeze + member view (v2.373.0)
 
@@ -2204,6 +2231,41 @@ snapshot; the index lives in `handicap_rounds`. Guards:
 Kerry 2026-09-21 (mailbox #582): "need to see the divisions/flights
 breakdown so probably will need a tab for it under each event." The
 FLIGHTING lane (spun off "TGF Tracker Improvements 2"; plan #584).
+
+- **EVEN | HCP | CUSTOM, drag-to-move, auto-save (v2.478.0, Kerry
+  2026-09-22 #599):** "I prefer toggles that are shared toggles rather
+  than separate buttons. Similar to the ROSTER | PAIRINGS | GAMES |
+  FLIGHTS… Shorten these to EVEN | HCP with hover text… Add the ability
+  to click and drag names to the other flight. When/if that is done,
+  than it becomes a CUSTOM flight… Add an Auto-Save feature for any
+  changes to both FLIGHTS and PAIRINGS tabs." Each game bar carries ONE
+  segmented control (`fbModeToggle`, `FB_MODE_TEXT` is the hover text;
+  the default segment carries a dot). Dragging a member row (`.fb-member`,
+  customer_id-keyed) onto another flight box (`.fb-flight`) POSTs
+  `flights/move` {game, customer_id, flight_no} → `move_event_flight_player`;
+  the game becomes **CUSTOM on its base cut**: `flight_modes:<event_id>`
+  holds `{game: {"mode":"custom","base":"equal_size"|"fixed_bands",
+  "moves":{"<customer_id>":<flight_no>}}}` (`flighting.mode_spec` reads
+  it; `_apply_moves` pins the named players after the base cut placed
+  everyone; a late add lands by the base edges; dropping a player back
+  on his rule flight clears his move; no moves left = plainly the base,
+  kept explicit). The selection then carries `mode:"custom"`, `base_mode`,
+  `moves` (from_flight/to_flight), `custom_note` (the words, also in
+  `notes`), `flights[].custom`, `members[].moved`; the band text says
+  "· custom" on the flights a move touched; the printed page follows.
+  Clicking EVEN or HCP re-cuts from scratch and clears the moves
+  (`moves_cleared` in the response; a toast says so). A frozen board
+  refuses both. Bridge `scoring-flights-move:<id>|<game>|<cid>|<flight>`.
+  **Auto-save:** on FLIGHTS every toggle/drop is the save (one POST, the
+  response is the board). On PAIRINGS `rerenderDetail` arms
+  `schedulePairingsAutosave` whenever the sheet is dirty: 1.2 s after the
+  last change, never mid-drag/mid-swap (waits 600 ms and looks again),
+  one retry after 2 s, then the stamp reads "Auto-save failed — click
+  Save" and the Save button (kept, as the manual flush) is the fallback;
+  a change made while a save is in flight keeps the sheet dirty; undo/redo
+  untouched (`savedIdx` moves). Stamp `.pair-save-stamp` reads "Saved
+  h:mm". Guards: `test_flighting.py`, `test_flights_board.py`,
+  `test_flights_custom_ui.js`.
 
 - **THE CUT TOGGLE (v2.476.8, Kerry 2026-09-22):** "Need the ability to
   split flights evenly. A button or a toggle. Specifically, historically

@@ -337,6 +337,13 @@
             background: var(--bg); color: var(--text); transition: 0.15s;
         }
         .pairings-action-btn:hover { border-color: var(--primary); color: var(--primary); }
+        .fb-seg-group .fb-seg:first-child { border-left: 0 !important; }
+        .fb-seg-group .fb-seg:not(.active):not([disabled]):hover { background: rgba(255,255,255,0.18) !important; }
+        .fb-member.fb-dragging { opacity: 0.45; }
+        .fb-flight.fb-drop-target { outline: 2px dashed #b45309; outline-offset: 2px; }
+        .fb-flight.fb-drop-over { outline: 2px solid #b45309; background: #fff7ed; }
+        .pair-save-stamp { font-size: 0.78rem; color: var(--text-muted); padding: 0.25rem 0.5rem; white-space: nowrap; }
+        .pair-save-stamp.is-error { color: var(--red); }
         .pairings-action-btn.generate-btn { border-color: var(--primary); color: var(--primary); }
         .pairings-action-btn.generate-btn:hover { background: var(--primary); color: #fff; }
         .pairings-seeds-panel {
@@ -3320,7 +3327,9 @@
             // picture replaces the order-centric fields.
             const _mFp = oneoffPlayerFin(ev.id, r);
             const fields = _mFp ? [
-                ["Chapter", _mFp.chapter || "\u2014"],
+                ["Team", _mFp.team === "A" ? "AUSTIN (A)"
+                    : _mFp.team === "SA" ? "SAN ANTONIO (SA)"
+                    : (_mFp.team || "\u2014")],
                 ["HCP", (() => {
                     const lh = hcpEntryFor(r.customer, r.customer_id, ev);
                     if (lh === undefined) return r.handicap || "\u2014";
@@ -3339,6 +3348,8 @@
                     const paidFull = lg.cost && (lg.paid || 0) >= lg.cost;
                     return `${lg.unit || "bed TBD"}${cost}${paidFull ? " \u2713" : (lg.cost ? " (owes)" : "")}`;
                 })()],
+                ["Shirt", (_mFp.shirt
+                    && (_mFp.shirt.selected || _mFp.shirt.known)) || "\u2014"],
                 ["Notes", r.notes || "\u2014"],
             ] : [
                 ["Order Date", r.order_date || "\u2014"],
@@ -4241,11 +4252,17 @@
     const ONEOFF_DETAIL_COLUMNS = [
         { key: "rsvp", label: "", default: true },
         { key: "customer", label: "Customer", default: true },
-        { key: "oo_chapter", label: "Chapter", default: true },
+        // TEAM replaces Chapter as the visible default (Kerry
+        // 2026-09-22: "Add a TEAM column for AUSTIN (A) | SAN ANTONIO
+        // (SA) so I can sort by those. Hide the Chapter column") —
+        // Chapter stays in the Columns menu for the DFW/HOU players.
+        { key: "oo_team", label: "Team", default: true },
+        { key: "oo_chapter", label: "Chapter", default: false },
         { key: "handicap", label: "HCP", default: true },
         { key: "oo_paid", label: "Paid", default: true },
         { key: "oo_balance", label: "Balance Due", default: true },
         { key: "oo_lodging", label: "Lodging", default: true },
+        { key: "oo_shirt", label: "Shirt", default: true },
         { key: "actions", label: "Actions", default: true },
     ];
     // event_id -> oneoff-finance payload ({oneoff:false} when the event
@@ -4274,7 +4291,8 @@
         side_games: "center", fall_race: "center", tee_choice: "center",
         user_status: "center", order_date: "center", item_price: "right",
         actions: "center", oo_chapter: "center", oo_paid: "right",
-        oo_balance: "right", oo_lodging: "center" };
+        oo_balance: "right", oo_lodging: "center", oo_team: "center",
+        oo_shirt: "center" };
     // "2026-08-30" → "8/30" (2-digit year appended only when it isn't
     // the current year).
     function fmtShortDate(d) {
@@ -4298,12 +4316,56 @@
         try { localStorage.setItem("tgf_detail_visible_columns", JSON.stringify(detailVisibleColumns)); } catch (e) {}
     }
 
+    // Column visibility: a saved pref wins; a column never toggled falls
+    // back to its own default (lets oo_chapter default to hidden while
+    // everything else defaults to shown — saved prefs predate oo_ keys).
+    function colVisible(c) {
+        const saved = detailVisibleColumns[c.key];
+        if (saved !== undefined) return saved !== false;
+        return c.default !== false;
+    }
+
     function sortRegistrants(registrants, allRegs, ev) {
         const sorted = [...registrants];
         const asc = detailSortDir === "asc";
         sorted.sort((a, b) => {
             let va = a[detailSortField] || "";
             let vb = b[detailSortField] || "";
+            if (ev && detailSortField.startsWith("oo_")) {
+                // One-off columns live in the oneoff-finance payload,
+                // not on the registrant row (Kerry 2026-09-22: TEAM
+                // column "so I can sort by those"). Blanks sink to the
+                // bottom in either direction.
+                const val = r => {
+                    const fp = oneoffPlayerFin(ev.id, r);
+                    if (!fp) return null;
+                    switch (detailSortField) {
+                        case "oo_team": return fp.team || null;
+                        case "oo_chapter": return fp.chapter || null;
+                        case "oo_paid": return fp.paid || null;
+                        case "oo_balance":
+                            return fp.expected == null ? null : fp.balance;
+                        case "oo_lodging":
+                            return fp.lodging
+                                ? (fp.lodging.own ? "zz-own"
+                                   : fp.lodging.out ? "zz-out"
+                                   : (fp.lodging.unit || "z-tbd")) : null;
+                        case "oo_shirt":
+                            return (fp.shirt
+                                && (fp.shirt.selected || fp.shirt.known))
+                                || null;
+                    }
+                    return null;
+                };
+                const xa = val(a), xb = val(b);
+                if (xa == null && xb == null) return 0;
+                if (xa == null) return 1;
+                if (xb == null) return -1;
+                if (typeof xa === "number" && typeof xb === "number")
+                    return asc ? xa - xb : xb - xa;
+                const sa = String(xa).toLowerCase(), sb = String(xb).toLowerCase();
+                return asc ? sa.localeCompare(sb) : sb.localeCompare(sa);
+            }
             if (detailSortField === "item_price") {
                 va = parseFloat((String(va) || "0").replace(/[$,]/g, "")) || 0;
                 vb = parseFloat((String(vb) || "0").replace(/[$,]/g, "")) || 0;
@@ -5509,29 +5571,75 @@
         unfreeze: "Unfreeze this event?\n\nThe frozen (and any settled) snapshot is voided but kept for the audit, and the board goes back to LIVE.",
     };
     function attachFlightsHandlers(container, ev) {
+        // AUTO-SAVE on FLIGHTS (Kerry 2026-09-22 #599): a toggle or a drag
+        // IS the save — one POST, the response is the board as it now
+        // reads, no second round trip, no Save button.
+        async function fbPost(action, body, errLabel) {
+            let data = null;
+            try {
+                const res = await fetch(`/api/events/${ev.id}/flights/${action}`, {
+                    method: "POST", headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(body) });
+                data = await res.json().catch(() => ({}));
+                if (!res.ok || !data.ok) {
+                    showToast((data && data.error) || `${errLabel} (HTTP ${res.status})`, "error");
+                    await loadFlightsBoard(ev.id);
+                    data = null;
+                } else {
+                    flightsBoards[ev.id] = data;
+                }
+            } catch (err) {
+                showToast(`${errLabel}: ${err && err.message || err}`, "error");
+                await loadFlightsBoard(ev.id);
+            }
+            rerenderDetail(container, ev);
+            return data;
+        }
         container.querySelectorAll("[data-flights-mode]").forEach(b => {
             b.addEventListener("click", async (e) => {
                 e.stopPropagation();
                 if (b.disabled) return;
                 const game = b.dataset.flightsGame, mode = b.dataset.flightsMode;
+                const cur = (((flightsBoards[ev.id] || {}).games || []).find(x => x.game === game) || {}).selection || {};
+                if (cur.mode === mode) return;          // already that cut
                 b.disabled = true;
-                try {
-                    const res = await fetch(`/api/events/${ev.id}/flights/mode`, {
-                        method: "POST", headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ game, mode }) });
-                    const data = await res.json().catch(() => ({}));
-                    if (!res.ok || !data.ok) {
-                        showToast((data && data.error) || `Could not set the cut (HTTP ${res.status})`, "error");
-                        await loadFlightsBoard(ev.id);
-                    } else {
-                        // The response IS the board as it now reads — no second round trip.
-                        flightsBoards[ev.id] = data;
-                    }
-                } catch (err) {
-                    showToast(`Could not set the cut: ${err && err.message || err}`, "error");
-                    await loadFlightsBoard(ev.id);
-                }
-                rerenderDetail(container, ev);
+                const data = await fbPost("mode", { game, mode }, "Could not set the cut");
+                if (data && data.moves_cleared) showToast(`Re-cut by ${mode === "equal_size" ? "EVEN" : "HCP"} — the custom moves are cleared. Saved.`, "info");
+            });
+        });
+        // Click-and-drag a name to another flight → CUSTOM (Kerry #599:
+        // "I'm thinking for instance, of moving Scott Marroquin at 12.4
+        // to Flight 1 to balance Skins some"). Same rail pattern as the
+        // PAIRINGS sheet; the drop is the save.
+        let fbDrag = null;
+        const fbClearDrop = () => container.querySelectorAll(".fb-drop-target,.fb-drop-over").forEach(x => x.classList.remove("fb-drop-target", "fb-drop-over"));
+        container.querySelectorAll('.fb-member[draggable="true"]').forEach(row => {
+            row.addEventListener("dragstart", e => {
+                fbDrag = { game: row.dataset.fbGame, cid: Number(row.dataset.fbCid), flight: Number(row.dataset.fbFlight) };
+                row.classList.add("fb-dragging");
+                try { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", String(fbDrag.cid)); } catch (_) {}
+                container.querySelectorAll(`.fb-flight[data-fb-game="${fbDrag.game}"]`).forEach(box => {
+                    if (Number(box.dataset.fbFlight) !== fbDrag.flight) box.classList.add("fb-drop-target");
+                });
+            });
+            row.addEventListener("dragend", () => { row.classList.remove("fb-dragging"); fbDrag = null; fbClearDrop(); });
+        });
+        container.querySelectorAll(".fb-flight").forEach(box => {
+            box.addEventListener("dragover", e => {
+                if (!fbDrag || box.dataset.fbGame !== fbDrag.game || Number(box.dataset.fbFlight) === fbDrag.flight) return;
+                e.preventDefault();
+                e.dataTransfer.dropEffect = "move";
+                box.classList.add("fb-drop-over");
+            });
+            box.addEventListener("dragleave", e => { if (!box.contains(e.relatedTarget)) box.classList.remove("fb-drop-over"); });
+            box.addEventListener("drop", async e => {
+                if (!fbDrag || box.dataset.fbGame !== fbDrag.game) return;
+                e.preventDefault(); e.stopPropagation();
+                const src = fbDrag; fbDrag = null; fbClearDrop();
+                const to = Number(box.dataset.fbFlight);
+                if (to === src.flight) return;
+                const data = await fbPost("move", { game: src.game, customer_id: src.cid, flight_no: to }, "Could not move the player");
+                if (data && data.moved) showToast(`${data.moved.text}. Saved.`, "success");
             });
         });
         container.querySelectorAll("[data-flights-act]").forEach(b => {
@@ -5565,17 +5673,38 @@
     // breaks… but a even break option/toggle should still be provided.")
     // EVEN SPLIT = the field cut down the middle; HCP BANDS = the ratified
     // ladder. Live boards only — a frozen selection is the record.
+    // The CUT control — KERRY 2026-09-22 (#599): "I prefer toggles that
+    // are shared toggles rather than separate buttons. Similar to the
+    // ROSTER | PAIRINGS | GAMES | FLIGHTS… Shorten these to EVEN | HCP
+    // with hover text that provides the broader explanation." One
+    // segmented control per game bar; a CUSTOM segment appears once a
+    // name has been dragged to another flight. The default carries a dot.
+    const FB_MODE_TEXT = {
+        equal_size: "EVEN — even split: the field is cut down the middle into equal-size flights (tie-safe). The edge is simply the next flight's lowest index; no ceiling nudges it.",
+        fixed_bands: "HCP — handicap bands: the ratified ladder. Two flights <12.0 / 12.0+; three <6.0 / 6.0–11.9 / 12.0+; four add 12.0–17.9 / 18.0+. Cut lines never move (12.0 goes up).",
+        custom: "CUSTOM — flights moved by hand: the base cut placed everyone, then the named players were dragged to another flight. Click EVEN or HCP to re-cut from scratch (clears the moves)."
+    };
     function fbModeToggle(board, g) {
         const sel = g.selection || {};
         const mode = sel.mode || "";
         const live = board.state === "live" && canSeeFlights();
-        const opt = (m, label) => {
+        const segs = [["equal_size", "EVEN"], ["fixed_bands", "HCP"]];
+        if (mode === "custom") segs.push(["custom", "CUSTOM"]);
+        const parts = segs.map(([m, label]) => {
             const on = mode === m;
             const isDefault = sel.mode_default === m;
-            const st = on ? "background:#fff;color:#1B1B1B;border-color:#fff;" : "background:transparent;color:#fff;border-color:rgba(255,255,255,0.45);";
-            return `<button type="button" data-flights-mode="${m}" data-flights-game="${g.game}" ${live ? "" : "disabled"} title="${label}${isDefault ? " (default)" : ""}${live ? "" : " — unfreeze to change"}" style="font-size:0.66rem;font-weight:700;letter-spacing:0.04em;padding:0.12rem 0.5rem;border-radius:99px;border:1px solid;cursor:${live ? "pointer" : "default"};${st}">${label}${isDefault ? "<span style=\"opacity:0.6;font-weight:400;\"> &middot; default</span>" : ""}</button>`;
-        };
-        return `<span style="display:inline-flex;gap:0.25rem;align-items:center;margin-left:auto;">${opt("equal_size", "EVEN SPLIT")}${opt("fixed_bands", "HCP BANDS")}</span>`;
+            let title = FB_MODE_TEXT[m] || label;
+            if (isDefault) title += " (default for this game)";
+            if (m === "custom" && (sel.moves || []).length) {
+                title += " Moves: " + sel.moves.map(x => `${x.name} (${x.index_text}) Flight ${x.from_flight} → ${x.to_flight}`).join("; ") + ".";
+            }
+            if (mode === "custom" && m !== "custom") title += ` Base cut now: ${sel.base_mode === "equal_size" ? "EVEN" : "HCP"}.`;
+            if (!live) title += " — unfreeze to change.";
+            const clickable = live && m !== "custom";
+            const st = on ? "background:#fff;color:#1B1B1B;" : "background:transparent;color:#fff;";
+            return `<button type="button" class="fb-seg${on ? " active" : ""}" data-flights-mode="${m}" data-flights-game="${g.game}" ${clickable ? "" : "disabled"} aria-pressed="${on}" title="${escapeHtml(title)}" style="font-size:0.64rem;font-weight:700;letter-spacing:0.06em;padding:0.14rem 0.5rem;border:0;border-left:1px solid rgba(255,255,255,0.45);cursor:${clickable ? "pointer" : "default"};line-height:1.3;${st}">${label}${isDefault ? "<span style=\"opacity:0.55;font-weight:400;\">&thinsp;&bull;</span>" : ""}</button>`;
+        });
+        return `<span class="fb-seg-group" role="group" aria-label="Cut" style="display:inline-flex;margin-left:auto;border:1px solid rgba(255,255,255,0.45);border-radius:99px;overflow:hidden;">${parts.join("")}</span>`;
     }
     function fbPlacesText(flight) {
         const pl = (flight.places || []);
@@ -5645,7 +5774,9 @@
             html += `<div style="width:0;min-width:100%;box-sizing:border-box;padding:0.4rem 0.7rem;font-size:0.74rem;color:var(--text-muted);border-bottom:1px solid var(--border);line-height:1.45;">
                 <strong style="color:var(--text);">Selection${board.state !== "live" ? " (frozen)" : ""}:</strong>
                 ${escapeHtml(v.label || g.label)}${vsel.reason ? ` &mdash; ${escapeHtml(vsel.reason)}` : ""}.
-                Flight count: ${sel.flight_count} (${escapeHtml(sel.count_source || "")}). Cut: ${escapeHtml(sel.edges_source || "")}${(sel.edges || []).length ? ` at ${sel.edges.map(e => e.toFixed(1)).join(" / ")}` : ""}.
+                Flight count: ${sel.flight_count} (${escapeHtml(sel.count_source || "")}). Cut: ${sel.mode === "custom" ? "<strong style=\"color:#7c2d12;\">CUSTOM</strong> on the " : ""}${escapeHtml(sel.edges_source || "")}${(sel.edges || []).length ? ` at ${sel.edges.map(e => e.toFixed(1)).join(" / ")}` : ""}.
+                ${sel.mode === "custom" && sel.custom_note ? `<span style="color:#7c2d12;">${escapeHtml(sel.custom_note)}</span>` : ""}
+                ${board.state === "live" && canSeeFlights() && sel.flight_count > 1 ? `<span style="opacity:0.8;">Drag a name to another flight to make it custom; the drop saves.</span>` : ""}
             </div>`;
             // AMOUNTS header: total pot, bonus line for Ind Gross
             if (am) {
@@ -5662,11 +5793,12 @@
             // boxes in a wrapping flex row, so N flights = N boxes wide (up
             // to the screen), and a one-flight game sits in the width the
             // widest game set.
+            const fbLive = board.state === "live" && canSeeFlights() && (sel.flight_count || 0) > 1;
             html += `<div style="display:flex;flex-wrap:wrap;gap:0.6rem;padding:0.6rem 0.7rem;align-items:flex-start;">`;
             for (const f of (sel.flights || [])) {
                 const fa = amBy[f.flight_no] || { pot: 0, places: [] };
                 const d = ((g.delta || {}).flights || []).find(x => x.flight_no === f.flight_no);
-                html += `<div style="flex:0 0 300px;max-width:100%;border:1.5px solid ${f.players ? "#1B1B1B" : "#d1d5db"};border-radius:6px;overflow:hidden;${f.players ? "" : "opacity:0.7;"}">
+                html += `<div class="fb-flight" data-fb-game="${g.game}" data-fb-flight="${f.flight_no}" style="flex:0 0 300px;max-width:100%;border:1.5px solid ${f.players ? "#1B1B1B" : "#d1d5db"};border-radius:6px;overflow:hidden;${f.players ? "" : "opacity:0.7;"}">
                     <div style="display:flex;justify-content:space-between;align-items:baseline;gap:0.4rem;background:#E5E7EB;padding:0.3rem 0.5rem;border-bottom:1px solid #1B1B1B;">
                         <span style="font-family:'Bitter',Georgia,serif;font-weight:700;font-size:0.8rem;">Flight ${f.flight_no} <span style="font-weight:400;color:#444;">${escapeHtml(f.band || "")}</span></span>
                         <span style="font-size:0.7rem;color:#444;font-variant-numeric:tabular-nums;">${escapeHtml(f.label || "")} &middot; ${f.players} player${f.players === 1 ? "" : "s"}</span>
@@ -5681,8 +5813,10 @@
                     html += `<div style="padding:0.3rem 0.5rem;font-size:0.74rem;color:var(--text-muted);font-style:italic;">no players in this band</div>`;
                 }
                 for (const m of (f.members || [])) {
-                    html += `<div style="display:flex;justify-content:space-between;gap:0.4rem;padding:0.15rem 0.5rem;border-bottom:1px solid #f1f1f1;font-size:0.76rem;">
-                        <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(m.sort_name || m.name || "")}</span>
+                    const canDrag = fbLive && m.customer_id !== null && m.customer_id !== undefined;
+                    const mv = (sel.moves || []).find(x => x.customer_id === m.customer_id);
+                    html += `<div class="fb-member" ${canDrag ? `draggable="true" data-fb-game="${g.game}" data-fb-cid="${m.customer_id}" data-fb-flight="${f.flight_no}" title="Drag to another flight"` : ""} style="display:flex;justify-content:space-between;gap:0.4rem;padding:0.15rem 0.5rem;border-bottom:1px solid #f1f1f1;font-size:0.76rem;${canDrag ? "cursor:grab;" : ""}${m.moved ? "background:#fff7ed;" : ""}">
+                        <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(m.sort_name || m.name || "")}${m.moved ? `<span title="${escapeHtml(mv ? `Moved by hand from Flight ${mv.from_flight}` : "Moved by hand")}" style="margin-left:0.35rem;font-size:0.6rem;font-weight:700;letter-spacing:0.05em;color:#9a3412;border:1px solid #fdba74;border-radius:99px;padding:0 0.3rem;vertical-align:middle;">MOVED</span>` : ""}</span>
                         <span style="font-variant-numeric:tabular-nums;color:#333;white-space:nowrap;">IDX ${escapeHtml(m.index_text || "—")}${m.ph !== null && m.ph !== undefined ? ` &middot; PH ${m.ph}` : ""}</span>
                     </div>`;
                 }
@@ -6412,6 +6546,74 @@
         state.histIdx = state.hist.length - 1;
     }
 
+    // AUTO-SAVE on PAIRINGS — KERRY 2026-09-22 (#599): "Add an Auto-Save
+    // feature for any changes to both FLIGHTS and PAIRINGS tabs. Don't make
+    // me click SAVE each time. But the Auto-Save needs to work in the
+    // background and fast and can't impede/slow down my work." Every
+    // change (drag, swap, move, generate, label, remove) rerenders; the
+    // rerender arms a short timer; the save runs once the hand settles —
+    // never mid-drag, never blocking the sheet. One retry on failure, then
+    // the Save button is the fallback (it stays as the manual flush).
+    // Undo/redo are untouched: the saved position simply moves.
+    const PAIR_AUTOSAVE_MS = 1200;
+    const pairAutosaveTimers = {};
+    function schedulePairingsAutosave(container, ev, state) {
+        if (!state || !state.loaded || !state.isDirty || state.autosaveError) return;
+        clearTimeout(pairAutosaveTimers[ev.id]);
+        pairAutosaveTimers[ev.id] = setTimeout(() => runPairingsAutosave(container, ev, state, 1), PAIR_AUTOSAVE_MS);
+    }
+    function pairingsBody(state) {
+        return JSON.stringify({ groups_by_holes: { '9': state.groups_9, '18': state.groups_18 } });
+    }
+    async function runPairingsAutosave(container, ev, state, attempt) {
+        if (!state.isDirty || state.saving) return;
+        // A drag or a half-done swap in flight: wait for the hand to settle.
+        if (state.selection || document.querySelector('.pair-dragging')) {
+            pairAutosaveTimers[ev.id] = setTimeout(() => runPairingsAutosave(container, ev, state, attempt), 600);
+            return;
+        }
+        const idxAtSend = state.histIdx;
+        state.saving = true;
+        paintPairingsSaveStamp(ev, state);
+        try {
+            const res = await fetch(`/api/events/${ev.id}/pairings/save`, {
+                method: 'POST', headers: {'Content-Type': 'application/json'}, body: pairingsBody(state) });
+            if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `HTTP ${res.status}`);
+            state.savedIdx = idxAtSend;
+            state.lastSavedAt = new Date();
+            state.autosaveError = null;
+            state.isDirty = state.histIdx !== idxAtSend;   // changed again while saving → still dirty
+        } catch (err) {
+            state.saving = false;
+            if (attempt < 2) {
+                pairAutosaveTimers[ev.id] = setTimeout(() => runPairingsAutosave(container, ev, state, attempt + 1), 2000);
+                return;
+            }
+            state.autosaveError = (err && err.message) || 'save failed';
+            paintPairingsSaveStamp(ev, state);
+            return;
+        }
+        state.saving = false;
+        if (state.isDirty) { schedulePairingsAutosave(container, ev, state); paintPairingsSaveStamp(ev, state); return; }
+        // Clean: a full rerender shows the printables — unless a drag has
+        // started since, in which case the next drop rerenders anyway.
+        if (document.querySelector('.pair-dragging')) paintPairingsSaveStamp(ev, state);
+        else rerenderDetail(container, ev);
+    }
+    function pairSaveStampText(state) {
+        if (state.saving) return 'Saving…';
+        if (state.autosaveError) return `Auto-save failed (${state.autosaveError}) — click Save`;
+        if (state.isDirty) return 'Auto-saves in a moment';
+        const t = state.lastSavedAt instanceof Date ? state.lastSavedAt : null;
+        return t ? `Saved ${t.getHours() % 12 || 12}:${String(t.getMinutes()).padStart(2, '0')}` : 'Saved';
+    }
+    function paintPairingsSaveStamp(ev, state) {
+        document.querySelectorAll(`.pair-save-stamp[data-ev-id="${ev.id}"]`).forEach(el => {
+            el.textContent = pairSaveStampText(state);
+            el.classList.toggle('is-error', !!state.autosaveError);
+        });
+    }
+
     function canUndoPairings(state) { return (state.histIdx || 0) > 0; }
     function canRedoPairings(state) {
         return Array.isArray(state.hist) && state.histIdx < state.hist.length - 1;
@@ -6695,10 +6897,10 @@
             + ` title="Pull this event's pairings from the Golf Genius tee sheet (replaces the pairings shown here)">&#x2913; GG Sheet</button>`;
         if (state.groups_9.length || state.groups_18.length) {
             html += `<button class="pairings-action-btn clear-btn" data-ev-id="${ev.id}" data-pairings-action="clear" style="color:var(--red);">&#x2715; Clear</button>`;
+            html += `<span class="pair-save-stamp${state.autosaveError ? ' is-error' : ''}" data-ev-id="${ev.id}" title="Changes auto-save in the background about a second after your last move; Save is the manual flush">${escapeHtml(pairSaveStampText(state))}</span>`;
             if (state.isDirty) {
-                html += `<button class="pairings-action-btn save-btn" data-ev-id="${ev.id}" data-pairings-action="save" style="background:var(--green);color:#fff;">&#x2713; Save</button>`;
+                html += `<button class="pairings-action-btn save-btn" data-ev-id="${ev.id}" data-pairings-action="save" style="background:var(--green);color:#fff;" title="Save now (auto-save is on; this flushes it)">&#x2713; Save</button>`;
             } else {
-                html += `<span style="font-size:0.78rem;color:var(--text-muted);padding:0.25rem 0.5rem;">Saved</span>`;
                 // Printables read the SAVED pairings — only offer when clean.
                 html += `<button class="pairings-action-btn" onclick="window.open('/events/${ev.id}/starter-sheet','_blank')" title="Print starter sheet">&#x1F5A8; Starter Sheet</button>`;
                 html += `<button class="pairings-action-btn" onclick="window.open('/events/${ev.id}/cart-signs','_blank')" title="Print cart signs">&#x1F5A8; Cart Signs</button>`;
@@ -8429,14 +8631,14 @@
         html += '<button class="column-toggle-btn detail-col-toggle-btn" style="font-size:0.75rem; padding:0.3rem 0.6rem;">Columns &#9662;</button>';
         html += '<div class="column-toggle-dropdown detail-col-dropdown">';
         html += DCOLS.filter(c => c.key !== "rsvp").map(c => {
-            const checked = detailVisibleColumns[c.key] !== false ? "checked" : "";
+            const checked = colVisible(c) ? "checked" : "";
             return `<label><input type="checkbox" data-detail-col="${c.key}" ${checked}> ${c.label}</label>`;
         }).join("");
         html += '</div></div></div>';
 
         html += '<table class="registrants-table"><thead><tr>';
         DCOLS.forEach(c => {
-            const vis = detailVisibleColumns[c.key] !== false;
+            const vis = colVisible(c);
             if (c.key === "rsvp") {
                 html += '<th class="rsvp-col" title="RSVP Status"></th>';
                 return;
@@ -8533,7 +8735,7 @@
             html += `<tr${rowClass} ${hasExtraInfo ? `data-expand-player="${r.id}"` : ''}>`;
 
             DCOLS.forEach(c => {
-                const vis = detailVisibleColumns[c.key] !== false;
+                const vis = colVisible(c);
                 const _ustat = (_cleanStatus(r.user_status) || '').toUpperCase();
                 const isGuestRow = _ustat === 'GUEST';
                 const isFirstTimerRow = _ustat === '1ST TIMER';
@@ -8793,6 +8995,41 @@
                     html += `<td class="fall-col" style="${style}">${inFallRace(r)
                         ? '<span style="color:#059669;font-weight:700;">YES</span>'
                         : '<span style="color:#9CA3AF;">\u2014</span>'}</td>`;
+                } else if (c.key === "oo_team") {
+                    // TEAM = the frozen-roster card the player sits on
+                    // (DFW/HOU bonus players carry a team their chapter
+                    // isn't) — Austin burnt orange, SA slate, same as
+                    // the Lone Star Cup page.
+                    const fp = oneoffPlayerFin(ev.id, r);
+                    const tm = fp && fp.team;
+                    if (!tm) {
+                        html += `<td style="${style}; color:#9CA3AF;">—</td>`;
+                    } else {
+                        const tcol = tm === "A" ? "#BF5700" : "#4B6274";
+                        const tfull = tm === "A" ? "Team Austin" : tm === "SA" ? "Team San Antonio" : tm;
+                        html += `<td style="${style}; color:${tcol}; font-weight:800;" title="${escapeHtml(tfull)}">${escapeHtml(tm)}</td>`;
+                    }
+                } else if (c.key === "oo_shirt") {
+                    // Click-to-select shirt size (Kerry 2026-09-22).
+                    // Options list follows the player's discerned
+                    // gender; a size already on file from order history
+                    // pre-fills amber, a pick made here saves via
+                    // /oneoff-shirt and shows green.
+                    const fp = oneoffPlayerFin(ev.id, r);
+                    const sh = fp && fp.shirt;
+                    if (!sh || !r.customer_id) {
+                        html += `<td style="${style}; color:#9CA3AF;">—</td>`;
+                    } else {
+                        const dOO = oneoffFinance[ev.id] || {};
+                        const opts = (((dOO.config || {}).shirt_options || {})[fp.gender === "F" ? "F" : "M"]) || ["S", "M", "L", "XL", "2XL", "3XL"];
+                        const eff = sh.selected || sh.known || "";
+                        const list = opts.slice();
+                        if (eff && !list.includes(eff)) list.unshift(eff);
+                        const optHtml = ['<option value="">—</option>'].concat(
+                            list.map(o => `<option value="${escapeHtml(o)}"${o === eff ? " selected" : ""}>${escapeHtml(o)}</option>`)).join("");
+                        const src = sh.selected ? "picked here" : (sh.known ? `from order history (${sh.known})` : "not on file");
+                        html += `<td style="${style}"><select class="oo-shirt-select" data-event-id="${ev.id}" data-cid="${r.customer_id}" title="Shirt size — ${escapeHtml(src)}${fp.gender === 'F' ? ' · women’s sizes' : ''}" style="font-size:0.78rem; padding:2px 4px; border:1px solid #d1d5db; border-radius:6px; cursor:pointer; background:${sh.selected ? '#ECFDF5' : (sh.known ? '#FFF7ED' : '#fff')};">${optHtml}</select></td>`;
+                    }
                 } else if (c.key === "oo_chapter") {
                     const fp = oneoffPlayerFin(ev.id, r);
                     const chp = (fp && fp.chapter) || "";
@@ -8848,7 +9085,7 @@
             html += '</tr>';
             // Expandable detail row for notes/partner/fellowship
             if (hasExtraInfo) {
-                const colCount = DCOLS.filter(c => detailVisibleColumns[c.key] !== false).length;
+                const colCount = DCOLS.filter(colVisible).length;
                 html += `<tr class="player-expand-row" data-expand-for="${r.id}"><td colspan="${colCount + 1}" style="padding:0;">`;
                 html += '<div class="player-detail-panel">';
                 // Contact first — left of any transaction info (Kerry 2026-08-31)
@@ -8879,7 +9116,7 @@
                 const payColor = isRefundRow ? "#dc2626" : "#059669";
                 html += `<tr class="child-payment-row" style="background:${childBg};${childSt !== 'active' ? 'opacity:0.6;' : ''}">`;
                 DCOLS.forEach(c => {
-                    const vis = detailVisibleColumns[c.key] !== false;
+                    const vis = colVisible(c);
                     const style = (vis ? '' : 'display:none;') + 'font-size:0.78rem;color:#6b7280;'
                         + (COL_ALIGN[c.key] ? `text-align:${COL_ALIGN[c.key]};` : '');
                     if (c.key === "rsvp") {
@@ -9125,6 +9362,10 @@
         // computed from the live header height, so recompute after any
         // re-render that may have changed the header (role chips, ops row).
         if (typeof _setStickyOffsets === 'function') _setStickyOffsets();
+        // Every pairings change rerenders, so this is where the background
+        // save is armed (#599). A clean sheet arms nothing.
+        const ps = pairingsData[ev.id];
+        if (ps && ps.loaded && ps.isDirty) schedulePairingsAutosave(container, ev, ps);
     }
 
     // ── Actions dropdown positioning ─────────────────────────────────────────
@@ -9326,6 +9567,34 @@
                 });
             });
         }
+
+        // One-off shirt-size pickers (Kerry 2026-09-22): save the pick,
+        // update the cached finance payload so the cell turns green
+        // without a refetch. stopPropagation keeps the row's
+        // expand-on-click from firing when the select is tapped.
+        container.querySelectorAll(".oo-shirt-select").forEach(sel => {
+            sel.addEventListener("click", (e) => e.stopPropagation());
+            sel.addEventListener("change", async (e) => {
+                e.stopPropagation();
+                const evId = sel.dataset.eventId, cid = sel.dataset.cid;
+                const size = sel.value;
+                try {
+                    const resp = await fetch(`/api/events/${evId}/oneoff-shirt`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ customer_id: cid, size: size }),
+                    });
+                    if (!resp.ok) throw new Error("save failed");
+                    const d = oneoffFinance[evId];
+                    const p = d && d.players && d.players[String(cid)];
+                    if (p && p.shirt) p.shirt.selected = size || null;
+                    sel.style.background = size ? "#ECFDF5"
+                        : (p && p.shirt && p.shirt.known ? "#FFF7ED" : "#fff");
+                } catch (err) {
+                    alert("Could not save shirt size — try again.");
+                }
+            });
+        });
 
         // RSVP circle tap-to-toggle
         container.querySelectorAll(".rsvp-circle").forEach(circle => {
@@ -10473,20 +10742,18 @@
 
                 if (action === 'save') {
                     btn.textContent = 'Saving…'; btn.disabled = true;
+                    clearTimeout(pairAutosaveTimers[ev.id]);   // the manual flush wins
                     try {
                         const res = await fetch(`/api/events/${ev.id}/pairings/save`, {
                             method: 'POST',
                             headers: {'Content-Type': 'application/json'},
-                            body: JSON.stringify({
-                                groups_by_holes: {
-                                    '9': state.groups_9,
-                                    '18': state.groups_18,
-                                },
-                            }),
+                            body: pairingsBody(state),
                         });
                         if (!res.ok) { const d = await res.json(); alert(d.error || 'Save failed'); return; }
                         state.isDirty = false;
                         state.savedIdx = state.histIdx;   // this is now the saved sheet
+                        state.lastSavedAt = new Date();
+                        state.autosaveError = null;
                     } catch(err) {
                         alert('Failed to save pairings.');
                     }

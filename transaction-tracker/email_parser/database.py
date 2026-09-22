@@ -11381,6 +11381,13 @@ def freeze_lsc_final_roster(db_path: str | Path = DB_PATH) -> dict:
                 s["seat"] = (f"{abbr} NET"
                              + (f" · {place}" if place else ""))
                 s["note"] = "City NET final standings — team captain"
+        # A FINAL roster has no empty chairs: an unfilled seat template
+        # (player TBD after a withdrawal — McCrary 2026-09-22 left a
+        # blank "DFW/HOUSTON · 2" on the SA card) is dropped from the
+        # snapshot; re-freeze after the replacement is picked and the
+        # seat comes back filled.
+        ch["seats"] = [s for s in ch.get("seats", [])
+                       if s.get("customer_id")]
     frozen = {
         "frozen_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "season": d.get("season"),
@@ -11483,6 +11490,49 @@ def get_oneoff_roster_finance(event_id: int,
         except Exception:
             lodging_by_cid = {}
 
+    # TEAM map (Kerry 2026-09-22: "Add a TEAM column for AUSTIN (A) |
+    # SAN ANTONIO (SA)") — for the Lone Star Cup the TEAM is the frozen
+    # roster's chapter card (the DFW/Houston bonus players belong to a
+    # TEAM even though their chapter isn't it). Config key `team_dial`
+    # names a dial shaped like lsc_roster_final.
+    team_by_cid: dict = {}
+    if cfg.get("team_dial"):
+        try:
+            tcfg = json.loads(get_app_setting(cfg["team_dial"],
+                                              db_path=db_path) or "{}")
+            _T_ABBR = {"austin": "A", "san antonio": "SA"}
+            for ch in tcfg.get("chapters") or []:
+                abbr = _T_ABBR.get((ch.get("chapter") or "").lower(),
+                                   (ch.get("chapter") or "")[:3].upper())
+                for s in ch.get("seats") or []:
+                    if s.get("customer_id"):
+                        team_by_cid[int(s["customer_id"])] = abbr
+        except Exception:
+            team_by_cid = {}
+
+    # SHIRT selections (Kerry 2026-09-22): stored per event in the
+    # oneoff_shirts dial; the size LIST splits by the player's gender
+    # (shirt_size_options dial, seed below). `known` prefills from the
+    # latest shirt size the player ever put on an order (memberships
+    # collect one), so most of the roster starts filled in.
+    shirts_on = bool(cfg.get("shirts"))
+    shirt_sel: dict = {}
+    if shirts_on:
+        try:
+            shirt_sel = (json.loads(get_app_setting(
+                "oneoff_shirts", db_path=db_path) or "{}")
+                .get(str(event_id)) or {})
+        except Exception:
+            shirt_sel = {}
+    try:
+        shirt_opts = json.loads(get_app_setting(
+            "shirt_size_options", db_path=db_path) or "")
+    except Exception:
+        shirt_opts = None
+    if not isinstance(shirt_opts, dict):
+        shirt_opts = {"M": ["S", "M", "L", "XL", "2XL", "3XL"],
+                      "F": ["W-XS", "W-S", "W-M", "W-L", "W-XL"]}
+
     players: dict = {}
     with _connect(db_path) as conn:
         # Everyone registered on the event (active + placeholders)
@@ -11494,14 +11544,54 @@ def get_oneoff_roster_finance(event_id: int,
                  AND COALESCE(i.transaction_status, 'active')
                      NOT IN ('credited', 'refunded', 'transferred')""",
             (event_id,)).fetchall()
-        for r in regs:
-            players[int(r["customer_id"])] = {
-                "chapter": r["chapter"],
+
+        def _known_shirt(cid: int):
+            row = conn.execute(
+                """SELECT shirt_size FROM items
+                   WHERE customer_id = ? AND shirt_size IS NOT NULL
+                     AND TRIM(shirt_size) != ''
+                   ORDER BY order_date DESC, id DESC LIMIT 1""",
+                (cid,)).fetchone()
+            return (row["shirt_size"] or "").strip() if row else None
+
+        def _gender_of(cid: int, known_shirt) -> str:
+            # customers carries no gender column, so discern it from the
+            # tees the player has actually played (course_tees.gender is
+            # the tee's rating gender): majority wins, so one forward-tee
+            # round doesn't flip a man to the women's size list. Shirt
+            # text like "Women's M" is the tie-breaker for players with
+            # no rounds on record.
+            row = conn.execute(
+                """SELECT ct.gender AS g, COUNT(*) AS n
+                     FROM scoring_rounds sr
+                     JOIN course_tees ct ON ct.tee_id = sr.tee_id
+                    WHERE sr.customer_id = ? AND ct.gender IN ('M', 'F')
+                    GROUP BY ct.gender ORDER BY n DESC LIMIT 1""",
+                (cid,)).fetchone()
+            if row and row["g"]:
+                return row["g"]
+            if known_shirt and re.search(r"\b(w|women'?s?|ladies)\b[-\s]?",
+                                         known_shirt, re.I):
+                return "F"
+            return "M"
+
+        def _blank(cid: int, chapter=None):
+            ks = _known_shirt(cid) if shirts_on else None
+            return {
+                "chapter": chapter,
+                "gender": _gender_of(cid, ks) if shirts_on else None,
+                "team": team_by_cid.get(cid),
                 "paid": 0.0, "payments": [],
-                "expected": overrides.get(int(r["customer_id"]),
-                                          default_expected),
-                "lodging": lodging_by_cid.get(int(r["customer_id"])),
+                "expected": overrides.get(cid, default_expected),
+                "lodging": lodging_by_cid.get(cid),
+                "shirt": ({"selected": shirt_sel.get(str(cid)),
+                           "known": ks}
+                          if shirts_on else None),
             }
+
+        for r in regs:
+            cid = int(r["customer_id"])
+            players[cid] = _blank(cid, r["chapter"])
         # Incoming money pointed at this event
         for r in conn.execute(
                 """SELECT id, customer_id, amount, transaction_date,
@@ -11513,31 +11603,50 @@ def get_oneoff_roster_finance(event_id: int,
             cid = r["customer_id"]
             if not cid:
                 continue
-            p = players.setdefault(int(cid), {
-                "chapter": None, "paid": 0.0, "payments": [],
-                "expected": overrides.get(int(cid), default_expected),
-                "lodging": lodging_by_cid.get(int(cid)),
-            })
+            p = players.setdefault(int(cid), _blank(int(cid)))
             amt = float(r["amount"] or 0)
-            # Lodging money stays in the LODGING column, not PAID:
-            # when the lodging dial shows this player paid, subtract
-            # their lodging-paid amount once from the golf tally if a
-            # single combined payment covered both. Simpler and safer:
-            # a payment equal to the player's lodging 'paid' amount is
-            # lodging, not golf.
-            lodge = lodging_by_cid.get(int(cid))
-            if lodge and lodge.get("paid") and amt == float(lodge["paid"]):
-                continue
             p["paid"] = round(p["paid"] + amt, 2)
             p["payments"].append({
                 "id": r["id"], "date": r["transaction_date"],
                 "amount": amt, "memo": r["notes"] or "",
             })
     for p in players.values():
+        # Lodging money stays in the LODGING column, not PAID (golf):
+        # everything arrives through the same Venmo, sometimes combined
+        # in one payment (Sharp's $630 = $100 golf + $530 bed), so the
+        # golf tally is total received minus the lodging amount the
+        # lodging dial says this player has paid.
+        lodge_paid = float((p.get("lodging") or {}).get("paid") or 0)
+        if lodge_paid:
+            p["lodging_deducted"] = min(lodge_paid, p["paid"])
+            p["paid"] = round(max(0.0, p["paid"] - lodge_paid), 2)
         p["balance"] = round((p["expected"] or 0) - p["paid"], 2)
     return {"config": {"default": default_expected,
-                       "lodging_dial": cfg.get("lodging_dial")},
+                       "lodging_dial": cfg.get("lodging_dial"),
+                       "team_dial": cfg.get("team_dial"),
+                       "shirts": shirts_on,
+                       "shirt_options": shirt_opts},
             "players": {str(k): v for k, v in players.items()}}
+
+
+def set_oneoff_shirt(event_id: int, customer_id: int, size: str,
+                     db_path: str | Path = DB_PATH) -> dict:
+    """Store one player's shirt size for a one-off event in the
+    oneoff_shirts dial ({"<event_id>": {"<cid>": "L"}}). Empty size
+    clears the selection (falls back to the known-from-orders size)."""
+    try:
+        allv = json.loads(get_app_setting("oneoff_shirts",
+                                          db_path=db_path) or "{}")
+    except Exception:
+        allv = {}
+    ev = allv.setdefault(str(event_id), {})
+    if size:
+        ev[str(customer_id)] = size
+    else:
+        ev.pop(str(customer_id), None)
+    set_app_setting("oneoff_shirts", json.dumps(allv), db_path=db_path)
+    return {"event_id": event_id, "customer_id": customer_id,
+            "size": size or None, "saved": True}
 
 
 def get_lone_star_cup_projection(db_path: str | Path = DB_PATH,
@@ -58601,8 +58710,22 @@ def event_flight_modes(event_id: int, db_path=None) -> dict:
         parsed = json.loads(raw)
     except (TypeError, ValueError):
         return {}
-    return {g: m for g, m in (parsed or {}).items()
-            if g in {x[0] for x in _fl.BOARD_GAMES} and m in _fl.FLIGHT_MODES}
+    games = {x[0] for x in _fl.BOARD_GAMES}
+    out: dict = {}
+    for g, m in (parsed or {}).items():
+        if g not in games:
+            continue
+        if m in _fl.FLIGHT_MODES:
+            out[g] = m
+        elif isinstance(m, dict) and m.get("mode") == _fl.CUSTOM_MODE:
+            # CUSTOM (#599): a base cut plus moves by hand, customer_id keyed.
+            base, moves, _ = _fl.mode_spec(m, g)
+            if moves:
+                out[g] = {"mode": _fl.CUSTOM_MODE, "base": base,
+                          "moves": {str(k): v for k, v in moves.items()}}
+            elif m.get("base") in _fl.FLIGHT_MODES:
+                out[g] = m["base"]
+    return out
 
 
 def set_event_flight_mode(event_id: int, game: str, mode: str | None,
@@ -58623,6 +58746,9 @@ def set_event_flight_mode(event_id: int, game: str, mode: str | None,
                                       "is the snapshot; unfreeze first",
                 "state": "settled" if snaps["settled"] else "frozen"}
     modes = event_flight_modes(event_id, db_path=db_path)
+    # EVEN / HCP re-cut from scratch: a CUSTOM setting's moves are cleared
+    # (#599: "Text and explanations would need to update accordingly").
+    had_moves = isinstance(modes.get(game), dict)
     if mode is None:
         modes.pop(game, None)
     else:
@@ -58630,7 +58756,8 @@ def set_event_flight_mode(event_id: int, game: str, mode: str | None,
     set_app_setting(_flight_modes_key(event_id), json.dumps(modes), db_path=db_path)
     try:
         log_agent_action(by or "manager", "flights_mode",
-                         f"event {event_id}: {game} cut = {mode or 'default'}",
+                         f"event {event_id}: {game} cut = {mode or 'default'}"
+                         + (" (custom moves cleared)" if had_moves else ""),
                          db_path=db_path)
     except Exception:                                    # noqa: BLE001
         pass
@@ -58638,6 +58765,83 @@ def set_event_flight_mode(event_id: int, game: str, mode: str | None,
     if not board:
         return {"ok": False, "error": f"event {event_id} not found"}
     board["ok"] = True
+    board["moves_cleared"] = had_moves
+    return board
+
+
+def move_event_flight_player(event_id: int, game: str, customer_id, flight_no,
+                             by: str = "manager", db_path=None) -> dict:
+    """Drag a name to another flight (KERRY 2026-09-22 #599): the game
+    becomes CUSTOM — the base cut stays what it was (even or HCP), the
+    move pins this player by customer_id. Dropping him back on the flight
+    the base cut gives him clears his move; when no moves remain the game
+    is plainly the base cut again. Auto-saved: the write IS the drop.
+    Refuses on a frozen / settled board. Returns the board as it now reads."""
+    from . import flighting as _fl
+    games = {x[0] for x in _fl.BOARD_GAMES}
+    if game not in games:
+        return {"ok": False, "error": f"unknown game '{game}' — one of {sorted(games)}"}
+    try:
+        cid, to = int(customer_id), int(flight_no)
+    except (TypeError, ValueError):
+        return {"ok": False, "error": "customer_id and flight_no must be integers"}
+    with _connect(db_path) as conn:
+        _ensure_flight_snapshot_tables(conn)
+        snaps = _active_flight_snapshots(conn, event_id)
+    if snaps["frozen"] or snaps["settled"]:
+        return {"ok": False, "error": "the board is frozen — the selection of record "
+                                      "is the snapshot; unfreeze first",
+                "state": "settled" if snaps["settled"] else "frozen"}
+    board = event_flights_board(event_id, db_path=db_path)
+    if not board:
+        return {"ok": False, "error": f"event {event_id} not found"}
+    entry = next((g for g in board.get("games") or [] if g["game"] == game), None)
+    sel = (entry or {}).get("selection") or {}
+    if not sel.get("active"):
+        return {"ok": False, "error": f"{game} is not running on this board"}
+    count = int(sel.get("flight_count") or 0)
+    if not 1 <= to <= count:
+        return {"ok": False, "error": f"Flight {to} is not on the board (1–{count})"}
+    cur, name = None, None
+    for f in sel.get("flights") or []:
+        for m in f.get("members") or []:
+            if m.get("customer_id") is not None and int(m["customer_id"]) == cid:
+                cur, name = int(f["flight_no"]), m.get("name")
+    if cur is None:
+        return {"ok": False, "error": f"customer_id {cid} is not flighted in {game} on this board"}
+    prior = {int(m["customer_id"]): m for m in (sel.get("moves") or [])
+             if m.get("customer_id") is not None}
+    base_flight = int(prior[cid]["from_flight"]) if cid in prior else cur
+    modes = event_flight_modes(event_id, db_path=db_path)
+    spec = modes.get(game)
+    if isinstance(spec, dict):
+        base, moves = spec["base"], dict(spec.get("moves") or {})
+    else:
+        base, moves = (spec if spec in _fl.FLIGHT_MODES else sel.get("base_mode")), {}
+    if to == base_flight:
+        moves.pop(str(cid), None)
+        what = f"back to Flight {to} (where the {base.replace('_', ' ')} cut puts him) — move cleared"
+    else:
+        moves[str(cid)] = to
+        what = f"Flight {cur} → Flight {to}"
+    if moves:
+        modes[game] = {"mode": _fl.CUSTOM_MODE, "base": base, "moves": moves}
+    else:
+        # Keep the base explicit so the cut does not change under his hand.
+        modes[game] = base
+    set_app_setting(_flight_modes_key(event_id), json.dumps(modes), db_path=db_path)
+    try:
+        log_agent_action(by or "manager", "flights_move",
+                         f"event {event_id}: {game} {name} (#{cid}) {what}",
+                         db_path=db_path)
+    except Exception:                                    # noqa: BLE001
+        pass
+    board = event_flights_board(event_id, db_path=db_path)
+    board["ok"] = True
+    board["moved"] = {"customer_id": cid, "name": name, "from_flight": cur,
+                      "to_flight": to, "cleared": to == base_flight,
+                      "text": (f"{name} {what}" if to == base_flight
+                               else f"{name} moved to Flight {to} — {entry['label']} is now CUSTOM")}
     return board
 
 

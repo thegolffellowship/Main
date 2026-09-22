@@ -8016,7 +8016,8 @@ def api_event_flights_action(event_id, action):
     and stores the record with the delta, unfreeze voids (keeps) the rows.
     Audited. Pays nobody; GG stays the payer of record."""
     from email_parser.database import (freeze_event_flights, settle_event_flights,
-                                        unfreeze_event_flights, set_event_flight_mode)
+                                        unfreeze_event_flights, set_event_flight_mode,
+                                        move_event_flight_player)
     data = request.get_json(silent=True) or {}
     by = session.get("role") or "manager"
     if session.get("chapter"):
@@ -8035,6 +8036,11 @@ def api_event_flights_action(event_id, action):
             # boards only; a frozen board refuses.
             res = set_event_flight_mode(event_id, (data.get("game") or "").strip(),
                                         (data.get("mode") or None), by=by)
+        elif action == "move":
+            # Drag a name to another flight (Kerry 2026-09-22 #599): the
+            # game becomes CUSTOM; the drop is the save. LIVE boards only.
+            res = move_event_flight_player(event_id, (data.get("game") or "").strip(),
+                                           data.get("customer_id"), data.get("flight_no"), by=by)
         else:
             return jsonify({"error": "unknown action"}), 404
     except Exception as e:
@@ -11082,6 +11088,28 @@ def api_oneoff_finance(event_id):
         return jsonify(d)
     except Exception as e:
         logger.exception("oneoff finance failed for event %s", event_id)
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/events/<int:event_id>/oneoff-shirt", methods=["POST"])
+@require_role("manager")
+def api_oneoff_shirt(event_id):
+    """Save one player's shirt size for a one-off event (Kerry
+    2026-09-22: click-to-select shirt column on the Lone Star Cup
+    roster). Body: {customer_id, size} — empty size clears the pick so
+    the row falls back to the size known from the player's orders."""
+    from email_parser.database import set_oneoff_shirt
+    data = request.get_json(silent=True) or {}
+    try:
+        cid = int(data.get("customer_id"))
+    except (TypeError, ValueError):
+        return jsonify({"error": "customer_id required"}), 400
+    size = (data.get("size") or "").strip()
+    try:
+        out = set_oneoff_shirt(event_id, cid, size)
+        return jsonify(out)
+    except Exception as e:
+        logger.exception("oneoff shirt save failed for event %s", event_id)
         return jsonify({"error": str(e)}), 500
 
 

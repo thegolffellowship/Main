@@ -1786,7 +1786,8 @@ def _scoring_dispatch(url: str, extract: str):
       scoring-flights-freeze:<event_id>[|apply]  FREEZE the board (B5 selection of record); dry run says what would freeze
       scoring-flights-settle:<event_id>[|apply]  SETTLE a frozen board: amounts from actual buyers + the delta, stored as the record
       scoring-flights-unfreeze:<event_id>[|apply]  void (keep) the frozen/settled rows so the board reads LIVE
-      scoring-flights-mode:<event_id>|<game>|<equal_size|fixed_bands|default>  the CUT toggle per game (Kerry 2026-09-22); LIVE boards only
+      scoring-flights-mode:<event_id>|<game>|<equal_size|fixed_bands|default>  the CUT toggle per game (Kerry 2026-09-22); LIVE boards only; clears custom moves
+      scoring-flights-move:<event_id>|<game>|<customer_id>|<flight_no>  move one player to another flight → CUSTOM (#599); dropping him back on his rule flight clears the move
       scoring-flights-board:<event_id>  the DIVISIONS/FLIGHTS board as data — ratified flighting + payout rules (SELECTION and AMOUNTS layers) beside what GG recorded; dry run, read-only
       scoring-pairings-counts:<event_id>[|<year>]  saved sheet scored against played history: times each pair has played together this year INCLUDING this event
       scoring-liabilities          payouts owed, credits held, LSC shirt fund by Cup year, HIO pot, tax reserve by month
@@ -2692,6 +2693,24 @@ def _scoring_dispatch(url: str, extract: str):
                                    "edges": g["selection"].get("edges")}
                                   for g in _res.get("games") or []]}
             return json.dumps(_res, indent=2, default=str)
+        if cmd == "scoring-flights-move":
+            # "<event_id>|<game>|<customer_id>|<flight_no>" — a move by
+            # hand (Kerry 2026-09-22 #599): the game becomes CUSTOM on its
+            # base cut. Writes the dial; a frozen board refuses.
+            _p = [x.strip() for x in arg.split("|")]
+            if len(_p) < 4 or not (_p[0].isdigit() and _p[2].lstrip("-").isdigit() and _p[3].isdigit()):
+                return json.dumps({"error": "usage: scoring-flights-move:<event_id>|<game>|<customer_id>|<flight_no>"})
+            _res = db.move_event_flight_player(int(_p[0]), _p[1], int(_p[2]), int(_p[3]), by="mcp-claude")
+            if _res.get("ok"):
+                _audit("scoring-flights-move", f"event {_p[0]} {_p[1]} #{_p[2]} → flight {_p[3]}")
+                _res = {"ok": True, "moved": _res.get("moved"), "flight_modes": _res.get("flight_modes"),
+                        "games": [{"game": g["game"], "mode": g["selection"].get("mode"),
+                                   "custom_note": g["selection"].get("custom_note"),
+                                   "flights": [{"flight_no": f["flight_no"], "band": f["band"],
+                                                "label": f["label"], "players": f["players"]}
+                                               for f in g["selection"]["flights"]]}
+                                  for g in _res.get("games") or []]}
+            return json.dumps(_res, indent=2, default=str)
         if cmd == "scoring-flights-board":
             # The DIVISIONS/FLIGHTS board (mailbox #582/#584) as data:
             # the ratified rule set from `email_parser/flighting.py` on
@@ -3202,6 +3221,63 @@ def _scoring_dispatch(url: str, extract: str):
             db.log_agent_action("mcp-claude", "scoring-lsc-freeze",
                                 f"frozen at {res.get('frozen_at')}")
             return json.dumps(res, indent=2)
+        if cmd == "scoring-lsc-shirts":
+            # "<event_id>" — read-only shirt-size coverage for a
+            # one-off event (Kerry 2026-09-22 shirt column): per player
+            # the picked size, the size known from order history, and
+            # the discerned gender, so coverage can be reported without
+            # scraping the UI.
+            _eid = int(arg.strip())
+            fin = db.get_oneoff_roster_finance(_eid)
+            if fin is None:
+                return json.dumps({"error": f"event {_eid} is not "
+                                   "configured in oneoff_charges"})
+            out = {}
+            for cid, p in (fin.get("players") or {}).items():
+                sh = p.get("shirt") or {}
+                out[cid] = {"gender": p.get("gender"),
+                            "team": p.get("team"),
+                            "selected": sh.get("selected"),
+                            "known": sh.get("known")}
+            return json.dumps({"event_id": _eid, "players": out,
+                               "options": (fin.get("config") or {})
+                               .get("shirt_options")}, indent=2)
+        if cmd == "scoring-expense-customer":
+            # "<expense_id>|<customer_id|none>" — set (or clear) the
+            # customer on an incoming expense_transactions row. Exists
+            # because Zelle arrivals carry raw bank names the matcher
+            # can't resolve (GUSTAVO VASQUEZ → cid 42), and the one-off
+            # roster's PAID column keys on customer_id. Audited.
+            _parts = [p.strip() for p in arg.split("|")]
+            if len(_parts) != 2:
+                return json.dumps({"error": "expected "
+                                   "<expense_id>|<customer_id|none>"})
+            _xid = int(_parts[0])
+            _cid = (None if _parts[1].lower() in ("none", "")
+                    else int(_parts[1]))
+            with db._connect() as _conn:
+                _row = _conn.execute(
+                    "SELECT id, merchant, amount, customer_id "
+                    "FROM expense_transactions WHERE id = ?",
+                    (_xid,)).fetchone()
+                if not _row:
+                    return json.dumps({"error":
+                                       f"expense {_xid} not found"})
+                _old = _row["customer_id"]
+                _conn.execute(
+                    "UPDATE expense_transactions SET customer_id = ? "
+                    "WHERE id = ?", (_cid, _xid))
+                _conn.commit()
+            db.log_agent_action(
+                "mcp-claude", "scoring-expense-customer",
+                f"expense {_xid} ({_row['merchant']} "
+                f"${_row['amount']}): customer {_old} -> {_cid}")
+            return json.dumps({"expense_id": _xid,
+                               "merchant": _row["merchant"],
+                               "amount": _row["amount"],
+                               "old_customer_id": _old,
+                               "new_customer_id": _cid,
+                               "saved": True})
         if cmd == "scoring-expense-promote":
             # "<expense_id>" — promote an expense_transactions row into
             # the acct_transactions ledger via the standard

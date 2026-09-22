@@ -140,6 +140,25 @@ index / PH), `amounts` (pot, bonus, share, per-flight pots and places),
 Also that afternoon: Brackenridge's four tee sets seeded from Kerry's GG
 screenshots and designated; nine-hole PH now reads per-nine rating rows.
 
+## 6c. #599 (Kerry 2026-09-22): EVEN | HCP | CUSTOM, drag-to-move, auto-save (v2.478.0)
+
+Kerry: "I prefer toggles that are shared toggles rather than separate
+buttons… Shorten these to EVEN | HCP with hover text… Add the ability to
+click and drag names to the other flight. When/if that is done, than it
+becomes a CUSTOM flight… Add an Auto-Save feature for any changes to both
+FLIGHTS and PAIRINGS tabs. Don't make me click SAVE each time."
+
+| Piece | Where | Guard |
+|---|---|---|
+| One segmented EVEN \| HCP control per game bar (tab style), hover text = the explanation, default dotted; CUSTOM segment once a move exists | `events.html` `fbModeToggle`, `FB_MODE_TEXT` | `test_flights_custom_ui.js` |
+| Drag a member row onto another flight box → `POST flights/move` → the game is CUSTOM on its base cut; MOVED tag; the Selection line says it in words; EVEN/HCP re-cut from scratch and clear the moves | `events.html` `.fb-member` / `.fb-flight` handlers, `fbPost`; `database.py` `move_event_flight_player`, `event_flight_modes` (custom shape), `set_event_flight_mode` (`moves_cleared`); `app.py` action `move`; bridge `scoring-flights-move` | `test_flights_board.py` |
+| The rule: `mode_spec` reads a toggle or `{"mode":"custom","base":…,"moves":{cid: flight}}`; `_apply_moves` after the base cut; `custom_note`; band "· custom"; frozen custom boards settle like any other (late add by the base edges) | `flighting.py` | `test_flighting.py` |
+| Auto-save: FLIGHTS (the drop/toggle is the save); PAIRINGS (debounced background save from `rerenderDetail`, never mid-drag, one retry, Save kept as the manual flush, "Saved h:mm" stamp) | `events.html` `schedulePairingsAutosave` / `runPairingsAutosave` / `pairSaveStampText` | `test_flights_custom_ui.js` |
+
+Rule 3b: the storage shape was proposed in the ack (same app_settings
+key, no new table) and built in-session; the freeze snapshot already
+carries the resulting selection.
+
 ## 7. Open / carried forward
 
 - Next: the Final Pairings send OFFERS the freeze when the event is not
@@ -148,7 +167,7 @@ screenshots and designated; nine-hole PH now reads per-nine rating rows.
 - P2-6 item 4 (a label/assignment mismatch on a future event raises a
   followups CA Queue item) is NOT built: it is the closeout comparison of
   `gg_game_flights` against the FROZEN selection, so it follows the schema.
-- Kerry: which Skins cut GG runs tomorrow (12.0 ladder vs equal halves).
+- Kerry's Skins-cut question is answered by #598/#599: EVEN | HCP per game, and CUSTOM by hand.
 - The Flighting Lab (`ls_flight_lab`) still runs `flight_plan` with the
   seed's dials — fine as a lab; the board is the rule.
 - Not this lane: Kissing Tree combo yardages (Event Closeout lane), handicap

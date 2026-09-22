@@ -1,5 +1,32 @@
-window.TGF_VERSION = "2.476.8";
+window.TGF_VERSION = "2.478.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.478.0",
+    date: "2026-09-22",
+    changes: [
+      "FLIGHTS tab: the cut is one shared EVEN | HCP control per game bar in the ROSTER | PAIRINGS | GAMES | FLIGHTS style — no more pill buttons; hover text carries the explanation (even split down the middle vs the ratified handicap bands), the default is dotted, and a CUSTOM segment appears once a name has been moved (Kerry 2026-09-22, mailbox #599).",
+      "FLIGHTS tab: drag a name to another flight and the game becomes CUSTOM on its base cut — the drop is the save. The moved player is tagged MOVED, the Selection line says who moved from where in words, the flight label follows who is actually in it, and the printed Divisions & Flights page follows the board. Clicking EVEN or HCP re-cuts from scratch and clears the moves. Stored per event in flight_modes:<event_id> keyed by customer_id; a frozen board refuses. Bridge scoring-flights-move:<event_id>|<game>|<customer_id>|<flight_no>.",
+      "PAIRINGS tab: auto-save. Changes save in the background about a second after your last drag, swap or move — never mid-drag, never blocking the sheet; a 'Saved h:mm' stamp replaces the plain Saved; Save stays as the manual flush and as the fallback if the background save fails twice. Undo/redo unchanged (Kerry: 'Don't make me click SAVE each time').",
+    ],
+  },
+  {
+    version: "2.477.1",
+    date: "2026-09-22",
+    changes: [
+      "Lone Star Cup freeze: an unfilled seat is dropped from the FINAL snapshot — Justin McCrary's withdrawal left a blank ‘DFW/HOUSTON · 2’ chair on the San Antonio card; a final roster shows only players, and the seat returns when a replacement is picked and the roster re-freezes.",
+      "Bridge scoring-expense-customer:<expense_id>|<cid|none> — sets the customer on an incoming payment row. Zelle arrivals come in under raw bank names the matcher can't resolve (GUSTAVO VASQUEZ → Gus, cid 42), and the one-off PAID column keys on customer_id. Audited.",
+    ],
+  },
+  {
+    version: "2.477.0",
+    date: "2026-09-22",
+    changes: [
+      "One-off roster (Lone Star Cup): TEAM column — A in Austin burnt orange, SA in slate, sortable, from the frozen roster card each player sits on so the DFW/Houston picks show the team they play for; Chapter now starts hidden but stays in the Columns menu (Kerry 2026-09-22: ‘Add a TEAM column for AUSTIN (A) | SAN ANTONIO (SA) so I can sort by those. Hide the Chapter column’).",
+      "One-off roster: SHIRT column — click-to-select size per player, saved instantly (green when picked here, amber when pre-filled from the size already on a past order). The size list follows the player's gender, discerned from the tees they've actually played with the shirt text as tie-breaker, since the member records carry no gender field. Lists ship as the shirt_size_options dial (S→3XL men, W-XS→W-XL women).",
+      "One-off roster: PAID (golf) now subtracts the lodging share the lodging dial says the player paid, so one combined Venmo (Sharp's $630 = $100 golf + $530 Bed 3) lands $100 in PAID and the bed money in LODGING instead of inflating the golf tally.",
+      "Read-only bridge scoring-lsc-shirts:<event_id> reports shirt coverage (gender · team · picked · known-from-orders per player).",
+    ],
+  },
   {
     version: "2.476.8",
     date: "2026-09-22",
