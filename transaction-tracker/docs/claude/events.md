@@ -2232,6 +2232,41 @@ Kerry 2026-09-21 (mailbox #582): "need to see the divisions/flights
 breakdown so probably will need a tab for it under each event." The
 FLIGHTING lane (spun off "TGF Tracker Improvements 2"; plan #584).
 
+- **EVEN | HCP | CUSTOM, drag-to-move, auto-save (v2.478.0, Kerry
+  2026-09-22 #599):** "I prefer toggles that are shared toggles rather
+  than separate buttons. Similar to the ROSTER | PAIRINGS | GAMES |
+  FLIGHTS… Shorten these to EVEN | HCP with hover text… Add the ability
+  to click and drag names to the other flight. When/if that is done,
+  than it becomes a CUSTOM flight… Add an Auto-Save feature for any
+  changes to both FLIGHTS and PAIRINGS tabs." Each game bar carries ONE
+  segmented control (`fbModeToggle`, `FB_MODE_TEXT` is the hover text;
+  the default segment carries a dot). Dragging a member row (`.fb-member`,
+  customer_id-keyed) onto another flight box (`.fb-flight`) POSTs
+  `flights/move` {game, customer_id, flight_no} → `move_event_flight_player`;
+  the game becomes **CUSTOM on its base cut**: `flight_modes:<event_id>`
+  holds `{game: {"mode":"custom","base":"equal_size"|"fixed_bands",
+  "moves":{"<customer_id>":<flight_no>}}}` (`flighting.mode_spec` reads
+  it; `_apply_moves` pins the named players after the base cut placed
+  everyone; a late add lands by the base edges; dropping a player back
+  on his rule flight clears his move; no moves left = plainly the base,
+  kept explicit). The selection then carries `mode:"custom"`, `base_mode`,
+  `moves` (from_flight/to_flight), `custom_note` (the words, also in
+  `notes`), `flights[].custom`, `members[].moved`; the band text says
+  "· custom" on the flights a move touched; the printed page follows.
+  Clicking EVEN or HCP re-cuts from scratch and clears the moves
+  (`moves_cleared` in the response; a toast says so). A frozen board
+  refuses both. Bridge `scoring-flights-move:<id>|<game>|<cid>|<flight>`.
+  **Auto-save:** on FLIGHTS every toggle/drop is the save (one POST, the
+  response is the board). On PAIRINGS `rerenderDetail` arms
+  `schedulePairingsAutosave` whenever the sheet is dirty: 1.2 s after the
+  last change, never mid-drag/mid-swap (waits 600 ms and looks again),
+  one retry after 2 s, then the stamp reads "Auto-save failed — click
+  Save" and the Save button (kept, as the manual flush) is the fallback;
+  a change made while a save is in flight keeps the sheet dirty; undo/redo
+  untouched (`savedIdx` moves). Stamp `.pair-save-stamp` reads "Saved
+  h:mm". Guards: `test_flighting.py`, `test_flights_board.py`,
+  `test_flights_custom_ui.js`.
+
 - **THE CUT TOGGLE (v2.476.8, Kerry 2026-09-22):** "Need the ability to
   split flights evenly. A button or a toggle. Specifically, historically
   we've always just split the field down the middle, because net is

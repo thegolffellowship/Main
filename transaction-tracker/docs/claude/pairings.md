@@ -759,6 +759,19 @@ The Quarry-night rulings, all built:
      Ctrl/Cmd+Z / +Shift+Z bound once at module level and ignored while
      typing or when more than one pairings panel is open. Groups ONLY —
      mode, race and the requests panel are deliberately out of scope.
+     **Auto-save (v2.478.0, Kerry 2026-09-22 #599: "Don't make me click
+     SAVE each time… needs to work in the background and fast and can't
+     impede/slow down my work").** `rerenderDetail` arms
+     `schedulePairingsAutosave` whenever the sheet is dirty; the POST to
+     `pairings/save` runs 1.2 s after the last change, never mid-drag or
+     mid-swap (it waits 600 ms and looks again), one retry after 2 s,
+     then the stamp reads "Auto-save failed — click Save" and the Save
+     button (kept as the manual flush; it cancels the pending timer) is
+     the fallback. `savedIdx` moves to the history position that was
+     sent, so undo back to it is clean and a change made while the save
+     was in flight stays dirty. The 5 PM routine treats any saved seat
+     as "already paired" — a background save has the same effect a
+     manual one did. Guard: `test_flights_custom_ui.js`.
      This exists because seat compaction makes a drag non-reversible by
      hand (Kerry: "I can't simply drag him back to his one spot").
    - **Seat compaction after a move (v2.162.0).** `_compactGroupSeats`

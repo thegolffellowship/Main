@@ -219,6 +219,55 @@ s = fl.select_game("individual_net", "Individual Net", "NET", net14 + [P(200, "X
 check("a player with no index is listed apart, never dropped into a flight",
       [u["name"] for u in s["unflighted"]] == ["X"] and any("no handicap index" in n for n in s["notes"]))
 
+print("\n== CUSTOM flights: a name dragged to another flight (Kerry 2026-09-22 #599) ==")
+# Brackenridge Skins, 14 gross buyers → 2 flights at 12.0 by HCP: 4 / 10.
+# Kerry: "I'm thinking for instance, of moving Scott Marroquin at 12.4 to
+# Flight 1 to balance Skins some." 104 is the 12.4.
+spec = {"mode": "custom", "base": "fixed_bands", "moves": {"104": 1}}
+s = fl.select_game("skins", "Skins", "GROSS", net14, "18", M18[14], cfg["skins"], mode=spec)
+check("a move by hand makes the game CUSTOM on its base cut: 4/10 becomes 5/9, base HCP, one move recorded",
+      s["mode"] == "custom" and s["base_mode"] == "fixed_bands" and [f["players"] for f in s["flights"]] == [5, 9]
+      and len(s["moves"]) == 1 and s["moves"][0]["customer_id"] == 104 and s["moves"][0]["from_flight"] == 2 and s["moves"][0]["to_flight"] == 1,
+      str((s["mode"], s["base_mode"], [f["players"] for f in s["flights"]], s["moves"])))
+check("...the moved player sits in Flight 1 flagged MOVED; the edges are still the base cut's (12.0)",
+      any(m["customer_id"] == 104 and m["moved"] for m in s["flights"][0]["members"]) and s["edges"] == [12.0], str(s["flights"][0]["members"]))
+check("...the flight label is derived from who is actually in it (P2-6): Flight 1 now runs to 12.4, Flight 2 starts at 13.8",
+      s["flights"][0]["label"].endswith("12.4") and s["flights"][1]["label"].startswith("13.8"), (s["flights"][0]["label"], s["flights"][1]["label"]))
+check("...the band text says custom on the flights the move touched",
+      [f["band"] for f in s["flights"]] == ["<12.0 · custom", "12.0+ · custom"] and all(f["custom"] for f in s["flights"]), str([f["band"] for f in s["flights"]]))
+check("...and the words are on the record: 'N4 (12.4) moved from Flight 2 to Flight 1'",
+      "N104 (12.4) moved from Flight 2 to Flight 1" in s["custom_note"] and s["custom_note"] in s["notes"], s["custom_note"])
+check("...mode_source says it was moved by hand", s["mode_source"].startswith("custom"), s["mode_source"])
+s2 = fl.select_game("skins", "Skins", "GROSS", net14, "18", M18[14], cfg["skins"],
+                    mode={"mode": "custom", "base": "fixed_bands", "moves": {"104": 2}})
+check("a move that names the player's own flight is not a move: the game stays plain HCP",
+      s2["mode"] == "fixed_bands" and not s2["moves"] and [f["players"] for f in s2["flights"]] == [4, 10])
+s3 = fl.select_game("skins", "Skins", "GROSS", net14, "18", M18[14], cfg["skins"],
+                    mode={"mode": "custom", "base": "fixed_bands", "moves": {"104": 9, "999": 1, "x": 1}})
+check("an unknown flight, an absent player, or a bad key are ignored, not errors",
+      s3["mode"] == "fixed_bands" and not s3["moves"])
+s4 = fl.select_game("individual_net", "Individual Net", "NET", net14, "9", M9[14], cfg["individual_net"],
+                    mode={"mode": "custom", "base": "equal_size", "moves": {"107": 1, "100": 2}})
+check("custom on an EVEN base: two moves, 7/7 stays 7/7 with the two swapped, both flagged",
+      s4["mode"] == "custom" and s4["base_mode"] == "equal_size" and [f["players"] for f in s4["flights"]] == [7, 7]
+      and {m["customer_id"] for m in s4["moves"]} == {100, 107}, str(s4["moves"]))
+check("...a custom spec with a base not on file falls back to the game's default base",
+      fl.mode_spec({"mode": "custom", "base": "sideways", "moves": {"1": 2}}, "skins") == ("fixed_bands", {1: 2}, True))
+check("...a bare toggle string reads as before", fl.mode_spec("equal_size", "skins") == ("equal_size", {}, True)
+      and fl.mode_spec(None, "skins") == ("fixed_bands", {}, False))
+bt2 = fl.build({"NET": net14, "GROSS": net14}, "18", row18, modes={"skins": spec})
+check("build() carries a custom spec through to the game; the amounts follow the custom headcounts (5/9 → skins pot still ÷ 2)",
+      next(g for g in bt2["games"] if g["game"] == "skins")["selection"]["mode"] == "custom"
+      and [f["pot"] for f in next(g for g in bt2["games"] if g["game"] == "skins")["amounts"]["flights"]] == [126.0, 126.0])
+fz = fl.build({"NET": [], "GROSS": net14}, "18", row18, modes={"skins": spec})
+late = net14 + [P(300, "Late", 12.2)]
+st = fl.settle(fz, {"NET": [], "GROSS": late}, row18)
+sk_st = next(g for g in st["games"] if g["game"] == "skins")["selection"]
+check("a frozen CUSTOM board settles like any other: the moved player stays where he was put, a late add lands by the base edges (12.2 → Flight 2)",
+      sk_st["mode"] == "custom" and any(m["customer_id"] == 104 for m in sk_st["flights"][0]["members"])
+      and any(m["customer_id"] == 300 for m in sk_st["flights"][1]["members"]) and [f["players"] for f in sk_st["flights"]] == [5, 10],
+      str([f["players"] for f in sk_st["flights"]]))
+
 print("\n== build(): a LIVE board, both layers from one field ==")
 field = {"NET": net14, "GROSS": landa_gross}
 b = fl.build(field, "18", row18)

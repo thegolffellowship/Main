@@ -61,10 +61,16 @@ move; NO minimum flight size, NO merging; flight labels derive from
 actual membership; places by FLIGHT size (1–9 → 1; 10–19 → 2/3–1/3;
 20+ → 50/30/20; ties pool and split to the pot); Individual Gross pot =
 10% off the top as the Overall Low Gross bonus + 90% by headcount;
-Skins keeps the matrix pot ÷ flights; Individual Net keeps the equal-size
-cut under 12.0 and the matrix place columns. SELECTION freezes at an
-explicit action; AMOUNTS recompute at settlement from actual buyers.
-Visible per event on the FLIGHTS tab — dry run, GG pays.
+Skins keeps the matrix pot ÷ flights; Individual Net keeps the matrix
+place columns. The cut per game is EVEN (down the middle, Ind Net's
+default) or HCP (the ladder, Skins/Gross default), one shared toggle per
+game bar; dragging a name to another flight makes the game CUSTOM on its
+base cut (`flight_modes:<event_id>`, customer_id-keyed moves; #599,
+v2.478.0). SELECTION freezes at an explicit action (FREEZE button, built
+v2.471.0); AMOUNTS recompute at settlement from actual buyers. Visible
+per event on the FLIGHTS tab — dry run, GG pays. FLIGHTS and PAIRINGS
+auto-save (the drop is the save; PAIRINGS in the background 1.2 s after
+the last change, Save kept as the manual flush).
 
 **The plus rule (2026-09-15/16).** A plus handicap comes off the ROUND,
 never off a hole: no hole is ever made harder than the card says, and
@@ -179,11 +185,11 @@ course. What that night forced, and what the Platform needs on day one:
 - Handicap lock is derived, not stored; a back-dated or deleted round
   moves an as-of index. A stored snapshot needs schema (3b).
 - Eric Pollard's home chapter (only order was DFW).
-- The flighting FREEZE needs schema (rule 3b, proposed #584):
-  `event_flight_snapshots` + `event_flight_snapshot_members`; and which
-  button carries the freeze (Final Pairings send vs a FREEZE button).
-  Also whether the 1/10/20 places rule applies to Individual Net or
-  only to Individual Gross.
+- Flighting, still open after #599 (v2.478.0): the Final Pairings send
+  OFFERING the freeze; the closeout writing the settled snapshot; a
+  Matrix-page editor for `gross_places_by_flight_size`; the P2-6
+  closeout comparison of `gg_game_flights` against the frozen selection.
+  (Freeze schema, FREEZE button, EVEN|HCP|CUSTOM and auto-save are built.)
 
 ## 6. What the Platform must carry forward (lessons, each paid for)
 

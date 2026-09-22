@@ -58575,8 +58575,22 @@ def event_flight_modes(event_id: int, db_path=None) -> dict:
         parsed = json.loads(raw)
     except (TypeError, ValueError):
         return {}
-    return {g: m for g, m in (parsed or {}).items()
-            if g in {x[0] for x in _fl.BOARD_GAMES} and m in _fl.FLIGHT_MODES}
+    games = {x[0] for x in _fl.BOARD_GAMES}
+    out: dict = {}
+    for g, m in (parsed or {}).items():
+        if g not in games:
+            continue
+        if m in _fl.FLIGHT_MODES:
+            out[g] = m
+        elif isinstance(m, dict) and m.get("mode") == _fl.CUSTOM_MODE:
+            # CUSTOM (#599): a base cut plus moves by hand, customer_id keyed.
+            base, moves, _ = _fl.mode_spec(m, g)
+            if moves:
+                out[g] = {"mode": _fl.CUSTOM_MODE, "base": base,
+                          "moves": {str(k): v for k, v in moves.items()}}
+            elif m.get("base") in _fl.FLIGHT_MODES:
+                out[g] = m["base"]
+    return out
 
 
 def set_event_flight_mode(event_id: int, game: str, mode: str | None,
@@ -58597,6 +58611,9 @@ def set_event_flight_mode(event_id: int, game: str, mode: str | None,
                                       "is the snapshot; unfreeze first",
                 "state": "settled" if snaps["settled"] else "frozen"}
     modes = event_flight_modes(event_id, db_path=db_path)
+    # EVEN / HCP re-cut from scratch: a CUSTOM setting's moves are cleared
+    # (#599: "Text and explanations would need to update accordingly").
+    had_moves = isinstance(modes.get(game), dict)
     if mode is None:
         modes.pop(game, None)
     else:
@@ -58604,7 +58621,8 @@ def set_event_flight_mode(event_id: int, game: str, mode: str | None,
     set_app_setting(_flight_modes_key(event_id), json.dumps(modes), db_path=db_path)
     try:
         log_agent_action(by or "manager", "flights_mode",
-                         f"event {event_id}: {game} cut = {mode or 'default'}",
+                         f"event {event_id}: {game} cut = {mode or 'default'}"
+                         + (" (custom moves cleared)" if had_moves else ""),
                          db_path=db_path)
     except Exception:                                    # noqa: BLE001
         pass
@@ -58612,6 +58630,83 @@ def set_event_flight_mode(event_id: int, game: str, mode: str | None,
     if not board:
         return {"ok": False, "error": f"event {event_id} not found"}
     board["ok"] = True
+    board["moves_cleared"] = had_moves
+    return board
+
+
+def move_event_flight_player(event_id: int, game: str, customer_id, flight_no,
+                             by: str = "manager", db_path=None) -> dict:
+    """Drag a name to another flight (KERRY 2026-09-22 #599): the game
+    becomes CUSTOM — the base cut stays what it was (even or HCP), the
+    move pins this player by customer_id. Dropping him back on the flight
+    the base cut gives him clears his move; when no moves remain the game
+    is plainly the base cut again. Auto-saved: the write IS the drop.
+    Refuses on a frozen / settled board. Returns the board as it now reads."""
+    from . import flighting as _fl
+    games = {x[0] for x in _fl.BOARD_GAMES}
+    if game not in games:
+        return {"ok": False, "error": f"unknown game '{game}' — one of {sorted(games)}"}
+    try:
+        cid, to = int(customer_id), int(flight_no)
+    except (TypeError, ValueError):
+        return {"ok": False, "error": "customer_id and flight_no must be integers"}
+    with _connect(db_path) as conn:
+        _ensure_flight_snapshot_tables(conn)
+        snaps = _active_flight_snapshots(conn, event_id)
+    if snaps["frozen"] or snaps["settled"]:
+        return {"ok": False, "error": "the board is frozen — the selection of record "
+                                      "is the snapshot; unfreeze first",
+                "state": "settled" if snaps["settled"] else "frozen"}
+    board = event_flights_board(event_id, db_path=db_path)
+    if not board:
+        return {"ok": False, "error": f"event {event_id} not found"}
+    entry = next((g for g in board.get("games") or [] if g["game"] == game), None)
+    sel = (entry or {}).get("selection") or {}
+    if not sel.get("active"):
+        return {"ok": False, "error": f"{game} is not running on this board"}
+    count = int(sel.get("flight_count") or 0)
+    if not 1 <= to <= count:
+        return {"ok": False, "error": f"Flight {to} is not on the board (1–{count})"}
+    cur, name = None, None
+    for f in sel.get("flights") or []:
+        for m in f.get("members") or []:
+            if m.get("customer_id") is not None and int(m["customer_id"]) == cid:
+                cur, name = int(f["flight_no"]), m.get("name")
+    if cur is None:
+        return {"ok": False, "error": f"customer_id {cid} is not flighted in {game} on this board"}
+    prior = {int(m["customer_id"]): m for m in (sel.get("moves") or [])
+             if m.get("customer_id") is not None}
+    base_flight = int(prior[cid]["from_flight"]) if cid in prior else cur
+    modes = event_flight_modes(event_id, db_path=db_path)
+    spec = modes.get(game)
+    if isinstance(spec, dict):
+        base, moves = spec["base"], dict(spec.get("moves") or {})
+    else:
+        base, moves = (spec if spec in _fl.FLIGHT_MODES else sel.get("base_mode")), {}
+    if to == base_flight:
+        moves.pop(str(cid), None)
+        what = f"back to Flight {to} (where the {base.replace('_', ' ')} cut puts him) — move cleared"
+    else:
+        moves[str(cid)] = to
+        what = f"Flight {cur} → Flight {to}"
+    if moves:
+        modes[game] = {"mode": _fl.CUSTOM_MODE, "base": base, "moves": moves}
+    else:
+        # Keep the base explicit so the cut does not change under his hand.
+        modes[game] = base
+    set_app_setting(_flight_modes_key(event_id), json.dumps(modes), db_path=db_path)
+    try:
+        log_agent_action(by or "manager", "flights_move",
+                         f"event {event_id}: {game} {name} (#{cid}) {what}",
+                         db_path=db_path)
+    except Exception:                                    # noqa: BLE001
+        pass
+    board = event_flights_board(event_id, db_path=db_path)
+    board["ok"] = True
+    board["moved"] = {"customer_id": cid, "name": name, "from_flight": cur,
+                      "to_flight": to, "cleared": to == base_flight,
+                      "text": (f"{name} {what}" if to == base_flight
+                               else f"{name} moved to Flight {to} — {entry['label']} is now CUSTOM")}
     return board
 
 

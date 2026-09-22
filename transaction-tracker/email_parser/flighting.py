@@ -389,6 +389,7 @@ def _flight_count(game: str, matrix_row: dict | None, game_cfg: dict,
 
 
 FLIGHT_MODES = ("equal_size", "fixed_bands")
+CUSTOM_MODE = "custom"
 
 
 def default_mode(game: str, rules: dict | None = None) -> str:
@@ -396,6 +397,66 @@ def default_mode(game: str, rules: dict | None = None) -> str:
     r = rules or FLIGHT_RULES
     return ((r.get("modes") or {}).get(game)
             or (r["net"]["mode"] if game == "individual_net" else "fixed_bands"))
+
+
+def mode_spec(spec, game: str, rules: dict | None = None) -> tuple[str, dict, bool]:
+    """Read an event's per-game cut setting.
+
+    A bare mode string ("equal_size" | "fixed_bands"), or a CUSTOM spec
+    {"mode": "custom", "base": <mode>, "moves": {"<customer_id>": <flight_no>}}
+    — KERRY 2026-09-22 (#599): "Add the ability to click and drag names to
+    the other flight. When/if that is done, than it becomes a CUSTOM
+    flight." The BASE cut places everyone; the MOVES pin the named players
+    (customer_id is king); a late add with no move lands by the base rule.
+    Returns (base_mode, {customer_id: flight_no}, set_by_event)."""
+    r = rules or FLIGHT_RULES
+    if isinstance(spec, dict):
+        base = spec.get("base")
+        base = base if base in FLIGHT_MODES else default_mode(game, r)
+        moves: dict = {}
+        for k, v in (spec.get("moves") or {}).items():
+            try:
+                moves[int(k)] = int(v)
+            except (TypeError, ValueError):
+                continue
+        return base, moves, True
+    if spec in FLIGHT_MODES:
+        return spec, {}, True
+    return default_mode(game, r), {}, False
+
+
+def _apply_moves(groups: list[list[dict]], moves: dict) -> list[dict]:
+    """Move each named player from the flight the base cut gave him to the
+    flight the move names. Returns the moves that actually changed a seat,
+    each with from_flight / to_flight (1-based); a move that names the
+    player's own flight, an unknown flight, or a player not in the field
+    is simply not a move."""
+    applied: list[dict] = []
+    if not moves or len(groups) < 2:
+        return applied
+    for i, g in enumerate(groups):
+        for p in list(g):
+            cid = p.get("customer_id")
+            if cid is None or int(cid) not in moves:
+                continue
+            to = moves[int(cid)]
+            if not (1 <= to <= len(groups)) or to == i + 1:
+                continue
+            g.remove(p)
+            groups[to - 1].append(p)
+            applied.append({**_member(p), "from_flight": i + 1, "to_flight": to})
+    applied.sort(key=lambda m: (m["to_flight"], _idx(m)))
+    return applied
+
+
+def custom_note(applied: list[dict]) -> str:
+    """The words the board and the printed page say for a CUSTOM cut."""
+    if not applied:
+        return ""
+    parts = [f"{m['name']} ({m['index_text']}) moved from Flight {m['from_flight']} "
+             f"to Flight {m['to_flight']}" for m in applied]
+    return (f"Custom flights — {len(applied)} move{'s' if len(applied) != 1 else ''} by hand "
+            f"on top of the base cut: " + "; ".join(parts) + ".")
 
 
 def _net_plan(field: list[dict], count: int, rules: dict,
@@ -430,23 +491,25 @@ def _net_plan(field: list[dict], count: int, rules: dict,
 
 def select_game(game: str, label: str, kind: str, field: list[dict],
                 holes_key: str, matrix_row: dict | None, game_cfg: dict,
-                rules: dict | None = None, mode: str | None = None) -> dict:
+                rules: dict | None = None, mode=None) -> dict:
     """The SELECTION layer for one game from the field as it stands.
 
     `field` is that game's buyers: [{customer_id, name, index, ph?}]. The
     index is the raw 18-hole TGF index of record (locked as-of for a
-    started event, upstream). `mode` is the event's toggle for this game
-    (equal_size | fixed_bands); None means the rules' default."""
+    started event, upstream). `mode` is the event's setting for this game:
+    a toggle (equal_size | fixed_bands), a CUSTOM spec (see `mode_spec`),
+    or None for the rules' default."""
     r = rules or FLIGHT_RULES
     n = len(field)
-    use_mode = mode if mode in FLIGHT_MODES else default_mode(game, r)
+    use_mode, moves, from_event = mode_spec(mode, game, r)
     sel: dict = {
         "game": game, "label": label, "kind": kind,
         "buyers_at_selection": n, "active": True, "inactive_reason": None,
         "variant": None, "flight_count": 0, "count_source": None,
         "mode": use_mode,
-        "mode_source": "event toggle" if mode in FLIGHT_MODES else "default",
+        "mode_source": "event toggle" if from_event else "default",
         "mode_default": default_mode(game, r),
+        "base_mode": use_mode, "moves": [], "custom_note": "",
         "edges": [], "edges_source": None,
         "flights": [], "unflighted": [], "notes": [],
     }
@@ -493,15 +556,32 @@ def select_game(game: str, label: str, kind: str, field: list[dict],
             sel["flight_count"] = 1
         sel["edges"], sel["edges_source"] = edges, "ratified ladder (cut lines never move)"
         groups = cut_by_edges(known, edges)
+    # CUSTOM (#599): the base cut placed everyone; now the moves by hand.
+    applied = _apply_moves(groups, moves)
+    touched: set = set()
+    if applied:
+        sel["mode"] = CUSTOM_MODE
+        sel["mode_source"] = "custom — moved by hand"
+        sel["moves"] = applied
+        sel["custom_note"] = custom_note(applied)
+        sel["notes"].append(sel["custom_note"])
+        touched = {m["from_flight"] for m in applied} | {m["to_flight"] for m in applied}
     for i, g in enumerate(groups):
         g = sorted(g, key=lambda p: (_idx(p), p.get("name") or ""))
+        band = (band_text(i, sel["edges"]) if sel["edges"]
+                else ("All handicaps" if sel["base_mode"] == "equal_size" else band_text(i, sel["edges"])))
+        if (i + 1) in touched:
+            band = f"{band} · custom"
+        moved_ids = {int(m["customer_id"]) for m in applied if m.get("customer_id") is not None}
         sel["flights"].append({
             "flight_no": i + 1,
-            "band": band_text(i, sel["edges"]) if sel["mode"] == "fixed_bands"
-                    else (band_text(i, sel["edges"]) if sel["edges"] else "All handicaps"),
+            "band": band,
+            "custom": (i + 1) in touched,
             "label": derived_label(g),
             "players": len(g),
-            "members": [_member(p) for p in g],
+            "members": [{**_member(p), "moved": (p.get("customer_id") is not None
+                                                 and int(p["customer_id"]) in moved_ids)}
+                        for p in g],
         })
     sel["unflighted"] = [_member(p) for p in sorted(unknown, key=lambda p: p.get("name") or "")]
     return sel
@@ -557,8 +637,9 @@ def build(field_by_kind: dict, holes_key: str,
     field_by_kind: {"NET": [players], "GROSS": [players]} — the bundle
     buyers per kind, each {customer_id, name, index, ph?}.
     matrix_row_for(n): the LIVE matrix row for n buyers on this hole count.
-    modes: the event's per-game cut toggles {game: equal_size|fixed_bands};
-    a game not named takes the rules' default.
+    modes: the event's per-game cut settings {game: equal_size|fixed_bands|
+    {"mode":"custom","base":...,"moves":{...}}}; a game not named takes the
+    rules' default.
     """
     r = rules or FLIGHT_RULES
     cfg = games_cfg or _games_cfg()

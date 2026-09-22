@@ -327,6 +327,14 @@ event_flight_snapshot_members  snapshot_id FK, game, variant, flight_no,
   (each audited in `agent_action_log` as flights_freeze / flights_settle /
   flights_unfreeze). Routes `POST /api/events/<id>/flights/freeze|settle|
   unfreeze` (manager+); bridges `scoring-flights-freeze|settle|unfreeze:<id>[|apply]`.
+- The event's CUT per game is not a table: app_settings
+  `flight_modes:<event_id>` (JSON) — `{game: "equal_size"|"fixed_bands"}`
+  or, once a name has been dragged (v2.478.0, Kerry #599), `{game:
+  {"mode":"custom","base":<mode>,"moves":{"<customer_id>":<flight_no>}}}`
+  — customer_id-keyed, base cut places everyone, moves pin the named
+  players. The FREEZE snapshot's `board_json` carries the resulting
+  selection (mode custom, moves, members per flight), so nothing else is
+  needed to reproduce a frozen custom board.
 - No payout row is read or written by any of it; Golf Genius stays the
   payer of record.
 

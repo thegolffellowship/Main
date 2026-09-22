@@ -7928,7 +7928,8 @@ def api_event_flights_action(event_id, action):
     and stores the record with the delta, unfreeze voids (keeps) the rows.
     Audited. Pays nobody; GG stays the payer of record."""
     from email_parser.database import (freeze_event_flights, settle_event_flights,
-                                        unfreeze_event_flights, set_event_flight_mode)
+                                        unfreeze_event_flights, set_event_flight_mode,
+                                        move_event_flight_player)
     data = request.get_json(silent=True) or {}
     by = session.get("role") or "manager"
     if session.get("chapter"):
@@ -7947,6 +7948,11 @@ def api_event_flights_action(event_id, action):
             # boards only; a frozen board refuses.
             res = set_event_flight_mode(event_id, (data.get("game") or "").strip(),
                                         (data.get("mode") or None), by=by)
+        elif action == "move":
+            # Drag a name to another flight (Kerry 2026-09-22 #599): the
+            # game becomes CUSTOM; the drop is the save. LIVE boards only.
+            res = move_event_flight_player(event_id, (data.get("game") or "").strip(),
+                                           data.get("customer_id"), data.get("flight_no"), by=by)
         else:
             return jsonify({"error": "unknown action"}), 404
     except Exception as e:

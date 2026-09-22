@@ -130,6 +130,40 @@ check("...the HCP BANDS toggle (set_event_flight_mode) cuts it at 12.0 like Skin
 check("...the board reports the event's toggles", _mres.get("flight_modes") == {"individual_net": "fixed_bands"}, str(_mres.get("flight_modes")))
 check("...and 'default' clears it", db.set_event_flight_mode(EV, "individual_net", None, db_path=tmp)["flight_modes"] == {})
 check("an unknown game is refused", db.set_event_flight_mode(EV, "bingo", "equal_size", db_path=tmp).get("ok") is False)
+
+print("\n== CUSTOM flights by drag (Kerry 2026-09-22 #599) ==")
+_sk0 = next(x for x in db.event_flights_board(EV, db_path=tmp)["games"] if x["game"] == "skins")["selection"]
+_low = _sk0["flights"][1]["members"][0]          # the lowest index in Flight 2
+_mv = db.move_event_flight_player(EV, "skins", _low["customer_id"], 1, by="test", db_path=tmp)
+_sk1 = next(x for x in _mv["games"] if x["game"] == "skins")["selection"]
+check("moving Flight 2's lowest index to Flight 1 makes Skins CUSTOM on its HCP base: 8/8 → 9/7, the move on the record",
+      _mv.get("ok") and _sk1["mode"] == "custom" and _sk1["base_mode"] == "fixed_bands"
+      and [f["players"] for f in _sk1["flights"]] == [9, 7] and _sk1["moves"][0]["customer_id"] == _low["customer_id"],
+      str((_mv.get("error"), _sk1.get("mode"), [f["players"] for f in _sk1["flights"]])))
+check("...the response says who moved where, and the setting is stored customer_id-keyed",
+      _mv["moved"]["to_flight"] == 1 and "CUSTOM" in _mv["moved"]["text"]
+      and _mv["flight_modes"]["skins"] == {"mode": "custom", "base": "fixed_bands", "moves": {str(_low["customer_id"]): 1}},
+      str((_mv.get("moved"), _mv.get("flight_modes"))))
+check("...the custom note names him", _low["name"] in _sk1["custom_note"], _sk1["custom_note"])
+check("...the audit log has the move", any(a["action_type"] == "flights_move" for a in db.get_agent_action_log(db_path=tmp, limit=5)))
+_rep = {x["game"]: x for x in db.event_flights_report(EV, db_path=tmp)["games"]}
+check("...the printed Divisions & Flights page follows the board (Flight 1 band says custom, 9 players)",
+      "custom" in _rep["skins"]["flights"][0]["name"] and _rep["skins"]["flights"][0]["players"] == 9,
+      str(_rep["skins"]["flights"][0]))
+_back = db.move_event_flight_player(EV, "skins", _low["customer_id"], 2, by="test", db_path=tmp)
+check("dropping him back on his rule flight clears the move; the game is plainly HCP again (the base stays explicit)",
+      _back["moved"]["cleared"] and _back["flight_modes"] == {"skins": "fixed_bands"}
+      and next(x for x in _back["games"] if x["game"] == "skins")["selection"]["mode"] == "fixed_bands", str(_back.get("flight_modes")))
+db.move_event_flight_player(EV, "skins", _low["customer_id"], 1, by="test", db_path=tmp)
+_ev = db.set_event_flight_mode(EV, "skins", "equal_size", by="test", db_path=tmp)
+check("clicking EVEN re-cuts from scratch and clears the moves (moves_cleared reported)",
+      _ev["moves_cleared"] is True and _ev["flight_modes"] == {"skins": "equal_size"}
+      and next(x for x in _ev["games"] if x["game"] == "skins")["selection"]["mode"] == "equal_size", str(_ev.get("flight_modes")))
+db.set_event_flight_mode(EV, "skins", None, by="test", db_path=tmp)
+check("a move to a flight not on the board is refused", db.move_event_flight_player(EV, "skins", _low["customer_id"], 5, db_path=tmp).get("ok") is False)
+check("a player not flighted in that game is refused", "not flighted" in db.move_event_flight_player(EV, "skins", 999999, 1, db_path=tmp).get("error", ""))
+check("a game not running is refused", db.move_event_flight_player(EV, "individual_gross", _low["customer_id"], 1, db_path=tmp).get("ok") is False
+      or next(x for x in db.event_flights_board(EV, db_path=tmp)["games"] if x["game"] == "individual_gross")["active"])
 check("...amounts from the matrix columns (netLow / netHigh)",
       inn["amounts"]["total_pot"] > 0 and inn["amounts"]["flights"][1]["matrix_column"] == "netHigh", str(inn["amounts"]))
 
@@ -237,6 +271,10 @@ r = client.post(f"/api/events/{EV}/flights/freeze", json={})
 check("...a second POST is a 409, not a re-freeze", r.status_code == 409, str(r.status_code))
 r = client.post(f"/api/events/{EV}/flights/bogus", json={})
 check("...an unknown action is a 404", r.status_code == 404, str(r.status_code))
+r = client.post(f"/api/events/{EV}/flights/move", json={"game": "skins", "customer_id": 301, "flight_no": 1})
+check("POST flights/move on a FROZEN board is a 409 that says unfreeze first", r.status_code == 409 and "frozen" in (r.get_json() or {}).get("error", ""), str((r.status_code, r.get_json())))
+r = client.post(f"/api/events/{EV}/flights/mode", json={"game": "skins", "mode": "equal_size"})
+check("...and so is the toggle", r.status_code == 409, str(r.status_code))
 import mcp_server as mcp  # noqa: E402
 out = json.loads(mcp._scoring_dispatch("https://tgf-sa.golfgenius.com/", f"scoring-flights-board:{EV}"))
 check("scoring-flights-board:<event_id> returns the same board (FROZEN by the route above)", out.get("event_id") == EV and out.get("state") == "frozen", str((out.get("event_id"), out.get("state"))))
@@ -248,6 +286,16 @@ out = json.loads(mcp._scoring_dispatch("https://tgf-sa.golfgenius.com/", f"scori
 check("...|apply voids and the board reads LIVE", out.get("ok") and out.get("state") == "live", str({k: out.get(k) for k in ("ok", "state", "error")}))
 out = json.loads(mcp._scoring_dispatch("https://tgf-sa.golfgenius.com/", f"scoring-flights-freeze:{EV}"))
 check("scoring-flights-freeze dry run reports the flights it would freeze", out.get("dry_run") and out.get("would") == "freeze" and out["games"], str(out)[:200])
+_sk = next(x for x in db.event_flights_board(EV, db_path=tmp)["games"] if x["game"] == "skins")["selection"]
+_cid = _sk["flights"][1]["members"][0]["customer_id"]
+out = json.loads(mcp._scoring_dispatch("https://tgf-sa.golfgenius.com/", f"scoring-flights-move:{EV}|skins|{_cid}|1"))
+check("scoring-flights-move:<id>|skins|<cid>|1 moves him (LIVE again) and reports the custom cut",
+      out.get("ok") and out["moved"]["customer_id"] == _cid and next(g for g in out["games"] if g["game"] == "skins")["mode"] == "custom", str(out)[:300])
+out = json.loads(mcp._scoring_dispatch("https://tgf-sa.golfgenius.com/", "scoring-flights-move:abc"))
+check("...and refuses a bad call with a usage line", "usage" in (out.get("error") or ""), str(out))
+r = client.post(f"/api/events/{EV}/flights/move", json={"game": "skins", "customer_id": _cid, "flight_no": 2})
+check("POST flights/move as a manager on a LIVE board: 200, the board comes back, the move cleared (dropped on his rule flight)",
+      r.status_code == 200 and (r.get_json() or {}).get("moved", {}).get("cleared") is True, str((r.status_code, (r.get_json() or {}).get("error"))))
 
 print()
 if F:

@@ -1786,7 +1786,8 @@ def _scoring_dispatch(url: str, extract: str):
       scoring-flights-freeze:<event_id>[|apply]  FREEZE the board (B5 selection of record); dry run says what would freeze
       scoring-flights-settle:<event_id>[|apply]  SETTLE a frozen board: amounts from actual buyers + the delta, stored as the record
       scoring-flights-unfreeze:<event_id>[|apply]  void (keep) the frozen/settled rows so the board reads LIVE
-      scoring-flights-mode:<event_id>|<game>|<equal_size|fixed_bands|default>  the CUT toggle per game (Kerry 2026-09-22); LIVE boards only
+      scoring-flights-mode:<event_id>|<game>|<equal_size|fixed_bands|default>  the CUT toggle per game (Kerry 2026-09-22); LIVE boards only; clears custom moves
+      scoring-flights-move:<event_id>|<game>|<customer_id>|<flight_no>  move one player to another flight → CUSTOM (#599); dropping him back on his rule flight clears the move
       scoring-flights-board:<event_id>  the DIVISIONS/FLIGHTS board as data — ratified flighting + payout rules (SELECTION and AMOUNTS layers) beside what GG recorded; dry run, read-only
       scoring-pairings-counts:<event_id>[|<year>]  saved sheet scored against played history: times each pair has played together this year INCLUDING this event
       scoring-liabilities          payouts owed, credits held, LSC shirt fund by Cup year, HIO pot, tax reserve by month
@@ -2690,6 +2691,24 @@ def _scoring_dispatch(url: str, extract: str):
                                    "mode_source": g["selection"].get("mode_source"),
                                    "flights": [f["players"] for f in g["selection"]["flights"]],
                                    "edges": g["selection"].get("edges")}
+                                  for g in _res.get("games") or []]}
+            return json.dumps(_res, indent=2, default=str)
+        if cmd == "scoring-flights-move":
+            # "<event_id>|<game>|<customer_id>|<flight_no>" — a move by
+            # hand (Kerry 2026-09-22 #599): the game becomes CUSTOM on its
+            # base cut. Writes the dial; a frozen board refuses.
+            _p = [x.strip() for x in arg.split("|")]
+            if len(_p) < 4 or not (_p[0].isdigit() and _p[2].lstrip("-").isdigit() and _p[3].isdigit()):
+                return json.dumps({"error": "usage: scoring-flights-move:<event_id>|<game>|<customer_id>|<flight_no>"})
+            _res = db.move_event_flight_player(int(_p[0]), _p[1], int(_p[2]), int(_p[3]), by="mcp-claude")
+            if _res.get("ok"):
+                _audit("scoring-flights-move", f"event {_p[0]} {_p[1]} #{_p[2]} → flight {_p[3]}")
+                _res = {"ok": True, "moved": _res.get("moved"), "flight_modes": _res.get("flight_modes"),
+                        "games": [{"game": g["game"], "mode": g["selection"].get("mode"),
+                                   "custom_note": g["selection"].get("custom_note"),
+                                   "flights": [{"flight_no": f["flight_no"], "band": f["band"],
+                                                "label": f["label"], "players": f["players"]}
+                                               for f in g["selection"]["flights"]]}
                                   for g in _res.get("games") or []]}
             return json.dumps(_res, indent=2, default=str)
         if cmd == "scoring-flights-board":
