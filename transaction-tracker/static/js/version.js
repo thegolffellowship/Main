@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.478.3";
+window.TGF_VERSION = "2.478.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.478.4",
+    date: "2026-09-22",
+    changes: [
+      "FLIGHTS tab reacts instantly: a toggle, a drop, FREEZE / SETTLE / Unfreeze and opening the tab now redraw the board alone instead of rebuilding the whole event card (roster, pairings, games) and re-wiring every handler on it — the part of the wait that was ours, not the server's (Kerry 2026-09-22: 'it needs to react instantly, not sluggishly').",
+      "One page toast, not two: the FLIGHTS handlers use the toast the events page gained in v2.478.1.",
+    ],
+  },
   {
     version: "2.478.3",
     date: "2026-09-22",
