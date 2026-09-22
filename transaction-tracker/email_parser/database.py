@@ -30689,9 +30689,88 @@ def wd_item(
     return changed
 
 
-def transfer_item(item_id: int, target_event_name: str, note: str = "", db_path: str | Path | None = None) -> dict | None:
+def _transfer_selections(orig: dict, target_event: dict) -> dict:
+    """What the player is buying at the target: status and games from the
+    row being moved, holes locked to the target's format (the same rule
+    the credit-info route applies)."""
+    fmt = (target_event.get("format") or "")
+    if fmt == "18 Holes":
+        holes = "18"
+    elif fmt == "9 Holes":
+        holes = "9"
+    else:
+        holes = str(orig.get("holes") or "9")
+    return {"user_status": (orig.get("user_status") or "MEMBER"),
+            "holes": holes,
+            "side_games": (orig.get("side_games") or "NONE"),
+            "tee_choice": orig.get("tee_choice") or ""}
+
+
+def transfer_preview(item_id: int, target_event_name: str,
+                     db_path: str | Path | None = None) -> dict | None:
+    """The PRICE CHECK a transfer implies (Kerry 2026-09-22: "surely
+    there's a price difference either for or against, but I'm not seeing
+    any information about that in the CREDIT / TRANSFER modal").
+
+    What the player paid at the source (parent + active +PAY children) is
+    the credit; the target event's SUBTOTAL for the same status / games,
+    holes per the target's format, is what it costs — subtotal, not
+    total, because a difference settles by Venmo with no card fee (the
+    Apply Credit rule). amount_owed > 0: the player owes; < 0: excess."""
+    with _connect(db_path) as conn:
+        orig = conn.execute("SELECT * FROM items WHERE id = ?", (item_id,)).fetchone()
+        if not orig:
+            return None
+        orig = dict(orig)
+        target = conn.execute("SELECT * FROM events WHERE item_name = ? COLLATE NOCASE",
+                              (target_event_name,)).fetchone()
+        target = dict(target) if target else {}
+        kids = conn.execute(
+            """SELECT item_price FROM items WHERE parent_item_id = ?
+               AND COALESCE(transaction_status, 'active') = 'active'""",
+            (item_id,)).fetchall()
+        credit = round(_parse_dollar(orig.get("item_price"))
+                       + sum(_parse_dollar(k["item_price"]) for k in kids), 2)
+        venmo = None
+        if orig.get("customer_id"):
+            row = conn.execute("SELECT venmo_username FROM customers WHERE customer_id = ?",
+                               (orig["customer_id"],)).fetchone()
+            venmo = (row["venmo_username"] or None) if row else None
+    sel = _transfer_selections(orig, target)
+    breakdown = (_calc_event_pricing_breakdown(target, sel["user_status"], sel["holes"],
+                                               sel["side_games"]) if target else None)
+    subtotal = breakdown["subtotal"] if breakdown else None
+    owed = round(subtotal - credit, 2) if subtotal is not None else None
+    return {
+        "item_id": item_id, "customer": orig.get("customer"),
+        "customer_id": orig.get("customer_id"),
+        "source_event": orig.get("item_name"), "target_event": target_event_name,
+        "target_found": bool(target),
+        "credit": credit, "selections": sel,
+        "target_subtotal": subtotal,
+        "target_total": (breakdown["total"] if breakdown else None),
+        "amount_owed": owed,
+        "excess": (round(-owed, 2) if owed is not None and owed < -0.005 else 0.0),
+        "can_calculate": subtotal is not None,
+        "venmo_username": venmo,
+    }
+
+
+def transfer_item(item_id: int, target_event_name: str, note: str = "",
+                  db_path: str | Path | None = None,
+                  excess_action: str = "keep") -> dict | None:
     """
     Transfer an item to a different event.
+
+    THE PRICE CHECK (v2.476.9, Kerry 2026-09-22): the credit moving is
+    what was paid at the source; the target may cost more or less for the
+    same package. Excess (target cheaper) → the new row carries the
+    target's subtotal and the leftover is posted as an "Excess credit —
+    <source>" row in the player's credit pool (`excess_action` keep |
+    venmo — venmo additionally lets the caller arm a refund watch, the
+    Apply Credit pattern); shortfall (target dearer) → the new row's
+    credit_note reads `balance_due:<amount>` so the balance-due Venmo
+    email can be sent. The returned row carries `price_check`.
 
     Marks the original (and any active +PAY children) as 'transferred' and
     creates ONE new item at the target event for the combined credit. The
@@ -30782,6 +30861,55 @@ def transfer_item(item_id: int, target_event_name: str, note: str = "", db_path:
                 "UPDATE items SET transferred_to_id = ? WHERE id = ?",
                 (new_id, ch["id"]),
             )
+
+        # ── THE PRICE CHECK (Kerry 2026-09-22) ──
+        sel = _transfer_selections(orig, target_event)
+        breakdown = (_calc_event_pricing_breakdown(
+            target_event, sel["user_status"], sel["holes"], sel["side_games"])
+            if target_event else None)
+        subtotal = breakdown["subtotal"] if breakdown else None
+        price_check = {"credit": combined_amt, "target_subtotal": subtotal,
+                       "amount_owed": None, "excess": 0.0,
+                       "excess_credit_id": None, "excess_action": excess_action,
+                       "selections": sel}
+        if subtotal is not None:
+            owed = round(subtotal - combined_amt, 2)
+            price_check["amount_owed"] = owed
+            if owed < -0.005:
+                excess = round(-owed, 2)
+                price_check["excess"] = excess
+                # The registration is worth the target's price; the rest
+                # goes back to the player's credit pool as its own row —
+                # the Apply Credit "keep" shape, so the pool, the customer
+                # page and the refund watch all read it the same way.
+                conn.execute(
+                    "UPDATE items SET item_price = ?, credit_note = ? WHERE id = ?",
+                    (f"${subtotal:.2f} (credit)",
+                     f"{new_values['credit_note']} — ${excess:.2f} excess to credit",
+                     new_id))
+                if excess_action in ("keep", "venmo"):
+                    import time as _time
+                    uid = f"transfer-excess-{item_id}-{int(_time.time() * 1000)}"
+                    cur2 = conn.execute(
+                        """INSERT INTO items
+                           (email_uid, merchant, customer, customer_email, item_name,
+                            item_price, transaction_status, credit_note,
+                            order_date, chapter, customer_id)
+                           VALUES (?, 'Manual Entry', ?, ?, ?, ?, 'credited', ?,
+                                   date('now'), ?, ?)""",
+                        (uid, orig.get("customer"), orig.get("customer_email"),
+                         f"Excess credit — {orig.get('item_name') or ''}".strip(" —"),
+                         f"${excess:.2f}",
+                         f"Excess credit from transfer to {target_event_name} — "
+                         f"${excess:.2f} remaining",
+                         orig.get("chapter") or "", orig.get("customer_id")))
+                    price_check["excess_credit_id"] = cur2.lastrowid
+            elif owed > 0.005:
+                # Short: the row says so the way apply-credit does, so the
+                # balance-due Venmo email and the roster's balance chip work.
+                conn.execute("UPDATE items SET credit_note = ? WHERE id = ?",
+                             (f"balance_due:{owed:.2f}", new_id))
+        new_values["price_check"] = price_check
 
         # ── Unified Financial Model: create accounting entries ──
         try:

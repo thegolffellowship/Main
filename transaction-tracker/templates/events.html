@@ -1316,6 +1316,7 @@
                             <option value="">Select an event...</option>
                         </select>
                     </label>
+                    <div id="ev-credit-transfer-preview" style="display:none;margin-top:0.5rem;padding:0.5rem 0.7rem;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;"></div>
                 </div>
                 <div id="ev-credit-refund-fields" style="display:none;">
                     <label>Refund Method
@@ -2431,47 +2432,56 @@
         return last.toLowerCase() + "|" + (first[0] || "").toLowerCase();
     }
 
-    /** Roster→pairings sync (Kerry 2026-09-01): after a WD / credit /
-     *  refund / transfer, ask whether to also pull the player from the
-     *  event's SAVED pairings. Dry-run first so the popup only appears
-     *  when the player is actually seated; on yes the server re-seats the
-     *  group per TGF standards (intact cart pairs keep the front seats,
-     *  the leftover single slides down). */
-    async function offerPairingRemoval(eventName, playerName) {
-        if (!eventName || !playerName) return;
+    /** Roster→pairings sync — AUTOMATIC (Kerry 2026-09-22: "It should
+     *  all be automated if I remove a player from the ROSTER"). The
+     *  server drops a credited / refunded / WD'd / transferred player
+     *  from the saved sheet inside the money action itself and re-seats
+     *  the group per TGF standards before the event starts; the API
+     *  response says what it did (`pairings`). Here: say so, and redraw
+     *  the PAIRINGS panel if it is open — no yes/no popup, no second
+     *  removal call, so nothing can race the server's own drop (the
+     *  2026-09-22 Pat Youngs case: the popup came 15 s late and then
+     *  found him already gone). */
+    // The events page had no toast of its own — FLIGHTS handlers already
+    // called showToast (undefined here), which turned every error path
+    // into a ReferenceError. One small, unobtrusive toast, bottom-right.
+    if (typeof window.showToast !== "function") {
+        window.showToast = function (msg, kind) {
+            let host = document.getElementById("tgf-toast-host");
+            if (!host) {
+                host = document.createElement("div");
+                host.id = "tgf-toast-host";
+                host.style.cssText = "position:fixed;right:16px;bottom:16px;z-index:99999;display:flex;flex-direction:column;gap:6px;max-width:min(420px,90vw);";
+                document.body.appendChild(host);
+            }
+            const el = document.createElement("div");
+            const err = kind === "error";
+            el.style.cssText = `font-size:0.82rem;line-height:1.4;padding:0.55rem 0.8rem;border-radius:8px;box-shadow:0 4px 14px rgba(0,0,0,0.18);background:${err ? "#7f1d1d" : "#1B1B1B"};color:#fff;opacity:0;transition:opacity .2s;`;
+            el.textContent = String(msg || "");
+            host.appendChild(el);
+            requestAnimationFrame(() => { el.style.opacity = "1"; });
+            setTimeout(() => { el.style.opacity = "0"; setTimeout(() => el.remove(), 250); }, err ? 7000 : 4500);
+        };
+    }
+    function _toast(msg, kind) { window.showToast(msg, kind); }
+    async function offerPairingRemoval(eventName, playerName, info) {
+        if (!eventName) return;
         const ev = allEvents.find(e => (e.item_name || "") === eventName);
         if (!ev) return;
-        try {
-            const dryRes = await fetch(`/api/events/${ev.id}/pairings/remove-player`, {
-                method: "POST", headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ name: playerName, dry_run: true }),
-            });
-            if (!dryRes.ok) return;
-            const dry = await dryRes.json();
-            if (!dry.found) return;
-            const where = (dry.groups || [])
-                .map(g => g.slot_label || `Group ${g.group_num}`).join(", ");
-            const ok = confirm(
-                `${playerName} is still in the saved PAIRINGS for this event` +
-                (where ? ` (${where})` : "") +
-                `.\n\nRemove from pairings too? The group re-seats per TGF ` +
-                `standards (intact cart pairs keep the front seats; the ` +
-                `leftover single slides down).`);
-            if (!ok) return;
-            const res = await fetch(`/api/events/${ev.id}/pairings/remove-player`, {
-                method: "POST", headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ name: playerName }),
-            });
-            const r = await res.json();
-            if (!res.ok || r.error) {
-                alert("Pairings removal failed: " + (r.error || res.status));
-                return;
+        if (info && info.removed) {
+            const where = (info.groups || []).join(", ");
+            _toast(`${playerName} removed from the pairings${where ? ` (${where})` : ""}`
+                + (info.reseated ? " — group re-seated." : " — seat left open (event under way)."));
+        }
+        // The saved sheet may have changed: bust the cached state and,
+        // if the panel is showing, reload and redraw it now.
+        delete pairingsData[ev.id];
+        if (pairingsOpenForEvent[ev.id]) {
+            const container = detailContainerFor(ev.id);
+            if (container) {
+                try { await loadPairings(ev.id); } catch (e) { /* redraw anyway */ }
+                rerenderDetail(container, ev);
             }
-            // Bust the cached panel state so the next open reloads the
-            // re-seated sheet from the server.
-            delete pairingsData[ev.id];
-        } catch (err) {
-            console.error("offerPairingRemoval", err);
         }
     }
 
@@ -12282,6 +12292,13 @@
         // Populate event picker — all events grouped by upcoming/past
         const select = document.getElementById("ev-credit-target-event");
         select.innerHTML = buildEvPickerOptions(allEvents);
+        evTransferPreview = null;
+        const _pvBox = document.getElementById("ev-credit-transfer-preview");
+        if (_pvBox) { _pvBox.style.display = "none"; _pvBox.innerHTML = ""; }
+        if (!select._pvWired) {
+            select.addEventListener("change", loadTransferPreview);
+            select._pvWired = true;
+        }
 
         document.getElementById("ev-credit-overlay").style.display = "flex";
     }
@@ -12479,12 +12496,14 @@
         if (!evCreditItemId) return;
         const note = document.getElementById("ev-credit-note").value.trim();
         try {
+            let _apiData = null;          // the action's answer: pairings sync, price check
             if (evCreditType === "credit") {
                 const res = await fetch(`/api/items/${evCreditItemId}/credit`, {
                     method: "POST", headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ note }),
                 });
-                if (!res.ok) throw new Error((await res.json()).error || "Credit failed");
+                _apiData = await res.json().catch(() => ({}));
+                if (!res.ok) throw new Error(_apiData.error || "Credit failed");
             } else if (evCreditType === "refund") {
                 const method = document.getElementById("ev-credit-refund-method").value;
                 if (!method) { alert("Please select a refund method."); return; }
@@ -12492,7 +12511,8 @@
                     method: "POST", headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ method, note }),
                 });
-                if (!res.ok) throw new Error((await res.json()).error || "Refund failed");
+                _apiData = await res.json().catch(() => ({}));
+                if (!res.ok) throw new Error(_apiData.error || "Refund failed");
             } else if (evCreditType === "partial") {
                 const method = document.getElementById("ev-credit-partial-method").value;
                 if (!method) { alert("Please select a refund method."); return; }
@@ -12559,11 +12579,26 @@
             } else {
                 const target = document.getElementById("ev-credit-target-event").value;
                 if (!target) { alert("Please select a target event."); return; }
+                // THE PRICE CHECK (Kerry 2026-09-22): the excess choice
+                // rides with the transfer; "Venmo back" opens Venmo in
+                // this click (the Apply Credit pattern) and arms the
+                // refund watch server-side.
+                const _pv = evTransferPreview || {};
+                const _exSel = document.querySelector('input[name="ev-transfer-excess"]:checked');
+                const excess_action = (_pv.excess > 0 && _exSel && _exSel.value === "venmo") ? "venmo" : "keep";
+                let excess_venmo = null;
+                if (excess_action === "venmo" && _pv.venmo_username) {
+                    const handle = String(_pv.venmo_username).replace(/^@/, "");
+                    const memo = `${_pv.customer || ""} - Excess credit from ${_pv.source_event || ""}`.trim();
+                    excess_venmo = { handle, amount: Number(_pv.excess).toFixed(2), memo };
+                    window.open(venmoPayHref(handle, _pv.excess, memo), "_blank");
+                }
                 const res = await fetch(`/api/items/${evCreditItemId}/transfer`, {
                     method: "POST", headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ target_event: target, note }),
+                    body: JSON.stringify({ target_event: target, note, excess_action, excess_venmo }),
                 });
-                if (!res.ok) throw new Error((await res.json()).error || "Transfer failed");
+                _apiData = await res.json().catch(() => ({}));
+                if (!res.ok) throw new Error(_apiData.error || "Transfer failed");
             }
             const _crItem = allItems.find(r => r.id === evCreditItemId);
             const _crType = evCreditType;
@@ -12571,17 +12606,89 @@
                 ev: (_crItem && _crItem.item_name) || "",
                 name: (_crItem && _crItem.customer) || "",
             };
+            const _pairInfo = _apiData && _apiData.pairings;
+            const _newItem = _apiData && _apiData.new_item;
             closeEvCreditModal();
             await fetchItems();
             await fetchEvents();
-            // Roster→pairings sync (Kerry 2026-09-01): a full credit,
-            // refund, or transfer takes the player off this event — offer
-            // to pull them from saved pairings too. A PARTIAL refund is a
-            // downgrade (they still play), so no offer there.
+            // Roster→pairings sync: the server already dropped a fully
+            // credited / refunded / transferred player from the saved
+            // sheet — report it and redraw. A PARTIAL refund is a
+            // downgrade (they still play), so nothing to sync.
             if (_crType !== "partial") {
-                await offerPairingRemoval(_pairCtx.ev, _pairCtx.name);
+                await offerPairingRemoval(_pairCtx.ev, _pairCtx.name, _pairInfo);
+            }
+            // A SHORT transfer: the balance-due Venmo email, prepared,
+            // for Kerry to send (the same modal Apply Credit uses).
+            const _pc = _newItem && _newItem.price_check;
+            if (_crType === "transfer" && _pc && Number(_pc.amount_owed) > 0.005 && _newItem.id) {
+                _toast(`${_pairCtx.name} owes $${Number(_pc.amount_owed).toFixed(2)} at the new event — balance-due email ready to send.`);
+                await openVenmoEmailModal(_newItem.id);
+            } else if (_crType === "transfer" && _pc && Number(_pc.excess) > 0.005) {
+                _toast(`$${Number(_pc.excess).toFixed(2)} excess ${_pc.excess_action === "venmo" ? "Venmo'd back — refund watch armed" : "kept as credit on the player's account"}.`);
             }
         } catch (err) { alert(err.message); }
+    }
+
+    // ── THE PRICE CHECK in the transfer modal (Kerry 2026-09-22) ──
+    // "…the same as when we apply a credit directly in an event, where it
+    // identifies if there's a difference in the cost of the selected event
+    // and gives options to Venmo them the difference, apply the credit to
+    // their account or if it's short $ then send them an email with a
+    // prepared Venmo link for the difference."
+    let evTransferPreview = null;
+    let _evTransferPreviewSeq = 0;
+    async function loadTransferPreview() {
+        const box = document.getElementById("ev-credit-transfer-preview");
+        const target = (document.getElementById("ev-credit-target-event") || {}).value || "";
+        evTransferPreview = null;
+        if (!box) return;
+        if (!evCreditItemId || !target) { box.style.display = "none"; box.innerHTML = ""; return; }
+        const seq = ++_evTransferPreviewSeq;
+        box.style.display = "";
+        box.innerHTML = `<div style="font-size:0.8rem;color:var(--text-muted);">Checking the price at ${escapeHtml(target)}&hellip;</div>`;
+        try {
+            const res = await fetch(`/api/items/${evCreditItemId}/transfer-preview?target=${encodeURIComponent(target)}`);
+            const pv = await res.json().catch(() => ({}));
+            if (seq !== _evTransferPreviewSeq) return;            // a newer pick won
+            if (!res.ok || pv.error) { box.innerHTML = `<div style="font-size:0.8rem;color:#b91c1c;">${escapeHtml(pv.error || "Could not price the transfer")}</div>`; return; }
+            evTransferPreview = pv;
+            box.innerHTML = renderTransferPreview(pv);
+            const _syncLabel = () => {
+                const btn = document.getElementById("ev-credit-submit");
+                if (!btn || evCreditType !== "transfer") return;
+                const sel = document.querySelector('input[name="ev-transfer-excess"]:checked');
+                btn.textContent = (pv.excess > 0 && sel && sel.value === "venmo") ? "Transfer & Refund Excess"
+                    : (pv.amount_owed > 0.005 ? "Transfer & Prepare Balance Email" : "Transfer");
+            };
+            box.querySelectorAll('input[name="ev-transfer-excess"]').forEach(rb => rb.addEventListener("change", _syncLabel));
+            _syncLabel();
+        } catch (err) {
+            if (seq === _evTransferPreviewSeq) box.innerHTML = `<div style="font-size:0.8rem;color:#b91c1c;">Could not price the transfer: ${escapeHtml(err.message || String(err))}</div>`;
+        }
+    }
+    function renderTransferPreview(pv) {
+        const fmt = v => `$${Number(v || 0).toFixed(2)}`;
+        const sel = pv.selections || {};
+        const pkg = `${escapeHtml(sel.user_status || "MEMBER")} &middot; ${escapeHtml(sel.holes || "9")} holes &middot; ${escapeHtml(sel.side_games || "NONE")}`;
+        let html = `<div style="font-size:0.82rem;line-height:1.5;">
+            <div>Paid at ${escapeHtml(pv.source_event || "")}: <strong>${fmt(pv.credit)}</strong></div>`;
+        if (!pv.can_calculate) {
+            return html + `<div style="color:#92400e;">${escapeHtml(pv.target_event || "")} has no pricing on file — the credit moves as is; settle any difference by hand.</div></div>`;
+        }
+        html += `<div>${escapeHtml(pv.target_event || "")} costs <strong>${fmt(pv.target_subtotal)}</strong> for the same package (${pkg}; card fee not charged on a difference).</div>`;
+        if (pv.amount_owed > 0.005) {
+            html += `<div style="margin-top:0.35rem;color:#d97706;font-weight:600;">Player owes ${fmt(pv.amount_owed)}</div>
+                <div style="color:var(--text-muted);">After the transfer the balance-due Venmo email opens, prepared, for you to send.</div>`;
+        } else if (pv.excess > 0.005) {
+            const vH = pv.venmo_username ? String(pv.venmo_username).replace(/^@/, "") : "";
+            html += `<div style="margin-top:0.35rem;color:#16a34a;font-weight:600;">Excess credit ${fmt(pv.excess)}</div>
+                <label style="display:block;"><input type="radio" name="ev-transfer-excess" value="keep" checked style="margin-right:0.3rem;">Keep as credit on the player's account</label>
+                <label style="display:block;"><input type="radio" name="ev-transfer-excess" value="venmo" ${vH ? "" : "disabled"} style="margin-right:0.3rem;">Venmo back ${fmt(pv.excess)}${vH ? ` to @${escapeHtml(vH)} — Venmo opens on Transfer` : " — no Venmo handle on file"}</label>`;
+        } else {
+            html += `<div style="margin-top:0.35rem;color:#16a34a;">Same price — nothing to settle.</div>`;
+        }
+        return html + `</div>`;
     }
 
     async function reverseEvCredit(itemId) {
@@ -13662,7 +13769,8 @@
                     credit_amount: creditAmount,
                 }),
             });
-            if (!res.ok) throw new Error((await res.json()).error || "WD failed");
+            const _wdData = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(_wdData.error || "WD failed");
             const _wdItem = allItems.find(r => r.id === wdItemId);
             const _pairCtx = {
                 ev: wdEventName || (_wdItem && _wdItem.item_name) || "",
@@ -13671,9 +13779,9 @@
             closeWdModal();
             await fetchItems();
             await fetchEvents();
-            // Roster→pairings sync (Kerry 2026-09-01): if the WD'd player
-            // is still seated in saved pairings, offer the yes/no removal.
-            await offerPairingRemoval(_pairCtx.ev, _pairCtx.name);
+            // Roster→pairings sync: the server dropped the WD'd player
+            // from the saved sheet — report it and redraw.
+            await offerPairingRemoval(_pairCtx.ev, _pairCtx.name, _wdData.pairings);
         } catch (err) {
             alert(err.message);
             btn.disabled = false;
