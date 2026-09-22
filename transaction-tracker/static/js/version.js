@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.482.1";
+window.TGF_VERSION = "2.482.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.482.2",
+    date: "2026-09-22",
+    changes: [
+      "A PAID one-off row is plain WHITE (Kerry 2026-09-22: ‘Why do the paid rows show blue?’). Every cup row is a hand-added manual-* row, so once the amber came off, the rows fell through to the app's blue manual-entry tint. Paid now short-circuits every tint, desktop and mobile; unpaid placeholders keep the amber + Remind.",
+    ],
+  },
   {
     version: "2.482.1",
     date: "2026-09-22",

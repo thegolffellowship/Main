@@ -3383,7 +3383,8 @@
             html += `
             <div class="mobile-card${statusClass}" style="${(() => {
                 const u = (_cleanStatus(r.user_status) || '').toUpperCase();
-                if ((isRsvpOnly || isGgRsvp) && !_ooPaidM) return 'background:#fef3c7;font-style:italic;';
+                if (_ooPaidM) return ''; // PAID one-off row = plain white
+                if (isRsvpOnly || isGgRsvp) return 'background:#fef3c7;font-style:italic;';
                 if (isComp) return 'background:#dcfce7;';
                 if (u === 'GUEST') return 'background:#fedcba;';
                 if (u === '1ST TIMER') return 'background:#fdba74;';
@@ -8967,7 +8968,12 @@
                 const _ustat = (_cleanStatus(r.user_status) || '').toUpperCase();
                 const isGuestRow = _ustat === 'GUEST';
                 const isFirstTimerRow = _ustat === '1ST TIMER';
-                const rowBg = ((isRsvpOnly || isGgRsvp) && !ooPaidRow) ? 'background-color:#fef3c7;font-style:italic;'
+                // A PAID one-off row is plain white (Kerry 2026-09-22:
+                // "Why do the paid rows show blue?") — the cup's rows
+                // are all manual-* placeholders, so without this they
+                // fell through to the manual-entry blue tint.
+                const rowBg = ooPaidRow ? ''
+                    : (isRsvpOnly || isGgRsvp) ? 'background-color:#fef3c7;font-style:italic;'
                     : isCompRow ? 'background-color:#dcfce7;'
                     : isGuestRow ? 'background-color:#fedcba;'
                     : isFirstTimerRow ? 'background-color:#fdba74;'
