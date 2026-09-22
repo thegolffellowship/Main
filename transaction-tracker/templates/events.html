@@ -3225,7 +3225,12 @@
             const isRsvpOnly = txStatus === "rsvp_only";
             const isGgRsvp = txStatus === "gg_rsvp";
             const isSynthetic = String(r.id).startsWith("gg-rsvp");
-            const statusClass = (isRsvpOnly || isGgRsvp) ? ' row-rsvp-only'
+            // One-off events: a PAID player reads like any other paid
+            // registration (Kerry 2026-09-22) — white card, no Remind.
+            const _ooFpM = oneoffPlayerFin(ev.id, r);
+            const _ooPaidM = !!(_ooFpM && _ooFpM.expected != null
+                && _ooFpM.balance <= 0.005);
+            const statusClass = (isRsvpOnly || isGgRsvp) ? (_ooPaidM ? '' : ' row-rsvp-only')
                 : txStatus !== "active" ? ` row-${txStatus}`
                 : (r.transferred_from_id ? ' row-from-transfer' : '');
             // True manual rows (where the user added the player) — gates the
@@ -3236,12 +3241,9 @@
             const isManual = isManualEmailUid || !!r.transferred_from_id;
             const isComp = (r.email_uid || "").startsWith("manual-comp");
             let tag = '';
-            // One-off events: PAID players show a green Paid chip
-            // instead of Remind (Kerry 2026-09-22) — mobile mirror.
-            const _ooFpM = oneoffPlayerFin(ev.id, r);
-            const _ooPaidM = !!(_ooFpM && _ooFpM.expected != null
-                && _ooFpM.balance <= 0.005);
-            if (_ooPaidM && (isRsvpOnly || isGgRsvp)) tag = `<span class="oo-paid-tag" style="display:inline-block; margin-left:6px; padding:1px 7px; border-radius:9px; font-size:0.62rem; font-weight:800; background:var(--buyin-green, #bbf7d0); color:var(--buyin-green-text, #15803D);" title="Paid in full — no reminder needed">Paid &#10003;</span>`;
+            // One-off events: PAID players get no Remind and no badge
+            // (Kerry 2026-09-22) — mobile mirror of the white row.
+            if (_ooPaidM && (isRsvpOnly || isGgRsvp)) tag = '';
             else if (isRsvpOnly) tag = `<span class="rsvp-only-tag" data-item-id="${r.id}" data-customer-email="${escapeHtml(r.customer_email || '')}" title="Click for options">Remind</span>`;
             else if (isGgRsvp && r.has_player_card === false) tag = `<span class="rsvp-only-tag rsvp-tag-no-card" data-item-id="${r.id}" data-customer-email="${escapeHtml(r.customer_email || '')}" title="No player card found — click for options">Remind</span>`;
             else if (isGgRsvp) tag = `<span class="rsvp-only-tag" data-item-id="${r.id}" data-customer-email="${escapeHtml(r.customer_email || '')}" title="Click for options">Remind</span>`;
@@ -3381,7 +3383,7 @@
             html += `
             <div class="mobile-card${statusClass}" style="${(() => {
                 const u = (_cleanStatus(r.user_status) || '').toUpperCase();
-                if (isRsvpOnly || isGgRsvp) return 'background:#fef3c7;font-style:italic;';
+                if ((isRsvpOnly || isGgRsvp) && !_ooPaidM) return 'background:#fef3c7;font-style:italic;';
                 if (isComp) return 'background:#dcfce7;';
                 if (u === 'GUEST') return 'background:#fedcba;';
                 if (u === '1ST TIMER') return 'background:#fdba74;';
@@ -8945,9 +8947,16 @@
             // anything to reveal, not just notes/partner/fellowship.
             const hasExtraInfo = !!(r.partner_request || r.fellowship || r.notes
                 || r.customer_email || r.customer_phone);
+            // One-off events: a PAID player reads like any other paid
+            // registration (Kerry 2026-09-22: "It just becomes white
+            // and the Remind is removed") — no amber tint, no italic,
+            // no Remind tag, no badge.
+            const _ooRowFp = oneoffPlayerFin(ev.id, r);
+            const ooPaidRow = !!(_ooRowFp && _ooRowFp.expected != null
+                && _ooRowFp.balance <= 0.005);
             let rowClasses = [];
-            if (isRsvpOnly || isGgRsvp) rowClasses.push("row-rsvp-only");
-            else if (txStatus !== "active") rowClasses.push(`row-${txStatus}`);
+            if ((isRsvpOnly || isGgRsvp) && !ooPaidRow) rowClasses.push("row-rsvp-only");
+            else if (txStatus !== "active" && !((isRsvpOnly || isGgRsvp) && ooPaidRow)) rowClasses.push(`row-${txStatus}`);
             else if (r.transferred_from_id) rowClasses.push("row-from-transfer");
             if (hasExtraInfo) rowClasses.push("player-row-clickable");
             const rowClass = rowClasses.length ? ` class="${rowClasses.join(' ')}"` : '';
@@ -8958,7 +8967,7 @@
                 const _ustat = (_cleanStatus(r.user_status) || '').toUpperCase();
                 const isGuestRow = _ustat === 'GUEST';
                 const isFirstTimerRow = _ustat === '1ST TIMER';
-                const rowBg = (isRsvpOnly || isGgRsvp) ? 'background-color:#fef3c7;font-style:italic;'
+                const rowBg = ((isRsvpOnly || isGgRsvp) && !ooPaidRow) ? 'background-color:#fef3c7;font-style:italic;'
                     : isCompRow ? 'background-color:#dcfce7;'
                     : isGuestRow ? 'background-color:#fedcba;'
                     : isFirstTimerRow ? 'background-color:#fdba74;'
@@ -8971,12 +8980,10 @@
                 } else if (c.key === "customer") {
                     let tag = "";
                     // One-off events: nobody who is PAID gets a Remind
-                    // badge (Kerry 2026-09-22) — the chip flips to a
-                    // green Paid, no click, no reminder.
-                    const _ooFp = oneoffPlayerFin(ev.id, r);
-                    const _ooPaid = !!(_ooFp && _ooFp.expected != null
-                        && _ooFp.balance <= 0.005);
-                    if (_ooPaid && (isRsvpOnly || isGgRsvp)) tag = `<span class="oo-paid-tag" style="display:inline-block; margin-left:6px; padding:1px 7px; border-radius:9px; font-size:0.62rem; font-weight:800; background:var(--buyin-green, #bbf7d0); color:var(--buyin-green-text, #15803D);" title="Paid in full — no reminder needed">Paid &#10003;</span>`;
+                    // badge (Kerry 2026-09-22: "It just becomes white
+                    // and the Remind is removed") — no tag at all, the
+                    // row reads like any other paid registration.
+                    if (ooPaidRow && (isRsvpOnly || isGgRsvp)) tag = "";
                     else if (isRsvpOnly) tag = `<span class="rsvp-only-tag" data-item-id="${r.id}" data-customer-email="${escapeHtml(r.customer_email || '')}" title="Click for options">Remind</span>`;
                     else if (isGgRsvp && r.has_player_card === false) tag = `<span class="rsvp-only-tag rsvp-tag-no-card" data-item-id="${r.id}" data-customer-email="${escapeHtml(r.customer_email || '')}" title="No player card found — click for options">Remind</span>`;
                     else if (isGgRsvp) tag = `<span class="rsvp-only-tag" data-item-id="${r.id}" data-customer-email="${escapeHtml(r.customer_email || '')}" title="Click for options">Remind</span>`;

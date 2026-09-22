@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.482.0";
+window.TGF_VERSION = "2.482.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.482.1",
+    date: "2026-09-22",
+    changes: [
+      "Refined per Kerry (‘It just becomes white and the Remind is removed. Doesn't need a badge’): a PAID player's row on a one-off event now renders like any other paid registration — white, no italic, no Remind, no chip — desktop and mobile. The v2.482.0 green Paid chip is gone.",
+    ],
+  },
   {
     version: "2.482.0",
     date: "2026-09-22",

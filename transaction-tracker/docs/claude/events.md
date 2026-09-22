@@ -2141,11 +2141,13 @@ Unconfigured events keep the standard columns untouched.
   path. The practice-round event's own oneoff default is 0 — the $110
   lives in the CUP's expected via the friday addon, so the 3330 roster
   is a who's-playing list, not a second bill.
-- **Paid players lose the Remind badge** (Kerry 2026-09-22): on a
-  one-off event a player whose balance is ≤ 0 shows a green `Paid ✓`
-  chip (buyin-green tokens, no click) instead of the Remind tag —
-  desktop and mobile. The auto reminder job was already excluded via
-  `payment_reminder_exclude_events`.
+- **Paid players lose the Remind badge AND the amber tint** (Kerry
+  2026-09-22, refined: "It just becomes white and the Remind is
+  removed. Doesn't need a badge"): on a one-off event a placeholder
+  row whose balance is ≤ 0 renders like any other paid registration —
+  white row, no italic, no Remind tag, no chip — desktop and mobile.
+  Whoever still owes keeps the amber row + Remind. The auto reminder
+  job was already excluded via `payment_reminder_exclude_events`.
 - **LODGING click-to-select** (Kerry 2026-09-22 third round: "'Own
   plans' and anything remaining in our AirBNB...if there is"): the
   cell is a `<select>` of — / Own plans / every unit with a spot left
