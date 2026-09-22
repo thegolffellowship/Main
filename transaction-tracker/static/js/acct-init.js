@@ -335,4 +335,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     const hashTab = tabFromHash();
     if (hashTab && hashTab !== ACCT.activeTab) switchTab(hashTab);
     else refreshActiveTab();
+
+    // ?exp=<id> deep link (Kerry 2026-09-22: clicking a row on the
+    // Dashboard's review card "should highlight and open it prompting
+    // me to do what I need to do") — open that expense's review modal
+    // straight away; openExpenseReview fetches the row by id, so it
+    // needs no table state.
+    try {
+        const _expParam = new URLSearchParams(location.search).get('exp');
+        if (_expParam && /^\d+$/.test(_expParam)) {
+            openExpenseReview(parseInt(_expParam, 10));
+        }
+    } catch (e) { /* bad param — the page just loads normally */ }
 });

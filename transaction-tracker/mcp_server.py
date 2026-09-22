@@ -3294,16 +3294,43 @@ def _scoring_dispatch(url: str, extract: str):
                 _conn.execute(
                     "UPDATE expense_transactions SET customer_id = ? "
                     "WHERE id = ?", (_cid, _xid))
+                # Capture the payment's display name as a NAME alias
+                # when it differs from the canonical (Kerry 2026-09-22:
+                # "I definitely would have expected Charles to already
+                # be an alias") — the same person never misses the
+                # auto-match twice. Idempotent via INSERT OR IGNORE.
+                _alias_added = None
+                if _cid:
+                    _c = _conn.execute(
+                        "SELECT first_name, last_name FROM customers "
+                        "WHERE customer_id = ?", (_cid,)).fetchone()
+                    _canon = " ".join(x for x in (
+                        (_c["first_name"] if _c else None),
+                        (_c["last_name"] if _c else None)) if x)
+                    _mname = (_row["merchant"] or "").strip()
+                    if (_c and _mname
+                            and _mname.lower() != _canon.lower()):
+                        _conn.execute(
+                            "INSERT OR IGNORE INTO customer_aliases "
+                            "(customer_name, alias_value, alias_type, "
+                            " customer_id, note) VALUES (?, ?, 'name', "
+                            " ?, ?)",
+                            (_canon, _mname, _cid,
+                             f"payment display name (expense {_xid})"))
+                        _alias_added = _mname
                 _conn.commit()
             db.log_agent_action(
                 "mcp-claude", "scoring-expense-customer",
                 f"expense {_xid} ({_row['merchant']} "
-                f"${_row['amount']}): customer {_old} -> {_cid}")
+                f"${_row['amount']}): customer {_old} -> {_cid}"
+                + (f"; alias captured {_alias_added!r}"
+                   if _alias_added else ""))
             return json.dumps({"expense_id": _xid,
                                "merchant": _row["merchant"],
                                "amount": _row["amount"],
                                "old_customer_id": _old,
                                "new_customer_id": _cid,
+                               "alias_captured": _alias_added,
                                "saved": True})
         if cmd == "scoring-expense-promote":
             # "<expense_id>" — promote an expense_transactions row into

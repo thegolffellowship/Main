@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.484.3";
+window.TGF_VERSION = "2.484.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.484.4",
+    date: "2026-09-22",
+    changes: [
+      "The Dashboard review card's rows now open the transaction (Kerry 2026-09-22: ‘It should highlight and open it prompting me to do what I need to do’): each row links to /accounting?exp=<id>, and the Accounting page opens that expense's review modal on arrival — date, amount, event, category, customer pickers ready.",
+      "Fixing a payment's customer now captures the payment's display name as a NAME alias on the profile when it differs (Kerry: ‘I definitely would have expected Charles to already be an alias’) — Charles Fehlis → Chuck Fehlis is on file, and the next mismatched display name self-heals after its first correction.",
+    ],
+  },
   {
     version: "2.484.3",
     date: "2026-09-22",

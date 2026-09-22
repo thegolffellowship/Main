@@ -290,7 +290,9 @@ def _expense_queue(conn, today):
                         f"{(r['source_type'] or '').replace('_', ' ')}"
                         f" — {(r['merchant'] or '?')[:40]} · no event"),
               "meta": _when(_days(r["transaction_date"], today)),
-              "href": "/accounting"} for r in incoming[:8]]
+              # ?exp= opens that row's review modal on arrival (Kerry
+              # 2026-09-22: "It should highlight and open it").
+              "href": f"/accounting?exp={r['id']}"} for r in incoming[:8]]
     detail = "nothing books until they are"
     if incoming:
         detail += f" · {len(incoming)} incoming with no event"
