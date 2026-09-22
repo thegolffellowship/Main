@@ -89,8 +89,24 @@ check("after a clean background save the sheet rerenders (printables appear) unl
       /if \(document\.querySelector\('\.pair-dragging'\)\) paintPairingsSaveStamp\(ev, state\);\s*else rerenderDetail\(container, ev\);/.test(html));
 
 console.log("\n== speed: instant feedback, one round trip, a toast that exists (Kerry 2026-09-22) ==");
-check("the events page defines its own showToast when none is loaded (acct-dashboard.js is not on this page) — the FREEZE handler no longer dies on it",
-      /if \(typeof window\.showToast !== "function"\) \{\s*window\.showToast = function \(msg, type\)/.test(html));
+check("the events page defines a showToast of its own (acct-dashboard.js is not on this page) — the FREEZE handler no longer dies on it; exactly one definition",
+      (html.match(/window\.showToast = function/g) || []).length === 1);
+console.log("\n== partial DOM update: the board alone is redrawn (Kerry 2026-09-22: 'react instantly, not sluggishly') ==");
+check("the panel root is addressable per event", /<div class="games-panel" data-fb-panel="\$\{ev\.id\}"/.test(html));
+check("rerenderFlightsPanel builds the new panel off-screen and swaps it in one step, re-wiring only its own handlers",
+      /function rerenderFlightsPanel\(container, ev\) \{/.test(html) && /old\.replaceWith\(fresh\);\s*attachFlightsHandlers\(fresh\.parentElement \|\| container, ev\);/.test(html));
+check("...and falls back to the full card redraw only when the panel is not on screen",
+      /if \(!old \|\| !flightsOpenForEvent\[ev\.id\]\) \{ rerenderDetail\(container, ev\); return false; \}/.test(html));
+{
+    const a = html.indexOf("    function attachFlightsHandlers(container, ev) {");
+    const b2 = html.indexOf("    function renderFlightsPanel(ev) {");
+    const region = html.slice(a, b2);
+    check("no FLIGHTS action (toggle, drop, FREEZE/SETTLE/Unfreeze) redraws the whole event card any more",
+          !/rerenderDetail\(container, ev\)/.test(region) && (region.match(/rerenderFlightsPanel\(container, ev\)/g) || []).length >= 3,
+          String((region.match(/rerenderDetail\(container, ev\)/g) || []).length));
+}
+check("opening the FLIGHTS tab swaps the Loading… placeholder for the board without redrawing the card",
+      /await loadFlightsBoard\(ev\.id\);\s*rerenderFlightsPanel\(container, ev\);/.test(html) && /if \(c && ev2\) rerenderFlightsPanel\(c, ev2\);/.test(html));
 check("FREEZE / SETTLE / Unfreeze show a pending label the instant they are clicked and use the response as the board (no second GET)",
       /b\.textContent = act === "freeze" \? "FREEZING…" : act === "settle" \? "SETTLING…" : "Unfreezing…";/.test(html)
       && /if \(Array\.isArray\(data\.games\)\) flightsBoards\[ev\.id\] = data;/.test(html)
@@ -99,7 +115,7 @@ check("...and the success toast says FROZEN with the timestamp", /Flights FROZEN
 check("the EVEN | HCP click lights the segment and says it is re-cutting before the server answers",
       /b\.textContent = \(mode === "equal_size" \? "EVEN" : "HCP"\) \+ "…";/.test(html));
 check("the drop is OPTIMISTIC: the card moves on screen at the drop, the save follows, the server's board replaces the guess",
-      /fbApplyMoveLocally\(flightsBoards\[ev\.id\], src\.game, src\.cid, src\.flight, to\);\s*rerenderDetail\(container, ev\);\s*const data = await fbPost\("move"/.test(html));
+      /fbApplyMoveLocally\(flightsBoards\[ev\.id\], src\.game, src\.cid, src\.flight, to\);\s*rerenderFlightsPanel\(container, ev\);\s*const data = await fbPost\("move"/.test(html));
 check("...while it saves, the LIVE badge reads saving…", /board\.saving \? " · saving…"/.test(html));
 {
     const a = html.indexOf("    function fbApplyMoveLocally(board, game, cid, fromNo, toNo) {");

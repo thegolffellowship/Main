@@ -2263,6 +2263,19 @@ Kerry 2026-09-21 (mailbox #582): "need to see the divisions/flights
 breakdown so probably will need a tab for it under each event." The
 FLIGHTING lane (spun off "TGF Tracker Improvements 2"; plan #584).
 
+- **Partial DOM update on the FLIGHTS tab (v2.478.4, Kerry 2026-09-22:
+  "When I click one of the toggles, it needs to react instantly, not
+  sluggishly"):** every FLIGHTS action used to call `rerenderDetail`,
+  which rebuilds the WHOLE event card (roster table, pairings, games,
+  badges) and re-wires every handler on it — most of the wait after the
+  server answered. `rerenderFlightsPanel(container, ev)` now builds the
+  new board off-screen, swaps it for the old one (`[data-fb-panel]`) in a
+  single step and re-wires only `attachFlightsHandlers`; it falls back to
+  the full redraw when the panel is not on screen. The toggle, the drop,
+  FREEZE / SETTLE / Unfreeze and the tab open all go through it. The
+  duplicate page toast is gone (the Handicap Surfaces lane's v2.478.1
+  definition stands). Guard: `test_flights_custom_ui.js`.
+
 - **The even split's odd-field and tie rule; page speed (v2.478.2, Kerry
   2026-09-22):** "If an odd number of players the lower number should go
   to the Flight 1, and the higher to the Flight 2. That way the lower

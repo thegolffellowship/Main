@@ -176,8 +176,13 @@ carries the resulting selection.
    the response is the board.
 4. UX standards applied: optimistic updates, instant pending states, one
    round trip per action, debounced background saves, a visible toast.
-   Still to do for real speed: partial DOM updates instead of the full
-   detail rerender (`rerenderDetail` rebuilds the whole event card).
+   v2.478.4 then did the partial DOM update for the FLIGHTS panel
+   (`rerenderFlightsPanel`: the board alone is swapped in; the other tabs
+   still rebuild the whole card on every change — the same treatment is
+   the next speed step for PAIRINGS if Kerry wants it).
+5. Brackenridge 3309 was unfrozen from the bridge on Kerry's instruction
+   (snapshot 2 voided) — the freeze had landed on the server while the
+   page showed nothing.
 
 ## 7. Open / carried forward
 

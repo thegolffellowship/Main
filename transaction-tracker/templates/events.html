@@ -4112,7 +4112,7 @@
                         await loadFlightsBoard(mem.id);
                         const c = detailContainerFor(mem.id);
                         const ev2 = allEvents.find(e => e.id === mem.id);
-                        if (c && ev2) rerenderDetail(c, ev2);
+                        if (c && ev2) rerenderFlightsPanel(c, ev2);
                     }
                 });
                 return;
@@ -5526,28 +5526,26 @@
     function canSeeFlights() {
         return currentRole === 'admin' || currentRole === 'manager';
     }
-    // The events page never loaded acct-dashboard.js, so `showToast` was
-    // undefined here: every call threw, and the FREEZE handler died before
-    // it reloaded the board (Kerry 2026-09-22: "How do I know if it's
-    // frozen once I click FREEZE? Nothing updates."). A small toast of its
-    // own, defined only if the page has none.
-    if (typeof window.showToast !== "function") {
-        window.showToast = function (msg, type) {
-            let host = document.getElementById("tgf-toast-host");
-            if (!host) {
-                host = document.createElement("div");
-                host.id = "tgf-toast-host";
-                host.style.cssText = "position:fixed;left:50%;bottom:1.25rem;transform:translateX(-50%);z-index:9999;display:flex;flex-direction:column;gap:0.4rem;align-items:center;pointer-events:none;";
-                document.body.appendChild(host);
-            }
-            const el = document.createElement("div");
-            const bg = type === "error" ? "#b91c1c" : type === "success" ? "#065f46" : "#1B1B1B";
-            el.style.cssText = `background:${bg};color:#fff;font-size:0.8rem;font-weight:600;padding:0.45rem 0.9rem;border-radius:99px;box-shadow:0 4px 14px rgba(0,0,0,0.25);max-width:min(90vw,34rem);text-align:center;opacity:0;transition:opacity 0.15s;pointer-events:auto;`;
-            el.textContent = String(msg == null ? "" : msg);
-            host.appendChild(el);
-            requestAnimationFrame(() => { el.style.opacity = "1"; });
-            setTimeout(() => { el.style.opacity = "0"; setTimeout(() => el.remove(), 200); }, type === "error" ? 6000 : 2800);
-        };
+    // PARTIAL DOM UPDATE (Kerry 2026-09-22: "When I click one of the
+    // toggles, it needs to react instantly, not sluggishly"). Every
+    // FLIGHTS action used to call rerenderDetail, which rebuilds the WHOLE
+    // event card (roster table, pairings, games, badges) and re-wires every
+    // handler on it — most of the wait after the server answered. Now the
+    // board alone is re-drawn: the new panel is built off-screen, swapped
+    // in for the old one in a single step, and only its own handlers are
+    // re-wired. Falls back to the full redraw when the panel is not on
+    // screen (a different tab is open).
+    function rerenderFlightsPanel(container, ev) {
+        const sel = `[data-fb-panel="${ev.id}"]`;
+        const old = (container && container.querySelector && container.querySelector(sel)) || document.querySelector(sel);
+        if (!old || !flightsOpenForEvent[ev.id]) { rerenderDetail(container, ev); return false; }
+        const tmp = document.createElement("div");
+        tmp.innerHTML = renderFlightsPanel(ev);
+        const fresh = tmp.firstElementChild;
+        if (!fresh) { rerenderDetail(container, ev); return false; }
+        old.replaceWith(fresh);
+        attachFlightsHandlers(fresh.parentElement || container, ev);
+        return true;
     }
     async function loadFlightsBoard(evId) {
         try {
@@ -5615,7 +5613,7 @@
                 showToast(`${errLabel}: ${err && err.message || err}`, "error");
                 await loadFlightsBoard(ev.id);
             }
-            rerenderDetail(container, ev);
+            rerenderFlightsPanel(container, ev);
             return data;
         }
         container.querySelectorAll("[data-flights-mode]").forEach(b => {
@@ -5671,7 +5669,7 @@
                 // server's board replaces the guess when it answers, or
                 // the board reloads if the save is refused.
                 fbApplyMoveLocally(flightsBoards[ev.id], src.game, src.cid, src.flight, to);
-                rerenderDetail(container, ev);
+                rerenderFlightsPanel(container, ev);
                 const data = await fbPost("move", { game: src.game, customer_id: src.cid, flight_no: to }, "Could not move the player");
                 if (data && data.moved) showToast(`${data.moved.text}. Saved.`, "success");
             });
@@ -5704,7 +5702,7 @@
                     showToast(`Could not ${act}: ${err && err.message || err}`, "error");
                 }
                 if (!ok || !Array.isArray((flightsBoards[ev.id] || {}).games)) await loadFlightsBoard(ev.id);
-                rerenderDetail(container, ev);
+                rerenderFlightsPanel(container, ev);
             });
         });
     }
@@ -5802,7 +5800,7 @@
         // whose width is set by the WIDEST game's row of flight boxes;
         // every text line is width 0 / min-width 100% so it wraps to that
         // width instead of stretching the panel across the row.
-        let html = '<div class="games-panel" style="white-space:normal;max-width:100%;">';
+        let html = `<div class="games-panel" data-fb-panel="${ev.id}" style="white-space:normal;max-width:100%;">`;
         if (board === undefined) {
             html += `<div style="padding:1rem;color:var(--text-muted);font-size:0.85rem;">Loading the divisions &amp; flights board&hellip;</div></div>`;
             return html;
@@ -9579,9 +9577,11 @@
                 }
                 if (val === "5") {
                     // LIVE board: re-read on every open so a signup a
-                    // moment ago is already in its flight.
+                    // moment ago is already in its flight. The card was
+                    // just redrawn with the "Loading…" placeholder; when
+                    // the board lands only the panel is swapped.
                     await loadFlightsBoard(ev.id);
-                    rerenderDetail(container, ev);
+                    rerenderFlightsPanel(container, ev);
                 }
             });
         });
