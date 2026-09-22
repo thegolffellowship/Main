@@ -216,6 +216,25 @@ lookup of which `customer_id` most frequently maps to a given keyword rule.
 emails. Classification types: `godaddy_order`, `golf_genius_rsvp`, `chase_transaction_alert`,
 `venmo_payment`, `expense_receipt`, `action_required`, `unknown`, `p2p_request`.
 
+**Venmo never guesses an event (v2.483.0, Kerry 2026-09-22, verbatim:
+"Venmo should never automatically go to an event unless it's memo is
+specifically something we created and matched. The only caveat is the
+Lone Star cup. Any others should be earmarked for review somewhere
+with options for tagging appropriately.").** The registration-based
+fallback (`match_event_from_customer` — most recent event the payer is
+registered on) is REMOVED from the P2P save path; it put Franz's
+"Golf" on Avery Ranch and cup money on Forest Creek. Assignment order
+now: (1) explicit memo match (`match_event_from_memo` — the memo
+names one of our events), (2) the **`venmo_event_keywords` dial**
+(`{"<event_id>": ["lone star", "lonestar", "lsc", "hideout"]}` —
+`match_event_from_keywords`, the cup caveat as data; a future one-off
+earns a dial row, not code), (3) otherwise NO event, and an incoming
+(received) row without an event is forced `pending` regardless of
+confidence, so it lands in the Accounting page's review queue, whose
+modal carries the Event / Category / Customer pickers. Guard:
+`test_venmo_event_rule.py` (incl. a source-level check that the
+fallback never returns to app.py).
+
 **A money REQUEST is not a transaction (v2.478.6, Kerry 2026-09-22).**
 Straiton's $22 Venmo *request* for reimbursement was classified as a
 payment and booked as income on Forest Creek — no money had moved, and

@@ -460,6 +460,40 @@ def match_event_from_memo(memo: str, conn) -> str | None:
     return None
 
 
+def match_event_from_keywords(memo: str, conn) -> str | None:
+    """The Lone Star Cup caveat as data (Kerry 2026-09-22, verbatim:
+    "Venmo should never automatically go to an event unless it's memo
+    is specifically something we created and matched. The only caveat
+    is the Lone Star cup."). Members type cup memos that never name
+    the event ("Hideout", "Golf hideout", "LoneStar Cup"), so the
+    cup's aliases live in the venmo_event_keywords dial
+    ({"<event_id>": ["lone star", "lonestar", ...]}); first match
+    wins. Any future one-off event earns its row in the dial, not a
+    code change."""
+    if not memo:
+        return None
+    try:
+        row = conn.execute("SELECT value FROM app_settings "
+                           "WHERE key = 'venmo_event_keywords'").fetchone()
+        cfg = json.loads(row["value"]) if row and row["value"] else {}
+    except Exception:
+        return None
+    if not isinstance(cfg, dict):
+        return None
+    memo_low = memo.lower()
+    for ev_id, kws in cfg.items():
+        for kw in (kws or []):
+            if kw and str(kw).lower() in memo_low:
+                try:
+                    r = conn.execute("SELECT item_name FROM events "
+                                     "WHERE id = ?", (int(ev_id),)).fetchone()
+                except (TypeError, ValueError):
+                    r = None
+                if r:
+                    return r["item_name"]
+    return None
+
+
 def match_customer_from_name(name: str, conn) -> int | None:
     """Try to match a name to a customer_id."""
     if not name:

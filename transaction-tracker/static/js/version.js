@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.482.2";
+window.TGF_VERSION = "2.483.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.483.0",
+    date: "2026-09-22",
+    changes: [
+      "Venmo never guesses an event (Kerry 2026-09-22: ‘Venmo should never automatically go to an event unless it's memo is specifically something we created and matched. The only caveat is the Lone Star cup.’). The fallback that pinned a payment to whatever event the payer last registered for is gone — it put Franz's ‘Golf’ on Avery Ranch and cup money on Forest Creek. A memo either names one of our events, hits the cup's keyword list (venmo_event_keywords dial: lone star / lonestar / lsc / hideout — a future one-off gets a dial row, not code), or the money lands with NO event.",
+      "Incoming money with no event is earmarked for review: the row is forced pending regardless of extraction confidence, so it sits in the Accounting review queue whose modal already carries the Event / Category / Customer pickers. Guard: test_venmo_event_rule.py, including a source-level check that the registration guess never comes back.",
+    ],
+  },
   {
     version: "2.482.2",
     date: "2026-09-22",

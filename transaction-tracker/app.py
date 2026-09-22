@@ -291,7 +291,7 @@ from email_parser.expense_parser import (
     classify_email, parse_chase_alert, parse_venmo_payment, parse_p2p_payment,
     parse_expense_receipt, parse_action_required,
     match_event_from_memo, match_customer_from_name,
-    match_event_from_customer,
+    match_event_from_keywords,
     get_merchant_context,
 )
 from email_parser.coo_email import build_coo_email_html
@@ -835,10 +835,25 @@ def check_expense_inbox(force=False, days_back=None):
                         customer_id = match_customer_from_name(_pm.group(1).strip(), conn)
                     if not customer_id:
                         customer_id = match_customer_from_name(extracted.get("recipient_name", ""), conn)
-                    # Fallback: if no event from memo but customer was found, check their registrations
-                    if not event_name and customer_id:
-                        event_name = match_event_from_customer(customer_id, conn)
+                    # NO registration-based guessing (Kerry 2026-09-22,
+                    # verbatim: "Venmo should never automatically go to
+                    # an event unless it's memo is specifically
+                    # something we created and matched. The only caveat
+                    # is the Lone Star cup.") — the old fallback put
+                    # Franz's "Golf" on Avery Ranch and cup money on
+                    # Forest Creek. The caveat lives as data: the
+                    # venmo_event_keywords dial maps memo keywords to
+                    # an event.
+                    if not event_name:
+                        event_name = match_event_from_keywords(memo_txt, conn)
                     review_status = "approved" if extracted["confidence"] >= 95 else "pending"
+                    if ((extracted.get("transaction_type") or "").lower()
+                            == "received" and not event_name):
+                        # Unmatched incoming money is earmarked for
+                        # review (Accounting page's pending queue, which
+                        # carries the Event/Category/Customer pickers) —
+                        # never silently booked without an event.
+                        review_status = "pending"
                     p2p_email_date = (email_data.get("date") or "")[:10]
                     # Venmo embeds the other party's @handle in link URLs the
                     # LLM never sees; PayPal/Cash App don't, so this is
