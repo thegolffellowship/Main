@@ -5386,6 +5386,24 @@ def cart_signs_page(event_id):
     return render_template("cart_signs.html", pack=pack)
 
 
+def _pairings_timings(event_id: int, tm: dict, lap) -> dict:
+    """Close the pairings GET's stopwatch; log a slow open with its breakdown."""
+    lap("blind_pool")
+    total = sum(tm.values())
+    tm["total"] = total
+    if total > 4000:
+        try:
+            from email_parser.database import log_agent_action
+            worst = ", ".join(f"{k} {v} ms" for k, v in sorted(
+                ((k, v) for k, v in tm.items() if k != "total"),
+                key=lambda kv: -kv[1])[:4])
+            log_agent_action("app", "pairings_get_slow",
+                             f"event {event_id}: {total} ms — {worst}")
+        except Exception:
+            pass
+    return tm
+
+
 @app.route("/api/events/<int:event_id>/pairings", methods=["GET"])
 @require_role("view-only")
 def api_get_pairings(event_id):
@@ -5397,7 +5415,19 @@ def api_get_pairings(event_id):
         if not ev:
             return jsonify({"error": "Event not found"}), 404
         ev = dict(ev)
+        # WHERE THE TIME GOES (Kerry 2026-09-22: "Just took 41 seconds to
+        # load pairings"): each section is timed; the answer carries
+        # `timings_ms`, and a slow open (> 4 s) is written to the agent
+        # action log with the breakdown so it can be read afterwards.
+        _t0 = time.perf_counter()
+        _tm: dict = {}
+        def _lap(label):
+            nonlocal _t0
+            now = time.perf_counter()
+            _tm[label] = round((now - _t0) * 1000)
+            _t0 = now
         pairings = get_event_pairings(event_id)
+        _lap("saved_sheet")
         # Current player list — used by UI to detect unassigned players.
         # THE roster (`_event_roster_rows`): active order rows PLUS the
         # PLAYING Golf Genius RSVPs with no order, one entry per person,
@@ -5444,6 +5474,7 @@ def api_get_pairings(event_id):
                 })
         finally:
             _pconn.close()
+        _lap("roster_and_index")
         # Slot labels sized by the roster when Edit Event carries no group
         # count (Kerry 2026-09-15: "why aren't holes being assigned to
         # the foursomes?") — the same rule the generator applies, so the
@@ -5492,6 +5523,7 @@ def api_get_pairings(event_id):
         # Match Play matches still pending among this roster — lets the
         # PAIRINGS tab badge opponents on SAVED pairings too (rule 8's
         # visual denotation), not just on a fresh generate.
+        _lap("slots_and_tiers")
         mp_matches = []
         try:
             from email_parser.database import detect_match_play_pairings
@@ -5501,6 +5533,7 @@ def api_get_pairings(event_id):
         # Partner-request list (who asked for whom + suppression state)
         # so the PAIRINGS tab can show its Requests chip without a
         # second round trip.
+        _lap("match_play")
         partner_requests = []
         try:
             from email_parser.database import get_event_partner_requests
@@ -5512,6 +5545,7 @@ def api_get_pairings(event_id):
         # (Kerry 2026-07-31). Read-only: a big max_age never triggers a GG
         # fetch on a plain GET — the point-of-use refresh belongs to
         # Generate, and this endpoint is hit on every panel open.
+        _lap("partner_requests")
         standings_points, standings_enrolled = {}, {}
         try:
             from email_parser.database import _standings_rank_map
@@ -5533,6 +5567,7 @@ def api_get_pairings(event_id):
         # History line under each name recomputes locally as the manager
         # swaps and drags (Kerry 2026-09-15: "provide this info as a row
         # underneath each name in a foursome").
+        _lap("standings")
         pair_counts = {}
         try:
             from email_parser.database import roster_pair_counts
@@ -5548,6 +5583,7 @@ def api_get_pairings(event_id):
         # The blind pool rides along with the panel (Kerry 2026-09-16:
         # "Blind selector is really slow to show the list") — CHOOSE then
         # renders from state with no round trip at all.
+        _lap("pair_counts")
         blind_pool = None
         try:
             from email_parser.database import event_blind_pool
@@ -5562,6 +5598,7 @@ def api_get_pairings(event_id):
         return jsonify({
             "pairings": pairings,
             "blind_pool": blind_pool,
+            "timings_ms": _pairings_timings(event_id, _tm, _lap),
             "slots_9": slots_9,
             "slots_18": slots_18,
             "event_players": event_players,

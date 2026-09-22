@@ -39699,8 +39699,59 @@ def get_starting_handicaps(db_path: str | Path | None = None) -> dict:
         "note": r["starting_handicap_note"]} for r in rows}
 
 
+# ── A SHORT CACHE on the whole-field handicap computation (v2.484.3) ──
+# Every open of the PAIRINGS tab computed the index of every player in
+# the club at least twice (the roster's index map, then the blind pool's
+# established-index gate), and the /api/handicaps/index-map call the page
+# awaits before it does either computed it a third time. The rounds that
+# decide an index do not change between two opens seconds apart, so the
+# result is kept for a short while, keyed by the rounds table's own
+# signature (count, last id, last date) and the links count — any posted
+# round, retag or re-link changes the key and the next read recomputes.
+_HCP_PLAYERS_CACHE: dict = {}
+_HCP_PLAYERS_TTL_S = 120.0
+
+
+def _hcp_players_signature(db_path) -> tuple:
+    try:
+        with _connect(db_path) as conn:
+            # Count + last id catch a posted round; the two sums catch an
+            # in-place edit (a retag's new differential, an exclude flag).
+            r = conn.execute("SELECT COUNT(*), MAX(id), MAX(round_date), "
+                             "ROUND(TOTAL(differential), 3), TOTAL(COALESCE(hcp_exclude, 0)) "
+                             "FROM handicap_rounds").fetchone()
+            l = conn.execute("SELECT COUNT(*), TOTAL(COALESCE(customer_id, 0)) "
+                             "FROM handicap_player_links").fetchone()
+            st = conn.execute("SELECT COUNT(*), MAX(starting_handicap_set_at) FROM customers "
+                              "WHERE starting_handicap_18 IS NOT NULL").fetchone()
+        return (tuple(r), tuple(l), tuple(st))
+    except sqlite3.OperationalError:
+        return ("nosig", _time_mod.time())
+
+
+import time as _time_mod
+
+
 def get_all_handicap_players(db_path: str | Path | None = None,
                              as_of: str | None = None) -> list[dict]:
+    """`_get_all_handicap_players_uncached` behind the short cache above.
+    Callers get their own copy — mutating a row never leaks."""
+    import copy as _copy
+    key = (str(db_path or DB_PATH), str(as_of or ""), _hcp_players_signature(db_path))
+    hit = _HCP_PLAYERS_CACHE.get(key)
+    now = _time_mod.time()
+    if hit and now - hit[0] < _HCP_PLAYERS_TTL_S:
+        return _copy.deepcopy(hit[1])
+    players = _get_all_handicap_players_uncached(db_path, as_of=as_of)
+    # Keep the cache small: one live map + a handful of as-of maps.
+    if len(_HCP_PLAYERS_CACHE) > 12:
+        _HCP_PLAYERS_CACHE.clear()
+    _HCP_PLAYERS_CACHE[key] = (now, _copy.deepcopy(players))
+    return players
+
+
+def _get_all_handicap_players_uncached(db_path: str | Path | None = None,
+                                       as_of: str | None = None) -> list[dict]:
     """Return one record per player with current handicap index and round stats.
 
     Only rounds within the lookback_months window count toward the index.

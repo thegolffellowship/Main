@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.484.2";
+window.TGF_VERSION = "2.484.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.484.3",
+    date: "2026-09-22",
+    changes: [
+      "PAIRINGS load (Kerry 2026-09-22: \u2018Just took 41 seconds to load pairings under s9.24 BRACKENRIDGE\u2019): every open computed the handicap index of every player in the club three times \u2014 the page's own index-map call, the roster's index map, then the blind pool's established-index gate. `get_all_handicap_players` now sits behind a two-minute cache keyed by the rounds table's own signature (count, last id, last date, differential total, exclude flags) and the links, so a posted round, a retag or a re-link recomputes at once and a second open seconds later does not. The GET now times each of its sections (`timings_ms` in the answer) and writes any open over 4 s to the agent action log with the breakdown, so the next slow open says exactly where the time went.",
+    ],
+  },
   {
     version: "2.484.2",
     date: "2026-09-22",
