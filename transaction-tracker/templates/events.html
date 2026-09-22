@@ -3335,9 +3335,15 @@
                     if (lh === undefined) return r.handicap || "\u2014";
                     return showHcp18Only ? lh.index_18.toFixed(1) : (lh.index_9.toFixed(1) + 'N');
                 })()],
+                ["Buy-ins", _mFp.addons
+                    ? (Object.keys(_mFp.addons).filter(k => _mFp.addons[k])
+                        .map(k => k.toUpperCase()).join(" + ") || "\u2014")
+                    : "\u2014"],
                 ["Paid", _mFp.paid ? `$${(+_mFp.paid).toFixed(2)}` : "\u2014"],
                 ["Balance Due", _mFp.expected == null ? "\u2014"
-                    : (_mFp.balance <= 0.005 ? "PAID \u2713"
+                    : (_mFp.balance < -0.005
+                        ? `CR $${Math.abs(+_mFp.balance).toFixed(2)}`
+                        : _mFp.balance <= 0.005 ? "PAID \u2713"
                         : `$${(+_mFp.balance).toFixed(2)}`)],
                 ["Lodging", (() => {
                     const lg = _mFp.lodging;
@@ -4339,6 +4345,10 @@
                 const val = r => {
                     const fp = oneoffPlayerFin(ev.id, r);
                     if (!fp) return null;
+                    if (detailSortField.startsWith("oo_ad_")) {
+                        const k = detailSortField.slice(6);
+                        return fp.addons ? (fp.addons[k] ? 1 : 0) : null;
+                    }
                     switch (detailSortField) {
                         case "oo_team": return fp.team || null;
                         case "oo_chapter": return fp.chapter || null;
@@ -8455,7 +8465,28 @@
         if (oneoffFinance[ev.id] === undefined) loadOneoffFinance(ev.id);
         const ooFin = (oneoffFinance[ev.id] && oneoffFinance[ev.id].oneoff)
             ? oneoffFinance[ev.id] : null;
-        const DCOLS = ooFin ? ONEOFF_DETAIL_COLUMNS : DETAIL_COLUMNS;
+        let DCOLS = ooFin ? ONEOFF_DETAIL_COLUMNS : DETAIL_COLUMNS;
+        // ADD-ON columns (Kerry 2026-09-22: FRI $110 / SKINS $75) come
+        // from the event's oneoff_charges addon catalog — rules as
+        // data, so a future one-off event with different add-ons gets
+        // its own columns without a code change. Inserted before Paid.
+        const ooAddons = (ooFin && (ooFin.config || {}).addons) || [];
+        if (ooAddons.length) {
+            DCOLS = [];
+            ONEOFF_DETAIL_COLUMNS.forEach(c => {
+                if (c.key === "oo_paid") {
+                    ooAddons.forEach(a => {
+                        COL_ALIGN["oo_ad_" + a.key] = "center";
+                        DCOLS.push({
+                            key: "oo_ad_" + a.key,
+                            label: a.label || a.key.toUpperCase(),
+                            default: true, addon: a,
+                        });
+                    });
+                }
+                DCOLS.push(c);
+            });
+        }
 
         // Count RSVP stats
         const playingRsvps = rsvps.filter(r => r.response === 'PLAYING');
@@ -9115,6 +9146,16 @@
                         const src = sh.selected ? "picked here" : (sh.known ? `from order history (${sh.known})` : "not on file");
                         html += `<td style="${style}"><select class="oo-shirt-select" data-event-id="${ev.id}" data-cid="${r.customer_id}" title="Shirt size — ${escapeHtml(src)}${fp.gender === 'F' ? ' · women’s sizes' : ''}" style="font-size:0.78rem; padding:2px 4px; border:1px solid #d1d5db; border-radius:6px; cursor:pointer; background:${sh.selected ? '#ECFDF5' : (sh.known ? '#FFF7ED' : '#fff')};">${optHtml}</select></td>`;
                     }
+                } else if (c.addon) {
+                    // Add-on buy-in toggle (FRI / SKINS): click flips
+                    // it, saves, and the Balance column recomputes.
+                    const fp = oneoffPlayerFin(ev.id, r);
+                    if (!fp || !r.customer_id || !fp.addons) {
+                        html += `<td style="${style}; color:#9CA3AF;">—</td>`;
+                    } else {
+                        const onA = !!fp.addons[c.addon.key];
+                        html += `<td class="oo-addon-toggle" data-event-id="${ev.id}" data-cid="${r.customer_id}" data-addon-key="${escapeHtml(c.addon.key)}" data-on="${onA ? 1 : 0}" style="${style}; cursor:pointer; font-weight:700; color:${onA ? '#059669' : '#9CA3AF'};" title="$${+c.addon.amount} ${escapeHtml(c.addon.label || c.addon.key)} — click to toggle">${onA ? "YES" : "—"}</td>`;
+                    }
                 } else if (c.key === "oo_chapter") {
                     const fp = oneoffPlayerFin(ev.id, r);
                     const chp = (fp && fp.chapter) || "";
@@ -9143,6 +9184,11 @@
                     const fp = oneoffPlayerFin(ev.id, r);
                     if (!fp || fp.expected == null) {
                         html += `<td style="${style}; color:#9CA3AF;">\u2014</td>`;
+                    } else if (fp.balance < -0.005) {
+                        // Overpaid \u2014 Kerry holds it as a credit (Jeff
+                        // Young 2026-09-22), so say so instead of a
+                        // bare PAID that hides the money.
+                        html += `<td style="${style}; color:#059669; font-weight:700;" title="Expected $${(+fp.expected).toFixed(2)}, paid $${(+fp.paid).toFixed(2)} \u2014 overpaid, held as credit">CR $${Math.abs(+fp.balance).toFixed(2)}</td>`;
                     } else if (fp.balance <= 0.005) {
                         html += `<td style="${style}; color:#059669; font-weight:700;" title="Expected $${(+fp.expected).toFixed(2)} \u2014 paid in full">PAID &#10003;</td>`;
                     } else {
@@ -9677,6 +9723,37 @@
                         : (p && p.shirt && p.shirt.known ? "#FFF7ED" : "#fff");
                 } catch (err) {
                     alert("Could not save shirt size — try again.");
+                }
+            });
+        });
+
+        // Add-on buy-in toggles (FRI / SKINS): flip, save, recompute
+        // expected/balance from the addon catalog and re-render.
+        container.querySelectorAll(".oo-addon-toggle").forEach(td => {
+            td.addEventListener("click", async (e) => {
+                e.stopPropagation();
+                const evId = td.dataset.eventId, cid = td.dataset.cid;
+                const key = td.dataset.addonKey;
+                const next = td.dataset.on !== "1";
+                try {
+                    const resp = await fetch(`/api/events/${evId}/oneoff-addon`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ customer_id: cid, key: key, on: next }),
+                    });
+                    if (!resp.ok) throw new Error("save failed");
+                    const d = oneoffFinance[evId];
+                    const p = d && d.players && d.players[String(cid)];
+                    if (p && p.addons) {
+                        p.addons[key] = next;
+                        const amt = +(((d.config || {}).addons || [])
+                            .find(a => a.key === key) || {}).amount || 0;
+                        p.expected = +(p.expected + (next ? amt : -amt)).toFixed(2);
+                        p.balance = +(p.expected - p.paid).toFixed(2);
+                    }
+                    renderEvents();
+                } catch (err) {
+                    alert("Could not save the buy-in — try again.");
                 }
             });
         });

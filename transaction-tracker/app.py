@@ -11113,6 +11113,29 @@ def api_oneoff_shirt(event_id):
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/events/<int:event_id>/oneoff-addon", methods=["POST"])
+@require_role("manager")
+def api_oneoff_addon(event_id):
+    """Toggle a player's add-on buy-in on a one-off event (Kerry
+    2026-09-22: FRI $110 / SKINS $75 columns). Body: {customer_id,
+    key, on} — expected/balance recompute from the addon catalog."""
+    from email_parser.database import set_oneoff_addon
+    data = request.get_json(silent=True) or {}
+    try:
+        cid = int(data.get("customer_id"))
+    except (TypeError, ValueError):
+        return jsonify({"error": "customer_id required"}), 400
+    key = (data.get("key") or "").strip()
+    if not key:
+        return jsonify({"error": "key required"}), 400
+    try:
+        out = set_oneoff_addon(event_id, cid, key, bool(data.get("on")))
+        return jsonify(out)
+    except Exception as e:
+        logger.exception("oneoff addon save failed for event %s", event_id)
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/scoring/import", methods=["POST"])
 @require_role("admin")
 def api_import_scorecards():

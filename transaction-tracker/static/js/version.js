@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.478.2";
+window.TGF_VERSION = "2.478.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.478.3",
+    date: "2026-09-22",
+    changes: [
+      "One-off roster: FRI ($110 practice round) and SKINS ($75) columns (Kerry 2026-09-22: ‘Need columns for Friday Practice Round inclusion and the weekend games’) — click YES/— to toggle a player's buy-in, sortable, saved to the oneoff_addons dial. The columns come from the event's addon catalog in oneoff_charges, so a future one-off event with different add-ons needs no code change.",
+      "Balance Due now DERIVES itself: $250 tournament + $110 if FRI + $75 if SKINS, so teaching the tracker what a payment meant is one click per buy-in instead of a hand-typed expected total. Hand-priced overrides still win when set; the LSC overrides map is now empty.",
+      "An overpayment shows as CR $X in green (Jeff Young's $150 held as credit per Kerry) instead of hiding behind a bare PAID ✓.",
+    ],
+  },
   {
     version: "2.478.2",
     date: "2026-09-22",
