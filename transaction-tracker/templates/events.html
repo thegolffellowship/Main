@@ -8900,10 +8900,15 @@
         const evCount18 = registrants.filter(rr => isEighteenStyleHoles(rowHoles(ev, rr))).length;
         const showHcp18Only = evCount9 === 0 && evCount18 > 0;
         // Detect active rows with duplicate customer+event registrations for badge display.
+        // A +PAY child (a balance-due Venmo, a games add-on) is a top-up
+        // on its parent, never a second registration (Kerry 2026-09-22:
+        // Pat Youngs read "Dup" the moment his $11 balance landed).
         const _activeRegistrations = registrants.filter(rr =>
             (rr.transaction_status || "active") === "active" &&
+            !rr.parent_item_id &&
             !String(rr.id).startsWith("gg-rsvp") &&
-            !(rr.email_uid || "").startsWith("manual-")
+            !(rr.email_uid || "").startsWith("manual-") &&
+            !(rr.email_uid || "").startsWith("venmo-bd-")
         );
         const _dupItemIds = new Set();
         const _seen = {};

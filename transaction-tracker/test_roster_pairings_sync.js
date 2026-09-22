@@ -31,5 +31,8 @@ check("the page defines a toast of its own (FLIGHTS handlers already called one)
 check("a transferred row wears the balance-due / paid badge and gets the Venmo email action like an Apply-Credit row (one predicate)",
       /function isCreditTransferRow\(r\)/.test(html) && (html.match(/isCreditTransferRow\(r\)/g) || []).length >= 3
       && !/r\.merchant === 'Paid Separately \(Credit Transfer\)'/.test(html));
+const dup = html.slice(html.indexOf("const _activeRegistrations = registrants.filter(rr =>"), html.indexOf("const _dupItemIds = new Set();"));
+check("a +PAY child (balance-due Venmo, add-on) never counts as a duplicate registration (Kerry 2026-09-22, Pat Youngs)",
+      /!rr\.parent_item_id &&/.test(dup) && /startsWith\("venmo-bd-"\)/.test(dup));
 console.log("\n" + (failures ? failures + " FAILURE(S)" : "ALL PASS"));
 process.exit(failures ? 1 : 0);

@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.484.1";
+window.TGF_VERSION = "2.484.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.484.2",
+    date: "2026-09-22",
+    changes: [
+      "Roster: a paid balance no longer reads as a duplicate registration (Kerry 2026-09-22: \u2018What's the DUP for Pat Youngs? He paid his balance\u2019). The Dup check counted every active row per person on the event, and a balance-due Venmo lands as its own +PAY child row under the registration it pays. Child rows (+PAY, add-ons, balance payments) are top-ups on their parent and never count. Guard: `test_roster_pairings_sync.js`.",
+    ],
+  },
   {
     version: "2.484.1",
     date: "2026-09-22",
