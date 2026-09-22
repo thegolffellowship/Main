@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.478.7";
+window.TGF_VERSION = "2.478.8";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.478.8",
+    date: "2026-09-22",
+    changes: [
+      "PAIRINGS pops right back up: opening the tab no longer waits on Golf Genius. The pairings read was fetching the points race live on event day (a 15-minute window made every open a GG round-trip); it now serves the snapshot it has and refreshes it behind the page. A saved sheet shows at once from the cache; the roster is re-read in the background and the panel only redraws if something changed (Kerry 2026-09-22: 'I've already SAVED the PAIRINGS. It should pop right back up').",
+      "PAIRINGS and ROSTER partial updates: every pairings action (drag, swap, move, undo, label, remove, the background save) redraws the card's body only — the tab header and its handlers stay put. The events table reuses rows that did not change instead of rebuilding every row, and a roster action (credit, WD, add player, add payment, delete, guest assign, side-games edit, reverse, assign member) refreshes that one event in place instead of reloading every order row ever written.",
+      "SETTLE is the closeout's job now: the button is gone from the FLIGHTS tab. The hourly post-event sync settles the DIVISIONS / FLIGHTS board of every event played today or yesterday that has scorecards in (a live board is frozen first). Bridge scoring-flights-close:<event_id>[|apply]; the closeout skill's Phase 0 and 2.2b carry it. Nothing pays anyone; Golf Genius stays the payer of record.",
+    ],
+  },
   {
     version: "2.478.7",
     date: "2026-09-22",

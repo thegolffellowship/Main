@@ -759,7 +759,7 @@ The Quarry-night rulings, all built:
      Ctrl/Cmd+Z / +Shift+Z bound once at module level and ignored while
      typing or when more than one pairings panel is open. Groups ONLY —
      mode, race and the requests panel are deliberately out of scope.
-     **Opening the tab never waits on Golf Genius (v2.478.5).** The
+     **Opening the tab never waits on Golf Genius (v2.478.8).** The
      pairings GET reads the points-race snapshot with `no_network=True`
      and queues a background refresh when it is stale (the event-day
      window used to make every open a live GG round-trip). Every in-panel

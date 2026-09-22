@@ -188,7 +188,7 @@ check("unchecked hides the column but keeps the bands",
     /const showPoints = havePoints && state\.showPointsCol !== false;/.test(html)
     && /\|\| havePoints;/.test(html));
 check("the choice is remembered per browser and re-renders",
-    /state\.showPointsCol = pointsChk\.checked;\s*pairingsPointsPref\(pointsChk\.checked\);\s*rerenderDetail\(container, ev\);/.test(html)
+    /state\.showPointsCol = pointsChk\.checked;\s*pairingsPointsPref\(pointsChk\.checked\);\s*rerenderDetail(?:Body)?\(container, ev\);/.test(html)
     && /localStorage\.getItem\('tgf_pairings_points_col'\)/.test(html));
 check("default is ON when nothing is stored",
     /return raw === null \? true : raw === '1';/.test(html));
@@ -301,8 +301,8 @@ check("there is a roster-only refresh that never touches the groups",
     && !/function refreshPairingsRoster[\s\S]{0,900}state\.groups_9 =/.test(html));
 check("it rebuilds the lookups that hang off the roster",
     /refreshPairingsRoster[\s\S]{0,900}state\._paceMap = null;[\s\S]{0,300}state\._reqPairs = null;[\s\S]{0,300}state\.pairCounts = data\.pair_counts/.test(html));
-check("re-opening the PAIRINGS tab re-reads the roster; first open still loads the sheet",
-    /if \(!getPairingsState\(ev\.id\)\.loaded\) \{\s*await loadPairings\(ev\.id\);\s*\} else \{\s*await refreshPairingsRoster\(ev\.id\);/.test(html));
+check("re-opening the PAIRINGS tab re-reads the roster (behind the cached sheet, v2.478.8); first open still loads the sheet",
+    /if \(!st\.loaded\) \{\s*await loadPairings\(ev\.id\);\s*rerenderDetailBody\(container, ev\);\s*\} else \{\s*const before = pairingsRosterSig\(st\);\s*await refreshPairingsRoster\(ev\.id\);/.test(html));
 check("the bullpen no longer disappears when everyone is seated",
     /Everyone on the roster is seated/.test(html)
     && !/const unassigned = getUnassigned\(state\);\s*if \(!unassigned\.length\) return '';/.test(html));

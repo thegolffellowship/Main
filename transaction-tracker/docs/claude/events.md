@@ -2292,7 +2292,7 @@ breakdown so probably will need a tab for it under each event." The
 FLIGHTING lane (spun off "TGF Tracker Improvements 2"; plan #584).
 
 - **Partial DOM updates for PAIRINGS and ROSTER; PAIRINGS never waits on
-  Golf Genius; SETTLE moves to the closeout (v2.478.5, Kerry 2026-09-22:
+  Golf Genius; SETTLE moves to the closeout (v2.478.8, Kerry 2026-09-22:
   "Do the same partial update for PAIRINGS and ROSTER… the pages
   (especially PAIRINGS) take WAY too long to load back up… Add SETTLE as
   part of the CLOSEOUT function").** (1) The detail card is HEADER + BODY;
