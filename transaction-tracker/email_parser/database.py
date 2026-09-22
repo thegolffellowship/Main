@@ -31163,6 +31163,14 @@ def reverse_credit(item_id: int, db_path: str | Path | None = None) -> bool:
             transferred_to_id = item["transferred_to_id"]
             # Delete the destination item
             conn.execute("DELETE FROM items WHERE id = ?", (transferred_to_id,))
+            # ...and the excess-credit row the transfer's price check may
+            # have posted (v2.478.1), while it is still unapplied credit.
+            # An excess already applied elsewhere (status no longer
+            # 'credited') is money in play and stays.
+            conn.execute(
+                """DELETE FROM items WHERE email_uid LIKE ?
+                   AND COALESCE(transaction_status, '') = 'credited'""",
+                (f"transfer-excess-{item_id}-%",))
             # Clean up accounting entries for this transfer
             try:
                 conn.execute("DELETE FROM acct_splits WHERE transaction_id IN (SELECT id FROM acct_transactions WHERE source_ref LIKE ?)", (f"xfer-{item_id}-%",))

@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.478.4";
+window.TGF_VERSION = "2.478.5";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.478.5",
+    date: "2026-09-22",
+    changes: [
+      "Reversing a transfer also removes the excess-credit row the transfer's price check posted (v2.478.1), while that credit is still unapplied \u2014 so an undo-and-redo (Kerry 2026-09-22, testing Sharitz / Youngs \u2192 s9.25) leaves no stray credit behind. Guard: `test_transfer_price.py`.",
+    ],
+  },
   {
     version: "2.478.4",
     date: "2026-09-22",

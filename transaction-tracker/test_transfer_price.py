@@ -64,5 +64,13 @@ check("...and posts the leftover as an 'Excess credit — <source>' row in the p
       and ex["item_name"] == "Excess credit — s9.24 Brackenridge" and ex["customer_id"] == 136, str(dict(ex)) if ex else "none")
 check("...which the credit pool sees", any(cr["id"] == pc2["excess_credit_id"] for cr in db.get_player_credits("Pat Youngs", customer_id=136, db_path=tmp)))
 
+print("\n== undoing the transfer undoes the price check ==")
+check("reverse: the moved row goes, and the unapplied excess-credit row goes with it",
+      db.reverse_credit(950, db_path=tmp)
+      and c.execute("SELECT COUNT(*) FROM items WHERE id IN (?, ?)", (new2["id"], pc2["excess_credit_id"])).fetchone()[0] == 0
+      and c.execute("SELECT transaction_status FROM items WHERE id = 950").fetchone()[0] == "active")
+check("reverse of a SHORT transfer restores the original (nothing else to clean)",
+      db.reverse_credit(900, db_path=tmp) and c.execute("SELECT COUNT(*) FROM items WHERE id = ?", (new["id"],)).fetchone()[0] == 0)
+
 print("\n" + ("ALL PASSED" if not F else f"{len(F)} FAILURE(S): " + "; ".join(F)))
 sys.exit(1 if F else 0)
