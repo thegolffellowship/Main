@@ -39845,8 +39845,22 @@ def _hcp_players_signature(db_path) -> tuple:
                                   "FROM scoring_rounds").fetchone()
             except sqlite3.OperationalError:
                 ex = (0,)
-        return (tuple(r), tuple(l), tuple(st), tuple(ex))
+            # The dials the computation reads (lookback, min rounds, the
+            # best-N table): an edit must recompute at once, not two
+            # minutes later (Kerry 2026-09-22: "make sure you're not
+            # screwing anything up with data").
+            try:
+                cfg = tuple(conn.execute("SELECT key, value FROM handicap_settings "
+                                         "ORDER BY key").fetchall())
+            except sqlite3.OperationalError:
+                cfg = ()
+        return (tuple(r), tuple(l), tuple(st), tuple(ex), cfg)
     except sqlite3.OperationalError:
+        # A signature that cannot be read means NO caching, which is safe
+        # but slow — say why in the log rather than hiding it (the v2.484.3
+        # lesson: this branch ran on every call for a day and nobody knew).
+        logger.warning("handicap cache signature unavailable — computing "
+                       "uncached", exc_info=True)
         return ("nosig", _time_mod.time())
 
 

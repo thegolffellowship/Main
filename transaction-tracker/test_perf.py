@@ -182,6 +182,9 @@ p1 = db.get_all_handicap_players(tmp); p1[0]["handicap_index"] = -99
 check("...and callers still get their own copy", db.get_all_handicap_players(tmp)[0]["handicap_index"] != -99)
 c.execute("INSERT INTO handicap_rounds (player_name, round_date, adjusted_score, rating, slope, differential) VALUES ('Youngs, Pat', date('now'), 45, 34.5, 120, 1.0)"); c.commit()
 check("a posted round changes the signature (the next read recomputes)", db._hcp_players_signature(tmp) != sig1)
+sig3 = db._hcp_players_signature(tmp)
+c.execute("INSERT OR REPLACE INTO handicap_settings (key, value) VALUES ('lookback_months', '18')"); c.commit()
+check("...and so does a handicap SETTINGS edit (lookback, min rounds) — never served stale", db._hcp_players_signature(tmp) != sig3)
 
 conn = db.get_connection(tmp)
 roster = db._event_roster_rows(conn, EV)

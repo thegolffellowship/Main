@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.486.0";
+window.TGF_VERSION = "2.486.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.486.1",
+    date: "2026-09-22",
+    changes: [
+      "Handicap cache (Kerry 2026-09-22: ‘make sure you're not screwing anything up with data’): the two-minute cache now also refreshes the moment a handicap SETTING is edited (lookback months, minimum rounds, the best-N table), not only on a posted round, retag, re-link or starting handicap. And if the cache's own signature ever cannot be read, the reason is logged instead of silently computing uncached on every call — which is what v2.484.3 did for a day unnoticed.",
+    ],
+  },
   {
     version: "2.486.0",
     date: "2026-09-22",
