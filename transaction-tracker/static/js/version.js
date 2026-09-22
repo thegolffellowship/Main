@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.477.0";
+window.TGF_VERSION = "2.477.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.477.1",
+    date: "2026-09-22",
+    changes: [
+      "Lone Star Cup freeze: an unfilled seat is dropped from the FINAL snapshot — Justin McCrary's withdrawal left a blank ‘DFW/HOUSTON · 2’ chair on the San Antonio card; a final roster shows only players, and the seat returns when a replacement is picked and the roster re-freezes.",
+      "Bridge scoring-expense-customer:<expense_id>|<cid|none> — sets the customer on an incoming payment row. Zelle arrivals come in under raw bank names the matcher can't resolve (GUSTAVO VASQUEZ → Gus, cid 42), and the one-off PAID column keys on customer_id. Audited.",
+    ],
+  },
   {
     version: "2.477.0",
     date: "2026-09-22",

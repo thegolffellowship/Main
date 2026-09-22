@@ -3223,6 +3223,42 @@ def _scoring_dispatch(url: str, extract: str):
             return json.dumps({"event_id": _eid, "players": out,
                                "options": (fin.get("config") or {})
                                .get("shirt_options")}, indent=2)
+        if cmd == "scoring-expense-customer":
+            # "<expense_id>|<customer_id|none>" — set (or clear) the
+            # customer on an incoming expense_transactions row. Exists
+            # because Zelle arrivals carry raw bank names the matcher
+            # can't resolve (GUSTAVO VASQUEZ → cid 42), and the one-off
+            # roster's PAID column keys on customer_id. Audited.
+            _parts = [p.strip() for p in arg.split("|")]
+            if len(_parts) != 2:
+                return json.dumps({"error": "expected "
+                                   "<expense_id>|<customer_id|none>"})
+            _xid = int(_parts[0])
+            _cid = (None if _parts[1].lower() in ("none", "")
+                    else int(_parts[1]))
+            with db._connect() as _conn:
+                _row = _conn.execute(
+                    "SELECT id, merchant, amount, customer_id "
+                    "FROM expense_transactions WHERE id = ?",
+                    (_xid,)).fetchone()
+                if not _row:
+                    return json.dumps({"error":
+                                       f"expense {_xid} not found"})
+                _old = _row["customer_id"]
+                _conn.execute(
+                    "UPDATE expense_transactions SET customer_id = ? "
+                    "WHERE id = ?", (_cid, _xid))
+                _conn.commit()
+            db.log_agent_action(
+                "mcp-claude", "scoring-expense-customer",
+                f"expense {_xid} ({_row['merchant']} "
+                f"${_row['amount']}): customer {_old} -> {_cid}")
+            return json.dumps({"expense_id": _xid,
+                               "merchant": _row["merchant"],
+                               "amount": _row["amount"],
+                               "old_customer_id": _old,
+                               "new_customer_id": _cid,
+                               "saved": True})
         if cmd == "scoring-expense-promote":
             # "<expense_id>" — promote an expense_transactions row into
             # the acct_transactions ledger via the standard
