@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.481.0";
+window.TGF_VERSION = "2.481.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.481.1",
+    date: "2026-09-22",
+    changes: [
+      "POINTS RACES \u2192 a monthly row's \u2018This month\u2019s rounds & scorecards\u2019 now finds September (Kerry 2026-09-22: \u2018Why isn\u2019t there any points detail or scorecards for this month?\u2019 \u2014 Luke Youngs, 50 points, 5 rounds, and the row said there was nothing). The expander asked Golf Genius for the player\u2019s spring/summer NET race page only; that page ends at the City Championship (Jul 31), and September\u2019s points are awarded on the FALL race page. Each monthly row now carries both of its chapter\u2019s pages (austin_net + austin_fall_net; san_antonio_net + san_antonio_fall_net), fetches both in parallel, and renders only the tables that have a row awarded in that month \u2014 so a page with nothing for the month prints no bare headers, and a month that straddles the two seasons shows both.",
+    ],
+  },
   {
     version: "2.481.0",
     date: "2026-09-22",

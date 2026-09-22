@@ -8899,9 +8899,15 @@
             const win = sel.complete && sel.winners.some(w =>
                 (w.customer_id != null && w.customer_id === r.customer_id) || w.player_name === r.player_name);
             const bg = win ? "background:#fde68a;" : "";
-            // Points detail comes from the player's chapter season page —
-            // the monthly table itself is TGF-wide, so pick the race by chapter
+            // Points detail comes from the player's chapter pages — the
+            // monthly table itself is TGF-wide, so pick the races by chapter.
+            // TWO pages per chapter (v2.481.1, Kerry 2026-09-22: "Why isn't
+            // there any points detail or scorecards for this month?"): the
+            // spring/summer NET race ends at the City Championship (Jul 31)
+            // and September's points live on the FALL race page. The row
+            // carries both; the month filter keeps whichever has the rows.
             const race = r.chapter === "Austin" ? "austin_net" : "san_antonio_net";
+            const race2 = r.chapter === "Austin" ? "austin_fall_net" : "san_antonio_fall_net";
             const name = (r.customer_id && !window.MEMBER_MODE)
                 ? `<a href="/customers?cid=${r.customer_id}" class="cell-link">${escapeHtml(r.display_name || r.player_name)}</a>`
                 : escapeHtml(r.display_name || r.player_name);
@@ -8912,7 +8918,7 @@
             if (win) purse = `<strong>$${sel.winners[0].share}</strong>`;
             else if (!sel.complete && r.rank === 1)
                 purse = `<span style="color:var(--text-muted);" title="Projected — month in progress">$${sel.purse}</span>`;
-            return `<tr${r.customer_id ? ` data-cid="${r.customer_id}"` : ""}${r.member_card_id ? ` data-card="${escapeHtml(String(r.member_card_id))}" data-race="${race}"` : ""} style="${bg}${r.customer_id ? "cursor:pointer;" : ""}">
+            return `<tr${r.customer_id ? ` data-cid="${r.customer_id}"` : ""}${r.member_card_id ? ` data-card="${escapeHtml(String(r.member_card_id))}" data-race="${race}" data-race2="${race2}"` : ""} style="${bg}${r.customer_id ? "cursor:pointer;" : ""}">
                 <td style="${rankStyle}${win ? "font-weight:700;" : ""}">${escapeHtml(r.rank_label)}</td>
                 <td class="pr-wrap"${win ? ' style="font-weight:700;"' : ""}>${name}${prChapterBadge(r.chapter)}${win ? ' <span class="tgf-troph" title="Month won"></span>' : ""}${chevron}</td>
                 <td style="${rndStyle}">${r.rounds ?? ""}</td>
@@ -8977,26 +8983,37 @@
         if (chev) chev.innerHTML = "&#9660;";
         const cell = detail.firstElementChild;
         try {
-            // GG points detail (chapter season page) and imported scorecards
-            // load in parallel; either side is optional
-            const [ptsTables, rounds] = await Promise.all([
-                tr.dataset.card && tr.dataset.race
-                    ? fetch(`/api/season-contests/points-race/detail?race=${encodeURIComponent(tr.dataset.race)}&card=${encodeURIComponent(tr.dataset.card)}`)
-                        .then(async res => {
-                            const data = await res.json();
-                            return res.ok ? data.tables : null;
-                        })
-                        .catch(() => null)
-                    : Promise.resolve(null),
+            // GG points detail (the chapter's season page AND its fall page
+            // — a month's points live on one of them) and imported
+            // scorecards load in parallel; every side is optional
+            const raceKeys = [tr.dataset.race, tr.dataset.race2].filter(Boolean);
+            const fetchTables = rk => fetch(`/api/season-contests/points-race/detail?race=${encodeURIComponent(rk)}&card=${encodeURIComponent(tr.dataset.card)}`)
+                .then(async res => {
+                    const data = await res.json();
+                    return res.ok ? (data.tables || []) : [];
+                })
+                .catch(() => []);
+            const [tableSets, rounds] = await Promise.all([
+                tr.dataset.card && raceKeys.length
+                    ? Promise.all(raceKeys.map(fetchTables))
+                    : Promise.resolve([]),
                 tr.dataset.cid
                     ? fetch(`/api/scoring/rounds?customer_id=${encodeURIComponent(tr.dataset.cid)}&limit=100`)
                         .then(async res => res.ok ? await res.json() : [])
                         .catch(() => [])
                     : Promise.resolve([]),
             ]);
+            // Keep only the tables that have a row awarded THIS month, so a
+            // page with nothing for the month does not print bare headers.
+            const nbT = v => String(v == null ? "" : v).replace(/\u00a0/g, " ").trim();
+            const ptsTables = tableSets.flat().filter(t => {
+                if (!Array.isArray(t) || t.length < 2) return false;
+                const dc = (t[0] || []).findIndex(h => /date/i.test(nbT(h)));
+                return dc > -1 && t.slice(1).some(r => Array.isArray(r) && nbT(r[dc]).startsWith(monthKey));
+            });
             const inMonth = (rounds || []).filter(x => String(x.round_date || "").startsWith(monthKey));
             const claimed = new Set();
-            let html = ptsTables && ptsTables.length
+            let html = ptsTables.length
                 ? prRenderDetailTables(ptsTables, inMonth, claimed, {monthFilter: monthKey, plain: true})
                 : "";
             // non-points rounds list removed here too (Kerry 2026-07-12)
