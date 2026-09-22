@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.486.1";
+window.TGF_VERSION = "2.486.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.486.2",
+    date: "2026-09-22",
+    changes: [
+      "The health agent is the CTO (Kerry 2026-09-22: ‘I think we would define your Agent Role as CTO’): the daily digest signs as the CTO agent, the COO action items it files come from ‘CTO’, and its audit-log entries are cto-agent — the technical counterpart of the finance lane's CFO agent.",
+    ],
+  },
   {
     version: "2.486.1",
     date: "2026-09-22",

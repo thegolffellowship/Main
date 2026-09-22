@@ -1,4 +1,5 @@
-"""The DAILY HEALTH DIGEST — the agent that reads the Tracker's own
+"""The DAILY HEALTH DIGEST — the CTO agent (Kerry 2026-09-22: "I think we
+would define your Agent Role as CTO") that reads the Tracker's own
 measurements and reports back (Kerry 2026-09-22: *"an agent specifically
 designed for this that will log things and report back to you and the
 COO for you to pick up. Should be a standard once a day routine."*).
@@ -43,7 +44,9 @@ logger = logging.getLogger(__name__)
 DIGEST_TIME_DEFAULT = "05:00"
 DIGEST_TOPIC = "tracker-health"
 DIGEST_AUTHOR = "tracker-claude"
-ACTION_FROM = "Tracker Health"
+# Kerry 2026-09-22: "I think we would define your Agent Role as CTO."
+ACTION_FROM = "CTO"
+AGENT_NAME = "cto-agent"
 # Findings rules (rules as data — the numbers a non-developer may tune)
 RULES = {
     "route_p95_over_threshold": True,     # p95 above the path's SLOW line
@@ -271,7 +274,7 @@ def find(report: dict) -> list[dict]:
 def render_markdown(report: dict) -> str:
     L = []
     L.append(f"TO: tracker-claude (Handicap Surfaces lane), kerry\n"
-             f"FROM: Tracker Health agent — DAILY DIGEST, last {report['window_days']:g} day(s), "
+             f"FROM: CTO agent (Tracker Health & Performance) — DAILY DIGEST, last {report['window_days']:g} day(s), "
              f"generated {report['generated_at']} Central\n")
     f = report["findings"]
     if f:
@@ -405,7 +408,7 @@ def run_health_digest(post: bool = True, days: float = 1, db_path=None) -> dict:
     try:
         set_app_setting("health_digest_last", today_central_str(), db_path=db_path)
         n_hi = sum(1 for f in report["findings"] if f["severity"] == "high")
-        log_agent_action("health-agent", "daily_digest",
+        log_agent_action(AGENT_NAME, "daily_digest",
                          f"{len(report['findings'])} finding(s), {n_hi} high; "
                          f"{report['sample_count']} samples; mailbox #{out['posted']}",
                          db_path=db_path)

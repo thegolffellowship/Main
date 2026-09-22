@@ -87,15 +87,15 @@ posts = db.read_platform_dialogue_entries(5, "tracker-health", 0, db_path=tmp)
 check("post=True posts ONE mailbox entry, topic tracker-health, author tracker-claude", len(posts) == 1 and posts[0]["author"] == "tracker-claude" and posts[0]["id"] == res["posted"], str(posts))
 items = db.get_action_items(status="open", db_path=tmp)
 subj = sorted(i["subject"] for i in items)
-check("every high/medium finding is a COO action item (HEALTH: <key>), from Tracker Health, category other",
+check("every high/medium finding is a COO action item (HEALTH: <key>), from the CTO, category other",
       subj == sorted(f"HEALTH: {f['key']}" for f in rep["findings"] if f["severity"] in ("high", "medium"))
-      and all(i["from_name"] == "Tracker Health" and i["category"] == "other" for i in items), str(subj))
+      and all(i["from_name"] == "CTO" and i["category"] == "other" for i in items), str(subj))
 check("urgency follows severity", next(i for i in items if i["subject"] == "HEALTH: job_error:db_backup")["urgency"] == "high")
 check("the once-a-day mark is set and the digest is no longer due today",
       db.get_app_setting("health_digest_last", db_path=tmp) == __import__("email_parser.timezone_utils", fromlist=["x"]).today_central_str()
       and health.digest_due(now=datetime.now().replace(hour=23, minute=59), db_path=tmp) is False)
 check("...and health_digest_check() therefore does nothing", health.health_digest_check(db_path=tmp) is None)
-check("the routine is logged as health-agent / daily_digest", any(r["action_type"] == "daily_digest" for r in db.get_agent_action_log(agent_name="health-agent", db_path=tmp)))
+check("the routine is logged as cto-agent / daily_digest", any(r["action_type"] == "daily_digest" for r in db.get_agent_action_log(agent_name="cto-agent", db_path=tmp)))
 
 n_before = len(items)
 health.run_health_digest(post=True, db_path=tmp)

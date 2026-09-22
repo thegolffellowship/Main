@@ -99,6 +99,18 @@ the GIL is.
 - **Digest hour:** 05:00 Central (Kerry, #611); the Handicap Surfaces
   lane reads at 5:15.
 
+## 2c. The agent is the CTO
+
+Kerry 2026-09-22 (~4 PM): *"I think we would define your Agent Role as
+CTO, don't you think?"* Agreed: the digest signs as the CTO agent, the
+action items it files are from "CTO", the audit log names `cto-agent`.
+Money stays the CFO agent's (finance lane); the C-Suite structure lane
+(#614) places both under the COO roll-up. Kerry's data rule the same
+afternoon: *"make sure you're not screwing anything up with data"* —
+this lane's only writes are its own `perf_samples` rows, additive
+action items / settings / log rows, and the mailbox post; no UPDATE,
+DELETE, ALTER or VACUUM on any existing table.
+
 ## 3. EVENTS landing
 
 Measured, not yet changed (events.md). Server side on the fixture is

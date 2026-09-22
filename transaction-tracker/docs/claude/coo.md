@@ -144,7 +144,10 @@ Kerry: *"an agent specifically designed for this that will log things
 and report back to you and the COO for you to pick up. Should be a
 standard once a day routine."*
 
-`email_parser/health.py` is that agent. Once a day, at or after the
+`email_parser/health.py` is that agent — the **CTO agent** (Kerry 2026-09-22:
+"I think we would define your Agent Role as CTO"), the technical
+counterpart of the finance lane's CFO agent; the C-Suite lane (#614)
+decides how both roll up through the COO. Once a day, at or after the
 dialled time (`health_digest_time`, default 05:00 Central; the check
 runs every 15 minutes 4–9 AM and the dial takes effect without a
 restart), `run_health_digest()`:
@@ -161,13 +164,13 @@ restart), `run_health_digest()`:
    `tracker-claude`, addressed to the Handicap Surfaces lane (whose 6:30
    routine reads it) and Kerry;
 3. files each high/medium finding as an `action_items` row — subject
-   `HEALTH: <finding key>`, `from_name` "Tracker Health", category
+   `HEALTH: <finding key>`, `from_name` "CTO", category
    `other`, urgency = severity. The subject is stable per finding, and
    `save_action_item` de-dupes on subject + category while an item is
    open, so the same problem on two mornings is ONE open item; a closed
    item that recurs is filed again. It reaches the COO dashboard and the
    landing page's action-items count like any other;
-4. prunes samples older than 30 days and logs `health-agent /
+4. prunes samples older than 30 days and logs `cto-agent /
    daily_digest`.
 
 The same report backs **`/admin/health`** (admin page: cards, findings,
