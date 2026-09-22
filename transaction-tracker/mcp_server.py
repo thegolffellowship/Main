@@ -1786,6 +1786,7 @@ def _scoring_dispatch(url: str, extract: str):
       scoring-flights-freeze:<event_id>[|apply]  FREEZE the board (B5 selection of record); dry run says what would freeze
       scoring-flights-settle:<event_id>[|apply]  SETTLE a frozen board: amounts from actual buyers + the delta, stored as the record
       scoring-flights-unfreeze:<event_id>[|apply]  void (keep) the frozen/settled rows so the board reads LIVE
+      scoring-flights-mode:<event_id>|<game>|<equal_size|fixed_bands|default>  the CUT toggle per game (Kerry 2026-09-22); LIVE boards only
       scoring-flights-board:<event_id>  the DIVISIONS/FLIGHTS board as data — ratified flighting + payout rules (SELECTION and AMOUNTS layers) beside what GG recorded; dry run, read-only
       scoring-pairings-counts:<event_id>[|<year>]  saved sheet scored against played history: times each pair has played together this year INCLUDING this event
       scoring-liabilities          payouts owed, credits held, LSC shirt fund by Cup year, HIO pot, tax reserve by month
@@ -2672,6 +2673,24 @@ def _scoring_dispatch(url: str, extract: str):
             _res = _fn(int(_p[0]), by="mcp-claude", dry_run=not _apply)
             _res = dict(_res)
             _res.pop("event", None)
+            return json.dumps(_res, indent=2, default=str)
+        if cmd == "scoring-flights-mode":
+            # "<event_id>|<game>|<equal_size|fixed_bands|default>" — the
+            # per-event, per-game CUT (Kerry 2026-09-22). Writes the dial
+            # and returns the board as it now reads; a frozen board refuses.
+            _p = [x.strip() for x in arg.split("|")]
+            if len(_p) < 3 or not _p[0].isdigit():
+                return json.dumps({"error": "usage: scoring-flights-mode:<event_id>|<game>|<equal_size|fixed_bands|default>"})
+            _mode = None if _p[2].lower() in ("default", "", "clear") else _p[2].lower()
+            _res = db.set_event_flight_mode(int(_p[0]), _p[1], _mode, by="mcp-claude")
+            if _res.get("ok"):
+                _audit("scoring-flights-mode", f"event {_p[0]} {_p[1]} = {_mode or 'default'}")
+                _res = {"ok": True, "flight_modes": _res.get("flight_modes"),
+                        "games": [{"game": g["game"], "mode": g["selection"].get("mode"),
+                                   "mode_source": g["selection"].get("mode_source"),
+                                   "flights": [f["players"] for f in g["selection"]["flights"]],
+                                   "edges": g["selection"].get("edges")}
+                                  for g in _res.get("games") or []]}
             return json.dumps(_res, indent=2, default=str)
         if cmd == "scoring-flights-board":
             # The DIVISIONS/FLIGHTS board (mailbox #582/#584) as data:

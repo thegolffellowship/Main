@@ -7928,7 +7928,7 @@ def api_event_flights_action(event_id, action):
     and stores the record with the delta, unfreeze voids (keeps) the rows.
     Audited. Pays nobody; GG stays the payer of record."""
     from email_parser.database import (freeze_event_flights, settle_event_flights,
-                                        unfreeze_event_flights)
+                                        unfreeze_event_flights, set_event_flight_mode)
     data = request.get_json(silent=True) or {}
     by = session.get("role") or "manager"
     if session.get("chapter"):
@@ -7941,6 +7941,12 @@ def api_event_flights_action(event_id, action):
             res = settle_event_flights(event_id, by=by, trigger="settle_button", note=note)
         elif action == "unfreeze":
             res = unfreeze_event_flights(event_id, by=by, note=note)
+        elif action == "mode":
+            # The CUT toggle (Kerry 2026-09-22): {game, mode} — even split
+            # or the ratified HCP bands, per game, for this event. LIVE
+            # boards only; a frozen board refuses.
+            res = set_event_flight_mode(event_id, (data.get("game") or "").strip(),
+                                        (data.get("mode") or None), by=by)
         else:
             return jsonify({"error": "unknown action"}), 404
     except Exception as e:

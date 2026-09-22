@@ -25099,6 +25099,9 @@ _COURSE_SHORT_PINS: list = [
     (r"la\s+cantera", "La Cantera | Resort"),
     # Austin's Riverside is not the SA one (v2.57.2 fix)
     (r"riverside.*austin|austin.*riverside", "Riverside | ATX"),
+    # Three Riversides in Texas (Kerry 2026-09-22): SA, Austin, DFW. The
+    # bare word stays SA (the one TGF plays); a DFW spelling pins apart.
+    (r"riverside.*(dfw|fort\s*worth|grand\s*prairie|dallas)|(dfw|fort\s*worth|grand\s*prairie|dallas).*riverside", "Riverside | DFW"),
     (r"riverside", "Riverside | SA"),
     (r"olympia\s+hills", "Olympia Hills"),
     (r"black\s*jack", "Black Jack's"),
@@ -25162,6 +25165,9 @@ def apply_course_short_name_pins(db_path: str | Path = DB_PATH) -> dict:
             "created_from_round_history": inserted, "pins_without_a_course": missed}
 
 
+_LOOSE_PIN_NEEDS_CITY = {"riverside | sa"}
+
+
 def _course_short_pin(name: str) -> str:
     """The short name a course name would be pinned to (Kerry's pins
     first, the generic deriver otherwise) — a name's identity for the
@@ -25201,6 +25207,14 @@ def _find_course_loose(conn, name: str) -> int | None:
     key, pin = _course_dedup_key(n), _course_short_pin(n).strip().lower()
     if not key:
         return None
+    # A short name that only a CITY tells apart (Kerry 2026-09-22: "There's
+    # a Riverside in SA, Austin, and DFW") never matches on the pin alone —
+    # a bare "Riverside Golf Club" pins to SA by default, and that default
+    # must not fold a DFW course into the SA row. Exact name, alias and
+    # the normalized key still apply.
+    if pin in _LOOSE_PIN_NEEDS_CITY and not re.search(
+            r"san\s*antonio|\bacgt\b|\bsa\b", n.lower()):
+        pin = ""
     try:
         rows = [dict(r) for r in conn.execute(
             """SELECT c.course_id, c.name, c.short_name,
@@ -58377,6 +58391,7 @@ def _flights_board_inputs(event_id: int, db_path=None) -> dict | None:
     today = today_central_str()
     completed = bool((ev.get("event_date") or "") and ev["event_date"][:10] < today)
     return {
+        "db_path": db_path,
         "ev": ev, "field_by_kind": field_by_kind, "holes_key": holes_key,
         "matrix": matrix, "matrix_source": matrix_source, "rules": rules,
         "places_source": places_source, "gg": gg, "as_of": as_of,
@@ -58424,11 +58439,78 @@ def _decorate_flights_board(board: dict, inp: dict) -> dict:
 
 def _compute_live_flights_board(inp: dict) -> dict:
     from . import flighting as _fl
+    modes = event_flight_modes(inp["ev"]["id"], db_path=inp.get("db_path"))
     board = _fl.build(inp["field_by_kind"], inp["holes_key"],
-                      _flights_row_for(inp["matrix"]), rules=inp["rules"])
+                      _flights_row_for(inp["matrix"]), rules=inp["rules"],
+                      modes=modes)
+    board["flight_modes"] = modes
     board["freeze"] = None
     board["settled"] = None
     return _decorate_flights_board(board, inp)
+
+
+# ── The CUT toggle, per event per game (Kerry 2026-09-22) ──────────────
+# "Need the ability to split flights evenly. A button or a toggle." The
+# event's choices live in app_settings `flight_modes:<event_id>` as JSON
+# {game: equal_size|fixed_bands}; a game not named takes the rules'
+# default (Individual Net even, Skins / Gross the ratified bands). A
+# FROZEN or SETTLED board refuses — the selection of record is the
+# snapshot; unfreeze first.
+
+def _flight_modes_key(event_id: int) -> str:
+    return f"flight_modes:{int(event_id)}"
+
+
+def event_flight_modes(event_id: int, db_path=None) -> dict:
+    from . import flighting as _fl
+    try:
+        raw = get_app_setting(_flight_modes_key(event_id), db_path=db_path)
+    except sqlite3.OperationalError:          # a bare test DB with no settings table
+        raw = None
+    if not raw:
+        return {}
+    try:
+        parsed = json.loads(raw)
+    except (TypeError, ValueError):
+        return {}
+    return {g: m for g, m in (parsed or {}).items()
+            if g in {x[0] for x in _fl.BOARD_GAMES} and m in _fl.FLIGHT_MODES}
+
+
+def set_event_flight_mode(event_id: int, game: str, mode: str | None,
+                          by: str = "manager", db_path=None) -> dict:
+    """Set (or clear, mode=None) one game's cut for one event; returns the
+    board as it now reads. Refuses on a frozen / settled board."""
+    from . import flighting as _fl
+    games = {x[0] for x in _fl.BOARD_GAMES}
+    if game not in games:
+        return {"ok": False, "error": f"unknown game '{game}' — one of {sorted(games)}"}
+    if mode is not None and mode not in _fl.FLIGHT_MODES:
+        return {"ok": False, "error": f"unknown mode '{mode}' — one of {list(_fl.FLIGHT_MODES)}"}
+    with _connect(db_path) as conn:
+        _ensure_flight_snapshot_tables(conn)
+        snaps = _active_flight_snapshots(conn, event_id)
+    if snaps["frozen"] or snaps["settled"]:
+        return {"ok": False, "error": "the board is frozen — the selection of record "
+                                      "is the snapshot; unfreeze first",
+                "state": "settled" if snaps["settled"] else "frozen"}
+    modes = event_flight_modes(event_id, db_path=db_path)
+    if mode is None:
+        modes.pop(game, None)
+    else:
+        modes[game] = mode
+    set_app_setting(_flight_modes_key(event_id), json.dumps(modes), db_path=db_path)
+    try:
+        log_agent_action(by or "manager", "flights_mode",
+                         f"event {event_id}: {game} cut = {mode or 'default'}",
+                         db_path=db_path)
+    except Exception:                                    # noqa: BLE001
+        pass
+    board = event_flights_board(event_id, db_path=db_path)
+    if not board:
+        return {"ok": False, "error": f"event {event_id} not found"}
+    board["ok"] = True
+    return board
 
 
 # ---------------------------------------------------------------------------

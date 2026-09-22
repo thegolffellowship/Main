@@ -2205,6 +2205,28 @@ Kerry 2026-09-21 (mailbox #582): "need to see the divisions/flights
 breakdown so probably will need a tab for it under each event." The
 FLIGHTING lane (spun off "TGF Tracker Improvements 2"; plan #584).
 
+- **THE CUT TOGGLE (v2.476.8, Kerry 2026-09-22):** "Need the ability to
+  split flights evenly. A button or a toggle. Specifically, historically
+  we've always just split the field down the middle, because net is
+  supposed to level the field. I think we should start off with that as
+  a default for Individual Net and then provide the HCP break of 12.0 as
+  an option to toggle too. For Skins and Gross, the default is the
+  breaks as we've previously defined, but a even break option/toggle
+  should still be provided." Each game bar on the tab carries EVEN SPLIT
+  / HCP BANDS; defaults are `FLIGHT_RULES["modes"]` (Individual Net
+  `equal_size`, Skins and Individual Gross `fixed_bands`); the event's
+  choices live in app_settings `flight_modes:<event_id>` (JSON {game:
+  mode}) via `set_event_flight_mode` / `POST /api/events/<id>/flights/
+  mode` {game, mode|null} / bridge `scoring-flights-mode:<id>|<game>|
+  <mode|default>`. EVEN SPLIT is the field cut down the middle with NO
+  ceiling (the 2026-09-21 "same as Skins at 12.0" reading for Ind Net is
+  now the HCP BANDS option); the edge reported is the next flight's
+  lowest index so a late add after a freeze lands by the same line. A
+  FROZEN / SETTLED board refuses the toggle (unfreeze first) — the
+  selection of record is the snapshot, which carries `mode` and
+  `mode_source`. `rules_version` is 2. Guards: `test_flighting.py`,
+  `test_flights_board.py`.
+
 - **Rules as data:** `email_parser/flighting.py` — pure, no DB —
   carries the RATIFIED rule set (#571–#575 as revised by #581/#582):
   ladders `<6.0 / 6.0–11.9 / 12.0+` (4 flights add `12.0–17.9 / 18.0+`;

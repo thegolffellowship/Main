@@ -196,10 +196,25 @@ check("Landa Park Ind Gross: 15 buyers → 3 flights on the ladder, 6/5/4",
 check("...bands read <6.0 / 6.0–11.9 / 12.0+", [f["band"] for f in s["flights"]] == ["<6.0", "6.0–11.9", "12.0+"])
 net14 = [P(i, f"N{i}", x) for i, x in enumerate([-1.0, 1.6, 11.0, 11.2, 12.4, 13.8, 14.6, 15.8, 16.4, 16.6, 18.0, 24.0, 27.2, 34.0], start=100)]
 s = fl.select_game("individual_net", "Individual Net", "NET", net14, "9", M9[14], cfg["individual_net"])
-check("Brackenridge Ind Net: 14 buyers on a nine → 2 flights on the SAME fixed ladder as Skins, <12.0 / 12.0+ (4/10) — Kerry 2026-09-21: 'same as Skins at <12.0 and 12.0+, not 12.4'",
-      s["mode"] == "fixed_bands" and [f["players"] for f in s["flights"]] == [4, 10], str(s["flights"]))
-check("...the cut line is the ladder's 12.0, never a moved ceiling, so a late add lands by the frozen line",
-      s["edges"] == [12.0] and [f["band"] for f in s["flights"]] == ["<12.0", "12.0+"], (s["edges"], [f["band"] for f in s["flights"]]))
+check("Brackenridge Ind Net: 14 buyers on a nine → 2 flights split DOWN THE MIDDLE by default, 7/7 (Kerry 2026-09-22: 'historically we've always just split the field down the middle… start off with that as a default for Individual Net')",
+      s["mode"] == "equal_size" and s["mode_source"] == "default" and [f["players"] for f in s["flights"]] == [7, 7], str(s["flights"]))
+check("...no ceiling nudges the cut: the edge is simply the next flight's lowest index (15.8), and the bands read from it",
+      s["edges"] == [15.8] and [f["band"] for f in s["flights"]] == ["<15.8", "15.8+"], (s["edges"], [f["band"] for f in s["flights"]]))
+s = fl.select_game("individual_net", "Individual Net", "NET", net14, "9", M9[14], cfg["individual_net"], mode="fixed_bands")
+check("...the HCP break is one toggle away: fixed_bands cuts on the ladder's 12.0 like Skins (4/10) — the 2026-09-21 reading, now the option",
+      s["mode"] == "fixed_bands" and s["mode_source"] == "event toggle" and [f["players"] for f in s["flights"]] == [4, 10]
+      and s["edges"] == [12.0] and [f["band"] for f in s["flights"]] == ["<12.0", "12.0+"], str(s["flights"]))
+s = fl.select_game("individual_gross", "Individual Gross", "GROSS", landa_gross, "18", M18[15], cfg["individual_gross"])
+check("Skins / Gross default to the ratified bands (Landa Park Ind Gross 6/5/4 unchanged)",
+      s["mode"] == "fixed_bands" and s["mode_source"] == "default" and [f["players"] for f in s["flights"]] == [6, 5, 4], str(s["flights"]))
+s = fl.select_game("individual_gross", "Individual Gross", "GROSS", landa_gross, "18", M18[15], cfg["individual_gross"], mode="equal_size")
+check("...and their even-split toggle cuts 15 into 5/5/5",
+      s["mode"] == "equal_size" and [f["players"] for f in s["flights"]] == [5, 5, 5], str(s["flights"]))
+check("an unknown mode falls back to the game's default", fl.select_game("skins", "Skins", "GROSS", landa_gross, "18", M18[15], cfg["skins"], mode="sideways")["mode"] == "fixed_bands")
+bt = fl.build({"NET": net14, "GROSS": landa_gross}, "18", row18, modes={"skins": "equal_size"})
+check("build() takes the event's per-game toggles; a game not named keeps its default",
+      next(g for g in bt["games"] if g["game"] == "skins")["selection"]["mode"] == "equal_size"
+      and next(g for g in bt["games"] if g["game"] == "individual_gross")["selection"]["mode"] == "fixed_bands")
 s = fl.select_game("individual_net", "Individual Net", "NET", net14 + [P(200, "X", None)], "9", M9[14], cfg["individual_net"])
 check("a player with no index is listed apart, never dropped into a flight",
       [u["name"] for u in s["unflighted"]] == ["X"] and any("no handicap index" in n for n in s["notes"]))

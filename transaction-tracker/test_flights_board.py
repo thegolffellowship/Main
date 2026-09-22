@@ -118,10 +118,18 @@ check("...beside what Golf Genius recorded for Skins ($130 across 2 rows; the CT
       sk["gg_recorded"]["total"] == 130.0 and len(sk["gg_recorded"]["rows"]) == 2, str(sk["gg_recorded"]))
 
 inn = g["individual_net"]
-check("Individual Net: 13 buyers on a nine → 2 flights cut at 12.0 like Skins (Kerry 2026-09-21), low flight under 12.0",
-      inn["selection"]["mode"] == "fixed_bands" and inn["selection"]["flight_count"] == 2
-      and all(m["index"] < 12.0 for m in inn["selection"]["flights"][0]["members"])
-      and all(m["index"] >= 12.0 for m in inn["selection"]["flights"][1]["members"]), str(inn["selection"]["flights"]))
+check("Individual Net: 13 buyers on a nine → 2 flights split down the middle by default, 7/6 (Kerry 2026-09-22)",
+      inn["selection"]["mode"] == "equal_size" and inn["selection"]["flight_count"] == 2
+      and [f["players"] for f in inn["selection"]["flights"]] == [7, 6], str(inn["selection"]["flights"]))
+_mres = db.set_event_flight_mode(EV, "individual_net", "fixed_bands", db_path=tmp)
+_inn2 = next(x for x in _mres["games"] if x["game"] == "individual_net")
+check("...the HCP BANDS toggle (set_event_flight_mode) cuts it at 12.0 like Skins, low flight under 12.0, and says it is the event's choice",
+      _mres.get("ok") and _inn2["selection"]["mode"] == "fixed_bands" and _inn2["selection"]["mode_source"] == "event toggle"
+      and all(m["index"] < 12.0 for m in _inn2["selection"]["flights"][0]["members"])
+      and all(m["index"] >= 12.0 for m in _inn2["selection"]["flights"][1]["members"]), str(_inn2["selection"]["flights"]))
+check("...the board reports the event's toggles", _mres.get("flight_modes") == {"individual_net": "fixed_bands"}, str(_mres.get("flight_modes")))
+check("...and 'default' clears it", db.set_event_flight_mode(EV, "individual_net", None, db_path=tmp)["flight_modes"] == {})
+check("an unknown game is refused", db.set_event_flight_mode(EV, "bingo", "equal_size", db_path=tmp).get("ok") is False)
 check("...amounts from the matrix columns (netLow / netHigh)",
       inn["amounts"]["total_pot"] > 0 and inn["amounts"]["flights"][1]["matrix_column"] == "netHigh", str(inn["amounts"]))
 

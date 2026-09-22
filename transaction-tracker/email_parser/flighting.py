@@ -61,7 +61,7 @@ from typing import Callable
 # ---------------------------------------------------------------------------
 
 FLIGHT_RULES: dict = {
-    "version": 1,
+    "version": 2,
     "source": ("mailbox #571-#575 (Kerry 2026-09-18/19) as revised by "
                "#581/#582 (2026-09-21)"),
     # Flight on the raw 18-hole TGF index (= 2 x the nine-hole index),
@@ -94,13 +94,29 @@ FLIGHT_RULES: dict = {
         # 18h $30 = Skins $18 + Ind Gross $8 + markup $4).
         "rate": {"9": 4.0, "18": 8.0},
     },
+    # THE CUT, per game — KERRY 2026-09-22: "Need the ability to split
+    # flights evenly. A button or a toggle. Specifically, historically
+    # we've always just split the field down the middle, because net is
+    # supposed to level the field. I think we should start off with that
+    # as a default for Individual Net and then provide the HCP break of
+    # 12.0 as an option to toggle too. For Skins and Gross, the default is
+    # the breaks as we've previously defined, but a even break option/
+    # toggle should still be provided."
+    #   equal_size  — the field split down the middle (equal headcounts,
+    #                 tie-safe, NO ceiling: the cut is wherever the middle
+    #                 falls; the edge is the next flight's lowest index)
+    #   fixed_bands — the ratified ladder (<12.0 / 12.0+; 6/12; 6/12/18)
+    # An event overrides per game (`flight_modes:<event_id>`); these are
+    # the defaults. Supersedes the 2026-09-21 "same as Skins" reading for
+    # Individual Net, which remains one toggle away.
+    "modes": {
+        "individual_net": "equal_size",
+        "skins": "fixed_bands",
+        "individual_gross": "fixed_bands",
+    },
     "net": {
-        # KERRY 2026-09-21 (Brackenridge board printed "Flight 1 (HCP
-        # <12.4)"): "Flights for Individual Net is supposed to be same as
-        # Skins at <12.0 and 12.0+, not 12.4." Individual Net cuts on the
-        # SAME fixed ladder as Skins; equal_size stays available as a dial.
-        "mode": "fixed_bands",
-        "low_flight_ceiling": 12.0,      # exclusive: 12.0 is pushed up (equal_size mode only)
+        "mode": "equal_size",            # kept for readers of the old key; `modes` rules
+        "low_flight_ceiling": None,      # "down the middle" — no ceiling nudges the cut
         "amounts": "matrix",
     },
     "skins": {"amounts": "matrix_equal_per_flight"},
@@ -372,7 +388,18 @@ def _flight_count(game: str, matrix_row: dict | None, game_cfg: dict,
     return int(_bands_lookup(bands, n, 1) or 1), "seed game config flight_bands"
 
 
-def _net_plan(field: list[dict], count: int, rules: dict) -> tuple[list[list[dict]], list[float], list[str]]:
+FLIGHT_MODES = ("equal_size", "fixed_bands")
+
+
+def default_mode(game: str, rules: dict | None = None) -> str:
+    """The cut a game uses unless the event says otherwise."""
+    r = rules or FLIGHT_RULES
+    return ((r.get("modes") or {}).get(game)
+            or (r["net"]["mode"] if game == "individual_net" else "fixed_bands"))
+
+
+def _net_plan(field: list[dict], count: int, rules: dict,
+              game: str = "individual_net") -> tuple[list[list[dict]], list[float], list[str]]:
     """Individual Net: equal-size cuts, tie-safe, low flight under the
     ceiling — `live_scoring.flight_plan` with NO merging. Returns the
     groups, the edges the cut implies (each flight's exclusive upper bound
@@ -384,7 +411,7 @@ def _net_plan(field: list[dict], count: int, rules: dict) -> tuple[list[list[dic
         from live_scoring import flight_plan, SEED_FLIGHT_CONFIG  # type: ignore
     cfg = copy.deepcopy(SEED_FLIGHT_CONFIG)
     cfg["min_flight_size"] = 0                       # #572: no merging
-    cfg["low_flight_ceiling"] = {"individual_net": rules["net"]["low_flight_ceiling"]}
+    cfg["low_flight_ceiling"] = {game: rules["net"].get("low_flight_ceiling")}
     # flight_plan keys its players and hands back only key/name/index, so
     # the original dicts (customer_id, ph) are restored by key afterwards.
     by_key = {}
@@ -393,8 +420,7 @@ def _net_plan(field: list[dict], count: int, rules: dict) -> tuple[list[list[dic
         k = str(p.get("customer_id") if p.get("customer_id") is not None else f"n{i}")
         by_key[k] = p
         keyed.append({"key": k, "name": p.get("name"), "index": p.get("index")})
-    plan = flight_plan(keyed, count, game="individual_net", config=cfg,
-                       mode=rules["net"]["mode"])
+    plan = flight_plan(keyed, count, game=game, config=cfg, mode="equal_size")
     groups = [[dict(by_key[m["key"]]) for m in f["members"]] for f in plan["flights"]]
     while len(groups) < count:
         groups.append([])
@@ -404,19 +430,24 @@ def _net_plan(field: list[dict], count: int, rules: dict) -> tuple[list[list[dic
 
 def select_game(game: str, label: str, kind: str, field: list[dict],
                 holes_key: str, matrix_row: dict | None, game_cfg: dict,
-                rules: dict | None = None) -> dict:
+                rules: dict | None = None, mode: str | None = None) -> dict:
     """The SELECTION layer for one game from the field as it stands.
 
     `field` is that game's buyers: [{customer_id, name, index, ph?}]. The
     index is the raw 18-hole TGF index of record (locked as-of for a
-    started event, upstream)."""
+    started event, upstream). `mode` is the event's toggle for this game
+    (equal_size | fixed_bands); None means the rules' default."""
     r = rules or FLIGHT_RULES
     n = len(field)
+    use_mode = mode if mode in FLIGHT_MODES else default_mode(game, r)
     sel: dict = {
         "game": game, "label": label, "kind": kind,
         "buyers_at_selection": n, "active": True, "inactive_reason": None,
         "variant": None, "flight_count": 0, "count_source": None,
-        "mode": None, "edges": [], "edges_source": None,
+        "mode": use_mode,
+        "mode_source": "event toggle" if mode in FLIGHT_MODES else "default",
+        "mode_default": default_mode(game, r),
+        "edges": [], "edges_source": None,
         "flights": [], "unflighted": [], "notes": [],
     }
     if n == 0:
@@ -447,10 +478,9 @@ def select_game(game: str, label: str, kind: str, field: list[dict],
         sel["notes"].append(
             f"{len(unknown)} player(s) have no handicap index and cannot be "
             f"flighted: {', '.join(sorted(p.get('name') or '' for p in unknown))}.")
-    if game == "individual_net" and r["net"]["mode"] == "equal_size":
-        sel["mode"] = r["net"]["mode"]
-        groups, edges, notes = _net_plan(known, count, r)
-        sel["edges"], sel["edges_source"] = edges, "equal-size cut (next flight's lowest index)"
+    if use_mode == "equal_size":
+        groups, edges, notes = _net_plan(known, count, r, game=game)
+        sel["edges"], sel["edges_source"] = edges, "even split (field cut down the middle; edge = next flight's lowest index)"
         sel["notes"].extend(notes)
     else:
         sel["mode"] = "fixed_bands"
@@ -520,12 +550,15 @@ def _games_cfg():
 
 def build(field_by_kind: dict, holes_key: str,
           matrix_row_for: Callable[[int], dict | None],
-          games_cfg: dict | None = None, rules: dict | None = None) -> dict:
+          games_cfg: dict | None = None, rules: dict | None = None,
+          modes: dict | None = None) -> dict:
     """A LIVE board: SELECTION and AMOUNTS from the same field.
 
     field_by_kind: {"NET": [players], "GROSS": [players]} — the bundle
     buyers per kind, each {customer_id, name, index, ph?}.
     matrix_row_for(n): the LIVE matrix row for n buyers on this hole count.
+    modes: the event's per-game cut toggles {game: equal_size|fixed_bands};
+    a game not named takes the rules' default.
     """
     r = rules or FLIGHT_RULES
     cfg = games_cfg or _games_cfg()
@@ -534,7 +567,7 @@ def build(field_by_kind: dict, holes_key: str,
         field = list(field_by_kind.get(kind) or [])
         row = matrix_row_for(len(field)) if field else None
         sel = select_game(game, label, kind, field, holes_key, row,
-                          cfg.get(game) or {}, r)
+                          cfg.get(game) or {}, r, mode=(modes or {}).get(game))
         games.append({"game": game, "label": label, "kind": kind,
                       "active": sel["active"],
                       "inactive_reason": sel["inactive_reason"],

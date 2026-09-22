@@ -41,6 +41,13 @@ check("a genuinely new course is None — it may be created",
       db._find_course_loose(c, "Cordillera Ranch") is None)
 check("Austin's Riverside is not San Antonio's (the pins keep them apart)",
       db._find_course_loose(c, "Riverside Golf Course (Austin)") is None)
+check("a bare 'Riverside Golf Club' (could be DFW) is NOT folded into SA's row on the pin alone (Kerry 2026-09-22)",
+      db._find_course_loose(c, "Riverside Golf Club") is None)
+check("…nor a DFW spelling, which pins apart",
+      db._course_short_pin("Riverside Golf Club - Fort Worth") == "Riverside | DFW"
+      and db._find_course_loose(c, "Riverside Golf Club - Fort Worth") is None)
+check("…while SA's own spelling still resolves",
+      db._find_course_loose(c, "Riverside Golf Course San Antonio") == 22368)
 
 c.commit()
 print("\n== the tee import goes through the same door ==")

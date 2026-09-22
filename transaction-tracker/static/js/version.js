@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.476.7";
+window.TGF_VERSION = "2.476.8";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.476.8",
+    date: "2026-09-22",
+    changes: [
+      "FLIGHTS tab: EVEN SPLIT / HCP BANDS toggle on every game bar (Kerry 2026-09-22: \u2018Need the ability to split flights evenly\u2026 historically we've always just split the field down the middle, because net is supposed to level the field\u2019). Individual Net now defaults to the even split \u2014 tonight's Brackenridge Ind Net reads 7/7 \u2014 with the 12.0 break one click away; Skins and Individual Gross keep the ratified bands by default with the even split as the option. Per event, per game (`flight_modes:<id>`), LIVE boards only; a frozen selection is the record and refuses. Rules version 2. Bridge `scoring-flights-mode`. Guards: `test_flighting.py`, `test_flights_board.py`.",
+      "Course registry: the five remaining twins are merged on Kerry's word \u2014 Lost Pines 22819\u219253554, Silverhorn 25399 and 54840\u219222366, Star Ranch 55562 and 50887\u219222375, Twin Creeks 63784\u219229587; rounds re-pinned to identical-spec tees, events and items re-pointed, every old spelling aliased. The three Riversides (SA, Austin, DFW) stay apart: a DFW spelling pins to \u2018Riverside | DFW\u2019, and a bare \u2018Riverside\u2019 never folds into SA's row on the short name alone.",
+    ],
+  },
   {
     version: "2.476.7",
     date: "2026-09-22",

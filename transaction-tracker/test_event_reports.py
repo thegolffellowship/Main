@@ -172,15 +172,28 @@ check("the report covers NET, SKINS and GROSS", set(g) == {"individual_net", "sk
 check("NET buyers come from the roster", g["individual_net"]["buyers"] == 12, str(g["individual_net"]["buyers"]))
 check("GROSS buyers are counted separately", g["skins"]["buyers"] == 3, str(g["skins"]["buyers"]))
 check("12 NET buyers -> 2 flights per the matrix", len(g["individual_net"]["flights"]) == 2, str(g["individual_net"]))
-check("the flight label names the break like Golf Genius does",
-      g["individual_net"]["flights"][0]["name"].endswith("(HCP <12.0)"),
+# Individual Net splits the field DOWN THE MIDDLE by default (Kerry
+# 2026-09-22): 12 buyers → 6/6, the label names the cut the split made
+# (Wade at 15.0 opens the upper flight) so a reader can see the line.
+check("the flight label names the even split's cut like Golf Genius does",
+      g["individual_net"]["flights"][0]["name"].endswith("(HCP <15.0)"),
       g["individual_net"]["flights"][0]["name"])
 check("…and the upper flight reads as a floor",
-      g["individual_net"]["flights"][1]["name"].endswith("(HCP 12.0+)"),
+      g["individual_net"]["flights"][1]["name"].endswith("(HCP 15.0+)"),
       g["individual_net"]["flights"][1]["name"])
 f1 = [m["name"] for m in g["individual_net"]["flights"][0]["members"]]
-check("12.0 goes UP — Espinosa is not in the low flight", "Chris Espinosa" not in f1, str(f1))
-check("the low flight holds everyone under 12.0", set(f1) == {"Pat Youngs", "Luke Mazanec", "Adam Baker", "Gus Vasquez"}, str(f1))
+check("12 NET buyers split 6/6 — Espinosa (12.0) and Marroquin (12.4) are in the low half",
+      len(f1) == 6 and {"Chris Espinosa", "Scott Marroquin"} <= set(f1), str(f1))
+# The HCP break is one toggle away: the same page under fixed_bands is
+# the 2026-09-21 reading — 12.0 goes UP, the low flight is everyone under it.
+db.set_event_flight_mode(EV, "individual_net", "fixed_bands", db_path=tmp)
+_gb = {x["game"]: x for x in db.event_flights_report(EV, db_path=tmp)["games"]}
+_f1b = [m["name"] for m in _gb["individual_net"]["flights"][0]["members"]]
+check("HCP BANDS toggle: the label names the 12.0 break", _gb["individual_net"]["flights"][0]["name"].endswith("(HCP <12.0)")
+      and _gb["individual_net"]["flights"][1]["name"].endswith("(HCP 12.0+)"), _gb["individual_net"]["flights"][0]["name"])
+check("…12.0 goes UP — Espinosa is not in the low flight", "Chris Espinosa" not in _f1b, str(_f1b))
+check("…the low flight holds everyone under 12.0", set(_f1b) == {"Pat Youngs", "Luke Mazanec", "Adam Baker", "Gus Vasquez"}, str(_f1b))
+db.set_event_flight_mode(EV, "individual_net", None, db_path=tmp)
 check("names print LAST, First", g["individual_net"]["flights"][0]["members"][0]["sort_name"] == "YOUNGS, Pat",
       g["individual_net"]["flights"][0]["members"][0]["sort_name"])
 check("a plus handicap prints as +1.4, not -1.4",
