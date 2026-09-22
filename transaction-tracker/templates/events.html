@@ -3961,6 +3961,40 @@
         };
     });
 
+    const _evRowCache = {};      // event id → {sig, row, detail} of the last render
+    function evRowSignature(ev) {
+        // Everything a COLLAPSED row is drawn from.
+        return JSON.stringify(ev) + "|" + currentRole + "|" + orderedEvColumns().map(c => c.key).join(",")
+            + "|" + getEventTotalPlayers(ev) + "|" + evColspan() + "|" + evStartCell(ev) + "|" + evPriceCell(ev);
+    }
+    // ONE event refreshed in place after a roster action (Kerry 2026-09-22):
+    // that event's order rows and its list row, not every order row ever
+    // written plus every event. Falls back to the full reload if anything
+    // about the scoped fetch is off.
+    async function refreshEventInPlace(evId) {
+        if (!evId) { await fetchItems(); await fetchEvents(); return; }
+        try {
+            const [ir, er] = await Promise.all([
+                fetch(`/api/items?event_id=${evId}`), fetch(`/api/events/${evId}`)]);
+            if (!ir.ok || !er.ok) throw new Error(`HTTP ${ir.status}/${er.status}`);
+            const items = await ir.json();
+            const evNew = await er.json();
+            if (!Array.isArray(items) || !evNew || !evNew.id) throw new Error("bad payload");
+            const names = new Set([String(evNew.item_name || "").toLowerCase()]
+                .concat((evNew.aliases || []).map(a => String(a).toLowerCase())));
+            allItems = allItems
+                .filter(i => !(i.event_id === evId || names.has(String(i.item_name || "").toLowerCase())))
+                .concat(items)
+                .sort((x, y) => String(y.order_date || "").localeCompare(String(x.order_date || "")) || ((y.id || 0) - (x.id || 0)));
+            const idx = allEvents.findIndex(e => e.id === evId);
+            if (idx >= 0) allEvents[idx] = evNew; else allEvents.push(evNew);
+            renderEvents();
+        } catch (err) {
+            console.warn("refreshEventInPlace: falling back to the full reload —", err);
+            await fetchItems();
+            await fetchEvents();
+        }
+    }
     function renderEvents() {
         const tbody = document.getElementById("events-body");
 
@@ -3983,6 +4017,12 @@
         }
 
         let html = "";
+        // KEYED ROW REUSE (Kerry 2026-09-22, "partial update for ROSTER"):
+        // a collapsed row whose inputs have not changed keeps its DOM node
+        // (and its handlers); only changed rows and the expanded card are
+        // rebuilt. The table is assembled in a fragment and swapped once.
+        const frag = document.createDocumentFragment();
+        const tpl = document.createElement("template");
         // All Events view: TGF-orange breakline where UPCOMING meets Past
         // (only meaningful while sorted by date)
         let dividerAfterIdx = -1;
@@ -3994,6 +4034,13 @@
         }
         filtered.forEach((ev, _evIdx) => {
             const isExpanded = expandedEventId === ev.id;
+            const _cache = _evRowCache[ev.id];
+            const _sig = isExpanded ? null : evRowSignature(ev);
+            if (!isExpanded && _cache && _cache.sig === _sig) {
+                frag.appendChild(_cache.row);
+                frag.appendChild(_cache.detail);
+            } else {
+            html = "";
             // Cells are built BY KEY and emitted in Kerry's order. The
             // old positional list meant column order lived in three
             // places at once (catalogue, header, row) and adding one
@@ -4031,29 +4078,34 @@
                     </div>
                 </td>
             </tr>`;
+            tpl.innerHTML = html;
+            const _row = tpl.content.querySelector("tr.event-row-clickable");
+            const _detail = tpl.content.querySelector("tr.event-detail-row");
+            frag.appendChild(_row);
+            frag.appendChild(_detail);
+            _evRowCache[ev.id] = { sig: _sig, row: _row, detail: _detail };
+            }
             if (_evIdx === dividerAfterIdx) {
-                html += `<tr class="ev-past-divider"><td colspan="${evColspan()}"><span>PAST EVENTS</span></td></tr>`;
+                tpl.innerHTML = `<tr class="ev-past-divider"><td colspan="${evColspan()}"><span>PAST EVENTS</span></td></tr>`;
+                frag.appendChild(tpl.content.firstElementChild);
             }
         });
 
-        tbody.innerHTML = html;
+        tbody.replaceChildren(frag);
 
-        // Attach click handlers to event rows
-        tbody.querySelectorAll(".event-row-clickable").forEach(row => {
+        // Handlers on NEW rows only — a reused row still has its own.
+        tbody.querySelectorAll(".event-row-clickable:not([data-wired])").forEach(row => {
+            row.dataset.wired = "1";
             row.addEventListener("click", () => {
                 const id = parseInt(row.dataset.id);
                 toggleEventDetail(id);
             });
-        });
-        // Attach event action button handlers (Edit/Merge/Delete)
-        tbody.querySelectorAll("[data-edit-event]").forEach(btn => {
-            btn.addEventListener("click", (e) => { e.stopPropagation(); openEditEvent(parseInt(btn.dataset.editEvent)); });
-        });
-        tbody.querySelectorAll("[data-merge-event]").forEach(btn => {
-            btn.addEventListener("click", (e) => { e.stopPropagation(); openMergeEvent(parseInt(btn.dataset.mergeEvent)); });
-        });
-        tbody.querySelectorAll("[data-delete-event]").forEach(btn => {
-            btn.addEventListener("click", (e) => { e.stopPropagation(); deleteEvent(parseInt(btn.dataset.deleteEvent)); });
+            const eb = row.querySelector("[data-edit-event]");
+            if (eb) eb.addEventListener("click", (e) => { e.stopPropagation(); openEditEvent(parseInt(eb.dataset.editEvent)); });
+            const mb = row.querySelector("[data-merge-event]");
+            if (mb) mb.addEventListener("click", (e) => { e.stopPropagation(); openMergeEvent(parseInt(mb.dataset.mergeEvent)); });
+            const db = row.querySelector("[data-delete-event]");
+            if (db) db.addEventListener("click", (e) => { e.stopPropagation(); deleteEvent(parseInt(db.dataset.deleteEvent)); });
         });
 
         // Re-attach detail handlers for any already-expanded row
@@ -5592,7 +5644,10 @@
         const dark = { bd: "#1B1B1B", bg: "#1B1B1B", fg: "#fff" };
         const line = { bd: "#9CA3AF", bg: "#fff", fg: "#374151" };
         if (board.state === "live") return btn("freeze", "FREEZE", dark);
-        if (board.state === "frozen") return btn("settle", "SETTLE", dark) + btn("unfreeze", "Unfreeze", line).replace("margin-left:auto;", "margin-left:0.4rem;");
+        // SETTLE is the CLOSEOUT's job (Kerry 2026-09-22: "I will likely
+        // never use it manually. Out of sight out of mind.") — the hourly
+        // post-event sync settles a played event's board itself.
+        if (board.state === "frozen") return btn("unfreeze", "Unfreeze", line);
         if (board.state === "settled") return btn("unfreeze", "Unfreeze", line);
         return "";
     }
@@ -5829,7 +5884,7 @@
         if (board.freeze) {
             html += `<div style="width:0;min-width:100%;box-sizing:border-box;font-size:0.74rem;color:#78350f;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;padding:0.35rem 0.6rem;margin:0.35rem 0 0;">
                 Frozen ${escapeHtml(board.freeze.taken_at_local || board.freeze.taken_at || "")} by ${escapeHtml(board.freeze.taken_by || "")}${board.freeze.note ? ` &mdash; ${escapeHtml(board.freeze.note)}` : ""}.
-                ${board.settled ? ` Settled ${escapeHtml(board.settled.taken_at_local || board.settled.taken_at || "")} by ${escapeHtml(board.settled.taken_by || "")} &mdash; this board is the record and no longer recomputes.` : " Selection is locked; pots and places keep recomputing from actual buyers until settlement."}
+                ${board.settled ? ` Settled ${escapeHtml(board.settled.taken_at_local || board.settled.taken_at || "")} by ${escapeHtml(board.settled.taken_by || "")} &mdash; this board is the record and no longer recomputes.` : " Selection is locked; pots and places keep recomputing from actual buyers until the closeout settles the board (automatic, the night of the event)."}
             </div>`;
         }
         html += `<div style="width:0;min-width:100%;box-sizing:border-box;font-size:0.74rem;color:var(--text-muted);margin:0.35rem 0 0.6rem;line-height:1.5;">
@@ -6691,7 +6746,7 @@
         // Clean: a full rerender shows the printables — unless a drag has
         // started since, in which case the next drop rerenders anyway.
         if (document.querySelector('.pair-dragging')) paintPairingsSaveStamp(ev, state);
-        else rerenderDetail(container, ev);
+        else rerenderDetailBody(container, ev);
     }
     function pairSaveStampText(state) {
         if (state.saving) return 'Saving…';
@@ -7676,6 +7731,14 @@
     // Groups are never touched: a manager may be mid-edit with an unsaved
     // sheet, and losing that to a background refresh would be far worse
     // than a missing name. Returns the new roster size, or null on error.
+    // What a PAIRINGS re-open can change without the sheet itself changing.
+    function pairingsRosterSig(state) {
+        try {
+            return JSON.stringify([state.event_players, state.requests, state.mpMatches,
+                                   state.standingsPoints, state.standingsEnrolled,
+                                   state.pairCounts, state.blindPool]);
+        } catch (_) { return String(Math.random()); }
+    }
     async function refreshPairingsRoster(evId) {
         try {
             const res = await fetch(`/api/events/${evId}/pairings`);
@@ -8442,7 +8505,16 @@
         return html;
     }
 
+    // PARTIAL DOM UPDATE, second step (Kerry 2026-09-22: "Do the same
+    // partial update for PAIRINGS and ROSTER"). The card is a HEADER (tab
+    // badges, filters, pricing) and a BODY (the open tab's panel). The body
+    // is wrapped in [data-ev-body] so an in-panel change can swap the body
+    // alone — the header and its handlers stay put.
     function renderDetailContent(ev) {
+        const html = renderDetailContentInner(ev);
+        return html.indexOf('data-ev-body="') >= 0 ? html + "</div>" : html;
+    }
+    function renderDetailContentInner(ev) {
         const registrants = getRegistrants(ev.item_name);
         const rsvps = allRsvps[ev.item_name] || [];
 
@@ -8651,6 +8723,7 @@
             html += `</div>`;
         }
 
+        html += `<div class="ev-detail-body" data-ev-body="${ev.id}">`;
         // ---- PAIRINGS VIEW ----
         if (pairingsView) {
             html += renderPairingsPanel(ev, registrants, ggRsvpRows);
@@ -9479,6 +9552,26 @@
             || document.getElementById(`ev-mobile-detail-${evId}`);
     }
 
+    // Swap the BODY of the open card only: the new body is built off-screen
+    // and replaces the old one in a single step; only its own handlers are
+    // re-wired (root-scoped attach). Falls back to the full redraw on the
+    // phone layout or when the body is not on screen.
+    function rerenderDetailBody(container, ev) {
+        if (!container || isMobileContainer(container)) { rerenderDetail(container, ev); return false; }
+        const old = container.querySelector(`[data-ev-body="${ev.id}"]`);
+        if (!old) { rerenderDetail(container, ev); return false; }
+        const tmp = document.createElement("div");
+        tmp.innerHTML = renderDetailContent(ev);
+        const fresh = tmp.querySelector(`[data-ev-body="${ev.id}"]`);
+        if (!fresh) { rerenderDetail(container, ev); return false; }
+        old.replaceWith(fresh);
+        attachDetailHandlers(container, ev, fresh);
+        if (typeof _setStickyOffsets === 'function') _setStickyOffsets();
+        const ps = pairingsData[ev.id];
+        if (ps && ps.loaded && ps.isDirty) schedulePairingsAutosave(container, ev, ps);
+        return true;
+    }
+
     function rerenderDetail(container, ev) {
         if (isMobileContainer(container)) {
             // Re-render mobile view for this event
@@ -9555,9 +9648,13 @@
     }, true);
     window.addEventListener('resize', evCloseActionsMenus);
 
-    function attachDetailHandlers(container, ev) {
+    function attachDetailHandlers(container, ev, _root) {
+        // `root` is where handlers are LOOKED UP; `container` is what a
+        // redraw targets. A body-only swap passes the new body as root so
+        // the header's still-live handlers are not bound twice.
+        const root = _root || container;
         // Actions dropdown toggle
-        container.querySelectorAll('.ev-actions-toggle').forEach(btn => {
+        root.querySelectorAll('.ev-actions-toggle').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 const menu = btn.nextElementSibling;
@@ -9566,28 +9663,28 @@
                 else evOpenActionsMenu(btn);
             });
         });
-        container.querySelectorAll('.ev-menu-item').forEach(item => {
+        root.querySelectorAll('.ev-menu-item').forEach(item => {
             item.addEventListener('click', () => { evCloseActionsMenus(); });
         });
 
         // Expandable player detail rows
-        container.querySelectorAll("tr[data-expand-player]").forEach(row => {
+        root.querySelectorAll("tr[data-expand-player]").forEach(row => {
             row.addEventListener("click", (e) => {
                 // Don't expand when clicking links, buttons, or RSVP circles
                 if (e.target.closest("a, button, .rsvp-circle, .rsvp-only-tag, .player-info-icon")) return;
                 const playerId = row.dataset.expandPlayer;
-                const detailRow = container.querySelector(`tr[data-expand-for="${playerId}"]`);
+                const detailRow = root.querySelector(`tr[data-expand-for="${playerId}"]`);
                 if (detailRow) detailRow.classList.toggle("visible");
             });
         });
         // Info icon also toggles the detail row
-        container.querySelectorAll(".player-info-icon").forEach(icon => {
+        root.querySelectorAll(".player-info-icon").forEach(icon => {
             icon.addEventListener("click", (e) => {
                 e.stopPropagation();
                 const row = icon.closest("tr[data-expand-player]");
                 if (!row) return;
                 const playerId = row.dataset.expandPlayer;
-                const detailRow = container.querySelector(`tr[data-expand-for="${playerId}"]`);
+                const detailRow = root.querySelector(`tr[data-expand-for="${playerId}"]`);
                 if (detailRow) detailRow.classList.toggle("visible");
             });
         });
@@ -9602,7 +9699,7 @@
         }
 
         // PLAYERS / PAIRINGS / GAMES view toggle
-        container.querySelectorAll("[data-toggle-games]").forEach(badge => {
+        root.querySelectorAll("[data-toggle-games]").forEach(badge => {
             badge.addEventListener("click", async (e) => {
                 e.stopPropagation();
                 const val = badge.dataset.toggleGames;
@@ -9614,12 +9711,20 @@
                 // a moment ago is in the bullpen when you come back
                 // (Kerry 2026-09-15, the Justin Guerrero late signup).
                 if (val === "2") {
-                    if (!getPairingsState(ev.id).loaded) {
+                    // The saved sheet is already on screen from the cache
+                    // (the redraw above). First open: load it, then swap
+                    // the body. Re-open: re-read the roster BEHIND the page
+                    // and swap the body only if something changed — a
+                    // saved sheet pops right back up (Kerry 2026-09-22).
+                    const st = getPairingsState(ev.id);
+                    if (!st.loaded) {
                         await loadPairings(ev.id);
+                        rerenderDetailBody(container, ev);
                     } else {
+                        const before = pairingsRosterSig(st);
                         await refreshPairingsRoster(ev.id);
+                        if (pairingsRosterSig(st) !== before) rerenderDetailBody(container, ev);
                     }
-                    rerenderDetail(container, ev);
                 }
                 if (val === "5") {
                     // LIVE board: re-read on every open so a signup a
@@ -9638,7 +9743,7 @@
         }
 
         // Game filter badges (PLAYERS view sub-filters)
-        container.querySelectorAll(".game-stat-badge[data-filter]").forEach(badge => {
+        root.querySelectorAll(".game-stat-badge[data-filter]").forEach(badge => {
             badge.addEventListener("click", (e) => {
                 e.stopPropagation();
                 const filter = badge.dataset.filter;
@@ -9652,7 +9757,7 @@
         });
 
         // Holes filter badges (9 | 18 toggle)
-        container.querySelectorAll(".game-stat-badge[data-holes-filter]").forEach(badge => {
+        root.querySelectorAll(".game-stat-badge[data-holes-filter]").forEach(badge => {
             badge.addEventListener("click", (e) => {
                 e.stopPropagation();
                 const val = badge.dataset.holesFilter;
@@ -9666,7 +9771,7 @@
         });
 
         // Detail column sort headers
-        container.querySelectorAll("th[data-detail-sort]").forEach(th => {
+        root.querySelectorAll("th[data-detail-sort]").forEach(th => {
             th.addEventListener("click", (e) => {
                 e.stopPropagation();
                 const field = th.dataset.detailSort;
@@ -9681,8 +9786,8 @@
         });
 
         // Detail column toggle dropdown
-        const colBtn = container.querySelector(".detail-col-toggle-btn");
-        const colDrop = container.querySelector(".detail-col-dropdown");
+        const colBtn = root.querySelector(".detail-col-toggle-btn");
+        const colDrop = root.querySelector(".detail-col-dropdown");
         if (colBtn && colDrop) {
             colBtn.addEventListener("click", (e) => {
                 e.stopPropagation();
@@ -9703,7 +9808,7 @@
         // update the cached finance payload so the cell turns green
         // without a refetch. stopPropagation keeps the row's
         // expand-on-click from firing when the select is tapped.
-        container.querySelectorAll(".oo-shirt-select").forEach(sel => {
+        root.querySelectorAll(".oo-shirt-select").forEach(sel => {
             sel.addEventListener("click", (e) => e.stopPropagation());
             sel.addEventListener("change", async (e) => {
                 e.stopPropagation();
@@ -9729,7 +9834,7 @@
 
         // Add-on buy-in toggles (FRI / SKINS): flip, save, recompute
         // expected/balance from the addon catalog and re-render.
-        container.querySelectorAll(".oo-addon-toggle").forEach(td => {
+        root.querySelectorAll(".oo-addon-toggle").forEach(td => {
             td.addEventListener("click", async (e) => {
                 e.stopPropagation();
                 const evId = td.dataset.eventId, cid = td.dataset.cid;
@@ -9759,7 +9864,7 @@
         });
 
         // RSVP circle tap-to-toggle
-        container.querySelectorAll(".rsvp-circle").forEach(circle => {
+        root.querySelectorAll(".rsvp-circle").forEach(circle => {
             circle.addEventListener("click", async (e) => {
                 e.stopPropagation();
                 const itemId = circle.dataset.itemId;
@@ -9821,7 +9926,7 @@
         });
 
         // RSVP-Remind tag click → popover with Record Payment + Send Reminder
-        container.querySelectorAll(".rsvp-only-tag").forEach(tag => {
+        root.querySelectorAll(".rsvp-only-tag").forEach(tag => {
             tag.addEventListener("click", (e) => {
                 e.stopPropagation();
                 // Remove any existing popover and clean up its close listener
@@ -9955,19 +10060,19 @@
         });
 
         // Credit/Reverse/WD buttons in registrant rows
-        container.querySelectorAll("[data-credit-id]").forEach(btn => {
+        root.querySelectorAll("[data-credit-id]").forEach(btn => {
             btn.addEventListener("click", (e) => {
                 e.stopPropagation();
                 openEvCreditModal(parseInt(btn.dataset.creditId));
             });
         });
-        container.querySelectorAll("[data-reverse-id]").forEach(btn => {
+        root.querySelectorAll("[data-reverse-id]").forEach(btn => {
             btn.addEventListener("click", (e) => {
                 e.stopPropagation();
                 reverseEvCredit(parseInt(btn.dataset.reverseId));
             });
         });
-        container.querySelectorAll("[data-wd-payout-id]").forEach(btn => {
+        root.querySelectorAll("[data-wd-payout-id]").forEach(btn => {
             btn.addEventListener("click", (e) => {
                 e.stopPropagation();
                 openWdPayoutModal(
@@ -9978,7 +10083,7 @@
                 );
             });
         });
-        container.querySelectorAll("[data-wd-id]").forEach(btn => {
+        root.querySelectorAll("[data-wd-id]").forEach(btn => {
             btn.addEventListener("click", (e) => {
                 e.stopPropagation();
                 openWdModal(parseInt(btn.dataset.wdId), btn.dataset.wdEvent);
@@ -9986,7 +10091,7 @@
         });
 
         // Delete manual player buttons
-        container.querySelectorAll("[data-delete-id]").forEach(btn => {
+        root.querySelectorAll("[data-delete-id]").forEach(btn => {
             btn.addEventListener("click", async (e) => {
                 e.stopPropagation();
                 const id = parseInt(btn.dataset.deleteId);
@@ -9999,14 +10104,13 @@
                         alert(data.error || "Failed to delete player.");
                         return;
                     }
-                    await fetchItems();
-                    await fetchEvents();
+                    await refreshEventInPlace(ev.id);
                 } catch (err) { alert("Failed to delete player."); }
             });
         });
 
         // Delete GG RSVP (synthetic) player — sets email override to not_playing
-        container.querySelectorAll(".btn-delete-gg-rsvp").forEach(btn => {
+        root.querySelectorAll(".btn-delete-gg-rsvp").forEach(btn => {
             btn.addEventListener("click", async (e) => {
                 e.stopPropagation();
                 const playerEmail = btn.dataset.playerEmail;
@@ -10129,7 +10233,7 @@
         // Set a STARTING handicap from the roster's HCP dash (Kerry
         // 2026-07-30). Offered only where there is no handicap on record —
         // a computed index is never editable here.
-        container.querySelectorAll(".btn-set-hcp").forEach(btn => {
+        root.querySelectorAll(".btn-set-hcp").forEach(btn => {
             btn.addEventListener("click", async (e) => {
                 e.stopPropagation();
                 const cid = btn.dataset.customerId;
@@ -10209,7 +10313,7 @@
         });
 
         // Assign Guest name — "Guest?" tag click
-        container.querySelectorAll(".btn-assign-guest").forEach(btn => {
+        root.querySelectorAll(".btn-assign-guest").forEach(btn => {
             btn.addEventListener("click", async (e) => {
                 e.stopPropagation();
                 const itemId = parseInt(btn.dataset.itemId);
@@ -10231,13 +10335,12 @@
                         return;
                     }
                     reportGuestAssigned(await res.json().catch(() => ({})));
-                    await fetchItems();
-                    await fetchEvents();
+                    await refreshEventInPlace(ev.id);
                 } catch (err) { alert("Failed to assign guest name."); }
             });
         });
 
-        container.querySelectorAll(".btn-assign-guest-action").forEach(btn => {
+        root.querySelectorAll(".btn-assign-guest-action").forEach(btn => {
             btn.addEventListener("click", async (e) => {
                 e.stopPropagation();
                 const itemId = parseInt(btn.dataset.itemId);
@@ -10259,14 +10362,13 @@
                         return;
                     }
                     reportGuestAssigned(await res.json().catch(() => ({})));
-                    await fetchItems();
-                    await fetchEvents();
+                    await refreshEventInPlace(ev.id);
                 } catch (err) { alert("Failed to assign guest name."); }
             });
         });
 
         // Assign Member
-        container.querySelectorAll(".btn-assign-member-action").forEach(btn => {
+        root.querySelectorAll(".btn-assign-member-action").forEach(btn => {
             btn.addEventListener("click", (e) => {
                 e.stopPropagation();
                 openAssignMemberModal(parseInt(btn.dataset.itemId), btn.dataset.buyerName || "");
@@ -10274,7 +10376,7 @@
         });
 
         // Add Player button
-        container.querySelectorAll(".btn-add-player").forEach(btn => {
+        root.querySelectorAll(".btn-add-player").forEach(btn => {
             btn.addEventListener("click", (e) => {
                 e.stopPropagation();
                 openAddPlayerModal(btn.dataset.eventName);
@@ -10282,7 +10384,7 @@
         });
 
         // Add Payment button
-        container.querySelectorAll(".btn-add-payment").forEach(btn => {
+        root.querySelectorAll(".btn-add-payment").forEach(btn => {
             btn.addEventListener("click", (e) => {
                 e.stopPropagation();
                 openAddPaymentModal(btn.dataset.eventName);
@@ -10290,7 +10392,7 @@
         });
 
         // Record Payouts (Games tab -> PAYOUTS tab)
-        container.querySelectorAll(".record-payouts-btn").forEach(btn => {
+        root.querySelectorAll(".record-payouts-btn").forEach(btn => {
             btn.addEventListener("click", e => {
                 e.stopPropagation();
                 const evName = btn.dataset.event;
@@ -10300,7 +10402,7 @@
         });
 
         // MVP unlink — remove event from combined TGF MVP
-        container.querySelectorAll(".mvp-unlink-btn").forEach(btn => {
+        root.querySelectorAll(".mvp-unlink-btn").forEach(btn => {
             btn.addEventListener("click", async (e) => {
                 e.stopPropagation();
                 const eventName = btn.dataset.event;
@@ -10320,7 +10422,7 @@
         });
 
         // MVP relink — restore event to combined TGF MVP
-        container.querySelectorAll(".mvp-relink-btn").forEach(btn => {
+        root.querySelectorAll(".mvp-relink-btn").forEach(btn => {
             btn.addEventListener("click", async (e) => {
                 e.stopPropagation();
                 const eventName = btn.dataset.event;
@@ -10340,7 +10442,7 @@
         });
 
         // Toggle game type between NET ↔ GROSS (no-cost swap only)
-        container.querySelectorAll(".btn-cycle-games").forEach(span => {
+        root.querySelectorAll(".btn-cycle-games").forEach(span => {
             span.addEventListener("click", async (e) => {
                 e.stopPropagation();
                 const itemId = parseInt(span.dataset.itemId);
@@ -10355,14 +10457,13 @@
                         body: JSON.stringify({ side_games: next }),
                     });
                     if (!res.ok) { const d = await res.json().catch(() => ({})); alert(d.error || "Failed to update."); return; }
-                    await fetchItems();
-                    await fetchEvents();
+                    await refreshEventInPlace(ev.id);
                 } catch (err) { alert("Failed to update game type."); }
             });
         });
 
         // Remind All button
-        container.querySelectorAll(".btn-remind-all").forEach(btn => {
+        root.querySelectorAll(".btn-remind-all").forEach(btn => {
             btn.addEventListener("click", async (e) => {
                 e.stopPropagation();
                 const eventName = btn.dataset.eventName;
@@ -10392,7 +10493,7 @@
         // Message Players button
         // Quick Message — Message Players, already pointed at the filtered
         // group with its template loaded.
-        container.querySelectorAll(".quick-msg-btn").forEach(btn => {
+        root.querySelectorAll(".quick-msg-btn").forEach(btn => {
             btn.addEventListener("click", (e) => {
                 e.stopPropagation();
                 const qm = QUICK_MESSAGE_PRESETS[btn.dataset.quickFilter];
@@ -10401,7 +10502,7 @@
             });
         });
 
-        container.querySelectorAll(".btn-message-players").forEach(btn => {
+        root.querySelectorAll(".btn-message-players").forEach(btn => {
             btn.addEventListener("click", (e) => {
                 e.stopPropagation();
                 openComposeModal(btn.dataset.eventName);
@@ -10409,7 +10510,7 @@
         });
 
         // Audit RSVPs button
-        container.querySelectorAll(".btn-audit-rsvps").forEach(btn => {
+        root.querySelectorAll(".btn-audit-rsvps").forEach(btn => {
             btn.addEventListener("click", async (e) => {
                 e.stopPropagation();
                 const eventName = btn.dataset.eventName;
@@ -10438,7 +10539,7 @@
         });
 
         // Cancel Event button
-        container.querySelectorAll(".btn-cancel-event").forEach(btn => {
+        root.querySelectorAll(".btn-cancel-event").forEach(btn => {
             btn.addEventListener("click", (e) => {
                 e.stopPropagation();
                 openCancelEventModal(parseInt(btn.dataset.eventId), btn.dataset.eventName);
@@ -10446,22 +10547,22 @@
         });
 
         // Edit / Merge / Delete event buttons (mobile cards)
-        container.querySelectorAll(".btn-mobile-edit-event").forEach(btn => {
+        root.querySelectorAll(".btn-mobile-edit-event").forEach(btn => {
             btn.addEventListener("click", (e) => { e.stopPropagation(); openEditEvent(parseInt(btn.dataset.editEvent)); });
         });
-        container.querySelectorAll(".btn-mobile-merge-event").forEach(btn => {
+        root.querySelectorAll(".btn-mobile-merge-event").forEach(btn => {
             btn.addEventListener("click", (e) => { e.stopPropagation(); openMergeEvent(parseInt(btn.dataset.mergeEvent)); });
         });
-        container.querySelectorAll(".btn-mobile-delete-event").forEach(btn => {
+        root.querySelectorAll(".btn-mobile-delete-event").forEach(btn => {
             btn.addEventListener("click", (e) => { e.stopPropagation(); deleteEvent(parseInt(btn.dataset.deleteEvent)); });
         });
 
         // Message History toggle
-        container.querySelectorAll(".btn-toggle-msg-history").forEach(btn => {
+        root.querySelectorAll(".btn-toggle-msg-history").forEach(btn => {
             btn.addEventListener("click", (e) => {
                 e.stopPropagation();
                 const eventName = btn.dataset.eventName;
-                const content = container.querySelector(`.msg-history-content[data-event-name="${CSS.escape(eventName)}"]`);
+                const content = root.querySelector(`.msg-history-content[data-event-name="${CSS.escape(eventName)}"]`);
                 if (!content) return;
                 if (content.style.display === "none") {
                     content.style.display = "block";
@@ -10655,7 +10756,7 @@
     function attachPairingsHandlers(container, ev) {
         // Let the keyboard path re-render this exact panel.
         window._tgfRerenderPairings = (evId) => {
-            if (String(evId) === String(ev.id)) rerenderDetail(container, ev);
+            if (String(evId) === String(ev.id)) rerenderDetailBody(container, ev);
         };
         bindPairingKeys();
         const state = getPairingsState(ev.id);
@@ -10679,7 +10780,7 @@
                     delete pairingsData[ev.id];
                     await loadPairings(ev.id);
                     pairingsOpenForEvent[ev.id] = true;
-                    rerenderDetail(container, ev);
+                    rerenderDetailBody(container, ev);
                 } catch (err) {
                     alert('Pairings removal failed: ' + err.message);
                     btn.disabled = false;
@@ -10722,7 +10823,7 @@
                         state.raceKey = def ? def.race_key : null;
                     }
                     state._raceFetch = false;
-                    rerenderDetail(container, ev);
+                    rerenderDetailBody(container, ev);
                 })
                 .catch(() => { state._raceFetch = false; });
         }
@@ -10733,7 +10834,7 @@
                 state.mode = btn.dataset.pairingsMode;
                 state.swapMode = null; state.selection = null;
                 savePairingMode(ev, state);
-                rerenderDetail(container, ev);
+                rerenderDetailBody(container, ev);
                 // Load the race list the first time STANDINGS is chosen and
                 // preselect the chapter's default, so Generate is correct
                 // without the manager touching the pulldown.
@@ -10747,7 +10848,7 @@
                             state.raceKey = def ? def.race_key : null;
                             if (state.raceKey) savePairingMode(ev, state);
                         }
-                        rerenderDetail(container, ev);
+                        rerenderDetailBody(container, ev);
                     } catch (err) {
                         console.error('Failed to load pairing race options:', err);
                     }
@@ -10769,7 +10870,7 @@
             pointsChk.addEventListener('change', e => {
                 state.showPointsCol = pointsChk.checked;
                 pairingsPointsPref(pointsChk.checked);
-                rerenderDetail(container, ev);
+                rerenderDetailBody(container, ev);
             });
         }
 
@@ -10796,7 +10897,7 @@
                 const state = getPairingsState(ev.id);
                 const added = getUnassigned(state)
                     .filter(p => !before.has(pairPersonKey(p.name)));
-                rerenderDetail(container, ev);
+                rerenderDetailBody(container, ev);
                 if (n === null) {
                     alert('Could not re-read the roster. Check the connection and try again.');
                 } else if (added.length) {
@@ -10812,7 +10913,7 @@
             histChk.addEventListener('change', e => {
                 state.showHistoryRow = histChk.checked;
                 pairingsHistoryPref(histChk.checked);
-                rerenderDetail(container, ev);
+                rerenderDetailBody(container, ev);
             });
         }
 
@@ -10821,7 +10922,7 @@
             btn.addEventListener('click', e => {
                 e.stopPropagation();
                 state.showSeeds = !state.showSeeds;
-                rerenderDetail(container, ev);
+                rerenderDetailBody(container, ev);
             });
         });
 
@@ -10849,7 +10950,7 @@
                         }
                         if (state.mpDetected.length) {
                             state.mpPanelOpen = true;
-                            rerenderDetail(container, ev);
+                            rerenderDetailBody(container, ev);
                             return;
                         }
                     }
@@ -10866,13 +10967,13 @@
 
                 if (action === 'mp-open') {
                     state.mpPanelOpen = !state.mpPanelOpen;
-                    rerenderDetail(container, ev);
+                    rerenderDetailBody(container, ev);
                     return;
                 }
 
                 if (action === 'mp-close') {
                     state.mpPanelOpen = false;
-                    rerenderDetail(container, ev);
+                    rerenderDetailBody(container, ev);
                     return;
                 }
 
@@ -10883,7 +10984,7 @@
 
                 if (action === 'undo' || action === 'redo') {
                     const moved = action === 'undo' ? undoPairings(state) : redoPairings(state);
-                    if (moved) rerenderDetail(container, ev);
+                    if (moved) rerenderDetailBody(container, ev);
                     return;
                 }
 
@@ -10898,7 +10999,7 @@
                     // to undo BACK to — start the stack over rather than
                     // offering an undo that couldn't be saved.
                     seedPairHistory(state);
-                    rerenderDetail(container, ev);
+                    rerenderDetailBody(container, ev);
                     return;
                 }
 
@@ -10919,13 +11020,13 @@
                     } catch(err) {
                         alert('Failed to save pairings.');
                     }
-                    rerenderDetail(container, ev);
+                    rerenderDetailBody(container, ev);
                     return;
                 }
 
                 if (action === 'requests-toggle') {
                     state.showRequests = !state.showRequests;
-                    rerenderDetail(container, ev);
+                    rerenderDetailBody(container, ev);
                     return;
                 }
 
@@ -10949,7 +11050,7 @@
                     } finally {
                         btn.disabled = false;
                     }
-                    rerenderDetail(container, ev);
+                    rerenderDetailBody(container, ev);
                     return;
                 }
 
@@ -10969,7 +11070,7 @@
                     if (!state.seeds.find(s => s.slot_index === adjIdx && s.holes === holes)) {
                         state.seeds.push({holes, slot_index: adjIdx, players: []});
                     }
-                    rerenderDetail(container, ev);
+                    rerenderDetailBody(container, ev);
                     return;
                 }
             });
@@ -10995,7 +11096,7 @@
                 } finally {
                     btn.disabled = false;
                 }
-                rerenderDetail(container, ev);
+                rerenderDetailBody(container, ev);
             });
         });
 
@@ -11021,7 +11122,7 @@
                 } finally {
                     btn.disabled = false;
                 }
-                rerenderDetail(container, ev);
+                rerenderDetailBody(container, ev);
             });
         });
 
@@ -11040,7 +11141,7 @@
             } catch (err) {
                 alert('Match update failed.');
             }
-            rerenderDetail(container, ev);
+            rerenderDetailBody(container, ev);
         };
         container.querySelectorAll('.request-match-select').forEach(sel => {
             sel.addEventListener('click', e => e.stopPropagation());
@@ -11091,7 +11192,7 @@
                 e.stopPropagation();
                 const idx = parseInt(btn.dataset.seedRemove);
                 state.seeds.splice(idx, 1);
-                rerenderDetail(container, ev);
+                rerenderDetailBody(container, ev);
             });
         });
 
@@ -11124,7 +11225,7 @@
                 } else {
                     state.swapMode = mode; state.selection = null;
                 }
-                rerenderDetail(container, ev);
+                rerenderDetailBody(container, ev);
             });
         });
 
@@ -11218,7 +11319,7 @@
                 _movePlayer(state, src, h, gn, null, {allowFifth: true});
                 state.isDirty = true;
                 commitPairHistory(state);
-                rerenderDetail(container, ev);
+                rerenderDetailBody(container, ev);
             });
         });
 
@@ -11231,24 +11332,24 @@
                     e.stopPropagation();
                     _movePlayer(state, state.selection, holes, groupNum);
                     state.isDirty = true; state.selection = null; commitPairHistory(state); commitPairHistory(state);
-                    rerenderDetail(container, ev);
+                    rerenderDetailBody(container, ev);
                     return;
                 }
                 if (state.swapMode !== 'group') return;
                 e.stopPropagation();
                 if (!state.selection) {
                     state.selection = {holes, group_num: groupNum};
-                    rerenderDetail(container, ev);
+                    rerenderDetailBody(container, ev);
                 } else {
                     if (state.selection.holes !== holes) {
                         alert('Cannot swap groups between 9-hole and 18-hole players.');
                         state.selection = null;
-                        rerenderDetail(container, ev);
+                        rerenderDetailBody(container, ev);
                         return;
                     }
                     _swapGroups(state, state.selection.holes, state.selection.group_num, holes, groupNum);
                     state.isDirty = true; state.selection = null; commitPairHistory(state); commitPairHistory(state);
-                    rerenderDetail(container, ev);
+                    rerenderDetailBody(container, ev);
                 }
             });
         });
@@ -11269,23 +11370,23 @@
                         const grp = _findGroup(state, holes, groupNum);
                         const pl = grp && grp.players.find(p => p.cart_pos === cartPos);
                         state.selection = {holes, group_num: groupNum, cart_pos: cartPos, unassigned: false, name: pl ? pl.name : ''};
-                        rerenderDetail(container, ev);
+                        rerenderDetailBody(container, ev);
                     } else {
                         // Drop into the group this player belongs to
                         _movePlayer(state, state.selection, holes, groupNum);
                         state.isDirty = true; state.selection = null; commitPairHistory(state); commitPairHistory(state); commitPairHistory(state);
-                        rerenderDetail(container, ev);
+                        rerenderDetailBody(container, ev);
                     }
                     return;
                 }
                 if (!state.selection) {
                     state.selection = {holes, group_num: groupNum, cart_pos: cartPos};
-                    rerenderDetail(container, ev);
+                    rerenderDetailBody(container, ev);
                 } else {
                     if (state.selection.holes !== holes) {
                         alert('Cannot swap 9-hole and 18-hole players.');
                         state.selection = null;
-                        rerenderDetail(container, ev);
+                        rerenderDetailBody(container, ev);
                         return;
                     }
                     if (state.swapMode === 'player') {
@@ -11294,7 +11395,7 @@
                         _swapCartPairs(state, state.selection, {holes, group_num: groupNum, cart_pos: cartPos});
                     }
                     state.isDirty = true; state.selection = null; commitPairHistory(state); commitPairHistory(state);
-                    rerenderDetail(container, ev);
+                    rerenderDetailBody(container, ev);
                 }
             });
         });
@@ -11345,7 +11446,7 @@
                             blindSeat({ev, holes, groupNum, cartPos, container},
                                       {mode: 'clear'});
                         } else {
-                            rerenderDetail(container, ev);
+                            rerenderDetailBody(container, ev);
                         }
                     }, {ev, holes, groupNum, cartPos, container}, onBlind);
                     return;
@@ -11354,7 +11455,7 @@
                     if (state.selection.holes !== holes) {
                         alert('Cannot swap 9-hole and 18-hole players.');
                         state.selection = null;
-                        rerenderDetail(container, ev);
+                        rerenderDetailBody(container, ev);
                         return;
                     }
                     const destGrp = _findGroup(state, holes, groupNum);
@@ -11370,7 +11471,7 @@
                     if (state.swapMode === 'player' && state.selection.holes !== holes) {
                         alert('Cannot swap 9-hole and 18-hole players.');
                         state.selection = null;
-                        rerenderDetail(container, ev);
+                        rerenderDetailBody(container, ev);
                         return;
                     }
                     _movePlayer(state, state.selection, holes, groupNum, cartPos);
@@ -11382,7 +11483,7 @@
                     blindSeat({ev, holes, groupNum, cartPos, container},
                               {mode: 'clear'});
                 } else {
-                    rerenderDetail(container, ev);
+                    rerenderDetailBody(container, ev);
                 }
             });
         });
@@ -11404,7 +11505,7 @@
                 grp.slot_label = label;
                 state.isDirty = true;
                 commitPairHistory(state);
-                rerenderDetail(container, ev);
+                rerenderDetailBody(container, ev);
             });
         });
 
@@ -11424,7 +11525,7 @@
                 state.isDirty = true;
                 state.swapMode = null; state.selection = null;
                 commitPairHistory(state);
-                rerenderDetail(container, ev);
+                rerenderDetailBody(container, ev);
             });
             // A row is draggable; the X must not start a drag or bubble
             // the mousedown into the row's select handler.
@@ -11442,15 +11543,15 @@
                 const name = row.dataset.unassignedName;
                 if (!state.selection) {
                     state.selection = {unassigned: true, name};
-                    rerenderDetail(container, ev);
+                    rerenderDetailBody(container, ev);
                 } else if (state.selection.unassigned && state.selection.name === name) {
                     state.selection = null; // deselect
-                    rerenderDetail(container, ev);
+                    rerenderDetailBody(container, ev);
                 }
                 // If something else is selected, just re-select this one
                 else {
                     state.selection = {unassigned: true, name};
-                    rerenderDetail(container, ev);
+                    rerenderDetailBody(container, ev);
                 }
             });
         });
@@ -13038,8 +13139,7 @@
             const _pairInfo = _apiData && _apiData.pairings;
             const _newItem = _apiData && _apiData.new_item;
             closeEvCreditModal();
-            await fetchItems();
-            await fetchEvents();
+            await refreshEventInPlace(expandedEventId);
             // Roster→pairings sync: the server already dropped a fully
             // credited / refunded / transferred player from the saved
             // sheet — report it and redraw. A PARTIAL refund is a
@@ -13130,8 +13230,7 @@
                 method: "POST", headers: { "Content-Type": "application/json" },
             });
             if (!res.ok) throw new Error((await res.json()).error || "Reverse failed");
-            await fetchItems();
-            await fetchEvents();
+            await refreshEventInPlace(expandedEventId);
         } catch (err) { alert(err.message); }
     }
 
@@ -14060,8 +14159,7 @@
                         alert(d.error || "Failed to assign member.");
                         return;
                     }
-                    await fetchItems();
-                    await fetchEvents();
+                    await refreshEventInPlace(expandedEventId);
                 } catch (err) { alert("Failed to assign member."); }
             });
         });
@@ -14163,8 +14261,7 @@
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || "Payout failed");
             closeWdPayoutModal();
-            await fetchItems();
-            await fetchEvents();
+            await refreshEventInPlace(expandedEventId);
         } catch (err) {
             alert(err.message);
             btn.disabled = false;
@@ -14206,8 +14303,7 @@
                 name: (_wdItem && _wdItem.customer) || "",
             };
             closeWdModal();
-            await fetchItems();
-            await fetchEvents();
+            await refreshEventInPlace(expandedEventId);
             // Roster→pairings sync: the server dropped the WD'd player
             // from the saved sheet — report it and redraw.
             await offerPairingRemoval(_pairCtx.ev, _pairCtx.name, _wdData.pairings);
@@ -14860,8 +14956,7 @@
                 entry.assignments[String(newId)] = payload.package_index;
             }
             closeAddPlayerModal();
-            await fetchItems();
-            await fetchEvents();
+            await refreshEventInPlace(expandedEventId);
         } catch (err) { alert("Failed to add player."); }
     }
 
@@ -15024,8 +15119,7 @@
                 return;
             }
             closeAddPaymentModal();
-            await fetchItems();
-            await fetchEvents();
+            await refreshEventInPlace(expandedEventId);
         } catch (err) { alert("Failed to add payment."); }
     }
 

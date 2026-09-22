@@ -86,7 +86,7 @@ check("the toolbar shows a 'Saved h:mm' stamp and the Save button stays as the m
 check("the manual Save cancels the pending background save (the flush wins)",
       /clearTimeout\(pairAutosaveTimers\[ev\.id\]\);\s*\/\/ the manual flush wins/.test(html));
 check("after a clean background save the sheet rerenders (printables appear) unless a drag has started",
-      /if \(document\.querySelector\('\.pair-dragging'\)\) paintPairingsSaveStamp\(ev, state\);\s*else rerenderDetail\(container, ev\);/.test(html));
+      /if \(document\.querySelector\('\.pair-dragging'\)\) paintPairingsSaveStamp\(ev, state\);\s*else rerenderDetailBody\(container, ev\);/.test(html));
 
 console.log("\n== speed: instant feedback, one round trip, a toast that exists (Kerry 2026-09-22) ==");
 check("the events page defines a showToast of its own (acct-dashboard.js is not on this page) — the FREEZE handler no longer dies on it; exactly one definition",
@@ -135,6 +135,38 @@ check("...while it saves, the LIVE badge reads saving…", /board\.saving \? " �
     check("...and dropping him back clears it locally too: plain HCP again, no moves, no note",
           sel.mode === "fixed_bands" && sel.moves.length === 0 && sel.custom_note === "" && sel.flights[1].band === "12.0+", JSON.stringify(sel));
 }
+
+console.log("\n== PAIRINGS and ROSTER: body-only redraws, reusable rows, one event refreshed in place (Kerry 2026-09-22) ==");
+check("the card's body is wrapped in [data-ev-body] and the wrapper closes it",
+      /html \+= `<div class="ev-detail-body" data-ev-body="\$\{ev\.id\}">`;\s*\/\/ ---- PAIRINGS VIEW ----/.test(html)
+      && /return html\.indexOf\('data-ev-body="'\) >= 0 \? html \+ "<\/div>" : html;/.test(html));
+check("rerenderDetailBody swaps the body alone and re-wires handlers scoped to the new body",
+      /function rerenderDetailBody\(container, ev\) \{/.test(html) && /old\.replaceWith\(fresh\);\s*attachDetailHandlers\(container, ev, fresh\);/.test(html));
+check("attachDetailHandlers looks handlers up under root, redraws against container — no double-binding of the header",
+      /function attachDetailHandlers\(container, ev, _root\) \{/.test(html) && /const root = _root \|\| container;/.test(html));
+{
+    const a = html.indexOf("    function attachDetailHandlers(container, ev, _root) {");
+    const b2 = html.slice(a + 10).search(/\n    (?:async )?function [A-Za-z_]/) + a + 10;
+    const region = html.slice(a, b2);
+    check("...every lookup in it is root-scoped", !/container\.querySelector/.test(region), String((region.match(/container\.querySelector/g) || []).length));
+    const pa = html.indexOf("    function attachPairingsHandlers(container, ev) {");
+    const pb = html.slice(pa + 10).search(/\n    (?:async )?function [A-Za-z_]/) + pa + 10;
+    const pregion = html.slice(pa, pb);
+    check("no pairings action redraws the whole card any more (drag, swap, move, undo, label, remove…)",
+          !/rerenderDetail\(container, ev\)/.test(pregion) && (pregion.match(/rerenderDetailBody\(container, ev\)/g) || []).length >= 30,
+          String((pregion.match(/rerenderDetailBody\(container, ev\)/g) || []).length));
+}
+check("re-opening PAIRINGS shows the cached sheet at once and re-reads the roster behind the page, swapping the body only if it changed",
+      /const before = pairingsRosterSig\(st\);\s*await refreshPairingsRoster\(ev\.id\);\s*if \(pairingsRosterSig\(st\) !== before\) rerenderDetailBody\(container, ev\);/.test(html));
+check("the events table reuses a collapsed row whose inputs did not change and wires handlers on new rows only",
+      /if \(!isExpanded && _cache && _cache\.sig === _sig\) \{\s*frag\.appendChild\(_cache\.row\);/.test(html)
+      && /tbody\.replaceChildren\(frag\);/.test(html) && /\.event-row-clickable:not\(\[data-wired\]\)/.test(html));
+check("a roster action refreshes ONE event in place (its rows + its list row), with the full reload as the fallback",
+      /async function refreshEventInPlace\(evId\)/.test(html) && /fetch\(`\/api\/items\?event_id=\$\{evId\}`\), fetch\(`\/api\/events\/\$\{evId\}`\)/.test(html)
+      && (html.match(/await refreshEventInPlace\((ev\.id|expandedEventId)\);/g) || []).length >= 10,
+      String((html.match(/await refreshEventInPlace\((ev\.id|expandedEventId)\);/g) || []).length));
+check("SETTLE is no longer a button on the tab — a frozen board offers Unfreeze only",
+      /if \(board\.state === "frozen"\) return btn\("unfreeze", "Unfreeze", line\);/.test(html) && !/btn\("settle", "SETTLE"/.test(html));
 
 console.log("\n== the control rendered headless ==");
 const start = html.indexOf("    const FB_MODE_TEXT = {");

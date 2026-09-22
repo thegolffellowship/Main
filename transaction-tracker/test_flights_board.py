@@ -305,6 +305,45 @@ check("bridge scoring-flights-move:<id>|<game>|<cid>|1 moves him (LIVE) and repo
 out = json.loads(mcp._scoring_dispatch("https://tgf-sa.golfgenius.com/", "scoring-flights-move:abc"))
 check("...and refuses a bad call with a usage line", "usage" in (out.get("error") or ""), str(out))
 
+print("\n== CLOSEOUT settles the board (Kerry 2026-09-22: 'Add SETTLE as part of the CLOSEOUT function') ==")
+c.execute("UPDATE events SET event_date = date('now', '+30 day') WHERE id = ?", (EV,)); c.commit()
+_cl = db.close_event_flights(EV, by="test", db_path=tmp)
+check("a future event is refused — closeout settles played events only", _cl.get("ok") is False and "not been played" in _cl.get("error", ""), str(_cl))
+c.execute("UPDATE events SET event_date = date('now', '-1 day') WHERE id = ?", (EV,)); c.commit()
+_dry = db.close_event_flights(EV, by="test", db_path=tmp, dry_run=True)
+check("dry run says what it would do on the board as it stands", _dry.get("dry_run") and _dry.get("would") in (["freeze", "settle"], ["settle"]), str(_dry))
+_cl = db.close_event_flights(EV, by="test", db_path=tmp)
+check("apply: a LIVE board is frozen then settled in one step (or a FROZEN one settled), state SETTLED",
+      _cl.get("ok") and _cl.get("state") == "settled" and _cl.get("steps") in (["freeze", "settle"], ["settle"]), str(_cl))
+check("...again is a no-op that says so", db.close_event_flights(EV, by="test", db_path=tmp).get("note", "").startswith("already settled"))
+check("...the board reads SETTLED, served from storage", db.event_flights_board(EV, db_path=tmp)["state"] == "settled")
+db.unfreeze_event_flights(EV, by="test", db_path=tmp)
+out = json.loads(mcp._scoring_dispatch("https://tgf-sa.golfgenius.com/", f"scoring-flights-close:{EV}"))
+check("bridge scoring-flights-close dry run", out.get("dry_run") and out.get("would"), str(out))
+out = json.loads(mcp._scoring_dispatch("https://tgf-sa.golfgenius.com/", f"scoring-flights-close:{EV}|apply"))
+check("...|apply settles", out.get("ok") and out.get("state") == "settled", str(out)[:200])
+db.unfreeze_event_flights(EV, by="test", db_path=tmp)
+c.execute("UPDATE events SET event_date = date('now', '+30 day') WHERE id = ?", (EV,)); c.commit()
+
+print("\n== one event refreshed in place (Kerry 2026-09-22: ROSTER partial update) ==")
+_its = db.get_event_items(EV, db_path=tmp)
+check("get_event_items returns only this event's order rows, every one carrying its event_id or name",
+      _its and all(i.get("event_id") == EV or (i.get("item_name") or "").lower() == "s9.24 brackenridge" for i in _its)
+      and len(_its) == len([i for i in db.get_all_items(tmp) if i.get("event_id") == EV]), str(len(_its)))
+r = client.get(f"/api/items?event_id={EV}")
+check("GET /api/items?event_id= serves them", r.status_code == 200 and len(r.get_json()) == len(_its), str(r.status_code))
+r = client.get(f"/api/events/{EV}")
+check("GET /api/events/<id> serves the one event in the list's shape", r.status_code == 200 and (r.get_json() or {}).get("id") == EV and "registrations" in (r.get_json() or {}), str(r.status_code))
+check("...unknown id is a 404", client.get("/api/events/999999").status_code == 404)
+
+print("\n== a PAIRINGS open never waits on Golf Genius (Kerry 2026-09-22: 'It should pop right back up') ==")
+import inspect as _insp
+_src = _insp.getsource(db.get_points_race_standings)
+check("get_points_race_standings has a no_network mode that serves the snapshot and queues the refresh behind the page",
+      "no_network" in _src and "_queue_points_refresh(race_key, db_path)" in _src)
+_app_src = open("app.py").read()
+check("...and the pairings GET uses it", "no_network=True" in _app_src[_app_src.index("def api_get_pairings"):_app_src.index("def api_get_pairings") + 20000])
+
 print()
 if F:
     print(f"FAILED ({len(F)}):")

@@ -2096,7 +2096,14 @@ def transactions_page():
 @app.route("/api/items")
 @require_role("view-only")
 def api_items():
-    """Return all item rows as JSON."""
+    """Return all item rows as JSON — or, with ?event_id=<id>, only the
+    rows one event's roster is built from (the page refreshes a single
+    event in place after a roster action instead of reloading every
+    order row ever written; Kerry 2026-09-22)."""
+    ev_id = request.args.get("event_id", type=int)
+    if ev_id:
+        from email_parser.database import get_event_items
+        return jsonify(get_event_items(ev_id))
     items = get_all_items()
     return jsonify(items)
 
@@ -5184,6 +5191,17 @@ def api_events():
     return jsonify(get_all_events())
 
 
+@app.route("/api/events/<int:event_id>", methods=["GET"])
+@require_role("view-only")
+def api_event_one(event_id):
+    """One event in the same shape as the list — the page refreshes a
+    single row in place after a roster action."""
+    ev = next((e for e in get_all_events() if e["id"] == event_id), None)
+    if not ev:
+        return jsonify({"error": "Event not found"}), 404
+    return jsonify(ev)
+
+
 @app.route("/api/events/aliases")
 @require_role("view-only")
 def api_event_aliases():
@@ -5467,7 +5485,8 @@ def api_get_pairings(event_id):
             _rk = (request.args.get("race_key") or "").strip() or None
             _, _, _, _meta = _standings_rank_map(
                 ev.get("chapter"), _rk, max_age_hours=10 ** 6,
-                event_name=ev.get("item_name"), _with_meta=True)
+                event_name=ev.get("item_name"), _with_meta=True,
+                no_network=True)
             # Keyed by customer_id AND name — see the note in
             # generate_event_pairings. Name-only made GG's spelling of a
             # player ("MURPHY, Mike") fail to match our roster's

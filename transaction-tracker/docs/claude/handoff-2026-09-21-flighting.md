@@ -184,6 +184,19 @@ carries the resulting selection.
    (snapshot 2 voided) — the freeze had landed on the server while the
    page showed nothing.
 
+## 6e. v2.478.5 — PAIRINGS / ROSTER partial updates, no GG wait, SETTLE at closeout
+
+Kerry 2026-09-22 ~1 PM: "Do the same partial update for PAIRINGS and
+ROSTER… the pages (especially PAIRINGS) take WAY too long to load back up.
+I've already SAVED the PAIRINGS. It should pop right back up… Add SETTLE
+as part of the CLOSEOUT function." Root cause of the PAIRINGS wait was
+SERVER-side: the pairings GET fetched the points race live from Golf
+Genius on event day (15-minute window). Now served from the snapshot with
+a background refresh. Client: body-only swaps, keyed row reuse, one event
+refreshed in place. SETTLE: button removed; `close_event_flights` runs in
+the hourly post-event sync; bridge `scoring-flights-close`. Details in
+events.md.
+
 ## 7. Open / carried forward
 
 - Next: the Final Pairings send OFFERS the freeze when the event is not

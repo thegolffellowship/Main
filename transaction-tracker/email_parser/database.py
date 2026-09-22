@@ -10350,10 +10350,37 @@ def fetch_champ_player_card(race_key: str, customer_id: int,
         return out
 
 
+_POINTS_REFRESH_INFLIGHT: set = set()
+_POINTS_REFRESH_LOCK = threading.Lock()
+
+
+def _queue_points_refresh(race_key: str, db_path) -> bool:
+    """Refresh a points race from Golf Genius on a background thread — at
+    most one in flight per race. The caller serves the snapshot it has;
+    the next read is fresh. Returns True when a refresh was started."""
+    with _POINTS_REFRESH_LOCK:
+        if race_key in _POINTS_REFRESH_INFLIGHT:
+            return False
+        _POINTS_REFRESH_INFLIGHT.add(race_key)
+
+    def _run():
+        try:
+            refresh_points_race_standings(race_key, db_path=db_path)
+        except Exception as exc:                          # noqa: BLE001
+            logger.warning("background GG points refresh for %r failed: %s", race_key, exc)
+        finally:
+            with _POINTS_REFRESH_LOCK:
+                _POINTS_REFRESH_INFLIGHT.discard(race_key)
+
+    threading.Thread(target=_run, name=f"gg-points-{race_key}", daemon=True).start()
+    return True
+
+
 def get_points_race_standings(race_key: str,
                               auto_refresh_hours: float = 12,
                               force_refresh: bool = False,
-                              db_path: str | Path = DB_PATH) -> dict:
+                              db_path: str | Path = DB_PATH,
+                              no_network: bool = False) -> dict:
     """Persisted GG points race standings joined with live buy-in status.
 
     Renders from the gg_points_standings snapshot (instant, survives
@@ -10436,7 +10463,16 @@ def get_points_race_standings(race_key: str,
             if not event_since:
                 stale = False
 
-    if force_refresh or stale:
+    queued_refresh = False
+    if (force_refresh or stale) and no_network and stat["n"]:
+        # A READ must never wait on Golf Genius (Kerry 2026-09-22: "the
+        # pages (especially PAIRINGS) take WAY too long to load back up").
+        # On event day the short window above made every PAIRINGS open a
+        # live GG round-trip, which is exactly when Kerry opens it. Serve
+        # the snapshot now; refresh it behind the page.
+        queued_refresh = _queue_points_refresh(race_key, db_path)
+        gg_error = None
+    elif force_refresh or stale:
         try:
             refresh_points_race_standings(race_key, db_path=db_path)
         except Exception as exc:
@@ -10755,6 +10791,7 @@ def get_points_race_standings(race_key: str,
                 _sp.players_cup_payouts(_n_pot) if race.get("flights")
                 else _sp.city_net_payouts(_n_pot))
     return {
+        "refresh_queued": queued_refresh,
         "race_key": race_key,
         "label": race["label"],
         "contest_type": race["contest_type"],
@@ -18457,6 +18494,27 @@ def auto_gg_results_sync(db_path: str | Path = DB_PATH,
             force_events=changed_events)
     except Exception as e:
         out["payouts"] = {"error": str(e)}
+    # CLOSEOUT settles the flights board (Kerry 2026-09-22): every event
+    # played today/yesterday that has scorecards in is brought to SETTLED
+    # — frozen first if it was still LIVE. Idempotent; a settled board is
+    # left alone. Nothing pays anyone.
+    out["flights"] = []
+    try:
+        with _connect(db_path) as conn:
+            played = [dict(r) for r in conn.execute(
+                """SELECT e.id, e.item_name FROM events e
+                    WHERE e.event_date IN (?, ?)
+                      AND EXISTS (SELECT 1 FROM scoring_rounds r WHERE r.event_id = e.id)""",
+                tuple(sorted(_days))).fetchall()]
+        for ev in played:
+            try:
+                res = close_event_flights(ev["id"], by="closeout", db_path=db_path)
+                out["flights"].append({"event": ev["item_name"], "state": res.get("state"),
+                                       "steps": res.get("steps"), "error": res.get("error")})
+            except Exception as e:                        # noqa: BLE001
+                out["flights"].append({"event": ev["item_name"], "error": str(e)})
+    except Exception as e:                                # noqa: BLE001
+        out["flights"] = {"error": str(e)}
     return out
 
 
@@ -27621,6 +27679,25 @@ def mark_expense_email_seen(email_uid: str, classified_as: str | None = None,
             (email_uid, classified_as),
         )
         conn.commit()
+
+
+def get_event_items(event_id: int, db_path: str | Path | None = None) -> list[dict]:
+    """The item rows ONE event's roster is built from — by event_id first,
+    by the event's name and aliases as the fallback for legacy rows. The
+    same shape as get_all_items so the page can splice them in."""
+    with _connect(db_path) as conn:
+        ev = conn.execute("SELECT id, item_name FROM events WHERE id = ?", (event_id,)).fetchone()
+        if not ev:
+            return []
+        names = {(ev["item_name"] or "").lower()}
+        try:
+            for r in conn.execute("SELECT alias_name FROM event_aliases WHERE event_name = ?",
+                                  (ev["item_name"],)).fetchall():
+                names.add((r["alias_name"] or "").lower())
+        except sqlite3.OperationalError:
+            pass
+    return [i for i in get_all_items(db_path)
+            if i.get("event_id") == event_id or (i.get("item_name") or "").lower() in names]
 
 
 def get_all_items(db_path: str | Path | None = None) -> list[dict]:
@@ -59147,6 +59224,49 @@ def settle_event_flights(event_id: int, by: str = "manager",
     return out
 
 
+def close_event_flights(event_id: int, by: str = "closeout", trigger: str = "closeout",
+                        db_path=None, dry_run: bool = False) -> dict:
+    """The CLOSEOUT step for the flights board (Kerry 2026-09-22: "Add
+    SETTLE as part of the CLOSEOUT function, because I will likely never
+    use it manually"). A played event's board is brought to SETTLED: a
+    LIVE board is frozen first (the selection as the field stood at
+    closeout), a FROZEN board is settled, a SETTLED board is left alone.
+    Refuses an event whose day has not come. Pays nobody."""
+    with _connect(db_path) as conn:
+        ev = conn.execute("SELECT id, item_name, event_date FROM events WHERE id = ?",
+                          (event_id,)).fetchone()
+        if not ev:
+            return {"ok": False, "error": f"event {event_id} not found"}
+        if (ev["event_date"] or "9999") > today_central_str():
+            return {"ok": False, "error": f"{ev['item_name']} has not been played yet "
+                                          f"({ev['event_date']}) — closeout settles played events only"}
+        _ensure_flight_snapshot_tables(conn)
+        snaps = _active_flight_snapshots(conn, event_id)
+    steps: list = []
+    if snaps["settled"]:
+        return {"ok": True, "event_id": event_id, "state": "settled", "steps": [],
+                "note": "already settled — nothing to do"}
+    if dry_run:
+        would = (["settle"] if snaps["frozen"] else ["freeze", "settle"])
+        return {"ok": True, "dry_run": True, "event_id": event_id,
+                "state": "frozen" if snaps["frozen"] else "live", "would": would}
+    if not snaps["frozen"]:
+        fr = freeze_event_flights(event_id, by=by, trigger=trigger, db_path=db_path)
+        if not fr.get("ok"):
+            return {"ok": False, "event_id": event_id, "error": fr.get("error"), "steps": steps}
+        steps.append("freeze")
+    st = settle_event_flights(event_id, by=by, trigger=trigger, db_path=db_path)
+    if not st.get("ok"):
+        return {"ok": False, "event_id": event_id, "error": st.get("error"), "steps": steps}
+    steps.append("settle")
+    return {"ok": True, "event_id": event_id, "state": st.get("state"), "steps": steps,
+            "buyers": st.get("buyers"),
+            "games": [{"game": g["game"], "active": g["active"],
+                       "flights": [f["players"] for f in g["selection"]["flights"]],
+                       "total_pot": (g.get("amounts") or {}).get("total_pot")}
+                      for g in st.get("games") or []]}
+
+
 def unfreeze_event_flights(event_id: int, by: str = "manager",
                            note: str | None = None, db_path=None,
                            dry_run: bool = False) -> dict:
@@ -66193,7 +66313,8 @@ def _standings_rank_map(chapter: str | None, race_key: str | None = None,
                         max_age_hours: float = _STANDINGS_PAIRING_MAX_AGE_HOURS,
                         event_name: str | None = None,
                         db_path=None,
-                        _with_meta: bool = False) -> tuple:
+                        _with_meta: bool = False,
+                        no_network: bool = False) -> tuple:
     """{lowercase player name: finishing position} for a chapter's points race.
 
     Position 1 is the LEADER. Returns (rank_map, race_key_used, notes).
@@ -66233,7 +66354,8 @@ def _standings_rank_map(chapter: str | None, race_key: str | None = None,
             data = get_fellowship_cup_projection(db_path=db_path)
         else:
             data = get_points_race_standings(
-                key, auto_refresh_hours=max_age_hours, db_path=db_path)
+                key, auto_refresh_hours=max_age_hours, db_path=db_path,
+                no_network=no_network)
     except Exception as e:
         notes.append(f"Could not read the {key} standings ({e}) — "
                      f"pairings fell back to random order.")

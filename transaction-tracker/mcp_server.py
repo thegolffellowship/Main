@@ -1788,6 +1788,7 @@ def _scoring_dispatch(url: str, extract: str):
       scoring-flights-unfreeze:<event_id>[|apply]  void (keep) the frozen/settled rows so the board reads LIVE
       scoring-flights-mode:<event_id>|<game>|<equal_size|fixed_bands|default>  the CUT toggle per game (Kerry 2026-09-22); LIVE boards only; clears custom moves
       scoring-flights-move:<event_id>|<game>|<customer_id>|<flight_no>  move one player to another flight → CUSTOM (#599); dropping him back on his rule flight clears the move
+      scoring-flights-close:<event_id>[|apply]  the CLOSEOUT step: a played event's board to SETTLED (frozen first if LIVE); dry run by default; the hourly sync runs it itself
       scoring-flights-board:<event_id>  the DIVISIONS/FLIGHTS board as data — ratified flighting + payout rules (SELECTION and AMOUNTS layers) beside what GG recorded; dry run, read-only
       scoring-pairings-counts:<event_id>[|<year>]  saved sheet scored against played history: times each pair has played together this year INCLUDING this event
       scoring-liabilities          payouts owed, credits held, LSC shirt fund by Cup year, HIO pot, tax reserve by month
@@ -2692,6 +2693,15 @@ def _scoring_dispatch(url: str, extract: str):
                                    "flights": [f["players"] for f in g["selection"]["flights"]],
                                    "edges": g["selection"].get("edges")}
                                   for g in _res.get("games") or []]}
+            return json.dumps(_res, indent=2, default=str)
+        if cmd == "scoring-flights-close":
+            _p = [x.strip() for x in arg.split("|")]
+            if not _p or not _p[0].isdigit():
+                return json.dumps({"error": "usage: scoring-flights-close:<event_id>[|apply]"})
+            _apply = len(_p) > 1 and _p[1].lower() == "apply"
+            _res = db.close_event_flights(int(_p[0]), by="mcp-claude", dry_run=not _apply)
+            if _apply and _res.get("ok"):
+                _audit("scoring-flights-close", f"event {_p[0]} → {_res.get('state')} ({', '.join(_res.get('steps') or [])})")
             return json.dumps(_res, indent=2, default=str)
         if cmd == "scoring-flights-move":
             # "<event_id>|<game>|<customer_id>|<flight_no>" — a move by

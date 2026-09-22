@@ -2281,6 +2281,42 @@ Kerry 2026-09-21 (mailbox #582): "need to see the divisions/flights
 breakdown so probably will need a tab for it under each event." The
 FLIGHTING lane (spun off "TGF Tracker Improvements 2"; plan #584).
 
+- **Partial DOM updates for PAIRINGS and ROSTER; PAIRINGS never waits on
+  Golf Genius; SETTLE moves to the closeout (v2.478.5, Kerry 2026-09-22:
+  "Do the same partial update for PAIRINGS and ROSTER… the pages
+  (especially PAIRINGS) take WAY too long to load back up… Add SETTLE as
+  part of the CLOSEOUT function").** (1) The detail card is HEADER + BODY;
+  `renderDetailContent` wraps the body in `[data-ev-body]` and
+  `rerenderDetailBody(container, ev)` swaps the body alone, re-wiring
+  handlers with `attachDetailHandlers(container, ev, root)` scoped to the
+  new body (every lookup in it is `root.querySelector…`; the header's
+  handlers stay bound once). Every pairings action (42 sites) and the
+  background save redraw the body only. (2) Re-opening PAIRINGS shows the
+  cached sheet at once, re-reads the roster behind the page and swaps the
+  body only if `pairingsRosterSig` changed. (3) **The real wait**: the
+  pairings GET called `_standings_rank_map` → `get_points_race_standings`,
+  whose EVENT-DAY window (15 min) made every open on event day a live GG
+  round-trip (0.85 s of 1.04 s on the fixture; seconds on prod). The GET now
+  passes `no_network=True`: the snapshot is served and
+  `_queue_points_refresh` refreshes it on a daemon thread (one in flight
+  per race; `refresh_queued` in the payload). Generate still refreshes
+  synchronously. (4) ROSTER: `renderEvents` reuses a collapsed row whose
+  `evRowSignature` did not change (`_evRowCache`, fragment +
+  `replaceChildren`, handlers wired on `:not([data-wired])` rows only);
+  a roster action calls `refreshEventInPlace(evId)` — `GET
+  /api/items?event_id=` (`get_event_items`) + `GET /api/events/<id>`
+  (`api_event_one`) spliced into `allItems` / `allEvents` — instead of
+  `fetchItems()` (every order row ever) + `fetchEvents()`; eleven sites
+  (delete player, guest assign ×2, side-games edit, credit, reverse,
+  assign member, WD payout, WD, add player, add payment); RSVP link /
+  upgrade, merge, orphans keep the full reload. (5) SETTLE: the button is
+  gone from the tab; `close_event_flights(event_id)` (freeze if LIVE with
+  trigger `closeout`, then settle; refuses a future event; idempotent)
+  runs inside `auto_gg_results_sync` for every event played today /
+  yesterday with scorecards in (`out["flights"]`); bridge
+  `scoring-flights-close:<id>[|apply]`; the closeout skill's Phase 0 and
+  2.2b say so. Guards: `test_flights_custom_ui.js`, `test_flights_board.py`.
+
 - **Partial DOM update on the FLIGHTS tab (v2.478.4, Kerry 2026-09-22:
   "When I click one of the toggles, it needs to react instantly, not
   sluggishly"):** every FLIGHTS action used to call `rerenderDetail`,

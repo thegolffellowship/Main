@@ -759,6 +759,13 @@ The Quarry-night rulings, all built:
      Ctrl/Cmd+Z / +Shift+Z bound once at module level and ignored while
      typing or when more than one pairings panel is open. Groups ONLY —
      mode, race and the requests panel are deliberately out of scope.
+     **Opening the tab never waits on Golf Genius (v2.478.5).** The
+     pairings GET reads the points-race snapshot with `no_network=True`
+     and queues a background refresh when it is stale (the event-day
+     window used to make every open a live GG round-trip). Every in-panel
+     action swaps the card BODY only (`rerenderDetailBody`); a re-open
+     shows the cached sheet at once and re-reads the roster behind the
+     page. See events.md "Partial DOM updates".
      **Auto-save (v2.478.0, Kerry 2026-09-22 #599: "Don't make me click
      SAVE each time… needs to work in the background and fast and can't
      impede/slow down my work").** `rerenderDetail` arms

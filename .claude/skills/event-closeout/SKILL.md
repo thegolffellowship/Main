@@ -41,9 +41,14 @@ closeout was mis-read as "nothing has happened" before this first run.
 The hourly auto-sync (`_GG_RESULT_PORTALS`, database.py) runs on any day
 an event happened today or yesterday: scorecards (ALL Net → ALL Gross) for
 the newest rounds, GG-recorded winners + flights, and a payout refresh
-that auto-records rows (descriptions start `auto:`). Expect Phase 1.1,
-1.3 and the payout RECORDING to be done within an hour of GG finalizing.
-Do not assume it — read it — but do not redo it either.
+that auto-records rows (descriptions start `auto:`), and then SETTLES the
+DIVISIONS / FLIGHTS board of every event played today/yesterday that has
+scorecards in (`close_event_flights`: a LIVE board is frozen first, a
+FROZEN one settled, a SETTLED one left alone — Kerry 2026-09-22: "Add
+SETTLE as part of the CLOSEOUT function, because I will likely never use
+it manually"). Expect Phase 1.1, 1.3, the payout RECORDING and the flights
+SETTLE to be done within an hour of GG finalizing. Do not assume it —
+read it — but do not redo it either.
 
 ## Phase 1 — data in (gates everything downstream)
 
@@ -141,6 +146,13 @@ Do not assume it — read it — but do not redo it either.
     `scoring-payouts-unpaid` is the one-call answer. On 2026-09-10 a
     morning report repeated "31 PENDING" from the night before; Kerry had
     paid all 31 in between, and the Tracker already knew.
+2.2b **Flights settled.** `scoring-flights-board:<event_id>` → `state`
+    must read `settled` (the board is the record: frozen selection priced
+    from the actual buyers, with the delta since the freeze). `live` or
+    `frozen` after the hourly sync ran means the event had no scorecards
+    when it ran — `scoring-flights-close:<event_id>|apply` settles it (dry
+    run without `|apply`). Nothing here pays anyone; GG is the payer of
+    record. The SETTLE button was removed from the tab on purpose.
 2.3 **Roster truth.** Registrations vs cards: no-shows (registered, no
     card), WDs, `credit_amount`, balance-due rows. A WD still in the saved
     pairings: `scoring-pairings-remove:<event>|<player>`.
