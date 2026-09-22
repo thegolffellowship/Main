@@ -62,8 +62,9 @@ actual membership; places by FLIGHT size (1–9 → 1; 10–19 → 2/3–1/3;
 20+ → 50/30/20; ties pool and split to the pot); Individual Gross pot =
 10% off the top as the Overall Low Gross bonus + 90% by headcount;
 Skins keeps the matrix pot ÷ flights; Individual Net keeps the matrix
-place columns. The cut per game is EVEN (down the middle, Ind Net's
-default) or HCP (the ladder, Skins/Gross default), one shared toggle per
+place columns. The cut per game is EVEN (down the middle — an odd field
+puts the SMALLER half in Flight 1 and a tie on the cut goes UP whole,
+never split; Ind Net's default) or HCP (the ladder, Skins/Gross default), one shared toggle per
 game bar; dragging a name to another flight makes the game CUSTOM on its
 base cut (`flight_modes:<event_id>`, customer_id-keyed moves; #599,
 v2.478.0). SELECTION freezes at an explicit action (FREEZE button, built

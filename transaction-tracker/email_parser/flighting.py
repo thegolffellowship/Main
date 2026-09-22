@@ -104,7 +104,11 @@ FLIGHT_RULES: dict = {
     # toggle should still be provided."
     #   equal_size  — the field split down the middle (equal headcounts,
     #                 tie-safe, NO ceiling: the cut is wherever the middle
-    #                 falls; the edge is the next flight's lowest index)
+    #                 falls; the edge is the next flight's lowest index).
+    #                 KERRY 2026-09-22: an odd field puts the SMALLER half
+    #                 in Flight 1 (13 → 6/7) and a tie group on the cut
+    #                 goes UP — ties are never split, the low flight is
+    #                 protected from higher handicaps sneaking in.
     #   fixed_bands — the ratified ladder (<12.0 / 12.0+; 6/12; 6/12/18)
     # An event overrides per game (`flight_modes:<event_id>`); these are
     # the defaults. Supersedes the 2026-09-21 "same as Skins" reading for
@@ -473,6 +477,10 @@ def _net_plan(field: list[dict], count: int, rules: dict,
     cfg = copy.deepcopy(SEED_FLIGHT_CONFIG)
     cfg["min_flight_size"] = 0                       # #572: no merging
     cfg["low_flight_ceiling"] = {game: rules["net"].get("low_flight_ceiling")}
+    # KERRY 2026-09-22: an odd field puts the smaller half in Flight 1 and a
+    # tie group on the cut goes UP — the low flight is protected, and
+    # "tied handicaps should NEVER be split into two separate flights."
+    cfg["tie_direction"] = "up"
     # flight_plan keys its players and hands back only key/name/index, so
     # the original dicts (customer_id, ph) are restored by key afterwards.
     by_key = {}

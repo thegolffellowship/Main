@@ -58633,9 +58633,10 @@ def set_event_flight_mode(event_id: int, game: str, mode: str | None,
                          db_path=db_path)
     except Exception:                                    # noqa: BLE001
         pass
-    board = event_flights_board(event_id, db_path=db_path)
-    if not board:
+    inp = _flights_board_inputs(event_id, db_path)
+    if not inp:
         return {"ok": False, "error": f"event {event_id} not found"}
+    board = _compute_live_flights_board(inp)
     board["ok"] = True
     board["moves_cleared"] = had_moves
     return board
@@ -58664,9 +58665,13 @@ def move_event_flight_player(event_id: int, game: str, customer_id, flight_no,
         return {"ok": False, "error": "the board is frozen — the selection of record "
                                       "is the snapshot; unfreeze first",
                 "state": "settled" if snaps["settled"] else "frozen"}
-    board = event_flights_board(event_id, db_path=db_path)
-    if not board:
+    # One read of the expensive inputs (every customer's index of record,
+    # the PH map, the matrix); the cut itself is cheap, so the board before
+    # and after the move comes off the same inputs.
+    inp = _flights_board_inputs(event_id, db_path)
+    if not inp:
         return {"ok": False, "error": f"event {event_id} not found"}
+    board = _compute_live_flights_board(inp)
     entry = next((g for g in board.get("games") or [] if g["game"] == game), None)
     sel = (entry or {}).get("selection") or {}
     if not sel.get("active"):
@@ -58708,7 +58713,7 @@ def move_event_flight_player(event_id: int, game: str, customer_id, flight_no,
                          db_path=db_path)
     except Exception:                                    # noqa: BLE001
         pass
-    board = event_flights_board(event_id, db_path=db_path)
+    board = _compute_live_flights_board(inp)
     board["ok"] = True
     board["moved"] = {"customer_id": cid, "name": name, "from_flight": cur,
                       "to_flight": to, "cleared": to == base_flight,

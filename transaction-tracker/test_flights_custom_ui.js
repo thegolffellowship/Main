@@ -88,6 +88,38 @@ check("the manual Save cancels the pending background save (the flush wins)",
 check("after a clean background save the sheet rerenders (printables appear) unless a drag has started",
       /if \(document\.querySelector\('\.pair-dragging'\)\) paintPairingsSaveStamp\(ev, state\);\s*else rerenderDetail\(container, ev\);/.test(html));
 
+console.log("\n== speed: instant feedback, one round trip, a toast that exists (Kerry 2026-09-22) ==");
+check("the events page defines its own showToast when none is loaded (acct-dashboard.js is not on this page) — the FREEZE handler no longer dies on it",
+      /if \(typeof window\.showToast !== "function"\) \{\s*window\.showToast = function \(msg, type\)/.test(html));
+check("FREEZE / SETTLE / Unfreeze show a pending label the instant they are clicked and use the response as the board (no second GET)",
+      /b\.textContent = act === "freeze" \? "FREEZING…" : act === "settle" \? "SETTLING…" : "Unfreezing…";/.test(html)
+      && /if \(Array\.isArray\(data\.games\)\) flightsBoards\[ev\.id\] = data;/.test(html)
+      && /if \(!ok \|\| !Array\.isArray\(\(flightsBoards\[ev\.id\] \|\| \{\}\)\.games\)\) await loadFlightsBoard\(ev\.id\);/.test(html));
+check("...and the success toast says FROZEN with the timestamp", /Flights FROZEN\$\{data\.freeze && data\.freeze\.taken_at_local/.test(html));
+check("the EVEN | HCP click lights the segment and says it is re-cutting before the server answers",
+      /b\.textContent = \(mode === "equal_size" \? "EVEN" : "HCP"\) \+ "…";/.test(html));
+check("the drop is OPTIMISTIC: the card moves on screen at the drop, the save follows, the server's board replaces the guess",
+      /fbApplyMoveLocally\(flightsBoards\[ev\.id\], src\.game, src\.cid, src\.flight, to\);\s*rerenderDetail\(container, ev\);\s*const data = await fbPost\("move"/.test(html));
+check("...while it saves, the LIVE badge reads saving…", /board\.saving \? " · saving…"/.test(html));
+{
+    const a = html.indexOf("    function fbApplyMoveLocally(board, game, cid, fromNo, toNo) {");
+    const b2 = html.indexOf("    function fbPlacesText(flight) {");
+    eval(html.slice(a, b2) + "\nglobalThis.fbApplyMoveLocally = fbApplyMoveLocally;");
+    const board = { games: [{ game: "skins", selection: { mode: "fixed_bands", base_mode: "fixed_bands", mode_default: "fixed_bands", moves: [], notes: [],
+        flights: [
+            { flight_no: 1, band: "<12.0", label: "1.6–11.8", players: 2, members: [{ customer_id: 1, name: "A", index: 1.6, index_text: "1.6" }, { customer_id: 2, name: "B", index: 11.8, index_text: "11.8" }] },
+            { flight_no: 2, band: "12.0+", label: "12.4–20.0", players: 2, members: [{ customer_id: 3, name: "Scott Marroquin", index: 12.4, index_text: "12.4" }, { customer_id: 4, name: "D", index: 20.0, index_text: "20.0" }] }] } }] };
+    const ok = fbApplyMoveLocally(board, "skins", 3, 2, 1);
+    const sel = board.games[0].selection;
+    check("the local move mirrors the server: 2/2 → 3/1, CUSTOM, MOVED tag, label to 12.4, band · custom, the note in words",
+          ok && sel.mode === "custom" && [sel.flights[0].players, sel.flights[1].players].join("/") === "3/1"
+          && sel.flights[0].members[2].moved === true && sel.flights[0].label === "1.6–12.4" && sel.flights[0].band === "<12.0 · custom"
+          && /Scott Marroquin \(12\.4\) moved from Flight 2 to Flight 1/.test(sel.custom_note) && board.saving === true, JSON.stringify(sel));
+    fbApplyMoveLocally(board, "skins", 3, 1, 2);
+    check("...and dropping him back clears it locally too: plain HCP again, no moves, no note",
+          sel.mode === "fixed_bands" && sel.moves.length === 0 && sel.custom_note === "" && sel.flights[1].band === "12.0+", JSON.stringify(sel));
+}
+
 console.log("\n== the control rendered headless ==");
 const start = html.indexOf("    const FB_MODE_TEXT = {");
 const end = html.indexOf("    function fbPlacesText(flight) {");

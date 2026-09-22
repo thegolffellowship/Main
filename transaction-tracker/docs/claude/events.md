@@ -2232,6 +2232,27 @@ Kerry 2026-09-21 (mailbox #582): "need to see the divisions/flights
 breakdown so probably will need a tab for it under each event." The
 FLIGHTING lane (spun off "TGF Tracker Improvements 2"; plan #584).
 
+- **The even split's odd-field and tie rule; page speed (v2.478.1, Kerry
+  2026-09-22):** "If an odd number of players the lower number should go
+  to the Flight 1, and the higher to the Flight 2. That way the lower
+  handicaps are protected from higher handicaps sneaking in… Tied
+  handicaps should NEVER be split into two separate flights." In
+  `live_scoring.flight_plan` the remainder now goes to the HIGHER flights
+  (13 → 6/7; 16 in three → 5/5/6; 17 → 5/6/6) and `tie_direction` is
+  `"up"` in the seed and in `flighting._net_plan`: a tie group on the cut
+  goes UP whole. The plan's notes say so. **Speed:** the events page never
+  loaded `showToast` (it lives in acct-dashboard.js), so every toast call
+  threw and the FREEZE handler died before reloading the board — "nothing
+  updates". The page now defines its own toast when none is loaded. FREEZE
+  / SETTLE / Unfreeze show a pending label instantly and take the response
+  as the board (no second GET); the EVEN | HCP click lights the segment
+  before the server answers; the drop is OPTIMISTIC (`fbApplyMoveLocally`
+  mirrors the server's selection change on the cached board and rerenders
+  at once, the badge reads "saving…", the server's board replaces the
+  guess); `move_event_flight_player` / `set_event_flight_mode` read the
+  expensive inputs once (`_flights_board_inputs`) and cut twice off them.
+  Guard: `test_flights_custom_ui.js`, `test_live_scoring.py`.
+
 - **EVEN | HCP | CUSTOM, drag-to-move, auto-save (v2.478.0, Kerry
   2026-09-22 #599):** "I prefer toggles that are shared toggles rather
   than separate buttons. Similar to the ROSTER | PAIRINGS | GAMES |

@@ -5516,6 +5516,29 @@
     function canSeeFlights() {
         return currentRole === 'admin' || currentRole === 'manager';
     }
+    // The events page never loaded acct-dashboard.js, so `showToast` was
+    // undefined here: every call threw, and the FREEZE handler died before
+    // it reloaded the board (Kerry 2026-09-22: "How do I know if it's
+    // frozen once I click FREEZE? Nothing updates."). A small toast of its
+    // own, defined only if the page has none.
+    if (typeof window.showToast !== "function") {
+        window.showToast = function (msg, type) {
+            let host = document.getElementById("tgf-toast-host");
+            if (!host) {
+                host = document.createElement("div");
+                host.id = "tgf-toast-host";
+                host.style.cssText = "position:fixed;left:50%;bottom:1.25rem;transform:translateX(-50%);z-index:9999;display:flex;flex-direction:column;gap:0.4rem;align-items:center;pointer-events:none;";
+                document.body.appendChild(host);
+            }
+            const el = document.createElement("div");
+            const bg = type === "error" ? "#b91c1c" : type === "success" ? "#065f46" : "#1B1B1B";
+            el.style.cssText = `background:${bg};color:#fff;font-size:0.8rem;font-weight:600;padding:0.45rem 0.9rem;border-radius:99px;box-shadow:0 4px 14px rgba(0,0,0,0.25);max-width:min(90vw,34rem);text-align:center;opacity:0;transition:opacity 0.15s;pointer-events:auto;`;
+            el.textContent = String(msg == null ? "" : msg);
+            host.appendChild(el);
+            requestAnimationFrame(() => { el.style.opacity = "1"; });
+            setTimeout(() => { el.style.opacity = "0"; setTimeout(() => el.remove(), 200); }, type === "error" ? 6000 : 2800);
+        };
+    }
     async function loadFlightsBoard(evId) {
         try {
             const res = await fetch(`/api/events/${evId}/flights-board`);
@@ -5539,7 +5562,7 @@
         let txt = st;
         if (st === "FROZEN" && board.freeze) txt += " " + escapeHtml(board.freeze.taken_at_local || board.freeze.taken_at || "");
         if (st === "SETTLED" && board.settled) txt += " " + escapeHtml(board.settled.taken_at_local || board.settled.taken_at || "");
-        if (st === "LIVE") txt += board.event_completed ? " · recomputed now" : " · recomputing";
+        if (st === "LIVE") txt += board.saving ? " · saving…" : (board.event_completed ? " · recomputed now" : " · recomputing");
         return `<span style="display:inline-block;padding:0.15rem 0.6rem;border-radius:999px;border:1px solid ${palette.bd};background:${palette.bg};color:${palette.fg};font-size:0.7rem;font-weight:700;letter-spacing:0.05em;">${txt}</span>`;
     }
     // The FREEZE / SETTLE / UNFREEZE buttons (Kerry 2026-09-21: "Let's go
@@ -5592,7 +5615,11 @@
                 const game = b.dataset.flightsGame, mode = b.dataset.flightsMode;
                 const cur = (((flightsBoards[ev.id] || {}).games || []).find(x => x.game === game) || {}).selection || {};
                 if (cur.mode === mode) return;          // already that cut
-                b.disabled = true;
+                // Instant feedback: the segment lights up and the bar says
+                // it is re-cutting before the server answers.
+                const grp = b.closest(".fb-seg-group");
+                if (grp) grp.querySelectorAll(".fb-seg").forEach(x => { x.disabled = true; x.classList.toggle("active", x === b); x.style.background = x === b ? "#fff" : "transparent"; x.style.color = x === b ? "#1B1B1B" : "#fff"; });
+                b.textContent = (mode === "equal_size" ? "EVEN" : "HCP") + "…";
                 const data = await fbPost("mode", { game, mode }, "Could not set the cut");
                 if (data && data.moves_cleared) showToast(`Re-cut by ${mode === "equal_size" ? "EVEN" : "HCP"} — the custom moves are cleared. Saved.`, "info");
             });
@@ -5628,6 +5655,13 @@
                 const src = fbDrag; fbDrag = null; fbClearDrop();
                 const to = Number(box.dataset.fbFlight);
                 if (to === src.flight) return;
+                // OPTIMISTIC (Kerry 2026-09-22: "the drag feature really
+                // takes a long time to register. Why can't it be
+                // immediate?"): the card moves on screen at the drop; the
+                // server's board replaces the guess when it answers, or
+                // the board reloads if the save is refused.
+                fbApplyMoveLocally(flightsBoards[ev.id], src.game, src.cid, src.flight, to);
+                rerenderDetail(container, ev);
                 const data = await fbPost("move", { game: src.game, customer_id: src.cid, flight_no: to }, "Could not move the player");
                 if (data && data.moved) showToast(`${data.moved.text}. Saved.`, "success");
             });
@@ -5637,7 +5671,12 @@
                 e.stopPropagation();
                 const act = b.dataset.flightsAct;
                 if (!confirm(FB_CONFIRM[act] || `${act}?`)) return;
+                // Instant feedback: the button says what it is doing and
+                // the badge turns while the server works.
                 b.disabled = true;
+                b.textContent = act === "freeze" ? "FREEZING…" : act === "settle" ? "SETTLING…" : "Unfreezing…";
+                container.querySelectorAll("[data-flights-act]").forEach(x => { x.disabled = true; });
+                let ok = false;
                 try {
                     const res = await fetch(`/api/events/${ev.id}/flights/${act}`, {
                         method: "POST", headers: { "Content-Type": "application/json" },
@@ -5646,12 +5685,15 @@
                     if (!res.ok || !data.ok) {
                         showToast((data && data.error) || `Could not ${act} (HTTP ${res.status})`, "error");
                     } else {
-                        showToast(act === "freeze" ? "Flights frozen" : act === "settle" ? "Flights settled" : "Board back to LIVE");
+                        ok = true;
+                        // The response IS the board as it now reads.
+                        if (Array.isArray(data.games)) flightsBoards[ev.id] = data;
+                        showToast(act === "freeze" ? `Flights FROZEN${data.freeze && data.freeze.taken_at_local ? " " + data.freeze.taken_at_local : ""} — the selection is the record; pots keep recomputing until settlement` : act === "settle" ? "Flights SETTLED — the record is stored with the delta since the freeze" : "Board back to LIVE — the snapshot is voided but kept", "success");
                     }
                 } catch (err) {
                     showToast(`Could not ${act}: ${err && err.message || err}`, "error");
                 }
-                await loadFlightsBoard(ev.id);
+                if (!ok || !Array.isArray((flightsBoards[ev.id] || {}).games)) await loadFlightsBoard(ev.id);
                 rerenderDetail(container, ev);
             });
         });
@@ -5695,6 +5737,49 @@
             return `<button type="button" class="fb-seg${on ? " active" : ""}" data-flights-mode="${m}" data-flights-game="${g.game}" ${clickable ? "" : "disabled"} aria-pressed="${on}" title="${escapeHtml(title)}" style="font-size:0.64rem;font-weight:700;letter-spacing:0.06em;padding:0.14rem 0.5rem;border:0;border-left:1px solid rgba(255,255,255,0.45);cursor:${clickable ? "pointer" : "default"};line-height:1.3;${st}">${label}${isDefault ? "<span style=\"opacity:0.55;font-weight:400;\">&thinsp;&bull;</span>" : ""}</button>`;
         });
         return `<span class="fb-seg-group" role="group" aria-label="Cut" style="display:inline-flex;margin-left:auto;border:1px solid rgba(255,255,255,0.45);border-radius:99px;overflow:hidden;">${parts.join("")}</span>`;
+    }
+    // The optimistic move: the same thing the server will do to the
+    // SELECTION, done to the cached board so the drop shows instantly.
+    // Amounts are left as they were (they re-price when the server
+    // answers a beat later); the panel says "saving…" meanwhile.
+    function fbApplyMoveLocally(board, game, cid, fromNo, toNo) {
+        if (!board || !Array.isArray(board.games)) return false;
+        const g = board.games.find(x => x.game === game);
+        const sel = g && g.selection;
+        if (!sel || !Array.isArray(sel.flights)) return false;
+        const from = sel.flights.find(f => f.flight_no === fromNo);
+        const dest = sel.flights.find(f => f.flight_no === toNo);
+        if (!from || !dest) return false;
+        const i = (from.members || []).findIndex(m => m.customer_id === cid);
+        if (i < 0) return false;
+        const m = from.members.splice(i, 1)[0];
+        const moves = (sel.moves || []).filter(x => x.customer_id !== cid);
+        const prior = (sel.moves || []).find(x => x.customer_id === cid);
+        const baseFlight = prior ? prior.from_flight : fromNo;
+        m.moved = toNo !== baseFlight;
+        if (m.moved) moves.push({ customer_id: cid, name: m.name, index: m.index, index_text: m.index_text, from_flight: baseFlight, to_flight: toNo });
+        dest.members = (dest.members || []).concat([m]).sort((a, b) => (Number(a.index) - Number(b.index)) || String(a.name || "").localeCompare(String(b.name || "")));
+        for (const f of sel.flights) {
+            f.players = (f.members || []).length;
+            f.custom = moves.some(x => x.from_flight === f.flight_no || x.to_flight === f.flight_no);
+            f.band = String(f.band || "").replace(/ · custom$/, "") + (f.custom ? " · custom" : "");
+            const idx = (f.members || []).map(x => x.index_text || "");
+            f.label = idx.length ? (idx.length === 1 ? idx[0] : `${idx[0]}–${idx[idx.length - 1]}`) : "—";
+        }
+        moves.sort((a, b) => (a.to_flight - b.to_flight) || (Number(a.index) - Number(b.index)));
+        sel.moves = moves;
+        if (moves.length) {
+            sel.mode = "custom";
+            sel.mode_source = "custom — moved by hand";
+            sel.custom_note = `Custom flights — ${moves.length} move${moves.length === 1 ? "" : "s"} by hand on top of the base cut: ${moves.map(x => `${x.name} (${x.index_text}) moved from Flight ${x.from_flight} to Flight ${x.to_flight}`).join("; ")}.`;
+        } else {
+            sel.mode = sel.base_mode || sel.mode_default || "fixed_bands";
+            sel.mode_source = "event toggle";
+            sel.custom_note = "";
+        }
+        sel.notes = (sel.notes || []).filter(n => !/^Custom flights — /.test(n)).concat(sel.custom_note ? [sel.custom_note] : []);
+        board.saving = true;
+        return true;
     }
     function fbPlacesText(flight) {
         const pl = (flight.places || []);

@@ -118,9 +118,9 @@ check("...beside what Golf Genius recorded for Skins ($130 across 2 rows; the CT
       sk["gg_recorded"]["total"] == 130.0 and len(sk["gg_recorded"]["rows"]) == 2, str(sk["gg_recorded"]))
 
 inn = g["individual_net"]
-check("Individual Net: 13 buyers on a nine → 2 flights split down the middle by default, 7/6 (Kerry 2026-09-22)",
+check("Individual Net: 13 buyers on a nine → 2 flights split down the middle by default, the SMALLER half in Flight 1: 6/7 (Kerry 2026-09-22: 'the lower number should go to the Flight 1')",
       inn["selection"]["mode"] == "equal_size" and inn["selection"]["flight_count"] == 2
-      and [f["players"] for f in inn["selection"]["flights"]] == [7, 6], str(inn["selection"]["flights"]))
+      and [f["players"] for f in inn["selection"]["flights"]] == [6, 7], str([f["players"] for f in inn["selection"]["flights"]]))
 _mres = db.set_event_flight_mode(EV, "individual_net", "fixed_bands", db_path=tmp)
 _inn2 = next(x for x in _mres["games"] if x["game"] == "individual_net")
 check("...the HCP BANDS toggle (set_event_flight_mode) cuts it at 12.0 like Skins, low flight under 12.0, and says it is the event's choice",

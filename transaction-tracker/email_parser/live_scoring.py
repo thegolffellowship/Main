@@ -600,7 +600,10 @@ SEED_FLIGHT_CONFIG: dict = {
     "index_scale": "18",             # "9" | "18"  — RULED: 18
     # RATIFIED 2026-09-19 (#572): no minimum, no merging. 0 = off.
     "min_flight_size": 0,
-    "tie_direction": "even",         # "even" | "up" | "down"
+    # KERRY 2026-09-22: "Tied handicaps should NEVER be split into two
+    # separate flights" and the low flight is protected — a tie group on
+    # the cut goes UP to the higher flight.
+    "tie_direction": "up",           # "even" | "up" | "down"
     "modes": {
         # Kerry 2026-09-21: Individual Net cuts on the same fixed ladder
         # as Skins (<12.0 / 12.0+), not an equal-size split.
@@ -701,11 +704,20 @@ def flight_plan(players: list[dict], count: int, game: str = "individual_net",
             notes.append("Bands (upper bound per flight, exclusive): "
                          + " / ".join(f"<{b}" for b in bands) + " / rest.")
     if mode == "equal_size" and count > 1:
+        # KERRY 2026-09-22: "If an odd number of players the lower number
+        # should go to Flight 1, and the higher to Flight 2. That way the
+        # lower handicaps are protected from higher handicaps sneaking
+        # in." The remainder goes to the HIGHER flights (13 → 6/7; 16 in
+        # three → 5/5/6), and a tie group on the cut goes UP.
         base, rem = divmod(n, count)
         cuts, acc = [], 0
+        if rem:
+            notes.append(f"{n} players do not split evenly into {count}: the extra "
+                         f"{'seat goes' if rem == 1 else 'seats go'} to the higher "
+                         f"flight{'s' if rem > 1 else ''}, so the low flight stays the smaller one.")
         for f in range(count - 1):
-            acc += base + (1 if f < rem else 0)
-            cut = _tie_safe_cut(ranked, acc, n, cfg.get("tie_direction", "even"))
+            acc += base + (1 if f >= count - rem else 0)
+            cut = _tie_safe_cut(ranked, acc, n, cfg.get("tie_direction", "up"))
             if cut != acc:
                 notes.append(
                     f"Cut {f + 1} moved {acc} -> {cut} so players sharing "

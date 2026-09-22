@@ -159,6 +159,26 @@ Rule 3b: the storage shape was proposed in the ack (same app_settings
 key, no new table) and built in-session; the freeze snapshot already
 carries the resulting selection.
 
+## 6d. Kerry's follow-up on v2.478.0 (2026-09-22 afternoon) → v2.478.1
+
+1. **Even split, odd field:** the smaller half is Flight 1 (13 → 6/7);
+   ties are never split and a tie group on the cut goes UP. Built in
+   `live_scoring.flight_plan` (remainder to the higher flights,
+   `tie_direction` "up") and pinned in `test_live_scoring.py`,
+   `test_flighting.py`, `test_flights_board.py`.
+2. **"The drag takes a long time to register":** the drop is now
+   optimistic (`fbApplyMoveLocally`), and the move endpoint reads the
+   expensive inputs once. Root cause of the wait: a full server recompute
+   plus a full detail rerender before anything moved.
+3. **"How do I know it's frozen? Nothing updates":** `showToast` was not
+   defined on the events page; the handler threw before reloading the
+   board. Fixed with a page-level toast; FREEZE shows a pending label and
+   the response is the board.
+4. UX standards applied: optimistic updates, instant pending states, one
+   round trip per action, debounced background saves, a visible toast.
+   Still to do for real speed: partial DOM updates instead of the full
+   detail rerender (`rerenderDetail` rebuilds the whole event card).
+
 ## 7. Open / carried forward
 
 - Next: the Final Pairings send OFFERS the freeze when the event is not

@@ -200,6 +200,14 @@ check("Brackenridge Ind Net: 14 buyers on a nine → 2 flights split DOWN THE MI
       s["mode"] == "equal_size" and s["mode_source"] == "default" and [f["players"] for f in s["flights"]] == [7, 7], str(s["flights"]))
 check("...no ceiling nudges the cut: the edge is simply the next flight's lowest index (15.8), and the bands read from it",
       s["edges"] == [15.8] and [f["band"] for f in s["flights"]] == ["<15.8", "15.8+"], (s["edges"], [f["band"] for f in s["flights"]]))
+net13 = net14[1:]                                    # Pat Youngs removed: an odd field
+s = fl.select_game("individual_net", "Individual Net", "NET", net13, "9", M9[14], cfg["individual_net"])
+check("an ODD field puts the smaller half in Flight 1: 13 → 6/7 (Kerry 2026-09-22: 'the lower number should go to the Flight 1, and the higher to the Flight 2… lower handicaps are protected')",
+      [f["players"] for f in s["flights"]] == [6, 7] and any("higher flight" in n for n in s["notes"]), (str([f["players"] for f in s["flights"]]), s["notes"]))
+tied = [P(i, f"T{i}", x) for i, x in enumerate([1.0, 2.0, 3.0, 4.0, 5.0, 9.2, 9.2, 9.2, 12.0, 15.0, 20.0], start=400)]
+s = fl.select_game("individual_net", "Individual Net", "NET", tied, "9", M9[14], cfg["individual_net"])
+check("tied handicaps are NEVER split: the three 9.2s on the cut all go UP to Flight 2 (5/6, low flight protected)",
+      [f["players"] for f in s["flights"]] == [5, 6] and all(m["index"] != 9.2 for m in s["flights"][0]["members"]), str([f["players"] for f in s["flights"]]))
 s = fl.select_game("individual_net", "Individual Net", "NET", net14, "9", M9[14], cfg["individual_net"], mode="fixed_bands")
 check("...the HCP break is one toggle away: fixed_bands cuts on the ladder's 12.0 like Skins (4/10) — the 2026-09-21 reading, now the option",
       s["mode"] == "fixed_bands" and s["mode_source"] == "event toggle" and [f["players"] for f in s["flights"]] == [4, 10]

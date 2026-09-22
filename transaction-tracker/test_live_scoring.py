@@ -532,6 +532,23 @@ plan = fp([1.0, 5.5, 5.5, 9.0], 2, mode="equal_size", min_flight_size=1,
 check("a dead-heat tie slide sends the group UP", sizes(plan) == [1, 3],
       str(sizes(plan)))
 
+# KERRY 2026-09-22: an odd field puts the SMALLER half in Flight 1 — "the
+# lower number should go to the Flight 1, and the higher to the Flight 2.
+# That way the lower handicaps are protected from higher handicaps
+# sneaking in." Three flights likewise: the extras go to the higher ones.
+plan = fp([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13], 2, mode="equal_size", min_flight_size=1,
+          low_flight_ceiling={})
+check("an odd field splits 6/7 — the smaller half is the low flight", sizes(plan) == [6, 7], str(sizes(plan)))
+check("...and says why in the notes", any("higher flight" in nsg for nsg in plan["notes"]), str(plan["notes"]))
+plan = fp(list(range(1, 17)), 3, mode="equal_size", min_flight_size=1, low_flight_ceiling={})
+check("16 in three flights goes 5/5/6", sizes(plan) == [5, 5, 6], str(sizes(plan)))
+plan = fp(list(range(1, 18)), 3, mode="equal_size", min_flight_size=1, low_flight_ceiling={})
+check("17 in three flights goes 5/6/6", sizes(plan) == [5, 6, 6], str(sizes(plan)))
+# Tied handicaps are NEVER split, and a tie on the cut goes UP.
+plan = fp([1.0, 2.0, 3.0, 4.0, 5.0, 9.2, 9.2, 9.2, 12.0, 15.0, 20.0], 2, mode="equal_size", min_flight_size=1,
+          low_flight_ceiling={})
+check("a tie group on the cut goes UP whole (5/6), never split", sizes(plan) == [5, 6], str(sizes(plan)))
+
 # Clean field with no ties splits evenly.
 plan = fp([1, 2, 3, 4, 5, 6, 7, 8], 2, mode="equal_size", min_flight_size=1,
           low_flight_ceiling={})
