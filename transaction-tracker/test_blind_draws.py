@@ -280,5 +280,23 @@ check("…and the BLINDS button reads the same unit and the same sources for tho
       and {(d["group_num"], d["cart_pos"]): d["drawn_from"] for d in whole["drawn"]}
       == {(2, 2): "other cart", (2, 4): "other cart"}, str(whole.get("drawn")))
 
+print("\n== what the popup shows is what OK writes (Kerry 2026-09-22) ==")
+db.save_event_pairings(EV, SHEET, db_path=tmp)
+db.remove_player_from_pairings(EV, "Will Wallace", reseat=False, db_path=tmp)
+db.clear_event_blinds(EV, db_path=tmp)
+prev = db.draw_event_blinds(EV, dry_run=True, db_path=tmp, team_unit="group")
+picks = [{"holes": b["holes"], "group_num": b["group_num"], "cart_pos": b["cart_pos"], "customer_id": b["customer_id"]} for b in prev["drawn"]]
+_same = True
+for _ in range(6):
+    got = db.draw_event_blinds(EV, dry_run=False, redraw=True, db_path=tmp, team_unit="group", picks=picks)
+    _same = _same and ([(b["group_num"], b["cart_pos"], b["customer_id"]) for b in got["drawn"]]
+                       == [(b["group_num"], b["cart_pos"], b["customer_id"]) for b in prev["drawn"]])
+check("the apply writes exactly the previewed names, every time (six redraws)", _same, str(got["drawn"]))
+check("a fill-only draw (no redraw) leaves the drawn seats alone: nothing open, nothing new",
+      db.draw_event_blinds(EV, dry_run=True, db_path=tmp, team_unit="group")["drawn"] == [])
+pv = db.draw_event_blinds(EV, dry_run=True, redraw=True, db_path=tmp, team_unit="group")
+check("a redraw PREVIEW shows every seat drawn afresh without deleting anything",
+      len(pv["drawn"]) == len(prev["drawn"]) and len(db.get_event_blinds(EV, db_path=tmp).get("9", {}).get(2, [])) == 2, str(pv["drawn"]))
+
 print("\n" + ("ALL PASS" if not F else f"{len(F)} FAILURE(S): " + "; ".join(F)))
 sys.exit(1 if F else 0)

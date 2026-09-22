@@ -1836,7 +1836,18 @@ GROUP on Team Net. The single-seat response carries `team_unit` and
 the groups from the apply response (`drawn` + `covered_by_existing`) and
 redraws the detail, instead of re-reading the whole panel (Kerry: "nothing
 showed up in the open spot until I collapsed and reopened the event").
-Guards: `test_blind_draws.py`, `test_blinds_ui.js`.
+**What the popup shows is what OK writes (v2.478.6):** the preview and
+the apply were two separate random draws (Kerry 2026-09-22: "It popped
+up with a modal that it had selected Richard PALACIOS… when I clicked OK,
+it replaced 3A Blind Jeff RIDEOUT with Michael Murphy and put Blind Will
+PETERSON in 3B"); the apply now carries `picks` [{holes, group_num,
+cart_pos, customer_id}] from the dry run and `draw_event_blinds` takes
+the named player for a seat while he is still a legal candidate. **Keep
+or replace (same ruling):** with app-drawn blinds already on the sheet
+the button asks first — keep them and fill only the open seats (no
+`redraw`), or replace all with a fresh draw (`redraw`, which the dry run
+now previews without deleting). Guards: `test_blind_draws.py`,
+`test_blinds_ui.js`.
 
 ### Surfaces
 

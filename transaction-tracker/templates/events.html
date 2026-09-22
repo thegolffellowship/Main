@@ -7606,9 +7606,27 @@
      *  already had this year — then writes only on OK. */
     async function drawBlinds(evId, container, ev) {
         try {
+            // Blinds already on the sheet (Kerry 2026-09-22: "If I click
+            // BLINDS when there is already at least one BLIND in an open
+            // spot, it should ask me if I want to replace all or only the
+            // open spots"): keep them and fill only the open seats, or
+            // replace them all with a fresh draw.
+            const st0 = getPairingsState(evId);
+            const existingApp = [...(st0.groups_9 || []), ...(st0.groups_18 || [])]
+                .flatMap(g => (g.blinds || []).filter(b => b.source === "app").map(b => b.name));
+            let redraw = false;
+            if (existingApp.length) {
+                const keep = confirm(
+                    `${existingApp.length} blind(s) already drawn: ${existingApp.join(", ")}.\n\n`
+                    + `Keep them and fill ONLY the open seat(s)?`);
+                if (!keep) {
+                    if (!confirm(`Replace ALL ${existingApp.length} blind(s) with a fresh draw?`)) return;
+                    redraw = true;
+                }
+            }
             const res = await fetch(`/api/events/${evId}/pairings/blinds`, {
                 method: "POST", headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({}),
+                body: JSON.stringify({ dry_run: true, redraw }),
             });
             const d = await res.json();
             if (!res.ok || d.error) { alert("Blind draw failed: " + (d.error || res.status)); return; }
@@ -7630,9 +7648,15 @@
                 + `Drawn from members in the field with an established handicap, `
                 + `fewest blinds this year first.\n\nRecord these?`);
             if (!ok) return;
+            // What was shown is what is written: the apply carries the
+            // previewed picks (the preview and the apply used to be two
+            // separate random draws — Kerry 2026-09-22: the popup named
+            // Richard Palacios, the OK wrote Michael Murphy).
+            const picks = d.drawn.map(b => ({ holes: b.holes, group_num: b.group_num,
+                                              cart_pos: b.cart_pos, customer_id: b.customer_id }));
             const w = await fetch(`/api/events/${evId}/pairings/blinds`, {
                 method: "POST", headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ apply: true, redraw: true }),
+                body: JSON.stringify({ apply: true, redraw, picks }),
             });
             const wd = await w.json();
             if (!w.ok || wd.error) { alert("Blind draw failed: " + (wd.error || w.status)); return; }
@@ -7645,11 +7669,13 @@
             // seat and the card that fills it, which is all the cards need.
             const st = getPairingsState(evId);
             if (st.blindPool) st.blindPool = null;   // counts moved
-            // redraw:true cleared the event's app-drawn blinds first —
-            // mirror that, keep the Golf Genius-sourced ones.
-            [...(st.groups_9 || []), ...(st.groups_18 || [])].forEach(g => {
-                g.blinds = (g.blinds || []).filter(b => b.source && b.source !== 'app');
-            });
+            // A redraw cleared the event's app-drawn blinds first —
+            // mirror that; a fill-only draw keeps them.
+            if (redraw) {
+                [...(st.groups_9 || []), ...(st.groups_18 || [])].forEach(g => {
+                    g.blinds = (g.blinds || []).filter(b => b.source && b.source !== 'app');
+                });
+            }
             (wd.drawn || []).concat(wd.covered_by_existing || []).forEach(b => {
                 const grp = _findGroup(st, String(b.holes), b.group_num);
                 if (!grp) return;
@@ -13013,18 +13039,21 @@
                 // this click (the Apply Credit pattern) and arms the
                 // refund watch server-side.
                 const _pv = evTransferPreview || {};
+                const _net = _pv._net || { owed: _pv.amount_owed || 0, excess: _pv.excess || 0 };
+                const apply_credit_ids = [...document.querySelectorAll(".ev-transfer-credit:checked")]
+                    .map(cb => parseInt(cb.dataset.id, 10)).filter(n => n > 0);
                 const _exSel = document.querySelector('input[name="ev-transfer-excess"]:checked');
-                const excess_action = (_pv.excess > 0 && _exSel && _exSel.value === "venmo") ? "venmo" : "keep";
+                const excess_action = (_net.excess > 0.005 && _exSel && _exSel.value === "venmo") ? "venmo" : "keep";
                 let excess_venmo = null;
                 if (excess_action === "venmo" && _pv.venmo_username) {
                     const handle = String(_pv.venmo_username).replace(/^@/, "");
                     const memo = `${_pv.customer || ""} - Excess credit from ${_pv.source_event || ""}`.trim();
-                    excess_venmo = { handle, amount: Number(_pv.excess).toFixed(2), memo };
-                    window.open(venmoPayHref(handle, _pv.excess, memo), "_blank");
+                    excess_venmo = { handle, amount: Number(_net.excess).toFixed(2), memo };
+                    window.open(venmoPayHref(handle, _net.excess, memo), "_blank");
                 }
                 const res = await fetch(`/api/items/${evCreditItemId}/transfer`, {
                     method: "POST", headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ target_event: target, note, excess_action, excess_venmo }),
+                    body: JSON.stringify({ target_event: target, note, excess_action, excess_venmo, apply_credit_ids }),
                 });
                 _apiData = await res.json().catch(() => ({}));
                 if (!res.ok) throw new Error(_apiData.error || "Transfer failed");
@@ -13086,12 +13115,20 @@
             const _syncLabel = () => {
                 const btn = document.getElementById("ev-credit-submit");
                 if (!btn || evCreditType !== "transfer") return;
+                const net = pv._net || { owed: pv.amount_owed, excess: pv.excess };
                 const sel = document.querySelector('input[name="ev-transfer-excess"]:checked');
-                btn.textContent = (pv.excess > 0 && sel && sel.value === "venmo") ? "Transfer & Refund Excess"
-                    : (pv.amount_owed > 0.005 ? "Transfer & Prepare Balance Email" : "Transfer");
+                btn.textContent = (net.excess > 0.005 && sel && sel.value === "venmo") ? "Transfer & Refund Excess"
+                    : (net.owed > 0.005 ? "Transfer & Prepare Balance Email" : "Transfer");
             };
-            box.querySelectorAll('input[name="ev-transfer-excess"]').forEach(rb => rb.addEventListener("change", _syncLabel));
-            _syncLabel();
+            const _renderNet = () => {
+                const netEl = document.getElementById("ev-transfer-net");
+                if (!netEl || !pv.can_calculate) return;
+                netEl.innerHTML = renderTransferNet(pv);
+                netEl.querySelectorAll('input[name="ev-transfer-excess"]').forEach(rb => rb.addEventListener("change", _syncLabel));
+                _syncLabel();
+            };
+            box.querySelectorAll(".ev-transfer-credit").forEach(cb => cb.addEventListener("change", _renderNet));
+            _renderNet();
         } catch (err) {
             if (seq === _evTransferPreviewSeq) box.innerHTML = `<div style="font-size:0.8rem;color:#b91c1c;">Could not price the transfer: ${escapeHtml(err.message || String(err))}</div>`;
         }
@@ -13106,18 +13143,38 @@
             return html + `<div style="color:#92400e;">${escapeHtml(pv.target_event || "")} has no pricing on file — the credit moves as is; settle any difference by hand.</div></div>`;
         }
         html += `<div>${escapeHtml(pv.target_event || "")} costs <strong>${fmt(pv.target_subtotal)}</strong> for the same package (${pkg}; card fee not charged on a difference).</div>`;
-        if (pv.amount_owed > 0.005) {
-            html += `<div style="margin-top:0.35rem;color:#d97706;font-weight:600;">Player owes ${fmt(pv.amount_owed)}</div>
-                <div style="color:var(--text-muted);">After the transfer the balance-due Venmo email opens, prepared, for you to send.</div>`;
-        } else if (pv.excess > 0.005) {
-            const vH = pv.venmo_username ? String(pv.venmo_username).replace(/^@/, "") : "";
-            html += `<div style="margin-top:0.35rem;color:#16a34a;font-weight:600;">Excess credit ${fmt(pv.excess)}</div>
-                <label style="display:block;"><input type="radio" name="ev-transfer-excess" value="keep" checked style="margin-right:0.3rem;">Keep as credit on the player's account</label>
-                <label style="display:block;"><input type="radio" name="ev-transfer-excess" value="venmo" ${vH ? "" : "disabled"} style="margin-right:0.3rem;">Venmo back ${fmt(pv.excess)}${vH ? ` to @${escapeHtml(vH)} — Venmo opens on Transfer` : " — no Venmo handle on file"}</label>`;
-        } else {
-            html += `<div style="margin-top:0.35rem;color:#16a34a;">Same price — nothing to settle.</div>`;
+        const creds = pv.available_credits || [];
+        if (creds.length) {
+            html += `<div style="margin-top:0.35rem;">Credit already on the account:</div>`;
+            creds.forEach(cr => {
+                html += `<label style="display:block;margin-left:0.2rem;"><input type="checkbox" class="ev-transfer-credit" data-id="${cr.id}" data-amount="${Number(cr.amount).toFixed(2)}" ${pv.amount_owed > 0.005 ? "checked" : ""} style="margin-right:0.3rem;">Apply <strong>${fmt(cr.amount)}</strong> — ${escapeHtml(cr.label || "")}${cr.order_date ? ` (${escapeHtml(cr.order_date)})` : ""}</label>`;
+            });
         }
+        html += `<div id="ev-transfer-net" style="margin-top:0.35rem;"></div>`;
         return html + `</div>`;
+    }
+    /** The line under the credits: owes / excess AFTER the ticked credits. */
+    function renderTransferNet(pv) {
+        const fmt = v => `$${Number(v || 0).toFixed(2)}`;
+        const applied = [...document.querySelectorAll(".ev-transfer-credit:checked")]
+            .reduce((a, cb) => a + (parseFloat(cb.dataset.amount) || 0), 0);
+        const owed = Math.round((Number(pv.amount_owed || 0) - applied) * 100) / 100;
+        const excess = owed < -0.005 ? -owed : 0;
+        let html = "";
+        if (applied > 0) html += `<div>Applying ${fmt(applied)} of account credit.</div>`;
+        if (owed > 0.005) {
+            html += `<div style="color:#d97706;font-weight:600;">Player owes ${fmt(owed)}</div>
+                <div style="color:var(--text-muted);">After the transfer the balance-due Venmo email opens, prepared, for you to send.</div>`;
+        } else if (excess > 0.005) {
+            const vH = pv.venmo_username ? String(pv.venmo_username).replace(/^@/, "") : "";
+            html += `<div style="color:#16a34a;font-weight:600;">Excess credit ${fmt(excess)}</div>
+                <label style="display:block;"><input type="radio" name="ev-transfer-excess" value="keep" checked style="margin-right:0.3rem;">Keep as credit on the player's account</label>
+                <label style="display:block;"><input type="radio" name="ev-transfer-excess" value="venmo" ${vH ? "" : "disabled"} style="margin-right:0.3rem;">Venmo back ${fmt(excess)}${vH ? ` to @${escapeHtml(vH)} — Venmo opens on Transfer` : " — no Venmo handle on file"}</label>`;
+        } else {
+            html += `<div style="color:#16a34a;">Same price — nothing to settle.</div>`;
+        }
+        pv._net = { owed, excess, applied };
+        return html;
     }
 
     async function reverseEvCredit(itemId) {
@@ -17915,7 +17972,7 @@
             const resp = await fetch(`/api/items/${_venmoEmailItemId}/balance-due-email/send`, { method: 'POST' });
             const data = await resp.json();
             if (resp.ok) {
-                _showVenmoResult(`Sent to ${data.sent_to}` + (data.override_active ? ' (testing override)' : ''), false);
+                _showVenmoResult(`Sent to ${data.sent_to || data.to || 'the player'}` + (data.override_active ? ' (testing override)' : ''), false);
                 sendBtn.textContent = 'Sent';
                 // Refresh send map + re-render the event detail so the button switches to "Remind"
                 const evName = _venmoEmailEventName;

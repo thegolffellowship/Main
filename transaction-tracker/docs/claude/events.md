@@ -947,6 +947,16 @@ it's short $ then send them an email with a prepared Venmo link."
   `_build_balance_due_email` accepts a transferred row, so the prepared
   Venmo email modal opens on the NEW row right after the transfer for
   Kerry to send. `price_check` rides on the API answer.
+- **Credit already on the account (v2.478.6, Kerry: "Sharitz already
+  had $6 of credit on his account, so adjustment needs to be made there
+  or a radial button to include that $6 towards the transfer event"):**
+  the preview lists the player's unapplied credits (`available_credits`,
+  from `get_player_credits`) as tick boxes, ticked by default when the
+  move is short; the owes / excess line recomputes as they are ticked.
+  `transfer_item(apply_credit_ids=)` consumes the ticked rows the way
+  Apply Credit does (status transferred → the new row; a WD credit has
+  its `credit_amount` cleared), tagged "Applied via transfer …" so
+  `reverse_credit` puts them back. `price_check.credits_applied`.
 - The customers page's transfer goes through the same server path
   (excess kept as credit, shortfall stamped) without the modal preview.
 - Guard: `test_transfer_price.py`, `test_roster_pairings_sync.js`.
