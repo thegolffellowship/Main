@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.478.5";
+window.TGF_VERSION = "2.478.6";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.478.6",
+    date: "2026-09-22",
+    changes: [
+      "A money REQUEST is not a transaction (Kerry 2026-09-22: ‘The Robert Straiton $22 was a REQUEST for reimbursement’). The classifier booked Venmo request emails as money received — no money had moved, and a request email carries no transaction id. Requests (Venmo out/in + reminders, PayPal money requests, bank-borne Zelle requests) now classify as p2p_request and are skipped; a request that slips past classification is tagged by the parser (request wording + no id) and the save path refuses it. When the request gets PAID, the real payment email books normally. Guard: test_p2p_request_emails.py.",
+      "Backfill sweep over every Venmo received row found two booked phantoms, both fixed: Straiton's $22 (expense 2561 ignored, its Forest Creek ledger row reversed) and Daniel South's $74 (expense 1626 — his 7/16 REQUEST for the Cedar Creek refund; the real $74 payout was expense 1665 on 7/20 and stays).",
+    ],
+  },
   {
     version: "2.478.5",
     date: "2026-09-22",

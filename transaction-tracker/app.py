@@ -751,6 +751,12 @@ def check_expense_inbox(force=False, days_back=None):
             if email_type == "unknown":
                 continue
 
+            if email_type == "p2p_request":
+                # A money request moves no money (Kerry 2026-09-22:
+                # Straiton's $22). If it gets paid, the payment email
+                # books it; the request itself is only marked seen.
+                continue
+
             if email_type == "chase_transaction_alert":
                 merchant_ctx = None
                 extracted = parse_chase_alert(
@@ -805,6 +811,13 @@ def check_expense_inbox(force=False, days_back=None):
                     body_text,
                     provider=_prov_label,
                 )
+                if (extracted.get("transaction_type") or "").lower() == "request":
+                    # parse_p2p_payment tagged it: a request email that
+                    # slipped past classification — no money moved, so
+                    # nothing to save (it is already marked seen).
+                    logger.info("P2P request email skipped (no money "
+                                "moved): %s", email_data.get("subject", ""))
+                    continue
                 if extracted.get("confidence", 0) > 0:
                     memo_txt = extracted.get("memo", "") or ""
                     event_name = match_event_from_memo(memo_txt, conn)
