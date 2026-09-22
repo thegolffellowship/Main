@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.480.1";
+window.TGF_VERSION = "2.481.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.481.0",
+    date: "2026-09-22",
+    changes: [
+      "One-off roster: LODGING is click-to-select (Kerry 2026-09-22: ‘select from “Own plans” and anything remaining in our AirBNB...if there is’) — the dropdown offers Own plans plus every bed with a spot left, with cost and spots-left on the option; full beds don't show. Capacity is enforced server-side, and a player whose lodging is already PAID stays locked text — moving paid money between beds is a hand operation on the dial, never a dropdown side effect.",
+      "The Airbnb units now carry their own beds + cost in the lodging dial (King $600, Queens $530, the two Doubles $280 per player, Bed 5 held whole by Jeff Rideout at $560), so spots-left and the stamped cost come from the room list, not retyped per player.",
+    ],
+  },
   {
     version: "2.480.1",
     date: "2026-09-22",

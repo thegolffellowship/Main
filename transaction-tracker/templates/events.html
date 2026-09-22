@@ -9292,19 +9292,40 @@
                         html += `<td style="${style}; font-weight:700; font-variant-numeric:tabular-nums; color:${fp.paid ? '#b45309' : '#dc2626'};" title="Expected $${(+fp.expected).toFixed(2)}, paid $${(+fp.paid).toFixed(2)}">$${(+fp.balance).toFixed(2)}</td>`;
                     }
                 } else if (c.key === "oo_lodging") {
+                    // Click-to-select (Kerry 2026-09-22): "Own plans"
+                    // or any bed with a spot left. An entry with
+                    // lodging money PAID is locked to text \u2014 moving
+                    // paid money is a hand operation, not a dropdown.
                     const fp = oneoffPlayerFin(ev.id, r);
                     const lg = fp && fp.lodging;
-                    if (!lg) {
-                        html += `<td style="${style}; color:#9CA3AF;">\u2014</td>`;
-                    } else if (lg.own || lg.out) {
-                        html += `<td style="${style}; color:#6B7280;" title="${escapeHtml(lg.note || '')}">${lg.own ? "Own plans" : "Not staying"}</td>`;
+                    const lgOpts = ((oneoffFinance[ev.id] || {}).config || {}).lodging_options || [];
+                    const lgPaid = lg && +(lg.paid || 0) > 0;
+                    if (!r.customer_id || lgPaid || (lg && lg.out)) {
+                        if (!lg) {
+                            html += `<td style="${style}; color:#9CA3AF;">\u2014</td>`;
+                        } else if (lg.own || lg.out) {
+                            html += `<td style="${style}; color:#6B7280;" title="${escapeHtml(lg.note || '')}">${lg.own ? "Own plans" : "Not staying"}</td>`;
+                        } else {
+                            const cost = lg.cost != null ? `$${+lg.cost}` : "";
+                            const paidFull = lg.cost && (lg.paid || 0) >= lg.cost;
+                            const pay = paidFull
+                                ? ' <span style="color:#059669;font-weight:700;">&#10003;</span>'
+                                : (lg.cost ? ` <span style="color:#dc2626;font-weight:700;" title="Owes ${cost} for lodging">owes</span>` : "");
+                            html += `<td style="${style}" title="${escapeHtml(lg.note || '')}">${escapeHtml(lg.unit || "bed TBD")}${cost ? ` \u00b7 ${cost}` : ""}${pay}</td>`;
+                        }
                     } else {
-                        const cost = lg.cost != null ? `$${+lg.cost}` : "";
-                        const paidFull = lg.cost && (lg.paid || 0) >= lg.cost;
-                        const pay = paidFull
-                            ? ' <span style="color:#059669;font-weight:700;">&#10003;</span>'
-                            : (lg.cost ? ` <span style="color:#dc2626;font-weight:700;" title="Owes ${cost} for lodging">owes</span>` : "");
-                        html += `<td style="${style}" title="${escapeHtml(lg.note || '')}">${escapeHtml(lg.unit || "bed TBD")}${cost ? ` \u00b7 ${cost}` : ""}${pay}</td>`;
+                        const curVal = lg ? (lg.own ? "own" : (lg.unit_id || "")) : "";
+                        let lgHtml = `<option value="">\u2014</option>`
+                            + `<option value="own"${curVal === "own" ? " selected" : ""}>Own plans</option>`;
+                        lgOpts.forEach(u => {
+                            const isCur = curVal === u.id;
+                            if (!isCur && u.left <= 0) return; // full beds hidden
+                            const label = `${u.name || u.id}${u.cost != null ? ` \u00b7 $${+u.cost}` : ""}${!isCur && u.left > 0 && u.beds > 1 ? ` (${u.left} left)` : ""}`;
+                            lgHtml += `<option value="${escapeHtml(u.id)}"${isCur ? " selected" : ""}>${escapeHtml(label)}</option>`;
+                        });
+                        const owes = lg && !lg.own && lg.cost
+                            ? ` <span style="color:#dc2626;font-weight:700;" title="Owes $${+lg.cost} for lodging">owes</span>` : "";
+                        html += `<td style="${style}"><select class="oo-lodging-select" data-event-id="${ev.id}" data-cid="${r.customer_id}" title="${escapeHtml((lg && lg.note) || 'Lodging \u2014 pick a bed or Own plans')}" style="font-size:0.78rem; padding:2px 4px; border:1px solid #d1d5db; border-radius:6px; cursor:pointer; max-width:170px; background:${lg ? '#ECFDF5' : '#fff'};">${lgHtml}</select>${owes}</td>`;
                     }
                 } else {
                     html += `<td style="${style}">${escapeHtml(r[c.key] || "\u2014")}</td>`;
@@ -9855,6 +9876,33 @@
                 } catch (err) {
                     alert("Could not save shirt size — try again.");
                 }
+            });
+        });
+
+        // Lodging pickers (Kerry 2026-09-22): save the choice, then
+        // refetch the finance payload — capacity and per-unit "left"
+        // counts change with every assignment, so the server recount
+        // is the truth, not a local patch.
+        container.querySelectorAll(".oo-lodging-select").forEach(sel => {
+            sel.addEventListener("click", (e) => e.stopPropagation());
+            sel.addEventListener("change", async (e) => {
+                e.stopPropagation();
+                const evId = sel.dataset.eventId, cid = sel.dataset.cid;
+                try {
+                    const resp = await fetch(`/api/events/${evId}/oneoff-lodging`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ customer_id: cid, choice: sel.value }),
+                    });
+                    const d = await resp.json();
+                    if (!resp.ok || d.error) {
+                        alert(d.error || "Could not save lodging — try again.");
+                    }
+                } catch (err) {
+                    alert("Could not save lodging — try again.");
+                }
+                delete oneoffFinance[evId];
+                loadOneoffFinance(evId);
             });
         });
 

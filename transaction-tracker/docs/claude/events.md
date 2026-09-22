@@ -2129,6 +2129,18 @@ Unconfigured events keep the standard columns untouched.
 - **Credit display**: a negative balance renders `CR $X` (green) in
   Balance Due instead of a bare PAID ✓ — Kerry holds overpayments as
   credits (Jeff Young's $150, 2026-09-22).
+- **LODGING click-to-select** (Kerry 2026-09-22 third round: "'Own
+  plans' and anything remaining in our AirBNB...if there is"): the
+  cell is a `<select>` of — / Own plans / every unit with a spot left
+  (units carry `beds` + `cost` in the lodging dial;
+  `config.lodging_options` reports per-unit taken/left; full beds are
+  hidden unless currently assigned). `set_oneoff_lodging()` +
+  `POST /api/events/<id>/oneoff-lodging` (manager+) enforce capacity
+  server-side and **refuse any change for a player whose lodging is
+  already paid** — moving paid money is a hand operation on the dial,
+  and such rows render as locked text. Choosing a bed stamps
+  unit+cost, preserving the entry's note; the UI refetches after each
+  save so "N left" counts stay true.
 
 ## Lone Star Cup page: final-roster freeze + member view (v2.373.0)
 

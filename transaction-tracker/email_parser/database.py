@@ -11586,19 +11586,27 @@ def get_oneoff_roster_finance(event_id: int,
                 exp += float(a.get("amount") or 0)
         return exp
 
-    # Lodging map from the named dial (the lsc_lodging shape)
+    # Lodging map from the named dial (the lsc_lodging shape). Also
+    # builds the SELECTABLE options (Kerry 2026-09-22: "add lodging
+    # selection... 'Own plans' and anything remaining in our AirBNB...
+    # if there is"): per unit, spots left = beds − assigned players.
     lodging_by_cid: dict = {}
+    lodging_options: list = []
     if cfg.get("lodging_dial"):
         try:
             lcfg = json.loads(get_app_setting(cfg["lodging_dial"],
                                               db_path=db_path) or "{}")
             unit_names = {u.get("id"): u.get("name")
                           for u in (lcfg.get("units") or [])}
+            _taken: dict = {}
             for cid_s, p in (lcfg.get("players") or {}).items():
                 try:
+                    if p.get("unit") and not p.get("out"):
+                        _taken[p["unit"]] = _taken.get(p["unit"], 0) + 1
                     lodging_by_cid[int(cid_s)] = {
                         "unit": unit_names.get(p.get("unit"))
                                 or p.get("unit"),
+                        "unit_id": p.get("unit"),
                         "cost": p.get("cost"),
                         "paid": p.get("paid"),
                         "own": bool(p.get("own")),
@@ -11607,8 +11615,17 @@ def get_oneoff_roster_finance(event_id: int,
                     }
                 except Exception:
                     continue
+            for u in (lcfg.get("units") or []):
+                beds = int(u.get("beds") or 1)
+                taken = _taken.get(u.get("id"), 0)
+                lodging_options.append({
+                    "id": u.get("id"), "name": u.get("name"),
+                    "cost": u.get("cost"), "beds": beds,
+                    "taken": taken, "left": max(0, beds - taken),
+                })
         except Exception:
             lodging_by_cid = {}
+            lodging_options = []
 
     # TEAM map (Kerry 2026-09-22: "Add a TEAM column for AUSTIN (A) |
     # SAN ANTONIO (SA)") — for the Lone Star Cup the TEAM is the frozen
@@ -11759,6 +11776,7 @@ def get_oneoff_roster_finance(event_id: int,
         p["balance"] = round((p["expected"] or 0) - p["paid"], 2)
     return {"config": {"default": default_expected,
                        "lodging_dial": cfg.get("lodging_dial"),
+                       "lodging_options": lodging_options,
                        "team_dial": cfg.get("team_dial"),
                        "shirts": shirts_on,
                        "shirt_options": shirt_opts,
@@ -11788,6 +11806,63 @@ def set_oneoff_addon(event_id: int, customer_id: int, key: str,
     set_app_setting("oneoff_addons", json.dumps(allv), db_path=db_path)
     return {"event_id": event_id, "customer_id": customer_id,
             "key": key, "on": bool(on), "selected": sel, "saved": True}
+
+
+def set_oneoff_lodging(event_id: int, customer_id: int, choice: str,
+                       db_path: str | Path = DB_PATH) -> dict:
+    """Set one player's lodging on a one-off event's lodging dial
+    (Kerry 2026-09-22: select from "Own plans" and any bed with a spot
+    left). choice: "" clears, "own" = own plans, else a unit id.
+
+    Money guard: an entry that already has lodging money PAID refuses
+    any change here — moving paid money between beds is a hand
+    operation on the dial, never a dropdown side effect."""
+    try:
+        cfgs = json.loads(get_app_setting("oneoff_charges",
+                                          db_path=db_path) or "{}")
+        dial = (cfgs.get(str(event_id)) or {}).get("lodging_dial")
+    except Exception:
+        dial = None
+    if not dial:
+        return {"error": f"event {event_id} has no lodging dial"}
+    try:
+        lcfg = json.loads(get_app_setting(dial, db_path=db_path) or "{}")
+    except Exception:
+        return {"error": f"lodging dial {dial} unreadable"}
+    players = lcfg.setdefault("players", {})
+    cur = players.get(str(customer_id)) or {}
+    if float(cur.get("paid") or 0) > 0:
+        return {"error": "this player has lodging money already paid — "
+                "adjust the lodging dial directly instead"}
+    choice = (choice or "").strip()
+    if not choice:
+        players.pop(str(customer_id), None)
+    elif choice == "own":
+        entry = {"own": True}
+        if cur.get("note"):
+            entry["note"] = cur["note"]
+        players[str(customer_id)] = entry
+    else:
+        unit = next((u for u in (lcfg.get("units") or [])
+                     if u.get("id") == choice), None)
+        if not unit:
+            return {"error": f"unknown unit {choice!r} in {dial}"}
+        beds = int(unit.get("beds") or 1)
+        taken = sum(1 for cs, p in players.items()
+                    if p.get("unit") == choice and not p.get("out")
+                    and cs != str(customer_id))
+        if taken >= beds:
+            return {"error": f"{unit.get('name') or choice} is full "
+                    f"({taken}/{beds})"}
+        entry = {"unit": choice}
+        if unit.get("cost") is not None:
+            entry["cost"] = unit["cost"]
+        if cur.get("note"):
+            entry["note"] = cur["note"]
+        players[str(customer_id)] = entry
+    set_app_setting(dial, json.dumps(lcfg), db_path=db_path)
+    return {"event_id": event_id, "customer_id": customer_id,
+            "choice": choice or None, "saved": True}
 
 
 def set_oneoff_shirt(event_id: int, customer_id: int, size: str,
