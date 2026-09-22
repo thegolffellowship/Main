@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.480.0";
+window.TGF_VERSION = "2.480.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.480.1",
+    date: "2026-09-22",
+    changes: [
+      "Shirt sizes are CUSTOMER data now (Kerry 2026-09-22: ‘When I add their shirt sizes will that be added to their customer_id? If not we need to.’): customers.shirt_size is the canonical record — every pick on the Lone Star Cup roster writes through to the player's profile, so the size follows them to every future event instead of living only on this one. Clearing a pick leaves the profile alone.",
+      "The profile seeds itself from order history at every boot — only where empty, so a hand-set size is never overwritten — and the roster prefill reads the profile before digging through old orders. Guard: test_oneoff_shirts.py.",
+    ],
+  },
   {
     version: "2.480.0",
     date: "2026-09-22",

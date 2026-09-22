@@ -4307,6 +4307,38 @@ def init_db(db_path: str | Path | None = None) -> None:
             except sqlite3.OperationalError:
                 pass
 
+        # Canonical SHIRT SIZE on the customer (Kerry 2026-09-22: "When
+        # I add their shirt sizes will that be added to their
+        # customer_id? If not we need to."). customer_id is king (rule
+        # 6): a size picked on a one-off roster writes here, and the
+        # seed below fills it once from the newest order that carried
+        # one (memberships collect a shirt size). items.shirt_size
+        # stays as the per-order parse-time snapshot.
+        try:
+            conn.execute("ALTER TABLE customers ADD COLUMN shirt_size TEXT")
+        except sqlite3.OperationalError:
+            pass
+        # Idempotent seed, every boot: fill ONLY empty canonical sizes
+        # from order history, so a size set by hand (or a roster pick)
+        # is never overwritten by old order data — and a future order
+        # from a customer with no size on file lands on the profile at
+        # the next boot.
+        try:
+            conn.execute("""
+                UPDATE customers SET shirt_size = (
+                    SELECT i.shirt_size FROM items i
+                    WHERE i.customer_id = customers.customer_id
+                      AND i.shirt_size IS NOT NULL
+                      AND TRIM(i.shirt_size) != ''
+                    ORDER BY i.order_date DESC, i.id DESC LIMIT 1)
+                WHERE (shirt_size IS NULL OR TRIM(shirt_size) = '')
+                  AND EXISTS (SELECT 1 FROM items i2
+                              WHERE i2.customer_id = customers.customer_id
+                                AND i2.shirt_size IS NOT NULL
+                                AND TRIM(i2.shirt_size) != '')""")
+        except sqlite3.OperationalError:
+            pass
+
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_customer_emails_customer "
             "ON customer_emails(customer_id)"
@@ -11614,6 +11646,18 @@ def get_oneoff_roster_finance(event_id: int,
             (event_id,)).fetchall()
 
         def _known_shirt(cid: int):
+            # Canonical customers.shirt_size first (roster picks and
+            # the boot seed write it); order history is the fallback
+            # for a profile the seed has not reached yet.
+            try:
+                row = conn.execute(
+                    "SELECT shirt_size FROM customers "
+                    "WHERE customer_id = ?", (cid,)).fetchone()
+                v = (row["shirt_size"] or "").strip() if row else ""
+                if v:
+                    return v
+            except sqlite3.OperationalError:
+                pass  # pre-migration schema (tests, fresh checkouts)
             row = conn.execute(
                 """SELECT shirt_size FROM items
                    WHERE customer_id = ? AND shirt_size IS NOT NULL
@@ -11730,7 +11774,12 @@ def set_oneoff_shirt(event_id: int, customer_id: int, size: str,
                      db_path: str | Path = DB_PATH) -> dict:
     """Store one player's shirt size for a one-off event in the
     oneoff_shirts dial ({"<event_id>": {"<cid>": "L"}}). Empty size
-    clears the selection (falls back to the known-from-orders size)."""
+    clears the selection (falls back to the known/canonical size).
+
+    A real pick ALSO writes the canonical customers.shirt_size (Kerry
+    2026-09-22: "will that be added to their customer_id? If not we
+    need to") — the profile is the durable record, the dial is only
+    this event's pick. Clearing the pick leaves the profile alone."""
     try:
         allv = json.loads(get_app_setting("oneoff_shirts",
                                           db_path=db_path) or "{}")
@@ -11742,8 +11791,21 @@ def set_oneoff_shirt(event_id: int, customer_id: int, size: str,
     else:
         ev.pop(str(customer_id), None)
     set_app_setting("oneoff_shirts", json.dumps(allv), db_path=db_path)
+    canonical_updated = False
+    if size:
+        try:
+            with _connect(db_path) as conn:
+                conn.execute("UPDATE customers SET shirt_size = ? "
+                             "WHERE customer_id = ?",
+                             (size, customer_id))
+                conn.commit()
+                canonical_updated = True
+        except Exception:
+            logger.exception("canonical shirt_size write failed for "
+                             "customer %s", customer_id)
     return {"event_id": event_id, "customer_id": customer_id,
-            "size": size or None, "saved": True}
+            "size": size or None,
+            "canonical_updated": canonical_updated, "saved": True}
 
 
 def get_lone_star_cup_projection(db_path: str | Path = DB_PATH,

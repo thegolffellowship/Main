@@ -2103,6 +2103,14 @@ Unconfigured events keep the standard columns untouched.
   `set_oneoff_shirt()`) and shows green. Empty pick clears back to the
   known size. Read-only bridge `scoring-lsc-shirts:<event_id>` reports
   coverage (gender/team/selected/known per player).
+  **Canonical since v2.480.1** (Kerry 2026-09-22: "will that be added
+  to their customer_id? If not we need to"): `customers.shirt_size` is
+  the durable record — a roster pick writes through to it (clearing
+  the pick leaves the profile alone), the prefill reads it before
+  order history, and an every-boot idempotent seed fills EMPTY
+  profiles from the newest items.shirt_size (never overwriting a
+  hand-set value; a new member's first sized order lands at the next
+  boot). Guard: `test_oneoff_shirts.py`.
 
 **v2.478.0 additions (Kerry 2026-09-22, second round):**
 
