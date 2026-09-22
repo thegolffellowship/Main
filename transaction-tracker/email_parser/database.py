@@ -31193,6 +31193,12 @@ def add_player_to_event(event_name: str, customer: str, mode: str = "comp",
             user_status=user_status,
             item_name=event_name,
         )
+        # HISTORY FILLS THE TEE in every mode — RSVP Only included, whose
+        # form never asks (Kerry 2026-09-21, Daniel South: "it didn't add
+        # his tee assignment and appears not to show configured PH or
+        # team either"). A row with a tee gets PH and team on the sheet.
+        if not (new_values.get("tee_choice") or "").strip():
+            new_values["tee_choice"] = _last_tee_on_file(conn, new_values.get("customer_id"))
 
         cols = ", ".join(ITEM_COLUMNS)
         placeholders = ", ".join(["?"] * len(ITEM_COLUMNS))
@@ -60291,6 +60297,23 @@ def get_bundle_catalog(db_path=None) -> dict:
         return {"games": list(games.values()), "bundles": bundles}
 
 
+def _last_tee_on_file(conn, customer_id) -> str | None:
+    """The tee this customer last registered with — the fill for any
+    roster row that has none (Kerry 2026-09-21: "Need that to automate
+    fill based on previous selections"). None for a person with no
+    history (a true first-timer)."""
+    if customer_id is None:
+        return None
+    try:
+        r = conn.execute(
+            """SELECT tee_choice FROM items
+                WHERE customer_id = ? AND tee_choice IS NOT NULL AND TRIM(tee_choice) != ''
+                ORDER BY order_date DESC, id DESC LIMIT 1""", (customer_id,)).fetchone()
+    except sqlite3.OperationalError:
+        return None
+    return (r["tee_choice"] if r else None) or None
+
+
 def _first_event_as_member(conn, roster_row: dict, event_date: str) -> bool:
     """NEW badge rule (Kerry 2026-09-18): the member's membership started
     on or before `event_date` and they have played NO event between that
@@ -63562,12 +63585,9 @@ def _event_rsvp_only_players(conn, event_id: int) -> list[dict]:
                 # should have his info in there because he's a customer"):
                 # the last tee he registered with stands until the roster
                 # says otherwise, so his PH and team handicap print.
-                _tee = conn.execute(
-                    """SELECT tee_choice FROM items
-                        WHERE customer_id = ? AND tee_choice IS NOT NULL AND TRIM(tee_choice) != ''
-                        ORDER BY order_date DESC, id DESC LIMIT 1""", (cid,)).fetchone()
-                if _tee and _tee["tee_choice"]:
-                    roles["tee_choice"] = _tee["tee_choice"]
+                _tee = _last_tee_on_file(conn, cid)
+                if _tee:
+                    roles["tee_choice"] = _tee
             except sqlite3.OperationalError:
                 cps = None
         received = r.get("received_at") or None
@@ -63650,6 +63670,14 @@ def _event_roster_rows(conn, event_id: int) -> list[dict]:
             continue
         d["name"] = d["customer"]
         d["rsvp_only"] = (d.get("transaction_status") or "active") == "rsvp_only"
+        # A row saved without a tee (RSVP Only, a comp, an order form that
+        # skipped it) plays off the customer's last tee on file — the same
+        # fill the RSVP-only rows get, so PH and team print.
+        if not (d.get("tee_choice") or "").strip():
+            _t = _last_tee_on_file(conn, d.get("customer_id"))
+            if _t:
+                d["tee_choice"] = _t
+                d["tee_source"] = "history"
         _decorate_roster_roles(d, ev_year)
         out.append(d)
         keys.add(_pair_key_name(d["customer"]))

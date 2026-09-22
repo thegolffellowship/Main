@@ -92,6 +92,22 @@ with db._connect(DB) as conn:
     rows = {r["name"]: r for r in db._event_roster_rows(conn, 9201)}
 check("…and the customer's LAST tee on file (Kerry: 'Jeff Young should have his info in there because he's a customer')",
       rows["Jeff Young"].get("tee_choice") == "<50", rows["Jeff Young"].get("tee_choice"))
+
+print("3. Add Player fills the tee from history in EVERY mode (Kerry: Daniel South, RSVP Only, no tee → no PH / team)")
+with db._connect(DB) as conn:
+    conn.execute("INSERT INTO customers (customer_id, first_name, last_name, current_player_status) VALUES (800998, 'Daniel', 'South', 'active_member')")
+    conn.execute("INSERT INTO items (customer, customer_id, item_name, event_id, holes, tee_choice, transaction_status, order_date, order_id, email_uid, merchant) VALUES ('Daniel South', 800998, 's9.20 Earlier', NULL, '9', '<50', 'active', '2026-08-01', 'R-ds-old', 'manual-ds-old', 'GoDaddy')")
+    conn.commit()
+_added = db.add_player_to_event("s9.24 Brackenridge", "Daniel South", mode="rsvp", record_ledger_entry=False, db_path=DB)
+check("an RSVP Only add stores the customer's last tee on the row", _added and _added.get("tee_choice") == "<50", _added and _added.get("tee_choice"))
+with db._connect(DB) as conn:
+    conn.execute("UPDATE items SET tee_choice = NULL WHERE customer_id = 800998 AND item_name = 's9.24 Brackenridge'")
+    conn.commit()
+    rows = {r["name"]: r for r in db._event_roster_rows(conn, 9201)}
+check("a row saved WITHOUT a tee before this shipped still plays off history at read time (tee_source = history)",
+      rows["Daniel South"].get("tee_choice") == "<50" and rows["Daniel South"].get("tee_source") == "history", rows.get("Daniel South"))
+_added2 = db.add_player_to_event("s9.24 Brackenridge", "Brand New Person", mode="rsvp", record_ledger_entry=False, db_path=DB)
+check("a true first-timer with no history stays blank", _added2 and not _added2.get("tee_choice"), _added2 and _added2.get("tee_choice"))
 try: os.unlink(DB)
 except OSError: pass
 print("\n" + ("ALL PASS" if not F else f"{len(F)} FAILURE(S): " + "; ".join(F)))

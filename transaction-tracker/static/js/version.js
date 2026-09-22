@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.476.4";
+window.TGF_VERSION = "2.476.5";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.476.5",
+    date: "2026-09-21",
+    changes: [
+      "Add Player fills the tee from history in EVERY mode, RSVP Only included, whose form never asks (Kerry 2026-09-21, Daniel South: \u2018it didn't add his tee assignment and appears not to show configured PH or team either. Again need that to automate fill based on previous selections\u2019). The row stores the customer's last tee on file, and the roster fills a blank tee on any ORDER row at read time the same way the RSVP-only rows already did \u2014 so rows saved before this shipped (Daniel South's) print PH and team now. A true first-timer with no history stays blank until his tee is chosen. One helper, `_last_tee_on_file`, serves all three paths.",
+    ],
+  },
   {
     version: "2.476.4",
     date: "2026-09-21",
