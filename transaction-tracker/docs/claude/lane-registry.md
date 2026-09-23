@@ -14,8 +14,9 @@ archiving.
 
 | Session | Last active | ID |
 |---|---|---|
+| **TGF Front Desk** (Kerry's single contact; no code) | 2026-09-23 | `session_01HWqWgMG2Jz985fnELjuBKw` |
 | TGF Tracker Improvements 3 | 2026-09-23 | `session_014svvTq1chymJug3Sc3Tg4T` |
-| Finance lane handoff | 2026-09-23 | `session_01XAS9btTpHQrS6iVNKKF7XX` |
+| Finance lane handoff (see note) | 2026-09-23 | `session_01XAS9btTpHQrS6iVNKKF7XX` |
 | C-Suite Agent Structure | 2026-09-22 | `session_01UpqdfZKtMADEgRGq2uAMC9` |
 | CTO - Tracker Health & Performance | 2026-09-23 | `session_013mPm9v9Cx7BiCnq85h6LQQ` |
 | Flighting & Payout Rules + Flights Tab | 2026-09-22 | `session_012tCKUsYQQcrxCEftZF3DAS` |
@@ -29,6 +30,20 @@ archiving.
 | Event Closeout | 2026-09-23 | `session_019AxFcHia31na5NB3RLsF2W` |
 | TGF Tracker - Lone Star Cup - 260825 | 2026-09-23 | `session_01XsCfrW7UsaAy5VXEdv1Mnb` |
 | Horizon Tracker | 2026-09-16 | `session_0198ejcaYqjicA6MPFmWpgq3` |
+
+Front Desk notes (2026-09-23):
+- **Finance lane handoff** was opened today from the desktop app and is blocked
+  on one question: are TGF checking's payments to the personal Sapphire card an
+  owner draw? That is the same question as COO queue #15 in the CFO lane's #622.
+  It duplicates the CFO lane. Proposed: answer once, in the CFO lane, and close
+  this one (Kerry to OK the archive).
+- **New standalone app setup** finished on 9/12; its only output was the Group
+  Planner - Church session. Archive candidate (Kerry to OK).
+- **C-Suite Agent Structure** (#614/#615) was discussion-first; its officer
+  proposal lives only in its transcript (branch `claude/c-suite-structure-x4t9dn`
+  was never pushed). Its job is now the Front Desk plus the lane charter.
+- **CD**: Kerry named "CD" on 9/23 without defining it (probably Claude Desktop /
+  Cowork, with local OneDrive access). Asked; answer to be recorded here.
 
 ## 2. Archived 2026-09-23 (restorable with unarchive_session)
 
@@ -217,3 +232,32 @@ ancestors of main even though the work shipped. None were deleted. Reviewing the
 2026-01-12 origin/claude/membership-transaction-mvp-KZ1Ol
 2026-01-10 origin/claude/explore-features-4IjBS
 ```
+
+## 5. Live Routines (Front Desk owns this list)
+
+Times Central (CDT, UTC−5 until Nov 1). Every daily cron moves one hour later in
+UTC after DST ends; the closeout lane has its own Nov 1 reminder.
+
+| Routine | ID | Cron (UTC) | Fires into | Reports to |
+|---|---|---|---|---|
+| Front Desk daily brief, 7:15 | `trig_01TJWBMxzUSW4JhR6G5MEaGE` | `15 12 * * *` | Front Desk | Kerry |
+| CTO daily response, 5:10 | `trig_01NFYQB2DbAjpC9J3CeexG33` | `10 10 * * *` | CTO / Tracker Health | mailbox (tracker-health); left as is per the Front Desk prompt |
+| Tracker pick-up + fixes, 5:15 | `trig_01YRePjJeWr9cdGMShZqqXas` | `15 10 * * *` | Tracker Improvements 3 | front-desk (prompt rewrite sent by poke, see below) |
+| CFO Daily Financial Review, 5:20 | `trig_01Crbpy6noUUGocjdAZHUusM` | `20 10 * * *` (was 30 11) | CFO | front-desk (prompt rewrite sent by poke) |
+| Event-night closeout, 9 PM Tue + Sat | `trig_01247koCbxDgjLv4xPv2GmNZ` | `0 2 * * 0,3` | Event Closeout | left as is |
+| Closeout catch-up, 5:30 Wed + Sun | `trig_01XUQwm6AbYLtdTgpECEnH4W` | `30 10 * * 0,3` | Event Closeout | left as is |
+| Shift closeout crons for CST (one-shot Nov 1) | `trig_01AhnZuf6sKhHYhwuZVxRxYH` | once 2026-11-01 14:00 | Event Closeout | — |
+| Insider Wednesday draft, 8:30 | `trig_015yGJ19gz1a5tgZL9fnUSCU` | `30 13 * * 3` | Insider Writer | left as is |
+| Insider Friday scorecard, 1:30 PM | `trig_01GFemcQP6W84yp6hvv6yeeK` | `30 18 * * 5` | Insider Writer | left as is |
+| Horizon morning check, 7:00 weekdays | `trig_01SzyMPk317BreaW93dSFoGQ` | `0 12 * * 1-5` | fresh session | Horizon mailbox |
+| Horizon hourly sweep, weekdays | `trig_015ST37j2x8DNo4P1zkMQKCT` | `30 14-23 * * 1-5` | fresh session | Horizon mailbox |
+
+The Tracker's own 5:00 AM CTO digest is an app job, not a Routine.
+
+**Old brief retired (2026-09-23):** `trig_01YRePjJeWr9cdGMShZqqXas` stopped being
+Kerry's morning brief when the Front Desk brief was created. A Routine's prompt
+can only be changed from the session it fires into, so the Front Desk renamed it
+and sent one-shot pokes asking each lane to install its new prompt:
+`trig_01KxAhmfahsZ3rX2xMwtjKaB` → Tracker Improvements 3 (5:15 pick-up now posts
+`TO: front-desk`), and `trig_01QHY5RUUk4yfrNpbVhKHtn1` → CFO (5:20 review now
+posts `TO: front-desk`). Both fire 2026-09-23 21:05 UTC.

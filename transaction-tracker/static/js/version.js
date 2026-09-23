@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.488.2";
+window.TGF_VERSION = "2.488.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.488.3",
+    date: "2026-09-23",
+    changes: [
+      "Docs only: the Front Desk opened (session_01HWqWgMG2Jz985fnELjuBKw). New docs/claude/sop/ with three SOPs: lane-lifecycle.md (when a lane opens, its opening prompt, hand-off, closing and archive, registry updates), reporting-contract.md (every lane digests to the mailbox TO: front-desk; one 7:15 AM brief for Kerry; escalation lane to Front Desk to Kerry, strategy to CA) and routines-and-loops.md (Routine rules and the guardrails every working loop carries). lane-registry.md gains the Front Desk row, notes on the Finance lane handoff duplicate and the C-Suite lane, and a new \u00a75 listing every live Routine with its cron and who it reports to. Routines: new Front Desk daily brief at 7:15 AM Central; CFO review moved from 6:30 to 5:20 AM Central so it lands before the brief.",
+    ],
+  },
   {
     version: "2.488.2",
     date: "2026-09-23",
