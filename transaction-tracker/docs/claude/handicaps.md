@@ -538,6 +538,33 @@ get_all_handicap_players returns `player_status` for this. The stats
 row (Players Tracked / Total Rounds / avg index) stays global,
 matching the chapter filter's existing behavior.
 
+## Email Handicap Cards — ONE function, the closeout sends By Event (v2.487.0)
+
+Kerry 2026-09-23: "For the closeout automatically send the handicap card
+updates to those who played in that event. To remove one more manual
+operation from me." The By-Event send is now `send_handicap_cards(
+event_name, chapter, members_only, dry_run, sent_by, db_path)` in
+database.py; the page route `/api/handicaps/send-bulk-email` and the
+bridge `scoring-hcp-cards:<event>[|apply]` both call it. Rules:
+
+- `dry_run=True` (the bridge default) sends nothing, logs nothing, and
+  returns `would_send` (player, email, index_9) beside every skip NAMED
+  with its reason; `registered = accounted + unaccounted` still closes.
+- The export now carries `no_email_ids` / `no_index_ids` (customer ids)
+  beside the name lists, so an event send labels a registrant who has
+  an index but no address "no email on file" and one with a link but
+  no nine-hole index "no nine-hole index to print" — before this both
+  read "no TGF handicap on record".
+- An unknown event returns `{"error", "http": 400}` before anything
+  else is looked at (the 2026-09-08 composer hazard: an unrecognised
+  audience must never fall through to a send). Credentials and the
+  mail stack (msal) are checked only once an audience has resolved.
+- Real sends log `message_log` (event_name `handicap-card`) and one
+  `agent_action_log` row (`send_handicap_cards`, actor `mcp-claude`
+  when the closeout ran it). The closeout skill runs the dry run, then
+  `|apply`, AFTER `scoring-hcp-import:<event>|apply` — never before.
+  Guards: `test_handicap_cards_bridge.py`, `test_handicap_card_counts.js`.
+
 ## Email Handicap Cards — MEMBERS send mode (v2.255.27, Kerry)
 
 The bulk-send modal has three modes: **All Players | Members | By

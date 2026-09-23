@@ -14,7 +14,7 @@
  * Run: node test_handicap_card_counts.js
  */
 const fs = require("fs");
-const py = fs.readFileSync("app.py", "utf8");
+const py = fs.readFileSync("email_parser/database.py", "utf8"); // v2.487.0: the send lives in send_handicap_cards
 const html = fs.readFileSync("templates/handicaps.html", "utf8");
 let failures = 0;
 function check(label, cond, detail) {
@@ -24,7 +24,7 @@ function check(label, cond, detail) {
 
 console.log("\nNobody leaves the loop uncounted");
 const fn = py.slice(py.indexOf("skipped_names: list = []"));
-const loop = fn.slice(0, fn.indexOf('return jsonify(out)'));
+const loop = fn.slice(0, fn.indexOf('    return out\n'));
 check("a player with no email is counted AND named",
     /if not email:\s*\n\s*skipped_no_email \+= 1\s*\n\s*skipped_names\.append/.test(loop),
     "the no-email continue is still silent");

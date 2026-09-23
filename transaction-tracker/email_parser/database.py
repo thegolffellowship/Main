@@ -39481,6 +39481,11 @@ def get_handicap_export_data(chapter: str | None = None,
     no_email = []
     no_index = []
     excluded = []
+    # The same two buckets BY customer_id (v2.487.0): an event send
+    # matches its roster by id, so a registrant who has an index but no
+    # address must read "no email on file", not "no TGF handicap".
+    no_email_ids: set = set()
+    no_index_ids: set = set()
 
     # First pass: collect every eligible (pname, p) candidate keyed by email.
     # Multiple handicap_rounds player_name variants can link to the same customer
@@ -39508,12 +39513,16 @@ def get_handicap_export_data(chapter: str | None = None,
 
         if p["handicap_index"] is None:
             no_index.append(pname)
+            if info.get("customer_id") is not None:
+                no_index_ids.add(int(info["customer_id"]))
             continue
 
         email = info["email"]
         if not email:
             if p["handicap_index"] is not None:
                 no_email.append(pname)
+                if info.get("customer_id") is not None:
+                    no_email_ids.add(int(info["customer_id"]))
             continue
 
         if test_player_email and email != test_player_email.strip().lower():
@@ -39584,6 +39593,8 @@ def get_handicap_export_data(chapter: str | None = None,
         "rows": rows,
         "no_email": sorted(no_email),
         "no_index": sorted(no_index),
+        "no_email_ids": sorted(no_email_ids),
+        "no_index_ids": sorted(no_index_ids),
         "excluded": sorted(excluded),  # admin-removed from GG, never exported
         # Links with NO customer_id — resolved by name string or not at
         # all. Reported rather than hidden so the size of the unlinked
@@ -40485,6 +40496,291 @@ def build_handicap_card_html(card_data: dict) -> str:
 # ---------------------------------------------------------------------------
 # Season Contest Enrollment
 # ---------------------------------------------------------------------------
+
+
+def send_handicap_cards(event_name: str | None = None, chapter: str | None = None,
+                        members_only: bool = False, dry_run: bool = True,
+                        sent_by: str = "closeout",
+                        db_path: str | Path | None = None) -> dict:
+    """Email a TGF handicap card to every eligible player — the whole
+    Handicaps page → Email Handicap Cards → By Event send, as ONE
+    function so the closeout can run it (v2.487.0, Kerry 2026-09-23:
+    "For the closeout automatically send the handicap card updates to
+    those who played in that event. To remove one more manual operation
+    from me"). The route `api_handicap_send_bulk_email` and the bridge
+    `scoring-hcp-cards:<event>[|apply]` both call this.
+
+    With `event_name`: only that event's roster (`_event_roster_rows`,
+    identity by customer_id), one card per person, every registrant
+    landing in exactly one bucket and every skip NAMED (Kerry
+    2026-09-16). `dry_run=True` (the default) sends nothing and logs
+    nothing; it returns `would_send`. Returns {"error", "http"} instead
+    of raising for an unknown event or missing mail credentials.
+    """
+    import time as _time
+    send_mail_graph = None
+
+    chapter = (chapter or "").strip() or None
+    event_name = (event_name or "").strip() or None
+    members_only = bool(members_only)
+    would_send: list = []
+
+    tenant_id = os.getenv("AZURE_TENANT_ID")
+    client_id = os.getenv("AZURE_CLIENT_ID")
+    client_secret = os.getenv("AZURE_CLIENT_SECRET")
+    from_address = os.getenv("EMAIL_ADDRESS")
+
+    export = get_handicap_export_data(chapter=chapter, db_path=db_path)
+    eligible_rows = export.get("rows") or []
+
+    skipped_not_member = 0
+    if members_only:
+        # MEMBERS by `customer_id`, never by a name string (v2.459.0,
+        # guiding principle 6). The old query fell back to
+        # `c.first_name || ' ' || c.last_name = l.customer_name` for a
+        # link with no id, then matched the RESULT back by player_name —
+        # so a member whose profile name and link label disagreed by a
+        # nickname, a suffix or a proper-casing read as "not a member"
+        # and quietly got no card.
+        conn = get_connection(db_path)
+        try:
+            member_ids = {r["customer_id"] for r in conn.execute(
+                """SELECT c.customer_id
+                     FROM customers c
+                    WHERE c.current_player_status
+                          IN ('active_member', 'member_plus')""")}
+        finally:
+            conn.close()
+        before = len(eligible_rows)
+        eligible_rows = [r for r in eligible_rows
+                         if r.get("customer_id") in member_ids]
+        skipped_not_member = before - len(eligible_rows)
+
+    # If filtering by event, restrict to players registered for that event
+    # and compute event-specific skip counts
+    # EVERY REGISTRANT LANDS IN EXACTLY ONE BUCKET (Kerry 2026-09-16:
+    # "Not sure how we have 21 registered and only 16 sent and 3 skipped.
+    # Seems to be 2 unaccounted for."). Two `continue`s inside the send
+    # loop — no email on file, and no NINE-hole index even though the
+    # player is otherwise eligible — dropped people silently, so the
+    # numbers could not add up and there was no way to find out who.
+    # They are counted now, and everyone skipped is NAMED.
+    skipped_no_email = 0
+    skipped_no_index = 0
+    skipped_names: list = []
+    registered = None
+    event_names: dict = {}
+    if event_name:
+        # THE ROSTER, AND IDENTITY BY `customer_id` (v2.459.0).
+        #
+        # This block used to build a FIFTH roster out of get_all_items() +
+        # aliases — so a Golf Genius RSVP with no order row was invisible
+        # to it and was not even counted in `registered` — and then match
+        # `handicap_player_links.customer_name` against `items.customer`
+        # by string equality. Both sides are per-order historical name
+        # snapshots (CLAUDE.md "Identity drift watch"), so "Mike Murphy"
+        # against "Michael Murphy" classified a player with a current
+        # index as "no TGF handicap on record", and he silently got no
+        # card. `WHERE customer_name IS NOT NULL` dropped any link that
+        # had an id but no name label on top of that.
+        #
+        # Now: `_event_roster_rows` — the ONE roster builder mandated in
+        # v2.410.0 — and set membership on `customer_id`.
+        conn = get_connection(db_path)
+        try:
+            ev = conn.execute(
+                "SELECT id, item_name FROM events WHERE item_name = ? COLLATE NOCASE",
+                (event_name,)).fetchone()
+            if not ev:
+                ev = conn.execute(
+                    """SELECT e.id, e.item_name FROM events e
+                         JOIN event_aliases ea
+                           ON ea.canonical_event_name = e.item_name
+                        WHERE ea.alias_name = ? COLLATE NOCASE""",
+                    (event_name,)).fetchone()
+            if not ev:
+                # An unrecognised audience must NEVER fall through to a
+                # send — the composer hazard of 2026-09-08 (handoff §7)
+                # mailed a whole roster exactly that way. Refuse instead.
+                return {"error": f"No event matches {event_name!r} — nothing sent.",
+                        "http": 400}
+            roster = _event_roster_rows(conn, ev["id"])
+        finally:
+            conn.close()
+
+        # One entry per PERSON. Roster rows are per order row (entry,
+        # side games, an add-on), so a player can hold several; dedupe on
+        # customer_id where there is one, on the pairing name key where
+        # there is not.
+        roster_ids: set = set()
+        roster_unidentified: dict = {}
+        for r in roster:
+            cid = r.get("customer_id")
+            disp = (r.get("name") or r.get("customer") or "").strip()
+            if cid is not None:
+                roster_ids.add(int(cid))
+                event_names.setdefault(int(cid), disp)
+            elif disp:
+                roster_unidentified.setdefault(disp.lower(), disp)
+
+        # Filter eligible rows to the people on THIS event's roster, ONE
+        # card per person. A customer can hold two handicap links (a
+        # legacy Golf Genius name variant beside the current one); the
+        # export already collapses those that share an email, but two
+        # links on two addresses would otherwise each draw a card.
+        _by_cid: dict = {}
+        for r in eligible_rows:
+            cid = r.get("customer_id")
+            if cid is None or int(cid) not in roster_ids:
+                continue
+            _by_cid.setdefault(int(cid), r)
+        eligible_rows = list(_by_cid.values())
+        eligible_ids = set(_by_cid)
+
+        # Every registrant lands in exactly one bucket, and anyone skipped
+        # is NAMED (Kerry 2026-09-16). A registrant with no customer_id at
+        # all is its own bucket with its own reason — it is an identity
+        # gap, not a missing handicap, and calling it the latter is what
+        # made the old counts read as authoritative when they were wrong.
+        registered = len(roster_ids) + len(roster_unidentified)
+        _no_email_ids = set(export.get("no_email_ids") or [])
+        _no_index_ids = set(export.get("no_index_ids") or [])
+        for cid in sorted(roster_ids):
+            if cid not in eligible_ids:
+                _who = event_names.get(cid, f"customer {cid}")
+                if cid in _no_email_ids:
+                    skipped_no_email += 1
+                    skipped_names.append({"player": _who, "why": "no email on file"})
+                elif cid in _no_index_ids:
+                    skipped_no_index += 1
+                    skipped_names.append({"player": _who, "why": "no nine-hole index to print"})
+                else:
+                    skipped_no_index += 1  # no handicap link at all
+                    skipped_names.append({"player": _who, "why": "no TGF handicap on record"})
+        for disp in sorted(roster_unidentified.values()):
+            skipped_no_index += 1
+            skipped_names.append({"player": disp,
+                                  "why": "on the roster with no customer record to match"})
+    else:
+        skipped_no_email = len(export.get("no_email") or [])
+        skipped_no_index = len(export.get("no_index") or [])
+
+    sent = 0
+    failed = 0
+    errors = []
+    role = sent_by or "unknown"
+
+    if not dry_run and eligible_rows:
+        # The audience has resolved (an unknown event refused above);
+        # only now do credentials and the mail stack (msal) matter.
+        if not all([tenant_id, client_id, client_secret, from_address]):
+            return {"error": "Email credentials not configured on server", "http": 500}
+        from email_parser.fetcher import send_mail_graph
+
+    for i, row in enumerate(eligible_rows):
+        pname = row["player_name"]
+        email = row.get("email") or ""
+        if not email:
+            skipped_no_email += 1
+            skipped_names.append({"player": pname, "why": "no email on file"})
+            continue
+
+        try:
+            card_data = build_handicap_card_data(pname, db_path=db_path)
+            if card_data.get("handicap_index_9") is None:
+                skipped_no_index += 1
+                skipped_names.append({"player": pname,
+                                      "why": "no nine-hole index to print"})
+                continue
+
+            html = build_handicap_card_html(card_data)
+            first = card_data.get("first_name") or ""
+            last = card_data.get("last_name") or ""
+            display = f"{first} {last}".strip() or pname
+            subject = f"TGF Handicap Update \u2014 {display}"
+
+            if dry_run:
+                # A DRY RUN says exactly who would get a card and with what
+                # index, and touches nothing — no mail, no message_log row.
+                would_send.append({"player": display, "email": email,
+                                   "index_9": card_data.get("handicap_index_9")})
+                continue
+
+            ok = send_mail_graph(
+                tenant_id=tenant_id,
+                client_id=client_id,
+                client_secret=client_secret,
+                from_address=from_address,
+                to_address=email,
+                subject=subject,
+                html_body=html,
+            )
+
+            status = "sent" if ok else "failed"
+            if ok:
+                sent += 1
+            else:
+                failed += 1
+                errors.append({"player": pname, "email": email, "error": "send_mail_graph returned False"})
+
+            try:
+                log_message({
+                    "event_name": "handicap-card",
+                    "channel": "email",
+                    "recipient_name": pname,
+                    "recipient_address": email,
+                    "subject": subject,
+                    "body_preview": f"Handicap card: {card_data.get('handicap_index_9')}N",
+                    "status": status,
+                    "sent_by": role,
+                }, db_path=db_path)
+            except Exception:
+                logger.warning("Failed to log handicap card email for %s", pname, exc_info=True)
+
+        except Exception as exc:
+            failed += 1
+            errors.append({"player": pname, "email": email, "error": str(exc)})
+
+        # Throttle to avoid rate limiting (300ms between sends)
+        if not dry_run and i < len(eligible_rows) - 1:
+            _time.sleep(0.3)
+
+    out = {
+        "status": ("dry_run" if dry_run else ("ok" if failed == 0 else "partial")),
+        "dry_run": bool(dry_run),
+        "event_name": event_name,
+        "would_send": would_send if dry_run else None,
+        "sent": sent,
+        "failed": failed,
+        "skipped_no_email": skipped_no_email,
+        "skipped_no_index": skipped_no_index,
+        "skipped_not_member": skipped_not_member,
+        "total_eligible": len(eligible_rows),
+        "skipped_players": skipped_names[:40],
+        "errors": errors[:20],  # limit error details
+    }
+    # Handicap links that carry no customer_id — the population that can
+    # only be resolved by name string. Surfaced on every send so the gap
+    # stays visible instead of being papered over by the fallback.
+    _fallbacks = export.get("name_fallbacks") or []
+    if _fallbacks:
+        out["unlinked_handicap_players"] = [f["player_name"] for f in _fallbacks][:40]
+        out["unlinked_handicap_count"] = len(_fallbacks)
+    if registered is not None:
+        # The arithmetic is published, so a gap can never hide again.
+        out["registered"] = registered
+        out["accounted"] = (sent + failed + skipped_no_email
+                            + skipped_no_index + skipped_not_member
+                            + (len(would_send) if dry_run else 0))
+        out["unaccounted"] = registered - out["accounted"]
+    if not dry_run:
+        try:
+            log_agent_action("mcp-claude" if role == "closeout" else role, "send_handicap_cards",
+                             f"{event_name or chapter or 'all'}: sent {sent}, failed {failed}, "
+                             f"skipped {skipped_no_email + skipped_no_index + skipped_not_member}")
+        except Exception:
+            pass
+    return out
 
 def enroll_season_contest(customer_name: str, contest_type: str,
                           chapter: str = "", season: str = "",

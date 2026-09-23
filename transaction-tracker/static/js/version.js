@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.486.6";
+window.TGF_VERSION = "2.487.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.487.0",
+    date: "2026-09-23",
+    changes: [
+      "The closeout sends the handicap cards (Kerry 2026-09-23: \u2018For the closeout automatically send the handicap card updates to those who played in that event. To remove one more manual operation from me\u2019). The Handicaps page\u2019s Email Handicap Cards \u2192 By Event became ONE function, send_handicap_cards, with a DRY RUN that names who would get a card and every skip with its reason and touches nothing; the new bridge scoring-hcp-cards:<event>[|apply] and the page route both call it, and the Wed + Sun 5:30 AM closeout Routine runs it right after the handicap post. Kerry\u2019s remaining manual step is the Golf Genius upload.",
+      "Skip reasons are now true: the export carries the customer ids of its no-email and no-index buckets, so a registrant with an index but no address reads \u2018no email on file\u2019 and one with a link but no nine-hole index reads \u2018no nine-hole index to print\u2019 \u2014 both used to be reported as \u2018no TGF handicap on record\u2019, which sent Kerry looking for a handicap that was there.",
+      "An unknown event name refuses (400) before credentials or the mail stack are looked at, so a mistyped event can never fall through to a send. Guard: test_handicap_cards_bridge.py.",
+    ],
+  },
   {
     version: "2.486.6",
     date: "2026-09-23",

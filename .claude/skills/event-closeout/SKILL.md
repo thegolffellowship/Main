@@ -209,15 +209,25 @@ read it — but do not redo it either.
     `hcp_recap_email_default` (Kerry + Robert Straiton as of 2026-09-09).
     The preview's footnote saying the standard "needs Kerry's ruling" is
     stale; the ruling is D1 / NDB in `docs/claude/handicaps.md`.
-3.3 **Email the players who played their updated card.** Handicaps page →
-    Email Handicap Cards → **By Event** (route
-    `/api/handicaps/send-bulk-email`, manager login). There is NO bridge
-    command for it as of 2026-09-09, so it cannot be run from an MCP
-    session — see OPEN 6. Reversing 3.2 and 3.3 mails yesterday's index.
-    **It IS verifiable from here:** every card send logs to `message_log`
+3.3 **Email the players who played their updated card — THE ROUTINE
+    DOES THIS** (v2.487.0, Kerry 2026-09-23: "For the closeout
+    automatically send the handicap card updates to those who played in
+    that event. To remove one more manual operation from me").
+    `scoring-hcp-cards:<event>` is a DRY RUN: it names `would_send`
+    (player, email, index) and every skip with its reason (no email on
+    file / no nine-hole index / no TGF handicap on record / on the
+    roster with no customer record), and `registered` must equal
+    `accounted` with `unaccounted: 0`. Read it — a would_send that is
+    not the field is a roster or identity problem, and a card for a
+    player whose index just moved 5 points is a wrong tee (3.1) — then
+    `scoring-hcp-cards:<event>|apply` sends. It is the same function the
+    Handicaps page's Email Handicap Cards → By Event runs
+    (`send_handicap_cards`, database.py), so the page remains the manual
+    fallback. Reversing 3.2 and 3.3 mails yesterday's index: apply this
+    ONLY after 3.2 posted. Verify: every send logs to `message_log`
     under event_name `handicap-card`; `scoring-message-log:handicap-card`
-    shows the sends by day with recipient and status. Check it before
-    reporting 3.3 as done or not done.
+    shows the sends by day with recipient and status. Report the count
+    sent and every skip by name; a `failed` above 0 is a finding.
 3.4 **Kerry uploads the updated handicaps to Golf Genius** (manual CSV
     export → GG, so next week's strokes are right). Not computable from
     the Tracker; ask, do not assume.
@@ -314,9 +324,9 @@ Then the OPEN items, verbatim, for Kerry to rule on.
 
 Raised 2026-09-09, on the first run:
 
-6. **A bridge for 3.3** (`/api/handicaps/send-bulk-email`, By Event) so
-   the whole routine can run from an MCP session. It is a member-facing
-   send path that would sit outside the manager login — Kerry's call.
+6. ~~A bridge for 3.3~~ — CLOSED 2026-09-23 by Kerry ("automatically
+   send the handicap card updates to those who played in that event"):
+   `scoring-hcp-cards:<event>[|apply]`, recipe in 3.3.
 7. **Shadow-computed payouts with no GG board.** Austin a9.22 had no GG
    Skins or CTP board; the tracker recorded Skins from the cards anyway
    ($117.00 across four players, all PENDING). Record shadow games before

@@ -1800,6 +1800,7 @@ def _scoring_dispatch_inner(url: str, extract: str):
       scoring-course-merge:<loser_id>|<winner_id>[|apply]  fold a duplicate course row into the canonical one (tees collapse/move, rounds/events/items re-point, names aliased); dry run by default
       scoring-tee-nines-store:<full_tee_id>|<fr>,<fs>|<br>,<bs>[|apply]  front/back rating rows (each with its slope) on an 18-hole tee set (refuses a pair that does not sum to the 18)
       scoring-crdb-seed:<course_id>[|<json>][|apply]  write a course's USGA CRDB tee sets (gender, par, bogey, total/front/back, optional yardages) onto the record; JSON row = [name, gender, r18, s18, bogey, [fr, fs], [br, bs], [y18, yf, yb]]
+      scoring-hcp-cards:<event>[|apply]  email the TGF handicap card to every player on the event's roster who has one (dry run names who would get one; apply sends and logs to message_log)
       scoring-tee-bands:<course_id>   which four sets TGF plays (current designation + the yardage-standards proposal; read-only)
       scoring-tee-bands-set:<tee_id>|<band[,band]|hide>[|apply]  designate a tee set (<50 / 50-64 / 65+ / Forward) or hide it; one set per band per course
       scoring-tee-bands-apply:<course_id>[|apply]  write the proposal: the four get their bands, every other set on the course is hidden
@@ -5466,6 +5467,16 @@ def _scoring_dispatch_inner(url: str, extract: str):
                 _res = db.seed_usga_crdb(_c, int(_p[0]), _sets, dry_run=not _apply)
             finally:
                 _c.close()
+            return json.dumps(_res, indent=2, default=str)
+        if cmd == "scoring-hcp-cards":
+            # "<event>[|apply]" — the Handicaps page's By-Event card send as
+            # a bridge (Kerry 2026-09-23), so the closeout can run it.
+            _p = [x.strip() for x in arg.split("|")]
+            if not _p or not _p[0]:
+                return json.dumps({"error": "<event>[|apply]"})
+            _apply = len(_p) > 1 and _p[-1].lower() == "apply"
+            _res = db.send_handicap_cards(event_name=_p[0], dry_run=not _apply,
+                                          sent_by="closeout")
             return json.dumps(_res, indent=2, default=str)
         if cmd in ("scoring-tee-bands", "scoring-tee-bands-apply"):
             # Tee designation (Kerry 2026-09-20): the four sets TGF plays on
