@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.488.4";
+window.TGF_VERSION = "2.488.5";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.488.5",
+    date: "2026-09-23",
+    changes: [
+      "Docs only: lane-registry.md \u00a75 records that Kerry abandoned the church Group Planner. Its two sessions are archived, and nothing was ever set up for it on Supabase or Vercel. The only thing left is the private GitHub repo Niester-Personal/group-planners, which Kerry deletes himself because no connected tool can delete a repository.",
+    ],
+  },
   {
     version: "2.488.4",
     date: "2026-09-23",

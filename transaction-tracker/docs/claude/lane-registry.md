@@ -263,3 +263,9 @@ and sent one-shot pokes asking each lane to install its new prompt:
 `trig_01KxAhmfahsZ3rX2xMwtjKaB` → Tracker Improvements 3 (5:15 pick-up now posts
 `TO: front-desk`), and `trig_01QHY5RUUk4yfrNpbVhKHtn1` → CFO (5:20 review now
 posts `TO: front-desk`). Both fire 2026-09-23 21:05 UTC.
+
+## 5. Group Planner abandoned (2026-09-23)
+
+Kerry: "New standalone app setup is the Group Planner, but I'm abandoning that work. It's not necessary. Archive it. I want to delete any setup work on 3rd party software too."
+- Archived: session_01Q5P4nYmCwK5p8J8S3ESXiV "New standalone app setup" and session_017KUh5KsexbrwWKX9AtR3ig "Group Planner - Church". Both are no longer live lanes.
+- Third-party check: no Supabase project was ever created (the lane was still waiting for an account), no Vercel project, and no branch left in this repo. The only artifact is the private GitHub repo `Niester-Personal/group-planners`. No connected tool can delete a repository, so Kerry deletes it himself on GitHub (Settings, Danger Zone, Delete this repository).
