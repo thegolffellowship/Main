@@ -51,6 +51,8 @@ AGENT_NAME = "cto-agent"
 RULES = {
     "route_p95_over_threshold": True,     # p95 above the path's SLOW line
     "job_error": True,                    # any failed job run
+    "job_error_recent_hours": 3,          # errors all older than this + last run ok → RECOVERED (medium)
+    "provider_alerts": True,              # an open hosting-provider alert (Railway) is a HIGH finding
     "job_slow": True,                     # a job over its SLOW line
     "db_growth_mb_per_day": 20,           # the file grew more than this
     "probe_connect_ms": 150,              # a bare connect slower than this
@@ -139,6 +141,32 @@ def _fmt_ms(ms) -> str:
     return f"{ms/1000:.1f} s" if ms >= 1000 else f"{ms} ms"
 
 
+def _provider_alerts(db_path) -> list[dict]:
+    """OPEN action items that are a hosting / infrastructure provider's own
+    alert (Railway volume, billing, outage mail). The 9/22 outage was
+    mailed by Railway three days earlier ("Main volume is 95% full") and
+    sat in the queue at confidence 45, never surfaced (#621). The CTO
+    digest names every open one until it is closed."""
+    conn = sqlite3.connect(str(db_path), timeout=10)
+    conn.row_factory = sqlite3.Row
+    try:
+        try:
+            rows = conn.execute(
+                """SELECT id, subject, from_email, email_date, created_at FROM action_items
+                    WHERE status IN ('open', 'in_progress')
+                      AND (LOWER(COALESCE(from_email, '')) LIKE '%railway%'
+                           OR LOWER(COALESCE(from_email, '')) LIKE '%@render.com'
+                           OR LOWER(COALESCE(from_email, '')) LIKE '%@fly.io'
+                           OR LOWER(COALESCE(subject, '')) LIKE '%volume%full%'
+                           OR LOWER(COALESCE(subject, '')) LIKE '%disk%full%')
+                    ORDER BY created_at DESC LIMIT 10""").fetchall()
+        except sqlite3.Error:
+            rows = []
+    finally:
+        conn.close()
+    return [dict(r) for r in rows]
+
+
 def build_health_report(days: float = 1, db_path=None, record_size: bool = False) -> dict:
     """Everything the digest, the page and the bridge show."""
     from .timezone_utils import now_central, today_central_str
@@ -151,7 +179,8 @@ def build_health_report(days: float = 1, db_path=None, record_size: bool = False
     for s in perf.samples(days, kind="job", db_path=db_path, limit=5000):
         j = jobs.setdefault(s["name"], {"name": s["name"], "runs": 0, "errors": 0,
                                         "max_ms": 0, "sum_ms": 0, "last_at": None,
-                                        "last_status": None, "last_error": None})
+                                        "last_status": None, "last_error": None,
+                                        "last_error_at": None})
         j["runs"] += 1
         j["sum_ms"] += s["total_ms"]
         j["max_ms"] = max(j["max_ms"], s["total_ms"])
@@ -159,6 +188,7 @@ def build_health_report(days: float = 1, db_path=None, record_size: bool = False
             j["errors"] += 1
             if j["last_error"] is None:
                 j["last_error"] = ((s.get("detail") or {}).get("error") or "")[:200]
+                j["last_error_at"] = s["at"]
         if j["last_at"] is None:          # samples come newest first
             j["last_at"], j["last_status"] = s["at"], s["status"]
     for j in jobs.values():
@@ -194,6 +224,7 @@ def build_health_report(days: float = 1, db_path=None, record_size: bool = False
         "load1": perf._load1(),
         "cpus": os.cpu_count(),
         "hcp_cache": _hcp_cache_stats(),
+        "provider_alerts": _provider_alerts(db_path),
         "sample_count": sum(r["count"] for k in summary for r in summary[k]),
     }
     report["findings"] = find(report)
@@ -222,9 +253,34 @@ def find(report: dict) -> list[dict]:
                                     f"(max {_fmt_ms(r['max'])}, p95 {_fmt_ms(r['p95'])})"})
     for j in report["jobs"]:
         if RULES["job_error"] and j["errors"]:
-            out.append({"severity": "high", "key": f"job_error:{j['name']}",
-                        "text": f"job {j['name']} failed {j['errors']} of {j['runs']} run(s)"
-                                + (f" — {j['last_error']}" if j.get("last_error") else "")})
+            # Errors that stopped hours ago with the last run OK are a
+            # RECOVERED incident, not a live one — reported, filed as
+            # medium, and worded so nobody chases a fixed problem
+            # (9/23: five HIGH items for a volume Kerry had already resized).
+            recovered = False
+            try:
+                last_err = datetime.strptime(j["last_error_at"], "%Y-%m-%d %H:%M:%S") if j.get("last_error_at") else None
+                age_h = ((datetime.now(timezone.utc).replace(tzinfo=None) - last_err).total_seconds() / 3600
+                         if last_err else None)
+                recovered = (j.get("last_status") == "ok" and age_h is not None
+                             and age_h >= RULES["job_error_recent_hours"])
+            except (TypeError, ValueError):
+                recovered = False
+            if recovered:
+                out.append({"severity": "medium", "key": f"job_error:{j['name']}",
+                            "text": f"job {j['name']} failed {j['errors']} of {j['runs']} run(s), "
+                                    f"RECOVERED — last error {j['last_error_at']} UTC, every run since OK"
+                                    + (f" — {j['last_error']}" if j.get("last_error") else "")})
+            else:
+                out.append({"severity": "high", "key": f"job_error:{j['name']}",
+                            "text": f"job {j['name']} failed {j['errors']} of {j['runs']} run(s)"
+                                    + (f" — {j['last_error']}" if j.get("last_error") else "")})
+    if RULES["provider_alerts"]:
+        for a in report.get("provider_alerts") or []:
+            out.append({"severity": "high", "key": f"provider_alert:{a['id']}",
+                        "text": f"OPEN provider alert #{a['id']} since {a.get('email_date') or a.get('created_at')}: "
+                                f"\"{a.get('subject')}\" ({a.get('from_email')}) — act on it or close it; "
+                                f"the 9/22 outage was mailed three days ahead and sat here"})
     if RULES["job_slow"]:
         for r in S["job"]:
             if r["slow"]:
@@ -346,6 +402,9 @@ def render_markdown(report: dict) -> str:
     hc = report["hcp_cache"]
     L.append(f"**HANDICAP CACHE** since boot: {hc['hits']} hits / {hc['misses']} misses"
              + (f" ({hc['hit_rate']*100:.0f}%)" if hc.get("hit_rate") is not None else ""))
+    if report.get("provider_alerts"):
+        L.append("**PROVIDER ALERTS OPEN:** " + "; ".join(
+            f"#{a['id']} {a.get('email_date') or ''} {a.get('subject')}" for a in report["provider_alerts"]))
     if report["log_errors"]:
         L.append("**LOG** error/slow rows: " + ", ".join(
             f"{k} ×{v}" for k, v in list(report["log_errors"].items())[:8]))
@@ -457,3 +516,38 @@ def health_digest_check(db_path=None) -> dict | None:
     if not digest_due(db_path=db_path):
         return None
     return run_health_digest(post=True, db_path=db_path)
+
+
+# ── closing what the digest filed ───────────────────────────────────────
+def ack_findings(item_ids, note: str, by: str = AGENT_NAME, db_path=None) -> dict:
+    """Close HEALTH action items the digest filed, with the reason on the
+    row (never deleted; `resolution_notes` + `completed_by`). Only items
+    whose subject starts with "HEALTH:" — other lanes' items are theirs.
+    The scoring-health-ack bridge and the 5:10 AM CTO routine use this
+    after a finding is fixed or explained (9/23: the disk-I/O errors
+    resolved by the volume resize)."""
+    from .database import _connect, update_action_item, log_agent_action
+    from .timezone_utils import now_central
+    closed, refused = [], []
+    with _connect(db_path) as conn:
+        for iid in item_ids:
+            row = conn.execute("SELECT id, subject, status FROM action_items WHERE id = ?",
+                               (int(iid),)).fetchone()
+            if not row or not str(row["subject"] or "").startswith("HEALTH:"):
+                refused.append({"id": int(iid), "why": "not a HEALTH item" if row else "no such item"})
+                continue
+            if row["status"] in ("completed", "dismissed"):
+                refused.append({"id": int(iid), "why": f"already {row['status']}"})
+                continue
+            closed.append(int(iid))
+    for iid in closed:
+        update_action_item(iid, {"status": "completed",
+                                 "completed_at": now_central().strftime("%Y-%m-%d %H:%M:%S"),
+                                 "completed_by": by,
+                                 "resolution_notes": (note or "")[:1000]}, db_path=db_path)
+    if closed:
+        try:
+            log_agent_action(by, "health_ack", f"closed {closed}: {(note or '')[:200]}", db_path=db_path)
+        except Exception:
+            logger.debug("health ack log failed", exc_info=True)
+    return {"closed": closed, "refused": refused}
