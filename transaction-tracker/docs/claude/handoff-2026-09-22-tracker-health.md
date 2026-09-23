@@ -127,6 +127,24 @@ the GIL is.
 - No `pairings_get` sample yet on the new build — Kerry has not opened
   PAIRINGS since the deploy. The first one is the before/after.
 
+## 2e. Morning two (2026-09-23, v2.486.5): the digest worked, the response loop did not exist
+
+- 5:00 digest #620 posted on time and named the 9/22 outage (five jobs
+  failing with `disk I/O error` 5:29–8:57 PM — the 500 MB Railway
+  volume was full; Kerry resized it to 250 GB at 9:10 PM, no data lost;
+  incident record #619). The sibling lane shipped v2.486.4 (volume
+  watch, 80/90% findings) at 5:15.
+- What was missing: nothing woke THIS lane to act on the digest. Now a
+  Routine fires into this session at 5:10 AM Central daily
+  (trig_01NFYQB2DbAjpC9J3CeexG33; cron 10 10 UTC — re-set after Nov 1).
+- Digest improvements from the first real morning: RECOVERED job errors
+  (medium, worded so nobody chases a fixed problem); OPEN provider
+  alerts named as HIGH until closed (Railway's 9/19 "95% full" mail sat
+  at confidence 45); `scoring-health-ack` to close HEALTH items with
+  the reason; db_backup line 300 s.
+- Still Kerry's: `gg_raw_archive` (368 MB of the file, the backup and
+  the volume both pay for it) — move it out; the EVENTS 30 s poll cadence.
+
 ## 2c. The agent is the CTO
 
 Kerry 2026-09-22 (~4 PM): *"I think we would define your Agent Role as

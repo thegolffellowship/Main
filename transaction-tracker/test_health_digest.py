@@ -48,6 +48,28 @@ check("routes / jobs / bridges summarised", {r["name"] for r in rep["summary"]["
 keys = {f["key"]: f for f in rep["findings"]}
 check("FINDING high: a route whose p95 is over its line (pairings_get)", keys.get("route_slow:pairings_get", {}).get("severity") == "high", str(keys))
 check("FINDING high: a failed job run (db_backup) with its error", keys.get("job_error:db_backup", {}).get("severity") == "high" and "no creds" in keys["job_error:db_backup"]["text"], str(keys))
+# a job whose errors all stopped hours ago and whose last run is OK is RECOVERED (medium), not a live HIGH
+c = sqlite3.connect(tmp)
+c.execute("INSERT INTO perf_samples (at, kind, name, total_ms, status, detail) VALUES (datetime('now', '-6 hours'), 'job', 'lead_poll', 900, 'error', '{\"error\": \"OperationalError(disk I/O error)\"}')")
+c.execute("INSERT INTO perf_samples (at, kind, name, total_ms, status) VALUES (datetime('now', '-1 minute'), 'job', 'lead_poll', 800, 'ok')")
+c.commit(); c.close()
+rep2 = health.build_health_report(1, db_path=tmp)
+k2 = {f["key"]: f for f in rep2["findings"]}
+check("FINDING medium: job errors older than the recent window with the last run OK read as RECOVERED",
+      k2.get("job_error:lead_poll", {}).get("severity") == "medium" and "RECOVERED" in k2["job_error:lead_poll"]["text"], str(k2.get("job_error:lead_poll")))
+check("...while a job whose LAST run failed stays HIGH", k2.get("job_error:db_backup", {}).get("severity") == "high")
+# an open provider alert in the action queue is named until closed
+db.save_action_item({"subject": "Alert: Main volume is 95% full in production", "from_name": "Railway Support",
+                     "from_email": "support@railway.app", "summary": "x", "urgency": "high", "category": "other",
+                     "email_date": "2026-09-19", "confidence": 45}, db_path=tmp)
+rep3 = health.build_health_report(1, db_path=tmp)
+pa = [f for f in rep3["findings"] if f["key"].startswith("provider_alert:")]
+check("FINDING high: an OPEN hosting-provider alert (Railway 95% full) is named with its id and date",
+      len(pa) == 1 and pa[0]["severity"] == "high" and "95% full" in pa[0]["text"] and "2026-09-19" in pa[0]["text"], str(pa))
+check("...and the markdown carries a PROVIDER ALERTS line", "**PROVIDER ALERTS OPEN:**" in health.render_markdown(rep3))
+alert_id = rep3["provider_alerts"][0]["id"]
+db.update_action_item(alert_id, {"status": "completed"}, db_path=tmp)
+check("...gone once the item is closed", not health.build_health_report(1, db_path=tmp)["provider_alerts"])
 check("FINDING medium: one spike on customers_list, p95 not over", keys.get("route_spike:customers_list", {}).get("severity") == "medium", str(keys))
 check("a healthy route raises nothing", not any(k.endswith("events_list") for k in keys))
 check("findings are ordered high → medium → info", [f["severity"] for f in rep["findings"]] == sorted([f["severity"] for f in rep["findings"]], key={"high": 0, "medium": 1, "info": 2}.get))
@@ -97,7 +119,7 @@ check("post=True posts ONE mailbox entry, topic tracker-health, author tracker-c
 items = db.get_action_items(status="open", db_path=tmp)
 subj = sorted(i["subject"] for i in items)
 check("every high/medium finding is a COO action item (HEALTH: <key>), from the CTO, category other",
-      subj == sorted(f"HEALTH: {f['key']}" for f in rep["findings"] if f["severity"] in ("high", "medium"))
+      subj == sorted(f"HEALTH: {f['key']}" for f in health.build_health_report(1, db_path=tmp)["findings"] if f["severity"] in ("high", "medium"))
       and all(i["from_name"] == "CTO" and i["category"] == "other" for i in items), str(subj))
 check("urgency follows severity", next(i for i in items if i["subject"] == "HEALTH: job_error:db_backup")["urgency"] == "high")
 check("the once-a-day mark is set and the digest is no longer due today",
@@ -113,6 +135,19 @@ check("a second run the same morning files NO duplicate action items (dedupe on 
 db.update_action_item(items[0]["id"], {"status": "completed"}, db_path=tmp)
 health.run_health_digest(post=True, db_path=tmp)
 check("...but a finding closed and found again is filed again", len(db.get_action_items(status="open", db_path=tmp)) == n_before)
+
+print("\n== ack: closing what the digest filed ==")
+open_items = db.get_action_items(status="open", db_path=tmp)
+hid = next(i["id"] for i in open_items if i["subject"].startswith("HEALTH:"))
+other = db.save_action_item({"subject": "Player Dropped - Someone", "from_name": "Kerry", "summary": "x", "category": "other"}, db_path=tmp)["id"]
+res = health.ack_findings([hid, other, 999999], "resolved by the volume resize 9/22 9:10 PM", db_path=tmp)
+row = db.get_action_items(status="completed", db_path=tmp)
+check("ack closes a HEALTH item with the note and cto-agent on the row",
+      res["closed"] == [hid] and any(r["id"] == hid and r["completed_by"] == "cto-agent" and "volume resize" in (r["resolution_notes"] or "") for r in row), str((res, row[:1])))
+check("...refuses a non-HEALTH item and an unknown id, and leaves them open",
+      {r["id"] for r in res["refused"]} == {other, 999999} and any(i["id"] == other for i in db.get_action_items(status="open", db_path=tmp)), str(res))
+check("...a second ack of the same item is refused as already completed", health.ack_findings([hid], "again", db_path=tmp)["refused"][0]["why"] == "already completed")
+check("...and it is logged as cto-agent / health_ack", any(r["action_type"] == "health_ack" for r in db.get_agent_action_log(agent_name="cto-agent", db_path=tmp)))
 
 c = sqlite3.connect(tmp)
 c.execute("INSERT INTO perf_samples (at, kind, name, total_ms) VALUES ('2020-01-01 00:00:00', 'route', 'old', 1)"); c.commit()

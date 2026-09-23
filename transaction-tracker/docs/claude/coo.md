@@ -180,3 +180,39 @@ and **`scoring-health-digest[:<days>][|post]`** (the text; `post` runs
 the real routine). `/health` remains the unauthenticated Railway probe.
 `HEALTH_DIGEST=0` switches the routine off. Guards: `test_perf.py`,
 `test_health_digest.py`.
+
+### Day two of the digest (v2.486.5, 2026-09-23) — what the first real morning taught it
+
+The 5:00 digest (#620) worked and caught the 9/22 volume-full outage
+after the fact: five HIGH job-error findings, all `disk I/O error`, all
+resolved by Kerry's resize at 9:10 PM. Three changes from that:
+
+- **RECOVERED, not live.** A job whose errors all stopped more than
+  `RULES["job_error_recent_hours"]` (3) ago and whose last run is OK is
+  filed as MEDIUM with "RECOVERED — last error <time>, every run since
+  OK", not as five HIGH items for a fixed problem. A job whose LAST run
+  failed stays HIGH.
+- **Provider alerts are named until closed.** Railway mailed "Main
+  volume is 95% full" on 9/19, twice; both sat in `action_items` at
+  confidence 45 and never surfaced; the outage followed in three days.
+  `_provider_alerts()` lists every OPEN action item from a hosting
+  provider (railway / render / fly senders, or a "volume full" / "disk
+  full" subject) and the digest files each as HIGH `provider_alert:<id>`
+  with a PROVIDER ALERTS OPEN line. (The COO classifier change the
+  Handicap Surfaces lane proposed in #621 is the COO lane's; this is the
+  CTO's own read of the queue.)
+- **The CTO can close what it filed.** `ack_findings(ids, note)` /
+  bridge `scoring-health-ack:<id[,id]>|<note>` completes HEALTH items
+  with the reason on the row (`resolution_notes`, `completed_by`
+  cto-agent), refuses anything not `HEALTH:`, logs `health_ack`. The
+  db_backup SLOW line is 300 s (a 430 MB file legitimately takes ~145 s;
+  the real item is `gg_raw_archive`).
+
+**The CTO's own morning:** a Routine ("CTO daily 5:10 AM Central: act on
+the Tracker Health digest", trig_01NFYQB2DbAjpC9J3CeexG33) wakes this
+lane's session at 5:10 AM Central — read the digest and the mailbox, fix
+what is code, close what is explained, route the rest, post one note,
+brief Kerry. Kerry 2026-09-23: *"I thought something would happen at
+5:00a. That you would run in response to the 5:00a digest and make any
+necessary improvements."* The cron is UTC (10:10); it drifts to 4:10 AM
+Central after DST ends Nov 1 — update the Routine then.

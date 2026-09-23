@@ -62,6 +62,7 @@ SLOW_MS = {
     "customers_list": 1500,
     "dashboard_api": 2500,
     "auto_pairings_grab": 400_000,   # budgeted at 280 s per portal
+    "db_backup": 300_000,            # VACUUM INTO + gzip + OneDrive upload of a 430 MB file (~145 s)
     "auto_gg_results_sync": 600_000,
 }
 RETENTION_DAYS = 30

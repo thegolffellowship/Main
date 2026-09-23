@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.486.4";
+window.TGF_VERSION = "2.486.5";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.486.5",
+    date: "2026-09-23",
+    changes: [
+      "The CTO digest learned from its first real morning (Kerry 2026-09-23: ‘I thought something would happen at 5:00a. That you would run in response to the 5:00a digest and make any necessary improvements’): a job whose failures stopped hours ago and has run clean since is reported as RECOVERED at medium, not as a fresh high alarm (yesterday's five disk-I/O findings were all the full volume Kerry had already resized); an OPEN hosting-provider alert in the action queue is named as HIGH every morning until it is closed (Railway mailed ‘Main volume is 95% full’ on 9/19, twice, and both sat unseen at confidence 45 until the outage three days later); and the CTO can close the HEALTH items it filed with the reason on the row (bridge scoring-health-ack). The nightly backup's slow line is 5 minutes — a 430 MB file legitimately takes ~145 s; the real fix is moving gg_raw_archive out.",
+      "A 5:10 AM Central routine now wakes the CTO lane every day to act on the digest: fix what is code, close what is explained, route the rest, brief Kerry.",
+    ],
+  },
   {
     version: "2.486.4",
     date: "2026-09-23",

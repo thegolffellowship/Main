@@ -1900,6 +1900,8 @@ def _scoring_dispatch_inner(url: str, extract: str):
                                    bridge from perf_samples, slow opens with
                                    breakdowns, job failures, DB size, live probe,
                                    findings (read-only)
+      scoring-health-ack:<id[,id]>|<note>  close HEALTH action items the CTO digest
+                                   filed (resolution note on the row; HEALTH: only)
       scoring-health-digest[:<days>][|post]  the daily health digest text; |post
                                    runs the real routine (mailbox `tracker-health`
                                    + COO action items + prune)
@@ -3171,6 +3173,21 @@ def _scoring_dispatch_inner(url: str, extract: str):
                 _audit("scoring-health-digest", f"posted mailbox #{_res.get('posted')}, "
                        f"{len(_res.get('action_items') or [])} action item(s)")
             return json.dumps(_res, indent=2, default=str)
+        if cmd == "scoring-health-ack":
+            # scoring-health-ack:<id[,id…]>|<note> — close HEALTH action
+            # items the CTO digest filed, with the reason on the row.
+            # Refuses anything that is not a HEALTH: item.
+            from email_parser.health import ack_findings
+            _ids_s, _, _note = arg.partition("|")
+            try:
+                _ids = [int(x) for x in _ids_s.replace(" ", "").split(",") if x]
+            except ValueError:
+                _ids = []
+            if not _ids or not _note.strip():
+                return json.dumps({"error": "usage: scoring-health-ack:<id[,id]>|<note>"})
+            _res = ack_findings(_ids, _note.strip())
+            _audit("scoring-health-ack", f"closed {_res['closed']} — {_note.strip()[:120]}")
+            return json.dumps(_res, indent=2)
         if cmd == "scoring-dashboard":
             # Read-only: the landing dashboard's payload (Kerry
             # 2026-09-21). Only cards with something in them come back —
