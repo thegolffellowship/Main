@@ -247,6 +247,45 @@ Robert Straiton sent the Austin draft under HIS name and phone
     correction before the Tracker does; when a manager's number differs
     from ours, re-pull the card BEFORE calling it wrong.
 
+**s9.24 Brackenridge, Kerry's send 2026-09-23 (draft vs sent; the SENT
+text is the SA section of `recaps/2026-09-22-s9.24-brackenridge-a9.24-teravista.md`):**
+
+44. **The greeting follows the SEND time**: "Good Afternoon, %first_name%!"
+    when it goes out after noon. Draft "Good Morning" and flag it; do not
+    assume a morning send.
+45. **Every member named in a sentence gets the CAPS surname on first
+    mention, including partners in a list** ("with Jeff YOUNG, Shahyan
+    Javed and 'blind' partner Richard PALACIOS") — and **Kerry's own
+    name is treated like everyone else's** (the draft left NIESTER
+    un-bolded; he bolded it). The first-timer is the exception in the
+    lede: plain there, CAPS in NEW FACES where he is the subject.
+46. **A blind draw is written "blind" in quotes** — it is TGF's term of
+    art, not a description of the player.
+47. **Comparisons across chapters name the thing compared**: "three clear
+    of Austin's best", not "three clear of Austin".
+48. **Standings links go to the TRACKER board, deep-linked to the race**,
+    not the GG portal page: SA fall `https://tgf-tracker.up.railway.app/contests#race=fall_sa`,
+    Austin fall `…/contests#race=fall_austin`, the month `…/contests#race=monthly`.
+    The link rides at the END of the race graf, inline.
+49. **Fellowship with a real count and a real place**: "10 of the players
+    headed over to The Cottage Irish Pub for good food, good drinks, and
+    good banter. It's the best part, and it's yours if you want it." The
+    count and the spot are Kerry's. The spot belongs in the event's
+    `fellowship_spot` (set in Edit Event; the MCP event tool does not
+    accept it, so it was NOT written for s9.24). Until the count has a
+    home (skill OPEN 4), draft the lesson-35 shape and flag the count.
+50. **UP NEXT, as sent**: the chapter's OWN lines carry the date and the
+    course in **bold** (`**Tue, Sep 29** | 5:00p Shot | **CANYON SPRINGS** |
+    REGISTER — Deadline Monday at 5pm.`); the other chapter's line bolds
+    only the course. **SA Tuesday deadline: Monday at 5pm** (as sent
+    9/23 — draft it as the default and flag it until Kerry calls it a
+    rule). Austin's tee window is printed as a range: "4:20-5:10p Tee
+    Times". **A line with no live store page carries NO link at all**
+    (Olympia Hills) rather than a dead one or a blank, and the Lone Star
+    Cup line reads "San Antonio vs Austin. Qualifiers Only" — no
+    register link, because members do not register for it.
+51. **Sign-off: "See you Next Tuesday!"**
+
 Draft-time checklist derived from the above: two-week trend table for
 the headliner (previous event's card + payout), team score on Team Net,
 acquisition source per first-timer, links for every proper noun, both

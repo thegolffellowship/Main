@@ -16,7 +16,7 @@
  */
 const fs = require("fs");
 const path = require("path");
-const { Document, Packer, Paragraph, TextRun, ExternalHyperlink, AlignmentType, LevelFormat } = require("docx");
+const { Document, Packer, Paragraph, TextRun, ExternalHyperlink, AlignmentType, LevelFormat, BorderStyle } = require("docx");
 
 const args = process.argv.slice(2);
 const src = args.find(a => !a.startsWith("--") && a.endsWith(".md"));
@@ -59,7 +59,9 @@ for (const raw of lines) {
   const l = raw.replace(/\s+$/, "");
   if (!l.trim()) { flush(); continue; }
   if (/^\*\*Subject:\*\*/.test(l)) { flush(); children.push(new Paragraph({ children: [run("Subject: ", { color: "666666" }), ...inline(l.replace(/^\*\*Subject:\*\*\s*/, ""), { bold: true })], spacing: { after: 200 } })); continue; }
-  if (isHead(l)) { flush(); children.push(new Paragraph({ children: [run(l.trim(), { bold: true, allCaps: true })], spacing: { before: 240, after: 120 } })); continue; }
+  // A thin rule above every section head, as Kerry's sent email has it
+  // (s9.24, 2026-09-23) — the sections read as blocks, not one long page.
+  if (isHead(l)) { flush(); children.push(new Paragraph({ children: [run(l.trim(), { bold: true, allCaps: true })], border: { top: { style: BorderStyle.SINGLE, size: 6, color: "D9D9D9", space: 10 } }, spacing: { before: 240, after: 120 } })); continue; }
   if (/^\s*[-•]\s+/.test(l)) {
     flush();
     const lvl = /^\s{2,}/.test(l) ? 1 : 0;

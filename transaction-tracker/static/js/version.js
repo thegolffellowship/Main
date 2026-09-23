@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.487.5";
+window.TGF_VERSION = "2.487.6";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.487.6",
+    date: "2026-09-23",
+    changes: [
+      "Recaps learn from Kerry's s9.24 send: his sent San Antonio text is now the record in the 9/22 recap file, and event-recaps.md gains lessons 44\u201351 (greeting follows send time, CAPS surnames for every named member including Kerry, \u201cblind\u201d in quotes, standings links deep-linked to the Tracker board, fellowship with a real count and place, UP NEXT bolding + Monday 5pm SA deadline + no link where no store page exists + Lone Star Cup \u2018Qualifiers Only\u2019, and \u2018See you Next Tuesday!\u2019). The Austin draft was revised to match for Robert.",
+      "tools/recap_docx.js draws a thin rule above every section head, as Kerry's sent email does, so the Word file reads in the same blocks.",
+    ],
+  },
   {
     version: "2.487.5",
     date: "2026-09-23",
