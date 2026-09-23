@@ -29551,6 +29551,14 @@ def update_customer_info(customer_name: str, fields: dict,
                 name_fields["first_name"] = safe["first_name"]
             if "last_name" in safe:
                 name_fields["last_name"] = safe["last_name"]
+            # suffix / middle_name live on the customers row too; they were
+            # written to items only, so a suffix saved on the Customers page
+            # or through scoring-customer-set never reached the canonical
+            # record (2026-09-23, Orlando Saenz Jr).
+            if "suffix" in safe:
+                name_fields["suffix"] = (safe["suffix"] or "").strip() or None
+            if "middle_name" in safe:
+                name_fields["middle_name"] = (safe["middle_name"] or "").strip() or None
             if "chapter" in safe:
                 name_fields["chapter"] = safe["chapter"] or None
             if name_fields:

@@ -42,12 +42,12 @@ def fresh_db():
     with db._connect(p) as conn:
         conn.executescript("""
             CREATE TABLE customers (customer_id INTEGER PRIMARY KEY,
-                first_name TEXT, last_name TEXT, suffix TEXT, phone TEXT,
+                first_name TEXT, last_name TEXT, suffix TEXT, middle_name TEXT, phone TEXT,
                 chapter TEXT, venmo_username TEXT, payment_method TEXT,
                 payment_handle TEXT, current_player_status TEXT,
                 updated_at TEXT);
             CREATE TABLE items (id INTEGER PRIMARY KEY, customer TEXT,
-                customer_id INTEGER, first_name TEXT, last_name TEXT,
+                customer_id INTEGER, first_name TEXT, last_name TEXT, middle_name TEXT,
                 suffix TEXT, customer_email TEXT, customer_phone TEXT,
                 chapter TEXT, item_name TEXT);
             CREATE TABLE customer_aliases (id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -164,6 +164,26 @@ def main():
     cust, item, aliases, links = snapshot(p)
     check("non-name update leaves items.customer alone",
           item == "Tom Donovan", item)
+
+    # 6. suffix / middle_name reach the CUSTOMERS row, not only items
+    #    (2026-09-23: "Move Jr to suffix for Orlando Saenz" saved nothing).
+    p = fresh_db()
+    db.update_customer_info("Thomas Donovan", {"suffix": "Jr", "middle_name": "A"},
+                            db_path=p, customer_id=796)
+    import sqlite3 as _sq
+    _c = _sq.connect(p); _c.row_factory = _sq.Row
+    r = _c.execute("SELECT suffix, middle_name, first_name, last_name FROM customers WHERE customer_id = 796").fetchone()
+    it = _c.execute("SELECT customer FROM items WHERE customer_id = 796").fetchone()
+    _c.close()
+    check("suffix and middle name saved on the customers row", r["suffix"] == "Jr" and r["middle_name"] == "A", dict(r))
+    check("…and the display name carries the suffix", it["customer"] == "Thomas Donovan Jr", it["customer"])
+    p = fresh_db()
+    db.update_customer_info("Thomas Donovan", {"suffix": "Jr"}, db_path=p, customer_id=796)
+    db.update_customer_info("Thomas Donovan Jr", {"suffix": ""}, db_path=p, customer_id=796)
+    _c = _sq.connect(p); _c.row_factory = _sq.Row
+    r = _c.execute("SELECT suffix FROM customers WHERE customer_id = 796").fetchone()
+    _c.close()
+    check("clearing the suffix stores NULL", r["suffix"] is None, dict(r))
 
     print()
     if FAILURES:

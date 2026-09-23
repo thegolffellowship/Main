@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.487.3";
+window.TGF_VERSION = "2.487.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.487.4",
+    date: "2026-09-23",
+    changes: [
+      "Customer name edits: a suffix (Jr, Sr, III) or middle name saved on a customer now reaches their customer record. It used to be written only onto their order rows, so the Customers page and Spotlight never showed it (found moving ‘Jr’ into the suffix for Orlando Saenz).",
+    ],
+  },
   {
     version: "2.487.3",
     date: "2026-09-23",
