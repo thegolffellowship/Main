@@ -10,6 +10,13 @@ window.TGF_CHANGELOG = [
     ],
   },
   {
+    version: "2.486.7",
+    date: "2026-09-23",
+    changes: [
+      "Insider fallback composer: a 'nearly half the field' band (45–50% cashed) for the headline and the beat-1 phrase — 16 of 33 cashed on 9/22 and the deterministic draft called it 'A Third of the Field', which is false. The writer path was unaffected (it ran and produced the first-timer draft); this only fixes what the fallback would have said.",
+    ],
+  },
+  {
     version: "2.486.6",
     date: "2026-09-23",
     changes: [

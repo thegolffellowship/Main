@@ -131,6 +131,8 @@ def _fraction_headline(n: int, m: int) -> str | None:
         return "Two-Thirds of the Field Won Money!"
     if r >= 0.5:
         return "Half the Field Won Money!"
+    if r >= 0.45:
+        return "Nearly Half the Field Won Money!"
     if r >= 0.33:
         return "A Third of the Field Won Money!"
     return None
@@ -158,6 +160,8 @@ def _fraction_phrase(n: int, m: int) -> str:
         return "nearly two-thirds of the field"
     if r >= 0.5:
         return "half the field"
+    if r >= 0.45:
+        return "nearly half the field"
     if r >= 0.33:
         return "a third of the field"
     return f"{n} of {m} players"
