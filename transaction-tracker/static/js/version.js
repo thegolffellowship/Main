@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.487.2";
+window.TGF_VERSION = "2.487.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.487.3",
+    date: "2026-09-23",
+    changes: [
+      "Arrow keys in every name search (Kerry 2026-09-23: ‘On any autofill type search on the tracker please add highlights to the arrow down so I can arrow down or up, see visually which is selected, and click enter to select.’). In any typeahead — Player Spotlight, Add Player, the accounting customer picker, the reconcile event picker and the rest — ↓ and ↑ move an orange-barred highlight through the suggestions and Enter picks the highlighted one. With nothing highlighted, Enter does what it always did. One shared script loaded on every page, so new search boxes get it without extra work.",
+    ],
+  },
   {
     version: "2.487.2",
     date: "2026-09-23",

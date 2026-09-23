@@ -14,6 +14,8 @@
    FIRST and without defer so window.fetch is wrapped before any page
    script runs — every request on every page lights the top bar. #}
 <script src="/static/js/loading.js"></script>
+{# ↓ ↑ Enter in every typeahead (Kerry 2026-09-23) #}
+<script src="/static/js/typeahead-keys.js?v={{ app_version }}"></script>
 {% if member_mode %}
 <header class="shell-nav shell-member">
     <div class="shell-brand">
