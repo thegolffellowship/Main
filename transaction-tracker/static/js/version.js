@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.487.3";
+window.TGF_VERSION = "2.487.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.487.4",
+    date: "2026-09-23",
+    changes: [
+      "Docs only: the s9.24 Brackenridge + a9.24 Teravista recap drafts were rendered to Word (TGF_Recap_s9.24_Brackenridge.docx, TGF_Recap_a9.24_Teravista.docx via tools/recap_docx.js) and handed to Kerry in-session (Kerry: \u2018I need the Event Recaps to send out. In DOC\u2019). The draft now carries the house shapes instead of blanks where the rule decides them: San Antonio Tuesdays print 5:00p Shot (event-recaps.md lesson 36) and a fellowship line with no headcount uses the \u2018a number of the players stuck around\u2019 shape (lesson 35). Blanks that remain are facts only the sender has: Austin\u2019s tee time and deadline, the SA deadline day, the Oct 6 Austin course, the Lone Star Cup store link.",
+    ],
+  },
   {
     version: "2.487.3",
     date: "2026-09-23",
