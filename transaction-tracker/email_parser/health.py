@@ -59,6 +59,8 @@ RULES = {
     "min_samples_expected": 1,            # fewer than this = nothing measured
     "free_pages_pct": 20,                 # freelist over this % of the file → VACUUM candidate
     "load_per_cpu": 4.0,                  # load1 / cpus over this → the box is saturated
+    "volume_pct_warn": 80,                # the volume the DB sits on — medium finding
+    "volume_pct_alarm": 90,               # ...high finding (9/22: 99% took the site down)
 }
 
 
@@ -184,7 +186,8 @@ def build_health_report(days: float = 1, db_path=None, record_size: bool = False
         "jobs": sorted(jobs.values(), key=lambda j: (-j["errors"], -j["max_ms"])),
         "log_errors": _log_errors(days, db_path),
         "db": {**size, "growth_bytes": growth, "history": hist[-14:],
-               "counts": _table_counts(db_path), "layout": perf.db_layout(db_path)},
+               "counts": _table_counts(db_path), "layout": perf.db_layout(db_path),
+               "disk": perf.disk_usage(db_path)},
         "probe": perf.probe_db_ms(db_path),
         # Inside a container os.getloadavg() is the HOST's number, so it is
         # read beside the cpu count; a ratio, not the raw figure, is the tell.
@@ -249,6 +252,16 @@ def find(report: dict) -> list[dict]:
                                 f"({lay['free_bytes']/1048576:.0f} MB of {report['db']['bytes']/1048576:.0f} MB) — "
                                 f"deleted rows' space never reclaimed; a VACUUM (off-hours, Kerry's call) "
                                 f"would shrink the file every read pays for"})
+    disk = report["db"].get("disk") or {}
+    pct = disk.get("pct_used")
+    if pct is not None and pct >= RULES["volume_pct_warn"]:
+        sev = "high" if pct >= RULES["volume_pct_alarm"] else "medium"
+        out.append({"severity": sev, "key": "volume_full",
+                    "text": f"the volume the database sits on is {pct:.0f}% full "
+                            f"({(disk.get('free_bytes') or 0)/1048576:.0f} MB free of "
+                            f"{(disk.get('total_bytes') or 0)/1048576:.0f} MB) — at 100% SQLite "
+                            f"cannot grow its WAL and every read fails (9/22 outage); resize the "
+                            f"Railway volume (Volumes → Live resize) or move gg_raw_archive out"})
     big = [t for t in (lay.get("tables") or []) if t["type"] == "table"]
     if big and report["db"]["bytes"] and big[0]["bytes"] > 0.5 * report["db"]["bytes"] and big[0]["bytes"] > 50 * 1048576:
         out.append({"severity": "medium", "key": f"db_big_table:{big[0]['name']}",
@@ -318,6 +331,10 @@ def render_markdown(report: dict) -> str:
              + (f" (+{g/1048576:.2f} MB since last digest)" if g is not None else "")
              + f", WAL {db['wal_bytes']/1048576:.1f} MB; rows: "
              + ", ".join(f"{k} {v}" for k, v in (db.get("counts") or {}).items() if v is not None))
+    dk = db.get("disk") or {}
+    if dk.get("pct_used") is not None:
+        L.append(f"**VOLUME** {dk['pct_used']:.0f}% used — {dk['free_bytes']/1048576:.0f} MB free "
+                 f"of {dk['total_bytes']/1048576:.0f} MB")
     lay = db.get("layout") or {}
     if lay.get("tables"):
         L.append("**WHERE THE BYTES ARE:** " + ", ".join(

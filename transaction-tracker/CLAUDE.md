@@ -197,6 +197,16 @@ An MCP (Model Context Protocol) server at `mcp_server.py` gives Claude direct re
 
 The `.mcp.json` at the repo root auto-configures it. Just restart Claude Code in this directory and you'll see the `tgf-transactions` server with 70 tools.
 
+**It is LOCAL.** That `tgf-transactions` server is a `python mcp_server.py`
+process in the sandbox reading a fresh, EMPTY database in the sandbox — it
+is not production. In a Claude Code on the web session the production
+bridge is the claude.ai connector (`TGF_Transaction_Tracker` tools); the
+local one answers `get_statistics` with 0 items and a mailbox holding only
+the boot welcome post. 2026-09-22, 8:50 PM: that empty mailbox was read as
+"production lost its database" for twenty minutes while the real fault was
+a full Railway volume (see `docs/claude/handoff-2026-09-22-tracker-health.md`
+§7). If a bridge shows an empty Tracker, check WHICH server answered first.
+
 ### Claude Desktop setup (remote — no local install)
 
 The MCP endpoint is built into the Railway app at `/mcp/mcp`. Add this to your `claude_desktop_config.json` (Settings → Developer → Edit Config):

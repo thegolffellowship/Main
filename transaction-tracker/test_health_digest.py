@@ -62,12 +62,21 @@ fk = {f["key"]: f for f in health.find(fake)}
 check("FINDING medium: free pages over 20% of the file → VACUUM candidate (Kerry's call, never run by the agent)", "db_free_pages" in fk and "VACUUM" in fk["db_free_pages"]["text"], str(fk))
 check("FINDING medium: one table over half the file", fk.get("db_big_table:big", {}).get("severity") == "medium")
 check("FINDING high: the box saturated (load per cpu over the rule)", fk.get("box_load", {}).get("severity") == "high")
+dk = rep["db"]["disk"]
+check("the report carries the VOLUME the database sits on (total / free / pct)", dk["total_bytes"] and dk["free_bytes"] is not None and 0 <= dk["pct_used"] <= 100, str(dk))
+check("a volume under 80% raises nothing", "volume_full" not in {f["key"] for f in health.find(dict(rep, db=dict(rep["db"], disk={"total_bytes": 1000, "used_bytes": 500, "free_bytes": 500, "pct_used": 50.0})))})
+vf = {f["key"]: f for f in health.find(dict(rep, db=dict(rep["db"], disk={"total_bytes": 500 * 1048576, "used_bytes": 420 * 1048576, "free_bytes": 80 * 1048576, "pct_used": 84.0})))}
+check("FINDING medium: the volume at 84% (warn line 80)", vf.get("volume_full", {}).get("severity") == "medium" and "84% full" in vf["volume_full"]["text"] and "80 MB free" in vf["volume_full"]["text"], str(vf.get("volume_full")))
+vf = {f["key"]: f for f in health.find(dict(rep, db=dict(rep["db"], disk={"total_bytes": 500 * 1048576, "used_bytes": 495 * 1048576, "free_bytes": 5 * 1048576, "pct_used": 99.0})))}
+check("FINDING high: the volume at 99% (alarm line 90) — the 9/22 outage, named with the fix", vf.get("volume_full", {}).get("severity") == "high" and "resize" in vf["volume_full"]["text"], str(vf.get("volume_full")))
+check("a volume the OS cannot report raises nothing", "volume_full" not in {f["key"] for f in health.find(dict(rep, db=dict(rep["db"], disk={"pct_used": None})))})
 
 md = health.render_markdown(rep)
 check("markdown is addressed to tracker-claude + kerry and leads with the findings",
       md.startswith("TO: tracker-claude") and "**FINDINGS**" in md and "[HIGH] pairings_get" in md, md[:300])
 check("...names the slow open's sections and what ran beside it", "saved_sheet 4.5 s" in md and "while job:auto_live_poll" in md)
 check("...and the database line", "**DATABASE**" in md and "items 1" in md)
+check("...and the VOLUME line (percent used, MB free of MB)", "**VOLUME**" in md and "% used" in md and "MB free of" in md, md[md.find("**VOLUME**"):][:120])
 
 print("\n== the routine: mailbox post, action items, once a day ==")
 db.set_app_setting("health_digest_time", "05:45", db_path=tmp)

@@ -2568,6 +2568,17 @@ def api_health():
                 "EMAIL_ADDRESS", "ANTHROPIC_API_KEY", "DATABASE_PATH",
                 "SECRET_KEY", "ADMIN_PIN", "MANAGER_PIN", "RSVP_EMAIL_ADDRESS"]
     env_status = {k: ("set" if os.getenv(k) else "missing") for k in env_keys}
+    # The volume the DB sits on (9/22 outage: a full 500 MB volume looked
+    # exactly like a broken database from a phone). Same helper as the
+    # health report, so a phone check of /api/health shows it.
+    try:
+        from email_parser.perf import disk_usage as _disk_usage
+        _dk = _disk_usage(db_path)
+        volume = {"pct_used": _dk["pct_used"],
+                  "free_mb": round((_dk["free_bytes"] or 0) / 1048576, 1),
+                  "total_mb": round((_dk["total_bytes"] or 0) / 1048576, 1)}
+    except Exception:
+        volume = None
     return jsonify({
         "status": "ok" if db_readable else "error",
         "database_path": db_path,
@@ -2575,6 +2586,7 @@ def api_health():
         "database_dir_exists": db_dir_exists,
         "database_readable": db_readable,
         "item_count": item_count,
+        "volume": volume,
         "env_vars": env_status,
     })
 

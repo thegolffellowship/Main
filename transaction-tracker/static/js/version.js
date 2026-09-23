@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.486.3";
+window.TGF_VERSION = "2.486.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.486.4",
+    date: "2026-09-23",
+    changes: [
+      "Volume watch (the 9/22 outage, 8:46–9:12 PM): the 500 MB Railway volume the database sits on hit 99% and SQLite could not grow its write-ahead log, so every page that reads data failed with ‘Internal server error’ while the Railway probe stayed green. The Tracker now measures the volume itself: the health report and the 5:00 AM digest carry a VOLUME line (percent used, MB free of MB), a finding is filed as a COO action item at 80% and marked high at 90% with the fix named (resize the volume, or move the Golf Genius raw archive out), and /api/health shows the same numbers so a phone check says ‘99% full’ instead of ‘database unreadable’.",
+      "CLAUDE.md: the repo's local tgf-transactions bridge is a sandbox process with an empty database, not production — the production bridge is the claude.ai connector. Written down after that empty mailbox was read as lost data during the outage.",
+    ],
+  },
   {
     version: "2.486.3",
     date: "2026-09-22",

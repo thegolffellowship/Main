@@ -550,6 +550,26 @@ def db_size(db_path=None) -> dict:
     return out
 
 
+def disk_usage(db_path=None) -> dict:
+    """The VOLUME the database sits on — total / used / free bytes and the
+    used percentage. 2026-09-22, 8:46 PM: the 500 MB Railway volume hit
+    99% (431 MB file + WAL), SQLite could not grow the WAL/shm, and every
+    data read raised until Kerry resized it from his phone. Railway had
+    mailed a 95% warning three days earlier; it sat in the action items
+    at confidence 45. This number is on the health report, /api/health
+    and the 5:00 AM digest so the app itself says it first."""
+    p = str(_db_path(db_path))
+    out = {"total_bytes": None, "used_bytes": None, "free_bytes": None, "pct_used": None}
+    try:
+        import shutil
+        u = shutil.disk_usage(os.path.dirname(os.path.abspath(p)) or ".")
+        out.update({"total_bytes": u.total, "used_bytes": u.used, "free_bytes": u.free,
+                    "pct_used": round(100.0 * u.used / u.total, 1) if u.total else None})
+    except (OSError, ValueError):
+        pass
+    return out
+
+
 def db_layout(db_path=None, top: int = 12) -> dict:
     """WHERE the bytes are: page size / count, FREE pages (space deleted
     rows left behind — a VACUUM candidate when large), and the biggest

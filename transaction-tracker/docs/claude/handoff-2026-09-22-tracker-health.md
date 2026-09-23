@@ -179,3 +179,40 @@ fix is the page asking for less — coordinate with the flighting lane.
   the sandbox).
 - Not this lane: money, member email, GG writes, flighting rules, the
   handicap surfaces, the closeout's content.
+
+## 7. Incident 2026-09-22, 8:46–9:12 PM CDT — the volume was full (v2.486.4)
+
+`main-volume` was a 500 MB Railway volume; the database file is ~431 MB
+(368 MB of it `gg_raw_archive`, §4). At 99% SQLite could not grow the
+WAL/shm, so every data read raised `disk I/O error`: `/events` returned
+`{"error":"Internal server error"}`, `/api/health` said
+`database_readable: false`, and the inbox / RSVP / expense / lead jobs
+failed from 5:29 PM until the resize (111 of 392 expense_inbox_check
+runs in the 9/23 digest). `/health` (`SELECT 1`) stayed green, so Railway
+never restarted anything. Railway had e-mailed "Main volume is 95% full"
+on 9/19 — twice — and the COO filed both at confidence 45 where they sat
+unread. Kerry live-resized the volume to 250 GB from his phone (Railway
+bills bytes stored, not the size set); the site answered at 9:12 PM with
+every row intact. No commit caused it and nothing was restored.
+
+What v2.486.4 adds (Handicap Surfaces lane, mailbox #619 asks 1 and 3):
+
+- `perf.disk_usage()` — total / used / free / `pct_used` of the volume
+  the DB file sits on (`shutil.disk_usage` of its directory).
+- The health report carries it as `db.disk`; the digest prints a
+  **VOLUME** line under **DATABASE**; `find()` files `volume_full`
+  (medium at `volume_pct_warn` 80%, high at `volume_pct_alarm` 90%) with
+  the fix in the text. One open COO action item per key, as for every
+  finding.
+- `/api/health` carries `volume: {pct_used, free_mb, total_mb}` — a phone
+  check now says "99% full" instead of "database unreadable".
+- The WAL size was already on the DATABASE line (`wal_bytes`); ask 3 was
+  met before it was asked.
+
+Still open from the incident: the `gg_raw_archive` move (§4, Kerry /
+gg-history lane's decision — the 500 MB ceiling is gone, the 431 MB
+nightly upload is not); and the COO's handling of a hosting-provider
+alert at confidence 45 — a `support@railway.app` "volume is N% full"
+mail should be urgency high, confidence 90, and named in the morning
+brief (COO lane).
+
