@@ -1800,6 +1800,7 @@ def _scoring_dispatch_inner(url: str, extract: str):
       scoring-course-merge:<loser_id>|<winner_id>[|apply]  fold a duplicate course row into the canonical one (tees collapse/move, rounds/events/items re-point, names aliased); dry run by default
       scoring-tee-nines-store:<full_tee_id>|<fr>,<fs>|<br>,<bs>[|apply]  front/back rating rows (each with its slope) on an 18-hole tee set (refuses a pair that does not sum to the 18)
       scoring-crdb-seed:<course_id>[|<json>][|apply]  write a course's USGA CRDB tee sets (gender, par, bogey, total/front/back, optional yardages) onto the record; JSON row = [name, gender, r18, s18, bogey, [fr, fs], [br, bs], [y18, yf, yb]]
+      scoring-recap-draft-email:<file>|<SECTION>[|to=..][|cc=..][|docx=<file>][|force][|apply]  mail one chapter's recap draft (docs/claude/recaps/<file>) to its sender as paste-ready HTML + the Word file; staff addresses only, once per file+section+recipients, dry run by default
       scoring-hcp-cards:<event>[|apply]  email the TGF handicap card to every player on the event's roster who has one (dry run names who would get one; apply sends and logs to message_log)
       scoring-tee-bands:<course_id>   which four sets TGF plays (current designation + the yardage-standards proposal; read-only)
       scoring-tee-bands-set:<tee_id>|<band[,band]|hide>[|apply]  designate a tee set (<50 / 50-64 / 65+ / Forward) or hide it; one set per band per course
@@ -5467,6 +5468,23 @@ def _scoring_dispatch_inner(url: str, extract: str):
                 _res = db.seed_usga_crdb(_c, int(_p[0]), _sets, dry_run=not _apply)
             finally:
                 _c.close()
+            return json.dumps(_res, indent=2, default=str)
+        if cmd == "scoring-recap-draft-email":
+            # "<file>|<SECTION>[|to=a,b][|cc=a,b][|docx=<file>][|force][|apply]"
+            # — mail one chapter's recap DRAFT to its sender (Kerry
+            # 2026-09-23: Austin drafts to Robert, Kerry copied). Staff
+            # addresses only; dry run by default.
+            _p = [x.strip() for x in arg.split("|")]
+            if len(_p) < 2 or not _p[0] or not _p[1]:
+                return json.dumps({"error": "<file>|<SECTION>[|to=..][|cc=..][|docx=..][|force][|apply]"})
+            _kw = {k: v for k, _, v in (x.partition("=") for x in _p[2:] if "=" in x)}
+            _flags = {x.lower() for x in _p[2:] if "=" not in x}
+            from email_parser.recap_mail import send_recap_draft
+            _res = send_recap_draft(_p[0], _p[1], to=_kw.get("to"),
+                                    cc=_kw.get("cc") if "cc" in _kw else None,
+                                    docx=_kw.get("docx"),
+                                    dry_run="apply" not in _flags,
+                                    force="force" in _flags)
             return json.dumps(_res, indent=2, default=str)
         if cmd == "scoring-hcp-cards":
             # "<event>[|apply]" — the Handicaps page's By-Event card send as

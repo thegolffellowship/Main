@@ -277,9 +277,10 @@ text is the SA section of `recaps/2026-09-22-s9.24-brackenridge-a9.24-teravista.
 50. **UP NEXT, as sent**: the chapter's OWN lines carry the date and the
     course in **bold** (`**Tue, Sep 29** | 5:00p Shot | **CANYON SPRINGS** |
     REGISTER — Deadline Monday at 5pm.`); the other chapter's line bolds
-    only the course. **SA Tuesday deadline: Monday at 5pm** (as sent
-    9/23 — draft it as the default and flag it until Kerry calls it a
-    rule). Austin's tee window is printed as a range: "4:20-5:10p Tee
+    only the course. **THE TUESDAY DEADLINE IS MONDAY AT 5PM, BOTH
+    CHAPTERS** (Kerry 2026-09-23: "Monday 5pm is the standing SA &
+    Austin Deadline.") — print it on every Tuesday line of the
+    chapter's own events; never a blank. Austin's tee window is printed as a range: "4:20-5:10p Tee
     Times". **A line with no live store page carries NO link at all**
     (Olympia Hills) rather than a dead one or a blank, and the Lone Star
     Cup line reads "San Antonio vs Austin. Qualifiers Only" — no

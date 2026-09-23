@@ -272,6 +272,22 @@ read it — but do not redo it either.
     [__ blanks __] all survive as Word formatting). Austin's carries
     Robert's signature block (lesson 39); SA's carries Kerry's. Kerry
     sends SA; Robert sends Austin — OPEN 2 answered in practice.
+    **Then MAIL each draft to its sender** (Kerry 2026-09-23: "Automatically
+    send Austin Recap drafts to Robert Straiton" / "Copy me"): save the
+    .docx BESIDE the .md under docs/claude/recaps/ (`TGF_Recap_<code>_<Course>.docx`),
+    commit + push main, wait for the deploy, then
+    `scoring-recap-draft-email:<md file>|AUSTIN|docx=<docx file>` (dry run:
+    read `to`, `cc`, `blanks`) → `…|apply`. Same for `SAN ANTONIO`.
+    Recipients are settings (`recap_draft_to_austin` default
+    Robert@thegolffellowship.com, `recap_draft_to_san_antonio` default
+    kerry@thegolffellowship.com, cc `recap_draft_cc` default Kerry); the
+    bridge refuses any non-staff address and sends a file+section once.
+    **The recap runs at 9 PM Central the night of the event** (Kerry
+    2026-09-23: "schedule these drafts for 9pm the night of event. But
+    that means all results need to be determined") — ONLY when Phase 1–2
+    say results are final: cards = field, every GG board present WITH a
+    purse, payouts recorded. If not, hold the drafts; the 5:30 AM run
+    finishes them.
     **Draft-time inputs the s9.22 send taught (event-recaps.md 20–29):**
     the headliner's PREVIOUS event (card + payout) for a trend; the Team
     Net team score; `customers.acquisition_source` for every first-timer;

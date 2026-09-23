@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.487.6";
+window.TGF_VERSION = "2.488.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.488.0",
+    date: "2026-09-23",
+    changes: [
+      "Recap drafts are mailed to the people who send them (Kerry 2026-09-23: \u2018Automatically send Austin Recap drafts to Robert Straiton\u2019 / \u2018Copy me\u2019). New email_parser/recap_mail.py + bridge scoring-recap-draft-email: one chapter\u2019s section of a recap draft goes out as a paste-ready HTML email (bold, links, bullets, section rules, yellow blanks) with the Word file attached. Austin goes to Robert@thegolffellowship.com and SA to kerry@thegolffellowship.com, Kerry copied; all three are app settings.",
+      "It is a staff door only: any address outside @thegolffellowship.com is refused unless named in recap_draft_allow, the file must live in docs/claude/recaps/, the same file + section + recipients sends once, and the default is a dry run. Guard: test_recap_mail.py.",
+      "The closeout now drafts and mails the recaps at 9 PM Central the night of the event, only once the results are final (every card in, every Golf Genius board posted with a purse, payouts recorded); otherwise the 5:30 AM run finishes them. The Monday-5pm registration deadline is now the standing rule for both chapters.",
+    ],
+  },
   {
     version: "2.487.6",
     date: "2026-09-23",
