@@ -20,6 +20,18 @@ Horizon is the one exception: its output lives in the Horizon mailbox
 (Horizon_Tracker `read_dialogue`, topic `morning-check`) and the Front Desk
 reads it there.
 
+## 1b. Kerry works through the Front Desk
+
+Kerry, 2026-09-23: "Obviously I can go into each one of these individually when
+I want to and work directly with that agent, right? But I don't necessarily
+want to do that because I'm the CEO and I don't want to micro-manage."
+
+- Kerry's default channel is the Front Desk. Lanes do not ask him to come to
+  them; they route questions through their digest.
+- He may open any lane directly whenever he chooses. When he does, that lane
+  posts a `TO: front-desk` digest afterwards (his rulings verbatim, what it
+  did), so the Front Desk stays in sync and does not ask him the same thing twice.
+
 ## 2. When a lane may address Kerry directly
 
 Only for something urgent that cannot wait for the 7:15 brief: production

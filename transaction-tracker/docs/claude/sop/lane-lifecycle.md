@@ -63,7 +63,7 @@ are never deleted by archiving.
 | Event | Registry change |
 |---|---|
 | Lane opened | Add to §1 with ID, role, parent, date |
-| Routine created, moved, or retimed | Update §5 Routines |
+| Routine created, moved, or retimed | Update §6 Routines |
 | Lane closed | Mark closed in §1 and list it for archive |
 | Kerry approves archive | Move the row to §2 |
 | Routine deleted | Record its prompt verbatim in §3 so it can be recreated |

@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.488.5";
+window.TGF_VERSION = "2.488.6";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.488.6",
+    date: "2026-09-23",
+    changes: [
+      "Docs only (Front Desk): lane-registry.md \u00a71 now lists the live sessions under the ROLE \u203a lane tree applied in #639 (COO, CTO, CFO, CMO, CEO, HORIZON), records Kerry\u2019s pending CGO (Chief Golf Officer) split as a proposal awaiting his ruling, and notes that both Routine prompt rewrites (5:15 Tracker pick-up, 5:20 CFO) took. The Routines section is renumbered \u00a76 with the new names. sop/reporting-contract.md gains Kerry\u2019s management rule: he works through the Front Desk and does not micro-manage; any lane he opens directly posts a TO: front-desk digest afterwards.",
+    ],
+  },
   {
     version: "2.488.5",
     date: "2026-09-23",

@@ -10,7 +10,7 @@ its queue, ship it, and digest it.
 ## 1. Rules for every Routine
 
 1. **The Front Desk owns the list.** Before creating one, run `list_triggers`
-   so nothing is duplicated. Record every new Routine in the registry §5 the
+   so nothing is duplicated. Record every new Routine in the registry §6 the
    same day.
 2. **Bind it to the lane that owns the work** (`persistent_session_id`), so the
    run has the lane's context. Use a fresh session per fire only for a job that
@@ -59,4 +59,4 @@ yes, then recorded in the registry.
 | Horizon hourly sweep | fresh session | 9:30 AM to 6:30 PM weekdays |
 | Front Desk daily brief | Front Desk | 7:15 daily |
 
-IDs are in the registry §5.
+IDs are in the registry §6.
