@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.488.0";
+window.TGF_VERSION = "2.488.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.488.1",
+    date: "2026-09-23",
+    changes: [
+      "Docs only: new docs/claude/lane-registry.md, the record of Kerry\u2019s 9/23 session and Routine cleanup (\u2018Sprawl of thought and action and session has become VERY real\u2019). It lists the 15 sessions kept live, the finished sessions queued for archive with their IDs and branches (archiving keeps the transcript, and unarchive_session restores one), the verbatim prompts of the three spent one-shot Routines that were deleted, and the 87 remote branches not merged into main, so nothing is lost. It is the seed of the lane SOP.",
+    ],
+  },
   {
     version: "2.488.0",
     date: "2026-09-23",
