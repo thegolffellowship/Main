@@ -973,6 +973,35 @@ it's short $ then send them an email with a prepared Venmo link."
   (excess kept as credit, shortfall stamped) without the modal preview.
 - Guard: `test_transfer_price.py`, `test_roster_pairings_sync.js`.
 
+## Add Player → RSVP Only checks for credit (v2.487.1, Kerry 2026-09-23)
+
+Kerry: *"When a player is entered for RSVP Only, check to see if they have
+Credit. If they have it, start the same credit application process. Bring
+up their typical choices and figure out difference. If they're short of
+the cost provide a click to approve and email the difference with a
+prepared Venmo link. If they still have a remaining balance offer options
+to either keep as credit or to send them Venmo right then."*
+
+- **As the name is typed** (a known player), a green line under the name
+  says *Has $X credit on file — Add RSVP opens Apply Credit*
+  (`GET /api/customers/credit-check?name=`).
+- **On Add RSVP** the row is saved first (so Cancel leaves a plain RSVP
+  and the credit untouched), the roster redraws, then the page asks
+  `/api/rsvps/<id>/credit-info`; if the player holds credit the existing
+  **Apply Credit** modal opens for that row, with a toast saying so.
+- **Typical choices:** `previous_selections` now come from
+  `_player_usual_selections()` — the most common holes / games / tee /
+  status over the player's last 8 real registrations (RSVP rows and +PAY
+  children excluded), falling back to the credited source row. Holes stay
+  locked to the event format on non-combo events. The chips remain
+  editable and reprice live.
+- **Difference:** unchanged machinery. Short → Apply sends the balance-due
+  email with the prepared Venmo link (the auto-email box, on by default).
+  Excess → the radio offers *keep as credit* or *Venmo now*, which opens
+  Venmo in the click with the memo prefilled and arms the refund watch.
+- Nothing runs for Golf Genius RSVP rows or email RSVPs; their roster
+  rows keep the CREDIT badge and the manual Apply Credit action.
+
 ## Apply Credit modal — holes default + multi-credit + Venmo handle inline entry
 
 - **Holes default from event format.** For non-combo events, `apply_credit_to_rsvp` and the

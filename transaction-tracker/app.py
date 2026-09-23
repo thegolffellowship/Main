@@ -6540,6 +6540,63 @@ def api_event_balance_due_sends(event_name):
     return jsonify(out)
 
 
+def _player_usual_selections(conn, customer_id, customer_name, limit: int = 8) -> dict:
+    """What this player USUALLY buys — the most common holes / games / tee /
+    status over their last `limit` real registrations (not RSVP rows, not
+    +PAY children). Kerry 2026-09-23, RSVP-only credit: "Bring up their
+    typical choices and figure out difference." The credited source row
+    used to be the only guess; a 9-hole NONE credit applied by a player
+    who buys BOTH every week priced the wrong package. Returns only the
+    keys that had a value."""
+    where, params = [], []
+    if customer_id:
+        where.append("i.customer_id = ?"); params.append(customer_id)
+    if customer_name:
+        where.append("i.customer = ? COLLATE NOCASE"); params.append(customer_name)
+    if not where:
+        return {}
+    rows = conn.execute(
+        f"""SELECT i.holes, i.side_games, i.tee_choice, i.user_status
+            FROM items i
+            WHERE ({' OR '.join(where)})
+              AND i.parent_item_id IS NULL
+              AND COALESCE(i.transaction_status, 'active') NOT IN ('rsvp_only', 'gg_rsvp')
+              AND i.merchant NOT LIKE 'Paid Separately (Credit%'
+            ORDER BY i.order_date DESC, i.id DESC LIMIT ?""",
+        (*params, limit)).fetchall()
+    out = {}
+    for key in ("holes", "side_games", "tee_choice", "user_status"):
+        votes = {}
+        for r in rows:
+            v = (str(r[key]).strip() if r[key] is not None else "")
+            if not v:
+                continue
+            k = v if key == "tee_choice" else v.upper()
+            if key == "tee_choice" and k.upper() in ("NONE", "—"):
+                continue
+            votes[k] = votes.get(k, 0) + 1
+        if votes:
+            out[key] = max(votes.items(), key=lambda kv: kv[1])[0]
+    return out
+
+
+@app.route("/api/customers/credit-check")
+@require_role("manager")
+def api_customer_credit_check():
+    """Does this player hold credit? For the Add Player modal's hint as the
+    name is typed (Kerry 2026-09-23). {has_credit, total, count}."""
+    name = (request.args.get("name") or "").strip()
+    if not name:
+        return jsonify({"has_credit": False, "total": 0, "count": 0})
+    try:
+        credits = get_player_credits(name)
+    except Exception:
+        logger.exception("credit-check failed for %s", name)
+        credits = []
+    total = round(sum((c.get("credit_amount") or 0) for c in credits), 2)
+    return jsonify({"has_credit": total > 0, "total": total, "count": len(credits)})
+
+
 @app.route("/api/rsvps/<int:item_id>/credit-info", methods=["GET"])
 @require_role("manager")
 def api_rsvp_credit_info_by_item(item_id):
@@ -6565,6 +6622,9 @@ def api_rsvp_credit_info_by_item(item_id):
         event = dict(event_row) if event_row else {}
 
         most_recent = credits[0]
+        # The player's USUAL choices win over the credited source row
+        # (Kerry 2026-09-23); the source row is the fallback.
+        usual = _player_usual_selections(conn, item.get("customer_id"), item.get("customer"))
         # For non-combo events the holes value is locked to the event format.
         # Inheriting from the credited source item (e.g. a 9-hole credit applied
         # at an 18-hole event) was producing the wrong subtotal because the
@@ -6575,12 +6635,12 @@ def api_rsvp_credit_info_by_item(item_id):
         elif _evt_fmt == "9 Holes":
             _holes = "9"
         else:
-            _holes = most_recent.get("holes") or "9"
+            _holes = usual.get("holes") or most_recent.get("holes") or "9"
         prev = {
-            "user_status": most_recent.get("user_status") or "MEMBER",
+            "user_status": usual.get("user_status") or most_recent.get("user_status") or "MEMBER",
             "holes": _holes,
-            "side_games": most_recent.get("side_games") or "NONE",
-            "tee_choice": most_recent.get("tee_choice") or "",
+            "side_games": usual.get("side_games") or most_recent.get("side_games") or "NONE",
+            "tee_choice": usual.get("tee_choice") or most_recent.get("tee_choice") or "",
         }
 
         breakdown = _calc_event_pricing_breakdown(

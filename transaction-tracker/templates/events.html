@@ -1616,6 +1616,7 @@
                                 <div id="ap-name-suggest" class="ap-suggest" style="display:none;"></div>
                             </div>
                         </label>
+                        <div id="ap-credit-hint" style="display:none;font-size:0.78rem;color:#15803d;margin-top:0.25rem;"></div>
                     </div>
                     <div id="ap-contact-fields" class="edit-grid ap-field-section-sm" style="display:none;">
                         <label>Email
@@ -15105,9 +15106,31 @@
                 entry.assignments = entry.assignments || {};
                 entry.assignments[String(newId)] = payload.package_index;
             }
+            const _apMode = mode, _apName = name, _apEvent = addPlayerEventName;
             closeAddPlayerModal();
             await refreshEventInPlace(expandedEventId);
+            if (_apMode === "rsvp" && newId != null) apOfferCreditAfterRsvp(newId, _apName, _apEvent);
         } catch (err) { alert("Failed to add player."); }
+    }
+
+    /** RSVP Only → credit check (Kerry 2026-09-23: "When a player is entered
+     *  for RSVP Only, check to see if they have Credit. If they have it,
+     *  start the same credit application process."). The row is saved
+     *  first, so Cancel on the credit modal leaves a plain RSVP and the
+     *  credit untouched. The modal is the existing Apply Credit one: the
+     *  player's usual choices pre-selected, the difference computed, a
+     *  shortfall emails the prepared Venmo link on Apply, an excess offers
+     *  keep-as-credit or Venmo-now with the memo prefilled. */
+    async function apOfferCreditAfterRsvp(itemId, name, eventName) {
+        let info = null;
+        try {
+            const r = await fetch(`/api/rsvps/${itemId}/credit-info`);
+            if (r.ok) info = await r.json();
+        } catch (_) { return; }
+        if (!info || !(info.credits || []).length) return;
+        const total = Number(info.total_credit || 0).toFixed(2);
+        if (typeof showToast === "function") showToast(`${displayName(name)} has $${total} credit on file — applying it to ${eventName}`);
+        openApplyCreditModal(itemId, null, name, eventName);
     }
 
     // ---- Add Payment modal ----
@@ -16889,8 +16912,28 @@
                 }
                 apPrefillFromPerson();
             }
+            apCreditHint(isKnown ? name : "");
             renderApNameSuggest(name);
         });
+        // "Has $X credit on file" under the name (Kerry 2026-09-23). Latest
+        // answer wins; a stale one is dropped.
+        let _apCreditSeq = 0;
+        async function apCreditHint(name) {
+            const el = document.getElementById("ap-credit-hint");
+            if (!el) return;
+            const seq = ++_apCreditSeq;
+            if (!name) { el.style.display = "none"; el.textContent = ""; return; }
+            try {
+                const r = await fetch(`/api/customers/credit-check?name=${encodeURIComponent(name)}`);
+                if (!r.ok || seq !== _apCreditSeq) return;
+                const d = await r.json();
+                if (seq !== _apCreditSeq) return;
+                if (d.has_credit) {
+                    el.textContent = `Has $${Number(d.total).toFixed(2)} credit on file — Add RSVP opens Apply Credit.`;
+                    el.style.display = "";
+                } else { el.style.display = "none"; el.textContent = ""; }
+            } catch (_) { /* hint only */ }
+        }
         document.getElementById("add-player-manager").addEventListener("change", apPrefillFromPerson);
 
         // Custom player-name typeahead — replaces the native <datalist>, which

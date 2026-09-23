@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.487.0";
+window.TGF_VERSION = "2.487.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.487.1",
+    date: "2026-09-23",
+    changes: [
+      "Add Player → RSVP Only now checks for credit (Kerry 2026-09-23). As you type a known name, a green line says ‘Has $X credit on file’. After Add RSVP the row is saved and the roster redraws, then, if the player holds credit, the Apply Credit modal opens for that row on its own: their usual choices pre-selected, the difference computed, a shortfall emails the prepared Venmo link on Apply, an excess offers keep-as-credit or Venmo-now with the memo prefilled. Cancel leaves a plain RSVP and the credit untouched.",
+      "Apply Credit pre-selects what the player USUALLY buys — the most common holes, games, tee and status over their last eight real registrations (RSVP rows and +PAY children excluded) — instead of copying the credited row, which could be a 9-hole NONE credit for a player who buys BOTH every week. Holes stay locked to the event format; the chips still reprice live.",
+    ],
+  },
   {
     version: "2.487.0",
     date: "2026-09-23",
