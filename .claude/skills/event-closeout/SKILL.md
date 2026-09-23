@@ -15,6 +15,13 @@ gitignored, so it never reached the repo. Rewritten 2026-09-09 from the
 first live run (s9.22 Silverhorn, a9.22 ShadowGlen). `.gitignore` now
 tracks `.claude/skills/`.
 
+**Scheduled since 2026-09-23** (Kerry: "Wasn't event closeout set to run
+automatically this morning?" — it had not been): Routine "Event closeout:
+Wed + Sun 5:30 AM Central" (trig_01XUQwm6AbYLtdTgpECEnH4W) fires this
+routine into the closeout lane the morning after every Tuesday nine and
+Saturday 18. It posts handicaps and drafts the recaps; Kerry's two steps
+(3.3 the handicap-card send, 3.4 the GG upload) stay his.
+
 **Rule 3d applies.** An instruction to close out applies to every chapter
 that played that day unless Kerry names one. Report per chapter.
 

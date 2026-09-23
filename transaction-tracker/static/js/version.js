@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.486.5";
+window.TGF_VERSION = "2.486.6";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.486.6",
+    date: "2026-09-23",
+    changes: [
+      "Docs only: closeout of s9.24 Brackenridge + a9.24 Teravista (recap drafts for both chapters under docs/claude/recaps/) and the closeout skill now records that the routine is SCHEDULED \u2014 a Wed + Sun 5:30 AM Central Routine fires it into the closeout lane; none had existed, which is why Tuesday\u2019s handicaps were still unposted at 7:30 AM Wednesday (Kerry: \u2018Wasn\u2019t event closeout set to run automatically this morning?\u2019).",
+    ],
+  },
   {
     version: "2.486.5",
     date: "2026-09-23",
