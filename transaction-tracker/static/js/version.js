@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.488.3";
+window.TGF_VERSION = "2.488.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.488.4",
+    date: "2026-09-23",
+    changes: [
+      "Docs only: lane-registry.md now records that the 78 finished Claude sessions in its \u00a72 were archived on Kerry\u2019s word. Their transcripts are kept and any one can be restored with unarchive_session. Your session list is down to the live lanes plus the new Front Desk.",
+    ],
+  },
   {
     version: "2.488.3",
     date: "2026-09-23",

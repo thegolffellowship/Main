@@ -47,6 +47,8 @@ Front Desk notes (2026-09-23):
 
 ## 2. Archived 2026-09-23 (restorable with unarchive_session)
 
+All 78 archived 2026-09-23 ~4:15 PM CDT on Kerry's word ("archive the 78 in the registry"), every call confirmed ARCHIVED. The safety check had stopped the first bulk attempt earlier that afternoon.
+
 | Last active | Title | ID | Branch |
 |---|---|---|---|
 | 2026-09-23 | (CLOSED) TGF Tracker Improvements 2 — v2.465.10–v2.487.4 | `session_01CD1p3A96wXobio1yz2y7JS` | main |
