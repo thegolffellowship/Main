@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.488.1";
+window.TGF_VERSION = "2.488.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.488.2",
+    date: "2026-09-23",
+    changes: [
+      "Docs only: opening prompt for the new Front Desk session (docs/claude/session-prompt-2026-09-23-front-desk.md). Kerry asked for \u2018one master correspondent for all of this\u2019: a session that does not code, sends one daily brief across TGF, Horizon and Personal, turns his replies into directives for the lanes, owns the Routines, and settles the lane charter and SOPs with the claude.ai Project (CA). Announced on the mailbox as #636.",
+    ],
+  },
   {
     version: "2.488.1",
     date: "2026-09-23",
