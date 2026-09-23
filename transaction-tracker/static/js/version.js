@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.488.6";
+window.TGF_VERSION = "2.488.7";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.488.7",
+    date: "2026-09-23",
+    changes: [
+      "Docs only (Front Desk): lane-registry.md records that CD means Claude Design, and that Kerry moved the full C-Suite tree (CGO, the new CCO, advisor personas per seat, lanes and Routines under each) to CA, directive in mailbox #640. Renames are paused until CA posts the ratified tree.",
+    ],
+  },
   {
     version: "2.488.6",
     date: "2026-09-23",

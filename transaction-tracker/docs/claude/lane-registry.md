@@ -43,6 +43,12 @@ Star Cup, possibly CGO › Golf Genius History Archive and handicap work, with t
 closeout Routines moving under CGO. Open question: where the line sits between
 CGO and COO. Renames wait for his ruling.
 
+**Moved to CA (Kerry, 2026-09-23 ~5:35 PM):** the full C-Suite tree (seats incl.
+CGO and the new CCO, what each owns, advisor personas per seat, lanes and
+Routines under each, reporting, loops) is being built with Kerry in CA. The
+directive is in mailbox #640; it replaces the #637 lane-charter ask. No further
+renames until CA posts the ratified tree `TO: front-desk`.
+
 Front Desk notes (2026-09-23):
 - **Finance lane handoff** was opened today from the desktop app and is blocked
   on one question: are TGF checking's payments to the personal Sapphire card an
@@ -52,8 +58,7 @@ Front Desk notes (2026-09-23):
 - **C-Suite Agent Structure** (#614/#615) was discussion-first; its officer
   proposal lives only in its transcript (branch `claude/c-suite-structure-x4t9dn`
   was never pushed). Its job is now the Front Desk plus the lane charter.
-- **CD**: Kerry named "CD" on 9/23 without defining it (probably Claude Desktop /
-  Cowork, with local OneDrive access). Asked; answer to be recorded here.
+- **CD = Claude Design** (design-claude), Kerry 2026-09-23.
 
 ## 2. Archived 2026-09-23 (restorable with unarchive_session)
 
