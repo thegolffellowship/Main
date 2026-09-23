@@ -14085,18 +14085,26 @@ def _entry_to_pot_cents() -> int:
 # pilot set (Kerry 2026-09-11, expanded same day: "add in Landa Park
 # and a9.21 and s9.21 as well") — production runs on the dial
 _EVENTS_LEADERBOARD_SEED = ["s9.22", "a9.22", "s9.21", "a9.21", "s18.10"]
+# Kerry 2026-09-23: "Let's add all events into the LEADERBOARD | EVENTS
+# page now. I think we've vetted that it all works now. Needs to pick up
+# new ones without me prompting now." The pilot list is retired: every
+# event with scorecards shows, and a new one appears the moment its
+# first card lands. The dial moved to a NEW key (empty/unset = all) so
+# the old stored pilot list can never quietly narrow the page again;
+# `scoring-leaderboard-events:set=...` still narrows it for a test.
+_EVENTS_LEADERBOARD_KEY = "events_leaderboard_only"
 
 
 def _events_leaderboard_codes(db_path=None) -> list[str]:
     try:
-        raw = get_app_setting("events_leaderboard_events", db_path=db_path)
+        raw = get_app_setting(_EVENTS_LEADERBOARD_KEY, db_path=db_path)
         if raw is not None and raw.strip() != "":
             parsed = json.loads(raw)
             if isinstance(parsed, list):
                 return [str(c) for c in parsed]
     except Exception as e:
-        logger.warning("events_leaderboard_events unreadable: %s", e)
-    return list(_EVENTS_LEADERBOARD_SEED)
+        logger.warning("%s unreadable: %s", _EVENTS_LEADERBOARD_KEY, e)
+    return []
 
 
 def _event_field_complete(conn, event_id: int, holes_n: int) -> dict:

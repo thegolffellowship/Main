@@ -2659,7 +2659,7 @@ def _scoring_dispatch_inner(url: str, extract: str):
                         return _j.dumps({"error": "usage: scoring-leaderboard-"
                                                   "events[:add=a,b|set=a,b|clear]",
                                          "current": cur})
-                set_app_setting("events_leaderboard_events", _j.dumps(new_codes))
+                set_app_setting("events_leaderboard_only", _j.dumps(new_codes))
                 db.log_agent_action("mcp-claude", "scoring-leaderboard-events",
                                     f"{cur} -> {new_codes}")
                 cur = new_codes

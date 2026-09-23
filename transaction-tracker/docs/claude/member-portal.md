@@ -476,13 +476,20 @@ that did buy in. Team Net has it's own. Skins has it's own, and only
 needs to show the players bought in and the flights. Closest to Pins
 obviously listed separately."
 
-- **ADMIN-ONLY until Kerry approves** (rule 3b): the tab carries
-  `admin-only` (applyRole reveals; member pages CSS-backstop it), both
-  routes are `@require_role("admin")` — the member flip is two role
-  strings + removing the class. Payloads are PII-free by design.
-- **Pilot scope is a dial**: `events_leaderboard_events` (JSON list of
-  event-code prefixes; seed s9.22 + a9.22 — this past Tuesday; empty
-  list = every event with scorecards).
+- **BETA for ADMIN + MANAGER** (Kerry 2026-09-23: *"Still keep it in
+  BETA for Admin view, but add Manager view too"*): the tab carries
+  `manager-only` and a BETA pill, is not rendered at all in
+  `member_mode`, and both routes are `@require_role("manager")`. Members
+  still wait for Kerry's approval (rule 3b); payloads are PII-free.
+- **Every event, automatically** (Kerry 2026-09-23: *"Let's add all
+  events into the LEADERBOARD | EVENTS page now... Needs to pick up new
+  ones without me prompting now"*): every event with at least one
+  scorecard shows, newest first; a new event appears the moment its first
+  card lands. The old pilot list (`events_leaderboard_events`) is retired
+  and ignored. A narrowing dial remains for testing only:
+  `events_leaderboard_only` (unset or `[]` = all), set through
+  `scoring-leaderboard-events:set=a,b|clear`; the page says "Narrowed to…"
+  whenever it is set.
 - **Boards per event** (the ratified leaderboard IA, side-games.md):
   TEAM (gg_game_results rows) · NET (whole field, flight-SECTIONED;
   buyers green + ✓ IN; Ind Net money badged) · GROSS (same shape) ·

@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.487.1";
+window.TGF_VERSION = "2.487.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.487.2",
+    date: "2026-09-23",
+    changes: [
+      "LEADERBOARD → EVENTS shows every event now (Kerry 2026-09-23: ‘Let's add all events… Needs to pick up new ones without me prompting now’). The pilot list is retired: any event with a scorecard appears, newest first, and next Tuesday's events show up on their own as soon as their first cards land.",
+      "The EVENTS tab opens to managers as well as admins and carries a BETA tag. It still never appears on the member pages.",
+    ],
+  },
   {
     version: "2.487.1",
     date: "2026-09-23",

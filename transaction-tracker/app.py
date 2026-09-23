@@ -10878,11 +10878,12 @@ def api_season_contest_removals():
 
 
 # ── EVENTS LEADERBOARD (Kerry 2026-09-11, improvements lane) ──
-# ADMIN-ONLY pilot until Kerry approves member exposure (rule 3b) —
+# BETA for admin + manager (Kerry 2026-09-23: "Still keep it in BETA for
+# Admin view, but add Manager view too"); members still wait (rule 3b) —
 # the payloads are PII-free by design, so the member flip is changing
 # these two role strings to "member".
 @app.route("/api/events-leaderboard")
-@require_role("admin")
+@require_role("manager")
 def api_events_leaderboard():
     from email_parser.database import get_events_leaderboard
     return jsonify(get_events_leaderboard(
@@ -10891,7 +10892,7 @@ def api_events_leaderboard():
 
 
 @app.route("/api/events-leaderboard/event")
-@require_role("admin")
+@require_role("manager")
 def api_events_leaderboard_event():
     from email_parser.database import get_event_leaderboard
     d = get_event_leaderboard(request.args.get("name", ""))
