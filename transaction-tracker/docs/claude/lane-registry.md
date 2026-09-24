@@ -257,7 +257,8 @@ UTC after DST ends; the closeout lane has its own Nov 1 reminder.
 
 | Routine | ID | Cron (UTC) | Fires into | Reports to |
 |---|---|---|---|---|
-| COO · Front Desk daily brief · 7:15 AM | `trig_01TJWBMxzUSW4JhR6G5MEaGE` | `15 12 * * *` | Front Desk | Kerry |
+| COO · Front Desk daily brief · 7:15 AM | `trig_01TJWBMxzUSW4JhR6G5MEaGE` | `15 12 * * *` | Front Desk | full text to the mailbox `TO: platform-claude (CA), kerry` (Kerry 2026-09-24) |
+| COO · Front Desk: mailbox watch · hourly 7 AM–9 PM | `trig_01F9KQqhLStfdo4biDsGu6Js` | `0 0-2,12-23 * * *` (server-anchored to :04) | Front Desk | CA acks on mailbox (Kerry 2026-09-24) |
 | CTO › Health: act on digest · 5:10 AM | `trig_01NFYQB2DbAjpC9J3CeexG33` | `10 10 * * *` | CTO / Tracker Health | mailbox (tracker-health); left as is per the Front Desk prompt |
 | CTO › Tracker Build: pick-up + fixes · 5:15 AM | `trig_01YRePjJeWr9cdGMShZqqXas` | `15 10 * * *` | Tracker Improvements 3 | front-desk (prompt rewrite sent by poke, see below) |
 | CFO › Daily finance review · 5:20 AM | `trig_01Crbpy6noUUGocjdAZHUusM` | `20 10 * * *` (was 30 11) | CFO | front-desk (prompt rewrite sent by poke) |

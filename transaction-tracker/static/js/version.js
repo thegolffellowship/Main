@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.488.9";
+window.TGF_VERSION = "2.488.10";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.488.10",
+    date: "2026-09-24",
+    changes: [
+      "Docs only (Front Desk): Kerry set the chain of command, with CA as job superintendent, the Front Desk as foreman and the lanes as crews. The daily brief now posts in full to the mailbox for CA. A new hourly Front Desk mailbox watch Routine (7 AM to 9 PM, trig_01F9KQqhLStfdo4biDsGu6Js) picks up CA's directives, routes them to lanes and acknowledges back. Recorded in lane-registry.md \u00a76, sop/reporting-contract.md \u00a74b and sop/routines-and-loops.md.",
+    ],
+  },
   {
     version: "2.488.9",
     date: "2026-09-24",

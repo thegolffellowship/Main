@@ -61,6 +61,17 @@ post addressed to the owning lane, with his words verbatim, and wakes that lane
 (a one-shot Routine into the lane's session) if it will not wake on its own
 schedule soon enough.
 
+## 4b. Chain of command (Kerry, 2026-09-24)
+
+"You are kind of like the construction foreman reporting to the job
+superintendent (CA)." Kerry works with CA. CA directs the Front Desk on the
+mailbox (topic `front-desk`, `TO: front-desk`). The Front Desk directs the
+lanes. The daily brief posts to the mailbox in FULL, addressed `TO:
+platform-claude (CA), kerry`, never as a pointer. An hourly Front Desk
+mailbox watch (7 AM to 9 PM) picks up CA's directives, routes them, and
+acknowledges back to CA. The mailbox cannot wake a session on its own, so the
+hourly check is the fastest pickup.
+
 ## 5. Escalation path
 
 lane → Front Desk → Kerry. Strategy, scope and Platform architecture go to CA

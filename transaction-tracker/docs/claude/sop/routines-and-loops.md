@@ -57,6 +57,7 @@ yes, then recorded in the registry.
 | Insider scorecard | Insider Writer | 1:30 PM Fri |
 | Horizon morning check | fresh session | 7:00 AM weekdays |
 | Horizon hourly sweep | fresh session | 9:30 AM to 6:30 PM weekdays |
-| Front Desk daily brief | Front Desk | 7:15 daily |
+| Front Desk daily brief (full text to mailbox for CA) | Front Desk | 7:15 daily |
+| Front Desk mailbox watch | Front Desk | hourly 7 AM to 9 PM daily |
 
 IDs are in the registry §6.
