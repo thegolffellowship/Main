@@ -41739,6 +41739,7 @@ def sync_season_contests_from_items(db_path: str | Path | None = None) -> dict:
     deduped = 0
     skipped_removed = 0
     healed_removed = 0
+    duplicate_entries = 0
     cust_by_id: dict[int, dict] = {}
     # REMOVED STAYS REMOVED (Kerry 2026-09-09). A removal recorded through
     # the Enrollment tab (season_contest_removals: who, when, why, refund)
@@ -41840,6 +41841,65 @@ def sync_season_contests_from_items(db_path: str | Path | None = None) -> dict:
                 enrolled += 1
             else:
                 linked += 1
+
+    def _flag_duplicate_fall_entry(conn, row, fall_chapter, fall_season):
+        """A second FALL entry is a warning, never a second enrollment.
+
+        The "Add FALL Points Race?" option is printed on every Fall event
+        product, so a member already in the race can buy it again (Jeff
+        Rideout, s9.25 Canyon Springs, 2026-09-23: $50 credited back by
+        hand, mailbox #641). The enrollment table holds one row per
+        person/race, so the extra purchase used to vanish silently. When
+        the person's enrollment for this race is backed by a DIFFERENT
+        order, open a DUPLICATE_CONTEST_ENTRY parse warning on this item
+        (COO action banner) so the refund is decided, once per item.
+        Spring contests are left alone on purpose: they are sold once per
+        season on the membership / SEASON CONTESTS product, not on every
+        event.
+        """
+        nonlocal duplicate_entries
+        cid = row.get("customer_id")
+        if cid is None:
+            return
+        try:
+            other = conn.execute(
+                """SELECT sc.source_item_id, i.order_id, i.item_name, i.order_date
+                   FROM season_contests sc
+                   JOIN items i ON i.id = sc.source_item_id
+                   JOIN items me ON me.id = ?
+                   WHERE sc.customer_id = ? AND sc.contest_type = 'NET Points Race'
+                     AND sc.season = ? AND sc.chapter = ?
+                     AND sc.source_item_id != me.id
+                     AND COALESCE(i.order_id, '') != COALESCE(me.order_id, '')
+                     AND COALESCE(i.transaction_status, 'active') = 'active'
+                   LIMIT 1""",
+                (row["id"], cid, fall_season, fall_chapter),
+            ).fetchone()
+            if not other:
+                return
+            me = conn.execute(
+                "SELECT email_uid, order_id, customer, item_name FROM items WHERE id = ?",
+                (row["id"],),
+            ).fetchone()
+            cur = conn.execute(
+                """INSERT OR IGNORE INTO parse_warnings
+                   (email_uid, order_id, customer, customer_id, item_name,
+                    warning_code, message)
+                   VALUES (?, ?, ?, ?, ?, 'DUPLICATE_CONTEST_ENTRY', ?)""",
+                (me["email_uid"] or f"item-{row['id']}", me["order_id"],
+                 me["customer"], cid, me["item_name"],
+                 f"{me['customer']} bought the {fall_chapter} {fall_season} "
+                 f"NET Points Race again on order {me['order_id']} (item "
+                 f"{row['id']}), but is already entered through order "
+                 f"{other['order_id']} (item {other['source_item_id']}, "
+                 f"{other['item_name']}). Only one entry counts: refund or "
+                 f"credit the second purchase, then set its FALL flag to NO."),
+            )
+            if cur.rowcount:
+                duplicate_entries += 1
+        except sqlite3.OperationalError:
+            logger.warning("Season contest sync: duplicate FALL check failed "
+                           "for item %s", row.get("id"), exc_info=True)
 
     with _connect(db_path) as conn:
         # Season contest chapter must ALWAYS come from the customer's canonical chapter,
@@ -41945,6 +42005,8 @@ def sync_season_contests_from_items(db_path: str | Path | None = None) -> dict:
                         fall_chapter = "Austin"
                 _upsert(conn, customer, "NET Points Race", fall_chapter,
                         f"{season} Fall", item_id, cid, order_date)
+                _flag_duplicate_fall_entry(conn, row, fall_chapter,
+                                           f"{season} Fall")
 
         # Handle standalone "SEASON CONTESTS" items (fallback for items where the parser
         # didn't populate the individual flag fields).
@@ -42258,7 +42320,8 @@ def sync_season_contests_from_items(db_path: str | Path | None = None) -> dict:
         )
     logger.info("Season contest sync: %d new enrollments, %d payments linked", enrolled, linked)
     return {"enrolled": enrolled, "linked": linked,
-            "skipped_removed": skipped_removed, "healed_removed": healed_removed}
+            "skipped_removed": skipped_removed, "healed_removed": healed_removed,
+            "duplicate_entries": duplicate_entries}
 
 
 # ---------------------------------------------------------------------------

@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.488.7";
+window.TGF_VERSION = "2.488.8";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.488.8",
+    date: "2026-09-24",
+    changes: [
+      "A second FALL Points Race purchase now raises a warning. Every Fall event product offers \u2018Add FALL Points Race?\u2019, so a member who is already entered can buy it again. Jeff Rideout did on s9.25 Canyon Springs, and the CFO lane refunded the $50 by hand. The enrollment sync kept the one entry and dropped the extra purchase without a word. It now opens a DUPLICATE_CONTEST_ENTRY warning on the COO action banner that names both orders, so the refund gets decided. The warning is raised once per item, and a dismissed one stays dismissed.",
+      "Setting the second item\u2019s FALL flag to NO clears the warning. Rows from the same order and credited rows never raise it. Spring contests are left out on purpose, because they are sold once per season on the membership or contest product. Docs: customers.md. Guard: test_fall_duplicate_entry.py.",
+    ],
+  },
   {
     version: "2.488.7",
     date: "2026-09-23",
