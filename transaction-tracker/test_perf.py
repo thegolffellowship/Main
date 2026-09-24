@@ -242,6 +242,29 @@ check("the EVENTS landing loads + roster reads + flights board are sampled under
       {"events_list", "items_list", "items_event", "event_one", "hcp_index_map", "rsvps_bulk", "flights_board"} <= have, str(sorted(have)))
 check("timed_route keeps Flask endpoint names (functools.wraps)", "api_get_pairings" in appmod.app.view_functions)
 
+print("\n== Spotlight: the cold cost is named, and the warmer pays it instead of a page ==")
+db._SPOTLIGHT_SHARED_CACHE.clear()
+check("warm_spotlight does nothing while the Spotlight is not in use", db.warm_spotlight(tmp)["warmed"] is False)
+r = client.get("/api/spotlight/player?cid=301"); perf.flush(tmp)
+sp = rows("spotlight_player")
+bd = json.loads(sp[-1]["breakdown"]); d = json.loads(sp[-1]["detail"] or "{}")
+check("a COLD Spotlight open is sampled with one lap per shared builder and cold=true",
+      r.status_code == 200 and d.get("cold") is True and any(k.startswith("shared:") for k in bd), str((r.status_code, bd, d)))
+r = client.get("/api/spotlight/player?cid=302"); perf.flush(tmp)
+sp2 = rows("spotlight_player")[-1]; d2 = json.loads(sp2["detail"] or "{}")
+check("...a WARM open right after has no shared laps and no cold mark", not d2.get("cold") and not any(k.startswith("shared:") for k in json.loads(sp2["breakdown"])), str(sp2))
+check("the warmer knows the Spotlight is in use but every entry is fresh", db.warm_spotlight(tmp).get("why") == "fresh")
+res = db.warm_spotlight(tmp, force=True); perf.flush(tmp)
+check("forced, it rebuilds every shared entry for the last-viewed player without counting as a page open",
+      res["warmed"] is True and res["cid"] == 302 and res["entries"] >= 1 and db._SPOTLIGHT_LAST_USED["cid"] == 302, str(res))
+check("the scheduler carries the spotlight_warm job", appmod.scheduler.get_job("spotlight_warm") is not None or os.getenv("EMAIL_ADDRESS") is None)
+for nm in ("spotlight_search", "contests_list", "points_race", "handicap_rounds", "payouts_list", "leads_list", "rsvps_list", "expense_queue", "ca_queue_list", "gg_history_overview", "action_items_list", "scoring_rounds", "matrix_get", "parse_warnings", "coo_action_items", "recon_unreconciled", "monthly_points"):
+    pass
+_timed = {v.__name__ for v in appmod.app.view_functions.values()}
+src = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "app.py")).read()
+check("every page's main data route is on the stopwatch (Kerry #630 ask 4)",
+      all(f'@perf.timed_route("{nm}")' in src for nm in ("spotlight_search", "spotlight_player", "contests_list", "points_race", "monthly_points", "handicap_rounds", "payouts_list", "leads_list", "expense_queue", "recon_unreconciled", "ca_queue_list", "gg_history_overview", "rsvps_list", "matrix_get", "parse_warnings", "action_items_list", "coo_action_items", "scoring_rounds", "customers_list", "events_list", "items_list", "dashboard_api", "hcp_index_map", "pairings_get", "flights_board")))
+
 j = appmod.scheduler.add_job(job_fn, "date", id="unit_sched_job", replace_existing=True)
 check("every scheduler.add_job wraps the callable in timed_job", getattr(j.func, "_perf_job", False) is True)
 appmod.scheduler.remove_job("unit_sched_job")

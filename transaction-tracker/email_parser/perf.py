@@ -62,7 +62,13 @@ SLOW_MS = {
     "customers_list": 1500,
     "dashboard_api": 2500,
     "auto_pairings_grab": 400_000,   # budgeted at 280 s per portal
+    "spotlight_player": 2500,
+    "spotlight_warm": 30_000,        # the job that pays the cold cost instead of a page
     "db_backup": 300_000,            # VACUUM INTO + gzip + OneDrive upload of a 430 MB file (~145 s)
+    # Bridges that SEND — one Graph call per recipient — are long by nature
+    "scoring-hcp-cards": 60_000,     # a card email per player who played (9/23: 18.7 s for 23)
+    "scoring-print-pack-pdf": 60_000,
+    "scoring-recap-draft-email": 30_000,
     "auto_gg_results_sync": 600_000,
 }
 RETENTION_DAYS = 30

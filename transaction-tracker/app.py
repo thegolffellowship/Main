@@ -1889,6 +1889,28 @@ def start_scheduler():
                     "" if os.getenv("AZURE_TENANT_ID")
                     else " (idle — AZURE_* creds not set)")
 
+    # ── Spotlight warmer (Kerry 2026-09-23: "it only took a long time for
+    #    the first one... what happens when we have 100s and thousands of
+    #    players?"). Every 90 s, while the Spotlight was opened in the
+    #    last day, rebuild its shared entries (every race's live board +
+    #    the cup projections) before their 2-minute TTL expires, so no
+    #    page open ever pays the cold cost. SPOTLIGHT_WARM=0 switches it off.
+    if os.getenv("SPOTLIGHT_WARM", "1") != "0":
+        def spotlight_warm_job():
+            from email_parser.database import warm_spotlight
+            try:
+                res = warm_spotlight()
+                if res.get("warmed"):
+                    logger.info("Spotlight warmed: %s", res)
+            except Exception:
+                logger.exception("Spotlight warm failed (non-fatal)")
+        scheduler.add_job(
+            spotlight_warm_job, "interval", seconds=90,
+            id="spotlight_warm", replace_existing=True,
+            max_instances=1, coalesce=True,
+        )
+        logger.info("Spotlight warmer scheduled every 90 s (while in use)")
+
     # ── Tracker Health digest (Kerry 2026-09-22: "a standard once a day
     #    routine"). Checked every 15 minutes from 4 to 9 AM Central and
     #    run ONCE, at or after the dialled time (app_settings
@@ -3320,6 +3342,7 @@ def _load_matrix() -> tuple[dict, dict]:
 
 @app.route("/api/matrix", methods=["GET"])
 @require_role("view-only")
+@perf.timed_route("matrix_get")
 def api_matrix_get():
     """Return the current games matrix (from DB if edited, else from static file)."""
     matrix9, matrix18 = _load_matrix()
@@ -7671,6 +7694,7 @@ def api_resolve_orphan():
 
 @app.route("/api/parse-warnings")
 @require_role("manager")
+@perf.timed_route("parse_warnings")
 def api_parse_warnings():
     """Return open parse warnings (items flagged during parsing)."""
     status = request.args.get("status", "open")
@@ -7679,6 +7703,7 @@ def api_parse_warnings():
 
 @app.route("/api/action-items")
 @require_role("manager")
+@perf.timed_route("action_items_list")
 def api_notification_action_items():
     """Return pending action items for admin/manager review.
 
@@ -8971,6 +8996,7 @@ def rsvps_page():
 
 @app.route("/api/rsvps")
 @require_role("view-only")
+@perf.timed_route("rsvps_list")
 def api_rsvps():
     """Return RSVPs, optionally filtered by event or response."""
     event = request.args.get("event", "")
@@ -9372,6 +9398,7 @@ def api_handicap_players():
 
 @app.route("/api/handicaps/rounds")
 @require_role("member")
+@perf.timed_route("handicap_rounds")
 def api_handicap_rounds():
     """Return rounds for a single player (?player=Name) or all rounds."""
     player_name = request.args.get("player")
@@ -10804,6 +10831,7 @@ def api_participation_send_email():
 
 @app.route("/api/season-contests")
 @require_role("member")
+@perf.timed_route("contests_list")
 def api_season_contests():
     """List season contest enrollments with optional filters."""
     from email_parser.database import get_season_contest_enrollments
@@ -10901,6 +10929,7 @@ def api_events_leaderboard_event():
 
 @app.route("/api/season-contests/points-race")
 @require_role("member")
+@perf.timed_route("points_race")
 def api_season_contest_points_race():
     """Persisted GG points-race standings joined with live buy-in status.
 
@@ -11161,6 +11190,7 @@ def api_import_scorecards():
 
 @app.route("/api/scoring/rounds")
 @require_role("member")
+@perf.timed_route("scoring_rounds")
 def api_scoring_rounds():
     from email_parser.database import get_scoring_rounds_list
     rows = get_scoring_rounds_list(
@@ -11630,6 +11660,7 @@ def api_season_contest_champ_card():
 
 @app.route("/api/season-contests/monthly-points")
 @require_role("member")
+@perf.timed_route("monthly_points")
 def api_season_contest_monthly_points():
     """Combined monthly points races (both chapters) with winner + purse.
 
@@ -12438,6 +12469,7 @@ def ca_queue_page():
 
 @app.route("/api/ca-queue")
 @require_role("admin")
+@perf.timed_route("ca_queue_list")
 def api_ca_queue():
     from email_parser.database import list_ca_queue
     return jsonify(list_ca_queue(
@@ -12499,6 +12531,7 @@ def _lead_campaign_options() -> list:
 
 @app.route("/api/leads")
 @require_role("manager")
+@perf.timed_route("leads_list")
 def api_leads():
     """The Lead Center's whole payload. The BUILDING of it lives in
     leads.lead_center_payload() so the exact thing the page receives can
@@ -12753,6 +12786,7 @@ def gg_history_page():
 
 @app.route("/api/gg-history/overview")
 @require_role("admin")
+@perf.timed_route("gg_history_overview")
 def api_gg_history_overview():
     from email_parser import gg_history as ggh
     return jsonify(ggh.portal_overview())
@@ -12815,6 +12849,7 @@ def spotlight_page():
 
 @app.route("/api/spotlight/search")
 @require_role("member")
+@perf.timed_route("spotlight_search")
 def api_spotlight_search():
     """Name typeahead. PII-free payload (member-tier-ready)."""
     from email_parser.database import search_spotlight_players
@@ -12824,6 +12859,7 @@ def api_spotlight_search():
 
 @app.route("/api/spotlight/player")
 @require_role("member")
+@perf.timed_route("spotlight_player")
 def api_spotlight_player():
     """One player's spotlight payload. PII-free (member-tier-ready)."""
     from email_parser.database import get_player_spotlight
@@ -13855,6 +13891,7 @@ def api_reconcile_orphan_venmo():
 
 @app.route("/api/accounting/expense-transactions")
 @require_role("admin")
+@perf.timed_route("expense_queue")
 def api_expense_transactions():
     return jsonify(get_expense_transactions(
         date_from=request.args.get("date_from"),
@@ -14232,6 +14269,7 @@ def coo_page():
 
 @app.route("/api/coo/action-items")
 @require_role("admin")
+@perf.timed_route("coo_action_items")
 def api_coo_action_items():
     return jsonify(get_action_items(
         status=request.args.get("status"),
@@ -14773,6 +14811,7 @@ def api_record_transfer():
 
 @app.route("/api/reconciliation/unreconciled")
 @require_role("admin")
+@perf.timed_route("recon_unreconciled")
 def api_recon_unreconciled():
     account = request.args.get("account")
     month = request.args.get("month")
@@ -14898,6 +14937,7 @@ def tgf_page():
 
 @app.route("/api/tgf")
 @require_role("admin")
+@perf.timed_route("payouts_list")
 def api_tgf_data():
     return jsonify(get_tgf_data())
 

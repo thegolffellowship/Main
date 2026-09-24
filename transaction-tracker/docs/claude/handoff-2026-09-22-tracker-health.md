@@ -145,6 +145,25 @@ the GIL is.
 - Still Kerry's: `gg_raw_archive` (368 MB of the file, the backup and
   the volume both pay for it) — move it out; the EVENTS 30 s poll cadence.
 
+## 2f. Morning three (2026-09-24, v2.488.8)
+
+- Digest #642: the only real finding was `scoring-hcp-cards` at 18.7 s
+  (23 card emails, Graph API — line raised to 60 s); the rest were the
+  provider-alert rule's own noise (ten HEALTH items filed about ten
+  existing Railway mails back to May). Fixed the mechanism (`file:
+  False`, 14-day window, one stale line) and closed the ten.
+- PAIRINGS on the new build, live: **p50 347 ms, max 520 ms** (was
+  8.9–11.5 s) — the before/after Kerry asked for.
+- Every page's main data route is on the stopwatch (#630 ask 4).
+- Spotlight (#630 asks 1–3): instrumented (per-builder laps + cold
+  mark); the 90 s `spotlight_warm` job pays the cold cost off the page;
+  scaling answer in coo.md (warm 14 ms, cold ~3.5 s, does not grow with
+  players; only the handicap map does, ~0.4 s at 5k).
+- `gg_raw_archive` move (#627, Kerry: "Yes, move the GG archive to its
+  own file"): NOT yet built — a schema + VACUUM step that needs an
+  off-hours window; the CTO lane takes it next unless the gg-history
+  lane claims it first (said so on the mailbox).
+
 ## 2c. The agent is the CTO
 
 Kerry 2026-09-22 (~4 PM): *"I think we would define your Agent Role as

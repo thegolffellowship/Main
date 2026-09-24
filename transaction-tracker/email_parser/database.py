@@ -15261,6 +15261,16 @@ def get_event_leaderboard(event_name: str,
 # events" territory; the CONTESTS page's own reads are untouched.
 _SPOTLIGHT_SHARED_CACHE: dict = {}
 _SPOTLIGHT_SHARED_TTL = 120.0
+# The warmer (`warm_spotlight`, a 90 s scheduler job) rebuilds the shared
+# entries BEFORE they expire, but only while someone is actually using
+# the Spotlight — the last open's customer_id and time are kept here
+# (Kerry 2026-09-23: "it only took a long time for the first one... what
+# happens when we have 100s and thousands of players?"). The cold cost
+# (every race's live board + the two cup projections, ~3.5 s on the
+# fixture) then lands on the scheduler thread, never on a page open.
+_SPOTLIGHT_LAST_USED: dict = {"at": 0.0, "cid": None, "db_path": None}
+_SPOTLIGHT_WARM_ACTIVE_S = 24 * 3600      # warm only if opened in the last day
+_SPOTLIGHT_WARM_AGE_S = 90.0              # rebuild entries older than this
 
 
 def _spotlight_shared(name: str, builder, db_path) -> object:
@@ -15269,13 +15279,57 @@ def _spotlight_shared(name: str, builder, db_path) -> object:
     hit = _SPOTLIGHT_SHARED_CACHE.get(ck)
     if hit and _t.time() - hit[0] < _SPOTLIGHT_SHARED_TTL:
         return hit[1]
+    # A COLD build: lap it on the request's stopwatch under its own name
+    # so the digest shows exactly which builder the open paid for.
+    try:
+        from . import perf as _perf
+        _sw = _perf.current()
+        if _sw:
+            _sw.lap("player")          # close whatever per-player work ran before
+            _sw.note(cold=True)
+    except Exception:
+        _sw = None
     val = builder()
+    if _sw:
+        _sw.lap(f"shared:{name}")
     _SPOTLIGHT_SHARED_CACHE[ck] = (_t.time(), val)
     return val
 
 
+def warm_spotlight(db_path=None, force: bool = False) -> dict:
+    """Rebuild the Spotlight's shared entries before they expire — the
+    scheduler's job (every 90 s). Does nothing unless the Spotlight was
+    opened in the last day (`force` overrides), and nothing while every
+    entry is younger than `_SPOTLIGHT_WARM_AGE_S`. Rebuilding is one
+    `get_player_spotlight` for the last-viewed player: its per-player
+    part is ~15 ms and every shared builder refreshes on the way."""
+    import time as _t
+    now = _t.time()
+    last = _SPOTLIGHT_LAST_USED
+    if not force and (not last.get("cid") or now - last.get("at", 0) > _SPOTLIGHT_WARM_ACTIVE_S):
+        return {"warmed": False, "why": "spotlight not in use"}
+    path = db_path or last.get("db_path") or DB_PATH
+    ages = [now - v[0] for k, v in _SPOTLIGHT_SHARED_CACHE.items() if k[1] == str(path)]
+    if ages and max(ages) < _SPOTLIGHT_WARM_AGE_S and not force:
+        return {"warmed": False, "why": "fresh", "oldest_s": round(max(ages))}
+    cid = last.get("cid")
+    if cid is None:
+        with _connect(path) as conn:
+            r = conn.execute("SELECT customer_id FROM customers ORDER BY customer_id LIMIT 1").fetchone()
+        if not r:
+            return {"warmed": False, "why": "no customers"}
+        cid = int(r["customer_id"])
+    # Expire the entries so the open below rebuilds them all.
+    for k in [k for k in _SPOTLIGHT_SHARED_CACHE if k[1] == str(path)]:
+        _SPOTLIGHT_SHARED_CACHE[k] = (0.0, _SPOTLIGHT_SHARED_CACHE[k][1])
+    t0 = _t.perf_counter()
+    get_player_spotlight(cid, db_path=path, _touch=False)
+    return {"warmed": True, "cid": cid, "ms": int((_t.perf_counter() - t0) * 1000),
+            "entries": sum(1 for k in _SPOTLIGHT_SHARED_CACHE if k[1] == str(path))}
+
+
 def get_player_spotlight(customer_id: int,
-                         db_path: str | Path = DB_PATH) -> dict:
+                         db_path: str | Path = DB_PATH, _touch: bool = True) -> dict:
     """PLAYER SPOTLIGHT payload (v1, admin preview — Kerry directed
     2026-07-10; opens to members after CA/CD iteration).
 
@@ -15288,6 +15342,9 @@ def get_player_spotlight(customer_id: int,
     tier later is a role-string change, not a data audit. Standings come
     from the same persisted snapshots the CONTESTS page serves.
     """
+    if _touch:
+        import time as _t
+        _SPOTLIGHT_LAST_USED.update(at=_t.time(), cid=int(customer_id), db_path=str(db_path))
     with _connect(db_path) as conn:
         cust = conn.execute(
             """SELECT customer_id, first_name, last_name, suffix, chapter,

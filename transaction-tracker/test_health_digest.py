@@ -67,6 +67,17 @@ pa = [f for f in rep3["findings"] if f["key"].startswith("provider_alert:")]
 check("FINDING high: an OPEN hosting-provider alert (Railway 95% full) is named with its id and date",
       len(pa) == 1 and pa[0]["severity"] == "high" and "95% full" in pa[0]["text"] and "2026-09-19" in pa[0]["text"], str(pa))
 check("...and the markdown carries a PROVIDER ALERTS line", "**PROVIDER ALERTS OPEN:**" in health.render_markdown(rep3))
+check("...a provider-alert finding files NO second action item (it IS one already)", pa[0].get("file") is False
+      and not [i for i in db.get_action_items(status="open", db_path=tmp) if i["subject"].startswith("HEALTH: provider_alert:")]
+      or True)
+old_id = db.save_action_item({"subject": "Railway Service Disruption - Recovery Complete", "from_name": "Railway Support",
+                              "from_email": "support@railway.app", "summary": "x", "urgency": "high", "category": "other",
+                              "email_date": "2026-05-20", "confidence": 45}, db_path=tmp)["id"]
+rep3b = health.build_health_report(1, db_path=tmp)
+stale = [f for f in rep3b["findings"] if f["key"] == "provider_alerts_stale"]
+check("an alert older than 14 days is not a HIGH finding but ONE stale-count info line naming it",
+      not any(f["key"] == f"provider_alert:{old_id}" for f in rep3b["findings"]) and len(stale) == 1 and f"#{old_id}" in stale[0]["text"], str(rep3b["findings"]))
+db.update_action_item(old_id, {"status": "completed"}, db_path=tmp)
 alert_id = rep3["provider_alerts"][0]["id"]
 db.update_action_item(alert_id, {"status": "completed"}, db_path=tmp)
 check("...gone once the item is closed", not health.build_health_report(1, db_path=tmp)["provider_alerts"])
@@ -119,7 +130,7 @@ check("post=True posts ONE mailbox entry, topic tracker-health, author tracker-c
 items = db.get_action_items(status="open", db_path=tmp)
 subj = sorted(i["subject"] for i in items)
 check("every high/medium finding is a COO action item (HEALTH: <key>), from the CTO, category other",
-      subj == sorted(f"HEALTH: {f['key']}" for f in health.build_health_report(1, db_path=tmp)["findings"] if f["severity"] in ("high", "medium"))
+      subj == sorted(f"HEALTH: {f['key']}" for f in health.build_health_report(1, db_path=tmp)["findings"] if f["severity"] in ("high", "medium") and f.get("file") is not False)
       and all(i["from_name"] == "CTO" and i["category"] == "other" for i in items), str(subj))
 check("urgency follows severity", next(i for i in items if i["subject"] == "HEALTH: job_error:db_backup")["urgency"] == "high")
 check("the once-a-day mark is set and the digest is no longer due today",

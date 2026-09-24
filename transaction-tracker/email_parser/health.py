@@ -53,6 +53,7 @@ RULES = {
     "job_error": True,                    # any failed job run
     "job_error_recent_hours": 3,          # errors all older than this + last run ok → RECOVERED (medium)
     "provider_alerts": True,              # an open hosting-provider alert (Railway) is a HIGH finding
+    "provider_alert_days": 14,            # ...only this recent; older open ones are ONE stale-count line
     "job_slow": True,                     # a job over its SLOW line
     "db_growth_mb_per_day": 20,           # the file grew more than this
     "probe_connect_ms": 150,              # a bare connect slower than this
@@ -276,11 +277,26 @@ def find(report: dict) -> list[dict]:
                             "text": f"job {j['name']} failed {j['errors']} of {j['runs']} run(s)"
                                     + (f" — {j['last_error']}" if j.get("last_error") else "")})
     if RULES["provider_alerts"]:
+        # A provider alert IS an action item already — the finding names
+        # it, it never files a second item about it (`file: False`; 9/24:
+        # ten HEALTH items were filed pointing at ten Railway mails). Only
+        # a recent one is a live finding; older open ones (May's "service
+        # disruption — recovery complete") are one stale count, to close.
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=RULES["provider_alert_days"])).strftime("%Y-%m-%d")
+        stale = []
         for a in report.get("provider_alerts") or []:
-            out.append({"severity": "high", "key": f"provider_alert:{a['id']}",
-                        "text": f"OPEN provider alert #{a['id']} since {a.get('email_date') or a.get('created_at')}: "
-                                f"\"{a.get('subject')}\" ({a.get('from_email')}) — act on it or close it; "
-                                f"the 9/22 outage was mailed three days ahead and sat here"})
+            when = (a.get("email_date") or a.get("created_at") or "")[:10]
+            if when and when < cutoff:
+                stale.append(a)
+                continue
+            out.append({"severity": "high", "key": f"provider_alert:{a['id']}", "file": False,
+                        "text": f"OPEN provider alert #{a['id']} since {when}: "
+                                f"\"{a.get('subject')}\" ({a.get('from_email')}) — act on it or close it "
+                                f"(the 9/22 outage was mailed three days ahead and sat in this queue)"})
+        if stale:
+            out.append({"severity": "info", "key": "provider_alerts_stale", "file": False,
+                        "text": f"{len(stale)} older provider alert(s) still open (oldest {min((a.get('email_date') or a.get('created_at') or '')[:10] for a in stale)}): "
+                                + ", ".join(f"#{a['id']}" for a in stale) + " — long resolved; close them"})
     if RULES["job_slow"]:
         for r in S["job"]:
             if r["slow"]:
@@ -433,7 +449,7 @@ def file_action_items(findings: list[dict], db_path=None) -> list[dict]:
     from .timezone_utils import today_central_str
     filed = []
     for f in findings:
-        if f["severity"] not in ("high", "medium"):
+        if f["severity"] not in ("high", "medium") or f.get("file") is False:
             continue
         subject = f"HEALTH: {f['key']}"
         try:

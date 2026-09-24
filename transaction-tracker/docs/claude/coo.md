@@ -216,3 +216,41 @@ brief Kerry. Kerry 2026-09-23: *"I thought something would happen at
 5:00a. That you would run in response to the 5:00a digest and make any
 necessary improvements."* The cron is UTC (10:10); it drifts to 4:10 AM
 Central after DST ends Nov 1 — update the Routine then.
+
+### Day three (v2.488.8, 2026-09-24) — every page on the stopwatch, the Spotlight cold open, and the digest's own noise
+
+- **Noise the digest made:** the provider-alert rule filed a HEALTH item
+  for each of ten open Railway mails going back to May — an action item
+  about an action item. Provider-alert findings now carry `file: False`
+  (they name the item, never file a second), only alerts newer than
+  `RULES["provider_alert_days"]` (14) are HIGH, and older open ones are
+  ONE info line ("N older provider alerts still open — close them"). The
+  ten duplicates were closed with `scoring-health-ack`.
+- **Send-type bridges have their own lines:** `scoring-hcp-cards` (a
+  card email per player) 60 s, `scoring-print-pack-pdf` 60 s,
+  `scoring-recap-draft-email` 30 s. 18.7 s for 23 cards is the Graph
+  API, not a defect.
+- **All pages (Kerry #630):** every page's main data route is now on the
+  stopwatch — Spotlight (search, player), Contests (list, points race,
+  monthly), Handicaps rounds, Payouts, Leads, Accounting expense queue,
+  Reconcile, CA Queue, GG History, RSVPs, Matrix, Transactions
+  (parse warnings, action items), COO action items, Scoring rounds —
+  beside the ones from day one. `test_perf.py` fails if one is removed.
+- **The Spotlight cold open (Kerry: "it only took a long time for the
+  first one… what happens when we have 100s and thousands of
+  players?").** Measured on the fixture (1,111 customers / 13,424
+  rounds): cold **3.6 s**, warm **14 ms**. The cold cost is the SHARED
+  builders, not the player: five live race boards (`get_points_race_live`,
+  each a Golf Genius round-trip, 250–600 ms) + the Fellowship Cup
+  projection (0.5 s) + the Lone Star Cup projection (1.3 s); the
+  handicap map is 44 ms. None of it grows with the customer count —
+  the race pages are Golf Genius's, fixed size; the projections walk the
+  standings; only the handicap map scales (~0.4 s at 5,000 linked
+  players). So at 2,000 or 5,000 players the warm open stays ~15–30 ms
+  and the cold open stays ~3–4 s — which nobody should pay:
+  `warm_spotlight` (a 90 s scheduler job, `spotlight_warm`) rebuilds the
+  shared entries before their 2-minute TTL while the Spotlight was opened
+  in the last day (`_SPOTLIGHT_LAST_USED`), so the cold cost lands on the
+  scheduler thread. A cold open that does happen is sampled with one lap
+  per builder (`shared:live:austin_net` …) and `cold: true` on the
+  sample, so the digest can say which one.
