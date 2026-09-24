@@ -21,6 +21,7 @@ tree is a working draft for the lane charter; Kerry decides the final shape.
 | COO | COO › Event Ops: Closeout | `session_019AxFcHia31na5NB3RLsF2W` |
 | COO | COO › Event Ops: Lone Star Cup | `session_01XsCfrW7UsaAy5VXEdv1Mnb` |
 | CTO | CTO › Tracker Build (Improvements 3) | `session_014svvTq1chymJug3Sc3Tg4T` |
+| CTO | CTO › Live Score Entry (Track A, opened 2026-09-24 on CA #654; prompt: session-prompt-2026-09-24-live-score-entry.md) | `session_01PeGTnLppc6bpJPrSmUWsVP` |
 | CTO | CTO › Tracker Health & Performance | `session_013mPm9v9Cx7BiCnq85h6LQQ` |
 | CTO | CTO › Flighting & Payout Rules | `session_012tCKUsYQQcrxCEftZF3DAS` |
 | CTO | CTO › Side Games Definitions | `session_01H3THo4abrTTbmi43bgRWeh` |
