@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.489.0";
+window.TGF_VERSION = "2.489.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.489.1",
+    date: "2026-09-24",
+    changes: [
+      "Lone Star Cup live board UI (Track B): the member Lone Star Cup tab gains a Ryder Cup-style cup board — AUSTIN vs SAN ANTONIO points header (team colors, points-to-win/points-on-the-board center chip, live projection line), session groups (Sat AM Four-Ball / Sat PM Foursomes / Sun Singles per the ratified HIW schedule) with per-session score chips, and one mp-match-card per match: FINAL margin strips (3&2), LIVE running margins (2 UP · thru 13), tee times for upcoming, tap-to-open hole-by-hole scorecards with winner circles and dead holes greyed after the closeout. Renders from /api/lsc/board; the Match Play tab's card renderer, live-lead helper and delegated toggle are reused as-is (team colors re-themed inside #lsc-board via the mp slate/clay vars). Cup details state match_len outright so a closed-out card still draws all 18 (mpMatchHoleCount reads it; GG details never carry it — CMP untouched). Invisible on production today: no lsc_matches dial exists yet, and the board_live rule-3b gate keeps any staged preview staff-only.",
+    ],
+  },
   {
     version: "2.489.0",
     date: "2026-09-24",

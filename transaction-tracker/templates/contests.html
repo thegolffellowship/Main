@@ -1639,6 +1639,46 @@
         .lsc-legend { margin-top: 0.9rem; display: flex; flex-direction: column; gap: 7px; }
         .lsc-legend .li { display: flex; align-items: flex-start; gap: 9px; font-size: 12.5px; line-height: 1.5; color: var(--text-body, #4B5563); }
         .lsc-legend .li .ic { flex: 0 0 auto; color: #1B1B1B; line-height: 0; padding-top: 1px; }
+        /* ── LIVE CUP BOARD (Track B, #654/#659) ─────────────────────
+           Ryder-style points header + session groups of Match Play
+           cards. The cards themselves are the mpv2 components — inside
+           #lsc-board the mp slate/clay vars re-theme to the ratified
+           team colors (Austin burnt orange, SA slate, same as the
+           roster cards above). One 560px breakpoint, per standard. */
+        #lsc-board { --mp-slate: #BF5700; --mp-clay: #4B6274; margin-top: 1.1rem; }
+        .lsc-bd-head { display: flex; align-items: stretch; border-radius: 12px;
+            overflow: hidden; border: 1px solid var(--border); }
+        .lsc-bd-head .t { flex: 1 1 0; display: flex; align-items: center;
+            gap: 12px; padding: 14px 16px; color: #fff; }
+        .lsc-bd-head .t.austin { background: #BF5700; justify-content: flex-start; }
+        .lsc-bd-head .t.sa { background: #4B6274; justify-content: flex-end; }
+        .lsc-bd-head .nm { font: 800 15px/1.1 'Bitter', serif; letter-spacing: 1px; }
+        .lsc-bd-head .p { font: 800 34px/1 'Bitter', serif; }
+        .lsc-bd-head .mid { flex: 0 0 auto; display: flex; align-items: center;
+            justify-content: center; padding: 0 14px; background: #002868;
+            color: #C9D6EA; font: 700 10.5px/1.35 'Bitter', serif;
+            letter-spacing: 0.6px; text-transform: uppercase; text-align: center;
+            max-width: 130px; }
+        .lsc-bd-proj { margin-top: 6px; text-align: center; font-size: 12.5px;
+            color: var(--text-muted); }
+        .lsc-bd-src { margin-top: 6px; text-align: center; font-size: 11.5px;
+            color: #92400E; background: #FEF3C7; border: 1px solid #FDE68A;
+            border-radius: 8px; padding: 5px 10px; }
+        .lsc-bd-sess { margin-top: 1.1rem; }
+        .lsc-bd-sess-h { display: flex; align-items: baseline; gap: 10px;
+            flex-wrap: wrap; padding: 6px 2px 8px; }
+        .lsc-bd-sess-h b { font: 700 15px/1.2 'Bitter', serif; color: #1B1B1B; }
+        .lsc-bd-sess-h .dt { font-size: 12.5px; color: var(--text-muted); }
+        .lsc-bd-sess-h .sc { margin-left: auto; font: 700 12.5px/1 'Bitter', serif;
+            color: #4B5563; white-space: nowrap; }
+        .lsc-bd-sess-h .sc .au { color: #BF5700; }
+        .lsc-bd-sess-h .sc .sa { color: #4B6274; }
+        @media (max-width: 560px) {
+            .lsc-bd-head .p { font-size: 26px; }
+            .lsc-bd-head .nm { font-size: 12px; }
+            .lsc-bd-head .t { padding: 11px 12px; gap: 8px; }
+            .lsc-bd-head .mid { max-width: 96px; padding: 0 8px; font-size: 9.5px; }
+        }
         .lsc-card.austin .lsc-seat.secured { background: #F7E0CC; border-left: 4px solid #BF5700; }
         .lsc-card.austin .lsc-seat.secured .lsc-player { color: #8C3F00; }
         .lsc-card.austin .lsc-seat.secured .lsc-seat-label { color: #BF5700; }
@@ -2187,6 +2227,14 @@
                 decided after the City and TGF Championships; until then, every
                 seat below is projected live from the current standings, just
                 like the projected payouts.</p>
+                <!-- LIVE CUP BOARD (Track B, #654/#659): Ryder Cup-style team
+                     points + match cards, rendered by lscBoardLoad() from
+                     /api/lsc/board. Hidden until the lsc_matches dial exists
+                     AND (board_live is flipped OR the viewer is staff) — the
+                     rule-3b gate lives server-side. mpv2 class inherits the
+                     Match Play card styling; the team colors are re-themed
+                     to Austin/SA inside #lsc-board. -->
+                <div id="lsc-board" class="mpv2" style="display:none;"></div>
                 <div id="lsc-rosters"><p style="color:var(--text-muted);margin-top:1rem;">Loading rosters&hellip;</p></div>
                 <!-- Lock/Pool legend removed (Kerry 2026-09-11: "No need for
                      that legend below since we're not using it") -->
@@ -2438,6 +2486,9 @@
     const LSC_LOCK_SVG = '<svg viewBox="0 0 24 24" width="22" height="22" aria-label="Secured"><path d="M8 10V7a4 4 0 0 1 8 0v3" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/><path fill="currentColor" fill-rule="evenodd" d="M6.2 10h11.6c1.2 0 2.2 1 2.2 2.2v7.6c0 1.2-1 2.2-2.2 2.2H6.2C5 22 4 21 4 19.8v-7.6C4 11 5 10 6.2 10zm5.8 3.2a1.9 1.9 0 0 0-1 3.5V19a1 1 0 0 0 2 0v-2.3a1.9 1.9 0 0 0-1-3.5z"/></svg>';
 
     async function lscLoad(force) {
+        // The cup board refreshes on EVERY visit to this tab (it's live
+        // on cup weekend); the roster below keeps its load-once flag.
+        lscBoardLoad();
         if (lscLoaded && !force) return;
         lscLoaded = true;
         const box = $("lsc-rosters");
@@ -2700,6 +2751,111 @@
             lscLoaded = false;
             box.innerHTML = `<p style="color:var(--text-muted);margin-top:1rem;">Couldn't load the projected rosters (${escapeHtml(err.message || String(err))}). Switch back to this tab to retry.</p>`;
         }
+    }
+
+    // ═══════════ LONE STAR CUP LIVE BOARD (Track B, #654/#659) ═══════
+    // Team points + match-by-match cards, computed server-side by
+    // email_parser/lsc_cup.py from locally entered scores (Track A) in
+    // the SAME detail shape mpMatchCard consumes — the Match Play tab's
+    // renderer, live-lead helper and scorecard grid are reused as-is.
+    // /api/lsc/board returns {configured:false} until the lsc_matches
+    // dial exists (and, for members, until board_live flips — rule 3b),
+    // so this renders nothing on today's page.
+    let lscBoardTimer = null;
+    const lscFmtPts = (x) => {
+        const v = Math.round((x || 0) * 2) / 2;
+        const w = Math.floor(v), half = v - w >= 0.25;
+        if (!w && half) return "½";
+        return `${w}${half ? "½" : ""}`;
+    };
+    async function lscBoardLoad() {
+        const box = $("lsc-board");
+        if (!box) return;
+        let d;
+        try {
+            const res = await fetch("/api/lsc/board");
+            d = await res.json();
+        } catch (e) { return; }                    // quiet: board is optional
+        if (!d || !d.configured) { box.style.display = "none"; return; }
+        lscBoardRender(box, d);
+        box.style.display = "";
+        // Live poll: refetch every 20s while a match is live and the tab
+        // is actually on screen; stops by itself once nothing is live.
+        clearTimeout(lscBoardTimer);
+        const anyLive = (d.sessions || []).some(s =>
+            (s.matches || []).some(m => m.state === "live"));
+        if (anyLive) lscBoardTimer = setTimeout(() => {
+            const sec = $("section-lone-star-cup");
+            if (!document.hidden && sec && !sec.classList.contains("section-hidden"))
+                lscBoardLoad();
+        }, 20000);
+    }
+    function lscBoardRender(box, d) {
+        const A = (d.teams || {}).austin || {}, S = (d.teams || {}).sa || {};
+        let totalPts = 0;
+        (d.sessions || []).forEach(s =>
+            totalPts += (s.matches || []).length * (s.points_per_match || 1));
+        const midTxt = d.points_to_win
+            ? `First to ${lscFmtPts(d.points_to_win)} takes the Cup`
+            : (totalPts ? `${lscFmtPts(totalPts)} points on the board` : "");
+        const showProj = (A.projected || 0) !== (A.points || 0)
+            || (S.projected || 0) !== (S.points || 0);
+        const head = `<div class="lsc-bd-head">
+            <div class="t austin"><span class="nm">AUSTIN</span><span class="p">${lscFmtPts(A.points)}</span></div>
+            ${midTxt ? `<div class="mid"><span>${escapeHtml(midTxt)}</span></div>` : ""}
+            <div class="t sa"><span class="p">${lscFmtPts(S.points)}</span><span class="nm">SAN ANTONIO</span></div>
+        </div>` + (showProj
+            ? `<div class="lsc-bd-proj">With matches on the course: Austin ${lscFmtPts(A.projected)} &mdash; ${lscFmtPts(S.projected)} San Antonio</div>`
+            : "") + (d.source === "mock"
+            // Staff-preview disclosure — mock scores never reach members
+            // (the board_live gate), but the preview must say what it is.
+            ? `<div class="lsc-bd-src">Preview on staged data &mdash; live scoring wires in from score entry on cup weekend.</div>`
+            : "");
+        const sessions = (d.sessions || []).map(sess => {
+            let au = 0, sa = 0;
+            (sess.matches || []).forEach(m => {
+                au += (m.points || {}).austin || 0;
+                sa += (m.points || {}).sa || 0;
+            });
+            const anyPts = (sess.matches || []).some(m => m.state === "final");
+            const cards = (sess.matches || []).map((m, i) => {
+                const P = m.players || [];
+                const aName = (P[0] || {}).name || "Austin";
+                const bName = (P[1] || {}).name || "San Antonio";
+                const live = m.state === "live";
+                const o = {
+                    aName, bName, live,
+                    tie: m.state === "final" && !m.gg_winner_idx,
+                    aWin: m.state === "final" && m.gg_winner_idx === 1,
+                    bWin: m.state === "final" && m.gg_winner_idx === 2,
+                    margin: m.state === "upcoming" ? "" : (m.gg_margin || ""),
+                    teeTime: m.tee_time || null,
+                    eventName: null, gg: m,
+                };
+                if (live) o.liveLead = mpLiveLead(m, aName, bName);
+                const fmtLbl = { singles: "Singles", fourball: "Four-Ball",
+                                 foursomes: "Foursomes" }[sess.format] || "";
+                const status = m.state === "final" ? "FINAL"
+                    : live ? ((o.liveLead && o.liveLead.thru > 0)
+                              ? `LIVE · thru ${o.liveLead.thru}`
+                              : (m.tee_time ? `${m.tee_time} TEE TIME` : "—"))
+                    : (m.tee_time ? `${m.tee_time} TEE TIME` : "UPCOMING");
+                return mpMatchCard(o, {
+                    metaL: `Match ${i + 1}${fmtLbl ? " · " + fmtLbl : ""}`,
+                    status, live,
+                    hasResult: m.state !== "upcoming",
+                });
+            }).join("");
+            return `<div class="lsc-bd-sess">
+                <div class="lsc-bd-sess-h"><b>${escapeHtml(sess.label || sess.id || "")}</b>
+                    ${sess.date ? `<span class="dt">${escapeHtml(sess.date)}</span>` : ""}
+                    ${anyPts ? `<span class="sc"><span class="au">${lscFmtPts(au)}</span> &mdash; <span class="sa">${lscFmtPts(sa)}</span></span>` : ""}
+                </div>${cards}</div>`;
+        }).join("");
+        box.innerHTML = head + sessions;
+        // Tap-to-open scorecards need no wiring here: the Match Play
+        // tab's document-level delegated listener (mpCardToggle) matches
+        // by class and covers these cards too.
     }
 
     // ═══════════ EVENTS LEADERBOARD (ADMIN pilot, Kerry 2026-09-11) ═══
@@ -4931,6 +5087,10 @@
         // the live Final showed ONE column while regular matches, whose
         // labels parse, showed the full run).
         if (/championship/i.test(src)) return 18;
+        // The Lone Star Cup engine (lsc_cup.py) states the match length
+        // outright — GG-parsed details never carry match_len, so CMP
+        // cards are untouched.
+        if (gg && gg.match_len) return gg.match_len;
         return null;
     }
 

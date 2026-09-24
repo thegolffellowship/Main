@@ -19,10 +19,13 @@ Rules live in the `lsc_matches` dial (rules-as-data, #659):
                "matches": [{"id": "SAT-AM-1", "tee_time": "8:30",
                             "austin": [cid, ...], "sa": [cid, ...]}]}]}
 
+The weekend format is already ratified in the LSC How-It-Works popup
+(contests.html): Sat AM Fourball, Sat PM Foursomes, Sun Singles.
 Handicapping (proposed default, Kerry corrects via #659 Q3): full
 difference of LOCKED playing handicaps off the match's low man,
 strokes taken on the lowest stroke-index holes; four-ball plays
-everyone off the low man of all four. Playing handicaps come from
+everyone off the low man of all four; foursomes takes the standard
+50%-of-combined-difference at team level. Playing handicaps come from
 Track A's payload (the locked snapshot) and are never re-derived here.
 
 Scores while Track A's se_* tables aren't live yet: the
@@ -118,11 +121,30 @@ def compute_match_detail(match: dict, session: dict, course: list[dict],
     """
     names = names or {}
     n_holes = int(session.get("n_holes") or 18)
+    fmt = (session.get("format") or "singles").strip().lower()
     teams = [[int(c) for c in (match.get(k) or [])] for k in TEAM_KEYS]
     everyone = [c for t in teams for c in t]
-    low_ph = min((phs.get(c) or 0) for c in everyone) if everyone else 0
-    strokes = {c: strokes_received(phs.get(c) or 0, low_ph, course, n_holes)
-               for c in everyone}
+    if fmt == "foursomes":
+        # Alternate shot: ONE ball per team (Track A enters the team's
+        # gross against either partner). Strokes at TEAM level — the
+        # standard foursomes allowance, 50% of the combined-handicap
+        # difference, on the lowest stroke-index holes — assigned to
+        # every member so whichever partner's row carries the gross
+        # gets the team's strokes.
+        combined = [sum(phs.get(c) or 0 for c in t) for t in teams]
+        low_comb = min(combined) if combined else 0
+        strokes = {}
+        for t, comb in zip(teams, combined):
+            smap = strokes_received(comb * 0.5, low_comb * 0.5,
+                                    course, n_holes)
+            for c in t:
+                strokes[c] = smap
+    else:
+        # singles + four-ball: full difference off the match's low man
+        low_ph = min((phs.get(c) or 0) for c in everyone) if everyone else 0
+        strokes = {c: strokes_received(phs.get(c) or 0, low_ph,
+                                       course, n_holes)
+                   for c in everyone}
     # normalize per-player scores to int hole keys
     sc = {c: {int(h): g for h, g in (scores.get(c) or scores.get(str(c)) or {}).items()
               if g is not None}
@@ -156,7 +178,12 @@ def compute_match_detail(match: dict, session: dict, course: list[dict],
     detail = {
         "match_id": match.get("id"),
         "players": players,
-        "start_hole": 1,
+        # start_hole None (not 1): cup matches all start on 1, and the
+        # card's "Started on hole N" caption is noise when N is 1.
+        # match_len tells mpMatchHoleCount the true length outright so
+        # a closed-out card still renders its full 18 (dead holes grey).
+        "start_hole": None,
+        "match_len": n_holes,
         "holes": holes_out,
         "n_holes": n_holes,
         "hole_pars": {str(int(c["hole"])): c.get("par")
@@ -261,6 +288,20 @@ def _setting_json(conn, key):
         return None
 
 
+def _nice_case(word: str) -> str:
+    """SHOUTING roster names → display case, keeping Mc/Mac and O'
+    prefixes right (MCDONNELL → McDonnell, O'BRIEN → O'Brien). Mixed-
+    case input is left alone — it's already how the person writes it."""
+    if not word or word != word.upper():
+        return word
+    w = word.title()
+    import re as _re
+    w = _re.sub(r"^(Mc)(\w)", lambda m: "Mc" + m.group(2).upper(), w)
+    w = _re.sub(r"^(Mac)([b-z]\w{2,})", lambda m: "Mac" + m.group(2).capitalize(), w)
+    w = _re.sub(r"^(O')(\w)", lambda m: "O'" + m.group(2).upper(), w)
+    return w
+
+
 def roster_names(conn) -> dict[int, str]:
     """cid → display name from the FROZEN lsc_roster_final dial
     (\"LAST, First\" → \"First Last\")."""
@@ -273,7 +314,8 @@ def roster_names(conn) -> dict[int, str]:
                 continue
             if "," in nm:
                 last, _, first = nm.partition(",")
-                nm = f"{first.strip().title()} {last.strip().title()}"
+                nm = " ".join(_nice_case(p) for p in first.strip().split()) \
+                    + " " + " ".join(_nice_case(p) for p in last.strip().split())
             out[int(cid)] = nm
     return out
 
@@ -295,4 +337,8 @@ def lsc_board_payload(db_path=None) -> dict:
         board = compute_board(dial, session_data, names)
         board["configured"] = True
         board["source"] = "mock" if session_data else "none"
+        # Rule 3b: the member page shows the board only once Kerry flips
+        # board_live in the dial (after his phone OK). Admin/manager
+        # sessions preview it regardless — the route enforces this.
+        board["board_live"] = bool(dial.get("board_live"))
         return board
