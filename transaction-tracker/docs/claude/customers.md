@@ -676,6 +676,23 @@ the "Removals & Refunds" table at the bottom of the Enrollment tab.
 pre-feature Venmo refunds (Cheshire/Lourigan CMP 2026) and backfills
 customer_id on seed rows written before the profile was resolvable.
 
+**A second FALL entry is a warning, not an enrollment (v2.488.8).** The
+"Add FALL Points Race?" option prints on every Fall event product, so a
+member already in the race can buy it again (Jeff Rideout, s9.25 Canyon
+Springs, mailbox #641: the CFO credited the $50 by hand). `season_contests`
+holds one row per person/race, so the extra purchase used to disappear
+silently. `sync_season_contests_from_items` now opens a
+`DUPLICATE_CONTEST_ENTRY` parse warning (COO action banner, `customer_id`
+set) on a FALL-flagged item when that person's enrollment for the same
+race is backed by a different ORDER. Once per item, and a dismissed or
+resolved warning is never reopened. Same-order rows (quantity splits) and
+credited rows stay quiet, and setting the flag to NO clears it. Spring
+contests are deliberately left out: they are sold once per season on the
+membership or SEASON CONTESTS product, not on every event. The sync
+returns `duplicate_entries`. Guard: `test_fall_duplicate_entry.py`.
+The source fix is Kerry's: take the FALL option off Tuesday products for
+members who are already entered.
+
 **Column/history reconciler (v2.16.13):** `_sync_status_history_with_column()`
 runs at every boot after all the column writers. `_migrate_autocorrect_player_status`
 updates only `current_player_status` (never `customer_statuses`), so a
