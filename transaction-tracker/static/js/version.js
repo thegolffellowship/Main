@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.489.2";
+window.TGF_VERSION = "2.489.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.489.3",
+    date: "2026-09-24",
+    changes: [
+      "Lone Star Cup board: the rule-3b member gate on /api/lsc/board ships (it was written in v2.489.1's session but missed that commit \u2014 caught by the push check before members could see the staged preview). While the lsc_matches dial's board_live flag is false, only admin/manager sessions receive the board; the pinless member tier gets {configured:false}, so /member/lonestarcup shows members nothing new until Kerry approves. Also: the foursomes engine guard test (team-level 50%-of-combined-difference strokes on the single team ball) and docs/claude/lone-star-cup-board.md, the subsystem's doc (dials, engine rules, reuse map, Track A wiring plan).",
+    ],
+  },
   {
     version: "2.489.2",
     date: "2026-09-24",

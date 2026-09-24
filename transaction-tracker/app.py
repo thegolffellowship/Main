@@ -11829,9 +11829,17 @@ def api_lsc_board():
     lsc_matches dial; scores from Track A's entry feed once live
     (lsc_mock_scores dial until then — see email_parser/lsc_cup.py).
     {"configured": false} until the dial exists, so the member page
-    keeps its current roster view until the cup is actually set up."""
+    keeps its current roster view until the cup is actually set up.
+    Rule 3b gate: while the dial's board_live flag is off, only
+    admin/manager sessions get the board (Kerry's preview); the pinless
+    member tier sees {configured: false} until Kerry flips it after his
+    phone OK."""
     from email_parser.lsc_cup import lsc_board_payload
-    return jsonify(lsc_board_payload())
+    payload = lsc_board_payload()
+    if (payload.get("configured") and not payload.get("board_live")
+            and session.get("role") not in ("admin", "manager")):
+        return jsonify({"configured": False})
+    return jsonify(payload)
 
 
 # ---------------------------------------------------------------------------

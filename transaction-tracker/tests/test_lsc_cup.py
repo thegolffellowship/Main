@@ -89,6 +89,21 @@ def test_fourball_best_ball_and_pickup():
     assert "/" in d["players"][0]["name"]
 
 
+def test_foursomes_team_strokes_and_single_ball():
+    # Alternate shot: 50% of combined-difference at team level.
+    # Austin combined 20 v SA combined 12 → Austin gets round(4) strokes
+    # on SI 1-4 (holes 3, 12, 6, 15), on the ONE team ball.
+    session = {"format": "foursomes", "n_holes": 18}
+    match = {"id": "FS1", "austin": [1, 2], "sa": [3, 4]}
+    phs = {1: 12, 2: 8, 3: 5, 4: 7}
+    # team gross entered against one partner only (either works)
+    scores = {1: {3: 5}, 3: {3: 5}}   # gross tied on hole 3 (SI 1)
+    d = compute_match_detail(match, session, COURSE, phs, scores)
+    h = next(x for x in d["holes"] if x["hole"] == 3)
+    assert h["p1_strokes"] == 1 and h["p2_strokes"] == 0
+    assert h["winner"] == 1           # Austin nets 4 v 5 on its stroke hole
+
+
 def test_board_points_win_halve_and_projection():
     dial = {"event_id": 3329, "halved_match": 0.5,
             "sessions": [{"id": "s1", "format": "singles", "n_holes": 18,
