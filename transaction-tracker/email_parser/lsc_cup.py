@@ -276,9 +276,9 @@ def compute_board(dial: dict, session_data: dict,
 # ---------------------------------------------------------------------------
 
 def _setting_json(conn, key):
+    # app_settings columns are key/value (see database.py's CREATE TABLE)
     row = conn.execute(
-        "SELECT setting_value FROM app_settings WHERE setting_key = ?",
-        (key,)).fetchone()
+        "SELECT value FROM app_settings WHERE key = ?", (key,)).fetchone()
     if not row or not row[0]:
         return None
     try:

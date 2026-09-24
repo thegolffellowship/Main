@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.489.1";
+window.TGF_VERSION = "2.489.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.489.2",
+    date: "2026-09-24",
+    changes: [
+      "Lone Star Cup board fix: /api/lsc/board 500'd on production \u2014 the dial reader queried app_settings by setting_key/setting_value, but the real columns are key/value (the local smoke DB was built with the wrong schema, masking it). One-line SQL fix; replica test now runs against the exact production schema and staged dial JSON. Also staged the rule-3b preview dials on production (lsc_matches demo pairings from the frozen roster + lsc_mock_scores, board_live OFF \u2014 members still see nothing; staff sessions see the staged board).",
+    ],
+  },
   {
     version: "2.489.1",
     date: "2026-09-24",
