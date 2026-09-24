@@ -32,6 +32,17 @@ tree is a working draft for the lane charter; Kerry decides the final shape.
 | CEO | CEO › C-Suite Structure & Lane Charter | `session_01UpqdfZKtMADEgRGq2uAMC9` |
 | HORIZON | HORIZON › Horizon Tracker | `session_0198ejcaYqjicA6MPFmWpgq3` |
 
+People notes (CA #655, Kerry 2026-09-24). Lanes follow these:
+- **James Jones**: inactive; an advisor in the background only. Don't route work,
+  dry runs or beta groups to him.
+- **Robert Straiton**: Austin manager. His wife is expecting in about two weeks, and
+  **Kerry covers Austin** while Robert is out. Kerry is being asked in the brief
+  whether Austin recap drafts (recap_draft_to_austin) go to him for that period,
+  and for the dates.
+- **Luke Mazanec**: a member Kerry is bringing on to help manage San Antonio, and a
+  natural first SA beta tester for live score entry. **Do not contact him.** Kerry
+  decides when and how.
+
 Personal/Church: no live lane. Group Planner abandoned and both its sessions
 archived (§5).
 

@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.488.10";
+window.TGF_VERSION = "2.488.11";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.488.11",
+    date: "2026-09-24",
+    changes: [
+      "Docs only (Front Desk): opening prompt for the new CTO \u203a Live Score Entry lane (docs/claude/session-prompt-2026-09-24-live-score-entry.md), Track A of CA's directive #654. It covers phone-first hole-by-hole score entry, a 9/29 dry run, a 10/6 shadow and the Lone Star Cup on 10/10, with GG still the money record. lane-registry.md records CA's people notes (#655): James Jones inactive, Robert Straiton's leave with Kerry covering Austin, and Luke Mazanec not to be contacted.",
+    ],
+  },
   {
     version: "2.488.10",
     date: "2026-09-24",
