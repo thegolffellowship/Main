@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.488.11";
+window.TGF_VERSION = "2.489.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.489.0",
+    date: "2026-09-24",
+    changes: [
+      "Lone Star Cup match engine (Track B, directives #654/#659): new email_parser/lsc_cup.py computes Ryder Cup-style match state from locally entered gross scores — full-difference strokes off the match's low man on the lowest stroke-index holes, net per hole, singles and four-ball (best ball, pickups covered), then the existing dormie-correct close-out walk from gg_match_play. Emits the same match-detail dict the Match Play tab's mp-match-card renderer already consumes. Rules-as-data in the new lsc_matches dial (sessions, formats, points per match, halved value); team points board with live projections; lsc_mock_scores dial feeds the pipeline until Track A's score entry lands. New member-tier read GET /api/lsc/board ({configured:false} until the dial exists — no member-visible change yet, rule 3b). Guard tests: tests/test_lsc_cup.py (6).",
+    ],
+  },
   {
     version: "2.488.11",
     date: "2026-09-24",

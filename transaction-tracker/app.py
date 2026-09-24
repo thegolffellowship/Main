@@ -11817,6 +11817,24 @@ def member_spotlight():
 
 
 # ---------------------------------------------------------------------------
+# Routes — Lone Star Cup live board (Track B, #654/#659)
+# ---------------------------------------------------------------------------
+
+@app.route("/api/lsc/board")
+@require_role("member")
+def api_lsc_board():
+    """The cup board in one cheap read: team points (+projected),
+    sessions, and per-match detail in the gg_match_play shape the
+    mp-match-card renderer already consumes. Rules come from the
+    lsc_matches dial; scores from Track A's entry feed once live
+    (lsc_mock_scores dial until then — see email_parser/lsc_cup.py).
+    {"configured": false} until the dial exists, so the member page
+    keeps its current roster view until the cup is actually set up."""
+    from email_parser.lsc_cup import lsc_board_payload
+    return jsonify(lsc_board_payload())
+
+
+# ---------------------------------------------------------------------------
 # Routes — City Match Play (CMP)
 # ---------------------------------------------------------------------------
 
