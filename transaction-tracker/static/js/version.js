@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.488.8";
+window.TGF_VERSION = "2.488.9";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.488.9",
+    date: "2026-09-24",
+    changes: [
+      "Player Spotlight (Kerry 2026-09-23: ‘it only took a long time for the first one… what happens when we have 100s and thousands of players?’): the first open after two minutes paid for every race's live board plus the two cup projections — about 3.5 s — and every open inside the two minutes was 14 ms. A warmer now rebuilds those shared pieces every 90 seconds while the Spotlight is in use, so the wait moves to the background and no open pays it. The cost does not grow with the number of players (the race boards are Golf Genius pages of fixed size); only the handicap map does, and that is under half a second at 5,000 players.",
+      "Every page's main data call is now on the stopwatch — Spotlight, Contests, Handicaps, Payouts, Leads, Accounting, Reconcile, CA Queue, GG History, RSVPs, Matrix, Transactions, COO — so the daily digest sees all of them, not only the events and pairings routes.",
+      "The CTO digest stops filing an action item about an action item: an open Railway alert is named in the digest but no longer duplicated into the queue, only alerts from the last two weeks count as live, and older ones become one ‘still open — close them’ line. Bridges that send mail (handicap cards, print packs, recap drafts) have their own slow lines, so 23 card emails taking 19 seconds is no longer an alarm.",
+    ],
+  },
   {
     version: "2.488.8",
     date: "2026-09-24",
