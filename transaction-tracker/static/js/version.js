@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.489.6";
+window.TGF_VERSION = "2.489.7";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.489.7",
+    date: "2026-09-25",
+    changes: [
+      "The handicap cache's change check retries once after a momentary database lock instead of giving up on caching for that read.",
+      "The Golf Genius archive move ran this morning at 5:28 AM Central: 143,801 archived pages copied and verified into the new file, the old table dropped, and the main database file shrunk from 444 MB to 46 MB. The archive file was backed up off-site right after. The archive-move bridge now has its own two-minute slow line so the copy and the upload do not show up as slow in tomorrow's digest.",
+    ],
+  },
   {
     version: "2.489.6",
     date: "2026-09-25",

@@ -169,16 +169,17 @@ the GIL is.
 - Digest #671 clean on speed. Built the `gg_raw_archive` move Kerry ruled
   on 9/23 (#627) as `email_parser/gg_archive.py` + `scoring-gg-archive`
   bridge steps + weekly archive backup + digest line + `test_gg_archive.py`
-  (46 checks). NOT run live yet: `plan` first, then migrate/verify/cutover
-  at the next 5:10 unless Kerry objects on the mailbox; VACUUM after, with
-  the time posted (#627 req 5).
+  (46 checks) — and RAN IT LIVE at 5:28 AM Central: migrate 13.7 s,
+  verify ok, cutover, vacuum 3.0 s; main file 444 → 46 MB, archive file
+  374 MB backed up off-site at 10:28:54 UTC (#627 req 5 met, time posted
+  in #677).
 - Answered CA's read-only SQLite portability audit (#670) — numbers in
   coo.md day four and the mailbox post.
 - Found while measuring ATTACH: every new connection's first query pays
   ~2.1 ms of schema parsing (140 tables); ~18 connections per PAIRINGS
   open. Lead for later: reuse one connection per request.
-- Still open: the digest header line (`TO: front-desk`) — the classifier
-  refused the edit twice; Tracker Build lane or Kerry.
+- The digest header line (`TO: front-desk`) was carried by the Tracker
+  Build lane in v2.489.5 the same morning.
 
 ## 2c. The agent is the CTO
 

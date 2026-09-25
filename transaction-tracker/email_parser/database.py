@@ -39913,7 +39913,7 @@ _HCP_PLAYERS_TTL_S = 120.0
 _HCP_CACHE_STATS: dict = {"hits": 0, "misses": 0}
 
 
-def _hcp_players_signature(db_path) -> tuple:
+def _hcp_players_signature(db_path, _retry: int = 1) -> tuple:
     try:
         with _connect(db_path) as conn:
             # Count + last id catch a posted round; the differential sum
@@ -39948,6 +39948,12 @@ def _hcp_players_signature(db_path) -> tuple:
                 cfg = ()
         return (tuple(r), tuple(l), tuple(st), tuple(ex), cfg)
     except sqlite3.OperationalError:
+        # A transient "database is locked" (a writer committing at that
+        # instant) is the usual cause — one short retry keeps the cache
+        # instead of a "nosig" miss (seen once in test_perf.py, 2026-09-25).
+        if _retry > 0:
+            _time_mod.sleep(0.05)
+            return _hcp_players_signature(db_path, _retry - 1)
         # A signature that cannot be read means NO caching, which is safe
         # but slow — say why in the log rather than hiding it (the v2.484.3
         # lesson: this branch ran on every call for a day and nobody knew).
