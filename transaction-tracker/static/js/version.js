@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.489.7";
+window.TGF_VERSION = "2.489.8";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.489.8",
+    date: "2026-09-25",
+    changes: [
+      "Reporting contract (docs/claude/sop/reporting-contract.md): only the claude.ai Project signs mailbox posts as platform-claude; every Claude Code lane signs tracker-claude, even when relaying CA's words. CA asked for this in #665 after two Track B digests went out under the wrong name. Docs only.",
+    ],
+  },
   {
     version: "2.489.7",
     date: "2026-09-25",

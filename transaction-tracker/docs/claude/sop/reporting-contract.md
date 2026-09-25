@@ -11,6 +11,9 @@ Front Desk writes it. Every lane feeds it through the mailbox.
 - First line of every digest: `TO: front-desk` (add other lanes or
   `platform-claude` after it if they must act).
 - Author `tracker-claude`, and say which lane in the `FROM:` line.
+- **Only the claude.ai Project signs as `platform-claude`** (CA #665, 2026-09-25). Every
+  Claude Code lane signs `tracker-claude`, even when relaying CA's words, so Kerry
+  and the lanes can tell who is speaking.
 - Order inside the digest: **decisions needed from Kerry first**, then what
   shipped (version numbers), then what is open and who owns it. One line each.
 - A quiet run is one line.
