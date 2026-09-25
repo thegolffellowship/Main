@@ -163,6 +163,16 @@
         .se-input:focus { outline: none; border-color: #E87C3E; box-shadow: 0 0 0 3px rgba(232,124,62,.2); }
         .se-link { background: none; border: none; padding: 0; margin-top: 12px; font-size: 14px; color: #4B5563;
                    text-decoration: underline; cursor: pointer; font-family: inherit; width: 100%; text-align: center; }
+        /* MATCH PLAY (Kerry 2026-09-25): a player with a match today wears
+           an M; a triple marked picked up is ringed. */
+        .se-mtag { display: inline-block; font: 700 10px/14px 'Helvetica Neue', Helvetica, Arial, sans-serif;
+                   color: #B45A22; border: 1.5px solid #B45A22; border-radius: 4px; padding: 0 3px;
+                   margin-left: 5px; vertical-align: 2px; letter-spacing: .5px; }
+        .se-check button.cell.pu { box-shadow: inset 0 0 0 2px #E87C3E; border-radius: 50%; }
+        .se-pu { display: inline-block; min-width: 22px; line-height: 22px; border-radius: 11px;
+                 box-shadow: inset 0 0 0 2px #E87C3E; }
+        .se-pu-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 10px; }
+        .se-legend { font-size: 12px; color: #6B7280; margin-top: 6px; white-space: normal; }
         .se-foot { font-size: 13px; color: #6B7280; text-align: center; margin-top: 10px; white-space: normal; }
         .se-hio { border: 2px solid #E87C3E; }
         .se-note { font-size: 12px; color: #6B7280; margin-top: 10px; white-space: normal; }
@@ -202,6 +212,8 @@
         let ctpHole = null, turnNext = null, lostMsg = "", errMsg = "", flagging = false, flagPick = null, busy = false;
         // Card check + photo (Kerry 2026-09-25).
         let checkNine = 0, checkPick = null, help = {}, noPhoto = false, psCid = null, psName = "", psOther = false;
+        // Match play pickup prompt + the max-triple notice (Kerry 2026-09-25).
+        let pickupHole = null, pickupKeys = [], pickupAns = {}, maxNote = "";
         const checkChanged = new Set();
         let photo = store.get(K.photo, null);        // {op_id, data, submitted, sent}
 
@@ -291,6 +303,23 @@
         const signedFor = (cid) => (card.signoffs || []).find((s) => s.customer_id === cid && s.kind === "player"
             && s.signed_by_customer_id != null && s.signed_by_customer_id !== cid);
         function openFlags(cid) { return (card.flags || []).filter((f) => f.customer_id === cid); }
+        // MATCH PLAY: who has a match in this round (the cup dial, bound
+        // to this round), the pickup mark per hole, and the triple.
+        const matchOf = (cids) => { for (const c of cids || []) { const m = (card.matches || {})[String(c)]; if (m) return m; } return null; };
+        const hiOf = (n) => { const par = info(n).par; return par ? par + 3 : 20; };
+        function markOf(key, n) {
+            const p = pending(key, n);
+            if (p && "mark" in p) return p.mark;
+            return ((card.marks || {})[key] || {})[String(n)] || null;
+        }
+        const needsMark = (n) => subjects().filter((s) => matchOf(s.cids)
+            && value(s.key, n).v === hiOf(n) && !markOf(s.key, n)).map((s) => s.key);
+        const mtag = (cids) => matchOf(cids) ? `<span class="se-mtag" title="In a match today">M</span>` : "";
+        function vsText(cids) {
+            const m = matchOf(cids);
+            return m ? "Match vs " + m.opponents.map((c) => first(byId(c).display_name) || "#" + c).join(" & ") : "";
+        }
+        const maxText = (n) => `Maximum allowed is triple bogey (${hiOf(n)}).`;
         const eyebrow = () => [card.round_label, card.group_num != null ? "Group " + card.group_num : null].filter(Boolean).join(" · ");
 
         // ── screens ─────────────────────────────────────────────────────
@@ -302,6 +331,7 @@
             let body;
             if (!who) body = joinScreen();
             else if (card.lock.state === "held" && !following) body = heldScreen();
+            else if (keeping() && pickupHole != null) body = pickupScreen(pickupHole);
             else if (keeping() && ctpHole != null) body = ctpScreen(ctpHole);
             else if (keeping() && turnNext != null) body = turnScreen(turnNext);
             else {
@@ -367,9 +397,10 @@
                 const shown = cur.v == null ? (h.par || "–") : cur.v;
                 const d = cur.v == null || !h.par ? null : cur.v - h.par;
                 const rel = d == null ? "" : (WORDS[String(d)] || (d > 0 ? "+" + d : String(d)));
-                const meta2 = s.team ? s.meta : [teeOf(s.cid).name || null, s.ph != null ? "PH " + s.ph : null, strokeNote(s.cid, hole)].filter(Boolean).join(" · ");
+                const meta2 = [s.team ? s.meta : null, s.team ? null : teeOf(s.cid).name || null, !s.team && s.ph != null ? "PH " + s.ph : null,
+                               s.team ? null : strokeNote(s.cid, hole), vsText(s.cids) || null].filter(Boolean).join(" · ");
                 return `<div class="se-row" data-key="${s.key}">${teeBar(s.cids)}
-                    <div class="se-who"><div class="se-name">${esc(s.name)}</div><div class="se-meta">${esc(meta2)}</div></div>
+                    <div class="se-who"><div class="se-name">${esc(s.name)}${mtag(s.cids)}</div><div class="se-meta">${esc(meta2)}</div></div>
                     <button type="button" class="se-minus" data-act="step" data-d="-1" aria-label="One less for ${esc(s.name)}">&minus;</button>
                     <div class="se-score"><div class="v ${cur.v == null ? "empty" : cur.waiting ? "waiting" : ""}">${shown}</div><div class="r">${rel}</div></div>
                     <button type="button" class="se-plus" data-act="step" data-d="1" aria-label="One more for ${esc(s.name)}">+</button>
@@ -390,6 +421,7 @@
                   </div></div>
                 <div class="se-keeper">${ICON.pen}<span>You're keeping score for the group</span></div>
                 ${hio}
+                ${maxNote ? `<div class="se-warn">${ICON.warn}<span>${esc(maxNote)}</span></div>` : ""}
                 <div class="se-stack">${rows}</div>
                 ${card.strokes_note ? `<div class="se-note">Handicap strokes: ${esc(card.strokes_note)}.</div>` : ""}
                 <div style="margin-top:16px" class="se-lbl">Group card</div>
@@ -430,10 +462,11 @@
                 const cells = hs.map((n) => {
                     const v = value(s.key, n).v;
                     const on = checkPick && checkPick.key === s.key && checkPick.h === n;
-                    const cls = on ? "picked" : checkChanged.has(s.key + "|" + n) ? "changed" : "";
+                    const cls = (on ? "picked" : checkChanged.has(s.key + "|" + n) ? "changed" : "")
+                        + (markOf(s.key, n) === "picked_up" ? " pu" : "");
                     return `<td><button type="button" class="cell ${cls}" data-act="cpick" data-key="${s.key}" data-h="${n}" aria-label="${esc(s.name)}, hole ${n}: ${v == null ? "no score" : v}">${v == null ? "–" : v}</button></td>`;
                 }).join("");
-                return `<tr><td class="nm">${s.cids.length === 1 ? teeDot(s.cids[0]) : ""}${esc(s.team ? s.name : first(s.name))}</td>${cells}<td class="tot">${tot(s.key, hs) || ""}</td>${back ? `<td class="tot">${tot(s.key, nums) || ""}</td>` : ""}</tr>`;
+                return `<tr><td class="nm">${s.cids.length === 1 ? teeDot(s.cids[0]) : ""}${esc(s.team ? s.name : first(s.name))}${mtag(s.cids)}</td>${cells}<td class="tot">${tot(s.key, hs) || ""}</td>${back ? `<td class="tot">${tot(s.key, nums) || ""}</td>` : ""}</tr>`;
             }).join("");
             let picker = "";
             if (checkPick && hs.includes(checkPick.h)) {
@@ -442,7 +475,7 @@
                 const cur = value(checkPick.key, checkPick.h).v;
                 const btns = [];
                 for (let v = lo; v <= hi; v++) btns.push(`<button type="button" class="${v === cur ? "on" : ""}" data-act="cset" data-v="${v}">${v}</button>`);
-                picker = `<div class="se-picker"><div class="h">${esc(sub ? (sub.team ? sub.name : first(sub.name)) : "")} · Hole ${checkPick.h}${h.par ? " · Par " + h.par : ""}</div><div class="row">${btns.join("")}</div></div>`;
+                picker = `<div class="se-picker"><div class="h">${esc(sub ? (sub.team ? sub.name : first(sub.name)) : "")} · Hole ${checkPick.h}${h.par ? " · Par " + h.par : ""}</div><div class="row">${btns.join("")}</div><div class="se-note">${maxText(checkPick.h)}</div></div>`;
             }
             const seg = nines.length > 1 ? `<div class="se-seg" role="tablist">
                     <button type="button" class="${checkNine === 0 ? "on" : ""}" data-act="nine" data-n="0">FRONT</button>
@@ -454,6 +487,7 @@
                 ${hioForKeeper()}
                 ${seg}
                 <div class="se-card se-check"><table><thead>${head}</thead><tbody>${par}${rows}</tbody></table></div>
+                ${subs.some((x) => matchOf(x.cids)) ? `<div class="se-legend"><span class="se-mtag" style="margin-left:0">M</span> in a match today · a ringed number was picked up</div>` : ""}
                 ${picker}
                 <div class="se-lbl" style="margin:14px 0 6px">Totals</div>
                 <div class="se-tots">${tots}</div>
@@ -510,6 +544,33 @@
                 <div class="se-note">Then one other player in the group confirms on their phone, and the manager verifies.</div></div>`).join("");
         }
 
+        // BALL IN HOLE or PICKED UP (Kerry 2026-09-25): "If triple is
+        // entered for match play, a prompt needs to be for BALL IN HOLE or
+        // PICKED UP." Every card keeps the triple; the answer only decides
+        // the match.
+        function pickupScreen(n) {
+            const h = info(n), hi = hiOf(n);
+            const rows = pickupKeys.map((k) => {
+                const sub = subjects().find((x) => x.key === k);
+                if (!sub) return "";
+                const a = pickupAns[k];
+                return `<div class="se-box" style="margin-bottom:10px">
+                    <div style="font-size:17px;font-weight:700">${esc(sub.name)}${mtag(sub.cids)} · ${hi}</div>
+                    <div class="se-meta">${esc(vsText(sub.cids))}</div>
+                    <div class="se-chips" style="margin-top:10px">
+                      <button type="button" class="se-chip ${a === "holed" ? "on" : ""}" data-act="pu" data-key="${k}" data-m="holed">Ball in hole</button>
+                      <button type="button" class="se-chip ${a === "picked_up" ? "on" : ""}" data-act="pu" data-key="${k}" data-m="picked_up">Picked up</button>
+                    </div></div>`;
+            }).join("");
+            const ready = pickupKeys.every((k) => pickupAns[k]);
+            return `<div class="se-eyebrow">Hole ${n}${h.par ? " · Par " + h.par : ""} · Match play</div>
+                <div class="se-titlebar"><h1 class="se-h1">Triple in a match</h1>${helpBtn("pickup")}</div>
+                ${helpText("pickup", `Every card keeps the ${hi}. For the match: ball in hole, his strokes count as usual. Picked up, or more than ${hi}: he can't win the hole. If both sides picked up, the hole is a push.`)}
+                <div class="se-gap" style="height:12px"></div>
+                ${rows}
+                <button type="button" class="se-pill go" data-act="pudone" ${ready ? "" : "disabled"}>Continue</button>`;
+        }
+
         function ctpScreen(n) {
             const c = (card.ctp || {})[String(n)] || {};
             const holder = c.holder_name ? `${esc(c.holder_name)} · Group ${esc(c.holder_group_num)}` : null;
@@ -563,12 +624,12 @@
                     const v = value(s.key, n).v;
                     if (v != null) sub += v;
                     const fl = isMe && flagsMine.some((f) => f.hole === n);
-                    const cell = v == null ? "" : v;
+                    const cell = v == null ? "" : markOf(s.key, n) === "picked_up" ? `<span class="se-pu">${v}</span>` : v;
                     const cls = fl ? "flagged" : (isMe && flagPick === n ? "picked" : "");
                     return `<td class="${cls}">${isMe && canTap ? `<button type="button" class="hole" data-act="pickhole" data-h="${n}" aria-label="Hole ${n}: ${cell}. Tap if it's wrong">${cell}</button>` : cell}</td>`;
                 }).join("");
                 const tot = all.reduce((a, n) => a + (value(s.key, n).v || 0), 0);
-                return `<tr class="${isMe ? "me" : ""}"><td class="nm">${s.cids.length === 1 ? teeDot(s.cids[0]) : ""}${esc(first(s.name) || s.name)}</td>${cells}<td>${sub || ""}</td>${withTotal ? `<td>${tot || ""}</td>` : ""}</tr>`;
+                return `<tr class="${isMe ? "me" : ""}"><td class="nm">${s.cids.length === 1 ? teeDot(s.cids[0]) : ""}${esc(first(s.name) || s.name)}${mtag(s.cids)}</td>${cells}<td>${sub || ""}</td>${withTotal ? `<td>${tot || ""}</td>` : ""}</tr>`;
             }).join("");
             return `<div class="se-card${flagging && canTap ? " picking" : ""}" style="margin-bottom:10px"><table><thead>${head}</thead><tbody>${par}${rows}</tbody></table></div>`;
         }
@@ -604,7 +665,7 @@
                 if (flagPick != null && mine && !signedSelf(who) && !flagsMine.length) {
                     const v = value(mine.key, flagPick).v;
                     actions += `<div class="se-box" style="margin-bottom:10px"><div style="font-size:17px;font-weight:700;margin-bottom:6px">Hole ${flagPick} shows ${v == null ? "no score" : v}. Is that wrong?</div>
-                        <div class="se-copy" style="margin-bottom:10px">${esc(first(kept) || "The scorekeeper")} gets the flag to fix it, then you sign.</div>
+                        <div class="se-copy" style="margin-bottom:10px">${esc(first(kept) || "The scorekeeper")} gets the flag to fix it, then you sign. ${maxText(flagPick)}${v != null && v === hiOf(flagPick) ? " Anything worse is still entered as " + v + "." : ""}</div>
                         <button type="button" class="se-pill dark" data-act="flaghole" data-h="${flagPick}">Flag hole ${flagPick}</button><div class="se-gap"></div>
                         <button type="button" class="se-pill line" data-act="unflag">Cancel, it's right</button></div>`;
                 } else if (flagging) {
@@ -738,9 +799,10 @@
                 if (queue.length) setTimeout(flush, 300);
             }).catch(() => { flushing = false; render(); });
         }
-        function enqueue(key, n, gross) {
+        function enqueue(key, n, gross, mark) {
             const op = {op_id: DEVICE + "-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 7),
                         hole: n, gross: gross, client_ts: new Date().toISOString()};
+            if (mark !== undefined) op.mark = mark;
             if (key.startsWith("t:")) op.team_id = Number(key.slice(2)); else op.customer_id = Number(key.slice(2));
             queue.push(op); store.set(K.q, queue);
         }
@@ -766,16 +828,26 @@
                 // MAX TRIPLE (Kerry 2026-09-25): never above par + 3; and no ace
                 // on a par 5, so a par 5 stops at 2. The server holds the same rule.
                 const lo = h.par >= 5 ? 2 : 1, hi = h.par ? h.par + 3 : 20;
-                draft[key] = Math.min(hi, Math.max(lo, base + Number(b.dataset.d)));
+                const want = base + Number(b.dataset.d);
+                const sub = subjects().find((x) => x.key === key);
+                maxNote = want > hi ? maxText(hole) + (sub && matchOf(sub.cids) ? ` Picked up or worse in the match: enter ${hi}, then mark it Picked up.` : "") : "";
+                draft[key] = Math.min(hi, Math.max(lo, want));
                 render(); return;
             }
             if (act === "goto" || act === "prev" || act === "next") {
+                maxNote = "";
                 commitDraft(); flush();
                 const order = holeOrder(), i = order.indexOf(hole);
                 hole = act === "goto" ? Number(b.dataset.h) : order[act === "prev" ? i - 1 : i + 1];
                 store.set(K.hole, hole); render(); return;
             }
+            if (act === "pu") { pickupAns[b.dataset.key] = b.dataset.m; render(); return; }
+            if (act === "pudone") {
+                for (const k of pickupKeys) if (pickupAns[k]) enqueue(k, pickupHole, value(k, pickupHole).v, pickupAns[k]);
+                flush(); pickupHole = null; pickupKeys = []; pickupAns = {}; render(); return;
+            }
             if (act === "save") {
+                maxNote = "";
                 // "Save" means what is on screen: an untouched player is saved at par.
                 const h = info(hole);
                 for (const s of subjects()) if (!(s.key in draft) && value(s.key, hole).v == null && h.par) draft[s.key] = h.par;
@@ -783,6 +855,8 @@
                 commitDraft(); flush();
                 const c = (card.ctp || {})[String(saved)];
                 if (h.par === 3 && c && !c.answered) { ctpHole = saved; }
+                const need = needsMark(saved);
+                if (need.length) { pickupHole = saved; pickupKeys = need; pickupAns = {}; }
                 const order = holeOrder(), i = order.indexOf(saved);
                 if (allDone()) hole = "review";
                 else if (i < order.length - 1) hole = order[i + 1];
@@ -808,6 +882,8 @@
             if (act === "cset") {
                 const v = Number(b.dataset.v), {key, h} = checkPick;
                 if (value(key, h).v !== v) { enqueue(key, h, v); checkChanged.add(key + "|" + h); flush(); }
+                const need = needsMark(h).filter((k) => k === key);
+                if (need.length) { pickupHole = h; pickupKeys = need; pickupAns = {}; }
                 checkPick = null; render(); return;
             }
             if (act === "matches") { commitDraft(); flush(); checkPick = null; hole = "photo"; store.set(K.hole, "photo"); render(); return; }

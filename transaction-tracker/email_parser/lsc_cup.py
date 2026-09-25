@@ -89,27 +89,40 @@ def _hole_numbers(course: list[dict], n_holes: int) -> list[int]:
     return nums[:n_holes]
 
 
-def _team_line(cids: list[int], hole: int, scores: dict, strokes: dict):
-    """Best-NET ball for one team on one hole → (gross, strokes, net) of
-    the counting player, or (None, 0, None) when no ball is in. A
-    partner without a score simply doesn't count (a pickup in
-    four-ball); singles passes one-man teams so the same path serves
-    both formats."""
+def _team_line(cids: list[int], hole: int, scores: dict, strokes: dict,
+               picked: dict | None = None):
+    """Best-NET ball for one team on one hole → (gross, strokes, net,
+    all_picked) of the counting player, or (None, 0, None, False) when no
+    ball is in. A partner without a score simply doesn't count; singles
+    passes one-man teams so the same path serves both formats.
+
+    PICKED UP (Kerry 2026-09-25): a ball marked picked_up (entered at
+    triple, the max) cannot win the hole, so it never counts while a
+    live ball does. When every entered ball on the side is picked up the
+    line carries that ball's gross for display, net None and all_picked
+    True -- the side cannot win the hole."""
+    picked = picked or {}
     best = None
+    fallback = None
     for cid in cids:
         g = (scores.get(cid) or {}).get(hole)
         if g is None:
             continue
         s = (strokes.get(cid) or {}).get(hole, 0)
+        if hole in (picked.get(cid) or ()):
+            if fallback is None:
+                fallback = (g, s, None, True)
+            continue
         net = g - s
         if best is None or net < best[2]:
-            best = (g, s, net)
-    return best or (None, 0, None)
+            best = (g, s, net, False)
+    return best or fallback or (None, 0, None, False)
 
 
 def compute_match_detail(match: dict, session: dict, course: list[dict],
                          phs: dict, scores: dict,
-                         names: dict | None = None) -> dict:
+                         names: dict | None = None,
+                         marks: dict | None = None) -> dict:
     """One match → the gg_match_play-shaped detail dict.
 
     match:   {"id", "austin": [cid, ...], "sa": [cid, ...], "tee_time"?}
@@ -118,6 +131,9 @@ def compute_match_detail(match: dict, session: dict, course: list[dict],
     phs:     {cid: locked playing handicap}
     scores:  {cid: {hole:int → gross:int}}  (missing holes ABSENT, not 0)
     names:   {cid: display name} (roster); falls back to "#<cid>".
+    marks:   {cid: {hole: "picked_up" | "holed"}} from score entry (a
+             triple in a match is ball-in-hole or picked up). Picked up
+             cannot win the hole; both sides picked up = a push.
     """
     names = names or {}
     n_holes = int(session.get("n_holes") or 18)
@@ -150,12 +166,21 @@ def compute_match_detail(match: dict, session: dict, course: list[dict],
               if g is not None}
           for c in everyone}
 
+    picked = {c: {int(h) for h, m in ((marks or {}).get(c) or (marks or {}).get(str(c)) or {}).items()
+                  if m == "picked_up"}
+              for c in everyone}
     holes_out = []
     for order, hn in enumerate(_hole_numbers(course, n_holes), start=1):
-        g1, s1, n1 = _team_line(teams[0], hn, sc, strokes)
-        g2, s2, n2 = _team_line(teams[1], hn, sc, strokes)
-        if n1 is None or n2 is None:
+        g1, s1, n1, pu1 = _team_line(teams[0], hn, sc, strokes, picked)
+        g2, s2, n2, pu2 = _team_line(teams[1], hn, sc, strokes, picked)
+        if g1 is None or g2 is None:
             winner = None          # hole not complete for both sides
+        elif pu1 and pu2:
+            winner = 0             # both picked up / over max: a push
+        elif pu1:
+            winner = 2             # side 1 cannot win the hole
+        elif pu2:
+            winner = 1
         elif n1 < n2:
             winner = 1
         elif n2 < n1:
@@ -165,6 +190,7 @@ def compute_match_detail(match: dict, session: dict, course: list[dict],
         holes_out.append({"hole": hn, "order": order,
                           "p1_gross": g1, "p2_gross": g2,
                           "p1_strokes": s1, "p2_strokes": s2,
+                          "p1_picked_up": pu1, "p2_picked_up": pu2,
                           "winner": winner})
 
     def _line_name(cids):
@@ -234,12 +260,13 @@ def compute_board(dial: dict, session_data: dict,
         course = data.get("course") or []
         phs = {int(k): v for k, v in (data.get("phs") or {}).items()}
         scores = {int(k): v for k, v in (data.get("scores") or {}).items()}
+        marks = {int(k): v for k, v in (data.get("marks") or {}).items()}
         ppm = float(sess.get("points_per_match") or 1)
         s_out = {"id": sess.get("id"), "label": sess.get("label"),
                  "date": sess.get("date"), "format": sess.get("format"),
                  "points_per_match": ppm, "matches": []}
         for m in sess.get("matches") or []:
-            detail = compute_match_detail(m, sess, course, phs, scores, names)
+            detail = compute_match_detail(m, sess, course, phs, scores, names, marks)
             state = _match_state(detail)
             pts = {"austin": 0.0, "sa": 0.0}
             if state == "final":
@@ -343,6 +370,9 @@ def merge_entry_feed(dial: dict, feed: dict) -> dict:
                for p in r.get("players") or [] if p.get("customer_id")}
         scores = {int(p["customer_id"]): dict(p.get("scores") or {})
                   for p in r.get("players") or [] if p.get("customer_id")}
+        # pickup marks (Kerry 2026-09-25) travel beside the scores
+        marks = {int(p["customer_id"]): dict(p.get("marks") or {})
+                 for p in r.get("players") or [] if p.get("customer_id") and p.get("marks")}
         for t in r.get("teams") or []:
             cids = [c for c in (t.get("customer_ids") or []) if c]
             if not cids or not t.get("scores"):
@@ -350,8 +380,10 @@ def merge_entry_feed(dial: dict, feed: dict) -> dict:
             slot = scores.setdefault(int(cids[0]), {})
             # the team ball wins over any stray individual entry
             slot.update(t["scores"])
+            if t.get("marks"):
+                marks.setdefault(int(cids[0]), {}).update(t["marks"])
         out[sess.get("id")] = {"course": r.get("course") or [],
-                               "phs": phs, "scores": scores}
+                               "phs": phs, "scores": scores, "marks": marks}
     return out
 
 

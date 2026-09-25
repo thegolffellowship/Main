@@ -165,6 +165,87 @@ def test_merge_entry_feed_binds_rounds_and_team_ball():
     assert pm["scores"][30] == {"1": 5, "2": 4}
 
 
+# ---------------------------------------------------------------------------
+# PICKUP RULE (Kerry 2026-09-25, via the Front Desk): in match play a triple
+# is BALL IN HOLE (pops apply) or PICKED UP (cannot win the hole); both
+# sides picked up = a push. Every card still records the triple.
+# ---------------------------------------------------------------------------
+
+def test_pickup_ball_in_hole_keeps_pops():
+    # hole 3 is SI 1: Austin (PH 10 v 7) gets a stroke there. Both make a
+    # triple 7, Austin's ball is IN THE HOLE -> net 6 v 7, Austin wins.
+    session = {"format": "singles", "n_holes": 18}
+    match = {"id": "M1", "austin": [1], "sa": [2]}
+    scores = {1: {3: 7}, 2: {3: 7}}
+    d = compute_match_detail(match, session, COURSE, {1: 10, 2: 7}, scores,
+                             marks={1: {"3": "holed"}, 2: {"3": "holed"}})
+    h = next(x for x in d["holes"] if x["hole"] == 3)
+    assert h["p1_strokes"] == 1 and h["winner"] == 1
+    assert not h["p1_picked_up"] and not h["p2_picked_up"]
+
+
+def test_pickup_cannot_win_even_with_a_pop():
+    # same hole, but Austin PICKED UP: his stroke can't save him -- SA
+    # wins the hole with a holed 7.
+    session = {"format": "singles", "n_holes": 18}
+    match = {"id": "M1", "austin": [1], "sa": [2]}
+    scores = {1: {3: 7}, 2: {3: 7}}
+    d = compute_match_detail(match, session, COURSE, {1: 10, 2: 7}, scores,
+                             marks={1: {"3": "picked_up"}})
+    h = next(x for x in d["holes"] if x["hole"] == 3)
+    assert h["winner"] == 2 and h["p1_picked_up"] and not h["p2_picked_up"]
+    assert h["p1_gross"] == 7          # the card still shows the triple
+
+
+def test_both_picked_up_is_a_push():
+    session = {"format": "singles", "n_holes": 18}
+    match = {"id": "M1", "austin": [1], "sa": [2]}
+    scores = {1: {3: 7}, 2: {3: 7}}
+    d = compute_match_detail(match, session, COURSE, {1: 10, 2: 7}, scores,
+                             marks={1: {"3": "picked_up"}, 2: {"3": "picked_up"}})
+    h = next(x for x in d["holes"] if x["hole"] == 3)
+    assert h["winner"] == 0 and h["p1_picked_up"] and h["p2_picked_up"]
+
+
+def test_fourball_partner_still_plays_after_a_pickup():
+    # Austin's man 1 picked up at 7; partner 2 holed a 5. SA best is 5.
+    # The pickup doesn't sink the side: 5 v 5 halves. Both Austin balls
+    # picked up -> SA wins with anything holed.
+    session = {"format": "fourball", "n_holes": 18}
+    match = {"id": "FB1", "austin": [1, 2], "sa": [3, 4]}
+    phs = {1: 5, 2: 5, 3: 5, 4: 5}
+    scores = {1: {1: 7, 2: 7}, 2: {1: 5, 2: 7}, 3: {1: 5, 2: 6}, 4: {1: 6, 2: 7}}
+    d = compute_match_detail(match, session, COURSE, phs, scores,
+                             marks={1: {"1": "picked_up", "2": "picked_up"},
+                                    2: {"2": "picked_up"}})
+    assert d["holes"][0]["winner"] == 0 and not d["holes"][0]["p1_picked_up"]
+    assert d["holes"][1]["winner"] == 2 and d["holes"][1]["p1_picked_up"]
+
+
+def test_no_marks_is_stroke_play_as_before():
+    # without marks a triple is just a number: nothing else changes
+    session = {"format": "singles", "n_holes": 18}
+    match = {"id": "M1", "austin": [1], "sa": [2]}
+    scores = {1: {3: 7}, 2: {3: 6}}
+    a = compute_match_detail(match, session, COURSE, {1: 10, 2: 7}, scores)
+    b = compute_match_detail(match, session, COURSE, {1: 10, 2: 7}, scores, marks={})
+    assert a["holes"] == b["holes"] and a["holes"][2]["winner"] == 0   # net 6 v 6
+
+
+def test_merge_entry_feed_carries_marks():
+    from email_parser.lsc_cup import merge_entry_feed
+    dial = {"sessions": [{"id": "s", "se_round": 9}]}
+    feed = {"rounds": [{"round_id": 9, "course": [],
+                        "players": [{"customer_id": 1, "playing_handicap": 3,
+                                     "scores": {"1": 7}, "marks": {"1": "picked_up"}},
+                                    {"customer_id": 2, "playing_handicap": 3,
+                                     "scores": {"1": 5}}],
+                        "teams": [{"team_id": 4, "customer_ids": [5, 6],
+                                   "scores": {"1": 7}, "marks": {"1": "holed"}}]}]}
+    out = merge_entry_feed(dial, feed)["s"]
+    assert out["marks"] == {1: {"1": "picked_up"}, 5: {"1": "holed"}}
+
+
 if __name__ == "__main__":
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     for fn in fns:

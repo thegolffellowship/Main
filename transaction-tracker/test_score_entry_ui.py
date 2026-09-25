@@ -199,6 +199,8 @@ with sync_playwright() as p:
     pg.wait_for_selector("text=Is that wrong?")
     check("tapping a hole asks first: 'Hole 3 shows … Is that wrong?'",
           "Hole 3 shows" in pg.inner_text("body") and pg.locator("td.picked").count() == 1)
+    check("the flag box says the maximum is triple bogey (Kerry: 'notify the player')",
+          "Maximum allowed is triple bogey (6)" in pg.inner_text("body"))
     pg.click("[data-act=unflag]")
     pg.wait_for_timeout(200)
     check("Cancel leaves the card unflagged", "Is that wrong?" not in pg.inner_text("body")
@@ -279,6 +281,48 @@ with sync_playwright() as p:
     play(pg, 9)
     pg.wait_for_timeout(1500)
     review_ok(pg, 9, "shotgun")
+    print("match play: M tag, the max-triple notice, Ball in hole / Picked up")
+    import json as _json
+    ridm, gidm, tokm = make(9, 1, "match")
+    db.set_app_setting("lsc_matches", _json.dumps({"event_id": 900, "sessions": [
+        {"id": "s1", "format": "singles", "se_round": ridm,
+         "matches": [{"id": "M1", "austin": [101], "sa": [102]}]}]}))
+    pg = open_as_kerry(tokm)
+    check("both players wear the M and 'Match vs' on the hole screen",
+          pg.locator(".se-row .se-mtag").count() == 2 and "Match vs Mark" in pg.inner_text("body"))
+    for _ in range(4):
+        pg.locator(".se-row").nth(1).locator(".se-plus").click()
+    body = pg.inner_text("body")
+    check("pressing + past the max says so, with the match hint",
+          "Maximum allowed is triple bogey (7)" in body and "mark it Picked up" in body, body[:300])
+    pg.click("[data-act=save]")
+    pg.wait_for_selector("text=Triple in a match", timeout=5000)
+    check("a triple for a match player asks Ball in hole / Picked up (only for him)",
+          pg.locator("[data-act=pu]").count() == 2 and pg.locator("[data-act=pudone]").is_disabled())
+    pg.click("[data-act=pu][data-m=picked_up]")
+    pg.click("[data-act=pudone]")
+    pg.wait_for_selector("text=Hole 2", timeout=5000)
+    pg.wait_for_timeout(1500)
+    card = se.get_group_card(gidm)
+    check("Picked up is stored beside the 7; the card still says 7",
+          card["marks"].get("c:102") == {"1": "picked_up"} and card["scores"]["c:102"]["1"] == 7, card["marks"])
+    play(pg, 8)
+    pg.wait_for_timeout(1500)
+    pg.wait_for_selector("text=Check the card")
+    check("the check card rings the picked-up number and shows the legend",
+          pg.locator("button.cell.pu[data-key='c:102'][data-h='1']").count() == 1
+          and "in a match today" in pg.inner_text("body"))
+    pg.click("button.cell[data-key='c:101'][data-h='2']")
+    check("the check picker shows the max notice", "Maximum allowed is triple bogey (8)" in pg.inner_text(".se-picker"))
+    pg.click(".se-picker [data-act=cset][data-v='8']")
+    pg.wait_for_selector("text=Triple in a match", timeout=5000)
+    pg.click("[data-act=pu][data-m=holed]")
+    pg.click("[data-act=pudone]")
+    pg.wait_for_selector("text=Check the card")
+    pg.wait_for_timeout(1500)
+    check("changing to a triple on the check card asks too; Ball in hole is stored",
+          se.get_group_card(gidm)["marks"].get("c:101") == {"2": "holed"}, se.get_group_card(gidm)["marks"])
+    db.set_app_setting("lsc_matches", "")
     b.close()
 
 try:

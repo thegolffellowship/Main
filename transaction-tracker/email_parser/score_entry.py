@@ -48,6 +48,44 @@ GROSS_MIN, GROSS_MAX = 1, 20
 MAX_OVER_PAR = 3
 
 
+HOLE_MARKS = ("holed", "picked_up")
+
+
+def round_matches(round_id: int, db_path=None) -> dict:
+    """{customer_id: {match_id, session, format, side, partners, opponents}}
+    for every player with a match in this round. The source is the Lone
+    Star Cup dial (Track B's `lsc_matches`): a session bound to this round
+    by se_round. Empty when no match is bound -- stroke play as usual."""
+    from email_parser.database import get_app_setting
+    try:
+        raw = get_app_setting("lsc_matches", db_path) or ""
+        dial = json.loads(raw) if raw.strip() else {}
+    except (ValueError, TypeError):
+        return {}
+    out: dict = {}
+    for sess in dial.get("sessions") or []:
+        if sess.get("se_round") is None or int(sess["se_round"]) != int(round_id):
+            continue
+        for m in sess.get("matches") or []:
+            sides = [[int(c) for c in (m.get(k) or [])] for k in ("austin", "sa")]
+            for i, side in enumerate(sides):
+                for c in side:
+                    out[c] = {"match_id": m.get("id"), "session": sess.get("id"),
+                              "format": sess.get("format") or "singles",
+                              "side": ("austin", "sa")[i],
+                              "partners": [x for x in side if x != c],
+                              "opponents": sides[1 - i]}
+    return out
+
+
+def _marks_by_subject(conn, group_id: int = None, round_id: int = None) -> dict:
+    q, a = ("group_id = ?", group_id) if group_id is not None else ("round_id = ?", round_id)
+    out: dict = {}
+    for r in conn.execute(f"SELECT subject_key, hole_number, mark FROM se_hole_marks WHERE {q}", (a,)):
+        out.setdefault(r[0], {})[str(r[1])] = r[2]
+    return out
+
+
 def gross_bounds(par) -> tuple[int, int]:
     """(lowest, highest) gross a scorer may enter on a hole of this par."""
     if not par:
@@ -288,6 +326,29 @@ def _ensure_score_entry_tables(conn: sqlite3.Connection) -> None:
     CREATE INDEX IF NOT EXISTS idx_se_card_checks_group ON se_card_checks(group_id);
     CREATE UNIQUE INDEX IF NOT EXISTS idx_se_card_checks_photo_op
         ON se_card_checks(photo_op_id) WHERE photo_op_id IS NOT NULL;
+
+    -- MATCH-PLAY PICKUP MARK (Kerry 2026-09-25, via the Front Desk): in
+    -- match play a hole entered at triple (par + 3) is either BALL IN HOLE
+    -- ('holed': the triple stands, pops apply) or PICKED UP ('picked_up':
+    -- he picked up or was over the max, and cannot win the hole; both
+    -- sides picked up = a push). Every card still records the triple; the
+    -- mark only means something at par + 3 and is cleared when the gross
+    -- moves off it. Stroke play ignores it.
+    CREATE TABLE IF NOT EXISTS se_hole_marks (
+        id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+        round_id                INTEGER NOT NULL REFERENCES se_rounds(id) ON DELETE CASCADE,
+        group_id                INTEGER NOT NULL REFERENCES se_groups(id) ON DELETE CASCADE,
+        subject_key             TEXT NOT NULL,
+        customer_id             INTEGER REFERENCES customers(customer_id),
+        team_id                 INTEGER REFERENCES se_teams(id),
+        hole_number             INTEGER NOT NULL,
+        mark                    TEXT NOT NULL CHECK(mark IN ('holed', 'picked_up')),
+        entered_by_customer_id  INTEGER REFERENCES customers(customer_id),
+        device_id               TEXT,
+        op_id                   TEXT,
+        at                      TEXT NOT NULL,
+        UNIQUE(round_id, subject_key, hole_number));
+    CREATE INDEX IF NOT EXISTS idx_se_hole_marks_group ON se_hole_marks(group_id);
 
     CREATE TABLE IF NOT EXISTS se_event_versions (
         event_id   INTEGER PRIMARY KEY,
@@ -773,12 +834,14 @@ def get_group_card(group_id: int, device_id: str | None = None, db_path=None) ->
         lock = conn.execute("SELECT * FROM se_group_locks WHERE group_id = ?",
                             (group_id,)).fetchone()
         extras = _card_extras(conn, g, group_id)
+        marks = _marks_by_subject(conn, group_id=group_id)
     return {**extras, "group_id": group_id, "round_id": g["round_id"], "event_id": g["event_id"],
             "round_label": g["round_label"], "round_date": g["round_date"],
             "holes": g["holes"], "status": g["status"], "label": g["label"],
             "group_num": g["group_num"],
             "start_hole": g["start_hole"], "tee_time": g["tee_time"],
             "course": holes, "players": players, "teams": teams, "scores": scores,
+            "marks": marks, "matches": {str(k): v for k, v in round_matches(g["round_id"]).items()},
             "lock": _lock_view(lock, device_id, names)}
 
 
@@ -899,6 +962,13 @@ def write_scores(group_id: int, device_id: str, entered_by: int | None,
                     if not lo <= gross <= hi:
                         why = (f"gross must be {lo}-{hi} on a par {par_of.get(hole)} (max triple)"
                                if par_of.get(hole) else f"gross must be {lo}-{hi}")
+            has_mark = "mark" in op
+            mark = op.get("mark") or None
+            if why is None and mark is not None and mark not in HOLE_MARKS:
+                why = "mark must be holed or picked_up"
+            if why is None and mark is not None and (
+                    gross is None or gross != gross_bounds(par_of.get(hole))[1]):
+                why = "a pickup mark goes only on a triple (the max)"
             cid = op.get("customer_id")
             tid = op.get("team_id")
             if why is None:
@@ -916,6 +986,7 @@ def write_scores(group_id: int, device_id: str, entered_by: int | None,
                 else:
                     why = "customer_id or team_id required"
             detail = json.dumps({"hole": op.get("hole"), "gross": op.get("gross"),
+                                 **({"mark": mark} if has_mark else {}),
                                  "customer_id": op.get("customer_id"),
                                  "team_id": op.get("team_id"),
                                  "client_ts": op.get("client_ts")})
@@ -944,6 +1015,22 @@ def write_scores(group_id: int, device_id: str, entered_by: int | None,
                     "client_ts = excluded.client_ts, server_ts = excluded.server_ts",
                     (g["round_id"], group_id, subject, cid, tid, ta, tb, hole, gross,
                      entered_by, device_id, op_id, op.get("client_ts"), now))
+                # The pickup mark: set or cleared when the op carries one;
+                # always cleared when the gross leaves the triple.
+                at_max = gross is not None and gross == gross_bounds(par_of.get(hole))[1]
+                if (has_mark and mark is None) or not at_max:
+                    conn.execute("DELETE FROM se_hole_marks WHERE round_id = ? AND subject_key = ? "
+                                 "AND hole_number = ?", (g["round_id"], subject, hole))
+                elif mark is not None:
+                    conn.execute(
+                        "INSERT INTO se_hole_marks (round_id, group_id, subject_key, customer_id, "
+                        "team_id, hole_number, mark, entered_by_customer_id, device_id, op_id, at) "
+                        "VALUES (?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(round_id, subject_key, hole_number) "
+                        "DO UPDATE SET mark = excluded.mark, entered_by_customer_id = "
+                        "excluded.entered_by_customer_id, device_id = excluded.device_id, "
+                        "op_id = excluded.op_id, at = excluded.at",
+                        (g["round_id"], group_id, subject, cid, tid, hole, mark, entered_by,
+                         device_id, op_id, now))
                 applied += 1
             conn.execute(
                 "INSERT INTO se_audit (round_id, group_id, kind, customer_id, device_id, "
@@ -1557,6 +1644,7 @@ def get_entered_scores(event_id: int, round_id: int | None = None, db_path=None)
                        "last_write_at": last.get(g["id"])}
                       for g in conn.execute("SELECT * FROM se_groups WHERE round_id = ? "
                                             "ORDER BY group_num", (rid,))]
+            marks = _marks_by_subject(conn, round_id=rid)
             players = []
             for p in conn.execute("SELECT * FROM se_players WHERE round_id = ? "
                                   "ORDER BY group_id, COALESCE(seat, 99), id", (rid,)):
@@ -1565,6 +1653,7 @@ def get_entered_scores(event_id: int, round_id: int | None = None, db_path=None)
                                 "group_id": p["group_id"], "tee": p["tee"],
                                 "playing_handicap": p["playing_handicap"],
                                 "scores": d["scores"], "thru": len(d["scores"]),
+                                "marks": marks.get(f"c:{p['customer_id']}", {}),
                                 "last_write_at": d["last"] or None})
             teams = []
             for t in conn.execute("SELECT * FROM se_teams WHERE round_id = ? ORDER BY id",
@@ -1573,6 +1662,7 @@ def get_entered_scores(event_id: int, round_id: int | None = None, db_path=None)
                 teams.append({"team_id": t["id"], "group_id": t["group_id"],
                               "customer_ids": [t["customer_id_a"], t["customer_id_b"]],
                               "label": t["label"], "scores": d["scores"],
+                              "marks": marks.get(f"t:{t['id']}", {}),
                               "thru": len(d["scores"]), "last_write_at": d["last"] or None})
             signed = [dict(x) for x in conn.execute(
                 "SELECT customer_id, kind, signed_by_customer_id, at FROM se_signoffs "

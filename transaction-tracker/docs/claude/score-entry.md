@@ -165,6 +165,51 @@ or `POST /api/score-entry/events/<id>/keeper-signs {on}` (manager+). The
 photo: `GET /api/score-entry/checks/<id>/photo.jpg` (manager+). Guards:
 `test_score_entry.py` (submit / dial / photo) and `test_score_entry_ui.py`.
 
+## Match play: Ball in hole or Picked up (v2.496.0)
+
+Kerry, 2026-09-25 (via the Front Desk), verbatim: "The only possible
+differentiation is in match play. If triple is entered for match play, a
+prompt needs to be for BALL IN HOLE or PICKED UP. If ball in hole then
+handicap pops apply for the the match. If ball picked up or over 7, then
+that player cannot win the hole. If both players/teams in a match had to
+pick up or are over max, then neither team/player wins the hole and the
+hole is simply a push, though it's still entered as a triple. It would
+receive some type of highlight or mark in a match. Probably scorecard also
+needs to recognize that there IS a match going on for the players that
+there is one in, like some type of symbol or note." And on "Something's
+wrong" above triple: "It should notify the player that the maximum allowed
+is Triple".
+
+- **Who has a match.** `round_matches(round_id)` reads the Lone Star Cup
+  dial (`lsc_matches`, Track B): a session bound to this round by
+  `se_round`. The card carries `matches` ({cid: match_id, format, side,
+  partners, opponents}); each such player wears an **M** and "Match vs …"
+  on every screen. No bound session = stroke play, nothing changes.
+- **The prompt.** When a match player is saved at par + 3 (hole screen or
+  the check card) and has no mark, the phone asks **Ball in hole / Picked
+  up** for him before moving on (help behind the ?). The answer rides the
+  normal write as `op.mark` (`holed` | `picked_up`), so it queues offline
+  and is idempotent on op_id. The card still records the triple.
+- **Storage.** `se_hole_marks` (one per round + subject + hole, with
+  customer_id or team_id). A mark only goes on the triple (`invalid`
+  otherwise); a write without `mark` keeps it; moving the gross off the
+  triple clears it. A mark does not void signatures (the card is
+  unchanged).
+- **The read.** `get_entered_scores` players[] and teams[] carry
+  `marks: {"<hole>": "picked_up" | "holed"}`; `get_group_card` carries
+  `marks: {subject_key: {hole: mark}}`.
+- **The match result** is Track B's engine (`lsc_cup.compute_match_detail`,
+  new `marks=` argument, fed by `merge_entry_feed`): a picked-up ball
+  cannot win the hole (a four-ball partner still plays); both sides picked
+  up = a push (`winner 0`); ball in hole keeps the pops. Hole rows carry
+  `p1_picked_up` / `p2_picked_up` for the match card's highlight. Guards:
+  `tests/test_lsc_cup.py` (six new cases) and `test_score_entry.py` (end to
+  end through `lsc_board_payload`).
+- **The notice.** Pressing + past the max, the check picker, and the
+  "Something's wrong" box all say "Maximum allowed is triple bogey (N)."
+  (for a match player: "enter N, then mark it Picked up").
+- Screenshots: `docs/claude/screenshots/score-entry-2026-09-25-match-pickup/`.
+
 ## Max Triple, and no ace on a par 5 (v2.493.3)
 
 Kerry, 2026-09-25: "We do Max Triple, so it can't be more than that. Also,
@@ -241,6 +286,10 @@ se_ctp_claims      round/group, hole_number, customer_id FK (NULL = no one
 se_hio_claims      round/group, customer_id FK, hole_number, eligible,
                    status pending|confirmed|witnessed|verified|rejected|
                    withdrawn, scorekeeper/witness customer_ids, verified_by
+se_hole_marks      round/group, subject_key, customer_id FK | team_id,
+                   hole_number, mark holed|picked_up (only at the triple),
+                   entered_by_customer_id, device_id, op_id, at;
+                   UNIQUE(round, subject, hole)
 se_card_checks     round/group, scorekeeper_customer_id FK,
                    print_scorer_customer_id FK | print_scorer_name (only
                    when not a group player), signed_for_group, photo_op_id

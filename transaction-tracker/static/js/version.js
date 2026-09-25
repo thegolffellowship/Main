@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.495.0";
+window.TGF_VERSION = "2.496.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.496.0",
+    date: "2026-09-25",
+    title: "Score entry: match play Ball in hole / Picked up, and the max-triple notice",
+    changes: [
+      "Kerry, 2026-09-25: 'If triple is entered for match play, a prompt needs to be for BALL IN HOLE or PICKED UP. If ball in hole then handicap pops apply ... If ball picked up or over 7, then that player cannot win the hole. If both ... had to pick up or are over max, then neither team/player wins the hole and the hole is simply a push, though it's still entered as a triple.' A player with a match in the round (a Lone Star Cup session bound to it) wears an M and 'Match vs ...' on every screen. When he is saved at triple, the phone asks Ball in hole or Picked up; the answer is kept beside the score (new table se_hole_marks), the card still shows the triple, and a picked-up number is ringed on the card.",
+      "The cup engine applies it: a picked-up ball cannot win the hole (a four-ball partner still plays it), both sides picked up is a push, ball in hole keeps the pops. The read carries marks per player for the board; hole rows say which side picked up so the match card can mark it.",
+      "Kerry: 'It should notify the player that the maximum allowed is Triple.' Pressing + past the max, the check-card picker and the Something's wrong box now say 'Maximum allowed is triple bogey (N).'"
+    ]
+  },
   {
     version: "2.495.0",
     date: "2026-09-25",

@@ -14,6 +14,7 @@
 Run: python3 test_score_entry.py
 """
 import io
+import json
 import contextlib
 import logging
 import os
@@ -284,6 +285,49 @@ se.write_scores(sg, "sk", 101, [{"op_id": "S105-6b", "customer_id": 105, "hole":
 check("fixing the hole resolves the flag", se.get_group_card(sg)["flags"] == [])
 check("then the card signs again", se.sign_card(sg, "p5", 105).get("signed"))
 check("a manager signature needs a note", "error" in se.sign_card(sg, "admin", 101, kind="manager"))
+
+print("match play: pickup marks (Kerry 2026-09-25)")
+# sg's course is NINE; hole 1 is a par 4 -> triple is 7
+mk = lambda op_id, cid, hole, gross, **kw: {"op_id": op_id, "customer_id": cid, "hole": hole, "gross": gross, **kw}
+r = se.write_scores(sg, "sk", 101, [mk("MK1", 102, 1, 6, mark="picked_up")])["results"][0]
+check("a pickup mark only goes on the triple", r["result"] == "invalid" and "triple" in r["why"], r)
+r = se.write_scores(sg, "sk", 101, [mk("MK2", 102, 1, 7, mark="gimme")])["results"][0]
+check("a mark is holed or picked_up, nothing else", r["result"] == "invalid", r)
+se.write_scores(sg, "sk", 101, [mk("MK3", 102, 1, 7, mark="picked_up")])
+check("the triple + picked up is stored beside the score",
+      se.get_group_card(sg)["marks"].get("c:102") == {"1": "picked_up"}
+      and se.get_group_card(sg)["scores"]["c:102"]["1"] == 7)
+se.write_scores(sg, "sk", 101, [mk("MK4", 102, 1, 7)])
+check("re-writing the triple without a mark keeps the mark",
+      se.get_group_card(sg)["marks"].get("c:102") == {"1": "picked_up"})
+se.write_scores(sg, "sk", 101, [mk("MK5", 102, 1, 7, mark="holed")])
+check("ball in hole replaces picked up", se.get_group_card(sg)["marks"].get("c:102") == {"1": "holed"})
+se.write_scores(sg, "sk", 101, [mk("MK6", 102, 1, 6)])
+check("moving off the triple clears the mark", "c:102" not in se.get_group_card(sg)["marks"])
+se.write_scores(sg, "sk", 101, [mk("MK7", 102, 1, 7, mark="picked_up")])
+rd = {p["customer_id"]: p for p in se.get_entered_scores(900, sr)["rounds"][0]["players"]}
+check("the read carries marks per player (Track B's shape)", rd[102]["marks"] == {"1": "picked_up"}
+      and rd[101]["marks"] == {}, rd[102])
+check("no match bound: the card says so", se.get_group_card(sg)["matches"] == {})
+db.set_app_setting("lsc_matches", json.dumps({"event_id": 900, "sessions": [
+    {"id": "s1", "format": "singles", "se_round": sr,
+     "matches": [{"id": "M1", "austin": [101], "sa": [102]}]}]}))
+mt = se.get_group_card(sg)["matches"]
+check("a bound cup session tells the card who has a match, and against whom",
+      mt.get("101", {}).get("opponents") == [102] and mt.get("102", {}).get("side") == "sa"
+      and "105" not in mt, mt)
+from email_parser.lsc_cup import lsc_board_payload
+se.write_scores(sg, "sk", 101, [mk("MK9", 101, 1, 7, mark="holed")])
+h1 = lambda: next(h for h in lsc_board_payload()["sessions"][0]["matches"][0]["holes"] if h["hole"] == 1)
+x = h1()
+check("end to end: Kerry holed 7, Adam picked up 7 -> Kerry (Austin) wins hole 1 on the cup board",
+      x["winner"] == 1 and x["p2_picked_up"] and not x["p1_picked_up"], x)
+se.write_scores(sg, "sk", 101, [mk("MK10", 101, 1, 7, mark="picked_up")])
+x = h1()
+check("...both picked up -> the hole is a push, both cards still 7",
+      x["winner"] == 0 and x["p1_gross"] == 7 and x["p2_gross"] == 7, x)
+db.set_app_setting("lsc_matches", "")
+se.write_scores(sg, "sk", 101, [mk("MK8", 102, 1, 5), mk("MK11", 101, 1, 4)])
 
 print("card check + submit + photo (Kerry 2026-09-25)")
 check("only the scorekeeper's phone submits",
