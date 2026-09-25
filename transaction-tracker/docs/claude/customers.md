@@ -676,6 +676,19 @@ the "Removals & Refunds" table at the bottom of the Enrollment tab.
 pre-feature Venmo refunds (Cheshire/Lourigan CMP 2026) and backfills
 customer_id on seed rows written before the profile was resolvable.
 
+**Bounced mail marks the address undeliverable by itself (v2.492.1, CA
+#688).** A permanent non-delivery report (5.x.x) for an address on
+`customer_emails` runs `set_email_undeliverable` with the SMTP code and
+NDR date as the reason, so the address stays for MATCHING and leaves every
+SEND path. A surviving live address is promoted, and the contact-gap item
+fires when none is left. One COO action item per bounce names the customer.
+Transient 4.x.x failures are logged only. Hayden Cooper (cid 161,
+`hayden@roofrevivecrs.com`, "550 5.1.2 Domain not found" on the 9/25
+lapsed notice) was the case that prompted it. That address came from his
+own GoDaddy membership order R663931562 of 2025-09-11 (EMAIL_DRIFT #135,
+adopted 9/9), not from anyone typing it in the Tracker. `email_parser/bounces.py`,
+guard `test_bounce_intake.py`.
+
 **A second FALL entry is a warning, not an enrollment (v2.488.8).** The
 "Add FALL Points Race?" option prints on every Fall event product, so a
 member already in the race can buy it again (Jeff Rideout, s9.25 Canyon

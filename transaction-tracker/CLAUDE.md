@@ -18,7 +18,7 @@ Before working on a specific area, Read the relevant sub-doc:
 - `docs/claude/side-games.md` (side-games RATIFIED SPEC v1.0 — buy-ins, game rules, prize-matrix derivation; open flags at bottom. **THE BUY-IN COUNT SELECTS WHICH GAME IS PLAYED** (a9.23, ratified 2026-09-16) — below 8 gross buyers on a nine the matrix runs Skins ½ Net, a NET game, and computing gross instead is what made us report that Golf Genius contradicted itself when it was right. Also **pops are a property of the GAME, not of the card** (round-level Individual Net/Gross vs hole-level Team Net/Stableford/½-Net Skins), and the **USGA Appendix C allowance table with its verification state** — the four-player ladder confirmed, the two-player CART Net rows NOT confirmed and deliberately carrying no fallback value)
 - `docs/claude/game-engine.md` (Game Creator engine + untether-from-GG staging — versioned game/season-contest definitions; design of record)
 - `docs/claude/live-scoring-test-center.md` (admin sandbox at `/admin/test-center` — the Stage-1 shadow leaderboard + GG parity gate; pure engine in `email_parser/live_scoring.py`; live in-place GG refresh + the course-coverage guard)
-- `docs/claude/score-entry.md` (**PLAYER SCORE ENTRY, Track A, v2.491.0 — schema RATIFIED by Kerry 2026-09-24 (#667), on main BEHIND the `score_entry_live` app setting**: phone-first `/member/score?t=<group link>`, gross only, keyed to customer_id, one scorer per group with explicit take-over (no timeout), offline queue idempotent on op_id, Foursomes team row; sign-off (an edit voids that player's signature only), card flags, par-3 CTP claims and the HIO scorekeeper→witness→manager chain (#666); the event-scoped rounds-plural read Track B consumes; GG stays the money record — `test_score_entry.py` fails if anything but `email_parser/score_entry.py` touches se_*)
+- `docs/claude/score-entry.md` (**PLAYER SCORE ENTRY, Track A, v2.493.0 — schema RATIFIED by Kerry 2026-09-24 (#667), on main BEHIND the `score_entry_live` app setting**: phone-first `/member/score?t=<group link>`, gross only, keyed to customer_id, one scorer per group with explicit take-over (no timeout), offline queue idempotent on op_id, Foursomes team row; sign-off (an edit voids that player's signature only), card flags, par-3 CTP claims and the HIO scorekeeper→witness→manager chain (#666); the event-scoped rounds-plural read Track B consumes; GG stays the money record — `test_score_entry.py` fails if anything but `email_parser/score_entry.py` touches se_*)
 - `docs/claude/live-scoring-spec-for-ca.md` (**end-to-end spec for CA** — the scoring engine, the FLIGHTING rule as taught by Kerry 2026-07-29, the pot-split analysis, the flights-freeze/money-floats scenario matrix, and an explicit ratified / derived / UNKNOWN split. Start here for the whole picture)
 - `docs/claude/runbook-tgf-championship-2026-08-14.md` (2026 TGF CHAMPIONSHIP at Lost Pines — pre-flight findings incl. the empty course row + the event-link fix, verified bucket purses, Thursday + game-day checklists)
 - `docs/claude/runbook-sa-championship-2026-08-01.md` (first live shadow: SA CHAMPIONSHIP at The Quarry — pre-flight, per-nine tee merge, buyer counts that decide which games activate, and what to record on the day)
@@ -400,6 +400,7 @@ No Python or local install needed — Claude Desktop connects directly to Railwa
 - `email_parser/print_pack.py` — the event PRINT PACK (v2.465.0): Starter Sheet + Cart Signs + Divisions & Flights + Proximity bound into one PDF by headless Chromium (Playwright; WeasyPrint fallback); `GET /events/<id>/print-pack.pdf`; evening-before routine 5–10 PM Central mails tomorrow's packs once per change (`print_pack_sent:<id>` hash); bridge `scoring-print-pack-pdf:<id>[|send]`. See events.md
 - `email_parser/report.py` — Daily digest email builder + sender
 - `email_parser/recap_mail.py` — recap DRAFTS by email to the chapter's sender (v2.488.0, Kerry 2026-09-23): one `## <CHAPTER>` section of `docs/claude/recaps/<file>.md` as paste-ready HTML + the .docx beside it; STAFF addresses only (`@thegolffellowship.com` or app setting `recap_draft_allow`), once per file+section+recipients; recipients `recap_draft_to_<chapter>` / `recap_draft_cc`; bridge `scoring-recap-draft-email`; guard `test_recap_mail.py`
+- `email_parser/bounces.py` — **BOUNCE INTAKE** (CA #688, Kerry 2026-09-25 "Deal with this.", after the Hayden Cooper 550 5.1.2): `parse_ndr` reads Exchange/MTA non-delivery reports (rejected address, basic + enhanced SMTP code); `process_bounces` marks a PERMANENT (5.x.x) bounce undeliverable on every `customer_emails` row with that address via `set_email_undeliverable` (reason = code + server text + "NDR <date>") and raises ONE COO action item per customer ("Email bounced: <name> <email>"); TRANSIENT (4.x.x) is logged only. Job `bounce_inbox_check` (every 15 min, `BOUNCE_CHECK_INTERVAL_MINUTES`) reads the sending mailboxes; the 2-min expense check hands NDRs to it before classifying. Dedup via `expense_seen_emails` (`classified_as='ndr'`). Guard `test_bounce_intake.py`
 - `email_parser/rsvp_parser.py` — Golf Genius RSVP email parser (regex, no AI)
 - `templates/index.html` — Transactions dashboard
 - `templates/events.html` — Events management + Tee Time Advisor + Financial tab (hybrid server/client rendering)
@@ -465,6 +466,19 @@ No Python or local install needed — Claude Desktop connects directly to Railwa
   `expense_parser._call_llm`, `parser.parse_emails`, and
   `app._check_inbox_background` — add a call to any new recurring
   Anthropic path you introduce.
+
+## Portable-SQL rule for ALL NEW code (CA #682, 2026-09-25, effective now)
+
+The Tracker may move to Postgres after launch (Convergence Plan Part 3, Kerry
+rules 9/26). Until then, new code must not add SQLite-only debt. On every
+coding lane, in every new line of SQL:
+- no new `COLLATE NOCASE` and no case-reliant `LIKE`; use `lower()` on both sides;
+- no new `INSERT OR REPLACE`;
+- new writes return ids with `RETURNING`, not `lastrowid`;
+- no new try-ALTER-except; new tables and columns get a migration file;
+- money in new columns is numeric cents or decimals, never TEXT.
+Existing code stays as it is until Kerry rules on the hardening work. The
+audit behind this is in mailbox #672 and #676.
 
 ## Lazy DDL is once per database (v2.486.0, IMPORTANT for every `_ensure_*`)
 
@@ -726,6 +740,20 @@ Same rule for `{%` (statement), `{{` (expression). When embedding CSS inside a J
 python3 -c "from jinja2 import Environment, FileSystemLoader; \
     Environment(loader=FileSystemLoader('templates')).get_template('accounting.html').render()"
 ```
+
+## Finish on main (Kerry, 2026-09-25, standing rule)
+
+Kerry: "Both can be pushed to their own respective MAINs and should be. Just
+obviously they have to go to the right places. Horizon is NOT TGF. No connection."
+- Every finished change to the TGF Tracker is merged into `main` of
+  thegolffellowship/Main and pushed, so Railway deploys it. Nothing is left on
+  a branch or in an open pull request when you report done. Verify that the
+  live site serves the new version.
+- Horizon Tracker work goes ONLY to `main` of thegolffellowship/horizon-tracker
+  (Vercel). Never put Horizon code, docs or data in this repo, and never put
+  TGF work in that one.
+- Rule 3b still applies: a change that needs Kerry's ratification is merged
+  only after he gives it.
 
 ## Git Merge & PR Best Practices
 

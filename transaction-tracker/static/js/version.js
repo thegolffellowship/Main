@@ -1,7 +1,7 @@
-window.TGF_VERSION = "2.491.0";
+window.TGF_VERSION = "2.493.0";
 window.TGF_CHANGELOG = [
   {
-    version: "2.491.0",
+    version: "2.493.0",
     date: "2026-09-25",
     title: "Player score entry (Track A): tables, API and the phone screen, behind a switch",
     changes: [
@@ -14,8 +14,45 @@ window.TGF_CHANGELOG = [
       "Handicap strokes per hole come off the locked playing handicap on GG's full-card setting and are labelled 'strokes per GG convention' on nines until Kerry rules on CA Queue #10/#11; a handicap the card's stroke indexes cannot carry is reported, never guessed.",
       "The screens are rebuilt to CA's four-screen mockup that Kerry approved as the MVP (#668/#669): 'Who are you?' join, the scorekeeper's hole screen with each player's stroke note and a label relative to par, the par-3 'Closest to the pin' prompt, and a live follow-along card that turns into 'Sign your card' when the last hole is in. A second phone chooses Follow along or Take over.",
       "Cart-sign QR (Kerry #666 B): a cart sign carries a 'Scan to keep score' code for the groups named in the new score_entry_qr app setting ({\"<event_id>\": \"all\" | [group numbers]}); the group's round is seeded from PAIRINGS the first time the sign prints. No dial, no code; a bad dial prints the old sign. New dependency: segno (pure-Python QR, inline SVG, no network at print time).",
-      "The score-entry tables are created once per database per process (CLAUDE.md 'Lazy DDL is once per database'); before this, every score-entry read would have taken the database write lock for its CREATE statements."
+      "The score-entry tables are created once per database per process (CLAUDE.md 'Lazy DDL is once per database'); before this, every score-entry read would have taken the database write lock for its CREATE statements.",
+      "Load rehearsal at cup scale (CA #665.1) on staged data: write p95 20 ms and read p95 14 ms at cup rate, 60 ms / 59 ms at ten times that, no errors, nothing lost. The event read now builds one payload per score version and every viewer shares it. The module follows CA's portable-SQL rule (#682) and a test keeps it there. Merged to main on Kerry's standing rule (2026-09-25, #667 ratification)."
     ]
+  },
+  {
+    version: "2.492.2",
+    date: "2026-09-25",
+    changes: [
+      "CLAUDE.md gains Kerry's standing rule: finished work goes to main and is pushed, so production deploys it, with nothing left on a branch or in an open pull request. The TGF Tracker and the Horizon Tracker each push to their own repo's main and never share code. Docs only.",
+    ],
+  },
+  {
+    version: "2.492.1",
+    date: "2026-09-25",
+    changes: [
+      "Bounce intake (CA #688, Kerry: \u2018Deal with this.\u2019). The 9 AM lapsed-member notice to Hayden Cooper bounced \u2018550 5.1.2 Domain not found\u2019, and until now only a person reading the admin mailbox would have caught it. The Tracker now reads non-delivery reports itself. A permanent failure (5.x.x) marks that address undeliverable on the customer, with the SMTP code and the NDR date as the reason, so the address stays for matching but no send path uses it. It also puts one action item on the COO banner naming the customer and the address that bounced. A temporary failure (4.x.x, such as a full mailbox) is only logged.",
+      "A new job checks the sending mailboxes every 15 minutes. The 2-minute expense check also passes any bounce it sees straight to intake, so bounces are never sent to the AI classifier. Each report is handled once. New email_parser/bounces.py; guard test_bounce_intake.py; docs in customers.md, expense-workflow.md and CLAUDE.md.",
+    ],
+  },
+  {
+    version: "2.492.0",
+    date: "2026-09-25",
+    title: "G2a: races descoped to G2c, and the purse mapping drafted (CA #682)",
+    changes: [
+      "CA ruled (#682) that the RACE leg is descoped to a new gate, G2c \u2014 our finding stands that there is no TGF points engine, so race parity would compare GG to itself. G2a now grades PLAYERS and GAMES only and CAN pass without races. The race tier still appears in the table as `descoped_to_g2c` with the reason, because a gate that silently drops a third of its scope is how a hollow pass happens; it simply no longer blocks the verdict.",
+      "DRAFTED the purse-category \u2194 GG-game mapping CA asked for, derived from the code rather than guessed, and gated behind `PURSE_MAP_RATIFIED = False` so nothing grades until CA reviews and Kerry ratifies (rule 3b).",
+      "THE NAMING WAS THE EASY HALF. Six of eight categories are the SAME STRING on both sides, because `_gg_purse_rows(game_key, ...)` emits `category = game_key`. The real finding is PROVENANCE: for `individual_net`, `individual_gross` and `skins` the assembler is GG-FIRST \u2014 when GG has posted a purse board we copy its numbers verbatim (`status: \u2018gg_purse\u2019`) and our engine computes only on the fallback. `team_net`, `ctp` and `longest_putt` are always GG\u2019s recorded rows. So on a normal event where GG posted its boards, grading purses against GG would compare GG to itself on six of eight categories \u2014 the same defect that got the race leg descoped.",
+      "Only `mvp` and `tgf_mvp` are independently computed today (`determine_tgf_mvp`), and they map CROSS-TABLE to `event_mvps.kind`, not to a `gg_game_results` game key \u2014 `audit_pre_boundary_mvp` already runs that comparison, so there is precedent for it being real.",
+      "FOUR AMBIGUITIES NAMED RATHER THAN MAPPED: (1) GG carries a `hio` game key but the payout assembler emits no hio category; (2) GG puts the flight label in `detail` while we embed it in description TEXT, so a per-row match needs flight-level keys on both sides or it will pair a Flight 1 row with a Flight 2 row; (3) team_net is one GG row but N rows our side, so only the team total is comparable; (4) A2(ii)\u2019s $0.01\u2013$0.02 tie tolerance must apply per tied GROUP, not per row.",
+      "Tests: `test_g2a_parity.py` now 31 checks, including that the draft map ships unratified, that every row carries a provenance value rather than just a GG key, and that no ambiguous key leaked into the mapped table.",
+      "Portable-SQL rule (#682, CLAUDE.md v2.490.1): the module complies trivially \u2014 it writes no SQL of its own, calling existing database helpers instead.",
+    ],
+  },
+  {
+    version: "2.490.1",
+    date: "2026-09-25",
+    changes: [
+      "CLAUDE.md gains the portable-SQL rule CA set in mailbox #682 for all new code on every lane: no new COLLATE NOCASE or case-reliant LIKE, no new INSERT OR REPLACE, RETURNING instead of lastrowid, migration files instead of try-ALTER, and money stored as numeric, never TEXT. It keeps new code ready for a later Postgres move without touching existing code before Kerry rules. Docs only.",
+    ],
   },
   {
     version: "2.490.0",

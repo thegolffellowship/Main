@@ -1,6 +1,6 @@
 # Player Score Entry (Track A, "CTO › Live Score Entry")
 
-**Status 2026-09-25 (v2.491.0): on main, BEHIND THE FLAG.** Kerry ratified
+**Status 2026-09-25 (v2.493.0): on main, BEHIND THE FLAG.** Kerry ratified
 the se_* schema — #657 + the #661 Foursomes team row + the #666 sign-off,
 CTP and HIO rows — on 2026-09-24 ("Yes.", #667), with access by QR/link
 (#666 B, cart-sign QR first) and the 9/29 dry run = his group at s9.25
