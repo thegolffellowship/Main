@@ -41,6 +41,19 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 GROSS_MIN, GROSS_MAX = 1, 20
+# TGF plays MAX TRIPLE (Kerry, 2026-09-25: "We do Max Triple, so it can't be
+# more than that."): a hole's gross is at most par + 3. And "hole in ones
+# wouldn't be possible on Par 5s": the lowest gross on a par 5 is 2. A hole
+# with no par on the card falls back to the 1-20 sanity range.
+MAX_OVER_PAR = 3
+
+
+def gross_bounds(par) -> tuple[int, int]:
+    """(lowest, highest) gross a scorer may enter on a hole of this par."""
+    if not par:
+        return GROSS_MIN, GROSS_MAX
+    par = int(par)
+    return (2 if par >= 5 else 1), par + MAX_OVER_PAR
 MAX_OPS_PER_BATCH = 200
 
 
@@ -826,8 +839,9 @@ def write_scores(group_id: int, device_id: str, entered_by: int | None,
         teams = {r[0]: (r[1], r[2]) for r in conn.execute(
             "SELECT id, customer_id_a, customer_id_b FROM se_teams WHERE group_id = ?",
             (group_id,))}
-        valid_holes = {r[0] for r in conn.execute(
-            "SELECT hole_number FROM se_round_holes WHERE round_id = ?", (g["round_id"],))}
+        par_of = {r[0]: r[1] for r in conn.execute(
+            "SELECT hole_number, par FROM se_round_holes WHERE round_id = ?", (g["round_id"],))}
+        valid_holes = set(par_of)
         if not valid_holes:
             first = 10 if g["start_hole"] >= 10 and g["holes"] == 9 else 1
             valid_holes = set(range(first, first + g["holes"]))
@@ -857,8 +871,10 @@ def write_scores(group_id: int, device_id: str, entered_by: int | None,
                 except (TypeError, ValueError):
                     why = "gross not a number"
                 else:
-                    if not GROSS_MIN <= gross <= GROSS_MAX:
-                        why = f"gross must be {GROSS_MIN}-{GROSS_MAX}"
+                    lo, hi = gross_bounds(par_of.get(hole))
+                    if not lo <= gross <= hi:
+                        why = (f"gross must be {lo}-{hi} on a par {par_of.get(hole)} (max triple)"
+                               if par_of.get(hole) else f"gross must be {lo}-{hi}")
             cid = op.get("customer_id")
             tid = op.get("team_id")
             if why is None:

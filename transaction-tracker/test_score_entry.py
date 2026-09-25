@@ -105,6 +105,26 @@ clr = se.write_scores(gid, "phone-A", 101, [
     {"op_id": "A4", "customer_id": 102, "hole": 1, "gross": None}])
 check("a hole can be cleared", "1" not in se.get_group_card(gid)["scores"].get("c:102", {}))
 
+print("max triple + no ace on a par 5 (Kerry 2026-09-25)")
+check("bounds: par 3 is 1-6, par 4 is 1-7, par 5 is 2-8",
+      [se.gross_bounds(3), se.gross_bounds(4), se.gross_bounds(5)] == [(1, 6), (1, 7), (2, 8)])
+check("no par on the card falls back to 1-20", se.gross_bounds(None) == (1, 20))
+mt = se.write_scores(gid, "phone-A", 101, [
+    {"op_id": "MT1", "customer_id": 102, "hole": 2, "gross": 7},   # par 3: triple is 6
+    {"op_id": "MT2", "customer_id": 102, "hole": 2, "gross": 6},
+    {"op_id": "MT3", "customer_id": 102, "hole": 3, "gross": 1},   # par 5: no ace
+    {"op_id": "MT4", "customer_id": 102, "hole": 3, "gross": 9},   # par 5: triple is 8
+    {"op_id": "MT5", "customer_id": 102, "hole": 3, "gross": 8},
+    {"op_id": "MT6", "customer_id": 102, "hole": 1, "gross": 1}])  # par 4: an ace is real
+check("the server refuses a score above triple and a 1 on a par 5",
+      [r["result"] for r in mt["results"]] == ["invalid", "ok", "invalid", "invalid", "ok", "ok"], mt)
+check("the refusal says why", "max triple" in (mt["results"][0].get("why") or ""), mt["results"][0])
+check("a 1 on a par 4 opens a hole-in-one claim",
+      any(h["customer_id"] == 102 and h["hole"] == 1 for h in se.get_group_card(gid)["hio"]))
+se.write_scores(gid, "phone-A", 101, [{"op_id": "MT7", "customer_id": 102, "hole": 1, "gross": None},
+                                      {"op_id": "MT8", "customer_id": 102, "hole": 2, "gross": None},
+                                      {"op_id": "MT9", "customer_id": 102, "hole": 3, "gross": None}])
+
 print("take-over")
 t = se.claim_group(gid, "phone-B", 102, takeover=True)
 check("take-over moves the lock", t.get("granted") and t["kind"] == "takeover", t)

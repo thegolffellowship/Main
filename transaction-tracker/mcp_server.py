@@ -3210,7 +3210,16 @@ def _scoring_dispatch_inner(url: str, extract: str):
             except (ValueError, IndexError):
                 return json.dumps({"error": "usage: scoring-se-preview:<event_id>|<cid,cid,...>[|apply]"})
             if not (len(_p) > 2 and _p[2].lower() == "apply"):
+                # app_version: the version this process is serving, so a lane
+                # can confirm a deploy through the connector.
+                try:
+                    import re as _re
+                    _vp = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static", "js", "version.js")
+                    _ver = _re.search(r'TGF_VERSION\s*=\s*"([^"]+)"', open(_vp).read()).group(1)
+                except Exception:
+                    _ver = None
                 return json.dumps({"dry_run": True, "event_id": _ev, "customer_ids": _ids,
+                                   "app_version": _ver,
                                    "would": "create or reuse the PREVIEW round and its group; add |apply"})
             _res = _se.create_preview_round(_ev, _ids)
             if "error" not in _res:

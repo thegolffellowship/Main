@@ -499,7 +499,10 @@
                 // The screen shows par until touched; a tap moves one from what is shown.
                 const cur = key in draft ? draft[key] : value(key, hole).v;
                 const base = cur == null ? (h.par || 4) : cur;
-                draft[key] = Math.min(20, Math.max(1, base + Number(b.dataset.d)));
+                // MAX TRIPLE (Kerry 2026-09-25): never above par + 3; and no ace
+                // on a par 5, so a par 5 stops at 2. The server holds the same rule.
+                const lo = h.par >= 5 ? 2 : 1, hi = h.par ? h.par + 3 : 20;
+                draft[key] = Math.min(hi, Math.max(lo, base + Number(b.dataset.d)));
                 render(); return;
             }
             if (act === "goto" || act === "prev" || act === "next") {

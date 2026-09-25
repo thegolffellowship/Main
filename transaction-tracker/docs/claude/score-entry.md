@@ -97,6 +97,27 @@ on the page — green means bought in.
   PAIRINGS view — Seed from pairings, each group's link and QR, round status
   and a Close button — so Kerry never needs a bridge.
 
+## Max Triple, and no ace on a par 5 (v2.493.3)
+
+Kerry, 2026-09-25: "We do Max Triple, so it can't be more than that. Also,
+hole in ones wouldn't be possible on Par 5s." `gross_bounds(par)` is the one
+rule: lowest 1 (2 on a par 5), highest par + 3; a hole with no par keeps
+1–20. The phone's stepper clamps to it and `write_scores` refuses anything
+outside it (`invalid`, "max triple" in the reason). A 1 on a par 3 or par 4
+still opens the hole-in-one flow.
+
+**Open for Kerry (not guessed):**
+- A Golf Genius card with a hole above triple: the diff against GG will
+  show it as a difference. Is GG also set to Max Triple, or does our card
+  cap and GG not?
+- "Something's wrong" when a player says his real score was above triple:
+  the fix can only enter triple. The card note says so, or should the flag
+  carry his claimed score?
+- A picked-up or unfinished hole: today the scorekeeper enters triple.
+  Is that the rule, or does a pickup need its own mark?
+- WHS posting uses net double bogey, not Max Triple; nothing here posts
+  handicap rounds, so this cap never reaches a differential.
+
 ## 18 holes (v2.493.2)
 
 - The card strip shows every hole in play order, nine to a row; a shotgun

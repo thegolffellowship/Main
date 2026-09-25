@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.493.2";
+window.TGF_VERSION = "2.493.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.493.3",
+    date: "2026-09-25",
+    title: "Score entry: Max Triple, and no hole-in-one on a par 5",
+    changes: [
+      "Kerry, 2026-09-25: 'We do Max Triple, so it can't be more than that. Also, hole in ones wouldn't be possible on Par 5s.' A hole's gross can be at most par + 3, and the lowest gross on a par 5 is 2. The phone's + button stops at par + 3 and its - button stops at 1 (2 on a par 5); the server refuses anything outside that and says why, so no client can get around it. A 1 on a par 3 or a par 4 still opens the hole-in-one flow. A hole with no par on the card keeps the 1-20 sanity range.",
+      "The score-entry dry-run bridge now reports the app version the server is running, so a lane can confirm a deploy through the connector."
+    ]
+  },
   {
     version: "2.493.2",
     date: "2026-09-25",
