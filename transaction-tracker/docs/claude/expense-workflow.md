@@ -304,3 +304,16 @@ customer_id** runs `_suggestExpenseVendor(exp)`:
 Transfers never suggest (no counterparty); income only suggests links,
 never vendor creation. Suggestion is confirm-only — nothing is created or
 linked without a click. Dismiss hides it for that open of the modal.
+
+
+## Non-delivery reports go to bounce intake, not the classifier (v2.492.1)
+
+`check_expense_inbox` hands every new email that looks like a bounce
+(`bounces.is_ndr`: "Undeliverable:", "Delivery has failed", … or from
+MicrosoftExchange / postmaster / mailer-daemon) to `bounces.process_bounces`
+before classifying, then drops it from the batch. The classifier never
+bills Anthropic for an NDR, and the address it names is marked
+undeliverable the same minute. The standalone `bounce_inbox_check` job
+(every 15 min) covers the sending mailbox (`EMAIL_ADDRESS`), which the
+expense check does not read. Both record the NDR in `expense_seen_emails`
+as `ndr`. See CLAUDE.md, `email_parser/bounces.py`.

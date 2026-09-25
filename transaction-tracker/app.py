@@ -722,6 +722,22 @@ def check_expense_inbox(force=False, days_back=None):
         return {"fetched": len(emails), "new": 0, "processed": 0,
                 "note": f"All {len(emails)} fetched emails already processed"}
 
+    # Non-delivery reports are bounce intake's, not the classifier's
+    # (CA #688): handle them here so the 2-minute classifier never bills
+    # Anthropic for one and never files it as an unknown email.
+    try:
+        from email_parser.bounces import is_ndr, process_bounces
+        _ndrs = [e for e in new_emails if is_ndr(e.get("subject", ""), e.get("from", ""))]
+        if _ndrs:
+            process_bounces(_ndrs, seen=set(seen_uids))
+            _ndr_uids = {e.get("uid") for e in _ndrs}
+            new_emails = [e for e in new_emails if e.get("uid") not in _ndr_uids]
+    except Exception:
+        logger.exception("Bounce intake inside the expense check failed")
+    if not new_emails:
+        return {"fetched": len(emails), "new": 0, "processed": 0,
+                "note": "only non-delivery reports were new"}
+
     logger.info("Classifying %d new emails for expense processing", len(new_emails))
     processed = 0
     conn = get_connection()
@@ -1021,6 +1037,43 @@ def check_expense_inbox(force=False, days_back=None):
     except Exception:
         logger.warning("Unmatched-inbound alert sweep failed", exc_info=True)
     return {"fetched": len(emails), "new": len(new_emails), "processed": processed}
+
+
+def check_bounce_inbox(days_back: int = 3) -> dict:
+    """Bounce intake (CA #688, Kerry 2026-09-25): read non-delivery reports
+    in the mailboxes the Tracker sends from and stop mailing dead
+    addresses. Permanent failures (5.x.x) mark the customer_emails row
+    undeliverable and raise one COO action item; transient ones (4.x.x)
+    are only logged. See email_parser/bounces.py."""
+    from email_parser.bounces import is_ndr, process_bounces
+    tenant_id = os.getenv("AZURE_TENANT_ID")
+    client_id = os.getenv("AZURE_CLIENT_ID")
+    client_secret = os.getenv("AZURE_CLIENT_SECRET")
+    boxes = []
+    for addr in (os.getenv("EMAIL_ADDRESS"), os.getenv("EXPENSE_EMAIL_ADDRESS"),
+                 os.getenv("RSVP_EMAIL_ADDRESS")):
+        if addr and addr.lower() not in [b.lower() for b in boxes]:
+            boxes.append(addr)
+    if not all([tenant_id, client_id, client_secret]) or not boxes:
+        return {"error": "Azure AD credentials not configured"}
+    since = datetime.now() - timedelta(days=days_back)
+    ndrs = []
+    for addr in boxes:
+        try:
+            emails = fetch_all_emails(
+                tenant_id=tenant_id, client_id=client_id,
+                client_secret=client_secret, email_address=addr,
+                since_date=since, max_emails=200)
+        except Exception:
+            logger.exception("Bounce intake: fetch failed for %s", addr)
+            continue
+        ndrs.extend(e for e in emails if is_ndr(e.get("subject", ""), e.get("from", "")))
+    if not ndrs:
+        return {"ndrs": 0}
+    res = process_bounces(ndrs)
+    if res.get("permanent") or res.get("transient"):
+        logger.info("Bounce intake: %s", res)
+    return res
 
 
 def check_rsvp_inbox():
@@ -1440,6 +1493,17 @@ def start_scheduler():
         "interval",
         minutes=interval,
         id="inbox_check",
+        replace_existing=True,
+    )
+
+    # Bounce intake (CA #688): non-delivery reports in the sending
+    # mailboxes mark dead addresses undeliverable. Every 15 min is plenty;
+    # each NDR is handled once (expense_seen_emails, classified 'ndr').
+    scheduler.add_job(
+        check_bounce_inbox,
+        "interval",
+        minutes=int(os.getenv("BOUNCE_CHECK_INTERVAL_MINUTES", "15")),
+        id="bounce_inbox_check",
         replace_existing=True,
     )
 

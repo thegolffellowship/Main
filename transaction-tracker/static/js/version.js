@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.492.0";
+window.TGF_VERSION = "2.492.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.492.1",
+    date: "2026-09-25",
+    changes: [
+      "Bounce intake (CA #688, Kerry: \u2018Deal with this.\u2019). The 9 AM lapsed-member notice to Hayden Cooper bounced \u2018550 5.1.2 Domain not found\u2019, and until now only a person reading the admin mailbox would have caught it. The Tracker now reads non-delivery reports itself. A permanent failure (5.x.x) marks that address undeliverable on the customer, with the SMTP code and the NDR date as the reason, so the address stays for matching but no send path uses it. It also puts one action item on the COO banner naming the customer and the address that bounced. A temporary failure (4.x.x, such as a full mailbox) is only logged.",
+      "A new job checks the sending mailboxes every 15 minutes. The 2-minute expense check also passes any bounce it sees straight to intake, so bounces are never sent to the AI classifier. Each report is handled once. New email_parser/bounces.py; guard test_bounce_intake.py; docs in customers.md, expense-workflow.md and CLAUDE.md.",
+    ],
+  },
   {
     version: "2.492.0",
     date: "2026-09-25",
