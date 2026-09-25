@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.492.1";
+window.TGF_VERSION = "2.492.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.492.2",
+    date: "2026-09-25",
+    changes: [
+      "CLAUDE.md gains Kerry's standing rule: finished work goes to main and is pushed, so production deploys it, with nothing left on a branch or in an open pull request. The TGF Tracker and the Horizon Tracker each push to their own repo's main and never share code. Docs only.",
+    ],
+  },
   {
     version: "2.492.1",
     date: "2026-09-25",

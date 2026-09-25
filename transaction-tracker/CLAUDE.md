@@ -740,6 +740,20 @@ python3 -c "from jinja2 import Environment, FileSystemLoader; \
     Environment(loader=FileSystemLoader('templates')).get_template('accounting.html').render()"
 ```
 
+## Finish on main (Kerry, 2026-09-25, standing rule)
+
+Kerry: "Both can be pushed to their own respective MAINs and should be. Just
+obviously they have to go to the right places. Horizon is NOT TGF. No connection."
+- Every finished change to the TGF Tracker is merged into `main` of
+  thegolffellowship/Main and pushed, so Railway deploys it. Nothing is left on
+  a branch or in an open pull request when you report done. Verify that the
+  live site serves the new version.
+- Horizon Tracker work goes ONLY to `main` of thegolffellowship/horizon-tracker
+  (Vercel). Never put Horizon code, docs or data in this repo, and never put
+  TGF work in that one.
+- Rule 3b still applies: a change that needs Kerry's ratification is merged
+  only after he gives it.
+
 ## Git Merge & PR Best Practices
 
 When merging branches that have diverged (especially long-running feature branches), follow these steps to avoid losing work:
