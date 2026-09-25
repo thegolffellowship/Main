@@ -68,6 +68,15 @@ RULES = {
 
 
 # ── the report ──────────────────────────────────────────────────────────
+def _archive_status(db_path) -> dict:
+    """The GG raw archive's own file (gg_archive.py) — mode, bytes, rows."""
+    try:
+        from .gg_archive import status
+        return status(db_path)
+    except Exception as e:      # the report never fails on its own extras
+        return {"mode": "unknown", "error": str(e)[:120]}
+
+
 def _table_counts(db_path) -> dict:
     out = {}
     conn = sqlite3.connect(str(db_path), timeout=10)
@@ -218,7 +227,7 @@ def build_health_report(days: float = 1, db_path=None, record_size: bool = False
         "log_errors": _log_errors(days, db_path),
         "db": {**size, "growth_bytes": growth, "history": hist[-14:],
                "counts": _table_counts(db_path), "layout": perf.db_layout(db_path),
-               "disk": perf.disk_usage(db_path)},
+               "disk": perf.disk_usage(db_path), "archive": _archive_status(db_path)},
         "probe": perf.probe_db_ms(db_path),
         # Inside a container os.getloadavg() is the HOST's number, so it is
         # read beside the cpu count; a ratio, not the raw figure, is the tell.
@@ -403,6 +412,14 @@ def render_markdown(report: dict) -> str:
              + (f" (+{g/1048576:.2f} MB since last digest)" if g is not None else "")
              + f", WAL {db['wal_bytes']/1048576:.1f} MB; rows: "
              + ", ".join(f"{k} {v}" for k, v in (db.get("counts") or {}).items() if v is not None))
+    arc = db.get("archive") or {}
+    if arc.get("mode") == "file":
+        L.append(f"**GG ARCHIVE FILE** {arc.get('bytes', 0)/1048576:.1f} MB, {arc.get('rows') or 0} rows"
+                 + (f"; last backup {arc['last_backup_at'][:10]}" if arc.get("last_backup_at") else "; never backed up on its own yet")
+                 + ("" if arc.get("vacuum_at") else "; main file not yet vacuumed after the move"))
+    elif arc.get("mode") == "main":
+        L.append(f"**GG ARCHIVE** still in the main file ({arc.get('main_rows') or 0} rows); "
+                 f"{arc.get('rows') or 0} copied to {arc.get('path')} so far")
     dk = db.get("disk") or {}
     if dk.get("pct_used") is not None:
         L.append(f"**VOLUME** {dk['pct_used']:.0f}% used — {dk['free_bytes']/1048576:.0f} MB free "

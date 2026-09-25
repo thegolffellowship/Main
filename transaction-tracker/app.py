@@ -1889,6 +1889,29 @@ def start_scheduler():
                     "" if os.getenv("AZURE_TENANT_ID")
                     else " (idle — AZURE_* creds not set)")
 
+    # ── The GG raw archive's own weekly backup (Kerry 2026-09-23, #627:
+    #    "move the GG archive to its own file"). Once the archive lives in
+    #    transactions_gg_archive.db the nightly backup above no longer
+    #    carries it; this uploads the archive file Sunday 08:45 UTC (3:45
+    #    AM Central) and only when its row count changed. Same kill switch.
+    if os.getenv("DB_BACKUP_DISABLED", "") != "1":
+        def gg_archive_backup_job():
+            from email_parser.gg_archive import run_archive_backup
+            res = run_archive_backup()
+            if res.get("skipped"):
+                logger.info("GG archive backup skipped — %s", res["skipped"])
+            elif res.get("ok"):
+                logger.info("GG archive backup OK — %s (%.1f MB gz)", res.get("name"),
+                            (res.get("bytes_gz") or 0) / 1048576)
+            else:
+                logger.error("GG archive backup FAILED: %s", res.get("error"))
+        scheduler.add_job(
+            gg_archive_backup_job,
+            "cron", day_of_week="sun", hour=8, minute=45,
+            id="gg_archive_backup",
+            replace_existing=True,
+        )
+
     # ── Spotlight warmer (Kerry 2026-09-23: "it only took a long time for
     #    the first one... what happens when we have 100s and thousands of
     #    players?"). Every 90 s, while the Spotlight was opened in the

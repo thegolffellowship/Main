@@ -164,6 +164,22 @@ the GIL is.
   off-hours window; the CTO lane takes it next unless the gg-history
   lane claims it first (said so on the mailbox).
 
+## 2g. Morning four (2026-09-25, v2.489.5)
+
+- Digest #671 clean on speed. Built the `gg_raw_archive` move Kerry ruled
+  on 9/23 (#627) as `email_parser/gg_archive.py` + `scoring-gg-archive`
+  bridge steps + weekly archive backup + digest line + `test_gg_archive.py`
+  (46 checks). NOT run live yet: `plan` first, then migrate/verify/cutover
+  at the next 5:10 unless Kerry objects on the mailbox; VACUUM after, with
+  the time posted (#627 req 5).
+- Answered CA's read-only SQLite portability audit (#670) — numbers in
+  coo.md day four and the mailbox post.
+- Found while measuring ATTACH: every new connection's first query pays
+  ~2.1 ms of schema parsing (140 tables); ~18 connections per PAIRINGS
+  open. Lead for later: reuse one connection per request.
+- Still open: the digest header line (`TO: front-desk`) — the classifier
+  refused the edit twice; Tracker Build lane or Kerry.
+
 ## 2c. The agent is the CTO
 
 Kerry 2026-09-22 (~4 PM): *"I think we would define your Agent Role as

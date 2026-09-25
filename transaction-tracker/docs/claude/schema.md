@@ -516,3 +516,42 @@ decorated the same way and stay idempotent.
 changed): `idx_items_customer_id ON items(customer_id)`,
 `idx_items_item_name_nocase ON items(item_name COLLATE NOCASE)`,
 `idx_handicap_player_links_customer ON handicap_player_links(customer_id)`.
+
+
+## The GG raw archive lives in its own file (v2.489.5, Kerry 2026-09-23 #627)
+
+`gg_raw_archive` (id, url, fetched_at, body_gz) — every gzipped Golf
+Genius page the history ingest and the scorecard import fetched — is NOT
+in `transactions.db` any more. It lives in **`transactions_gg_archive.db`**
+beside it on the volume (`email_parser/gg_archive.py`, `archive_path()`),
+ATTACHed as schema `arc` by `get_connection()` on every connection (0.25 ms;
+the first query's schema load costs ~2 ms either way). It was 374 MB of the
+444 MB main file: the nightly backup's 145 s, the 9/22 full-volume outage,
+every integrity check and restore drill paid for it.
+
+- **Readers and writers** call `gg_archive.archive_table(conn)` and use the
+  name it returns: `main.gg_raw_archive` while the legacy table still exists
+  in the main file (before the cutover), `arc.gg_raw_archive` after. Two
+  writers (`gg_history._archive_raw`, the scorecard import) and one reader
+  (the affiliation audit join in gg_history) — `gg_history_pages.raw_archive_id`
+  keeps pointing at it (foreign keys are not enforced on those connections).
+  `_ensure_scoring_tables` no longer creates the table in the main file.
+- **The move is four resumable bridge steps** (`scoring-gg-archive:<step>`):
+  `plan` (read-only) → `migrate` (copies by id in 40-row transactions under a
+  20 s budget; repeat until `done`; a row written meanwhile goes to the main
+  table and is picked up next pass) → `verify` (read-only full compare: count,
+  url, fetched_at, body length) → `cutover|go` (BEGIN IMMEDIATE, straggler
+  copy, count check, `DROP TABLE main.gg_raw_archive`, commit; refuses while
+  verify fails) → `vacuum|go` (reclaims the dropped pages; holds the write
+  lock; off-hours). `app_settings` `gg_archive_cutover_at` / `gg_archive_vacuum_at`
+  record when each ran.
+- **Backup:** the nightly `db_backup` snapshots the main file only. The
+  archive file has its own weekly job `gg_archive_backup` (Sunday 08:45 UTC),
+  `run_archive_backup` → `VACUUM INTO` → gzip → OneDrive `<folder>/archive/gg_archive_<stamp>.db.gz`,
+  keep 4, and only when the row count changed (`gg_archive_backup_rows`).
+  Until the cutover the nightly backup still carries the table.
+- **A restored volume** with the archive file missing opens: the file is
+  created empty on first touch and the reader finds no rows. In-memory
+  databases keep the table in main.
+- Health: `report["db"]["archive"]` (`gg_archive.status`) and the digest's
+  **GG ARCHIVE FILE** line. Guard: `test_gg_archive.py`.

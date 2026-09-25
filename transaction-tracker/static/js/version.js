@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.489.4";
+window.TGF_VERSION = "2.489.5";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.489.5",
+    date: "2026-09-25",
+    changes: [
+      "The Golf Genius page archive (Kerry 2026-09-23: ‘Yes, move the GG archive to its own file’) now has its own database file beside the main one. It was 374 of the main file's 444 MB — the reason the nightly backup took two and a half minutes and the 500 MB volume filled on 9/22. The Tracker attaches the second file on every connection, so the two places that write archived pages and the one that reads them work unchanged before and after the move. The move itself runs as separate, resumable steps from the CTO lane (copy in short batches, verify every row, then drop the old table, then reclaim the space), and nothing is dropped that has not been proven copied. The archive file gets its own weekly backup on Sunday nights, only when it changed.",
+      "The daily health digest prints a GG ARCHIVE FILE line with the file's size, row count and last backup.",
+    ],
+  },
   {
     version: "2.489.4",
     date: "2026-09-25",

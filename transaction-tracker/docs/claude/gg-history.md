@@ -1086,3 +1086,14 @@ TGF/Former profiles remain Kerry's open decision (option b).
       after the wave still 0 unmatched TGF/Former members.
 - [ ] Two Man Tour lane (last): verify per-course events inside
       tgf-twomantour; ingest under brand='TwoManTour'
+
+
+## NOTE (v2.489.5): `gg_raw_archive` moved to its own file
+
+Kerry 2026-09-23 (#627): "Yes, move the GG archive to its own file." The
+table's rows live in `transactions_gg_archive.db` beside the main file,
+reached through `email_parser/gg_archive.py` — `archive_table(conn)` gives
+the qualified name (`arc.gg_raw_archive` after the cutover, `main.…` before).
+`_archive_raw` and the affiliation-audit join already use it; any NEW reader
+or writer of the archive must too. Schema.md "The GG raw archive lives in
+its own file" has the move steps and the backup rule.
