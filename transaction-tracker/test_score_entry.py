@@ -66,6 +66,9 @@ check("a seat with no customer_id is reported, not scored",
       g.get("skipped_no_customer_id") == ["Guest With No Id"], g)
 v0 = se.event_version(900)
 
+check("the lazy DDL runs once per database, not on every connection",
+      any(k[0] == "_ensure_score_entry_tables" for k in db._ENSURED), sorted(db._ENSURED)[:3])
+
 print("lock / take-over")
 a = se.claim_group(gid, "phone-A", 101)
 check("first device is granted", a.get("granted") and a["kind"] == "claim", a)
@@ -294,6 +297,23 @@ check("strokes per hole come off the locked PH", st.get("102") == {str(h): 1 for
 check("a PH the card's indexes can't carry is reported, not guessed", st.get("_unresolved") == [105], st)
 check("a nine carries the GG-convention note",
       se.get_group_card(sg)["strokes_note"] == "strokes per GG convention")
+
+print("cart-sign QR (Kerry #666 B), behind the score_entry_qr dial")
+pack = db.get_event_print_pack(900)
+res = se.attach_cart_sign_qr(pack)
+check("no dial, no code", res["groups"] == 0 and not any(g.get("score_qr") for g in pack["groups"]), res)
+db.set_app_setting("score_entry_qr", '{"900": [3]}')
+pack = db.get_event_print_pack(900)
+res = se.attach_cart_sign_qr(pack, base_url="https://x.test")
+qg = [g for g in pack["groups"] if g.get("score_qr")]
+check("the dial's group gets a code", res["groups"] == 1 and qg and qg[0]["group_num"] == 3, res)
+check("the code is inline SVG pointing at the group's link",
+      qg and qg[0]["score_qr"]["svg"].startswith("<svg") and "/member/score?t=" in qg[0]["score_qr"]["url"])
+tokq = qg[0]["score_qr"]["url"].split("t=", 1)[1] if qg else ""
+check("the printed link opens that group", se.verify_group_token(tokq) is not None)
+db.set_app_setting("score_entry_qr", "not json")
+check("a bad dial prints the old sign", se.attach_cart_sign_qr(db.get_event_print_pack(900))["groups"] == 0)
+db.set_app_setting("score_entry_qr", "")
 
 print("HTTP (admin builds, scorer by link, flag off until Kerry OKs)")
 os.environ.setdefault("SECRET_KEY", "test-secret")

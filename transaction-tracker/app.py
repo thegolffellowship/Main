@@ -5490,6 +5490,8 @@ def cart_signs_page(event_id):
     pack = get_event_print_pack(event_id)
     if not pack:
         return "Event not found", 404
+    from email_parser.score_entry import attach_cart_sign_qr
+    attach_cart_sign_qr(pack)
     return render_template("cart_signs.html", pack=pack)
 
 

@@ -60,6 +60,20 @@ def _conn(db_path=None) -> sqlite3.Connection:
 # ---------------------------------------------------------------------------
 
 def ensure_score_entry_tables(conn: sqlite3.Connection) -> None:
+    """Once per database file per process (CLAUDE.md "Lazy DDL is once per
+    database"): CREATE ... IF NOT EXISTS still takes the write lock, and this
+    runs on every score-entry connection, so it must not run every time."""
+    from email_parser.database import _once_per_db
+    global _ensure_once
+    if _ensure_once is None:
+        _ensure_once = _once_per_db(_ensure_score_entry_tables)
+    _ensure_once(conn)
+
+
+_ensure_once = None
+
+
+def _ensure_score_entry_tables(conn: sqlite3.Connection) -> None:
     conn.executescript("""
     CREATE TABLE IF NOT EXISTS se_rounds (
         id            INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -535,6 +549,72 @@ def _event_course_holes(conn, ev: dict, n_holes: int) -> list[dict]:
         want = range(1, 10)          # a named nine numbers 1-9 (handicaps.md)
     return [{"hole": n, "par": by[n]["par"], "stroke_index": by[n]["stroke_index"],
              "yardage": by[n]["yardage"]} for n in want if n in by]
+
+
+# ---------------------------------------------------------------------------
+# Cart-sign QR (Kerry #666 B: "QR Code printed on cart sign"). Which events
+# and groups carry one is a dial, `score_entry_qr` in app_settings:
+#   {"<event_id>": "all" | [group_num, ...]}
+# The 9/29 dry run lists Kerry's group only. A sign never carries a code for
+# a group that has no round: the round is seeded from PAIRINGS (idempotent)
+# the first time the sign is printed.
+# ---------------------------------------------------------------------------
+
+def _qr_dial(event_id: int, db_path=None):
+    from email_parser.database import get_app_setting
+    try:
+        raw = get_app_setting("score_entry_qr", db_path) or ""
+        dial = json.loads(raw) if raw.strip() else {}
+    except (ValueError, TypeError):
+        return None
+    return dial.get(str(event_id))
+
+
+def qr_svg(url: str) -> str | None:
+    try:
+        import segno
+    except ImportError:
+        return None
+    return segno.make(url, error="m").svg_inline(scale=4, border=1, dark="#111111")
+
+
+def attach_cart_sign_qr(pack: dict, base_url: str | None = None, db_path=None) -> dict:
+    """Stamp `score_qr` {url, svg} on each group of a print pack whose event
+    and group the dial enables. Returns {"groups": n, "skipped": [...]}. Never
+    raises: a sign without a code is the old sign, not a broken one."""
+    out = {"groups": 0}
+    try:
+        event_id = int((pack.get("event") or {}).get("id"))
+        want = _qr_dial(event_id, db_path)
+        if not want:
+            return out
+        base = (base_url or os.getenv("PUBLIC_BASE_URL")
+                or "https://tgf-tracker.up.railway.app").rstrip("/")
+        for holes in sorted({str(g.get("holes")) for g in pack.get("groups") or []}):
+            seeded = seed_round_from_pairings(event_id, holes, db_path=db_path)
+            rid = seeded.get("round_id")
+            if not rid:
+                continue
+            with _closing(_conn(db_path)) as conn:
+                gids = {r[0]: r[1] for r in conn.execute(
+                    "SELECT group_num, id FROM se_groups WHERE round_id = ?", (rid,))}
+            for g in pack.get("groups") or []:
+                if str(g.get("holes")) != holes:
+                    continue
+                gnum = g.get("group_num")
+                if want != "all" and gnum not in want:
+                    continue
+                gid = gids.get(gnum)
+                if not gid:
+                    continue
+                url = f"{base}/member/score?t={make_group_token(gid, db_path=db_path)}"
+                svg = qr_svg(url)
+                if svg:
+                    g["score_qr"] = {"url": url, "svg": svg}
+                    out["groups"] += 1
+    except Exception as e:                       # noqa: BLE001 — print must not fail
+        out["error"] = str(e)[:200]
+    return out
 
 
 # ---------------------------------------------------------------------------

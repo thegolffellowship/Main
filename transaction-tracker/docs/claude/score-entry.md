@@ -84,6 +84,21 @@ on the page — green means bought in.
   CA Queue #10/#11 are ruled. A PH the card's stroke indexes cannot carry
   (a nine indexed 1–9) is listed in `strokes._unresolved`, never guessed.
 
+## Access: the cart-sign QR (Kerry #666 B)
+
+The first access path is a QR code on the cart sign: scan, tap your name,
+keep score or follow along. A sign carries a code only for the groups the
+**`score_entry_qr`** app setting names — `{"<event_id>": "all" | [group
+numbers]}` — so the 9/29 dry run can list Kerry's group alone.
+`attach_cart_sign_qr(pack)` runs on both cart-sign paths (the page and the
+print-pack PDF), seeds the group's round from PAIRINGS the first time
+(idempotent), and stamps `score_qr {url, svg}` on the group; the SVG is
+inline (segno), so printing needs no network. It never raises: no dial or a
+bad dial prints the old sign. The scorecard QR (R7) and the personal email
+link (R8, a member send — Kerry OKs each batch) come later; the email link
+is the strong identity path, "tap your name" from a shared code is weak and
+is accepted for the beta because every action is logged by device.
+
 ## Data model (`ensure_score_entry_tables`, lazily created)
 
 ```

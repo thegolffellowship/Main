@@ -66,6 +66,10 @@
       font-family: "Bitter", Georgia, serif; font-weight: 600;
       font-size: 15px; color: #444; margin-top: 11px;
     }
+    .qr { display: flex; align-items: center; gap: 14px; margin-top: 12px; text-align: left; }
+    .qr-code svg { width: 1.15in; height: 1.15in; display: block; }
+    .qr-copy { font-family: "Bitter", Georgia, serif; font-weight: 700; font-size: 18px; line-height: 1.25; }
+    .qr-copy span { font-family: "Helvetica Neue", Arial, sans-serif; font-weight: 400; font-size: 12px; color: #444; }
     .empty { width: 8.5in; margin: 0 auto; padding: 40px; background: #fff;
              border: 1px solid #C9C9C4; color: #666; text-align: center; font-style: italic; }
     @media print {
@@ -104,6 +108,14 @@
           {% endfor %}
         </div>
         <div class="start">{{ s.g.start_line or s.g.slot_label }}</div>
+        {% if s.g.score_qr %}
+        {#- Score entry (Kerry #666 B): scan, tap your name, keep or follow
+            the group's card. Only on groups the score_entry_qr dial enables. #}
+        <div class="qr">
+          <div class="qr-code">{{ s.g.score_qr.svg | safe }}</div>
+          <div class="qr-copy">Scan to keep score<br><span>Tap your name. One phone per group keeps score.</span></div>
+        </div>
+        {% endif %}
         <div class="sign-foot">
           {{ pack.event.item_name }}{% if pack.event.course %} &middot; {{ pack.event.course }}{% endif %}
           {%- if pack.event.event_date %} &middot; {{ pack.event.event_date }}{% endif %}

@@ -86,6 +86,10 @@ def build_event_print_pack(render, event_id: int, static_dir: str,
             continue
         if slug == "starter-sheet":
             sheet_pack = ctx
+        if slug == "cart-signs":
+            # Score-entry QR for the groups the `score_entry_qr` dial enables.
+            from email_parser.score_entry import attach_cart_sign_qr
+            attach_cart_sign_qr(ctx, db_path=db_path)
         try:
             htmls.append((slug, render(template, **{key: ctx})))
         except Exception:
