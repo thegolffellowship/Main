@@ -265,6 +265,30 @@ def _ensure_score_entry_tables(conn: sqlite3.Connection) -> None:
         at                        TEXT NOT NULL,
         UNIQUE(round_id, customer_id, hole_number));
 
+    -- CARD CHECK (Kerry 2026-09-25): before submitting, the scorekeeper
+    -- reads the card hole by hole against the print scorer's paper card,
+    -- photographs the paper (it is thrown away after), and names who kept
+    -- it. One row per submit. The photo can arrive later on a weak signal;
+    -- it is matched to its row by photo_op_id and kept as a file beside the
+    -- database, never as a blob in it.
+    CREATE TABLE IF NOT EXISTS se_card_checks (
+        id                        INTEGER PRIMARY KEY AUTOINCREMENT,
+        round_id                  INTEGER NOT NULL REFERENCES se_rounds(id) ON DELETE CASCADE,
+        group_id                  INTEGER NOT NULL REFERENCES se_groups(id) ON DELETE CASCADE,
+        scorekeeper_customer_id   INTEGER NOT NULL REFERENCES customers(customer_id),
+        print_scorer_customer_id  INTEGER REFERENCES customers(customer_id),
+        print_scorer_name         TEXT,
+        signed_for_group          INTEGER NOT NULL DEFAULT 0,
+        photo_op_id               TEXT,
+        photo_path                TEXT,
+        photo_bytes               INTEGER,
+        photo_at                  TEXT,
+        device_id                 TEXT,
+        at                        TEXT NOT NULL);
+    CREATE INDEX IF NOT EXISTS idx_se_card_checks_group ON se_card_checks(group_id);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_se_card_checks_photo_op
+        ON se_card_checks(photo_op_id) WHERE photo_op_id IS NOT NULL;
+
     CREATE TABLE IF NOT EXISTS se_event_versions (
         event_id   INTEGER PRIMARY KEY,
         version    INTEGER NOT NULL DEFAULT 0,
@@ -1070,6 +1094,173 @@ def sign_card(group_id: int, device_id: str, customer_id: int, kind: str = "play
     return {"signed": True, "kind": kind}
 
 
+# ---------------------------------------------------------------------------
+# Card check + submit (Kerry 2026-09-25): "Card matches paper", the photo
+# of the paper card, who kept it, and -- when the event's dial is on -- the
+# scorekeeper signs every card in the group. "Dry run, scorekeeper signs
+# for group." A player can still flag a hole afterwards; the flag voids the
+# signature made for him, as it would his own.
+# ---------------------------------------------------------------------------
+
+KEEPER_SIGNS_SETTING = "score_entry_keeper_signs"   # JSON {"<event_id>": true}
+KEEPER_SIGNED_NOTE = "signed for the group by the scorekeeper"
+PHOTO_MAX_BYTES = 3 * 1024 * 1024
+
+
+def keeper_signs(event_id: int, db_path=None) -> bool:
+    from email_parser.database import get_app_setting
+    try:
+        raw = get_app_setting(KEEPER_SIGNS_SETTING, db_path) or ""
+        dial = json.loads(raw) if raw.strip() else {}
+    except (ValueError, TypeError):
+        return False
+    return bool(dial.get(str(event_id)))
+
+
+def set_keeper_signs(event_id: int, on: bool, db_path=None) -> dict:
+    from email_parser.database import get_app_setting, set_app_setting
+    try:
+        raw = get_app_setting(KEEPER_SIGNS_SETTING, db_path) or ""
+        dial = json.loads(raw) if raw.strip() else {}
+    except (ValueError, TypeError):
+        dial = {}
+    if on:
+        dial[str(event_id)] = True
+    else:
+        dial.pop(str(event_id), None)
+    set_app_setting(KEEPER_SIGNS_SETTING, json.dumps(dial, sort_keys=True), db_path)
+    return {"event_id": event_id, "keeper_signs": bool(on)}
+
+
+def _photo_dir(db_path=None) -> Path:
+    from email_parser.database import DB_PATH
+    return Path(str(db_path or DB_PATH)).parent / "se_photos"
+
+
+def submit_card(group_id: int, device_id: str, keeper: int, *, print_scorer_customer_id=None,
+                print_scorer_name=None, photo_op_id=None, db_path=None) -> dict:
+    """The scorekeeper's "Card matches paper" -> Submit. Attests the group,
+    records who kept the paper card, and signs every player's card for him
+    when the event's keeper-signs dial is on (never over a player's own
+    signature, never over an open flag)."""
+    name = (print_scorer_name or "").strip()[:80] or None
+    ps_cid = int(print_scorer_customer_id) if print_scorer_customer_id else None
+    if not ps_cid and not name:
+        return {"error": "say who kept the paper card"}
+    with _closing(_conn(db_path)) as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        g = _group_ctx(conn, group_id)
+        if not g:
+            conn.rollback()
+            return {"error": "no such group"}
+        lock = conn.execute("SELECT device_id FROM se_group_locks WHERE group_id = ?",
+                            (group_id,)).fetchone()
+        if not lock or lock[0] != device_id:
+            conn.rollback()
+            return {"error": "only the scorekeeper's phone can submit the card"}
+        players = [r[0] for r in conn.execute(
+            "SELECT customer_id FROM se_players WHERE group_id = ? ORDER BY COALESCE(seat, 99), id",
+            (group_id,))]
+        if keeper not in players:
+            conn.rollback()
+            return {"error": "that person is not in this group"}
+        if ps_cid is not None and ps_cid not in players:
+            conn.rollback()
+            return {"error": "the print scorer is not in this group; use their name"}
+        cards = {c: _player_card(conn, g, group_id, c) for c in players}
+        if not all(cd["complete"] for cd in cards.values()):
+            conn.rollback()
+            return {"error": "the card isn't complete yet"}
+        now = _now()
+        conn.execute("UPDATE se_signoffs SET voided_at = ?, void_reason = 'submitted again' "
+                     "WHERE group_id = ? AND kind = 'scorekeeper' AND voided_at IS NULL",
+                     (now, group_id))
+        conn.execute(
+            "INSERT INTO se_signoffs (round_id, group_id, customer_id, kind, signed_by_customer_id, "
+            "device_id, card, note, at) VALUES (?,?,?,?,?,?,?,?,?)",
+            (g["round_id"], group_id, keeper, "scorekeeper", keeper, device_id,
+             json.dumps({"subjects": _group_scores(conn, group_id)}, sort_keys=True),
+             "card matches paper", now))
+        signed_for, skipped = [], []
+        on = keeper_signs(g["event_id"], db_path)
+        if on:
+            for c in players:
+                if conn.execute("SELECT 1 FROM se_card_flags WHERE group_id = ? AND customer_id = ? "
+                                "AND resolved_at IS NULL", (group_id, c)).fetchone():
+                    skipped.append({"customer_id": c, "why": "flagged"})
+                    continue
+                if conn.execute("SELECT 1 FROM se_signoffs WHERE group_id = ? AND customer_id = ? "
+                                "AND kind = 'player' AND signed_by_customer_id = customer_id "
+                                "AND voided_at IS NULL", (group_id, c)).fetchone():
+                    skipped.append({"customer_id": c, "why": "signed it himself"})
+                    continue
+                conn.execute("UPDATE se_signoffs SET voided_at = ?, void_reason = 'signed again' "
+                             "WHERE group_id = ? AND customer_id = ? AND kind = 'player' "
+                             "AND voided_at IS NULL", (now, group_id, c))
+                conn.execute(
+                    "INSERT INTO se_signoffs (round_id, group_id, customer_id, kind, "
+                    "signed_by_customer_id, device_id, card, note, at) VALUES (?,?,?,?,?,?,?,?,?)",
+                    (g["round_id"], group_id, c, "player", keeper, device_id,
+                     json.dumps(cards[c], sort_keys=True), KEEPER_SIGNED_NOTE, now))
+                signed_for.append(c)
+        op = (photo_op_id or "").strip()[:80] or None
+        if op and conn.execute("SELECT 1 FROM se_card_checks WHERE photo_op_id = ?", (op,)).fetchone():
+            op = None                   # a resubmit keeps the photo on the first row
+        cur = conn.execute(
+            "INSERT INTO se_card_checks (round_id, group_id, scorekeeper_customer_id, "
+            "print_scorer_customer_id, print_scorer_name, signed_for_group, photo_op_id, "
+            "device_id, at) VALUES (?,?,?,?,?,?,?,?,?) RETURNING id",
+            (g["round_id"], group_id, keeper, ps_cid, None if ps_cid else name,
+             1 if on else 0, op, device_id, now))
+        check_id = cur.fetchone()[0]
+        _bump(conn, g["event_id"])
+        conn.commit()
+    return {"submitted": True, "check_id": check_id, "keeper_signs": on,
+            "signed_for": signed_for, "skipped": skipped}
+
+
+def attach_card_photo(group_id: int, device_id: str, photo_op_id: str, data: bytes,
+                      db_path=None) -> dict:
+    """The paper card's photo, sent after the submit (it may wait on the
+    phone). Idempotent on photo_op_id. JPEG only, 3 MB at most; the phone
+    shrinks it to about 300 KB first."""
+    op = (photo_op_id or "").strip()
+    if not op:
+        return {"error": "photo_op_id is required"}
+    if not data or data[:3] != b"\xff\xd8\xff":
+        return {"error": "the photo must be a JPEG"}
+    if len(data) > PHOTO_MAX_BYTES:
+        return {"error": "the photo is too large"}
+    with _closing(_conn(db_path)) as conn:
+        row = conn.execute("SELECT c.id, c.photo_path, g.event_id FROM se_card_checks c "
+                           "JOIN se_rounds g ON g.id = c.round_id "
+                           "WHERE c.group_id = ? AND c.photo_op_id = ?", (group_id, op)).fetchone()
+        if not row:
+            return {"error": "submit the card first"}
+        if row["photo_path"]:
+            return {"dup": True, "check_id": row["id"]}
+        rel = f"{row['event_id']}/check-{row['id']}.jpg"
+        path = _photo_dir(db_path) / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_suffix(".part")
+        tmp.write_bytes(data)
+        tmp.replace(path)
+        conn.execute("UPDATE se_card_checks SET photo_path = ?, photo_bytes = ?, photo_at = ? "
+                     "WHERE id = ?", (rel, len(data), _now(), row["id"]))
+        _bump(conn, row["event_id"])
+        conn.commit()
+    return {"saved": True, "check_id": row["id"], "bytes": len(data)}
+
+
+def card_photo_path(check_id: int, db_path=None) -> Path | None:
+    with _closing(_conn(db_path)) as conn:
+        r = conn.execute("SELECT photo_path FROM se_card_checks WHERE id = ?", (check_id,)).fetchone()
+    if not r or not r[0]:
+        return None
+    p = _photo_dir(db_path) / r[0]
+    return p if p.exists() else None
+
+
 def _group_scores(conn, group_id: int) -> dict:
     out: dict = {}
     for s in conn.execute("SELECT subject_key, hole_number, gross FROM se_hole_scores "
@@ -1314,7 +1505,13 @@ def _card_extras(conn, g, group_id: int) -> dict:
     course = [dict(h) for h in conn.execute(
         "SELECT hole_number AS hole, stroke_index FROM se_round_holes WHERE round_id = ?",
         (g["round_id"],))]
+    checks = [dict(r) for r in conn.execute(
+        "SELECT id, scorekeeper_customer_id, print_scorer_customer_id, print_scorer_name, "
+        "signed_for_group, photo_path IS NOT NULL AS has_photo, at FROM se_card_checks "
+        "WHERE group_id = ? ORDER BY id DESC LIMIT 1", (group_id,))]
     return {"signoffs": signoffs, "flags": flags, "ctp": ctp, "hio": hio,
+            "card_check": checks[0] if checks else None,
+            "keeper_signs": keeper_signs(g["event_id"]),
             "tees": _tee_legend(conn, g["event_id"]),
             "strokes": _strokes_by_player(players, course),
             "strokes_note": "strokes per GG convention" if g["holes"] == 9 else None}
@@ -1378,8 +1575,13 @@ def get_entered_scores(event_id: int, round_id: int | None = None, db_path=None)
                               "label": t["label"], "scores": d["scores"],
                               "thru": len(d["scores"]), "last_write_at": d["last"] or None})
             signed = [dict(x) for x in conn.execute(
-                "SELECT customer_id, kind, at FROM se_signoffs WHERE round_id = ? "
-                "AND voided_at IS NULL ORDER BY id", (rid,))]
+                "SELECT customer_id, kind, signed_by_customer_id, at FROM se_signoffs "
+                "WHERE round_id = ? AND voided_at IS NULL ORDER BY id", (rid,))]
+            checks = [dict(x) for x in conn.execute(
+                "SELECT id AS check_id, group_id, scorekeeper_customer_id, "
+                "print_scorer_customer_id, print_scorer_name, signed_for_group, "
+                "photo_path IS NOT NULL AS has_photo, at FROM se_card_checks "
+                "WHERE round_id = ? ORDER BY id", (rid,))]
             ctp = {}
             for (hole,) in conn.execute("SELECT hole_number FROM se_round_holes WHERE "
                                         "round_id = ? AND par = 3", (rid,)).fetchall():
@@ -1393,7 +1595,8 @@ def get_entered_scores(event_id: int, round_id: int | None = None, db_path=None)
             rounds_out.append({"round_id": rid, "date": r["round_date"], "label": r["label"],
                                "holes": r["holes"], "status": r["status"],
                                "course": course, "groups": groups, "players": players,
-                               "teams": teams, "signoffs": signed, "ctp": ctp, "hio": hio})
+                               "teams": teams, "signoffs": signed, "card_checks": checks,
+                               "ctp": ctp, "hio": hio})
     return {"event_id": event_id, "official": False, "source": "tgf-entry",
             "version": int(vr["version"]) if vr else 0,
             "as_of": (vr["updated_at"] if vr else None) or _now(),

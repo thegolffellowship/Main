@@ -11396,6 +11396,64 @@ def api_se_sign():
     return (jsonify(res), 400) if "error" in res else jsonify(res)
 
 
+@app.route("/api/score-entry/submit", methods=["POST"])
+def api_se_submit():
+    """The scorekeeper's Card matches paper -> Submit: attest, who kept
+    the paper card, and (event dial on) sign every card for the group."""
+    from email_parser.score_entry import submit_card
+    b = request.get_json(silent=True) or {}
+    gid, err = _se_group_from_request(b)
+    if err:
+        return err
+    try:
+        res = submit_card(gid, str(b.get("device_id") or ""), int(b["keeper"]),
+                          print_scorer_customer_id=b.get("print_scorer_customer_id"),
+                          print_scorer_name=b.get("print_scorer_name"),
+                          photo_op_id=b.get("photo_op_id"))
+    except (KeyError, TypeError, ValueError):
+        return jsonify({"error": "keeper is required"}), 400
+    return (jsonify(res), 400) if "error" in res else jsonify(res)
+
+
+@app.route("/api/score-entry/photo", methods=["POST"])
+def api_se_photo():
+    """The paper card's photo (a JPEG data URL), after the submit."""
+    import base64 as _b64
+    from email_parser.score_entry import attach_card_photo
+    b = request.get_json(silent=True) or {}
+    gid, err = _se_group_from_request(b)
+    if err:
+        return err
+    raw = str(b.get("image") or "")
+    if "," in raw:
+        raw = raw.split(",", 1)[1]
+    try:
+        data = _b64.b64decode(raw, validate=True)
+    except (ValueError, TypeError):
+        return jsonify({"error": "the photo didn't arrive whole"}), 400
+    res = attach_card_photo(gid, str(b.get("device_id") or ""), str(b.get("photo_op_id") or ""), data)
+    return (jsonify(res), 400) if "error" in res else jsonify(res)
+
+
+@app.route("/api/score-entry/checks/<int:check_id>/photo.jpg")
+@require_role("manager")
+def api_se_check_photo(check_id):
+    from email_parser.score_entry import card_photo_path
+    p = card_photo_path(check_id)
+    if not p:
+        return jsonify({"error": "no photo"}), 404
+    return send_file(str(p), mimetype="image/jpeg")
+
+
+@app.route("/api/score-entry/events/<int:event_id>/keeper-signs", methods=["POST"])
+@require_role("manager")
+def api_se_keeper_signs(event_id):
+    """The dial: the scorekeeper's submit signs every card in his group."""
+    from email_parser.score_entry import set_keeper_signs
+    b = request.get_json(silent=True) or {}
+    return jsonify(set_keeper_signs(event_id, bool(b.get("on", True))))
+
+
 @app.route("/api/score-entry/flag", methods=["POST"])
 def api_se_flag():
     from email_parser.score_entry import flag_hole
