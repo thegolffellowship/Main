@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.493.1";
+window.TGF_VERSION = "2.493.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.493.2",
+    date: "2026-09-25",
+    title: "Score entry at 18 holes: the turn, and OUT / IN / TOTAL on the card",
+    changes: [
+      "Kerry asked to see the 18-hole screens. After the ninth hole played on an 18, the scorekeeper sees the turn: each player's first-nine total against par, then 'Go to hole 10' (or 'Back nine done' for a group that started on 10).",
+      "The sign-your-card screen on an 18 is two blocks like a paper scorecard, holes 1-9 with OUT and holes 10-18 with IN and TOTAL, instead of one 20-column table that scrolled sideways on a phone. A nine keeps one block, labelled OUT (or IN on a back nine). Screenshots: docs/claude/screenshots/score-entry-2026-09-25-18h/."
+    ]
+  },
   {
     version: "2.493.1",
     date: "2026-09-25",

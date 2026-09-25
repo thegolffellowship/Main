@@ -97,6 +97,18 @@ on the page — green means bought in.
   PAIRINGS view — Seed from pairings, each group's link and QR, round status
   and a Close button — so Kerry never needs a bridge.
 
+## 18 holes (v2.493.2)
+
+- The card strip shows every hole in play order, nine to a row; a shotgun
+  group on 10 runs 10–18 then 1–9.
+- **The turn:** after the ninth hole played on an 18, the scorekeeper sees
+  each player's first-nine total against par, then "Go to hole N". Not in
+  CA's mockup; added because Kerry asked to see the front total and it is
+  the natural pause on a paper card.
+- **The card:** OUT (1–9) and IN (10–18) + TOTAL blocks, not one 20-column
+  table. A nine keeps one block.
+- Stroke notes use the 18-hole stroke indexes on GG's full-card setting.
+
 ## Access: the cart-sign QR (Kerry #666 B)
 
 The first access path is a QR code on the cart sign: scan, tap your name,
