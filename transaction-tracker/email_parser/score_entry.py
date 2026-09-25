@@ -586,6 +586,7 @@ def get_group_card(group_id: int, device_id: str | None = None, db_path=None) ->
     return {**extras, "group_id": group_id, "round_id": g["round_id"], "event_id": g["event_id"],
             "round_label": g["round_label"], "round_date": g["round_date"],
             "holes": g["holes"], "status": g["status"], "label": g["label"],
+            "group_num": g["group_num"],
             "start_hole": g["start_hole"], "tee_time": g["tee_time"],
             "course": holes, "players": players, "teams": teams, "scores": scores,
             "lock": _lock_view(lock, device_id, names)}

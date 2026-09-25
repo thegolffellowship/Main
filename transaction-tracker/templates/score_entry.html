@@ -7,134 +7,110 @@
     <meta name="robots" content="noindex">
     <title>Scorecard · The Golf Fellowship</title>
     <link rel="icon" href="/static/tgf-icon.svg">
-    <link href="https://fonts.googleapis.com/css2?family=Bitter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Bitter:wght@600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/css/dashboard.css?v={{ app_version }}">
     <link rel="stylesheet" href="/static/css/shell.css">
     <link rel="manifest" href="/static/manifest-member.json">
-    {#  PLAYER SCORE ENTRY (Track A). One scorer per group enters GROSS
-        scores hole by hole. Rules of record in email_parser/score_entry.py.
-        Weak signal: every hole is queued on the phone with its own op id and
-        resent until the server confirms it; a hole never shows as saved
-        before that. One breakpoint: 560px. Green is never used here — green
-        means bought in (CLAUDE.md colour standard). #}
+    {#  PLAYER SCORE ENTRY (Track A). Built to CA's four-screen mockup, which
+        Kerry approved as the MVP target (#668/#669): join, scorekeeper hole,
+        par-3 closest to the pin, player sign-off. Rules of record live in
+        email_parser/score_entry.py. Colours per the CTA and Color Standard as
+        the mockup applies it: green #0d7556 only for proceed/save, black for
+        utility and submit, outlined for choices, orange as an accent with
+        #B45A22 for label text, mint for saved. Weak signal: every hole waits
+        on the phone with its own op id until the server confirms it. One
+        breakpoint: 560px. #}
     <style>
-        body { background: #F8F8F8; }
-        .se-wrap { max-width: 520px; margin: 0 auto; padding: 12px 12px 120px; }
-        .se-head { background: #fff; border: 1px solid #E5E7EB; border-radius: 12px;
-                   padding: 12px 14px; margin-bottom: 10px; }
-        .se-eyebrow { font-family: Bitter, serif; font-size: 12px; letter-spacing: .08em;
-                      text-transform: uppercase; color: #6B7280; }
-        .se-title { font-family: Bitter, serif; font-size: 20px; font-weight: 700;
-                    color: #1B1B1B; margin: 2px 0 0; }
-        .se-sub { color: #4B5563; font-size: 14px; margin-top: 2px; }
-        .se-sync { display: inline-flex; align-items: center; gap: 6px; margin-top: 8px;
-                   font-size: 13px; padding: 3px 10px; border-radius: 999px;
-                   background: #F3F4F6; color: #4B5563; }
-        .se-sync.pending { background: #FEF3C7; color: #92400E; }
-        .se-sync.lost { background: #FEE2E2; color: #991B1B; }
-        .se-card { background: #fff; border: 1px solid #E5E7EB; border-radius: 12px;
-                   padding: 14px; margin-bottom: 10px; }
-        .se-card h2 { font-family: Bitter, serif; font-size: 18px; margin: 0 0 6px; }
-        .se-card p { margin: 6px 0; color: #4B5563; font-size: 15px; white-space: normal; }
-        .se-btn { display: block; width: 100%; min-height: 52px; border-radius: 999px;
-                  border: 2px solid #1B1B1B; background: #fff; color: #1B1B1B;
-                  font-family: Bitter, serif; font-weight: 700; font-size: 17px;
-                  margin-top: 10px; cursor: pointer; }
-        .se-btn.primary { background: #E87C3E; border-color: #E87C3E; color: #fff; }
-        .se-btn:disabled { opacity: .5; }
-        .se-holebar { display: flex; align-items: center; justify-content: space-between;
-                      gap: 8px; margin-bottom: 10px; }
-        .se-holebar button { width: 52px; height: 52px; border-radius: 50%;
-                             border: 2px solid #1B1B1B; background: #fff; font-size: 22px;
-                             cursor: pointer; }
-        .se-holebar button:disabled { opacity: .3; }
-        .se-holeinfo { text-align: center; flex: 1; }
-        .se-holeno { font-family: Bitter, serif; font-size: 28px; font-weight: 800; }
-        .se-holemeta { color: #6B7280; font-size: 14px; }
-        .se-row { display: flex; align-items: center; gap: 10px; padding: 10px 0;
-                  border-top: 1px solid #F3F4F6; }
-        .se-row:first-child { border-top: 0; }
-        .se-who { flex: 1; min-width: 0; }
-        .se-name { font-weight: 600; font-size: 17px; color: #1B1B1B; white-space: normal; }
-        .se-meta { font-size: 13px; color: #6B7280; }
-        .se-step { display: flex; align-items: center; gap: 6px; }
-        .se-step button { width: 48px; height: 48px; border-radius: 50%; border: 2px solid #1B1B1B;
-                          background: #fff; font-size: 24px; line-height: 1; cursor: pointer; }
-        .se-val { width: 48px; text-align: center; font-family: Bitter, serif; font-size: 28px;
-                  font-weight: 800; color: #1B1B1B; font-variant-numeric: tabular-nums; }
-        .se-val.empty { color: #9CA3AF; font-weight: 500; }
-        .se-val.waiting { color: #B45309; }
-        .se-next { margin-top: 6px; }
-        .se-strip { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-        .se-strip table { border-collapse: collapse; font-size: 13px; }
-        .se-strip th, .se-strip td { padding: 4px 6px; text-align: center; border-bottom: 1px solid #F3F4F6;
-                                     font-variant-numeric: tabular-nums; }
-        .se-strip th { color: #6B7280; font-weight: 600; cursor: pointer; }
-        .se-strip th.cur { color: #E87C3E; }
-        .se-strip td.nm { text-align: left; white-space: nowrap; font-weight: 600; }
-        .se-strip td.w { color: #B45309; }
-        .se-banner { border-radius: 12px; padding: 12px 14px; margin-bottom: 10px; font-size: 15px;
-                     white-space: normal; }
-        .se-banner.warn { background: #FEF3C7; color: #92400E; }
-        .se-banner.bad { background: #FEE2E2; color: #991B1B; }
-        .se-note { font-size: 12px; color: #6B7280; margin-top: 8px; white-space: normal; }
+        body { background: #FFFFFF; }
+        .se-wrap { max-width: 480px; margin: 0 auto; padding: 20px 20px 40px; color: #1B1B1B;
+                   font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; }
+        .se-eyebrow { font-size: 12px; font-weight: 700; letter-spacing: 1.2px; color: #B45A22;
+                      text-transform: uppercase; }
+        .se-h1 { margin: 2px 0 0; font-family: Bitter, Georgia, serif; font-size: 30px; line-height: 1.15;
+                 font-weight: 700; }
+        .se-h1.big { font-size: 34px; }
+        .se-sub { font-size: 15px; color: #4B5563; margin-top: 4px; }
+        .se-copy { font-size: 14px; line-height: 1.5; color: #4B5563; white-space: normal; }
+        .se-stack { display: flex; flex-direction: column; gap: 10px; }
+        .se-gap { height: 18px; }
+        .se-pill { height: 56px; border-radius: 48px; font-size: 17px; font-weight: 600; font-family: inherit;
+                   width: 100%; cursor: pointer; }
+        .se-pill.go { border: none; background: #0d7556; color: #FFFFFF; font-weight: 700; }
+        .se-pill.dark { border: none; background: #1B1B1B; color: #FFFFFF; }
+        .se-pill.line { border: 1px solid #1B1B1B; background: transparent; color: #1B1B1B; }
+        .se-pill:disabled { opacity: .45; }
+        .se-name-btn { height: 60px; border-radius: 12px; border: 1px solid #E5E7EB; background: #F8F8F8;
+                       display: flex; align-items: center; justify-content: space-between; padding: 0 18px;
+                       font-size: 18px; font-weight: 600; color: #1B1B1B; font-family: inherit; width: 100%;
+                       cursor: pointer; }
+        .se-name-btn span.m { font-size: 13px; font-weight: 500; color: #4B5563; }
+        .se-box { padding: 16px; border-radius: 12px; border: 1px solid #E5E7EB; background: #F8F8F8; }
+        .se-box.dash { border: 1px dashed #D1D5DB; background: #FFFFFF; }
+        .se-lbl { font-size: 11px; font-weight: 700; letter-spacing: 1px; color: #6B7280; text-transform: uppercase; }
+        .se-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+        .se-nav { display: flex; gap: 8px; padding-top: 4px; }
+        .se-nav button { width: 44px; height: 44px; border-radius: 22px; border: 1px solid #E5E7EB;
+                         background: #FFFFFF; display: flex; align-items: center; justify-content: center;
+                         cursor: pointer; }
+        .se-nav button:disabled { opacity: .35; }
+        .se-keeper { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #4B5563; margin: 12px 0; }
+        .se-row { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 12px;
+                  background: #F8F8F8; border: 1px solid #E5E7EB; }
+        .se-who { flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+        .se-name { font-size: 17px; font-weight: 600; white-space: normal; }
+        .se-meta { font-size: 13px; color: #4B5563; white-space: normal; }
+        .se-minus, .se-plus { width: 48px; height: 48px; border-radius: 24px; font-size: 24px; line-height: 1;
+                              font-family: inherit; cursor: pointer; flex: none; }
+        .se-minus { border: 1px solid #1B1B1B; background: #FFFFFF; color: #1B1B1B; }
+        .se-plus { border: none; background: #1B1B1B; color: #FFFFFF; }
+        .se-score { width: 52px; display: flex; flex-direction: column; align-items: center; gap: 1px; flex: none; }
+        .se-score .v { font-family: Bitter, Georgia, serif; font-size: 32px; font-weight: 700; line-height: 1;
+                       font-variant-numeric: tabular-nums; }
+        .se-score .v.empty { color: #9CA3AF; }
+        .se-score .v.waiting { color: #B45A22; }
+        .se-score .r { font-size: 11px; font-weight: 600; color: #4B5563; }
+        .se-strip { display: grid; gap: 4px; }
+        .se-cell { height: 44px; border-radius: 8px; display: flex; flex-direction: column; align-items: center;
+                   justify-content: center; background: #F8F8F8; border: 1px solid #E5E7EB; cursor: pointer;
+                   font-family: inherit; color: #1B1B1B; padding: 0; }
+        .se-cell .n { font-size: 10px; color: #6B7280; }
+        .se-cell .k { font-size: 13px; font-weight: 700; min-height: 16px; }
+        .se-cell.saved { background: #d1f4e0; border-color: #d1f4e0; color: #0d7556; }
+        .se-cell.saved .k { color: #0d7556; }
+        .se-cell.waiting { background: #FEF3C7; border-color: #FEF3C7; }
+        .se-cell.cur { background: #FFFFFF; border: 2px solid #E87C3E; }
+        .se-status { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #15803D; margin: 14px 0 10px; }
+        .se-warn { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-radius: 12px;
+                   background: #FEF3C7; color: #78350F; font-size: 14px; font-weight: 600; margin: 14px 0 10px;
+                   white-space: normal; }
+        .se-bad { padding: 12px 14px; border-radius: 12px; background: #FEE2E2; color: #991B1B; font-size: 14px;
+                  font-weight: 600; margin-bottom: 12px; white-space: normal; }
+        .se-holder { display: flex; align-items: center; gap: 14px; }
+        .se-flag { width: 44px; height: 44px; border-radius: 22px; background: #FFFFFF; border: 2px solid #E87C3E;
+                   display: flex; align-items: center; justify-content: center; flex: none; }
+        .se-card { border-radius: 12px; border: 1px solid #E5E7EB; overflow-x: auto; }
+        .se-card table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+        .se-card th, .se-card td { text-align: center; padding: 8px 2px; font-size: 13px; }
+        .se-card thead th { background: #1B1B1B; color: #FFFFFF; font-weight: 700; font-size: 12px; }
+        .se-card tr.par td { background: #F8F8F8; color: #4B5563; border-bottom: 1px solid #E5E7EB; }
+        .se-card td.nm { text-align: left; padding-left: 8px; color: #4B5563; white-space: nowrap; }
+        .se-card tr.me td { font-size: 16px; font-weight: 700; color: #1B1B1B; }
+        .se-card td.flagged { background: #FEE2E2; }
+        .se-card button.hole { width: 100%; background: none; border: none; font: inherit; color: inherit;
+                               padding: 0; cursor: pointer; }
+        .se-foot { font-size: 13px; color: #6B7280; text-align: center; margin-top: 10px; white-space: normal; }
+        .se-hio { border: 2px solid #E87C3E; }
+        .se-note { font-size: 12px; color: #6B7280; margin-top: 10px; white-space: normal; }
         .hidden { display: none !important; }
         @media (max-width: 560px) {
-            .se-wrap { padding: 8px 8px 120px; }
+            .se-wrap { padding: 16px 16px 32px; }
         }
     </style>
 </head>
 <body>
     {% set SHELL_TITLE = 'Scorecard' %}{% set SHELL_ACTIVE = '' %}
     {% include '_shell_nav.html' %}
-    <main class="se-wrap">
-        <div id="se-error" class="se-banner bad hidden"></div>
-        <div id="se-root" class="hidden">
-            <div class="se-head">
-                <div class="se-eyebrow" id="se-round"></div>
-                <div class="se-title" id="se-group"></div>
-                <div class="se-sub" id="se-scorer"></div>
-                <div class="se-sync" id="se-sync">All scores saved</div>
-            </div>
-
-            <div id="se-lost" class="se-banner bad hidden"></div>
-
-            {# Step 1: who is keeping score (remembered on this phone) #}
-            <div id="se-pick" class="se-card hidden">
-                <h2>Who's keeping score?</h2>
-                <p>One person enters the scores for the group. Tap your name.</p>
-                <div id="se-pick-list"></div>
-            </div>
-
-            {# Someone else holds the card #}
-            <div id="se-held" class="se-card hidden">
-                <h2 id="se-held-title"></h2>
-                <p id="se-held-body"></p>
-                <button class="se-btn primary" id="se-takeover" type="button">Take over scoring</button>
-                <button class="se-btn" id="se-viewonly" type="button">Just watch</button>
-            </div>
-
-            {# The hole #}
-            <div id="se-hole" class="se-card hidden">
-                <div class="se-holebar">
-                    <button type="button" id="se-prev" aria-label="Previous hole">&#8249;</button>
-                    <div class="se-holeinfo">
-                        <div class="se-holeno" id="se-holeno"></div>
-                        <div class="se-holemeta" id="se-holemeta"></div>
-                    </div>
-                    <button type="button" id="se-nextbtn" aria-label="Next hole">&#8250;</button>
-                </div>
-                <div id="se-rows"></div>
-                <button class="se-btn primary se-next" id="se-save" type="button">Save &amp; next hole</button>
-            </div>
-
-            <div class="se-card">
-                <div class="se-strip" id="se-strip"></div>
-                <div class="se-note" id="se-note">Your group's gross scores. The official results are still on the
-                    scorecard and Golf Genius.</div>
-            </div>
-        </div>
-    </main>
+    <main class="se-wrap" id="se-app" aria-live="polite"></main>
 
     <script src="/static/js/version.js"></script>
     <script>window.MEMBER_MODE = true;</script>
@@ -143,10 +119,10 @@
     (function () {
         "use strict";
         const T = new URLSearchParams(location.search).get("t") || "";
-        const $ = (id) => document.getElementById(id);
+        const app = document.getElementById("se-app");
         const store = {
             get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } },
-            set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* private mode: queue lives in memory */ } },
+            set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* private mode: in memory only */ } },
         };
         let DEVICE = store.get("se_device", null);
         if (!DEVICE) {
@@ -154,181 +130,295 @@
             store.set("se_device", DEVICE);
         }
         const tk = T.slice(0, 24);
-        const QKEY = "se_queue_" + tk, WKEY = "se_who_" + tk, HKEY = "se_hole_" + tk;
-        let card = null, queue = store.get(QKEY, []);
-        let who = store.get(WKEY, null), watching = false, flushing = false, hole = null;
-        let draft = {};           // subject -> value on the hole on screen, not yet saved
+        const K = {q: "se_queue_" + tk, who: "se_who_" + tk, hole: "se_hole_" + tk, follow: "se_follow_" + tk};
+        let card = null, queue = store.get(K.q, []), who = store.get(K.who, null);
+        let following = store.get(K.follow, false), hole = null, draft = {}, flushing = false;
+        let ctpHole = null, lostMsg = "", errMsg = "", flagging = false, busy = false;
 
+        const ICON = {
+            back: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#1B1B1B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>',
+            fwd: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#1B1B1B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>',
+            pen: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#B45A22" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>',
+            check: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#15803D" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>',
+            warn: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#78350F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8v4"/><path d="M12 16h.01"/><circle cx="12" cy="12" r="9"/></svg>',
+            flag: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#B45A22" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 21V4"/><path d="M5 4h11l-2 4 2 4H5"/></svg>',
+        };
+        const WORDS = {"-3": "Albatross", "-2": "Eagle", "-1": "Birdie", "0": "Par", "1": "Bogey", "2": "Double"};
         const esc = (s) => String(s == null ? "" : s).replace(/[&<>"]/g,
             (c) => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
-        function saveQueue() { store.set(QKEY, queue); }
-        function showError(msg) { $("se-error").textContent = msg; $("se-error").classList.remove("hidden"); }
+        const first = (n) => String(n || "").split(" ")[0];
 
+        // ── derived state ───────────────────────────────────────────────
+        function byId(cid) { return card.players.find((p) => p.customer_id === cid) || {}; }
         function subjects() {
-            // FOURSOMES: a team plays one ball, so the pair is scored, not its players.
-            if (card.teams && card.teams.length) {
-                const byId = Object.fromEntries(card.players.map((p) => [p.customer_id, p]));
-                const inTeam = new Set();
-                const rows = card.teams.map((t) => {
-                    inTeam.add(t.customer_id_a); inTeam.add(t.customer_id_b);
-                    const a = byId[t.customer_id_a], b = byId[t.customer_id_b];
-                    return {key: "t:" + t.team_id, team_id: t.team_id,
-                            name: t.label || [a && a.display_name, b && b.display_name].join(" / "),
-                            meta: "Team · one ball"};
-                });
-                card.players.filter((p) => !inTeam.has(p.customer_id)).forEach((p) => rows.push(playerSubject(p)));
-                return rows;
+            // FOURSOMES: a pair plays one ball, so the pair is scored, not its players.
+            const inTeam = new Set(), rows = [];
+            for (const t of card.teams || []) {
+                inTeam.add(t.customer_id_a); inTeam.add(t.customer_id_b);
+                rows.push({key: "t:" + t.team_id, team: t,
+                           name: t.label || first(byId(t.customer_id_a).display_name) + " / " + first(byId(t.customer_id_b).display_name),
+                           meta: "Team · one ball", cids: [t.customer_id_a, t.customer_id_b]});
             }
-            return card.players.map(playerSubject);
-        }
-        function playerSubject(p) {
-            const bits = [];
-            if (p.tee) bits.push(p.tee);
-            if (p.playing_handicap != null) bits.push("PH " + p.playing_handicap);
-            return {key: "c:" + p.customer_id, customer_id: p.customer_id, name: p.display_name,
-                    meta: bits.join(" · ")};
+            for (const p of card.players) {
+                if (inTeam.has(p.customer_id)) continue;
+                rows.push({key: "c:" + p.customer_id, cid: p.customer_id, name: p.display_name,
+                           ph: p.playing_handicap, cids: [p.customer_id]});
+            }
+            return rows;
         }
         function holeOrder() {
             const nums = card.course.length ? card.course.map((h) => h.hole)
-                : Array.from({length: card.holes}, (_, i) => i + (card.start_hole >= 10 && card.holes === 9 ? 10 : 1));
+                : Array.from({length: card.holes}, (_, i) => i + 1);
             const i = Math.max(0, nums.indexOf(card.start_hole));
             return nums.slice(i).concat(nums.slice(0, i));     // shotgun: start on your hole
         }
-        function holeInfo(n) { return card.course.find((h) => h.hole === n) || {hole: n}; }
-        function pendingFor(key, n) {
+        const info = (n) => card.course.find((h) => h.hole === n) || {hole: n};
+        function pending(key, n) {
             for (let i = queue.length - 1; i >= 0; i--) {
                 const o = queue[i];
                 if (o.hole === n && (o.customer_id ? "c:" + o.customer_id : "t:" + o.team_id) === key) return o;
             }
             return null;
         }
-        function valueFor(key, n) {
-            const p = pendingFor(key, n);
+        function value(key, n) {
+            const p = pending(key, n);
             if (p) return {v: p.gross, waiting: true};
             const s = (card.scores[key] || {})[String(n)];
             return {v: s == null ? null : s, waiting: false};
         }
-        function canEdit() { return card.lock.state === "mine" && !watching; }
-
-        function renderSync() {
-            const el = $("se-sync");
-            el.classList.remove("pending", "lost");
-            if (queue.length) {
-                el.classList.add("pending");
-                const holes = new Set(queue.map((o) => o.hole)).size;
-                el.textContent = holes === 1 ? "1 hole waiting to send" : holes + " holes waiting to send";
-            } else {
-                el.textContent = "All scores saved";
-            }
+        const holeDone = (n) => subjects().every((s) => value(s.key, n).v != null);
+        const holeWaiting = (n) => queue.some((o) => o.hole === n);
+        const allDone = () => holeOrder().every(holeDone);
+        const keeping = () => card.lock.state === "mine" && !following;
+        function strokeNote(cid, n) {
+            const k = ((card.strokes || {})[String(cid)] || {})[String(n)];
+            return k ? (k === 1 ? "gets 1 stroke here" : "gets " + k + " strokes here") : "";
         }
+        function signed(cid, kind) { return (card.signoffs || []).some((s) => s.customer_id === cid && s.kind === (kind || "player")); }
+        function openFlags(cid) { return (card.flags || []).filter((f) => f.customer_id === cid); }
+        const eyebrow = () => [card.round_label, card.group_num != null ? "Group " + card.group_num : null].filter(Boolean).join(" · ");
 
+        // ── screens ─────────────────────────────────────────────────────
         function render() {
-            $("se-root").classList.remove("hidden");
-            $("se-round").textContent = [card.round_label, card.round_date].filter(Boolean).join(" · ");
-            $("se-group").textContent = card.label || ("Group " + card.group_id);
-            const holderName = card.lock.holder_name;
-            $("se-scorer").textContent = card.lock.state === "mine" ? "You're keeping score"
-                : holderName ? holderName + " is keeping score" : "No one is keeping score yet";
-            renderSync();
-            const needPick = !who && !watching;
-            $("se-pick").classList.toggle("hidden", !needPick);
-            if (needPick) {
-                $("se-pick-list").innerHTML = card.players.map((p) =>
-                    `<button class="se-btn" type="button" data-cid="${p.customer_id}">${esc(p.display_name)}</button>`).join("");
-            }
-            const held = !needPick && card.lock.state === "held" && !watching;
-            $("se-held").classList.toggle("hidden", !held);
-            if (held) {
-                $("se-held-title").textContent = (holderName || "Someone") + " is keeping score";
-                $("se-held-body").textContent = "Only one phone enters scores for a group, so nothing is entered twice. "
-                    + "If " + (holderName || "they") + " can't keep going, take over and this phone becomes the scorecard.";
-            }
-            const showHole = !needPick && !held;
-            $("se-hole").classList.toggle("hidden", !showHole);
-            if (showHole) renderHole();
-            renderStrip();
+            if (errMsg && !card) { app.innerHTML = `<div class="se-bad">${esc(errMsg)}</div>`; return; }
+            if (!card) return;
+            const banner = (lostMsg ? `<div class="se-bad">${esc(lostMsg)}</div>` : "")
+                         + (errMsg ? `<div class="se-bad">${esc(errMsg)}</div>` : "");
+            let body;
+            if (!who) body = joinScreen();
+            else if (card.lock.state === "held" && !following) body = heldScreen();
+            else if (keeping() && ctpHole != null) body = ctpScreen(ctpHole);
+            else if (keeping() && !(allDone() && hole === "done")) body = holeScreen();
+            else body = cardScreen();
+            app.innerHTML = banner + body;
         }
 
-        function renderHole() {
+        function joinScreen() {
+            const btns = card.players.map((p) =>
+                `<button type="button" class="se-name-btn" data-act="pick" data-cid="${p.customer_id}">
+                    <span>${esc(p.display_name)}</span><span class="m">${p.playing_handicap != null ? "PH " + p.playing_handicap : ""}</span>
+                 </button>`).join("");
+            const when = [card.group_num != null ? "Group " + card.group_num : null, card.label,
+                          card.holes === 9 ? "Nine holes" : "18 holes"].filter(Boolean).join(" · ");
+            return `<div class="se-eyebrow">${esc([card.round_label, card.round_date].filter(Boolean).join(" · "))}</div>
+                <h1 class="se-h1">Who are you?</h1><div class="se-sub">${esc(when)}</div>
+                <div class="se-gap"></div><div class="se-stack">${btns}</div><div class="se-gap"></div>
+                <div class="se-copy">The first person to start keeps score for the group. Everyone else follows along live and signs their card at the end.</div>`;
+        }
+
+        function heldScreen() {
+            const nm = card.lock.holder_name || "Someone";
+            return `<div class="se-eyebrow">${esc(eyebrow())}</div>
+                <h1 class="se-h1">${esc(first(nm))} is keeping score.</h1>
+                <div class="se-sub">One phone enters the group's scores, so nothing is entered twice.</div>
+                <div class="se-gap"></div>
+                <div class="se-stack">
+                  <button type="button" class="se-pill line" data-act="follow">Follow along</button>
+                  <button type="button" class="se-pill dark" data-act="takeover">Take over</button>
+                </div><div class="se-gap"></div>
+                <div class="se-copy">Take over only if ${esc(first(nm))} can't keep going. This phone becomes the scorecard and ${esc(first(nm))}'s phone switches to follow along.</div>`;
+        }
+
+        function holeScreen() {
             const order = holeOrder();
             if (hole == null || order.indexOf(hole) < 0) {
-                const saved = store.get(HKEY, null);
-                hole = order.indexOf(saved) >= 0 ? saved : firstOpenHole(order);
+                const saved = store.get(K.hole, null);
+                hole = order.indexOf(saved) >= 0 ? saved : (order.find((n) => !holeDone(n)) ?? order[order.length - 1]);
             }
-            const info = holeInfo(hole), i = order.indexOf(hole);
-            $("se-holeno").textContent = "Hole " + hole;
-            $("se-holemeta").textContent = [info.par ? "Par " + info.par : null,
-                info.yardage ? info.yardage + " yds" : null,
-                info.stroke_index ? "Hcp " + info.stroke_index : null].filter(Boolean).join(" · ");
-            $("se-prev").disabled = i <= 0;
-            $("se-nextbtn").disabled = i >= order.length - 1;
-            const edit = canEdit();
-            $("se-rows").innerHTML = subjects().map((s) => {
-                const cur = s.key in draft ? {v: draft[s.key], waiting: false} : valueFor(s.key, hole);
-                const shown = cur.v == null ? (info.par || "–") : cur.v;
-                const cls = cur.v == null ? "empty" : cur.waiting ? "waiting" : "";
+            const h = info(hole), i = order.indexOf(hole);
+            const meta = [h.par ? "Par " + h.par : null, h.yardage ? h.yardage + " yds" : null,
+                          h.stroke_index ? "Stroke index " + h.stroke_index : null].filter(Boolean).join(" · ");
+            const rows = subjects().map((s) => {
+                const cur = s.key in draft ? {v: draft[s.key], waiting: false} : value(s.key, hole);
+                const shown = cur.v == null ? (h.par || "–") : cur.v;
+                const d = cur.v == null || !h.par ? null : cur.v - h.par;
+                const rel = d == null ? "" : (WORDS[String(d)] || (d > 0 ? "+" + d : String(d)));
+                const meta2 = s.team ? s.meta : [s.ph != null ? "PH " + s.ph : null, strokeNote(s.cid, hole)].filter(Boolean).join(" · ");
                 return `<div class="se-row" data-key="${s.key}">
-                    <div class="se-who"><div class="se-name">${esc(s.name)}</div>
-                        <div class="se-meta">${esc(s.meta)}</div></div>
-                    <div class="se-step">
-                        ${edit ? `<button type="button" data-d="-1" aria-label="One less">&minus;</button>` : ""}
-                        <div class="se-val ${cls}">${shown}</div>
-                        ${edit ? `<button type="button" data-d="1" aria-label="One more">+</button>` : ""}
-                    </div></div>`;
+                    <div class="se-who"><div class="se-name">${esc(s.name)}</div><div class="se-meta">${esc(meta2)}</div></div>
+                    <button type="button" class="se-minus" data-act="step" data-d="-1" aria-label="One less for ${esc(s.name)}">&minus;</button>
+                    <div class="se-score"><div class="v ${cur.v == null ? "empty" : cur.waiting ? "waiting" : ""}">${shown}</div><div class="r">${rel}</div></div>
+                    <button type="button" class="se-plus" data-act="step" data-d="1" aria-label="One more for ${esc(s.name)}">+</button>
+                  </div>`;
             }).join("");
-            $("se-save").classList.toggle("hidden", !edit);
-            $("se-save").textContent = i >= order.length - 1 ? "Save last hole" : "Save & next hole";
+            const cells = order.map((n) => {
+                const cls = n === hole ? "cur" : holeWaiting(n) ? "waiting" : holeDone(n) ? "saved" : "";
+                const mark = n === hole ? "&bull;" : holeWaiting(n) ? "&hellip;" : holeDone(n) ? "&#10003;" : "";
+                return `<button type="button" class="se-cell ${cls}" data-act="goto" data-h="${n}" aria-label="Hole ${n}"><span class="n">${n}</span><span class="k">${mark}</span></button>`;
+            }).join("");
+            const next = order[i + 1];
+            const cta = next == null ? "Save last hole" : "Save &amp; go to hole " + next;
+            const hio = hioForKeeper();
+            return `<div class="se-top"><div>
+                    <div class="se-eyebrow">${esc(eyebrow())}</div>
+                    <h1 class="se-h1 big">Hole ${hole}</h1><div class="se-sub">${esc(meta)}</div></div>
+                  <div class="se-nav">
+                    <button type="button" data-act="prev" aria-label="Previous hole" ${i <= 0 ? "disabled" : ""}>${ICON.back}</button>
+                    <button type="button" data-act="next" aria-label="Next hole" ${i >= order.length - 1 ? "disabled" : ""}>${ICON.fwd}</button>
+                  </div></div>
+                <div class="se-keeper">${ICON.pen}<span>You're keeping score for the group</span></div>
+                ${hio}
+                <div class="se-stack">${rows}</div>
+                ${card.strokes_note ? `<div class="se-note">Handicap strokes: ${esc(card.strokes_note)}.</div>` : ""}
+                <div style="margin-top:16px" class="se-lbl">Group card</div>
+                <div class="se-strip" style="margin-top:8px;grid-template-columns:repeat(${Math.min(order.length, 9)}, minmax(0, 1fr))">${cells}</div>
+                ${statusLine()}
+                <button type="button" class="se-pill go" data-act="save">${cta}</button>
+                ${allDone() ? `<div class="se-gap"></div><button type="button" class="se-pill line" data-act="finish">Finish &amp; sign</button>` : ""}`;
         }
 
-        function firstOpenHole(order) {
+        function statusLine() {
+            if (queue.length) {
+                const n = new Set(queue.map((o) => o.hole)).size;
+                return `<div class="se-warn">${ICON.warn}<span>Weak signal: ${n} ${n === 1 ? "hole" : "holes"} waiting to send. Keep going, nothing is lost.</span></div>`;
+            }
+            const done = holeOrder().filter(holeDone);
+            if (!done.length) return `<div class="se-status" style="color:#6B7280">No holes saved yet</div>`;
+            return `<div class="se-status">${ICON.check}<span>${done.length === holeOrder().length ? "Every hole saved" : done.length + (done.length === 1 ? " hole" : " holes") + " saved"}</span></div>`;
+        }
+
+        function hioForKeeper() {
+            const open = (card.hio || []).filter((h) => h.status === "pending" && h.eligible);
+            return open.map((h) => `<div class="se-box se-hio" style="margin-bottom:12px">
+                <div class="se-lbl" style="color:#B45A22">Hole ${h.hole}</div>
+                <div style="font-size:18px;font-weight:700;margin:4px 0 10px">Hole-in-one for ${esc(byId(h.customer_id).display_name)}? Confirm.</div>
+                <button type="button" class="se-pill dark" data-act="hio" data-id="${h.id}">Yes, confirm the ace</button>
+                <div class="se-note">Then one other player in the group confirms on their phone, and the manager verifies.</div></div>`).join("");
+        }
+
+        function ctpScreen(n) {
+            const c = (card.ctp || {})[String(n)] || {};
+            const holder = c.holder_name ? `${esc(c.holder_name)} · Group ${esc(c.holder_group_num)}` : null;
+            const btns = card.players.map((p) => `<button type="button" class="se-pill line" data-act="ctp" data-cid="${p.customer_id}">${esc(p.display_name)}</button>`).join("");
+            return `<div class="se-eyebrow">Hole ${n} · Par 3 · Scores saved</div>
+                <h1 class="se-h1">Closest to the pin</h1><div class="se-gap"></div>
+                <div class="se-box se-holder"><div class="se-flag">${ICON.flag}</div>
+                  <div><div class="se-lbl">Current closest</div><div style="font-size:18px;font-weight:700">${holder || "No one yet"}</div></div></div>
+                <div class="se-gap"></div>
+                <div style="font-size:20px;font-weight:700">${holder ? "Did anyone in your group get closer?" : "Is anyone in your group on the green?"}</div>
+                <div class="se-gap"></div>
+                <div class="se-stack">${btns}<button type="button" class="se-pill dark" data-act="ctp" data-cid="">${holder ? "No one closer" : "No one on the green"}</button></div>
+                <div class="se-gap"></div>
+                <div class="se-copy">No measuring needed. The next group sees whoever you pick. Your manager settles any disagreement.</div>
+                ${queue.length ? statusLine() : ""}`;
+        }
+
+        function cardScreen() {
+            // The live group card: read-only for followers, and the sign-off
+            // screen for everyone once the last hole is in.
+            const order = holeOrder().slice().sort((a, b) => a - b);
+            const me = byId(who);
             const subs = subjects();
-            for (const n of order) {
-                if (subs.some((s) => valueFor(s.key, n).v == null)) return n;
-            }
-            return order[order.length - 1];
-        }
-
-        function renderStrip() {
-            const order = holeOrder(), subs = subjects();
-            let h = "<table><thead><tr><th></th>" + order.map((n) =>
-                `<th data-h="${n}" class="${n === hole ? "cur" : ""}">${n}</th>`).join("") + "<th>Tot</th></tr></thead><tbody>";
-            for (const s of subs) {
+            const mine = subs.find((s) => s.cids.includes(who));
+            const done = allDone();
+            const kept = card.lock.holder_name;
+            const flagsMine = openFlags(who);
+            const head = `<tr><th>Hole</th>${order.map((n) => `<th>${n}</th>`).join("")}<th>Tot</th></tr>`;
+            const par = `<tr class="par"><td class="nm">Par</td>${order.map((n) => `<td>${info(n).par || ""}</td>`).join("")}<td>${order.reduce((a, n) => a + (info(n).par || 0), 0) || ""}</td></tr>`;
+            const rows = subs.map((s) => {
                 let tot = 0;
-                h += `<tr><td class="nm">${esc(s.name.split(" ")[0] || s.name)}</td>` + order.map((n) => {
-                    const v = valueFor(s.key, n);
-                    if (v.v != null) tot += v.v;
-                    return `<td class="${v.waiting ? "w" : ""}">${v.v == null ? "" : v.v}</td>`;
-                }).join("") + `<td><strong>${tot || ""}</strong></td></tr>`;
+                const isMe = s === mine;
+                return `<tr class="${isMe ? "me" : ""}"><td class="nm">${esc(first(s.name) || s.name)}</td>` + order.map((n) => {
+                    const v = value(s.key, n).v;
+                    if (v != null) tot += v;
+                    const fl = isMe && flagsMine.some((f) => f.hole === n);
+                    const cell = v == null ? "" : v;
+                    return `<td class="${fl ? "flagged" : ""}">${isMe && flagging ? `<button type="button" class="hole" data-act="flaghole" data-h="${n}">${cell}</button>` : cell}</td>`;
+                }).join("") + `<td>${tot || ""}</td></tr>`;
+            }).join("");
+            const total = mine ? order.reduce((a, n) => a + (value(mine.key, n).v || 0), 0) : 0;
+            const nSigned = card.players.filter((p) => signed(p.customer_id)).length;
+            const keeperSigned = (card.signoffs || []).find((s) => s.kind === "scorekeeper");
+            let actions = "";
+            if (done && keeping() && !keeperSigned) {
+                actions = `<button type="button" class="se-pill dark" data-act="attest">I kept these scores</button><div class="se-gap"></div>`;
             }
-            $("se-strip").innerHTML = h + "</tbody></table>";
+            if (done) {
+                if (flagging) {
+                    actions += `<div class="se-copy" style="margin-bottom:10px"><strong>Tap the hole that's wrong.</strong> ${esc(first(kept) || "The scorekeeper")} and your manager get the flag.</div>
+                        <button type="button" class="se-pill line" data-act="unflag">Cancel</button>`;
+                } else if (flagsMine.length) {
+                    actions += `<div class="se-warn">${ICON.warn}<span>Hole ${flagsMine.map((f) => f.hole).join(", ")} flagged. Your card reopens for signing once it's fixed.</span></div>`;
+                } else if (signed(who)) {
+                    actions += `<div class="se-status">${ICON.check}<span>You signed your card · ${total}</span></div>`;
+                } else if (mine) {
+                    actions += `<button type="button" class="se-pill dark" data-act="sign">Sign my card · ${total}</button><div class="se-gap"></div>
+                        <button type="button" class="se-pill line" data-act="flag">Something's wrong</button>`;
+                }
+            }
+            const hioW = (card.hio || []).filter((h) => h.status === "confirmed" && h.eligible
+                && h.customer_id !== who && h.scorekeeper_customer_id !== who).map((h) =>
+                `<div class="se-box se-hio" style="margin:12px 0"><div style="font-size:17px;font-weight:700;margin-bottom:10px">Did ${esc(byId(h.customer_id).display_name)} make a hole-in-one on ${h.hole}?</div>
+                 <button type="button" class="se-pill dark" data-act="hio" data-id="${h.id}">Yes, I saw it</button></div>`).join("");
+            return `<div class="se-eyebrow">${done ? "Round complete · " : ""}${esc(card.group_num != null ? "Group " + card.group_num : card.label || "")}</div>
+                <h1 class="se-h1">${done && mine ? "Sign your card, " + esc(first(me.display_name)) : "Your group's card"}</h1>
+                <div class="se-sub">${kept ? "Scores kept by " + esc(kept) : "No one is keeping score yet"}</div>
+                ${!done && !keeping() && card.lock.state === "held" ? `<div class="se-gap"></div><button type="button" class="se-pill line" data-act="takeover">Take over scoring</button>` : ""}
+                ${!done && card.lock.state === "free" ? `<div class="se-gap"></div><button type="button" class="se-pill dark" data-act="keep">Keep score for the group</button>` : ""}
+                ${keeping() && done ? `<div class="se-gap"></div><button type="button" class="se-pill line" data-act="back">Back to the holes</button>` : ""}
+                ${hioW}
+                <div class="se-gap"></div>
+                <div class="se-card"><table><thead>${head}</thead><tbody>${par}${rows}</tbody></table></div>
+                <div class="se-gap"></div>
+                ${done ? `<div class="se-copy" style="margin-bottom:14px">Check each hole. Signing tells your manager this card is right. If a hole is wrong, tap it and ${esc(first(kept) || "the scorekeeper")} gets the flag to fix it. Only your card reopens.</div>` : `<div class="se-copy">Live. This card fills in as ${esc(first(kept) || "the scorekeeper")} enters each hole. You'll sign it at the end.</div>`}
+                ${actions}
+                <div class="se-foot">Signed ${nSigned} of ${card.players.length}${keeperSigned ? " · " + esc(first(byId(keeperSigned.customer_id).display_name)) + " signed as scorekeeper" : ""}</div>
+                <div class="se-note" style="text-align:center">The official results are still on the scorecard and Golf Genius.</div>`;
         }
 
+        // ── network ─────────────────────────────────────────────────────
         function api(path, body) {
             const opts = body ? {method: "POST", headers: {"Content-Type": "application/json"},
                                  body: JSON.stringify(Object.assign({t: T, device_id: DEVICE}, body))} : {};
             return fetch(path, opts).then((r) => r.json().then((j) => ({status: r.status, j})));
         }
-
         function load() {
             return api("/api/score-entry/card?t=" + encodeURIComponent(T) + "&device_id=" + encodeURIComponent(DEVICE))
                 .then(({status, j}) => {
-                    if (status !== 200) { showError(j.error || "This scoring link isn't working."); return; }
-                    card = j;
+                    if (status !== 200) { errMsg = j.error || "This scoring link isn't working."; card = null; render(); return; }
+                    card = j; errMsg = "";
                     if (who && !card.players.some((p) => p.customer_id === who)) who = null;
-                    if (who && card.lock.state === "free" && !watching) return claim(false);
+                    if (who && card.lock.state === "free" && !following) return claim(false);
                     render();
                 })
-                .catch(() => { if (card) render(); });   // offline: keep showing what we have
+                .catch(() => render());      // offline: keep showing what we have
         }
-
+        function post(path, body) {
+            if (busy) return Promise.resolve();
+            busy = true;
+            return api(path, body).then(({j}) => {
+                busy = false;
+                errMsg = j.error || "";
+                return load();
+            }).catch(() => { busy = false; errMsg = "No signal. Try again in a moment."; render(); });
+        }
         function claim(takeover) {
+            following = false; store.set(K.follow, false);
             return api("/api/score-entry/claim", {customer_id: who, takeover}).then(({j}) => {
-                if (j.error) { showError(j.error); return; }
-                $("se-lost").classList.add("hidden");
+                if (j.error) errMsg = j.error; else lostMsg = "";
                 return load();
             });
         }
-
         function flush() {
             if (flushing || !queue.length) return;
             flushing = true;
@@ -336,83 +426,84 @@
             api("/api/score-entry/write", {entered_by: who, ops: batch}).then(({status, j}) => {
                 flushing = false;
                 if (status !== 200 || !j.results) return;
-                const done = new Set(), refused = [];
-                for (const r of j.results) {
-                    if (r.result === "refused_lock") refused.push(r.op_id);
-                    done.add(r.op_id);      // ok, dup, invalid and refused all leave the queue
-                }
+                const done = new Set(j.results.map((r) => r.op_id));    // ok, dup, invalid, refused all leave
+                const refused = j.results.filter((r) => r.result === "refused_lock").map((r) => r.op_id);
                 queue = queue.filter((o) => !done.has(o.op_id));
-                saveQueue();
+                store.set(K.q, queue);
                 if (refused.length) {
                     const n = new Set(batch.filter((o) => refused.includes(o.op_id)).map((o) => o.hole)).size;
-                    $("se-lost").textContent = "Someone else took over scoring. " + n
-                        + (n === 1 ? " hole" : " holes")
-                        + " from this phone didn't go on the card. They're kept on record for the organizer.";
-                    $("se-lost").classList.remove("hidden");
+                    lostMsg = "Someone else took over scoring. " + n + (n === 1 ? " hole" : " holes")
+                        + " from this phone didn't go on the card. They're kept on record for your manager.";
                 }
                 load();
                 if (queue.length) setTimeout(flush, 300);
-            }).catch(() => { flushing = false; renderSync(); });
+            }).catch(() => { flushing = false; render(); });
         }
-
-        function enqueue(subjectKey, n, gross) {
+        function enqueue(key, n, gross) {
             const op = {op_id: DEVICE + "-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 7),
                         hole: n, gross: gross, client_ts: new Date().toISOString()};
-            if (subjectKey.startsWith("t:")) op.team_id = Number(subjectKey.slice(2));
-            else op.customer_id = Number(subjectKey.slice(2));
-            queue.push(op);
-            saveQueue();
+            if (key.startsWith("t:")) op.team_id = Number(key.slice(2)); else op.customer_id = Number(key.slice(2));
+            queue.push(op); store.set(K.q, queue);
         }
-
-        document.addEventListener("click", (e) => {
-            const pick = e.target.closest("#se-pick-list button");
-            if (pick) { who = Number(pick.dataset.cid); store.set(WKEY, who); claim(false); return; }
-            if (e.target.id === "se-takeover") { claim(true); return; }
-            if (e.target.id === "se-viewonly") { watching = true; render(); return; }
-            const step = e.target.closest(".se-step button");
-            if (step && canEdit()) {
-                const key = step.closest(".se-row").dataset.key;
-                const info = holeInfo(hole);
-                const cur = key in draft ? draft[key] : valueFor(key, hole).v;
-                const base = cur == null ? (info.par || 4) : cur;
-                const next = cur == null ? base : base + Number(step.dataset.d);
-                draft[key] = Math.min(20, Math.max(1, next));
-                renderHole(); return;
-            }
-            const th = e.target.closest(".se-strip th[data-h]");
-            if (th) { commitDraft(); hole = Number(th.dataset.h); store.set(HKEY, hole); render(); return; }
-            if (e.target.id === "se-prev" || e.target.id === "se-nextbtn") {
-                commitDraft();
-                const order = holeOrder(), i = order.indexOf(hole);
-                hole = order[e.target.id === "se-prev" ? i - 1 : i + 1];
-                store.set(HKEY, hole); render(); return;
-            }
-            if (e.target.id === "se-save") {
-                // A hole the scorer never touched saves as par for everyone
-                // shown at par, so "Save" means what it says on screen.
-                const info = holeInfo(hole);
-                for (const s of subjects()) {
-                    if (!(s.key in draft) && valueFor(s.key, hole).v == null && info.par) draft[s.key] = info.par;
-                }
-                commitDraft();
-                const order = holeOrder(), i = order.indexOf(hole);
-                if (i < order.length - 1) hole = order[i + 1];
-                store.set(HKEY, hole);
-                render(); flush();
-            }
-        });
-
         function commitDraft() {
-            for (const [key, v] of Object.entries(draft)) {
-                if (valueFor(key, hole).v !== v) enqueue(key, hole, v);
-            }
+            for (const [key, v] of Object.entries(draft)) if (value(key, hole).v !== v) enqueue(key, hole, v);
             draft = {};
         }
 
-        if (!T) { showError("This page needs your group's scoring link."); return; }
+        // ── taps ────────────────────────────────────────────────────────
+        app.addEventListener("click", (e) => {
+            const b = e.target.closest("button[data-act]");
+            if (!b) return;
+            const act = b.dataset.act;
+            if (act === "pick") { who = Number(b.dataset.cid); store.set(K.who, who); claim(false); return; }
+            if (act === "follow") { following = true; store.set(K.follow, true); render(); return; }
+            if (act === "takeover") { claim(true); return; }
+            if (act === "keep") { claim(false); return; }
+            if (act === "step") {
+                const key = b.closest(".se-row").dataset.key, h = info(hole);
+                // The screen shows par until touched; a tap moves one from what is shown.
+                const cur = key in draft ? draft[key] : value(key, hole).v;
+                const base = cur == null ? (h.par || 4) : cur;
+                draft[key] = Math.min(20, Math.max(1, base + Number(b.dataset.d)));
+                render(); return;
+            }
+            if (act === "goto" || act === "prev" || act === "next") {
+                commitDraft(); flush();
+                const order = holeOrder(), i = order.indexOf(hole);
+                hole = act === "goto" ? Number(b.dataset.h) : order[act === "prev" ? i - 1 : i + 1];
+                store.set(K.hole, hole); render(); return;
+            }
+            if (act === "save") {
+                // "Save" means what is on screen: an untouched player is saved at par.
+                const h = info(hole);
+                for (const s of subjects()) if (!(s.key in draft) && value(s.key, hole).v == null && h.par) draft[s.key] = h.par;
+                const saved = hole;
+                commitDraft(); flush();
+                const c = (card.ctp || {})[String(saved)];
+                if (h.par === 3 && c && !c.answered) { ctpHole = saved; }
+                const order = holeOrder(), i = order.indexOf(saved);
+                if (i < order.length - 1) hole = order[i + 1];
+                store.set(K.hole, hole); render(); return;
+            }
+            if (act === "ctp") {
+                const n = ctpHole; ctpHole = null;
+                post("/api/score-entry/ctp", {hole: n, customer_id: b.dataset.cid ? Number(b.dataset.cid) : null, claimed_by: who});
+                return;
+            }
+            if (act === "finish") { commitDraft(); flush(); hole = "done"; render(); return; }
+            if (act === "back") { hole = null; store.set(K.hole, null); render(); return; }
+            if (act === "attest") { post("/api/score-entry/sign", {customer_id: who, kind: "scorekeeper"}); return; }
+            if (act === "sign") { post("/api/score-entry/sign", {customer_id: who}); return; }
+            if (act === "flag") { flagging = true; render(); return; }
+            if (act === "unflag") { flagging = false; render(); return; }
+            if (act === "flaghole") { flagging = false; post("/api/score-entry/flag", {customer_id: who, hole: Number(b.dataset.h)}); return; }
+            if (act === "hio") { post("/api/score-entry/hio/confirm", {hio_id: Number(b.dataset.id), customer_id: who}); return; }
+        });
+
+        if (!T) { errMsg = "This page needs your group's scoring link."; render(); return; }
         load();
         setInterval(flush, 5000);
-        setInterval(() => { if (!queue.length) load(); }, 20000);
+        setInterval(() => { if (!queue.length && !busy) load(); }, 15000);
         window.addEventListener("online", flush);
         document.addEventListener("visibilitychange", () => { if (!document.hidden) { flush(); load(); } });
     })();
