@@ -695,7 +695,8 @@ per issue (Brevo campaign ids: #15 = Insider 1 (9/2), #18 = Insider 2
 |---|---|---|---|---|---|---|---|---|---|---|
 | #1 (#15) | Wed 9/2 2:18 PM | whole list 3 | 1,245 | 119 | 32.3% | 24 | 56 | 4 | — | final |
 | #2 (#18) | Wed 9/10 1:36 PM | list 3 − active | 1,222 | 238 | 44.0% | 21 | 46 | 10 | 0 | final |
-| #3 (#19) | Wed 9/16 1:17 PM | list 3 − active | 1,207 | 106 | 38.0% | 15 | 43 | 6 | 1 (Ty B., 1st timer, Cedar Creek 18, Fri 1:32 PM — source unattributed) | +48h Fri 9/18 |
+| #3 (#19) | Wed 9/16 1:17 PM | list 3 − active | 1,207 | 109 | 39.2% | 16 | 50 | 7 | 1 (Ty B., 1st timer, Cedar Creek 18, Fri 1:32 PM — source unattributed) | final (9/25); +48h was 106 / 15 / 43 / 6 |
+| #4 | — | — | — | — | — | — | — | — | — | NOT SENT. The writer's first-timer draft went to Kerry Wed 9/23 8:00 AM and the corrected text sat in chat awaiting "go"; no reply by Fri 9/25. First missed week of the weekly cadence. |
 
 #3 by group at +48h (openers incl. Apple auto-opens / unique clickers): unknown 71 / 7 · prospect 19 / 6 · former 15 / 1 · active 1 / 1. Links: Brackenridge button 6, MEMBERSHIP 6, SA RESULTS 6, SA calendar 5, Austin calendar 4, Teravista 3, Cedar Creek 18 3, Austin RESULTS 2, home 1. **Reading (2026-09-18):** three issues, clickers 24 → 21 → 15 on a fixed audience; #3's real reads are under half of #2's. Two money headlines in a row ("First payday" → "Half the Field Won Money!") and the second pulled less; prospects are still the group that clicks (6 of 15 from ~260 people) and the event buttons + MEMBERSHIP are where they go. Next issue: the rotation's first-timer angle, a subject that names a person and a moment (no purse, no exclamation), and the ratified "you're in the team game without buying anything" line above the Try-a-Tuesday button. The list itself is the ceiling — the Insider cannot grow the audience; lead ads and first-timers do.
 
