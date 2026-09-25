@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.489.3";
+window.TGF_VERSION = "2.489.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.489.4",
+    date: "2026-09-25",
+    changes: [
+      "Docs only (Track B): docs/claude/lone-star-cup-board.md records CA's #661 rulings \u2014 the Track A read shape is ROUNDS PLURAL and event-scoped (one version per event, ?round_id= optional filter, per the Event Builder ladder), the foursomes team row is in scope for Track A's se_* schema, playing handicap comes from the locked handicap only (never derived a second way), and the 2026-09-24 rule-3b near-miss is on record as strike one.",
+    ],
+  },
   {
     version: "2.489.3",
     date: "2026-09-24",

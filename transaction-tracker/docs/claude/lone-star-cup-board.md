@@ -61,11 +61,28 @@ every non-staff session. Admin/manager sessions always get the board,
 so Kerry previews the staged demo on his phone signed in as staff.
 Nothing member-visible until Kerry flips `board_live` after his OK.
 
-## Wiring plan (Track A)
+## Wiring plan (Track A) — per CA rulings #661 (2026-09-25)
 
-When Track A's read shape lands (#657/#658): bind each session's
-`se_round`, prefer real entered scores over `lsc_mock_scores` in
-`lsc_board_payload`, keep the 15s poll + versioning server-side.
-Foursomes needs one team score line from entry — flagged in #659.
-The Fri 10/9 practice round renders a plain gross leaderboard from the
-same feed (no matches that day).
+- **Read shape RULED: rounds plural, event-scoped.** One event read
+  carries `rounds: [{round_id, date, label, holes, course, groups,
+  players}]` and ONE version for the whole event (Event Builder
+  ladder: EVENT → ROUND → NINE → HOLE). `?round_id=` stays as an
+  optional filter. 15s poll with since_version + 304 stands.
+- Each `lsc_matches` session binds by `se_round` = that read's
+  `round_id`. When the feed exists, `lsc_board_payload` prefers real
+  entered scores over `lsc_mock_scores`.
+- **Foursomes team row RULED in scope for Track A** (#661 item 2):
+  se_hole_scores accepts a pair-keyed entry with both customer_ids and
+  one gross per hole. The engine's foursomes path already scores one
+  team ball however it's keyed.
+- **Playing handicap comes from the locked handicap ONLY** (#661 item
+  4). This module never derives it a second way — it reads the PH the
+  feed carries, full stop. (The nine-hole stroke-allocation convention
+  open in CA Queue #10/#11 doesn't touch the cup: 18-hole rounds.)
+- The Fri 10/9 practice round renders a plain gross leaderboard from
+  the same feed (no matches that day).
+
+*Rule-3b record: the member gate missed its intended commit on
+2026-09-24, caught by the lane's own push check before any deploy
+exposed the board — CA logged it as strike one (#661 item 3). A second
+slip on a member-facing gate stops Track B.*
