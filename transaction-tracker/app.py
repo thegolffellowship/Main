@@ -11430,9 +11430,28 @@ def api_se_scores(event_id):
     event. ?since_version=N returns 304 when nothing changed."""
     from email_parser.score_entry import event_version, get_entered_scores
     since = request.args.get("since_version", type=int)
-    if since is not None and since == event_version(event_id):
+    ver = event_version(event_id)
+    if since is not None and since == ver:
         return ("", 304)
-    return jsonify(get_entered_scores(event_id, request.args.get("round_id", type=int)))
+    # ONE BUILD PER VERSION (load rehearsal 2026-09-25, CA #665.1): every
+    # viewer polling the same event at the same version shares one payload,
+    # so 60 viewers cost one build per score written, not 60.
+    rid = request.args.get("round_id", type=int)
+    key = (event_id, rid)
+    hit = _SE_READ_CACHE.get(key)
+    if not hit or hit[0] != ver:
+        body = get_entered_scores(event_id, rid)
+        hit = (body["version"], app.response_class(
+            json.dumps(body), mimetype="application/json").get_data())
+        with _SE_READ_LOCK:
+            if len(_SE_READ_CACHE) > 64:
+                _SE_READ_CACHE.clear()
+            _SE_READ_CACHE[key] = hit
+    return app.response_class(hit[1], mimetype="application/json")
+
+
+_SE_READ_CACHE: dict = {}
+_SE_READ_LOCK = threading.Lock()
 
 
 @app.route("/api/score-entry/events/<int:event_id>/seed", methods=["POST"])
