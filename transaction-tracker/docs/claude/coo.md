@@ -255,7 +255,7 @@ Central after DST ends Nov 1 — update the Routine then.
   per builder (`shared:live:austin_net` …) and `cold: true` on the
   sample, so the digest can say which one.
 
-### Day four (v2.489.5, 2026-09-25) — the archive move is built; the audit for CA
+### Day four (v2.489.6, 2026-09-25) — the archive move is built; the audit for CA
 
 - Digest #671 was clean on speed: no slow samples, no job errors, every
   route inside its line, load 2.2 per cpu. Its findings were the Railway

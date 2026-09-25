@@ -518,7 +518,7 @@ changed): `idx_items_customer_id ON items(customer_id)`,
 `idx_handicap_player_links_customer ON handicap_player_links(customer_id)`.
 
 
-## The GG raw archive lives in its own file (v2.489.5, Kerry 2026-09-23 #627)
+## The GG raw archive lives in its own file (v2.489.6, Kerry 2026-09-23 #627)
 
 `gg_raw_archive` (id, url, fetched_at, body_gz) — every gzipped Golf
 Genius page the history ingest and the scorecard import fetched — is NOT

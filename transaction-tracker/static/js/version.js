@@ -1,11 +1,19 @@
-window.TGF_VERSION = "2.489.5";
+window.TGF_VERSION = "2.489.6";
 window.TGF_CHANGELOG = [
   {
-    version: "2.489.5",
+    version: "2.489.6",
     date: "2026-09-25",
     changes: [
       "The Golf Genius page archive (Kerry 2026-09-23: ‘Yes, move the GG archive to its own file’) now has its own database file beside the main one. It was 374 of the main file's 444 MB — the reason the nightly backup took two and a half minutes and the 500 MB volume filled on 9/22. The Tracker attaches the second file on every connection, so the two places that write archived pages and the one that reads them work unchanged before and after the move. The move itself runs as separate, resumable steps from the CTO lane (copy in short batches, verify every row, then drop the old table, then reclaim the space), and nothing is dropped that has not been proven copied. The archive file gets its own weekly backup on Sunday nights, only when it changed.",
       "The daily health digest prints a GG ARCHIVE FILE line with the file's size, row count and last backup.",
+    ],
+  },
+  {
+    version: "2.489.5",
+    date: "2026-09-25",
+    changes: [
+      "The 5:00 AM Tracker Health digest is now addressed TO: front-desk (and the Tracker Build lane), so it lands in the Front Desk\u2019s 7:15 brief instead of going to a lane that no longer exists (mailbox #637/#640, requested by the CTO lane in #645).",
+      "test_pairings_rsvp_roster.py was red on main from 9/23. The failure was the test, not the pairings code: it dated Alan\u2019s handicap rounds \u2018yesterday\u2019 against an event fixed on 9/22. Once the calendar passed 9/22, the handicap lock correctly ignored rounds played after the event, and the generator seated him with no index. The rounds are now dated before the event.",
     ],
   },
   {

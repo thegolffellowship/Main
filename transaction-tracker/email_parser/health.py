@@ -367,7 +367,7 @@ def find(report: dict) -> list[dict]:
 # ── rendering ───────────────────────────────────────────────────────────
 def render_markdown(report: dict) -> str:
     L = []
-    L.append(f"TO: tracker-claude (Handicap Surfaces lane), kerry\n"
+    L.append(f"TO: front-desk, tracker-claude (CTO › Tracker Build)\n"
              f"FROM: CTO agent (Tracker Health & Performance) — DAILY DIGEST, last {report['window_days']:g} day(s), "
              f"generated {report['generated_at']} Central\n")
     f = report["findings"]
