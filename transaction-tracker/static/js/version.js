@@ -1,5 +1,19 @@
-window.TGF_VERSION = "2.489.8";
+window.TGF_VERSION = "2.490.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.490.0",
+    date: "2026-09-25",
+    title: "G2a compute-parity harness (A4 gate) \u2014 and the race leg it refuses to grade",
+    changes: [
+      "NEW `email_parser/g2a_parity.py` + read-only bridge `scoring-g2a:<event>`, for CA\u2019s G2a directive (#665): our engine, fed Golf Genius\u2019s own hole scores, diffed against GG on every game, purse and race. This is the A4 gate (#571), which has been defined since 9/18 with no recorded pass. The harness REUSES `ls_seed_session_from_event`, the existing Test Center `ls_parity` gate, `live_scoring` and `assemble_event_game_payouts` \u2014 it adds no scoring maths of its own, per CA\u2019s \u2018don\u2019t rewrite them\u2019.",
+      "THE RACE LEG CANNOT BE GRADED, AND THE HARNESS SAYS SO INSTEAD OF REPORTING GREEN. Our points standings are a SNAPSHOT FETCHED FROM GOLF GENIUS \u2014 `get_points_race_standings` renders `gg_points_standings`, and `get_monthly_points` fetches the GG portal live. There is no independent TGF points computation anywhere in the codebase, so diffing our race against GG\u2019s race compares GG to itself. That is the same hollow-parity defect already found in `test_live_scoring_center.py`. The tier reports `ungradeable` with the reason and what would unblock it.",
+      "Consequently a G2a run can return PASS, FAIL, INCOMPLETE or ERROR, and INCOMPLETE is what a clean player tier gets while any tier is ungradeable. A verdict is never PASS with an open blocker \u2014 recording one would be exactly the failure the Convergence Plan exists to prevent.",
+      "The A1 grading contract is zero-tolerance with FAIL as the DEFAULT: a residual must positively qualify as one of A2\u2019s two named classes to be \u2018explained\u2019, and nothing else ever is. Class (i) requires derived-dots mode AND a playing-handicap delta of exactly +1 AND no other field moving \u2014 a +2, a given-dots card, or a stray gross delta all fail. A3\u2019s Team Net and Skins \u00bd Net are captured verbatim and flagged report-only, never graded.",
+      "HONEST SCOPE NOTE, in the module and on every result: this is not flatly \u2018read-only\u2019. It creates a Test Center sandbox session per run (`ls_test_*` tables only) because that is how the engine is handed GG\u2019s hole scores. No production row, no money, no member contact, nothing sent to GG \u2014 but repeated runs do accumulate inert sandbox sessions, and the result names the session it made.",
+      "Purses are reported as our-total vs GG-total rather than graded per row: our payout categories and GG\u2019s game keys are different vocabularies, and mapping them is a ratification, not a guess. A wrong mapping would manufacture agreement, which is worse than an ungraded row.",
+      "Tests: `test_g2a_parity.py` (21 checks) pins the GRADING CONTRACT rather than the arithmetic \u2014 that a gross delta is never explained, that an unrecognised residual fails instead of spawning a third class, that a mismatch with no deltas still fails, and that the verdict cannot be talked into a PASS while a blocker stands.",
+    ],
+  },
   {
     version: "2.489.8",
     date: "2026-09-25",

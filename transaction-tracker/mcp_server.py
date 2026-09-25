@@ -1981,6 +1981,21 @@ def _scoring_dispatch_inner(url: str, extract: str):
             return json.dumps(card if card else {"error": "not found"}, indent=2)
         if cmd == "scoring-courses":
             return json.dumps(db.list_courses(), indent=2)
+        if cmd == "scoring-g2a":
+            # G2a COMPUTE PARITY (A4 gate, mailbox #571 / CA #665).
+            # "scoring-g2a:<event name>" — seeds a sandbox from the event's
+            # imported GG cards, runs the existing Test Center parity gate
+            # for the A1 player tier, captures GG's game board verbatim, and
+            # totals our matrix purses against GG's. Touches no production
+            # row, no money, no member — but it DOES create a Test Center
+            # sandbox session per run (ls_test_* only), which is how the
+            # engine is handed GG's hole scores. Not "read-only" flat.
+            #
+            # It will NOT report PASS while the race tier is ungradeable —
+            # our standings are a snapshot fetched from GG, so diffing them
+            # against GG compares GG to itself. See g2a_parity.__doc__.
+            from email_parser.g2a_parity import g2a_parity
+            return json.dumps(g2a_parity(arg.strip()), indent=2, default=str)
         if cmd == "scoring-parity":
             return json.dumps(db.get_differential_parity(), indent=2)
         if cmd == "scoring-mvp-import":
