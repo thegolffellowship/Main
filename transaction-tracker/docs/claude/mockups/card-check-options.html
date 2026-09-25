@@ -1,0 +1,102 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Card check options</title>
+<style>
+body{margin:0;background:#E5E7EB;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;color:#1B1B1B}
+.phone{width:390px;background:#fff;margin:0 0 24px;padding:0 0 28px;position:relative}
+.nav{height:56px;background:#1B1B1B;display:flex;align-items:center;padding:0 16px;gap:18px;color:#ddd;font-family:Georgia,serif;letter-spacing:2px;font-size:12px}
+.nav b{width:30px;height:30px;border-radius:50%;border:2px solid #fff}
+.w{padding:16px 16px 0}
+.tag{display:inline-block;background:#1B1B1B;color:#fff;font-size:11px;font-weight:700;letter-spacing:1px;padding:4px 10px;border-radius:20px;margin-bottom:10px}
+.eb{font-size:12px;font-weight:700;letter-spacing:1.2px;color:#B45A22;text-transform:uppercase}
+h1{margin:2px 0 0;font-family:Bitter,Georgia,serif;font-size:28px;line-height:1.15}
+.sub{font-size:14px;color:#4B5563;margin-top:4px;line-height:1.4}
+.lbl{font-size:11px;font-weight:700;letter-spacing:1px;color:#6B7280;text-transform:uppercase;margin:16px 0 6px}
+.pill{height:54px;border-radius:48px;font-size:17px;font-weight:700;width:100%;border:none;margin-top:12px;font-family:inherit}
+.go{background:#0d7556;color:#fff}.dark{background:#1B1B1B;color:#fff}.line{background:#fff;border:1px solid #1B1B1B;color:#1B1B1B;font-weight:600}
+.card{border:1px solid #E5E7EB;border-radius:12px;overflow:hidden}
+table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}
+th,td{text-align:center;padding:7px 1px;font-size:13px}
+thead th{background:#1B1B1B;color:#fff;font-size:11px}
+tr.par td{background:#F8F8F8;color:#4B5563;border-bottom:1px solid #E5E7EB}
+td.nm{text-align:left;padding-left:6px;white-space:nowrap;color:#1B1B1B;font-weight:600}
+td.e{font-weight:700;font-size:15px}
+td.e span{display:inline-block;min-width:22px;padding:3px 0;border-radius:6px;border-bottom:2px dotted #B45A22}
+td.e.fix span{background:#E87C3E;color:#fff;border:none}
+td.e.chg span{background:#FEF3C7}
+td.t{font-weight:700;background:#F8F8F8}
+.dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:4px}
+.ring{box-shadow:inset 0 0 0 2px #1B1B1B;background:#fff}
+.sheet{border-top:1px solid #E5E7EB;box-shadow:0 -8px 24px rgba(0,0,0,.12);border-radius:16px 16px 0 0;padding:16px;margin-top:14px;background:#fff}
+.sheet .h{font-weight:700;font-size:16px}
+.nums{display:flex;gap:6px;margin-top:10px}
+.nums div{flex:1;height:48px;border-radius:10px;border:1px solid #E5E7EB;background:#F8F8F8;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;font-family:Bitter,Georgia,serif}
+.nums div.on{background:#1B1B1B;color:#fff;border-color:#1B1B1B}
+.nums div small{font-size:10px;display:block}
+.sum{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px}
+.sum div{background:#F8F8F8;border:1px solid #E5E7EB;border-radius:10px;padding:8px 6px;text-align:center;font-size:12px;color:#4B5563}
+.sum b{display:block;font-family:Bitter,Georgia,serif;font-size:22px;color:#1B1B1B}
+.big{border:1px solid #E5E7EB;border-radius:12px;background:#F8F8F8;padding:14px}
+.prow{display:flex;align-items:center;justify-content:space-between;padding:10px 4px;border-bottom:1px solid #E5E7EB;font-size:17px;font-weight:600}
+.prow:last-child{border:none}
+.prow .v{font-family:Bitter,Georgia,serif;font-size:28px}
+.prog{display:grid;grid-template-columns:repeat(18,1fr);gap:3px;margin-top:10px}
+.prog i{height:8px;border-radius:4px;background:#E5E7EB}.prog i.d{background:#0d7556}.prog i.c{background:#E87C3E}
+.cam{height:190px;border-radius:12px;background:#1B1B1B;display:flex;align-items:center;justify-content:center;color:#fff;font-size:14px;flex-direction:column;gap:8px}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{padding:10px 14px;border-radius:24px;border:1px solid #E5E7EB;background:#F8F8F8;font-weight:600;font-size:15px}
+.chip.on{background:#1B1B1B;color:#fff;border-color:#1B1B1B}
+.ok{display:flex;gap:8px;align-items:center;color:#15803D;font-size:14px;margin:8px 0}
+.note{font-size:12px;color:#6B7280;margin-top:10px;line-height:1.4}
+</style></head><body><div id="root"></div>
+<script>
+const PARS=[4,5,3,4,4,4,3,5,4,4,4,3,5,4,4,3,4,5];
+const P=[["Kerry","#1D4ED8",0],["Mark","",1],["Dave","#B8860B",0],["Luis","",1]];
+const S=[[4,5,3,4,5,4,3,5,4,4,4,3,6,4,4,3,4,5],[3,5,3,4,4,5,3,5,4,4,5,3,5,4,4,2,4,5],[5,6,3,4,4,4,4,5,4,5,4,3,5,4,5,3,4,6],[4,5,3,5,4,4,3,5,4,4,4,3,5,4,4,3,5,5]];
+const dot=p=>`<span class="dot ${p[2]?"ring":""}" style="${p[1]?"background:"+p[1]:""}"></span>`;
+const sum=(a,f,t)=>a.slice(f,t).reduce((x,y)=>x+y,0);
+const nav=`<div class="nav"><b></b>PLAYERS&nbsp; LEADERBOARD&nbsp; HANDICAPS</div>`;
+const head=(t,h,s)=>`<div class="eb">s9.25 Canyon Springs · Group 3</div><h1>${h}</h1><div class="sub">${s}</div>`;
+function block(from,to,lbl,mark){
+ const hs=[...Array(to-from).keys()].map(i=>i+from);
+ return `<div class="card" style="margin-bottom:8px"><table><thead><tr><th style="text-align:left;padding-left:6px">${lbl}</th>${hs.map(h=>`<th>${h+1}</th>`).join("")}<th>${from?"IN":"OUT"}</th>${from?"<th>TOT</th>":""}</tr></thead><tbody>
+ <tr class="par"><td class="nm" style="color:#4B5563;font-weight:400">Par</td>${hs.map(h=>`<td>${PARS[h]}</td>`).join("")}<td>${sum(PARS,from,to)}</td>${from?`<td>${sum(PARS,0,18)}</td>`:""}</tr>
+ ${P.map((p,i)=>`<tr><td class="nm">${dot(p)}${p[0]}</td>${hs.map(h=>`<td class="e ${mark&&mark[0]===i&&mark[1]===h?mark[2]:""}"><span>${S[i][h]}</span></td>`).join("")}<td class="t">${sum(S[i],from,to)}</td>${from?`<td class="t">${sum(S[i],0,18)}</td>`:""}</tr>`).join("")}
+ </tbody></table></div>`}
+const sumBox=`<div class="lbl">Totals</div><div class="sum">${P.map((p,i)=>`<div>${dot(p)}${p[0]}<b>${sum(S[i],0,18)}</b>${sum(S[i],0,9)} · ${sum(S[i],9,18)}</div>`).join("")}</div>`;
+const photoNote=`<div class="note">Next: photo of the paper card, then the print scorer's name.</div>`;
+let out="";
+// A
+out+=`<div class="phone" id="A">${nav}<div class="w"><span class="tag">OPTION A · LIKE THE PAPER CARD</span>
+${head(0,"Check the card","Read it hole by hole with the print scorer. Tap any number to fix it.")}
+<div class="lbl">Front nine</div>${block(0,9,"Hole",[1,5,"fix"])}
+<div class="lbl">Back nine</div>${block(9,18,"Hole")}
+<div class="sheet"><div class="h">Mark · Hole 6 · Par 4</div><div class="nums">${[1,2,3,4,5,6,7].map(n=>`<div class="${n===5?"on":""}">${n}</div>`).join("")}</div></div>
+${sumBox}<button class="pill go">Card matches paper</button>${photoNote}</div></div>`;
+// B
+out+=`<div class="phone" id="B">${nav}<div class="w"><span class="tag">OPTION B · HOLES DOWN THE PAGE</span>
+${head(0,"Check the card","Read down, one hole per line: “Hole 1: four, three, five, four.” Tap any number to fix it.")}
+<div class="card" style="margin-top:14px"><table><thead><tr><th>Hole</th><th>Par</th>${P.map(p=>`<th>${p[0]}</th>`).join("")}</tr></thead><tbody>
+${PARS.map((par,h)=>`<tr style="${h===8?"border-bottom:2px solid #1B1B1B":"border-bottom:1px solid #F3F4F6"}"><td style="font-weight:700">${h+1}</td><td style="color:#6B7280">${par}</td>${P.map((p,i)=>`<td class="e ${i===1&&h===5?"chg":""}"><span>${S[i][h]}</span></td>`).join("")}</tr>${h===8?`<tr><td class="t" colspan="2">OUT</td>${P.map((p,i)=>`<td class="t">${sum(S[i],0,9)}</td>`).join("")}</tr>`:""}`).join("")}
+<tr><td class="t" colspan="2">IN</td>${P.map((p,i)=>`<td class="t">${sum(S[i],9,18)}</td>`).join("")}</tr>
+<tr><td class="t" colspan="2" style="background:#1B1B1B;color:#fff">TOT</td>${P.map((p,i)=>`<td class="t" style="background:#1B1B1B;color:#fff">${sum(S[i],0,18)}</td>`).join("")}</tr>
+</tbody></table></div>
+<div class="note">Mark's hole 6 is highlighted: it was changed during the check (4 → 5). Tee colour dots sit in the column heads on the real screen.</div>
+<button class="pill go">Card matches paper</button>${photoNote}</div></div>`;
+// C
+out+=`<div class="phone" id="C">${nav}<div class="w"><span class="tag">OPTION C · ONE HOLE AT A TIME</span>
+${head(0,"Hole 6 · Par 4","Read it to the print scorer. Tap a number to change it.")}
+<div class="prog">${PARS.map((_,h)=>`<i class="${h<5?"d":h===5?"c":""}"></i>`).join("")}</div>
+<div class="big" style="margin-top:14px">${P.map((p,i)=>`<div class="prow"><span>${dot(p)}${p[0]}</span><span class="v">${S[i][5]}</span></div>`).join("")}</div>
+<button class="pill dark">Matches · next hole</button><button class="pill line">Back to hole 5</button>
+<div class="note">After hole 18 it shows the totals and Card matches paper. Slowest of the three, but nothing gets skipped.</div></div></div>`;
+// Photo
+out+=`<div class="phone" id="D">${nav}<div class="w"><span class="tag">THEN · PHOTO + PRINT SCORER</span>
+${head(0,"Photo of the paper card","Lay the card flat, all 18 holes in the frame. It's kept with this round.")}
+<div class="cam" style="margin-top:14px"><div style="font-size:32px">◎</div>Tap to take the photo</div>
+<div class="lbl">Who kept the paper card?</div>
+<div class="chips">${P.filter(p=>p[0]!=="Kerry").map(p=>`<div class="chip ${p[0]==="Dave"?"on":""}">${p[0]}</div>`).join("")}<div class="chip">Someone else…</div></div>
+<button class="pill go">Submit card</button>
+<div class="note">Dry run: the scorekeeper signs for the group, so Submit signs all four cards (recorded as “signed by Kerry for Mark”, etc.). Each player can still open the link and flag a hole until close-out.</div></div></div>`;
+document.getElementById("root").innerHTML=out;
+</script></body></html>
