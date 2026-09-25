@@ -192,3 +192,34 @@ Missing holes are absent, not zero. One version per event; poll every
 take-over audit, team row, the read shape, links (tamper / revoke / closed
 round), identity, the money-record guard, seeding from PAIRINGS (shotgun
 start hole + clock), and the HTTP layer including the flag.
+
+## Load rehearsal (CA #665.1, 2026-09-25)
+
+Staged data only, on this sandbox: the production stack (gunicorn + one
+uvicorn worker, SQLite), 14 groups × 4 players on an 18-hole round, each
+group writing a hole every N seconds, 60 viewers polling the event read
+with `since_version`. Latencies are measured at the client.
+
+| Rate | Writes p95 / max | Reads p95 / max | Errors / refused |
+|---|---|---|---|
+| Cup rate (hole every 90 s, poll every 15 s) | 20 ms / 20 ms | 14 ms / 125 ms | 0 / 0 |
+| 10× | 60 ms / 238 ms | 59 ms / 1.1 s | 0 / 0 |
+| 30× | 5.7 s / 5.8 s | 6.6 s / 7.0 s | 0 / 0 |
+
+- The first run, before the read cache, held at cup rate but reached ~4 s
+  at 10×: every poll rebuilt the whole payload. The scores route now builds
+  **one payload per event version** and every viewer at that version shares
+  it (`_SE_READ_CACHE` in app.py).
+- 30× saturates the single worker; that is 120 reads/s, far past the cup.
+- Not reproduced here: production's host load (load average 89–113 on 48
+  CPUs in the health digest) and the scheduler jobs running beside the
+  requests. Track B's member board is a separate read and was not measured.
+
+## Portable-SQL rule (CA #682)
+
+The module follows it and `test_score_entry.py` holds it there: no
+`COLLATE NOCASE`, no `INSERT OR ...` (upserts are `ON CONFLICT`), ids come
+back via `RETURNING`, no try-ALTER. `RETURNING` needs SQLite 3.35+; the
+sandbox has 3.45.1. The tables are still created lazily with `CREATE TABLE
+IF NOT EXISTS` (once per database), since the repo has no migration-file
+convention yet; that goes to CA with the hardening ruling.

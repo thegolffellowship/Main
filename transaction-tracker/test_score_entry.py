@@ -176,6 +176,12 @@ for tname in [r[0] for r in conn.execute(
         if PERSONISH.search(c) and c.endswith("_id") and "customer" not in c:
             check(f"{tname}.{c} is not a person key without customer_id", False)
 
+print("portable-SQL rule (CA #682) on the score-entry module")
+_src = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "email_parser", "score_entry.py")).read()
+for pat, why in [(r"\bNOCASE\b", "COLLATE NOCASE"), (r"INSERT\s+OR\s+(REPLACE|IGNORE)", "INSERT OR ..."),
+                 (r"\blastrowid\b", "lastrowid"), (r"ALTER\s+TABLE", "try-ALTER")]:
+    check(f"no {why}", not re.search(pat, _src, re.I))
+
 print("GG stays the money record")
 ROOT = os.path.dirname(os.path.abspath(__file__))
 readers = []

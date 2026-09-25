@@ -355,10 +355,10 @@ def create_round(event_id: int, holes: int, *, round_date=None, label=None,
     with _closing(_conn(db_path)) as conn:
         cur = conn.execute(
             "INSERT INTO se_rounds (event_id, round_date, label, holes, pairings_holes, "
-            "course_id, tee_note, created_by) VALUES (?,?,?,?,?,?,?,?)",
+            "course_id, tee_note, created_by) VALUES (?,?,?,?,?,?,?,?) RETURNING id",
             (event_id, round_date, label, int(holes), pairings_holes, course_id,
              tee_note, created_by))
-        rid = cur.lastrowid
+        rid = cur.fetchone()[0]
         for h in (course_holes or []):
             _upsert_hole(conn, rid, h)
         _bump(conn, event_id)
@@ -445,8 +445,9 @@ def add_team(round_id: int, group_id: int, customer_id_a: int, customer_id_b: in
         if n != 2:
             return {"error": "both players must be in this group"}
         conn.execute(
-            "INSERT OR IGNORE INTO se_teams (round_id, group_id, customer_id_a, "
-            "customer_id_b, label) VALUES (?,?,?,?,?)", (round_id, group_id, a, b, label))
+            "INSERT INTO se_teams (round_id, group_id, customer_id_a, customer_id_b, label) "
+            "VALUES (?,?,?,?,?) ON CONFLICT(round_id, customer_id_a, customer_id_b) DO NOTHING",
+            (round_id, group_id, a, b, label))
         tid = conn.execute(
             "SELECT id FROM se_teams WHERE round_id = ? AND customer_id_a = ? "
             "AND customer_id_b = ?", (round_id, a, b)).fetchone()[0]
@@ -1002,16 +1003,17 @@ def flag_hole(group_id: int, device_id: str, customer_id: int, hole: int,
         now = _now()
         cur = conn.execute(
             "INSERT INTO se_card_flags (round_id, group_id, customer_id, hole_number, note, "
-            "raised_by_customer_id, device_id, at) VALUES (?,?,?,?,?,?,?,?)",
+            "raised_by_customer_id, device_id, at) VALUES (?,?,?,?,?,?,?,?) RETURNING id",
             (g["round_id"], group_id, customer_id, int(hole), (note or "").strip() or None,
              raised_by if raised_by is not None else customer_id, device_id, now))
+        flag_id = cur.fetchone()[0]
         conn.execute(
             "UPDATE se_signoffs SET voided_at = ?, void_reason = ? WHERE group_id = ? "
             "AND customer_id = ? AND kind IN ('player', 'manager') AND voided_at IS NULL",
             (now, f"hole {hole} flagged", group_id, customer_id))
         _bump(conn, g["event_id"])
         conn.commit()
-        return {"flag_id": cur.lastrowid}
+        return {"flag_id": flag_id}
 
 
 def resolve_flag(flag_id: int, resolution: str, resolved_by: int | None = None,
