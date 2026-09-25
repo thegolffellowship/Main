@@ -244,7 +244,19 @@
             const order = holeOrder();
             if (hole == null || order.indexOf(hole) < 0) {
                 const saved = store.get(K.hole, null);
-                hole = order.indexOf(saved) >= 0 ? saved : (order.find((n) => !holeDone(n)) ?? order[order.length - 1]);
+                // A fresh open of a finished card lands on the review, even if
+                // this phone remembers the last hole it showed.
+                hole = allDone() ? "review"
+                     : order.indexOf(saved) >= 0 ? saved : (order.find((n) => !holeDone(n)) ?? "review");
+            }
+            // EVERY HOLE IN (Kerry 2026-09-25: "Save last hole shouldn't be
+            // available after you saved the last hole ... it should only
+            // display FINISH & SIGN or you can click on any individual hole
+            // to adjust"). The review view: all cells mint, no current hole,
+            // one primary action. A tap on a cell opens that hole to adjust.
+            if (hole === "review") {
+                if (allDone()) return reviewScreen(order);
+                hole = order.find((n) => !holeDone(n)) ?? order[0];
             }
             const h = info(hole), i = order.indexOf(hole);
             const meta = [h.par ? "Par " + h.par : null, h.yardage ? h.yardage + " yds" : null,
@@ -262,13 +274,11 @@
                     <button type="button" class="se-plus" data-act="step" data-d="1" aria-label="One more for ${esc(s.name)}">+</button>
                   </div>`;
             }).join("");
-            const cells = order.map((n) => {
-                const cls = n === hole ? "cur" : holeWaiting(n) ? "waiting" : holeDone(n) ? "saved" : "";
-                const mark = n === hole ? "&bull;" : holeWaiting(n) ? "&hellip;" : holeDone(n) ? "&#10003;" : "";
-                return `<button type="button" class="se-cell ${cls}" data-act="goto" data-h="${n}" aria-label="Hole ${n}"><span class="n">${n}</span><span class="k">${mark}</span></button>`;
-            }).join("");
+            const cells = stripCells(order, hole);
             const next = order[i + 1];
-            const cta = next == null ? "Save last hole" : "Save &amp; go to hole " + next;
+            const editing = order.every((n) => n === hole || holeDone(n));   // the rest are in
+            const cta = editing ? "Save hole " + hole
+                      : next == null ? "Save last hole" : "Save &amp; go to hole " + next;
             const hio = hioForKeeper();
             return `<div class="se-top"><div>
                     <div class="se-eyebrow">${esc(eyebrow())}</div>
@@ -284,8 +294,33 @@
                 <div style="margin-top:16px" class="se-lbl">Group card</div>
                 <div class="se-strip" style="margin-top:8px;grid-template-columns:repeat(${Math.min(order.length, 9)}, minmax(0, 1fr))">${cells}</div>
                 ${statusLine()}
-                <button type="button" class="se-pill go" data-act="save">${cta}</button>
-                ${allDone() ? `<div class="se-gap"></div><button type="button" class="se-pill line" data-act="finish">Finish &amp; sign</button>` : ""}`;
+                <button type="button" class="se-pill go" data-act="save">${cta}</button>`;
+        }
+
+        function stripCells(order, current) {
+            return order.map((n) => {
+                const cls = n === current ? "cur" : holeWaiting(n) ? "waiting" : holeDone(n) ? "saved" : "";
+                const mark = n === current ? "&bull;" : holeWaiting(n) ? "&hellip;" : holeDone(n) ? "&#10003;" : "";
+                return `<button type="button" class="se-cell ${cls}" data-act="goto" data-h="${n}" aria-label="Hole ${n}"><span class="n">${n}</span><span class="k">${mark}</span></button>`;
+            }).join("");
+        }
+
+        function reviewScreen(order) {
+            const par = order.reduce((a, n) => a + (info(n).par || 0), 0);
+            const rows = subjects().map((s) => {
+                const t = order.reduce((a, n) => a + (value(s.key, n).v || 0), 0);
+                const d = par ? t - par : null;
+                return `<div class="se-row"><div class="se-who"><div class="se-name">${esc(s.name)}</div></div>
+                    <div class="se-score"><div class="v">${t}</div><div class="r">${d == null ? "" : d === 0 ? "Even" : (d > 0 ? "+" + d : d)}</div></div></div>`;
+            }).join("");
+            return `<div class="se-eyebrow">${esc(eyebrow())}</div>
+                <h1 class="se-h1">Every hole is in</h1>
+                <div class="se-sub">Tap any hole on the card to change it.</div>
+                <div class="se-gap"></div><div class="se-stack">${rows}</div>
+                <div style="margin-top:16px" class="se-lbl">Group card</div>
+                <div class="se-strip" style="margin-top:8px;grid-template-columns:repeat(${Math.min(order.length, 9)}, minmax(0, 1fr))">${stripCells(order, null)}</div>
+                ${statusLine()}
+                <button type="button" class="se-pill go" data-act="finish">Finish &amp; sign</button>`;
         }
 
         function statusLine() {
@@ -520,7 +555,8 @@
                 const c = (card.ctp || {})[String(saved)];
                 if (h.par === 3 && c && !c.answered) { ctpHole = saved; }
                 const order = holeOrder(), i = order.indexOf(saved);
-                if (i < order.length - 1) hole = order[i + 1];
+                if (allDone()) hole = "review";
+                else if (i < order.length - 1) hole = order[i + 1];
                 // THE TURN (18 holes): after the ninth hole played, show the
                 // first nine's totals before heading to the other nine.
                 if (order.length === 18 && i === 8) turnNext = hole;

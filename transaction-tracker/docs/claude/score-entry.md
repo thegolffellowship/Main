@@ -97,6 +97,19 @@ on the page — green means bought in.
   PAIRINGS view — Seed from pairings, each group's link and QR, round status
   and a Close button — so Kerry never needs a bridge.
 
+## Every hole is in (v2.493.4)
+
+Kerry, 2026-09-25: "Save last hole shouldn't be available after you saved
+the last hole. The last hole should show a green check and it should only
+display FINISH & SIGN or you can click on any individual hole to adjust."
+When every hole of the group's card is saved (pending sends count), the
+scorekeeper's view is the review (`hole = "review"`): all cells mint ✓, no
+current ring, totals against par, one primary button **Finish & sign**. A
+tap on a cell opens that hole with **Save hole N**; saving returns to the
+review. Same for 9, 18 and a shotgun start whose last hole is not 9/18; a
+fresh open of a finished card lands on the review. Guard:
+`test_score_entry_ui.py` (headless Chromium; skips without Playwright).
+
 ## Max Triple, and no ace on a par 5 (v2.493.3)
 
 Kerry, 2026-09-25: "We do Max Triple, so it can't be more than that. Also,

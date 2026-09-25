@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.493.3";
+window.TGF_VERSION = "2.493.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.493.4",
+    date: "2026-09-25",
+    title: "Score entry: once every hole is in, only Finish & sign",
+    changes: [
+      "Kerry, 2026-09-25: 'Save last hole shouldn't be available after you saved the last hole. The last hole should show a green check and it should only display FINISH & SIGN or you can click on any individual hole to adjust.' Once every hole is saved the scorekeeper sees 'Every hole is in': every cell mint with a check, no current-hole ring, each player's total against par, and one primary button, Finish & sign. Tapping any cell opens that hole with 'Save hole N'; saving it returns to the review. Works the same for 9 and 18 holes and for a shotgun start whose last hole is not 9 or 18, and a reopened page lands on the review even if the phone remembers the last hole it showed.",
+      "New browser test test_score_entry_ui.py drives all three cases in headless Chromium, plus the Max Triple stepper limits (a par 4 stops at 7; a par 5 stops at 2)."
+    ]
+  },
   {
     version: "2.493.3",
     date: "2026-09-25",
