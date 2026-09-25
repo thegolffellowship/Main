@@ -54,6 +54,18 @@
                          cursor: pointer; }
         .se-nav button:disabled { opacity: .35; }
         .se-keeper { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #4B5563; margin: 12px 0; }
+        /* TEE BAR (Kerry 2026-09-25): the player's tee colour down the left
+           edge of his row, from the same legend as the tee sheet. Light
+           tees get a dark outline; the women's tee is an outline, as on the
+           sheet; no tee on file is neutral grey. */
+        .se-tee { position: absolute; left: 0; top: 0; bottom: 0; width: 8px;
+                  border-radius: 12px 0 0 12px; }
+        .se-tee.ring, .se-tee.light { box-shadow: inset 0 0 0 2px #1B1B1B; }
+        .se-tee.ring { background: #FFFFFF !important; }
+        .se-tee-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%;
+                      margin-right: 6px; vertical-align: 0; }
+        .se-tee-dot.ring, .se-tee-dot.light { box-shadow: inset 0 0 0 2px #1B1B1B; }
+        .se-row { position: relative; padding-left: 20px !important; }
         .se-row { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 12px;
                   background: #F8F8F8; border: 1px solid #E5E7EB; }
         .se-who { flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
@@ -194,6 +206,24 @@
             const k = ((card.strokes || {})[String(cid)] || {})[String(n)];
             return k ? (k === 1 ? "gets 1 stroke here" : "gets " + k + " strokes here") : "";
         }
+        // The tee a player plays, from the tee sheet's legend (card.tees).
+        function teeOf(cid) {
+            const band = (byId(cid).tee || "").trim();
+            const t = band && (card.tees || {})[band];
+            if (!t || !t.color) return {color: "#9CA3AF", cls: "none", name: ""};
+            const hex = t.color.replace("#", "");
+            const r = parseInt(hex.slice(0, 2), 16), gg = parseInt(hex.slice(2, 4), 16), b = parseInt(hex.slice(4, 6), 16);
+            const light = (0.299 * r + 0.587 * gg + 0.114 * b) > 170;   // white, yellow and the like
+            return {color: t.color, cls: t.ring ? "ring" : light ? "light" : "", name: t.tee_name || t.band_label || band};
+        }
+        function teeBar(cids) {
+            const t = cids && cids.length === 1 ? teeOf(cids[0]) : {color: "#9CA3AF", cls: "none"};
+            return `<span class="se-tee ${t.cls}" style="background:${t.color}${t.cls === "ring" ? ";box-shadow:inset 0 0 0 3px " + t.color : ""}" aria-hidden="true"></span>`;
+        }
+        function teeDot(cid) {
+            const t = teeOf(cid);
+            return `<span class="se-tee-dot ${t.cls}" style="background:${t.cls === "ring" ? "#fff" : t.color}${t.cls === "ring" ? ";box-shadow:inset 0 0 0 2px " + t.color : ""}" aria-hidden="true"></span>`;
+        }
         function signed(cid, kind) { return (card.signoffs || []).some((s) => s.customer_id === cid && s.kind === (kind || "player")); }
         function openFlags(cid) { return (card.flags || []).filter((f) => f.customer_id === cid); }
         const eyebrow = () => [card.round_label, card.group_num != null ? "Group " + card.group_num : null].filter(Boolean).join(" · ");
@@ -266,8 +296,8 @@
                 const shown = cur.v == null ? (h.par || "–") : cur.v;
                 const d = cur.v == null || !h.par ? null : cur.v - h.par;
                 const rel = d == null ? "" : (WORDS[String(d)] || (d > 0 ? "+" + d : String(d)));
-                const meta2 = s.team ? s.meta : [s.ph != null ? "PH " + s.ph : null, strokeNote(s.cid, hole)].filter(Boolean).join(" · ");
-                return `<div class="se-row" data-key="${s.key}">
+                const meta2 = s.team ? s.meta : [teeOf(s.cid).name || null, s.ph != null ? "PH " + s.ph : null, strokeNote(s.cid, hole)].filter(Boolean).join(" · ");
+                return `<div class="se-row" data-key="${s.key}">${teeBar(s.cids)}
                     <div class="se-who"><div class="se-name">${esc(s.name)}</div><div class="se-meta">${esc(meta2)}</div></div>
                     <button type="button" class="se-minus" data-act="step" data-d="-1" aria-label="One less for ${esc(s.name)}">&minus;</button>
                     <div class="se-score"><div class="v ${cur.v == null ? "empty" : cur.waiting ? "waiting" : ""}">${shown}</div><div class="r">${rel}</div></div>
@@ -310,7 +340,7 @@
             const rows = subjects().map((s) => {
                 const t = order.reduce((a, n) => a + (value(s.key, n).v || 0), 0);
                 const d = par ? t - par : null;
-                return `<div class="se-row"><div class="se-who"><div class="se-name">${esc(s.name)}</div></div>
+                return `<div class="se-row">${teeBar(s.cids)}<div class="se-who"><div class="se-name">${esc(s.name)}</div></div>
                     <div class="se-score"><div class="v">${t}</div><div class="r">${d == null ? "" : d === 0 ? "Even" : (d > 0 ? "+" + d : d)}</div></div></div>`;
             }).join("");
             return `<div class="se-eyebrow">${esc(eyebrow())}</div>
@@ -366,7 +396,7 @@
             const rows = subjects().map((s) => {
                 const t = firstNine.reduce((a, n) => a + (value(s.key, n).v || 0), 0);
                 const d = par ? t - par : null;
-                return `<div class="se-row"><div class="se-who"><div class="se-name">${esc(s.name)}</div></div>
+                return `<div class="se-row">${teeBar(s.cids)}<div class="se-who"><div class="se-name">${esc(s.name)}</div></div>
                     <div class="se-score"><div class="v">${t || "–"}</div><div class="r">${d == null ? "" : d === 0 ? "Even" : (d > 0 ? "+" + d : d)}</div></div></div>`;
             }).join("");
             return `<div class="se-eyebrow">${esc(eyebrow())} · The turn</div>
@@ -395,7 +425,7 @@
                     return `<td class="${fl ? "flagged" : ""}">${isMe && flagging ? `<button type="button" class="hole" data-act="flaghole" data-h="${n}">${cell}</button>` : cell}</td>`;
                 }).join("");
                 const tot = all.reduce((a, n) => a + (value(s.key, n).v || 0), 0);
-                return `<tr class="${isMe ? "me" : ""}"><td class="nm">${esc(first(s.name) || s.name)}</td>${cells}<td>${sub || ""}</td>${withTotal ? `<td>${tot || ""}</td>` : ""}</tr>`;
+                return `<tr class="${isMe ? "me" : ""}"><td class="nm">${s.cids.length === 1 ? teeDot(s.cids[0]) : ""}${esc(first(s.name) || s.name)}</td>${cells}<td>${sub || ""}</td>${withTotal ? `<td>${tot || ""}</td>` : ""}</tr>`;
             }).join("");
             return `<div class="se-card" style="margin-bottom:10px"><table><thead>${head}</thead><tbody>${par}${rows}</tbody></table></div>`;
         }

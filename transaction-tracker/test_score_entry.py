@@ -359,6 +359,32 @@ check("closing kills the link", se.verify_group_token(ptok) is None)
 check("closed round's rows are kept", any(r["round_id"] == pv["round_id"]
                                           for r in se.get_entered_scores(900)["rounds"]))
 
+print("tee colour bar (Kerry 2026-09-25): the tee sheet's own legend")
+cc = sqlite3.connect(DB); cc.row_factory = sqlite3.Row
+db._ensure_scoring_tables(cc)
+cc.execute("INSERT INTO courses (course_id, name) VALUES (7700, 'Tee Test GC')")
+for tid, nm, gen, bands in [(77001, "Blue", "M", "<50"), (77002, "White", "M", "50-64,65+"),
+                            (77003, "Red (L)", "F", "Forward")]:
+    cc.execute("INSERT INTO course_tees (tee_id, course_id, tee_name, gender, holes, rating, slope, "
+               "yardage_total, tgf_bands) VALUES (?,?,?,?,18,70.1,125,6400,?)", (tid, 7700, nm, gen, bands))
+cc.execute("INSERT INTO events (id, item_name, event_date, course_id) VALUES (901, 'Tee test', '2026-09-29', 7700)")
+cc.commit()
+legend = {t_["band"]: t_ for t_ in db.event_tee_legend(cc, 901, dict(cc.execute("SELECT * FROM events WHERE id=901").fetchone()))}
+cc.close()
+tr = se.create_round(901, 9, course_holes=NINE)["round_id"]
+tg = se.upsert_group(tr, 1, players=[
+    {"customer_id": 101, "display_name": "Kerry Niester", "tee": "<50"},
+    {"customer_id": 102, "display_name": "Adam Baker", "tee": "50-64"},
+    {"customer_id": 103, "display_name": "Chris Best", "tee": "Forward"},
+    {"customer_id": 104, "display_name": "Robert Hogue"}])["group_id"]
+tees = se.get_group_card(tg)["tees"]
+check("the card carries the tee sheet's legend, colour for colour",
+      set(tees) == set(legend) and all(tees[b]["color"] == legend[b]["color"] for b in legend), (tees, legend))
+check("the women's tee is marked as an outline, as on the sheet", tees.get("Forward", {}).get("ring") is True, tees)
+check("a player with no tee has no colour here (the screen shows grey, never a guess)",
+      not se.get_group_card(tg)["players"][3]["tee"])
+check("an event with no course card gives no colours, not an error", se.get_group_card(gid)["tees"] == {})
+
 print("HTTP (admin builds, scorer by link, flag off until Kerry OKs)")
 os.environ.setdefault("SECRET_KEY", "test-secret")
 with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):

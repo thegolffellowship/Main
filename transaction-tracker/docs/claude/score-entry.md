@@ -97,6 +97,18 @@ on the page — green means bought in.
   PAIRINGS view — Seed from pairings, each group's link and QR, round status
   and a Close button — so Kerry never needs a bridge.
 
+## Tee colour bar (v2.493.5)
+
+Kerry, 2026-09-25: "Show a color bar on left side of name blocks for each
+hole that are the color of player tees that would match tee sheets." The
+group card carries `tees` = `_tee_legend(event)`, a view of
+`database.event_tee_legend` (the starter-sheet / print-pack legend, no
+second colour map), keyed by band; a player's `se_players.tee` is his band.
+Hole, turn and review rows get a left bar; the read-only and sign-off cards
+get a dot. Light tees (white, yellow) get a dark outline; the women's tee
+(`ring`) is an outline; no tee on file → neutral grey. The PREVIEW round's
+players carry no tee (no PAIRINGS behind it), so its bars are grey.
+
 ## Every hole is in (v2.493.4)
 
 Kerry, 2026-09-25: "Save last hole shouldn't be available after you saved

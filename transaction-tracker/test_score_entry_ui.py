@@ -121,6 +121,10 @@ with sync_playwright() as p:
     print("nine holes, start on 1")
     rid9, gid9, tok9 = make(9, 1, "nine")
     pg = open_as_kerry(tok9)
+    bars = pg.locator(".se-row .se-tee")
+    check("every player row carries a tee bar", bars.count() == 2, bars.count())
+    check("no tee on file shows the neutral grey bar, not a guessed tee",
+          "rgb(156, 163, 175)" in bars.nth(0).evaluate("e => getComputedStyle(e).backgroundColor"))
     # max triple on hole 1 (par 4): + stops at 7
     for _ in range(6):
         pg.locator(".se-row").nth(0).locator(".se-plus").click()

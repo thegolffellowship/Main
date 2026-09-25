@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.493.4";
+window.TGF_VERSION = "2.493.5";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.493.5",
+    date: "2026-09-25",
+    title: "Score entry: each player's tee colour, as on the tee sheet",
+    changes: [
+      "Kerry, 2026-09-25: 'Show a color bar on left side of name blocks for each hole that are the color of player tees that would match tee sheets.' Every player row on the scorekeeper's hole screen, the turn and the review carries a bar down its left edge in the player's tee colour, and the read-only card and the sign-your-card screen show the same colour as a dot beside each name, with the tee named in the row ('White Tees · PH 8'). The colour comes from the one tee legend the starter sheet and print pack already use (event_tee_legend), so the screen and the paper can't disagree. White and other light tees get a dark outline; the women's tee is an outline, as on the sheet; a player with no tee on file gets a neutral grey bar, never a guessed tee."
+    ]
+  },
   {
     version: "2.493.4",
     date: "2026-09-25",

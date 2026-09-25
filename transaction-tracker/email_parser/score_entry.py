@@ -1270,6 +1270,24 @@ def _strokes_by_player(players, course) -> dict:
     return out
 
 
+def _tee_legend(conn, event_id: int) -> dict:
+    """{band: {color, ring, tee_name, band_label}} from the ONE tee legend
+    the starter sheet and print pack use (database.event_tee_legend, v2.437+
+    tee circles). A player's se_players.tee is his band. A band the legend
+    does not carry, or no tee at all, gets no colour here and the screen
+    shows a neutral grey bar: we never guess a tee."""
+    try:
+        from email_parser.database import event_tee_legend
+        ev = conn.execute("SELECT * FROM events WHERE id = ?", (event_id,)).fetchone()
+        if not ev:
+            return {}
+        return {t["band"]: {"color": t.get("color"), "ring": bool(t.get("ring") or t.get("ladies")),
+                            "tee_name": t.get("tee_name"), "band_label": t.get("band_label")}
+                for t in event_tee_legend(conn, event_id, dict(ev)) if t.get("band")}
+    except Exception:
+        return {}
+
+
 def _card_extras(conn, g, group_id: int) -> dict:
     signoffs = [dict(r) for r in conn.execute(
         "SELECT customer_id, kind, signed_by_customer_id, at FROM se_signoffs "
@@ -1297,6 +1315,7 @@ def _card_extras(conn, g, group_id: int) -> dict:
         "SELECT hole_number AS hole, stroke_index FROM se_round_holes WHERE round_id = ?",
         (g["round_id"],))]
     return {"signoffs": signoffs, "flags": flags, "ctp": ctp, "hio": hio,
+            "tees": _tee_legend(conn, g["event_id"]),
             "strokes": _strokes_by_player(players, course),
             "strokes_note": "strokes per GG convention" if g["holes"] == 9 else None}
 
