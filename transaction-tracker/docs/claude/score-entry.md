@@ -74,7 +74,7 @@ on the page — green means bought in.
   the same with the row outlined. Kerry, 2026-09-25, on the old screen:
   "So are you saying I can tap a hole on that summary scorecard to change
   it? Because that's not obvious." A player flags; only the scorekeeper
-  changes a score (from "Every hole is in", tap a cell).
+  changes a score (from Check the card, tap a number).
 - **Closest to the pin.** Par 3s only, answered from the scorekeeper's phone:
   a player (claim) or "No one closer" (never unseats a holder). The latest
   claim is the holder the next group sees; `rule_ctp` is the manager's
@@ -116,18 +116,54 @@ get a dot. Light tees (white, yellow) get a dark outline; the women's tee
 (`ring`) is an outline; no tee on file → neutral grey. The PREVIEW round's
 players carry no tee (no PAIRINGS behind it), so its bars are grey.
 
-## Every hole is in (v2.493.4)
+## Check the card, photo, submit (v2.495.0)
 
-Kerry, 2026-09-25: "Save last hole shouldn't be available after you saved
-the last hole. The last hole should show a green check and it should only
-display FINISH & SIGN or you can click on any individual hole to adjust."
-When every hole of the group's card is saved (pending sends count), the
-scorekeeper's view is the review (`hole = "review"`): all cells mint ✓, no
-current ring, totals against par, one primary button **Finish & sign**. A
-tap on a cell opens that hole with **Save hole N**; saving returns to the
-review. Same for 9, 18 and a shotgun start whose last hole is not 9/18; a
-fresh open of a finished card lands on the review. Guard:
-`test_score_entry_ui.py` (headless Chromium; skips without Playwright).
+Kerry, 2026-09-25, on how a round ends: a printed scorecard is kept beside
+the live one, "both scorers compare at the end of the round. The print card
+is tossed away then." He picked option A of three mockups
+(`docs/claude/mockups/card-check-*.png`): "A is what is most like what the
+paper is and order will be exactly the same. plus its how GG works so
+there'll be familiarity." With: "Add toggle for FRONT | BACK for 18s ... so
+row of replacement scores is right under the 9 being edited", "Reduce text
+above the card ... or put a ? in a circle for help", and on totals: "Not
+totals first. Hole by hole. Totals should be there too, but the print
+scorer will not have totals generally." The photo: "The live scorer with the
+phone is prompted to take a pic that is stored on record, and scorer is
+prompted to enter that person's name as well." And: "Dry run, scorekeeper
+signs for group."
+
+1. **Check the card** (`hole = "review"`, replaces v2.493.4's "Every hole is
+   in"). Once every hole is saved: players down, holes across, one nine at a
+   time (FRONT | BACK on an 18, OUT / IN and TOT), every number a button.
+   A tap opens the score row (1..par+3, 2..par+3 on a par 5) directly under
+   the card; a pick writes through the normal queue and the cell stays
+   marked yellow. Help text lives behind the ? circle. Totals under the
+   card. One primary action: **Card matches paper**.
+2. **Photo of the paper card.** The camera (file input, `capture=
+   environment`); the phone shrinks the picture to 1600 px on the long side,
+   JPEG 0.7 (~300 KB) and keeps it in localStorage until the server has it.
+   **Who kept the paper card?** A chip per group player (customer_id) or
+   "Someone else" with a typed name. "Can't take a photo?" allows a submit
+   without one.
+3. **Submit card** (`submit_card`): scorekeeper's phone only, every card
+   complete. Attests the group (kind `scorekeeper`, note "card matches
+   paper"), writes one `se_card_checks` row, and when the event's dial is on
+   signs every player's card for him: kind `player`, `signed_by_customer_id`
+   = the scorekeeper, note "signed for the group by the scorekeeper". It
+   never signs over a player's OWN signature or an open flag. Then the photo
+   uploads (`attach_card_photo`, idempotent on `photo_op_id`, retried every
+   5 s from the phone), stored as a file at
+   `<db dir>/se_photos/<event>/check-<id>.jpg`, never as a blob.
+4. **Players.** A player whose card was signed for him sees "Kerry signed
+   your card for the group" and can still tap a number on his row to flag
+   it; the flag voids the signature made for him, exactly as it voids his
+   own. A reload of a submitted card lands on the finished card.
+
+**The dial:** app setting `score_entry_keeper_signs` = `{"<event_id>":
+true}`; default off. Set it with `scoring-se-keeper-signs:<event_id>|on|off`
+or `POST /api/score-entry/events/<id>/keeper-signs {on}` (manager+). The
+photo: `GET /api/score-entry/checks/<id>/photo.jpg` (manager+). Guards:
+`test_score_entry.py` (submit / dial / photo) and `test_score_entry_ui.py`.
 
 ## Max Triple, and no ace on a par 5 (v2.493.3)
 
@@ -205,6 +241,11 @@ se_ctp_claims      round/group, hole_number, customer_id FK (NULL = no one
 se_hio_claims      round/group, customer_id FK, hole_number, eligible,
                    status pending|confirmed|witnessed|verified|rejected|
                    withdrawn, scorekeeper/witness customer_ids, verified_by
+se_card_checks     round/group, scorekeeper_customer_id FK,
+                   print_scorer_customer_id FK | print_scorer_name (only
+                   when not a group player), signed_for_group, photo_op_id
+                   UNIQUE, photo_path (file beside the DB), photo_bytes,
+                   photo_at, device_id, at — one row per submit
 se_event_versions  event_id, version (bumps on every accepted write,
                    claim, take-over and build change)
 ```
@@ -218,6 +259,10 @@ se_event_versions  event_id, version (bumps on every accepted write,
 | `POST /api/score-entry/claim` `{t, device_id, customer_id, takeover}` | link | Claim / take over |
 | `POST /api/score-entry/write` `{t, device_id, entered_by, ops[]}` | link | Queued hole writes |
 | `POST /api/score-entry/sign` `{t, device_id, customer_id, kind?}` | link | Sign own card / scorekeeper attests |
+| `POST /api/score-entry/submit` `{t, device_id, keeper, print_scorer_customer_id | print_scorer_name, photo_op_id?}` | link | Card matches paper → submit (attest, and sign for the group when the dial is on) |
+| `POST /api/score-entry/photo` `{t, device_id, photo_op_id, image}` | link | The paper card's photo (JPEG data URL), after the submit |
+| `GET /api/score-entry/checks/<id>/photo.jpg` | manager+ | The kept photo |
+| `POST /api/score-entry/events/<id>/keeper-signs` `{on}` | manager+ | The keeper-signs dial |
 | `POST /api/score-entry/flag` `{t, device_id, customer_id, hole, note?}` | link | Something's wrong |
 | `POST /api/score-entry/ctp` `{t, device_id, hole, customer_id|null}` | link | CTP answer |
 | `POST /api/score-entry/hio/confirm` `{t, device_id, hio_id, customer_id}` | link | HIO confirmations |

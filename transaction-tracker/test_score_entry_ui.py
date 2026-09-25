@@ -93,15 +93,18 @@ def play(page, n):
 
 
 def review_ok(page, n, label):
-    page.wait_for_selector("text=Every hole is in", timeout=5000)
+    """Once every hole is in: CHECK THE CARD (Kerry 2026-09-25, option A)."""
+    page.wait_for_selector("text=Check the card", timeout=5000)
     body = page.inner_text("body")
     check(f"{label}: no 'Save last hole' once every hole is saved", "Save last hole" not in body)
-    check(f"{label}: all {n} cells are mint ✓, none is the current ring",
-          page.locator(".se-cell.saved").count() == n and page.locator(".se-cell.cur").count() == 0,
-          (page.locator(".se-cell.saved").count(), page.locator(".se-cell.cur").count()))
-    check(f"{label}: the one primary action is Finish & sign",
+    cells = page.locator(".se-check button.cell")
+    check(f"{label}: one nine on screen, every number a button (2 players x 9)",
+          cells.count() == 18, cells.count())
+    check(f"{label}: the one primary action is Card matches paper",
           page.locator(".se-pill.go").count() == 1
-          and "Finish" in page.inner_text(".se-pill.go"))
+          and "Card matches paper" in page.inner_text(".se-pill.go"))
+    check(f"{label}: FRONT | BACK toggle only on an 18",
+          page.locator(".se-seg").count() == (1 if n == 18 else 0))
 
 
 if not CHROME:
@@ -142,13 +145,21 @@ with sync_playwright() as p:
     play(pg, 8)
     pg.wait_for_timeout(1200)
     review_ok(pg, 9, "nine")
-    pg.click(".se-cell[data-h='4']")
-    pg.wait_for_selector("text=Hole 4")
-    check("tapping a cell opens that hole to adjust, with 'Save hole 4'",
-          "Save hole 4" in pg.inner_text(".se-pill.go"))
-    pg.locator(".se-row").nth(1).locator(".se-plus").click()
-    pg.click("[data-act=save]")
+    check("help text is hidden until the ? is tapped", pg.locator(".se-helptext").count() == 0)
+    pg.click("[data-act=help]")
+    check("the ? shows the help", pg.locator(".se-helptext").count() == 1)
+    pg.click("[data-act=help]")
+    pg.click("button.cell[data-key='c:102'][data-h='4']")
+    pg.wait_for_selector(".se-picker")
+    picker_after_card = pg.evaluate("""() => {
+        const t = document.querySelector('.se-check'), p = document.querySelector('.se-picker');
+        return !!(t.compareDocumentPosition(p) & Node.DOCUMENT_POSITION_FOLLOWING); }""")
+    check("tapping a number opens the score row right under the card", picker_after_card)
+    vals = [int(x) for x in pg.locator(".se-picker .row button").all_inner_texts()]
+    check("the row runs 1 to par + 3 (hole 4 is a par 4: 1..7)", vals == list(range(1, 8)), vals)
+    pg.click(".se-picker [data-act=cset][data-v='5']")
     pg.wait_for_timeout(1200)
+    check("the changed number stays marked", pg.locator("button.cell.changed[data-key='c:102'][data-h='4']").count() == 1)
     review_ok(pg, 9, "nine, after an adjustment")
     got = se.get_entered_scores(900, rid9)["rounds"][0]["players"]
     mark = {x["customer_id"]: x["scores"] for x in got}[102]
@@ -161,8 +172,22 @@ with sync_playwright() as p:
     # Kerry 2026-09-25: "So are you saying I can tap a hole on that summary
     # scorecard to change it? Because that's not obvious". The sign screen
     # now makes your own row tappable and says so.
-    pg.click("[data-act=finish]")
+    pg.click("[data-act=matches]")
+    pg.wait_for_selector("text=Photo of the paper card")
+    check("submit waits for who kept the paper card",
+          pg.locator("[data-act=submit]").is_disabled())
+    pg.click("[data-act=ps][data-cid='102']")
+    check("...and for a photo", pg.locator("[data-act=submit]").is_disabled())
+    pg.click("[data-act=nophoto]")
+    check("'Can't take a photo?' lets it go without one",
+          not pg.locator("[data-act=submit]").is_disabled()
+          and "without a photo" in pg.inner_text("[data-act=submit]"))
+    pg.click("[data-act=submit]")
     pg.wait_for_selector("text=Sign your card")
+    cc = se.get_group_card(gid9)["card_check"]
+    check("submit records Mark as the print scorer, no photo, dial off: nobody signed for",
+          cc and cc["print_scorer_customer_id"] == 102 and not cc["has_photo"]
+          and not cc["signed_for_group"], cc)
     body = pg.inner_text("body")
     check("sign screen: the copy says to tap the number that's wrong",
           "tap that number" in body, body[:400])
@@ -189,12 +214,63 @@ with sync_playwright() as p:
     check("after flagging, the row is no longer tappable",
           pg.locator("tr.me button.hole").count() == 0)
 
-    print("eighteen holes, start on 1 (the turn)")
+    print("eighteen holes, start on 1 (the turn); the dial on: the scorekeeper signs for the group")
+    se.set_keeper_signs(900, True)
     rid18, gid18, tok18 = make(18, 1, "eighteen")
     pg = open_as_kerry(tok18)
     play(pg, 18)
     pg.wait_for_timeout(1500)
     review_ok(pg, 18, "eighteen")
+    heads = pg.locator(".se-check thead th").all_inner_texts()
+    check("FRONT shows holes 1-9 and OUT", heads[1] == "1" and heads[-1].upper() == "OUT", heads)
+    pg.click("[data-act=nine][data-n='1']")
+    heads = pg.locator(".se-check thead th").all_inner_texts()
+    check("BACK shows holes 10-18, IN and TOT", heads[1] == "10" and heads[-2].upper() == "IN"
+          and heads[-1].upper() == "TOT", heads)
+    pg.click("button.cell[data-key='c:101'][data-h='13']")
+    vals = [int(x) for x in pg.locator(".se-picker .row button").all_inner_texts()]
+    check("a par 5 row runs 2..8", vals == list(range(2, 9)), vals)
+    pg.click("[data-act=cpick][data-key='c:101'][data-h='13']")
+    check("tapping the same number again closes the row", pg.locator(".se-picker").count() == 0)
+    pg.click("[data-act=matches]")
+    pg.wait_for_selector("text=Photo of the paper card")
+    from PIL import Image
+    jp = tempfile.mktemp(suffix=".jpg")
+    Image.new("RGB", (2400, 1800), (240, 240, 230)).save(jp, "JPEG")
+    pg.set_input_files("input[data-photo]", jp)
+    pg.wait_for_selector("img.se-shot", timeout=5000)
+    pg.click("[data-act=ps][data-cid='']")
+    pg.fill("#se-ps-name", "Joe Caddie")
+    pg.click("[data-act=submit]")
+    pg.wait_for_selector("text=Card submitted", timeout=5000)
+    pg.wait_for_timeout(2500)
+    cc = se.get_group_card(gid18)["card_check"]
+    check("the photo arrived and is kept as a file, not in the database",
+          cc and cc["has_photo"] and se.card_photo_path(cc["id"]) is not None, cc)
+    if cc and se.card_photo_path(cc["id"]):
+        with Image.open(se.card_photo_path(cc["id"])) as im:
+            check("the phone shrank the photo to 1600 px on the long side", max(im.size) == 1600, im.size)
+        check("...and to well under 1 MB", se.card_photo_path(cc["id"]).stat().st_size < 1_000_000,
+              se.card_photo_path(cc["id"]).stat().st_size)
+    check("someone outside the group is kept by name", cc and cc["print_scorer_name"] == "Joe Caddie"
+          and cc["print_scorer_customer_id"] is None, cc)
+    sig = {(x["customer_id"], x["kind"]): x for x in se.get_group_card(gid18)["signoffs"]}
+    check("dial on: Mark's card is signed, by Kerry", sig.get((102, "player"), {}).get("signed_by_customer_id") == 101, sig)
+    check("...and Kerry attested as scorekeeper", (101, "scorekeeper") in sig, sig)
+    ctx2 = b.new_context(viewport={"width": 390, "height": 844})
+    mk = ctx2.new_page()
+    mk.goto(f"http://127.0.0.1:{PORT}/member/score?t={tok18}")
+    mk.click("text=Mark Stich")
+    mk.click("[data-act=follow]")
+    mk.wait_for_selector("text=signed your card for the group", timeout=5000)
+    check("Mark sees Kerry signed for him, and can still tap his own row",
+          mk.locator("tr.me button.hole").count() == 18)
+    mk.click("tr.me button.hole[data-h='7']")
+    mk.click("button[data-act=flaghole][data-h='7']")
+    mk.wait_for_selector("text=flagged", timeout=5000)
+    sig = {(x["customer_id"], x["kind"]) for x in se.get_group_card(gid18)["signoffs"]}
+    check("Mark's flag voids the signature Kerry made for him", (102, "player") not in sig, sig)
+    se.set_keeper_signs(900, False)
 
     print("shotgun, nine holes starting on 4 (last hole is 3)")
     ridsg, gidsg, toksg = make(9, 4, "shotgun")

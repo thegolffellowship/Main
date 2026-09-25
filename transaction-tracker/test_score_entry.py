@@ -192,7 +192,11 @@ for tname in [r[0] for r in conn.execute(
     cols = [r[1] for r in conn.execute(f"PRAGMA table_info({tname})")]
     for c in cols:
         if c.endswith("_name") or c == "display_name":
-            check(f"{tname}.{c} has customer_id beside it", "customer_id" in cols)
+            # The repo rule (test_customer_id_everywhere.py): <prefix>_name
+            # sits beside <prefix>_customer_id (or the row's customer_id).
+            pre = c[:-5]
+            check(f"{tname}.{c} has customer_id beside it",
+                  "customer_id" in cols or f"{pre}_customer_id" in cols)
         if PERSONISH.search(c) and c.endswith("_id") and "customer" not in c:
             check(f"{tname}.{c} is not a person key without customer_id", False)
 
@@ -280,6 +284,56 @@ se.write_scores(sg, "sk", 101, [{"op_id": "S105-6b", "customer_id": 105, "hole":
 check("fixing the hole resolves the flag", se.get_group_card(sg)["flags"] == [])
 check("then the card signs again", se.sign_card(sg, "p5", 105).get("signed"))
 check("a manager signature needs a note", "error" in se.sign_card(sg, "admin", 101, kind="manager"))
+
+print("card check + submit + photo (Kerry 2026-09-25)")
+check("only the scorekeeper's phone submits",
+      "error" in se.submit_card(sg, "p2", 101, print_scorer_customer_id=102))
+check("submit needs who kept the paper card", "error" in se.submit_card(sg, "sk", 101))
+check("a print scorer given by id must be in the group",
+      "error" in se.submit_card(sg, "sk", 101, print_scorer_customer_id=104))
+check("the keeper-signs dial is off by default", not se.keeper_signs(900))
+r = se.submit_card(sg, "sk", 101, print_scorer_customer_id=102, photo_op_id="PH-1")
+live = {(x["customer_id"], x["kind"]): x for x in se.get_group_card(sg)["signoffs"]}
+check("dial off: submit attests, signs nobody's card", r.get("submitted") and r["signed_for"] == []
+      and (101, "scorekeeper") in live and (102, "player") not in live, (r, live))
+se.set_keeper_signs(900, True)
+se.flag_hole(sg, "p2", 102, 4)
+r = se.submit_card(sg, "sk", 101, print_scorer_name="  Joe Caddie  ", photo_op_id="PH-2")
+live = {(x["customer_id"], x["kind"]): x for x in se.get_group_card(sg)["signoffs"]}
+check("dial on: the scorekeeper's own card is signed", 101 in r["signed_for"], r)
+check("...a flagged card is left alone", {"customer_id": 102, "why": "flagged"} in r["skipped"], r)
+check("...a card the player signed himself is left alone",
+      {"customer_id": 105, "why": "signed it himself"} in r["skipped"]
+      and live[(105, "player")]["signed_by_customer_id"] == 105, (r, live))
+cc = se.get_group_card(sg)["card_check"]
+check("the check row keeps a name only when the scorer is not a player",
+      cc["print_scorer_name"] == "Joe Caddie" and cc["print_scorer_customer_id"] is None
+      and cc["signed_for_group"] == 1, cc)
+se.write_scores(sg, "sk", 101, [{"op_id": "S101-2x", "customer_id": 101, "hole": 2, "gross": 3}])
+live = {(x["customer_id"], x["kind"]) for x in se.get_group_card(sg)["signoffs"]}
+check("an edit voids a signature the scorekeeper made for you, like your own",
+      (101, "player") not in live and (101, "scorekeeper") not in live, live)
+se.write_scores(sg, "sk", 101, [{"op_id": "S102-4x", "customer_id": 102, "hole": 4, "gross": 6}])
+from PIL import Image as _Im
+import io as _io
+_buf = _io.BytesIO(); _Im.new("RGB", (40, 30), (200, 200, 200)).save(_buf, "JPEG"); JPG = _buf.getvalue()
+check("a photo before its submit is refused", "error" in se.attach_card_photo(sg, "sk", "PH-none", JPG))
+check("a photo must be a JPEG", "error" in se.attach_card_photo(sg, "sk", "PH-2", b"GIF89a....."))
+check("a photo over 3 MB is refused",
+      "error" in se.attach_card_photo(sg, "sk", "PH-2", b"\xff\xd8\xff" + b"0" * (3 * 1024 * 1024)))
+ph = se.attach_card_photo(sg, "sk", "PH-2", JPG)
+check("the photo lands on its check row", ph.get("saved") and ph["check_id"] == cc["id"], ph)
+check("a retry of the same photo is a no-op", se.attach_card_photo(sg, "sk", "PH-2", JPG).get("dup"))
+pp = se.card_photo_path(cc["id"])
+check("the photo is a file beside the database, not a blob in it",
+      pp is not None and pp.read_bytes() == JPG and "se_photos" in str(pp), pp)
+rd = se.get_entered_scores(900, sr)["rounds"][0]
+check("the read carries the card checks with has_photo",
+      any(x["check_id"] == cc["id"] and x["has_photo"] for x in rd["card_checks"]), rd["card_checks"])
+check("the read says who signed each card",
+      all("signed_by_customer_id" in x for x in rd["signoffs"]), rd["signoffs"][:2])
+se.set_keeper_signs(900, False)
+check("the dial turns off again", not se.keeper_signs(900))
 
 # CTP: hole 2 is the par 3 in NINE
 sg2 = se.upsert_group(sr, 2, players=[{"customer_id": 103, "display_name": "Chris Best"},

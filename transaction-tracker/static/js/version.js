@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.494.0";
+window.TGF_VERSION = "2.495.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.495.0",
+    date: "2026-09-25",
+    title: "Score entry: Check the card, photo of the paper card, scorekeeper signs for the group",
+    changes: [
+      "Kerry, 2026-09-25, on how a round ends: the live scorer and the print scorer compare cards, then the paper is thrown away. He picked option A of three mockups ('A is what is most like what the paper is and order will be exactly the same. plus its how GG works'). Once every hole is in, the scorekeeper sees Check the card: players down, holes across, one nine at a time with a FRONT | BACK toggle on an 18, every number tappable, and the row of scores to pick from right under the nine being edited. A changed number stays marked. Help sits behind a ? circle; totals come after the card, and the one action is Card matches paper.",
+      "Then the phone asks for a photo of the paper card (shrunk to about 300 KB on the phone and kept as a file with the round, never in the database) and who kept the paper card: a player in the group, or someone else by name. Submit attests the card. With the event's new dial on (scoring-se-keeper-signs, off by default; Kerry: 'Dry run, scorekeeper signs for group'), Submit also signs every player's card, recorded as signed by the scorekeeper for that player. It never signs over a player's own signature or an open flag, and a player can still tap a hole on his row to flag it afterwards, which voids the signature made for him.",
+      "New table se_card_checks (one row per submit). New routes: submit, photo, the photo read (manager+), and the keeper-signs dial (manager+). Tests: test_score_entry.py and test_score_entry_ui.py cover the grid, toggle, picker limits, photo shrink and storage, the dial, and a player flagging after being signed for."
+    ]
+  },
   {
     version: "2.494.0",
     date: "2026-09-25",
