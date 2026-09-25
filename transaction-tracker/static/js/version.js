@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.493.5";
+window.TGF_VERSION = "2.493.6";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.493.6",
+    date: "2026-09-25",
+    title: "Score entry: tap your own score to flag it",
+    changes: [
+      "Kerry, 2026-09-25, on the sign-your-card screen: 'So are you saying I can tap a hole on that summary scorecard to change it? Because that's not obvious.' It wasn't: the copy said 'tap it' but a tap did nothing until you pressed Something's wrong. Now every number on your own row is underlined and tappable; a tap asks 'Hole N shows X. Is that wrong?' with Flag hole N or Cancel, it's right. Something's wrong still works and outlines your row. Only the scorekeeper changes a score; the player's tap sends the scorekeeper a flag.",
+      "Kerry's rulings recorded in score-entry.md: 'GG is max triple; pickups enter triple.'"
+    ]
+  },
   {
     version: "2.493.5",
     date: "2026-09-25",

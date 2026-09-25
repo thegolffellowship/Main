@@ -158,6 +158,37 @@ with sync_playwright() as p:
     pg.reload()
     review_ok(pg, 9, "nine, reopened with a remembered hole")
 
+    # Kerry 2026-09-25: "So are you saying I can tap a hole on that summary
+    # scorecard to change it? Because that's not obvious". The sign screen
+    # now makes your own row tappable and says so.
+    pg.click("[data-act=finish]")
+    pg.wait_for_selector("text=Sign your card")
+    body = pg.inner_text("body")
+    check("sign screen: the copy says to tap the number that's wrong",
+          "tap that number" in body, body[:400])
+    mine = pg.locator("tr.me button.hole[data-act=pickhole]")
+    check("sign screen: every hole on your own row is a tappable button", mine.count() == 9, mine.count())
+    check("sign screen: other players' rows are not tappable",
+          pg.locator("tr:not(.me) button.hole").count() == 0)
+    pg.click("tr.me button.hole[data-h='3']")
+    pg.wait_for_selector("text=Is that wrong?")
+    check("tapping a hole asks first: 'Hole 3 shows … Is that wrong?'",
+          "Hole 3 shows" in pg.inner_text("body") and pg.locator("td.picked").count() == 1)
+    pg.click("[data-act=unflag]")
+    pg.wait_for_timeout(200)
+    check("Cancel leaves the card unflagged", "Is that wrong?" not in pg.inner_text("body")
+          and not se.get_group_card(gid9)["flags"])
+    pg.click("[data-act=flag]")
+    check("Something's wrong outlines your row's holes", pg.locator(".se-card.picking").count() == 1)
+    pg.click("tr.me button.hole[data-h='2']")
+    pg.click("button[data-act=flaghole][data-h='2']")
+    pg.wait_for_selector("text=flagged", timeout=5000)
+    flags = se.get_group_card(gid9)["flags"]
+    check("Flag hole 2 reaches the server as an open flag on hole 2 for Kerry",
+          any(f["hole"] == 2 and f["customer_id"] == 101 for f in flags), flags)
+    check("after flagging, the row is no longer tappable",
+          pg.locator("tr.me button.hole").count() == 0)
+
     print("eighteen holes, start on 1 (the turn)")
     rid18, gid18, tok18 = make(18, 1, "eighteen")
     pg = open_as_kerry(tok18)

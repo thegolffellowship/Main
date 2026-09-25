@@ -68,6 +68,13 @@ on the page — green means bought in.
 - **Something's wrong.** `flag_hole` records the hole, voids that player's
   signature, and blocks his re-signing until the hole is edited (auto-
   resolves) or a manager resolves it.
+  On the sign screen (v2.493.6) every number on the player's OWN row is a
+  button, underlined: tap it and the screen asks "Hole N shows X. Is that
+  wrong?" with Flag hole N / Cancel, it's right. "Something's wrong" does
+  the same with the row outlined. Kerry, 2026-09-25, on the old screen:
+  "So are you saying I can tap a hole on that summary scorecard to change
+  it? Because that's not obvious." A player flags; only the scorekeeper
+  changes a score (from "Every hole is in", tap a cell).
 - **Closest to the pin.** Par 3s only, answered from the scorekeeper's phone:
   a player (claim) or "No one closer" (never unseats a holder). The latest
   claim is the holder the next group sees; `rule_ctp` is the manager's
@@ -131,15 +138,11 @@ rule: lowest 1 (2 on a par 5), highest par + 3; a hole with no par keeps
 outside it (`invalid`, "max triple" in the reason). A 1 on a par 3 or par 4
 still opens the hole-in-one flow.
 
-**Open for Kerry (not guessed):**
-- A Golf Genius card with a hole above triple: the diff against GG will
-  show it as a difference. Is GG also set to Max Triple, or does our card
-  cap and GG not?
-- "Something's wrong" when a player says his real score was above triple:
-  the fix can only enter triple. The card note says so, or should the flag
-  carry his claimed score?
-- A picked-up or unfinished hole: today the scorekeeper enters triple.
-  Is that the rule, or does a pickup need its own mark?
+**Ruled (Kerry, 2026-09-25): "GG is max triple; pickups enter triple."**
+Golf Genius caps the same way, so a capped hole is not a GG difference, and
+a picked-up or unfinished hole is entered as triple with no separate mark.
+A player can't have a real score above triple, so a flag never needs to
+carry one.
 - WHS posting uses net double bogey, not Max Triple; nothing here posts
   handicap rounds, so this cap never reaches a differential.
 

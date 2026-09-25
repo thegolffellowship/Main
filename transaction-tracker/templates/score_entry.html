@@ -109,7 +109,12 @@
         .se-card tr.me td { font-size: 16px; font-weight: 700; color: #1B1B1B; }
         .se-card td.flagged { background: #FEE2E2; }
         .se-card button.hole { width: 100%; background: none; border: none; font: inherit; color: inherit;
-                               padding: 0; cursor: pointer; }
+                               padding: 0; cursor: pointer; text-decoration: underline dotted #B45A22;
+                               text-decoration-thickness: 2px; text-underline-offset: 4px; }
+        .se-card.picking tr.me td { background: #FFF4EC; }
+        .se-card.picking button.hole { outline: 2px solid #E87C3E; outline-offset: -2px; border-radius: 6px;
+                                       text-decoration: none; min-height: 32px; }
+        .se-card td.picked { background: #FDE3D2; }
         .se-foot { font-size: 13px; color: #6B7280; text-align: center; margin-top: 10px; white-space: normal; }
         .se-hio { border: 2px solid #E87C3E; }
         .se-note { font-size: 12px; color: #6B7280; margin-top: 10px; white-space: normal; }
@@ -145,7 +150,7 @@
         const K = {q: "se_queue_" + tk, who: "se_who_" + tk, hole: "se_hole_" + tk, follow: "se_follow_" + tk};
         let card = null, queue = store.get(K.q, []), who = store.get(K.who, null);
         let following = store.get(K.follow, false), hole = null, draft = {}, flushing = false;
-        let ctpHole = null, turnNext = null, lostMsg = "", errMsg = "", flagging = false, busy = false;
+        let ctpHole = null, turnNext = null, lostMsg = "", errMsg = "", flagging = false, flagPick = null, busy = false;
 
         const ICON = {
             back: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#1B1B1B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>',
@@ -414,6 +419,10 @@
             const parSum = (hs) => hs.reduce((a, n) => a + (info(n).par || 0), 0);
             const all = holeOrder();
             const par = `<tr class="par"><td class="nm">Par</td>${holes.map((n) => `<td>${info(n).par || ""}</td>`).join("")}<td>${parSum(holes) || ""}</td>${withTotal ? `<td>${parSum(all) || ""}</td>` : ""}</tr>`;
+            // Your own row is tappable on the sign-off screen: tap a hole to
+            // flag it for the scorekeeper (Kerry 2026-09-25: "that's not
+            // obvious" — so the cells are underlined and say so above).
+            const canTap = allDone() && !signed(who) && !flagsMine.length;
             const rows = subs.map((s) => {
                 const isMe = s === mine;
                 let sub = 0;
@@ -422,12 +431,13 @@
                     if (v != null) sub += v;
                     const fl = isMe && flagsMine.some((f) => f.hole === n);
                     const cell = v == null ? "" : v;
-                    return `<td class="${fl ? "flagged" : ""}">${isMe && flagging ? `<button type="button" class="hole" data-act="flaghole" data-h="${n}">${cell}</button>` : cell}</td>`;
+                    const cls = fl ? "flagged" : (isMe && flagPick === n ? "picked" : "");
+                    return `<td class="${cls}">${isMe && canTap ? `<button type="button" class="hole" data-act="pickhole" data-h="${n}" aria-label="Hole ${n}: ${cell}. Tap if it's wrong">${cell}</button>` : cell}</td>`;
                 }).join("");
                 const tot = all.reduce((a, n) => a + (value(s.key, n).v || 0), 0);
                 return `<tr class="${isMe ? "me" : ""}"><td class="nm">${s.cids.length === 1 ? teeDot(s.cids[0]) : ""}${esc(first(s.name) || s.name)}</td>${cells}<td>${sub || ""}</td>${withTotal ? `<td>${tot || ""}</td>` : ""}</tr>`;
             }).join("");
-            return `<div class="se-card" style="margin-bottom:10px"><table><thead>${head}</thead><tbody>${par}${rows}</tbody></table></div>`;
+            return `<div class="se-card${flagging && canTap ? " picking" : ""}" style="margin-bottom:10px"><table><thead>${head}</thead><tbody>${par}${rows}</tbody></table></div>`;
         }
 
         function cardScreen() {
@@ -454,8 +464,14 @@
                 actions = `<button type="button" class="se-pill dark" data-act="attest">I kept these scores</button><div class="se-gap"></div>`;
             }
             if (done) {
-                if (flagging) {
-                    actions += `<div class="se-copy" style="margin-bottom:10px"><strong>Tap the hole that's wrong.</strong> ${esc(first(kept) || "The scorekeeper")} and your manager get the flag.</div>
+                if (flagPick != null && mine && !signed(who) && !flagsMine.length) {
+                    const v = value(mine.key, flagPick).v;
+                    actions += `<div class="se-box" style="margin-bottom:10px"><div style="font-size:17px;font-weight:700;margin-bottom:6px">Hole ${flagPick} shows ${v == null ? "no score" : v}. Is that wrong?</div>
+                        <div class="se-copy" style="margin-bottom:10px">${esc(first(kept) || "The scorekeeper")} gets the flag to fix it, then you sign.</div>
+                        <button type="button" class="se-pill dark" data-act="flaghole" data-h="${flagPick}">Flag hole ${flagPick}</button><div class="se-gap"></div>
+                        <button type="button" class="se-pill line" data-act="unflag">Cancel, it's right</button></div>`;
+                } else if (flagging) {
+                    actions += `<div class="se-copy" style="margin-bottom:10px"><strong>Tap the hole that's wrong on your row</strong> (outlined above).</div>
                         <button type="button" class="se-pill line" data-act="unflag">Cancel</button>`;
                 } else if (flagsMine.length) {
                     actions += `<div class="se-warn">${ICON.warn}<span>Hole ${flagsMine.map((f) => f.hole).join(", ")} flagged. Your card reopens for signing once it's fixed.</span></div>`;
@@ -480,7 +496,7 @@
                 <div class="se-gap"></div>
                 ${tables}
                 <div class="se-gap"></div>
-                ${done ? `<div class="se-copy" style="margin-bottom:14px">Check each hole. Signing tells your manager this card is right. If a hole is wrong, tap it and ${esc(first(kept) || "the scorekeeper")} gets the flag to fix it. Only your card reopens.</div>` : `<div class="se-copy">Live. This card fills in as ${esc(first(kept) || "the scorekeeper")} enters each hole. You'll sign it at the end.</div>`}
+                ${done ? `<div class="se-copy" style="margin-bottom:14px">${mine && !signed(who) && !(flagsMine.length) ? `Check each hole on your row. Signing tells your manager it's right. If one is wrong, tap that number (or tap <strong>Something's wrong</strong>) and ${esc(first(kept) || "the scorekeeper")} gets the flag to fix it. Only your card reopens.` : "Signing tells your manager this card is right."}</div>` : `<div class="se-copy">Live. This card fills in as ${esc(first(kept) || "the scorekeeper")} enters each hole. You'll sign it at the end.</div>`}
                 ${actions}
                 <div class="se-foot">Signed ${nSigned} of ${card.players.length}${keeperSigned ? " · " + esc(first(byId(keeperSigned.customer_id).display_name)) + " signed as scorekeeper" : ""}</div>
                 <div class="se-note" style="text-align:center">The official results are still on the scorecard and Golf Genius.</div>`;
@@ -602,9 +618,10 @@
             if (act === "back") { hole = null; store.set(K.hole, null); render(); return; }
             if (act === "attest") { post("/api/score-entry/sign", {customer_id: who, kind: "scorekeeper"}); return; }
             if (act === "sign") { post("/api/score-entry/sign", {customer_id: who}); return; }
-            if (act === "flag") { flagging = true; render(); return; }
-            if (act === "unflag") { flagging = false; render(); return; }
-            if (act === "flaghole") { flagging = false; post("/api/score-entry/flag", {customer_id: who, hole: Number(b.dataset.h)}); return; }
+            if (act === "flag") { flagging = true; flagPick = null; render(); return; }
+            if (act === "unflag") { flagging = false; flagPick = null; render(); return; }
+            if (act === "pickhole") { flagPick = Number(b.dataset.h); render(); return; }
+            if (act === "flaghole") { flagging = false; flagPick = null; post("/api/score-entry/flag", {customer_id: who, hole: Number(b.dataset.h)}); return; }
             if (act === "hio") { post("/api/score-entry/hio/confirm", {hio_id: Number(b.dataset.id), customer_id: who}); return; }
         });
 
