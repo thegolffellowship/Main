@@ -465,6 +465,19 @@ No Python or local install needed — Claude Desktop connects directly to Railwa
   `app._check_inbox_background` — add a call to any new recurring
   Anthropic path you introduce.
 
+## Portable-SQL rule for ALL NEW code (CA #682, 2026-09-25, effective now)
+
+The Tracker may move to Postgres after launch (Convergence Plan Part 3, Kerry
+rules 9/26). Until then, new code must not add SQLite-only debt. On every
+coding lane, in every new line of SQL:
+- no new `COLLATE NOCASE` and no case-reliant `LIKE`; use `lower()` on both sides;
+- no new `INSERT OR REPLACE`;
+- new writes return ids with `RETURNING`, not `lastrowid`;
+- no new try-ALTER-except; new tables and columns get a migration file;
+- money in new columns is numeric cents or decimals, never TEXT.
+Existing code stays as it is until Kerry rules on the hardening work. The
+audit behind this is in mailbox #672 and #676.
+
 ## Lazy DDL is once per database (v2.486.0, IMPORTANT for every `_ensure_*`)
 
 `CREATE INDEX IF NOT EXISTS` on an index that already exists takes the

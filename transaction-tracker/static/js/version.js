@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.490.0";
+window.TGF_VERSION = "2.490.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.490.1",
+    date: "2026-09-25",
+    changes: [
+      "CLAUDE.md gains the portable-SQL rule CA set in mailbox #682 for all new code on every lane: no new COLLATE NOCASE or case-reliant LIKE, no new INSERT OR REPLACE, RETURNING instead of lastrowid, migration files instead of try-ALTER, and money stored as numeric, never TEXT. It keeps new code ready for a later Postgres move without touching existing code before Kerry rules. Docs only.",
+    ],
+  },
   {
     version: "2.490.0",
     date: "2026-09-25",
