@@ -320,6 +320,41 @@ def roster_names(conn) -> dict[int, str]:
     return out
 
 
+def merge_entry_feed(dial: dict, feed: dict) -> dict:
+    """Track A's entered-scores read (score_entry.get_entered_scores,
+    the rounds-plural event-scoped shape CA ruled in #661) → the
+    {session_id: {course, phs, scores}} overrides compute_board takes.
+
+    Only sessions bound to a round (se_round = that read's round_id)
+    are produced — everything else keeps whatever source it had (the
+    lsc_mock_scores dial during staging). Playing handicaps are taken
+    from the feed AS-IS: the locked PH snapshot, never re-derived
+    (#661 item 4). A foursomes TEAM row (one ball, customer_ids pair)
+    lands on its first listed partner — the engine's team line reads
+    any partner's ball, and team-level strokes cover both."""
+    out: dict = {}
+    rounds = {r.get("round_id"): r for r in (feed or {}).get("rounds") or []}
+    for sess in dial.get("sessions") or []:
+        rid = sess.get("se_round")
+        r = rounds.get(rid) if rid is not None else None
+        if not r:
+            continue
+        phs = {int(p["customer_id"]): p.get("playing_handicap")
+               for p in r.get("players") or [] if p.get("customer_id")}
+        scores = {int(p["customer_id"]): dict(p.get("scores") or {})
+                  for p in r.get("players") or [] if p.get("customer_id")}
+        for t in r.get("teams") or []:
+            cids = [c for c in (t.get("customer_ids") or []) if c]
+            if not cids or not t.get("scores"):
+                continue
+            slot = scores.setdefault(int(cids[0]), {})
+            # the team ball wins over any stray individual entry
+            slot.update(t["scores"])
+        out[sess.get("id")] = {"course": r.get("course") or [],
+                               "phs": phs, "scores": scores}
+    return out
+
+
 def lsc_board_payload(db_path=None) -> dict:
     """The member-page read: dial + roster + best available scores
     (Track A's feed once its tables land; the lsc_mock_scores dial until
@@ -332,11 +367,30 @@ def lsc_board_payload(db_path=None) -> dict:
             return {"configured": False}
         names = roster_names(conn)
         session_data = _setting_json(conn, "lsc_mock_scores") or {}
-        # TODO(Track A): when se_* lands, prefer real entered scores per
-        # session (se_round binding) over the mock dial.
+        # Real entered scores (Track A, live on main v2.493.0) take
+        # precedence per session: any session bound via se_round reads
+        # the rounds-plural event feed; unbound sessions keep the mock
+        # dial (staging) or stay empty (upcoming).
+        entry_used = False
+        bound = any(s.get("se_round") is not None
+                    for s in dial.get("sessions") or [])
+        if bound and dial.get("event_id"):
+            try:
+                from email_parser.score_entry import get_entered_scores
+                feed = get_entered_scores(int(dial["event_id"]),
+                                          db_path=db_path)
+                overrides = merge_entry_feed(dial, feed)
+                if overrides:
+                    session_data = {**session_data, **overrides}
+                    entry_used = True
+            except Exception:
+                logger.exception("lsc_cup: entered-scores feed read "
+                                 "failed — board falls back to the "
+                                 "mock dial")
         board = compute_board(dial, session_data, names)
         board["configured"] = True
-        board["source"] = "mock" if session_data else "none"
+        board["source"] = ("entry" if entry_used
+                           else "mock" if session_data else "none")
         # Rule 3b: the member page shows the board only once Kerry flips
         # board_live in the dial (after his phone OK). Admin/manager
         # sessions preview it regardless — the route enforces this.

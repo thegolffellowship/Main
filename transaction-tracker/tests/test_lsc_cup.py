@@ -133,6 +133,38 @@ def test_board_points_win_halve_and_projection():
     assert a["projected"] == 2.5 and s["projected"] == 0.5
 
 
+def test_merge_entry_feed_binds_rounds_and_team_ball():
+    from email_parser.lsc_cup import merge_entry_feed
+    dial = {"sessions": [
+        {"id": "sat-am", "se_round": 5},
+        {"id": "sat-pm", "se_round": 6},
+        {"id": "sun", "se_round": None}]}          # unbound → untouched
+    feed = {"rounds": [
+        {"round_id": 5,
+         "course": [{"hole": 1, "par": 4, "stroke_index": 1}],
+         "players": [
+             {"customer_id": 7, "playing_handicap": 9,
+              "scores": {"1": 4, "2": 5}},
+             {"customer_id": 35, "playing_handicap": 12,
+              "scores": {"1": 5}}],
+         "teams": []},
+        {"round_id": 6,
+         "course": [{"hole": 1, "par": 4, "stroke_index": 1}],
+         "players": [{"customer_id": 30, "playing_handicap": 10,
+                      "scores": {"1": 9}}],       # stray individual entry
+         "teams": [{"team_id": 1, "customer_ids": [30, 438],
+                    "scores": {"1": 5, "2": 4}}]},
+    ]}
+    out = merge_entry_feed(dial, feed)
+    assert set(out) == {"sat-am", "sat-pm"}       # sun stays unbound
+    am = out["sat-am"]
+    assert am["phs"][7] == 9 and am["scores"][7] == {"1": 4, "2": 5}
+    # foursomes: the team ball lands on the first partner and WINS over
+    # the stray individual score on the same hole
+    pm = out["sat-pm"]
+    assert pm["scores"][30] == {"1": 5, "2": 4}
+
+
 if __name__ == "__main__":
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     for fn in fns:

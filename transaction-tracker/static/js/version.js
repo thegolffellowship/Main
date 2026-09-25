@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.493.6";
+window.TGF_VERSION = "2.494.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.494.0",
+    date: "2026-09-25",
+    changes: [
+      "Lone Star Cup board reads REAL entered scores (Track B \u00d7 Track A): lsc_board_payload now prefers score entry's rounds-plural event feed (score_entry.get_entered_scores, the shape CA ruled in #661) for any lsc_matches session bound via se_round \u2014 new pure adapter merge_entry_feed maps each bound round's players to {course, phs, scores}, takes playing_handicap from the feed AS-IS (the locked snapshot, never re-derived), and lands a foursomes TEAM ball on its first listed partner where it wins over any stray individual entry. Unbound sessions keep the staged lsc_mock_scores (rule-3b preview) or stay upcoming; a feed read failure falls back to the mock with a logged exception, never a 500. board.source now reads entry|mock|none. Guard test added (tests/test_lsc_cup.py, 8 total). Wiring lands ahead of the Tue 9/29 dry run \u2014 bind a session by setting its se_round to the entry round id and the cup board goes live-data with no further code.",
+    ],
+  },
   {
     version: "2.493.6",
     date: "2026-09-25",
