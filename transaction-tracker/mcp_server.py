@@ -1779,6 +1779,9 @@ def _scoring_dispatch_inner(url: str, extract: str):
       scoring-verify:<round_id>    verify one round vs GG's numbers
       scoring-card:<round_id>      full scorecard with derivations
       scoring-courses              course/tee database listing
+      scoring-se-preview:<event_id>|<cid,...>[|apply]  labelled PREVIEW score-entry round + link (admin-only open)
+      scoring-se-links:<round_id>  one score-entry link per group
+      scoring-se-close:<round_id>|apply  close a score-entry round (links stop opening; nothing deleted)
       scoring-mvp-import           import_gg_event_mvps(widget_url)
       scoring-mvp-recompute[:event] self-compute City/TGF MVP badges (split -> Co-)
       scoring-games-import         import_gg_game_results(widget_url) — GG-recorded CTP/LP/HIO/TEAM Net winners
@@ -3196,6 +3199,40 @@ def _scoring_dispatch_inner(url: str, extract: str):
                 _audit("scoring-health-digest", f"posted mailbox #{_res.get('posted')}, "
                        f"{len(_res.get('action_items') or [])} action item(s)")
             return json.dumps(_res, indent=2, default=str)
+        if cmd == "scoring-se-preview":
+            # scoring-se-preview:<event_id>|<cid,cid,...>[|apply] — a labelled
+            # PREVIEW score-entry round with one group, and its link. Dry run
+            # by default. Admin-session only while score_entry_live is off.
+            from email_parser import score_entry as _se
+            _p = [x.strip() for x in arg.split("|")]
+            try:
+                _ev = int(_p[0]); _ids = [int(x) for x in _p[1].split(",") if x.strip()]
+            except (ValueError, IndexError):
+                return json.dumps({"error": "usage: scoring-se-preview:<event_id>|<cid,cid,...>[|apply]"})
+            if not (len(_p) > 2 and _p[2].lower() == "apply"):
+                return json.dumps({"dry_run": True, "event_id": _ev, "customer_ids": _ids,
+                                   "would": "create or reuse the PREVIEW round and its group; add |apply"})
+            _res = _se.create_preview_round(_ev, _ids)
+            if "error" not in _res:
+                _res["links"] = _se.round_links(_res["round_id"])
+                _audit("scoring-se-preview", f"event {_ev} round {_res['round_id']} players {_ids}")
+            return json.dumps(_res, indent=2, default=str)
+        if cmd == "scoring-se-links":
+            # scoring-se-links:<round_id> — one link per group (Kerry hands them out).
+            from email_parser import score_entry as _se
+            try:
+                return json.dumps(_se.round_links(int(arg.strip())), indent=2)
+            except ValueError:
+                return json.dumps({"error": "usage: scoring-se-links:<round_id>"})
+        if cmd == "scoring-se-close":
+            # scoring-se-close:<round_id>|apply — close a round; its links stop opening.
+            from email_parser import score_entry as _se
+            _rid, _, _flag = arg.partition("|")
+            if _flag.strip().lower() != "apply":
+                return json.dumps({"dry_run": True, "would": f"close round {_rid.strip()}; add |apply"})
+            _res = _se.close_round(int(_rid.strip()))
+            _audit("scoring-se-close", f"round {_rid.strip()}")
+            return json.dumps(_res)
         if cmd == "scoring-health-ack":
             # scoring-health-ack:<id[,id…]>|<note> — close HEALTH action
             # items the CTO digest filed, with the reason on the row.

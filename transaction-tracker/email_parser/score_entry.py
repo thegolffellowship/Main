@@ -553,6 +553,78 @@ def _event_course_holes(conn, ev: dict, n_holes: int) -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
+# PREVIEW round (Front Desk, 2026-09-25: Kerry asked "Where do I see the Live
+# Score Entry on the Tracker?"). A clearly labelled test round on an event,
+# separate from any round seeded from PAIRINGS (pairings_holes stays NULL, so
+# seed_round_from_pairings never reuses it). Nothing member-facing: the link
+# opens only for an admin session while score_entry_live is off.
+# ---------------------------------------------------------------------------
+
+PREVIEW_LABEL = "PREVIEW (test round, not a real card)"
+
+
+def create_preview_round(event_id: int, customer_ids: list[int], db_path=None) -> dict:
+    ids = [int(c) for c in customer_ids if str(c).strip()]
+    if not ids or len(ids) > 5:
+        return {"error": "one to five customer_ids"}
+    with _closing(_conn(db_path)) as conn:
+        ev = conn.execute("SELECT * FROM events WHERE id = ?", (event_id,)).fetchone()
+        if not ev:
+            return {"error": "no such event"}
+        ev = dict(ev)
+        names = {r[0]: r[1] for r in conn.execute(
+            "SELECT customer_id, TRIM(COALESCE(first_name,'') || ' ' || COALESCE(last_name,'')) "
+            f"FROM customers WHERE customer_id IN ({','.join('?' * len(ids))})", ids)}
+        missing = [c for c in ids if c not in names]
+        if missing:
+            return {"error": f"unknown customer_id(s): {missing}"}
+        existing = conn.execute("SELECT id FROM se_rounds WHERE event_id = ? AND label = ? "
+                                "AND status = 'open' ORDER BY id LIMIT 1",
+                                (event_id, PREVIEW_LABEL)).fetchone()
+        holes = 18 if "18" in str(ev.get("format") or "") and "9/18" not in str(ev.get("format") or "") else 9
+        course = _event_course_holes(conn, ev, holes)
+    rid = existing[0] if existing else create_round(
+        event_id, holes, round_date=(ev.get("event_date") or "")[:10] or None,
+        label=PREVIEW_LABEL, course_holes=course, course_id=ev.get("course_id"),
+        created_by="preview", db_path=db_path)["round_id"]
+    g = upsert_group(rid, 1, label="Preview group", start_hole=_first_hole(ev, holes),
+                     players=[{"customer_id": c, "display_name": names[c], "seat": i + 1}
+                              for i, c in enumerate(ids)], db_path=db_path)
+    out = {"round_id": rid, "group_id": g["group_id"], "reused": bool(existing),
+           "course_holes": len(course), "holes": holes}
+    if len(course) < holes:
+        out["warning"] = f"course card gave {len(course)} of {holes} holes"
+    return out
+
+
+def close_round(round_id: int, db_path=None) -> dict:
+    """Close a round: its links stop opening. Nothing is deleted."""
+    with _closing(_conn(db_path)) as conn:
+        r = conn.execute("SELECT event_id FROM se_rounds WHERE id = ?", (round_id,)).fetchone()
+        if not r:
+            return {"error": "no such round"}
+        conn.execute("UPDATE se_rounds SET status = 'closed' WHERE id = ?", (round_id,))
+        _bump(conn, r[0])
+        conn.commit()
+    return {"closed": round_id}
+
+
+def round_links(round_id: int, base_url: str | None = None, db_path=None) -> list[dict]:
+    base = (base_url or os.getenv("PUBLIC_BASE_URL")
+            or "https://tgf-tracker.up.railway.app").rstrip("/")
+    with _closing(_conn(db_path)) as conn:
+        rows = conn.execute("SELECT id, group_num, label FROM se_groups WHERE round_id = ? "
+                            "ORDER BY group_num", (round_id,)).fetchall()
+        players = {}
+        for p in conn.execute("SELECT group_id, display_name FROM se_players WHERE round_id = ? "
+                              "ORDER BY COALESCE(seat, 99), id", (round_id,)):
+            players.setdefault(p[0], []).append(p[1])
+    return [{"group_id": r[0], "group_num": r[1], "label": r[2], "players": players.get(r[0], []),
+             "url": f"{base}/member/score?t={make_group_token(r[0], db_path=db_path)}"}
+            for r in rows]
+
+
+# ---------------------------------------------------------------------------
 # Cart-sign QR (Kerry #666 B: "QR Code printed on cart sign"). Which events
 # and groups carry one is a dial, `score_entry_qr` in app_settings:
 #   {"<event_id>": "all" | [group_num, ...]}

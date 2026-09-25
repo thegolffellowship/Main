@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.493.0";
+window.TGF_VERSION = "2.493.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.493.1",
+    date: "2026-09-25",
+    title: "Score entry: a PREVIEW round Kerry can open, and bridges to make links and close rounds",
+    changes: [
+      "Kerry asked where to see Live Score Entry. New bridges on the MCP connector: scoring-se-preview:<event_id>|<customer ids>[|apply] builds a clearly labelled PREVIEW round (one group, separate from any round seeded from PAIRINGS) and returns its link; scoring-se-links:<round_id> lists one link per group; scoring-se-close:<round_id>|apply closes a round so its links stop opening, deleting nothing. While score_entry_live is off, a link opens only on a phone signed in as admin."
+    ]
+  },
   {
     version: "2.493.0",
     date: "2026-09-25",

@@ -321,6 +321,24 @@ db.set_app_setting("score_entry_qr", "not json")
 check("a bad dial prints the old sign", se.attach_cart_sign_qr(db.get_event_print_pack(900))["groups"] == 0)
 db.set_app_setting("score_entry_qr", "")
 
+print("PREVIEW round + links + close")
+pv = se.create_preview_round(900, [101, 102])
+check("preview round is created", "round_id" in pv and not pv["reused"], pv)
+pv2 = se.create_preview_round(900, [101, 102, 103])
+check("a second call reuses the preview round", pv2["round_id"] == pv["round_id"] and pv2["reused"], pv2)
+check("the preview is never the PAIRINGS round",
+      se.seed_round_from_pairings(900, "9")["round_id"] != pv["round_id"])
+lk = se.round_links(pv["round_id"], base_url="https://x.test")
+check("one link per group with its players",
+      len(lk) == 1 and lk[0]["players"] == ["Kerry Niester", "Adam Baker", "Chris Best"], lk)
+ptok = lk[0]["url"].split("t=", 1)[1]
+check("the preview link opens", se.verify_group_token(ptok) == pv["group_id"])
+check("unknown people are refused", "error" in se.create_preview_round(900, [424242]))
+se.close_round(pv["round_id"])
+check("closing kills the link", se.verify_group_token(ptok) is None)
+check("closed round's rows are kept", any(r["round_id"] == pv["round_id"]
+                                          for r in se.get_entered_scores(900)["rounds"]))
+
 print("HTTP (admin builds, scorer by link, flag off until Kerry OKs)")
 os.environ.setdefault("SECRET_KEY", "test-secret")
 with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):

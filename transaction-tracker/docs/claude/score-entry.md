@@ -84,6 +84,19 @@ on the page — green means bought in.
   CA Queue #10/#11 are ruled. A PH the card's stroke indexes cannot carry
   (a nine indexed 1–9) is listed in `strokes._unresolved`, never guessed.
 
+## Preview and admin bridges (v2.493.1)
+
+- `scoring-se-preview:<event_id>|<customer ids>[|apply]` — a labelled
+  PREVIEW round (`PREVIEW_LABEL`) with one group, reused on repeat calls,
+  never the round `seed_round_from_pairings` builds. Dry run by default.
+- `scoring-se-links:<round_id>` — one link per group, for Kerry to hand out.
+- `scoring-se-close:<round_id>|apply` — status closed; the links stop
+  opening; nothing is deleted.
+- While `score_entry_live` is off, a link opens only for an admin session.
+- **Proposed, not built (scope → CA):** a "Score entry" panel on the event's
+  PAIRINGS view — Seed from pairings, each group's link and QR, round status
+  and a Close button — so Kerry never needs a bridge.
+
 ## Access: the cart-sign QR (Kerry #666 B)
 
 The first access path is a QR code on the cart sign: scan, tap your name,
