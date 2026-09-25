@@ -37,14 +37,16 @@ THE GRADING CONTRACT, from #571 A1–A3:
       and this module will not invent a third class to make a board green.
   A3  Team Net and Skins ½ Net are REPORTED, not graded.
 
-WHAT THIS HARNESS CANNOT GRADE, AND WILL NOT PRETEND TO:
-  * RACES. `get_points_race_standings` and `get_monthly_points` both RENDER
-    A SNAPSHOT FETCHED FROM GOLF GENIUS. There is no independent TGF points
-    computation to diff against them, so "our race matches GG's race" would
-    be comparing GG to itself — the same hollow-parity defect already found
-    in `test_live_scoring_center.py` (CA Queue #10 note). The race tier
-    therefore reports `status: "ungradeable"` with the reason, and a G2a run
-    is never called a PASS while it does.
+RACES ARE NOT PART OF G2a. CA ruled on 2026-09-25 (#682) that the race leg
+is DESCOPED to a new gate, G2c: `get_points_race_standings` and
+`get_monthly_points` both render a snapshot FETCHED FROM GOLF GENIUS, so
+there is no independent TGF points computation to diff and "our race matches
+GG's race" would compare GG to itself. G2c returns when a points engine
+exists — that is a build, not a test. **G2a therefore grades PLAYERS and
+GAMES only, and CAN pass without races.** The race tier is still reported
+here, as `descoped_to_g2c`, so a reader of one table can see the whole gate
+rather than wondering what happened to the third leg; it no longer blocks
+the verdict.
 """
 
 from __future__ import annotations
@@ -53,6 +55,78 @@ from __future__ import annotations
 RESIDUAL_DERIVED_DOTS_PLUS1 = "derived_dots_ph_plus1_no_ndb_cap"
 RESIDUAL_TIED_PAYOUT_ROUNDING = "tied_group_payout_1_2_cents_under_gg"
 A2_CLASSES = (RESIDUAL_DERIVED_DOTS_PLUS1, RESIDUAL_TIED_PAYOUT_ROUNDING)
+
+# ── DRAFT purse mapping — NOT RATIFIED, NOT USED TO GRADE ──────────────
+# CA (#682): "Draft the purse-category <-> GG-game mapping as a table and
+# post it here, with anything ambiguous marked... Don't guess the mapping in
+# code." This constant is therefore DOCUMENTATION of what the two
+# vocabularies actually are — every row below was read out of the code, not
+# invented — and `PURSE_MAP_RATIFIED` gates it out of the grading path until
+# CA reviews and Kerry ratifies (rule 3b).
+#
+# The naming turned out to be the easy half: six of eight categories are the
+# SAME STRING on both sides, because `_gg_purse_rows(game_key, ...)` emits
+# `category = game_key`. The hard half is PROVENANCE — see `independent`.
+#
+#   independent=True   our engine computed this number, so diffing it
+#                      against GG is a real test.
+#   independent=False  our "our side" IS GG's number, copied. Diffing it
+#                      against GG compares GG to itself and can only ever
+#                      report green — the same hollow parity that got the
+#                      race leg descoped to G2c.
+DRAFT_PURSE_MAP = {
+    # our category:   (GG source, GG key, independent, note)
+    "individual_net": ("gg_game_results", "individual_net", "conditional",
+                       "GG-FIRST: if GG posted a purse board we copy it "
+                       "verbatim (status 'gg_purse'); our engine computes "
+                       "only when GG has not posted. Independent on the "
+                       "fallback path ONLY."),
+    "individual_gross": ("gg_game_results", "individual_gross", "conditional",
+                         "GG-first, same as individual_net."),
+    "skins": ("gg_game_results", "skins", "conditional",
+              "GG-first (Kerry 2026-09-02). On a 9 with <8 gross buyers and "
+              "no GG board, the row is recorded MANUALLY — neither ours nor "
+              "GG's."),
+    "team_net": ("gg_game_results", "team_net", False,
+                 "Always GG's recorded row, split per member. Also A3 "
+                 "report-only, so it is out of scope twice over."),
+    "ctp": ("gg_game_results", "ctp", False,
+            "GG-recorded, manager-entered after the round. Nothing for our "
+            "engine to compute."),
+    "longest_putt": ("gg_game_results", "longest_putt", False,
+                     "GG-recorded, as ctp."),
+    "mvp": ("event_mvps", "kind='mvp'", True,
+            "CROSS-TABLE: GG's MVP lands in `event_mvps`, not "
+            "`gg_game_results`. Ours is computed by `determine_tgf_mvp`. "
+            "This is a REAL independent comparison — and `audit_pre_boundary_"
+            "mvp` already does one, so there is precedent."),
+    "tgf_mvp": ("event_mvps", "kind='tgf_mvp'", True,
+                "As mvp. Combined same-day pot; paid once, on the winner's "
+                "event, which a per-event diff must not double-count."),
+}
+
+# AMBIGUOUS — flagged for CA, deliberately left unmapped rather than guessed.
+DRAFT_PURSE_MAP_AMBIGUOUS = {
+    "hio": "GG carries a `hio` game key (_GG_GAME_PATTERNS) but the payout "
+           "assembler emits NO hio category. The HIO pot is tracked "
+           "elsewhere. Which side owns an HIO payout row?",
+    "_flight_granularity": "GG puts the flight label in `detail`; we embed "
+                           "it in `description` text. A per-row match needs "
+                           "flight-level keys on both sides, not just the "
+                           "category. Matching on category alone would pair "
+                           "a Flight 1 row with a Flight 2 row.",
+    "_team_row_shape": "team_net is ONE GG row per team but N rows our side "
+                       "(per-member split), so row counts differ by "
+                       "construction; only the team TOTAL is comparable.",
+    "_tie_cents": "A2(ii) allows our tied-group split to land $0.01-$0.02 "
+                  "under GG because ours sums to the pot. Any cent-level "
+                  "purse grading must apply that tolerance per tied GROUP, "
+                  "not per row.",
+}
+
+# Flipped only by ratification (CA review + Kerry, rule 3b). While False the
+# purse tier reports totals and refuses to grade per row.
+PURSE_MAP_RATIFIED = False
 
 # A3: reported, never graded.
 A3_REPORT_ONLY = ("team_net", "skins_half_net")
@@ -137,9 +211,10 @@ def g2a_parity(event_name: str, db_path=None) -> dict:
     # ── tier 3: PURSES, our matrix assembly vs GG's recorded purse ──
     out["tiers"]["purses"] = _diff_purses(gg, event_name, db_path)
 
-    # ── tier 4: RACES — ungradeable, and says so ──
+    # ── tier 4: RACES — descoped to G2c by CA (#682); reported, not blocking ──
     out["tiers"]["races"] = {
-        "status": "ungradeable",
+        "status": "descoped_to_g2c",
+        "ruled": "platform-claude (CA), mailbox #682, 2026-09-25",
         "reason": (
             "Our race standings are a SNAPSHOT FETCHED FROM GOLF GENIUS "
             "(`get_points_race_standings` renders `gg_points_standings`; "
@@ -148,13 +223,14 @@ def g2a_parity(event_name: str, db_path=None) -> dict:
             "compares GG to itself and would report a hollow pass. G2a "
             "cannot claim the race leg until a TGF-side points engine "
             "exists — that is a build, not a test."),
-        "what_would_unblock_it": (
+        "what_would_unblock_g2c": (
             "A ratified TGF points schedule (position -> points, per race) "
             "computed from our own results, which does not exist today."),
+        "blocks_g2a": False,
     }
-    out["blockers"].append(
-        "races tier is UNGRADEABLE — we mirror GG's standings rather than "
-        "computing them, so there is nothing to diff")
+    # Deliberately NOT appended to out["blockers"]: CA descoped this leg, so
+    # G2a can pass without it. It stays in the table because a gate with a
+    # silently missing third of its scope is how a hollow pass happens.
 
     out["verdict"] = _verdict(out)
     return out
@@ -216,11 +292,17 @@ def _diff_purses(gg: dict, event_name: str, db_path) -> dict:
         "gg_purse_row_count": len(gg_by),
         "our_total": round(sum(our_by.values()), 2),
         "gg_total": round(sum(gg_by.values()), 2),
-        "note": ("Category and game keys are not the same vocabulary, so "
-                 "this reports both totals rather than asserting a per-row "
-                 "match. Mapping them is the next step and must be ratified "
-                 "before a purse row is graded — a wrong mapping would "
-                 "manufacture agreement."),
+        "map_ratified": PURSE_MAP_RATIFIED,
+        "note": ("Totals only. The draft mapping is in DRAFT_PURSE_MAP and "
+                 "is NOT ratified, so no row is graded (CA #682: don't guess "
+                 "the mapping in code). Six of eight categories share a "
+                 "string with GG's game key, so naming was never the "
+                 "obstacle — PROVENANCE is: for individual_net, "
+                 "individual_gross and skins our 'our side' IS GG's posted "
+                 "purse, copied verbatim, whenever GG posted a board. "
+                 "Grading those against GG would compare GG to itself. Only "
+                 "mvp and tgf_mvp are independently computed today."),
+        "ambiguities": sorted(DRAFT_PURSE_MAP_AMBIGUOUS),
     }
 
 

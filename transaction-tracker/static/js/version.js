@@ -1,5 +1,19 @@
-window.TGF_VERSION = "2.490.1";
+window.TGF_VERSION = "2.492.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.492.0",
+    date: "2026-09-25",
+    title: "G2a: races descoped to G2c, and the purse mapping drafted (CA #682)",
+    changes: [
+      "CA ruled (#682) that the RACE leg is descoped to a new gate, G2c \u2014 our finding stands that there is no TGF points engine, so race parity would compare GG to itself. G2a now grades PLAYERS and GAMES only and CAN pass without races. The race tier still appears in the table as `descoped_to_g2c` with the reason, because a gate that silently drops a third of its scope is how a hollow pass happens; it simply no longer blocks the verdict.",
+      "DRAFTED the purse-category \u2194 GG-game mapping CA asked for, derived from the code rather than guessed, and gated behind `PURSE_MAP_RATIFIED = False` so nothing grades until CA reviews and Kerry ratifies (rule 3b).",
+      "THE NAMING WAS THE EASY HALF. Six of eight categories are the SAME STRING on both sides, because `_gg_purse_rows(game_key, ...)` emits `category = game_key`. The real finding is PROVENANCE: for `individual_net`, `individual_gross` and `skins` the assembler is GG-FIRST \u2014 when GG has posted a purse board we copy its numbers verbatim (`status: \u2018gg_purse\u2019`) and our engine computes only on the fallback. `team_net`, `ctp` and `longest_putt` are always GG\u2019s recorded rows. So on a normal event where GG posted its boards, grading purses against GG would compare GG to itself on six of eight categories \u2014 the same defect that got the race leg descoped.",
+      "Only `mvp` and `tgf_mvp` are independently computed today (`determine_tgf_mvp`), and they map CROSS-TABLE to `event_mvps.kind`, not to a `gg_game_results` game key \u2014 `audit_pre_boundary_mvp` already runs that comparison, so there is precedent for it being real.",
+      "FOUR AMBIGUITIES NAMED RATHER THAN MAPPED: (1) GG carries a `hio` game key but the payout assembler emits no hio category; (2) GG puts the flight label in `detail` while we embed it in description TEXT, so a per-row match needs flight-level keys on both sides or it will pair a Flight 1 row with a Flight 2 row; (3) team_net is one GG row but N rows our side, so only the team total is comparable; (4) A2(ii)\u2019s $0.01\u2013$0.02 tie tolerance must apply per tied GROUP, not per row.",
+      "Tests: `test_g2a_parity.py` now 31 checks, including that the draft map ships unratified, that every row carries a provenance value rather than just a GG key, and that no ambiguous key leaked into the mapped table.",
+      "Portable-SQL rule (#682, CLAUDE.md v2.490.1): the module complies trivially \u2014 it writes no SQL of its own, calling existing database helpers instead.",
+    ],
+  },
   {
     version: "2.490.1",
     date: "2026-09-25",
