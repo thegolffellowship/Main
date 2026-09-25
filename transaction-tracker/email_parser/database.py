@@ -364,6 +364,13 @@ def get_connection(db_path: str | Path | None = None) -> sqlite3.Connection:
     if key not in _WAL_SET:
         conn.execute("PRAGMA journal_mode=WAL")
         _WAL_SET.add(key)
+    # The Golf Genius raw archive lives in its own file beside this one
+    # (Kerry 2026-09-23, #627); ATTACH it here, before any statement, so
+    # the two writers and the one reader of gg_raw_archive keep working
+    # through gg_archive.archive_table(conn). ATTACH is refused inside a
+    # transaction, which is why it is done at connect time and nowhere else.
+    from .gg_archive import attach as _attach_gg_archive
+    _attach_gg_archive(conn, path)
     return conn
 
 
@@ -16374,11 +16381,10 @@ def _ensure_scoring_tables(conn: sqlite3.Connection) -> None:
         strokes_received INTEGER DEFAULT 0,
         gg_result        TEXT,
         UNIQUE(scoring_round_id, hole_number))""")
-    conn.execute("""CREATE TABLE IF NOT EXISTS gg_raw_archive (
-        id         INTEGER PRIMARY KEY AUTOINCREMENT,
-        url        TEXT NOT NULL,
-        fetched_at TEXT DEFAULT (datetime('now')),
-        body_gz    BLOB)""")
+    # gg_raw_archive is NOT created here any more: it lives in its own file
+    # (email_parser/gg_archive.py, Kerry #627). A legacy copy still in this
+    # file is served until the cutover drops it; a fresh database never
+    # gets one here.
     conn.execute("CREATE INDEX IF NOT EXISTS idx_scoring_rounds_cid ON scoring_rounds(customer_id)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_scoring_rounds_event ON scoring_rounds(event_id)")
     try:
@@ -23781,8 +23787,10 @@ def import_gg_scorecards(tournament_url: str, event_code: str | None = None,
                 event_id = ev["id"]
                 event_date = round_date or ev["event_date"]
 
+        from .gg_archive import archive_table as _archive_table
+        _arc = _archive_table(conn)
         for url, body in data["raw"]:
-            conn.execute("INSERT INTO gg_raw_archive (url, body_gz) VALUES (?, ?)",
+            conn.execute(f"INSERT INTO {_arc} (url, body_gz) VALUES (?, ?)",
                          (url, zlib.compress(body.encode("utf-8"))))
 
         imported = replaced = upgraded = unresolved = skipped = bridged = 0
@@ -39905,7 +39913,7 @@ _HCP_PLAYERS_TTL_S = 120.0
 _HCP_CACHE_STATS: dict = {"hits": 0, "misses": 0}
 
 
-def _hcp_players_signature(db_path) -> tuple:
+def _hcp_players_signature(db_path, _retry: int = 1) -> tuple:
     try:
         with _connect(db_path) as conn:
             # Count + last id catch a posted round; the differential sum
@@ -39940,6 +39948,12 @@ def _hcp_players_signature(db_path) -> tuple:
                 cfg = ()
         return (tuple(r), tuple(l), tuple(st), tuple(ex), cfg)
     except sqlite3.OperationalError:
+        # A transient "database is locked" (a writer committing at that
+        # instant) is the usual cause — one short retry keeps the cache
+        # instead of a "nosig" miss (seen once in test_perf.py, 2026-09-25).
+        if _retry > 0:
+            _time_mod.sleep(0.05)
+            return _hcp_players_signature(db_path, _retry - 1)
         # A signature that cannot be read means NO caching, which is safe
         # but slow — say why in the log rather than hiding it (the v2.484.3
         # lesson: this branch ran on every call for a day and nobody knew).

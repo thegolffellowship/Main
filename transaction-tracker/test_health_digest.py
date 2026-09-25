@@ -106,7 +106,7 @@ check("a volume the OS cannot report raises nothing", "volume_full" not in {f["k
 
 md = health.render_markdown(rep)
 check("markdown is addressed to tracker-claude + kerry and leads with the findings",
-      md.startswith("TO: tracker-claude") and "**FINDINGS**" in md and "[HIGH] pairings_get" in md, md[:300])
+      md.startswith("TO: front-desk") and "**FINDINGS**" in md and "[HIGH] pairings_get" in md, md[:300])
 check("...names the slow open's sections and what ran beside it", "saved_sheet 4.5 s" in md and "while job:auto_live_poll" in md)
 check("...and the database line", "**DATABASE**" in md and "items 1" in md)
 check("...and the VOLUME line (percent used, MB free of MB)", "**VOLUME**" in md and "% used" in md and "MB free of" in md, md[md.find("**VOLUME**"):][:120])
@@ -121,7 +121,7 @@ db.set_app_setting("health_digest_time", "06:00", db_path=tmp)
 check("the dial can move the hour (06:00)", health.digest_time(tmp) == "06:00" and health.digest_due(now=datetime(2026, 9, 23, 5, 50), db_path=tmp) is False)
 
 res = health.run_health_digest(post=False, db_path=tmp)
-check("post=False builds the text and writes nothing", res["posted"] is None and res["action_items"] == [] and "TO: tracker-claude" in res["body"]
+check("post=False builds the text and writes nothing", res["posted"] is None and res["action_items"] == [] and "TO: front-desk" in res["body"]
       and db.read_platform_dialogue_entries(5, "tracker-health", 0, db_path=tmp) == [])
 
 res = health.run_health_digest(post=True, db_path=tmp)

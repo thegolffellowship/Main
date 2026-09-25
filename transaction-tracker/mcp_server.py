@@ -1907,6 +1907,12 @@ def _scoring_dispatch_inner(url: str, extract: str):
       scoring-health-digest[:<days>][|post]  the daily health digest text; |post
                                    runs the real routine (mailbox `tracker-health`
                                    + COO action items + prune)
+      scoring-gg-archive[:<step>][|go]  the GG raw archive's move to its own
+                                   file (Kerry #627): plan (default, read-only)
+                                   · migrate (resumable copy, ~20 s per call)
+                                   · verify (read-only full compare) · cutover|go
+                                   (drops the main-file table after the check)
+                                   · vacuum|go (off-hours) · backup[|force]
       scoring-partial-credit       JSON {"item_id","amount","new_holes"?,
                                    "package_index"?,"note"?} — partial CREDIT
                                    (bridge twin of partial_credit_transaction)
@@ -1975,6 +1981,21 @@ def _scoring_dispatch_inner(url: str, extract: str):
             return json.dumps(card if card else {"error": "not found"}, indent=2)
         if cmd == "scoring-courses":
             return json.dumps(db.list_courses(), indent=2)
+        if cmd == "scoring-g2a":
+            # G2a COMPUTE PARITY (A4 gate, mailbox #571 / CA #665).
+            # "scoring-g2a:<event name>" — seeds a sandbox from the event's
+            # imported GG cards, runs the existing Test Center parity gate
+            # for the A1 player tier, captures GG's game board verbatim, and
+            # totals our matrix purses against GG's. Touches no production
+            # row, no money, no member — but it DOES create a Test Center
+            # sandbox session per run (ls_test_* only), which is how the
+            # engine is handed GG's hole scores. Not "read-only" flat.
+            #
+            # It will NOT report PASS while the race tier is ungradeable —
+            # our standings are a snapshot fetched from GG, so diffing them
+            # against GG compares GG to itself. See g2a_parity.__doc__.
+            from email_parser.g2a_parity import g2a_parity
+            return json.dumps(g2a_parity(arg.strip()), indent=2, default=str)
         if cmd == "scoring-parity":
             return json.dumps(db.get_differential_parity(), indent=2)
         if cmd == "scoring-mvp-import":
@@ -3190,6 +3211,36 @@ def _scoring_dispatch_inner(url: str, extract: str):
             _res = ack_findings(_ids, _note.strip())
             _audit("scoring-health-ack", f"closed {_res['closed']} — {_note.strip()[:120]}")
             return json.dumps(_res, indent=2)
+        if cmd == "scoring-gg-archive":
+            # scoring-gg-archive[:<step>][|go] — the archive move, one
+            # resumable step per call. cutover and vacuum refuse without
+            # |go; nothing is dropped that verify has not proven copied.
+            from email_parser import gg_archive as _ga
+            _step, _, _flag = (arg or "plan").partition("|")
+            _step = (_step or "plan").strip().lower()
+            _go = _flag.strip().lower() == "go"
+            if _step == "plan":
+                return json.dumps(_ga.plan(), indent=2, default=str)
+            if _step == "migrate":
+                _res = _ga.migrate()
+                _audit("scoring-gg-archive", f"migrate: copied {_res.get('copied')} rows, remaining {_res.get('remaining')}")
+                return json.dumps(_res, indent=2, default=str)
+            if _step == "verify":
+                return json.dumps(_ga.verify(), indent=2, default=str)
+            if _step == "cutover":
+                _res = _ga.cutover(go=_go)
+                if _res.get("ok"):
+                    _audit("scoring-gg-archive", f"cutover: {_res.get('rows')} rows in the archive file, main table dropped")
+                return json.dumps(_res, indent=2, default=str)
+            if _step == "vacuum":
+                _res = _ga.vacuum_main(go=_go)
+                if _res.get("ok"):
+                    _audit("scoring-gg-archive", f"vacuum: freed {_res.get('freed_mb')} MB in {_res.get('ms')} ms")
+                return json.dumps(_res, indent=2, default=str)
+            if _step == "backup":
+                _res = _ga.run_archive_backup(force=_flag.strip().lower() == "force")
+                return json.dumps(_res, indent=2, default=str)
+            return json.dumps({"error": "usage: scoring-gg-archive[:plan|migrate|verify|cutover|vacuum|backup][|go]"})
         if cmd == "scoring-dashboard":
             # Read-only: the landing dashboard's payload (Kerry
             # 2026-09-21). Only cards with something in them come back —

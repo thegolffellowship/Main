@@ -254,3 +254,37 @@ Central after DST ends Nov 1 — update the Routine then.
   scheduler thread. A cold open that does happen is sampled with one lap
   per builder (`shared:live:austin_net` …) and `cold: true` on the
   sample, so the digest can say which one.
+
+### Day four (v2.489.6, 2026-09-25) — the archive move is built; the audit for CA
+
+- Digest #671 was clean on speed: no slow samples, no job errors, every
+  route inside its line, load 2.2 per cpu. Its findings were the Railway
+  alerts still open in the COO queue (not the CTO's to close: they are
+  email items) and `gg_raw_archive` at 374 MB.
+- **`gg_raw_archive` → its own file, BUILT AND RUN LIVE 5:28 AM Central**
+  (plan → migrate 143,801 rows in 13.7 s → verify 0 mismatched in 0.7 s →
+  cutover|go dropped the main table → vacuum|go freed 377.6 MB in 3.0 s:
+  main file 444 MB → **46 MB**; archive file 374 MB, first off-site backup
+  uploaded 10:28:54 UTC, 86 s). Nightly backup tonight is ~50 MB.
+  (`email_parser/gg_archive.py`, schema.md "The GG raw archive lives in
+  its own file"). Every connection ATTACHes `transactions_gg_archive.db`;
+  the two writers and the one reader go through `archive_table(conn)`;
+  the move is `scoring-gg-archive:plan → migrate (repeat) → verify →
+  cutover|go → vacuum|go`, each resumable, nothing dropped that verify has
+  not proven copied; the archive file gets its own weekly backup
+  (`gg_archive_backup`, Sunday 3:45 AM Central, only when changed); the
+  digest prints a GG ARCHIVE FILE line. `test_gg_archive.py` covers fresh /
+  legacy / restored-volume / in-memory databases and the tampered-row
+  refusal. Kerry's #627 ruling covered the drop and the VACUUM; it was
+  off-hours and verified, so it ran in the same morning (mailbox #677).
+- **Connection cost, measured while checking ATTACH:** a new connection's
+  first query pays ~2.1 ms loading the 140-table schema; a PAIRINGS open
+  makes ~18 connections, so ~40 ms of its 350 ms is schema parsing. ATTACH
+  adds 0.25 ms. Connection reuse per request is the next lever if PAIRINGS
+  needs to go lower; not started.
+- **CA's SQLite portability audit (#670)** was answered from this lane
+  (read-only): ~1,420 lines of SQLite-only constructs across ~5,000 SQL
+  lines, no ORM, no migration framework, ~30 in-process caches and an
+  in-process scheduler that assume one worker; estimate LARGE (3+ weeks)
+  to run the same app on Postgres. Posted `TO: platform-claude (CA),
+  front-desk`.

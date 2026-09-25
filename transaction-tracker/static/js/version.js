@@ -1,7 +1,7 @@
-window.TGF_VERSION = "2.490.0";
+window.TGF_VERSION = "2.491.0";
 window.TGF_CHANGELOG = [
   {
-    version: "2.490.0",
+    version: "2.491.0",
     date: "2026-09-25",
     title: "Player score entry (Track A): tables, API and the phone screen, behind a switch",
     changes: [
@@ -9,8 +9,62 @@ window.TGF_CHANGELOG = [
       "Lock and take-over: one phone holds the group's card. A second phone is asked to take over explicitly (no timeout), and the first phone's later writes are refused and kept on record rather than lost.",
       "Weak signal: every hole is queued on the phone with its own id and resent until the server confirms it; the header says how many holes are waiting and a hole never shows as saved early. Replays are idempotent.",
       "Foursomes team row (CA #661): a pair's one ball is scored once with both customer_ids recorded. The read Track B uses is event-scoped with rounds plural and one version per event, with a 304 when nothing changed.",
-      "Off until Kerry OKs it (rule 3b): the link routes return 404 unless the score_entry_live app setting is 1; admins can preview. Docs: docs/claude/score-entry.md."
+      "Off until Kerry OKs it (rule 3b): the link routes return 404 unless the score_entry_live app setting is 1; admins can preview. Docs: docs/claude/score-entry.md.",
+      "Sign-off, card flags, closest to the pin and hole-in-one (Kerry #666, ratified with the schema in #667): each player signs his own complete card and the scorekeeper attests the group; an edit voids only that player's signature; 'Something's wrong' flags a hole and reopens only that card until it is fixed; the scorekeeper answers 'Did anyone in your group get closer?' on par 3s and the latest claim is the holder the next group sees, with a manager ruling to settle disputes; a raw 1 opens a hole-in-one claim that needs the scorekeeper, one other player in the group, then the manager, and a non-member's 1 is a score only.",
+      "Handicap strokes per hole come off the locked playing handicap on GG's full-card setting and are labelled 'strokes per GG convention' on nines until Kerry rules on CA Queue #10/#11; a handicap the card's stroke indexes cannot carry is reported, never guessed."
     ]
+  },
+  {
+    version: "2.490.0",
+    date: "2026-09-25",
+    title: "G2a compute-parity harness (A4 gate) \u2014 and the race leg it refuses to grade",
+    changes: [
+      "NEW `email_parser/g2a_parity.py` + read-only bridge `scoring-g2a:<event>`, for CA\u2019s G2a directive (#665): our engine, fed Golf Genius\u2019s own hole scores, diffed against GG on every game, purse and race. This is the A4 gate (#571), which has been defined since 9/18 with no recorded pass. The harness REUSES `ls_seed_session_from_event`, the existing Test Center `ls_parity` gate, `live_scoring` and `assemble_event_game_payouts` \u2014 it adds no scoring maths of its own, per CA\u2019s \u2018don\u2019t rewrite them\u2019.",
+      "THE RACE LEG CANNOT BE GRADED, AND THE HARNESS SAYS SO INSTEAD OF REPORTING GREEN. Our points standings are a SNAPSHOT FETCHED FROM GOLF GENIUS \u2014 `get_points_race_standings` renders `gg_points_standings`, and `get_monthly_points` fetches the GG portal live. There is no independent TGF points computation anywhere in the codebase, so diffing our race against GG\u2019s race compares GG to itself. That is the same hollow-parity defect already found in `test_live_scoring_center.py`. The tier reports `ungradeable` with the reason and what would unblock it.",
+      "Consequently a G2a run can return PASS, FAIL, INCOMPLETE or ERROR, and INCOMPLETE is what a clean player tier gets while any tier is ungradeable. A verdict is never PASS with an open blocker \u2014 recording one would be exactly the failure the Convergence Plan exists to prevent.",
+      "The A1 grading contract is zero-tolerance with FAIL as the DEFAULT: a residual must positively qualify as one of A2\u2019s two named classes to be \u2018explained\u2019, and nothing else ever is. Class (i) requires derived-dots mode AND a playing-handicap delta of exactly +1 AND no other field moving \u2014 a +2, a given-dots card, or a stray gross delta all fail. A3\u2019s Team Net and Skins \u00bd Net are captured verbatim and flagged report-only, never graded.",
+      "HONEST SCOPE NOTE, in the module and on every result: this is not flatly \u2018read-only\u2019. It creates a Test Center sandbox session per run (`ls_test_*` tables only) because that is how the engine is handed GG\u2019s hole scores. No production row, no money, no member contact, nothing sent to GG \u2014 but repeated runs do accumulate inert sandbox sessions, and the result names the session it made.",
+      "Purses are reported as our-total vs GG-total rather than graded per row: our payout categories and GG\u2019s game keys are different vocabularies, and mapping them is a ratification, not a guess. A wrong mapping would manufacture agreement, which is worse than an ungraded row.",
+      "Tests: `test_g2a_parity.py` (21 checks) pins the GRADING CONTRACT rather than the arithmetic \u2014 that a gross delta is never explained, that an unrecognised residual fails instead of spawning a third class, that a mismatch with no deltas still fails, and that the verdict cannot be talked into a PASS while a blocker stands.",
+    ],
+  },
+  {
+    version: "2.489.8",
+    date: "2026-09-25",
+    changes: [
+      "Reporting contract (docs/claude/sop/reporting-contract.md): only the claude.ai Project signs mailbox posts as platform-claude; every Claude Code lane signs tracker-claude, even when relaying CA's words. CA asked for this in #665 after two Track B digests went out under the wrong name. Docs only.",
+    ],
+  },
+  {
+    version: "2.489.7",
+    date: "2026-09-25",
+    changes: [
+      "The handicap cache's change check retries once after a momentary database lock instead of giving up on caching for that read.",
+      "The Golf Genius archive move ran this morning at 5:28 AM Central: 143,801 archived pages copied and verified into the new file, the old table dropped, and the main database file shrunk from 444 MB to 46 MB. The archive file was backed up off-site right after. The archive-move bridge now has its own two-minute slow line so the copy and the upload do not show up as slow in tomorrow's digest.",
+    ],
+  },
+  {
+    version: "2.489.6",
+    date: "2026-09-25",
+    changes: [
+      "The Golf Genius page archive (Kerry 2026-09-23: ‘Yes, move the GG archive to its own file’) now has its own database file beside the main one. It was 374 of the main file's 444 MB — the reason the nightly backup took two and a half minutes and the 500 MB volume filled on 9/22. The Tracker attaches the second file on every connection, so the two places that write archived pages and the one that reads them work unchanged before and after the move. The move itself runs as separate, resumable steps from the CTO lane (copy in short batches, verify every row, then drop the old table, then reclaim the space), and nothing is dropped that has not been proven copied. The archive file gets its own weekly backup on Sunday nights, only when it changed.",
+      "The daily health digest prints a GG ARCHIVE FILE line with the file's size, row count and last backup.",
+    ],
+  },
+  {
+    version: "2.489.5",
+    date: "2026-09-25",
+    changes: [
+      "The 5:00 AM Tracker Health digest is now addressed TO: front-desk (and the Tracker Build lane), so it lands in the Front Desk\u2019s 7:15 brief instead of going to a lane that no longer exists (mailbox #637/#640, requested by the CTO lane in #645).",
+      "test_pairings_rsvp_roster.py was red on main from 9/23. The failure was the test, not the pairings code: it dated Alan\u2019s handicap rounds \u2018yesterday\u2019 against an event fixed on 9/22. Once the calendar passed 9/22, the handicap lock correctly ignored rounds played after the event, and the generator seated him with no index. The rounds are now dated before the event.",
+    ],
+  },
+  {
+    version: "2.489.4",
+    date: "2026-09-25",
+    changes: [
+      "Docs only (Track B): docs/claude/lone-star-cup-board.md records CA's #661 rulings \u2014 the Track A read shape is ROUNDS PLURAL and event-scoped (one version per event, ?round_id= optional filter, per the Event Builder ladder), the foursomes team row is in scope for Track A's se_* schema, playing handicap comes from the locked handicap only (never derived a second way), and the 2026-09-24 rule-3b near-miss is on record as strike one.",
+    ],
   },
   {
     version: "2.489.3",

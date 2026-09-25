@@ -365,8 +365,9 @@ _INGEST_KINDS = ("season_standings", "monthly_points", "money_leaders")
 
 
 def _archive_raw(conn, url: str, body: str) -> int:
+    from .gg_archive import archive_table
     cur = conn.execute(
-        "INSERT INTO gg_raw_archive (url, body_gz) VALUES (?, ?)",
+        f"INSERT INTO {archive_table(conn)} (url, body_gz) VALUES (?, ?)",
         (url, zlib.compress(body.encode("utf-8"))))
     return cur.lastrowid
 
@@ -2741,10 +2742,11 @@ def cohort_analysis(season_a: str = "2022", season_b: str = "2023",
         # (4) does a season-A standings page carry an affiliation column?
         aff_pages = 0
         try:
+            from .gg_archive import archive_table
             for r in conn.execute(
-                    """SELECT a.body_gz FROM gg_history_pages g
+                    f"""SELECT a.body_gz FROM gg_history_pages g
                        JOIN gg_history_portals p ON p.id=g.portal_id
-                       JOIN gg_raw_archive a ON a.id=g.raw_archive_id
+                       JOIN {archive_table(conn)} a ON a.id=g.raw_archive_id
                        WHERE p.season=? AND g.fetch_status='done'
                          AND g.page_kind IN ('season_standings',
                                              'money_leaders')""",

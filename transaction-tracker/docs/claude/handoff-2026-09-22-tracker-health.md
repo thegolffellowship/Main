@@ -39,7 +39,7 @@ routine on your part I think."*
   dispatcher; a non-bridge probe leaves no sample).
 - **`email_parser/health.py`** — the daily digest agent: the report,
   the findings rules, the markdown, the mailbox post (topic
-  `tracker-health`, to tracker-claude + Kerry), COO action items (one
+  `tracker-health`, addressed `TO: front-desk` since v2.489.6 — it was tracker-claude + Kerry), COO action items (one
   open item per finding key), retention prune, the once-a-day gate on a
   dial (`health_digest_time`, default 05:00 Central; the job checks
   every 15 min 4–9 AM so the dial is live without a restart).
@@ -163,6 +163,23 @@ the GIL is.
   own file"): NOT yet built — a schema + VACUUM step that needs an
   off-hours window; the CTO lane takes it next unless the gg-history
   lane claims it first (said so on the mailbox).
+
+## 2g. Morning four (2026-09-25, v2.489.6)
+
+- Digest #671 clean on speed. Built the `gg_raw_archive` move Kerry ruled
+  on 9/23 (#627) as `email_parser/gg_archive.py` + `scoring-gg-archive`
+  bridge steps + weekly archive backup + digest line + `test_gg_archive.py`
+  (46 checks) — and RAN IT LIVE at 5:28 AM Central: migrate 13.7 s,
+  verify ok, cutover, vacuum 3.0 s; main file 444 → 46 MB, archive file
+  374 MB backed up off-site at 10:28:54 UTC (#627 req 5 met, time posted
+  in #677).
+- Answered CA's read-only SQLite portability audit (#670) — numbers in
+  coo.md day four and the mailbox post.
+- Found while measuring ATTACH: every new connection's first query pays
+  ~2.1 ms of schema parsing (140 tables); ~18 connections per PAIRINGS
+  open. Lead for later: reuse one connection per request.
+- The digest header line (`TO: front-desk`) was carried by the Tracker
+  Build lane in v2.489.5 the same morning.
 
 ## 2c. The agent is the CTO
 

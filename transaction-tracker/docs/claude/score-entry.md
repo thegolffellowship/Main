@@ -1,11 +1,17 @@
 # Player Score Entry (Track A, "CTO › Live Score Entry")
 
-**Status 2026-09-25: built on branch `claude/live-score-entry`, NOT on main.**
-Rule 3b: Kerry ratifies the se_* schema (including the team row), the
-signed link per group, and the screens on his phone before this ships.
+**Status 2026-09-25 (v2.491.0): on main, BEHIND THE FLAG.** Kerry ratified
+the se_* schema — #657 + the #661 Foursomes team row + the #666 sign-off,
+CTP and HIO rows — on 2026-09-24 ("Yes.", #667), with access by QR/link
+(#666 B, cart-sign QR first) and the 9/29 dry run = his group at s9.25
+Canyon Springs. CA's four-screen mockup is the approved MVP target (#669).
+Members see nothing until the `score_entry_live` app setting is "1" and
+Kerry has OK'd the screens on his phone (rule 3b).
 Contract: `docs/claude/session-prompt-2026-09-24-live-score-entry.md`.
 Mailbox: #654, #655 (directive + standards), #657 (ack + plan), #661 (CA
-rulings: rounds plural, Foursomes team row in scope, PH from the lock).
+rulings: rounds plural, Foursomes team row in scope, PH from the lock),
+#665.1 (load rehearsal before the 10/2 go/no-go), #666 (Kerry's rulings:
+sign-off, access, CTP/HIO), #667 (ratified), #668/#669 (mockup = MVP).
 
 ## Rules of record
 
@@ -48,6 +54,36 @@ shows "N holes waiting to send" (amber) until the queue is empty; a
 waiting number renders amber, never as saved. Green is not used anywhere
 on the page — green means bought in.
 
+## Sign-off, flags, closest to the pin, hole-in-one (Kerry #666)
+
+- **Sign-off.** One scorekeeper; everyone signs his own card at the end
+  (`sign_card`, kind `player`), only when the card is complete and no hole
+  on it is flagged. The scorekeeper's phone attests the group (kind
+  `scorekeeper`). A manager may sign on the player's behalf with a note
+  (kind `manager`, admin route). **An edit voids that player's signature
+  only** (and the scorekeeper's attestation); re-writing the same value
+  voids nothing. Every signature keeps who, device, time and the card
+  signed. Beta: unsigned at the 9 PM close-out shows "unsigned" and
+  proceeds — GG is the record.
+- **Something's wrong.** `flag_hole` records the hole, voids that player's
+  signature, and blocks his re-signing until the hole is edited (auto-
+  resolves) or a manager resolves it.
+- **Closest to the pin.** Par 3s only, answered from the scorekeeper's phone:
+  a player (claim) or "No one closer" (never unseats a holder). The latest
+  claim is the holder the next group sees; `rule_ctp` is the manager's
+  ruling. No distances.
+- **Hole-in-one.** A raw 1 opens a claim (`se_hio_claims`); `eligible` is a
+  membership term covering the round date (`hio_eligible`), and an
+  ineligible player's 1 is a score only. Chain: scorekeeper confirms (lock
+  phone) → one OTHER player in the group confirms → manager verifies.
+  Changing the 1 withdraws an unverified claim. The staff alert and the
+  member-wide blast are NOT built: the alert is a 10/6 item, the blast is a
+  Platform requirement, and any member send is rule 3b.
+- **Strokes.** `_strokes_by_player` allocates the LOCKED PH on GG's full-
+  card setting; on a nine the card says "strokes per GG convention" until
+  CA Queue #10/#11 are ruled. A PH the card's stroke indexes cannot carry
+  (a nine indexed 1–9) is listed in `strokes._unresolved`, never guessed.
+
 ## Data model (`ensure_score_entry_tables`, lazily created)
 
 ```
@@ -69,6 +105,17 @@ se_group_locks     group_id, device_id, holder_customer_id, claimed_at,
                    heartbeat_at
 se_audit           claim / takeover / write rows; op_id UNIQUE; result
                    ok|refused_lock|invalid; detail keeps the value
+se_signoffs        round/group, customer_id FK, kind player|scorekeeper|
+                   manager, signed_by_customer_id, device_id, card (JSON
+                   snapshot signed), note, at, voided_at, void_reason
+se_card_flags      round/group, customer_id FK, hole_number, note,
+                   raised_by_customer_id, device_id, at, resolved_at,
+                   resolved_by_customer_id, resolution
+se_ctp_claims      round/group, hole_number, customer_id FK (NULL = no one
+                   closer), kind claim|none|manager, claimed_by_customer_id
+se_hio_claims      round/group, customer_id FK, hole_number, eligible,
+                   status pending|confirmed|witnessed|verified|rejected|
+                   withdrawn, scorekeeper/witness customer_ids, verified_by
 se_event_versions  event_id, version (bumps on every accepted write,
                    claim, take-over and build change)
 ```
@@ -81,6 +128,14 @@ se_event_versions  event_id, version (bumps on every accepted write,
 | `GET /api/score-entry/card?t=&device_id=` | link | The group's card, course, scores, lock |
 | `POST /api/score-entry/claim` `{t, device_id, customer_id, takeover}` | link | Claim / take over |
 | `POST /api/score-entry/write` `{t, device_id, entered_by, ops[]}` | link | Queued hole writes |
+| `POST /api/score-entry/sign` `{t, device_id, customer_id, kind?}` | link | Sign own card / scorekeeper attests |
+| `POST /api/score-entry/flag` `{t, device_id, customer_id, hole, note?}` | link | Something's wrong |
+| `POST /api/score-entry/ctp` `{t, device_id, hole, customer_id|null}` | link | CTP answer |
+| `POST /api/score-entry/hio/confirm` `{t, device_id, hio_id, customer_id}` | link | HIO confirmations |
+| `POST /api/score-entry/hio/<id>/verify` `{approve?}` | manager+ | Verify / reject |
+| `POST /api/score-entry/flags/<id>/resolve` | manager+ | Resolve a flag by hand |
+| `POST /api/score-entry/rounds/<id>/ctp` `{hole, customer_id}` | manager+ | CTP ruling |
+| `POST /api/score-entry/groups/<id>/sign-for` `{customer_id, note}` | manager+ | Sign on a player's behalf |
 | `GET /api/score-entry/events/<id>/scores[?round_id=][&since_version=]` | manager+ | **THE READ** (below); 304 when unchanged |
 | `POST /api/score-entry/events/<id>/seed` `{holes}` | admin | Build a round from PAIRINGS (re-run safe) |
 | `POST /api/score-entry/rounds` | admin | Build a round by hand (the cup) |
@@ -106,7 +161,11 @@ Link routes are **off** (404) until the app setting `score_entry_live` is
            players: [{customer_id, name, group_id, tee, playing_handicap,
                       scores: {"1": 4, ...}, thru, last_write_at}],
            teams:   [{team_id, group_id, customer_ids: [a, b], label,
-                      scores, thru, last_write_at}]}]}
+                      scores, thru, last_write_at}],
+           signoffs: [{customer_id, kind, at}],        # live ones only
+           ctp:     {"<par-3 hole>": {customer_id, name, group_num,
+                                      by_manager} | null},
+           hio:     [{id, customer_id, hole, eligible, status}]}]}
 ```
 
 Missing holes are absent, not zero. One version per event; poll every
