@@ -11290,6 +11290,114 @@ def api_se_write():
     return (jsonify(res), 400) if "error" in res else jsonify(res)
 
 
+@app.route("/api/score-entry/sign", methods=["POST"])
+def api_se_sign():
+    """A player signs his own card, or the scorekeeper's phone attests the
+    group (kind=scorekeeper). Manager signatures go through the admin route."""
+    from email_parser.score_entry import sign_card
+    b = request.get_json(silent=True) or {}
+    gid, err = _se_group_from_request(b)
+    if err:
+        return err
+    kind = "scorekeeper" if b.get("kind") == "scorekeeper" else "player"
+    try:
+        res = sign_card(gid, str(b.get("device_id") or ""), int(b["customer_id"]), kind=kind)
+    except (KeyError, TypeError, ValueError):
+        return jsonify({"error": "customer_id is required"}), 400
+    return (jsonify(res), 400) if "error" in res else jsonify(res)
+
+
+@app.route("/api/score-entry/flag", methods=["POST"])
+def api_se_flag():
+    from email_parser.score_entry import flag_hole
+    b = request.get_json(silent=True) or {}
+    gid, err = _se_group_from_request(b)
+    if err:
+        return err
+    try:
+        res = flag_hole(gid, str(b.get("device_id") or ""), int(b["customer_id"]),
+                        int(b["hole"]), note=b.get("note"))
+    except (KeyError, TypeError, ValueError):
+        return jsonify({"error": "customer_id and hole are required"}), 400
+    return (jsonify(res), 400) if "error" in res else jsonify(res)
+
+
+@app.route("/api/score-entry/ctp", methods=["POST"])
+def api_se_ctp():
+    from email_parser.score_entry import claim_ctp
+    b = request.get_json(silent=True) or {}
+    gid, err = _se_group_from_request(b)
+    if err:
+        return err
+    cid = b.get("customer_id")
+    by = b.get("claimed_by")
+    try:
+        res = claim_ctp(gid, str(b.get("device_id") or ""), int(b["hole"]),
+                        int(cid) if cid else None, claimed_by=int(by) if by else None)
+    except (KeyError, TypeError, ValueError):
+        return jsonify({"error": "hole is required"}), 400
+    return (jsonify(res), 400) if "error" in res else jsonify(res)
+
+
+@app.route("/api/score-entry/hio/confirm", methods=["POST"])
+def api_se_hio_confirm():
+    from email_parser.score_entry import confirm_hio
+    b = request.get_json(silent=True) or {}
+    gid, err = _se_group_from_request(b)
+    if err:
+        return err
+    try:
+        res = confirm_hio(gid, str(b.get("device_id") or ""), int(b["hio_id"]),
+                          int(b["customer_id"]))
+    except (KeyError, TypeError, ValueError):
+        return jsonify({"error": "hio_id and customer_id are required"}), 400
+    return (jsonify(res), 400) if "error" in res else jsonify(res)
+
+
+@app.route("/api/score-entry/hio/<int:hio_id>/verify", methods=["POST"])
+@require_role("manager")
+def api_se_hio_verify(hio_id):
+    from email_parser.score_entry import verify_hio
+    b = request.get_json(silent=True) or {}
+    res = verify_hio(hio_id, session.get("role") or "manager", approve=b.get("approve", True) is not False)
+    return (jsonify(res), 400) if "error" in res else jsonify(res)
+
+
+@app.route("/api/score-entry/flags/<int:flag_id>/resolve", methods=["POST"])
+@require_role("manager")
+def api_se_flag_resolve(flag_id):
+    from email_parser.score_entry import resolve_flag
+    b = request.get_json(silent=True) or {}
+    res = resolve_flag(flag_id, (b.get("resolution") or "resolved by manager")[:200])
+    return (jsonify(res), 400) if "error" in res else jsonify(res)
+
+
+@app.route("/api/score-entry/rounds/<int:round_id>/ctp", methods=["POST"])
+@require_role("manager")
+def api_se_ctp_rule(round_id):
+    from email_parser.score_entry import rule_ctp
+    b = request.get_json(silent=True) or {}
+    try:
+        res = rule_ctp(round_id, int(b["hole"]), int(b["customer_id"]))
+    except (KeyError, TypeError, ValueError):
+        return jsonify({"error": "hole and customer_id are required"}), 400
+    return (jsonify(res), 400) if "error" in res else jsonify(res)
+
+
+@app.route("/api/score-entry/groups/<int:group_id>/sign-for", methods=["POST"])
+@require_role("manager")
+def api_se_sign_for(group_id):
+    """Manager signs on the player's behalf, with a note (#666 A.5)."""
+    from email_parser.score_entry import sign_card
+    b = request.get_json(silent=True) or {}
+    try:
+        res = sign_card(group_id, "manager:" + (session.get("role") or ""), int(b["customer_id"]),
+                        kind="manager", signed_by=None, note=b.get("note"))
+    except (KeyError, TypeError, ValueError):
+        return jsonify({"error": "customer_id is required"}), 400
+    return (jsonify(res), 400) if "error" in res else jsonify(res)
+
+
 @app.route("/api/score-entry/events/<int:event_id>/scores")
 @require_role("manager")
 def api_se_scores(event_id):

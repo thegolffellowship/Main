@@ -166,6 +166,78 @@ def ensure_score_entry_tables(conn: sqlite3.Connection) -> None:
         at                 TEXT NOT NULL);
     CREATE INDEX IF NOT EXISTS idx_se_audit_group ON se_audit(group_id);
 
+    -- SIGN-OFF (Kerry #666 A): one scorekeeper, everyone signs their own
+    -- card at the end. kind: 'player' (his own card), 'scorekeeper' (I kept
+    -- these scores), 'manager' (on the player's behalf, with a note). An
+    -- edit to a signed card voids THAT player's signature only.
+    CREATE TABLE IF NOT EXISTS se_signoffs (
+        id                     INTEGER PRIMARY KEY AUTOINCREMENT,
+        round_id               INTEGER NOT NULL REFERENCES se_rounds(id) ON DELETE CASCADE,
+        group_id               INTEGER NOT NULL REFERENCES se_groups(id) ON DELETE CASCADE,
+        customer_id            INTEGER NOT NULL REFERENCES customers(customer_id),
+        kind                   TEXT NOT NULL CHECK(kind IN ('player', 'scorekeeper', 'manager')),
+        signed_by_customer_id  INTEGER REFERENCES customers(customer_id),
+        device_id              TEXT,
+        card                   TEXT,
+        note                   TEXT,
+        at                     TEXT NOT NULL,
+        voided_at              TEXT,
+        void_reason            TEXT);
+    CREATE INDEX IF NOT EXISTS idx_se_signoffs_group ON se_signoffs(group_id);
+
+    -- "Something's wrong": the player taps the hole; the scorekeeper and the
+    -- chapter manager fix it. Resolved by an edit of that hole or by hand.
+    CREATE TABLE IF NOT EXISTS se_card_flags (
+        id                       INTEGER PRIMARY KEY AUTOINCREMENT,
+        round_id                 INTEGER NOT NULL REFERENCES se_rounds(id) ON DELETE CASCADE,
+        group_id                 INTEGER NOT NULL REFERENCES se_groups(id) ON DELETE CASCADE,
+        customer_id              INTEGER NOT NULL REFERENCES customers(customer_id),
+        hole_number              INTEGER NOT NULL,
+        note                     TEXT,
+        raised_by_customer_id    INTEGER REFERENCES customers(customer_id),
+        device_id                TEXT,
+        at                       TEXT NOT NULL,
+        resolved_at              TEXT,
+        resolved_by_customer_id  INTEGER REFERENCES customers(customer_id),
+        resolution               TEXT);
+
+    -- CLOSEST TO THE PIN (Kerry #666 C): no distances. The latest claim on a
+    -- hole is the current holder the next group sees; 'none' records a group
+    -- that answered "No one closer". A manager ruling is a claim too.
+    CREATE TABLE IF NOT EXISTS se_ctp_claims (
+        id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+        round_id                INTEGER NOT NULL REFERENCES se_rounds(id) ON DELETE CASCADE,
+        group_id                INTEGER REFERENCES se_groups(id) ON DELETE CASCADE,
+        hole_number             INTEGER NOT NULL,
+        customer_id             INTEGER REFERENCES customers(customer_id),
+        kind                    TEXT NOT NULL CHECK(kind IN ('claim', 'none', 'manager')),
+        claimed_by_customer_id  INTEGER REFERENCES customers(customer_id),
+        device_id               TEXT,
+        at                      TEXT NOT NULL);
+    CREATE INDEX IF NOT EXISTS idx_se_ctp_round_hole ON se_ctp_claims(round_id, hole_number);
+
+    -- HOLE-IN-ONE (Kerry #666 C): a raw 1 opens a claim. The scorekeeper
+    -- confirms, one other player in the group confirms, then the manager
+    -- verifies. An ineligible player's 1 is a score only (eligible = 0).
+    CREATE TABLE IF NOT EXISTS se_hio_claims (
+        id                        INTEGER PRIMARY KEY AUTOINCREMENT,
+        round_id                  INTEGER NOT NULL REFERENCES se_rounds(id) ON DELETE CASCADE,
+        group_id                  INTEGER NOT NULL REFERENCES se_groups(id) ON DELETE CASCADE,
+        customer_id               INTEGER NOT NULL REFERENCES customers(customer_id),
+        hole_number               INTEGER NOT NULL,
+        eligible                  INTEGER NOT NULL DEFAULT 1,
+        status                    TEXT NOT NULL DEFAULT 'pending'
+                                      CHECK(status IN ('pending', 'confirmed', 'witnessed',
+                                                       'verified', 'rejected', 'withdrawn')),
+        scorekeeper_customer_id   INTEGER REFERENCES customers(customer_id),
+        scorekeeper_at            TEXT,
+        witness_customer_id       INTEGER REFERENCES customers(customer_id),
+        witness_at                TEXT,
+        verified_by               TEXT,
+        verified_at               TEXT,
+        at                        TEXT NOT NULL,
+        UNIQUE(round_id, customer_id, hole_number));
+
     CREATE TABLE IF NOT EXISTS se_event_versions (
         event_id   INTEGER PRIMARY KEY,
         version    INTEGER NOT NULL DEFAULT 0,
@@ -510,7 +582,8 @@ def get_group_card(group_id: int, device_id: str | None = None, db_path=None) ->
             scores.setdefault(s["subject_key"], {})[str(s["hole_number"])] = s["gross"]
         lock = conn.execute("SELECT * FROM se_group_locks WHERE group_id = ?",
                             (group_id,)).fetchone()
-    return {"group_id": group_id, "round_id": g["round_id"], "event_id": g["event_id"],
+        extras = _card_extras(conn, g, group_id)
+    return {**extras, "group_id": group_id, "round_id": g["round_id"], "event_id": g["event_id"],
             "round_label": g["round_label"], "round_date": g["round_date"],
             "holes": g["holes"], "status": g["status"], "label": g["label"],
             "start_hole": g["start_hole"], "tee_time": g["tee_time"],
@@ -659,6 +732,13 @@ def write_scores(group_id: int, device_id: str, entered_by: int | None,
             else:
                 result = "ok"
                 ta, tb = teams.get(tid, (None, None)) if tid is not None else (None, None)
+                prev = conn.execute(
+                    "SELECT gross FROM se_hole_scores WHERE round_id = ? AND subject_key = ? "
+                    "AND hole_number = ?", (g["round_id"], subject, hole)).fetchone()
+                if (prev[0] if prev else None) != gross:
+                    _after_change(conn, g, group_id,
+                                  [cid] if cid is not None else [ta, tb], hole, gross,
+                                  entered_by, now, is_team=tid is not None)
                 conn.execute(
                     "INSERT INTO se_hole_scores (round_id, group_id, subject_key, customer_id, "
                     "team_id, team_customer_id_a, team_customer_id_b, hole_number, gross, "
@@ -683,6 +763,371 @@ def write_scores(group_id: int, device_id: str, entered_by: int | None,
         version = _bump(conn, g["event_id"]) if applied else None
         conn.commit()
     return {"results": results, "holds_lock": holds, "version": version}
+
+
+# ---------------------------------------------------------------------------
+# Sign-off, card flags, closest to the pin, hole-in-one (Kerry #666, ratified
+# with the schema in #667)
+# ---------------------------------------------------------------------------
+
+def _after_change(conn, g, group_id, cids, hole, gross, entered_by, now, is_team=False):
+    """A hole's value changed. Void the affected players' signatures (theirs
+    only) and the scorekeeper's attestation, resolve any open flag on that
+    hole, and open or withdraw a hole-in-one claim."""
+    cids = [c for c in cids if c is not None]
+    for c in cids:
+        conn.execute(
+            "UPDATE se_signoffs SET voided_at = ?, void_reason = ? WHERE group_id = ? "
+            "AND customer_id = ? AND kind IN ('player', 'manager') AND voided_at IS NULL",
+            (now, f"hole {hole} changed", group_id, c))
+        conn.execute(
+            "UPDATE se_card_flags SET resolved_at = ?, resolved_by_customer_id = ?, "
+            "resolution = 'edited' WHERE group_id = ? AND customer_id = ? AND hole_number = ? "
+            "AND resolved_at IS NULL", (now, entered_by, group_id, c, hole))
+    conn.execute(
+        "UPDATE se_signoffs SET voided_at = ?, void_reason = ? WHERE group_id = ? "
+        "AND kind = 'scorekeeper' AND voided_at IS NULL", (now, f"hole {hole} changed", group_id))
+    if is_team:
+        return                         # the HIO pot is an individual prize
+    for c in cids:
+        if gross == 1:
+            conn.execute(
+                "INSERT INTO se_hio_claims (round_id, group_id, customer_id, hole_number, "
+                "eligible, at) VALUES (?,?,?,?,?,?) ON CONFLICT(round_id, customer_id, "
+                "hole_number) DO UPDATE SET status = 'pending', scorekeeper_customer_id = NULL, "
+                "scorekeeper_at = NULL, witness_customer_id = NULL, witness_at = NULL, "
+                "verified_by = NULL, verified_at = NULL, at = excluded.at",
+                (g["round_id"], group_id, c, hole, 1 if hio_eligible(conn, c, g["round_date"]) else 0,
+                 now))
+        else:
+            conn.execute(
+                "UPDATE se_hio_claims SET status = 'withdrawn' WHERE round_id = ? "
+                "AND customer_id = ? AND hole_number = ? AND status != 'verified'",
+                (g["round_id"], c, hole))
+
+
+def hio_eligible(conn, customer_id: int, round_date) -> bool:
+    """HIO pot: members only (side-games spec). A membership term covering the
+    round date, per customer_memberships. No membership table, or no date,
+    means 'we cannot say' and the claim stays open for the manager."""
+    day = str(round_date or "")[:10]
+    if len(day) != 10 or not day[:4].isdigit():
+        return True
+    try:
+        r = conn.execute(
+            "SELECT 1 FROM customer_memberships WHERE customer_id = ? "
+            "AND substr(started_at, 1, 10) <= ? AND substr(expires_at, 1, 10) >= ? LIMIT 1",
+            (customer_id, day, day)).fetchone()
+    except sqlite3.OperationalError:
+        return True
+    return bool(r)
+
+
+def _subject_keys_for(conn, group_id: int, customer_id: int) -> list[str]:
+    keys = [f"c:{customer_id}"]
+    for t in conn.execute("SELECT id FROM se_teams WHERE group_id = ? AND ? IN "
+                          "(customer_id_a, customer_id_b)", (group_id, customer_id)):
+        keys.append(f"t:{t[0]}")
+    return keys
+
+
+def _player_card(conn, g, group_id: int, customer_id: int) -> dict:
+    """The gross card a player signs: his own holes, or his team's ball."""
+    holes = [r[0] for r in conn.execute(
+        "SELECT hole_number FROM se_round_holes WHERE round_id = ? ORDER BY hole_number",
+        (g["round_id"],))]
+    keys = _subject_keys_for(conn, group_id, customer_id)
+    rows = {}
+    for k in keys:
+        for s in conn.execute("SELECT hole_number, gross FROM se_hole_scores WHERE group_id = ? "
+                              "AND subject_key = ? AND gross IS NOT NULL", (group_id, k)):
+            rows.setdefault(s[0], s[1])
+    if not holes:
+        holes = sorted(rows)
+    complete = bool(holes) and all(h in rows for h in holes)
+    return {"holes": {str(h): rows.get(h) for h in holes}, "complete": complete,
+            "total": sum(v for v in rows.values() if v is not None)}
+
+
+def sign_card(group_id: int, device_id: str, customer_id: int, kind: str = "player",
+              signed_by: int | None = None, note: str | None = None, db_path=None) -> dict:
+    """Sign a card. 'player': the player signs his own complete card.
+    'scorekeeper': the lock holder attests the group. 'manager': on the
+    player's behalf, a note required (only via the admin route)."""
+    if kind not in ("player", "scorekeeper", "manager"):
+        return {"error": "unknown kind"}
+    if kind == "manager" and not (note or "").strip():
+        return {"error": "a manager signature needs a note"}
+    with _closing(_conn(db_path)) as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        g = _group_ctx(conn, group_id)
+        if not g:
+            conn.rollback()
+            return {"error": "no such group"}
+        if not conn.execute("SELECT 1 FROM se_players WHERE group_id = ? AND customer_id = ?",
+                            (group_id, customer_id)).fetchone():
+            conn.rollback()
+            return {"error": "that person is not in this group"}
+        if kind == "scorekeeper":
+            lock = conn.execute("SELECT device_id FROM se_group_locks WHERE group_id = ?",
+                                (group_id,)).fetchone()
+            if not lock or lock[0] != device_id:
+                conn.rollback()
+                return {"error": "only the scorekeeper's phone can attest the group"}
+            card = {"subjects": {k: v for k, v in _group_scores(conn, group_id).items()}}
+        else:
+            card = _player_card(conn, g, group_id, customer_id)
+            if not card["complete"]:
+                conn.rollback()
+                return {"error": "the card isn't complete yet"}
+            if conn.execute("SELECT 1 FROM se_card_flags WHERE group_id = ? AND customer_id = ? "
+                            "AND resolved_at IS NULL", (group_id, customer_id)).fetchone():
+                conn.rollback()
+                return {"error": "a hole on this card is flagged; it has to be fixed first"}
+        now = _now()
+        conn.execute(
+            "UPDATE se_signoffs SET voided_at = ?, void_reason = 'signed again' WHERE group_id = ? "
+            "AND customer_id = ? AND kind = ? AND voided_at IS NULL",
+            (now, group_id, customer_id, kind))
+        conn.execute(
+            "INSERT INTO se_signoffs (round_id, group_id, customer_id, kind, signed_by_customer_id, "
+            "device_id, card, note, at) VALUES (?,?,?,?,?,?,?,?,?)",
+            (g["round_id"], group_id, customer_id, kind,
+             signed_by if signed_by is not None else customer_id, device_id,
+             json.dumps(card, sort_keys=True), note, now))
+        _bump(conn, g["event_id"])
+        conn.commit()
+    return {"signed": True, "kind": kind}
+
+
+def _group_scores(conn, group_id: int) -> dict:
+    out: dict = {}
+    for s in conn.execute("SELECT subject_key, hole_number, gross FROM se_hole_scores "
+                          "WHERE group_id = ? AND gross IS NOT NULL", (group_id,)):
+        out.setdefault(s[0], {})[str(s[1])] = s[2]
+    return out
+
+
+def flag_hole(group_id: int, device_id: str, customer_id: int, hole: int,
+              note: str | None = None, raised_by: int | None = None, db_path=None) -> dict:
+    """'Something's wrong': the flag reopens only this player's card."""
+    with _closing(_conn(db_path)) as conn:
+        g = _group_ctx(conn, group_id)
+        if not g:
+            return {"error": "no such group"}
+        if not conn.execute("SELECT 1 FROM se_players WHERE group_id = ? AND customer_id = ?",
+                            (group_id, customer_id)).fetchone():
+            return {"error": "that person is not in this group"}
+        now = _now()
+        cur = conn.execute(
+            "INSERT INTO se_card_flags (round_id, group_id, customer_id, hole_number, note, "
+            "raised_by_customer_id, device_id, at) VALUES (?,?,?,?,?,?,?,?)",
+            (g["round_id"], group_id, customer_id, int(hole), (note or "").strip() or None,
+             raised_by if raised_by is not None else customer_id, device_id, now))
+        conn.execute(
+            "UPDATE se_signoffs SET voided_at = ?, void_reason = ? WHERE group_id = ? "
+            "AND customer_id = ? AND kind IN ('player', 'manager') AND voided_at IS NULL",
+            (now, f"hole {hole} flagged", group_id, customer_id))
+        _bump(conn, g["event_id"])
+        conn.commit()
+        return {"flag_id": cur.lastrowid}
+
+
+def resolve_flag(flag_id: int, resolution: str, resolved_by: int | None = None,
+                 db_path=None) -> dict:
+    with _closing(_conn(db_path)) as conn:
+        r = conn.execute("SELECT f.group_id, g.round_id, r.event_id FROM se_card_flags f "
+                         "JOIN se_groups g ON g.id = f.group_id JOIN se_rounds r ON r.id = g.round_id "
+                         "WHERE f.id = ?", (flag_id,)).fetchone()
+        if not r:
+            return {"error": "no such flag"}
+        conn.execute("UPDATE se_card_flags SET resolved_at = ?, resolved_by_customer_id = ?, "
+                     "resolution = ? WHERE id = ? AND resolved_at IS NULL",
+                     (_now(), resolved_by, resolution or "resolved", flag_id))
+        _bump(conn, r["event_id"])
+        conn.commit()
+    return {"ok": True}
+
+
+def _ctp_current(conn, round_id: int, hole: int):
+    """The current holder is the latest claim naming a person (a manager
+    ruling included); 'No one closer' answers never unseat a holder."""
+    return conn.execute(
+        "SELECT c.customer_id, c.group_id, c.kind, c.at, p.display_name, g.group_num "
+        "FROM se_ctp_claims c LEFT JOIN se_players p ON p.round_id = c.round_id "
+        "AND p.customer_id = c.customer_id LEFT JOIN se_groups g ON g.id = c.group_id "
+        "WHERE c.round_id = ? AND c.hole_number = ? AND c.kind IN ('claim', 'manager') "
+        "ORDER BY c.id DESC LIMIT 1", (round_id, hole)).fetchone()
+
+
+def claim_ctp(group_id: int, device_id: str, hole: int, customer_id: int | None,
+              claimed_by: int | None = None, db_path=None) -> dict:
+    """The scorekeeper answers "Did anyone in your group get closer?" with a
+    player (claim) or None ("No one closer"). Par 3s only; lock holder only."""
+    with _closing(_conn(db_path)) as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        g = _group_ctx(conn, group_id)
+        if not g:
+            conn.rollback()
+            return {"error": "no such group"}
+        lock = conn.execute("SELECT device_id FROM se_group_locks WHERE group_id = ?",
+                            (group_id,)).fetchone()
+        if not lock or lock[0] != device_id:
+            conn.rollback()
+            return {"error": "only the scorekeeper's phone can answer this"}
+        h = conn.execute("SELECT par FROM se_round_holes WHERE round_id = ? AND hole_number = ?",
+                         (g["round_id"], int(hole))).fetchone()
+        if not h or h[0] != 3:
+            conn.rollback()
+            return {"error": "closest to the pin is on par 3s only"}
+        if customer_id is not None and not conn.execute(
+                "SELECT 1 FROM se_players WHERE group_id = ? AND customer_id = ?",
+                (group_id, customer_id)).fetchone():
+            conn.rollback()
+            return {"error": "that person is not in this group"}
+        conn.execute(
+            "INSERT INTO se_ctp_claims (round_id, group_id, hole_number, customer_id, kind, "
+            "claimed_by_customer_id, device_id, at) VALUES (?,?,?,?,?,?,?,?)",
+            (g["round_id"], group_id, int(hole), customer_id,
+             "claim" if customer_id is not None else "none", claimed_by, device_id, _now()))
+        _bump(conn, g["event_id"])
+        conn.commit()
+    return {"ok": True}
+
+
+def rule_ctp(round_id: int, hole: int, customer_id: int, db_path=None) -> dict:
+    """The manager settles a dispute (or two claims at once on a shotgun)."""
+    with _closing(_conn(db_path)) as conn:
+        p = conn.execute("SELECT group_id FROM se_players WHERE round_id = ? AND customer_id = ?",
+                         (round_id, customer_id)).fetchone()
+        ev = conn.execute("SELECT event_id FROM se_rounds WHERE id = ?", (round_id,)).fetchone()
+        if not p or not ev:
+            return {"error": "that person is not in this round"}
+        conn.execute(
+            "INSERT INTO se_ctp_claims (round_id, group_id, hole_number, customer_id, kind, at) "
+            "VALUES (?,?,?,?, 'manager', ?)", (round_id, p[0], int(hole), customer_id, _now()))
+        _bump(conn, ev[0])
+        conn.commit()
+    return {"ok": True}
+
+
+def confirm_hio(group_id: int, device_id: str, hio_id: int, confirmer: int,
+                db_path=None) -> dict:
+    """Scorekeeper confirms from the lock-holding phone; then ONE OTHER player
+    in the group (not the ace-maker, not the scorekeeper) confirms from his
+    own view. The manager verifies after that (verify_hio)."""
+    with _closing(_conn(db_path)) as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        h = conn.execute("SELECT * FROM se_hio_claims WHERE id = ? AND group_id = ?",
+                         (hio_id, group_id)).fetchone()
+        g = _group_ctx(conn, group_id)
+        if not h or not g:
+            conn.rollback()
+            return {"error": "no such hole-in-one claim"}
+        if not h["eligible"]:
+            conn.rollback()
+            return {"error": "recorded as a score only; the pot is for members"}
+        if not conn.execute("SELECT 1 FROM se_players WHERE group_id = ? AND customer_id = ?",
+                            (group_id, confirmer)).fetchone():
+            conn.rollback()
+            return {"error": "that person is not in this group"}
+        lock = conn.execute("SELECT device_id FROM se_group_locks WHERE group_id = ?",
+                            (group_id,)).fetchone()
+        now = _now()
+        if h["status"] == "pending":
+            if not lock or lock[0] != device_id:
+                conn.rollback()
+                return {"error": "the scorekeeper confirms first"}
+            conn.execute("UPDATE se_hio_claims SET status = 'confirmed', "
+                         "scorekeeper_customer_id = ?, scorekeeper_at = ? WHERE id = ?",
+                         (confirmer, now, hio_id))
+        elif h["status"] == "confirmed":
+            if confirmer in (h["customer_id"], h["scorekeeper_customer_id"]):
+                conn.rollback()
+                return {"error": "another player in the group has to confirm"}
+            conn.execute("UPDATE se_hio_claims SET status = 'witnessed', "
+                         "witness_customer_id = ?, witness_at = ? WHERE id = ?",
+                         (confirmer, now, hio_id))
+        else:
+            conn.rollback()
+            return {"error": f"this claim is already {h['status']}"}
+        _bump(conn, g["event_id"])
+        conn.commit()
+    return {"ok": True}
+
+
+def verify_hio(hio_id: int, verified_by: str, approve: bool = True, db_path=None) -> dict:
+    with _closing(_conn(db_path)) as conn:
+        h = conn.execute("SELECT h.status, r.event_id FROM se_hio_claims h JOIN se_rounds r "
+                         "ON r.id = h.round_id WHERE h.id = ?", (hio_id,)).fetchone()
+        if not h:
+            return {"error": "no such hole-in-one claim"}
+        if approve and h["status"] != "witnessed":
+            return {"error": "the scorekeeper and one other player confirm first"}
+        conn.execute("UPDATE se_hio_claims SET status = ?, verified_by = ?, verified_at = ? "
+                     "WHERE id = ?", ("verified" if approve else "rejected", verified_by, _now(),
+                                      hio_id))
+        _bump(conn, h["event_id"])
+        conn.commit()
+    return {"ok": True}
+
+
+def _strokes_by_player(players, course) -> dict:
+    """Handicap strokes per hole off the LOCKED playing handicap. On a nine
+    the convention is open (CA Queue #10/#11), so the screen labels it
+    'strokes per GG convention' — GG's league setting is the full card."""
+    try:
+        from email_parser.handicap_calc import allocate_strokes
+    except Exception:
+        return {}
+    si = {h["hole"]: h["stroke_index"] for h in course if h.get("stroke_index")}
+    if not si:
+        return {}
+    out = {}
+    for p in players:
+        ph = p.get("playing_handicap")
+        if ph is None:
+            continue
+        try:
+            alloc = allocate_strokes(int(round(ph)), si, mode="full_card")
+        except Exception:
+            # The card's stroke indexes can't carry this handicap on the full
+            # card (a nine indexed 1-9). Say so; never guess.
+            out.setdefault("_unresolved", []).append(p["customer_id"])
+            continue
+        out[str(p["customer_id"])] = {str(k): v for k, v in alloc.items() if v}
+    return out
+
+
+def _card_extras(conn, g, group_id: int) -> dict:
+    signoffs = [dict(r) for r in conn.execute(
+        "SELECT customer_id, kind, signed_by_customer_id, at FROM se_signoffs "
+        "WHERE group_id = ? AND voided_at IS NULL ORDER BY id", (group_id,))]
+    flags = [dict(r) for r in conn.execute(
+        "SELECT id, customer_id, hole_number AS hole, note, at FROM se_card_flags "
+        "WHERE group_id = ? AND resolved_at IS NULL ORDER BY id", (group_id,))]
+    ctp = {}
+    for (hole,) in conn.execute("SELECT hole_number FROM se_round_holes WHERE round_id = ? "
+                                "AND par = 3", (g["round_id"],)).fetchall():
+        cur = _ctp_current(conn, g["round_id"], hole)
+        answered = conn.execute("SELECT 1 FROM se_ctp_claims WHERE round_id = ? AND hole_number = ? "
+                                "AND group_id = ?", (g["round_id"], hole, group_id)).fetchone()
+        ctp[str(hole)] = {"holder_customer_id": cur["customer_id"] if cur else None,
+                          "holder_name": cur["display_name"] if cur else None,
+                          "holder_group_num": cur["group_num"] if cur else None,
+                          "answered": bool(answered)}
+    hio = [dict(r) for r in conn.execute(
+        "SELECT id, customer_id, hole_number AS hole, eligible, status, "
+        "scorekeeper_customer_id, witness_customer_id FROM se_hio_claims "
+        "WHERE group_id = ? AND status NOT IN ('withdrawn') ORDER BY id", (group_id,))]
+    players = [dict(p) for p in conn.execute(
+        "SELECT customer_id, playing_handicap FROM se_players WHERE group_id = ?", (group_id,))]
+    course = [dict(h) for h in conn.execute(
+        "SELECT hole_number AS hole, stroke_index FROM se_round_holes WHERE round_id = ?",
+        (g["round_id"],))]
+    return {"signoffs": signoffs, "flags": flags, "ctp": ctp, "hio": hio,
+            "strokes": _strokes_by_player(players, course),
+            "strokes_note": "strokes per GG convention" if g["holes"] == 9 else None}
 
 
 # ---------------------------------------------------------------------------
@@ -742,10 +1187,23 @@ def get_entered_scores(event_id: int, round_id: int | None = None, db_path=None)
                               "customer_ids": [t["customer_id_a"], t["customer_id_b"]],
                               "label": t["label"], "scores": d["scores"],
                               "thru": len(d["scores"]), "last_write_at": d["last"] or None})
+            signed = [dict(x) for x in conn.execute(
+                "SELECT customer_id, kind, at FROM se_signoffs WHERE round_id = ? "
+                "AND voided_at IS NULL ORDER BY id", (rid,))]
+            ctp = {}
+            for (hole,) in conn.execute("SELECT hole_number FROM se_round_holes WHERE "
+                                        "round_id = ? AND par = 3", (rid,)).fetchall():
+                cur = _ctp_current(conn, rid, hole)
+                ctp[str(hole)] = ({"customer_id": cur["customer_id"], "name": cur["display_name"],
+                                   "group_num": cur["group_num"], "by_manager": cur["kind"] == "manager"}
+                                  if cur else None)
+            hio = [dict(x) for x in conn.execute(
+                "SELECT id, customer_id, hole_number AS hole, eligible, status FROM se_hio_claims "
+                "WHERE round_id = ? AND status != 'withdrawn' ORDER BY id", (rid,))]
             rounds_out.append({"round_id": rid, "date": r["round_date"], "label": r["label"],
                                "holes": r["holes"], "status": r["status"],
                                "course": course, "groups": groups, "players": players,
-                               "teams": teams})
+                               "teams": teams, "signoffs": signed, "ctp": ctp, "hio": hio})
     return {"event_id": event_id, "official": False, "source": "tgf-entry",
             "version": int(vr["version"]) if vr else 0,
             "as_of": (vr["updated_at"] if vr else None) or _now(),

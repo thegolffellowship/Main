@@ -213,6 +213,88 @@ with contextlib.redirect_stdout(io.StringIO()):
     s2 = se.seed_round_from_pairings(900, "9")
 check("re-seed reuses the round", s2["round_id"] == s["round_id"], s2)
 
+print("sign-off, flags, CTP, HIO (Kerry #666, ratified #667)")
+conn.execute("INSERT INTO customers (customer_id, first_name, last_name) VALUES (105, 'Mark', 'Stich')")
+conn.execute("INSERT INTO customer_memberships (customer_id, started_at, expires_at) "
+             "VALUES (101, '2026-01-01', '2026-12-31')") if conn.execute(
+    "SELECT name FROM sqlite_master WHERE name='customer_memberships'").fetchone() else None
+conn.commit()
+sr = se.create_round(900, 9, round_date="2026-09-29", label="signoff", course_holes=NINE)["round_id"]
+sg = se.upsert_group(sr, 1, players=[{"customer_id": c, "display_name": n, "playing_handicap": ph}
+                                     for c, n, ph in [(101, "Kerry Niester", 2), (102, "Adam Baker", 7),
+                                                      (105, "Mark Stich", 11)]])["group_id"]
+se.claim_group(sg, "sk", 101)
+ops = [{"op_id": f"S{c}-{h}", "customer_id": c, "hole": h, "gross": 4}
+       for c in (101, 102, 105) for h in range(1, 9)]
+se.write_scores(sg, "sk", 101, ops)
+check("an incomplete card cannot be signed", "error" in se.sign_card(sg, "p2", 102))
+se.write_scores(sg, "sk", 101, [{"op_id": f"S{c}-9", "customer_id": c, "hole": 9, "gross": 5}
+                                for c in (101, 102, 105)])
+check("a complete card signs", se.sign_card(sg, "p2", 102).get("signed"))
+check("a non-scorekeeper phone cannot attest the group",
+      "error" in se.sign_card(sg, "p2", 102, kind="scorekeeper"))
+check("the scorekeeper attests", se.sign_card(sg, "sk", 101, kind="scorekeeper").get("signed"))
+se.sign_card(sg, "p5", 105)
+se.write_scores(sg, "sk", 101, [{"op_id": "S102-3b", "customer_id": 102, "hole": 3, "gross": 5}])
+live = {(x["customer_id"], x["kind"]) for x in se.get_group_card(sg)["signoffs"]}
+check("an edit voids that player's signature only",
+      (102, "player") not in live and (105, "player") in live, live)
+check("an edit voids the scorekeeper's attestation", (101, "scorekeeper") not in live, live)
+se.write_scores(sg, "sk", 101, [{"op_id": "S102-3c", "customer_id": 102, "hole": 3, "gross": 5}])
+check("re-writing the same value voids nothing",
+      (105, "player") in {(x["customer_id"], x["kind"]) for x in se.get_group_card(sg)["signoffs"]})
+fl = se.flag_hole(sg, "p5", 105, 6, "I had a 5")
+live = {(x["customer_id"], x["kind"]) for x in se.get_group_card(sg)["signoffs"]}
+check("a flag reopens only that player's card", (105, "player") not in live, live)
+check("a flagged card cannot be signed", "error" in se.sign_card(sg, "p5", 105))
+se.write_scores(sg, "sk", 101, [{"op_id": "S105-6b", "customer_id": 105, "hole": 6, "gross": 5}])
+check("fixing the hole resolves the flag", se.get_group_card(sg)["flags"] == [])
+check("then the card signs again", se.sign_card(sg, "p5", 105).get("signed"))
+check("a manager signature needs a note", "error" in se.sign_card(sg, "admin", 101, kind="manager"))
+
+# CTP: hole 2 is the par 3 in NINE
+sg2 = se.upsert_group(sr, 2, players=[{"customer_id": 103, "display_name": "Chris Best"},
+                                      {"customer_id": 104, "display_name": "Robert Hogue"}])["group_id"]
+se.claim_group(sg2, "sk2", 103)
+check("CTP is par 3s only", "error" in se.claim_ctp(sg, "sk", 1, 102))
+check("only the scorekeeper answers CTP", "error" in se.claim_ctp(sg, "p2", 2, 102))
+se.claim_ctp(sg, "sk", 2, 102, claimed_by=101)
+c2 = se.get_group_card(sg2)["ctp"]["2"]
+check("the next group sees the current holder",
+      c2["holder_customer_id"] == 102 and c2["holder_group_num"] == 1 and not c2["answered"], c2)
+se.claim_ctp(sg2, "sk2", 2, None)
+check("'No one closer' keeps the holder", se.get_group_card(sg2)["ctp"]["2"]["holder_customer_id"] == 102)
+se.claim_ctp(sg2, "sk2", 2, 104)
+check("a closer claim takes over", se.get_group_card(sg)["ctp"]["2"]["holder_customer_id"] == 104)
+se.rule_ctp(sr, 2, 102)
+check("a manager ruling settles it", se.get_group_card(sg)["ctp"]["2"]["holder_customer_id"] == 102)
+
+# HIO on hole 2
+se.write_scores(sg, "sk", 101, [{"op_id": "H101", "customer_id": 101, "hole": 2, "gross": 1},
+                                {"op_id": "H102", "customer_id": 102, "hole": 2, "gross": 1}])
+hio = {h["customer_id"]: h for h in se.get_group_card(sg)["hio"]}
+check("a raw 1 opens a claim", 101 in hio and hio[101]["status"] == "pending", hio)
+has_mem = conn.execute("SELECT name FROM sqlite_master WHERE name='customer_memberships'").fetchone()
+if has_mem:
+    check("a non-member's 1 is a score only", hio[102]["eligible"] == 0, hio)
+    check("...and cannot be confirmed", "error" in se.confirm_hio(sg, "sk", hio[102]["id"], 101))
+hid = hio[101]["id"]
+check("the scorekeeper confirms first", "error" in se.confirm_hio(sg, "p5", hid, 105))
+check("scorekeeper confirms", se.confirm_hio(sg, "sk", hid, 101).get("ok"))
+check("the ace-maker cannot be the witness", "error" in se.confirm_hio(sg, "p1", hid, 101))
+check("the manager cannot verify before a witness", "error" in se.verify_hio(hid, "admin"))
+check("another player witnesses", se.confirm_hio(sg, "p5", hid, 105).get("ok"))
+check("the manager verifies", se.verify_hio(hid, "admin").get("ok"))
+check("verified", {h["id"]: h for h in se.get_group_card(sg)["hio"]}[hid]["status"] == "verified")
+se.write_scores(sg, "sk", 101, [{"op_id": "H102b", "customer_id": 102, "hole": 2, "gross": 3}])
+check("changing a 1 withdraws an unverified claim",
+      102 not in {h["customer_id"] for h in se.get_group_card(sg)["hio"]})
+st = se.get_group_card(sg)["strokes"]
+check("strokes per hole come off the locked PH", st.get("102") == {str(h): 1 for h in (3, 7, 1, 9, 4, 8, 5)}, st)
+check("a PH the card's indexes can't carry is reported, not guessed", st.get("_unresolved") == [105], st)
+check("a nine carries the GG-convention note",
+      se.get_group_card(sg)["strokes_note"] == "strokes per GG convention")
+
 print("HTTP (admin builds, scorer by link, flag off until Kerry OKs)")
 os.environ.setdefault("SECRET_KEY", "test-secret")
 with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
