@@ -1,0 +1,266 @@
+"""Player score entry (Track A) — the rules that must never break.
+
+- Idempotent replay: a queued op sent twice applies once, and an OLD op
+  replayed after a newer write never overwrites the newer value.
+- Lock: a second device is refused until it takes over explicitly; the
+  first device's later writes are refused AND kept (se_audit), never lost.
+- Foursomes team row: one gross per hole, both customer_ids recorded.
+- The read is event-scoped, rounds plural, one version per event (CA #661).
+- Links: a group link verifies; a revoked link or a closed round does not.
+- customer_id on every person column (guiding principle 6).
+- GG stays the money record: no payout / GG / season path reads se_*.
+- Seeding from PAIRINGS carries customer_id and the starter sheet's PH.
+
+Run: python3 test_score_entry.py
+"""
+import io
+import contextlib
+import logging
+import os
+import re
+import sqlite3
+import sys
+import tempfile
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+DB = tempfile.mktemp(suffix=".db")
+os.environ["DATABASE_PATH"] = DB
+logging.disable(logging.CRITICAL)
+with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+    from email_parser import database as db  # noqa: E402
+    db.init_db(DB)
+from email_parser import score_entry as se  # noqa: E402
+
+FAILURES = []
+
+
+def check(label, cond, detail=""):
+    print(f"  {'PASS' if cond else 'FAIL'}  {label}" + ("" if cond else f"  {detail}"))
+    if not cond:
+        FAILURES.append(label)
+
+
+conn = sqlite3.connect(DB)
+conn.row_factory = sqlite3.Row
+for cid, fn, ln in [(101, "Kerry", "Niester"), (102, "Adam", "Baker"),
+                    (103, "Chris", "Best"), (104, "Robert", "Hogue")]:
+    conn.execute("INSERT INTO customers (customer_id, first_name, last_name) VALUES (?,?,?)",
+                 (cid, fn, ln))
+conn.execute("INSERT INTO events (id, item_name, event_date, start_type, start_time) "
+             "VALUES (900, 's9.25 Canyon Springs', '2026-09-29', 'Shotgun', '17:30')")
+conn.commit()
+
+NINE = [{"hole": h, "par": p, "stroke_index": si} for h, p, si in
+        [(1, 4, 3), (2, 3, 9), (3, 5, 1), (4, 4, 5), (5, 4, 7), (6, 3, 8),
+         (7, 4, 2), (8, 4, 6), (9, 5, 4)]]
+
+print("round + group")
+rid = se.create_round(900, 9, round_date="2026-09-29", label="s9.25", course_holes=NINE)["round_id"]
+g = se.upsert_group(rid, 1, label="Hole 1", start_hole=1, players=[
+    {"customer_id": 101, "display_name": "Kerry Niester", "playing_handicap": 2, "seat": 1},
+    {"customer_id": 102, "display_name": "Adam Baker", "playing_handicap": 7, "seat": 2},
+    {"customer_id": 103, "display_name": "Chris Best", "playing_handicap": 0, "seat": 3},
+    {"display_name": "Guest With No Id", "seat": 4}])
+gid = g["group_id"]
+check("a seat with no customer_id is reported, not scored",
+      g.get("skipped_no_customer_id") == ["Guest With No Id"], g)
+v0 = se.event_version(900)
+
+print("lock / take-over")
+a = se.claim_group(gid, "phone-A", 101)
+check("first device is granted", a.get("granted") and a["kind"] == "claim", a)
+b = se.claim_group(gid, "phone-B", 102)
+check("second device is refused without take-over",
+      b.get("granted") is False and b["lock"]["state"] == "held"
+      and b["lock"]["holder_name"] == "Kerry Niester", b)
+check("a person outside the group cannot claim",
+      "error" in se.claim_group(gid, "phone-C", 104))
+
+print("writes + idempotency")
+w = se.write_scores(gid, "phone-A", 101, [
+    {"op_id": "A1", "customer_id": 101, "hole": 1, "gross": 4},
+    {"op_id": "A2", "customer_id": 102, "hole": 1, "gross": 5}])
+check("holder's writes apply", [r["result"] for r in w["results"]] == ["ok", "ok"], w)
+check("version bumps on accepted writes", se.event_version(900) > v0)
+w = se.write_scores(gid, "phone-A", 101, [
+    {"op_id": "A3", "customer_id": 101, "hole": 1, "gross": 3}])
+w = se.write_scores(gid, "phone-A", 101, [
+    {"op_id": "A1", "customer_id": 101, "hole": 1, "gross": 4}])
+check("replayed op is a dup", w["results"][0]["result"] == "dup", w)
+card = se.get_group_card(gid, "phone-A")
+check("an old replay never overwrites a newer value", card["scores"]["c:101"]["1"] == 3,
+      card["scores"])
+check("screen sees its own lock as mine", card["lock"]["state"] == "mine")
+bad = se.write_scores(gid, "phone-A", 101, [
+    {"op_id": "X1", "customer_id": 101, "hole": 12, "gross": 4},
+    {"op_id": "X2", "customer_id": 101, "hole": 2, "gross": 0},
+    {"op_id": "X3", "customer_id": 104, "hole": 2, "gross": 4},
+    {"op_id": "X4", "customer_id": 101, "hole": 2, "gross": 21}])
+check("bad hole / range / outsider are invalid",
+      [r["result"] for r in bad["results"]] == ["invalid"] * 4, bad)
+clr = se.write_scores(gid, "phone-A", 101, [
+    {"op_id": "A4", "customer_id": 102, "hole": 1, "gross": None}])
+check("a hole can be cleared", "1" not in se.get_group_card(gid)["scores"].get("c:102", {}))
+
+print("take-over")
+t = se.claim_group(gid, "phone-B", 102, takeover=True)
+check("take-over moves the lock", t.get("granted") and t["kind"] == "takeover", t)
+late = se.write_scores(gid, "phone-A", 101, [
+    {"op_id": "A5", "customer_id": 101, "hole": 2, "gross": 6}])
+check("old device is refused after take-over",
+      late["results"][0]["result"] == "refused_lock" and late["holds_lock"] is False, late)
+kept = conn.execute("SELECT detail FROM se_audit WHERE op_id = 'A5'").fetchone()
+check("the refused hole is kept, not lost", kept and '"gross": 6' in kept[0], kept)
+check("the refused hole did not land",
+      "2" not in se.get_group_card(gid)["scores"]["c:101"])
+aud = conn.execute("SELECT device_id, prev_device_id, customer_id FROM se_audit "
+                   "WHERE kind = 'takeover'").fetchone()
+check("take-over audit keeps both devices",
+      tuple(aud) == ("phone-B", "phone-A", 102), tuple(aud) if aud else None)
+check("old device now sees the lock as held",
+      se.get_group_card(gid, "phone-A")["lock"]["state"] == "held")
+
+print("foursomes team row")
+bad_team = se.add_team(rid, gid, 101, 104)
+check("a team member must be in the group", "error" in bad_team, bad_team)
+tid = se.add_team(rid, gid, 103, 101, label="Best / Niester")["team_id"]
+tw = se.write_scores(gid, "phone-B", 102, [
+    {"op_id": "B1", "team_id": tid, "hole": 1, "gross": 4}])
+check("team row applies", tw["results"][0]["result"] == "ok", tw)
+row = conn.execute("SELECT customer_id, team_customer_id_a, team_customer_id_b, "
+                   "entered_by_customer_id FROM se_hole_scores WHERE subject_key = ?",
+                   (f"t:{tid}",)).fetchone()
+check("team row records both people and who entered it",
+      tuple(row) == (None, 101, 103, 102), tuple(row))
+
+print("the read (CA #661)")
+rid2 = se.create_round(900, 18, round_date="2026-09-30", label="second round")["round_id"]
+out = se.get_entered_scores(900)
+check("rounds plural, event-scoped", [r["round_id"] for r in out["rounds"]] == [rid, rid2])
+check("one version for the event", out["version"] == se.event_version(900))
+check("not official", out["official"] is False and out["source"] == "tgf-entry")
+r1 = out["rounds"][0]
+k = {p["customer_id"]: p for p in r1["players"]}
+check("gross only, keyed by customer_id",
+      k[101]["scores"] == {"1": 3} and k[101]["thru"] == 1 and k[101]["playing_handicap"] == 2)
+check("missing holes are absent, not zero", k[102]["scores"] == {} and k[102]["thru"] == 0)
+check("group shows scorer and lock", r1["groups"][0]["scorer_customer_id"] == 102
+      and r1["groups"][0]["lock_state"] == "held")
+check("team present with both ids",
+      r1["teams"][0]["customer_ids"] == [101, 103] and r1["teams"][0]["scores"] == {"1": 4})
+check("round_id filter", [r["round_id"] for r in se.get_entered_scores(900, rid2)["rounds"]] == [rid2])
+check("course carried", len(r1["course"]) == 9 and r1["course"][2]["par"] == 5)
+
+print("links")
+tok = se.make_group_token(gid)
+check("a group link verifies", se.verify_group_token(tok) == gid)
+check("a tampered link fails", se.verify_group_token(tok[:-1] + ("0" if tok[-1] != "0" else "1")) is None)
+se.revoke_group_links(gid)
+check("a revoked link fails", se.verify_group_token(tok) is None)
+tok2 = se.make_group_token(gid)
+conn.execute("UPDATE se_rounds SET status = 'closed' WHERE id = ?", (rid,))
+conn.commit()
+check("a closed round's link fails", se.verify_group_token(tok2) is None)
+
+print("identity (principle 6)")
+PERSONISH = re.compile(r"(name|customer|player|scorer|holder|entered_by)", re.I)
+for tname in [r[0] for r in conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'se\\_%' ESCAPE '\\'")]:
+    cols = [r[1] for r in conn.execute(f"PRAGMA table_info({tname})")]
+    for c in cols:
+        if c.endswith("_name") or c == "display_name":
+            check(f"{tname}.{c} has customer_id beside it", "customer_id" in cols)
+        if PERSONISH.search(c) and c.endswith("_id") and "customer" not in c:
+            check(f"{tname}.{c} is not a person key without customer_id", False)
+
+print("GG stays the money record")
+ROOT = os.path.dirname(os.path.abspath(__file__))
+readers = []
+for dirpath, _, files in os.walk(ROOT):
+    if any(p in dirpath for p in ("/.git", "/node_modules", "/docs")):
+        continue
+    for f in files:
+        if not f.endswith(".py") or f.startswith("test_"):
+            continue
+        path = os.path.join(dirpath, f)
+        if path.endswith(os.path.join("email_parser", "score_entry.py")):
+            continue
+        src = open(path, encoding="utf-8", errors="ignore").read()
+        if re.search(r"\bse_(hole_scores|players|rounds|teams|groups)\b", src):
+            readers.append(os.path.relpath(path, ROOT))
+check("only score_entry.py touches se_* tables", readers == [], readers)
+for f in ("season_payouts.py", "gg_match_play.py", "match_play.py", "flighting.py"):
+    src = open(os.path.join(ROOT, "email_parser", f), encoding="utf-8").read()
+    check(f"{f} does not import score_entry", "score_entry" not in src)
+
+print("seed from PAIRINGS")
+db._ensure_pairing_tables(conn)
+for pos, (cid, nm) in enumerate([(101, "Kerry Niester"), (102, "Adam Baker")], 1):
+    conn.execute("INSERT INTO event_pairings (event_id, holes, group_num, slot_label, "
+                 "player_name, cart_pos, customer_id) VALUES (900, '9', 3, 'HOLE 4', ?, ?, ?)",
+                 (nm, pos, cid))
+conn.commit()
+with contextlib.redirect_stdout(io.StringIO()):
+    s = se.seed_round_from_pairings(900, "9")
+check("seeded a round from PAIRINGS", "round_id" in s and s["groups"] == 1, s)
+check("no course card is said out loud", "warning" in s, s)
+gp = [x for x in se.get_entered_scores(900, s["round_id"])["rounds"][0]["players"]]
+check("seeded players carry customer_id", sorted(p["customer_id"] for p in gp) == [101, 102], gp)
+grp = se.get_entered_scores(900, s["round_id"])["rounds"][0]["groups"][0]
+check("shotgun: start hole read from the sheet's hole label", grp["start_hole"] == 4, grp)
+check("shotgun: tee time is the one start clock", grp["tee_time"] == "5:30 PM", grp)
+with contextlib.redirect_stdout(io.StringIO()):
+    s2 = se.seed_round_from_pairings(900, "9")
+check("re-seed reuses the round", s2["round_id"] == s["round_id"], s2)
+
+print("HTTP (admin builds, scorer by link, flag off until Kerry OKs)")
+os.environ.setdefault("SECRET_KEY", "test-secret")
+with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+    import app as appmod
+client = appmod.app.test_client()
+check("anonymous cannot read the board",
+      client.get("/api/score-entry/events/900/scores").status_code in (401, 403, 302))
+check("anonymous cannot build a round",
+      client.post("/api/score-entry/rounds", json={"event_id": 900, "holes": 9}).status_code
+      in (401, 403, 302))
+with client.session_transaction() as sess:
+    sess["role"] = "admin"; sess["authenticated"] = True
+r = client.post("/api/score-entry/rounds", json={"event_id": 900, "holes": 9,
+                                                 "course": NINE, "label": "http"})
+check("admin builds a round", r.status_code == 201, r.get_data(as_text=True))
+hrid = r.get_json()["round_id"]
+r = client.post(f"/api/score-entry/rounds/{hrid}/groups", json={
+    "group_num": 1, "players": [{"customer_id": 104, "display_name": "Robert Hogue"}]})
+hgid = r.get_json()["group_id"]
+links = client.get(f"/api/score-entry/rounds/{hrid}/links").get_json()
+check("one link per group, with its players",
+      len(links) == 1 and links[0]["players"] == ["Robert Hogue"] and "/member/score?t=" in links[0]["url"],
+      links)
+htok = links[0]["url"].split("t=", 1)[1]
+full = client.get("/api/score-entry/events/900/scores").get_json()
+r304 = client.get(f"/api/score-entry/events/900/scores?since_version={full['version']}")
+check("unchanged version is a 304", r304.status_code == 304, r304.status_code)
+check("stale version returns the body",
+      client.get("/api/score-entry/events/900/scores?since_version=0").status_code == 200)
+anon = appmod.app.test_client()
+check("scorer routes are OFF for a member until the flag is set",
+      anon.get(f"/api/score-entry/card?t={htok}").status_code == 404)
+db.set_app_setting("score_entry_live", "1")
+check("a bad link is refused", anon.get("/api/score-entry/card?t=nope.nope").status_code == 401)
+c = anon.post("/api/score-entry/claim", json={"t": htok, "device_id": "d1", "customer_id": 104})
+check("scorer claims by link", c.status_code == 200 and c.get_json()["granted"], c.get_json())
+w = anon.post("/api/score-entry/write", json={"t": htok, "device_id": "d1", "entered_by": 104,
+                                              "ops": [{"op_id": "H1", "customer_id": 104,
+                                                       "hole": 1, "gross": 5}]})
+check("scorer writes by link", w.get_json()["results"][0]["result"] == "ok", w.get_json())
+card = anon.get(f"/api/score-entry/card?t={htok}&device_id=d1").get_json()
+check("card shows the hole", card["scores"]["c:104"]["1"] == 5 and card["lock"]["state"] == "mine")
+check("the scoring page renders", anon.get(f"/member/score?t={htok}").status_code == 200)
+
+conn.close()
+try:
+    os.unlink(DB)
+except OSError:
+    pass
+print("ALL PASS" if not FAILURES else f"{len(FAILURES)} FAILURE(S): {FAILURES}")
+sys.exit(1 if FAILURES else 0)

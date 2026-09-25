@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#E87C3E">
+    <meta name="robots" content="noindex">
+    <title>Scorecard · The Golf Fellowship</title>
+    <link rel="icon" href="/static/tgf-icon.svg">
+    <link href="https://fonts.googleapis.com/css2?family=Bitter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/dashboard.css?v={{ app_version }}">
+    <link rel="stylesheet" href="/static/css/shell.css">
+    <link rel="manifest" href="/static/manifest-member.json">
+    {#  PLAYER SCORE ENTRY (Track A). One scorer per group enters GROSS
+        scores hole by hole. Rules of record in email_parser/score_entry.py.
+        Weak signal: every hole is queued on the phone with its own op id and
+        resent until the server confirms it; a hole never shows as saved
+        before that. One breakpoint: 560px. Green is never used here — green
+        means bought in (CLAUDE.md colour standard). #}
+    <style>
+        body { background: #F8F8F8; }
+        .se-wrap { max-width: 520px; margin: 0 auto; padding: 12px 12px 120px; }
+        .se-head { background: #fff; border: 1px solid #E5E7EB; border-radius: 12px;
+                   padding: 12px 14px; margin-bottom: 10px; }
+        .se-eyebrow { font-family: Bitter, serif; font-size: 12px; letter-spacing: .08em;
+                      text-transform: uppercase; color: #6B7280; }
+        .se-title { font-family: Bitter, serif; font-size: 20px; font-weight: 700;
+                    color: #1B1B1B; margin: 2px 0 0; }
+        .se-sub { color: #4B5563; font-size: 14px; margin-top: 2px; }
+        .se-sync { display: inline-flex; align-items: center; gap: 6px; margin-top: 8px;
+                   font-size: 13px; padding: 3px 10px; border-radius: 999px;
+                   background: #F3F4F6; color: #4B5563; }
+        .se-sync.pending { background: #FEF3C7; color: #92400E; }
+        .se-sync.lost { background: #FEE2E2; color: #991B1B; }
+        .se-card { background: #fff; border: 1px solid #E5E7EB; border-radius: 12px;
+                   padding: 14px; margin-bottom: 10px; }
+        .se-card h2 { font-family: Bitter, serif; font-size: 18px; margin: 0 0 6px; }
+        .se-card p { margin: 6px 0; color: #4B5563; font-size: 15px; white-space: normal; }
+        .se-btn { display: block; width: 100%; min-height: 52px; border-radius: 999px;
+                  border: 2px solid #1B1B1B; background: #fff; color: #1B1B1B;
+                  font-family: Bitter, serif; font-weight: 700; font-size: 17px;
+                  margin-top: 10px; cursor: pointer; }
+        .se-btn.primary { background: #E87C3E; border-color: #E87C3E; color: #fff; }
+        .se-btn:disabled { opacity: .5; }
+        .se-holebar { display: flex; align-items: center; justify-content: space-between;
+                      gap: 8px; margin-bottom: 10px; }
+        .se-holebar button { width: 52px; height: 52px; border-radius: 50%;
+                             border: 2px solid #1B1B1B; background: #fff; font-size: 22px;
+                             cursor: pointer; }
+        .se-holebar button:disabled { opacity: .3; }
+        .se-holeinfo { text-align: center; flex: 1; }
+        .se-holeno { font-family: Bitter, serif; font-size: 28px; font-weight: 800; }
+        .se-holemeta { color: #6B7280; font-size: 14px; }
+        .se-row { display: flex; align-items: center; gap: 10px; padding: 10px 0;
+                  border-top: 1px solid #F3F4F6; }
+        .se-row:first-child { border-top: 0; }
+        .se-who { flex: 1; min-width: 0; }
+        .se-name { font-weight: 600; font-size: 17px; color: #1B1B1B; white-space: normal; }
+        .se-meta { font-size: 13px; color: #6B7280; }
+        .se-step { display: flex; align-items: center; gap: 6px; }
+        .se-step button { width: 48px; height: 48px; border-radius: 50%; border: 2px solid #1B1B1B;
+                          background: #fff; font-size: 24px; line-height: 1; cursor: pointer; }
+        .se-val { width: 48px; text-align: center; font-family: Bitter, serif; font-size: 28px;
+                  font-weight: 800; color: #1B1B1B; font-variant-numeric: tabular-nums; }
+        .se-val.empty { color: #9CA3AF; font-weight: 500; }
+        .se-val.waiting { color: #B45309; }
+        .se-next { margin-top: 6px; }
+        .se-strip { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+        .se-strip table { border-collapse: collapse; font-size: 13px; }
+        .se-strip th, .se-strip td { padding: 4px 6px; text-align: center; border-bottom: 1px solid #F3F4F6;
+                                     font-variant-numeric: tabular-nums; }
+        .se-strip th { color: #6B7280; font-weight: 600; cursor: pointer; }
+        .se-strip th.cur { color: #E87C3E; }
+        .se-strip td.nm { text-align: left; white-space: nowrap; font-weight: 600; }
+        .se-strip td.w { color: #B45309; }
+        .se-banner { border-radius: 12px; padding: 12px 14px; margin-bottom: 10px; font-size: 15px;
+                     white-space: normal; }
+        .se-banner.warn { background: #FEF3C7; color: #92400E; }
+        .se-banner.bad { background: #FEE2E2; color: #991B1B; }
+        .se-note { font-size: 12px; color: #6B7280; margin-top: 8px; white-space: normal; }
+        .hidden { display: none !important; }
+        @media (max-width: 560px) {
+            .se-wrap { padding: 8px 8px 120px; }
+        }
+    </style>
+</head>
+<body>
+    {% set SHELL_TITLE = 'Scorecard' %}{% set SHELL_ACTIVE = '' %}
+    {% include '_shell_nav.html' %}
+    <main class="se-wrap">
+        <div id="se-error" class="se-banner bad hidden"></div>
+        <div id="se-root" class="hidden">
+            <div class="se-head">
+                <div class="se-eyebrow" id="se-round"></div>
+                <div class="se-title" id="se-group"></div>
+                <div class="se-sub" id="se-scorer"></div>
+                <div class="se-sync" id="se-sync">All scores saved</div>
+            </div>
+
+            <div id="se-lost" class="se-banner bad hidden"></div>
+
+            {# Step 1: who is keeping score (remembered on this phone) #}
+            <div id="se-pick" class="se-card hidden">
+                <h2>Who's keeping score?</h2>
+                <p>One person enters the scores for the group. Tap your name.</p>
+                <div id="se-pick-list"></div>
+            </div>
+
+            {# Someone else holds the card #}
+            <div id="se-held" class="se-card hidden">
+                <h2 id="se-held-title"></h2>
+                <p id="se-held-body"></p>
+                <button class="se-btn primary" id="se-takeover" type="button">Take over scoring</button>
+                <button class="se-btn" id="se-viewonly" type="button">Just watch</button>
+            </div>
+
+            {# The hole #}
+            <div id="se-hole" class="se-card hidden">
+                <div class="se-holebar">
+                    <button type="button" id="se-prev" aria-label="Previous hole">&#8249;</button>
+                    <div class="se-holeinfo">
+                        <div class="se-holeno" id="se-holeno"></div>
+                        <div class="se-holemeta" id="se-holemeta"></div>
+                    </div>
+                    <button type="button" id="se-nextbtn" aria-label="Next hole">&#8250;</button>
+                </div>
+                <div id="se-rows"></div>
+                <button class="se-btn primary se-next" id="se-save" type="button">Save &amp; next hole</button>
+            </div>
+
+            <div class="se-card">
+                <div class="se-strip" id="se-strip"></div>
+                <div class="se-note" id="se-note">Your group's gross scores. The official results are still on the
+                    scorecard and Golf Genius.</div>
+            </div>
+        </div>
+    </main>
+
+    <script src="/static/js/version.js"></script>
+    <script>window.MEMBER_MODE = true;</script>
+    <script src="/static/js/auth.js"></script>
+    <script>
+    (function () {
+        "use strict";
+        const T = new URLSearchParams(location.search).get("t") || "";
+        const $ = (id) => document.getElementById(id);
+        const store = {
+            get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } },
+            set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* private mode: queue lives in memory */ } },
+        };
+        let DEVICE = store.get("se_device", null);
+        if (!DEVICE) {
+            DEVICE = "d-" + Math.random().toString(36).slice(2) + Date.now().toString(36);
+            store.set("se_device", DEVICE);
+        }
+        const tk = T.slice(0, 24);
+        const QKEY = "se_queue_" + tk, WKEY = "se_who_" + tk, HKEY = "se_hole_" + tk;
+        let card = null, queue = store.get(QKEY, []);
+        let who = store.get(WKEY, null), watching = false, flushing = false, hole = null;
+        let draft = {};           // subject -> value on the hole on screen, not yet saved
+
+        const esc = (s) => String(s == null ? "" : s).replace(/[&<>"]/g,
+            (c) => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
+        function saveQueue() { store.set(QKEY, queue); }
+        function showError(msg) { $("se-error").textContent = msg; $("se-error").classList.remove("hidden"); }
+
+        function subjects() {
+            // FOURSOMES: a team plays one ball, so the pair is scored, not its players.
+            if (card.teams && card.teams.length) {
+                const byId = Object.fromEntries(card.players.map((p) => [p.customer_id, p]));
+                const inTeam = new Set();
+                const rows = card.teams.map((t) => {
+                    inTeam.add(t.customer_id_a); inTeam.add(t.customer_id_b);
+                    const a = byId[t.customer_id_a], b = byId[t.customer_id_b];
+                    return {key: "t:" + t.team_id, team_id: t.team_id,
+                            name: t.label || [a && a.display_name, b && b.display_name].join(" / "),
+                            meta: "Team · one ball"};
+                });
+                card.players.filter((p) => !inTeam.has(p.customer_id)).forEach((p) => rows.push(playerSubject(p)));
+                return rows;
+            }
+            return card.players.map(playerSubject);
+        }
+        function playerSubject(p) {
+            const bits = [];
+            if (p.tee) bits.push(p.tee);
+            if (p.playing_handicap != null) bits.push("PH " + p.playing_handicap);
+            return {key: "c:" + p.customer_id, customer_id: p.customer_id, name: p.display_name,
+                    meta: bits.join(" · ")};
+        }
+        function holeOrder() {
+            const nums = card.course.length ? card.course.map((h) => h.hole)
+                : Array.from({length: card.holes}, (_, i) => i + (card.start_hole >= 10 && card.holes === 9 ? 10 : 1));
+            const i = Math.max(0, nums.indexOf(card.start_hole));
+            return nums.slice(i).concat(nums.slice(0, i));     // shotgun: start on your hole
+        }
+        function holeInfo(n) { return card.course.find((h) => h.hole === n) || {hole: n}; }
+        function pendingFor(key, n) {
+            for (let i = queue.length - 1; i >= 0; i--) {
+                const o = queue[i];
+                if (o.hole === n && (o.customer_id ? "c:" + o.customer_id : "t:" + o.team_id) === key) return o;
+            }
+            return null;
+        }
+        function valueFor(key, n) {
+            const p = pendingFor(key, n);
+            if (p) return {v: p.gross, waiting: true};
+            const s = (card.scores[key] || {})[String(n)];
+            return {v: s == null ? null : s, waiting: false};
+        }
+        function canEdit() { return card.lock.state === "mine" && !watching; }
+
+        function renderSync() {
+            const el = $("se-sync");
+            el.classList.remove("pending", "lost");
+            if (queue.length) {
+                el.classList.add("pending");
+                const holes = new Set(queue.map((o) => o.hole)).size;
+                el.textContent = holes === 1 ? "1 hole waiting to send" : holes + " holes waiting to send";
+            } else {
+                el.textContent = "All scores saved";
+            }
+        }
+
+        function render() {
+            $("se-root").classList.remove("hidden");
+            $("se-round").textContent = [card.round_label, card.round_date].filter(Boolean).join(" · ");
+            $("se-group").textContent = card.label || ("Group " + card.group_id);
+            const holderName = card.lock.holder_name;
+            $("se-scorer").textContent = card.lock.state === "mine" ? "You're keeping score"
+                : holderName ? holderName + " is keeping score" : "No one is keeping score yet";
+            renderSync();
+            const needPick = !who && !watching;
+            $("se-pick").classList.toggle("hidden", !needPick);
+            if (needPick) {
+                $("se-pick-list").innerHTML = card.players.map((p) =>
+                    `<button class="se-btn" type="button" data-cid="${p.customer_id}">${esc(p.display_name)}</button>`).join("");
+            }
+            const held = !needPick && card.lock.state === "held" && !watching;
+            $("se-held").classList.toggle("hidden", !held);
+            if (held) {
+                $("se-held-title").textContent = (holderName || "Someone") + " is keeping score";
+                $("se-held-body").textContent = "Only one phone enters scores for a group, so nothing is entered twice. "
+                    + "If " + (holderName || "they") + " can't keep going, take over and this phone becomes the scorecard.";
+            }
+            const showHole = !needPick && !held;
+            $("se-hole").classList.toggle("hidden", !showHole);
+            if (showHole) renderHole();
+            renderStrip();
+        }
+
+        function renderHole() {
+            const order = holeOrder();
+            if (hole == null || order.indexOf(hole) < 0) {
+                const saved = store.get(HKEY, null);
+                hole = order.indexOf(saved) >= 0 ? saved : firstOpenHole(order);
+            }
+            const info = holeInfo(hole), i = order.indexOf(hole);
+            $("se-holeno").textContent = "Hole " + hole;
+            $("se-holemeta").textContent = [info.par ? "Par " + info.par : null,
+                info.yardage ? info.yardage + " yds" : null,
+                info.stroke_index ? "Hcp " + info.stroke_index : null].filter(Boolean).join(" · ");
+            $("se-prev").disabled = i <= 0;
+            $("se-nextbtn").disabled = i >= order.length - 1;
+            const edit = canEdit();
+            $("se-rows").innerHTML = subjects().map((s) => {
+                const cur = s.key in draft ? {v: draft[s.key], waiting: false} : valueFor(s.key, hole);
+                const shown = cur.v == null ? (info.par || "–") : cur.v;
+                const cls = cur.v == null ? "empty" : cur.waiting ? "waiting" : "";
+                return `<div class="se-row" data-key="${s.key}">
+                    <div class="se-who"><div class="se-name">${esc(s.name)}</div>
+                        <div class="se-meta">${esc(s.meta)}</div></div>
+                    <div class="se-step">
+                        ${edit ? `<button type="button" data-d="-1" aria-label="One less">&minus;</button>` : ""}
+                        <div class="se-val ${cls}">${shown}</div>
+                        ${edit ? `<button type="button" data-d="1" aria-label="One more">+</button>` : ""}
+                    </div></div>`;
+            }).join("");
+            $("se-save").classList.toggle("hidden", !edit);
+            $("se-save").textContent = i >= order.length - 1 ? "Save last hole" : "Save & next hole";
+        }
+
+        function firstOpenHole(order) {
+            const subs = subjects();
+            for (const n of order) {
+                if (subs.some((s) => valueFor(s.key, n).v == null)) return n;
+            }
+            return order[order.length - 1];
+        }
+
+        function renderStrip() {
+            const order = holeOrder(), subs = subjects();
+            let h = "<table><thead><tr><th></th>" + order.map((n) =>
+                `<th data-h="${n}" class="${n === hole ? "cur" : ""}">${n}</th>`).join("") + "<th>Tot</th></tr></thead><tbody>";
+            for (const s of subs) {
+                let tot = 0;
+                h += `<tr><td class="nm">${esc(s.name.split(" ")[0] || s.name)}</td>` + order.map((n) => {
+                    const v = valueFor(s.key, n);
+                    if (v.v != null) tot += v.v;
+                    return `<td class="${v.waiting ? "w" : ""}">${v.v == null ? "" : v.v}</td>`;
+                }).join("") + `<td><strong>${tot || ""}</strong></td></tr>`;
+            }
+            $("se-strip").innerHTML = h + "</tbody></table>";
+        }
+
+        function api(path, body) {
+            const opts = body ? {method: "POST", headers: {"Content-Type": "application/json"},
+                                 body: JSON.stringify(Object.assign({t: T, device_id: DEVICE}, body))} : {};
+            return fetch(path, opts).then((r) => r.json().then((j) => ({status: r.status, j})));
+        }
+
+        function load() {
+            return api("/api/score-entry/card?t=" + encodeURIComponent(T) + "&device_id=" + encodeURIComponent(DEVICE))
+                .then(({status, j}) => {
+                    if (status !== 200) { showError(j.error || "This scoring link isn't working."); return; }
+                    card = j;
+                    if (who && !card.players.some((p) => p.customer_id === who)) who = null;
+                    if (who && card.lock.state === "free" && !watching) return claim(false);
+                    render();
+                })
+                .catch(() => { if (card) render(); });   // offline: keep showing what we have
+        }
+
+        function claim(takeover) {
+            return api("/api/score-entry/claim", {customer_id: who, takeover}).then(({j}) => {
+                if (j.error) { showError(j.error); return; }
+                $("se-lost").classList.add("hidden");
+                return load();
+            });
+        }
+
+        function flush() {
+            if (flushing || !queue.length) return;
+            flushing = true;
+            const batch = queue.slice(0, 50);
+            api("/api/score-entry/write", {entered_by: who, ops: batch}).then(({status, j}) => {
+                flushing = false;
+                if (status !== 200 || !j.results) return;
+                const done = new Set(), refused = [];
+                for (const r of j.results) {
+                    if (r.result === "refused_lock") refused.push(r.op_id);
+                    done.add(r.op_id);      // ok, dup, invalid and refused all leave the queue
+                }
+                queue = queue.filter((o) => !done.has(o.op_id));
+                saveQueue();
+                if (refused.length) {
+                    const n = new Set(batch.filter((o) => refused.includes(o.op_id)).map((o) => o.hole)).size;
+                    $("se-lost").textContent = "Someone else took over scoring. " + n
+                        + (n === 1 ? " hole" : " holes")
+                        + " from this phone didn't go on the card. They're kept on record for the organizer.";
+                    $("se-lost").classList.remove("hidden");
+                }
+                load();
+                if (queue.length) setTimeout(flush, 300);
+            }).catch(() => { flushing = false; renderSync(); });
+        }
+
+        function enqueue(subjectKey, n, gross) {
+            const op = {op_id: DEVICE + "-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 7),
+                        hole: n, gross: gross, client_ts: new Date().toISOString()};
+            if (subjectKey.startsWith("t:")) op.team_id = Number(subjectKey.slice(2));
+            else op.customer_id = Number(subjectKey.slice(2));
+            queue.push(op);
+            saveQueue();
+        }
+
+        document.addEventListener("click", (e) => {
+            const pick = e.target.closest("#se-pick-list button");
+            if (pick) { who = Number(pick.dataset.cid); store.set(WKEY, who); claim(false); return; }
+            if (e.target.id === "se-takeover") { claim(true); return; }
+            if (e.target.id === "se-viewonly") { watching = true; render(); return; }
+            const step = e.target.closest(".se-step button");
+            if (step && canEdit()) {
+                const key = step.closest(".se-row").dataset.key;
+                const info = holeInfo(hole);
+                const cur = key in draft ? draft[key] : valueFor(key, hole).v;
+                const base = cur == null ? (info.par || 4) : cur;
+                const next = cur == null ? base : base + Number(step.dataset.d);
+                draft[key] = Math.min(20, Math.max(1, next));
+                renderHole(); return;
+            }
+            const th = e.target.closest(".se-strip th[data-h]");
+            if (th) { commitDraft(); hole = Number(th.dataset.h); store.set(HKEY, hole); render(); return; }
+            if (e.target.id === "se-prev" || e.target.id === "se-nextbtn") {
+                commitDraft();
+                const order = holeOrder(), i = order.indexOf(hole);
+                hole = order[e.target.id === "se-prev" ? i - 1 : i + 1];
+                store.set(HKEY, hole); render(); return;
+            }
+            if (e.target.id === "se-save") {
+                // A hole the scorer never touched saves as par for everyone
+                // shown at par, so "Save" means what it says on screen.
+                const info = holeInfo(hole);
+                for (const s of subjects()) {
+                    if (!(s.key in draft) && valueFor(s.key, hole).v == null && info.par) draft[s.key] = info.par;
+                }
+                commitDraft();
+                const order = holeOrder(), i = order.indexOf(hole);
+                if (i < order.length - 1) hole = order[i + 1];
+                store.set(HKEY, hole);
+                render(); flush();
+            }
+        });
+
+        function commitDraft() {
+            for (const [key, v] of Object.entries(draft)) {
+                if (valueFor(key, hole).v !== v) enqueue(key, hole, v);
+            }
+            draft = {};
+        }
+
+        if (!T) { showError("This page needs your group's scoring link."); return; }
+        load();
+        setInterval(flush, 5000);
+        setInterval(() => { if (!queue.length) load(); }, 20000);
+        window.addEventListener("online", flush);
+        document.addEventListener("visibilitychange", () => { if (!document.hidden) { flush(); load(); } });
+    })();
+    </script>
+</body>
+</html>

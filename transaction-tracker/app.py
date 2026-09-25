@@ -11217,6 +11217,178 @@ def api_scorecard(scoring_round_id):
 
 
 # ═══════════════════════════════════════════════════════════════════════
+# PLAYER SCORE ENTRY (Track A, 2026-09-25) — email_parser/score_entry.py
+#
+# GG stays the official and money record: nothing here feeds a payout.
+# Admin routes build rounds and hand out one signed link per group (Kerry
+# hands them out; the Tracker sends nothing). Scorer routes are keyed by
+# that link and are OFF until the `score_entry_live` app setting is "1"
+# (rule 3b: Kerry OKs the screens first); an admin session can always use
+# them for the preview.
+# ═══════════════════════════════════════════════════════════════════════
+
+def _score_entry_live() -> bool:
+    if _ROLE_RANK.get(session.get("role"), 0) >= _ROLE_RANK["admin"]:
+        return True
+    from email_parser.database import get_app_setting
+    try:
+        return (get_app_setting("score_entry_live") or "").strip() == "1"
+    except Exception:
+        return False
+
+
+def _se_group_from_request(body=None):
+    """(group_id, error_response). The link is the only key."""
+    from email_parser.score_entry import verify_group_token
+    if not _score_entry_live():
+        return None, (jsonify({"error": "score entry is not open yet"}), 404)
+    tok = (body or {}).get("t") or request.args.get("t") or ""
+    gid = verify_group_token(tok)
+    if not gid:
+        return None, (jsonify({"error": "this scoring link is not valid any more"}), 401)
+    return gid, None
+
+
+@app.route("/member/score")
+def score_entry_page():
+    # The page carries no data; its JS presents the link to /api/score-entry/*.
+    return render_template("score_entry.html", member_mode=True)
+
+
+@app.route("/api/score-entry/card")
+def api_se_card():
+    from email_parser.score_entry import get_group_card
+    gid, err = _se_group_from_request()
+    if err:
+        return err
+    return jsonify(get_group_card(gid, request.args.get("device_id") or None))
+
+
+@app.route("/api/score-entry/claim", methods=["POST"])
+def api_se_claim():
+    from email_parser.score_entry import claim_group
+    body = request.get_json(silent=True) or {}
+    gid, err = _se_group_from_request(body)
+    if err:
+        return err
+    cid = body.get("customer_id")
+    res = claim_group(gid, str(body.get("device_id") or ""),
+                      int(cid) if cid else None, takeover=bool(body.get("takeover")))
+    return (jsonify(res), 400) if "error" in res else jsonify(res)
+
+
+@app.route("/api/score-entry/write", methods=["POST"])
+def api_se_write():
+    from email_parser.score_entry import write_scores
+    body = request.get_json(silent=True) or {}
+    gid, err = _se_group_from_request(body)
+    if err:
+        return err
+    by = body.get("entered_by")
+    res = write_scores(gid, str(body.get("device_id") or ""), int(by) if by else None,
+                       list(body.get("ops") or []))
+    return (jsonify(res), 400) if "error" in res else jsonify(res)
+
+
+@app.route("/api/score-entry/events/<int:event_id>/scores")
+@require_role("manager")
+def api_se_scores(event_id):
+    """THE READ (CA #661): event-scoped, rounds plural, one version per
+    event. ?since_version=N returns 304 when nothing changed."""
+    from email_parser.score_entry import event_version, get_entered_scores
+    since = request.args.get("since_version", type=int)
+    if since is not None and since == event_version(event_id):
+        return ("", 304)
+    return jsonify(get_entered_scores(event_id, request.args.get("round_id", type=int)))
+
+
+@app.route("/api/score-entry/events/<int:event_id>/seed", methods=["POST"])
+@require_role("admin")
+def api_se_seed(event_id):
+    from email_parser.score_entry import seed_round_from_pairings
+    body = request.get_json(silent=True) or {}
+    res = seed_round_from_pairings(event_id, str(body.get("holes") or "9"),
+                                   label=body.get("label"), created_by=session.get("role"))
+    return (jsonify(res), 400) if "error" in res else (jsonify(res), 201)
+
+
+@app.route("/api/score-entry/rounds", methods=["POST"])
+@require_role("admin")
+def api_se_create_round():
+    from email_parser.score_entry import create_round
+    b = request.get_json(silent=True) or {}
+    try:
+        res = create_round(int(b["event_id"]), int(b["holes"]), round_date=b.get("round_date"),
+                           label=b.get("label"), course_holes=b.get("course") or [],
+                           created_by=session.get("role"))
+    except (KeyError, TypeError, ValueError):
+        return jsonify({"error": "event_id and holes are required"}), 400
+    return (jsonify(res), 400) if "error" in res else (jsonify(res), 201)
+
+
+@app.route("/api/score-entry/rounds/<int:round_id>/course", methods=["POST"])
+@require_role("admin")
+def api_se_course(round_id):
+    from email_parser.score_entry import set_course_holes
+    res = set_course_holes(round_id, (request.get_json(silent=True) or {}).get("holes") or [])
+    return (jsonify(res), 400) if "error" in res else jsonify(res)
+
+
+@app.route("/api/score-entry/rounds/<int:round_id>/groups", methods=["POST"])
+@require_role("admin")
+def api_se_group(round_id):
+    from email_parser.score_entry import upsert_group
+    b = request.get_json(silent=True) or {}
+    try:
+        res = upsert_group(round_id, int(b["group_num"]), label=b.get("label"),
+                           start_hole=b.get("start_hole") or 1, tee_time=b.get("tee_time"),
+                           players=b.get("players") or [])
+    except (KeyError, TypeError, ValueError):
+        return jsonify({"error": "group_num is required"}), 400
+    return (jsonify(res), 400) if "error" in res else jsonify(res)
+
+
+@app.route("/api/score-entry/rounds/<int:round_id>/teams", methods=["POST"])
+@require_role("admin")
+def api_se_team(round_id):
+    from email_parser.score_entry import add_team
+    b = request.get_json(silent=True) or {}
+    try:
+        res = add_team(round_id, int(b["group_id"]), int(b["customer_id_a"]),
+                       int(b["customer_id_b"]), label=b.get("label"))
+    except (KeyError, TypeError, ValueError):
+        return jsonify({"error": "group_id, customer_id_a and customer_id_b are required"}), 400
+    return (jsonify(res), 400) if "error" in res else jsonify(res)
+
+
+@app.route("/api/score-entry/rounds/<int:round_id>/links")
+@require_role("admin")
+def api_se_links(round_id):
+    """One signed link per group, for Kerry to hand out. Nothing is sent."""
+    from email_parser.score_entry import (get_entered_scores, make_group_token,
+                                          round_event_id)
+    event_id = round_event_id(round_id)
+    if not event_id:
+        return jsonify({"error": "no such round"}), 404
+    rd = get_entered_scores(event_id, round_id)["rounds"][0]
+    names = {}
+    for p in rd["players"]:
+        names.setdefault(p["group_id"], []).append(p["name"])
+    base = request.host_url.rstrip("/")
+    return jsonify([{"group_id": g["group_id"], "group_num": g["group_num"],
+                     "label": g["label"], "players": names.get(g["group_id"], []),
+                     "url": f"{base}/member/score?t={make_group_token(g['group_id'])}"}
+                    for g in rd["groups"]])
+
+
+@app.route("/api/score-entry/groups/<int:group_id>/revoke", methods=["POST"])
+@require_role("admin")
+def api_se_revoke(group_id):
+    from email_parser.score_entry import revoke_group_links
+    return jsonify({"ok": revoke_group_links(group_id)})
+
+
+# ═══════════════════════════════════════════════════════════════════════
 # LIVE SCORING TEST CENTER (admin sandbox)
 #
 # Stage 1 of the untether-from-GG plan (docs/claude/game-engine.md): stand

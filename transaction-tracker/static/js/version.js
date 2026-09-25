@@ -1,5 +1,17 @@
-window.TGF_VERSION = "2.489.3";
+window.TGF_VERSION = "2.490.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.490.0",
+    date: "2026-09-25",
+    title: "Player score entry (Track A): tables, API and the phone screen, behind a switch",
+    changes: [
+      "New phone-first scoring page at /member/score?t=<group link>: one scorer per group enters GROSS scores hole by hole with big +/- steppers that start at par, a running card strip, and the group's shotgun hole first. Golf Genius stays the official and money record; nothing that pays reads these scores (guarded by test_score_entry.py).",
+      "Lock and take-over: one phone holds the group's card. A second phone is asked to take over explicitly (no timeout), and the first phone's later writes are refused and kept on record rather than lost.",
+      "Weak signal: every hole is queued on the phone with its own id and resent until the server confirms it; the header says how many holes are waiting and a hole never shows as saved early. Replays are idempotent.",
+      "Foursomes team row (CA #661): a pair's one ball is scored once with both customer_ids recorded. The read Track B uses is event-scoped with rounds plural and one version per event, with a 304 when nothing changed.",
+      "Off until Kerry OKs it (rule 3b): the link routes return 404 unless the score_entry_live app setting is 1; admins can preview. Docs: docs/claude/score-entry.md."
+    ]
+  },
   {
     version: "2.489.3",
     date: "2026-09-24",
