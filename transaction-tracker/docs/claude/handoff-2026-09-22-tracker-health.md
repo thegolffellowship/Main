@@ -39,7 +39,7 @@ routine on your part I think."*
   dispatcher; a non-bridge probe leaves no sample).
 - **`email_parser/health.py`** — the daily digest agent: the report,
   the findings rules, the markdown, the mailbox post (topic
-  `tracker-health`, to tracker-claude + Kerry), COO action items (one
+  `tracker-health`, addressed `TO: front-desk` since v2.489.5 — it was tracker-claude + Kerry), COO action items (one
   open item per finding key), retention prune, the once-a-day gate on a
   dial (`health_digest_time`, default 05:00 Central; the job checks
   every 15 min 4–9 AM so the dial is live without a restart).

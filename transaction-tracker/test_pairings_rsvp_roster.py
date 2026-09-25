@@ -99,9 +99,13 @@ conn.execute("INSERT INTO handicap_player_links (player_name, customer_name, cus
 # Three rounds, because the map is the TGF index (v2.462.0 — the same
 # computation the ROSTER shows) and an index needs three.
 ALAN_DIFFS = (4.0, 6.0, 5.0)
+# Dated BEFORE the event (2026-09-22), never relative to today: the
+# handicap lock seats the index in effect when the event began, so rounds
+# dated "yesterday" fell after the event once the calendar passed 9/22 and
+# the generator (rightly) seated Alan with no index (red from 9/23 on).
 for i, d in enumerate(ALAN_DIFFS):
     conn.execute("INSERT INTO handicap_rounds (player_name, round_date, adjusted_score, rating, slope, differential) "
-                 "VALUES ('Alan Paid', date('now', ?), 40, 34.5, 120, ?)", (f'-{i+1} days', d))
+                 "VALUES ('Alan Paid', date('2026-09-22', ?), 40, 34.5, 120, ?)", (f'-{i+8} days', d))
 conn.commit()
 ALAN_IDX = db.compute_handicap_index(list(ALAN_DIFFS), db.get_handicap_settings(tmp))
 

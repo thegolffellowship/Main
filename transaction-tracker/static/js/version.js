@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.489.4";
+window.TGF_VERSION = "2.489.5";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.489.5",
+    date: "2026-09-25",
+    changes: [
+      "The 5:00 AM Tracker Health digest is now addressed TO: front-desk (and the Tracker Build lane), so it lands in the Front Desk\u2019s 7:15 brief instead of going to a lane that no longer exists (mailbox #637/#640, requested by the CTO lane in #645).",
+      "test_pairings_rsvp_roster.py was red on main from 9/23. The failure was the test, not the pairings code: it dated Alan\u2019s handicap rounds \u2018yesterday\u2019 against an event fixed on 9/22. Once the calendar passed 9/22, the handicap lock correctly ignored rounds played after the event, and the generator seated him with no index. The rounds are now dated before the event.",
+    ],
+  },
   {
     version: "2.489.4",
     date: "2026-09-25",
