@@ -366,7 +366,8 @@ with sync_playwright() as p:
     se.set_round_matches(ridm, [{"id": "M1", "format": "singles", "sides": [[101], [102]]}])
     pg = open_as_kerry(tokm)
     check("the hole screen shows the match standing",
-          pg.locator(".se-mline").count() == 1 and "Kerry v Mark" in pg.inner_text(".se-mline"))
+          pg.locator(".se-mcard").count() == 1 and "NIESTER" in pg.inner_text(".se-mcard").upper()
+          and "Kerry v Mark" in pg.locator(".se-mc-head").get_attribute("aria-label"))
     check("no M tag; each match player reads 'vs' his opponent on the hole screen",
           pg.locator(".se-mtag").count() == 0 and "vs Mark" in pg.inner_text("body"))
     for _ in range(4):
@@ -385,7 +386,14 @@ with sync_playwright() as p:
     card = se.get_group_card(gidm)
     pg.wait_for_timeout(300)
     check("after hole 1 (Mark picked up) the standing reads Kerry 1 UP thru 1",
-          "Kerry 1 UP thru 1" in pg.inner_text(".se-mline"), pg.inner_text(".se-mline"))
+          "Kerry 1 UP thru 1" in pg.locator(".se-mc-head").get_attribute("aria-label")
+          and pg.locator(".se-mc-bar.a").count() == 1 and pg.locator(".se-hd.a").count() == 1,
+          pg.locator(".se-mc-head").get_attribute("aria-label"))
+    pg.click("[data-act=mtoggle]")
+    check("tapping the match opens its hole-by-hole card; hole 1 is circled for Kerry",
+          pg.locator(".se-mc-grid").count() == 1 and pg.locator(".se-mc-grid .w.a").count() == 1)
+    pg.click("[data-act=mtoggle]")
+    check("tapping again closes it", pg.locator(".se-mc-grid").count() == 0)
     check("Picked up is stored beside the 7; the card still says 7",
           card["marks"].get("c:102") == {"1": "picked_up"} and card["scores"]["c:102"]["1"] == 7, card["marks"])
     play(pg, 8)
@@ -425,10 +433,10 @@ with sync_playwright() as p:
     check("X is stored as the triple with the Picked up mark",
           cc["scores"]["c:102"]["1"] == 7 and cc["marks"].get("c:102") == {"1": "picked_up"}, (cc["scores"], cc["marks"]))
     pc.reload(); pc.wait_for_selector("text=You're keeping score")
-    ml = pc.locator(".se-mline")
+    ml = pc.locator(".se-mcard")
     check("Kerry (Austin) leads, so the banner is Austin's colour",
           "lead-austin" in ml.get_attribute("class")
-          and ml.evaluate("e => getComputedStyle(e).backgroundColor") == "rgb(191, 87, 0)", ml.get_attribute("class"))
+          and pc.locator(".se-mc-bar.a").evaluate("e => getComputedStyle(e).backgroundColor") == "rgb(191, 87, 0)", ml.get_attribute("class"))
     play(pc, 8)
     pc.wait_for_selector("text=Check the card")
     pc.wait_for_timeout(1200)
@@ -443,7 +451,7 @@ with sync_playwright() as p:
           se.get_group_card(gidc)["marks"].get("c:102") == {"1": "picked_up", "2": "picked_up"}
           and se.get_group_card(gidc)["scores"]["c:102"]["2"] == 8)
     pc.wait_for_timeout(800)
-    wl = pc.locator(".se-mline")
+    wl = pc.locator(".se-mcard")
     check("a won cup match shimmers in the winner's colour",
           "won" in wl.get_attribute("class") and "lead-austin" in wl.get_attribute("class"), wl.get_attribute("class"))
     db.set_app_setting("lsc_matches", "")

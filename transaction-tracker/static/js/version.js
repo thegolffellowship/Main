@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.500.11";
+window.TGF_VERSION = "2.500.12";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.500.12",
+    date: "2026-09-26",
+    title: "Score entry: the standard match card, a bigger group card, more room for names",
+    changes: [
+      "Kerry, 2026-09-26: 'For the match bar ... make it like the other match play page ... if I click it it will show that match scorecard below it and ... when it's collapsed it would show the colored dots ... something like attached because that will be a standard match play view.' The match banner is now the Match Play tab's card: initials, first / LAST, the margin arrow in the leader's colour pointing at him (with 'thru N' or 'final'), and a dot per hole in play order (each side's colour, grey halved, hollow unplayed or after the match was decided). Tap it for the hole-by-hole card: winners circled in their colour, match-stroke dots, pickups ringed (X in the cup), dead holes grey. Lone Star Cup matches use Austin / San Antonio colours, others slate / clay; a won match keeps its gold frame and shine.",
+      "Kerry: 'less padding between the numbers and +/- buttons which will provide more room for names on the left.' The score column and its gaps are narrower on the hole screen.",
+      "Kerry: 'Numbers on the group card below scoring should be bigger and centered ... turn the same green and have the little checkmark in the upper right.' Hole numbers are 16 px and centred; a saved hole turns green with a small check in its top-right corner."
+    ]
+  },
   {
     version: "2.500.11",
     date: "2026-09-26",

@@ -131,6 +131,50 @@
         /* Thin light lines between the columns (Kerry 2026-09-26). */
         .se-chk .se-check td + td, .se-chk .se-check th + th { border-left: 1px solid #ECEEF1; }
         .se-chk .se-check thead th + th { border-left-color: rgba(255,255,255,.14); }
+        /* THE STANDARD MATCH VIEW (Match Play tab look). */
+        .se-mcard { border: 1px solid #E5E7EB; border-radius: 10px; overflow: hidden; background: #FFFFFF; position: relative; }
+        .se-mc-head { display: block; width: 100%; padding: 0; border: none; background: none; cursor: pointer;
+                      font-family: inherit; color: inherit; text-align: left; }
+        .se-mc-strip { display: flex; align-items: stretch; min-height: 44px; }
+        .se-mc-mono { width: 36px; flex: none; display: flex; align-items: center; justify-content: center;
+                      font: 700 13px/1 Bitter, Georgia, serif; color: #FFFFFF; }
+        .se-mc-mono.a { background: var(--ma); } .se-mc-mono.b { background: var(--mb); }
+        .se-mc-name { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; padding: 0 8px; }
+        .se-mc-name.r { align-items: flex-end; text-align: right; }
+        .se-mc-name em { font-style: normal; font-size: 11px; color: #6B7280; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+        .se-mc-name b { font: 700 14px/1.1 Bitter, Georgia, serif; text-transform: uppercase; white-space: nowrap;
+                        overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+        .se-mc-bar { flex: none; min-width: 70px; display: flex; flex-direction: column; align-items: center; justify-content: center;
+                     color: #FFFFFF; font: 700 15px/1 Bitter, Georgia, serif; padding: 0 8px; }
+        .se-mc-bar small { font: 600 9px/1.2 'Helvetica Neue', Helvetica, Arial, sans-serif; letter-spacing: .6px;
+                           text-transform: uppercase; opacity: .85; margin-top: 2px; }
+        .se-mc-bar.a { background: var(--ma); clip-path: polygon(12px 0, 100% 0, 100% 100%, 12px 100%, 0 50%); padding-left: 16px; }
+        .se-mc-bar.b { background: var(--mb); clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 50%, calc(100% - 12px) 100%, 0 100%); padding-right: 16px; }
+        .se-mc-bar.tie { background: #BFB8AC; }
+        .se-mc-dots { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px; padding: 6px 8px; }
+        .se-hd { width: 9px; height: 9px; border-radius: 50%; display: block; }
+        .se-hd.a { background: var(--ma); } .se-hd.b { background: var(--mb); } .se-hd.h { background: #BFB8AC; }
+        .se-hd.e { border: 1.5px solid #D6D3CC; }
+        .se-mcard.won::after { content: ""; position: absolute; top: 0; bottom: 0; width: 36%; left: -60%;
+            transform: skewX(-20deg); pointer-events: none;
+            background: linear-gradient(75deg, transparent, rgba(255,255,255,.45), transparent);
+            animation: seChampShine 3.4s ease-in-out infinite; }
+        .se-mcard.won { box-shadow: 0 0 0 2px #D4A017, 0 4px 14px rgba(212,160,23,.28); }
+        .se-mc-grid { border-top: 1px solid #E5E7EB; padding: 6px 6px 8px; }
+        .se-mc-grid table { width: 100%; border-collapse: collapse; table-layout: fixed; font-variant-numeric: tabular-nums; margin-bottom: 6px; }
+        .se-mc-grid th, .se-mc-grid td { text-align: center; font-size: 13px; padding: 4px 0; position: relative; }
+        .se-mc-grid th:first-child { width: 36px; }
+        .se-mc-grid tr.h td, .se-mc-grid tr.h th { background: #1B1B1B; color: #FFFFFF; font-size: 11px; font-weight: 700; }
+        .se-mc-grid tr.p td, .se-mc-grid tr.p th { color: #6B7280; font-size: 11px; }
+        .se-mc-grid td.dim { color: #C4C4C4; }
+        .se-mc-grid .w { display: inline-block; min-width: 22px; line-height: 20px; border-radius: 11px; color: #FFFFFF; font-weight: 700; }
+        .se-mc-grid .w.a { background: var(--ma); } .se-mc-grid .w.b { background: var(--mb); }
+        .se-mc-grid .pu { display: inline-block; min-width: 20px; line-height: 18px; border-radius: 10px; box-shadow: inset 0 0 0 1.5px #E87C3E; }
+        .se-mc-grid .pp { position: absolute; top: 1px; left: 0; right: 0; display: flex; justify-content: center; gap: 1px; }
+        .se-mc-grid .pp i { width: 4px; height: 4px; border-radius: 50%; background: #1B1B1B; display: block; }
+        .se-mc-chip { display: inline-block; min-width: 24px; padding: 2px 3px; border-radius: 4px; color: #FFFFFF; font: 700 10px Bitter, Georgia, serif; }
+        .se-mc-chip.a { background: var(--ma); } .se-mc-chip.b { background: var(--mb); }
+        .se-mc-note { font-size: 11px; color: #6B7280; text-align: center; }
         .se-lblrow { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; }
         .se-keepnote { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: #4B5563; }
         .se-keepnote svg { width: 14px; height: 14px; }
@@ -142,7 +186,8 @@
         .se-hole .se-nav { padding-top: 0; }
         .se-hole .se-mstrip { margin: 8px 0 2px; }
         .se-hole .se-stack { gap: 6px; margin-top: 8px; }
-        .se-hole .se-row { padding: 7px 10px; gap: 10px; }
+        .se-hole .se-row { padding: 7px 10px; gap: 4px; }
+        .se-hole .se-who { margin-right: 6px; }
         .se-hole .se-who { gap: 1px; }
         .se-hole .se-name { font-size: 17px; display: flex; align-items: center; min-width: 0; white-space: nowrap; }
         .se-hole .se-name .nm { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
@@ -150,7 +195,7 @@
         .se-hole .se-meta { font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .se-hole .se-minus, .se-hole .se-plus { width: 44px; height: 44px; }
         .se-hole .se-pops { height: 44px; }
-        .se-hole .se-score { width: 46px; }
+        .se-hole .se-score { width: 40px; }
         .se-hole .se-popkey { margin-top: 6px; }
         .se-hole .se-cell { height: 34px; }
         .se-hole .se-pill { height: 50px; margin-top: 10px; }
@@ -161,10 +206,15 @@
         .se-cell { height: 44px; border-radius: 8px; display: flex; flex-direction: column; align-items: center;
                    justify-content: center; background: #F8F8F8; border: 1px solid #E5E7EB; cursor: pointer;
                    font-family: inherit; color: #1B1B1B; padding: 0; }
-        .se-cell .n { font-size: 10px; color: #6B7280; }
-        .se-cell .k { font-size: 13px; font-weight: 700; min-height: 16px; }
+        /* GROUP CARD (Kerry 2026-09-26: "Numbers ... should be bigger and centered
+           ... turn the same green and have the little checkmark in the upper
+           right"). */
+        .se-cell { position: relative; }
+        .se-cell .n { font-size: 16px; font-weight: 700; color: #4B5563; font-variant-numeric: tabular-nums; }
+        .se-cell .k { position: absolute; top: 2px; right: 4px; font-size: 10px; font-weight: 800; line-height: 1; }
         .se-cell.saved { background: #d1f4e0; border-color: #d1f4e0; color: #0d7556; }
-        .se-cell.saved .k { color: #0d7556; }
+        .se-cell.saved .n, .se-cell.saved .k { color: #0d7556; }
+        .se-cell.cur .n { color: #1B1B1B; }
         .se-cell.waiting { background: #FEF3C7; border-color: #FEF3C7; }
         .se-cell.cur { background: #FFFFFF; border: 2px solid #E87C3E; }
         .se-status { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #15803D; margin: 14px 0 10px; }
@@ -279,46 +329,13 @@
         .se-card tr.me td.nm { box-shadow: inset 4px 0 0 #E87C3E; }
         /* MATCH STANDING while scoring (Kerry: "show match progress") */
         .se-mstrip { display: flex; flex-direction: column; gap: 6px; margin: 10px 0 4px; }
-        .se-mline { display: flex; justify-content: space-between; align-items: center; gap: 8px;
-                    padding: 8px 12px; border-radius: 10px; background: #FFF4EC; border: 1px solid #F5C8A8;
-                    font-size: 14px; white-space: normal; }
-        .se-mline .who { font-family: Bitter, Georgia, serif; font-weight: 700; }
-        .se-mline .st { font-weight: 700; color: #B45A22; white-space: nowrap; }
-        .se-mline.final { background: #F8F8F8; border-color: #E5E7EB; }
-        .se-mline.final .st { color: #1B1B1B; }
         /* A WON MATCH SHIMMERS (Kerry 2026-09-26: "kind of like our champion
            banner on the Points Races") — the champion plaque from
            contests.html: TGF-dark, gold frame, gold-gradient text, a slow
            shine sweeping across. */
-        .se-mline.won { position: relative; overflow: hidden; border: 1px solid #D4A017;
-            background: linear-gradient(135deg, #1B1B1B 0%, #2E2414 55%, #1B1B1B 100%);
-            box-shadow: inset 0 0 0 2px #1B1B1B, inset 0 0 0 3px rgba(212,160,23,.55), 0 4px 14px rgba(212,160,23,.28); }
-        .se-mline.won .who { color: #D4A017; }
-        .se-mline.won .st { font-family: Bitter, Georgia, serif; font-weight: 800; color: #FFD75E;
-            background: linear-gradient(100deg, #F7E7A0 0%, #FFD75E 35%, #E0A93C 62%, #F7E7A0 100%);
-            -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
-        .se-mline.won::after { content: ""; position: absolute; top: -60%; bottom: -60%; width: 36%; left: -60%;
-            transform: skewX(-20deg); pointer-events: none;
-            background: linear-gradient(75deg, transparent, rgba(255,255,255,.16), transparent);
-            animation: seChampShine 3.4s ease-in-out infinite; }
         /* LONE STAR CUP (Kerry 2026-09-26): "the match position banner needs to
            be the team color who's in the lead ... the shimmering banner needs to
            be color coordinated as well." Austin burnt orange, San Antonio slate. */
-        .se-mline.lead-austin { background: #BF5700; border-color: #BF5700; color: #FFFFFF; }
-        .se-mline.lead-sa { background: #4B6274; border-color: #4B6274; color: #FFFFFF; }
-        .se-mline.lead-austin .st, .se-mline.lead-sa .st { color: #FFFFFF; }
-        .se-mline.won.lead-austin { border-color: #FFD75E;
-            background: linear-gradient(135deg, #8A3F00 0%, #BF5700 55%, #8A3F00 100%);
-            box-shadow: inset 0 0 0 2px #8A3F00, inset 0 0 0 3px rgba(255,215,94,.7), 0 4px 14px rgba(191,87,0,.35); }
-        .se-mline.won.lead-sa { border-color: #FFD75E;
-            background: linear-gradient(135deg, #2F3F4C 0%, #4B6274 55%, #2F3F4C 100%);
-            box-shadow: inset 0 0 0 2px #2F3F4C, inset 0 0 0 3px rgba(255,215,94,.7), 0 4px 14px rgba(75,98,116,.35); }
-        .se-mline.won.lead-austin .who, .se-mline.won.lead-sa .who { color: #FFFFFF; }
-        .se-mline.won.lead-austin .st, .se-mline.won.lead-sa .st {
-            background: linear-gradient(100deg, #FFFFFF 0%, #FFE9A8 40%, #FFD75E 60%, #FFFFFF 100%);
-            -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
-        .se-mline.won.lead-austin::after, .se-mline.won.lead-sa::after {
-            background: linear-gradient(75deg, transparent, rgba(255,255,255,.28), transparent); }
         .se-x { font-family: Bitter, Georgia, serif; font-weight: 800; }
         @keyframes seChampShine { 0% { left: -60%; } 55% { left: 135%; } 100% { left: 135%; } }
         /* LONE STAR CUP team standings beside the match */
@@ -662,7 +679,7 @@
         function stripCells(order, current) {
             return order.map((n) => {
                 const cls = n === current ? "cur" : holeWaiting(n) ? "waiting" : holeDone(n) ? "saved" : "";
-                const mark = n === current ? "&bull;" : holeWaiting(n) ? "&hellip;" : holeDone(n) ? "&#10003;" : "";
+                const mark = n === current ? "" : holeWaiting(n) ? "&hellip;" : holeDone(n) ? "&#10003;" : "";
                 return `<button type="button" class="se-cell ${cls}" data-act="goto" data-h="${n}" aria-label="Hole ${n}"><span class="n">${n}</span><span class="k">${mark}</span></button>`;
             }).join("");
         }
@@ -689,19 +706,75 @@
             const cup = cs ? `<div class="se-cup"><span class="lbl">Lone Star Cup</span>
                 <span class="tm aus"><span>Austin<span class="proj">live ${half(cs.austin_projected)}</span></span><b>${half(cs.austin)}</b></span>
                 <span class="tm sa"><span>San Antonio<span class="proj">live ${half(cs.sa_projected)}</span></span><b>${half(cs.sa)}</b></span></div>` : "";
-            return `<div class="se-mstrip">${cup}${ms.map((m) => {
-                const vs = `${esc(m.names[0])} v ${esc(m.names[1])}`;
-                let st;
-                if (!m.thru) st = "Not started";
-                // A tie: the Lone Star Cup halves; regular-season Match Play
-                // settles it by its rulings (pool: may halve; knockout: extra
-                // holes or a putt-off), so the phone says all square, not halved.
-                else if (m.lead_side == null) st = m.final ? (m.tie_rule === "halve" ? "Halved" : `All square after ${m.thru}`) : `All square thru ${m.thru}`;
-                else st = `${esc(m.names[m.lead_side])} ${m.final ? "wins " + esc(m.margin) : esc(m.margin) + " thru " + m.thru}`;
-                const won = m.final && m.lead_side != null;
-                const lead = m.cup && m.lead_team ? " lead-" + m.lead_team : "";
-                return `<div class="se-mline ${won ? "won" : m.final && !lead ? "final" : ""}${lead}"><span class="who">${vs}</span><span class="st">${st}</span></div>`;
-            }).join("")}</div>`;
+            return `<div class="se-mstrip">${cup}${ms.map(matchCard).join("")}</div>`;
+        }
+        // THE STANDARD MATCH VIEW (Kerry 2026-09-26: "like the other match play
+        // page ... if I click it it will show that match scorecard below it and
+        // ... when it's collapsed it would show the colored dots ... something
+        // like attached because that will be a standard match play view").
+        // The Match Play tab's card: initials, first / LAST, the margin arrow in
+        // the leader's colour pointing at him, one dot per hole in play order
+        // (side A / side B / halved; hollow = not played or after the match was
+        // decided). Tap it for the hole-by-hole card. Cup colours in the Lone
+        // Star Cup (Austin / San Antonio), slate and clay otherwise.
+        const mOpen = new Set();
+        function matchCard(m) {
+            const cup = !!m.cup;
+            const col = cup ? ["#BF5700", "#4B6274"] : ["#2F5D74", "#C1673F"];
+            const fn = m.full_names || [[m.names[0]], [m.names[1]]];
+            const mono = (side) => side.map((n) => (String(n).trim()[0] || "")).join("")
+                + (side.length === 1 ? (String(side[0]).trim().split(/\s+/).slice(-1)[0] || "")[0] || "" : "");
+            const nm = (side, right) => {
+                const f = side.map((n) => String(n).trim().split(/\s+/)[0]).join(" & ");
+                const l = side.map((n) => String(n).trim().split(/\s+/).slice(1).join(" ")).join(" / ");
+                return `<span class="se-mc-name${right ? " r" : ""}"><em>${esc(f)}</em><b>${esc(l)}</b></span>`;
+            };
+            let bar, sub = "";
+            if (!m.thru) { bar = "tie"; sub = "vs"; }
+            else if (m.lead_side == null) { bar = "tie"; sub = m.final ? (m.tie_rule === "halve" ? "HALVED" : "AS") : "AS"; }
+            else { bar = m.lead_side === 0 ? "a" : "b"; sub = m.margin || ""; }
+            const thru = m.thru && !m.final ? `<small>thru ${m.thru}</small>` : m.final && m.thru ? `<small>final</small>` : "";
+            const won = m.final && m.lead_side != null;
+            const holes = (m.card || []).slice().sort((x, y) => (x.order || 0) - (y.order || 0));
+            const dead = (h) => m.closed_at != null && h.order > m.closed_at;
+            const dots = holes.map((h) => {
+                const c = h.w == null || dead(h) ? "e" : h.w === 1 ? "a" : h.w === 2 ? "b" : "h";
+                return `<i class="se-hd ${c}"></i>`;
+            }).join("");
+            const open = mOpen.has(m.match_id);
+            const vs = `${esc(m.names[0])} v ${esc(m.names[1])}`;
+            const st = !m.thru ? "Not started" : m.lead_side == null
+                ? (m.final ? (m.tie_rule === "halve" ? "Halved" : `All square after ${m.thru}`) : `All square thru ${m.thru}`)
+                : `${esc(m.names[m.lead_side])} ${m.final ? "wins " + esc(m.margin) : esc(m.margin) + " thru " + m.thru}`;
+            return `<div class="se-mcard${won ? " won" : ""}${m.cup && m.lead_team ? " lead-" + m.lead_team : ""}" style="--ma:${col[0]};--mb:${col[1]}">
+                <button type="button" class="se-mc-head" data-act="mtoggle" data-m="${esc(m.match_id)}" aria-expanded="${open}" aria-label="${vs}: ${st}. Tap for the match card.">
+                  <span class="se-mc-strip">
+                    <span class="se-mc-mono a">${esc(mono(fn[0]))}</span>${nm(fn[0], false)}
+                    <span class="se-mc-bar ${bar}">${esc(sub)}${thru}</span>
+                    ${nm(fn[1], true)}<span class="se-mc-mono b">${esc(mono(fn[1]))}</span>
+                  </span>
+                  <span class="se-mc-dots">${dots}</span>
+                </button>
+                ${open ? matchGrid(m, holes, fn, dead) : ""}
+              </div>`;
+        }
+        function matchGrid(m, holes, fn, dead) {
+            const blocks = holes.length > 9 ? [holes.slice(0, 9), holes.slice(9)] : [holes];
+            const initials = (side) => side.map((n) => String(n).trim()[0] || "").join("");
+            const row = (k, list) => list.map((h) => {
+                const g = h.g[k], won = h.w === k + 1;
+                const v = g == null ? "" : h.pu[k] ? (m.cup ? "X" : `<span class="pu">${g}</span>`) : g;
+                const pops = h.s[k] ? `<span class="pp">${"<i></i>".repeat(Math.min(h.s[k], 3))}</span>` : "";
+                return `<td class="${dead(h) ? "dim" : ""}">${won ? `<span class="w ${k ? "b" : "a"}">${v}</span>` : v}${pops}</td>`;
+            }).join("");
+            const tot = (k, list) => list.reduce((a, h) => a + (h.g[k] != null && !h.pu[k] ? h.g[k] : h.g[k] || 0), 0) || "";
+            return `<div class="se-mc-grid">${blocks.map((list) => `<table>
+                <tr class="h"><th></th>${list.map((h) => `<td>${h.hole}</td>`).join("")}<th>Tot</th></tr>
+                <tr class="p"><th>Par</th>${list.map((h) => `<td>${info(h.hole).par || ""}</td>`).join("")}<th>${list.reduce((a, h) => a + (info(h.hole).par || 0), 0) || ""}</th></tr>
+                <tr><th><span class="se-mc-chip a">${esc(initials(fn[0]))}</span></th>${row(0, list)}<th>${tot(0, list)}</th></tr>
+                <tr><th><span class="se-mc-chip b">${esc(initials(fn[1]))}</span></th>${row(1, list)}<th>${tot(1, list)}</th></tr>
+              </table>`).join("")}
+              <div class="se-mc-note">Circled: won the hole · dots: match strokes · grey: after the match was decided</div></div>`;
         }
         const helpBtn = (k) => `<button type="button" class="se-help ${help[k] ? "on" : ""}" data-act="help" data-k="${k}" aria-expanded="${help[k] ? "true" : "false"}">How It Works</button>`;
         const helpText = (k, t) => help[k] ? `<div class="se-helptext">${t}</div>` : "";
@@ -1176,6 +1249,11 @@
             const b = e.target.closest("button[data-act]");
             if (!b) return;
             const act = b.dataset.act;
+            if (act === "mtoggle") {
+                const id = b.dataset.m;
+                if (mOpen.has(id)) mOpen.delete(id); else mOpen.add(id);
+                render(); return;
+            }
             if (act === "stafflogin") {
                 const pin = (document.getElementById("se-pin") || {}).value || "";
                 fetch("/api/auth/login", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({pin})})

@@ -243,11 +243,12 @@ def _match_status(conn, g) -> list:
     course = [dict(h) for h in conn.execute(
         "SELECT hole_number AS hole, par, stroke_index FROM se_round_holes WHERE round_id = ? "
         "ORDER BY hole_number", (g["round_id"],))]
-    phs, names = {}, {}
+    phs, names, full = {}, {}, {}
     for p in conn.execute("SELECT customer_id, display_name, playing_handicap FROM se_players "
                           "WHERE round_id = ?", (g["round_id"],)):
         phs[p[0]] = p[2]
         names[p[0]] = (p[1] or "").split(" ")[0]
+        full[p[0]] = p[1] or ""
     scores: dict = {}
     for s_ in conn.execute("SELECT customer_id, team_customer_id_a, hole_number, gross FROM se_hole_scores "
                            "WHERE round_id = ? AND gross IS NOT NULL", (g["round_id"],)):
@@ -283,7 +284,19 @@ def _match_status(conn, g) -> list:
                     "lead_side": (w - 1) if w else None, "margin": d.get("gg_margin"),
                     "thru": d.get("thru") or 0,
                     "final": bool(d.get("closed_at_order")) or (d.get("thru") or 0) >= e["n_holes"],
-                    "holes": {str(h["hole"]): h["winner"] for h in d["holes"] if h["winner"] is not None}})
+                    "holes": {str(h["hole"]): h["winner"] for h in d["holes"] if h["winner"] is not None},
+                    # THE STANDARD MATCH VIEW (Kerry 2026-09-26: "something like
+                    # attached because that will be a standard match play view"):
+                    # full names for the strip, where the match closed (holes after
+                    # it are dead), and each hole's side-line gross, match strokes
+                    # and pickups for the tap-open card.
+                    "full_names": [[full.get(c) or "#%s" % c for c in sd] for sd in sides],
+                    "closed_at": d.get("closed_at_order"),
+                    "card": [{"hole": h["hole"], "order": h.get("order"), "w": h["winner"],
+                              "g": [h.get("p1_gross"), h.get("p2_gross")],
+                              "s": [h.get("p1_strokes") or 0, h.get("p2_strokes") or 0],
+                              "pu": [bool(h.get("p1_picked_up")), bool(h.get("p2_picked_up"))]}
+                             for h in d["holes"]]})
     return out
 
 
