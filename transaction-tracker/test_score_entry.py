@@ -556,7 +556,7 @@ check("admin: the overview lists every round's groups with a working link and ho
       ov["rounds"] and all(g["url"] and "/member/score?t=" in g["url"] for g in g0)
       and all("holes_in" in g and "players" in g for g in g0), ov["rounds"][:1])
 check("admin: the overview carries the dials", {"live_for_members", "keeper_signs", "qr"} <= set(ov))
-pv = se.create_preview_round(900, [101, 102], holes=18)
+pv = se.create_preview_round(900, [101, 102], holes=18, tees={101: "<50", 102: "65+"})
 se.set_round_matches(pv["round_id"], [{"id": "P-1", "format": "singles", "sides": [[101], [102]]}])
 check("only a PREVIEW round can be started over",
       "error" in client.post(f"/api/score-entry/rounds/{sr}/restart-preview").get_json())
@@ -568,6 +568,8 @@ check("starting a preview over closes the old one (kept, not deleted) and opens 
 check("...with the same players and the demo match moved across",
       se.round_matches(rs["round_id"]).get(101, {}).get("opponents") == [102]
       and not se.round_matches(pv["round_id"]), se.round_matches(rs["round_id"]))
+tz = {p["customer_id"]: p["tee"] for p in se.get_entered_scores(900, rs["round_id"])["rounds"][0]["players"]}
+check("...and each player's tee", tz == {101: "<50", 102: "65+"}, tz)
 
 conn.close()
 try:

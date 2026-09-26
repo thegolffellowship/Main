@@ -3224,8 +3224,25 @@ def _scoring_dispatch_inner(url: str, extract: str):
                                    "app_version": _ver,
                                    "would": "create or reuse the PREVIEW round and its group; add |apply"})
             _flags = {x.lower() for x in _p[3:]}
-            _res = _se.create_preview_round(_ev, _ids, holes=18 if "18" in _flags else None)
-            if "error" not in _res and "match" in _flags:
+            # tees=<cid>:<band>;<cid>:<band> -- each preview player's tee band
+            # (the event's tee-sheet bands, e.g. <50, 50-64, 65+, Forward);
+            # match=<cid>v<cid>[;<cid>v<cid>] -- exactly these demo matches.
+            _opts = {x.split("=", 1)[0].lower(): x.split("=", 1)[1] for x in _p[3:] if "=" in x}
+            _tees = {}
+            for _t in (_opts.get("tees") or "").split(";"):
+                if ":" in _t:
+                    _c, _b = _t.split(":", 1)
+                    _tees[int(_c)] = _b.strip()
+            _res = _se.create_preview_round(_ev, _ids, holes=18 if "18" in _flags else None,
+                                            tees=_tees or None)
+            if "error" not in _res and _opts.get("match"):
+                _ms = []
+                for _n, _m in enumerate(_opts["match"].split(";")):
+                    _a, _, _b = _m.lower().partition("v")
+                    _ms.append({"id": f"PREVIEW-{_n + 1}", "format": "singles",
+                                "sides": [[int(x) for x in _a.split("+")], [int(x) for x in _b.split("+")]]})
+                _res["matches"] = _se.set_round_matches(_res["round_id"], _ms)
+            elif "error" not in _res and "match" in _flags:
                 # demo match play so every screen shows: 1v2, 3v4 (singles)
                 _pairs = [_ids[i:i + 2] for i in range(0, len(_ids) - 1, 2)]
                 _res["matches"] = _se.set_round_matches(

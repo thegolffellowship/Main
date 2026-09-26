@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.498.1";
+window.TGF_VERSION = "2.498.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.498.2",
+    date: "2026-09-26",
+    title: "Preview: a tee per player and a chosen match",
+    changes: [
+      "Kerry, 2026-09-26: 'Give me players with different tees, and also only one match.' The preview bridge takes tees=<cid>:<band>;... (the event's tee-sheet bands) and match=<cid>v<cid> for exactly the demo matches wanted. Start the preview over keeps each player's tee. scoring-se-status also lists the event's tee bands."
+    ]
+  },
   {
     version: "2.498.1",
     date: "2026-09-26",

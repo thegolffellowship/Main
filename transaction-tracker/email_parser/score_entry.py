@@ -142,8 +142,11 @@ def round_status(event_id: int, db_path=None) -> dict:
                                  "signed": signed.get(p["customer_id"], [])} for p in r["players"]],
                     "card_checks": r["card_checks"],
                     "matches": round_matches(r["round_id"], db_path)})
+    with _closing(_conn(db_path)) as conn:
+        legend = _tee_legend(conn, event_id)
     return {"event_id": event_id, "version": feed["version"],
-            "keeper_signs": keeper_signs(event_id, db_path), "rounds": out}
+            "keeper_signs": keeper_signs(event_id, db_path),
+            "tee_bands": {b: v.get("tee_name") for b, v in legend.items()}, "rounds": out}
 
 
 def admin_overview(event_id: int, base_url: str | None = None, db_path=None) -> dict:
@@ -825,7 +828,7 @@ PREVIEW_LABEL = "PREVIEW (test round, not a real card)"
 
 
 def create_preview_round(event_id: int, customer_ids: list[int], db_path=None,
-                         holes: int | None = None) -> dict:
+                         holes: int | None = None, tees: dict | None = None) -> dict:
     ids = [int(c) for c in customer_ids if str(c).strip()]
     if not ids or len(ids) > 5:
         return {"error": "one to five customer_ids"}
@@ -854,7 +857,8 @@ def create_preview_round(event_id: int, customer_ids: list[int], db_path=None,
         label=label, course_holes=course, course_id=ev.get("course_id"),
         created_by="preview", db_path=db_path)["round_id"]
     g = upsert_group(rid, 1, label="Preview group", start_hole=_first_hole(ev, holes),
-                     players=[{"customer_id": c, "display_name": names[c], "seat": i + 1}
+                     players=[{"customer_id": c, "display_name": names[c], "seat": i + 1,
+                               **({"tee": tees[c]} if tees and tees.get(c) else {})}
                               for i, c in enumerate(ids)], db_path=db_path)
     out = {"round_id": rid, "group_id": g["group_id"], "reused": bool(existing),
            "course_holes": len(course), "holes": holes}
@@ -876,9 +880,11 @@ def restart_preview(round_id: int, db_path=None) -> dict:
             return {"error": "no such round"}
         if not (r["label"] or "").startswith(PREVIEW_LABEL):
             return {"error": "only a PREVIEW round can be started over"}
-        cids = [x[0] for x in conn.execute(
-            "SELECT customer_id FROM se_players WHERE round_id = ? ORDER BY group_id, "
-            "COALESCE(seat, 99), id", (round_id,))]
+        rows = conn.execute(
+            "SELECT customer_id, tee FROM se_players WHERE round_id = ? ORDER BY group_id, "
+            "COALESCE(seat, 99), id", (round_id,)).fetchall()
+        cids = [x[0] for x in rows]
+        tees = {x[0]: x[1] for x in rows if x[1]}
     from email_parser.database import get_app_setting
     try:
         demo = json.loads(get_app_setting(ROUND_MATCHES_SETTING, db_path) or "{}").get(str(round_id))
@@ -886,7 +892,8 @@ def restart_preview(round_id: int, db_path=None) -> dict:
         demo = None
     if r["status"] == "open":
         close_round(round_id, db_path=db_path)
-    res = create_preview_round(r["event_id"], cids, db_path=db_path, holes=r["holes"])
+    res = create_preview_round(r["event_id"], cids, db_path=db_path, holes=r["holes"],
+                               tees=tees or None)
     if "error" in res:
         return res
     if demo:
