@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.498.2";
+window.TGF_VERSION = "2.498.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.498.3",
+    date: "2026-09-26",
+    title: "Score entry: wider tee bars, a compact turn, ties by the right rule",
+    changes: [
+      "Kerry, 2026-09-26: 'make the color bands for tees left of names twice as wide' (16 px now). 'The Front nine done could definitely take up less space. Relationship to par could go to the right of the totals. Names could be a little bigger, but height of each could be less.' The turn rows are tighter: bigger name, the total with its to-par beside it, shorter hole boxes.",
+      "Kerry: 'For Lone Star Cup matches will end in HALVED if they're tied. But for regular season Match Play, we have rulings for this.' A tied cup match reads Halved; any other match reads 'All square after N', because the regular-season rulings (game-engine.md, 2026-07-20) settle it: a pool match may halve, a knockout goes to extra holes (NH) or a putt-off."
+    ]
+  },
   {
     version: "2.498.2",
     date: "2026-09-26",

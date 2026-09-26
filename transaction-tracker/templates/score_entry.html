@@ -58,14 +58,14 @@
            edge of his row, from the same legend as the tee sheet. Light
            tees get a dark outline; the women's tee is an outline, as on the
            sheet; no tee on file is neutral grey. */
-        .se-tee { position: absolute; left: 0; top: 0; bottom: 0; width: 8px;
+        .se-tee { position: absolute; left: 0; top: 0; bottom: 0; width: 16px;   /* Kerry 2026-09-26: twice as wide */
                   border-radius: 12px 0 0 12px; }
         .se-tee.ring, .se-tee.light { box-shadow: inset 0 0 0 2px #1B1B1B; }
         .se-tee.ring { background: #FFFFFF !important; }
         .se-tee-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%;
                       margin-right: 6px; vertical-align: 0; }
         .se-tee-dot.ring, .se-tee-dot.light { box-shadow: inset 0 0 0 2px #1B1B1B; }
-        .se-row { position: relative; padding-left: 20px !important; }
+        .se-row { position: relative; padding-left: 30px !important; }
         .se-row { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 12px;
                   background: #F8F8F8; border: 1px solid #E5E7EB; }
         .se-who { flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
@@ -211,14 +211,22 @@
         .se-mline.final { background: #F8F8F8; border-color: #E5E7EB; }
         .se-mline.final .st { color: #1B1B1B; }
         /* THE TURN: each player's nine under his name, tap one to edit */
-        .se-mini { display: grid; grid-template-columns: repeat(9, minmax(0, 1fr)); gap: 3px; margin-top: 8px; width: 100%; }
-        .se-mini button { height: 38px; border-radius: 7px; border: 1px solid #E5E7EB; background: #FFFFFF; cursor: pointer;
+        .se-mini { display: grid; grid-template-columns: repeat(9, minmax(0, 1fr)); gap: 3px; margin-top: 6px; width: 100%; }
+        .se-mini button { height: 32px; border-radius: 7px; border: 1px solid #E5E7EB; background: #FFFFFF; cursor: pointer;
                           display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 0;
                           font: 700 15px 'Helvetica Neue', Helvetica, Arial, sans-serif; color: #1B1B1B;
                           font-variant-numeric: tabular-nums; }
-        .se-mini button .n { font-size: 9px; font-weight: 600; color: #9CA3AF; line-height: 1; }
-        .se-turnrow { display: block; padding: 12px 14px 12px 20px; }
-        .se-turnrow .top { display: flex; justify-content: space-between; align-items: center; }
+        .se-mini button .n { font-size: 8px; font-weight: 600; color: #9CA3AF; line-height: 1; }
+        /* THE TURN, compact (Kerry 2026-09-26: "could definitely take up less
+           space. Relationship to par could go to the right of the totals.
+           Names could be a little bigger, but height of each could be less.") */
+        .se-turnrow { display: block; padding: 8px 12px 8px 30px !important; }
+        .se-turnrow .top { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+        .se-turnrow .se-name { font-size: 19px; }
+        .se-turnrow .tt { display: flex; align-items: baseline; gap: 6px; white-space: nowrap; }
+        .se-turnrow .tt .v { font: 700 24px/1 Bitter, Georgia, serif; font-variant-numeric: tabular-nums; }
+        .se-turnrow .tt .r { font-size: 13px; font-weight: 700; color: #4B5563; min-width: 34px; }
+        .se-turnrow + .se-turnrow { margin-top: 0; }
         .se-foot { font-size: 13px; color: #6B7280; text-align: center; margin-top: 10px; white-space: normal; }
         .se-hio { border: 2px solid #E87C3E; }
         .se-note { font-size: 12px; color: #6B7280; margin-top: 10px; white-space: normal; }
@@ -504,7 +512,10 @@
                 const vs = `${esc(m.names[0])} v ${esc(m.names[1])}`;
                 let st;
                 if (!m.thru) st = "Not started";
-                else if (m.lead_side == null) st = m.final ? "Halved" : `All square thru ${m.thru}`;
+                // A tie: the Lone Star Cup halves; regular-season Match Play
+                // settles it by its rulings (pool: may halve; knockout: extra
+                // holes or a putt-off), so the phone says all square, not halved.
+                else if (m.lead_side == null) st = m.final ? (m.tie_rule === "halve" ? "Halved" : `All square after ${m.thru}`) : `All square thru ${m.thru}`;
                 else st = `${esc(m.names[m.lead_side])} ${m.final ? "wins " + esc(m.margin) : esc(m.margin) + " thru " + m.thru}`;
                 return `<div class="se-mline ${m.final ? "final" : ""}"><span class="who">${vs}</span><span class="st">${st}</span></div>`;
             }).join("")}</div>`;
@@ -680,14 +691,14 @@
                 }).join("");
                 return `<div class="se-row se-turnrow">${teeBar(s.cids)}
                     <div class="top"><div class="se-name">${esc(s.name)}${mtag(s.cids)}</div>
-                      <div class="se-score"><div class="v">${t || "–"}</div><div class="r">${d == null ? "" : d === 0 ? "Even" : (d > 0 ? "+" + d : d)}</div></div></div>
+                      <div class="tt"><span class="v">${t || "–"}</span><span class="r">${d == null ? "" : d === 0 ? "E" : (d > 0 ? "+" + d : d)}</span></div></div>
                     <div class="se-mini">${mini}</div></div>`;
             }).join("");
             return `<div class="se-eyebrow">${esc(eyebrow())} · The turn</div>
                 <h1 class="se-h1">${lo === 1 ? "Front" : "Back"} nine done</h1>
                 <div class="se-sub">${label} (holes ${firstNine[0]}–${firstNine[8]}) · Par ${par} · tap a hole to change it</div>
                 ${matchStrip()}
-                <div class="se-gap" style="height:12px"></div><div class="se-stack">${rows}</div>
+                <div class="se-gap" style="height:8px"></div><div class="se-stack" style="gap:6px">${rows}</div>
                 ${statusLine()}
                 <button type="button" class="se-pill go" data-act="turn">Go to hole ${next}</button>
                 <div class="se-gap" style="height:10px"></div>

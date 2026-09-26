@@ -183,6 +183,14 @@ photo: `GET /api/score-entry/checks/<id>/photo.jpg` (manager+). Guards:
   score** replaces "Back to the holes". Change → Card matches paper →
   Submit again; the edit resolves the flag and the submit re-signs.
 
+**Ties (v2.498.3, Kerry 2026-09-26):** "For Lone Star Cup matches will end
+in HALVED if they're tied. But for regular season Match Play, we have rulings
+for this." `match_status[].tie_rule` is `halve` for a cup session, `rulings`
+otherwise; the phone reads "Halved" vs "All square after N". The rulings
+themselves (pool may halve; knockout → extra holes `NH` with pops continuing,
+or a putt-off) live in game-engine.md and are NOT yet entered from the phone.
+Tee bars are 16 px (Kerry: "twice as wide"); the turn is compact.
+
 ## Live Scoring in the Tracker (v2.497.0)
 
 Kerry, 2026-09-26: "How will I access this thru the Tracker so I can see the

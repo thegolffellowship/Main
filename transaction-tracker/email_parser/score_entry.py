@@ -203,7 +203,8 @@ def _match_status(conn, g) -> list:
     matches: dict = {}
     for cid, m in rm.items():
         e = matches.setdefault(m["match_id"], {"format": m["format"], "sides": {},
-                                                "n_holes": m.get("n_holes") or g["holes"]})
+                                                "n_holes": m.get("n_holes") or g["holes"],
+                                                "cup": m.get("session") is not None})
         e["sides"].setdefault(m["side"], []).append(cid)
     course = [dict(h) for h in conn.execute(
         "SELECT hole_number AS hole, par, stroke_index FROM se_round_holes WHERE round_id = ? "
@@ -236,6 +237,10 @@ def _match_status(conn, g) -> list:
                                  course, phs, scores, names, marks)
         w = d.get("gg_winner_idx")
         out.append({"match_id": mid, "format": e["format"], "sides": sides,
+                    # Lone Star Cup: a tie is HALVED. Anything else follows the
+                    # regular-season rulings (game-engine.md, 2026-07-20): pool
+                    # may halve, knockout goes to extra holes (NH) or a putt-off.
+                    "tie_rule": "halve" if e.get("cup") else "rulings",
                     "names": [" & ".join(names.get(c) or "#%s" % c for c in sd) for sd in sides],
                     "lead_side": (w - 1) if w else None, "margin": d.get("gg_margin"),
                     "thru": d.get("thru") or 0,
