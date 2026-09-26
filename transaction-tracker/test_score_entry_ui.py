@@ -535,6 +535,29 @@ with sync_playwright() as p:
           g.count() == 2 and g.nth(0).locator(".se-pop:not(.t)").count() >= 1
           and g.nth(0).bounding_box()["y"] < cellp.locator("button.cell").bounding_box()["y"] + 10)
 
+    print("CA #717: after a cup match is decided the phone keeps taking holes (skins)")
+    rk, gk, tokk = make(9, 1, "closeout-ui")
+    db.set_app_setting("lsc_matches", _json.dumps({"event_id": 900, "sessions": [
+        {"id": "sK", "format": "singles", "se_round": rk, "n_holes": 9,
+         "matches": [{"id": "K1", "austin": [101], "sa": [102]}]}]}))
+    pk = open_as_kerry(tokk)
+    kdev = pk.evaluate("JSON.parse(localStorage.getItem('se_device'))")
+    se.write_scores(gk, kdev, 101, [{"op_id": f"k{c_}-{h}", "customer_id": c_, "hole": h,
+                                     "gross": PARS[h - 1] - 1 if c_ == 101 else PARS[h - 1] + 1}
+                                    for h in range(1, 6) for c_ in (101, 102)])
+    pk.evaluate("localStorage.setItem('se_hole_' + new URLSearchParams(location.search).get('t').slice(0,24), '6')")
+    pk.reload(); pk.wait_for_selector("h1:has-text('Hole 6')")
+    check("the match reads final (5&4) on hole 6", "5&4" in pk.inner_text(".se-mcard") and "final" in pk.inner_text(".se-mcard").lower())
+    check("hole 6 still has its steppers and Save after the close-out",
+          pk.locator(".se-plus").count() == 2 and pk.locator("[data-act=save]").is_enabled())
+    pk.locator(".se-row").nth(1).locator(".se-minus").click()
+    pk.click("[data-act=save]"); pk.wait_for_selector("h1:has-text('Hole 7')"); pk.wait_for_timeout(1200)
+    kc = se.get_group_card(gk)
+    check("a hole after the close-out saves like any other",
+          kc["scores"]["c:101"].get("6") == PARS[5] and kc["scores"]["c:102"].get("6") == PARS[5] - 1, kc["scores"])
+    check("and the result stays 5&4", kc["match_status"][0]["margin"] == "5&4")
+    db.set_app_setting("lsc_matches", "")
+
     print("pops as dots: black = PH at 100%, orange = Team/Cart Net")
     rp = se.create_round(900, 9, label="pops", course_holes=course(9))["round_id"]
     gp = se.upsert_group(rp, 1, players=[

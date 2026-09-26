@@ -323,6 +323,18 @@ link (R8, a member send — Kerry OKs each batch) come later; the email link
 is the strong identity path, "tap your name" from a shared code is weak and
 is accepted for the beta because every action is logged by device.
 
+## Entry stays open after a match is decided (CA #717, 2026-09-26)
+
+Kerry's Lone Star Cup ruling via CA #717: "score entry must stay open after a match
+is decided. Don't lock the card or end entry at the close-out; keep taking holes
+through the last hole of the round. The board shows the match result as final, and
+later holes feed skins only." Verified: nothing in `write_scores`, the lock, the
+card or the phone screens reads a match's close-out; it only greys the dead holes in
+the match card (labelled "skins only" in the cup). `_match_status` keeps the result
+frozen at `closed_at` (the engine's `closed_at_order`). Guards: test_score_entry.py
+"CA #717" (holes 6-9 accepted after 5&4, result unchanged, card still held) and
+test_score_entry_ui.py (hole 6 keeps its steppers and Save, and saves).
+
 ## Admin PIN box on the closed page (v2.500.2)
 
 Kerry 2026-09-26: "Yes, add the PIN box." While `score_entry_live` is off, the card

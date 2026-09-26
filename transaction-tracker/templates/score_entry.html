@@ -786,7 +786,7 @@
                 <tr><th><span class="se-mc-chip a">${esc(initials(fn[0]))}</span></th>${row(0, list)}<th>${tot(0, list)}</th></tr>
                 <tr><th><span class="se-mc-chip b">${esc(initials(fn[1]))}</span></th>${row(1, list)}<th>${tot(1, list)}</th></tr>
               </table>`).join("")}
-              <div class="se-mc-note">Circled: won the hole · dots: match strokes · grey: after the match was decided</div></div>`;
+              <div class="se-mc-note">Circled: won the hole · dots: match strokes · grey: after the match was decided${m.cup ? " (skins only)" : ""}</div></div>`;
         }
         const helpBtn = (k) => `<button type="button" class="se-help ${help[k] ? "on" : ""}" data-act="help" data-k="${k}" aria-expanded="${help[k] ? "true" : "false"}">How It Works</button>`;
         const helpText = (k, t) => help[k] ? `<div class="se-helptext">${t}</div>` : "";

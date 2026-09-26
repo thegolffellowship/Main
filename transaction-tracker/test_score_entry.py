@@ -481,6 +481,37 @@ check("a PH the card's indexes can't carry is reported, not guessed", st.get("_u
 check("a nine carries the GG-convention note",
       se.get_group_card(sg)["strokes_note"] == "strokes per GG convention")
 
+print("CA #717: entry stays open after a Lone Star Cup match is decided")
+cr = se.create_round(900, 9, label="closeout", course_holes=NINE)["round_id"]
+cg = se.upsert_group(cr, 1, players=[{"customer_id": c, "display_name": n, "playing_handicap": 0}
+                                     for c, n in [(101, "Kerry Niester"), (102, "Adam Baker")]])["group_id"]
+db.set_app_setting("lsc_matches", json.dumps({"event_id": 900, "sessions": [
+    {"id": "sC", "format": "singles", "se_round": cr, "n_holes": 9,
+     "matches": [{"id": "C1", "austin": [101], "sa": [102]}]}]}))
+se.claim_group(cg, "ck", 101)
+par_of = {h["hole"]: h["par"] for h in NINE}
+ops = []
+for h in range(1, 6):   # Kerry wins 1-5: 5 up with 4 to play, closed out 5&4
+    ops += [mk(f"C{h}a", 101, h, par_of[h] - 1), mk(f"C{h}b", 102, h, par_of[h] + 1)]
+se.write_scores(cg, "ck", 101, ops)
+m1 = se.get_group_card(cg)["match_status"][0]
+check("the match closes out 5&4 after hole 5", m1["final"] and m1["margin"] == "5&4" and m1["closed_at"] == 5, m1)
+late = []
+for h in range(6, 10):  # Adam wins every hole after the close-out
+    late += [mk(f"C{h}a", 101, h, par_of[h] + 2), mk(f"C{h}b", 102, h, par_of[h] - 1)]
+res = se.write_scores(cg, "ck", 101, late)
+check("every hole after the close-out is still taken (skins play on)",
+      len(res.get("results", [])) == 8 and all(r["result"] == "ok" for r in res["results"]) and res.get("holds_lock"), res)
+cc = se.get_group_card(cg)
+check("the card keeps holes 6-9 for both players",
+      all(str(h) in cc["scores"]["c:101"] and str(h) in cc["scores"]["c:102"] for h in range(6, 10)))
+m2 = cc["match_status"][0]
+check("the match result stays final at 5&4; later holes do not change it",
+      m2["final"] and m2["margin"] == "5&4" and m2["lead_side"] == 0 and m2["closed_at"] == 5, m2)
+check("the scorekeeper still holds the card after the close-out; nothing attested it",
+      se.get_group_card(cg, device_id="ck")["lock"]["state"] == "mine" and not cc.get("card_check"))
+db.set_app_setting("lsc_matches", "")
+
 print("Team/Cart Net pops (Kerry 2026-09-26: PH pops at 100% and team pops, as dots)")
 check("no team handicap on file, no team pops", se.get_group_card(sg)["team_strokes"] == {}
       and se.get_group_card(sg)["team_game"] is None)

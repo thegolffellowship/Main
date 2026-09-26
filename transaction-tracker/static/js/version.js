@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.500.13";
+window.TGF_VERSION = "2.500.14";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.500.14",
+    date: "2026-09-26",
+    title: "Score entry: stays open after a match is decided (CA #717)",
+    changes: [
+      "Kerry's Lone Star Cup ruling (CA #717): 'score entry must stay open after a match is decided ... keep taking holes through the last hole of the round. The board shows the match result as final, and later holes feed skins only.' Checked: nothing in score entry locks, stops or hides a hole at the close-out; the match result stays frozen where it closed. New guards prove it on the server (holes after a 5&4 close-out are accepted, the result stays 5&4, the scorekeeper still holds the card) and on the phone (the next hole keeps its steppers and Save, and saves). The match card's note now marks the greyed holes 'skins only' in the cup."
+    ]
+  },
   {
     version: "2.500.13",
     date: "2026-09-26",
