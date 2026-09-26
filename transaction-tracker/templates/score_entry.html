@@ -144,7 +144,9 @@
         .se-hole .se-stack { gap: 6px; margin-top: 8px; }
         .se-hole .se-row { padding: 7px 10px; gap: 10px; }
         .se-hole .se-who { gap: 1px; }
-        .se-hole .se-name { font-size: 17px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .se-hole .se-name { font-size: 17px; display: flex; align-items: center; min-width: 0; white-space: nowrap; }
+        .se-hole .se-name .nm { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+        .se-hole .se-name .se-mtag { flex: none; }
         .se-hole .se-meta { font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .se-hole .se-minus, .se-hole .se-plus { width: 44px; height: 44px; }
         .se-hole .se-pops { height: 44px; }
@@ -353,15 +355,32 @@
         @media (max-width: 560px) {
             .se-wrap { padding: 16px 16px 32px; }
         }
+        /* UPRIGHT ONLY (Kerry 2026-09-26: "Let's lock the live score entry to
+           vertical"). A web page cannot lock an iPhone's rotation, so a phone
+           held sideways gets this panel over the screens instead; nothing
+           typed is lost. Where the browser allows it (Android, installed app)
+           the page also asks for portrait. Short landscape only: a tablet or
+           desktop window is never covered. */
+        .se-upright { display: none; }
+        @media (orientation: landscape) and (max-height: 500px) {
+            .se-upright { display: flex; position: fixed; inset: 0; z-index: 1000; background: #1B1B1B; color: #FFFFFF;
+                          flex-direction: column; align-items: center; justify-content: center; gap: 14px;
+                          font: 700 20px Bitter, Georgia, serif; text-align: center; padding: 24px; }
+            body { overflow: hidden; }
+        }
     </style>
 </head>
 <body>
     {% set SHELL_TITLE = 'Scorecard' %}{% set SHELL_ACTIVE = '' %}
     {% include '_shell_nav.html' %}
     <main class="se-wrap" id="se-app" aria-live="polite"></main>
+    <div class="se-upright" role="alert"><svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2.5" width="10" height="19" rx="2"/><path d="M11 18.5h2"/></svg>
+        <div>Turn your phone upright to keep score.</div></div>
 
     <script src="/static/js/version.js"></script>
-    <script>window.MEMBER_MODE = true;</script>
+    <script>window.MEMBER_MODE = true;
+    try { if (screen.orientation && screen.orientation.lock) screen.orientation.lock("portrait").catch(() => {}); } catch (e) {}
+    </script>
     <script src="/static/js/auth.js"></script>
     <script>
     (function () {
@@ -625,7 +644,7 @@
                                !s.team && s.ph != null ? "PH " + s.ph : null,
                                (vsText(s.cids) || "").replace(/^Match vs/, "vs") || null].filter(Boolean).join(" · ");
                 return `<div class="se-row" data-key="${s.key}">${teeBar(s.cids)}
-                    <div class="se-who"><div class="se-name">${esc(s.name)}${mtag(s.cids)}</div><div class="se-meta">${esc(meta2)}</div></div>
+                    <div class="se-who"><div class="se-name"><span class="nm">${esc(s.name)}</span>${mtag(s.cids)}</div><div class="se-meta">${esc(meta2)}</div></div>
                     <button type="button" class="se-minus" data-act="step" data-d="-1" aria-label="One less for ${esc(s.name)}">&minus;</button>
                     <div class="se-score" ${popLabel(s.cids, hole) ? `aria-label="${esc(popLabel(s.cids, hole))}"` : ""}>${popDots(s.cids, hole)}<div class="v ${cur.v == null ? "empty" : cur.waiting ? "waiting" : ""}">${xx ? '<span class="se-x">X</span>' : shown}</div><div class="r">${rel}</div></div>
                     <button type="button" class="se-plus" data-act="step" data-d="1" aria-label="One more for ${esc(s.name)}">+</button>

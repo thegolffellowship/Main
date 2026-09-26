@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.500.9";
+window.TGF_VERSION = "2.500.10";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.500.10",
+    date: "2026-09-26",
+    title: "Score entry: upright only; a trimmed name keeps its M",
+    changes: [
+      "Kerry, 2026-09-26: 'Let's lock the live score entry to vertical.' A web page cannot lock an iPhone's rotation, so a phone turned sideways now sees 'Turn your phone upright to keep score' over the scoring screens (nothing typed is lost; it clears the moment the phone is upright). Where the browser allows it (Android, an installed app) the page also asks for portrait. Only a short landscape window is covered, never a tablet or desktop.",
+      "Seen in Kerry's screenshot: 'Brian Thompson ...' lost his M when the name was trimmed. Now only the name is shortened and the M always shows."
+    ]
+  },
   {
     version: "2.500.9",
     date: "2026-09-26",
