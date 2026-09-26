@@ -145,9 +145,15 @@ with sync_playwright() as p:
     play(pg, 8)
     pg.wait_for_timeout(1200)
     review_ok(pg, 9, "nine")
-    check("help text is hidden until the ? is tapped", pg.locator(".se-helptext").count() == 0)
+    check("help text is hidden until How It Works is tapped", pg.locator(".se-helptext").count() == 0)
+    hb = pg.locator("[data-act=help]")
+    check("help is the How It Works standard: orange pill, white text",
+          hb.inner_text().strip().upper() == "HOW IT WORKS"
+          and hb.evaluate("e => getComputedStyle(e).backgroundColor") == "rgb(232, 124, 62)"
+          and hb.evaluate("e => getComputedStyle(e).color") == "rgb(255, 255, 255)",
+          (hb.inner_text(), hb.evaluate("e => getComputedStyle(e).backgroundColor")))
     pg.click("[data-act=help]")
-    check("the ? shows the help", pg.locator(".se-helptext").count() == 1)
+    check("How It Works shows the help", pg.locator(".se-helptext").count() == 1)
     pg.click("[data-act=help]")
     pg.click("button.cell[data-key='c:102'][data-h='4']")
     pg.wait_for_selector(".se-picker")
@@ -176,7 +182,12 @@ with sync_playwright() as p:
     pg.wait_for_selector("text=Photo of the paper card")
     check("submit waits for who kept the paper card",
           pg.locator("[data-act=submit]").is_disabled())
+    pg.click("[data-act=ps][data-cid='101']")
+    check("'Me' is a choice, with Kerry's note",
+          "Next time, please have one person keep the paper card and another Live Scoring" in pg.inner_text("body"))
     pg.click("[data-act=ps][data-cid='102']")
+    check("the note goes away for anyone else",
+          "Next time, please have one person" not in pg.inner_text("body"))
     check("...and for a photo", pg.locator("[data-act=submit]").is_disabled())
     pg.click("[data-act=nophoto]")
     check("'Can't take a photo?' lets it go without one",

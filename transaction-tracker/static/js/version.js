@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.496.0";
+window.TGF_VERSION = "2.496.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.496.1",
+    date: "2026-09-26",
+    title: "Score entry: How It Works button, 'Me' for the paper card, a full preview",
+    changes: [
+      "Kerry, 2026-09-26: the help '?' now follows the How It Works standard, an orange pill with white capitals, like the Leaderboard's How It Works button.",
+      "'Who kept the paper card?' now offers Me, for when the live scorer also kept the paper. Picking it shows Kerry's note: 'Next time, please have one person keep the paper card and another Live Scoring.'",
+      "The preview can show everything: scoring-se-preview takes |18 for an 18-hole preview (FRONT | BACK) and |match to bind demo singles matches (1v2, 3v4) through a new round-level match list (app setting score_entry_matches), so the M tags and the Ball in hole / Picked up prompt appear without touching the Lone Star Cup. New read-only bridge scoring-se-status:<event> shows each round's holes in, signatures, card checks, marks and matches."
+    ]
+  },
   {
     version: "2.496.0",
     date: "2026-09-25",

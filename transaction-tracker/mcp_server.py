@@ -1779,7 +1779,8 @@ def _scoring_dispatch_inner(url: str, extract: str):
       scoring-verify:<round_id>    verify one round vs GG's numbers
       scoring-card:<round_id>      full scorecard with derivations
       scoring-courses              course/tee database listing
-      scoring-se-preview:<event_id>|<cid,...>[|apply]  labelled PREVIEW score-entry round + link (admin-only open)
+      scoring-se-preview:<event_id>|<cid,...>[|apply][|18][|match]  labelled PREVIEW score-entry round + link (admin-only open); 18 = an 18-hole preview, match = a demo singles match per pair (1v2, 3v4)
+      scoring-se-status:<event_id>  read-only: every score-entry round on the event, holes in, signatures, checks, marks, matches
       scoring-se-links:<round_id>  one score-entry link per group
       scoring-se-close:<round_id>|apply  close a score-entry round (links stop opening; nothing deleted)
       scoring-se-keeper-signs:<event_id>[|on|off]  the dial: the scorekeeper's submit signs every card in the group
@@ -3222,11 +3223,24 @@ def _scoring_dispatch_inner(url: str, extract: str):
                 return json.dumps({"dry_run": True, "event_id": _ev, "customer_ids": _ids,
                                    "app_version": _ver,
                                    "would": "create or reuse the PREVIEW round and its group; add |apply"})
-            _res = _se.create_preview_round(_ev, _ids)
+            _flags = {x.lower() for x in _p[3:]}
+            _res = _se.create_preview_round(_ev, _ids, holes=18 if "18" in _flags else None)
+            if "error" not in _res and "match" in _flags:
+                # demo match play so every screen shows: 1v2, 3v4 (singles)
+                _pairs = [_ids[i:i + 2] for i in range(0, len(_ids) - 1, 2)]
+                _res["matches"] = _se.set_round_matches(
+                    _res["round_id"], [{"id": f"PREVIEW-{n + 1}", "format": "singles",
+                                        "sides": [[a], [b]]} for n, (a, b) in enumerate(_pairs)])
             if "error" not in _res:
                 _res["links"] = _se.round_links(_res["round_id"])
                 _audit("scoring-se-preview", f"event {_ev} round {_res['round_id']} players {_ids}")
             return json.dumps(_res, indent=2, default=str)
+        if cmd == "scoring-se-status":
+            from email_parser import score_entry as _se
+            try:
+                return json.dumps(_se.round_status(int(arg.strip())), indent=2, default=str)
+            except ValueError:
+                return json.dumps({"error": "usage: scoring-se-status:<event_id>"})
         if cmd == "scoring-se-links":
             # scoring-se-links:<round_id> — one link per group (Kerry hands them out).
             from email_parser import score_entry as _se

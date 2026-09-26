@@ -63,6 +63,23 @@ def round_matches(round_id: int, db_path=None) -> dict:
     except (ValueError, TypeError):
         return {}
     out: dict = {}
+    # A round-level match list (app setting score_entry_matches,
+    # {"<round_id>": [{"id", "format", "sides": [[cid...], [cid...]]}]}):
+    # matches that are not a Lone Star Cup session -- the preview's demo
+    # match today. The cup dial below wins for any player in both.
+    try:
+        rm = json.loads(get_app_setting(ROUND_MATCHES_SETTING, db_path) or "{}")
+    except (ValueError, TypeError):
+        rm = {}
+    for m in (rm.get(str(round_id)) or []):
+        sides = [[int(c) for c in side] for side in (m.get("sides") or [[], []])[:2]]
+        if len(sides) < 2:
+            continue
+        for i, side in enumerate(sides):
+            for c in side:
+                out[c] = {"match_id": m.get("id"), "session": None,
+                          "format": m.get("format") or "singles", "side": ("a", "b")[i],
+                          "partners": [x for x in side if x != c], "opponents": sides[1 - i]}
     for sess in dial.get("sessions") or []:
         if sess.get("se_round") is None or int(sess["se_round"]) != int(round_id):
             continue
@@ -76,6 +93,56 @@ def round_matches(round_id: int, db_path=None) -> dict:
                               "partners": [x for x in side if x != c],
                               "opponents": sides[1 - i]}
     return out
+
+
+ROUND_MATCHES_SETTING = "score_entry_matches"
+
+
+def set_round_matches(round_id: int, matches: list | None, db_path=None) -> dict:
+    """Bind (or with None, clear) round-level matches: [{"id", "format",
+    "sides": [[cid...], [cid...]]}]. Every cid must be in the round."""
+    from email_parser.database import get_app_setting, set_app_setting
+    try:
+        rm = json.loads(get_app_setting(ROUND_MATCHES_SETTING, db_path) or "{}")
+    except (ValueError, TypeError):
+        rm = {}
+    if matches:
+        with _closing(_conn(db_path)) as conn:
+            inround = {r[0] for r in conn.execute(
+                "SELECT customer_id FROM se_players WHERE round_id = ?", (round_id,))}
+        bad = [c for m in matches for side in m.get("sides") or [] for c in side if int(c) not in inround]
+        if bad:
+            return {"error": f"not in round {round_id}: {bad}"}
+        rm[str(round_id)] = matches
+    else:
+        rm.pop(str(round_id), None)
+    set_app_setting(ROUND_MATCHES_SETTING, json.dumps(rm, sort_keys=True), db_path)
+    return {"round_id": round_id, "matches": matches or []}
+
+
+def round_status(event_id: int, db_path=None) -> dict:
+    """A short read of every score-entry round on an event: holes, each
+    player's holes in, signatures, card checks, marks, matches. For lanes
+    checking what the preview shows (read-only)."""
+    feed = get_entered_scores(event_id, db_path=db_path)
+    out = []
+    for r in feed["rounds"]:
+        signed = {}
+        for x in r["signoffs"]:
+            signed.setdefault(x["customer_id"], []).append(
+                x["kind"] + ("" if x.get("signed_by_customer_id") in (None, x["customer_id"])
+                             else f" (by {x['signed_by_customer_id']})"))
+        out.append({"round_id": r["round_id"], "label": r["label"], "holes": r["holes"],
+                    "status": r["status"], "course_holes": len(r["course"]),
+                    "groups": [{"group_id": g["group_id"], "lock": g["lock_state"],
+                                "scorer": g["scorer_customer_id"]} for g in r["groups"]],
+                    "players": [{"customer_id": p["customer_id"], "name": p["name"],
+                                 "thru": p["thru"], "marks": p["marks"],
+                                 "signed": signed.get(p["customer_id"], [])} for p in r["players"]],
+                    "card_checks": r["card_checks"],
+                    "matches": round_matches(r["round_id"], db_path)})
+    return {"event_id": event_id, "version": feed["version"],
+            "keeper_signs": keeper_signs(event_id, db_path), "rounds": out}
 
 
 def _marks_by_subject(conn, group_id: int = None, round_id: int = None) -> dict:
@@ -661,7 +728,8 @@ def _event_course_holes(conn, ev: dict, n_holes: int) -> list[dict]:
 PREVIEW_LABEL = "PREVIEW (test round, not a real card)"
 
 
-def create_preview_round(event_id: int, customer_ids: list[int], db_path=None) -> dict:
+def create_preview_round(event_id: int, customer_ids: list[int], db_path=None,
+                         holes: int | None = None) -> dict:
     ids = [int(c) for c in customer_ids if str(c).strip()]
     if not ids or len(ids) > 5:
         return {"error": "one to five customer_ids"}
@@ -676,14 +744,18 @@ def create_preview_round(event_id: int, customer_ids: list[int], db_path=None) -
         missing = [c for c in ids if c not in names]
         if missing:
             return {"error": f"unknown customer_id(s): {missing}"}
+        default = 18 if "18" in str(ev.get("format") or "") and "9/18" not in str(ev.get("format") or "") else 9
+        # An 18-hole preview on a nine event is its own round (Kerry asked to
+        # see every screen, the FRONT | BACK toggle included).
+        label = PREVIEW_LABEL if not holes or holes == default else f"{PREVIEW_LABEL} · {holes} holes"
+        holes = holes if holes in (9, 18) else default
         existing = conn.execute("SELECT id FROM se_rounds WHERE event_id = ? AND label = ? "
                                 "AND status = 'open' ORDER BY id LIMIT 1",
-                                (event_id, PREVIEW_LABEL)).fetchone()
-        holes = 18 if "18" in str(ev.get("format") or "") and "9/18" not in str(ev.get("format") or "") else 9
+                                (event_id, label)).fetchone()
         course = _event_course_holes(conn, ev, holes)
     rid = existing[0] if existing else create_round(
         event_id, holes, round_date=(ev.get("event_date") or "")[:10] or None,
-        label=PREVIEW_LABEL, course_holes=course, course_id=ev.get("course_id"),
+        label=label, course_holes=course, course_id=ev.get("course_id"),
         created_by="preview", db_path=db_path)["round_id"]
     g = upsert_group(rid, 1, label="Preview group", start_hole=_first_hole(ev, holes),
                      players=[{"customer_id": c, "display_name": names[c], "seat": i + 1}

@@ -328,6 +328,19 @@ check("...both picked up -> the hole is a push, both cards still 7",
       x["winner"] == 0 and x["p1_gross"] == 7 and x["p2_gross"] == 7, x)
 db.set_app_setting("lsc_matches", "")
 se.write_scores(sg, "sk", 101, [mk("MK8", 102, 1, 5), mk("MK11", 101, 1, 4)])
+check("a round-level match must use players in the round",
+      "error" in se.set_round_matches(sr, [{"id": "X", "sides": [[101], [999]]}]))
+se.set_round_matches(sr, [{"id": "DEMO-1", "format": "singles", "sides": [[102], [105]]}])
+mt = se.get_group_card(sg)["matches"]
+check("a round-level match (the preview's demo) also marks who has a match",
+      mt.get("102", {}).get("opponents") == [105] and "101" not in mt, mt)
+st = se.round_status(900)
+rs = next(r for r in st["rounds"] if r["round_id"] == sr)
+check("round_status reads holes in, signatures and matches",
+      rs["holes"] == 9 and any(p["customer_id"] == 102 and p["thru"] == 9 for p in rs["players"])
+      and "102" in {str(k) for k in rs["matches"]}, rs["players"][:2])
+se.set_round_matches(sr, None)
+check("the round-level match clears", se.get_group_card(sg)["matches"] == {})
 
 print("card check + submit + photo (Kerry 2026-09-25)")
 check("only the scorekeeper's phone submits",

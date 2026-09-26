@@ -209,6 +209,16 @@ is Triple".
   "Something's wrong" box all say "Maximum allowed is triple bogey (N)."
   (for a match player: "enter N, then mark it Picked up").
 - Screenshots: `docs/claude/screenshots/score-entry-2026-09-25-match-pickup/`.
+- **Round-level matches (v2.496.1).** Besides the cup dial, `round_matches`
+  reads app setting `score_entry_matches` ({"<round_id>": [{"id", "format",
+  "sides": [[cid], [cid]]}]}; `set_round_matches`). Today it binds the
+  preview's demo match (`scoring-se-preview:<event>|<cids>|apply|18|match`);
+  it is also the place a non-cup match would bind. Read the state with
+  `scoring-se-status:<event>`.
+- **Help and the paper card (v2.496.1, Kerry 2026-09-26).** Help is the How
+  It Works pill (orange, white Bitter capitals, as `.pr-hiw-link`). "Who kept
+  the paper card?" offers **Me**; picking it shows "Next time, please have
+  one person keep the paper card and another Live Scoring."
 
 ## Max Triple, and no ace on a par 5 (v2.493.3)
 

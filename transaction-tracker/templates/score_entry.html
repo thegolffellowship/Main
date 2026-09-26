@@ -118,10 +118,13 @@
         /* CARD CHECK (Kerry 2026-09-25): like the paper card and GG's review,
            one nine at a time, the score row right under it. */
         .se-titlebar { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-        .se-help { width: 30px; height: 30px; border-radius: 15px; border: 1.5px solid #6B7280; background: #FFFFFF;
-                   color: #4B5563; font: 700 15px/1 'Helvetica Neue', Helvetica, Arial, sans-serif; cursor: pointer;
-                   flex: none; padding: 0; }
-        .se-help.on { background: #1B1B1B; border-color: #1B1B1B; color: #FFFFFF; }
+        /* HOW IT WORKS: the app's help standard (contests.html .pr-hiw-link):
+           an orange pill, white Bitter capitals (Kerry 2026-09-26). */
+        .se-help { display: inline-flex; align-items: center; height: 30px; padding: 0 14px; flex: none;
+                   background: #E87C3E; border: none; border-radius: 9999px; cursor: pointer; color: #FFFFFF;
+                   font: 700 11px/1 Bitter, Georgia, serif; letter-spacing: 1px; text-transform: uppercase;
+                   white-space: nowrap; }
+        .se-help:hover, .se-help.on { background: #D06B2E; }
         .se-helptext { margin-top: 8px; padding: 10px 12px; border-radius: 10px; background: #F8F8F8;
                        font-size: 14px; line-height: 1.45; color: #4B5563; white-space: normal; }
         .se-seg { display: flex; border: 1px solid #1B1B1B; border-radius: 24px; overflow: hidden; margin: 12px 0 10px; }
@@ -438,7 +441,7 @@
             }).join("");
         }
 
-        const helpBtn = (k) => `<button type="button" class="se-help ${help[k] ? "on" : ""}" data-act="help" data-k="${k}" aria-label="Help">?</button>`;
+        const helpBtn = (k) => `<button type="button" class="se-help ${help[k] ? "on" : ""}" data-act="help" data-k="${k}" aria-expanded="${help[k] ? "true" : "false"}">How It Works</button>`;
         const helpText = (k, t) => help[k] ? `<div class="se-helptext">${t}</div>` : "";
 
         // CHECK THE CARD (Kerry 2026-09-25): "A is what is most like what the
@@ -500,7 +503,8 @@
         // is prompted to enter that person's name as well.")
         function photoScreen() {
             const others = card.players.filter((p) => p.customer_id !== who);
-            const chips = others.map((p) => `<button type="button" class="se-chip ${psCid === p.customer_id ? "on" : ""}" data-act="ps" data-cid="${p.customer_id}">${esc(first(p.display_name))}</button>`).join("")
+            const chips = `<button type="button" class="se-chip ${psCid === who ? "on" : ""}" data-act="ps" data-cid="${who}">Me</button>`
+                + others.map((p) => `<button type="button" class="se-chip ${psCid === p.customer_id ? "on" : ""}" data-act="ps" data-cid="${p.customer_id}">${esc(first(p.display_name))}</button>`).join("")
                 + `<button type="button" class="se-chip ${psOther ? "on" : ""}" data-act="ps" data-cid="">Someone else</button>`;
             const shot = photo && photo.data
                 ? `<img class="se-shot" src="${photo.data}" alt="Photo of the paper card"><label class="se-retake">Retake<input type="file" accept="image/*" capture="environment" data-photo="1"></label>`
@@ -514,6 +518,7 @@
                 <div class="se-lbl" style="margin:16px 0 8px">Who kept the paper card?</div>
                 <div class="se-chips">${chips}</div>
                 ${psOther ? `<input class="se-input" id="se-ps-name" type="text" autocomplete="off" placeholder="Their name" value="${esc(psName)}">` : ""}
+                ${psCid === who ? `<div class="se-warn">${ICON.warn}<span>Next time, please have one person keep the paper card and another Live Scoring.</span></div>` : ""}
                 <div class="se-gap"></div>
                 <button type="button" class="se-pill go" data-act="submit" ${submitReady() ? "" : "disabled"}>${noPhoto && !(photo && (photo.data || photo.sent)) ? "Submit without a photo" : "Submit card"}</button>
                 ${photo && (photo.data || photo.sent) ? "" : `<button type="button" class="se-link" data-act="nophoto">${noPhoto ? "Take the photo after all" : "Can't take a photo?"}</button>`}
