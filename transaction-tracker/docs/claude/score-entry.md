@@ -219,6 +219,9 @@ is Triple".
   It Works pill (orange, white Bitter capitals, as `.pr-hiw-link`). "Who kept
   the paper card?" offers **Me**; picking it shows "Next time, please have
   one person keep the paper card and another Live Scoring."
+- **Names in Bitter (v2.496.2, Kerry 2026-09-26):** "I'd like to use the
+  Bitters text for names on the display." Every player name on every
+  score-entry screen; numbers stay sans.
 
 ## Max Triple, and no ace on a par 5 (v2.493.3)
 

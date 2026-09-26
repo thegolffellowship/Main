@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.496.1";
+window.TGF_VERSION = "2.496.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.496.2",
+    date: "2026-09-26",
+    title: "Score entry: player names in Bitter",
+    changes: [
+      "Kerry, 2026-09-26: 'I'd like to use the Bitters text for names on the display. I like how that looks on the LEADERBOARD / EVENTS scoring.' Every player name on the score-entry screens (the join list, the hole rows, the check card, the sign card, the totals and the match prompt) is now Bitter; the scores beside them stay sans with tabular figures."
+    ]
+  },
   {
     version: "2.496.1",
     date: "2026-09-26",
