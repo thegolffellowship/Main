@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.498.4";
+window.TGF_VERSION = "2.498.5";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.498.5",
+    date: "2026-09-26",
+    title: "Score entry: a won match shimmers; cup rounds show the team standings",
+    changes: [
+      "Kerry, 2026-09-26: 'If a match is won, then that heading needs to shimmer kind of like our champion banner on the Points Races.' A finished match with a winner renders in the champion-plaque style (dark plate, gold lettering, the same passing shine as the Points Races champion banner). A halved or unfinished match stays plain.",
+      "Kerry: 'For Lone Star cup, It should also show an update to the Team Standings.' When the round is bound to a Lone Star Cup session, the card carries cup_standings read from the cup board itself (lsc_board_payload): Austin and San Antonio points, with the live projection under each. Rounds with no cup session show no strip. Golf Genius stays the official record."
+    ]
+  },
   {
     version: "2.498.4",
     date: "2026-09-26",

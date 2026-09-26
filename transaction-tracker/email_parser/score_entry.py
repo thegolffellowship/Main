@@ -190,6 +190,26 @@ def admin_overview(event_id: int, base_url: str | None = None, db_path=None) -> 
             "qr": _qr_dial(event_id, db_path)}
 
 
+def _cup_standings(round_id: int) -> dict | None:
+    """The Lone Star Cup team standings when this round is bound to a cup
+    session (Kerry 2026-09-26: "For Lone Star cup, It should also show an
+    update to the Team Standings"). Read from the cup board itself
+    (lsc_cup.lsc_board_payload), so the phone and the board agree."""
+    rm = round_matches(round_id)
+    if not any(v.get("session") is not None for v in rm.values()):
+        return None
+    from email_parser.lsc_cup import lsc_board_payload
+    b = lsc_board_payload()
+    if not b.get("configured"):
+        return None
+    t = b.get("teams") or {}
+    return {"austin": (t.get("austin") or {}).get("points", 0.0),
+            "sa": (t.get("sa") or {}).get("points", 0.0),
+            "austin_projected": (t.get("austin") or {}).get("projected", 0.0),
+            "sa_projected": (t.get("sa") or {}).get("projected", 0.0),
+            "points_to_win": b.get("points_to_win")}
+
+
 def _genders(conn, cids: list) -> dict:
     """{customer_id: 'M' | 'F'} from customers.gender; {} when the column
     is not there yet (a fresh database before its boot migration)."""
@@ -1074,13 +1094,17 @@ def get_group_card(group_id: int, device_id: str | None = None, db_path=None) ->
             match_status = _match_status(conn, g)
         except Exception:                 # a match read must never cost the card
             match_status = []
+        try:
+            cup = _cup_standings(g["round_id"]) if match_status else None
+        except Exception:
+            cup = None
     return {**extras, "group_id": group_id, "round_id": g["round_id"], "event_id": g["event_id"],
             "round_label": g["round_label"], "round_date": g["round_date"],
             "holes": g["holes"], "status": g["status"], "label": g["label"],
             "group_num": g["group_num"],
             "start_hole": g["start_hole"], "tee_time": g["tee_time"],
             "course": holes, "players": players, "teams": teams, "scores": scores,
-            "marks": marks, "match_status": match_status, "matches": {str(k): v for k, v in round_matches(g["round_id"]).items()},
+            "marks": marks, "match_status": match_status, "cup_standings": cup, "matches": {str(k): v for k, v in round_matches(g["round_id"]).items()},
             "lock": _lock_view(lock, device_id, names)}
 
 

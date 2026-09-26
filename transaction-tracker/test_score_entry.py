@@ -332,6 +332,11 @@ check("the phone's match standing is the cup board's (same engine, same numbers)
       len(ms) == 1 and ms[0]["margin"] == bd["gg_margin"] and ms[0]["thru"] == bd["thru"]
       and ms[0]["holes"].get("1") == 0 and ms[0]["names"] == ["Kerry", "Adam"], (ms, bd.get("gg_margin")))
 check("a Lone Star Cup match halves a tie", ms[0]["tie_rule"] == "halve", ms[0])
+cs = se.get_group_card(sg)["cup_standings"]
+bt = lsc_board_payload()["teams"]
+check("a cup round's card carries the team standings, the board's own numbers",
+      cs is not None and cs["austin"] == bt["austin"]["points"] and cs["sa"] == bt["sa"]["points"]
+      and cs["austin_projected"] == bt["austin"]["projected"], (cs, bt))
 db.set_app_setting("lsc_matches", "")
 se.write_scores(sg, "sk", 101, [mk("MK8", 102, 1, 5), mk("MK11", 101, 1, 4)])
 check("a round-level match must use players in the round",
@@ -342,6 +347,7 @@ check("a round-level match (the preview's demo) also marks who has a match",
       mt.get("102", {}).get("opponents") == [105] and "101" not in mt, mt)
 check("a regular-season (round-level) match follows the tie rulings, not an automatic halve",
       se.get_group_card(sg)["match_status"][0]["tie_rule"] == "rulings")
+check("a round with no cup session shows no cup standings", se.get_group_card(sg)["cup_standings"] is None)
 st = se.round_status(900)
 rs = next(r for r in st["rounds"] if r["round_id"] == sr)
 check("round_status reads holes in, signatures and matches",

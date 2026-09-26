@@ -323,6 +323,21 @@ link (R8, a member send — Kerry OKs each batch) come later; the email link
 is the strong identity path, "tap your name" from a shared code is weak and
 is accepted for the beta because every action is logged by device.
 
+## Won-match shimmer and cup standings (v2.498.5)
+
+Kerry 2026-09-26: "If a match is won, then that heading needs to shimmer kind of
+like our champion banner on the Points Races. For Lone Star cup, It should also
+show an update to the Team Standings."
+
+- A match line with `final` and a `lead_side` gets class `won`: the champion
+  plaque look from contests.html (`.tgf-champ-plaque`), cloned as `.se-mline.won`
+  with its own `seChampShine` keyframes. Halved and in-progress lines stay plain.
+- `get_group_card` returns `cup_standings` from `_cup_standings(round_id)`, which
+  reads `lsc_board_payload()` (the board's own numbers, never recomputed) and is
+  `None` unless the round is bound to a cup session in `lsc_matches`. The phone
+  renders it as the `.se-cup` strip: Austin #BF5700, San Antonio #4B6274, points
+  with the live projection beneath, ½ for halves.
+
 ## Data model (`ensure_score_entry_tables`, lazily created)
 
 ```
