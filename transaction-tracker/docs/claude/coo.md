@@ -255,6 +255,19 @@ Central after DST ends Nov 1 — update the Routine then.
   per builder (`shared:live:austin_net` …) and `cold: true` on the
   sample, so the digest can say which one.
 
+### Day five (v2.500.6, 2026-09-26) — quiet; `/api/items` gets laps
+
+- Digest #710: no job errors, no slow jobs; nightly backup 145 s → 59 s
+  after the archive move; main file 47 MB. `scoring-gg-archive_slow` ×3
+  were the one-time move (before its 120 s line shipped) — explained.
+- `/api/items` (`items_list`): 2 of 96 over 1.5 s (1.7 / 2.1 s), p50 527
+  ms, p95 1.0 s. Fixture, 2,400 rows × 64 columns: 117 ms query+dicts,
+  92 ms JSON, 3.6 MB raw / 76 KB gzipped. Added `query` / `encode` laps and
+  `rows` so a spike names its half. Not cached: `items` has no updated-at
+  column, so an in-place edit could not invalidate a cached payload.
+  Levers if it keeps crossing: send only the columns the EVENTS page reads,
+  or add `items.updated_at` (rule 3b, schema) and serve 304s to the 30 s poll.
+
 ### Day four (v2.489.6, 2026-09-25) — the archive move is built; the audit for CA
 
 - Digest #671 was clean on speed: no slow samples, no job errors, every

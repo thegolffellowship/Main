@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.500.5";
+window.TGF_VERSION = "2.500.6";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.500.6",
+    date: "2026-09-26",
+    changes: [
+      "The all-orders feed behind the EVENTS page now records how its time splits between reading the rows and packing them for the browser, plus the row count. Two opens on 9/25 took about two seconds with nothing to say why; the next slow one will name its part.",
+    ],
+  },
   {
     version: "2.500.5",
     date: "2026-09-26",

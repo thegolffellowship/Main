@@ -2286,8 +2286,18 @@ def api_items():
         if perf.current():
             perf.current().name, perf.current().event_id = "items_event", ev_id
         return jsonify(get_event_items(ev_id))
+    # Laps (CTO digest 2026-09-26: two 1.7–2.1 s opens with no breakdown):
+    # on 2,400 rows the fixture splits ~55% query+dicts / ~45% JSON of a
+    # 3.6 MB payload (76 KB gzipped). The laps say which one a spike was.
     items = get_all_items()
-    return jsonify(items)
+    sw = perf.current()
+    if sw:
+        sw.lap("query")
+        sw.note(rows=len(items))
+    resp = jsonify(items)
+    if sw:
+        sw.lap("encode")
+    return resp
 
 
 @app.route("/api/stats")
