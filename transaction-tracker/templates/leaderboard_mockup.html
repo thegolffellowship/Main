@@ -48,8 +48,9 @@
         .lb tr.me td { background: #FFF4EC; }
         .lb tr.me td.pos { box-shadow: inset 3px 0 0 #E87C3E; }
         .nm { display: inline-flex; align-items: baseline; gap: 4px; }
-        .nm em { font-style: normal; font-size: 12px; color: #6B7280; }
-        .nm b { font: 700 15px/1.3 Bitter, Georgia, serif; text-transform: uppercase; }
+        /* Kerry 2026-09-26: first name the same size as the last. */
+        .nm em { font-style: normal; font-size: 15px; color: #4B5563; }
+        .nm b { font: 700 15px/1.3 Bitter, Georgia, serif; }
         .cart { display: flex; align-items: baseline; gap: 7px; white-space: nowrap; }
         .cart .sep { color: #C4C4C4; }
         .meta { font-size: 11px; color: #6B7280; margin-top: 2px; }
@@ -94,12 +95,16 @@
         const A = "#2F5D74", B = "#C1673F";
         const TEE = {Blue: "#1D4ED8", White: "#1B1B1B", Gold: "#B8860B", Red: "#B91C1C"};
         const RING = {White: 1, Red: 1};
-        const P = (f, l) => `<span class="nm"><em>${f}</em><b>${l}</b></span>`;
+        // Surname case follows the Tracker's rule (events.md "Surname Uppercase
+        // for Elevated Roles"): MEMBER / MEMBER+ / MANAGER / OWNER in CAPS,
+        // everyone else (guest, 1st timer, non-member) in proper case.
+        const NONMEMBER = new Set(["Lee", "Cho", "Hale", "Park", "Kim"]);
+        const P = (f, l) => `<span class="nm"><em>${f}</em><b style="text-transform:${NONMEMBER.has(l) ? "none" : "uppercase"}">${l}</b></span>`;
         const cart = (pair) => `<div class="cart">${P(...pair[0])}<span class="sep">•</span>${P(...pair[1])}</div>`;
         const tp = (n) => n === 0 ? "E" : (n > 0 ? "+" + n : "" + n);
         const EV = {
           "9": {
-            name: "s9.29 Canyon Springs", group: 1, sub: "Tuesday nine · 16 players · holes 1–9",
+            name: "s9.29 Canyon Springs", group: 1, sub: "Tuesday nine · 16 players · holes 1–9", matrix: "16 players: the side-games matrix plays Cart Net",
             team: {key: "CART", title: "Cart Net · best ball of 2, 85%", rows: [
               {pos: 1, carts: [[["Dan", "Stich"], ["Mary", "Wade"]]], meta: "Group 1 · your group", thru: 6, net: -6, me: 1},
               {pos: 2, carts: [[["Ray", "Delgado"], ["Joe", "Reyes"]]], meta: "Group 3", thru: 7, net: -5},
@@ -117,7 +122,7 @@
               {a: ["Brian", "Thompson"], b: ["Mary", "Wade"], lead: null, txt: "AS", sub: "thru 6", h: [2, 1, 0, 1, 2, 0, null, null, null]}],
             note: "3 of 4 groups thru 5 or more"},
           "18": {
-            name: "s10.3 Brackenridge", group: 3, sub: "Saturday 18 · 24 players · shotgun",
+            name: "s10.3 Brackenridge", group: 3, sub: "Saturday 18 · 24 players · shotgun", matrix: "24 players: the side-games matrix plays Team Net",
             team: {key: "TEAM", title: "Team Net · best 2 of 4", rows: [
               {pos: 1, carts: [[["Ray", "Delgado"], ["Luis", "Garza"]], [["Ann", "Lee"], ["Sam", "Park"]]], meta: "Group 5", thru: 12, net: -11},
               {pos: 2, carts: [[["Kerry", "Niester"], ["Brian", "Thompson"]], [["Dan", "Stich"], ["Mary", "Wade"]]], meta: "Group 3 · your group", thru: 10, net: -9, me: 1},
@@ -140,7 +145,7 @@
         function playerRows(ev, col) {
             const rows = ev.players.slice().sort((x, y) => (col === "gross" ? x[4] - y[4] : x[6] - y[6]));
             return rows.map((r, i) => `<tr class="${r[3] === ev.group ? "me" : ""}"><td class="pos">${i + 1}</td>
-                <td class="who"><span class="tee ${RING[r[2]] ? "ring" : ""}" style="background:${TEE[r[2]]};color:${TEE[r[2]]}"></span>${P(r[0], r[1])}<div class="meta">Group ${r[3]}${r[3] === ev.group ? " · your group" : ""}</div></td>
+                <td class="who"><span class="tee ${RING[r[2]] ? "ring" : ""}" style="background:${TEE[r[2]]};color:${TEE[r[2]]}"></span>${P(r[0], r[1])}</td>
                 <td class="sm">${r[5]}</td><td class="tp ${(col === "gross" ? 0 : r[6]) < 0 ? "u" : ""}">${col === "gross" ? r[4] : tp(r[6])}</td></tr>`).join("");
         }
         function mcard(m) {
@@ -154,12 +159,12 @@
         }
         function body(ev, g) {
             if (g === ev.team.key) return `<table><tr><th class="l" colspan="2">${ev.team.title}</th><th>Thru</th><th>Net</th></tr>${ev.team.rows.map((r) =>
-                `<tr class="${r.me ? "me" : ""}"><td class="pos">${r.pos}</td><td class="who">${r.carts.map(cart).join("")}<div class="meta">${r.meta}</div></td>
+                `<tr class="${r.me ? "me" : ""}"><td class="pos">${r.pos}</td><td class="who">${r.carts.map(cart).join("")}</td>
                  <td class="sm">${r.thru}</td><td class="tp ${r.net < 0 ? "u" : ""}">${tp(r.net)}</td></tr>`).join("")}</table>`;
             if (g === "NET") return `<table><tr><th class="l" colspan="2">Individual Net</th><th>Thru</th><th>Net</th></tr>${playerRows(ev, "net")}</table>`;
             if (g === "GROSS") return `<table><tr><th class="l" colspan="2">Individual Gross</th><th>Thru</th><th>Gross</th></tr>${playerRows(ev, "gross")}</table>`;
             if (g === "MVP") return `<table><tr><th class="l" colspan="2">MVP · points today</th><th>Thru</th><th>Pts</th></tr>${ev.players.slice().sort((x, y) => x[6] - y[6]).map((r, i) =>
-                `<tr class="${r[3] === ev.group ? "me" : ""}"><td class="pos">${i + 1}</td><td class="who">${P(r[0], r[1])}<div class="meta">Group ${r[3]}</div></td><td class="sm">${r[5]}</td><td class="tp">${Math.max(0, 12 - 2 * i)}</td></tr>`).join("")}</table>`;
+                `<tr class="${r[3] === ev.group ? "me" : ""}"><td class="pos">${i + 1}</td><td class="who">${P(r[0], r[1])}</td><td class="sm">${r[5]}</td><td class="tp">${Math.max(0, 12 - 2 * i)}</td></tr>`).join("")}</table>`;
             if (g === "SKINS") return `<div class="lbl"><span>Skins · ${ev.skinsTitle}</span><span>${ev.skinsNote}</span></div>
                 <div class="skins" style="grid-template-columns:repeat(9,1fr)">${ev.skins.map((s, i) => `<div class="sk ${s.w ? "won" : s.c ? "carry" : ""}">${i + 1}<b>${s.w || (s.c ? "c/o" : "–")}</b></div>`).join("")}</div>`;
             if (g === "CTP") return `<table><tr><th class="l" colspan="2">Closest to the pin</th><th></th><th>Distance</th></tr>${ev.ctp.map((c) =>
@@ -179,6 +184,7 @@
                 <div class="seg"><button type="button">SCORING</button><button type="button" class="on">BOARD</button></div>
                 <div class="seg games">${gs.map((x) => `<button type="button" class="${x === game ? "on" : ""}" data-g="${x}">${x}</button>`).join("")}</div>
                 <div class="prov">Provisional · ${ev.note}. No money shows until every card is in.</div>
+                <div class="meta" style="margin:-2px 0 8px">Team game: ${ev.matrix}. Cart or Team comes from the matrix for the field, not from 9 or 18 holes.</div>
                 ${body(ev, game)}
                 <div class="note">One board for the event, fed by every group's live entry through the same engine the Test Center checks against Golf Genius. Golf Genius stays the official record.</div>`;
         }

@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.502.1";
+window.TGF_VERSION = "2.502.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.502.2",
+    date: "2026-09-26",
+    title: "Leaderboard mockup: name sizes, surname case, matrix note",
+    changes: [
+      "Kerry, 2026-09-26: 'Make first name text same size. Follow case rules for last names based on Membership. Remove group number line. That's unimportant. Remember Cart v Team is based on the side game matrix, not 9 or 18.' First and last names are the same size now. Surnames follow the elevated-role rule: CAPS for members, proper case for guests. The group lines are gone. The board says the team game comes from the side-games matrix for the field size, not from 9 or 18 holes."
+    ]
+  },
   {
     version: "2.502.1",
     date: "2026-09-26",
