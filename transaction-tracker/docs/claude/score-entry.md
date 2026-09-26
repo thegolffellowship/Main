@@ -195,6 +195,13 @@ in, the scorer, the card check (Submitted + photo link), and **Open** /
 (`score_entry_live`), scorekeeper signs for the group (toggle), the cart-sign
 QR groups; and **Build the round from PAIRINGS** (9 | 18, re-run safe).
 
+**Start the preview over (v2.498.1, Kerry 2026-09-26: "reset that scorecard
+so I can start over"):** `restart_preview(round_id)` / `POST
+/api/score-entry/rounds/<id>/restart-preview` (admin) and a button on each
+open PREVIEW round. Never deletes (standing rule): closes the used preview
+and opens a fresh one with the same players, holes and demo matches. PREVIEW
+rounds only.
+
 **Cart-sign QR (v2.497.0):** "It could just be in one of the corners and
 perhaps a little smaller." Top-right corner of each sign, 0.9 in, one line
 "Scan to keep score" under it.

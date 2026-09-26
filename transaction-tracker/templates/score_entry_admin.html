@@ -95,10 +95,13 @@
             $("rounds").innerHTML = `<div class="card"><div class="empty">No scoring round yet. Save PAIRINGS, then Build the round from PAIRINGS.</div></div>`;
             return;
         }
-        $("rounds").innerHTML = d.rounds.map((r) => `
+        // A used PREVIEW that was started over is closed and kept on record;
+        // it stays off this page so the live preview is the one you see.
+        $("rounds").innerHTML = d.rounds.filter((r) => !(r.preview && r.status === "closed")).map((r) => `
             <div class="card">
               <div class="card-h"><div class="t">${esc(r.label || "Round")}${r.preview ? '<span class="pv">PREVIEW</span>' : ""}</div>
-                <div class="m">${r.holes} holes · ${esc(r.status)}${r.matches ? " · match play" : ""}</div></div>
+                <div class="m">${r.holes} holes · ${esc(r.status)}${r.matches ? " · match play" : ""}
+                  ${r.preview && r.status === "open" ? `<button class="btn" style="margin-left:10px;padding:4px 12px;font-size:12px" data-restart="${r.round_id}">Start the preview over</button>` : ""}</div></div>
               <div class="scroll"><table>
                 <thead><tr><th>Group</th><th>Players</th><th>Holes in</th><th>Scoring</th><th>Card</th><th></th></tr></thead>
                 <tbody>${r.groups.map((g) => `<tr>
@@ -123,6 +126,13 @@
     }
     $("seed").onclick = () => post(`/api/score-entry/events/${EV}/seed`, {holes: $("seed-holes").value});
     document.addEventListener("click", (e) => {
+        const rs = e.target.closest("[data-restart]");
+        if (rs) {
+            if (confirm("Start this preview over? Its scores are kept on record, and a fresh card with a new link opens.")) {
+                post(`/api/score-entry/rounds/${rs.dataset.restart}/restart-preview`, {});
+            }
+            return;
+        }
         const b = e.target.closest("[data-copy]");
         if (!b) return;
         const done = () => { b.textContent = "Copied"; setTimeout(() => { b.textContent = "Copy link"; }, 1500); };

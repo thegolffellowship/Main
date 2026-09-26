@@ -11600,6 +11600,16 @@ def api_se_admin(event_id):
     return jsonify(admin_overview(event_id))
 
 
+@app.route("/api/score-entry/rounds/<int:round_id>/restart-preview", methods=["POST"])
+@require_role("admin")
+def api_se_restart_preview(round_id):
+    """Start a PREVIEW round over: close it (kept on record) and open a
+    fresh one with the same players. Never deletes."""
+    from email_parser.score_entry import restart_preview
+    res = restart_preview(round_id)
+    return (jsonify(res), 400) if "error" in res else jsonify(res)
+
+
 @app.route("/api/score-entry/events/<int:event_id>/seed", methods=["POST"])
 @require_role("admin")
 def api_se_seed(event_id):

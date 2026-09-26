@@ -863,6 +863,40 @@ def create_preview_round(event_id: int, customer_ids: list[int], db_path=None,
     return out
 
 
+def restart_preview(round_id: int, db_path=None) -> dict:
+    """START THE PREVIEW OVER (Kerry 2026-09-26: "reset that scorecard so I
+    can start over"). Never deletes: the used PREVIEW round is closed (its
+    link stops opening, its rows stay on record) and a fresh one opens with
+    the same players, holes and demo matches. Refuses anything that is not
+    a PREVIEW round."""
+    with _closing(_conn(db_path)) as conn:
+        r = conn.execute("SELECT event_id, holes, label, status FROM se_rounds WHERE id = ?",
+                         (round_id,)).fetchone()
+        if not r:
+            return {"error": "no such round"}
+        if not (r["label"] or "").startswith(PREVIEW_LABEL):
+            return {"error": "only a PREVIEW round can be started over"}
+        cids = [x[0] for x in conn.execute(
+            "SELECT customer_id FROM se_players WHERE round_id = ? ORDER BY group_id, "
+            "COALESCE(seat, 99), id", (round_id,))]
+    from email_parser.database import get_app_setting
+    try:
+        demo = json.loads(get_app_setting(ROUND_MATCHES_SETTING, db_path) or "{}").get(str(round_id))
+    except (ValueError, TypeError):
+        demo = None
+    if r["status"] == "open":
+        close_round(round_id, db_path=db_path)
+    res = create_preview_round(r["event_id"], cids, db_path=db_path, holes=r["holes"])
+    if "error" in res:
+        return res
+    if demo:
+        set_round_matches(res["round_id"], demo, db_path=db_path)
+        set_round_matches(round_id, None, db_path=db_path)
+    res["closed_round_id"] = round_id
+    res["links"] = round_links(res["round_id"], db_path=db_path)
+    return res
+
+
 def close_round(round_id: int, db_path=None) -> dict:
     """Close a round: its links stop opening. Nothing is deleted."""
     with _closing(_conn(db_path)) as conn:

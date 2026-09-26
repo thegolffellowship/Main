@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.498.0";
+window.TGF_VERSION = "2.498.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.498.1",
+    date: "2026-09-26",
+    title: "Live Scoring: Start the preview over",
+    changes: [
+      "Kerry, 2026-09-26: 'reset that scorecard so I can start over. I can't seem to clear it to go back and try again.' A PREVIEW round on the Live Scoring page now has a Start the preview over button. Nothing is deleted: the used preview is closed (its link stops opening, its rows stay on record) and a fresh one opens with the same players, holes and demo matches and a new link. Closed previews are hidden from the page. Only PREVIEW rounds can be started over; a real round cannot."
+    ]
+  },
   {
     version: "2.498.0",
     date: "2026-09-26",
