@@ -1,0 +1,78 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+body{margin:0;background:#fff;color:#1B1B1B;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif}
+.w{max-width:480px;margin:0 auto;padding:10px 16px 24px}
+.eb{font:700 12px/1.3 'Helvetica Neue',Arial;letter-spacing:1.2px;color:#B45A22;text-transform:uppercase}
+h1{font:700 26px/1.1 Bitter,Georgia,serif;margin:2px 0 0}
+.sub{font-size:13px;color:#4B5563;margin-top:3px}
+.mode{display:flex;border:1px solid #1B1B1B;border-radius:24px;overflow:hidden;margin:10px 0 8px}
+.mode b{flex:1;text-align:center;font:700 13px/32px 'Helvetica Neue';letter-spacing:1px}
+.mode b.on{background:#1B1B1B;color:#fff}
+.chips{display:flex;gap:6px;margin:6px 0 8px;overflow-x:auto}
+.chip{flex:none;padding:6px 12px;border-radius:999px;border:1px solid #E5E7EB;font:700 12px 'Helvetica Neue';letter-spacing:.6px;background:#F8F8F8}
+.chip.on{background:#E87C3E;border-color:#E87C3E;color:#fff}
+.prov{display:flex;align-items:center;gap:6px;font-size:12px;color:#92400E;background:#FEF3C7;border-radius:8px;padding:6px 10px;margin-bottom:8px}
+table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+th{font:700 10px 'Helvetica Neue';letter-spacing:.8px;color:#6B7280;text-transform:uppercase;text-align:right;padding:4px 4px;border-bottom:1px solid #E5E7EB}
+th.l{text-align:left}
+td{padding:7px 4px;border-bottom:1px solid #F1F2F4;font-size:14px;text-align:right}
+td.pos{width:26px;text-align:left;color:#6B7280;font-weight:700}
+td.nm{text-align:left;font:700 15px Bitter,Georgia,serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:150px}
+td.nm small{display:block;font:400 11px 'Helvetica Neue';color:#6B7280}
+td.tp{font:700 16px Bitter,Georgia,serif;width:40px}
+td.tp.u{color:#B91C1C}
+td.th{color:#6B7280;font-size:12px;width:40px}
+td.gr{color:#6B7280;font-size:13px;width:32px}
+tr.me td{background:#FFF4EC}
+tr.me td.pos{box-shadow:inset 3px 0 0 #E87C3E}
+.dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px;vertical-align:1px}
+.ring{box-shadow:inset 0 0 0 2px currentColor;background:#fff!important}
+.lbl{font:700 11px 'Helvetica Neue';letter-spacing:1px;color:#6B7280;text-transform:uppercase;margin:14px 0 6px;display:flex;justify-content:space-between}
+.skins{display:grid;grid-template-columns:repeat(9,1fr);gap:3px}
+.sk{border:1px solid #E5E7EB;border-radius:6px;text-align:center;padding:3px 0;font-size:10px;color:#6B7280;background:#F8F8F8}
+.sk b{display:block;font:700 12px Bitter,Georgia,serif;color:#1B1B1B}
+.sk.won{background:#d1f4e0;border-color:#d1f4e0}.sk.won b{color:#0d7556}
+.sk.carry{background:#fff;border-style:dashed}
+.mcard{border:1px solid #E5E7EB;border-radius:10px;overflow:hidden;margin-bottom:6px;position:relative}
+.strip{display:flex;min-height:44px}
+.mono{width:36px;flex:none;display:flex;align-items:center;justify-content:center;font:700 13px Bitter,Georgia,serif;color:#fff}
+.mn{flex:1;min-width:0;display:flex;flex-direction:column;justify-content:center;padding:0 8px}
+.mn.r{align-items:flex-end;text-align:right}
+.mn em{font-style:normal;font-size:11px;color:#6B7280}
+.mn b{font:700 14px/1.1 Bitter,Georgia,serif;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.bar{flex:none;min-width:70px;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#fff;font:700 15px/1 Bitter,Georgia,serif;padding:0 8px}
+.bar small{font:600 9px 'Helvetica Neue';letter-spacing:.6px;text-transform:uppercase;opacity:.85;margin-top:2px}
+.bar.a{clip-path:polygon(12px 0,100% 0,100% 100%,12px 100%,0 50%);padding-left:16px}
+.bar.b{clip-path:polygon(0 0,calc(100% - 12px) 0,100% 50%,calc(100% - 12px) 100%,0 100%);padding-right:16px}
+.bar.t{background:#BFB8AC}
+.dots{display:flex;justify-content:center;gap:4px;padding:6px 8px}
+.hd{width:9px;height:9px;border-radius:50%}
+.hd.e{border:1.5px solid #D6D3CC;box-sizing:border-box}
+.note{font-size:11px;color:#6B7280;margin-top:10px;line-height:1.4}
+.tag{display:inline-block;font:700 9px 'Helvetica Neue';letter-spacing:.6px;color:#fff;background:#1B1B1B;border-radius:3px;padding:1px 4px;margin-left:4px;vertical-align:2px}
+</style></head><body><div class="w" id="app"></div>
+<script>
+const EV = window.EV;
+const A = "#2F5D74", B = "#C1673F";
+const tee = {Blue:"#1D4ED8", White:"#FFFFFF", Gold:"#B8860B", Red:"#B91C1C"};
+function tp(n){return n===0?"E":(n>0?"+"+n:""+n)}
+function row(r,i,me){const col=tee[r.tee];const ring=r.tee==="White"||r.f;
+ return `<tr class="${me?"me":""}"><td class="pos">${r.pos}</td><td class="nm"><span class="dot ${ring?"ring":""}" style="background:${col};color:${r.tee==="White"?"#1B1B1B":col}"></span>${r.name}${r.grp?`<small>Group ${r.grp}${r.grp===EV.myGroup?" · your group":""}</small>`:""}</td><td class="gr">${r.gross}</td><td class="th">${r.thru}</td><td class="tp ${r.net<0?"u":""}">${tp(r.net)}</td></tr>`}
+function mcard(m){const bar=m.lead==null?"t":m.lead;const bg=bar==="a"?A:bar==="b"?B:"";
+ const dots=m.h.map(w=>w==null?'<i class="hd e"></i>':`<i class="hd" style="background:${w===1?A:w===2?B:"#BFB8AC"}"></i>`).join("");
+ return `<div class="mcard"><div class="strip"><span class="mono" style="background:${A}">${m.a[0][0]}${m.a[1][0]}</span><span class="mn"><em>${m.a[0]}</em><b>${m.a[1]}</b></span>
+ <span class="bar ${bar}" style="${bg?"background:"+bg:""}">${m.txt}<small>${m.sub}</small></span>
+ <span class="mn r"><em>${m.b[0]}</em><b>${m.b[1]}</b></span><span class="mono" style="background:${B}">${m.b[0][0]}${m.b[1][0]}</span></div><div class="dots">${dots}</div></div>`}
+const S = EV.skins.map((s,i)=>`<div class="sk ${s.w?"won":s.c?"carry":""}">${i+EV.firstHole}<b>${s.w||(s.c?"c/o":"–")}</b></div>`).join("");
+document.getElementById("app").innerHTML = `
+<div class="eb">${EV.name} · Group ${EV.myGroup}</div>
+<h1>Leaderboard</h1><div class="sub">${EV.sub}</div>
+<div class="mode"><b>SCORING</b><b class="on">BOARD</b></div>
+<div class="chips">${EV.games.map((g,i)=>`<span class="chip ${i===0?"on":""}">${g}</span>`).join("")}</div>
+<div class="prov">&#9888;&#xFE0E; Provisional · ${EV.inNote}. No money shows until every card is in.</div>
+<table><tr><th class="l" colspan="2">${EV.boardTitle}</th><th>Gross</th><th>Thru</th><th>Net</th></tr>${EV.rows.map((r,i)=>row(r,i,r.grp===EV.myGroup)).join("")}</table>
+<div class="lbl"><span>Skins · ${EV.skinsTitle}</span><span>${EV.skinsNote}</span></div>
+<div class="skins" style="grid-template-columns:repeat(${Math.min(EV.skins.length,9)},1fr)">${S}</div>
+${EV.matches.length?`<div class="lbl"><span>Matches</span><span>tap one for its card</span></div>${EV.matches.map(mcard).join("")}`:""}
+<div class="note">MOCKUP · scores are made up. One board for the event, fed by every group's live entry through the same engine the Test Center checks against Golf Genius. Golf Genius stays the official record.</div>`;
+</script></body></html>

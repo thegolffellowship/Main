@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.501.0";
+window.TGF_VERSION = "2.501.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.501.1",
+    date: "2026-09-26",
+    title: "Score entry: leaderboard mockups (not built)",
+    changes: [
+      "Kerry, 2026-09-26: 'Do we have a leaderboard connection yet? I want to see this mocked up ... both 9 hole event and 18 hole event. Show me matches between 1 and 3 and 2 and 4 on one of them.' No: entered scores feed only the Lone Star Cup board today. Mockups of a BOARD tab beside SCORING are in docs/claude/mockups/leaderboard-9-hole.png (with the 1 v 3 and 2 v 4 matches) and leaderboard-18-hole.png: game chips (Net, Gross, Skins, Cart/Team Net, Matches), a provisional banner with no money until every card is in, the ranked board with thru and your group highlighted, a skins strip by hole, and the standard match cards. Nothing is wired; building it waits on Kerry's OK (rule 3b)."
+    ]
+  },
   {
     version: "2.501.0",
     date: "2026-09-26",
