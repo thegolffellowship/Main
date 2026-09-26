@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.500.4";
+window.TGF_VERSION = "2.500.5";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.500.5",
+    date: "2026-09-26",
+    title: "Score entry: swipe between FRONT and BACK on Check the card",
+    changes: [
+      "Kerry, 2026-09-26: 'Allow me to swipe to back nine or front 9 as well as the toggle.' On an 18, a swipe left on Check the card shows the BACK nine and a swipe right shows the FRONT; the FRONT | BACK toggle stays. Only a clearly sideways swipe (50 px or more, mostly horizontal) counts, so scrolling and tapping a number work as before."
+    ]
+  },
   {
     version: "2.500.4",
     date: "2026-09-26",

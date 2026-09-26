@@ -470,7 +470,7 @@ with sync_playwright() as p:
         for i_, (c_, n_, ph_) in enumerate([(101, "Kerry Niester", 1), (102, "Mark Stich", 29),
                                             (107, "Gus Vasquez", 13), (108, "Ann Lee", 10)])])["group_id"]
     se.set_round_matches(rf, [{"id": "F", "format": "singles", "sides": [[101], [102]]}])
-    fpg = b.new_context(viewport={"width": 390, "height": 660}).new_page()
+    fpg = b.new_context(viewport={"width": 390, "height": 660}, has_touch=True).new_page()
     fpg.goto(f"http://127.0.0.1:{PORT}/member/score?t={se.make_group_token(gf)}")
     fpg.click("text=Kerry Niester"); fpg.wait_for_selector("text=You're keeping score")
     fh = fpg.evaluate("document.documentElement.scrollHeight")
@@ -485,6 +485,18 @@ with sync_playwright() as p:
     fpg.reload(); fpg.wait_for_selector("text=Check the card"); fpg.wait_for_timeout(500)
     fh = fpg.evaluate("document.documentElement.scrollHeight")
     check("Check the card fits without scrolling", fh <= 660, fh)
+    swipe_js = """(dx) => { const el = document.querySelector('.se-check'); const r = el.getBoundingClientRect();
+        const x0 = r.left + r.width / 2, y0 = r.top + r.height / 2;
+        const mk = (x) => new Touch({identifier: 1, target: el, clientX: x, clientY: y0});
+        el.dispatchEvent(new TouchEvent('touchstart', {bubbles: true, touches: [mk(x0)], changedTouches: [mk(x0)]}));
+        el.dispatchEvent(new TouchEvent('touchend', {bubbles: true, touches: [], changedTouches: [mk(x0 + dx)]})); }"""
+    fpg.evaluate(swipe_js, -120); fpg.wait_for_timeout(200)
+    check("swipe left on the card shows the BACK nine",
+          fpg.locator(".se-seg button.on").inner_text() == "BACK" and fpg.locator(".se-check th").nth(1).inner_text() == "10")
+    fpg.evaluate(swipe_js, 20); fpg.wait_for_timeout(200)
+    check("a small drag is not a swipe", fpg.locator(".se-seg button.on").inner_text() == "BACK")
+    fpg.evaluate(swipe_js, 120); fpg.wait_for_timeout(200)
+    check("swipe right goes back to FRONT", fpg.locator(".se-seg button.on").inner_text() == "FRONT")
     cellp = fpg.locator("button.cell[data-key='c:102'][data-h='1']").locator("xpath=..")
     g = cellp.locator(".se-pops.cell .g")
     check("in a card cell the PH pops sit above the number and the team pops below",

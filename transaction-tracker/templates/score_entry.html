@@ -1109,6 +1109,23 @@
         }
 
         // ── taps ────────────────────────────────────────────────────────
+        // SWIPE between the nines on Check the card (Kerry 2026-09-26: "Allow me
+        // to swipe to back nine or front 9 as well as the toggle"). Left = BACK,
+        // right = FRONT. Only a clearly sideways swipe counts, so scrolling and
+        // tapping a number behave as before.
+        let swipe = null;
+        app.addEventListener("touchstart", (e) => {
+            swipe = e.touches.length === 1 && e.target.closest(".se-chk") && app.querySelector(".se-chk .se-seg")
+                ? {x: e.touches[0].clientX, y: e.touches[0].clientY} : null;
+        }, {passive: true});
+        app.addEventListener("touchend", (e) => {
+            if (!swipe) return;
+            const t = e.changedTouches[0], dx = t.clientX - swipe.x, dy = t.clientY - swipe.y;
+            swipe = null;
+            if (Math.abs(dx) < 50 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+            const want = dx < 0 ? 1 : 0;
+            if (want !== checkNine) { checkNine = want; checkPick = null; render(); }
+        }, {passive: true});
         app.addEventListener("click", (e) => {
             const b = e.target.closest("button[data-act]");
             if (!b) return;
