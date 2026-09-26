@@ -295,6 +295,10 @@ def _match_status(conn, g) -> list:
                     "card": [{"hole": h["hole"], "order": h.get("order"), "w": h["winner"],
                               "g": [h.get("p1_gross"), h.get("p2_gross")],
                               "s": [h.get("p1_strokes") or 0, h.get("p2_strokes") or 0],
+                              # Track B #724: the side's pops BEFORE the hole is
+                              # played (s reads 0 until then), for the dots.
+                              "p": [h.get("p1_pops", h.get("p1_strokes")) or 0,
+                                    h.get("p2_pops", h.get("p2_strokes")) or 0],
                               "pu": [bool(h.get("p1_picked_up")), bool(h.get("p2_picked_up"))]}
                              for h in d["holes"]]})
     return out

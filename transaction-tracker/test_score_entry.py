@@ -380,6 +380,10 @@ _c2 = se.get_group_card(fg2)
 check("a Chapman session makes one team row per pair, like foursomes", len(_c2["teams"]) == 2, _c2["teams"])
 check("the match engine's per-hole strokes reach the card for the team's pop dots",
       _c2["match_status"] and all("s" in h and len(h["s"]) == 2 for h in _c2["match_status"][0]["card"]), _c2["match_status"][:1])
+_cc = _c2["match_status"][0]["card"]
+check("Track B #724: before anyone plays, the Chapman pair's pops are already on the card (60/40: 9 v 13, 4 strokes)",
+      sum(h["p"][1] for h in _cc) == 4 and sum(h["p"][0] for h in _cc) == 0 and not any(any(h["s"]) for h in _cc),
+      [(h["hole"], h["p"], h["s"]) for h in _cc])
 db.set_app_setting("lsc_matches", "")
 check("a round-level (non-cup) match has no lead team",
       all(m["lead_team"] is None for m in se.get_group_card(sg)["match_status"]))

@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.502.2";
+window.TGF_VERSION = "2.502.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.502.3",
+    date: "2026-09-26",
+    title: "Chapman pop dots show before the hole is played",
+    changes: [
+      "Track B #724: the match card's strokes (s) read 0 until a hole is played, so a Chapman pair showed no pop dots ahead of the shot. The card now also carries p, the side's pops before anyone plays (p1_pops / p2_pops from compute_match_detail). The team row's dots, the pop key and the match card's unplayed holes read p; played holes still show the strokes that counted."
+    ]
+  },
   {
     version: "2.502.2",
     date: "2026-09-26",
