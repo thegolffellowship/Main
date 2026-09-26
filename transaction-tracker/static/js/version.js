@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.500.7";
+window.TGF_VERSION = "2.500.8";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.500.8",
+    date: "2026-09-26",
+    title: "Score entry: the other nine slides in as you swipe",
+    changes: [
+      "Kerry, 2026-09-26: 'When swiping you should see the other side/9 coming in too.' ... 'Of course that's only with 18 hole rounds with two 9s.' On an 18, Check the card now lays FRONT and BACK side by side in a track: dragging moves both, so the other nine comes in beside the one leaving, and letting go snaps to a full nine (past 50 px) or springs back. A nine-hole card is one card with no track and no swipe."
+    ]
+  },
   {
     version: "2.500.7",
     date: "2026-09-26",

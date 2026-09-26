@@ -97,7 +97,7 @@ def review_ok(page, n, label):
     page.wait_for_selector("text=Check the card", timeout=5000)
     body = page.inner_text("body")
     check(f"{label}: no 'Save last hole' once every hole is saved", "Save last hole" not in body)
-    cells = page.locator(".se-check button.cell")
+    cells = page.locator(".se-check.cur button.cell")
     check(f"{label}: one nine on screen, every number a button (2 players x 9)",
           cells.count() == 18, cells.count())
     check(f"{label}: the one primary action is Card matches paper",
@@ -158,7 +158,7 @@ with sync_playwright() as p:
     pg.click("button.cell[data-key='c:102'][data-h='4']")
     pg.wait_for_selector(".se-picker")
     picker_after_card = pg.evaluate("""() => {
-        const t = document.querySelector('.se-check'), p = document.querySelector('.se-picker');
+        const t = document.querySelector('.se-check.cur'), p = document.querySelector('.se-picker');
         return !!(t.compareDocumentPosition(p) & Node.DOCUMENT_POSITION_FOLLOWING); }""")
     check("tapping a number opens the score row right under the card", picker_after_card)
     vals = [int(x) for x in pg.locator(".se-picker .row button").all_inner_texts()]
@@ -265,17 +265,17 @@ with sync_playwright() as p:
     pg.wait_for_timeout(1500)
     review_ok(pg, 18, "eighteen")
     check("Check the card puts the last name under the first",
-          pg.locator(".se-check td.nm .ln").first.inner_text().strip() == "Niester")
-    x_front = pg.evaluate("() => [...document.querySelectorAll('.se-check thead th')].map(t => Math.round(t.getBoundingClientRect().left))")
+          pg.locator(".se-check.cur td.nm .ln").first.inner_text().strip() == "Niester")
+    x_front = pg.evaluate("() => [...document.querySelectorAll('.se-check.cur thead th')].map(t => Math.round(t.getBoundingClientRect().left))")
     pg.click("[data-act=nine][data-n='1']")
-    x_back = pg.evaluate("() => [...document.querySelectorAll('.se-check thead th')].map(t => Math.round(t.getBoundingClientRect().left))")
+    x_back = pg.evaluate("() => [...document.querySelectorAll('.se-check.cur thead th')].map(t => Math.round(t.getBoundingClientRect().left))")
     check("FRONT and BACK use the exact same column positions", x_front == x_back, (x_front, x_back))
     pg.click("[data-act=nine][data-n='0']")
-    heads = pg.locator(".se-check thead th").all_inner_texts()
+    heads = pg.locator(".se-check.cur thead th").all_inner_texts()
     check("FRONT shows holes 1-9 and OUT (TOT column left blank so the nines line up)",
           heads[1] == "1" and heads[-2].upper() == "OUT" and heads[-1] == "", heads)
     pg.click("[data-act=nine][data-n='1']")
-    heads = pg.locator(".se-check thead th").all_inner_texts()
+    heads = pg.locator(".se-check.cur thead th").all_inner_texts()
     check("BACK shows holes 10-18, IN and TOT", heads[1] == "10" and heads[-2].upper() == "IN"
           and heads[-1].upper() == "TOT", heads)
     pg.click("button.cell[data-key='c:101'][data-h='13']")
@@ -485,29 +485,38 @@ with sync_playwright() as p:
     fpg.reload(); fpg.wait_for_selector("text=Check the card"); fpg.wait_for_timeout(500)
     fh = fpg.evaluate("document.documentElement.scrollHeight")
     check("Check the card fits without scrolling", fh <= 660, fh)
-    swipe_js = """(dx) => { const el = document.querySelector('.se-check'); const r = el.getBoundingClientRect();
+    swipe_js = """(dx) => { const el = document.querySelector('.se-vp'); const r = el.getBoundingClientRect();
         const x0 = r.left + r.width / 2, y0 = r.top + r.height / 2;
         const mk = (x) => new Touch({identifier: 1, target: el, clientX: x, clientY: y0});
         el.dispatchEvent(new TouchEvent('touchstart', {bubbles: true, touches: [mk(x0)], changedTouches: [mk(x0)]}));
         el.dispatchEvent(new TouchEvent('touchmove', {bubbles: true, touches: [mk(x0 + dx / 2)], changedTouches: [mk(x0 + dx / 2)]}));
         el.dispatchEvent(new TouchEvent('touchmove', {bubbles: true, touches: [mk(x0 + dx)], changedTouches: [mk(x0 + dx)]}));
         el.dispatchEvent(new TouchEvent('touchend', {bubbles: true, touches: [], changedTouches: [mk(x0 + dx)]})); }"""
-    drag_js = """(dx) => { const el = document.querySelector('.se-check'); const r = el.getBoundingClientRect();
+    drag_js = """(dx) => { const el = document.querySelector('.se-vp'); const r = el.getBoundingClientRect();
         const x0 = r.left + r.width / 2, y0 = r.top + r.height / 2;
         const mk = (x) => new Touch({identifier: 1, target: el, clientX: x, clientY: y0});
         el.dispatchEvent(new TouchEvent('touchstart', {bubbles: true, touches: [mk(x0)], changedTouches: [mk(x0)]}));
         el.dispatchEvent(new TouchEvent('touchmove', {bubbles: true, touches: [mk(x0 + dx)], changedTouches: [mk(x0 + dx)]}));
-        return getComputedStyle(el).transform; }"""
+        return getComputedStyle(document.querySelector('.se-track')).transform; }"""
     tf = fpg.evaluate(drag_js, -40)
     check("mid-swipe the card follows the finger", tf not in ("none", "") and "-40" in tf, tf)
-    fpg.evaluate("""() => { const el = document.querySelector('.se-check'); const r = el.getBoundingClientRect();
+    fpg.evaluate("""() => { const el = document.querySelector('.se-vp'); const r = el.getBoundingClientRect();
         const t = new Touch({identifier: 1, target: el, clientX: r.left + r.width / 2 - 40, clientY: r.top + 10});
         el.dispatchEvent(new TouchEvent('touchend', {bubbles: true, touches: [], changedTouches: [t]})); }""")
     fpg.wait_for_timeout(400)
     check("a short drag springs back to the same nine", fpg.locator(".se-seg button.on").inner_text() == "FRONT")
+    fpg.evaluate(drag_js, -120)
+    bx = fpg.evaluate("document.querySelectorAll('.se-check')[1].getBoundingClientRect().left")
+    check("mid-swipe the BACK nine is already sliding in beside the FRONT", 0 < bx < 390, bx)
+    fpg.evaluate("""() => { const el = document.querySelector('.se-vp'); const r = el.getBoundingClientRect();
+        const t = new Touch({identifier: 1, target: el, clientX: r.left + r.width / 2 - 120, clientY: r.top + r.height / 2});
+        el.dispatchEvent(new TouchEvent('touchend', {bubbles: true, touches: [], changedTouches: [t]})); }""")
+    fpg.wait_for_timeout(500)
+    check("letting go past the line snaps to BACK", fpg.locator(".se-seg button.on").inner_text() == "BACK")
+    fpg.click("[data-act=nine][data-n='0']")
     fpg.evaluate(swipe_js, -120); fpg.wait_for_timeout(500)
     check("swipe left on the card shows the BACK nine",
-          fpg.locator(".se-seg button.on").inner_text() == "BACK" and fpg.locator(".se-check th").nth(1).inner_text() == "10")
+          fpg.locator(".se-seg button.on").inner_text() == "BACK" and fpg.locator(".se-check.cur th").nth(1).inner_text() == "10")
     fpg.evaluate(swipe_js, 20); fpg.wait_for_timeout(500)
     check("a small drag is not a swipe", fpg.locator(".se-seg button.on").inner_text() == "BACK")
     fpg.evaluate(swipe_js, 120); fpg.wait_for_timeout(500)
@@ -536,6 +545,7 @@ with sync_playwright() as p:
     play(pp, 9)
     pp.wait_for_selector("text=Check the card")
     pp.wait_for_timeout(800)
+    check("a nine-hole card is one card: no swipe track", pp.locator(".se-vp").count() == 0 and pp.locator(".se-seg").count() == 0)
     cell = pp.locator("button.cell[data-key='c:102'][data-h='4']").locator("xpath=..")
     check("the check card puts the dots in the cell's corner (hole 4: 1 PH, 0 team)",
           cell.locator(".se-pops.cell .se-pop:not(.t)").count() == 1 and cell.locator(".se-pop.t").count() == 0,

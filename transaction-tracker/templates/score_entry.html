@@ -124,7 +124,10 @@
         .se-pops.cell .g { flex-direction: row; gap: 1px; min-height: 4px; }
         .se-pops.cell .se-pop { width: 4px; height: 4px; }
         .se-chk { overflow-x: clip; }
-        .se-chk .se-check { touch-action: pan-y; will-change: transform; }
+        .se-chk .se-check { touch-action: pan-y; }
+        .se-vp { overflow: hidden; touch-action: pan-y; }
+        .se-track { display: flex; gap: 8px; width: calc(200% + 8px); align-items: flex-start; will-change: transform; }
+        .se-track > .se-card { width: calc(50% - 4px); flex: none; }
         /* Thin light lines between the columns (Kerry 2026-09-26). */
         .se-chk .se-check td + td, .se-chk .se-check th + th { border-left: 1px solid #ECEEF1; }
         .se-chk .se-check thead th + th { border-left-color: rgba(255,255,255,.14); }
@@ -705,6 +708,8 @@
         // across, every number tappable; the replacement row sits right under
         // the nine being edited. Totals come last: "the print scorer will not
         // have totals generally."
+        // FRONT sits at 0, BACK one pane-plus-gap to the left.
+        const trackBase = (k) => k ? "translateX(calc(-50% - 4px))" : "translateX(0px)";
         function checkScreen() {
             const nums = holeOrder().slice().sort((a, b) => a - b);
             const nines = nums.length > 9 ? [nums.slice(0, 9), nums.slice(9)] : [nums];
@@ -712,9 +717,14 @@
             const hs = nines[checkNine], subs = subjects();
             const parSum = (list) => list.reduce((a, n) => a + (info(n).par || 0), 0);
             const tot = (key, list) => list.reduce((a, n) => a + (value(key, n).v || 0), 0);
-            const lbl = nines.length > 1 ? (checkNine ? "In" : "Out") : (hs[0] >= 10 ? "In" : "Out");
-            const back = nines.length > 1 && checkNine === 1;
             const eighteen = nines.length > 1;
+            // One table per nine. On an 18 both sit side by side in a track, so a
+            // swipe shows the other nine coming in (Kerry 2026-09-26: "When
+            // swiping you should see the other side/9 coming in too").
+            const pane = (k) => {
+            const hs = nines[k];
+            const lbl = nines.length > 1 ? (k ? "In" : "Out") : (hs[0] >= 10 ? "In" : "Out");
+            const back = nines.length > 1 && k === 1;
             const head = `<tr><th style="text-align:left;padding-left:8px">Hole</th>${hs.map((n) => `<th>${n}</th>`).join("")}<th>${lbl}</th>${eighteen ? `<th>${back ? "Tot" : ""}</th>` : ""}</tr>`;
             const par = `<tr class="par"><td class="nm" style="font-weight:400;color:#4B5563">Par</td>${hs.map((n) => `<td>${info(n).par || ""}</td>`).join("")}<td>${parSum(hs) || ""}</td>${eighteen ? `<td>${back ? parSum(nums) || "" : ""}</td>` : ""}</tr>`;
             const rows = subs.map((s) => {
@@ -727,6 +737,11 @@
                 }).join("");
                 return `<tr><td class="nm">${nameCell(s, true)}</td>${cells}<td class="tot">${tot(s.key, hs) || ""}</td>${eighteen ? `<td class="tot">${back ? tot(s.key, nums) || "" : ""}</td>` : ""}</tr>`;
             }).join("");
+            return `<div class="se-card se-check ${eighteen ? "" : "nine"} ${k === checkNine ? "cur" : "other"}" ${k === checkNine ? "" : 'aria-hidden="true"'}><table>${colgroup(hs.length, eighteen)}<thead>${head}</thead><tbody>${par}${rows}</tbody></table></div>`;
+            };
+            const cardHtml = eighteen
+                ? `<div class="se-vp"><div class="se-track" style="transform:${trackBase(checkNine)}">${pane(0)}${pane(1)}</div></div>`
+                : pane(0);
             let picker = "";
             if (checkPick && hs.includes(checkPick.h)) {
                 const sub = subs.find((x) => x.key === checkPick.key), h = info(checkPick.h);
@@ -748,7 +763,7 @@
                 ${hioForKeeper()}
                 ${matchStrip()}
                 ${seg}
-                <div class="se-card se-check ${eighteen ? "" : "nine"}"><table>${colgroup(hs.length, eighteen)}<thead>${head}</thead><tbody>${par}${rows}</tbody></table></div>
+                ${cardHtml}
                 ${popKey()}
                 ${subs.some((x) => matchOf(x.cids)) ? `<div class="se-legend"><span class="se-mtag" style="margin-left:0">M</span> in a match today · ${subs.some((x) => cupOf(x.cids)) ? "X = picked up (the card keeps the triple)" : "a ringed number was picked up"}</div>` : ""}
                 ${picker}
@@ -1122,48 +1137,36 @@
         // slides out and the other nine slides in; not far enough, it springs
         // back. Only a sideways drag moves it, so scrolling and taps are as before.
         let swipe = null;
-        const cardEl = () => app.querySelector(".se-chk .se-check");
+        const trackEl = () => app.querySelector(".se-chk .se-track");
+        const moveTrack = (el, k, dx, ms) => {
+            el.style.transition = ms ? `transform ${ms}ms ease-out` : "none";
+            el.style.transform = k ? `translateX(calc(-50% - 4px + ${dx}px))` : `translateX(${dx}px)`;
+        };
         app.addEventListener("touchstart", (e) => {
-            swipe = e.touches.length === 1 && e.target.closest(".se-chk") && app.querySelector(".se-chk .se-seg") && cardEl()
-                ? {x: e.touches[0].clientX, y: e.touches[0].clientY, axis: null, dx: 0} : null;
+            swipe = e.touches.length === 1 && e.target.closest(".se-chk .se-vp") && trackEl()
+                ? {x: e.touches[0].clientX, y: e.touches[0].clientY, axis: null} : null;
         }, {passive: true});
         app.addEventListener("touchmove", (e) => {
             if (!swipe) return;
             const t = e.touches[0], dx = t.clientX - swipe.x, dy = t.clientY - swipe.y;
             if (!swipe.axis && (Math.abs(dx) > 8 || Math.abs(dy) > 8)) swipe.axis = Math.abs(dx) > Math.abs(dy) ? "x" : "y";
             if (swipe.axis !== "x") return;
+            // Past FRONT or BACK there is nothing to show: resist.
             const edge = (checkNine === 0 && dx > 0) || (checkNine === 1 && dx < 0);
-            swipe.dx = dx;
-            const el = cardEl();
-            el.style.transition = "none";
-            el.style.transform = `translateX(${edge ? dx * 0.3 : dx}px)`;
+            moveTrack(trackEl(), checkNine, edge ? dx * 0.3 : dx, 0);
         }, {passive: true});
         app.addEventListener("touchend", (e) => {
             if (!swipe) return;
             const sw = swipe; swipe = null;
             const t = e.changedTouches[0], dx = t.clientX - sw.x, dy = t.clientY - sw.y;
-            const el = cardEl();
+            const el = trackEl();
+            if (!el) return;
             const want = dx < 0 ? 1 : 0;
             const go = Math.abs(dx) >= 50 && Math.abs(dx) >= Math.abs(dy) * 1.5 && want !== checkNine;
-            if (!go) {
-                if (el && sw.axis === "x") { el.style.transition = "transform .18s ease-out"; el.style.transform = "translateX(0)"; }
-                return;
-            }
-            const w = el ? el.offsetWidth : 360, dir = dx < 0 ? -1 : 1;
-            const swap = () => {
-                checkNine = want; checkPick = null; render();
-                const nel = cardEl();
-                if (!nel) return;
-                nel.style.transition = "none";
-                nel.style.transform = `translateX(${-dir * w}px)`;
-                void nel.offsetWidth;
-                nel.style.transition = "transform .2s ease-out";
-                nel.style.transform = "translateX(0)";
-            };
-            if (!el) { swap(); return; }
-            el.style.transition = "transform .15s ease-in";
-            el.style.transform = `translateX(${dir * w}px)`;
-            setTimeout(swap, 150);
+            if (!go) { if (sw.axis === "x") moveTrack(el, checkNine, 0, 180); return; }
+            // Snap to the other nine, then settle the page on it.
+            moveTrack(el, want, 0, 200);
+            setTimeout(() => { checkNine = want; checkPick = null; render(); }, 210);
         }, {passive: true});
         app.addEventListener("click", (e) => {
             const b = e.target.closest("button[data-act]");
