@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.500.10";
+window.TGF_VERSION = "2.500.11";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.500.11",
+    date: "2026-09-26",
+    title: "Score entry: no upright lock, no M tag",
+    changes: [
+      "Kerry, 2026-09-26: 'Don't lock vertical then.' The 'Turn your phone upright' panel and the portrait request from v2.500.10 are removed; the screens work sideways as before.",
+      "Kerry: 'I want to do something different with the M. I don't want to have the M.' The M tag is gone from every screen (hole rows, Check the card, the cards, the pickup prompt) and from the legend. Who has a match still reads on the row ('vs Brian') and in the match banner. What replaces the M is Kerry's to say."
+    ]
+  },
   {
     version: "2.500.10",
     date: "2026-09-26",

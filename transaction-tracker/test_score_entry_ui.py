@@ -358,7 +358,7 @@ with sync_playwright() as p:
         check("a man on white gets the dark outline (white is the exception)", "light" in cls[2], cls)
     cz.close()
 
-    print("match play: M tag, the max-triple notice, Ball in hole / Picked up")
+    print("match play: no M tag (Kerry 2026-09-26), the max-triple notice, Ball in hole / Picked up")
     import json as _json
     ridm, gidm, tokm = make(9, 1, "match")
     # A regular-season (round-level) match keeps the Ball in hole / Picked up
@@ -367,8 +367,8 @@ with sync_playwright() as p:
     pg = open_as_kerry(tokm)
     check("the hole screen shows the match standing",
           pg.locator(".se-mline").count() == 1 and "Kerry v Mark" in pg.inner_text(".se-mline"))
-    check("both players wear the M and 'Match vs' on the hole screen",
-          pg.locator(".se-row .se-mtag").count() == 2 and "vs Mark" in pg.inner_text("body"))
+    check("no M tag; each match player reads 'vs' his opponent on the hole screen",
+          pg.locator(".se-mtag").count() == 0 and "vs Mark" in pg.inner_text("body"))
     for _ in range(4):
         pg.locator(".se-row").nth(1).locator(".se-plus").click()
     body = pg.inner_text("body")
@@ -393,7 +393,7 @@ with sync_playwright() as p:
     pg.wait_for_selector("text=Check the card")
     check("the check card rings the picked-up number and shows the legend",
           pg.locator("button.cell.pu[data-key='c:102'][data-h='1']").count() == 1
-          and "in a match today" in pg.inner_text("body"))
+          and "ringed number was picked up" in pg.inner_text("body"))
     pg.click("button.cell[data-key='c:101'][data-h='2']")
     check("the check picker shows the max notice", "Maximum allowed is triple bogey (8)" in pg.inner_text(".se-picker"))
     pg.click(".se-picker [data-act=cset][data-v='8']")
@@ -478,19 +478,6 @@ with sync_playwright() as p:
     check("the PREVIEW label is not on the scoring screen", "PREVIEW" not in fpg.inner_text(".se-eyebrow").upper())
     check("the save button is on screen", fpg.locator("[data-act=save]").bounding_box()["y"] + 50 <= 660)
     check("the site nav steps aside while scoring", not fpg.locator(".shell-nav").first.is_visible())
-    check("upright, nothing covers the screen", not fpg.locator(".se-upright").is_visible())
-    fpg.set_viewport_size({"width": 844, "height": 390})
-    check("sideways on a phone, 'Turn your phone upright' covers the scoring screen",
-          fpg.locator(".se-upright").is_visible() and "upright" in fpg.inner_text(".se-upright"))
-    fpg.set_viewport_size({"width": 390, "height": 660})
-    check("back upright, the hole screen returns", not fpg.locator(".se-upright").is_visible()
-          and fpg.locator("[data-act=save]").is_visible())
-    wide = b.new_context(viewport={"width": 1280, "height": 800}).new_page()
-    wide.goto(f"http://127.0.0.1:{PORT}/member/score?t={se.make_group_token(gf)}")
-    wide.wait_for_selector("#se-app")
-    check("a desktop window is never covered", not wide.locator(".se-upright").is_visible())
-    mrow = fpg.locator(".se-row").nth(1)
-    check("a long name is trimmed but keeps its M", mrow.locator(".se-name .se-mtag").is_visible())
     fdev = fpg.evaluate("JSON.parse(localStorage.getItem('se_device'))")
     se.write_scores(gf, fdev, 101, [{"op_id": f"fit{c_}-{h}", "customer_id": c_, "hole": h, "gross": PARS[h - 1]}
                                     for h in range(1, 19) for c_ in (101, 102, 107, 108)])
