@@ -449,6 +449,20 @@ check("a PH the card's indexes can't carry is reported, not guessed", st.get("_u
 check("a nine carries the GG-convention note",
       se.get_group_card(sg)["strokes_note"] == "strokes per GG convention")
 
+print("Team/Cart Net pops (Kerry 2026-09-26: PH pops at 100% and team pops, as dots)")
+check("no team handicap on file, no team pops", se.get_group_card(sg)["team_strokes"] == {}
+      and se.get_group_card(sg)["team_game"] is None)
+check("the snapshot stores who has a number, skips who hasn't",
+      se.set_game_handicaps(sr, {101: 0, 102: 3, 105: None}, unit="cart", basis="Cart Net 85%") == 2)
+tc = se.get_group_card(sg)
+check("team pops come off the snapshotted team handicap, by stroke index",
+      tc["team_strokes"].get("102") == {"3": 1, "7": 1, "1": 1}, tc["team_strokes"])
+check("the low man gets no team pops", not tc["team_strokes"].get("101"), tc["team_strokes"])
+check("the game is named for the unit", tc["team_game"]["label"] == "Cart Net", tc["team_game"])
+se.set_game_handicaps(sr, {102: 2}, unit="cart", basis="Cart Net 85%")
+check("a re-seed updates the number in place",
+      se.get_group_card(sg)["team_strokes"].get("102") == {"3": 1, "7": 1})
+
 print("cart-sign QR (Kerry #666 B), behind the score_entry_qr dial")
 pack = db.get_event_print_pack(900)
 res = se.attach_cart_sign_qr(pack)
@@ -469,6 +483,8 @@ db.set_app_setting("score_entry_qr", "")
 print("PREVIEW round + links + close")
 pv = se.create_preview_round(900, [101, 102])
 check("preview round is created", "round_id" in pv and not pv["reused"], pv)
+check("the preview reports its handicaps, never errors on a missing index",
+      "handicaps" in pv and isinstance(pv["handicaps"]["ph"], dict), pv)
 pv2 = se.create_preview_round(900, [101, 102, 103])
 check("a second call reuses the preview round", pv2["round_id"] == pv["round_id"] and pv2["reused"], pv2)
 check("the preview is never the PAIRINGS round",

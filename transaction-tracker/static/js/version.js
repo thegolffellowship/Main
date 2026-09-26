@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.498.5";
+window.TGF_VERSION = "2.499.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.499.0",
+    date: "2026-09-26",
+    title: "Score entry: PH pops and Team/Cart Net pops shown as dots",
+    changes: [
+      "Kerry, 2026-09-26: 'We also need some way to simply show PH pops at 100% and Team/cart Net pops on the hole by hole scoring. Don't want it in text necessarily.' Each stroke is a dot: black for the playing handicap at 100%, orange for the team game. They sit beside the score on every hole and in the corner of each cell on Check the card and on the player's card, with a two-item key under the rows. The 'gets 1 stroke here' text is gone.",
+      "The team number is the starter sheet's own team_handicap (allowance on the unrounded course handicap, rounded once, off the lowest in the field), snapshotted when the round is built from PAIRINGS into the new se_game_handicaps table, so the phone and the sheet cannot disagree. A PREVIEW round has no PAIRINGS, so it computes PH and the team number from the same pieces with the preview group as the field, and says so. A player with no index or tee gets no dots, never a guess."
+    ]
+  },
   {
     version: "2.498.5",
     date: "2026-09-26",

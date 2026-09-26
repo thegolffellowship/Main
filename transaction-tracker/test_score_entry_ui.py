@@ -405,6 +405,30 @@ with sync_playwright() as p:
     check("changing to a triple on the check card asks too; Ball in hole is stored",
           se.get_group_card(gidm)["marks"].get("c:101") == {"2": "holed"}, se.get_group_card(gidm)["marks"])
     db.set_app_setting("lsc_matches", "")
+
+    print("pops as dots: black = PH at 100%, orange = Team/Cart Net")
+    rp = se.create_round(900, 9, label="pops", course_holes=course(9))["round_id"]
+    gp = se.upsert_group(rp, 1, players=[
+        {"customer_id": 101, "display_name": "Kerry Niester", "seat": 1, "playing_handicap": 0},
+        {"customer_id": 102, "display_name": "Mark Stich", "seat": 2, "playing_handicap": 4}])["group_id"]
+    se.set_game_handicaps(rp, {101: 0, 102: 3}, unit="cart", basis="Cart Net 85%")
+    pp = open_as_kerry(se.make_group_token(gp))
+    row = pp.locator(".se-row").nth(1)
+    check("hole 1 (index 1): Mark's score carries 1 black dot and 1 orange",
+          row.locator(".se-pop:not(.t)").count() == 1 and row.locator(".se-pop.t").count() == 1,
+          row.inner_html()[:400])
+    check("the low man shows no dots", pp.locator(".se-row").nth(0).locator(".se-pop").count() == 0)
+    check("no stroke text on the row", "stroke here" not in pp.inner_text("body"))
+    check("a small key names the two dots",
+          "PH pop" in pp.inner_text(".se-popkey") and "Cart Net pop" in pp.inner_text(".se-popkey"))
+    play(pp, 9)
+    pp.wait_for_selector("text=Check the card")
+    pp.wait_for_timeout(800)
+    cell = pp.locator("button.cell[data-key='c:102'][data-h='4']").locator("xpath=..")
+    check("the check card puts the dots in the cell's corner (hole 4: 1 PH, 0 team)",
+          cell.locator(".se-pops.cell .se-pop:not(.t)").count() == 1 and cell.locator(".se-pop.t").count() == 0,
+          cell.inner_html())
+    pp.screenshot(path=os.path.join(SHOTS, "pops-check-card.png"), full_page=True) if "SHOTS" in globals() else None
     b.close()
 
 try:

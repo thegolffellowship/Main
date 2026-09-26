@@ -555,6 +555,24 @@ def _ensure_score_entry_tables(conn: sqlite3.Connection) -> None:
         UNIQUE(round_id, subject_key, hole_number));
     CREATE INDEX IF NOT EXISTS idx_se_hole_marks_group ON se_hole_marks(group_id);
 
+    -- THE TEAM GAME'S HANDICAP, snapshotted when the round is built (Kerry
+    -- 2026-09-26: "some way to simply show PH pops at 100% and Team/cart Net
+    -- pops on the hole by hole scoring"). The number is the starter sheet's
+    -- own team_handicap (allowance on the unrounded course handicap, rounded
+    -- once, off the lowest in the field), never recomputed here, so the dots
+    -- on the phone and the TEAM column on the sheet cannot disagree. The
+    -- handicap lock applies: a later index change does not move it.
+    CREATE TABLE IF NOT EXISTS se_game_handicaps (
+        id           INTEGER PRIMARY KEY AUTOINCREMENT,
+        round_id     INTEGER NOT NULL REFERENCES se_rounds(id) ON DELETE CASCADE,
+        customer_id  INTEGER NOT NULL REFERENCES customers(customer_id),
+        game         TEXT NOT NULL CHECK(game IN ('team_net')),
+        handicap     INTEGER NOT NULL,
+        unit         TEXT,
+        basis        TEXT,
+        at           TEXT NOT NULL,
+        UNIQUE(round_id, customer_id, game));
+
     CREATE TABLE IF NOT EXISTS se_event_versions (
         event_id   INTEGER PRIMARY KEY,
         version    INTEGER NOT NULL DEFAULT 0,
@@ -812,6 +830,11 @@ def seed_round_from_pairings(event_id: int, holes: str = "9", *, round_date=None
                       "seat": p.get("cart_pos")} for p in g.get("players") or []],
             db_path=db_path)
         skipped += res.get("skipped_no_customer_id", [])
+    set_game_handicaps(rid, {p["customer_id"]: p.get("team_handicap")
+                             for g in groups for p in g.get("players") or []
+                             if p.get("customer_id")},
+                       unit=pack.get("team_unit"), basis=pack.get("team_basis"),
+                       db_path=db_path)
     out = {"round_id": rid, "groups": len(groups),
            "course_holes": len(course_holes)}
     if skipped:
@@ -895,14 +918,92 @@ def create_preview_round(event_id: int, customer_ids: list[int], db_path=None,
         event_id, holes, round_date=(ev.get("event_date") or "")[:10] or None,
         label=label, course_holes=course, course_id=ev.get("course_id"),
         created_by="preview", db_path=db_path)["round_id"]
+    hc = _preview_handicaps(event_id, ids, tees or {}, holes, db_path=db_path)
     g = upsert_group(rid, 1, label="Preview group", start_hole=_first_hole(ev, holes),
                      players=[{"customer_id": c, "display_name": names[c], "seat": i + 1,
+                               "playing_handicap": (hc["ph"] or {}).get(c),
                                **({"tee": tees[c]} if tees and tees.get(c) else {})}
                               for i, c in enumerate(ids)], db_path=db_path)
+    set_game_handicaps(rid, hc["team"], unit=hc["unit"], basis=hc["basis"], db_path=db_path)
     out = {"round_id": rid, "group_id": g["group_id"], "reused": bool(existing),
-           "course_holes": len(course), "holes": holes}
+           "course_holes": len(course), "holes": holes,
+           "handicaps": {"ph": hc["ph"], "team": hc["team"], "unit": hc["unit"],
+                         "basis": hc["basis"]}}
+    if hc.get("error"):
+        out["handicaps_error"] = hc["error"]
     if len(course) < holes:
         out["warning"] = f"course card gave {len(course)} of {holes} holes"
+    return out
+
+
+def set_game_handicaps(round_id: int, by_cid: dict, *, unit=None, basis=None,
+                       game: str = "team_net", db_path=None) -> int:
+    """Snapshot each player's team-game handicap for this round. A player
+    with no number (no index, no tee) is left out, and the phone shows no
+    team dots for him rather than a guess."""
+    n = 0
+    with _closing(_conn(db_path)) as conn:
+        for cid, h in (by_cid or {}).items():
+            if h is None:
+                continue
+            conn.execute(
+                "INSERT INTO se_game_handicaps (round_id, customer_id, game, handicap, unit, basis, at) "
+                "VALUES (?,?,?,?,?,?,?) ON CONFLICT(round_id, customer_id, game) DO UPDATE SET "
+                "handicap = excluded.handicap, unit = excluded.unit, basis = excluded.basis, "
+                "at = excluded.at",
+                (round_id, int(cid), game, int(h), unit, basis, _now()))
+            n += 1
+        conn.commit()
+    return n
+
+
+def _preview_handicaps(event_id: int, ids: list, tees: dict, holes: int, db_path=None) -> dict:
+    """PH at 100% and the team handicap for a PREVIEW group, through the
+    starter sheet's own pieces (tee rows, the locked index, the team dial,
+    team_handicaps_for_groups). A preview has no PAIRINGS, so its field is
+    the preview group itself; the basis says so. An 18-hole preview on a
+    nine-hole event rates each tee as twice its nine."""
+    out = {"ph": {}, "team": {}, "unit": None, "basis": None}
+    try:
+        from email_parser import database as db
+        from email_parser.handicap_calc import playing_handicap as ph_fn, course_handicap as ch_fn
+        from email_parser.live_scoring import SEED_LIVE_SCORING_CONFIG, team_allowance_pct
+        with db._connect(db_path) as conn:
+            ev = dict(conn.execute("SELECT * FROM events WHERE id = ?", (event_id,)).fetchone())
+            legend = db.event_tee_legend(conn, event_id, ev)
+            tee_rows, _b, _n = db._event_tee_rows(conn, ev, legend)
+            balls, allowance, basis = db.event_team_net_dial(conn, ev)
+        idx_map = db._handicap_index_18_by_customer(db_path, as_of=db._event_index_as_of(ev))
+        players = []
+        for c in ids:
+            tee = tee_rows.get((tees.get(c) or "").strip())
+            idx = idx_map.get(int(c))
+            p = {"customer_id": c, "name": str(c)}
+            players.append(p)
+            if idx is None or not tee:
+                continue
+            slope, rating, par = tee["slope"], tee["rating"], tee["par"]
+            nine = (rating or 0) < 50
+            if holes == 18 and nine:
+                rating, par = rating * 2, par * 2
+            use = round(idx / 2.0, 1) if (holes == 9 and nine) else idx
+            p["playing_handicap"] = ph_fn(use, slope, rating, par)
+            p["course_handicap_raw"] = ch_fn(use, slope, rating, par)
+            out["ph"][c] = p["playing_handicap"]
+        unit = "cart" if len(ids) < 16 else "group"
+        res = team_allowance_pct(SEED_LIVE_SCORING_CONFIG["games"]["team_net"],
+                                 2 if unit == "cart" else 4, balls)
+        if res.get("pct") is not None and "manager override" not in (basis or ""):
+            allowance = res["pct"] / 100.0
+        db.team_handicaps_for_groups([{"players": players}], allowance, unit)
+        out["team"] = {p["customer_id"]: p.get("team_handicap") for p in players
+                       if p.get("team_handicap") is not None}
+        out["unit"] = unit
+        out["basis"] = (f"{'Cart' if unit == 'cart' else 'Team'} Net: best {balls} of "
+                        f"{2 if unit == 'cart' else 4}, {round(allowance * 100)}%, off the lowest "
+                        f"in this preview group")
+    except Exception as e:     # a preview without handicaps still opens
+        out["error"] = str(e)
     return out
 
 
@@ -1811,6 +1912,22 @@ def _strokes_by_player(players, course) -> dict:
     return out
 
 
+def _team_strokes(conn, round_id: int, course) -> dict:
+    """Team/Cart Net pops per hole off the snapshotted team handicap, the
+    same allocation as the PH pops (full card, by stroke index)."""
+    rows = conn.execute("SELECT customer_id, handicap, unit, basis FROM se_game_handicaps "
+                        "WHERE round_id = ? AND game = 'team_net'", (round_id,)).fetchall()
+    if not rows:
+        return {"team_strokes": {}, "team_game": None}
+    alloc = _strokes_by_player([{"customer_id": r[0], "playing_handicap": r[1]} for r in rows],
+                               course)
+    alloc.pop("_unresolved", None)
+    unit = rows[0][2]
+    return {"team_strokes": alloc,
+            "team_game": {"unit": unit, "label": "Cart Net" if unit == "cart" else "Team Net",
+                          "basis": rows[0][3]}}
+
+
 def _tee_legend(conn, event_id: int) -> dict:
     """{band: {color, ring, tee_name, band_label}} from the ONE tee legend
     the starter sheet and print pack use (database.event_tee_legend, v2.437+
@@ -1864,6 +1981,7 @@ def _card_extras(conn, g, group_id: int) -> dict:
             "keeper_signs": keeper_signs(g["event_id"]),
             "tees": _tee_legend(conn, g["event_id"]),
             "strokes": _strokes_by_player(players, course),
+            **_team_strokes(conn, g["round_id"], course),
             "strokes_note": "strokes per GG convention" if g["holes"] == 9 else None}
 
 

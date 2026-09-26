@@ -323,6 +323,21 @@ link (R8, a member send — Kerry OKs each batch) come later; the email link
 is the strong identity path, "tap your name" from a shared code is weak and
 is accepted for the beta because every action is logged by device.
 
+## Pops as dots (v2.499.0)
+
+Kerry 2026-09-26: "some way to simply show PH pops at 100% and Team/cart Net pops
+on the hole by hole scoring. Don't want it in text necessarily."
+
+- One dot per stroke. Black = the playing handicap at 100% (`card.strokes`,
+  unchanged), orange = the team game (`card.team_strokes`, labelled by
+  `card.team_game.label`, Cart Net or Team Net). Both are allocated full-card by
+  stroke index. A plus handicap draws no dots (a plus comes off the round).
+- `se_game_handicaps` (round, customer_id, game='team_net', handicap, unit, basis)
+  is the snapshot. `seed_round_from_pairings` copies the starter sheet's
+  `team_handicap`, `team_unit` and `team_basis`; `create_preview_round` computes PH
+  and the team number with `_preview_handicaps` from the same helpers, the preview
+  group as the field. `set_game_handicaps` upserts with ON CONFLICT.
+
 ## Won-match shimmer and cup standings (v2.498.5)
 
 Kerry 2026-09-26: "If a match is won, then that heading needs to shimmer kind of

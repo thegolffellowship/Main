@@ -81,6 +81,18 @@
         .se-score .v.empty { color: #9CA3AF; }
         .se-score .v.waiting { color: #B45A22; }
         .se-score .r { font-size: 11px; font-weight: 600; color: #4B5563; }
+        /* POPS (Kerry 2026-09-26: "simply show PH pops at 100% and Team/cart
+           Net pops ... Don't want it in text"). One dot per stroke: black is
+           the playing handicap at 100%, orange is the team game's. */
+        .se-score { position: relative; }
+        .se-pops { position: absolute; top: -4px; right: -8px; display: flex; flex-direction: column; gap: 2px; }
+        .se-pops.cell { top: 2px; right: 2px; flex-direction: row; gap: 1px; }
+        .se-pop { width: 7px; height: 7px; border-radius: 50%; background: #1B1B1B; display: block; }
+        .se-pop.t { background: #E87C3E; }
+        .se-pops.cell .se-pop { width: 5px; height: 5px; }
+        .se-popkey { display: flex; gap: 14px; align-items: center; font-size: 12px; color: #4B5563; margin-top: 8px; }
+        .se-popkey span { display: inline-flex; align-items: center; gap: 5px; }
+        .se-card td { position: relative; }
         .se-strip { display: grid; gap: 4px; }
         .se-cell { height: 44px; border-radius: 8px; display: flex; flex-direction: column; align-items: center;
                    justify-content: center; background: #F8F8F8; border: 1px solid #E5E7EB; cursor: pointer;
@@ -352,9 +364,28 @@
         const holeWaiting = (n) => queue.some((o) => o.hole === n);
         const allDone = () => holeOrder().every(holeDone);
         const keeping = () => card.lock.state === "mine" && !following;
-        function strokeNote(cid, n) {
-            const k = ((card.strokes || {})[String(cid)] || {})[String(n)];
-            return k ? (k === 1 ? "gets 1 stroke here" : "gets " + k + " strokes here") : "";
+        // Dots, not words: k PH pops (black) + t team pops (orange).
+        function popsOf(cid, n) {
+            const g = (m) => Math.max(0, Number(((m || {})[String(cid)] || {})[String(n)]) || 0);
+            return {k: g(card.strokes), t: g(card.team_strokes)};
+        }
+        function popDots(cids, n, small) {
+            if (!cids || cids.length !== 1) return "";
+            const p = popsOf(cids[0], n);
+            if (!p.k && !p.t) return "";
+            const d = "<i class=\"se-pop\"></i>".repeat(p.k) + "<i class=\"se-pop t\"></i>".repeat(p.t);
+            return `<span class="se-pops${small ? " cell" : ""}" aria-hidden="true">${d}</span>`;
+        }
+        function popLabel(cids, n) {
+            if (!cids || cids.length !== 1) return "";
+            const p = popsOf(cids[0], n), tg = (card.team_game || {}).label || "Team Net";
+            return [p.k ? p.k + " handicap stroke" + (p.k > 1 ? "s" : "") : "", p.t ? p.t + " " + tg + " stroke" + (p.t > 1 ? "s" : "") : ""].filter(Boolean).join(", ");
+        }
+        function popKey() {
+            const any = (m) => Object.values(m || {}).some((h) => Object.values(h || {}).some((v) => v > 0));
+            const a = any(card.strokes), b = any(card.team_strokes);
+            if (!a && !b) return "";
+            return `<div class="se-popkey">${a ? `<span><i class="se-pop"></i>PH pop</span>` : ""}${b ? `<span><i class="se-pop t"></i>${esc((card.team_game || {}).label || "Team Net")} pop</span>` : ""}</div>`;
         }
         // The tee a player plays, from the tee sheet's legend (card.tees).
         function teeOf(cid) {
@@ -484,11 +515,11 @@
                 const d = cur.v == null || !h.par ? null : cur.v - h.par;
                 const rel = d == null ? "" : (WORDS[String(d)] || (d > 0 ? "+" + d : String(d)));
                 const meta2 = [s.team ? s.meta : null, s.team ? null : teeOf(s.cid).name || null, !s.team && s.ph != null ? "PH " + s.ph : null,
-                               s.team ? null : strokeNote(s.cid, hole), vsText(s.cids) || null].filter(Boolean).join(" · ");
+                               vsText(s.cids) || null].filter(Boolean).join(" · ");
                 return `<div class="se-row" data-key="${s.key}">${teeBar(s.cids)}
                     <div class="se-who"><div class="se-name">${esc(s.name)}${mtag(s.cids)}</div><div class="se-meta">${esc(meta2)}</div></div>
                     <button type="button" class="se-minus" data-act="step" data-d="-1" aria-label="One less for ${esc(s.name)}">&minus;</button>
-                    <div class="se-score"><div class="v ${cur.v == null ? "empty" : cur.waiting ? "waiting" : ""}">${shown}</div><div class="r">${rel}</div></div>
+                    <div class="se-score" ${popLabel(s.cids, hole) ? `aria-label="${esc(popLabel(s.cids, hole))}"` : ""}>${popDots(s.cids, hole)}<div class="v ${cur.v == null ? "empty" : cur.waiting ? "waiting" : ""}">${shown}</div><div class="r">${rel}</div></div>
                     <button type="button" class="se-plus" data-act="step" data-d="1" aria-label="One more for ${esc(s.name)}">+</button>
                   </div>`;
             }).join("");
@@ -510,6 +541,7 @@
                 ${hio}
                 ${maxNote ? `<div class="se-warn">${ICON.warn}<span>${esc(maxNote)}</span></div>` : ""}
                 <div class="se-stack">${rows}</div>
+                ${popKey()}
                 ${card.strokes_note ? `<div class="se-note">Handicap strokes: ${esc(card.strokes_note)}.</div>` : ""}
                 <div style="margin-top:16px" class="se-lbl">Group card</div>
                 <div class="se-strip" style="margin-top:8px;grid-template-columns:repeat(${Math.min(order.length, 9)}, minmax(0, 1fr))">${cells}</div>
@@ -585,7 +617,7 @@
                     const on = checkPick && checkPick.key === s.key && checkPick.h === n;
                     const cls = (on ? "picked" : checkChanged.has(s.key + "|" + n) ? "changed" : "")
                         + (markOf(s.key, n) === "picked_up" ? " pu" : "");
-                    return `<td><button type="button" class="cell ${cls}" data-act="cpick" data-key="${s.key}" data-h="${n}" aria-label="${esc(s.name)}, hole ${n}: ${v == null ? "no score" : v}">${v == null ? "–" : v}</button></td>`;
+                    return `<td><button type="button" class="cell ${cls}" data-act="cpick" data-key="${s.key}" data-h="${n}" aria-label="${esc(s.name)}, hole ${n}: ${v == null ? "no score" : v}">${v == null ? "–" : v}</button>${popDots(s.cids, n, true)}</td>`;
                 }).join("");
                 return `<tr><td class="nm">${nameCell(s, true)}</td>${cells}<td class="tot">${tot(s.key, hs) || ""}</td>${eighteen ? `<td class="tot">${back ? tot(s.key, nums) || "" : ""}</td>` : ""}</tr>`;
             }).join("");
@@ -609,6 +641,7 @@
                 ${matchStrip()}
                 ${seg}
                 <div class="se-card se-check ${eighteen ? "" : "nine"}"><table>${colgroup(hs.length, eighteen)}<thead>${head}</thead><tbody>${par}${rows}</tbody></table></div>
+                ${popKey()}
                 ${subs.some((x) => matchOf(x.cids)) ? `<div class="se-legend"><span class="se-mtag" style="margin-left:0">M</span> in a match today · a ringed number was picked up</div>` : ""}
                 ${picker}
                 <div class="se-lbl" style="margin:14px 0 6px">Totals</div>
@@ -763,7 +796,7 @@
                     const fl = isMe && flagsMine.some((f) => f.hole === n);
                     const cell = v == null ? "" : markOf(s.key, n) === "picked_up" ? `<span class="se-pu">${v}</span>` : v;
                     const cls = fl ? "flagged" : (isMe && flagPick === n ? "picked" : "");
-                    return `<td class="${cls}">${isMe && canTap ? `<button type="button" class="hole" data-act="pickhole" data-h="${n}" aria-label="Hole ${n}: ${cell}. Tap if it's wrong">${cell}</button>` : cell}</td>`;
+                    return `<td class="${cls}">${popDots(s.cids, n, true)}${isMe && canTap ? `<button type="button" class="hole" data-act="pickhole" data-h="${n}" aria-label="Hole ${n}: ${cell}. Tap if it's wrong">${cell}</button>` : cell}</td>`;
                 }).join("");
                 const tot = all.reduce((a, n) => a + (value(s.key, n).v || 0), 0);
                 return `<tr class="${isMe ? "me" : ""}"><td class="nm">${nameCell(s, false)}</td>${cells}<td>${sub || ""}</td>${eighteen ? `<td>${withTotal ? tot || "" : ""}</td>` : ""}</tr>`;
@@ -850,6 +883,7 @@
                 ${hioW}
                 <div class="se-gap"></div>
                 ${tables}
+                ${popKey()}
                 ${matchStrip()}
                 <div class="se-gap"></div>
                 ${done ? `<div class="se-copy" style="margin-bottom:14px">${mine && signedFor(who) && !flagsMine.length ? `${esc(first(kept) || "The scorekeeper")} checked this card against the paper card and signed it for the group. If a hole on your row is wrong, tap that number and ${esc(first(kept) || "the scorekeeper")} gets the flag.` : mine && !signedSelf(who) && !(flagsMine.length) ? `Check each hole on your row. Signing tells your manager it's right. If one is wrong, tap that number (or tap <strong>Something's wrong</strong>) and ${esc(first(kept) || "the scorekeeper")} gets the flag to fix it. Only your card reopens.` : "Signing tells your manager this card is right."}</div>` : `<div class="se-copy">Live. This card fills in as ${esc(first(kept) || "the scorekeeper")} enters each hole. You'll sign it at the end.</div>`}
