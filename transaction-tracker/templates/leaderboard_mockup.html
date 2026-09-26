@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#E87C3E">
+    <meta name="robots" content="noindex">
+    <title>Leaderboard mockup · The Golf Fellowship</title>
+    <link rel="icon" href="/static/tgf-icon.svg">
+    <link href="https://fonts.googleapis.com/css2?family=Bitter:wght@600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/dashboard.css?v={{ app_version }}">
+    <link rel="stylesheet" href="/static/css/shell.css">
+    {#  LEADERBOARD MOCKUP (Kerry 2026-09-26: "I want to show on my tracker so it
+        renders with my standards"). The Board tab as it would sit beside
+        SCORING on the score-entry page, in the Tracker shell with the same
+        fonts and tokens. MADE-UP SCORES: nothing here reads the database.
+        Rulings folded in: games are one standard toggle; the team game first
+        (Cart Net OR Team Net, never both), then MVP, Net, Gross, Skins, CTP
+        (+ Match when a group has matches); team names one line per cart,
+        small first name + LAST NAME in Bitter, a bullet between partners. #}
+    <style>
+        body { background: #FFFFFF; }
+        .lb { max-width: 480px; margin: 0 auto; padding: 14px 16px 40px; color: #1B1B1B; white-space: normal; }
+        .lb-demo { display: flex; justify-content: space-between; align-items: center; gap: 8px;
+                   background: #FEF3C7; color: #92400E; border-radius: 8px; padding: 6px 10px; font-size: 12px; margin-bottom: 12px; }
+        .lb-demo a { color: #92400E; font-weight: 700; text-decoration: none; padding: 2px 8px; border-radius: 999px; }
+        .lb-demo a.on { background: #92400E; color: #FEF3C7; }
+        .lb-eb { font: 700 12px/1.3 'Helvetica Neue', Helvetica, Arial, sans-serif; letter-spacing: 1.2px; color: #B45A22; text-transform: uppercase; }
+        .lb h1 { font: 700 28px/1.1 Bitter, Georgia, serif; margin: 2px 0 0; }
+        .lb-sub { font-size: 13px; color: #4B5563; margin-top: 3px; }
+        .seg { display: flex; border: 1px solid #1B1B1B; border-radius: 24px; overflow: hidden; margin: 10px 0 8px; }
+        .seg button { flex: 1; border: none; background: #FFFFFF; color: #1B1B1B; cursor: pointer; padding: 0;
+                      font: 700 13px/34px Bitter, Georgia, serif; letter-spacing: 1px; }
+        .seg button.on { background: #1B1B1B; color: #FFFFFF; }
+        .seg.games button { font: 700 10px/28px 'Helvetica Neue', Helvetica, Arial, sans-serif; letter-spacing: .5px; border-left: 1px solid #1B1B1B; }
+        .seg.games button:first-child { border-left: none; }
+        .prov { font-size: 12px; color: #92400E; background: #FEF3C7; border-radius: 8px; padding: 6px 10px; margin-bottom: 8px; }
+        .lb table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+        .lb th { font: 700 10px 'Helvetica Neue', Helvetica, Arial, sans-serif; letter-spacing: .8px; color: #6B7280; text-transform: uppercase;
+                 text-align: right; padding: 4px; border-bottom: 1px solid #E5E7EB; }
+        .lb th.l { text-align: left; }
+        .lb td { padding: 7px 4px; border-bottom: 1px solid #F1F2F4; text-align: right; font-size: 14px; white-space: nowrap; }
+        .lb td.pos { width: 26px; text-align: left; color: #6B7280; font-weight: 700; }
+        .lb td.who { text-align: left; white-space: normal; }
+        .lb td.tp { width: 42px; font: 700 16px Bitter, Georgia, serif; }
+        .lb td.tp.u { color: #B91C1C; }
+        .lb td.sm { width: 38px; color: #6B7280; font-size: 12px; }
+        .lb tr.me td { background: #FFF4EC; }
+        .lb tr.me td.pos { box-shadow: inset 3px 0 0 #E87C3E; }
+        .nm { display: inline-flex; align-items: baseline; gap: 4px; }
+        .nm em { font-style: normal; font-size: 12px; color: #6B7280; }
+        .nm b { font: 700 15px/1.3 Bitter, Georgia, serif; text-transform: uppercase; }
+        .cart { display: flex; align-items: baseline; gap: 7px; white-space: nowrap; }
+        .cart .sep { color: #C4C4C4; }
+        .meta { font-size: 11px; color: #6B7280; margin-top: 2px; }
+        .tee { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; vertical-align: 1px; }
+        .tee.ring { background: #FFFFFF !important; box-shadow: inset 0 0 0 2px currentColor; }
+        .lbl { display: flex; justify-content: space-between; font: 700 11px 'Helvetica Neue', Helvetica, Arial, sans-serif;
+               letter-spacing: 1px; color: #6B7280; text-transform: uppercase; margin: 14px 0 6px; }
+        .skins { display: grid; gap: 3px; }
+        .sk { border: 1px solid #E5E7EB; border-radius: 6px; text-align: center; padding: 3px 0; font-size: 10px; color: #6B7280; background: #F8F8F8; }
+        .sk b { display: block; font: 700 12px Bitter, Georgia, serif; color: #1B1B1B; }
+        .sk.won { background: #d1f4e0; border-color: #d1f4e0; } .sk.won b { color: #0d7556; }
+        .sk.carry { background: #FFFFFF; border-style: dashed; }
+        .mcard { border: 1px solid #E5E7EB; border-radius: 10px; overflow: hidden; margin-bottom: 6px; }
+        .strip { display: flex; min-height: 44px; }
+        .mono { width: 36px; flex: none; display: flex; align-items: center; justify-content: center; font: 700 13px Bitter, Georgia, serif; color: #FFFFFF; }
+        .mn { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; padding: 0 8px; }
+        .mn.r { align-items: flex-end; text-align: right; }
+        .mn em { font-style: normal; font-size: 11px; color: #6B7280; }
+        .mn b { font: 700 14px/1.1 Bitter, Georgia, serif; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+        .bar { flex: none; min-width: 70px; display: flex; flex-direction: column; align-items: center; justify-content: center;
+               color: #FFFFFF; font: 700 15px/1 Bitter, Georgia, serif; padding: 0 8px; }
+        .bar small { font: 600 9px 'Helvetica Neue', Helvetica, Arial, sans-serif; letter-spacing: .6px; text-transform: uppercase; opacity: .85; margin-top: 2px; }
+        .bar.a { clip-path: polygon(12px 0, 100% 0, 100% 100%, 12px 100%, 0 50%); padding-left: 16px; }
+        .bar.b { clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 50%, calc(100% - 12px) 100%, 0 100%); padding-right: 16px; }
+        .bar.t { background: #BFB8AC; }
+        .dots { display: flex; justify-content: center; gap: 4px; padding: 6px 8px; }
+        .hd { width: 9px; height: 9px; border-radius: 50%; }
+        .hd.e { border: 1.5px solid #D6D3CC; box-sizing: border-box; }
+        .note { font-size: 11px; color: #6B7280; margin-top: 12px; line-height: 1.4; }
+    </style>
+</head>
+<body>
+    {% set SHELL_TITLE = 'Leaderboard' %}{% set SHELL_ACTIVE = '' %}
+    {% include '_shell_nav.html' %}
+    <main class="lb" id="lb"></main>
+    <script src="/static/js/version.js"></script>
+    <script>window.MEMBER_MODE = true;</script>
+    <script src="/static/js/auth.js"></script>
+    <script>
+    (function () {
+        "use strict";
+        const A = "#2F5D74", B = "#C1673F";
+        const TEE = {Blue: "#1D4ED8", White: "#1B1B1B", Gold: "#B8860B", Red: "#B91C1C"};
+        const RING = {White: 1, Red: 1};
+        const P = (f, l) => `<span class="nm"><em>${f}</em><b>${l}</b></span>`;
+        const cart = (pair) => `<div class="cart">${P(...pair[0])}<span class="sep">•</span>${P(...pair[1])}</div>`;
+        const tp = (n) => n === 0 ? "E" : (n > 0 ? "+" + n : "" + n);
+        const EV = {
+          "9": {
+            name: "s9.29 Canyon Springs", group: 1, sub: "Tuesday nine · 16 players · holes 1–9",
+            team: {key: "CART", title: "Cart Net · best ball of 2, 85%", rows: [
+              {pos: 1, carts: [[["Dan", "Stich"], ["Mary", "Wade"]]], meta: "Group 1 · your group", thru: 6, net: -6, me: 1},
+              {pos: 2, carts: [[["Ray", "Delgado"], ["Joe", "Reyes"]]], meta: "Group 3", thru: 7, net: -5},
+              {pos: "T3", carts: [[["Tom", "Alvarez"], ["Sam", "Ortiz"]]], meta: "Group 2", thru: 7, net: -3},
+              {pos: "T3", carts: [[["Kerry", "Niester"], ["Brian", "Thompson"]]], meta: "Group 1 · your group", thru: 6, net: -3, me: 1},
+              {pos: 5, carts: [[["Chris", "Benton"], ["Luis", "Garza"]]], meta: "Group 4", thru: 5, net: -2}]},
+            players: [
+              ["Dan", "Stich", "Gold", 1, 27, 6, -3], ["Ray", "Delgado", "White", 3, 31, 7, -2], ["Mary", "Wade", "Red", 1, 30, 6, -2],
+              ["Tom", "Alvarez", "Blue", 2, 28, 7, -1], ["Kerry", "Niester", "Blue", 1, 24, 6, 0], ["Chris", "Benton", "White", 4, 21, 5, 0],
+              ["Sam", "Ortiz", "Gold", 2, 33, 7, 1], ["Brian", "Thompson", "White", 1, 34, 6, 2]],
+            skinsTitle: "½ Net (7 buyers)", skinsNote: "2 won · 1 carry",
+            skins: [{}, {w: "Stich"}, {c: 1}, {w: "Wade"}, {}, {}, {}, {}, {}], ctp: [["3", "Mary", "Wade", "8' 4\""], ["7", null]],
+            matches: [
+              {a: ["Kerry", "Niester"], b: ["Dan", "Stich"], lead: "b", txt: "1 UP", sub: "thru 6", h: [0, 1, 2, 0, 2, 0, null, null, null]},
+              {a: ["Brian", "Thompson"], b: ["Mary", "Wade"], lead: null, txt: "AS", sub: "thru 6", h: [2, 1, 0, 1, 2, 0, null, null, null]}],
+            note: "3 of 4 groups thru 5 or more"},
+          "18": {
+            name: "s10.3 Brackenridge", group: 3, sub: "Saturday 18 · 24 players · shotgun",
+            team: {key: "TEAM", title: "Team Net · best 2 of 4", rows: [
+              {pos: 1, carts: [[["Ray", "Delgado"], ["Luis", "Garza"]], [["Ann", "Lee"], ["Sam", "Park"]]], meta: "Group 5", thru: 12, net: -11},
+              {pos: 2, carts: [[["Kerry", "Niester"], ["Brian", "Thompson"]], [["Dan", "Stich"], ["Mary", "Wade"]]], meta: "Group 3 · your group", thru: 10, net: -9, me: 1},
+              {pos: 3, carts: [[["Tom", "Alvarez"], ["Joe", "Reyes"]], [["Min", "Cho"], ["Rosa", "Diaz"]]], meta: "Group 1", thru: 12, net: -7},
+              {pos: 4, carts: [[["Chris", "Benton"], ["Sam", "Ortiz"]], [["Eli", "Ruiz"], ["Pat", "Hale"]]], meta: "Group 4", thru: 9, net: -4}]},
+            players: [
+              ["Ray", "Delgado", "White", 5, 44, 12, -4], ["Mary", "Wade", "Red", 3, 45, 10, -3], ["Kerry", "Niester", "Blue", 3, 37, 10, -2],
+              ["Tom", "Alvarez", "Blue", 1, 46, 12, -2], ["Dan", "Stich", "Gold", 3, 49, 10, -1], ["Sam", "Ortiz", "Gold", 6, 38, 8, 0],
+              ["Chris", "Benton", "White", 4, 44, 9, 1], ["Brian", "Thompson", "White", 3, 58, 10, 3]],
+            skinsTitle: "Net (14 buyers)", skinsNote: "3 won · 2 carries",
+            skins: [{w: "Delgado"}, {c: 1}, {c: 1}, {w: "Wade"}, {}, {w: "Stich"}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}],
+            ctp: [["4", "Ray", "Delgado", "11' 2\""], ["8", "Kerry", "Niester", "5' 9\""], ["12", null], ["16", null]],
+            matches: [], note: "all 6 groups on course, 2 thru 12"}
+        };
+        const q = new URLSearchParams(location.search);
+        let holes = q.get("holes") === "18" ? "18" : "9";
+        let game = null;
+        const app = document.getElementById("lb");
+        function games(ev) { return [ev.team.key, "MVP", "NET", "GROSS", "SKINS", "CTP"].concat(ev.matches.length ? ["MATCH"] : []); }
+        function playerRows(ev, col) {
+            const rows = ev.players.slice().sort((x, y) => (col === "gross" ? x[4] - y[4] : x[6] - y[6]));
+            return rows.map((r, i) => `<tr class="${r[3] === ev.group ? "me" : ""}"><td class="pos">${i + 1}</td>
+                <td class="who"><span class="tee ${RING[r[2]] ? "ring" : ""}" style="background:${TEE[r[2]]};color:${TEE[r[2]]}"></span>${P(r[0], r[1])}<div class="meta">Group ${r[3]}${r[3] === ev.group ? " · your group" : ""}</div></td>
+                <td class="sm">${r[5]}</td><td class="tp ${(col === "gross" ? 0 : r[6]) < 0 ? "u" : ""}">${col === "gross" ? r[4] : tp(r[6])}</td></tr>`).join("");
+        }
+        function mcard(m) {
+            const bar = m.lead == null ? "t" : m.lead, bg = bar === "a" ? A : bar === "b" ? B : "";
+            const dots = m.h.map((w) => w == null ? '<i class="hd e"></i>' : `<i class="hd" style="background:${w === 1 ? A : w === 2 ? B : "#BFB8AC"}"></i>`).join("");
+            return `<div class="mcard"><div class="strip"><span class="mono" style="background:${A}">${m.a[0][0]}${m.a[1][0]}</span>
+                <span class="mn"><em>${m.a[0]}</em><b>${m.a[1]}</b></span>
+                <span class="bar ${bar}" style="${bg ? "background:" + bg : ""}">${m.txt}<small>${m.sub}</small></span>
+                <span class="mn r"><em>${m.b[0]}</em><b>${m.b[1]}</b></span><span class="mono" style="background:${B}">${m.b[0][0]}${m.b[1][0]}</span></div>
+                <div class="dots">${dots}</div></div>`;
+        }
+        function body(ev, g) {
+            if (g === ev.team.key) return `<table><tr><th class="l" colspan="2">${ev.team.title}</th><th>Thru</th><th>Net</th></tr>${ev.team.rows.map((r) =>
+                `<tr class="${r.me ? "me" : ""}"><td class="pos">${r.pos}</td><td class="who">${r.carts.map(cart).join("")}<div class="meta">${r.meta}</div></td>
+                 <td class="sm">${r.thru}</td><td class="tp ${r.net < 0 ? "u" : ""}">${tp(r.net)}</td></tr>`).join("")}</table>`;
+            if (g === "NET") return `<table><tr><th class="l" colspan="2">Individual Net</th><th>Thru</th><th>Net</th></tr>${playerRows(ev, "net")}</table>`;
+            if (g === "GROSS") return `<table><tr><th class="l" colspan="2">Individual Gross</th><th>Thru</th><th>Gross</th></tr>${playerRows(ev, "gross")}</table>`;
+            if (g === "MVP") return `<table><tr><th class="l" colspan="2">MVP · points today</th><th>Thru</th><th>Pts</th></tr>${ev.players.slice().sort((x, y) => x[6] - y[6]).map((r, i) =>
+                `<tr class="${r[3] === ev.group ? "me" : ""}"><td class="pos">${i + 1}</td><td class="who">${P(r[0], r[1])}<div class="meta">Group ${r[3]}</div></td><td class="sm">${r[5]}</td><td class="tp">${Math.max(0, 12 - 2 * i)}</td></tr>`).join("")}</table>`;
+            if (g === "SKINS") return `<div class="lbl"><span>Skins · ${ev.skinsTitle}</span><span>${ev.skinsNote}</span></div>
+                <div class="skins" style="grid-template-columns:repeat(9,1fr)">${ev.skins.map((s, i) => `<div class="sk ${s.w ? "won" : s.c ? "carry" : ""}">${i + 1}<b>${s.w || (s.c ? "c/o" : "–")}</b></div>`).join("")}</div>`;
+            if (g === "CTP") return `<table><tr><th class="l" colspan="2">Closest to the pin</th><th></th><th>Distance</th></tr>${ev.ctp.map((c) =>
+                `<tr><td class="pos">#${c[0]}</td><td class="who">${c[1] ? P(c[1], c[2]) : '<span class="meta">not played yet</span>'}</td><td></td><td class="sm" style="width:60px">${c[3] || ""}</td></tr>`).join("")}</table>`;
+            if (g === "MATCH") return `<div class="lbl"><span>Matches</span><span>tap one for its card</span></div>${ev.matches.map(mcard).join("")}`;
+            return "";
+        }
+        function render() {
+            const ev = EV[holes];
+            const gs = games(ev);
+            if (!gs.includes(game)) game = gs[0];
+            app.innerHTML = `<div class="lb-demo"><span>MOCKUP · made-up scores</span><span>
+                    <a href="?holes=9" class="${holes === "9" ? "on" : ""}" data-h="9">9 holes</a>
+                    <a href="?holes=18" class="${holes === "18" ? "on" : ""}" data-h="18">18 holes</a></span></div>
+                <div class="lb-eb">${ev.name} · Group ${ev.group}</div>
+                <h1>Leaderboard</h1><div class="lb-sub">${ev.sub}</div>
+                <div class="seg"><button type="button">SCORING</button><button type="button" class="on">BOARD</button></div>
+                <div class="seg games">${gs.map((x) => `<button type="button" class="${x === game ? "on" : ""}" data-g="${x}">${x}</button>`).join("")}</div>
+                <div class="prov">Provisional · ${ev.note}. No money shows until every card is in.</div>
+                ${body(ev, game)}
+                <div class="note">One board for the event, fed by every group's live entry through the same engine the Test Center checks against Golf Genius. Golf Genius stays the official record.</div>`;
+        }
+        app.addEventListener("click", (e) => {
+            const g = e.target.closest("[data-g]");
+            if (g) { game = g.dataset.g; render(); return; }
+            const h = e.target.closest("[data-h]");
+            if (h) { e.preventDefault(); holes = h.dataset.h; game = null; history.replaceState(null, "", "?holes=" + holes); render(); }
+        });
+        render();
+    })();
+    </script>
+</body>
+</html>

@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.502.0";
+window.TGF_VERSION = "2.502.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.502.1",
+    date: "2026-09-26",
+    title: "Leaderboard mockup as a real Tracker page",
+    changes: [
+      "Kerry, 2026-09-26: 'Come on now. I want to show on my tracker so it renders with my standards.' /admin/mockups/leaderboard is the Board tab mockup as a Tracker page: the member shell, Bitter, the TGF tokens, the SCORING | BOARD toggle and one game toggle (the team game first, Cart Net or Team Net, then MVP, Net, Gross, Skins, CTP, and Match when a group has matches), team names one line per cart (small first name, LAST NAME in Bitter, a bullet between partners), and a 9 holes | 18 holes switch. Every game tab works. Made-up scores; it reads nothing. Admin only, with the PIN box.",
+      "The fresh-launch rule in auth.js (a new tab starts on EVENTS) no longer bounces a link to /admin/mockups, the same exemption the member pages have; that bounce is why the link opened on EVENTS."
+    ]
+  },
   {
     version: "2.502.0",
     date: "2026-09-26",

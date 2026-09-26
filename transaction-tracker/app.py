@@ -11621,11 +11621,22 @@ def mockups_index():
         names = sorted(f for f in os.listdir(_MOCKUP_DIR) if f.lower().endswith((".html", ".png")))
     except OSError:
         names = []
-    rows = "".join(f'<li><a href="/admin/mockups/{n}">{n}</a></li>' for n in names)
+    rows = ('<li><a href="/admin/mockups/leaderboard"><b>Leaderboard (Tracker page)</b></a></li>'
+            + "".join(f'<li><a href="/admin/mockups/{n}">{n}</a></li>' for n in names))
     return (f'<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1">'
             f'<title>Mockups</title><body style="font-family:Helvetica Neue,Arial;padding:16px">'
             f'<h1 style="font-family:Bitter,Georgia,serif">Mockups</h1>'
             f'<p style="color:#6B7280">Design mockups with made-up scores. Admin only.</p><ul>{rows}</ul></body>')
+
+
+@app.route("/admin/mockups/leaderboard")
+def mockup_leaderboard():
+    """The leaderboard mockup as a real Tracker page, in the shell with the
+    Tracker's fonts and tokens (Kerry 2026-09-26: "I want to show on my
+    tracker so it renders with my standards"). Made-up scores; reads nothing."""
+    if not _is_admin_session():
+        return _mockup_signin()
+    return render_template("leaderboard_mockup.html", member_mode=True)
 
 
 @app.route("/admin/mockups/<name>")

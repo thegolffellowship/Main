@@ -22,7 +22,10 @@
         // member opening the shared URL must never be bounced to /events
         // (which would just show them the login modal). (v2.53.0, Kerry)
         const isMemberPage = window.location.pathname.startsWith("/member");
-        if (window.location.pathname !== "/events" && !isDeepLink && !isMemberPage) {
+        // A mockup link is its own destination too (Kerry 2026-09-26: a link
+        // to the leaderboard mockup opened on /events instead).
+        const isMockup = window.location.pathname.startsWith("/admin/mockups");
+        if (window.location.pathname !== "/events" && !isDeepLink && !isMemberPage && !isMockup) {
             window.location.replace("/events");
             return;
         }

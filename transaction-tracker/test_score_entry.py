@@ -626,6 +626,9 @@ check("anonymous cannot read the board",
 check("anonymous cannot open the mockups (they carry members' names)",
       client.get("/admin/mockups").status_code in (401, 403, 302)
       and client.get("/admin/mockups/leaderboard-team-names.html").status_code in (401, 403, 302))
+check("the leaderboard mockup page asks an anonymous visitor for the admin PIN",
+      client.get("/admin/mockups/leaderboard").status_code == 401
+      and b"Admin PIN" in client.get("/admin/mockups/leaderboard").data)
 check("anonymous cannot open the Live Scoring page",
       client.get("/events/900/live-scoring").status_code in (401, 403, 302))
 check("anonymous cannot read the Live Scoring overview",
