@@ -4,35 +4,35 @@ body{margin:0;font-family:'Helvetica Neue',Arial,sans-serif;color:#1B1B1B;backgr
 h2{font:700 12px 'Helvetica Neue';letter-spacing:1.2px;color:#B45A22;text-transform:uppercase;margin:14px 0 4px}
 .sub{font-size:12px;color:#6B7280;margin-bottom:6px}
 table{width:100%;border-collapse:collapse}
-td{padding:8px 4px;border-bottom:1px solid #F1F2F4;vertical-align:middle}
+td{padding:7px 4px;border-bottom:1px solid #F1F2F4;vertical-align:middle}
 td.pos{width:24px;color:#6B7280;font-weight:700}
-td.th{width:36px;text-align:right;color:#6B7280;font-size:12px}
+td.th{width:34px;text-align:right;color:#6B7280;font-size:12px}
 td.tp{width:40px;text-align:right;font:700 16px Bitter,Georgia,serif;color:#B91C1C}
 tr.me td{background:#FFF4EC} tr.me td.pos{box-shadow:inset 3px 0 0 #E87C3E}
-.cart{font:700 14px/1.3 Bitter,Georgia,serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.cart .amp{color:#9CA3AF;font-weight:400;margin:0 2px}
-.cart .c{display:inline-block;width:14px;font:700 9px 'Helvetica Neue';color:#9CA3AF}
-.meta{font-size:11px;color:#6B7280;margin-top:1px}
-.grid{display:grid;grid-template-columns:1fr 1fr;column-gap:10px;row-gap:1px;font:700 14px/1.35 Bitter,Georgia,serif}
-.grid span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.d{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px;vertical-align:1px}
-.ring{background:#fff!important;box-shadow:inset 0 0 0 2px currentColor}
+.cart{display:flex;align-items:center;gap:8px;min-width:0}
+.cart + .cart{margin-top:4px}
+.p{display:flex;flex-direction:column;min-width:0}
+.p em{font-style:normal;font-size:11px;line-height:1.1;color:#6B7280}
+.p b{font:700 14px/1.1 Bitter,Georgia,serif;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dot{color:#C4C4C4;font-size:14px;align-self:flex-end;line-height:1.1}
+.meta{font-size:11px;color:#6B7280;margin-top:3px}
 </style></head><body><div class="w">
-<h2>1 · One line per cart</h2><div class="sub">Team Net (18). Each line is a cart as they rode.</div>
-<table>
-<tr><td class="pos">1</td><td><div class="cart"><span class="c">A</span>Ray Delgado <span class="amp">&amp;</span> Luis Garza</div><div class="cart"><span class="c">B</span>Ann Lee <span class="amp">&amp;</span> Sam Park</div><div class="meta">Group 5</div></td><td class="th">12</td><td class="tp">-11</td></tr>
-<tr class="me"><td class="pos">2</td><td><div class="cart"><span class="c">A</span>Kerry Niester <span class="amp">&amp;</span> Brian Thompson</div><div class="cart"><span class="c">B</span>Dan Stich <span class="amp">&amp;</span> Mary Wade</div><div class="meta">Group 3 · your group</div></td><td class="th">10</td><td class="tp">-9</td></tr>
-<tr><td class="pos">3</td><td><div class="cart"><span class="c">A</span>Tom Alvarez <span class="amp">&amp;</span> Joe Reyes</div><div class="cart"><span class="c">B</span>Min Cho <span class="amp">&amp;</span> Rosa Diaz</div><div class="meta">Group 1</div></td><td class="th">12</td><td class="tp">-7</td></tr>
-</table>
-<div class="sub" style="margin-top:10px">Cart Net (9). One player per line.</div>
-<table>
-<tr class="me"><td class="pos">1</td><td><div class="cart">Dan Stich</div><div class="cart">Mary Wade</div><div class="meta">Group 1 · cart B · your group</div></td><td class="th">6</td><td class="tp">-6</td></tr>
-<tr><td class="pos">2</td><td><div class="cart">Ray Delgado</div><div class="cart">Joe Reyes</div><div class="meta">Group 3 · cart A</div></td><td class="th">7</td><td class="tp">-5</td></tr>
-</table>
-<h2 style="margin-top:22px">3 · Tee dots, last names in a 2×2</h2><div class="sub">Team Net (18). Carts are the rows, tee colour on each name.</div>
-<table>
-<tr><td class="pos">1</td><td><div class="grid"><span><i class="d ring" style="color:#1B1B1B"></i>Delgado</span><span><i class="d ring" style="color:#1B1B1B"></i>Garza</span><span><i class="d ring" style="color:#B91C1C"></i>Lee</span><span><i class="d" style="background:#1D4ED8"></i>Park</span></div><div class="meta">Group 5</div></td><td class="th">12</td><td class="tp">-11</td></tr>
-<tr class="me"><td class="pos">2</td><td><div class="grid"><span><i class="d" style="background:#1D4ED8"></i>Niester</span><span><i class="d ring" style="color:#1B1B1B"></i>Thompson</span><span><i class="d" style="background:#B8860B"></i>Stich</span><span><i class="d ring" style="color:#B91C1C"></i>Wade</span></div><div class="meta">Group 3 · your group</div></td><td class="th">10</td><td class="tp">-9</td></tr>
-<tr><td class="pos">3</td><td><div class="grid"><span><i class="d" style="background:#1D4ED8"></i>Alvarez</span><span><i class="d ring" style="color:#1B1B1B"></i>Reyes</span><span><i class="d" style="background:#B8860B"></i>Cho</span><span><i class="d ring" style="color:#B91C1C"></i>Diaz</span></div><div class="meta">Group 1</div></td><td class="th">12</td><td class="tp">-7</td></tr>
-</table>
-</div></body></html>
+<h2>Team Net (18) · best 2 of 4</h2><div class="sub">Each line is a cart. First name small, LAST NAME in Bitter, as on the match card.</div>
+<table id="t18"></table>
+<h2 style="margin-top:20px">Cart Net (9) · best ball of 2</h2><div class="sub">One line per cart.</div>
+<table id="t9"></table>
+</div><script>
+const P=(f,l)=>`<span class="p"><em>${f}</em><b>${l}</b></span>`;
+const cart=(a,b)=>`<div class="cart">${P(...a)}<span class="dot">•</span>${P(...b)}</div>`;
+const row=(pos,carts,meta,thru,net,me)=>`<tr class="${me?"me":""}"><td class="pos">${pos}</td><td>${carts.map(c=>cart(...c)).join("")}<div class="meta">${meta}</div></td><td class="th">${thru}</td><td class="tp">${net}</td></tr>`;
+document.getElementById("t18").innerHTML=[
+ row(1,[[["Ray","Delgado"],["Luis","Garza"]],[["Ann","Lee"],["Sam","Park"]]],"Group 5",12,-11),
+ row(2,[[["Kerry","Niester"],["Brian","Thompson"]],[["Dan","Stich"],["Mary","Wade"]]],"Group 3 · your group",10,-9,1),
+ row(3,[[["Tom","Alvarez"],["Joe","Reyes"]],[["Min","Cho"],["Rosa","Diaz"]]],"Group 1",12,-7),
+ row(4,[[["Chris","Benton"],["Sam","Ortiz"]],[["Eli","Ruiz"],["Pat","Hale"]]],"Group 4",9,-4)].join("");
+document.getElementById("t9").innerHTML=[
+ row(1,[[["Dan","Stich"],["Mary","Wade"]]],"Group 1 · your group",6,-6,1),
+ row(2,[[["Ray","Delgado"],["Joe","Reyes"]]],"Group 3",7,-5),
+ row("T3",[[["Tom","Alvarez"],["Sam","Ortiz"]]],"Group 2",7,-3),
+ row("T3",[[["Kerry","Niester"],["Brian","Thompson"]]],"Group 1 · your group",6,-3,1)].join("");
+</script></body></html>
