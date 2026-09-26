@@ -301,6 +301,9 @@
         .se-pu { display: inline-block; min-width: 22px; line-height: 22px; border-radius: 11px;
                  box-shadow: inset 0 0 0 2px #E87C3E; }
         .se-pu-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 10px; }
+        .se-pu.sm { min-width: 18px; line-height: 18px; border-radius: 9px; text-align: center; font-weight: 700;
+                    font-size: 12px; color: #1B1B1B; }
+        .se-pukey { margin-top: 4px; }
         .se-legend { font-size: 12px; color: #6B7280; margin-top: 6px; white-space: normal; }
         /* NAMES IN BITTER (Kerry 2026-09-26: "I'd like to use the Bitters
            text for names on the display. I like how that looks on the
@@ -481,6 +484,15 @@
             if (!cids || cids.length !== 1) return "";
             const p = popsOf(cids[0], n), tg = (card.team_game || {}).label || "Team Net";
             return [p.k ? p.k + " handicap stroke" + (p.k > 1 ? "s" : "") : "", p.t ? p.t + " " + tg + " stroke" + (p.t > 1 ? "s" : "") : ""].filter(Boolean).join(", ");
+        }
+        // THE PICKUP KEY (Kerry 2026-09-26: "Need to show the orange pick up
+        // circle in legend below"): the ring itself, not a description of it.
+        // Shown wherever a match is on the card; X in the Lone Star Cup.
+        function puKey() {
+            const subs = subjects();
+            if (!subs.some((x) => matchOf(x.cids))) return "";
+            const cup = subs.some((x) => cupOf(x.cids)), reg = subs.some((x) => matchOf(x.cids) && !cupOf(x.cids));
+            return `<div class="se-popkey se-pukey">${reg ? `<span><span class="se-pu sm">7</span>Picked up</span>` : ""}${cup ? `<span><span class="se-x">X</span>Picked up (the card keeps the triple)</span>` : ""}</div>`;
         }
         function popKey() {
             // Only a player's own row draws dots (a foursomes pair's ball does not).
@@ -842,7 +854,7 @@
                 ${seg}
                 ${cardHtml}
                 ${popKey()}
-                ${subs.some((x) => matchOf(x.cids)) ? `<div class="se-legend">${subs.some((x) => cupOf(x.cids)) ? "X = picked up (the card keeps the triple)" : "A ringed number was picked up"}</div>` : ""}
+                ${puKey()}
                 ${picker}
                 <div class="se-tots">${tots}</div>
                 ${queue.length ? statusLine() : ""}
@@ -969,6 +981,7 @@
                 <div class="se-sub">${label} (holes ${firstNine[0]}–${firstNine[8]}) · Par ${par} · tap a hole to change it</div>
                 ${matchStrip()}
                 <div class="se-gap" style="height:8px"></div><div class="se-stack" style="gap:6px">${rows}</div>
+                ${puKey()}
                 ${statusLine()}
                 <button type="button" class="se-pill go" data-act="turn">Go to hole ${next}</button>
                 <div class="se-gap" style="height:10px"></div>
@@ -1082,7 +1095,7 @@
                 ${hioW}
                 <div class="se-gap"></div>
                 ${tables}
-                ${popKey()}
+                ${popKey()}${puKey()}
                 ${matchStrip()}
                 <div class="se-gap"></div>
                 ${done ? `<div class="se-copy" style="margin-bottom:14px">${mine && signedFor(who) && !flagsMine.length ? `${esc(first(kept) || "The scorekeeper")} checked this card against the paper card and signed it for the group. If a hole on your row is wrong, tap that number and ${esc(first(kept) || "the scorekeeper")} gets the flag.` : mine && !signedSelf(who) && !(flagsMine.length) ? `Check each hole on your row. Signing tells your manager it's right. If one is wrong, tap that number (or tap <strong>Something's wrong</strong>) and ${esc(first(kept) || "the scorekeeper")} gets the flag to fix it. Only your card reopens.` : "Signing tells your manager this card is right."}</div>` : `<div class="se-copy">Live. This card fills in as ${esc(first(kept) || "the scorekeeper")} enters each hole. You'll sign it at the end.</div>`}

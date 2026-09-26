@@ -401,7 +401,7 @@ with sync_playwright() as p:
     pg.wait_for_selector("text=Check the card")
     check("the check card rings the picked-up number and shows the legend",
           pg.locator("button.cell.pu[data-key='c:102'][data-h='1']").count() == 1
-          and "ringed number was picked up" in pg.inner_text("body"))
+          and pg.locator(".se-pukey .se-pu").count() == 1 and "Picked up" in pg.inner_text(".se-pukey"))
     pg.click("button.cell[data-key='c:101'][data-h='2']")
     check("the check picker shows the max notice", "Maximum allowed is triple bogey (8)" in pg.inner_text(".se-picker"))
     pg.click(".se-picker [data-act=cset][data-v='8']")

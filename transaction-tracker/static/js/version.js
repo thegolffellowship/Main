@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.500.12";
+window.TGF_VERSION = "2.500.13";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.500.13",
+    date: "2026-09-26",
+    title: "Score entry: the pickup ring in the legend",
+    changes: [
+      "Kerry, 2026-09-26: 'Need to show the orange pick up circle in legend below.' Wherever a match is on the card (the turn, Check the card, the player's card) a key under the rows shows the orange ring itself beside 'Picked up', and X beside 'Picked up (the card keeps the triple)' in the Lone Star Cup, in place of the text-only line."
+    ]
+  },
   {
     version: "2.500.12",
     date: "2026-09-26",
