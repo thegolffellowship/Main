@@ -85,8 +85,14 @@
            Net pops ... Don't want it in text"). One dot per stroke: black is
            the playing handicap at 100%, orange is the team game's. */
         .se-score { position: relative; }
-        .se-pops { position: absolute; top: -4px; right: -8px; display: flex; flex-direction: column; gap: 2px; }
-        .se-pops.cell { top: 2px; right: 2px; flex-direction: row; gap: 1px; }
+        /* Kerry 2026-09-26: black PH pops align with the TOP of the + circle,
+           orange team pops with its BOTTOM. The column is the +'s own 48px,
+           centred the same way, so the two groups sit on its edges. */
+        .se-pops { position: absolute; top: 50%; height: 48px; transform: translateY(-50%); right: -8px;
+                   display: flex; flex-direction: column; justify-content: space-between; }
+        .se-pops .g { display: flex; flex-direction: column; gap: 2px; }
+        .se-pops.cell { top: 2px; right: 2px; height: auto; transform: none; flex-direction: row; gap: 1px; }
+        .se-pops.cell .g { flex-direction: row; gap: 1px; }
         .se-pop { width: 7px; height: 7px; border-radius: 50%; background: #1B1B1B; display: block; }
         .se-pop.t { background: #E87C3E; }
         .se-pops.cell .se-pop { width: 5px; height: 5px; }
@@ -393,7 +399,7 @@
             if (!cids || cids.length !== 1) return "";
             const p = popsOf(cids[0], n);
             if (!p.k && !p.t) return "";
-            const d = "<i class=\"se-pop\"></i>".repeat(p.k) + "<i class=\"se-pop t\"></i>".repeat(p.t);
+            const d = `<span class="g">${"<i class=\"se-pop\"></i>".repeat(p.k)}</span><span class="g">${"<i class=\"se-pop t\"></i>".repeat(p.t)}</span>`;
             return `<span class="se-pops${small ? " cell" : ""}" aria-hidden="true">${d}</span>`;
         }
         function popLabel(cids, n) {

@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.500.0";
+window.TGF_VERSION = "2.500.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.500.1",
+    date: "2026-09-26",
+    title: "Score entry: pop dots line up with the + button",
+    changes: [
+      "Kerry, 2026-09-26: 'Move the orange team/cart pops down to align with bottom of + circle and the top black PH pops to align with top of black + circle.' The dot column is now the + button's own 48 px, centred the same way: black PH dots stack down from its top edge, orange Team/Cart Net dots stack up from its bottom edge."
+    ]
+  },
   {
     version: "2.500.0",
     date: "2026-09-26",
