@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.501.3";
+window.TGF_VERSION = "2.501.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.501.4",
+    date: "2026-09-26",
+    title: "Admin mockups: sign in on the page",
+    changes: [
+      "Kerry, 2026-09-26: 'No log in and error.' /admin/mockups answered a signed-out phone with a bare JSON error. It now shows an admin PIN box (the same /api/auth/login, PINs and rate limit) and reloads into the mockup once an admin PIN is entered; any other PIN is refused on the page."
+    ]
+  },
   {
     version: "2.501.3",
     date: "2026-09-26",

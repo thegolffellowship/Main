@@ -11592,9 +11592,31 @@ _SE_READ_LOCK = threading.Lock()
 _MOCKUP_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "docs", "claude", "mockups")
 
 
+def _mockup_signin():
+    """No admin session: a PIN box on the page instead of a bare JSON error
+    (Kerry 2026-09-26: "No log in and error"). The same /api/auth/login, PINs
+    and rate limit as everywhere; only an admin PIN reloads into the page."""
+    return ('<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1">'
+            '<title>Mockups · sign in</title><body style="font-family:Helvetica Neue,Arial;padding:20px;max-width:420px;margin:auto">'
+            '<h1 style="font-family:Bitter,Georgia,serif">Mockups</h1><p style="color:#4B5563">Tracker admin only. Sign in with your admin PIN.</p>'
+            '<input id="pin" type="password" inputmode="numeric" autocomplete="current-password" placeholder="Admin PIN" '
+            'style="width:100%;height:48px;font-size:18px;border:1px solid #E5E7EB;border-radius:8px;padding:0 12px;box-sizing:border-box">'
+            '<div id="msg" style="color:#991B1B;margin-top:8px"></div>'
+            '<button id="go" style="margin-top:12px;width:100%;height:50px;border:none;border-radius:48px;background:#0d7556;color:#fff;font-size:17px;font-weight:600">Sign in</button>'
+            '<script>document.getElementById("go").onclick=function(){fetch("/api/auth/login",{method:"POST",headers:{"Content-Type":"application/json"},'
+            'body:JSON.stringify({pin:document.getElementById("pin").value})}).then(function(r){return r.json().then(function(j){return {ok:r.ok,j:j}})})'
+            '.then(function(x){if(x.ok&&x.j.role==="admin"){location.reload()}else{document.getElementById("msg").textContent=x.ok?"That PIN is not an admin PIN.":(x.j.error||"That PIN did not work.")}})'
+            '.catch(function(){document.getElementById("msg").textContent="No connection. Try again."})};</script></body>'), 401
+
+
+def _is_admin_session() -> bool:
+    return _ROLE_RANK.get(session.get("role"), 0) >= _ROLE_RANK["admin"]
+
+
 @app.route("/admin/mockups")
-@require_role("admin")
 def mockups_index():
+    if not _is_admin_session():
+        return _mockup_signin()
     try:
         names = sorted(f for f in os.listdir(_MOCKUP_DIR) if f.lower().endswith((".html", ".png")))
     except OSError:
@@ -11607,8 +11629,9 @@ def mockups_index():
 
 
 @app.route("/admin/mockups/<name>")
-@require_role("admin")
 def mockup_file(name):
+    if not _is_admin_session():
+        return _mockup_signin()
     try:
         allowed = set(os.listdir(_MOCKUP_DIR))
     except OSError:
