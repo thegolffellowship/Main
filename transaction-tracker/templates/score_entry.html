@@ -138,7 +138,7 @@
         .se-hole .se-top { align-items: center; }
         .se-hole .se-h1.big { font-size: 30px; line-height: 1.05; }
         .se-hole .se-sub { font-size: 14px; margin-top: 2px; }
-        .se-hole .se-eyebrow { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .se-hole .se-eyebrow, .se-chk .se-eyebrow { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .se-hole .se-nav { padding-top: 0; }
         .se-hole .se-mstrip { margin: 8px 0 2px; }
         .se-hole .se-stack { gap: 6px; margin-top: 8px; }
@@ -530,7 +530,7 @@
         const maxText = (n) => `Maximum allowed is triple bogey (${hiOf(n)}).`;
         // Kerry 2026-09-26: "Remove the preview text." A PREVIEW round's label
         // is left off the eyebrow (the admin page still marks it PREVIEW).
-        const eyebrow = () => [/^PREVIEW/.test(card.round_label || "") ? null : card.round_label, card.group_num != null ? "Group " + card.group_num : null].filter(Boolean).join(" · ");
+        const eyebrow = () => [card.round_label, card.group_num != null ? "Group " + card.group_num : null].filter(Boolean).join(" · ");
 
         // ── screens ─────────────────────────────────────────────────────
         function render() {

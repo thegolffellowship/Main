@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.500.8";
+window.TGF_VERSION = "2.500.9";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.500.9",
+    date: "2026-09-26",
+    title: "Score entry: a preview reads exactly like the real round",
+    changes: [
+      "Kerry, 2026-09-26: 'Remove the preview text everywhere so I can see exactly how it will appear.' On a PREVIEW round every scoring screen (Who are you?, the holes, Check the card, the cards) now shows the event's name where the real round will, and no 'Preview group'. The label is swapped in the card read (get_group_card), so no screen can miss it; the admin Live Scoring page still marks the round PREVIEW, and a long event name is trimmed to one line on the hole and card screens."
+    ]
+  },
   {
     version: "2.500.8",
     date: "2026-09-26",

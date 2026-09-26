@@ -1238,9 +1238,23 @@ def get_group_card(group_id: int, device_id: str | None = None, db_path=None) ->
             cup = _cup_standings(g["round_id"]) if match_status else None
         except Exception:
             cup = None
+    # A PREVIEW looks exactly as the real round will (Kerry 2026-09-26: "Remove
+    # the preview text everywhere so I can see exactly how it will appear"):
+    # the scoring screens get the event's name, as seed_round_from_pairings
+    # labels a real round, and no "Preview group". The admin Live Scoring page
+    # (round_status / admin_overview) still marks it PREVIEW.
+    round_label, group_label = g["round_label"], g["label"]
+    if (round_label or "").startswith(PREVIEW_LABEL):
+        try:
+            with _closing(_conn(db_path)) as c2:
+                ev = c2.execute("SELECT item_name FROM events WHERE id = ?", (g["event_id"],)).fetchone()
+            round_label = ev[0] if ev else None
+        except Exception:
+            round_label = None
+        group_label = None
     return {**extras, "group_id": group_id, "round_id": g["round_id"], "event_id": g["event_id"],
-            "round_label": g["round_label"], "round_date": g["round_date"],
-            "holes": g["holes"], "status": g["status"], "label": g["label"],
+            "round_label": round_label, "round_date": g["round_date"],
+            "holes": g["holes"], "status": g["status"], "label": group_label,
             "group_num": g["group_num"],
             "start_hole": g["start_hole"], "tee_time": g["tee_time"],
             "course": holes, "players": players, "teams": teams, "scores": scores,

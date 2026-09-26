@@ -515,6 +515,10 @@ db.set_app_setting("score_entry_qr", "")
 print("PREVIEW round + links + close")
 pv = se.create_preview_round(900, [101, 102])
 check("preview round is created", "round_id" in pv and not pv["reused"], pv)
+_ev_name = conn.execute("SELECT item_name FROM events WHERE id = 900").fetchone()[0]
+_pc = se.get_group_card(pv["group_id"])
+check("the preview's scoring screens read exactly like the real round: the event's name, no PREVIEW, no 'Preview group'",
+      _pc["round_label"] == _ev_name and _pc["label"] is None, (_pc["round_label"], _pc["label"]))
 check("the preview reports its handicaps, never errors on a missing index",
       "handicaps" in pv and isinstance(pv["handicaps"]["ph"], dict), pv)
 pv2 = se.create_preview_round(900, [101, 102, 103])
