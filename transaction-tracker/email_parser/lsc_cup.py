@@ -12,21 +12,26 @@ mp-match-card renderer are reused unchanged. CMP's GG-scraping live
 path is untouched.
 
 Rules live in the `lsc_matches` dial (rules-as-data, #659):
-{"event_id": 3329, "points_to_win": null, "halved_match": 0.5,
+{"event_id": 3329, "defending_champion": "austin"|"sa"|null,
+ "skins": {"basis": null|"net"|"gross", "carryover": null|bool},
  "sessions": [{"id": "sat-am", "label": "...", "date": "2026-10-10",
-               "format": "singles"|"fourball", "points_per_match": 1,
+               "format": "singles"|"fourball"|"foursomes",
                "se_round": null, "n_holes": 18,
                "matches": [{"id": "SAT-AM-1", "tee_time": "8:30",
                             "austin": [cid, ...], "sa": [cid, ...]}]}]}
 
 The weekend format is already ratified in the LSC How-It-Works popup
 (contests.html): Sat AM Fourball, Sat PM Foursomes, Sun Singles.
-Handicapping (proposed default, Kerry corrects via #659 Q3): full
-difference of LOCKED playing handicaps off the match's low man,
-strokes taken on the lowest stroke-index holes; four-ball plays
-everyone off the low man of all four; foursomes takes the standard
-50%-of-combined-difference at team level. Playing handicaps come from
-Track A's payload (the locked snapshot) and are never re-derived here.
+Points (Kerry, CA #717): 1 for a win, 1/2 for a halve, every format;
+level points = the defending champion keeps the cup. Skins replace
+CTP and are scored separately from the match (compute_skins); their
+basis, pot and carryover are still Kerry's to rule.
+Handicapping (still PENDING Kerry, CA #717): full difference of LOCKED
+playing handicaps off the match's low man on the lowest stroke-index
+holes; four-ball plays everyone off the low man of all four; the team
+format holds 50% of the combined difference until Kerry confirms it
+is Greensomes (60% of the low + 40% of the high). Playing handicaps
+come from Track A's payload (the locked snapshot), never re-derived.
 
 Scores while Track A's se_* tables aren't live yet: the
 `lsc_mock_scores` dial ({"<session_id>": {"course": [{hole, par,
@@ -236,65 +241,247 @@ def _match_state(detail: dict) -> str:
     return "live"
 
 
+# Kerry's ruling (CA #717, 2026-09-26, rule 3b): 1 point for a win and
+# ½ for a halve, the SAME in every format. These are the event-level
+# defaults; the dial may carry points_win / halved_match, but no
+# per-session value exists any more, because the ruling is one value for
+# every session.
+POINTS_WIN = 1.0
+POINTS_HALVE = 0.5
+
+
+def cup_status(points: dict, total: float,
+               defending_champion: str | None) -> dict:
+    """Who holds the cup, and what each side still needs.
+
+    Tiebreak (Kerry, CA #717): if the points finish level, the DEFENDING
+    CHAMPION keeps the cup. So the champion clinches at exactly half the
+    points on the board, and the challenger has to pass half. With no
+    champion recorded (the dial's defending_champion unset) both sides
+    need more than half, and a finished tie reads "tied_pending" rather
+    than guessing who keeps it.
+
+    Returns {total, half, defending_champion, status, winner, needs}:
+    status is open | won | retained | tied_pending; winner is the team
+    that has clinched (won or retained) or None; needs[team] is the
+    points still required to clinch, 0 once clinched."""
+    total = float(total or 0)
+    half = total / 2.0
+    champ = defending_champion if defending_champion in TEAM_KEYS else None
+    pts = {k: float((points or {}).get(k) or 0) for k in TEAM_KEYS}
+    step = POINTS_HALVE            # scores move in half-point steps
+    target = {k: (half if k == champ else half + step) for k in TEAM_KEYS}
+    status, winner = "open", None
+    if total > 0:
+        for k in TEAM_KEYS:
+            if pts[k] > half:
+                status, winner = "won", k
+        if winner is None and champ and pts[champ] >= half:
+            status, winner = "retained", champ
+        if winner is None and sum(pts.values()) >= total \
+                and pts["austin"] == pts["sa"]:
+            status = "tied_pending"   # no champion on record to keep it
+    needs = {k: (0.0 if winner == k else round(max(0.0, target[k] - pts[k]), 2))
+             for k in TEAM_KEYS}
+    return {"total": round(total, 2), "half": round(half, 2),
+            "defending_champion": champ, "status": status,
+            "winner": winner, "needs": needs}
+
+
+def compute_skins(session: dict, course: list[dict], phs: dict,
+                  scores: dict, marks: dict | None = None,
+                  names: dict | None = None, basis: str = "net",
+                  carryover: bool = False) -> dict:
+    """Skins for one session, a calculation SEPARATE from the match
+    (Kerry, CA #717). It reads raw scores only, never the match state, so
+    holes played after a match is decided count here and nothing here
+    can change a match result.
+
+    - Team sessions (fourball, foursomes) play TEAM skins: each side of
+      each match is one entry, across the whole session. Singles play
+      INDIVIDUAL skins: every player is an entry.
+    - basis "net" | "gross". Kerry has not ruled which (CA #717), so the
+      board only calls this once the dial names one. Net strokes are the
+      full LOCKED playing handicap off zero on the stroke-index holes
+      (skins are a field game, not off the low man); a plus handicap
+      gets nothing on a hole, per the plus rule (it comes off the round,
+      never a hole). Foursomes use the team ball with the allowance the
+      engine holds (50% of combined) until Kerry confirms Greensomes.
+    - A picked-up ball never wins a skin.
+    - A hole is decided only when EVERY entry has posted it (the money
+      hold: no win shows before the field is in); until then "pending".
+    - One lowest score wins the skin. A tie wins nothing, and carries the
+      skin to the next hole only when carryover is on (unruled, so off).
+    """
+    names = names or {}
+    marks = marks or {}
+    fmt = (session.get("format") or "singles").strip().lower()
+    n_holes = int(session.get("n_holes") or 18)
+    team_game = fmt in ("fourball", "foursomes")
+
+    entries = []
+    for m in session.get("matches") or []:
+        for side in TEAM_KEYS:
+            cids = [int(c) for c in (m.get(side) or [])]
+            if not cids:
+                continue
+            if team_game:
+                entries.append({"key": f"{m.get('id')}:{side}",
+                                "team": side, "cids": cids})
+            else:
+                for c in cids:
+                    entries.append({"key": f"{m.get('id')}:{side}:{c}",
+                                    "team": side, "cids": [c]})
+    for e in entries:
+        e["label"] = " / ".join(names.get(c) or names.get(str(c)) or f"#{c}"
+                                for c in e["cids"])
+
+    sc = {}
+    picked = {}
+    for e in entries:
+        for c in e["cids"]:
+            raw = scores.get(c) or scores.get(str(c)) or {}
+            sc[c] = {int(h): g for h, g in raw.items() if g is not None}
+            mk = marks.get(c) or marks.get(str(c)) or {}
+            picked[c] = {int(h) for h, v in mk.items() if v == "picked_up"}
+
+    def _strokes_for(e):
+        if basis != "net":
+            return {c: {} for c in e["cids"]}
+        if fmt == "foursomes":
+            team_ph = sum(phs.get(c) or phs.get(str(c)) or 0
+                          for c in e["cids"]) * 0.5
+            smap = strokes_received(team_ph, 0, course, n_holes)
+            return {c: smap for c in e["cids"]}
+        return {c: strokes_received(phs.get(c) or phs.get(str(c)) or 0, 0,
+                                    course, n_holes)
+                for c in e["cids"]}
+
+    strokes = {e["key"]: _strokes_for(e) for e in entries}
+    totals = {e["key"]: 0 for e in entries}
+    holes_out = []
+    carry = 0
+    for hn in _hole_numbers(course, n_holes):
+        posted_all = True
+        best_by_entry = {}
+        for e in entries:
+            posted = False
+            best = None
+            for c in e["cids"]:
+                g = sc.get(c, {}).get(hn)
+                if g is None:
+                    continue
+                posted = True
+                if hn in picked.get(c, set()):
+                    continue            # a picked-up ball can't win a skin
+                v = g - strokes[e["key"]].get(c, {}).get(hn, 0)
+                if best is None or v < best:
+                    best = v
+            if not posted:
+                posted_all = False
+            best_by_entry[e["key"]] = best
+        if not entries or not posted_all:
+            holes_out.append({"hole": hn, "status": "pending",
+                              "winner": None, "score": None, "value": 0})
+            continue
+        live = {k: v for k, v in best_by_entry.items() if v is not None}
+        low = min(live.values()) if live else None
+        at_low = [k for k, v in live.items() if v == low]
+        if len(at_low) == 1:
+            value = 1 + carry
+            carry = 0
+            totals[at_low[0]] += value
+            holes_out.append({"hole": hn, "status": "won",
+                              "winner": at_low[0], "score": low,
+                              "value": value})
+        else:
+            if carryover:
+                carry += 1
+            holes_out.append({"hole": hn, "status": "tied", "winner": None,
+                              "score": low, "value": 0})
+    by_key = {e["key"]: e for e in entries}
+    board = [{"key": k, "label": by_key[k]["label"],
+              "team": by_key[k]["team"], "skins": v}
+             for k, v in totals.items()]
+    board.sort(key=lambda r: (-r["skins"], r["label"]))
+    return {"kind": "team" if team_game else "individual",
+            "basis": basis, "carryover": bool(carryover),
+            "carried": carry, "holes": holes_out, "totals": board}
+
+
 def compute_board(dial: dict, session_data: dict,
                   names: dict | None = None) -> dict:
     """The full cup board.
 
     dial:          the lsc_matches dial.
     session_data:  {session_id: {"course": [...], "phs": {cid: ph},
-                    "scores": {cid: {hole: gross}}}} — from Track A's
-                    feed or the lsc_mock_scores dial; a session with no
-                    entry renders every match "upcoming".
-    Points: a FINAL match pays points_per_match to the winner, or
-    halved_match (default 0.5) each on a halve. A LIVE leader counts
-    toward the projected totals only.
+                    "scores": {cid: {hole: gross}}, "marks": {...}}} from
+                    Track A's feed or the lsc_mock_scores dial; a session
+                    with no entry renders every match "upcoming".
+    Points (Kerry, CA #717): a FINAL match pays POINTS_WIN (1) to the
+    winner or POINTS_HALVE (½) to each side on a halve, in every
+    format. A live leader counts toward the projection only. A match
+    decided at the close-out is FINAL, and holes played after it feed
+    skins only (compute_skins), never the match.
     """
-    halved = float(dial.get("halved_match") or 0.5)
+    win = float(dial.get("points_win") or POINTS_WIN)
+    halve = float(dial.get("halved_match") or POINTS_HALVE)
+    skins_cfg = dial.get("skins") or {}
+    skins_basis = skins_cfg.get("basis")
+    skins_on = skins_basis in ("net", "gross")
     board = {"event_id": dial.get("event_id"),
-             "points_to_win": dial.get("points_to_win"),
              "teams": {"austin": {"points": 0.0, "projected": 0.0},
                        "sa": {"points": 0.0, "projected": 0.0}},
+             "points_win": win, "points_halve": halve,
+             "skins_pending": not skins_on,
              "sessions": []}
+    total = 0.0
     for sess in dial.get("sessions") or []:
         data = (session_data or {}).get(sess.get("id")) or {}
         course = data.get("course") or []
         phs = {int(k): v for k, v in (data.get("phs") or {}).items()}
         scores = {int(k): v for k, v in (data.get("scores") or {}).items()}
         marks = {int(k): v for k, v in (data.get("marks") or {}).items()}
-        ppm = float(sess.get("points_per_match") or 1)
         s_out = {"id": sess.get("id"), "label": sess.get("label"),
                  "date": sess.get("date"), "format": sess.get("format"),
-                 "points_per_match": ppm, "matches": []}
+                 "points_per_match": win, "matches": [], "skins": None}
         for m in sess.get("matches") or []:
+            total += win
             detail = compute_match_detail(m, sess, course, phs, scores, names, marks)
             state = _match_state(detail)
             pts = {"austin": 0.0, "sa": 0.0}
             if state == "final":
                 w = detail.get("gg_winner_idx")
                 if w == 1:
-                    pts["austin"] = ppm
+                    pts["austin"] = win
                 elif w == 2:
-                    pts["sa"] = ppm
+                    pts["sa"] = win
                 else:
-                    pts["austin"] = pts["sa"] = ppm * halved
+                    pts["austin"] = pts["sa"] = halve
                 for k in pts:
                     board["teams"][k]["points"] += pts[k]
                     board["teams"][k]["projected"] += pts[k]
             elif state == "live":
                 w = detail.get("gg_winner_idx")   # current leader (lead != 0)
                 if w == 1:
-                    board["teams"]["austin"]["projected"] += ppm
+                    board["teams"]["austin"]["projected"] += win
                 elif w == 2:
-                    board["teams"]["sa"]["projected"] += ppm
+                    board["teams"]["sa"]["projected"] += win
                 else:
-                    board["teams"]["austin"]["projected"] += ppm / 2.0
-                    board["teams"]["sa"]["projected"] += ppm / 2.0
+                    board["teams"]["austin"]["projected"] += halve
+                    board["teams"]["sa"]["projected"] += halve
             s_out["matches"].append({**detail, "tee_time": m.get("tee_time"),
                                      "state": state, "points": pts})
+        if skins_on and scores:
+            s_out["skins"] = compute_skins(
+                sess, course, phs, scores, marks, names, basis=skins_basis,
+                carryover=bool(skins_cfg.get("carryover")))
         board["sessions"].append(s_out)
     for t in board["teams"].values():
         t["points"] = round(t["points"], 2)
         t["projected"] = round(t["projected"], 2)
+    board["cup"] = cup_status({k: v["points"] for k, v in board["teams"].items()},
+                              total, dial.get("defending_champion"))
     return board
 
 

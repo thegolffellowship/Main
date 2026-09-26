@@ -3491,7 +3491,8 @@ def _scoring_dispatch_inner(url: str, extract: str):
                 out[cid] = {"gender": p.get("gender"),
                             "team": p.get("team"),
                             "selected": sh.get("selected"),
-                            "known": sh.get("known")}
+                            "known": sh.get("known"),
+                            "note": sh.get("note")}
             return json.dumps({"event_id": _eid, "players": out,
                                "options": (fin.get("config") or {})
                                .get("shirt_options")}, indent=2)

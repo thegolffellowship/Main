@@ -4428,13 +4428,24 @@ def init_db(db_path: str | Path | None = None) -> None:
         # too (a pick is Kerry's explicit word, so it outranks the
         # items seed above, which runs first only for ordering; both
         # honor the never-overwrite rule).
+        # A pick carrying a note in oneoff_shirt_notes is UNCONFIRMED (a
+        # guess for an order, CA #716) — it never reaches the profile,
+        # so a guess can't become the member's permanent size.
         try:
             _shirt_row = conn.execute(
                 "SELECT value FROM app_settings WHERE key = "
                 "'oneoff_shirts'").fetchone()
-            for _ev_sel in (json.loads(_shirt_row[0]) or {}).values() \
-                    if _shirt_row and _shirt_row[0] else []:
+            _note_row = conn.execute(
+                "SELECT value FROM app_settings WHERE key = "
+                "'oneoff_shirt_notes'").fetchone()
+            _notes = (json.loads(_note_row[0]) or {}) \
+                if _note_row and _note_row[0] else {}
+            for _ev_id, _ev_sel in ((json.loads(_shirt_row[0]) or {}).items()
+                                    if _shirt_row and _shirt_row[0] else []):
+                _ev_notes = _notes.get(str(_ev_id)) or {}
                 for _cid_s, _size in (_ev_sel or {}).items():
+                    if str(_cid_s) in _ev_notes:
+                        continue
                     if _size and str(_size).strip():
                         conn.execute(
                             "UPDATE customers SET shirt_size = ? "
@@ -11757,6 +11768,7 @@ def get_oneoff_roster_finance(event_id: int,
     # shirt + gender lookups are per-player queries the badge never needs.
     shirts_on = bool(cfg.get("shirts")) and include_shirts
     shirt_sel: dict = {}
+    shirt_notes: dict = {}
     if shirts_on:
         try:
             shirt_sel = (json.loads(get_app_setting(
@@ -11764,6 +11776,12 @@ def get_oneoff_roster_finance(event_id: int,
                 .get(str(event_id)) or {})
         except Exception:
             shirt_sel = {}
+        try:
+            shirt_notes = (json.loads(get_app_setting(
+                "oneoff_shirt_notes", db_path=db_path) or "{}")
+                .get(str(event_id)) or {})
+        except Exception:
+            shirt_notes = {}
     try:
         shirt_opts = json.loads(get_app_setting(
             "shirt_size_options", db_path=db_path) or "")
@@ -11841,7 +11859,8 @@ def get_oneoff_roster_finance(event_id: int,
                            if addons_cat else None),
                 "lodging": lodging_by_cid.get(cid),
                 "shirt": ({"selected": shirt_sel.get(str(cid)),
-                           "known": ks}
+                           "known": ks,
+                           "note": shirt_notes.get(str(cid))}
                           if shirts_on else None),
             }
 
@@ -12082,6 +12101,17 @@ def set_oneoff_shirt(event_id: int, customer_id: int, size: str,
     else:
         ev.pop(str(customer_id), None)
     set_app_setting("oneoff_shirts", json.dumps(allv), db_path=db_path)
+    # A size picked (or cleared) here is Kerry's own word, so it
+    # replaces any "unconfirmed" note left by a relayed guess.
+    try:
+        notes = json.loads(get_app_setting("oneoff_shirt_notes",
+                                           db_path=db_path) or "{}")
+        if str(customer_id) in (notes.get(str(event_id)) or {}):
+            notes[str(event_id)].pop(str(customer_id), None)
+            set_app_setting("oneoff_shirt_notes", json.dumps(notes),
+                            db_path=db_path)
+    except Exception:
+        logger.exception("oneoff_shirt_notes clear failed (non-fatal)")
     canonical_updated = False
     if size:
         try:

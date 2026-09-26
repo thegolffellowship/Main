@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.500.15";
+window.TGF_VERSION = "2.501.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.501.0",
+    date: "2026-09-26",
+    changes: [
+      "Lone Star Cup: Kerry's format rulings (CA #717, rule 3b) are in the engine and on the staff preview board. POINTS: 1 for a win, \u00bd for a halve, the same in every format \u2014 event-level POINTS_WIN / POINTS_HALVE; the old per-session points_per_match no longer changes a payout. TIEBREAK: level points = the defending champion keeps the cup \u2014 new cup_status() works out who has clinched (won outright past half, or retained at exactly half by the champion) and what each side still needs; the board's centre chip reads the result and a line under the score says who holds the cup and the target for each side. The champion is the dial's defending_champion, which stays EMPTY until Kerry names the 2025 winner: with none recorded a finished tie reads tied_pending instead of guessing.",
+      "Lone Star Cup skins (CA #717, replacing CTP): compute_skins() is a calculation SEPARATE from the match \u2014 team skins in the team sessions (each side of each match is one entry across the session), individual skins in singles; holes played after a close-out count for skins and can never change a match result; a picked-up ball never wins; a hole is decided only once every entry has posted it (the money hold). Net strokes use the full LOCKED playing handicap off zero; a plus handicap gets nothing on a hole (the plus rule). Net-or-gross, the pot and carryovers are still Kerry's to rule, so the board shows skins only once the dial's skins.basis is set; carryover is supported but off. 12 new guard tests (tests/test_lsc_cup.py, 22 total).",
+      "Unconfirmed shirt sizes (CA #716): a new oneoff_shirt_notes dial marks a pick as a guess. The one-off roster's SHIRT column shows it amber with a \u201c?\u201d and the note; the boot seed never copies a noted pick onto the member's profile, so a size guessed for an order can't become his permanent size; and a size Kerry picks in the column confirms it and clears the note. The scoring-lsc-shirts bridge reports the note. Guard added to test_oneoff_shirts.py.",
+    ],
+  },
   {
     version: "2.500.15",
     date: "2026-09-26",

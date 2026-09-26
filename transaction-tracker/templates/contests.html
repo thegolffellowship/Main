@@ -1665,6 +1665,12 @@
             color: #92400E; background: #FEF3C7; border: 1px solid #FDE68A;
             border-radius: 8px; padding: 5px 10px; }
         .lsc-bd-sess { margin-top: 1.1rem; }
+        .lsc-bd-skins { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: baseline;
+            margin: 2px 2px 0; font-size: 12.5px; color: #4B5563; }
+        .lsc-bd-skins .h { font: 700 11px/1.3 'Bitter', serif; letter-spacing: 0.6px;
+            text-transform: uppercase; color: #6B7280; }
+        .lsc-bd-skins .sk.au b { color: #BF5700; }
+        .lsc-bd-skins .sk.sa b { color: #4B6274; }
         .lsc-bd-sess-h { display: flex; align-items: baseline; gap: 10px;
             flex-wrap: wrap; padding: 6px 2px 8px; }
         .lsc-bd-sess-h b { font: 700 15px/1.2 'Bitter', serif; color: #1B1B1B; }
@@ -2792,21 +2798,34 @@
     }
     function lscBoardRender(box, d) {
         const A = (d.teams || {}).austin || {}, S = (d.teams || {}).sa || {};
-        let totalPts = 0;
-        (d.sessions || []).forEach(s =>
-            totalPts += (s.matches || []).length * (s.points_per_match || 1));
-        const midTxt = d.points_to_win
-            ? `First to ${lscFmtPts(d.points_to_win)} takes the Cup`
-            : (totalPts ? `${lscFmtPts(totalPts)} points on the board` : "");
-        const showProj = (A.projected || 0) !== (A.points || 0)
-            || (S.projected || 0) !== (S.points || 0);
+        // Cup status (Kerry, CA #717): 1 a win, ½ a halve; level points
+        // = the defending champion keeps the cup. cup_status() on the
+        // server decides; the page only words it.
+        const cup = d.cup || {};
+        const TEAM_NAME = { austin: "Austin", sa: "San Antonio" };
+        const champ = cup.defending_champion;
+        let midTxt = cup.total ? `${lscFmtPts(cup.total)} points on the board` : "";
+        if (cup.status === "won") midTxt = `${TEAM_NAME[cup.winner]} wins the Cup`;
+        else if (cup.status === "retained") midTxt = `${TEAM_NAME[cup.winner]} keeps the Cup`;
+        let needsTxt = "";
+        if (cup.status === "open" && cup.total && champ) {
+            const other = champ === "austin" ? "sa" : "austin";
+            needsTxt = `${TEAM_NAME[champ]} holds the Cup and keeps it on a tie: `
+                + `${lscFmtPts(cup.needs[champ])} more to retain · `
+                + `${TEAM_NAME[other]} needs ${lscFmtPts(cup.needs[other])} to win it.`;
+        } else if (cup.status === "tied_pending") {
+            needsTxt = "Level on points: the defending champion keeps the Cup.";
+        }
+        const showProj = !cup.winner && ((A.projected || 0) !== (A.points || 0)
+            || (S.projected || 0) !== (S.points || 0));
         const head = `<div class="lsc-bd-head">
             <div class="t austin"><span class="nm">AUSTIN</span><span class="p">${lscFmtPts(A.points)}</span></div>
             ${midTxt ? `<div class="mid"><span>${escapeHtml(midTxt)}</span></div>` : ""}
             <div class="t sa"><span class="p">${lscFmtPts(S.points)}</span><span class="nm">SAN ANTONIO</span></div>
         </div>` + (showProj
             ? `<div class="lsc-bd-proj">With matches on the course: Austin ${lscFmtPts(A.projected)} &mdash; ${lscFmtPts(S.projected)} San Antonio</div>`
-            : "") + (d.source === "mock"
+            : "") + (needsTxt ? `<div class="lsc-bd-proj">${escapeHtml(needsTxt)}</div>` : "")
+            + (d.source === "mock"
             // Staff-preview disclosure — mock scores never reach members
             // (the board_live gate), but the preview must say what it is.
             ? `<div class="lsc-bd-src">Preview on staged data &mdash; live scoring wires in from score entry on cup weekend.</div>`
@@ -2846,11 +2865,21 @@
                     hasResult: m.state !== "upcoming",
                 });
             }).join("");
+            // Skins (Kerry, CA #717): scored apart from the match, so
+            // holes after a close-out count here only. Rendered once the
+            // dial names a basis (net/gross); until then the server
+            // sends skins: null and nothing shows.
+            const sk = sess.skins;
+            const skinsHtml = (sk && (sk.totals || []).some(t => t.skins > 0))
+                ? `<div class="lsc-bd-skins"><span class="h">${sk.kind === "team" ? "Team" : "Individual"} skins · ${escapeHtml(sk.basis)}</span>${
+                    sk.totals.filter(t => t.skins > 0).map(t =>
+                        `<span class="sk ${t.team === "austin" ? "au" : "sa"}">${escapeHtml(t.label)} <b>${t.skins}</b></span>`).join("")}</div>`
+                : "";
             return `<div class="lsc-bd-sess">
                 <div class="lsc-bd-sess-h"><b>${escapeHtml(sess.label || sess.id || "")}</b>
                     ${sess.date ? `<span class="dt">${escapeHtml(sess.date)}</span>` : ""}
                     ${anyPts ? `<span class="sc"><span class="au">${lscFmtPts(au)}</span> &mdash; <span class="sa">${lscFmtPts(sa)}</span></span>` : ""}
-                </div>${cards}</div>`;
+                </div>${cards}${skinsHtml}</div>`;
         }).join("");
         box.innerHTML = head + sessions;
         // Tap-to-open scorecards need no wiring here: the Match Play

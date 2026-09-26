@@ -9291,8 +9291,14 @@
                         if (eff && !list.includes(eff)) list.unshift(eff);
                         const optHtml = ['<option value="">—</option>'].concat(
                             list.map(o => `<option value="${escapeHtml(o)}"${o === eff ? " selected" : ""}>${escapeHtml(o)}</option>`)).join("");
-                        const src = sh.selected ? "picked here" : (sh.known ? `from order history (${sh.known})` : "not on file");
-                        html += `<td style="${style}"><select class="oo-shirt-select" data-event-id="${ev.id}" data-cid="${r.customer_id}" title="Shirt size — ${escapeHtml(src)}${fp.gender === 'F' ? ' · women’s sizes' : ''}" style="font-size:0.78rem; padding:2px 4px; border:1px solid #d1d5db; border-radius:6px; cursor:pointer; background:${sh.selected ? '#ECFDF5' : (sh.known ? '#FFF7ED' : '#fff')};">${optHtml}</select></td>`;
+                        // An UNCONFIRMED pick (oneoff_shirt_notes, e.g. a
+                        // size guessed for an order) reads amber with a
+                        // "?" and its note; picking a size here confirms
+                        // it and clears the note server-side.
+                        const unconf = sh.selected && sh.note;
+                        const src = unconf ? `UNCONFIRMED — ${sh.note}` : (sh.selected ? "picked here" : (sh.known ? `from order history (${sh.known})` : "not on file"));
+                        const bg = unconf ? '#FEF3C7' : (sh.selected ? '#ECFDF5' : (sh.known ? '#FFF7ED' : '#fff'));
+                        html += `<td style="${style}; white-space:nowrap;"><select class="oo-shirt-select" data-event-id="${ev.id}" data-cid="${r.customer_id}" title="Shirt size — ${escapeHtml(src)}${fp.gender === 'F' ? ' · women’s sizes' : ''}" style="font-size:0.78rem; padding:2px 4px; border:1px solid ${unconf ? '#F59E0B' : '#d1d5db'}; border-radius:6px; cursor:pointer; background:${bg};">${optHtml}</select>${unconf ? `<span title="${escapeHtml(sh.note)}" style="margin-left:3px; color:#B45309; font-weight:800; cursor:help;">?</span>` : ''}</td>`;
                     }
                 } else if (c.addon) {
                     // Add-on buy-in toggle (FRI / SKINS): click flips
@@ -9921,9 +9927,14 @@
                     if (!resp.ok) throw new Error("save failed");
                     const d = oneoffFinance[evId];
                     const p = d && d.players && d.players[String(cid)];
-                    if (p && p.shirt) p.shirt.selected = size || null;
+                    if (p && p.shirt) { p.shirt.selected = size || null; p.shirt.note = null; }
                     sel.style.background = size ? "#ECFDF5"
                         : (p && p.shirt && p.shirt.known ? "#FFF7ED" : "#fff");
+                    // a pick here confirms the size: the server cleared
+                    // the "unconfirmed" note, so drop the marker too
+                    sel.style.borderColor = "#d1d5db";
+                    const q = sel.nextElementSibling;
+                    if (q && q.textContent === "?") q.remove();
                 } catch (err) {
                     alert("Could not save shirt size — try again.");
                 }

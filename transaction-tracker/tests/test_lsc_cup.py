@@ -246,6 +246,140 @@ def test_merge_entry_feed_carries_marks():
     assert out["marks"] == {1: {"1": "picked_up"}, 5: {"1": "holed"}}
 
 
+# ── Kerry's rulings, CA #717 (2026-09-26) ─────────────────────────────
+
+def _flat_course(n=18):
+    return [{"hole": h, "par": 4, "stroke_index": h} for h in range(1, n + 1)]
+
+
+def test_points_one_and_half_in_every_format():
+    from email_parser.lsc_cup import compute_board
+    course = _flat_course()
+    full = {h: 4 for h in range(1, 19)}
+    won1 = {h: (3 if h == 1 else 4) for h in range(1, 19)}
+    sessions, scores = [], {}
+    for fmt, a, b in (("singles", [1], [2]), ("fourball", [3, 4], [5, 6]),
+                      ("foursomes", [7, 8], [9, 10])):
+        sessions.append({"id": fmt, "format": fmt, "n_holes": 18,
+                         # a stale per-session value must NOT change the payout
+                         "points_per_match": 3,
+                         "matches": [{"id": fmt + "-W", "austin": a, "sa": b},
+                                     {"id": fmt + "-H", "austin": [c + 100 for c in a],
+                                      "sa": [c + 100 for c in b]}]})
+        for c in a:
+            scores[c] = won1                 # Austin wins the W match 1 UP
+        for c in b + [x + 100 for x in a + b]:
+            scores[c] = full                 # the H match is halved
+    data = {s["id"]: {"course": course, "phs": {c: 0 for c in scores},
+                      "scores": scores} for s in sessions}
+    board = compute_board({"sessions": sessions}, data)
+    for sess in board["sessions"]:
+        by = {m["match_id"]: m["points"] for m in sess["matches"]}
+        assert by[sess["id"] + "-W"] == {"austin": 1.0, "sa": 0.0}, sess["id"]
+        assert by[sess["id"] + "-H"] == {"austin": 0.5, "sa": 0.5}, sess["id"]
+    assert board["teams"]["austin"]["points"] == 4.5
+    assert board["teams"]["sa"]["points"] == 1.5
+
+
+def test_cup_status_defending_champion_keeps_a_tie():
+    from email_parser.lsc_cup import cup_status
+    # 14 points on the board: the champion needs 7, the challenger 7.5
+    st = cup_status({"austin": 3, "sa": 2}, 14, "sa")
+    assert st["status"] == "open" and st["needs"] == {"austin": 4.5, "sa": 5.0}
+    st = cup_status({"austin": 6.5, "sa": 7}, 14, "sa")
+    assert st["status"] == "retained" and st["winner"] == "sa"
+    st = cup_status({"austin": 7.5, "sa": 5}, 14, "sa")
+    assert st["status"] == "won" and st["winner"] == "austin"
+    # a finished 7-7 tie: the champion keeps it
+    st = cup_status({"austin": 7, "sa": 7}, 14, "austin")
+    assert st["status"] == "retained" and st["winner"] == "austin"
+
+
+def test_cup_status_without_a_recorded_champion_never_guesses():
+    from email_parser.lsc_cup import cup_status
+    st = cup_status({"austin": 7, "sa": 7}, 14, None)
+    assert st["status"] == "tied_pending" and st["winner"] is None
+    st = cup_status({"austin": 7, "sa": 3}, 14, None)
+    assert st["status"] == "open"            # 7 of 14 is not a clinch
+    assert st["needs"] == {"austin": 0.5, "sa": 4.5}
+
+
+def test_skins_count_holes_after_the_closeout_but_never_the_match():
+    from email_parser.lsc_cup import compute_board
+    # Austin closes the match out 10&8; SA then wins holes 11-18 by a
+    # stroke each. The match stays Austin's, and SA takes those skins.
+    a = {h: (3 if h <= 10 else 5) for h in range(1, 19)}
+    b = {h: 4 for h in range(1, 19)}
+    sess = {"id": "sun", "format": "singles", "n_holes": 18,
+            "matches": [{"id": "S1", "austin": [1], "sa": [2]}]}
+    data = {"sun": {"course": _flat_course(), "phs": {1: 0, 2: 0},
+                    "scores": {1: a, 2: b}}}
+    board = compute_board({"sessions": [sess],
+                           "skins": {"basis": "gross"}}, data)
+    m = board["sessions"][0]["matches"][0]
+    assert m["state"] == "final" and m["gg_margin"] == "10&8"
+    assert m["points"] == {"austin": 1.0, "sa": 0.0}
+    sk = {r["key"]: r["skins"] for r in board["sessions"][0]["skins"]["totals"]}
+    assert sk == {"S1:austin:1": 10, "S1:sa:2": 8}
+
+
+def test_skins_team_vs_individual_and_pending_until_all_posted():
+    from email_parser.lsc_cup import compute_skins
+    course = _flat_course(2)
+    fb = {"id": "am", "format": "fourball", "n_holes": 2,
+          "matches": [{"id": "M1", "austin": [1, 2], "sa": [3, 4]},
+                      {"id": "M2", "austin": [5, 6], "sa": [7, 8]}]}
+    scores = {1: {1: 4, 2: 5}, 2: {1: 5}, 3: {1: 5, 2: 5}, 4: {1: 6},
+              5: {1: 5, 2: 5}, 6: {1: 5}, 7: {1: 5}, 8: {1: 5}}
+    out = compute_skins(fb, course, {}, scores, basis="gross")
+    assert out["kind"] == "team"
+    h1, h2 = out["holes"]
+    assert h1["status"] == "won" and h1["winner"] == "M1:austin"   # 4 vs 5s
+    assert h2["status"] == "pending"          # M2's SA side hasn't posted 2
+    singles = {"id": "sun", "format": "singles", "n_holes": 2,
+               "matches": [{"id": "S1", "austin": [1], "sa": [3]}]}
+    out = compute_skins(singles, course, {}, scores, basis="gross")
+    assert out["kind"] == "individual"
+    assert [r["key"] for r in out["totals"]] == ["S1:austin:1", "S1:sa:3"]
+
+
+def test_skins_net_uses_full_locked_ph_and_ties_carry_only_when_on():
+    from email_parser.lsc_cup import compute_skins
+    course = _flat_course(3)
+    sess = {"id": "sun", "format": "singles", "n_holes": 3,
+            "matches": [{"id": "S1", "austin": [1], "sa": [2]}]}
+    # player 2 gets 1 stroke (SI 1 = hole 1): gross 5 nets 4 = tie
+    scores = {1: {1: 4, 2: 4, 3: 3}, 2: {1: 5, 2: 4, 3: 4}}
+    gross = compute_skins(sess, course, {1: 0, 2: 1}, scores, basis="gross")
+    assert [h["status"] for h in gross["holes"]] == ["won", "tied", "won"]
+    net = compute_skins(sess, course, {1: 0, 2: 1}, scores, basis="net")
+    assert [h["status"] for h in net["holes"]] == ["tied", "tied", "won"]
+    assert net["holes"][2]["value"] == 1                 # no carryover
+    carry = compute_skins(sess, course, {1: 0, 2: 1}, scores, basis="net",
+                          carryover=True)
+    assert carry["holes"][2]["value"] == 3                # 2 carried + 1
+
+
+def test_skins_a_picked_up_ball_never_wins():
+    from email_parser.lsc_cup import compute_skins
+    sess = {"id": "sun", "format": "singles", "n_holes": 1,
+            "matches": [{"id": "S1", "austin": [1], "sa": [2]}]}
+    out = compute_skins(sess, _flat_course(1), {}, {1: {1: 7}, 2: {1: 7}},
+                        marks={1: {1: "picked_up"}}, basis="gross")
+    assert out["holes"][0]["winner"] == "S1:sa:2"
+
+
+def test_board_holds_skins_until_kerry_rules_the_basis():
+    from email_parser.lsc_cup import compute_board
+    sess = {"id": "sun", "format": "singles", "n_holes": 1,
+            "matches": [{"id": "S1", "austin": [1], "sa": [2]}]}
+    data = {"sun": {"course": _flat_course(1), "phs": {},
+                    "scores": {1: {1: 3}, 2: {1: 4}}}}
+    board = compute_board({"sessions": [sess]}, data)
+    assert board["skins_pending"] is True
+    assert board["sessions"][0]["skins"] is None
+
+
 if __name__ == "__main__":
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     for fn in fns:
