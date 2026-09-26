@@ -89,6 +89,7 @@ def round_matches(round_id: int, db_path=None) -> dict:
                 for c in side:
                     out[c] = {"match_id": m.get("id"), "session": sess.get("id"),
                               "format": sess.get("format") or "singles",
+                              "n_holes": int(sess.get("n_holes") or 18),   # the cup engine's default
                               "side": ("austin", "sa")[i],
                               "partners": [x for x in side if x != c],
                               "opponents": sides[1 - i]}
@@ -184,6 +185,60 @@ def admin_overview(event_id: int, base_url: str | None = None, db_path=None) -> 
             "live_for_members": (get_app_setting("score_entry_live", db_path) or "").strip() == "1",
             "keeper_signs": keeper_signs(event_id, db_path),
             "qr": _qr_dial(event_id, db_path)}
+
+
+def _match_status(conn, g) -> list:
+    """Where each match in this round stands, for the scoring screens (Kerry
+    2026-09-26: "Also need to show match progress somehow during scoring").
+    The result is the Lone Star Cup engine's (lsc_cup.compute_match_detail),
+    fed from this round's scores, locked PHs and pickup marks, so the phone
+    and the cup board can never disagree."""
+    rm = round_matches(g["round_id"])
+    if not rm:
+        return []
+    from email_parser.lsc_cup import compute_match_detail
+    matches: dict = {}
+    for cid, m in rm.items():
+        e = matches.setdefault(m["match_id"], {"format": m["format"], "sides": {},
+                                                "n_holes": m.get("n_holes") or g["holes"]})
+        e["sides"].setdefault(m["side"], []).append(cid)
+    course = [dict(h) for h in conn.execute(
+        "SELECT hole_number AS hole, par, stroke_index FROM se_round_holes WHERE round_id = ? "
+        "ORDER BY hole_number", (g["round_id"],))]
+    phs, names = {}, {}
+    for p in conn.execute("SELECT customer_id, display_name, playing_handicap FROM se_players "
+                          "WHERE round_id = ?", (g["round_id"],)):
+        phs[p[0]] = p[2]
+        names[p[0]] = (p[1] or "").split(" ")[0]
+    scores: dict = {}
+    for s_ in conn.execute("SELECT customer_id, team_customer_id_a, hole_number, gross FROM se_hole_scores "
+                           "WHERE round_id = ? AND gross IS NOT NULL", (g["round_id"],)):
+        who = s_[0] if s_[0] is not None else s_[1]      # a team ball lands on its first partner
+        if who is not None:
+            scores.setdefault(who, {})[int(s_[2])] = s_[3]
+    marks: dict = {}
+    for m_ in conn.execute("SELECT m.customer_id, t.customer_id_a, m.hole_number, m.mark FROM se_hole_marks m "
+                           "LEFT JOIN se_teams t ON t.id = m.team_id WHERE m.round_id = ?", (g["round_id"],)):
+        who = m_[0] if m_[0] is not None else m_[1]
+        if who is not None:
+            marks.setdefault(who, {})[str(m_[2])] = m_[3]
+    out = []
+    for mid, e in matches.items():
+        keys = [k for k in ("austin", "a") if k in e["sides"]] + [k for k in ("sa", "b") if k in e["sides"]]
+        if len(keys) != 2:
+            continue
+        sides = [e["sides"][keys[0]], e["sides"][keys[1]]]
+        d = compute_match_detail({"id": mid, "austin": sides[0], "sa": sides[1]},
+                                 {"format": e["format"], "n_holes": e["n_holes"]},
+                                 course, phs, scores, names, marks)
+        w = d.get("gg_winner_idx")
+        out.append({"match_id": mid, "format": e["format"], "sides": sides,
+                    "names": [" & ".join(names.get(c) or "#%s" % c for c in sd) for sd in sides],
+                    "lead_side": (w - 1) if w else None, "margin": d.get("gg_margin"),
+                    "thru": d.get("thru") or 0,
+                    "final": bool(d.get("closed_at_order")) or (d.get("thru") or 0) >= e["n_holes"],
+                    "holes": {str(h["hole"]): h["winner"] for h in d["holes"] if h["winner"] is not None}})
+    return out
 
 
 def _marks_by_subject(conn, group_id: int = None, round_id: int = None) -> dict:
@@ -948,13 +1003,17 @@ def get_group_card(group_id: int, device_id: str | None = None, db_path=None) ->
                             (group_id,)).fetchone()
         extras = _card_extras(conn, g, group_id)
         marks = _marks_by_subject(conn, group_id=group_id)
+        try:
+            match_status = _match_status(conn, g)
+        except Exception:                 # a match read must never cost the card
+            match_status = []
     return {**extras, "group_id": group_id, "round_id": g["round_id"], "event_id": g["event_id"],
             "round_label": g["round_label"], "round_date": g["round_date"],
             "holes": g["holes"], "status": g["status"], "label": g["label"],
             "group_num": g["group_num"],
             "start_hole": g["start_hole"], "tee_time": g["tee_time"],
             "course": holes, "players": players, "teams": teams, "scores": scores,
-            "marks": marks, "matches": {str(k): v for k, v in round_matches(g["round_id"]).items()},
+            "marks": marks, "match_status": match_status, "matches": {str(k): v for k, v in round_matches(g["round_id"]).items()},
             "lock": _lock_view(lock, device_id, names)}
 
 

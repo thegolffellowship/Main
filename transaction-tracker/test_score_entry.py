@@ -326,6 +326,11 @@ se.write_scores(sg, "sk", 101, [mk("MK10", 101, 1, 7, mark="picked_up")])
 x = h1()
 check("...both picked up -> the hole is a push, both cards still 7",
       x["winner"] == 0 and x["p1_gross"] == 7 and x["p2_gross"] == 7, x)
+ms = se.get_group_card(sg)["match_status"]
+bd = lsc_board_payload()["sessions"][0]["matches"][0]
+check("the phone's match standing is the cup board's (same engine, same numbers)",
+      len(ms) == 1 and ms[0]["margin"] == bd["gg_margin"] and ms[0]["thru"] == bd["thru"]
+      and ms[0]["holes"].get("1") == 0 and ms[0]["names"] == ["Kerry", "Adam"], (ms, bd.get("gg_margin")))
 db.set_app_setting("lsc_matches", "")
 se.write_scores(sg, "sk", 101, [mk("MK8", 102, 1, 5), mk("MK11", 101, 1, 4)])
 check("a round-level match must use players in the round",

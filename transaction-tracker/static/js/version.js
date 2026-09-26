@@ -1,5 +1,16 @@
-window.TGF_VERSION = "2.497.0";
+window.TGF_VERSION = "2.498.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.498.0",
+    date: "2026-09-26",
+    title: "Score entry: the turn shows every hole, one column grid, match standing, fix a flag after submit",
+    changes: [
+      "Kerry, 2026-09-26, from the 18-hole preview. The turn ('Front nine done') now shows each player's nine holes under his name as small tappable boxes; tapping one opens that hole to change it, and a Back to hole 9 button goes back a hole.",
+      "Every card table uses one fixed column grid, so FRONT and BACK on Check the card line up exactly (the front keeps a blank TOT column), and the Your Card view's holes align down both nines. Check the card puts the last name under the first. Your own row on Your Card has a stronger tint and an orange edge.",
+      "Match standing while scoring: a line per match on the hole screen, the turn, Check the card and the finished card, e.g. 'Kerry v Mark · Kerry 1 UP thru 9', 'All square thru 4', 'Kerry wins 3&2'. It is computed on the server by the Lone Star Cup engine from the round's scores, locked handicaps and pickup marks, so the phone and the cup board always agree.",
+      "Kerry: 'Where do I submit for a hole change if I receive this after card was submitted?' The scorekeeper's finished card now lists every open flag ('Dave flagged hole 5 (card shows 4)') with a Fix it button that opens Check the card on that number, and the old Back to the holes button is now Change a score. Change the number, tap Card matches paper and Submit again; the flag resolves and the card re-signs."
+    ]
+  },
   {
     version: "2.497.0",
     date: "2026-09-26",

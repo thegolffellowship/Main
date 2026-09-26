@@ -226,16 +226,54 @@ with sync_playwright() as p:
           any(f["hole"] == 2 and f["customer_id"] == 101 for f in flags), flags)
     check("after flagging, the row is no longer tappable",
           pg.locator("tr.me button.hole").count() == 0)
+    check("your own row stands out", pg.locator(".se-card tr.me td").first.evaluate(
+          "e => getComputedStyle(e).backgroundColor") == "rgb(253, 235, 221)")
+    check("the scorekeeper's finished card lists the flag with Fix it",
+          "Kerry flagged hole 2" in pg.inner_text("body") and pg.locator("[data-act=fixflag]").count() == 1)
+    pg.click("[data-act=fixflag]")
+    pg.wait_for_selector(".se-picker")
+    check("Fix it opens Check the card with that number's row open",
+          "Hole 2" in pg.inner_text(".se-picker") and "Kerry" in pg.inner_text(".se-picker"))
+    pg.click(".se-picker [data-act=cset][data-v='4']")
+    pg.wait_for_timeout(1200)
+    check("fixing the number resolves the flag", se.get_group_card(gid9)["flags"] == [])
 
     print("eighteen holes, start on 1 (the turn); the dial on: the scorekeeper signs for the group")
     se.set_keeper_signs(900, True)
     rid18, gid18, tok18 = make(18, 1, "eighteen")
     pg = open_as_kerry(tok18)
-    play(pg, 18)
+    for _ in range(9):
+        pg.click("[data-act=save]")
+        pg.wait_for_timeout(250)
+        if pg.locator("button[data-act=ctp][data-cid='']").count():
+            pg.click("button[data-act=ctp][data-cid='']")
+            pg.wait_for_timeout(400)
+    pg.wait_for_selector("text=Front nine done")
+    check("the turn shows each player's nine under his name (2 x 9 tappable holes)",
+          pg.locator(".se-turnrow .se-mini button[data-act=goto]").count() == 18)
+    pg.click("[data-act=goto] >> text=Back to hole 9")
+    pg.wait_for_selector("text=Hole 9")
+    check("Back to hole 9 goes back a hole", "Hole 9" in pg.inner_text(".se-h1"))
+    pg.click("[data-act=save]")
+    pg.wait_for_selector("text=Front nine done")
+    pg.locator(".se-turnrow").nth(1).locator(".se-mini button[data-h='3']").click()
+    pg.wait_for_selector("h1:has-text('Hole 3')")
+    check("tapping a hole at the turn opens it to edit", "Hole 3" in pg.inner_text(".se-h1"))
+    pg.click(".se-cell[data-h='10']")
+    pg.wait_for_selector("h1:has-text('Hole 10')")
+    play(pg, 9)
     pg.wait_for_timeout(1500)
     review_ok(pg, 18, "eighteen")
+    check("Check the card puts the last name under the first",
+          pg.locator(".se-check td.nm .ln").first.inner_text().strip() == "Niester")
+    x_front = pg.evaluate("() => [...document.querySelectorAll('.se-check thead th')].map(t => Math.round(t.getBoundingClientRect().left))")
+    pg.click("[data-act=nine][data-n='1']")
+    x_back = pg.evaluate("() => [...document.querySelectorAll('.se-check thead th')].map(t => Math.round(t.getBoundingClientRect().left))")
+    check("FRONT and BACK use the exact same column positions", x_front == x_back, (x_front, x_back))
+    pg.click("[data-act=nine][data-n='0']")
     heads = pg.locator(".se-check thead th").all_inner_texts()
-    check("FRONT shows holes 1-9 and OUT", heads[1] == "1" and heads[-1].upper() == "OUT", heads)
+    check("FRONT shows holes 1-9 and OUT (TOT column left blank so the nines line up)",
+          heads[1] == "1" and heads[-2].upper() == "OUT" and heads[-1] == "", heads)
     pg.click("[data-act=nine][data-n='1']")
     heads = pg.locator(".se-check thead th").all_inner_texts()
     check("BACK shows holes 10-18, IN and TOT", heads[1] == "10" and heads[-2].upper() == "IN"
@@ -299,6 +337,8 @@ with sync_playwright() as p:
         {"id": "s1", "format": "singles", "se_round": ridm,
          "matches": [{"id": "M1", "austin": [101], "sa": [102]}]}]}))
     pg = open_as_kerry(tokm)
+    check("the hole screen shows the match standing",
+          pg.locator(".se-mline").count() == 1 and "Kerry v Mark" in pg.inner_text(".se-mline"))
     check("both players wear the M and 'Match vs' on the hole screen",
           pg.locator(".se-row .se-mtag").count() == 2 and "Match vs Mark" in pg.inner_text("body"))
     for _ in range(4):
@@ -315,6 +355,9 @@ with sync_playwright() as p:
     pg.wait_for_selector("text=Hole 2", timeout=5000)
     pg.wait_for_timeout(1500)
     card = se.get_group_card(gidm)
+    pg.wait_for_timeout(300)
+    check("after hole 1 (Mark picked up) the standing reads Kerry 1 UP thru 1",
+          "Kerry 1 UP thru 1" in pg.inner_text(".se-mline"), pg.inner_text(".se-mline"))
     check("Picked up is stored beside the 7; the card still says 7",
           card["marks"].get("c:102") == {"1": "picked_up"} and card["scores"]["c:102"]["1"] == 7, card["marks"])
     play(pg, 8)

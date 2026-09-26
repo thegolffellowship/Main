@@ -165,6 +165,24 @@ or `POST /api/score-entry/events/<id>/keeper-signs {on}` (manager+). The
 photo: `GET /api/score-entry/checks/<id>/photo.jpg` (manager+). Guards:
 `test_score_entry.py` (submit / dial / photo) and `test_score_entry_ui.py`.
 
+## Kerry's preview notes, 2026-09-26 (v2.498.0)
+
+- **The turn:** each player's nine under his name, every hole tappable to
+  edit (`goto`), plus **Back to hole 9**.
+- **One column grid:** every card table is `table-layout: fixed` with one
+  `colgroup` (name, 9 holes, OUT/IN, TOT); an 18's front nine keeps a blank
+  TOT column so FRONT and BACK line up; Your Card's two blocks align. Check
+  the card shows the last name under the first. Your own row on Your Card:
+  stronger tint (#FDEBDD) and an orange edge.
+- **Match standing:** `get_group_card` carries `match_status` (from
+  `_match_status`: `lsc_cup.compute_match_detail` over the round's scores,
+  locked PHs and pickup marks; a cup session's `n_holes` is honoured) —
+  shown on the hole screen, the turn, Check the card and the finished card.
+- **A change after submit:** the scorekeeper's finished card lists open
+  flags with **Fix it** (opens Check the card on that number); **Change a
+  score** replaces "Back to the holes". Change → Card matches paper →
+  Submit again; the edit resolves the flag and the submit re-signs.
+
 ## Live Scoring in the Tracker (v2.497.0)
 
 Kerry, 2026-09-26: "How will I access this thru the Tracker so I can see the

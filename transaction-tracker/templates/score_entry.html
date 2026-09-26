@@ -184,6 +184,41 @@
         .se-pu-name { font-family: Bitter, Georgia, serif; }
         .se-card tr.par td.nm { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; }
         .se-tots b { font-family: Bitter, Georgia, serif; }
+        /* ONE COLUMN GRID for every card table (Kerry 2026-09-26: "Should be
+           exact same column widths" / "Holes should align on the Your Card
+           view"): fixed layout, a colgroup per table, the same widths on the
+           front and the back nine. */
+        .se-card table { table-layout: fixed; }
+        .se-card col.c-nm { width: 24%; }
+        .se-card col.c-h { width: 6.5%; }
+        .se-card col.c-sub { width: 9%; }
+        .se-card col.c-tot { width: 8.5%; }
+        .se-card.nine col.c-nm { width: 26%; }
+        .se-card.nine col.c-h { width: 7%; }
+        .se-card.nine col.c-sub { width: 11%; }
+        .se-card td, .se-card th { overflow: hidden; }
+        .se-card td.nm .ln { display: block; font-size: 11px; font-weight: 600; color: #6B7280; line-height: 1.1; }
+        /* YOUR ROW stands out (Kerry: "a little more contrast to MY row") */
+        .se-card tr.me td { background: #FDEBDD; }
+        .se-card tr.me td.nm { box-shadow: inset 4px 0 0 #E87C3E; }
+        /* MATCH STANDING while scoring (Kerry: "show match progress") */
+        .se-mstrip { display: flex; flex-direction: column; gap: 6px; margin: 10px 0 4px; }
+        .se-mline { display: flex; justify-content: space-between; align-items: center; gap: 8px;
+                    padding: 8px 12px; border-radius: 10px; background: #FFF4EC; border: 1px solid #F5C8A8;
+                    font-size: 14px; white-space: normal; }
+        .se-mline .who { font-family: Bitter, Georgia, serif; font-weight: 700; }
+        .se-mline .st { font-weight: 700; color: #B45A22; white-space: nowrap; }
+        .se-mline.final { background: #F8F8F8; border-color: #E5E7EB; }
+        .se-mline.final .st { color: #1B1B1B; }
+        /* THE TURN: each player's nine under his name, tap one to edit */
+        .se-mini { display: grid; grid-template-columns: repeat(9, minmax(0, 1fr)); gap: 3px; margin-top: 8px; width: 100%; }
+        .se-mini button { height: 38px; border-radius: 7px; border: 1px solid #E5E7EB; background: #FFFFFF; cursor: pointer;
+                          display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 0;
+                          font: 700 15px 'Helvetica Neue', Helvetica, Arial, sans-serif; color: #1B1B1B;
+                          font-variant-numeric: tabular-nums; }
+        .se-mini button .n { font-size: 9px; font-weight: 600; color: #9CA3AF; line-height: 1; }
+        .se-turnrow { display: block; padding: 12px 14px 12px 20px; }
+        .se-turnrow .top { display: flex; justify-content: space-between; align-items: center; }
         .se-foot { font-size: 13px; color: #6B7280; text-align: center; margin-top: 10px; white-space: normal; }
         .se-hio { border: 2px solid #E87C3E; }
         .se-note { font-size: 12px; color: #6B7280; margin-top: 10px; white-space: normal; }
@@ -431,6 +466,7 @@
                     <button type="button" data-act="next" aria-label="Next hole" ${i >= order.length - 1 ? "disabled" : ""}>${ICON.fwd}</button>
                   </div></div>
                 <div class="se-keeper">${ICON.pen}<span>You're keeping score for the group</span></div>
+                ${matchStrip()}
                 ${hio}
                 ${maxNote ? `<div class="se-warn">${ICON.warn}<span>${esc(maxNote)}</span></div>` : ""}
                 <div class="se-stack">${rows}</div>
@@ -449,6 +485,30 @@
             }).join("");
         }
 
+        // The one colgroup (fixed widths): name, 9 holes, OUT/IN, TOT. An 18's
+        // front nine keeps an empty TOT column so both nines line up.
+        const colgroup = (nHoles, eighteen) => `<colgroup><col class="c-nm">${'<col class="c-h">'.repeat(nHoles)}<col class="c-sub">${eighteen ? '<col class="c-tot">' : ""}</colgroup>`;
+        function nameCell(s, twoLine) {
+            const dot = s.cids.length === 1 ? teeDot(s.cids[0]) : "";
+            if (s.team || !twoLine) return `${dot}${esc(s.team ? s.name : first(s.name) || s.name)}${mtag(s.cids)}`;
+            const parts = String(s.name || "").trim().split(/\s+/);
+            return `${dot}${esc(parts[0] || "")}${mtag(s.cids)}<span class="ln">${esc(parts.slice(1).join(" "))}</span>`;
+        }
+        // MATCH STANDING (Kerry 2026-09-26): each match with a player in
+        // this group, from the server's cup-engine read.
+        function matchStrip() {
+            const mine = new Set(card.players.map((p) => p.customer_id));
+            const ms = (card.match_status || []).filter((m) => m.sides.flat().some((c) => mine.has(c)));
+            if (!ms.length) return "";
+            return `<div class="se-mstrip">${ms.map((m) => {
+                const vs = `${esc(m.names[0])} v ${esc(m.names[1])}`;
+                let st;
+                if (!m.thru) st = "Not started";
+                else if (m.lead_side == null) st = m.final ? "Halved" : `All square thru ${m.thru}`;
+                else st = `${esc(m.names[m.lead_side])} ${m.final ? "wins " + esc(m.margin) : esc(m.margin) + " thru " + m.thru}`;
+                return `<div class="se-mline ${m.final ? "final" : ""}"><span class="who">${vs}</span><span class="st">${st}</span></div>`;
+            }).join("")}</div>`;
+        }
         const helpBtn = (k) => `<button type="button" class="se-help ${help[k] ? "on" : ""}" data-act="help" data-k="${k}" aria-expanded="${help[k] ? "true" : "false"}">How It Works</button>`;
         const helpText = (k, t) => help[k] ? `<div class="se-helptext">${t}</div>` : "";
 
@@ -467,8 +527,9 @@
             const tot = (key, list) => list.reduce((a, n) => a + (value(key, n).v || 0), 0);
             const lbl = nines.length > 1 ? (checkNine ? "In" : "Out") : (hs[0] >= 10 ? "In" : "Out");
             const back = nines.length > 1 && checkNine === 1;
-            const head = `<tr><th style="text-align:left;padding-left:8px">Hole</th>${hs.map((n) => `<th>${n}</th>`).join("")}<th>${lbl}</th>${back ? "<th>Tot</th>" : ""}</tr>`;
-            const par = `<tr class="par"><td class="nm" style="font-weight:400;color:#4B5563">Par</td>${hs.map((n) => `<td>${info(n).par || ""}</td>`).join("")}<td>${parSum(hs) || ""}</td>${back ? `<td>${parSum(nums) || ""}</td>` : ""}</tr>`;
+            const eighteen = nines.length > 1;
+            const head = `<tr><th style="text-align:left;padding-left:8px">Hole</th>${hs.map((n) => `<th>${n}</th>`).join("")}<th>${lbl}</th>${eighteen ? `<th>${back ? "Tot" : ""}</th>` : ""}</tr>`;
+            const par = `<tr class="par"><td class="nm" style="font-weight:400;color:#4B5563">Par</td>${hs.map((n) => `<td>${info(n).par || ""}</td>`).join("")}<td>${parSum(hs) || ""}</td>${eighteen ? `<td>${back ? parSum(nums) || "" : ""}</td>` : ""}</tr>`;
             const rows = subs.map((s) => {
                 const cells = hs.map((n) => {
                     const v = value(s.key, n).v;
@@ -477,7 +538,7 @@
                         + (markOf(s.key, n) === "picked_up" ? " pu" : "");
                     return `<td><button type="button" class="cell ${cls}" data-act="cpick" data-key="${s.key}" data-h="${n}" aria-label="${esc(s.name)}, hole ${n}: ${v == null ? "no score" : v}">${v == null ? "–" : v}</button></td>`;
                 }).join("");
-                return `<tr><td class="nm">${s.cids.length === 1 ? teeDot(s.cids[0]) : ""}${esc(s.team ? s.name : first(s.name))}${mtag(s.cids)}</td>${cells}<td class="tot">${tot(s.key, hs) || ""}</td>${back ? `<td class="tot">${tot(s.key, nums) || ""}</td>` : ""}</tr>`;
+                return `<tr><td class="nm">${nameCell(s, true)}</td>${cells}<td class="tot">${tot(s.key, hs) || ""}</td>${eighteen ? `<td class="tot">${back ? tot(s.key, nums) || "" : ""}</td>` : ""}</tr>`;
             }).join("");
             let picker = "";
             if (checkPick && hs.includes(checkPick.h)) {
@@ -496,8 +557,9 @@
                 <div class="se-titlebar"><h1 class="se-h1">Check the card</h1>${helpBtn("check")}</div>
                 ${helpText("check", "Read the card hole by hole with whoever kept the paper card. Tap any number to change it; the right score is in the row that opens under the card." + (nines.length > 1 ? " FRONT and BACK switch nines." : "") + " When every hole matches, tap Card matches paper.")}
                 ${hioForKeeper()}
+                ${matchStrip()}
                 ${seg}
-                <div class="se-card se-check"><table><thead>${head}</thead><tbody>${par}${rows}</tbody></table></div>
+                <div class="se-card se-check ${eighteen ? "" : "nine"}"><table>${colgroup(hs.length, eighteen)}<thead>${head}</thead><tbody>${par}${rows}</tbody></table></div>
                 ${subs.some((x) => matchOf(x.cids)) ? `<div class="se-legend"><span class="se-mtag" style="margin-left:0">M</span> in a match today · a ringed number was picked up</div>` : ""}
                 ${picker}
                 <div class="se-lbl" style="margin:14px 0 6px">Totals</div>
@@ -602,30 +664,43 @@
         }
 
         function turnScreen(next) {
+            // THE TURN (Kerry 2026-09-26: "show hole scores below each players
+            // line as a quick overview ... a back button to go back a hole,
+            // and also the ability to click on a hole and edit it").
             const order = holeOrder(), firstNine = order.slice(0, 9);
             const lo = Math.min(...firstNine), label = lo === 1 ? "Out" : "In";
             const par = firstNine.reduce((a, n) => a + (info(n).par || 0), 0);
+            const last = firstNine[firstNine.length - 1];
             const rows = subjects().map((s) => {
                 const t = firstNine.reduce((a, n) => a + (value(s.key, n).v || 0), 0);
                 const d = par ? t - par : null;
-                return `<div class="se-row">${teeBar(s.cids)}<div class="se-who"><div class="se-name">${esc(s.name)}</div></div>
-                    <div class="se-score"><div class="v">${t || "–"}</div><div class="r">${d == null ? "" : d === 0 ? "Even" : (d > 0 ? "+" + d : d)}</div></div></div>`;
+                const mini = firstNine.map((n) => {
+                    const v = value(s.key, n).v;
+                    return `<button type="button" data-act="goto" data-h="${n}" aria-label="Hole ${n}: ${v == null ? "no score" : v}"><span class="n">${n}</span>${v == null ? "–" : markOf(s.key, n) === "picked_up" ? `<span class="se-pu" style="line-height:18px;min-width:18px">${v}</span>` : v}</button>`;
+                }).join("");
+                return `<div class="se-row se-turnrow">${teeBar(s.cids)}
+                    <div class="top"><div class="se-name">${esc(s.name)}${mtag(s.cids)}</div>
+                      <div class="se-score"><div class="v">${t || "–"}</div><div class="r">${d == null ? "" : d === 0 ? "Even" : (d > 0 ? "+" + d : d)}</div></div></div>
+                    <div class="se-mini">${mini}</div></div>`;
             }).join("");
             return `<div class="se-eyebrow">${esc(eyebrow())} · The turn</div>
                 <h1 class="se-h1">${lo === 1 ? "Front" : "Back"} nine done</h1>
-                <div class="se-sub">${label} (holes ${firstNine[0]}–${firstNine[8]}) · Par ${par}</div>
-                <div class="se-gap"></div><div class="se-stack">${rows}</div>
+                <div class="se-sub">${label} (holes ${firstNine[0]}–${firstNine[8]}) · Par ${par} · tap a hole to change it</div>
+                ${matchStrip()}
+                <div class="se-gap" style="height:12px"></div><div class="se-stack">${rows}</div>
                 ${statusLine()}
-                <button type="button" class="se-pill go" data-act="turn">Go to hole ${next}</button>`;
+                <button type="button" class="se-pill go" data-act="turn">Go to hole ${next}</button>
+                <div class="se-gap" style="height:10px"></div>
+                <button type="button" class="se-pill line" data-act="goto" data-h="${last}">Back to hole ${last}</button>`;
         }
 
-        function cardBlock(holes, label, subs, mine, flagsMine, withTotal) {
+        function cardBlock(holes, label, subs, mine, flagsMine, withTotal, eighteen) {
             // One scorecard block: a nine with its OUT / IN column, plus the
             // round TOTAL on the second block of an 18.
-            const head = `<tr><th>Hole</th>${holes.map((n) => `<th>${n}</th>`).join("")}<th>${label}</th>${withTotal ? "<th>Tot</th>" : ""}</tr>`;
+            const head = `<tr><th>Hole</th>${holes.map((n) => `<th>${n}</th>`).join("")}<th>${label}</th>${eighteen ? `<th>${withTotal ? "Tot" : ""}</th>` : ""}</tr>`;
             const parSum = (hs) => hs.reduce((a, n) => a + (info(n).par || 0), 0);
             const all = holeOrder();
-            const par = `<tr class="par"><td class="nm">Par</td>${holes.map((n) => `<td>${info(n).par || ""}</td>`).join("")}<td>${parSum(holes) || ""}</td>${withTotal ? `<td>${parSum(all) || ""}</td>` : ""}</tr>`;
+            const par = `<tr class="par"><td class="nm">Par</td>${holes.map((n) => `<td>${info(n).par || ""}</td>`).join("")}<td>${parSum(holes) || ""}</td>${eighteen ? `<td>${withTotal ? parSum(all) || "" : ""}</td>` : ""}</tr>`;
             // Your own row is tappable on the sign-off screen: tap a hole to
             // flag it for the scorekeeper (Kerry 2026-09-25: "that's not
             // obvious" — so the cells are underlined and say so above).
@@ -642,9 +717,25 @@
                     return `<td class="${cls}">${isMe && canTap ? `<button type="button" class="hole" data-act="pickhole" data-h="${n}" aria-label="Hole ${n}: ${cell}. Tap if it's wrong">${cell}</button>` : cell}</td>`;
                 }).join("");
                 const tot = all.reduce((a, n) => a + (value(s.key, n).v || 0), 0);
-                return `<tr class="${isMe ? "me" : ""}"><td class="nm">${s.cids.length === 1 ? teeDot(s.cids[0]) : ""}${esc(first(s.name) || s.name)}${mtag(s.cids)}</td>${cells}<td>${sub || ""}</td>${withTotal ? `<td>${tot || ""}</td>` : ""}</tr>`;
+                return `<tr class="${isMe ? "me" : ""}"><td class="nm">${nameCell(s, false)}</td>${cells}<td>${sub || ""}</td>${eighteen ? `<td>${withTotal ? tot || "" : ""}</td>` : ""}</tr>`;
             }).join("");
-            return `<div class="se-card${flagging && canTap ? " picking" : ""}" style="margin-bottom:10px"><table><thead>${head}</thead><tbody>${par}${rows}</tbody></table></div>`;
+            return `<div class="se-card${flagging && canTap ? " picking" : ""}${eighteen ? "" : " nine"}" style="margin-bottom:10px"><table>${colgroup(holes.length, eighteen)}<thead>${head}</thead><tbody>${par}${rows}</tbody></table></div>`;
+        }
+
+        // CHANGES AFTER THE SUBMIT (Kerry 2026-09-26: "Where do I submit for
+        // a hole change if I receive this after card was submitted?"): the
+        // scorekeeper's finished card lists every open flag with a Fix
+        // button that opens Check the card on that number. Changing it and
+        // submitting again re-signs the card.
+        function keeperFlags() {
+            const fl = card.flags || [];
+            if (!fl.length) return "";
+            return fl.map((f) => {
+                const sub = subjects().find((x) => x.cids.includes(f.customer_id));
+                const v = sub ? value(sub.key, f.hole).v : null;
+                return `<div class="se-warn" style="justify-content:space-between">${ICON.warn}<span style="flex:1">${esc(first(byId(f.customer_id).display_name))} flagged hole ${f.hole}${v != null ? " (card shows " + v + ")" : ""}${f.note ? ": " + esc(f.note) : ""}</span>
+                    <button type="button" class="se-chip" data-act="fixflag" data-cid="${f.customer_id}" data-h="${f.hole}">Fix it</button></div>`;
+            }).join("");
         }
 
         function cardScreen() {
@@ -660,9 +751,9 @@
             // 18 holes: OUT and IN blocks like a paper card (one 20-column
             // table would scroll sideways on a phone). A nine keeps one block.
             const tables = order.length > 9
-                ? cardBlock(order.slice(0, 9), "Out", subs, mine, flagsMine, false)
-                  + cardBlock(order.slice(9), "In", subs, mine, flagsMine, true)
-                : cardBlock(order, order[0] >= 10 ? "In" : "Out", subs, mine, flagsMine, false);
+                ? cardBlock(order.slice(0, 9), "Out", subs, mine, flagsMine, false, true)
+                  + cardBlock(order.slice(9), "In", subs, mine, flagsMine, true, true)
+                : cardBlock(order, order[0] >= 10 ? "In" : "Out", subs, mine, flagsMine, false, false);
             const total = mine ? order.reduce((a, n) => a + (value(mine.key, n).v || 0), 0) : 0;
             const nSigned = card.players.filter((p) => signed(p.customer_id)).length;
             const keeperSigned = (card.signoffs || []).find((s) => s.kind === "scorekeeper");
@@ -706,10 +797,11 @@
                 <div class="se-sub">${kept ? "Scores kept by " + esc(kept) : "No one is keeping score yet"}</div>
                 ${!done && !keeping() && card.lock.state === "held" ? `<div class="se-gap"></div><button type="button" class="se-pill line" data-act="takeover">Take over scoring</button>` : ""}
                 ${!done && card.lock.state === "free" ? `<div class="se-gap"></div><button type="button" class="se-pill dark" data-act="keep">Keep score for the group</button>` : ""}
-                ${keeping() && done ? `<div class="se-gap"></div><button type="button" class="se-pill line" data-act="back">Back to the holes</button>` : ""}
+                ${keeping() && done ? keeperFlags() + `<div class="se-gap"></div><button type="button" class="se-pill line" data-act="back">Change a score</button>` : ""}
                 ${hioW}
                 <div class="se-gap"></div>
                 ${tables}
+                ${matchStrip()}
                 <div class="se-gap"></div>
                 ${done ? `<div class="se-copy" style="margin-bottom:14px">${mine && signedFor(who) && !flagsMine.length ? `${esc(first(kept) || "The scorekeeper")} checked this card against the paper card and signed it for the group. If a hole on your row is wrong, tap that number and ${esc(first(kept) || "the scorekeeper")} gets the flag.` : mine && !signedSelf(who) && !(flagsMine.length) ? `Check each hole on your row. Signing tells your manager it's right. If one is wrong, tap that number (or tap <strong>Something's wrong</strong>) and ${esc(first(kept) || "the scorekeeper")} gets the flag to fix it. Only your card reopens.` : "Signing tells your manager this card is right."}</div>` : `<div class="se-copy">Live. This card fills in as ${esc(first(kept) || "the scorekeeper")} enters each hole. You'll sign it at the end.</div>`}
                 ${actions}
@@ -852,6 +944,7 @@
                 commitDraft(); flush();
                 const order = holeOrder(), i = order.indexOf(hole);
                 hole = act === "goto" ? Number(b.dataset.h) : order[act === "prev" ? i - 1 : i + 1];
+                turnNext = null;
                 store.set(K.hole, hole); render(); return;
             }
             if (act === "pu") { pickupAns[b.dataset.key] = b.dataset.m; render(); return; }
@@ -885,6 +978,14 @@
                 return;
             }
             if (act === "finish") { commitDraft(); flush(); hole = "done"; render(); return; }
+            if (act === "fixflag") {
+                const cid = Number(b.dataset.cid), h = Number(b.dataset.h);
+                const sub = subjects().find((x) => x.cids.includes(cid));
+                const nums = holeOrder().slice().sort((a, c) => a - c);
+                checkNine = nums.length > 9 && nums.indexOf(h) >= 9 ? 1 : 0;
+                checkPick = sub ? {key: sub.key, h: h} : null;
+                hole = "review"; store.set(K.hole, null); render(); return;
+            }
             if (act === "help") { help[b.dataset.k] = !help[b.dataset.k]; render(); return; }
             if (act === "nine") { checkNine = Number(b.dataset.n); checkPick = null; render(); return; }
             if (act === "cpick") {
