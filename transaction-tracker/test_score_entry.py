@@ -337,7 +337,39 @@ bt = lsc_board_payload()["teams"]
 check("a cup round's card carries the team standings, the board's own numbers",
       cs is not None and cs["austin"] == bt["austin"]["points"] and cs["sa"] == bt["sa"]["points"]
       and cs["austin_projected"] == bt["austin"]["projected"], (cs, bt))
+
+print("Lone Star Cup FOURSOMES: one team row per pair; the banner knows who leads (Kerry 2026-09-26)")
+fr = se.create_round(900, 9, label="foursomes", course_holes=NINE)["round_id"]
+fg = se.upsert_group(fr, 1, players=[{"customer_id": c, "display_name": n, "playing_handicap": 0}
+                                     for c, n in [(101, "Kerry Niester"), (105, "Mark Stich"),
+                                                  (102, "Adam Baker"), (104, "Robert Hogue")]])["group_id"]
+db.set_app_setting("lsc_matches", json.dumps({"event_id": 900, "sessions": [
+    {"id": "s1", "format": "singles", "se_round": sr,
+     "matches": [{"id": "M1", "austin": [101], "sa": [102]}]},
+    {"id": "s2", "format": "foursomes", "se_round": fr,
+     "matches": [{"id": "F1", "austin": [101, 105], "sa": [102, 104]}]}]}))
+fc = se.get_group_card(fg)
+check("opening the card makes one team row per foursomes pair",
+      sorted((t["customer_id_a"], t["customer_id_b"]) for t in fc["teams"]) == [(101, 105), (102, 104)], fc["teams"])
+check("opening it again adds nothing", len(se.get_group_card(fg)["teams"]) == 2)
+ta = {(t["customer_id_a"], t["customer_id_b"]): t["team_id"] for t in fc["teams"]}
+se.claim_group(fg, "fk", 101)
+se.write_scores(fg, "fk", 101, [{"op_id": "F1a", "team_id": ta[(101, 105)], "hole": 1, "gross": 4},
+                                {"op_id": "F1b", "team_id": ta[(102, 104)], "hole": 1, "gross": 5}])
+fm = se.get_group_card(fg)["match_status"]
+check("the team ball decides the foursomes match; Austin leads and the banner says so",
+      len(fm) == 1 and fm[0]["cup"] and fm[0]["lead_team"] == "austin" and fm[0]["thru"] == 1, fm)
+se.write_scores(fg, "fk", 101, [{"op_id": "F2a", "team_id": ta[(101, 105)], "hole": 2, "gross": 6, "mark": "picked_up"},
+                                {"op_id": "F2b", "team_id": ta[(102, 104)], "hole": 2, "gross": 6},
+                                {"op_id": "F3a", "team_id": ta[(101, 105)], "hole": 3, "gross": 7},
+                                {"op_id": "F3b", "team_id": ta[(102, 104)], "hole": 3, "gross": 3}])
+fm = se.get_group_card(fg)["match_status"]
+check("X (the triple, picked up) loses the hole to a holed triple; San Antonio now leads",
+      fm[0]["holes"].get("2") == 2 and fm[0]["lead_team"] == "sa", fm)
+check("a singles session's pair is never made a team", not se.get_group_card(sg)["teams"])
 db.set_app_setting("lsc_matches", "")
+check("a round-level (non-cup) match has no lead team",
+      all(m["lead_team"] is None for m in se.get_group_card(sg)["match_status"]))
 se.write_scores(sg, "sk", 101, [mk("MK8", 102, 1, 5), mk("MK11", 101, 1, 4)])
 check("a round-level match must use players in the round",
       "error" in se.set_round_matches(sr, [{"id": "X", "sides": [[101], [999]]}]))

@@ -237,6 +237,25 @@
             transform: skewX(-20deg); pointer-events: none;
             background: linear-gradient(75deg, transparent, rgba(255,255,255,.16), transparent);
             animation: seChampShine 3.4s ease-in-out infinite; }
+        /* LONE STAR CUP (Kerry 2026-09-26): "the match position banner needs to
+           be the team color who's in the lead ... the shimmering banner needs to
+           be color coordinated as well." Austin burnt orange, San Antonio slate. */
+        .se-mline.lead-austin { background: #BF5700; border-color: #BF5700; color: #FFFFFF; }
+        .se-mline.lead-sa { background: #4B6274; border-color: #4B6274; color: #FFFFFF; }
+        .se-mline.lead-austin .st, .se-mline.lead-sa .st { color: #FFFFFF; }
+        .se-mline.won.lead-austin { border-color: #FFD75E;
+            background: linear-gradient(135deg, #8A3F00 0%, #BF5700 55%, #8A3F00 100%);
+            box-shadow: inset 0 0 0 2px #8A3F00, inset 0 0 0 3px rgba(255,215,94,.7), 0 4px 14px rgba(191,87,0,.35); }
+        .se-mline.won.lead-sa { border-color: #FFD75E;
+            background: linear-gradient(135deg, #2F3F4C 0%, #4B6274 55%, #2F3F4C 100%);
+            box-shadow: inset 0 0 0 2px #2F3F4C, inset 0 0 0 3px rgba(255,215,94,.7), 0 4px 14px rgba(75,98,116,.35); }
+        .se-mline.won.lead-austin .who, .se-mline.won.lead-sa .who { color: #FFFFFF; }
+        .se-mline.won.lead-austin .st, .se-mline.won.lead-sa .st {
+            background: linear-gradient(100deg, #FFFFFF 0%, #FFE9A8 40%, #FFD75E 60%, #FFFFFF 100%);
+            -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+        .se-mline.won.lead-austin::after, .se-mline.won.lead-sa::after {
+            background: linear-gradient(75deg, transparent, rgba(255,255,255,.28), transparent); }
+        .se-x { font-family: Bitter, Georgia, serif; font-weight: 800; }
         @keyframes seChampShine { 0% { left: -60%; } 55% { left: 135%; } 100% { left: 135%; } }
         /* LONE STAR CUP team standings beside the match */
         .se-cup { display: flex; align-items: stretch; border-radius: 10px; overflow: hidden; border: 1px solid #E5E7EB;
@@ -305,6 +324,7 @@
         // Card check + photo (Kerry 2026-09-25).
         let checkNine = 0, checkPick = null, help = {}, noPhoto = false, psCid = null, psName = "", psOther = false;
         // Match play pickup prompt + the max-triple notice (Kerry 2026-09-25).
+        let draftX = {};
         let pickupHole = null, pickupKeys = [], pickupAns = {}, maxNote = "";
         const checkChanged = new Set();
         let photo = store.get(K.photo, null);        // {op_id, data, submitted, sent}
@@ -382,7 +402,9 @@
             return [p.k ? p.k + " handicap stroke" + (p.k > 1 ? "s" : "") : "", p.t ? p.t + " " + tg + " stroke" + (p.t > 1 ? "s" : "") : ""].filter(Boolean).join(", ");
         }
         function popKey() {
-            const any = (m) => Object.values(m || {}).some((h) => Object.values(h || {}).some((v) => v > 0));
+            // Only a player's own row draws dots (a foursomes pair's ball does not).
+            const solo = new Set(subjects().filter((x) => x.cids.length === 1).map((x) => String(x.cids[0])));
+            const any = (m) => Object.entries(m || {}).some(([c, h]) => solo.has(c) && Object.values(h || {}).some((v) => v > 0));
             const a = any(card.strokes), b = any(card.team_strokes);
             if (!a && !b) return "";
             return `<div class="se-popkey">${a ? `<span><i class="se-pop"></i>PH pop</span>` : ""}${b ? `<span><i class="se-pop t"></i>${esc((card.team_game || {}).label || "Team Net")} pop</span>` : ""}</div>`;
@@ -429,7 +451,14 @@
             if (p && "mark" in p) return p.mark;
             return ((card.marks || {})[key] || {})[String(n)] || null;
         }
-        const needsMark = (n) => subjects().filter((s) => matchOf(s.cids)
+        // X (Kerry 2026-09-26: "X would also need to be an option for scoring in
+        // Lone Star Cup"). In a cup match, one tap past the triple is X: stored
+        // as the triple (GG's max, every card keeps it) with the Picked up mark,
+        // so it can't win the hole. A triple without X is a ball in the hole,
+        // so the cup never asks Ball in hole / Picked up.
+        const cupOf = (cids) => { const m = matchOf(cids); return !!(m && m.session != null); };
+        const isX = (key, n, cids) => cupOf(cids) && value(key, n).v === hiOf(n) && markOf(key, n) === "picked_up";
+        const needsMark = (n) => subjects().filter((s) => matchOf(s.cids) && !cupOf(s.cids)
             && value(s.key, n).v === hiOf(n) && !markOf(s.key, n)).map((s) => s.key);
         const mtag = (cids) => matchOf(cids) ? `<span class="se-mtag" title="In a match today">M</span>` : "";
         function vsText(cids) {
@@ -513,13 +542,14 @@
                 const cur = s.key in draft ? {v: draft[s.key], waiting: false} : value(s.key, hole);
                 const shown = cur.v == null ? (h.par || "–") : cur.v;
                 const d = cur.v == null || !h.par ? null : cur.v - h.par;
-                const rel = d == null ? "" : (WORDS[String(d)] || (d > 0 ? "+" + d : String(d)));
+                const xx = cupOf(s.cids) && (s.key in draftX ? draftX[s.key] : isX(s.key, hole, s.cids));
+                const rel = xx ? "Picked up" : d == null ? "" : (WORDS[String(d)] || (d > 0 ? "+" + d : String(d)));
                 const meta2 = [s.team ? s.meta : null, s.team ? null : teeOf(s.cid).name || null, !s.team && s.ph != null ? "PH " + s.ph : null,
                                vsText(s.cids) || null].filter(Boolean).join(" · ");
                 return `<div class="se-row" data-key="${s.key}">${teeBar(s.cids)}
                     <div class="se-who"><div class="se-name">${esc(s.name)}${mtag(s.cids)}</div><div class="se-meta">${esc(meta2)}</div></div>
                     <button type="button" class="se-minus" data-act="step" data-d="-1" aria-label="One less for ${esc(s.name)}">&minus;</button>
-                    <div class="se-score" ${popLabel(s.cids, hole) ? `aria-label="${esc(popLabel(s.cids, hole))}"` : ""}>${popDots(s.cids, hole)}<div class="v ${cur.v == null ? "empty" : cur.waiting ? "waiting" : ""}">${shown}</div><div class="r">${rel}</div></div>
+                    <div class="se-score" ${popLabel(s.cids, hole) ? `aria-label="${esc(popLabel(s.cids, hole))}"` : ""}>${popDots(s.cids, hole)}<div class="v ${cur.v == null ? "empty" : cur.waiting ? "waiting" : ""}">${xx ? '<span class="se-x">X</span>' : shown}</div><div class="r">${rel}</div></div>
                     <button type="button" class="se-plus" data-act="step" data-d="1" aria-label="One more for ${esc(s.name)}">+</button>
                   </div>`;
             }).join("");
@@ -562,6 +592,8 @@
         const colgroup = (nHoles, eighteen) => `<colgroup><col class="c-nm">${'<col class="c-h">'.repeat(nHoles)}<col class="c-sub">${eighteen ? '<col class="c-tot">' : ""}</colgroup>`;
         function nameCell(s, twoLine) {
             const dot = s.cids.length === 1 ? teeDot(s.cids[0]) : "";
+            // A foursomes pair on the card: one partner per line, like first / last.
+            if (s.team && twoLine) return `${esc(first(byId(s.cids[0]).display_name))}${mtag(s.cids)}<span class="ln" style="font-family:Bitter,Georgia,serif;font-weight:700;color:inherit">${esc(first(byId(s.cids[1]).display_name))}</span>`;
             if (s.team || !twoLine) return `${dot}${esc(s.team ? s.name : first(s.name) || s.name)}${mtag(s.cids)}`;
             const parts = String(s.name || "").trim().split(/\s+/);
             return `${dot}${esc(parts[0] || "")}${mtag(s.cids)}<span class="ln">${esc(parts.slice(1).join(" "))}</span>`;
@@ -587,7 +619,8 @@
                 else if (m.lead_side == null) st = m.final ? (m.tie_rule === "halve" ? "Halved" : `All square after ${m.thru}`) : `All square thru ${m.thru}`;
                 else st = `${esc(m.names[m.lead_side])} ${m.final ? "wins " + esc(m.margin) : esc(m.margin) + " thru " + m.thru}`;
                 const won = m.final && m.lead_side != null;
-                return `<div class="se-mline ${won ? "won" : m.final ? "final" : ""}"><span class="who">${vs}</span><span class="st">${st}</span></div>`;
+                const lead = m.cup && m.lead_team ? " lead-" + m.lead_team : "";
+                return `<div class="se-mline ${won ? "won" : m.final && !lead ? "final" : ""}${lead}"><span class="who">${vs}</span><span class="st">${st}</span></div>`;
             }).join("")}</div>`;
         }
         const helpBtn = (k) => `<button type="button" class="se-help ${help[k] ? "on" : ""}" data-act="help" data-k="${k}" aria-expanded="${help[k] ? "true" : "false"}">How It Works</button>`;
@@ -616,8 +649,8 @@
                     const v = value(s.key, n).v;
                     const on = checkPick && checkPick.key === s.key && checkPick.h === n;
                     const cls = (on ? "picked" : checkChanged.has(s.key + "|" + n) ? "changed" : "")
-                        + (markOf(s.key, n) === "picked_up" ? " pu" : "");
-                    return `<td><button type="button" class="cell ${cls}" data-act="cpick" data-key="${s.key}" data-h="${n}" aria-label="${esc(s.name)}, hole ${n}: ${v == null ? "no score" : v}">${v == null ? "–" : v}</button>${popDots(s.cids, n, true)}</td>`;
+                        + (markOf(s.key, n) === "picked_up" && !isX(s.key, n, s.cids) ? " pu" : "");
+                    return `<td><button type="button" class="cell ${cls}" data-act="cpick" data-key="${s.key}" data-h="${n}" aria-label="${esc(s.name)}, hole ${n}: ${v == null ? "no score" : v}">${v == null ? "–" : isX(s.key, n, s.cids) ? '<span class="se-x">X</span>' : v}</button>${popDots(s.cids, n, true)}</td>`;
                 }).join("");
                 return `<tr><td class="nm">${nameCell(s, true)}</td>${cells}<td class="tot">${tot(s.key, hs) || ""}</td>${eighteen ? `<td class="tot">${back ? tot(s.key, nums) || "" : ""}</td>` : ""}</tr>`;
             }).join("");
@@ -627,7 +660,9 @@
                 const lo = h.par >= 5 ? 2 : 1, hi = h.par ? h.par + 3 : 12;
                 const cur = value(checkPick.key, checkPick.h).v;
                 const btns = [];
-                for (let v = lo; v <= hi; v++) btns.push(`<button type="button" class="${v === cur ? "on" : ""}" data-act="cset" data-v="${v}">${v}</button>`);
+                const curX = sub && isX(checkPick.key, checkPick.h, sub.cids);
+                for (let v = lo; v <= hi; v++) btns.push(`<button type="button" class="${v === cur && !curX ? "on" : ""}" data-act="cset" data-v="${v}">${v}</button>`);
+                if (sub && cupOf(sub.cids)) btns.push(`<button type="button" class="${curX ? "on" : ""}" data-act="cset" data-v="X" aria-label="X, picked up">X</button>`);
                 picker = `<div class="se-picker"><div class="h">${esc(sub ? (sub.team ? sub.name : first(sub.name)) : "")} · Hole ${checkPick.h}${h.par ? " · Par " + h.par : ""}</div><div class="row">${btns.join("")}</div><div class="se-note">${maxText(checkPick.h)}</div></div>`;
             }
             const seg = nines.length > 1 ? `<div class="se-seg" role="tablist">
@@ -642,7 +677,7 @@
                 ${seg}
                 <div class="se-card se-check ${eighteen ? "" : "nine"}"><table>${colgroup(hs.length, eighteen)}<thead>${head}</thead><tbody>${par}${rows}</tbody></table></div>
                 ${popKey()}
-                ${subs.some((x) => matchOf(x.cids)) ? `<div class="se-legend"><span class="se-mtag" style="margin-left:0">M</span> in a match today · a ringed number was picked up</div>` : ""}
+                ${subs.some((x) => matchOf(x.cids)) ? `<div class="se-legend"><span class="se-mtag" style="margin-left:0">M</span> in a match today · ${subs.some((x) => cupOf(x.cids)) ? "X = picked up (the card keeps the triple)" : "a ringed number was picked up"}</div>` : ""}
                 ${picker}
                 <div class="se-lbl" style="margin:14px 0 6px">Totals</div>
                 <div class="se-tots">${tots}</div>
@@ -758,7 +793,7 @@
                 const d = par ? t - par : null;
                 const mini = firstNine.map((n) => {
                     const v = value(s.key, n).v;
-                    return `<button type="button" data-act="goto" data-h="${n}" aria-label="Hole ${n}: ${v == null ? "no score" : v}"><span class="n">${n}</span>${v == null ? "–" : markOf(s.key, n) === "picked_up" ? `<span class="se-pu" style="line-height:18px;min-width:18px">${v}</span>` : v}</button>`;
+                    return `<button type="button" data-act="goto" data-h="${n}" aria-label="Hole ${n}: ${v == null ? "no score" : v}"><span class="n">${n}</span>${v == null ? "–" : isX(s.key, n, s.cids) ? '<span class="se-x">X</span>' : markOf(s.key, n) === "picked_up" ? `<span class="se-pu" style="line-height:18px;min-width:18px">${v}</span>` : v}</button>`;
                 }).join("");
                 return `<div class="se-row se-turnrow">${teeBar(s.cids)}
                     <div class="top"><div class="se-name">${esc(s.name)}${mtag(s.cids)}</div>
@@ -794,9 +829,9 @@
                     const v = value(s.key, n).v;
                     if (v != null) sub += v;
                     const fl = isMe && flagsMine.some((f) => f.hole === n);
-                    const cell = v == null ? "" : markOf(s.key, n) === "picked_up" ? `<span class="se-pu">${v}</span>` : v;
+                    const cell = v == null ? "" : isX(s.key, n, s.cids) ? '<span class="se-x">X</span>' : markOf(s.key, n) === "picked_up" ? `<span class="se-pu">${v}</span>` : v;
                     const cls = fl ? "flagged" : (isMe && flagPick === n ? "picked" : "");
-                    return `<td class="${cls}">${popDots(s.cids, n, true)}${isMe && canTap ? `<button type="button" class="hole" data-act="pickhole" data-h="${n}" aria-label="Hole ${n}: ${cell}. Tap if it's wrong">${cell}</button>` : cell}</td>`;
+                    return `<td class="${cls}">${popDots(s.cids, n, true)}${isMe && canTap ? `<button type="button" class="hole" data-act="pickhole" data-h="${n}" aria-label="Hole ${n}: ${isX(s.key, n, s.cids) ? "X" : v}. Tap if it's wrong">${cell}</button>` : cell}</td>`;
                 }).join("");
                 const tot = all.reduce((a, n) => a + (value(s.key, n).v || 0), 0);
                 return `<tr class="${isMe ? "me" : ""}"><td class="nm">${nameCell(s, false)}</td>${cells}<td>${sub || ""}</td>${eighteen ? `<td>${withTotal ? tot || "" : ""}</td>` : ""}</tr>`;
@@ -995,8 +1030,14 @@
             queue.push(op); store.set(K.q, queue);
         }
         function commitDraft() {
-            for (const [key, v] of Object.entries(draft)) if (value(key, hole).v !== v) enqueue(key, hole, v);
-            draft = {};
+            for (const [key, v] of Object.entries(draft)) {
+                if (key in draftX) {
+                    const wasX = markOf(key, hole) === "picked_up" && value(key, hole).v === v;
+                    if (draftX[key] && !wasX) enqueue(key, hole, v, "picked_up");
+                    else if (!draftX[key] && (wasX || value(key, hole).v !== v)) enqueue(key, hole, v, null);
+                } else if (value(key, hole).v !== v) enqueue(key, hole, v);
+            }
+            draft = {}; draftX = {};
         }
 
         // ── taps ────────────────────────────────────────────────────────
@@ -1018,6 +1059,12 @@
                 const lo = h.par >= 5 ? 2 : 1, hi = h.par ? h.par + 3 : 20;
                 const want = base + Number(b.dataset.d);
                 const sub = subjects().find((x) => x.key === key);
+                if (sub && cupOf(sub.cids)) {
+                    const x = key in draftX ? draftX[key] : isX(key, hole, sub.cids);
+                    if (want > hi) { draftX[key] = true; draft[key] = hi; maxNote = ""; render(); return; }
+                    if (x && Number(b.dataset.d) < 0) { draftX[key] = false; draft[key] = hi; render(); return; }
+                    draftX[key] = false;
+                }
                 maxNote = want > hi ? maxText(hole) + (sub && matchOf(sub.cids) ? ` Picked up or worse in the match: enter ${hi}, then mark it Picked up.` : "") : "";
                 draft[key] = Math.min(hi, Math.max(lo, want));
                 render(); return;
@@ -1077,8 +1124,15 @@
                 render(); return;
             }
             if (act === "cset") {
-                const v = Number(b.dataset.v), {key, h} = checkPick;
-                if (value(key, h).v !== v) { enqueue(key, h, v); checkChanged.add(key + "|" + h); flush(); }
+                const {key, h} = checkPick;
+                const sub = subjects().find((x) => x.key === key);
+                if (b.dataset.v === "X") {
+                    if (!isX(key, h, sub.cids)) { enqueue(key, h, hiOf(h), "picked_up"); checkChanged.add(key + "|" + h); flush(); }
+                    checkPick = null; render(); return;
+                }
+                const v = Number(b.dataset.v);
+                if (sub && isX(key, h, sub.cids)) { enqueue(key, h, v, null); checkChanged.add(key + "|" + h); flush(); }
+                else if (value(key, h).v !== v) { enqueue(key, h, v); checkChanged.add(key + "|" + h); flush(); }
                 const need = needsMark(h).filter((k) => k === key);
                 if (need.length) { pickupHole = h; pickupKeys = need; pickupAns = {}; }
                 checkPick = null; render(); return;

@@ -323,6 +323,29 @@ link (R8, a member send — Kerry OKs each batch) come later; the email link
 is the strong identity path, "tap your name" from a shared code is weak and
 is accepted for the beta because every action is logged by device.
 
+## Lone Star Cup: foursomes, X, team-colour banners (v2.500.0)
+
+Kerry 2026-09-26: "For Lone Star cup also going to need Team Entries for FOURBALL
+and FOURSOMES ... X would also need to be an option for scoring in Lone Star Cup.
+... the match position banner needs to be the team color who's in the lead ...
+the shimmering banner needs to be color coordinated as well."
+
+- FOURSOMES: `_ensure_cup_teams(group_id)` runs at the top of `get_group_card`.
+  For each foursomes cup session (`lsc_matches`, format `foursomes`) bound to the
+  round, a pair whose two players are both in this group gets an `se_teams` row via
+  `add_team`. Read-first and idempotent. FOUR-BALL stays a row per player.
+- X: a cup subject (`card.matches[cid].session != null`) steps from the triple to
+  X. X is written as gross = par + 3 with `mark = picked_up`; stepping back or any
+  other number sends `mark: null` to clear it. Cup subjects are excluded from
+  `needsMark`, so a cup triple is a ball in the hole with no prompt. Regular-season
+  (round-level) matches keep Ball in hole / Picked up.
+- `_match_status` adds `cup` and `lead_team` (`austin` | `sa` | null). The banner
+  takes `lead-austin` (#BF5700) or `lead-sa` (#4B6274); `won` + `lead-*` is the
+  champion plate in that colour with the same shine.
+- Foursomes pops: a pair's row draws no dots yet (the cup's foursomes allowance is
+  50% of the combined difference, computed by the cup engine, not the PH dots).
+- Screenshots: `docs/claude/screenshots/score-entry-2026-09-26-cup/`.
+
 ## Pops as dots (v2.499.0)
 
 Kerry 2026-09-26: "some way to simply show PH pops at 100% and Team/cart Net pops

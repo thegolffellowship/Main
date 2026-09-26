@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.499.0";
+window.TGF_VERSION = "2.500.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.500.0",
+    date: "2026-09-26",
+    title: "Lone Star Cup scoring: foursomes team rows, X, banners in team colours",
+    changes: [
+      "Kerry, 2026-09-26: 'For Lone Star Cup also going to need Team Entries for FOURBALL and FOURSOMES. Where it would show both players on one team with one score entry.' A foursomes cup session bound to a round now gives each pair ONE row (one ball, one score, both customer_ids), made automatically the first time the group's card opens. Four-ball keeps a row per player, since each plays his own ball.",
+      "Kerry: 'X would also need to be an option for scoring in Lone Star Cup.' In a cup match, one tap past the triple shows X. It is stored as the triple (GG's max; every card keeps it) with the Picked up mark, so it cannot win the hole; the check-card picker offers X too. A plain triple in the cup is a ball in the hole, so the cup no longer asks Ball in hole / Picked up. Regular-season matches keep that prompt.",
+      "Kerry: 'the match position banner needs to be the team color who's in the lead of the match at any given moment. Then at the end when a match is won, the shimmering banner needs to be color coordinated as well.' The match banner is Austin burnt orange or San Antonio slate while that side leads (neutral when all square), and a won cup match shimmers on a plate in the winner's colour."
+    ]
+  },
   {
     version: "2.499.0",
     date: "2026-09-26",

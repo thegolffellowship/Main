@@ -275,6 +275,10 @@ def _match_status(conn, g) -> list:
                     # regular-season rulings (game-engine.md, 2026-07-20): pool
                     # may halve, knockout goes to extra holes (NH) or a putt-off.
                     "tie_rule": "halve" if e.get("cup") else "rulings",
+                    # Lone Star Cup (Kerry 2026-09-26): the banner wears the
+                    # colour of the team leading, and the won plate too.
+                    "cup": bool(e.get("cup")),
+                    "lead_team": (("austin", "sa")[w - 1] if (w and e.get("cup")) else None),
                     "names": [" & ".join(names.get(c) or "#%s" % c for c in sd) for sd in sides],
                     "lead_side": (w - 1) if w else None, "margin": d.get("gg_margin"),
                     "thru": d.get("thru") or 0,
@@ -1158,8 +1162,43 @@ def _lock_view(lock, device_id: str | None, names: dict) -> dict:
             "heartbeat_at": lock["heartbeat_at"]}
 
 
+def _ensure_cup_teams(group_id: int, db_path=None) -> list:
+    """FOURSOMES in the Lone Star Cup (Kerry 2026-09-26: "Team Entries for
+    FOURBALL and FOURSOMES. Where it would show both players on one team with
+    one score entry"). A foursomes pair plays one ball, so each pair in this
+    group becomes one team row (add_team) the first time the card opens.
+    Idempotent and read-first: nothing is written once the rows exist.
+    Four-ball stays two rows, one per ball."""
+    made = []
+    try:
+        with _closing(_conn(db_path)) as conn:
+            g = conn.execute("SELECT round_id FROM se_groups WHERE id = ?", (group_id,)).fetchone()
+            if not g:
+                return made
+            rid = g[0]
+            here = {r[0] for r in conn.execute("SELECT customer_id FROM se_players WHERE group_id = ?",
+                                              (group_id,))}
+            have = {tuple(sorted((r[0], r[1]))) for r in conn.execute(
+                "SELECT customer_id_a, customer_id_b FROM se_teams WHERE round_id = ?", (rid,))}
+        pairs = set()
+        for cid, m in round_matches(rid, db_path=db_path).items():
+            if (m.get("format") or "").lower() != "foursomes" or m.get("session") is None:
+                continue
+            side = [cid] + [int(c) for c in m.get("partners") or []]
+            if len(side) == 2 and all(c in here for c in side):
+                pairs.add(tuple(sorted(side)))
+        for a_, b_ in sorted(pairs - have):
+            res = add_team(rid, group_id, a_, b_, db_path=db_path)
+            if res.get("team_id"):
+                made.append(res["team_id"])
+    except Exception:
+        pass
+    return made
+
+
 def get_group_card(group_id: int, device_id: str | None = None, db_path=None) -> dict:
     """Everything the entry screen needs for one group."""
+    _ensure_cup_teams(group_id, db_path=db_path)
     with _closing(_conn(db_path)) as conn:
         g = _group_ctx(conn, group_id)
         if not g:

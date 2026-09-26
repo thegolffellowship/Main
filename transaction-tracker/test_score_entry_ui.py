@@ -361,9 +361,9 @@ with sync_playwright() as p:
     print("match play: M tag, the max-triple notice, Ball in hole / Picked up")
     import json as _json
     ridm, gidm, tokm = make(9, 1, "match")
-    db.set_app_setting("lsc_matches", _json.dumps({"event_id": 900, "sessions": [
-        {"id": "s1", "format": "singles", "se_round": ridm,
-         "matches": [{"id": "M1", "austin": [101], "sa": [102]}]}]}))
+    # A regular-season (round-level) match keeps the Ball in hole / Picked up
+    # prompt; a Lone Star Cup match uses X instead (tested below).
+    se.set_round_matches(ridm, [{"id": "M1", "format": "singles", "sides": [[101], [102]]}])
     pg = open_as_kerry(tokm)
     check("the hole screen shows the match standing",
           pg.locator(".se-mline").count() == 1 and "Kerry v Mark" in pg.inner_text(".se-mline"))
@@ -404,6 +404,48 @@ with sync_playwright() as p:
     pg.wait_for_timeout(1500)
     check("changing to a triple on the check card asks too; Ball in hole is stored",
           se.get_group_card(gidm)["marks"].get("c:101") == {"2": "holed"}, se.get_group_card(gidm)["marks"])
+    se.set_round_matches(ridm, None)
+
+    print("Lone Star Cup: X past the triple, the banner in the leading team's colour")
+    ridc, gidc, tokc = make(9, 1, "cup")
+    db.set_app_setting("lsc_matches", _json.dumps({"event_id": 900, "sessions": [
+        {"id": "s1", "format": "singles", "se_round": ridc, "n_holes": 9,
+         "matches": [{"id": "M1", "austin": [101], "sa": [102]}]}]}))
+    pc = open_as_kerry(tokc)
+    for _ in range(4):
+        pc.locator(".se-row").nth(1).locator(".se-plus").click()
+    check("one tap past the triple shows X, marked Picked up",
+          pc.locator(".se-row").nth(1).locator(".se-x").count() == 1
+          and "Picked up" in pc.locator(".se-row").nth(1).inner_text())
+    pc.click("[data-act=save]")
+    pc.wait_for_selector("text=Hole 2", timeout=5000)
+    check("a cup match never asks Ball in hole / Picked up", pc.locator("[data-act=pu]").count() == 0)
+    pc.wait_for_timeout(1500)
+    cc = se.get_group_card(gidc)
+    check("X is stored as the triple with the Picked up mark",
+          cc["scores"]["c:102"]["1"] == 7 and cc["marks"].get("c:102") == {"1": "picked_up"}, (cc["scores"], cc["marks"]))
+    pc.reload(); pc.wait_for_selector("text=You're keeping score")
+    ml = pc.locator(".se-mline")
+    check("Kerry (Austin) leads, so the banner is Austin's colour",
+          "lead-austin" in ml.get_attribute("class")
+          and ml.evaluate("e => getComputedStyle(e).backgroundColor") == "rgb(191, 87, 0)", ml.get_attribute("class"))
+    play(pc, 8)
+    pc.wait_for_selector("text=Check the card")
+    pc.wait_for_timeout(1200)
+    check("the check card shows X, not a ringed 7",
+          pc.locator("button.cell[data-key='c:102'][data-h='1'] .se-x").count() == 1
+          and pc.locator("button.cell.pu").count() == 0)
+    pc.click("button.cell[data-key='c:102'][data-h='2']")
+    check("the check picker offers X for a cup player", pc.locator(".se-picker [data-v='X']").count() == 1)
+    pc.click(".se-picker [data-v='X']")
+    pc.wait_for_timeout(1500)
+    check("choosing X there stores the triple, picked up",
+          se.get_group_card(gidc)["marks"].get("c:102") == {"1": "picked_up", "2": "picked_up"}
+          and se.get_group_card(gidc)["scores"]["c:102"]["2"] == 8)
+    pc.wait_for_timeout(800)
+    wl = pc.locator(".se-mline")
+    check("a won cup match shimmers in the winner's colour",
+          "won" in wl.get_attribute("class") and "lead-austin" in wl.get_attribute("class"), wl.get_attribute("class"))
     db.set_app_setting("lsc_matches", "")
 
     print("pops as dots: black = PH at 100%, orange = Team/Cart Net")
