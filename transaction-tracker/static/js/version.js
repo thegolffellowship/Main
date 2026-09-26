@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.498.3";
+window.TGF_VERSION = "2.498.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.498.4",
+    date: "2026-09-26",
+    title: "Score entry: tee marks follow the player (men solid, women outlined)",
+    changes: [
+      "Kerry, 2026-09-26: 'Standard for men's tees is solid color except for white. If shared with women, women's tees are outlined, while men's are always solid.' The tee bar and dot now follow the PLAYER's gender (customers.gender): a man is always solid in his tee's colour (white gets a dark outline so it shows), a woman is outlined in hers. With no gender on file the tee sheet's own mark stands (its ladies' tee is the outline)."
+    ]
+  },
   {
     version: "2.498.3",
     date: "2026-09-26",

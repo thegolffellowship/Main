@@ -330,6 +330,34 @@ with sync_playwright() as p:
     play(pg, 9)
     pg.wait_for_timeout(1500)
     review_ok(pg, 9, "shotgun")
+    print("tee mark standard: men solid (white outlined), women outlined")
+    cz = sqlite3.connect(DB)
+    if "gender" in [r[1] for r in cz.execute("PRAGMA table_info(customers)")]:
+        cz.execute("INSERT INTO courses (course_id, name) VALUES (7790, 'Mark GC')")
+        for tid, nm, gen, bands in [(77901, "Blue", "M", "<50"), (77902, "White", "M", "50-64,65+"),
+                                    (77903, "Red (L)", "F", "Forward")]:
+            cz.execute("INSERT INTO course_tees (tee_id, course_id, tee_name, gender, holes, rating, slope, "
+                       "yardage_total, tgf_bands) VALUES (?,?,?,?,18,70.1,125,6400,?)", (tid, 7790, nm, gen, bands))
+        cz.execute("INSERT INTO events (id, item_name, event_date, course_id) VALUES (905, 'Mark test', '2026-09-29', 7790)")
+        cz.execute("INSERT INTO customers (customer_id, first_name, last_name, gender) VALUES (107, 'Gus', 'Vasquez', 'M')")
+        cz.execute("INSERT INTO customers (customer_id, first_name, last_name, gender) VALUES (108, 'Ann', 'Lee', 'F')")
+        cz.commit()
+        rt = se.create_round(905, 9, course_holes=course(9))["round_id"]
+        gt = se.upsert_group(rt, 1, players=[
+            {"customer_id": 107, "display_name": "Gus Vasquez", "tee": "Forward", "seat": 1},
+            {"customer_id": 108, "display_name": "Ann Lee", "tee": "Forward", "seat": 2},
+            {"customer_id": 102, "display_name": "Mark Stich", "tee": "50-64", "seat": 3}])["group_id"]
+        ctx = b.new_context(viewport={"width": 390, "height": 844})
+        tp = ctx.new_page()
+        tp.goto(f"http://127.0.0.1:{PORT}/member/score?t={se.make_group_token(gt)}")
+        tp.click("text=Gus Vasquez")
+        tp.wait_for_selector(".se-row .se-tee")
+        cls = tp.locator(".se-row .se-tee").evaluate_all("els => els.map(e => e.className)")
+        check("a man on the red tee is SOLID", "ring" not in cls[0], cls)
+        check("a woman on the red tee is OUTLINED", "ring" in cls[1], cls)
+        check("a man on white gets the dark outline (white is the exception)", "light" in cls[2], cls)
+    cz.close()
+
     print("match play: M tag, the max-triple notice, Ball in hole / Picked up")
     import json as _json
     ridm, gidm, tokm = make(9, 1, "match")

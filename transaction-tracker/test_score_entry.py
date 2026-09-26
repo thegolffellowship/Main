@@ -503,6 +503,16 @@ check("the women's tee is marked as an outline, as on the sheet", tees.get("Forw
 check("a player with no tee has no colour here (the screen shows grey, never a guess)",
       not se.get_group_card(tg)["players"][3]["tee"])
 check("an event with no course card gives no colours, not an error", se.get_group_card(gid)["tees"] == {})
+cc = sqlite3.connect(DB)
+has_gender = "gender" in [r[1] for r in cc.execute("PRAGMA table_info(customers)")]
+if has_gender:
+    cc.execute("UPDATE customers SET gender = 'M' WHERE customer_id IN (101, 102, 103)")
+    cc.execute("UPDATE customers SET gender = 'F' WHERE customer_id = 104")
+    cc.commit()
+cc.close()
+gp = {p_["customer_id"]: p_.get("gender") for p_ in se.get_group_card(tg)["players"]}
+check("the card carries each player's gender for the tee mark (men solid, women outlined)",
+      not has_gender or (gp[103] == "M" and gp[104] == "F"), gp)
 
 print("HTTP (admin builds, scorer by link, flag off until Kerry OKs)")
 os.environ.setdefault("SECRET_KEY", "test-secret")

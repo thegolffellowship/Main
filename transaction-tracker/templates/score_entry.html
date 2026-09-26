@@ -338,7 +338,13 @@
             const hex = t.color.replace("#", "");
             const r = parseInt(hex.slice(0, 2), 16), gg = parseInt(hex.slice(2, 4), 16), b = parseInt(hex.slice(4, 6), 16);
             const light = (0.299 * r + 0.587 * gg + 0.114 * b) > 170;   // white, yellow and the like
-            return {color: t.color, cls: t.ring ? "ring" : light ? "light" : "", name: t.tee_name || t.band_label || band};
+            // TEE MARK STANDARD (Kerry 2026-09-26): men always SOLID (white
+            // gets a dark outline so it shows); a woman is OUTLINED in her
+            // tee's colour. The player's gender decides; with no gender on
+            // file, the tee sheet's own mark (its ladies' tee) stands.
+            const g = byId(cid).gender;
+            const women = g ? g === "F" : !!t.ring;
+            return {color: t.color, cls: women ? "ring" : light ? "light" : "", name: t.tee_name || t.band_label || band};
         }
         function teeBar(cids) {
             const t = cids && cids.length === 1 ? teeOf(cids[0]) : {color: "#9CA3AF", cls: "none"};

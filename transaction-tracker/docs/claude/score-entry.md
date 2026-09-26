@@ -191,6 +191,13 @@ themselves (pool may halve; knockout → extra holes `NH` with pops continuing,
 or a putt-off) live in game-engine.md and are NOT yet entered from the phone.
 Tee bars are 16 px (Kerry: "twice as wide"); the turn is compact.
 
+**Tee mark standard (v2.498.4, Kerry 2026-09-26):** "Standard for men's
+tees is solid color except for white. If shared with women, women's tees are
+outlined, while men's are always solid." The card carries each player's
+`gender` (customers.gender); the bar/dot is solid for a man (white: dark
+outline), outlined for a woman; no gender on file → the legend's own ladies
+mark.
+
 ## Live Scoring in the Tracker (v2.497.0)
 
 Kerry, 2026-09-26: "How will I access this thru the Tracker so I can see the

@@ -190,6 +190,20 @@ def admin_overview(event_id: int, base_url: str | None = None, db_path=None) -> 
             "qr": _qr_dial(event_id, db_path)}
 
 
+def _genders(conn, cids: list) -> dict:
+    """{customer_id: 'M' | 'F'} from customers.gender; {} when the column
+    is not there yet (a fresh database before its boot migration)."""
+    if not cids:
+        return {}
+    try:
+        rows = conn.execute(
+            f"SELECT customer_id, gender FROM customers WHERE customer_id IN ({','.join('?' * len(cids))})",
+            list(cids)).fetchall()
+    except sqlite3.OperationalError:
+        return {}
+    return {r[0]: (r[1] or "").strip().upper()[:1] or None for r in rows}
+
+
 def _match_status(conn, g) -> list:
     """Where each match in this round stands, for the scoring screens (Kerry
     2026-09-26: "Also need to show match progress somehow during scoring").
@@ -1034,6 +1048,13 @@ def get_group_card(group_id: int, device_id: str | None = None, db_path=None) ->
             "FROM se_players WHERE group_id = ? ORDER BY COALESCE(seat, 99), id",
             (group_id,))]
         names = {p["customer_id"]: p["display_name"] for p in players}
+        # TEE MARK STANDARD (Kerry 2026-09-26): "men's tees is solid color
+        # except for white. If shared with women, women's tees are outlined,
+        # while men's are always solid." The outline follows the PLAYER's
+        # gender (customers.gender), not the tee.
+        genders = _genders(conn, [p["customer_id"] for p in players])
+        for p in players:
+            p["gender"] = genders.get(p["customer_id"])
         teams = [dict(t) for t in conn.execute(
             "SELECT id AS team_id, customer_id_a, customer_id_b, label FROM se_teams "
             "WHERE group_id = ? ORDER BY id", (group_id,))]
