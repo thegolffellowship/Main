@@ -366,13 +366,14 @@ def test_skins_count_holes_after_the_closeout_but_never_the_match():
             "matches": [{"id": "S1", "austin": [1], "sa": [2]}]}
     data = {"sun": {"course": _flat_course(), "phs": {1: 0, 2: 0},
                     "scores": {1: a, 2: b}}}
-    board = compute_board({"sessions": [sess],
-                           "skins": {"basis": "gross"}}, data)
+    board = compute_board({"sessions": [sess]}, data,
+                          skins_ctx={"buyers": {1, 2}, "index": {1: 5.0, 2: 6.0}})
     m = board["sessions"][0]["matches"][0]
     assert m["state"] == "final" and m["gg_margin"] == "10&8"
     assert m["points"] == {"austin": 1.0, "sa": 0.0}
-    sk = {r["key"]: r["skins"] for r in board["sessions"][0]["skins"]["totals"]}
-    assert sk == {"S1:austin:1": 10, "S1:sa:2": 8}
+    f1 = board["sessions"][0]["skins"]["groups"][0]
+    assert {r["key"]: r["skins"] for r in f1["totals"]} == \
+        {"S1:austin:1": 10, "S1:sa:2": 8}
 
 
 def test_skins_team_vs_individual_and_pending_until_all_posted():
@@ -438,15 +439,128 @@ def test_skins_chapman_net_uses_the_team_handicap_off_zero():
     assert by[9]["winner"] == "C1:austin"
 
 
-def test_board_holds_skins_until_kerry_rules_the_basis():
-    from email_parser.lsc_cup import compute_board
+# ── Skins payout, Kerry's rulings CA #725/#726 (2026-09-26) ───────────
+
+def _fb_session():
+    return {"id": "am", "format": "fourball", "n_holes": 2,
+            "matches": [{"id": "M1", "austin": [1, 2], "sa": [3, 4]},
+                        {"id": "M2", "austin": [5, 6], "sa": [7, 8]}]}
+
+
+def _all_fours(cids, holes=2):
+    return {c: {h: 4 for h in range(1, holes + 1)} for c in cids}
+
+
+def test_pot_is_25_per_buyer_in_the_round_and_team_skin_splits():
+    from email_parser.lsc_cup import compute_skins_payout
+    scores = _all_fours(range(1, 9))
+    scores[1][1] = 3                    # M1 Austin best ball wins hole 1
+    scores[7][2] = 3                    # M2 SA best ball wins hole 2
+    out = compute_skins_payout(_fb_session(), _flat_course(2), {}, scores,
+                               buyers=set(range(1, 9)))
+    assert out["basis"] == "gross" and out["pot_cents"] == 8 * 2500
+    g = out["groups"][0]
+    assert g["complete"] and g["skins_won"] == 2
+    pay = {p["key"]: p for p in g["payouts"]}
+    assert pay["M1:austin"]["cents"] == 10000 and pay["M2:sa"]["cents"] == 10000
+    # a team skin is split evenly between the partners
+    assert [pp["cents"] for pp in pay["M1:austin"]["per_player"]] == [5000, 5000]
+    assert sum(p["cents"] for p in g["payouts"]) == out["pot_cents"]
+
+
+def test_uneven_money_splits_exactly_to_the_cent():
+    from email_parser.lsc_cup import compute_skins_payout
+    sess = {"id": "am", "format": "fourball", "n_holes": 3,
+            "matches": [{"id": "M1", "austin": [1, 2], "sa": [3, 4]},
+                        {"id": "M2", "austin": [5, 6], "sa": [7]}]}
+    scores = _all_fours([1, 2, 3, 4, 5, 6, 7], 3)
+    scores[1][1] = 3
+    scores[3][2] = 3
+    scores[5][3] = 3
+    out = compute_skins_payout(sess, _flat_course(3), {}, scores,
+                               buyers={1, 2, 3, 4, 5, 6, 7})
+    g = out["groups"][0]
+    assert out["pot_cents"] == 7 * 2500                  # $175 / 3 skins
+    assert sorted(p["cents"] for p in g["payouts"]) == [5833, 5833, 5834]
+    assert sum(p["cents"] for p in g["payouts"]) == 17500
+
+
+def test_mixed_team_is_left_out_and_flagged_but_its_buyer_funds_the_pot():
+    from email_parser.lsc_cup import compute_skins_payout
+    scores = _all_fours(range(1, 9))
+    out = compute_skins_payout(_fb_session(), _flat_course(2), {}, scores,
+                               buyers={1, 3, 4, 5, 6, 7, 8})   # 2 didn't buy
+    assert out["pot_cents"] == 7 * 2500
+    assert any(e["reason"].startswith("mixed") for e in out["excluded"])
+    assert any("one partner bought" in f for f in out["flags"])
+    keys = {t["key"] for t in out["groups"][0]["totals"]}
+    assert "M1:austin" not in keys and "M1:sa" in keys
+
+
+def test_singles_flight_at_12_with_half_the_pot_each():
+    from email_parser.lsc_cup import compute_skins_payout
     sess = {"id": "sun", "format": "singles", "n_holes": 1,
-            "matches": [{"id": "S1", "austin": [1], "sa": [2]}]}
-    data = {"sun": {"course": _flat_course(1), "phs": {},
-                    "scores": {1: {1: 3}, 2: {1: 4}}}}
-    board = compute_board({"sessions": [sess]}, data)
-    assert board["skins_pending"] is True
-    assert board["sessions"][0]["skins"] is None
+            "matches": [{"id": "S1", "austin": [1], "sa": [2]},
+                        {"id": "S2", "austin": [3], "sa": [4]}]}
+    idx = {1: 11.9, 2: 4.0, 3: 12.0, 4: 20.5}         # F1: 1,2  F2: 3,4
+    scores = {1: {1: 3}, 2: {1: 4}, 3: {1: 5}, 4: {1: 4}}
+    out = compute_skins_payout(sess, _flat_course(1), {}, scores,
+                               buyers={1, 2, 3, 4}, index=idx)
+    f1, f2 = out["groups"]
+    assert (f1["flight"], f2["flight"]) == (1, 2)
+    assert f1["pot_cents"] == f2["pot_cents"] == 5000   # $100 split in half
+    assert f1["payouts"][0]["key"] == "S1:austin:1"     # 3 beats 4 in F1
+    assert f2["payouts"][0]["key"] == "S2:sa:4"         # 4 beats 5 in F2
+    assert not any("uneven" in f for f in out["flags"])
+
+
+def test_uneven_flights_and_unflighted_players_are_flagged():
+    from email_parser.lsc_cup import compute_skins_payout
+    sess = {"id": "sun", "format": "singles", "n_holes": 1,
+            "matches": [{"id": f"S{i}", "austin": [i], "sa": [i + 10]}
+                        for i in range(1, 4)]}
+    idx = {1: 5, 11: 6, 2: 7, 12: 8, 3: 20}           # 5 in F1, 1 in F2
+    out = compute_skins_payout(sess, _flat_course(1), {}, {},
+                               buyers={1, 2, 3, 11, 12, 13}, index=idx)
+    assert any("uneven" in f for f in out["flags"])
+    assert any("no TGF index" in e["reason"] for e in out["excluded"])  # 13
+
+
+def test_no_dollar_until_every_entry_has_posted_every_hole():
+    from email_parser.lsc_cup import compute_skins_payout
+    scores = _all_fours(range(1, 9))
+    del scores[8][2], scores[7][2]                    # M2 SA hasn't posted 2
+    out = compute_skins_payout(_fb_session(), _flat_course(2), {}, scores,
+                               buyers=set(range(1, 9)))
+    g = out["groups"][0]
+    assert g["held"] is True and g["payouts"] is None
+
+
+def test_no_skin_won_leaves_the_pot_unallocated_and_flags_it():
+    from email_parser.lsc_cup import compute_skins_payout
+    out = compute_skins_payout(_fb_session(), _flat_course(2), {},
+                               _all_fours(range(1, 9)),
+                               buyers=set(range(1, 9)))
+    g = out["groups"][0]
+    assert g["complete"] and g["skins_won"] == 0
+    assert g["unpaid_cents"] == out["pot_cents"] and g["payouts"] == []
+    assert any("unallocated" in f for f in out["flags"])
+
+
+def test_member_view_strips_every_dollar():
+    from email_parser.lsc_cup import compute_board, strip_money
+    scores = _all_fours(range(1, 9))
+    scores[1][1] = 3
+    board = compute_board({"sessions": [_fb_session()]},
+                          {"am": {"course": _flat_course(2), "phs": {},
+                                  "scores": scores}},
+                          skins_ctx={"buyers": set(range(1, 9))})
+    assert board["sessions"][0]["skins"]["pot_cents"] == 20000
+    member = strip_money(board)
+    blob = str(member["sessions"][0]["skins"])
+    assert "cents" not in blob and "flags" not in blob
+    assert member["sessions"][0]["skins"]["groups"][0]["totals"]
+    assert board["sessions"][0]["skins"]["pot_cents"] == 20000  # original intact
 
 
 if __name__ == "__main__":

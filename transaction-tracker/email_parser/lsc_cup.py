@@ -485,8 +485,201 @@ def compute_skins(session: dict, course: list[dict], phs: dict,
             "carried": carry, "holes": holes_out, "totals": board}
 
 
+# Kerry's ratified skins rules (CA #725/#726, 2026-09-26, rule 3b).
+SKINS_BASIS = "gross"                 # gross only, never net
+SKINS_CARRYOVER = False               # a tied low score = no skin, nothing carries
+SKINS_PER_ROUND_CENTS = 2500          # $75 weekend = $25 per player per round
+SINGLES_FLIGHT_BREAK = 12.0           # Flight 1 <= 11.9, Flight 2 >= 12.0 (TGF 18-hole index)
+SINGLES_FLIGHT_SHARES = (50.0, 50.0)  # Sunday pot split in half by default
+UNEVEN_FLIGHT_RATIO = 2.0             # flag when one flight is 2x the other (or empty)
+
+
+def compute_skins_payout(session: dict, course: list[dict], phs: dict,
+                         scores: dict, marks: dict | None = None,
+                         names: dict | None = None,
+                         buyers: set | None = None,
+                         index: dict | None = None) -> dict:
+    """One round's skins pot and payout (Kerry, CA #725/#726). Staff
+    only: the member payload strips every amount (strip_money).
+
+    - Each 18 is its own pot: $25 x the players IN THIS SESSION who
+      bought the weekend skins (buyers = the SKINS add-on on the cup
+      roster). Pots are never pooled across rounds.
+    - Saturday team sessions: team gross skins (four-ball best gross
+      ball, Chapman one gross score), each team skin split evenly
+      between the partners. A team plays only when BOTH partners bought
+      in; a team where one did and one didn't is EXCLUDED and flagged,
+      because the ruling doesn't cover it (Kerry decides).
+    - Sunday singles: individual gross skins flighted on the TGF
+      18-hole index frozen at the event: Flight 1 below 12.0, Flight 2
+      at 12.0 and up, each playing for half the pot. A player with no
+      index on record can't be flighted and is flagged. Badly uneven
+      flights are flagged for Kerry BEFORE the round.
+    - No carryover: a hole with a tied low score pays nothing, and a
+      pot where nobody wins a skin stays unallocated (flagged).
+    - Money hold: no dollar is shown until every entry in the group
+      has posted every hole; until then the group reads held.
+    - Every split is exact to the cent (largest-remainder), so what is
+      paid always sums to the pot.
+    """
+    from email_parser.match_play import allocate_cents, split_cents
+    names = names or {}
+    index = index or {}
+    fmt = normalize_format(session.get("format"))
+    team_game = fmt in ("fourball", "chapman")
+
+    def _bought(c):
+        return buyers is None or c in buyers
+
+    def _label(cids):
+        return " / ".join(names.get(c) or names.get(str(c)) or f"#{c}"
+                          for c in cids)
+
+    flags, excluded = [], []
+    in_round = set()
+    for m in session.get("matches") or []:
+        for side in TEAM_KEYS:
+            for c in (m.get(side) or []):
+                if _bought(int(c)):
+                    in_round.add(int(c))
+    pot_cents = SKINS_PER_ROUND_CENTS * len(in_round)
+
+    # entrants per group: [(group_key, label, pot_share_pct, matches)]
+    if team_game:
+        matches = []
+        for m in session.get("matches") or []:
+            mm = {"id": m.get("id")}
+            for side in TEAM_KEYS:
+                cids = [int(c) for c in (m.get(side) or [])]
+                got = [c for c in cids if _bought(c)]
+                if cids and len(got) == len(cids):
+                    mm[side] = cids
+                elif got:
+                    mm[side] = []
+                    excluded.append({"label": _label(cids), "team": side,
+                                     "reason": "mixed: " + _label(got)
+                                     + " bought skins, "
+                                     + _label([c for c in cids if c not in got])
+                                     + " did not"})
+                elif cids:
+                    mm[side] = []
+                    excluded.append({"label": _label(cids), "team": side,
+                                     "reason": "not bought in"})
+            matches.append(mm)
+        groups = [(None, "Team skins", 100.0, matches)]
+        if any(e["reason"].startswith("mixed") for e in excluded):
+            flags.append("A team where one partner bought skins and the "
+                         "other didn't is left out: the ruling doesn't "
+                         "cover it. Kerry decides; the buyer's $25 is "
+                         "still in the pot.")
+    else:
+        fl = {1: [], 2: []}
+        for m in session.get("matches") or []:
+            for side in TEAM_KEYS:
+                for c in (m.get(side) or []):
+                    c = int(c)
+                    if not _bought(c):
+                        excluded.append({"label": _label([c]), "team": side,
+                                         "reason": "not bought in"})
+                        continue
+                    ix = index.get(c)
+                    if ix is None:
+                        ix = index.get(str(c))
+                    if ix is None:
+                        excluded.append({"label": _label([c]), "team": side,
+                                         "reason": "no TGF index on record "
+                                         "to flight"})
+                        flags.append(f"{_label([c])} has no TGF index on "
+                                     "record, so can't be flighted.")
+                        continue
+                    f = 1 if float(ix) < SINGLES_FLIGHT_BREAK else 2
+                    fl[f].append((m.get("id"), side, c))
+        n1, n2 = len(fl[1]), len(fl[2])
+        if min(n1, n2) == 0 or max(n1, n2) >= UNEVEN_FLIGHT_RATIO * min(n1, n2):
+            flags.append(f"Flights are uneven ({n1} in Flight 1, {n2} in "
+                         "Flight 2) on a half-and-half split: flag to Kerry "
+                         "before the round.")
+        groups = []
+        for f, share in zip((1, 2), SINGLES_FLIGHT_SHARES):
+            lbl = (f"Flight {f} (index "
+                   + ("under 12.0" if f == 1 else "12.0 and up") + ")")
+            groups.append((f, lbl, share,
+                           [{"id": mid, side: [c]} for mid, side, c in fl[f]]))
+
+    shares = allocate_cents(pot_cents, [g[2] for g in groups]) \
+        if groups else []
+    out_groups = []
+    for (flight, lbl, _pct, matches), gpot in zip(groups, shares):
+        sk = compute_skins({**session, "matches": matches}, course, phs,
+                           scores, marks, names, basis=SKINS_BASIS,
+                           carryover=SKINS_CARRYOVER)
+        entrants = len(sk["totals"])
+        complete = entrants > 0 and all(h["status"] != "pending"
+                                        for h in sk["holes"])
+        won = sum(t["skins"] for t in sk["totals"])
+        payouts, unpaid = None, None
+        if complete:
+            payouts, unpaid = [], 0
+            winners = [t for t in sk["totals"] if t["skins"] > 0]
+            if won == 0 or gpot == 0:
+                unpaid = gpot
+            else:
+                cents = allocate_cents(gpot, [t["skins"] * 100.0 / won
+                                              for t in winners])
+                # compute_skins keys a team "<match>:<side>" and a
+                # singles player "<match>:<side>:<cid>"
+                key_cids = {}
+                for m in matches:
+                    for side in TEAM_KEYS:
+                        cids = m.get(side) or []
+                        if team_game and cids:
+                            key_cids[f"{m.get('id')}:{side}"] = cids
+                        for c in ([] if team_game else cids):
+                            key_cids[f"{m.get('id')}:{side}:{c}"] = [c]
+                for t, c in zip(winners, cents):
+                    ent_cids = key_cids.get(t["key"], [])
+                    per = split_cents(c, max(1, len(ent_cids)))
+                    payouts.append({**t, "cents": c,
+                                    "per_player": [{"customer_id": cid, "cents": pc}
+                                                   for cid, pc in zip(ent_cids, per)]})
+        if entrants == 0 and gpot:
+            flags.append(f"{lbl}: nobody is entered, so its "
+                         f"${gpot / 100:.2f} can't be won.")
+        elif complete and won == 0:
+            flags.append(f"{lbl}: no skin was won, so ${gpot / 100:.2f} "
+                         "is unallocated (no carryovers).")
+        out_groups.append({"flight": flight, "label": lbl,
+                           "pot_cents": gpot, "entrants": entrants,
+                           "complete": complete, "held": not complete,
+                           "skins_won": won, "holes": sk["holes"],
+                           "totals": sk["totals"], "payouts": payouts,
+                           "unpaid_cents": unpaid})
+    return {"kind": "team" if team_game else "individual",
+            "basis": SKINS_BASIS, "carryover": SKINS_CARRYOVER,
+            "buyers_in_round": len(in_round), "pot_cents": pot_cents,
+            "groups": out_groups, "excluded": excluded, "flags": flags}
+
+
+def strip_money(board: dict) -> dict:
+    """The member view of a board: skins COUNTS stay, every dollar and
+    every staff flag goes (CA #726: the payout is staff only)."""
+    import copy
+    b = copy.deepcopy(board)
+    for sess in b.get("sessions") or []:
+        sk = sess.get("skins")
+        if not sk:
+            continue
+        sess["skins"] = {"kind": sk.get("kind"), "basis": sk.get("basis"),
+                         "groups": [{"flight": g.get("flight"),
+                                     "label": g.get("label"),
+                                     "totals": g.get("totals")}
+                                    for g in sk.get("groups") or []]}
+    return b
+
+
 def compute_board(dial: dict, session_data: dict,
-                  names: dict | None = None) -> dict:
+                  names: dict | None = None,
+                  skins_ctx: dict | None = None) -> dict:
     """The full cup board.
 
     dial:          the lsc_matches dial.
@@ -502,14 +695,13 @@ def compute_board(dial: dict, session_data: dict,
     """
     win = float(dial.get("points_win") or POINTS_WIN)
     halve = float(dial.get("halved_match") or POINTS_HALVE)
-    skins_cfg = dial.get("skins") or {}
-    skins_basis = skins_cfg.get("basis")
-    skins_on = skins_basis in ("net", "gross")
+    # skins_ctx: {"buyers": set of cids who bought the weekend skins,
+    # "index": {cid: frozen TGF 18-hole index}} (lsc_board_payload).
+    skins_ctx = skins_ctx or {}
     board = {"event_id": dial.get("event_id"),
              "teams": {"austin": {"points": 0.0, "projected": 0.0},
                        "sa": {"points": 0.0, "projected": 0.0}},
              "points_win": win, "points_halve": halve,
-             "skins_pending": not skins_on,
              "sessions": []}
     total = 0.0
     for sess in dial.get("sessions") or []:
@@ -548,10 +740,9 @@ def compute_board(dial: dict, session_data: dict,
                     board["teams"]["sa"]["projected"] += halve
             s_out["matches"].append({**detail, "tee_time": m.get("tee_time"),
                                      "state": state, "points": pts})
-        if skins_on and scores:
-            s_out["skins"] = compute_skins(
-                sess, course, phs, scores, marks, names, basis=skins_basis,
-                carryover=bool(skins_cfg.get("carryover")))
+        s_out["skins"] = compute_skins_payout(
+            sess, course, phs, scores, marks, names,
+            buyers=skins_ctx.get("buyers"), index=skins_ctx.get("index"))
         board["sessions"].append(s_out)
     for t in board["teams"].values():
         t["points"] = round(t["points"], 2)
@@ -650,6 +841,34 @@ def merge_entry_feed(dial: dict, feed: dict) -> dict:
     return out
 
 
+def _skins_ctx(conn, dial: dict, db_path=None) -> dict:
+    """Who bought the weekend skins (the SKINS add-on on the cup's
+    one-off roster, oneoff_addons) and each player's TGF 18-hole index
+    frozen at the event (the handicap lock: _event_index_as_of). A read
+    that fails returns None for that part, and the payout says so
+    rather than guessing."""
+    ctx = {"buyers": None, "index": {}}
+    eid = dial.get("event_id")
+    if not eid:
+        return ctx
+    try:
+        add = (_setting_json(conn, "oneoff_addons") or {}).get(str(eid)) or {}
+        ctx["buyers"] = {int(c) for c, keys in add.items()
+                         if "skins" in (keys or [])}
+    except Exception:
+        logger.exception("lsc_cup: skins buyers read failed")
+    try:
+        from email_parser import database as db
+        ev = conn.execute("SELECT * FROM events WHERE id = ?",
+                          (int(eid),)).fetchone()
+        as_of = db._event_index_as_of(dict(ev)) if ev else None
+        ctx["index"] = db._handicap_index_18_by_customer(db_path,
+                                                         as_of=as_of) or {}
+    except Exception:
+        logger.exception("lsc_cup: frozen index read failed")
+    return ctx
+
+
 def lsc_board_payload(db_path=None) -> dict:
     """The member-page read: dial + roster + best available scores
     (Track A's feed once its tables land; the lsc_mock_scores dial until
@@ -682,7 +901,8 @@ def lsc_board_payload(db_path=None) -> dict:
                 logger.exception("lsc_cup: entered-scores feed read "
                                  "failed — board falls back to the "
                                  "mock dial")
-        board = compute_board(dial, session_data, names)
+        skins_ctx = _skins_ctx(conn, dial, db_path)
+        board = compute_board(dial, session_data, names, skins_ctx)
         board["configured"] = True
         board["source"] = ("entry" if entry_used
                            else "mock" if session_data else "none")

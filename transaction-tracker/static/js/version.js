@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.502.5";
+window.TGF_VERSION = "2.503.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.503.0",
+    date: "2026-09-26",
+    changes: [
+      "Lone Star Cup skins payout, Kerry-ratified (CA #725/#726), STAFF ONLY: gross skins, no carryover (a tied low score pays nothing), and each 18 is its own pot of $25 \u00d7 the players in that round who bought the weekend skins (the SKINS add-on on the cup roster). Saturday plays team skins (four-ball best gross ball, Chapman one gross score) with each team skin split evenly between the partners; Sunday plays individual gross skins flighted on the TGF 18-hole index frozen at the event (Flight 1 under 12.0, Flight 2 at 12.0 and up), half the pot each. Holes after a close-out still count; skins never touch a match. Every split is exact to the cent and sums to the pot. No dollar shows until every entry has posted every hole (the money hold).",
+      "What the payout flags for Kerry instead of guessing: a team where one partner bought skins and the other didn't (left out, the buyer's $25 still in the pot); a Sunday player with no TGF index on record (can't be flighted); flights badly uneven on the half-and-half split (one flight twice the other, or empty) \u2014 before the round; a flight nobody is entered in; and a pot where no skin was won (unallocated, no carryover).",
+      "Members never see a dollar: /api/lsc/board strips every amount and every staff flag for any non-staff session (strip_money), even once the board is live, leaving only the skins counts. 11 new tests (tests/test_lsc_cup.py, 34 total) cover the pot, the partner split, exact-cent rounding, the mixed-team exclusion, the 12.0 flight line, uneven flights, the money hold, an unwon pot and the member strip.",
+    ],
+  },
   {
     version: "2.502.5",
     date: "2026-09-26",

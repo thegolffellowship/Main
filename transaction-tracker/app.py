@@ -12390,12 +12390,15 @@ def api_lsc_board():
     admin/manager sessions get the board (Kerry's preview); the pinless
     member tier sees {configured: false} until Kerry flips it after his
     phone OK."""
-    from email_parser.lsc_cup import lsc_board_payload
+    from email_parser.lsc_cup import lsc_board_payload, strip_money
     payload = lsc_board_payload()
+    staff = session.get("role") in ("admin", "manager")
     if (payload.get("configured") and not payload.get("board_live")
-            and session.get("role") not in ("admin", "manager")):
+            and not staff):
         return jsonify({"configured": False})
-    return jsonify(payload)
+    # The skins payout is staff only (CA #726): members get the skins
+    # counts, never a dollar or a staff flag, even once the board is live.
+    return jsonify(payload if staff else strip_money(payload))
 
 
 # ---------------------------------------------------------------------------

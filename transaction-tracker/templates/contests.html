@@ -1671,6 +1671,9 @@
             text-transform: uppercase; color: #6B7280; }
         .lsc-bd-skins .sk.au b { color: #BF5700; }
         .lsc-bd-skins .sk.sa b { color: #4B6274; }
+        .lsc-bd-skins .sk i { font-style: normal; color: #15803D; font-weight: 700; }
+        .lsc-bd-skflags { margin: 4px 2px 0; padding: 6px 10px; font-size: 12px; line-height: 1.45;
+            color: #92400E; background: #FEF3C7; border: 1px solid #FDE68A; border-radius: 8px; }
         .lsc-bd-sess-h { display: flex; align-items: baseline; gap: 10px;
             flex-wrap: wrap; padding: 6px 2px 8px; }
         .lsc-bd-sess-h b { font: 700 15px/1.2 'Bitter', serif; color: #1B1B1B; }
@@ -2871,11 +2874,31 @@
             // dial names a basis (net/gross); until then the server
             // sends skins: null and nothing shows.
             const sk = sess.skins;
-            const skinsHtml = (sk && (sk.totals || []).some(t => t.skins > 0))
-                ? `<div class="lsc-bd-skins"><span class="h">${sk.kind === "team" ? "Team" : "Individual"} skins · ${escapeHtml(sk.basis)}</span>${
-                    sk.totals.filter(t => t.skins > 0).map(t =>
-                        `<span class="sk ${t.team === "austin" ? "au" : "sa"}">${escapeHtml(t.label)} <b>${t.skins}</b></span>`).join("")}</div>`
-                : "";
+            // Skins (Kerry, CA #725/#726): gross, no carryover, one pot per
+            // 18. The server sends pot/payout/flags to STAFF only
+            // (strip_money), so members see skins counts and never a
+            // dollar; staff also see who is left out and why.
+            const $c = (c) => "$" + (c / 100).toFixed(2);
+            let skinsHtml = "";
+            if (sk && (sk.groups || []).length) {
+                const staff = sk.pot_cents != null;
+                const rows = sk.groups.map(g => {
+                    const won = (g.totals || []).filter(t => t.skins > 0);
+                    const pay = {};
+                    (g.payouts || []).forEach(p => { pay[p.key] = p.cents; });
+                    const who = won.map(t =>
+                        `<span class="sk ${t.team === "austin" ? "au" : "sa"}">${escapeHtml(t.label)} <b>${t.skins}</b>${
+                            staff && pay[t.key] != null ? ` <i>${$c(pay[t.key])}</i>` : ""}</span>`).join("");
+                    const potTxt = staff ? ` · ${$c(g.pot_cents)}${g.held ? " · held until every card is in" : ""}` : "";
+                    if (!won.length && !staff) return "";
+                    return `<div class="lsc-bd-skins"><span class="h">${escapeHtml(g.label)}${potTxt}</span>${who || (staff ? '<span class="sk">no skins yet</span>' : "")}</div>`;
+                }).join("");
+                const flags = staff && (sk.flags || []).length
+                    ? `<div class="lsc-bd-skflags">${sk.flags.map(f => `<div>${escapeHtml(f)}</div>`).join("")}</div>` : "";
+                const head = staff
+                    ? `<div class="lsc-bd-skins"><span class="h">Skins · gross · ${sk.buyers_in_round} bought in · pot ${$c(sk.pot_cents)} (staff only)</span></div>` : "";
+                skinsHtml = rows || flags ? head + rows + flags : "";
+            }
             return `<div class="lsc-bd-sess">
                 <div class="lsc-bd-sess-h"><b>${escapeHtml(sess.label || sess.id || "")}</b>
                     ${sess.date ? `<span class="dt">${escapeHtml(sess.date)}</span>` : ""}

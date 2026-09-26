@@ -50,14 +50,25 @@ tap-open hole-by-hole scorecards.
   dial stays EMPTY until Kerry names the 2025 winner (the repo has the
   GG archive rows but not the result, so nobody guesses); with none
   recorded a finished tie reads `tied_pending`.
-- **CTP: none. Skins instead**, scored by `compute_skins()`, SEPARATE
-  from the match: team skins in team sessions, individual skins in
+- **CTP: none. Skins instead** (CA #717), scored by `compute_skins()`,
+  SEPARATE from the match: team skins in team sessions, individual in
   singles; holes after a close-out count for skins only and never touch
   the match; a picked-up ball never wins; a hole is decided only once
-  every entry has posted it. Net strokes = full locked PH off zero,
-  plus handicaps get nothing on a hole. **Still Kerry's:** net or gross,
-  the pot, carryovers — so the board shows skins only once
-  `skins.basis` is set (`carryover` supported, off).
+  every entry has posted it.
+- **Skins PAYOUT, ratified (CA #725/#726, v2.503.0), STAFF ONLY** —
+  `compute_skins_payout()`: GROSS, no carryover (a tie pays nothing).
+  Each 18 is its own pot: $25 × the players IN THAT ROUND who bought the
+  weekend skins (the SKINS add-on in `oneoff_addons`). Saturday: team
+  skins (four-ball best gross ball, Chapman one gross), each team skin
+  split evenly between partners; a team is in only when BOTH partners
+  bought (a mixed pair is left out and flagged — unruled). Sunday:
+  individual gross skins flighted on the TGF 18-hole index FROZEN at the
+  event (`_event_index_as_of` → `_handicap_index_18_by_customer`):
+  Flight 1 < 12.0, Flight 2 ≥ 12.0, half the pot each; a player with no
+  index is flagged; flights flagged when one is ≥ 2× the other (or
+  empty). Exact cents (`match_play.allocate_cents` / `split_cents`).
+  Money hold: `held` until every entry posts every hole. `strip_money()`
+  removes every amount and flag for non-staff in `/api/lsc/board`.
 - **Handicap allowances: RATIFIED (CA #721, v2.502.0)** — USGA/WHS
   Appendix C: singles 100% (full difference); four-ball 90% of each
   player, all off the low player; the team session is **CHAPMAN**
