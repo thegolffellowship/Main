@@ -368,7 +368,7 @@ with sync_playwright() as p:
     check("the hole screen shows the match standing",
           pg.locator(".se-mline").count() == 1 and "Kerry v Mark" in pg.inner_text(".se-mline"))
     check("both players wear the M and 'Match vs' on the hole screen",
-          pg.locator(".se-row .se-mtag").count() == 2 and "Match vs Mark" in pg.inner_text("body"))
+          pg.locator(".se-row .se-mtag").count() == 2 and "vs Mark" in pg.inner_text("body"))
     for _ in range(4):
         pg.locator(".se-row").nth(1).locator(".se-plus").click()
     body = pg.inner_text("body")
@@ -462,6 +462,22 @@ with sync_playwright() as p:
     gp_.wait_for_selector("text=Kerry Niester", timeout=5000)
     check("the admin PIN opens the card", gp_.locator("[data-act=pick]").count() == 2)
     db.set_app_setting("score_entry_live", "1")
+
+    print("one screen, no scrolling (Kerry 2026-09-26): 4 players, 18 holes, a match, on a 390x660 phone")
+    rf = se.create_round(900, 18, label=se.PREVIEW_LABEL + " · 18 holes", course_holes=course(18))["round_id"]
+    gf = se.upsert_group(rf, 1, start_hole=1, players=[
+        {"customer_id": c_, "display_name": n_, "playing_handicap": ph_, "seat": i_ + 1}
+        for i_, (c_, n_, ph_) in enumerate([(101, "Kerry Niester", 1), (102, "Mark Stich", 29),
+                                            (107, "Gus Vasquez", 13), (108, "Ann Lee", 10)])])["group_id"]
+    se.set_round_matches(rf, [{"id": "F", "format": "singles", "sides": [[101], [102]]}])
+    fpg = b.new_context(viewport={"width": 390, "height": 660}).new_page()
+    fpg.goto(f"http://127.0.0.1:{PORT}/member/score?t={se.make_group_token(gf)}")
+    fpg.click("text=Kerry Niester"); fpg.wait_for_selector("text=You're keeping score")
+    fh = fpg.evaluate("document.documentElement.scrollHeight")
+    check("the hole screen fits without scrolling", fh <= 660, fh)
+    check("the PREVIEW label is not on the scoring screen", "PREVIEW" not in fpg.inner_text(".se-eyebrow").upper())
+    check("the save button is on screen", fpg.locator("[data-act=save]").bounding_box()["y"] + 50 <= 660)
+    check("the site nav steps aside while scoring", not fpg.locator(".shell-nav").first.is_visible())
 
     print("pops as dots: black = PH at 100%, orange = Team/Cart Net")
     rp = se.create_round(900, 9, label="pops", course_holes=course(9))["round_id"]

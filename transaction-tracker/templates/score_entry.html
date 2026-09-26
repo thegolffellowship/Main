@@ -96,6 +96,32 @@
         .se-pop { width: 7px; height: 7px; border-radius: 50%; background: #1B1B1B; display: block; }
         .se-pop.t { background: #E87C3E; }
         .se-pops.cell .se-pop { width: 5px; height: 5px; }
+        /* ONE SCREEN, NO SCROLLING (Kerry 2026-09-26: "We've got to work on
+           getting everything to fit in the window without scrolling"). The hole
+           screen drops the site nav, the keeper line and the saved-count line,
+           and every row keeps its name and details to one line each. */
+        body.se-focus .shell-nav { display: none; }
+        .se-lblrow { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; }
+        .se-keepnote { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: #4B5563; }
+        .se-keepnote svg { width: 14px; height: 14px; }
+        body.se-focus .se-wrap { padding-top: 10px; padding-bottom: 16px; }
+        .se-hole .se-top { align-items: center; }
+        .se-hole .se-h1.big { font-size: 30px; line-height: 1.05; }
+        .se-hole .se-sub { font-size: 14px; margin-top: 2px; }
+        .se-hole .se-eyebrow { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .se-hole .se-nav { padding-top: 0; }
+        .se-hole .se-mstrip { margin: 8px 0 2px; }
+        .se-hole .se-stack { gap: 6px; margin-top: 8px; }
+        .se-hole .se-row { padding: 7px 10px; gap: 10px; }
+        .se-hole .se-who { gap: 1px; }
+        .se-hole .se-name { font-size: 17px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .se-hole .se-meta { font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .se-hole .se-minus, .se-hole .se-plus { width: 44px; height: 44px; }
+        .se-hole .se-pops { height: 44px; }
+        .se-hole .se-score { width: 46px; }
+        .se-hole .se-popkey { margin-top: 6px; }
+        .se-hole .se-cell { height: 34px; }
+        .se-hole .se-pill { height: 50px; margin-top: 10px; }
         .se-popkey { display: flex; gap: 14px; align-items: center; font-size: 12px; color: #4B5563; margin-top: 8px; }
         .se-popkey span { display: inline-flex; align-items: center; gap: 5px; }
         .se-card td { position: relative; }
@@ -413,7 +439,7 @@
             const any = (m) => Object.entries(m || {}).some(([c, h]) => solo.has(c) && Object.values(h || {}).some((v) => v > 0));
             const a = any(card.strokes), b = any(card.team_strokes);
             if (!a && !b) return "";
-            return `<div class="se-popkey">${a ? `<span><i class="se-pop"></i>PH pop</span>` : ""}${b ? `<span><i class="se-pop t"></i>${esc((card.team_game || {}).label || "Team Net")} pop</span>` : ""}</div>`;
+            return `<div class="se-popkey">${a ? `<span><i class="se-pop"></i>PH pop</span>` : ""}${b ? `<span><i class="se-pop t"></i>${esc((card.team_game || {}).label || "Team Net")} pop</span>` : ""}${card.strokes_note ? `<span style="color:#9CA3AF">${esc(card.strokes_note)}</span>` : ""}</div>`;
         }
         // The tee a player plays, from the tee sheet's legend (card.tees).
         function teeOf(cid) {
@@ -472,7 +498,9 @@
             return m ? "Match vs " + m.opponents.map((c) => first(byId(c).display_name) || "#" + c).join(" & ") : "";
         }
         const maxText = (n) => `Maximum allowed is triple bogey (${hiOf(n)}).`;
-        const eyebrow = () => [card.round_label, card.group_num != null ? "Group " + card.group_num : null].filter(Boolean).join(" · ");
+        // Kerry 2026-09-26: "Remove the preview text." A PREVIEW round's label
+        // is left off the eyebrow (the admin page still marks it PREVIEW).
+        const eyebrow = () => [/^PREVIEW/.test(card.round_label || "") ? null : card.round_label, card.group_num != null ? "Group " + card.group_num : null].filter(Boolean).join(" · ");
 
         // ── screens ─────────────────────────────────────────────────────
         function render() {
@@ -504,6 +532,7 @@
                 body = keeping() && !(allDone() && hole === "done") ? holeScreen() : cardScreen();
             }
             app.innerHTML = banner + body;
+            document.body.classList.toggle("se-focus", !!app.querySelector(".se-hole"));
         }
 
         function joinScreen() {
@@ -554,15 +583,17 @@
             }
             const h = info(hole), i = order.indexOf(hole);
             const meta = [h.par ? "Par " + h.par : null, h.yardage ? h.yardage + " yds" : null,
-                          h.stroke_index ? "Stroke index " + h.stroke_index : null].filter(Boolean).join(" · ");
+                          h.stroke_index ? "SI " + h.stroke_index : null].filter(Boolean).join(" · ");
             const rows = subjects().map((s) => {
                 const cur = s.key in draft ? {v: draft[s.key], waiting: false} : value(s.key, hole);
                 const shown = cur.v == null ? (h.par || "–") : cur.v;
                 const d = cur.v == null || !h.par ? null : cur.v - h.par;
                 const xx = cupOf(s.cids) && (s.key in draftX ? draftX[s.key] : isX(s.key, hole, s.cids));
                 const rel = xx ? "Picked up" : d == null ? "" : (WORDS[String(d)] || (d > 0 ? "+" + d : String(d)));
-                const meta2 = [s.team ? s.meta : null, s.team ? null : teeOf(s.cid).name || null, !s.team && s.ph != null ? "PH " + s.ph : null,
-                               vsText(s.cids) || null].filter(Boolean).join(" · ");
+                // One line: "Blue · PH 1 · vs Brian" (the tee colour bar is beside it).
+                const meta2 = [s.team ? s.meta : null, s.team ? null : (teeOf(s.cid).name || "").replace(/\s*Tees?$/i, "") || null,
+                               !s.team && s.ph != null ? "PH " + s.ph : null,
+                               (vsText(s.cids) || "").replace(/^Match vs/, "vs") || null].filter(Boolean).join(" · ");
                 return `<div class="se-row" data-key="${s.key}">${teeBar(s.cids)}
                     <div class="se-who"><div class="se-name">${esc(s.name)}${mtag(s.cids)}</div><div class="se-meta">${esc(meta2)}</div></div>
                     <button type="button" class="se-minus" data-act="step" data-d="-1" aria-label="One less for ${esc(s.name)}">&minus;</button>
@@ -576,24 +607,22 @@
             const cta = editing ? "Save hole " + hole
                       : next == null ? "Save last hole" : "Save &amp; go to hole " + next;
             const hio = hioForKeeper();
-            return `<div class="se-top"><div>
+            return `<div class="se-hole"><div class="se-top"><div style="min-width:0">
                     <div class="se-eyebrow">${esc(eyebrow())}</div>
                     <h1 class="se-h1 big">Hole ${hole}</h1><div class="se-sub">${esc(meta)}</div></div>
                   <div class="se-nav">
                     <button type="button" data-act="prev" aria-label="Previous hole" ${i <= 0 ? "disabled" : ""}>${ICON.back}</button>
                     <button type="button" data-act="next" aria-label="Next hole" ${i >= order.length - 1 ? "disabled" : ""}>${ICON.fwd}</button>
                   </div></div>
-                <div class="se-keeper">${ICON.pen}<span>You're keeping score for the group</span></div>
                 ${matchStrip()}
                 ${hio}
                 ${maxNote ? `<div class="se-warn">${ICON.warn}<span>${esc(maxNote)}</span></div>` : ""}
                 <div class="se-stack">${rows}</div>
                 ${popKey()}
-                ${card.strokes_note ? `<div class="se-note">Handicap strokes: ${esc(card.strokes_note)}.</div>` : ""}
-                <div style="margin-top:16px" class="se-lbl">Group card</div>
-                <div class="se-strip" style="margin-top:8px;grid-template-columns:repeat(${Math.min(order.length, 9)}, minmax(0, 1fr))">${cells}</div>
-                ${statusLine()}
-                <button type="button" class="se-pill go" data-act="save">${cta}</button>`;
+                <div class="se-lblrow"><span class="se-lbl">Group card</span><span class="se-keepnote">${ICON.pen}<span>You're keeping score</span></span></div>
+                <div class="se-strip" style="margin-top:6px;grid-template-columns:repeat(${Math.min(order.length, 9)}, minmax(0, 1fr))">${cells}</div>
+                ${queue.length ? statusLine() : ""}
+                <button type="button" class="se-pill go" data-act="save">${cta}</button></div>`;
         }
 
         function stripCells(order, current) {

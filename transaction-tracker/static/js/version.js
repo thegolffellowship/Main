@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.500.2";
+window.TGF_VERSION = "2.500.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.500.3",
+    date: "2026-09-26",
+    title: "Score entry: the hole screen fits one phone screen",
+    changes: [
+      "Kerry, 2026-09-26: 'We've got to work on getting everything to fit in the window without scrolling. Remove the preview text for one.' The PREVIEW label is off the scoring screens (the admin Live Scoring page still marks the round). On the hole screen the site nav steps aside, 'Stroke index' reads 'SI', each player's row keeps his name and one detail line ('Blue · PH 1 · vs Brian'), the steppers are 44 px, 'You're keeping score' moves beside the Group card label, the saved-holes count leaves (the ticks on the card show it; a weak-signal warning still appears), and the group-card cells are shorter. Four players on an 18 with a match now measure 593 px tall on a 390 x 660 window; a test holds it to one screen."
+    ]
+  },
   {
     version: "2.500.2",
     date: "2026-09-26",
