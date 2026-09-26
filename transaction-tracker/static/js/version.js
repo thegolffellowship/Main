@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.500.14";
+window.TGF_VERSION = "2.500.15";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.500.15",
+    date: "2026-09-26",
+    title: "Score entry: clean gold frame; pickup rings are circles",
+    changes: [
+      "Kerry, 2026-09-26: 'Match play border bleeding a little.' A won match's gold frame is now a 2 px border inside the card's own rounded edge instead of a glow outside it.",
+      "Kerry: 'Make pick up circles circles not ovals so they don't cover the pops.' On Check the card the orange ring is a 26 px circle around the number only (it was drawn on the whole cell, which is taller than wide), so the pops above and below stay clear; the match card's ring is a true circle too, and the legend's sample 7 is centred in its ring. A test holds the ring round."
+    ]
+  },
   {
     version: "2.500.14",
     date: "2026-09-26",

@@ -159,7 +159,9 @@
             transform: skewX(-20deg); pointer-events: none;
             background: linear-gradient(75deg, transparent, rgba(255,255,255,.45), transparent);
             animation: seChampShine 3.4s ease-in-out infinite; }
-        .se-mcard.won { box-shadow: 0 0 0 2px #D4A017, 0 4px 14px rgba(212,160,23,.28); }
+        /* The gold frame is a real border inside the card's own edge, so
+           nothing bleeds past the rounded corners (Kerry 2026-09-26). */
+        .se-mcard.won { border: 2px solid #D4A017; }
         .se-mc-grid { border-top: 1px solid #E5E7EB; padding: 6px 6px 8px; }
         .se-mc-grid table { width: 100%; border-collapse: collapse; table-layout: fixed; font-variant-numeric: tabular-nums; margin-bottom: 6px; }
         .se-mc-grid th, .se-mc-grid td { text-align: center; font-size: 13px; padding: 4px 0; position: relative; }
@@ -169,7 +171,8 @@
         .se-mc-grid td.dim { color: #C4C4C4; }
         .se-mc-grid .w { display: inline-block; min-width: 22px; line-height: 20px; border-radius: 11px; color: #FFFFFF; font-weight: 700; }
         .se-mc-grid .w.a { background: var(--ma); } .se-mc-grid .w.b { background: var(--mb); }
-        .se-mc-grid .pu { display: inline-block; min-width: 20px; line-height: 18px; border-radius: 10px; box-shadow: inset 0 0 0 1.5px #E87C3E; }
+        .se-mc-grid .pu { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px;
+                          border-radius: 50%; box-shadow: inset 0 0 0 1.5px #E87C3E; }
         .se-mc-grid .pp { position: absolute; top: 1px; left: 0; right: 0; display: flex; justify-content: center; gap: 1px; }
         .se-mc-grid .pp i { width: 4px; height: 4px; border-radius: 50%; background: #1B1B1B; display: block; }
         .se-mc-chip { display: inline-block; min-width: 24px; padding: 2px 3px; border-radius: 4px; color: #FFFFFF; font: 700 10px Bitter, Georgia, serif; }
@@ -297,13 +300,18 @@
         .se-mtag { display: inline-block; font: 700 10px/14px 'Helvetica Neue', Helvetica, Arial, sans-serif;
                    color: #B45A22; border: 1.5px solid #B45A22; border-radius: 4px; padding: 0 3px;
                    margin-left: 5px; vertical-align: 2px; letter-spacing: .5px; }
-        .se-check button.cell.pu { box-shadow: inset 0 0 0 2px #E87C3E; border-radius: 50%; }
+        /* A true circle around the number only, so the pops above and below
+           stay clear (Kerry 2026-09-26: "circles not ovals"). */
+        .se-check button.cell .ring { display: inline-flex; align-items: center; justify-content: center;
+            width: 26px; height: 26px; border-radius: 50%; box-shadow: inset 0 0 0 2px #E87C3E; }
         .se-pu { display: inline-block; min-width: 22px; line-height: 22px; border-radius: 11px;
                  box-shadow: inset 0 0 0 2px #E87C3E; }
         .se-pu-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 10px; }
         .se-pu.sm { min-width: 18px; line-height: 18px; border-radius: 9px; text-align: center; font-weight: 700;
                     font-size: 12px; color: #1B1B1B; }
         .se-pukey { margin-top: 4px; }
+        .se-pukey .se-pu.sm { display: inline-flex; align-items: center; justify-content: center; gap: 0;
+                              width: 20px; height: 20px; min-width: 0; line-height: 1; }
         .se-legend { font-size: 12px; color: #6B7280; margin-top: 6px; white-space: normal; }
         /* NAMES IN BITTER (Kerry 2026-09-26: "I'd like to use the Bitters
            text for names on the display. I like how that looks on the
@@ -822,7 +830,7 @@
                     const on = checkPick && checkPick.key === s.key && checkPick.h === n;
                     const cls = (on ? "picked" : checkChanged.has(s.key + "|" + n) ? "changed" : "")
                         + (markOf(s.key, n) === "picked_up" && !isX(s.key, n, s.cids) ? " pu" : "");
-                    return `<td><button type="button" class="cell ${cls}" data-act="cpick" data-key="${s.key}" data-h="${n}" aria-label="${esc(s.name)}, hole ${n}: ${v == null ? "no score" : v}">${v == null ? "–" : isX(s.key, n, s.cids) ? '<span class="se-x">X</span>' : v}</button>${popDots(s.cids, n, true)}</td>`;
+                    return `<td><button type="button" class="cell ${cls}" data-act="cpick" data-key="${s.key}" data-h="${n}" aria-label="${esc(s.name)}, hole ${n}: ${v == null ? "no score" : v}">${v == null ? "–" : isX(s.key, n, s.cids) ? '<span class="se-x">X</span>' : markOf(s.key, n) === "picked_up" ? `<span class="ring">${v}</span>` : v}</button>${popDots(s.cids, n, true)}</td>`;
                 }).join("");
                 return `<tr><td class="nm">${nameCell(s, true)}</td>${cells}<td class="tot">${tot(s.key, hs) || ""}</td>${eighteen ? `<td class="tot">${back ? tot(s.key, nums) || "" : ""}</td>` : ""}</tr>`;
             }).join("");
