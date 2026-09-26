@@ -478,6 +478,18 @@ with sync_playwright() as p:
     check("the PREVIEW label is not on the scoring screen", "PREVIEW" not in fpg.inner_text(".se-eyebrow").upper())
     check("the save button is on screen", fpg.locator("[data-act=save]").bounding_box()["y"] + 50 <= 660)
     check("the site nav steps aside while scoring", not fpg.locator(".shell-nav").first.is_visible())
+    fdev = fpg.evaluate("JSON.parse(localStorage.getItem('se_device'))")
+    se.write_scores(gf, fdev, 101, [{"op_id": f"fit{c_}-{h}", "customer_id": c_, "hole": h, "gross": PARS[h - 1]}
+                                    for h in range(1, 19) for c_ in (101, 102, 107, 108)])
+    fpg.evaluate("localStorage.removeItem('se_hole_' + new URLSearchParams(location.search).get('t').slice(0,24))")
+    fpg.reload(); fpg.wait_for_selector("text=Check the card"); fpg.wait_for_timeout(500)
+    fh = fpg.evaluate("document.documentElement.scrollHeight")
+    check("Check the card fits without scrolling", fh <= 660, fh)
+    cellp = fpg.locator("button.cell[data-key='c:102'][data-h='1']").locator("xpath=..")
+    g = cellp.locator(".se-pops.cell .g")
+    check("in a card cell the PH pops sit above the number and the team pops below",
+          g.count() == 2 and g.nth(0).locator(".se-pop:not(.t)").count() >= 1
+          and g.nth(0).bounding_box()["y"] < cellp.locator("button.cell").bounding_box()["y"] + 10)
 
     print("pops as dots: black = PH at 100%, orange = Team/Cart Net")
     rp = se.create_round(900, 9, label="pops", course_holes=course(9))["round_id"]

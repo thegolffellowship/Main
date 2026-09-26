@@ -91,16 +91,38 @@
         .se-pops { position: absolute; top: 50%; height: 48px; transform: translateY(-50%); right: -8px;
                    display: flex; flex-direction: column; justify-content: space-between; }
         .se-pops .g { display: flex; flex-direction: column; gap: 2px; }
-        .se-pops.cell { top: 2px; right: 2px; height: auto; transform: none; flex-direction: row; gap: 1px; }
-        .se-pops.cell .g { flex-direction: row; gap: 1px; }
+
         .se-pop { width: 7px; height: 7px; border-radius: 50%; background: #1B1B1B; display: block; }
         .se-pop.t { background: #E87C3E; }
-        .se-pops.cell .se-pop { width: 5px; height: 5px; }
+
         /* ONE SCREEN, NO SCROLLING (Kerry 2026-09-26: "We've got to work on
            getting everything to fit in the window without scrolling"). The hole
            screen drops the site nav, the keeper line and the saved-count line,
            and every row keeps its name and details to one line each. */
         body.se-focus .shell-nav { display: none; }
+        /* CHECK THE CARD fits one screen too (Kerry 2026-09-26: "Now make Check
+           the card fit too"), and in each cell the pops sit ABOVE (black, PH)
+           and BELOW (orange, team) the number ("Pops here should go above and
+           below"). */
+        .se-chk .se-h1 { font-size: 26px; }
+        .se-chk .se-help { height: 26px; padding: 0 11px; font-size: 10px; }
+        .se-chk .se-mstrip { margin: 8px 0 2px; }
+        .se-chk .se-seg { margin: 8px 0 6px; }
+        .se-chk .se-seg button { height: 32px; }
+        .se-chk .se-check td { padding: 1px 0; }
+        .se-chk .se-check td.nm { font-size: 13.5px; line-height: 1.15; }
+        .se-chk .se-check button.cell { min-height: 38px; font-size: 16px; }
+        .se-chk .se-card th { padding: 6px 2px; }
+        .se-chk .se-card tr.par td { padding: 3px 2px; }
+        .se-chk .se-legend { margin-top: 4px; font-size: 11.5px; }
+        .se-chk .se-tots { margin-top: 8px; }
+        .se-chk .se-tots div { padding: 3px 4px; font-size: 11px; line-height: 1.2; }
+        .se-chk .se-tots b { font-size: 18px; line-height: 1.1; }
+        .se-chk .se-pill { height: 50px; margin-top: 10px; }
+        .se-pops.cell { top: 1px; bottom: 1px; left: 0; right: 0; height: auto; transform: none; pointer-events: none;
+                        flex-direction: column; justify-content: space-between; align-items: center; }
+        .se-pops.cell .g { flex-direction: row; gap: 1px; min-height: 4px; }
+        .se-pops.cell .se-pop { width: 4px; height: 4px; }
         .se-lblrow { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; }
         .se-keepnote { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: #4B5563; }
         .se-keepnote svg { width: 14px; height: 14px; }
@@ -532,7 +554,7 @@
                 body = keeping() && !(allDone() && hole === "done") ? holeScreen() : cardScreen();
             }
             app.innerHTML = banner + body;
-            document.body.classList.toggle("se-focus", !!app.querySelector(".se-hole"));
+            document.body.classList.toggle("se-focus", !!app.querySelector(".se-hole, .se-chk"));
         }
 
         function joinScreen() {
@@ -715,7 +737,7 @@
                     <button type="button" class="${checkNine === 0 ? "on" : ""}" data-act="nine" data-n="0">FRONT</button>
                     <button type="button" class="${checkNine === 1 ? "on" : ""}" data-act="nine" data-n="1">BACK</button></div>` : `<div class="se-gap" style="height:12px"></div>`;
             const tots = subs.map((s) => `<div>${s.cids.length === 1 ? teeDot(s.cids[0]) : ""}${esc(s.team ? s.name : first(s.name))}<b>${tot(s.key, nums)}</b>${nines.length > 1 ? tot(s.key, nines[0]) + " · " + tot(s.key, nines[1]) : ""}</div>`).join("");
-            return `<div class="se-eyebrow">${esc(eyebrow())}</div>
+            return `<div class="se-chk"><div class="se-eyebrow">${esc(eyebrow())}</div>
                 <div class="se-titlebar"><h1 class="se-h1">Check the card</h1>${helpBtn("check")}</div>
                 ${helpText("check", "Read the card hole by hole with whoever kept the paper card. Tap any number to change it; the right score is in the row that opens under the card." + (nines.length > 1 ? " FRONT and BACK switch nines." : "") + " When every hole matches, tap Card matches paper.")}
                 ${hioForKeeper()}
@@ -725,10 +747,9 @@
                 ${popKey()}
                 ${subs.some((x) => matchOf(x.cids)) ? `<div class="se-legend"><span class="se-mtag" style="margin-left:0">M</span> in a match today · ${subs.some((x) => cupOf(x.cids)) ? "X = picked up (the card keeps the triple)" : "a ringed number was picked up"}</div>` : ""}
                 ${picker}
-                <div class="se-lbl" style="margin:14px 0 6px">Totals</div>
                 <div class="se-tots">${tots}</div>
-                ${statusLine()}
-                <button type="button" class="se-pill go" data-act="matches">Card matches paper</button>`;
+                ${queue.length ? statusLine() : ""}
+                <button type="button" class="se-pill go" data-act="matches">Card matches paper</button></div>`;
         }
 
         // PHOTO + PRINT SCORER (Kerry 2026-09-25: "The live scorer with the

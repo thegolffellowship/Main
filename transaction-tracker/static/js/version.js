@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.500.3";
+window.TGF_VERSION = "2.500.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.500.4",
+    date: "2026-09-26",
+    title: "Score entry: Check the card fits one screen; pops above and below",
+    changes: [
+      "Kerry, 2026-09-26: 'Now make Check the card fit too.' The site nav steps aside there as on the hole screen, the title and FRONT | BACK are smaller, the rows are tighter, the Totals label and the saved line leave (a weak-signal warning still shows), and the total tiles are compact. Four players on an 18 with a match now fit a 390 x 660 window, held by a test.",
+      "Kerry: 'Pops here should go above and below.' In every card cell (Check the card and the player's own card) the black PH dots sit above the number and the orange Team/Cart Net dots below it, centred, instead of crowding the corner."
+    ]
+  },
   {
     version: "2.500.3",
     date: "2026-09-26",
