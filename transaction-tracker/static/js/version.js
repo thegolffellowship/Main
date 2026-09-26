@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.502.3";
+window.TGF_VERSION = "2.502.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.502.4",
+    date: "2026-09-26",
+    title: "Leaderboard mockup: games follow the matrix, EVENTS display rules",
+    changes: [
+      "Kerry, 2026-09-26: 'Not always matches so if no matches then don't show that toggle. CTP only show if the game is played per side game matrix. The rest should still show ... Same highlighting and display rules as the LEADERBOARD / EVENTS page.' The team game, MVP, Net, Gross and Skins always show. CTP shows only when the matrix plays it (Team Net at 16+ players), and Match only when a group has one.",
+      "The 9-hole mock is now 12 players (Cart Net, no CTPs). Before, it claimed 16 players on Cart Net, which the matrix does not do.",
+      "Rows follow the EVENTS board. On Net and Gross a row is green if the player bought into that game and grey if not, and rows are ordered by the ± column (ties show T) while the event is going. The team and MVP tabs use the grey wash on every other row. The tee circle sits right-justified in the name cell. Live skins show the winning score circled. There is no 'your group' tint (EVENTS has none) and no win tints while money is held."
+    ]
+  },
   {
     version: "2.502.3",
     date: "2026-09-26",

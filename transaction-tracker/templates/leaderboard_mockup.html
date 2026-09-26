@@ -16,7 +16,7 @@
         fonts and tokens. MADE-UP SCORES: nothing here reads the database.
         Rulings folded in: games are one standard toggle; the team game first
         (Cart Net OR Team Net, never both), then MVP, Net, Gross, Skins, CTP
-        (+ Match when a group has matches); team names one line per cart,
+        (CTP only when the matrix plays it, Match only when a group has matches); team names one line per cart,
         small first name + LAST NAME in Bitter, a bullet between partners. #}
     <style>
         body { background: #FFFFFF; }
@@ -45,8 +45,22 @@
         .lb td.tp { width: 42px; font: 700 16px Bitter, Georgia, serif; }
         .lb td.tp.u { color: #B91C1C; }
         .lb td.sm { width: 38px; color: #6B7280; font-size: 12px; }
-        .lb tr.me td { background: #FFF4EC; }
-        .lb tr.me td.pos { box-shadow: inset 3px 0 0 #E87C3E; }
+        /* The EVENTS leaderboard's rules (Kerry 2026-09-26: "Same highlighting
+           and display rules as the LEADERBOARD / EVENTS page"): a light grey
+           wash on every other row; on NET and GROSS a green row = bought into
+           that game, light grey = did not; no win tints while the field is
+           incomplete (the money hold). */
+        .lb tr.alt td { background: #F3F3F1; }
+        .lb tr.bought td { background: var(--buyin-green, #bbf7d0); }
+        .lb tr.nobuy td { background: var(--buyin-grey, #FAFAFA); color: #9CA3AF; }
+        .lb tr.nobuy .nm em, .lb tr.nobuy .nm b { color: #9CA3AF; }
+        .lb td.who .whoin { display: flex; align-items: center; gap: 6px; }
+        .lb td.who .whoin .tee { margin: 0 0 0 auto; flex: none; }
+        .legend { font-size: 11px; color: #6B7280; margin: 8px 0 0; }
+        .legend .lg { display: inline-block; padding: 1px 7px; border-radius: 4px; font-weight: 700; }
+        .legend .lg.g { background: var(--buyin-green, #bbf7d0); color: #166534; }
+        .legend .lg.n { background: #F3F3F1; color: #9CA3AF; }
+        .circ { display: inline-block; min-width: 17px; line-height: 17px; border: 1.5px solid #1B1B1B; border-radius: 50%; font-weight: 700; font-size: 11px; }
         .nm { display: inline-flex; align-items: baseline; gap: 4px; }
         /* Kerry 2026-09-26: first name the same size as the last. */
         .nm em { font-style: normal; font-size: 15px; color: #4B5563; }
@@ -54,13 +68,14 @@
         .cart { display: flex; align-items: baseline; gap: 7px; white-space: nowrap; }
         .cart .sep { color: #C4C4C4; }
         .meta { font-size: 11px; color: #6B7280; margin-top: 2px; }
-        .tee { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; vertical-align: 1px; }
-        .tee.ring { background: #FFFFFF !important; box-shadow: inset 0 0 0 2px currentColor; }
+        .tee { display: inline-block; width: 10px; height: 10px; border-radius: 50%; }
+        .tee.ring { background: #FFFFFF !important; box-shadow: inset 0 0 0 1.5px currentColor; }
         .lbl { display: flex; justify-content: space-between; font: 700 11px 'Helvetica Neue', Helvetica, Arial, sans-serif;
                letter-spacing: 1px; color: #6B7280; text-transform: uppercase; margin: 14px 0 6px; }
         .skins { display: grid; gap: 3px; }
         .sk { border: 1px solid #E5E7EB; border-radius: 6px; text-align: center; padding: 3px 0; font-size: 10px; color: #6B7280; background: #F8F8F8; }
         .sk b { display: block; font: 700 12px Bitter, Georgia, serif; color: #1B1B1B; }
+        .sk .circ { margin-top: 2px; background: #FFFFFF; color: #1B1B1B; }
         .sk.won { background: #d1f4e0; border-color: #d1f4e0; } .sk.won b { color: #0d7556; }
         .sk.carry { background: #FFFFFF; border-style: dashed; }
         .mcard { border: 1px solid #E5E7EB; border-radius: 10px; overflow: hidden; margin-bottom: 6px; }
@@ -94,7 +109,8 @@
         "use strict";
         const A = "#2F5D74", B = "#C1673F";
         const TEE = {Blue: "#1D4ED8", White: "#1B1B1B", Gold: "#B8860B", Red: "#B91C1C"};
-        const RING = {White: 1, Red: 1};
+        const RING = {White: 1, Red: 1};  // white: black outline, white centre; the women's tee: an outline
+        const INK = {White: "#1B1B1B"};
         // Surname case follows the Tracker's rule (events.md "Surname Uppercase
         // for Elevated Roles"): MEMBER / MEMBER+ / MANAGER / OWNER in CAPS,
         // everyone else (guest, 1st timer, non-member) in proper case.
@@ -102,51 +118,67 @@
         const P = (f, l) => `<span class="nm"><em>${f}</em><b style="text-transform:${NONMEMBER.has(l) ? "none" : "uppercase"}">${l}</b></span>`;
         const cart = (pair) => `<div class="cart">${P(...pair[0])}<span class="sep">•</span>${P(...pair[1])}</div>`;
         const tp = (n) => n === 0 ? "E" : (n > 0 ? "+" + n : "" + n);
+        // Players: first, last, tee, group, gross, thru, net ±, gross ±, bought NET, bought GROSS.
+        // The team game, CTPs and matches follow the side-games matrix
+        // (side-games.md): CART Net at 4–15 players with no CTPs (the CTP money
+        // rides in the cart pot); TEAM Net at 16+ with CTPs (18 holes: 2, 3, 4
+        // CTPs at 16, 24, 32). Matches only when a group has one.
         const EV = {
           "9": {
-            name: "s9.29 Canyon Springs", group: 1, sub: "Tuesday nine · 16 players · holes 1–9", matrix: "16 players: the side-games matrix plays Cart Net",
+            name: "s9.29 Canyon Springs", group: 1, sub: "Tuesday nine · 12 players · holes 1–9", matrix: "12 players, so the side-games matrix plays Cart Net and no CTPs",
             team: {key: "CART", title: "Cart Net · best ball of 2, 85%", rows: [
-              {pos: 1, carts: [[["Dan", "Stich"], ["Mary", "Wade"]]], meta: "Group 1 · your group", thru: 6, net: -6, me: 1},
-              {pos: 2, carts: [[["Ray", "Delgado"], ["Joe", "Reyes"]]], meta: "Group 3", thru: 7, net: -5},
-              {pos: "T3", carts: [[["Tom", "Alvarez"], ["Sam", "Ortiz"]]], meta: "Group 2", thru: 7, net: -3},
-              {pos: "T3", carts: [[["Kerry", "Niester"], ["Brian", "Thompson"]]], meta: "Group 1 · your group", thru: 6, net: -3, me: 1},
-              {pos: 5, carts: [[["Chris", "Benton"], ["Luis", "Garza"]]], meta: "Group 4", thru: 5, net: -2}]},
+              {pos: 1, carts: [[["Dan", "Stich"], ["Mary", "Wade"]]], thru: 6, net: -6},
+              {pos: 2, carts: [[["Ray", "Delgado"], ["Joe", "Reyes"]]], thru: 7, net: -5},
+              {pos: "T3", carts: [[["Tom", "Alvarez"], ["Sam", "Ortiz"]]], thru: 7, net: -3},
+              {pos: "T3", carts: [[["Kerry", "Niester"], ["Brian", "Thompson"]]], thru: 6, net: -3},
+              {pos: 5, carts: [[["Chris", "Benton"], ["Luis", "Garza"]]], thru: 5, net: -2},
+              {pos: 6, carts: [[["Ann", "Lee"], ["Eli", "Ruiz"]]], thru: 5, net: 1}]},
             players: [
-              ["Dan", "Stich", "Gold", 1, 27, 6, -3], ["Ray", "Delgado", "White", 3, 31, 7, -2], ["Mary", "Wade", "Red", 1, 30, 6, -2],
-              ["Tom", "Alvarez", "Blue", 2, 28, 7, -1], ["Kerry", "Niester", "Blue", 1, 24, 6, 0], ["Chris", "Benton", "White", 4, 21, 5, 0],
-              ["Sam", "Ortiz", "Gold", 2, 33, 7, 1], ["Brian", "Thompson", "White", 1, 34, 6, 2]],
+              ["Dan", "Stich", "Gold", 1, 27, 6, -3, 5, 1, 0], ["Ray", "Delgado", "White", 3, 31, 7, -2, 3, 1, 1], ["Mary", "Wade", "Red", 1, 30, 6, -2, 7, 1, 0],
+              ["Tom", "Alvarez", "Blue", 2, 28, 7, -1, 1, 0, 1], ["Kerry", "Niester", "Blue", 1, 24, 6, 0, 0, 1, 1], ["Chris", "Benton", "White", 4, 21, 5, 0, 2, 1, 0],
+              ["Joe", "Reyes", "White", 3, 29, 7, 0, 3, 1, 0], ["Luis", "Garza", "Gold", 4, 26, 5, 1, 6, 0, 0],
+              ["Sam", "Ortiz", "Gold", 2, 33, 7, 1, 7, 1, 0], ["Ann", "Lee", "Red", 4, 29, 5, 1, 9, 0, 0], ["Brian", "Thompson", "White", 1, 34, 6, 2, 10, 1, 0],
+              ["Eli", "Ruiz", "White", 2, 38, 5, 3, 13, 0, 0]],
             skinsTitle: "½ Net (7 buyers)", skinsNote: "2 won · 1 carry",
-            skins: [{}, {w: "Stich"}, {c: 1}, {w: "Wade"}, {}, {}, {}, {}, {}], ctp: [["3", "Mary", "Wade", "8' 4\""], ["7", null]],
+            skins: [{}, {w: "Stich", s: 4}, {c: 1}, {w: "Wade", s: 3}, {}, {}, {}, {}, {}], ctp: [],
             matches: [
               {a: ["Kerry", "Niester"], b: ["Dan", "Stich"], lead: "b", txt: "1 UP", sub: "thru 6", h: [0, 1, 2, 0, 2, 0, null, null, null]},
               {a: ["Brian", "Thompson"], b: ["Mary", "Wade"], lead: null, txt: "AS", sub: "thru 6", h: [2, 1, 0, 1, 2, 0, null, null, null]}],
             note: "3 of 4 groups thru 5 or more"},
           "18": {
-            name: "s10.3 Brackenridge", group: 3, sub: "Saturday 18 · 24 players · shotgun", matrix: "24 players: the side-games matrix plays Team Net",
+            name: "s10.3 Brackenridge", group: 3, sub: "Saturday 18 · 24 players · shotgun", matrix: "24 players, so the side-games matrix plays Team Net and 3 CTPs",
             team: {key: "TEAM", title: "Team Net · best 2 of 4", rows: [
-              {pos: 1, carts: [[["Ray", "Delgado"], ["Luis", "Garza"]], [["Ann", "Lee"], ["Sam", "Park"]]], meta: "Group 5", thru: 12, net: -11},
-              {pos: 2, carts: [[["Kerry", "Niester"], ["Brian", "Thompson"]], [["Dan", "Stich"], ["Mary", "Wade"]]], meta: "Group 3 · your group", thru: 10, net: -9, me: 1},
-              {pos: 3, carts: [[["Tom", "Alvarez"], ["Joe", "Reyes"]], [["Min", "Cho"], ["Rosa", "Diaz"]]], meta: "Group 1", thru: 12, net: -7},
-              {pos: 4, carts: [[["Chris", "Benton"], ["Sam", "Ortiz"]], [["Eli", "Ruiz"], ["Pat", "Hale"]]], meta: "Group 4", thru: 9, net: -4}]},
+              {pos: 1, carts: [[["Ray", "Delgado"], ["Luis", "Garza"]], [["Ann", "Lee"], ["Sam", "Park"]]], thru: 12, net: -11},
+              {pos: 2, carts: [[["Kerry", "Niester"], ["Brian", "Thompson"]], [["Dan", "Stich"], ["Mary", "Wade"]]], thru: 10, net: -9},
+              {pos: 3, carts: [[["Tom", "Alvarez"], ["Joe", "Reyes"]], [["Min", "Cho"], ["Rosa", "Diaz"]]], thru: 12, net: -7},
+              {pos: 4, carts: [[["Chris", "Benton"], ["Sam", "Ortiz"]], [["Eli", "Ruiz"], ["Pat", "Hale"]]], thru: 9, net: -4}]},
             players: [
-              ["Ray", "Delgado", "White", 5, 44, 12, -4], ["Mary", "Wade", "Red", 3, 45, 10, -3], ["Kerry", "Niester", "Blue", 3, 37, 10, -2],
-              ["Tom", "Alvarez", "Blue", 1, 46, 12, -2], ["Dan", "Stich", "Gold", 3, 49, 10, -1], ["Sam", "Ortiz", "Gold", 6, 38, 8, 0],
-              ["Chris", "Benton", "White", 4, 44, 9, 1], ["Brian", "Thompson", "White", 3, 58, 10, 3]],
+              ["Ray", "Delgado", "White", 5, 44, 12, -4, 8, 1, 1], ["Mary", "Wade", "Red", 3, 45, 10, -3, 7, 1, 0], ["Kerry", "Niester", "Blue", 3, 37, 10, -2, -1, 1, 1],
+              ["Tom", "Alvarez", "Blue", 1, 46, 12, -2, 2, 0, 1], ["Dan", "Stich", "Gold", 3, 49, 10, -1, 11, 1, 0], ["Sam", "Ortiz", "Gold", 6, 38, 8, 0, 6, 1, 0],
+              ["Chris", "Benton", "White", 4, 44, 9, 1, 8, 0, 0], ["Brian", "Thompson", "White", 3, 58, 10, 3, 18, 1, 0]],
             skinsTitle: "Net (14 buyers)", skinsNote: "3 won · 2 carries",
-            skins: [{w: "Delgado"}, {c: 1}, {c: 1}, {w: "Wade"}, {}, {w: "Stich"}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}],
-            ctp: [["4", "Ray", "Delgado", "11' 2\""], ["8", "Kerry", "Niester", "5' 9\""], ["12", null], ["16", null]],
+            skins: [{w: "Delgado", s: 3}, {c: 1}, {c: 1}, {w: "Wade", s: 4}, {}, {w: "Stich", s: 4}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}],
+            ctp: [["4", "Ray", "Delgado", "11' 2\""], ["8", "Kerry", "Niester", "5' 9\""], ["12", null]],
             matches: [], note: "all 6 groups on course, 2 thru 12"}
         };
         const q = new URLSearchParams(location.search);
         let holes = q.get("holes") === "18" ? "18" : "9";
         let game = null;
         const app = document.getElementById("lb");
-        function games(ev) { return [ev.team.key, "MVP", "NET", "GROSS", "SKINS", "CTP"].concat(ev.matches.length ? ["MATCH"] : []); }
+        // Always: the team game, MVP, NET, GROSS, SKINS (Kerry: "The rest should
+        // still show", e.g. Individual Gross). CTP only when the matrix plays it;
+        // MATCH only when a group has a match.
+        function games(ev) { return [ev.team.key, "MVP", "NET", "GROSS", "SKINS"].concat(ev.ctp.length ? ["CTP"] : [], ev.matches.length ? ["MATCH"] : []); }
+        const who = (f, l, tee) => `<div class="whoin">${P(f, l)}${tee ? `<span class="tee ${RING[tee] ? "ring" : ""}" style="background:${TEE[tee]};color:${INK[tee] || TEE[tee]}" title="${tee} Tees"></span>` : ""}</div>`;
+        // NET and GROSS order by the ± column while the event is going (the
+        // EVENTS rule), and wash each row green (bought into that game) or grey.
         function playerRows(ev, col) {
-            const rows = ev.players.slice().sort((x, y) => (col === "gross" ? x[4] - y[4] : x[6] - y[6]));
-            return rows.map((r, i) => `<tr class="${r[3] === ev.group ? "me" : ""}"><td class="pos">${i + 1}</td>
-                <td class="who"><span class="tee ${RING[r[2]] ? "ring" : ""}" style="background:${TEE[r[2]]};color:${TEE[r[2]]}"></span>${P(r[0], r[1])}</td>
-                <td class="sm">${r[5]}</td><td class="tp ${(col === "gross" ? 0 : r[6]) < 0 ? "u" : ""}">${col === "gross" ? r[4] : tp(r[6])}</td></tr>`).join("");
+            const k = col === "gross" ? 7 : 6, buy = col === "gross" ? 9 : 8;
+            const rows = ev.players.slice().sort((x, y) => x[k] - y[k]);
+            const pos = (i) => { const f = rows.findIndex((x) => x[k] === rows[i][k]); return (rows.filter((x) => x[k] === rows[i][k]).length > 1 ? "T" : "") + (f + 1); };
+            return rows.map((r, i) => `<tr class="${r[buy] ? "bought" : "nobuy"}"><td class="pos">${pos(i)}</td>
+                <td class="who">${who(r[0], r[1], r[2])}</td>
+                <td class="sm">${r[5]}</td><td class="tp ${r[k] < 0 && r[buy] ? "u" : ""}">${tp(r[k])}</td></tr>`).join("");
         }
         function mcard(m) {
             const bar = m.lead == null ? "t" : m.lead, bg = bar === "a" ? A : bar === "b" ? B : "";
@@ -157,18 +189,19 @@
                 <span class="mn r"><em>${m.b[0]}</em><b>${m.b[1]}</b></span><span class="mono" style="background:${B}">${m.b[0][0]}${m.b[1][0]}</span></div>
                 <div class="dots">${dots}</div></div>`;
         }
+        const legend = (g) => `<div class="legend"><span class="lg g">Bought ${g}</span> <span class="lg n">Did not</span> · ordered by ± while the event is going</div>`;
         function body(ev, g) {
-            if (g === ev.team.key) return `<table><tr><th class="l" colspan="2">${ev.team.title}</th><th>Thru</th><th>Net</th></tr>${ev.team.rows.map((r) =>
-                `<tr class="${r.me ? "me" : ""}"><td class="pos">${r.pos}</td><td class="who">${r.carts.map(cart).join("")}</td>
+            if (g === ev.team.key) return `<table><tr><th class="l" colspan="2">${ev.team.title}</th><th>Thru</th><th>Net</th></tr>${ev.team.rows.map((r, i) =>
+                `<tr class="${i % 2 ? "alt" : ""}"><td class="pos">${r.pos}</td><td class="who">${r.carts.map(cart).join("")}</td>
                  <td class="sm">${r.thru}</td><td class="tp ${r.net < 0 ? "u" : ""}">${tp(r.net)}</td></tr>`).join("")}</table>`;
-            if (g === "NET") return `<table><tr><th class="l" colspan="2">Individual Net</th><th>Thru</th><th>Net</th></tr>${playerRows(ev, "net")}</table>`;
-            if (g === "GROSS") return `<table><tr><th class="l" colspan="2">Individual Gross</th><th>Thru</th><th>Gross</th></tr>${playerRows(ev, "gross")}</table>`;
+            if (g === "NET") return `<table><tr><th class="l" colspan="2">Individual Net</th><th>Thru</th><th>Net</th></tr>${playerRows(ev, "net")}</table>${legend("Net")}`;
+            if (g === "GROSS") return `<table><tr><th class="l" colspan="2">Individual Gross</th><th>Thru</th><th>Gross</th></tr>${playerRows(ev, "gross")}</table>${legend("Gross")}`;
             if (g === "MVP") return `<table><tr><th class="l" colspan="2">MVP · points today</th><th>Thru</th><th>Pts</th></tr>${ev.players.slice().sort((x, y) => x[6] - y[6]).map((r, i) =>
-                `<tr class="${r[3] === ev.group ? "me" : ""}"><td class="pos">${i + 1}</td><td class="who">${P(r[0], r[1])}</td><td class="sm">${r[5]}</td><td class="tp">${Math.max(0, 12 - 2 * i)}</td></tr>`).join("")}</table>`;
+                `<tr class="${i % 2 ? "alt" : ""}"><td class="pos">${i + 1}</td><td class="who">${who(r[0], r[1], r[2])}</td><td class="sm">${r[5]}</td><td class="tp">${Math.max(0, 12 - 2 * i)}</td></tr>`).join("")}</table>`;
             if (g === "SKINS") return `<div class="lbl"><span>Skins · ${ev.skinsTitle}</span><span>${ev.skinsNote}</span></div>
-                <div class="skins" style="grid-template-columns:repeat(9,1fr)">${ev.skins.map((s, i) => `<div class="sk ${s.w ? "won" : s.c ? "carry" : ""}">${i + 1}<b>${s.w || (s.c ? "c/o" : "–")}</b></div>`).join("")}</div>`;
+                <div class="skins" style="grid-template-columns:repeat(9,1fr)">${ev.skins.map((s, i) => `<div class="sk ${s.w ? "won" : s.c ? "carry" : ""}">${i + 1}<b>${s.w || (s.c ? "c/o" : "–")}</b>${s.w ? `<span class="circ">${s.s}</span>` : ""}</div>`).join("")}</div>`;
             if (g === "CTP") return `<table><tr><th class="l" colspan="2">Closest to the pin</th><th></th><th>Distance</th></tr>${ev.ctp.map((c) =>
-                `<tr><td class="pos">#${c[0]}</td><td class="who">${c[1] ? P(c[1], c[2]) : '<span class="meta">not played yet</span>'}</td><td></td><td class="sm" style="width:60px">${c[3] || ""}</td></tr>`).join("")}</table>`;
+                `<tr><td class="pos">#${c[0]}</td><td class="who">${c[1] ? who(c[1], c[2], (ev.players.find((r) => r[1] === c[2]) || [])[2]) : '<span class="meta">not played yet</span>'}</td><td></td><td class="sm" style="width:60px">${c[3] || ""}</td></tr>`).join("")}</table>`;
             if (g === "MATCH") return `<div class="lbl"><span>Matches</span><span>tap one for its card</span></div>${ev.matches.map(mcard).join("")}`;
             return "";
         }
@@ -184,7 +217,7 @@
                 <div class="seg"><button type="button">SCORING</button><button type="button" class="on">BOARD</button></div>
                 <div class="seg games">${gs.map((x) => `<button type="button" class="${x === game ? "on" : ""}" data-g="${x}">${x}</button>`).join("")}</div>
                 <div class="prov">Provisional · ${ev.note}. No money shows until every card is in.</div>
-                <div class="meta" style="margin:-2px 0 8px">Team game: ${ev.matrix}. Cart or Team comes from the matrix for the field, not from 9 or 18 holes.</div>
+                <div class="meta" style="margin:-2px 0 8px">${ev.matrix}. Cart or Team, and CTPs, come from the matrix for the field size, not from 9 or 18 holes.</div>
                 ${body(ev, game)}
                 <div class="note">One board for the event, fed by every group's live entry through the same engine the Test Center checks against Golf Genius. Golf Genius stays the official record.</div>`;
         }
