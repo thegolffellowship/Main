@@ -11586,6 +11586,38 @@ _SE_READ_CACHE: dict = {}
 _SE_READ_LOCK = threading.Lock()
 
 
+# MOCKUPS ON THE SITE (Kerry 2026-09-26: "Give me a link to see it on my
+# site"). The design mockups in docs/claude/mockups/, admin only: they carry
+# members' names. Only files that exist in that folder by exact name are served.
+_MOCKUP_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "docs", "claude", "mockups")
+
+
+@app.route("/admin/mockups")
+@require_role("admin")
+def mockups_index():
+    try:
+        names = sorted(f for f in os.listdir(_MOCKUP_DIR) if f.lower().endswith((".html", ".png")))
+    except OSError:
+        names = []
+    rows = "".join(f'<li><a href="/admin/mockups/{n}">{n}</a></li>' for n in names)
+    return (f'<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1">'
+            f'<title>Mockups</title><body style="font-family:Helvetica Neue,Arial;padding:16px">'
+            f'<h1 style="font-family:Bitter,Georgia,serif">Mockups</h1>'
+            f'<p style="color:#6B7280">Design mockups with made-up scores. Admin only.</p><ul>{rows}</ul></body>')
+
+
+@app.route("/admin/mockups/<name>")
+@require_role("admin")
+def mockup_file(name):
+    try:
+        allowed = set(os.listdir(_MOCKUP_DIR))
+    except OSError:
+        allowed = set()
+    if name not in allowed or not name.lower().endswith((".html", ".png")):
+        return jsonify({"error": "no such mockup"}), 404
+    return send_file(os.path.join(_MOCKUP_DIR, name))
+
+
 @app.route("/events/<int:event_id>/live-scoring")
 @require_role("admin")
 def live_scoring_admin_page(event_id):

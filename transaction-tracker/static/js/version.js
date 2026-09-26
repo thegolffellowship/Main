@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.501.2";
+window.TGF_VERSION = "2.501.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.501.3",
+    date: "2026-09-26",
+    title: "Admin: design mockups viewable on the site",
+    changes: [
+      "Kerry, 2026-09-26: 'Give me a link to see it on my site.' /admin/mockups lists the design mockups in docs/claude/mockups/ (HTML and PNG) and /admin/mockups/<file> opens one. Admin only, because mockups carry members' names; only a file that exists in that folder by its exact name is served (no paths). First up: the leaderboard and team-name mockups."
+    ]
+  },
   {
     version: "2.501.2",
     date: "2026-09-26",

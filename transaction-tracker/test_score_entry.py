@@ -623,6 +623,9 @@ with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.St
 client = appmod.app.test_client()
 check("anonymous cannot read the board",
       client.get("/api/score-entry/events/900/scores").status_code in (401, 403, 302))
+check("anonymous cannot open the mockups (they carry members' names)",
+      client.get("/admin/mockups").status_code in (401, 403, 302)
+      and client.get("/admin/mockups/leaderboard-team-names.html").status_code in (401, 403, 302))
 check("anonymous cannot open the Live Scoring page",
       client.get("/events/900/live-scoring").status_code in (401, 403, 302))
 check("anonymous cannot read the Live Scoring overview",
