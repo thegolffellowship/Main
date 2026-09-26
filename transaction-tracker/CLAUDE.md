@@ -480,6 +480,18 @@ coding lane, in every new line of SQL:
 Existing code stays as it is until Kerry rules on the hardening work. The
 audit behind this is in mailbox #672 and #676.
 
+## Hard gate before member money or member logins (CA #731, Kerry-ratified 2026-09-26)
+
+No member payment and no member sign-in runs on the Tracker until all four pass:
+(a) continuous off-site replication is live; (b) the restore drill has passed and
+is recorded; (c) money columns are stored as numbers (inventory first, then a
+conversion ruling); (d) identity and alias lookups that touch money match
+case-insensitively (`lower()` on both sides). Signed QR / score-entry links are
+NOT member logins and are not blocked by this gate. Also retired in #731: the
+June webhook-bridge design and the "GG until V2.0" boundary. The Tracker is the
+product; a doc that still says otherwise is superseded. Postgres moves after the
+Fall Championship (#728).
+
 ## Lazy DDL is once per database (v2.486.0, IMPORTANT for every `_ensure_*`)
 
 `CREATE INDEX IF NOT EXISTS` on an index that already exists takes the

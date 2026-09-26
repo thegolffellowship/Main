@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.502.4";
+window.TGF_VERSION = "2.502.5";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.502.5",
+    date: "2026-09-26",
+    changes: [
+      "CLAUDE.md records the gate Kerry ratified in CA #731: no member payment or member sign-in on the Tracker until off-site replication, a passed restore drill, numeric money columns and case-insensitive money lookups are all in place. Signed score-entry links are not affected. It also notes that the old webhook-bridge design is retired and the Tracker is the product. Docs only.",
+    ],
+  },
   {
     version: "2.502.4",
     date: "2026-09-26",
