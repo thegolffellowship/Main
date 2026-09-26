@@ -89,19 +89,71 @@ def test_fourball_best_ball_and_pickup():
     assert "/" in d["players"][0]["name"]
 
 
-def test_foursomes_team_strokes_and_single_ball():
-    # Alternate shot: 50% of combined-difference at team level.
-    # Austin combined 20 v SA combined 12 → Austin gets round(4) strokes
-    # on SI 1-4 (holes 3, 12, 6, 15), on the ONE team ball.
-    session = {"format": "foursomes", "n_holes": 18}
-    match = {"id": "FS1", "austin": [1, 2], "sa": [3, 4]}
+def test_chapman_team_handicap_is_60_40_not_50_combined():
+    # CA #721 (Kerry, rule 3b): the team session is CHAPMAN. Team hcp =
+    # 60% of the lower partner + 40% of the higher. These numbers split
+    # the two rules: 50%-of-combined makes both teams 10 (no strokes);
+    # 60/40 makes Austin 0.6*0 + 0.4*20 = 8 and SA 0.6*10 + 0.4*10 = 10,
+    # so SA gets 2 strokes (SI 1 and 2 = holes 3 and 12) on ONE ball.
+    session = {"format": "chapman", "n_holes": 18}
+    match = {"id": "C1", "austin": [1, 2], "sa": [3, 4]}
+    phs = {1: 0, 2: 20, 3: 10, 4: 10}
+    d = compute_match_detail(match, session, COURSE, phs, {})
+    # pop dots are known before any ball is struck
+    got_sa = {h["hole"]: h["p2_pops"] for h in d["holes"] if h["p2_pops"]}
+    got_au = {h["hole"]: h["p1_pops"] for h in d["holes"] if h["p1_pops"]}
+    assert got_sa == {3: 1, 12: 1} and got_au == {}
+    # both SA partners carry the team's strokes, whoever's row holds the ball
+    assert d["strokes"]["3"] == d["strokes"]["4"] == {"3": 1, "12": 1}
+    assert [p["handicap"] for p in d["players"]] == [8, 10]
+
+
+def test_chapman_whs_rounding_and_single_ball():
+    # Austin 0.6*8 + 0.4*12 = 9.6 -> 10; SA 0.6*5 + 0.4*7 = 5.8 -> 6.
+    # Difference 4: Austin's one ball gets strokes on SI 1-4.
+    session = {"format": "chapman", "n_holes": 18}
+    match = {"id": "C2", "austin": [1, 2], "sa": [3, 4]}
     phs = {1: 12, 2: 8, 3: 5, 4: 7}
-    # team gross entered against one partner only (either works)
-    scores = {1: {3: 5}, 3: {3: 5}}   # gross tied on hole 3 (SI 1)
+    scores = {1: {3: 5}, 3: {3: 5}}   # team gross against either partner
     d = compute_match_detail(match, session, COURSE, phs, scores)
     h = next(x for x in d["holes"] if x["hole"] == 3)
     assert h["p1_strokes"] == 1 and h["p2_strokes"] == 0
     assert h["winner"] == 1           # Austin nets 4 v 5 on its stroke hole
+    assert sum(x["p1_pops"] for x in d["holes"]) == 4
+
+
+def test_old_foursomes_label_plays_as_chapman():
+    # A dial still saying "foursomes" must NOT fall back to 50% combined.
+    from email_parser.lsc_cup import normalize_format
+    for label in ("foursomes", "Foursomes", "alternate shot", "chapman"):
+        assert normalize_format(label) == "chapman"
+    session = {"format": "foursomes", "n_holes": 18}
+    d = compute_match_detail({"id": "F", "austin": [1, 2], "sa": [3, 4]},
+                             session, COURSE, {1: 0, 2: 20, 3: 10, 4: 10}, {})
+    assert sum(h["p2_pops"] for h in d["holes"]) == 2
+
+
+def test_fourball_is_90_percent_off_the_low_player():
+    # 90% of each PH, WHS-rounded (half up), all off the low player:
+    # 15 -> 13.5 -> 14 strokes (100% would give 15); 5 -> 4.5 -> 5.
+    session = {"format": "fourball", "n_holes": 18}
+    match = {"id": "FB", "austin": [1, 2], "sa": [3, 4]}
+    phs = {1: 15, 2: 5, 3: 0, 4: 0}
+    d = compute_match_detail(match, session, COURSE, phs, {})
+    from email_parser.lsc_cup import session_handicaps
+    assert session_handicaps("fourball", [[1, 2], [3, 4]], phs) == \
+        {1: 14, 2: 5, 3: 0, 4: 0}
+    assert d["players"][0]["handicap"] == [14, 5]
+    assert d["players"][0]["course_handicap"] == [15, 5]
+    # four-ball partners differ, so the per-player map carries them
+    assert sum(d["strokes"]["1"].values()) == 14
+    assert sum(d["strokes"]["2"].values()) == 5
+    assert all(h["p1_pops"] is None for h in d["holes"])
+
+
+def test_singles_stays_full_difference():
+    from email_parser.lsc_cup import session_handicaps
+    assert session_handicaps("singles", [[1], [2]], {1: 17, 2: 4}) == {1: 17, 2: 4}
 
 
 def test_board_points_win_halve_and_projection():
@@ -367,6 +419,23 @@ def test_skins_a_picked_up_ball_never_wins():
     out = compute_skins(sess, _flat_course(1), {}, {1: {1: 7}, 2: {1: 7}},
                         marks={1: {1: "picked_up"}}, basis="gross")
     assert out["holes"][0]["winner"] == "S1:sa:2"
+
+
+def test_skins_chapman_net_uses_the_team_handicap_off_zero():
+    from email_parser.lsc_cup import compute_skins
+    sess = {"id": "pm", "format": "chapman", "n_holes": 18,
+            "matches": [{"id": "C1", "austin": [1, 2], "sa": [3, 4]}]}
+    # Team handicaps off zero: Austin 0.6*0 + 0.4*20 = 8 (strokes on SI
+    # 1-8), SA 0.6*10 + 0.4*10 = 10 (SI 1-10). Holes 3 (SI 1) and 10
+    # (SI 8): both gross 5, both net 4 -> tied. Hole 9 (SI 11): no
+    # strokes for either -> gross 4 beats 5, Austin wins the skin.
+    course = COURSE
+    scores = {1: {3: 5, 10: 5, 9: 4}, 3: {3: 5, 10: 5, 9: 5}}
+    out = compute_skins(sess, course, {1: 0, 2: 20, 3: 10, 4: 10}, scores,
+                        basis="net")
+    by = {h["hole"]: h for h in out["holes"]}
+    assert by[3]["status"] == "tied" and by[10]["status"] == "tied"
+    assert by[9]["winner"] == "C1:austin"
 
 
 def test_board_holds_skins_until_kerry_rules_the_basis():

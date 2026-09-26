@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.501.4";
+window.TGF_VERSION = "2.502.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.502.0",
+    date: "2026-09-26",
+    changes: [
+      "Lone Star Cup handicap allowances, Kerry-ratified (CA #721, the USGA/WHS Appendix C match-play numbers): SINGLES 100% \u2014 the full difference; FOUR-BALL 90% of each player's handicap, all four off the low player; the team session is CHAPMAN (Pinehurst) \u2014 team handicap = 60% of the lower partner + 40% of the higher, the higher team getting the difference. WHS order throughout: allowance, round (half up, the Tracker's whs_round \u2014 never Python's banker's round), then difference. Applied on the locked playing handicap score entry carries, which is the course handicap at 100%. The old 50%-of-combined foursomes number is gone: a dial still saying \"foursomes\" or \"alternate shot\" now normalises to Chapman, so it can never fall back. One helper (session_handicaps) feeds both the match and net skins, so they can't disagree; skins take it off zero.",
+      "Pop dots before play: each match detail now carries p1_pops / p2_pops per hole (the side's strokes before anyone plays the hole \u2014 one ball per side in singles and Chapman) and a per-player strokes map (four-ball partners differ). p1_strokes / p2_strokes stay the COUNTING ball's strokes on a played hole. The match card also reports the handicap each side plays off after the allowance, beside the 100% course handicap it came from.",
+      "Members see CHAPMAN, not Foursomes, on the Lone Star Cup tab: the How-It-Works schedule reads \"AM Fourball \u00b7 PM Chapman\" and the match-card format label reads Chapman (older dial labels map to it too). 5 new tests, 27 in tests/test_lsc_cup.py, including a case whose numbers only 60/40 can satisfy (50%-of-combined would give zero strokes).",
+    ],
+  },
   {
     version: "2.501.4",
     date: "2026-09-26",

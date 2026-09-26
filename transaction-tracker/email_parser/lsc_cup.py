@@ -15,23 +15,24 @@ Rules live in the `lsc_matches` dial (rules-as-data, #659):
 {"event_id": 3329, "defending_champion": "austin"|"sa"|null,
  "skins": {"basis": null|"net"|"gross", "carryover": null|bool},
  "sessions": [{"id": "sat-am", "label": "...", "date": "2026-10-10",
-               "format": "singles"|"fourball"|"foursomes",
+               "format": "singles"|"fourball"|"chapman",
                "se_round": null, "n_holes": 18,
                "matches": [{"id": "SAT-AM-1", "tee_time": "8:30",
                             "austin": [cid, ...], "sa": [cid, ...]}]}]}
 
 The weekend format is already ratified in the LSC How-It-Works popup
-(contests.html): Sat AM Fourball, Sat PM Foursomes, Sun Singles.
+(contests.html): Sat AM Four-Ball, Sat PM Chapman, Sun Singles.
 Points (Kerry, CA #717): 1 for a win, 1/2 for a halve, every format;
 level points = the defending champion keeps the cup. Skins replace
 CTP and are scored separately from the match (compute_skins); their
 basis, pot and carryover are still Kerry's to rule.
-Handicapping (still PENDING Kerry, CA #717): full difference of LOCKED
-playing handicaps off the match's low man on the lowest stroke-index
-holes; four-ball plays everyone off the low man of all four; the team
-format holds 50% of the combined difference until Kerry confirms it
-is Greensomes (60% of the low + 40% of the high). Playing handicaps
-come from Track A's payload (the locked snapshot), never re-derived.
+Handicap allowances (Kerry RATIFIED, CA #721, USGA/WHS Appendix C):
+singles 100% (full difference); four-ball 90% of each player, all off
+the low player; the team session is CHAPMAN, team handicap = 60% of the
+lower partner + 40% of the higher, the higher team getting the
+difference. WHS order: allowance, round, then difference. Applied on
+the locked playing handicap from Track A's payload (100% of course
+handicap, rounded), never re-derived.
 
 Scores while Track A's se_* tables aren't live yet: the
 `lsc_mock_scores` dial ({"<session_id>": {"course": [{hole, par,
@@ -45,6 +46,8 @@ from __future__ import annotations
 import json
 import logging
 
+from email_parser.handicap_calc import whs_round
+
 logger = logging.getLogger(__name__)
 
 # Teams in fixed display order: p1/team1 = Austin, p2/team2 = San Antonio
@@ -56,17 +59,70 @@ TEAM_KEYS = ("austin", "sa")
 # Stroke allocation
 # ---------------------------------------------------------------------------
 
+# Kerry's ratified allowances (CA #721, 2026-09-26, rule 3b), the USGA/WHS
+# Appendix C match-play recommendations. They apply to the LOCKED playing
+# handicap score entry carries, which is the course handicap at 100%,
+# rounded (handicap_calc.playing_handicap, allowance 1.0). WHS order:
+# allowance on the course handicap, round, then take the difference.
+SINGLES_ALLOWANCE = 1.00              # the higher player gets the full difference
+FOURBALL_ALLOWANCE = 0.90             # each player's 90%, all off the low player
+CHAPMAN_LOW_SHARE, CHAPMAN_HIGH_SHARE = 0.60, 0.40   # team = 60% low + 40% high
+
+# The team alternate-shot session is CHAPMAN (Pinehurst), not straight
+# foursomes (CA #721). Older dials and Track A's one-ball set name it
+# "foursomes" or "alternate shot"; for this event every one of them IS
+# Chapman, so they normalise here and can never fall back to the old
+# 50%-of-combined number.
+ONE_BALL_FORMATS = {"chapman", "foursomes", "alternate_shot", "alternate-shot",
+                    "alternate shot", "pinehurst"}
+
+
+def normalize_format(fmt: str | None) -> str:
+    f = (fmt or "singles").strip().lower()
+    if f in ONE_BALL_FORMATS:
+        return "chapman"
+    if f in ("four-ball", "four ball", "fourball", "best ball", "best-ball"):
+        return "fourball"
+    return "singles" if f in ("singles", "single", "") else f
+
+
+def chapman_team_handicap(phs: list) -> int:
+    """60% of the lower partner + 40% of the higher, rounded per WHS."""
+    vals = sorted(float(v or 0) for v in phs) or [0.0]
+    lo, hi = vals[0], vals[-1]
+    return whs_round(CHAPMAN_LOW_SHARE * lo + CHAPMAN_HIGH_SHARE * hi)
+
+
+def session_handicaps(fmt: str, teams: list[list[int]], phs: dict) -> dict:
+    """The handicap each side plays off in this session, after the
+    ratified allowance and WHS rounding: {cid: value} for singles and
+    four-ball, {"team:<i>": value} for Chapman (one ball per team)."""
+    fmt = normalize_format(fmt)
+
+    def _ph(c):
+        v = phs.get(c)
+        if v is None:
+            v = phs.get(str(c))
+        return float(v or 0)
+
+    if fmt == "chapman":
+        return {f"team:{i}": chapman_team_handicap([_ph(c) for c in t])
+                for i, t in enumerate(teams)}
+    pct = FOURBALL_ALLOWANCE if fmt == "fourball" else SINGLES_ALLOWANCE
+    return {c: whs_round(_ph(c) * pct) for t in teams for c in t}
+
+
 def strokes_received(ph: float, low_ph: float, course: list[dict],
                      n_holes: int) -> dict[int, int]:
     """Per-hole strokes a player RECEIVES playing off `low_ph`.
 
-    Full difference (rounded to a whole number), one stroke on each of
+    Full difference (WHS-rounded), one stroke on each of
     the N lowest-stroke-index holes; a difference beyond n_holes wraps
     (second stroke on the hardest holes again). Holes missing a
     stroke_index fall back to hole-number order, so a course loaded
     without SI still allocates deterministically.
     """
-    diff = int(round((ph or 0) - (low_ph or 0)))
+    diff = whs_round((ph or 0) - (low_ph or 0))
     if diff <= 0:
         return {}
     holes = sorted((c for c in course if c.get("hole")),
@@ -142,29 +198,27 @@ def compute_match_detail(match: dict, session: dict, course: list[dict],
     """
     names = names or {}
     n_holes = int(session.get("n_holes") or 18)
-    fmt = (session.get("format") or "singles").strip().lower()
+    fmt = normalize_format(session.get("format"))
     teams = [[int(c) for c in (match.get(k) or [])] for k in TEAM_KEYS]
     everyone = [c for t in teams for c in t]
-    if fmt == "foursomes":
-        # Alternate shot: ONE ball per team (Track A enters the team's
-        # gross against either partner). Strokes at TEAM level — the
-        # standard foursomes allowance, 50% of the combined-handicap
-        # difference, on the lowest stroke-index holes — assigned to
-        # every member so whichever partner's row carries the gross
-        # gets the team's strokes.
-        combined = [sum(phs.get(c) or 0 for c in t) for t in teams]
-        low_comb = min(combined) if combined else 0
+    hcp = session_handicaps(fmt, teams, phs)
+    if fmt == "chapman":
+        # ONE ball per team (Track A enters the team's gross against
+        # either partner). Team handicap = 60% low + 40% high, WHS-rounded;
+        # the higher team gets the difference on the lowest stroke-index
+        # holes, assigned to every member so whichever partner's row
+        # carries the gross gets the team's strokes.
+        team_vals = [hcp[f"team:{i}"] for i in range(len(teams))]
+        low = min(team_vals) if team_vals else 0
         strokes = {}
-        for t, comb in zip(teams, combined):
-            smap = strokes_received(comb * 0.5, low_comb * 0.5,
-                                    course, n_holes)
+        for t, th in zip(teams, team_vals):
+            smap = strokes_received(th, low, course, n_holes)
             for c in t:
                 strokes[c] = smap
     else:
-        # singles + four-ball: full difference off the match's low man
-        low_ph = min((phs.get(c) or 0) for c in everyone) if everyone else 0
-        strokes = {c: strokes_received(phs.get(c) or 0, low_ph,
-                                       course, n_holes)
+        # singles 100% / four-ball 90%: every player off the low player
+        low = min(hcp.values()) if hcp else 0
+        strokes = {c: strokes_received(hcp[c], low, course, n_holes)
                    for c in everyone}
     # normalize per-player scores to int hole keys
     sc = {c: {int(h): g for h, g in (scores.get(c) or scores.get(str(c)) or {}).items()
@@ -174,6 +228,11 @@ def compute_match_detail(match: dict, session: dict, course: list[dict],
     picked = {c: {int(h) for h, m in ((marks or {}).get(c) or (marks or {}).get(str(c)) or {}).items()
                   if m == "picked_up"}
               for c in everyone}
+    def _side_pops(cids, hn):
+        if fmt == "fourball" or not cids:
+            return None
+        return (strokes.get(cids[0]) or {}).get(hn, 0)
+
     holes_out = []
     for order, hn in enumerate(_hole_numbers(course, n_holes), start=1):
         g1, s1, n1, pu1 = _team_line(teams[0], hn, sc, strokes, picked)
@@ -195,6 +254,12 @@ def compute_match_detail(match: dict, session: dict, course: list[dict],
         holes_out.append({"hole": hn, "order": order,
                           "p1_gross": g1, "p2_gross": g2,
                           "p1_strokes": s1, "p2_strokes": s2,
+                          # the side's strokes on this hole BEFORE anyone
+                          # plays it (pop dots): one ball per side in
+                          # singles and Chapman; four-ball partners differ,
+                          # so read detail["strokes"] per player there.
+                          "p1_pops": _side_pops(teams[0], hn),
+                          "p2_pops": _side_pops(teams[1], hn),
                           "p1_picked_up": pu1, "p2_picked_up": pu2,
                           "winner": winner})
 
@@ -202,10 +267,15 @@ def compute_match_detail(match: dict, session: dict, course: list[dict],
         return " / ".join(names.get(c) or names.get(str(c)) or f"#{c}"
                           for c in cids)
 
+    # "handicap" is what the side PLAYS OFF after the session allowance;
+    # course_handicap keeps the locked 100% figure(s) it came from.
     players = [{"name": _line_name(t), "customer_ids": t,
-                "handicap": (phs.get(t[0]) if len(t) == 1 else
-                             [phs.get(c) for c in t])}
-               for t in teams]
+                "handicap": (hcp.get(f"team:{i}") if fmt == "chapman"
+                             else (hcp.get(t[0]) if len(t) == 1
+                                   else [hcp.get(c) for c in t])),
+                "course_handicap": (phs.get(t[0]) if len(t) == 1
+                                    else [phs.get(c) for c in t])}
+               for i, t in enumerate(teams)]
     detail = {
         "match_id": match.get("id"),
         "players": players,
@@ -215,6 +285,11 @@ def compute_match_detail(match: dict, session: dict, course: list[dict],
         # a closed-out card still renders its full 18 (dead holes grey).
         "start_hole": None,
         "match_len": n_holes,
+        "format": fmt,
+        # every player's allowance-applied match strokes by hole, known
+        # before a ball is struck (Chapman partners share the team's)
+        "strokes": {str(c): {str(h): n for h, n in (strokes.get(c) or {}).items()}
+                    for c in everyone},
         "holes": holes_out,
         "n_holes": n_holes,
         "hole_pars": {str(int(c["hole"])): c.get("par")
@@ -297,16 +372,15 @@ def compute_skins(session: dict, course: list[dict], phs: dict,
     holes played after a match is decided count here and nothing here
     can change a match result.
 
-    - Team sessions (fourball, foursomes) play TEAM skins: each side of
+    - Team sessions (four-ball, Chapman) play TEAM skins: each side of
       each match is one entry, across the whole session. Singles play
       INDIVIDUAL skins: every player is an entry.
     - basis "net" | "gross". Kerry has not ruled which (CA #717), so the
-      board only calls this once the dial names one. Net strokes are the
-      full LOCKED playing handicap off zero on the stroke-index holes
-      (skins are a field game, not off the low man); a plus handicap
-      gets nothing on a hole, per the plus rule (it comes off the round,
-      never a hole). Foursomes use the team ball with the allowance the
-      engine holds (50% of combined) until Kerry confirms Greensomes.
+      board only calls this once the dial names one. Net strokes use the
+      SESSION's ratified allowance (CA #721: singles 100%, four-ball
+      90%, Chapman 60/40 team) taken off zero, not off the low man
+      (skins are a field game); a plus handicap gets nothing on a hole,
+      per the plus rule (it comes off the round, never a hole).
     - A picked-up ball never wins a skin.
     - A hole is decided only when EVERY entry has posted it (the money
       hold: no win shows before the field is in); until then "pending".
@@ -315,9 +389,9 @@ def compute_skins(session: dict, course: list[dict], phs: dict,
     """
     names = names or {}
     marks = marks or {}
-    fmt = (session.get("format") or "singles").strip().lower()
+    fmt = normalize_format(session.get("format"))
     n_holes = int(session.get("n_holes") or 18)
-    team_game = fmt in ("fourball", "foursomes")
+    team_game = fmt in ("fourball", "chapman")
 
     entries = []
     for m in session.get("matches") or []:
@@ -348,13 +422,15 @@ def compute_skins(session: dict, course: list[dict], phs: dict,
     def _strokes_for(e):
         if basis != "net":
             return {c: {} for c in e["cids"]}
-        if fmt == "foursomes":
-            team_ph = sum(phs.get(c) or phs.get(str(c)) or 0
-                          for c in e["cids"]) * 0.5
-            smap = strokes_received(team_ph, 0, course, n_holes)
+        # The session's ratified allowance (CA #721), taken off ZERO:
+        # skins are a field game, not a head-to-head off the low man.
+        if fmt == "chapman":
+            th = chapman_team_handicap([phs.get(c) if phs.get(c) is not None
+                                        else phs.get(str(c)) for c in e["cids"]])
+            smap = strokes_received(th, 0, course, n_holes)
             return {c: smap for c in e["cids"]}
-        return {c: strokes_received(phs.get(c) or phs.get(str(c)) or 0, 0,
-                                    course, n_holes)
+        hc = session_handicaps(fmt, [e["cids"]], phs)
+        return {c: strokes_received(hc[c], 0, course, n_holes)
                 for c in e["cids"]}
 
     strokes = {e["key"]: _strokes_for(e) for e in entries}

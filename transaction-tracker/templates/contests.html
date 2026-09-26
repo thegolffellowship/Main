@@ -2263,7 +2263,7 @@
                             <div class="pr-hiw-sec-h">The Weekend</div>
                             <div class="lsc-sched">
                                 <div class="d"><span class="dt">Friday, October 9</span><span class="fmt">Practice Round</span></div>
-                                <div class="d"><span class="dt">Saturday, October 10</span><span class="fmt">AM Fourball &middot; PM Foursomes</span></div>
+                                <div class="d"><span class="dt">Saturday, October 10</span><span class="fmt">AM Fourball &middot; PM Chapman</span></div>
                                 <div class="d"><span class="dt">Sunday, October 11</span><span class="fmt">Singles</span></div>
                             </div>
                         </div>
@@ -2853,7 +2853,8 @@
                 };
                 if (live) o.liveLead = mpLiveLead(m, aName, bName);
                 const fmtLbl = { singles: "Singles", fourball: "Four-Ball",
-                                 foursomes: "Foursomes" }[sess.format] || "";
+                                 chapman: "Chapman", foursomes: "Chapman",
+                                 alternate_shot: "Chapman" }[sess.format] || "";
                 const status = m.state === "final" ? "FINAL"
                     : live ? ((o.liveLead && o.liveLead.thru > 0)
                               ? `LIVE · thru ${o.liveLead.thru}`

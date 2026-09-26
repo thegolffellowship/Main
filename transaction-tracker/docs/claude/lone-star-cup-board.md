@@ -58,9 +58,19 @@ tap-open hole-by-hole scorecards.
   plus handicaps get nothing on a hole. **Still Kerry's:** net or gross,
   the pot, carryovers — so the board shows skins only once
   `skins.basis` is set (`carryover` supported, off).
-- **Handicap allowances: PENDING.** The team format may be Greensomes
-  (60% of the low + 40% of the high); the engine HOLDS 50% of combined
-  until Kerry confirms.
+- **Handicap allowances: RATIFIED (CA #721, v2.502.0)** — USGA/WHS
+  Appendix C: singles 100% (full difference); four-ball 90% of each
+  player, all off the low player; the team session is **CHAPMAN**
+  (Pinehurst), team handicap = 60% of the lower partner + 40% of the
+  higher, the higher team gets the difference. WHS order: allowance →
+  `whs_round` (half up) → difference, applied on the locked PH (= course
+  handicap at 100%). `session_handicaps()` is the one helper; match and
+  net skins both read it. "foursomes" / "alternate shot" normalise to
+  Chapman — the old 50%-of-combined is gone. Members see "Chapman".
+- **Pop dots before play:** each hole carries `p1_pops` / `p2_pops` (the
+  side's strokes before anyone plays it; singles and Chapman) and the
+  detail carries a per-player `strokes` map (four-ball). `p*_strokes`
+  remain the COUNTING ball's strokes on a played hole.
 - **Match play pickups (Track A, v2.496.0):** a hole marked Picked up
   can't win; both sides picked up = a push. Score entry stays open after
   a match is decided (Track A, CA #717).
