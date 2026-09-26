@@ -330,7 +330,7 @@
         // Card check + photo (Kerry 2026-09-25).
         let checkNine = 0, checkPick = null, help = {}, noPhoto = false, psCid = null, psName = "", psOther = false;
         // Match play pickup prompt + the max-triple notice (Kerry 2026-09-25).
-        let draftX = {};
+        let draftX = {}, closedGate = false, pinMsg = "";
         let pickupHole = null, pickupKeys = [], pickupAns = {}, maxNote = "";
         const checkChanged = new Set();
         let photo = store.get(K.photo, null);        // {op_id, data, submitted, sent}
@@ -476,6 +476,17 @@
 
         // ── screens ─────────────────────────────────────────────────────
         function render() {
+            // STAFF PREVIEW (Kerry 2026-09-26, on his phone: "score entry is not
+            // open yet" with no way in). While scoring is off for members, an
+            // admin can sign in right here with the Tracker PIN; the card opens.
+            if (errMsg && !card && closedGate) {
+                app.innerHTML = `<div class="se-bad">Live scoring isn't open to players yet.</div>
+                    <div class="se-lbl" style="margin:18px 0 8px">Tracker admin? Sign in to preview</div>
+                    <input class="se-input" id="se-pin" type="password" inputmode="numeric" autocomplete="current-password" placeholder="Admin PIN">
+                    ${pinMsg ? `<div class="se-note" style="color:#991B1B">${esc(pinMsg)}</div>` : ""}
+                    <button type="button" class="se-pill go" data-act="stafflogin" style="margin-top:12px">Sign in and open the card</button>`;
+                return;
+            }
             if (errMsg && !card) { app.innerHTML = `<div class="se-bad">${esc(errMsg)}</div>`; return; }
             if (!card) return;
             const banner = (lostMsg ? `<div class="se-bad">${esc(lostMsg)}</div>` : "")
@@ -942,6 +953,7 @@
         function load() {
             return api("/api/score-entry/card?t=" + encodeURIComponent(T) + "&device_id=" + encodeURIComponent(DEVICE))
                 .then(({status, j}) => {
+                    closedGate = status === 404 && /not open yet/.test(j.error || "");
                     if (status !== 200) { errMsg = j.error || "This scoring link isn't working."; card = null; render(); return; }
                     card = j; errMsg = "";
                     if (who && !card.players.some((p) => p.customer_id === who)) who = null;
@@ -1051,6 +1063,16 @@
             const b = e.target.closest("button[data-act]");
             if (!b) return;
             const act = b.dataset.act;
+            if (act === "stafflogin") {
+                const pin = (document.getElementById("se-pin") || {}).value || "";
+                fetch("/api/auth/login", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({pin})})
+                    .then((r) => r.json().then((j) => ({ok: r.ok, j})))
+                    .then(({ok, j}) => {
+                        if (!ok || j.role !== "admin") { pinMsg = ok ? "That PIN isn't an admin PIN." : (j.error || "That PIN didn't work."); render(); return; }
+                        pinMsg = ""; closedGate = false; errMsg = ""; load();
+                    }).catch(() => { pinMsg = "No connection. Try again."; render(); });
+                return;
+            }
             if (act === "pick") { who = Number(b.dataset.cid); store.set(K.who, who); claim(false); return; }
             if (act === "follow") { following = true; store.set(K.follow, true); render(); return; }
             if (act === "takeover") { claim(true); return; }

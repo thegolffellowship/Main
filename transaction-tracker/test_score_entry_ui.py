@@ -448,6 +448,21 @@ with sync_playwright() as p:
           "won" in wl.get_attribute("class") and "lead-austin" in wl.get_attribute("class"), wl.get_attribute("class"))
     db.set_app_setting("lsc_matches", "")
 
+    print("scoring off: a Tracker admin can sign in on the link's page to preview")
+    os.environ["ADMIN_PIN"] = "4242"
+    db.set_app_setting("score_entry_live", "")
+    rz, gz, tokz = make(9, 1, "gate")
+    gp_ = b.new_context(viewport={"width": 390, "height": 844}).new_page()
+    gp_.goto(f"http://127.0.0.1:{PORT}/member/score?t={tokz}")
+    gp_.wait_for_selector("#se-pin")
+    check("the closed page offers the admin sign-in", "isn't open to players yet" in gp_.inner_text("body"))
+    gp_.fill("#se-pin", "1111"); gp_.click("[data-act=stafflogin]"); gp_.wait_for_timeout(800)
+    check("a wrong PIN says so and stays closed", "Invalid PIN" in gp_.inner_text("body") and gp_.locator("#se-pin").count() == 1)
+    gp_.fill("#se-pin", "4242"); gp_.click("[data-act=stafflogin]")
+    gp_.wait_for_selector("text=Kerry Niester", timeout=5000)
+    check("the admin PIN opens the card", gp_.locator("[data-act=pick]").count() == 2)
+    db.set_app_setting("score_entry_live", "1")
+
     print("pops as dots: black = PH at 100%, orange = Team/Cart Net")
     rp = se.create_round(900, 9, label="pops", course_holes=course(9))["round_id"]
     gp = se.upsert_group(rp, 1, players=[

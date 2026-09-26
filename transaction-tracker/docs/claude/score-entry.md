@@ -323,6 +323,14 @@ link (R8, a member send — Kerry OKs each batch) come later; the email link
 is the strong identity path, "tap your name" from a shared code is weak and
 is accepted for the beta because every action is logged by device.
 
+## Admin PIN box on the closed page (v2.500.2)
+
+Kerry 2026-09-26: "Yes, add the PIN box." While `score_entry_live` is off, the card
+read returns 404 "score entry is not open yet". The page then shows "Live scoring
+isn't open to players yet" and a Tracker admin PIN field that posts to the existing
+`/api/auth/login` (same PINs, same rate limiter). Only `role == "admin"` reloads the
+card; any other PIN is refused on the page. Nothing opens for players.
+
 ## Lone Star Cup: foursomes, X, team-colour banners (v2.500.0)
 
 Kerry 2026-09-26: "For Lone Star cup also going to need Team Entries for FOURBALL

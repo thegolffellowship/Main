@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.500.1";
+window.TGF_VERSION = "2.500.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.500.2",
+    date: "2026-09-26",
+    title: "Score entry: admin PIN box on the closed scoring page",
+    changes: [
+      "Kerry, 2026-09-26, on his phone the preview link read 'score entry is not open yet' with no way in (the Claude app's browser and Safari were not signed in as admin). Kerry: 'Yes, add the PIN box.' While scoring is off for players, the link's page now says 'Live scoring isn't open to players yet' and offers a Tracker admin sign-in. It posts to the existing /api/auth/login (same PINs, same rate limit); only an ADMIN PIN opens the card, a wrong PIN shows the server's message, and a manager or view-only PIN is told it isn't an admin PIN. Nothing opens for players until score_entry_live is on."
+    ]
+  },
   {
     version: "2.500.1",
     date: "2026-09-26",
