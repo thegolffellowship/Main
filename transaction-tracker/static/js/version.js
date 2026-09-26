@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.500.5";
+window.TGF_VERSION = "2.500.6";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.500.6",
+    date: "2026-09-26",
+    title: "Score entry: the card slides with the swipe and snaps; column lines",
+    changes: [
+      "Kerry, 2026-09-26: 'When I swipe allow some movement so I can see it swipe but still make it snap to full front or back view.' On Check the card the card now follows the finger sideways (with resistance past the first or last nine). Let go past 50 px and it slides out and the other nine slides in; short of that it springs back. Vertical scrolling and taps are unchanged.",
+      "Kerry: 'Show thin light vertical lines between columns.' Check the card has a thin light line between every column (a faint one in the dark header)."
+    ]
+  },
   {
     version: "2.500.5",
     date: "2026-09-26",

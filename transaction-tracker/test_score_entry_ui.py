@@ -489,13 +489,28 @@ with sync_playwright() as p:
         const x0 = r.left + r.width / 2, y0 = r.top + r.height / 2;
         const mk = (x) => new Touch({identifier: 1, target: el, clientX: x, clientY: y0});
         el.dispatchEvent(new TouchEvent('touchstart', {bubbles: true, touches: [mk(x0)], changedTouches: [mk(x0)]}));
+        el.dispatchEvent(new TouchEvent('touchmove', {bubbles: true, touches: [mk(x0 + dx / 2)], changedTouches: [mk(x0 + dx / 2)]}));
+        el.dispatchEvent(new TouchEvent('touchmove', {bubbles: true, touches: [mk(x0 + dx)], changedTouches: [mk(x0 + dx)]}));
         el.dispatchEvent(new TouchEvent('touchend', {bubbles: true, touches: [], changedTouches: [mk(x0 + dx)]})); }"""
-    fpg.evaluate(swipe_js, -120); fpg.wait_for_timeout(200)
+    drag_js = """(dx) => { const el = document.querySelector('.se-check'); const r = el.getBoundingClientRect();
+        const x0 = r.left + r.width / 2, y0 = r.top + r.height / 2;
+        const mk = (x) => new Touch({identifier: 1, target: el, clientX: x, clientY: y0});
+        el.dispatchEvent(new TouchEvent('touchstart', {bubbles: true, touches: [mk(x0)], changedTouches: [mk(x0)]}));
+        el.dispatchEvent(new TouchEvent('touchmove', {bubbles: true, touches: [mk(x0 + dx)], changedTouches: [mk(x0 + dx)]}));
+        return getComputedStyle(el).transform; }"""
+    tf = fpg.evaluate(drag_js, -40)
+    check("mid-swipe the card follows the finger", tf not in ("none", "") and "-40" in tf, tf)
+    fpg.evaluate("""() => { const el = document.querySelector('.se-check'); const r = el.getBoundingClientRect();
+        const t = new Touch({identifier: 1, target: el, clientX: r.left + r.width / 2 - 40, clientY: r.top + 10});
+        el.dispatchEvent(new TouchEvent('touchend', {bubbles: true, touches: [], changedTouches: [t]})); }""")
+    fpg.wait_for_timeout(400)
+    check("a short drag springs back to the same nine", fpg.locator(".se-seg button.on").inner_text() == "FRONT")
+    fpg.evaluate(swipe_js, -120); fpg.wait_for_timeout(500)
     check("swipe left on the card shows the BACK nine",
           fpg.locator(".se-seg button.on").inner_text() == "BACK" and fpg.locator(".se-check th").nth(1).inner_text() == "10")
-    fpg.evaluate(swipe_js, 20); fpg.wait_for_timeout(200)
+    fpg.evaluate(swipe_js, 20); fpg.wait_for_timeout(500)
     check("a small drag is not a swipe", fpg.locator(".se-seg button.on").inner_text() == "BACK")
-    fpg.evaluate(swipe_js, 120); fpg.wait_for_timeout(200)
+    fpg.evaluate(swipe_js, 120); fpg.wait_for_timeout(500)
     check("swipe right goes back to FRONT", fpg.locator(".se-seg button.on").inner_text() == "FRONT")
     cellp = fpg.locator("button.cell[data-key='c:102'][data-h='1']").locator("xpath=..")
     g = cellp.locator(".se-pops.cell .g")
