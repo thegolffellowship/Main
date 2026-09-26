@@ -123,6 +123,11 @@
                         flex-direction: column; justify-content: space-between; align-items: center; }
         .se-pops.cell .g { flex-direction: row; gap: 1px; min-height: 4px; }
         .se-pops.cell .se-pop { width: 4px; height: 4px; }
+        .se-chk { overflow-x: clip; }
+        .se-chk .se-check { touch-action: pan-y; will-change: transform; }
+        /* Thin light lines between the columns (Kerry 2026-09-26). */
+        .se-chk .se-check td + td, .se-chk .se-check th + th { border-left: 1px solid #ECEEF1; }
+        .se-chk .se-check thead th + th { border-left-color: rgba(255,255,255,.14); }
         .se-lblrow { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; }
         .se-keepnote { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: #4B5563; }
         .se-keepnote svg { width: 14px; height: 14px; }
@@ -1110,21 +1115,55 @@
 
         // ── taps ────────────────────────────────────────────────────────
         // SWIPE between the nines on Check the card (Kerry 2026-09-26: "Allow me
-        // to swipe to back nine or front 9 as well as the toggle"). Left = BACK,
-        // right = FRONT. Only a clearly sideways swipe counts, so scrolling and
-        // tapping a number behave as before.
+        // to swipe to back nine or front 9 as well as the toggle" ... "allow some
+        // movement so I can see it swipe but still make it snap to full front or
+        // back view"). The card follows the finger sideways (with a little
+        // resistance past the first or last nine), then snaps: far enough, it
+        // slides out and the other nine slides in; not far enough, it springs
+        // back. Only a sideways drag moves it, so scrolling and taps are as before.
         let swipe = null;
+        const cardEl = () => app.querySelector(".se-chk .se-check");
         app.addEventListener("touchstart", (e) => {
-            swipe = e.touches.length === 1 && e.target.closest(".se-chk") && app.querySelector(".se-chk .se-seg")
-                ? {x: e.touches[0].clientX, y: e.touches[0].clientY} : null;
+            swipe = e.touches.length === 1 && e.target.closest(".se-chk") && app.querySelector(".se-chk .se-seg") && cardEl()
+                ? {x: e.touches[0].clientX, y: e.touches[0].clientY, axis: null, dx: 0} : null;
+        }, {passive: true});
+        app.addEventListener("touchmove", (e) => {
+            if (!swipe) return;
+            const t = e.touches[0], dx = t.clientX - swipe.x, dy = t.clientY - swipe.y;
+            if (!swipe.axis && (Math.abs(dx) > 8 || Math.abs(dy) > 8)) swipe.axis = Math.abs(dx) > Math.abs(dy) ? "x" : "y";
+            if (swipe.axis !== "x") return;
+            const edge = (checkNine === 0 && dx > 0) || (checkNine === 1 && dx < 0);
+            swipe.dx = dx;
+            const el = cardEl();
+            el.style.transition = "none";
+            el.style.transform = `translateX(${edge ? dx * 0.3 : dx}px)`;
         }, {passive: true});
         app.addEventListener("touchend", (e) => {
             if (!swipe) return;
-            const t = e.changedTouches[0], dx = t.clientX - swipe.x, dy = t.clientY - swipe.y;
-            swipe = null;
-            if (Math.abs(dx) < 50 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+            const sw = swipe; swipe = null;
+            const t = e.changedTouches[0], dx = t.clientX - sw.x, dy = t.clientY - sw.y;
+            const el = cardEl();
             const want = dx < 0 ? 1 : 0;
-            if (want !== checkNine) { checkNine = want; checkPick = null; render(); }
+            const go = Math.abs(dx) >= 50 && Math.abs(dx) >= Math.abs(dy) * 1.5 && want !== checkNine;
+            if (!go) {
+                if (el && sw.axis === "x") { el.style.transition = "transform .18s ease-out"; el.style.transform = "translateX(0)"; }
+                return;
+            }
+            const w = el ? el.offsetWidth : 360, dir = dx < 0 ? -1 : 1;
+            const swap = () => {
+                checkNine = want; checkPick = null; render();
+                const nel = cardEl();
+                if (!nel) return;
+                nel.style.transition = "none";
+                nel.style.transform = `translateX(${-dir * w}px)`;
+                void nel.offsetWidth;
+                nel.style.transition = "transform .2s ease-out";
+                nel.style.transform = "translateX(0)";
+            };
+            if (!el) { swap(); return; }
+            el.style.transition = "transform .15s ease-in";
+            el.style.transform = `translateX(${dir * w}px)`;
+            setTimeout(swap, 150);
         }, {passive: true});
         app.addEventListener("click", (e) => {
             const b = e.target.closest("button[data-act]");
