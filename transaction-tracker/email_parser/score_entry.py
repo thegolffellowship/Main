@@ -1175,6 +1175,13 @@ def _lock_view(lock, device_id: str | None, names: dict) -> dict:
             "heartbeat_at": lock["heartbeat_at"]}
 
 
+# The team formats where a pair plays ONE ball. CA #721 (Kerry ratified
+# 2026-09-26): the cup's alternate-shot session is CHAPMAN, and Track B renames
+# the format from "foursomes"; both names (and plain alternate shot) make one
+# team row, so the rename can't silently split a pair into two rows.
+ONE_BALL_FORMATS = {"foursomes", "chapman", "alternate_shot", "alternate-shot"}
+
+
 def _ensure_cup_teams(group_id: int, db_path=None) -> list:
     """FOURSOMES in the Lone Star Cup (Kerry 2026-09-26: "Team Entries for
     FOURBALL and FOURSOMES. Where it would show both players on one team with
@@ -1195,7 +1202,7 @@ def _ensure_cup_teams(group_id: int, db_path=None) -> list:
                 "SELECT customer_id_a, customer_id_b FROM se_teams WHERE round_id = ?", (rid,))}
         pairs = set()
         for cid, m in round_matches(rid, db_path=db_path).items():
-            if (m.get("format") or "").lower() != "foursomes" or m.get("session") is None:
+            if (m.get("format") or "").lower() not in ONE_BALL_FORMATS or m.get("session") is None:
                 continue
             side = [cid] + [int(c) for c in m.get("partners") or []]
             if len(side) == 2 and all(c in here for c in side):

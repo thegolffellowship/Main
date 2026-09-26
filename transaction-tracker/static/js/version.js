@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.501.1";
+window.TGF_VERSION = "2.501.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.501.2",
+    date: "2026-09-26",
+    title: "Score entry: Chapman team rows and team pop dots (CA #721)",
+    changes: [
+      "CA #721 (Kerry ratified the Lone Star Cup allowances): the alternate-shot session is CHAPMAN. A Chapman session now makes one team row per pair exactly as foursomes did (a set of one-ball formats, so Track B renaming the format cannot split a pair into two rows), and the team row's pop dots are drawn from the match engine's own strokes for that side ('Draw the Chapman team's pop dots from compute_match_detail's strokes'), keyed 'Team match stroke'. X and pickup behaviour are unchanged."
+    ]
+  },
   {
     version: "2.501.1",
     date: "2026-09-26",

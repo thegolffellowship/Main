@@ -367,6 +367,19 @@ fm = se.get_group_card(fg)["match_status"]
 check("X (the triple, picked up) loses the hole to a holed triple; San Antonio now leads",
       fm[0]["holes"].get("2") == 2 and fm[0]["lead_team"] == "sa", fm)
 check("a singles session's pair is never made a team", not se.get_group_card(sg)["teams"])
+# CA #721: the cup's alternate-shot session is CHAPMAN; the renamed format still makes one team row
+fr2 = se.create_round(900, 9, label="chapman", course_holes=NINE)["round_id"]
+fg2 = se.upsert_group(fr2, 1, players=[{"customer_id": c, "display_name": n, "playing_handicap": ph}
+                                       for c, n, ph in [(101, "Kerry Niester", 2), (105, "Mark Stich", 20),
+                                                        (102, "Adam Baker", 10), (104, "Robert Hogue", 18)]])["group_id"]
+_d = json.loads(db.get_app_setting("lsc_matches"))
+_d["sessions"].append({"id": "s3", "format": "chapman", "se_round": fr2,
+                       "matches": [{"id": "CH1", "austin": [101, 105], "sa": [102, 104]}]})
+db.set_app_setting("lsc_matches", json.dumps(_d))
+_c2 = se.get_group_card(fg2)
+check("a Chapman session makes one team row per pair, like foursomes", len(_c2["teams"]) == 2, _c2["teams"])
+check("the match engine's per-hole strokes reach the card for the team's pop dots",
+      _c2["match_status"] and all("s" in h and len(h["s"]) == 2 for h in _c2["match_status"][0]["card"]), _c2["match_status"][:1])
 db.set_app_setting("lsc_matches", "")
 check("a round-level (non-cup) match has no lead team",
       all(m["lead_team"] is None for m in se.get_group_card(sg)["match_status"]))

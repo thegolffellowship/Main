@@ -481,7 +481,24 @@
             const g = (m) => Math.max(0, Number(((m || {})[String(cid)] || {})[String(n)]) || 0);
             return {k: g(card.strokes), t: g(card.team_strokes)};
         }
+        // A one-ball team (Chapman in the cup) gets its pops from the match
+        // engine's own strokes for that side (CA #721: "Draw the Chapman team's
+        // pop dots from compute_match_detail's strokes").
+        function teamPops(cids, n) {
+            const key = cids.slice().sort((a, b) => a - b).join(",");
+            for (const m of card.match_status || []) {
+                const k = m.sides.findIndex((sd) => sd.slice().sort((a, b) => a - b).join(",") === key);
+                if (k < 0) continue;
+                const h = (m.card || []).find((x) => x.hole === n);
+                return h ? Math.max(0, h.s[k] || 0) : 0;
+            }
+            return 0;
+        }
         function popDots(cids, n, small) {
+            if (cids && cids.length === 2) {
+                const k = teamPops(cids, n);
+                return k ? `<span class="se-pops${small ? " cell" : ""}" aria-hidden="true"><span class="g">${"<i class=\"se-pop\"></i>".repeat(k)}</span><span class="g"></span></span>` : "";
+            }
             if (!cids || cids.length !== 1) return "";
             const p = popsOf(cids[0], n);
             if (!p.k && !p.t) return "";
@@ -507,8 +524,9 @@
             const solo = new Set(subjects().filter((x) => x.cids.length === 1).map((x) => String(x.cids[0])));
             const any = (m) => Object.entries(m || {}).some(([c, h]) => solo.has(c) && Object.values(h || {}).some((v) => v > 0));
             const a = any(card.strokes), b = any(card.team_strokes);
-            if (!a && !b) return "";
-            return `<div class="se-popkey">${a ? `<span><i class="se-pop"></i>PH pop</span>` : ""}${b ? `<span><i class="se-pop t"></i>${esc((card.team_game || {}).label || "Team Net")} pop</span>` : ""}${card.strokes_note ? `<span style="color:#9CA3AF">${esc(card.strokes_note)}</span>` : ""}</div>`;
+            const tm = subjects().some((x) => x.cids.length === 2 && (card.match_status || []).some((m) => (m.card || []).some((h) => h.s.some((v) => v > 0))));
+            if (!a && !b && !tm) return "";
+            return `<div class="se-popkey">${a ? `<span><i class="se-pop"></i>PH pop</span>` : ""}${tm ? `<span><i class="se-pop"></i>Team match stroke</span>` : ""}${b ? `<span><i class="se-pop t"></i>${esc((card.team_game || {}).label || "Team Net")} pop</span>` : ""}${card.strokes_note ? `<span style="color:#9CA3AF">${esc(card.strokes_note)}</span>` : ""}</div>`;
         }
         // The tee a player plays, from the tee sheet's legend (card.tees).
         function teeOf(cid) {

@@ -323,6 +323,15 @@ link (R8, a member send — Kerry OKs each batch) come later; the email link
 is the strong identity path, "tap your name" from a shared code is weak and
 is accepted for the beta because every action is logged by device.
 
+## Chapman (CA #721): one team row, team pops from the match engine
+
+Kerry ratified the cup's alternate-shot session as CHAPMAN (60% low + 40% high).
+`ONE_BALL_FORMATS` (`foursomes`, `chapman`, alternate shot) makes one team row per
+pair in `_ensure_cup_teams`, so Track B's rename cannot split a pair into two rows.
+The team row's pop dots come from the match engine's own per-hole strokes for that
+side (`match_status[].card[].s`), key "Team match stroke"; the allowance itself is
+Track B's (`lsc_cup.compute_match_detail`).
+
 ## Entry stays open after a match is decided (CA #717, 2026-09-26)
 
 Kerry's Lone Star Cup ruling via CA #717: "score entry must stay open after a match
