@@ -165,6 +165,22 @@ or `POST /api/score-entry/events/<id>/keeper-signs {on}` (manager+). The
 photo: `GET /api/score-entry/checks/<id>/photo.jpg` (manager+). Guards:
 `test_score_entry.py` (submit / dial / photo) and `test_score_entry_ui.py`.
 
+## Live Scoring in the Tracker (v2.497.0)
+
+Kerry, 2026-09-26: "How will I access this thru the Tracker so I can see the
+preview?" The event's PAIRINGS toolbar has a **Live Scoring** button (admin)
+that opens `/events/<id>/live-scoring` (`templates/score_entry_admin.html`,
+data from `GET /api/score-entry/events/<id>/admin` → `admin_overview`):
+every round (PREVIEW flagged), each group's players (✓ when signed), holes
+in, the scorer, the card check (Submitted + photo link), and **Open** /
+**Copy link** per group. The switches are shown: open to members
+(`score_entry_live`), scorekeeper signs for the group (toggle), the cart-sign
+QR groups; and **Build the round from PAIRINGS** (9 | 18, re-run safe).
+
+**Cart-sign QR (v2.497.0):** "It could just be in one of the corners and
+perhaps a little smaller." Top-right corner of each sign, 0.9 in, one line
+"Scan to keep score" under it.
+
 ## Match play: Ball in hole or Picked up (v2.496.0)
 
 Kerry, 2026-09-25 (via the Front Desk), verbatim: "The only possible

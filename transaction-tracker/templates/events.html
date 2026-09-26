@@ -7087,6 +7087,11 @@
                 // matrix and course card.
                 html += `<button class="pairings-action-btn" onclick="window.open('/events/${ev.id}/divisions-flights','_blank')" title="Print Divisions &amp; Flights — NET, Skins and Gross on one page">&#x1F5A8; Divisions &amp; Flights</button>`;
                 html += `<button class="pairings-action-btn" onclick="window.open('/events/${ev.id}/proximity-markers','_blank')" title="Print Closest-to-the-Pin markers for the par 3s">&#x1F5A8; Proximity</button>`;
+                // LIVE SCORING (Kerry 2026-09-26: "How will I access this thru
+                // the Tracker so I can see the preview?"): each group's
+                // scoring link and where every card stands. Admin only in
+                // the dry run.
+                if (currentRole === "admin") html += `<button class="pairings-action-btn" onclick="window.open('/events/${ev.id}/live-scoring','_blank')" title="Live score entry: every group's link, holes in, signatures, card checks">&#x26F3; Live Scoring</button>`;
                 html += `<button class="pairings-action-btn pairings-blinds-btn" title="Draw BLINDs for the open seats — members in the field with an established handicap, spread evenly over the year">&#x1F3B2; Blinds</button>`;
             }
         }

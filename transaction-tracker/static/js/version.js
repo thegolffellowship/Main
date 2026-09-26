@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.496.2";
+window.TGF_VERSION = "2.497.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.497.0",
+    date: "2026-09-26",
+    title: "Live Scoring in the Tracker, and the cart-sign QR in the corner",
+    changes: [
+      "Kerry, 2026-09-26: 'How will I access this thru the Tracker so I can see the preview?' A new Live Scoring button in each event's PAIRINGS toolbar (admin) opens /events/<id>/live-scoring: every scoring round on the event (the preview marked PREVIEW), each group's players with a check when signed, holes in, who is keeping score, whether the card was submitted and its photo, and Open / Copy link for each group. It also shows the switches: open to members (off in the dry run), scorekeeper signs for the group (with a Turn on/off button) and which groups carry a QR on the cart signs, plus Build the round from PAIRINGS (9 or 18 holes, re-run safe).",
+      "Kerry: 'It doesn't look right with the text. It could just be in one of the corners and perhaps a little smaller.' The cart-sign score QR now sits in the top-right corner of each sign at 0.9 inch with a one-line 'Scan to keep score' under it, clear of the names and the start line."
+    ]
+  },
   {
     version: "2.496.2",
     date: "2026-09-26",

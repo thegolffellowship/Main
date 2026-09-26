@@ -145,6 +145,47 @@ def round_status(event_id: int, db_path=None) -> dict:
             "keeper_signs": keeper_signs(event_id, db_path), "rounds": out}
 
 
+def admin_overview(event_id: int, base_url: str | None = None, db_path=None) -> dict:
+    """The Tracker's Live Scoring page for one event (Kerry 2026-09-26: "How
+    will I access this thru the Tracker so I can see the preview?"): every
+    score-entry round, its groups with players, holes in, who is scoring,
+    signatures, the card check and photo, and each group's link."""
+    from email_parser.database import get_app_setting
+    feed = get_entered_scores(event_id, db_path=db_path)
+    rounds = []
+    for r in feed["rounds"]:
+        links = {x["group_id"]: x["url"] for x in round_links(r["round_id"], base_url, db_path)}
+        by_group: dict = {}
+        for p in r["players"]:
+            by_group.setdefault(p["group_id"], []).append(p)
+        signed = {(x["customer_id"], x["kind"]) for x in r["signoffs"]}
+        checks = {}
+        for c in r["card_checks"]:
+            checks[c["group_id"]] = c          # latest wins (ordered by id)
+        n = r["holes"]
+        groups = []
+        for g in r["groups"]:
+            ps = by_group.get(g["group_id"], [])
+            groups.append({
+                "group_id": g["group_id"], "group_num": g["group_num"], "label": g["label"],
+                "tee_time": g["tee_time"], "start_hole": g["start_hole"],
+                "players": [{"customer_id": p["customer_id"], "name": p["name"], "thru": p["thru"],
+                             "signed": (p["customer_id"], "player") in signed} for p in ps],
+                "holes_in": min((p["thru"] for p in ps), default=0), "holes": n,
+                "scorer": next((p["name"] for p in ps if p["customer_id"] == g["scorer_customer_id"]), None),
+                "attested": any((p["customer_id"], "scorekeeper") in signed for p in ps),
+                "card_check": checks.get(g["group_id"]),
+                "url": links.get(g["group_id"])})
+        rounds.append({"round_id": r["round_id"], "label": r["label"], "date": r["date"],
+                       "holes": n, "status": r["status"],
+                       "preview": (r["label"] or "").startswith(PREVIEW_LABEL),
+                       "matches": bool(round_matches(r["round_id"], db_path)), "groups": groups})
+    return {"event_id": event_id, "rounds": rounds,
+            "live_for_members": (get_app_setting("score_entry_live", db_path) or "").strip() == "1",
+            "keeper_signs": keeper_signs(event_id, db_path),
+            "qr": _qr_dial(event_id, db_path)}
+
+
 def _marks_by_subject(conn, group_id: int = None, round_id: int = None) -> dict:
     q, a = ("group_id = ?", group_id) if group_id is not None else ("round_id = ?", round_id)
     out: dict = {}

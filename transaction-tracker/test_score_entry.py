@@ -503,6 +503,10 @@ with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.St
 client = appmod.app.test_client()
 check("anonymous cannot read the board",
       client.get("/api/score-entry/events/900/scores").status_code in (401, 403, 302))
+check("anonymous cannot open the Live Scoring page",
+      client.get("/events/900/live-scoring").status_code in (401, 403, 302))
+check("anonymous cannot read the Live Scoring overview",
+      client.get("/api/score-entry/events/900/admin").status_code in (401, 403, 302))
 check("anonymous cannot build a round",
       client.post("/api/score-entry/rounds", json={"event_id": 900, "holes": 9}).status_code
       in (401, 403, 302))
@@ -539,6 +543,14 @@ check("scorer writes by link", w.get_json()["results"][0]["result"] == "ok", w.g
 card = anon.get(f"/api/score-entry/card?t={htok}&device_id=d1").get_json()
 check("card shows the hole", card["scores"]["c:104"]["1"] == 5 and card["lock"]["state"] == "mine")
 check("the scoring page renders", anon.get(f"/member/score?t={htok}").status_code == 200)
+pg = client.get("/events/900/live-scoring")
+check("admin: the Live Scoring page renders", pg.status_code == 200 and b"LIVE SCORING" in pg.data)
+ov = client.get("/api/score-entry/events/900/admin").get_json()
+g0 = [g for r in ov["rounds"] for g in r["groups"]]
+check("admin: the overview lists every round's groups with a working link and holes in",
+      ov["rounds"] and all(g["url"] and "/member/score?t=" in g["url"] for g in g0)
+      and all("holes_in" in g and "players" in g for g in g0), ov["rounds"][:1])
+check("admin: the overview carries the dials", {"live_for_members", "keeper_signs", "qr"} <= set(ov))
 
 conn.close()
 try:

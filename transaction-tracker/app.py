@@ -11576,6 +11576,30 @@ _SE_READ_CACHE: dict = {}
 _SE_READ_LOCK = threading.Lock()
 
 
+@app.route("/events/<int:event_id>/live-scoring")
+@require_role("admin")
+def live_scoring_admin_page(event_id):
+    """The Tracker's door into score entry for one event (Kerry 2026-09-26).
+    Admin only while the feature is in its dry run."""
+    from email_parser.database import get_connection
+    conn = get_connection()
+    try:
+        ev = conn.execute("SELECT id, item_name, event_date, course FROM events WHERE id = ?",
+                          (event_id,)).fetchone()
+    finally:
+        conn.close()
+    if not ev:
+        return "Event not found", 404
+    return render_template("score_entry_admin.html", ev=dict(ev))
+
+
+@app.route("/api/score-entry/events/<int:event_id>/admin")
+@require_role("admin")
+def api_se_admin(event_id):
+    from email_parser.score_entry import admin_overview
+    return jsonify(admin_overview(event_id))
+
+
 @app.route("/api/score-entry/events/<int:event_id>/seed", methods=["POST"])
 @require_role("admin")
 def api_se_seed(event_id):
