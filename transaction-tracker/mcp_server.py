@@ -1821,7 +1821,7 @@ def _scoring_dispatch_inner(url: str, extract: str):
       scoring-flights-close:<event_id>[|apply]  the CLOSEOUT step: a played event's board to SETTLED (frozen first if LIVE); dry run by default; the hourly sync runs it itself
       scoring-flights-board:<event_id>  the DIVISIONS/FLIGHTS board as data — ratified flighting + payout rules (SELECTION and AMOUNTS layers) beside what GG recorded; dry run, read-only
       scoring-pairings-counts:<event_id>[|<year>]  saved sheet scored against played history: times each pair has played together this year INCLUDING this event
-      scoring-liabilities          payouts owed, credits held, LSC shirt fund by Cup year, HIO pot, tax reserve by month
+      scoring-liabilities          payouts owed, credits held, LSC shirt fund by Cup year, HIO pot, LSC skins pot, tax reserve by month
       scoring-membership-gap[:apply]  the membership gap group: booked vs today's decomposition by price/type/contests; apply rebooks membership rows only
       scoring-import-orders:<from>|<to>[|apply][|membership-only]  date-range import of "New Order" emails from the mailbox (dry-run counts; apply runs in the background, no member email)
       scoring-import-status        progress of the running/last import

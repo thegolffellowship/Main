@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.503.1";
+window.TGF_VERSION = "2.503.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.503.2",
+    date: "2026-09-27",
+    changes: [
+      "LONE STAR CUP SKINS POT on the liabilities read (Kerry, CA #753 item 5, CA Queue #23): the cup\u2019s $75 skins buy-in is money held for payout, not TGF revenue. scoring-liabilities now carries lsc_skins_pot: held = $25 \u00d7 rounds \u00d7 players marked SKINS on the cup roster (the same oneoff_addons column the v2.503.0 payout reads, so the pot, the payout and this bucket can never disagree), paid_out = skins payouts recorded PAID for the cup, balance = held \u2212 paid. Undecided players are unmarked, not out, and are added when marked at check-in. Read-only: no schema change, no ledger write, and the cup receipts stay booked as they are. Guard test_lsc_skins_pot.py.",
+    ],
+  },
   {
     version: "2.503.1",
     date: "2026-09-27",

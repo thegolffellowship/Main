@@ -428,6 +428,19 @@ pre-cutover memberships count too (Kerry: "All memberships fund shirts") —
 and the sales-tax reserve by month, filed/open by the 20th-of-next-month rule.
 Shirt PURCHASES are not yet tagged to the fund (open).
 
+**Lone Star Cup skins pot (`lsc_skins_pot`, v2.503.2, Kerry-approved
+2026-09-27, CA #753 item 5 / CA Queue #23).** The cup's $75 skins buy-in
+($25 × 3 rounds) is money held for payout, not revenue. The cup receipts
+mix deposits, balances and skins in single payments, so nothing is split
+per receipt: the bucket is DERIVED. `held` = $25 × rounds in the
+`lsc_matches` dial × players marked `skins` in `oneoff_addons` for the
+cup event (the same source `lsc_cup._skins_ctx` and the payout read);
+`paid_out` = PAID `tgf_payouts` rows for the cup whose category contains
+"skin"; `balance` = held − paid_out. Unmarked players are undecided, not
+out, and add to `held` when marked at check-in. Read-only: no schema, no
+ledger write. At cup close, TGF revenue for the cup = cash in − course
+cost − the skins pot. Guard `test_lsc_skins_pot.py`.
+
 **Tax reserve is SIGNED per row; the MONTH floors at zero (Kerry-ratified
 2026-09-09, v2.352.0 — supersedes the 9/5 per-row floor).** Kerry:
 *"Shouldn't minus margins be minus sales tax too? ... Comptroller only

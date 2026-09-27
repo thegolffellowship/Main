@@ -32,6 +32,7 @@ Three reads, all read-only:
 from __future__ import annotations
 
 import logging
+import sqlite3
 from collections import defaultdict
 from pathlib import Path
 
@@ -307,6 +308,51 @@ def membership_gap(db_path: str | Path | None = None,
     return result
 
 
+def lsc_skins_pot(conn) -> dict:
+    """The Lone Star Cup skins buy-in held for payout (Kerry, CA #725 +
+    #753 item 5, approved 2026-09-27, CA Queue #23). Read-only, derived:
+
+      held     = $75 x players marked SKINS on the cup roster — the
+                 oneoff_addons 'skins' key, the same source the v2.503.0
+                 payout reads (lsc_cup._skins_ctx), so the pot, the
+                 payout and this bucket can never disagree
+      paid_out = skins payouts recorded PAID for the cup event
+                 (tgf_payouts, category containing 'skin')
+      balance  = held - paid_out
+
+    Receipts stay booked as they are; nothing here writes. Unmarked
+    players are undecided, not out, and add to `held` when marked."""
+    from .lsc_cup import SKINS_PER_ROUND_CENTS, _setting_json
+    dial = _setting_json(conn, "lsc_matches") or {}
+    eid = dial.get("event_id")
+    if not eid:
+        return {"error": "no lsc_matches dial with an event_id"}
+    rounds = len(dial.get("sessions") or []) or 3
+    per_player = SKINS_PER_ROUND_CENTS * rounds / 100.0
+    add = (_setting_json(conn, "oneoff_addons") or {}).get(str(eid)) or {}
+    buyers = sorted(int(c) for c, keys in add.items() if "skins" in (keys or []))
+    held = round(per_player * len(buyers), 2)
+    paid = 0.0
+    try:
+        r = conn.execute(
+            """SELECT COALESCE(SUM(p.amount), 0) AS amt
+                 FROM tgf_payouts p
+                 JOIN tgf_events te ON te.id = p.event_id
+                WHERE te.events_id = ?
+                  AND p.paid_at IS NOT NULL
+                  AND lower(p.category) LIKE '%skin%'""", (int(eid),)).fetchone()
+        paid = round(float(r["amt"] or 0), 2)
+    except sqlite3.OperationalError:
+        pass  # no payouts tables yet: nothing paid
+    return {"event_id": int(eid), "per_player": per_player,
+            "rounds": rounds, "buyers_marked": len(buyers),
+            "buyer_ids": buyers, "held": held, "paid_out": paid,
+            "balance": round(held - paid, 2),
+            "rule": ("$25 x rounds per player marked SKINS on the cup roster; "
+                     "undecided players are unmarked, not out (Kerry 2026-09-27, "
+                     "CA #753 item 5)")}
+
+
 def liability_buckets(db_path: str | Path | None = None,
                       today: str | None = None) -> dict:
     """What TGF is holding for someone else or has earmarked. Read-only.
@@ -318,6 +364,8 @@ def liability_buckets(db_path: str | Path | None = None,
                             (Aug–Jul), from the membership items
                             themselves so pre-cutover memberships count
                             (Kerry: 'All memberships fund shirts')
+      lsc_skins_pot       — Lone Star Cup skins money held for payout
+                            (lsc_skins_pot below)
       sales_tax_reserve   — tax_reserve by month, split filed / open by
                             the 20th-of-next-month rule
     """
@@ -394,6 +442,11 @@ def liability_buckets(db_path: str | Path | None = None,
         except Exception:
             logger.warning("HIO pot read failed", exc_info=True)
             out["hio_pot"] = {"error": "unavailable"}
+        try:
+            out["lsc_skins_pot"] = lsc_skins_pot(conn)
+        except Exception:
+            logger.warning("LSC skins pot read failed", exc_info=True)
+            out["lsc_skins_pot"] = {"error": "unavailable"}
         # Sales tax reserve by month
         months = {}
         for r in conn.execute(
