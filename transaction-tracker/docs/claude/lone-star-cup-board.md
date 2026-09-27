@@ -46,10 +46,10 @@ tap-open hole-by-hole scorecards.
   longer changes a payout).
 - **Tiebreak:** level points = the **defending champion keeps the cup**.
   `cup_status()` decides: the champion clinches at exactly half the
-  points, the challenger has to pass half. `defending_champion` in the
-  dial stays EMPTY until Kerry names the 2025 winner (the repo has the
-  GG archive rows but not the result, so nobody guesses); with none
-  recorded a finished tie reads `tied_pending`.
+  points, the challenger has to pass half. **San Antonio won the 2025
+  cup (Kerry, CA #753, 2026-09-27): the live dial carries
+  `defending_champion: "sa"`**, so a finished tie reads "SA retains".
+  With no champion recorded a finished tie would read `tied_pending`.
 - **CTP: none. Skins instead** (CA #717), scored by `compute_skins()`,
   SEPARATE from the match: team skins in team sessions, individual in
   singles; holes after a close-out count for skins only and never touch
@@ -60,8 +60,13 @@ tap-open hole-by-hole scorecards.
   Each 18 is its own pot: $25 × the players IN THAT ROUND who bought the
   weekend skins (the SKINS add-on in `oneoff_addons`). Saturday: team
   skins (four-ball best gross ball, Chapman one gross), each team skin
-  split evenly between partners; a team is in only when BOTH partners
-  bought (a mixed pair is left out and flagged — unruled). Sunday:
+  split evenly between partners. **Mixed pair (only one partner bought),
+  RULED CA #753 item 4:** the team still plays for team skins and ONLY
+  the buyer is paid his half; the non-buyer's half stays in the pot.
+  How that half is redistributed is Kerry's pick (#757: A = back into
+  the same round's pot, recommended; B = fixed skin value, half held).
+  NOT BUILT until he picks: the engine still leaves a mixed pair out and
+  flags it. A pair where neither bought stays out. Sunday:
   individual gross skins flighted on the TGF 18-hole index FROZEN at the
   event (`_event_index_as_of` → `_handicap_index_18_by_customer`):
   Flight 1 < 12.0, Flight 2 ≥ 12.0, half the pot each; a player with no
@@ -142,3 +147,12 @@ slip on a member-facing gate stops Track B.*
 FootJoy order). The SHIRT column shows it amber with a "?"; the boot
 seed never copies a noted pick onto `customers.shirt_size`; a size
 picked in the column confirms it and clears the note.
+
+## 14 v 13 odd-player rule (DRAFT, CA #753 item 2, mailbox #757 — NOT applied)
+
+Only if Kerry finds no 14th SA player. Team sessions 6 v 6 pairs (SA sits
+1 player, Austin sits 1 pair, each session); Sunday 13 singles (one Austin
+player sits); no Austin player sits more than once; captains pick. 25
+points: SA retains at 12.5, Austin needs 13. No engine change — a sit-out
+is simply not listed in the dial. Open for Kerry: the $25 a sitting skins
+buyer didn't play for (the pot is $25 × buyers present).
