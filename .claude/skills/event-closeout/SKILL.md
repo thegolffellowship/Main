@@ -43,6 +43,19 @@ filter by NAME SUBSTRING** — passing an id like `3306` returns `[]` and
 reads as "no scorecards" when there are 24. That is how the 2026-09-08
 closeout was mis-read as "nothing has happened" before this first run.
 
+## NOT TGF EVENTS — never close these out
+
+Events on the Tracker that are not TGF events. Skip them in every run:
+no handicap post, no card send, no recap, no results, no P&L. Never
+delete one without Kerry's OK.
+
+| Event | Why | Ruling |
+|---|---|---|
+| 3332 "Kizee" (Austin, Roy Kizer, 2026-09-26, 4 hand-entered rows) | Not a TGF event; possibly Robert's private game | Kerry via CA mailbox #753 item 6, 2026-09-27. Flagged for Robert (CA Queue) |
+
+There is no event-level "not TGF" flag in the schema; adding one is a
+rule-3b change. Until then this table is the exclusion.
+
 ## Phase 0 — what the machine already did
 
 The hourly auto-sync (`_GG_RESULT_PORTALS`, database.py) runs on any day

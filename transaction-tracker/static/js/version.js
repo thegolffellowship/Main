@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.503.0";
+window.TGF_VERSION = "2.503.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.503.1",
+    date: "2026-09-27",
+    changes: [
+      "Docs only: the closeout skill gains a NOT TGF EVENTS table, which every closeout run skips (no handicap post, card send, recap, results or P&L). First entry: event 3332 \u201cKizee\u201d (Austin, Roy Kizer, 9/26), per Kerry\u2019s answer in CA mailbox #753 item 6. Nothing is deleted. The Tracker has no event-level \u2018not TGF\u2019 flag, so this table is the exclusion until one is ratified.",
+    ],
+  },
   {
     version: "2.503.0",
     date: "2026-09-26",
