@@ -50,6 +50,8 @@ for cid, fn, ln in [(101, "Kerry", "Niester"), (102, "Adam", "Baker"),
 conn.execute("INSERT INTO events (id, item_name, event_date, start_type, start_time) "
              "VALUES (900, 's9.25 Canyon Springs', '2026-09-29', 'Shotgun', '17:30')")
 conn.commit()
+# Kerry 2026-09-28: score entry is opt-in per event. The test event is on.
+db.set_app_setting("score_entry_events", "[900]")
 
 NINE = [{"hole": h, "par": p, "stroke_index": si} for h, p, si in
         [(1, 4, 3), (2, 3, 9), (3, 5, 1), (4, 4, 5), (5, 4, 7), (6, 3, 8),
@@ -827,6 +829,28 @@ check("a manager signs for a player (note required) and it's logged with who",
       and se.manager_log(sr)[0]["actor"] == "manager:San Antonio"
       and mgr.post(f"/api/score-entry/groups/{sg}/sign-for", json={"customer_id": 101}).status_code == 400,
       (sf843.get_json(), se.manager_log(sr)[:1]))
+print("PER-EVENT OPT-IN (Kerry 2026-09-28: SA-only test, nothing for Austin)")
+db.set_app_setting("score_entry_events", "[3304]")
+check("an event not turned on: a manager can't open Live Scoring or its read",
+      mgr.get("/events/900/live-scoring").status_code == 404
+      and mgr.get("/api/score-entry/events/900/admin").status_code == 404
+      and mgr.get("/api/score-entry/events/900/scores").status_code == 404)
+check("...nor settle a CTP, clear a flag or sign for a player there",
+      mgr.post(f"/api/score-entry/rounds/{sr}/ctp", json={"hole": 6, "customer_id": 105}).status_code == 404
+      and mgr.post(f"/api/score-entry/groups/{sg}/sign-for", json={"customer_id": 101, "note": "x"}).status_code == 404)
+_tk = se.group_link(sg).split("t=", 1)[1]
+check("...and a player's link doesn't open, even with the member switch on",
+      anon.get(f"/api/score-entry/card?t={_tk}").status_code == 404)
+check("...while an admin still can (preview)", client.get("/events/900/live-scoring").status_code == 200
+      and client.get(f"/api/score-entry/card?t={_tk}").status_code == 200)
+check("...and no cart sign gets a code", se.attach_cart_sign_qr(
+      {"event": {"id": 900}, "groups": []}) == {"groups": 0})
+check("the setting reads a comma list too", se.enabled_events() == {3304}
+      and (db.set_app_setting("score_entry_events", "3304, 900") or se.event_enabled(900)))
+check("an empty setting turns every event off", (db.set_app_setting("score_entry_events", "") or True)
+      and not se.event_enabled(900) and se.enabled_events() == set())
+db.set_app_setting("score_entry_events", "[900]")
+check("turned back on: the manager is back in", mgr.get("/api/score-entry/events/900/admin").status_code == 200)
 pv = se.create_preview_round(900, [101, 102], holes=18, tees={101: "<50", 102: "65+"})
 se.set_round_matches(pv["round_id"], [{"id": "P-1", "format": "singles", "sides": [[101], [102]]}])
 check("only a PREVIEW round can be started over",

@@ -99,6 +99,64 @@ def round_matches(round_id: int, db_path=None) -> dict:
 ROUND_MATCHES_SETTING = "score_entry_matches"
 
 
+# ---------------------------------------------------------------------------
+# PER-EVENT OPT-IN (Kerry 2026-09-28: "I don't want that available to Robert
+# yet in Austin. We need to only test it here in San Antonio at the Canyon
+# Springs event."). Score entry is OFF for every event unless its id is in
+# the app setting `score_entry_events` (a JSON list or comma list of event
+# ids). Staff turn an event on; nothing turns one on by itself. Admin
+# PREVIEW use is unaffected; everything a manager or a player can reach
+# checks this.
+# ---------------------------------------------------------------------------
+EVENTS_SETTING = "score_entry_events"
+
+
+def enabled_events(db_path=None) -> set:
+    from email_parser.database import get_app_setting
+    raw = (get_app_setting(EVENTS_SETTING, db_path) or "").strip()
+    if not raw:
+        return set()
+    try:
+        val = json.loads(raw)
+        items = val if isinstance(val, list) else list(val.keys()) if isinstance(val, dict) else [val]
+    except (ValueError, TypeError):
+        items = raw.split(",")
+    out = set()
+    for x in items:
+        try:
+            out.add(int(str(x).strip()))
+        except ValueError:
+            continue
+    return out
+
+
+def event_enabled(event_id, db_path=None) -> bool:
+    try:
+        return int(event_id) in enabled_events(db_path)
+    except (TypeError, ValueError):
+        return False
+
+
+_EVENT_OF = {
+    "group": "SELECT r.event_id FROM se_groups g JOIN se_rounds r ON r.id = g.round_id WHERE g.id = ?",
+    "round": "SELECT event_id FROM se_rounds WHERE id = ?",
+    "flag": ("SELECT r.event_id FROM se_card_flags f JOIN se_groups g ON g.id = f.group_id "
+             "JOIN se_rounds r ON r.id = g.round_id WHERE f.id = ?"),
+    "hio": ("SELECT r.event_id FROM se_hio_claims h JOIN se_groups g ON g.id = h.group_id "
+            "JOIN se_rounds r ON r.id = g.round_id WHERE h.id = ?"),
+}
+
+
+def event_of(kind: str, obj_id, db_path=None):
+    """The event a group / round / flag / HIO claim belongs to, or None."""
+    sql = _EVENT_OF.get(kind)
+    if not sql:
+        return None
+    with _closing(_conn(db_path)) as conn:
+        r = conn.execute(sql, (int(obj_id),)).fetchone()
+    return r[0] if r else None
+
+
 def set_round_matches(round_id: int, matches: list | None, db_path=None) -> dict:
     """Bind (or with None, clear) round-level matches: [{"id", "format",
     "sides": [[cid...], [cid...]]}]. Every cid must be in the round."""
@@ -211,6 +269,7 @@ def admin_overview(event_id: int, base_url: str | None = None, db_path=None) -> 
                                    "log": manager_log(r["round_id"], db_path=db_path)}})
     return {"event_id": event_id, "rounds": rounds,
             "live_for_members": (get_app_setting("score_entry_live", db_path) or "").strip() == "1",
+            "event_enabled": event_enabled(event_id, db_path),
             "keeper_signs": keeper_signs(event_id, db_path),
             "qr": _qr_dial(event_id, db_path)}
 
@@ -1319,6 +1378,8 @@ def attach_cart_sign_qr(pack: dict, base_url: str | None = None, db_path=None) -
     out = {"groups": 0}
     try:
         event_id = int((pack.get("event") or {}).get("id"))
+        if not event_enabled(event_id, db_path):
+            return out
         want = _qr_dial(event_id, db_path)
         if not want:
             return out

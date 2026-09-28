@@ -709,3 +709,15 @@ dial; the staged demo should not be applied.
 The G-0 publish dry run (`scoring-entry-publish`) resolves EVERY player's tee,
 held or not, and returns `tees: {tee value: {tee_id, players[, why]}}` per round.
 Use it to prove tees after seeding, before anyone plays.
+
+## Per-event opt-in (Kerry 2026-09-28)
+
+Score entry is OFF for every event unless its id is in the app setting
+`score_entry_events` (JSON list or comma list). Set it with
+`scoring-setting-set:score_entry_events|[3304]`. Below admin, every door checks
+it: the scorer link routes (`_se_group_from_request`), the Live Scoring page and
+read, the scores feed and the four manager actions (`_se_event_gate` in app.py).
+The cart-sign QR (`attach_cart_sign_qr`) and the EVENTS page's SCORE ENTRY panel
+and Live Scoring button (`SE_EVENTS`, server-rendered) follow it too. Admin
+preview is unaffected. `score_entry_live` stays the member switch; both must be
+on for a member to score.

@@ -74,6 +74,7 @@ def make(holes, start, label):
 
 
 db.set_app_setting("score_entry_live", "1")
+db.set_app_setting("score_entry_events", "[900, 905]")
 PORT = 5093
 threading.Thread(target=lambda: appmod.app.run(port=PORT, use_reloader=False), daemon=True).start()
 time.sleep(2)

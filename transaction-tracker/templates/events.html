@@ -6946,6 +6946,11 @@
     // ── SCORE ENTRY panel on PAIRINGS (CA #782) ──────────────────────────
     // Reuses the Live Scoring read (/api/score-entry/events/<id>/admin),
     // the seed route (Build from PAIRINGS), and admin close / QR routes.
+    // PER-EVENT OPT-IN (Kerry 2026-09-28): the panel and the Live Scoring
+    // button show only on events staff turned on (app setting
+    // score_entry_events), server-rendered into SE_EVENTS.
+    const SE_EVENTS = new Set(({{ (se_events or []) | tojson }}).map(Number));
+    function seEventOn(evId) { return SE_EVENTS.has(Number(evId)); }
     const SE_PP_CACHE = {};
     const SE_PP_OPEN = {};
     const SE_PP_AT = {};
@@ -7232,7 +7237,7 @@
                 // the Tracker so I can see the preview?"): each group's
                 // scoring link and where every card stands. Admin only in
                 // the dry run.
-                if (currentRole === "admin") html += `<button class="pairings-action-btn" onclick="window.open('/events/${ev.id}/live-scoring','_blank')" title="Live score entry: every group's link, holes in, signatures, card checks">&#x26F3; Live Scoring</button>`;
+                if (currentRole === "admin" && seEventOn(ev.id)) html += `<button class="pairings-action-btn" onclick="window.open('/events/${ev.id}/live-scoring','_blank')" title="Live score entry: every group's link, holes in, signatures, card checks">&#x26F3; Live Scoring</button>`;
                 html += `<button class="pairings-action-btn pairings-blinds-btn" title="Draw BLINDs for the open seats — members in the field with an established handicap, spread evenly over the year">&#x1F3B2; Blinds</button>`;
             }
         }
@@ -7244,7 +7249,7 @@
         // status, Close. Admin only; the member switches stay where they
         // are. Filled after render by seFillPanel (cached, so re-renders
         // don't flicker).
-        if (currentRole === "admin" && !state.isDirty && (state.groups_9.length || state.groups_18.length)) {
+        if (currentRole === "admin" && seEventOn(ev.id) && !state.isDirty && (state.groups_9.length || state.groups_18.length)) {
             html += `<div class="se-pp-slot" data-se-ev="${ev.id}" data-se-h9="${state.groups_9.length ? 1 : 0}" data-se-h18="${state.groups_18.length ? 1 : 0}">${SE_PP_CACHE[ev.id] || ''}</div>`;
             setTimeout(() => seFillPanel(ev.id), 0);
         }

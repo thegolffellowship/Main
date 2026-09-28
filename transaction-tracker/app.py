@@ -4448,7 +4448,13 @@ def api_fix_guest_customers():
 @app.route("/events")
 def events_page():
     matrix9, matrix18 = _load_matrix()
-    return render_template("events.html", matrix9=matrix9, matrix18=matrix18)
+    try:
+        from email_parser.score_entry import enabled_events as _se_enabled
+        se_events = sorted(_se_enabled())
+    except Exception:
+        se_events = []
+    return render_template("events.html", matrix9=matrix9, matrix18=matrix18,
+                           se_events=se_events)
 
 
 @app.route("/customers")
@@ -11340,6 +11346,26 @@ def _score_entry_live() -> bool:
         return False
 
 
+def _se_is_admin() -> bool:
+    return _ROLE_RANK.get(session.get("role"), 0) >= _ROLE_RANK["admin"]
+
+
+def _se_event_gate(kind: str, obj_id):
+    """PER-EVENT OPT-IN (Kerry 2026-09-28, SA-only test): anyone below admin
+    reaches score entry only on an event listed in `score_entry_events`.
+    Returns an error response, or None when allowed."""
+    if _se_is_admin():
+        return None
+    from email_parser.score_entry import event_enabled, event_of
+    try:
+        ev = obj_id if kind == "event" else event_of(kind, obj_id)
+    except Exception:
+        ev = None
+    if ev is None or not event_enabled(ev):
+        return jsonify({"error": "score entry is not open for this event"}), 404
+    return None
+
+
 def _se_group_from_request(body=None):
     """(group_id, error_response). The link is the only key."""
     from email_parser.score_entry import verify_group_token
@@ -11349,6 +11375,9 @@ def _se_group_from_request(body=None):
     gid = verify_group_token(tok)
     if not gid:
         return None, (jsonify({"error": "this scoring link is not valid any more"}), 401)
+    gate = _se_event_gate("group", gid)
+    if gate:
+        return None, gate
     return gid, None
 
 
@@ -11532,6 +11561,9 @@ def _se_actor() -> str:
 @require_role("manager")
 def api_se_hio_verify(hio_id):
     from email_parser.score_entry import verify_hio
+    gate = _se_event_gate("hio", hio_id)
+    if gate:
+        return gate
     b = request.get_json(silent=True) or {}
     res = verify_hio(hio_id, _se_actor(), approve=b.get("approve", True) is not False)
     return (jsonify(res), 400) if "error" in res else jsonify(res)
@@ -11541,6 +11573,9 @@ def api_se_hio_verify(hio_id):
 @require_role("manager")
 def api_se_flag_resolve(flag_id):
     from email_parser.score_entry import resolve_flag
+    gate = _se_event_gate("flag", flag_id)
+    if gate:
+        return gate
     b = request.get_json(silent=True) or {}
     res = resolve_flag(flag_id, (b.get("resolution") or "resolved by manager")[:200],
                        actor=_se_actor())
@@ -11551,6 +11586,9 @@ def api_se_flag_resolve(flag_id):
 @require_role("manager")
 def api_se_ctp_rule(round_id):
     from email_parser.score_entry import rule_ctp
+    gate = _se_event_gate("round", round_id)
+    if gate:
+        return gate
     b = request.get_json(silent=True) or {}
     try:
         res = rule_ctp(round_id, int(b["hole"]), int(b["customer_id"]), actor=_se_actor())
@@ -11564,6 +11602,9 @@ def api_se_ctp_rule(round_id):
 def api_se_sign_for(group_id):
     """Manager signs on the player's behalf, with a note (#666 A.5)."""
     from email_parser.score_entry import sign_card
+    gate = _se_event_gate("group", group_id)
+    if gate:
+        return gate
     b = request.get_json(silent=True) or {}
     try:
         res = sign_card(group_id, _se_actor(), int(b["customer_id"]),
@@ -11579,6 +11620,9 @@ def api_se_scores(event_id):
     """THE READ (CA #661): event-scoped, rounds plural, one version per
     event. ?since_version=N returns 304 when nothing changed."""
     from email_parser.score_entry import event_version, get_entered_scores
+    gate = _se_event_gate("event", event_id)
+    if gate:
+        return gate
     since = request.args.get("since_version", type=int)
     ver = event_version(event_id)
     if since is not None and since == ver:
@@ -11678,6 +11722,9 @@ def live_scoring_admin_page(event_id):
     CTP / Longest Putt holder, verify a hole-in-one, sign for a player,
     clear a flag) live here. Seeding and preview restarts stay admin-only."""
     from email_parser.database import get_connection
+    gate = _se_event_gate("event", event_id)
+    if gate:
+        return "Score entry is not open for this event.", 404
     conn = get_connection()
     try:
         ev = conn.execute("SELECT id, item_name, event_date, course FROM events WHERE id = ?",
@@ -11694,6 +11741,9 @@ def live_scoring_admin_page(event_id):
 @require_role("manager")
 def api_se_admin(event_id):
     from email_parser.score_entry import admin_overview
+    gate = _se_event_gate("event", event_id)
+    if gate:
+        return gate
     return jsonify(admin_overview(event_id))
 
 

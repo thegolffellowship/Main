@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.517.1";
+window.TGF_VERSION = "2.518.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.518.0",
+    date: "2026-09-28",
+    title: "Score entry is opt-in per event: only s9.25 Canyon Springs is on",
+    changes: [
+      "Kerry 2026-09-28: \"I don't want that available to Robert yet in Austin. We need to only test it here in San Antonio at the Canyon Springs event.\" Score entry is now OFF for every event unless its id is in the new app setting score_entry_events (a JSON or comma list of event ids). Staff turn an event on; nothing turns one on by itself. It's set to [3304] only.",
+      "On an event that isn't on, a manager can't open the Live Scoring page, its read, the scores feed, or any manager action (CTP settle, HIO verify, clear a flag, sign for a player). A player's link doesn't open even with the member switch (score_entry_live) on, and no cart sign gets a QR code. Admin preview use is unaffected.",
+      "On the EVENTS page the SCORE ENTRY panel and the Live Scoring button under PAIRINGS show only on events that are on, even for admin. That's why both Tuesday events showed Live Scoring before: the panel appeared on every event with saved pairings."
+    ]
+  },
   {
     version: "2.517.1",
     date: "2026-09-28",

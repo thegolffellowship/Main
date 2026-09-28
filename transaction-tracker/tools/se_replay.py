@@ -96,6 +96,10 @@ def main() -> int:
         from email_parser import score_entry as se
         import app as appmod
     db.set_app_setting("score_entry_live", "1")
+    # Score entry is opt-in per event (Kerry 2026-09-28); turn on the
+    # replayed events IN THE SCRATCH FILE only.
+    db.set_app_setting("score_entry_events", json.dumps(
+        sorted(int(x) for x in str(a.events).split(",") if x.strip())))
 
     from werkzeug.serving import make_server
     srv = make_server("127.0.0.1", a.port, appmod.app, threaded=True)
