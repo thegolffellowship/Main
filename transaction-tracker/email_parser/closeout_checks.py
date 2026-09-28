@@ -269,6 +269,26 @@ def closeout_final_check(event: str | int, db_path=None, _read: dict | None = No
             if unpublished:
                 blocking.append(f"signed but not published into scorecards: {', '.join(unpublished)} "
                                 f"(run scoring-entry-publish:{eid}|apply)")
+            # An entered card with a playing handicap but no stroke on any
+            # hole: every reader that takes pops from scoring_holes (the
+            # handicap post's net-double-bogey cap, the MVP's Stableford net,
+            # the leaderboard, the card) scores it as scratch. Found on the
+            # 9/28 rehearsal copy: G-0 published strokes_received = 0 on all
+            # 33 cards, and 11 of Brackenridge's 22 adjusted grosses fell
+            # below GG's.
+            no_pops = []
+            for c in entry_cards:
+                ph = conn.execute("SELECT playing_handicap FROM scoring_rounds WHERE id = ?",
+                                  (c["id"],)).fetchone()[0]
+                if not ph or abs(float(ph)) < 1:
+                    continue
+                got = conn.execute("SELECT COALESCE(SUM(ABS(COALESCE(strokes_received,0))),0) "
+                                   "FROM scoring_holes WHERE scoring_round_id = ?", (c["id"],)).fetchone()[0]
+                if not got:
+                    no_pops.append(c["player_name"] or f"customer {c['customer_id']}")
+            if no_pops:
+                blocking.append(f"{len(no_pops)} entered card(s) carry a playing handicap but no strokes on any "
+                                f"hole (handicaps and MVP would score them as scratch): {', '.join(sorted(no_pops))}")
             if not payouts:
                 blocking.append("no payouts computed for the event")
         # A card with no tee has no rating/slope/par/stroke index: the handicap

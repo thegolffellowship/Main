@@ -3,9 +3,10 @@ window.TGF_CHANGELOG = [
   {
     version: "2.513.16",
     date: "2026-09-28",
-    title: "Read-only MVP bridge for the rehearsal copy",
+    title: "Final check blocks entered cards with no strokes; read-only MVP bridge",
     changes: [
       "New bridge scoring-mvp-determine:<event name> returns determine_tgf_mvp (City MVP per linked event, TGF MVP, the top-5 field) as JSON. It is read-only. Rehearsal step 3 needed it: scoring-mvp-recompute writes the badges and returns only counts, and the determine_tgf_mvp MCP tool reads production, so nothing could compare the MVP computed from entered rounds on the scratch copy with production's winners. It runs inside scoring-rehearsal:run|bridge|… like any read bridge.",
+      "Rehearsal step 3 finding: G-0 (entry_publish) writes strokes_received = 0 on every entered hole, but the handicap preview/post (net double bogey), get_scorecard (so the MVP's Stableford net), the Events leaderboard and the handicap cards all read pops from scoring_holes. On the scratch copy, 11 of Brackenridge's 22 adjusted grosses fell below Golf Genius's (DelCarmen 59→53, McCormick 55→50, Rideout 52→49) and 13 cards were capped instead of 4. closeout_final_check now BLOCKS an entered card that carries a playing handicap but has no stroke on any hole, and names each player, so the 9 PM closeout never posts handicaps or an MVP off scratch pops. The fix to the publish itself is Tracker Build's (entry_publish.py). Guard: test_closeout_checks.py.",
     ],
   },
   {

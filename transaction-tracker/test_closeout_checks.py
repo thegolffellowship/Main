@@ -70,8 +70,24 @@ for cid in (401, 402, 403, 404, 405):
 c.execute("INSERT INTO tgf_events (id, code, name, event_date, events_id) VALUES (91, 's9.40', 's9.40 Future Links', '2026-10-13', 771)")
 c.execute("INSERT INTO tgf_payouts (event_id, customer_id, category, amount, description) VALUES (91, 401, 'Individual Net', 20, 'x')")
 c.commit(); c.close()
+c = sqlite3.connect(tmp)
+for rid, in c.execute("SELECT id FROM scoring_rounds WHERE event_id = 771").fetchall():
+    c.execute("INSERT INTO scoring_holes (scoring_round_id, hole_number, strokes, strokes_received) VALUES (?, 1, 4, 1)", (rid,))
+c.execute("UPDATE scoring_rounds SET playing_handicap = 6 WHERE event_id = 771 AND customer_id = 403")
+c.commit(); c.close()
 f = cc.closeout_final_check(771, db_path=tmp, _read=read(771))
 check("closed, signed, published, paid: FINAL", f.get("era") == "entry" and f.get("final") is True, f)
+c = sqlite3.connect(tmp)
+c.execute("UPDATE scoring_holes SET strokes_received = 0 WHERE scoring_round_id IN "
+          "(SELECT id FROM scoring_rounds WHERE event_id = 771 AND customer_id = 403)")
+c.commit(); c.close()
+f = cc.closeout_final_check(771, db_path=tmp, _read=read(771))
+check("an entered card with a playing handicap but no strokes on any hole blocks, by name (9/28 rehearsal)",
+      not f["final"] and any("no strokes" in b and " ".join(people[403]) in b for b in f["blocking"]), f.get("blocking"))
+c = sqlite3.connect(tmp)
+c.execute("UPDATE scoring_holes SET strokes_received = 1 WHERE scoring_round_id IN "
+          "(SELECT id FROM scoring_rounds WHERE event_id = 771 AND customer_id = 403)")
+c.commit(); c.close()
 f = cc.closeout_final_check(771, db_path=tmp, _read=read(771, status="open", sign=False))
 check("unsigned cards block, each player named", not f["final"] and any("Ann Able: card not signed" in b for b in f["blocking"]), f.get("blocking"))
 f = cc.closeout_final_check(771, db_path=tmp, _read=read(771, hio=[{"hole": 3, "status": "witnessed"}]))
