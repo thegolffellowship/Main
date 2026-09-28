@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.513.15";
+window.TGF_VERSION = "2.513.16";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.513.16",
+    date: "2026-09-28",
+    title: "Read-only MVP bridge for the rehearsal copy",
+    changes: [
+      "New bridge scoring-mvp-determine:<event name> returns determine_tgf_mvp (City MVP per linked event, TGF MVP, the top-5 field) as JSON. It is read-only. Rehearsal step 3 needed it: scoring-mvp-recompute writes the badges and returns only counts, and the determine_tgf_mvp MCP tool reads production, so nothing could compare the MVP computed from entered rounds on the scratch copy with production's winners. It runs inside scoring-rehearsal:run|bridge|… like any read bridge.",
+    ],
+  },
   {
     version: "2.513.15",
     date: "2026-09-28",

@@ -129,5 +129,6 @@ check("entered scores are read only through score_entry (no se_* table names her
       not re.search(r"\bse_(hole_scores|players|rounds|teams|groups)\b", src))
 m = open(os.path.join(os.path.dirname(__file__), "mcp_server.py"), encoding="utf-8").read()
 check("both bridges exist", 'cmd == "scoring-closeout-final"' in m and 'cmd == "scoring-pairings-entry"' in m)
+check("the read-only MVP bridge exists (rehearsal MVP diff)", 'cmd == "scoring-mvp-determine"' in m)
 print("\nALL PASS" if not F else f"\\nFAILED: {F}")
 sys.exit(1 if F else 0)

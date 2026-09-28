@@ -1785,6 +1785,7 @@ def _scoring_dispatch_inner(url: str, extract: str):
       scoring-se-close:<round_id>|apply  close a score-entry round (links stop opening; nothing deleted)
       scoring-se-keeper-signs:<event_id>[|on|off]  the dial: the scorekeeper's submit signs every card in the group
       scoring-mvp-import           import_gg_event_mvps(widget_url)
+      scoring-mvp-determine:<event> City/TGF MVP winners, read-only (runs on the rehearsal copy)
       scoring-mvp-recompute[:event] self-compute City/TGF MVP badges (split -> Co-)
       scoring-games-import         import_gg_game_results(widget_url) — GG-recorded CTP/LP/HIO/TEAM Net winners
       scoring-flights-import       import_gg_game_flights(widget_url) — per-game flight membership
@@ -4764,6 +4765,14 @@ def _scoring_dispatch_inner(url: str, extract: str):
             return json.dumps(
                 db.cmp_repin_2026_to_dmp_register(by=(arg.strip() or None)),
                 indent=2, default=str)
+        if cmd == "scoring-mvp-determine":
+            # determine_tgf_mvp as a bridge: City MVP per linked event + TGF
+            # MVP, winners by name. READ-ONLY. It lets a rehearsal job on the
+            # scratch copy compare the MVP from entered rounds with
+            # production's, which the MCP tool (production only) can't.
+            if not arg.strip():
+                return json.dumps({"error": "usage: scoring-mvp-determine:<event name>"})
+            return json.dumps(db.determine_tgf_mvp(arg.strip()), indent=2, default=str)
         if cmd == "scoring-mvp-recompute":
             # Self-computed City MVP / TGF MVP (Kerry-ratified 2026-07-16):
             # materialize determine_tgf_mvp winners + split -> Co- into
