@@ -486,13 +486,57 @@ def _pid_alive(pid) -> bool:
         return False
 
 
+def _proc_start(pid):
+    """The process's start time (clock ticks since boot, /proc/<pid>/stat
+    field 22), or None where /proc can't say. With the pid it names ONE
+    process: a pid reused after a restart has a different start time."""
+    try:
+        with open(f"/proc/{int(pid)}/stat") as f:
+            return int(f.read().rsplit(")", 1)[1].split()[19])
+    except (OSError, ValueError, TypeError, IndexError):
+        return None
+
+
+def _job_alive(meta: dict) -> bool:
+    """Is THIS job's process still running? A pid alone is not enough: the
+    17:14 deploy on 9/28 killed job …171400-tool-se-replay (pid 17), and
+    after the restart a new process got pid 17 and "revived" it, so the
+    runner refused every job (#862/#863). A job must carry the start time
+    of the process it spawned and the pid must still have that start time.
+    Jobs recorded before this check (no proc_start key) are from a process
+    that a deploy has since ended."""
+    if not _pid_alive(meta.get("pid")):
+        return False
+    if "proc_start" not in meta:
+        return False
+    rec = meta.get("proc_start")
+    if rec is None:                  # spawned where /proc couldn't say: pid only
+        return True
+    return _proc_start(meta.get("pid")) == rec
+
+
+def _settle(meta: dict, mp: Path) -> dict:
+    """A 'running' job whose process is gone is LOST, and says so in its
+    file, once, so no later process can revive it."""
+    if meta.get("status") == "running" and not _job_alive(meta):
+        meta["status"] = "lost"      # the process ended without the waiter (e.g. a restart)
+        meta.setdefault("ended_at", datetime.utcnow().isoformat(timespec="seconds"))
+        try:
+            mp.write_text(json.dumps(meta))
+        except OSError:
+            pass
+    return meta
+
+
 def _running(jd: Path):
     for m in sorted(jd.glob("*.json")):
+        if m.name.endswith("-report.json"):
+            continue
         try:
             meta = json.loads(m.read_text())
         except Exception:
             continue
-        if meta.get("status") == "running" and _pid_alive(meta.get("pid")):
+        if _settle(meta, m).get("status") == "running":
             return meta
     return None
 
@@ -636,6 +680,7 @@ def start_job(kind: str, spec: str, args: str = "", db_path=None) -> dict:
                              start_new_session=True)
     meta = {"id": jid, "kind": kind, "spec": spec, "args": args, "pid": proc.pid,
             "status": "running", "started_at": datetime.utcnow().isoformat(timespec="seconds"),
+            "proc_start": _proc_start(proc.pid),
             "argv": [a if a != _BRIDGE_CHILD else "<bridge child>" for a in shown[1:]],
             "nice": 19 if _nice else None,
             "scratch": str(scratch)}
@@ -669,9 +714,7 @@ def job_status(jid: str, db_path=None, tail_chars: int = 12000) -> dict:
     mp = jd / f"{jid}.json"
     if not jid or not mp.is_file():
         return {"error": f"no job {jid!r}"}
-    meta = json.loads(mp.read_text())
-    if meta.get("status") == "running" and not _pid_alive(meta.get("pid")):
-        meta["status"] = "lost"      # the process ended without the waiter (e.g. a restart)
+    meta = _settle(json.loads(mp.read_text()), mp)
     log = jd / f"{jid}.log"
     text = log.read_text(errors="replace") if log.is_file() else ""
     if "RESULT_BEGIN" in text and "RESULT_END" in text:
@@ -700,8 +743,7 @@ def list_jobs(db_path=None, limit: int = 20) -> list:
             meta = json.loads(m.read_text())
         except Exception:
             continue
-        if meta.get("status") == "running" and not _pid_alive(meta.get("pid")):
-            meta["status"] = "lost"
+        _settle(meta, m)
         out.append({k: meta.get(k) for k in ("id", "kind", "spec", "args", "status", "secs", "started_at")})
         if len(out) >= limit:
             break

@@ -100,6 +100,16 @@ while a job is running or a live event holds the runner. Guard:
 intact with only its own rows. With the old `os.replace` it opened as the
 OLD copy).
 
+### A job is its process, not its pid (#862/#863, 2026-09-28)
+
+A deploy restarts the container and pids start over, so a dead job's pid
+can belong to a new process. Each job records its process's start time
+(`proc_start`, /proc/<pid>/stat field 22). `_job_alive` requires the pid to
+be alive with that same start time. A job with no `proc_start` predates
+this change and is treated as ended. `_settle` writes "lost" into the job
+file the first time it's seen. Before this, the ghost of
+…171400-tool-se-replay (pid 17) blocked every job.
+
 ### Jobs stay out of live events (Front Desk #851, 2026-09-28)
 
 The runner shares the production host. A job is REFUSED ("held: …",

@@ -109,10 +109,26 @@ for ex in ("scoring-rehearsal:restore", "scoring-gg-archive:vacuum|go", "scoring
 print("\n== one job at a time ==")
 jd = rh._jobs_dir(live)
 fake = jd / "zzzz-fake.json"
-fake.write_text(json.dumps({"id": "zzzz-fake", "kind": "bridge", "spec": "x", "status": "running", "pid": os.getpid()}))
+fake.write_text(json.dumps({"id": "zzzz-fake", "kind": "bridge", "spec": "x", "status": "running",
+                            "pid": os.getpid(), "proc_start": rh._proc_start(os.getpid())}))
 r = rh.start_job("bridge", "scoring-setting-get:runner_probe", db_path=live)
 check("a second job is refused while one runs", "error" in r and "zzzz-fake" in r["error"], r)
 fake.unlink()
+
+print("\n== a dead job's pid, reused after a restart, never revives it (#862/#863) ==")
+check("this process's start time is readable", isinstance(rh._proc_start(os.getpid()), int))
+for label, extra in (("recorded before the fix (no proc_start)", {}),
+                     ("a different process start time (pid reused)", {"proc_start": -1})):
+    ghost = jd / "zzzz-ghost.json"
+    ghost.write_text(json.dumps({"id": "zzzz-ghost", "kind": "tool", "spec": "se_replay", "status": "running",
+                                 "pid": os.getpid(), **extra}))      # a LIVE pid, like pid 17 after the deploy
+    r = rh.start_job("bridge", "scoring-setting-get:runner_probe", db_path=live)
+    check(f"{label}: not blocking, a new job starts", r.get("status") == "running", r)
+    wait(r["id"]) if r.get("id") else None
+    saved = json.loads(ghost.read_text())
+    check(f"{label}: 'lost' is SAVED in the job file", saved.get("status") == "lost" and saved.get("ended_at"), saved)
+    check(f"{label}: job_status reads lost", rh.job_status("zzzz-ghost", db_path=live).get("status") == "lost")
+    ghost.unlink()
 
 print("\n== a TOOL job runs the lane harness in the child ==")
 j3 = rh.start_job("tool", "takeover", "--events 999999", db_path=live)

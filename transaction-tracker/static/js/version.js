@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.513.14";
+window.TGF_VERSION = "2.513.15";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.513.15",
+    date: "2026-09-28",
+    title: "Rehearsal runner: a dead job's reused pid never blocks the runner",
+    changes: [
+      "The runner refused every job because job 20260928T171400-tool-se-replay was 'still running' (#862/#863). The 17:14 deploy had killed it (pid 17), and after the restart a new process got pid 17. The running check trusted the pid alone, and 'lost' was worked out on every read but never saved, so the dead job came back to life.",
+      "Each job now records its process's start time (/proc/<pid>/stat field 22) when it's spawned. A job counts as running only if its pid is alive AND still has that start time. Jobs recorded before this change have no start time and are treated as ended. 'lost' is written into the job file the first time it's seen, so no later process can revive it. Guard: test_rehearsal_runner.py.",
+    ],
+  },
   {
     version: "2.513.14",
     date: "2026-09-28",
