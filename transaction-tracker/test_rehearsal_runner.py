@@ -126,7 +126,32 @@ log4 = st4.get("log_tail", "")
 check("se_replay's guard admits it too (no Railway / production-path refusal)",
       "looks like a Railway" not in log4 and "production database path" not in log4 and "--i-am-scratch" not in log4, log4[-800:])
 check("list_jobs shows the runs", len(rh.list_jobs(db_path=live)) >= 4)
+check("tool jobs run at the lowest CPU priority", st4.get("nice") == 19 or not __import__("shutil").which("nice"), st4.get("nice"))
 check("a missing job id answers plainly", "error" in rh.job_status("nope", db_path=live))
+
+print("\n== jobs stay out of a live score-entry event (Front Desk #851) ==")
+from datetime import datetime as _dt
+check("tee times parse: 17:00, 5:00 PM, 8:30am", rh._parse_tee("17:00") == (17, 0)
+      and rh._parse_tee("5:00 PM") == (17, 0) and rh._parse_tee("8:30am") == (8, 30) and rh._parse_tee("TBD") is None)
+_lc = sqlite3.connect(live)
+_lc.execute("CREATE TABLE IF NOT EXISTS se_rounds (id INTEGER PRIMARY KEY, event_id INTEGER, round_date TEXT, "
+            "label TEXT, holes INTEGER, status TEXT DEFAULT 'open')")
+_lc.execute("INSERT INTO events (item_name, event_date, start_time) VALUES ('t9.29 Hold Test', '2026-09-29', '5:00 PM')")
+_ev = _lc.execute("SELECT id FROM events WHERE item_name='t9.29 Hold Test'").fetchone()[0]
+_lc.execute("INSERT INTO se_rounds (event_id, round_date, holes, status) VALUES (?, '2026-09-29', 9, 'open')", (_ev,))
+_lc.commit()
+check("the day before: no hold", rh.live_event_hold(live, now=_dt(2026, 9, 28, 20, 0)) is None)
+check("event day, 3:00 PM (2 h before tee): no hold", rh.live_event_hold(live, now=_dt(2026, 9, 29, 15, 0)) is None)
+check("event day, 4:05 PM (inside the hour before tee): held",
+      "tees off" in (rh.live_event_hold(live, now=_dt(2026, 9, 29, 16, 5)) or ""))
+check("event day, 8:30 PM, round still open: held", rh.live_event_hold(live, now=_dt(2026, 9, 29, 20, 30)) is not None)
+_lc.execute("UPDATE se_rounds SET status='closed'"); _lc.commit()
+check("round closed: hold lifts", rh.live_event_hold(live, now=_dt(2026, 9, 29, 20, 30)) is None)
+db.set_app_setting("rehearsal_hold", "1", db_path=live)
+r = rh.start_job("bridge", "scoring-setting-get:runner_probe", db_path=live)
+check("app setting rehearsal_hold=1 refuses a job, nothing started", "held" in r.get("error", ""), r)
+db.set_app_setting("rehearsal_hold", "0", db_path=live)
+_lc.execute("DELETE FROM se_rounds"); _lc.commit(); _lc.close()
 
 print("\n== no scratch copy -> a plain refusal ==")
 os.rename(scratch, str(scratch) + ".bak")

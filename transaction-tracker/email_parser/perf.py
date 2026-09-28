@@ -73,6 +73,13 @@ SLOW_MS = {
     "scoring-print-pack-pdf": 60_000,
     "scoring-recap-draft-email": 30_000,
     "auto_gg_results_sync": 600_000,
+    # Live score entry: a phone waits on these. One save is ~40 ms of write
+    # on the Railway volume (2026-09-28), so a second is worth seeing.
+    "se_write": 1000,
+    "se_claim": 1000,
+    "se_sign": 1000,
+    "se_submit": 2000,
+    "se_card": 1500,
 }
 RETENTION_DAYS = 30
 FLUSH_INTERVAL_S = 3.0

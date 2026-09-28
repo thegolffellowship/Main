@@ -518,6 +518,55 @@ print("RESULT_END")
 '''
 
 
+HOLD_LEAD_MIN = 60   # a live round's hold starts this long before its first tee
+
+
+def _parse_tee(t: str):
+    """'17:00' / '5:00 PM' / '8:30am' -> (hour, minute), or None."""
+    m = _re.match(r"^\s*(\d{1,2}):(\d{2})\s*([ap])?\.?m?\.?\s*$", str(t or ""), _re.I)
+    if not m:
+        return None
+    h, mi, ap = int(m.group(1)), int(m.group(2)), (m.group(3) or "").lower()
+    if ap == "p" and h < 12:
+        h += 12
+    elif ap == "a" and h == 12:
+        h = 0
+    return (h, mi) if h < 24 and mi < 60 else None
+
+
+def live_event_hold(db_path=None, now=None) -> str | None:
+    """Why a rehearsal job may not start now, or None (Front Desk, #851).
+
+    Rehearsal jobs run on the production host, so they stay out of a live
+    score-entry event: from an hour before the first tee of a round dated
+    today (Central) until that round is closed. With no readable tee time
+    the hold covers the whole day. App setting ``rehearsal_hold`` = 1
+    holds every job by hand. Reads the LIVE file; writes nothing."""
+    from .timezone_utils import now_central
+    now = now or now_central()
+    today = now.strftime("%Y-%m-%d")
+    from .database import get_app_setting
+    try:
+        if str(get_app_setting("rehearsal_hold", db_path=db_path) or "").strip() in ("1", "true", "on", "yes"):
+            return "app setting rehearsal_hold is on"
+    except Exception:
+        pass
+    try:
+        from .score_entry import open_rounds_on
+        rows = [(r["id"], r["item_name"], r["start_time"]) for r in open_rounds_on(today, db_path=db_path)]
+    except Exception as e:     # can't tell whether a round is live: hold
+        return f"could not read today's live rounds ({type(e).__name__})"
+    for rid, name, start in rows:
+        tee = _parse_tee(start)
+        if tee is None:
+            return f"live score-entry round {rid} ({name}) is open today, tee time unknown"
+        first = now.replace(hour=tee[0], minute=tee[1], second=0, microsecond=0)
+        if (first - now).total_seconds() <= HOLD_LEAD_MIN * 60:
+            return (f"live score-entry round {rid} ({name}) tees off {start}; "
+                    "rehearsal jobs wait until it is closed")
+    return None
+
+
 def start_job(kind: str, spec: str, args: str = "", db_path=None) -> dict:
     """Start one rehearsal job in a separate process. kind = 'tool' (spec =
     a RUNNER_TOOLS key, args = its flags) or 'bridge' (spec = the scoring-*
@@ -526,6 +575,9 @@ def start_job(kind: str, spec: str, args: str = "", db_path=None) -> dict:
     scratch = rdir / SCRUBBED
     if not scratch.is_file():
         return {"error": "no scratch copy — run scoring-rehearsal:restore first"}
+    held = live_event_hold(db_path)
+    if held:
+        return {"error": f"held: {held}. Nothing started."}
     jd = _jobs_dir(db_path)
     busy = _running(jd)
     if busy:
@@ -550,13 +602,20 @@ def start_job(kind: str, spec: str, args: str = "", db_path=None) -> dict:
             return {"error": "kind is tool or bridge"}
     except ValueError as e:
         return {"error": str(e)}
+    # Lowest CPU priority: a job shares the host with live requests and
+    # must lose every contest for the CPU (Front Desk #851).
+    shown = argv
+    _nice = shutil.which("nice")
+    if _nice:
+        argv = [_nice, "-n", "19"] + argv
     fh = open(log, "wb")
     proc = _subprocess.Popen(argv, cwd=str(_repo_root()), env=env, stdout=fh,
                              stderr=_subprocess.STDOUT, stdin=_subprocess.DEVNULL,
                              start_new_session=True)
     meta = {"id": jid, "kind": kind, "spec": spec, "args": args, "pid": proc.pid,
             "status": "running", "started_at": datetime.utcnow().isoformat(timespec="seconds"),
-            "argv": [a if a != _BRIDGE_CHILD else "<bridge child>" for a in argv[1:]],
+            "argv": [a if a != _BRIDGE_CHILD else "<bridge child>" for a in shown[1:]],
+            "nice": 19 if _nice else None,
             "scratch": str(scratch)}
     mp = jd / f"{jid}.json"
     mp.write_text(json.dumps(meta))

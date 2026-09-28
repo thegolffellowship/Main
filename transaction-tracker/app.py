@@ -11359,6 +11359,7 @@ def score_entry_page():
 
 
 @app.route("/api/score-entry/card")
+@perf.timed_route("se_card")
 def api_se_card():
     from email_parser.score_entry import get_group_card
     gid, err = _se_group_from_request()
@@ -11368,6 +11369,7 @@ def api_se_card():
 
 
 @app.route("/api/score-entry/claim", methods=["POST"])
+@perf.timed_route("se_claim")
 def api_se_claim():
     from email_parser.score_entry import claim_group
     body = request.get_json(silent=True) or {}
@@ -11381,6 +11383,7 @@ def api_se_claim():
 
 
 @app.route("/api/score-entry/write", methods=["POST"])
+@perf.timed_route("se_write")
 def api_se_write():
     from email_parser.score_entry import write_scores
     body = request.get_json(silent=True) or {}
@@ -11394,6 +11397,7 @@ def api_se_write():
 
 
 @app.route("/api/score-entry/sign", methods=["POST"])
+@perf.timed_route("se_sign")
 def api_se_sign():
     """A player signs his own card, or the scorekeeper's phone attests the
     group (kind=scorekeeper). Manager signatures go through the admin route."""
@@ -11411,6 +11415,7 @@ def api_se_sign():
 
 
 @app.route("/api/score-entry/submit", methods=["POST"])
+@perf.timed_route("se_submit")
 def api_se_submit():
     """The scorekeeper's Card matches paper -> Submit: attest, who kept
     the paper card, and (event dial on) sign every card for the group."""

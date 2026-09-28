@@ -87,6 +87,32 @@ never under /data" guards admit exactly one case: `runner_scratch_ok(path)`,
 true only in a runner child for a file inside `<volume>/rehearsal/`.
 Guard: `test_rehearsal_runner.py`.
 
+### Jobs stay out of live events (Front Desk #851, 2026-09-28)
+
+The runner shares the production host. A job is REFUSED ("held: …",
+nothing started) while a live score-entry round is on:
+`live_event_hold()` holds from an hour before the first tee (`events.start_time`)
+of any OPEN round dated today (Central) until that round is closed, and all
+day if the tee time can't be read. App setting `rehearsal_hold` = 1 holds
+every job by hand. The open rounds are read through
+`score_entry.open_rounds_on()` (only score_entry.py touches se_*). Every job
+runs under `nice -n 19`, so it loses every contest for the CPU to live
+requests.
+
+Why: Track A's 8-worker replay on 9/28 saw p95 1.77 s / max 4.65 s per save
+(sandbox 137 ms). A single write on the production volume costs about
+40 ms (three timed `scoring-setting-set` writes, 9/28), so eight writers
+with no pause between saves queue behind each other on SQLite's one write
+lock; in the sandbox a commit is ~1 ms and the queue never forms. Proven the
+same hour on the same host at the same load (~95): the replay with
+`--workers 1` ran p50 54 ms, p95 122 ms, max 204 ms (job
+20260928T171738-tool-se-replay), against p95 1.77 s with `--workers 8`. Live entry
+is not that shape (a group saves a hole every few minutes), and the child
+writes its own file, so it takes no lock on the live database. The live
+score-entry routes are timed from v2.513.11 (`se_write`, `se_claim`,
+`se_sign`, `se_submit`, `se_card` in `/admin/health`) so Tuesday's real
+numbers are on record.
+
 The download path (option A) was written on 2026-09-27, refused by the
 session's permission system as data leaving Railway, removed, and not
 pursued. Kerry chose B.

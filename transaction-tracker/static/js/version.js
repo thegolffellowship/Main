@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.513.10";
+window.TGF_VERSION = "2.513.11";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.513.11",
+    date: "2026-09-28",
+    title: "Rehearsal jobs stay out of live events; live score-entry saves are timed",
+    changes: [
+      "Track A's rehearsal replay on Railway saw saves at p95 1.77 s and max 4.65 s (137 ms in the sandbox), and Front Desk asked why before Tuesday's live entry (#851). A single write on the production volume costs about 40 ms, so the replay's eight groups saving back-to-back queued behind SQLite's one write lock. Proven on the same host at the same load: the same replay with one worker ran p95 122 ms, max 204 ms. The replay writes its own file, so it takes no lock on the live database, and live entry doesn't have that shape: a group saves one hole every few minutes.",
+      "The rehearsal runner now refuses to start a job from an hour before the first tee of any open live score-entry round dated today until that round is closed. If the tee time can't be read, it refuses all day. App setting rehearsal_hold = 1 holds every job by hand. Every job also runs at the lowest CPU priority (nice 19), so live requests win the CPU. The open rounds are read through score_entry.open_rounds_on(), because only score_entry.py touches se_* tables.",
+      "The live score-entry routes (card, claim, write, sign, submit) are timed into perf_samples as se_card, se_claim, se_write, se_sign and se_submit. A save slower than 1 s is flagged, so Tuesday's real save times show in /admin/health and scoring-health. Guard: test_rehearsal_runner.py (the hold windows, the manual hold, nice 19).",
+    ],
+  },
   {
     version: "2.513.10",
     date: "2026-09-28",

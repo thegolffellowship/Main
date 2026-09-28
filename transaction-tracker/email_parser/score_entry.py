@@ -2212,6 +2212,19 @@ def _card_extras(conn, g, group_id: int) -> dict:
 # The read (Track B, the GG diff, the admin board). CA #661 shape.
 # ---------------------------------------------------------------------------
 
+def open_rounds_on(day: str, db_path=None) -> list[dict]:
+    """Rounds still OPEN whose date (the round's, else the event's) is
+    ``day`` (YYYY-MM-DD), with the event's name and first tee time. Read
+    only; the rehearsal runner's live-event hold reads it (#851)."""
+    with _closing(_conn(db_path)) as conn:
+        rows = conn.execute(
+            "SELECT r.id, r.event_id, e.item_name, e.start_time FROM se_rounds r "
+            "LEFT JOIN events e ON e.id = r.event_id "
+            "WHERE r.status = 'open' AND substr(COALESCE(r.round_date, e.event_date, ''), 1, 10) = ?",
+            (day,)).fetchall()
+    return [dict(r) for r in rows]
+
+
 def get_entered_scores(event_id: int, round_id: int | None = None, db_path=None) -> dict:
     with _closing(_conn(db_path)) as conn:
         vr = conn.execute("SELECT version, updated_at FROM se_event_versions "
