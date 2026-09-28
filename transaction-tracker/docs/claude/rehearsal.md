@@ -5,7 +5,7 @@ replays real past events on a copy restored from last night's backup, with
 every outbound channel off. Code: `email_parser/rehearsal.py`; guard
 `test_rehearsal.py`.
 
-## What is built (v2.510.2)
+## What is built (v2.510.3)
 
 1. **The restore drill on production** (bridge `scoring-rehearsal:restore`):
    the newest nightly backup → gunzip → `PRAGMA integrity_check` +

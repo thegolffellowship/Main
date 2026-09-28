@@ -1,11 +1,18 @@
-window.TGF_VERSION = "2.510.2";
+window.TGF_VERSION = "2.510.3";
 window.TGF_CHANGELOG = [
   {
-    version: "2.510.2",
+    version: "2.510.3",
     date: "2026-09-27",
     changes: [
       "Restore drill for the dress rehearsal (Kerry: ‘Why not have it test run tonight?’): the Tracker can restore last night's backup into a separate scratch copy on its own volume, check it, and time every step — download, unpack, integrity check, and row counts against the live file. The copy has every email address, phone number, payment handle and stored secret blanked. The live database is only read.",
       "In rehearsal mode (TGF_REHEARSAL=1) nothing can leave: every outbound connection is refused at the network layer — email, text, Brevo, Stripe, Golf Genius and every other service, including ones added later — and the scheduler does not start. A test proves it.",
+    ],
+  },
+  {
+    version: "2.510.2",
+    date: "2026-09-28",
+    changes: [
+      "An auto-verified refund\u2019s ledger row carries the refund again (CFO #804, a fix to v2.510.0). Since the dedupe-on-ingest ruling, the Venmo receipt is the ONE ledger row for an auto-verified refund, but the promotion only wrote the category and event on the split. The event P&L groups the ledger\u2019s own category / event_name / customer columns, which the old credit-payout row had filled, so a refund would have landed as a plain payout: refund contra understated, the credits-held link lost, and the month\u2019s sales-tax base overstated. When a receipt is claimed for a credit it is now marked as the refund (category refund, the item\u2019s event, the customer), and the ledger row gets category refund, item_id, event_name, customer and customer_id, whether the claim comes before or after the promotion. test_refund_watch.py gains the guard: exactly one refund ledger row per refunded item, carrying all four.",
     ],
   },
   {

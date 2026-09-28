@@ -35848,13 +35848,47 @@ def mark_referral_fee_paid(fee_id: int, method: str = "Venmo",
     return {"ok": n > 0, "updated": n}
 
 
+def _stamp_refund_ledger(conn, acct_id: int, item_id: int) -> None:
+    """Make a promoted refund receipt's ledger row carry what the old
+    credit-payout row carried (CFO #804, 2026-09-28): category 'refund',
+    the item and its event, and the customer. Since CA #785 item 6 the
+    receipt is the ONE ledger row for an auto-verified refund; without these
+    flat columns the event P&L's refund contra understates, the credits-held
+    read loses the link, and the month's sales-tax base is overstated."""
+    it = conn.execute("SELECT id, item_name, customer, customer_id FROM items WHERE id = ?",
+                      (item_id,)).fetchone()
+    if not it:
+        return
+    conn.execute(
+        """UPDATE acct_transactions
+              SET category = 'refund', item_id = ?, event_name = ?,
+                  customer = COALESCE(NULLIF(?, ''), customer),
+                  customer_id = COALESCE(?, customer_id)
+            WHERE id = ?""",
+        (it["id"], it["item_name"], it["customer"], it["customer_id"], acct_id))
+
+
 def _claim_receipt_for_credit(expense_id: int, item_id: int, db_path) -> None:
     """Point a P2P receipt at the credit item it refunded (matched_item_id)
-    so no later pass claims it for a second credit."""
+    so no later pass claims it for a second credit, and mark it as that
+    refund: category 'refund', the item's event and customer, on the
+    expense row (so the promotion carries them) and on its ledger row if it
+    is already promoted (CFO #804)."""
     with _connect(db_path) as conn:
         conn.execute(
             "UPDATE expense_transactions SET matched_item_id = ? "
             "WHERE id = ? AND matched_item_id IS NULL", (item_id, expense_id))
+        it = conn.execute("SELECT item_name, customer_id FROM items WHERE id = ?",
+                          (item_id,)).fetchone()
+        if it:
+            conn.execute(
+                "UPDATE expense_transactions SET category = 'refund', event_name = ?, "
+                "customer_id = COALESCE(customer_id, ?) WHERE id = ?",
+                (it["item_name"], it["customer_id"], expense_id))
+        row = conn.execute("SELECT acct_transaction_id FROM expense_transactions WHERE id = ?",
+                           (expense_id,)).fetchone()
+        if row and row["acct_transaction_id"]:
+            _stamp_refund_ledger(conn, row["acct_transaction_id"], item_id)
         conn.commit()
 
 
@@ -52635,6 +52669,8 @@ def _sync_expense_ledger_entry(conn, exp: dict) -> int | None:
                 "INSERT INTO acct_splits (transaction_id, entity_id, category_id, amount, event_id) VALUES (?,?,?,?,?)",
                 (existing_id, entity_id, category_id, amount, event_id),
             )
+        if exp.get("matched_item_id") and (category_name or "").lower() == "refund":
+            _stamp_refund_ledger(conn, existing_id, exp["matched_item_id"])
         return existing_id
     else:
         cur = conn.execute(
@@ -52654,6 +52690,8 @@ def _sync_expense_ledger_entry(conn, exp: dict) -> int | None:
             "UPDATE expense_transactions SET acct_transaction_id = ? WHERE id = ?",
             (new_id, expense_id),
         )
+        if exp.get("matched_item_id") and (category_name or "").lower() == "refund":
+            _stamp_refund_ledger(conn, new_id, exp["matched_item_id"])
         return new_id
 
 
