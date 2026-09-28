@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.512.1";
+window.TGF_VERSION = "2.513.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.513.0",
+    date: "2026-09-28",
+    title: "Event-day email: each player's pairing from the Tracker (built, not yet approved)",
+    changes: [
+      "CA #829 GO: Golf Genius goes away after 10/10, and it is what mails each player their pairing on event day. email_parser/event_day_email.py builds one message per roster player: their start as the Starter Sheet states it, their group-mates, their cart partner, the course and date, the chapter manager, and which game bundles they bought (the Games tab's own buyer rule; left out, never guessed, when it can't be read). The wording is the system template 'Event Day — Your Pairing', editable in the UI.",
+      "Any message with a blank, a leftover {tag} or a [BRACKETED BLANK] is HELD with its reason and never reaches Graph, as are players with no email, no customer_id, or no seat on a saved sheet. A preview mails to staff only (kerry@ by default). The member send refuses unless app setting event_day_email_approved carries the current template's hash (Kerry's approval, voided by any edit) and confirm is passed, and it records one row per event + customer in event_day_email_sends so nobody is mailed twice. Nobody has approved it and nothing schedules it.",
+      "Bridges: scoring-event-day-email:<event_id> (dry build) and scoring-event-day-email:<event_id>|preview[|<staff addr>]. There is no member-send bridge. Test: test_event_day_email.py.",
+    ],
+  },
   {
     version: "2.512.1",
     date: "2026-09-28",
