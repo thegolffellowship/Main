@@ -37,6 +37,8 @@ c.execute("INSERT INTO items (email_uid, item_index, merchant, customer, custome
           "('u1', 0, 'GoDaddy', 'Pat Golfer', 'pat.golfer@gmail.com', '210-555-0101', 'R1', "
           "'2026-09-01', 's9.1 THE QUARRY', '$86.00', 501)")
 c.execute("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('graph_refresh_token', 'SECRET-XYZ')")
+c.execute("CREATE TABLE IF NOT EXISTS _t_unique_tok (id INTEGER PRIMARY KEY, merchant_token TEXT NOT NULL UNIQUE)")
+c.executemany("INSERT INTO _t_unique_tok (merchant_token) VALUES (?)", [("netflix",), ("adobe",), ("zoom",)])
 c.execute("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('health_digest_time', '05:00')")
 c.commit(); c.close()
 
@@ -61,6 +63,8 @@ check("every customer_emails address is .invalid", all(r[0].endswith("@rehearsal
 st = dict(s.execute("SELECT key, value FROM app_settings WHERE key IN ('graph_refresh_token','health_digest_time')").fetchall())
 check("secret-looking settings emptied, ordinary dials kept",
       st.get("graph_refresh_token") == "" and st.get("health_digest_time") == "05:00", st)
+check("a NOT NULL UNIQUE token column gets distinct placeholders (no collision)",
+      sorted(r[0] for r in s.execute("SELECT merchant_token FROM _t_unique_tok")) == ["redacted-1", "redacted-2", "redacted-3"])
 check("integrity ok after the scrub", s.execute("PRAGMA integrity_check").fetchone()[0] == "ok")
 check("no free pages left (rewritten with VACUUM INTO)", s.execute("PRAGMA freelist_count").fetchone()[0] == 0)
 s.close()

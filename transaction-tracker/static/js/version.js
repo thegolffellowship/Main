@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.510.3";
+window.TGF_VERSION = "2.510.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.510.4",
+    date: "2026-09-27",
+    changes: [
+      "The restore drill's scrub step no longer trips over a column that must stay unique: a required field it blanks gets a distinct placeholder per row instead of an empty value. The first live drill stopped there on the recurring-payments merchant list. The drill's own numbers (time to restore, integrity, counts) are now reported even if the scrub step fails.",
+      "Two test suites that had aged into failure pass again. The refunds overview test now expects the season-contest removal refunds that every fresh database carries, and the event flights test posts its handicap rounds on fixed dates before the event, because the report reads each index as of the event date.",
+    ],
+  },
   {
     version: "2.510.3",
     date: "2026-09-27",

@@ -76,7 +76,14 @@ def main():
         conn.commit()
 
     ov = db.get_refunds_overview(tmp, completed_days=120)
-    out = ov["outstanding"]
+    # Season-contest removal refunds are OUTSTANDING too (Kerry 2026-07-20,
+    # keyed by removal_id); boot seeds two real ones (Lourigan, Cheshire)
+    # into every fresh database. This test is about item credits, so read
+    # those apart (CTO Health triage 2026-09-27, #802).
+    contest = [o for o in ov["outstanding"] if o.get("kind") == "contest_refund"]
+    check("contest-removal refunds carry removal_id, never item_id",
+          all("removal_id" in o and "item_id" not in o for o in contest))
+    out = [o for o in ov["outstanding"] if "item_id" in o]
     inf = ov["in_flight"]
     comp = ov["completed"]
 
@@ -100,7 +107,9 @@ def main():
           and comp[0]["date"] == "2026-07-13")
 
     t = ov["totals"]
-    check("totals outstanding_amount = 99.00", t["outstanding_amount"] == 99.00)
+    _contest_total = round(sum(o["amount"] for o in contest), 2)
+    check("totals outstanding_amount = 99.00 of item credits + the seeded contest refunds",
+          round(t["outstanding_amount"], 2) == round(99.00 + _contest_total, 2))
     check("totals in_flight_amount = 50.00", t["in_flight_amount"] == 50.00)
     check("totals completed_amount = 30.00", t["completed_amount"] == 30.00)
 
@@ -134,7 +143,7 @@ def main():
         conn.commit()
 
     ov2 = db.get_refunds_overview(tmp, completed_days=120)
-    byid = {o["item_id"]: o for o in ov2["outstanding"]}
+    byid = {o["item_id"]: o for o in ov2["outstanding"] if "item_id" in o}
     from email_parser.timezone_utils import today_central
     today = today_central()
 

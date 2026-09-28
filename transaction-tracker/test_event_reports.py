@@ -153,9 +153,13 @@ for i, (cid, f, l, idx18) in enumerate(names):
     # so the fixture states its intent in the flighting's own units.
     c.execute("INSERT INTO handicap_player_links (player_name, customer_name, customer_id) VALUES (?, ?, ?)", (f"{l}, {f}", f"{f} {l}", cid))
     diff = idx18 / 2.0 + 2.0
-    for _d in (10, 20, 30):
+    # FIXED dates before the event (2026-09-15): the report reads the index
+    # LOCKED as of the event date, so rounds posted relative to "now" aged
+    # out of the lock window after 9/25 and every player lost his index
+    # (CTO Health triage 2026-09-27, #794).
+    for _day in ("2026-09-05", "2026-08-26", "2026-08-16"):
         c.execute("INSERT INTO handicap_rounds (player_name, round_date, adjusted_score, rating, slope, differential) "
-                  "VALUES (?, date('now', ?), 45, 34.5, 120, ?)", (f"{l}, {f}", f"-{_d} days", diff))
+                  "VALUES (?, ?, 45, 34.5, 120, ?)", (f"{l}, {f}", _day, diff))
     # everyone buys NET; the first three also buy GROSS
     sg = "NET & GROSS" if i < 3 else "NET"
     c.execute("INSERT INTO items (id, email_uid, merchant, customer, customer_id, item_name, order_date, transaction_status, event_id, side_games, user_status) "
@@ -230,9 +234,9 @@ for i in range(3, 8):
     f, l, t = "Gross", f"Buyer{i}", 12.4 + i
     c.execute("INSERT INTO customers (customer_id, first_name, last_name, chapter, account_status) VALUES (?, ?, ?, 'San Antonio', 'active')", (cid, f, l))
     c.execute("INSERT INTO handicap_player_links (player_name, customer_name, customer_id) VALUES (?, ?, ?)", (f"{l}, {f}", f"{f} {l}", cid))
-    for _d in (10, 20, 30):
+    for _day in ("2026-09-05", "2026-08-26", "2026-08-16"):   # fixed, before the 9/15 lock
         c.execute("INSERT INTO handicap_rounds (player_name, round_date, adjusted_score, rating, slope, differential) "
-                  "VALUES (?, date('now', ?), 45, 34.5, 120, ?)", (f"{l}, {f}", f"-{_d} days", t / 2.0 + 2.0))
+                  "VALUES (?, ?, 45, 34.5, 120, ?)", (f"{l}, {f}", _day, t / 2.0 + 2.0))
     c.execute("INSERT INTO items (id, email_uid, merchant, customer, customer_id, item_name, order_date, transaction_status, event_id, side_games, user_status) "
               "VALUES (?, ?, 'The Golf Fellowship', ?, ?, 's9.23 The Quarry', '2026-09-10', 'active', ?, 'NET & GROSS', 'MEMBER')",
               (810 + i, f"u{810+i}", f"{f} {l}", cid, EV))
@@ -555,9 +559,9 @@ for _i, (_cid, _f, _l, _tee, _idx18) in enumerate((
         (303, "Gus", "Vasquez", "50-64", 17.2))):
     _c2.execute("INSERT INTO customers (customer_id, first_name, last_name, chapter, account_status) VALUES (?, ?, ?, 'San Antonio', 'active')", (_cid, _f, _l))
     _c2.execute("INSERT INTO handicap_player_links (player_name, customer_name, customer_id) VALUES (?, ?, ?)", (f"{_l}, {_f}", f"{_f} {_l}", _cid))
-    for _d in (10, 20, 30):
+    for _day in ("2026-09-05", "2026-08-26", "2026-08-16"):   # fixed, before the 9/15 lock
         _c2.execute("INSERT INTO handicap_rounds (player_name, round_date, adjusted_score, rating, slope, differential) "
-                    "VALUES (?, date('now', ?), 45, 34.5, 120, ?)", (f"{_l}, {_f}", f"-{_d} days", _idx18 / 2.0 + 2.0))
+                    "VALUES (?, ?, 45, 34.5, 120, ?)", (f"{_l}, {_f}", _day, _idx18 / 2.0 + 2.0))
     _c2.execute("INSERT INTO event_pairings (event_id, holes, group_num, slot_label, player_name, cart_pos, tee_choice, customer_id) "
                 "VALUES (990, '9', 1, '1A', ?, ?, ?, ?)", (f"{_f} {_l}", _i + 1, _tee, _cid))
 _c2.commit()

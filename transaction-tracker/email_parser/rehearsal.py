@@ -211,7 +211,10 @@ def scrub(path) -> dict:
                     done["columns"].append(f"{t}.{name}")
                 elif _BLANK_COL.search(name) and "INT" not in (ctype or "").upper() \
                         and not re.search(r"_at$|_on$|count|flag", name, re.I):
-                    val = "''" if notnull else "NULL"
+                    # NULL never collides with a UNIQUE index; a NOT NULL
+                    # column gets a per-row placeholder for the same reason
+                    # (recurring_payments.merchant_token, 2026-09-27).
+                    val = f"'redacted-' || rowid" if notnull else "NULL"
                     conn.execute(f'UPDATE "{t}" SET "{name}" = {val} '
                                  f'WHERE "{name}" IS NOT NULL')
                     done["columns"].append(f"{t}.{name}")
@@ -292,8 +295,19 @@ def restore(db_path=None) -> dict:
         drift = {k: {"restored": restored_counts.get(k), "live": v}
                  for k, v in live_counts.items()
                  if restored_counts.get(k) is not None and restored_counts[k] > v}
+        drill = {"backup": newest["name"], "backup_bytes": newest.get("size"),
+                 "taken_at": newest.get("lastModifiedDateTime"),
+                 "time_to_restore_ms": restore_ms, "integrity": integrity,
+                 "foreign_key_violations": len(fk), "tables": len(restored_counts),
+                 "counts_vs_live": {k: {"restored": restored_counts.get(k), "live": v}
+                                    for k, v in live_counts.items()},
+                 "unexpected_drift": drift or None}
         t3 = time.perf_counter()
-        sc = scrub(restored)
+        try:
+            sc = scrub(restored)
+        except Exception as e:
+            logger.exception("rehearsal scrub failed")
+            return {"ok": False, "stage": "scrub", "error": str(e), "timings_ms": t, **drill}
         final = rdir / SCRUBBED
         os.replace(restored, final)
         t["scrub_ms"] = int((time.perf_counter() - t3) * 1000)
