@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.510.6";
+window.TGF_VERSION = "2.510.7";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.510.7",
+    date: "2026-09-28",
+    changes: [
+      "Apply Credit works on a phone for Golf Genius-only players (Kerry, 9/27 9:54 PM, James Wilson: the CREDIT badge opened a modal that said only \u2018Failed to load credit info.\u2019). The mobile roster built its GG-only (RSVP, no order) rows without the RSVP id, so the badge carried neither an RSVP id nor an order id, and the modal asked the server for /api/rsvps/null/credit-info, which does not exist. The desktop roster always carried the id, which is why it only failed on the phone. Every GG-only row builder now carries it, including the Message Players audience, which had the same gap.",
+      "The modal is no longer a mystery when something is wrong. With no id at all, it says the row carries no RSVP id and no order id and does not call the server. When the server answers without a reason, it shows the HTTP status. A server reason, such as \u2018No credits on file for this player\u2019, is still shown word for word. Guard test_apply_credit_ids.js fails if any GG-only row builder drops the RSVP id, and runs the modal with a missing id, an RSVP id, a non-JSON 404 and a JSON reason. Not caused by tonight\u2019s releases: the mobile builder predates them.",
+    ],
+  },
   {
     version: "2.510.6",
     date: "2026-09-28",

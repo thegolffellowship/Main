@@ -3499,7 +3499,14 @@
             });
             // Cancelled/postponed events read empty — no synthetic GG rows
             const mGgRows = ((ev.status || 'active') !== 'active') ? [] : mUnmatched.map((r, i) => ({
-                id: `gg-rsvp-${i}`, customer: r.resolved_name || r.player_name || 'Unknown',
+                id: `gg-rsvp-${i}`,
+                // The rsvps-table id: the Credit badge and Apply Credit read it.
+                // The desktop builder always carried it; this mobile one did
+                // not, so on a phone the badge sent no id at all and the modal
+                // said only "Failed to load credit info." (Kerry, 2026-09-27,
+                // James Wilson). Guard: test_apply_credit_ids.js.
+                rsvp_id: r.id,
+                customer: r.resolved_name || r.player_name || 'Unknown',
                 customer_email: r.player_email || '', item_name: ev.item_name,
                 item_price: '', side_games: '', tee_choice: '', handicap: '',
                 user_status: '', order_date: '',
@@ -12555,6 +12562,7 @@
         });
         const ggRows = unmatchedPlaying.map((r, i) => ({
             id: `gg-rsvp-${i}`,
+            rsvp_id: r.id,  // every displayed gg-rsvp row carries its rsvps id (test_apply_credit_ids.js)
             customer: r.resolved_name || r.player_name || 'Unknown',
             customer_email: r.player_email || '',
             item_name: eventName,
@@ -17764,8 +17772,17 @@
         actions.style.display = 'none';
         overlay.style.display = 'flex';
 
+        // A row that reaches here with neither id would call
+        // /api/rsvps/null/credit-info and get an HTML 404 — say so plainly
+        // instead of guessing (Kerry, 2026-09-27).
+        const _id = v => v !== undefined && v !== null && String(v).trim() !== ''
+            && String(v) !== 'null' && String(v) !== 'undefined';
+        if (!_id(rsvpId) && !_id(itemId)) {
+            body.innerHTML = `<div style="color:#dc2626;padding:1rem;">Can't open credit for this row: it carries no RSVP id and no order id. Reload the page; if it persists, report the player and event.</div>`;
+            return;
+        }
         try {
-            const infoUrl = rsvpId
+            const infoUrl = _id(rsvpId)
                 ? `/api/rsvps/gg/${rsvpId}/credit-info`
                 : `/api/rsvps/${itemId}/credit-info`;
             const resp = await fetch(infoUrl);
@@ -17775,7 +17792,10 @@
                 // 404 indistinguishable from a deploy-rollover 502
                 // (Kerry 2026-07-20, McCrary at s9.19).
                 let msg = 'Failed to load credit info.';
-                try { const e = await resp.json(); if (e && e.error) msg = e.error; } catch (_) {}
+                let gotReason = false;
+                try { const e = await resp.json(); if (e && e.error) { msg = e.error; gotReason = true; } } catch (_) {}
+                // No JSON reason: show the status so it is never a mystery.
+                if (!gotReason) msg += ` (HTTP ${resp.status})`;
                 if (resp.status >= 500) msg += ' (server may be restarting — try again in a minute)';
                 body.innerHTML = `<div style="color:#dc2626;padding:1rem;">${msg}</div>`;
                 return;
