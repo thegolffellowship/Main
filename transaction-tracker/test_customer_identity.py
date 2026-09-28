@@ -57,6 +57,24 @@ conn.commit()
 mid = db.match_rsvp_to_item("jmejiasat@yahoo.com", "Jose", "s9.23 The Quarry", db_path=tmp)
 check("an RSVP under the yahoo email finds the order under the mac email through customer_id", mid == 2880, str(mid))
 check("an unknown email and a first name nobody has -> no match", db.match_rsvp_to_item("nobody@x.com", "Zed", "s9.23 The Quarry", db_path=tmp) is None)
+
+print("\n== first-name fallback never pins another known person (s9.25 Callaway -> Burlingame) ==")
+conn.execute("INSERT INTO customers (customer_id, first_name, last_name) VALUES (935, 'Rob', 'Callaway')")
+conn.execute("INSERT INTO customers (customer_id, first_name, last_name) VALUES (9412, 'Rob', 'Burlingame')")
+conn.execute("INSERT INTO customer_emails (customer_id, email, is_primary) VALUES (935, 'flhskr@example.com', 1)")
+conn.execute("INSERT INTO items (id, email_uid, merchant, customer, customer_email, customer_id, item_name, order_date, transaction_status) VALUES (2636, 'u2', 'The Golf Fellowship', 'Rob Burlingame', 'rob.b@example.com', 9412, 's9.23 THE QUARRY', '2026-09-01', 'active')")
+conn.commit()
+check("Callaway's RSVP (his own email, first name 'Rob') does NOT match Burlingame's order",
+      db.match_rsvp_to_item("flhskr@example.com", "Rob", "s9.23 The Quarry", db_path=tmp) is None)
+check("an RSVP whose email conflicts with the only first-name hit does not match",
+      db.match_rsvp_to_item("someone@else.com", "Rob", "s9.23 The Quarry", db_path=tmp) is None)
+check("with no email at all the unique first-name hit still matches (legacy path kept)",
+      db.match_rsvp_to_item(None, "Rob", "s9.23 The Quarry", db_path=tmp) == 2636)
+conn.execute("INSERT INTO rsvps (email_uid, player_name, player_email, event_identifier, response, matched_event, matched_item_id, customer_id) VALUES ('r1', 'Rob', 'flhskr@example.com', 's9.23 The Quarry', 'NOT PLAYING', 's9.23 The Quarry', 2636, 935)")
+conn.commit()
+res = db.audit_event_rsvps("s9.23 The Quarry", db_path=tmp)
+left = conn.execute("SELECT matched_item_id FROM rsvps WHERE email_uid = 'r1'").fetchone()[0]
+check("the audit clears the bad link and does not re-pin it", left is None and res.get("cleared", 0) >= 1, (left, res))
 conn.close()
 
 print("\n== one-shot repair on the full schema ==")

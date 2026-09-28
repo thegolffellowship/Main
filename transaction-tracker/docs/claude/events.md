@@ -846,6 +846,16 @@ with the frontend's `unmatchedPlaying` filter (including the
 matched-but-different-email branch) or mis-matched players silently
 lose their Credit badge. Regression: `test_rsvp_credit_map.py`.
 
+**The matcher itself now refuses the cross-person pin (v2.513.7, s9.25
+Canyon Springs):** `match_rsvp_to_item`'s first-name fallback returns
+the single "<first name>%" item ONLY when the RSVP's email does not
+resolve to a DIFFERENT customer_id than the item's, and the two emails do
+not disagree. Before this, `audit_event_rsvps` cleared an email-mismatched
+link and then re-ran the matcher, which re-pinned the same wrong item on
+every audit (Rob Callaway's NOT PLAYING RSVP → Rob Burlingame's paid
+order). With no email at all the unique first-name hit still matches.
+Regression: `test_customer_identity.py`.
+
 **How it works:**
 - After RSVP inbox check, `_send_rsvp_credit_alerts()` auto-sends email alerts to players
   with outstanding credits who have RSVPed to an upcoming event.

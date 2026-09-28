@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.513.8";
+window.TGF_VERSION = "2.513.9";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.513.9",
+    date: "2026-09-28",
+    title: "An RSVP never matches another known person's order by first name",
+    changes: [
+      "s9.25 Canyon Springs: Rob Callaway's NOT PLAYING Golf Genius RSVP (first name 'Rob', his own email) was linked to Rob Burlingame's paid order, the only 'Rob' item on the event. The nightly and per-ingest RSVP audit cleared the link because the emails differ, then re-ran the matcher, which put it straight back. The first-name fallback in match_rsvp_to_item now refuses an item that belongs to a different customer_id than the RSVP's email resolves to, or whose email disagrees with the RSVP's, so the audit's clear sticks. An RSVP with no email still matches a unique first name. Burlingame was never counted out of the games (the game count reads manual overrides only). Regression test_customer_identity.py.",
+    ],
+  },
   {
     version: "2.513.8",
     date: "2026-09-28",

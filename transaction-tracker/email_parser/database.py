@@ -33631,16 +33631,39 @@ def match_rsvp_to_item(player_email: str | None, player_name: str | None,
         # Guard: only use first-name matching when there's no ambiguity.
         # If there are multiple items with names starting with the same first name,
         # do NOT match (e.g. "Daniel" could be "Daniel South" or "Daniel Miller").
+        #
+        # IDENTITY GUARD (rule 6; s9.25 Canyon Springs 2026-09-28: Rob
+        # Callaway's NOT PLAYING rsvp, first name "Rob", pinned to Rob
+        # Burlingame's order — the only "Rob%" item on the event). A
+        # first-name hit is NEVER another known person's item: when the
+        # rsvp's email resolves to a customer_id, the item must carry that
+        # id (or none), and when both sides have an email they must agree
+        # — the same rule audit_event_rsvps clears on, so the audit's
+        # clear-then-rematch can no longer re-pin the row it just cleared.
         if player_name:
+            rsvp_cid = None
+            if player_email:
+                r_cid = conn.execute(
+                    """SELECT customer_id FROM customer_emails
+                       WHERE lower(email) = lower(?) AND customer_id IS NOT NULL
+                       LIMIT 1""", (player_email,)).fetchone()
+                rsvp_cid = r_cid["customer_id"] if r_cid else None
             rows = conn.execute(
-                f"""SELECT id, customer FROM items
+                f"""SELECT id, customer, customer_id, customer_email FROM items
                    WHERE customer LIKE ?
                      AND item_name COLLATE NOCASE IN ({placeholders})
                      AND COALESCE(transaction_status, 'active') = 'active'""",
                 [f"{player_name}%"] + name_list,
             ).fetchall()
             if len(rows) == 1:
-                return rows[0]["id"]
+                r = rows[0]
+                other_person = (rsvp_cid is not None and r["customer_id"] is not None
+                                and r["customer_id"] != rsvp_cid)
+                item_email = (r["customer_email"] or "").strip().lower()
+                email_conflict = bool(player_email and item_email
+                                      and item_email != player_email.strip().lower())
+                if not other_person and not email_conflict:
+                    return r["id"]
 
         return None
 
