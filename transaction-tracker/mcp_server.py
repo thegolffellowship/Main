@@ -5678,11 +5678,16 @@ def _scoring_dispatch_inner(url: str, extract: str):
         if cmd == "scoring-hcp-cards":
             # "<event>[|apply]" — the Handicaps page's By-Event card send as
             # a bridge (Kerry 2026-09-23), so the closeout can run it.
-            _p = [x.strip() for x in arg.split("|")]
-            if not _p or not _p[0]:
-                return json.dumps({"error": "<event>[|apply]"})
-            _apply = len(_p) > 1 and _p[-1].lower() == "apply"
-            _res = db.send_handicap_cards(event_name=_p[0], dry_run=not _apply,
+            # Only a TRAILING "|apply" is an option: event names carry "|"
+            # themselves ("LONE STAR CUP | The Hideout"), and splitting on
+            # every "|" sent a truncated name to the lookup. An event id
+            # ("3329") also works.
+            _a = (arg or "").strip()
+            _apply = _a.lower().endswith("|apply")
+            _ev = _a[: -len("|apply")].strip() if _apply else _a
+            if not _ev:
+                return json.dumps({"error": "<event name or id>[|apply]"})
+            _res = db.send_handicap_cards(event_name=_ev, dry_run=not _apply,
                                           sent_by="closeout")
             return json.dumps(_res, indent=2, default=str)
         if cmd in ("scoring-tee-bands", "scoring-tee-bands-apply"):
