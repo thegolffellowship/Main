@@ -78,6 +78,29 @@ check("...and the LIVE file was not touched",
       lc.execute("SELECT COUNT(*) FROM customer_emails WHERE email='pat.golfer@gmail.com'").fetchone()[0] == 1)
 lc.close()
 
+print("\n== install_scratch(): a leftover WAL never reaches the new copy ==")
+fin = os.path.join(root, "scratch_final.db")
+old = sqlite3.connect(fin); old.execute("PRAGMA journal_mode=WAL"); old.execute("PRAGMA wal_autocheckpoint=0")
+old.execute("CREATE TABLE t (id INTEGER PRIMARY KEY, v TEXT)"); old.execute("CREATE UNIQUE INDEX t_v ON t(v)")
+old.commit()
+old.executemany("INSERT INTO t (v) VALUES (?)", [(f"old{i}",) for i in range(200)]); old.commit()
+shutil.copy(fin + "-wal", fin + "-wal.keep")          # the WAL a killed job leaves behind
+old.close()
+shutil.move(fin + "-wal.keep", fin + "-wal")
+new = os.path.join(root, "scratch_new.db")
+n = sqlite3.connect(new); n.execute("CREATE TABLE t (id INTEGER PRIMARY KEY, v TEXT)")
+n.execute("CREATE UNIQUE INDEX t_v ON t(v)"); n.executemany("INSERT INTO t (v) VALUES (?)", [(f"new{i}",) for i in range(50)])
+n.commit(); n.close()
+check("a stale -wal sits beside the old copy (the 9/28 condition)", os.path.exists(fin + "-wal"))
+rh.install_scratch(new, fin)
+check("the stale -wal is gone before the new copy is opened", not os.path.exists(fin + "-wal"))
+f = sqlite3.connect(fin)
+check("the new copy opens intact: integrity ok, only its own 50 rows",
+      f.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+      and f.execute("SELECT COUNT(*) FROM t").fetchone()[0] == 50
+      and f.execute("SELECT COUNT(*) FROM t WHERE v LIKE 'old%'").fetchone()[0] == 0)
+f.close()
+
 print("\n== status ==")
 check("status() names the scratch path on the volume, beside the live file",
       rh.status(db_path=live)["scratch_path"].startswith(os.path.join(root, "rehearsal")))

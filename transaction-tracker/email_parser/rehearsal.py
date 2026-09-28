@@ -241,6 +241,20 @@ def scrub(path) -> dict:
     return done
 
 
+def install_scratch(src, final) -> None:
+    """Put a freshly restored file at ``final``. The old copy's -wal / -shm
+    go FIRST: the runner opens the copy in WAL mode, and a leftover WAL is
+    replayed into whatever file next opens under that name, which is how
+    the 9/28 17:15 drill came back "row 335 missing from index
+    idx_customer_emails_primary" (a job killed by a deploy had left one)."""
+    final = Path(str(final))
+    for suffix in ("-wal", "-shm", "-journal"):
+        side = Path(str(final) + suffix)
+        if side.exists():
+            side.unlink()
+    os.replace(str(src), str(final))
+
+
 def restore(db_path=None) -> dict:
     """THE RESTORE DRILL into the rehearsal folder: newest OneDrive backup →
     gunzip → integrity → counts vs live → scrub → gzip. Times each step."""
@@ -250,6 +264,14 @@ def restore(db_path=None) -> dict:
     live = Path(str(db_path or DB_PATH))
     rdir = rehearsal_dir(live)
     rdir.mkdir(parents=True, exist_ok=True)
+    # Never swap the copy out from under a running job, and keep the drill
+    # (download, scrub, gzip on the shared host) out of a live event.
+    busy = _running(_jobs_dir(live))
+    if busy:
+        return {"ok": False, "error": f"job {busy['id']} is still running on the copy; restore after it ends"}
+    held = live_event_hold(live)
+    if held:
+        return {"ok": False, "error": f"held: {held}. Nothing restored."}
     t = {}
     t0 = time.perf_counter()
     creds = backups._graph_creds()
@@ -310,7 +332,7 @@ def restore(db_path=None) -> dict:
             logger.exception("rehearsal scrub failed")
             return {"ok": False, "stage": "scrub", "error": str(e), "timings_ms": t, **drill}
         final = rdir / SCRUBBED
-        os.replace(restored, final)
+        install_scratch(restored, final)
         t["scrub_ms"] = int((time.perf_counter() - t3) * 1000)
         t4 = time.perf_counter()
         gz_out = rdir / SCRUBBED_GZ

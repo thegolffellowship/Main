@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.513.11";
+window.TGF_VERSION = "2.513.12";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.513.12",
+    date: "2026-09-28",
+    title: "Rehearsal restore never inherits the old copy's write-ahead log",
+    changes: [
+      "The 17:15 restore drill on 9/28 came back with integrity_after_scrub \"row 335 missing from index idx_customer_emails_primary\". The runner opens the scratch copy in WAL mode, and a job killed by that hour's deploy had left the old copy's -wal file beside it. The drill replaced the database file but not the -wal, and SQLite replays a leftover WAL into whatever file next opens under that name. The copy came back as a mix of old and new pages. Reproduced: with the old swap, a new 50-row copy opened as the old copy's 200 rows.",
+      "install_scratch() now deletes the copy's -wal, -shm and -journal before swapping in the new file. The drill also refuses to run while a runner job is still using the copy, or while a live score-entry event holds the runner. Nothing on the live database is affected: the drill only ever writes the rehearsal folder. Guard: test_rehearsal.py.",
+    ],
+  },
   {
     version: "2.513.11",
     date: "2026-09-28",

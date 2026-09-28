@@ -87,6 +87,19 @@ never under /data" guards admit exactly one case: `runner_scratch_ok(path)`,
 true only in a runner child for a file inside `<volume>/rehearsal/`.
 Guard: `test_rehearsal_runner.py`.
 
+### The restore never inherits the old copy's WAL (v2.513.12)
+
+The runner opens the copy in WAL mode. The 9/28 17:15 drill replaced the
+file while the previous copy's `-wal` was still beside it (a job killed by a
+deploy had left one), and SQLite replays a leftover WAL into whatever file
+next opens under that name: `integrity_after_scrub` came back "row 335
+missing from index idx_customer_emails_primary". `install_scratch()` now
+deletes `-wal` / `-shm` / `-journal` before the swap, and `restore` refuses
+while a job is running or a live event holds the runner. Guard:
+`test_rehearsal.py` (a stale WAL beside the old copy; the new copy opens
+intact with only its own rows. With the old `os.replace` it opened as the
+OLD copy).
+
 ### Jobs stay out of live events (Front Desk #851, 2026-09-28)
 
 The runner shares the production host. A job is REFUSED ("held: …",
