@@ -56,6 +56,22 @@ delete one without Kerry's OK.
 There is no event-level "not TGF" flag in the schema; adding one is a
 rule-3b change. Until then this table is the exclusion.
 
+## NO HANDICAPS — TGF events whose rounds never post and draw no card
+
+Kerry 2026-09-27 (CA #787 item 1): "No Lone Star Cup round (four-ball,
+Chapman or singles) posts to TGF handicaps. Closeout: skip the handicap
+post and the handicap card for event 3329 and practice round 3330."
+The CODE enforces it (v2.504.x): `hcp_skip_events` (default 3329, 3330;
+app setting of the same name overrides) makes the handicap preview, the
+9-hole post, the two-nines post and `scoring-hcp-cards` refuse the event
+with the ruling as the reason. The cup also feeds no points race (#787
+item 2). Everything else in the closeout still runs for the cup: results
+(Track B's frozen snapshot), the recap, money.
+
+The cup ROSTER for any card or roster read comes from Track B's frozen
+`lsc_roster_final` dial by customer_id, never from event registrations
+(CA #786 GO 5) — event 3329 holds one registration; the 27 are in the dial.
+
 ## Phase 0 — what the machine already did
 
 The hourly auto-sync (`_GG_RESULT_PORTALS`, database.py) runs on any day

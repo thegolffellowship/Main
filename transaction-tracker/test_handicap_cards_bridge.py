@@ -80,6 +80,41 @@ bad = db.send_handicap_cards(event_name="s9.98 Nowhere", dry_run=False, db_path=
 check("unknown event → error 400, nothing sent", bad.get("http") == 400 and "nothing sent" in bad.get("error", ""), bad)
 
 print()
+print("The Lone Star Cup: roster from Track B's dial (CA #786 GO 5), and no cards by ruling (CA #787)")
+import json as _json
+c = sqlite3.connect(tmp)
+c.execute("INSERT INTO events (id, item_name, event_date, chapter, status) "
+          "VALUES (992, 'LONE STAR CUP | Test Hideout', '2026-10-10', 'TGF', 'active')")
+for k, v in (("lsc_matches", _json.dumps({"event_id": 992})),
+             ("lsc_roster_final", _json.dumps({"chapters": [{"chapter": "San Antonio", "seats": [
+                 {"customer_id": 301, "player_name": "YOUNGS, Pat"},
+                 {"customer_id": 302, "player_name": "ANTHIS, Larry"}]}]})),
+             ("hcp_skip_events", "{}")):
+    c.execute("INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)", (k, v))
+c.execute("INSERT INTO scoring_rounds (customer_id, player_name, event_id, round_date, holes_played, gross, source) "
+          "VALUES (301, 'YOUNGS, Pat', 992, '2026-10-10', 18, 80, 'entry')")
+c.commit(); c.close()
+cup = db.send_handicap_cards(event_name="LONE STAR CUP | Test Hideout", dry_run=True, db_path=tmp)
+check("the cup roster comes from the dial, not registrations (the event has none)",
+      cup.get("registered") == 2 and [w["player"] for w in cup.get("would_send") or []] == ["Pat Youngs"], cup)
+c = sqlite3.connect(tmp)
+c.execute("UPDATE app_settings SET value = ? WHERE key = 'hcp_skip_events'", (_json.dumps({"992": "test ruling"}),))
+c.commit(); c.close()
+sk = db.send_handicap_cards(event_name="LONE STAR CUP | Test Hideout", dry_run=False, db_path=tmp)
+check("a ruled-out event refuses the card send, nothing sent",
+      sk.get("status") == "skipped_by_ruling" and sk.get("http") == 409 and "Nothing sent" in sk.get("error", ""), sk)
+pv = db.get_scoring_handicap_preview("LONE STAR CUP", db_path=tmp)
+check("a ruled-out event posts no handicap rounds (preview refuses by ruling)",
+      "no handicap posting" in (pv.get("error") or "") and pv.get("skipped_by_ruling"), pv)
+dr = db.derive_handicap_rounds_from_scoring("LONE STAR CUP", dry_run=False, db_path=tmp)
+check("the handicap post refuses it too", "no handicap posting" in (dr.get("error") or ""), dr)
+c = sqlite3.connect(tmp)
+c.execute("DELETE FROM app_settings WHERE key = 'hcp_skip_events'")
+c.commit(); c.close()
+check("with no setting, the default skips 3329 and 3330 (Kerry, CA #787)",
+      set(db.hcp_skip_events(db_path=tmp)) == {3329, 3330})
+
+print()
 print("The bridge and the route both call the one function")
 src = open(os.path.join(os.path.dirname(__file__), "mcp_server.py"), encoding="utf-8").read()
 check("scoring-hcp-cards bridge exists and defaults to a dry run",

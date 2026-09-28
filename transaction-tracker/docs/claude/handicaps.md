@@ -565,6 +565,21 @@ bridge `scoring-hcp-cards:<event>[|apply]` both call it. Rules:
   `|apply`, AFTER `scoring-hcp-import:<event>|apply` — never before.
   Guards: `test_handicap_cards_bridge.py`, `test_handicap_card_counts.js`.
 
+## Events ruled out of handicaps; the cup roster (v2.504.x)
+
+Kerry 2026-09-27 (CA #787): no Lone Star Cup round posts to TGF
+handicaps and no card goes out for it. `hcp_skip_events()` (database.py)
+returns `{event_id: reason}` — default `HCP_SKIP_EVENTS_DEFAULT` = 3329
+(the cup) and 3330 (its practice round); the app setting
+`hcp_skip_events` (JSON object) replaces the default, `{}` skips none.
+`get_scoring_handicap_preview`, `derive_handicap_rounds_from_scoring` and
+`derive_18hole_rounds_as_two_nines` drop that event's rounds and refuse
+with the ruling as the reason; `send_handicap_cards` refuses with
+status `skipped_by_ruling` (HTTP 409) and sends nothing. For the cup
+event (`lsc_matches.event_id`) the card roster is read from Track B's
+`lsc_roster_final` dial by customer_id (CA #786 GO 5), not from event
+registrations. Guard: test_handicap_cards_bridge.py.
+
 ## Email Handicap Cards — MEMBERS send mode (v2.255.27, Kerry)
 
 The bulk-send modal has three modes: **All Players | Members | By

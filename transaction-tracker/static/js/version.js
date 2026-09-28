@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.504.0";
+window.TGF_VERSION = "2.504.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.504.1",
+    date: "2026-09-27",
+    changes: [
+      "No handicaps from the Lone Star Cup, enforced in code (Kerry 2026-09-27, CA #787: \u2018No Lone Star Cup round \u2026 posts to TGF handicaps \u2026 skip the handicap post and the handicap card for event 3329 and practice round 3330\u2019). A skip list (default 3329 and 3330, app setting hcp_skip_events overrides) makes the handicap preview, the 9-hole post, the two-nines post and the handicap-card send refuse those events with the ruling as the reason. Nothing is sent or posted for them.",
+      "The cup\u2019s roster for the card send comes from Track B\u2019s frozen lsc_roster_final dial by customer_id, not from event registrations (CA #786 GO 5). The cup event holds one registration; the 27 players live in the dial. Guard: test_handicap_cards_bridge.py (5 new checks).",
+    ],
+  },
   {
     version: "2.504.0",
     date: "2026-09-28",
