@@ -1175,32 +1175,37 @@ recorded them. The `source` field says so, and a test keeps that wording in
 place. If a Cart Net event ever fails to reproduce GG, check the settings
 screen first.
 
-### 9s vs 18s — OPEN, CA Queue #11
+### 9s vs 18s — RULED (CA Queue #10/#11, Kerry via CA #771, 2026-09-27)
 
-Golf Genius does **not** halve the index for nine-hole play. Melchor's 6.888
-is a course handicap on the 18-hole stroke scale (18-hole-scale slope, but the
-*nine*-hole rating-minus-par adjustment). The nine-hole discount happens in the
-**allocation**: strokes spread across the full 18-hole stroke-index card and
-the player collects only those landing on the nine he plays.
+**9-hole events: strokes are allocated by COLLAPSING THE NINE'S STROKE
+INDEXES TO 1–9.** Kerry: *"9 hole events collapse to 1-9 si. So it gets the
+full 3."* A 9-hole PH of 3 receives all 3 strokes, and the front and back
+nines pay the same. **18-hole events: the full 1–18 card.** The handicap
+record is unchanged (TGF indexes still come from 9-hole differentials).
 
-A coincidence that will mislead someone eventually: on a **half-Net** game the
-50% allowance and the nine-hole halving are the same arithmetic —
-`6.888 × 50% = (5.6 ÷ 2) × 139/113 = 3.444`. They come apart on any other
-game. a9.23 *does* discriminate, and picks GG's reading: halving first and
-then applying the allowance drops Zapata's hole 7, the $13.
+One implementation: `handicap_calc.ruled_allocation_mode("ruled", si)`
+resolves to `subset` (the 1–9 collapse) on a nine and `full_card` on an 18.
+It is used by the live-scoring card path and `game_handicaps` (every net
+game, incl. ½-Net Skins). Score entry's pop dots (`score_entry._strokes_by_player`,
+which also drives team pops) follow the same rule via `mode="subset"` — Track
+A's change, 863eed2 — which is the 1–9 collapse on a nine and identical to
+the full card on an 18. Routing it through `ruled_allocation_mode` would make
+it one implementation; that is Track A's call. The `full_card` guard in `allocate_strokes`
+stays: handed re-ranked 1–9 indexes with a handicap it cannot carry, it
+raises rather than silently under-allocating.
 
-Two consequences, which are the open discussion:
-
-1. **A nine pays fewer strokes than the printed playing handicap.** Melchor's
-   card says PH 3; he receives 2, because stroke index 2 is on the back nine.
-2. **The front nine pays more than the back.** Front holds the odd indexes,
-   back the even, so on every *odd* playing handicap the front nine gives one
-   extra stroke — a 3-handicap gets 2 on the front and 1 on the back. Same
-   player, same course, different nine.
-
-Both are GG behaving consistently, and we stay tethered. Whether TGF wants it
-after untether is Kerry's, on CA Queue #11 — which should be settled together
-with CA Queue #10, since they are the same question at two layers.
+**CORRECTION TO THE RECORD (2026-09-28).** The CA #7 work and the original
+CA Queue #11 write-up said Golf Genius allocates nines on the *full 18-hole*
+card — so a PH of 3 would get 2 strokes and the front nine would pay more
+than the back. **That was wrong for GG's headline net card.** The dots GG
+itself stored on a9.23 (rounds 3520 and 3523, read live) are the 1–9
+collapse: Melchor, PH 7, has 7 dots; Compton, PH 12, has 12 (two on the
+three hardest holes). With GG's "use a 9-hole scorecard" setting on, the
+nine *is* the full card. Kerry's ruling therefore matches what GG was
+already doing, so no allocation-driven divergence from GG is expected on
+9/29 or in the points backtest. `test_half_net_skins.py` pins those two real
+cards. (Whether GG's ½-Net Skins board allocates the same way cannot be told
+from a9.23 — both conventions reproduce it.)
 
 ### The governing rule when we and GG disagree
 

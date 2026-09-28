@@ -1,5 +1,16 @@
-window.TGF_VERSION = "2.503.3";
+window.TGF_VERSION = "2.504.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.504.0",
+    date: "2026-09-28",
+    title: "Nines collapse to 1\u20139 stroke indexes (Kerry, CA #771) \u2014 one rule, every path",
+    changes: [
+      "KERRY RULED CA Queue #10/#11 (rule 3b, CA #771): on a 9-hole event strokes are allocated by COLLAPSING the nine\u2019s stroke indexes to 1\u20139, so a 9-hole PH of 3 receives all 3 strokes and the front and back nines pay the same; an 18-hole event uses the full 1\u201318 card.",
+      "ONE IMPLEMENTATION: `handicap_calc.ruled_allocation_mode(\u201cruled\u201d, si)` resolves to the 1\u20139 collapse on a nine and the full card on an 18. It drives the side-games paths \u2014 the live-scoring card path and `game_handicaps` (every net game including \u00bd-Net Skins, which CA #7 had switched to full-card). Score entry\u2019s pop dots were moved to the same rule by TRACK A in their own module (863eed2, `mode=\u201csubset\u201d`, which is the 1\u20139 collapse on a nine and identical to the full card on an 18) \u2014 this lane had drafted the same change and took theirs instead. Every 9-hole path in the codebase now follows the ruling. The guard that raises on a mismatched stroke-index convention is kept, as CA asked.",
+      "RE-RUN a9.23 under the ruling, as CA asked: NO DIFF. The board is still GG\u2019s four skins and dollars exactly, and GG\u2019s old convention still reproduces it too (both shown in the test).",
+      "CORRECTION TO THE RECORD. The CA #7 work concluded that Golf Genius allocates nines on the full 18-hole card \u2014 so a PH of 3 would get two strokes and the front nine would pay more than the back \u2014 and that framed CA Queue #11. It was WRONG for GG\u2019s headline card. The dots GG itself stored on a9.23 are the 1\u20139 collapse: Melchor, PH 7, has seven dots (full-card would give four); Compton, PH 12, has twelve (full-card would give six). With GG\u2019s \u2018use a 9-hole scorecard\u2019 setting on, the nine IS the full card. Kerry\u2019s ruling therefore matches what GG was already doing, so no allocation-driven divergence is expected on 9/29 or in the points backtest. Both real cards are pinned in test_half_net_skins.py.",
+    ],
+  },
   {
     version: "2.503.3",
     date: "2026-09-27",

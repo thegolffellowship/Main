@@ -287,27 +287,83 @@ check("the config records WHAT ratified it, not merely that it is ratified",
       "worked example" in HALF_NET["handicap"].get("ratified_source", ""),
       HALF_NET["handicap"].get("ratified_source"))
 
-print("\n== full-card allocation: ratified by the SETTING, not by a9.23 ==")
+print("\n== 9-hole allocation: Kerry's ruling, CA Queue #10/#11 (CA #771) ==")
 
-# Honest bookkeeping. GG's league setting is "full card Stroke Index
-# Allocation", so a PH of 3 lands only TWO strokes on this front nine —
-# index 2 is on the back nine and is not played. But a9.23 does NOT
-# discriminate the two modes, and the test says so rather than implying
-# the replay proved it.
-check("a PH of 3 delivers only TWO strokes on the front nine",
-      sum(_h["by_key"]["MELCHOR, Eduardo"]["by_hole"].values()) == 2,
+# Kerry, 2026-09-27: "9 hole events collapse to 1-9 si. So it gets the full 3."
+# This SUPERSEDES the GG "full card" league setting the dial copied at CA #7.
+check("the half-Net dial carries the ruled mode, not GG's full_card",
+      HALF_NET["handicap"]["stroke_allocation"] == "ruled")
+check("'ruled' resolves to the 1-9 collapse on a nine",
+      ls.ruled_allocation_mode("ruled", SI) == "subset")
+check("'ruled' resolves to the full 1-18 card on an 18",
+      ls.ruled_allocation_mode("ruled", {h: h for h in range(1, 19)})
+      == "full_card")
+check("a 9-hole PH of 3 now receives ALL THREE strokes",
+      sum(_h["by_key"]["MELCHOR, Eduardo"]["by_hole"].values()) == 3,
       str(_h["by_key"]["MELCHOR, Eduardo"]["by_hole"]))
-check("  ...on the holes whose FULL-CARD index is 1 and 3 (holes 5 and 7)",
-      [h for h, v in _h["by_key"]["MELCHOR, Eduardo"]["by_hole"].items() if v]
-      == [5, 7])
-_subset = ls.game_handicaps(
-    cards, dict(HALF_NET["handicap"], stroke_allocation="subset"), SI)
-check("subset allocation would deliver THREE — a real, different answer",
-      sum(_subset["by_key"]["MELCHOR, Eduardo"]["by_hole"].values()) == 3)
-check("BUT a9.23 does not discriminate them: both reproduce GG's board",
-      skins_set(ls.game_skins(cards, _cfg_with(stroke_allocation="subset"),
-                              "9")) == GG_SKINS,
-      "if this ever fails, a9.23 HAS become evidence for the dial")
+check("  ...on the nine's three hardest holes (holes 5, 7 and 4)",
+      sorted(h for h, v in _h["by_key"]["MELCHOR, Eduardo"]["by_hole"].items()
+             if v) == [4, 5, 7],
+      str(_h["by_key"]["MELCHOR, Eduardo"]["by_hole"]))
+
+# The front and back nines now pay the same — the asymmetry CA Queue #11
+# described is gone. Back nine carries the EVEN full-card indexes.
+_BACK = {h: 2 * h for h in range(1, 10)}
+for _ph in range(1, 10):
+    _f = sum(ls.allocate_strokes(_ph, SI,
+                                 mode=ls.ruled_allocation_mode("ruled", SI)).values())
+    _b = sum(ls.allocate_strokes(_ph, _BACK,
+                                 mode=ls.ruled_allocation_mode("ruled", _BACK)).values())
+    if _f != _ph or _b != _ph:
+        check(f"PH {_ph}: front and back both pay {_ph}", False, f"front {_f} back {_b}")
+        break
+else:
+    check("for every PH 1-9, front nine and back nine each pay the full PH", True)
+
+# RE-RUN a9.23 under the ruling (CA #771 asked for it, and any diff before 9/29).
+# GG itself allocated full-card that night, which gave Melchor/Zapata 2 strokes;
+# the ruling gives 3. It happens NOT to move the board: both allocations
+# reproduce GG's four skins and dollars. So a9.23 reports NO DIFF — by the
+# data, not by assumption.
+check("a9.23 RE-RUN under the ruling: still GG's four skins exactly",
+      skins_set(ls.game_skins(cards, ls.SEED_LIVE_SCORING_CONFIG, "9"))
+      == GG_SKINS,
+      str(sorted(skins_set(ls.game_skins(cards, ls.SEED_LIVE_SCORING_CONFIG,
+                                         "9")))))
+check("  ...and GG's full-card convention also still reproduces it (both shown)",
+      skins_set(ls.game_skins(cards, _cfg_with(stroke_allocation="full_card"),
+                              "9")) == GG_SKINS)
+
+# PRIMARY-SOURCE CHECK, 2026-09-28: the dots Golf Genius itself STORED on
+# a9.23's headline net cards (scoring_holes.strokes_received, read live via
+# get_scorecard_detail, rounds 3520 and 3523). They are the 1-9 collapse, not
+# full-card: GG was already doing what Kerry ruled. With GG's "use a 9-hole
+# scorecard" setting on, the NINE is the full card. The CA #7 inference that
+# GG gives a PH of 3 only two strokes on a nine was WRONG for the headline
+# card, and the front-vs-back asymmetry reported on CA Queue #11 was never
+# GG's behaviour there.
+_GG_STORED = {
+    "MELCHOR PH7 (round 3520)": (7, {1: 0, 2: 1, 3: 1, 4: 1, 5: 1, 6: 1, 7: 1,
+                                     8: 0, 9: 1}),
+    "COMPTON PH12 (round 3523)": (12, {1: 1, 2: 1, 3: 1, 4: 2, 5: 2, 6: 1,
+                                       7: 2, 8: 1, 9: 1}),
+}
+for _who, (_ph, _gg) in _GG_STORED.items():
+    check(f"GG's stored dots, {_who}: the ruled 1-9 collapse reproduces them",
+          ls.allocate_strokes(_ph, SI, mode=ls.ruled_allocation_mode("ruled", SI))
+          == _gg)
+    check(f"  ...and full_card does NOT ({_who})",
+          ls.allocate_strokes(_ph, SI, mode="full_card") != _gg)
+
+# The guard CA asked to keep: full_card handed a re-ranked 1-9 nine with a
+# handicap it cannot carry RAISES rather than silently under-allocating.
+try:
+    ls.allocate_strokes(11, {h: h for h in range(1, 10)}, mode="full_card")
+    check("the mismatched-convention guard still raises", False)
+except ValueError:
+    check("the mismatched-convention guard still raises", True)
+
+
 print("\n== the USGA allowance table, with its verification state ==")
 
 check("the four-player ladder matches Kerry's ratified Team Net figures",

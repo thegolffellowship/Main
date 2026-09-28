@@ -56,6 +56,27 @@ def playing_handicap(index: float, slope: float, rating: float, par: float,
     return whs_round(ch)
 
 
+def ruled_allocation_mode(mode: str, si_by_hole: dict) -> str:
+    """Resolve the "ruled" stroke-allocation mode to a concrete one.
+
+    Kerry, CA Queue #10/#11 (rule 3b, CA #771, 2026-09-27):
+      * 9-HOLE ROUND  -> collapse the nine's stroke indexes to 1-9 and
+        allocate over them ("subset"). "9 hole events collapse to 1-9 si.
+        So it gets the full 3." A 9-hole PH of 3 receives all 3 strokes,
+        and the front and back nines pay the same.
+      * 18-HOLE ROUND -> the full 1-18 card ("full_card").
+
+    Any explicit mode passes through unchanged, so a test or a sandbox can
+    still ask for the other convention side by side (G2a reports both). The
+    `full_card` guard in `allocate_strokes` stays: handed re-ranked 1..N
+    indexes with a handicap it cannot carry, it RAISES rather than silently
+    under-allocating.
+    """
+    if mode != "ruled":
+        return mode
+    return "subset" if len(si_by_hole) <= 9 else "full_card"
+
+
 def allocate_strokes(playing_hcp: int, stroke_index_by_hole: dict,
                      max_pops: int = 2, mode: str = "subset") -> dict:
     """Distribute a playing handicap across holes by stroke index.
@@ -66,7 +87,7 @@ def allocate_strokes(playing_hcp: int, stroke_index_by_hole: dict,
     `mode` is the LEAGUE SETTING for a round played over a subset of the card
     (e.g. a TGF nine), and the two modes give different stroke counts:
 
-      "full_card"  (default) — a hole gets a stroke when its stroke index on
+      "full_card" — a hole gets a stroke when its stroke index on
           the FULL 18-hole card is <= the playing handicap. A playing handicap
           of 3 played over the front nine therefore lands only TWO strokes,
           because stroke index 2 is on the back nine and is simply not played.
@@ -74,7 +95,7 @@ def allocate_strokes(playing_hcp: int, stroke_index_by_hole: dict,
           Stroke Index Allocation", which is the setting on the TGF league
           (Kerry's handicap-settings screenshot, 2026-09-16).
 
-      "subset" — re-rank the holes played and allocate over them, so a
+      "subset"  (default) — re-rank the holes played and allocate over them, so a
           playing handicap of 3 always lands three strokes. This is GG's
           "Allocate strokes for the subset of holes played", which GG labels
           Recommended and TGF does NOT use.

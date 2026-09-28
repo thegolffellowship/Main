@@ -29,7 +29,7 @@ from __future__ import annotations
 
 import random
 
-from .handicap_calc import allocate_strokes
+from .handicap_calc import allocate_strokes, ruled_allocation_mode
 
 # ---------------------------------------------------------------------------
 # Rules-as-data. Every threshold below is transcribed from the RATIFIED
@@ -277,14 +277,14 @@ SEED_LIVE_SCORING_CONFIG: dict = {
                         # to a CH of 13 becomes 7" (6.5 -> 7). Melchor's
                         # 3.444 -> 3 and Zapata's 2.746 -> 3 confirm nearest.
                         "rounding": "half_up",
-                        # GG league setting: "Allocate strokes based on the
-                        # full card Stroke Index Allocation" (NOT its
-                        # "subset of holes played", which GG marks
-                        # Recommended and TGF does not use). Ratified from
-                        # the settings screen. a9.23 does NOT discriminate
-                        # the two — both reproduce its board — so this rests
-                        # on the setting, not on the replay.
-                        "stroke_allocation": "full_card",
+                        # KERRY RULED CA Queue #10/#11 (rule 3b, CA #771,
+                        # 2026-09-27): "9 hole events collapse to 1-9 si. So
+                        # it gets the full 3." A nine allocates by COLLAPSING
+                        # its stroke indexes to 1-9; an 18 uses the full 1-18
+                        # card. This SUPERSEDES the GG "full card" league
+                        # setting this dial copied at CA #7 — see
+                        # `ruled_allocation_mode`.
+                        "stroke_allocation": "ruled",
                         "rounding_ratified": True,
                         "ratified_source": (
                             "GG league handicap settings + GG worked example "
@@ -408,16 +408,12 @@ def build_cards(state: dict, formulas: dict, derive_hole=None) -> list[dict]:
     nobody hands us dots.
     """
     derive_hole = derive_hole or _default_derive_hole
-    # The league's stroke-allocation setting. TGF's Golf Genius league is set
-    # to "full card Stroke Index Allocation", so a nine allocates against the
-    # 18-hole card and can deliver fewer strokes than the playing handicap.
-    # Deliberately "subset" here, NOT the league's "full_card". This is the
-    # headline net game's allocation and it is not this lane's to change: no
-    # real GG event has yet been checked that discriminates the two on the
-    # card path, and some rounds store stroke indexes re-ranked to 1..N,
-    # where "full_card" would silently under-allocate. Carried as CA Queue
-    # #10. `game_handicaps` uses the league setting because a9.23 verified it.
-    allocation_mode = state.get("stroke_allocation", "subset")
+    # Stroke allocation follows Kerry's ruling on CA Queue #10/#11 (CA #771,
+    # 2026-09-27): a nine COLLAPSES its stroke indexes to 1-9, an 18 uses the
+    # full 1-18 card. "ruled" resolves to exactly that by hole count; see
+    # `ruled_allocation_mode`. (Before the ruling this path was already
+    # "subset", which CA confirmed is the correct nine-hole behaviour.)
+    allocation_mode = state.get("stroke_allocation", "ruled")
     hole_meta = {h["hole"]: h for h in state.get("holes") or []}
     si_by_hole = {h: (m.get("stroke_index") or 99) for h, m in hole_meta.items()}
     cards = []
@@ -433,8 +429,9 @@ def build_cards(state: dict, formulas: dict, derive_hole=None) -> list[dict]:
             received = {}
             allocation_source = "none"
         else:
-            received = allocate_strokes(int(ph), si_by_hole,
-                                        mode=allocation_mode)
+            received = allocate_strokes(
+                int(ph), si_by_hole,
+                mode=ruled_allocation_mode(allocation_mode, si_by_hole))
             allocation_source = "derived"
 
         holes_out, totals = [], {
@@ -1029,7 +1026,7 @@ def game_handicaps(cards: list[dict], handicap_cfg: dict | None,
 
     pct = handicap_cfg.get("allowance_pct", 100)
     mode = handicap_cfg.get("rounding", "half_up")
-    alloc_mode = handicap_cfg.get("stroke_allocation", "full_card")
+    alloc_mode = handicap_cfg.get("stroke_allocation", "ruled")
 
     # Step 1-3: allowance on the unrounded course handicap, rounded ONCE.
     rounded, lossy = {}, {}
@@ -1060,7 +1057,9 @@ def game_handicaps(cards: list[dict], handicap_cfg: dict | None,
             "allowanced": round(base * pct / 100.0, 3),
             "strokes": strokes,
             "precision_loss": lossy[c["key"]],
-            "by_hole": (allocate_strokes(strokes, si_by_hole, mode=alloc_mode)
+            "by_hole": (allocate_strokes(
+                strokes, si_by_hole,
+                mode=ruled_allocation_mode(alloc_mode, si_by_hole))
                         if si_by_hole else {}),
         }
     return out
