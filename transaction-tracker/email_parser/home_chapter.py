@@ -25,6 +25,7 @@ case, no INSERT OR REPLACE.
 from __future__ import annotations
 
 NAMED = ("barna", "moore", "sharp", "franz", "williams")
+NEUTRAL_EVENT_CHAPTERS = ("TGF", "(none)")
 
 
 def audit_home_chapters(year: str = "2026", db_path=None) -> dict:
@@ -53,8 +54,12 @@ def audit_home_chapters(year: str = "2026", db_path=None) -> dict:
 
     flagged = []
     for p in people.values():
-        by = p["events_by_chapter"]
-        total = sum(by.values())
+        # TGF-wide events (championships, the cup) belong to no chapter, so
+        # they are shown but never count as "playing away from home" — the
+        # first live run flagged players whose only 2026 event was a TGF one.
+        by = {k: v for k, v in p["events_by_chapter"].items()
+              if k not in NEUTRAL_EVENT_CHAPTERS}
+        total = sum(p["events_by_chapter"].values())
         home = (p["home_chapter"] or "").strip()
         most = max(by, key=by.get) if by else None
         reasons = []
