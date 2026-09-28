@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.513.4";
+window.TGF_VERSION = "2.513.5";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.513.5",
+    date: "2026-09-28",
+    title: "Live Scoring: the manager panel (four actions, each logged with who)",
+    changes: [
+      "CA #843 GO: chapter managers can now open the Live Scoring page. Under each round a Manager actions block has exactly four actions: settle a closest-to-the-pin or longest-putt holder, verify or reject a hole-in-one (after the group has confirmed), sign a complete card for a player (a note is required, and a flagged card isn't offered), and clear a flag with how it was resolved. Every action is logged in the same transaction with who did it (role and chapter, e.g. manager:San Antonio), and the latest show at the bottom of the panel.",
+      "Seeding and preview restarts stay admin-only and are hidden from a manager's page. The manager runbook is updated: managers do the four actions themselves, and Kerry seeds."
+    ]
+  },
   {
     version: "2.513.4",
     date: "2026-09-28",

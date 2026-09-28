@@ -180,10 +180,35 @@ def admin_overview(event_id: int, base_url: str | None = None, db_path=None) -> 
                 "attested": any((p["customer_id"], "scorekeeper") in signed for p in ps),
                 "card_check": checks.get(g["group_id"]),
                 "url": links.get(g["group_id"])})
+        names = {p["customer_id"]: p["name"] for p in r["players"]}
+        # THE MANAGER PANEL (CA #843): the four actions and what they act on.
+        with _closing(_conn(db_path)) as conn:
+            cc = ctp_contests(conn, r["round_id"], db_path)
+            contests = []
+            for hole, kind in cc["holes"].items():
+                cur = _ctp_current(conn, r["round_id"], hole)
+                contests.append({"hole": hole, "kind": kind,
+                                 "holder": ({"customer_id": cur["customer_id"],
+                                             "name": cur["display_name"],
+                                             "group_num": cur["group_num"],
+                                             "by_manager": cur["kind"] == "manager"}
+                                            if cur else None)})
+            flags = [dict(x) for x in conn.execute(
+                "SELECT f.id, f.group_id, g.group_num, f.customer_id, f.hole_number AS hole, "
+                "f.note, f.at FROM se_card_flags f JOIN se_groups g ON g.id = f.group_id "
+                "WHERE g.round_id = ? AND f.resolved_at IS NULL ORDER BY f.id", (r["round_id"],))]
+        for f in flags:
+            f["name"] = names.get(f["customer_id"])
+        hio = [dict(h, name=names.get(h["customer_id"])) for h in r["hio"]]
         rounds.append({"round_id": r["round_id"], "label": r["label"], "date": r["date"],
                        "holes": n, "status": r["status"],
                        "preview": (r["label"] or "").startswith(PREVIEW_LABEL),
-                       "matches": bool(round_matches(r["round_id"], db_path)), "groups": groups})
+                       "matches": bool(round_matches(r["round_id"], db_path)), "groups": groups,
+                       "manager": {"contests": contests, "contest_source": cc["source"],
+                                   "flags": flags, "hio": hio,
+                                   "players": [{"customer_id": p["customer_id"], "name": p["name"]}
+                                               for p in r["players"]],
+                                   "log": manager_log(r["round_id"], db_path=db_path)}})
     return {"event_id": event_id, "rounds": rounds,
             "live_for_members": (get_app_setting("score_entry_live", db_path) or "").strip() == "1",
             "keeper_signs": keeper_signs(event_id, db_path),
@@ -1641,6 +1666,9 @@ def sign_card(group_id: int, device_id: str, customer_id: int, kind: str = "play
             (g["round_id"], group_id, customer_id, kind,
              signed_by if signed_by is not None else customer_id, device_id,
              json.dumps(card, sort_keys=True), note, now))
+        if kind == "manager":
+            _log_manager(conn, "sign", device_id, g["round_id"], group_id, customer_id,
+                         {"note": note})
         _bump(conn, g["event_id"])
         conn.commit()
     return {"signed": True, "kind": kind}
@@ -1848,9 +1876,10 @@ def flag_hole(group_id: int, device_id: str, customer_id: int, hole: int,
 
 
 def resolve_flag(flag_id: int, resolution: str, resolved_by: int | None = None,
-                 db_path=None) -> dict:
+                 db_path=None, actor: str | None = None) -> dict:
     with _closing(_conn(db_path)) as conn:
-        r = conn.execute("SELECT f.group_id, g.round_id, r.event_id FROM se_card_flags f "
+        r = conn.execute("SELECT f.group_id, g.round_id, r.event_id, f.customer_id, "
+                         "f.hole_number FROM se_card_flags f "
                          "JOIN se_groups g ON g.id = f.group_id JOIN se_rounds r ON r.id = g.round_id "
                          "WHERE f.id = ?", (flag_id,)).fetchone()
         if not r:
@@ -1858,6 +1887,8 @@ def resolve_flag(flag_id: int, resolution: str, resolved_by: int | None = None,
         conn.execute("UPDATE se_card_flags SET resolved_at = ?, resolved_by_customer_id = ?, "
                      "resolution = ? WHERE id = ? AND resolved_at IS NULL",
                      (_now(), resolved_by, resolution or "resolved", flag_id))
+        _log_manager(conn, "flag", actor, r["round_id"], r["group_id"], r["customer_id"],
+                     {"flag_id": flag_id, "hole": r["hole_number"], "resolution": resolution})
         _bump(conn, r["event_id"])
         conn.commit()
     return {"ok": True}
@@ -1890,6 +1921,29 @@ def _ctp_report(event_id: int, db_path=None):
         rep = None
     _CTP_CACHE[key] = (_t.monotonic(), rep)
     return rep
+
+
+def _log_manager(conn, kind: str, actor: str | None, round_id=None, group_id=None,
+                 customer_id=None, detail: dict | None = None) -> None:
+    """MANAGER ACTIONS ARE LOGGED WITH WHO DID THEM (CA #843, the manager
+    panel): one se_audit row per action, kind 'manager_<action>', the actor
+    ('admin', 'manager:San Antonio', ...) in device_id, the specifics in
+    detail. Written in the same transaction as the action itself."""
+    if not actor:
+        return
+    conn.execute("INSERT INTO se_audit (round_id, group_id, kind, customer_id, device_id, "
+                 "result, detail, at) VALUES (?,?,?,?,?,?,?,?)",
+                 (round_id, group_id, "manager_" + kind, customer_id, actor, "ok",
+                  json.dumps(detail or {}, default=str), _now()))
+
+
+def manager_log(round_id: int, limit: int = 30, db_path=None) -> list[dict]:
+    with _closing(_conn(db_path)) as conn:
+        return [dict(r) for r in conn.execute(
+            "SELECT a.kind, a.device_id AS actor, a.customer_id, p.display_name AS name, "
+            "a.detail, a.at FROM se_audit a LEFT JOIN se_players p ON p.round_id = a.round_id "
+            "AND p.customer_id = a.customer_id WHERE a.round_id = ? AND a.kind LIKE 'manager\\_%' "
+            "ESCAPE '\\' ORDER BY a.id DESC LIMIT ?", (round_id, limit))]
 
 
 def refused_writes_kept(round_id: int, db_path=None) -> int:
@@ -1967,7 +2021,8 @@ def claim_ctp(group_id: int, device_id: str, hole: int, customer_id: int | None,
     return {"ok": True}
 
 
-def rule_ctp(round_id: int, hole: int, customer_id: int, db_path=None) -> dict:
+def rule_ctp(round_id: int, hole: int, customer_id: int, db_path=None,
+             actor: str | None = None) -> dict:
     """The manager settles a dispute (or two claims at once on a shotgun)."""
     with _closing(_conn(db_path)) as conn:
         p = conn.execute("SELECT group_id FROM se_players WHERE round_id = ? AND customer_id = ?",
@@ -1978,6 +2033,7 @@ def rule_ctp(round_id: int, hole: int, customer_id: int, db_path=None) -> dict:
         conn.execute(
             "INSERT INTO se_ctp_claims (round_id, group_id, hole_number, customer_id, kind, at) "
             "VALUES (?,?,?,?, 'manager', ?)", (round_id, p[0], int(hole), customer_id, _now()))
+        _log_manager(conn, "ctp", actor, round_id, p[0], customer_id, {"hole": int(hole)})
         _bump(conn, ev[0])
         conn.commit()
     return {"ok": True}
@@ -2030,7 +2086,8 @@ def confirm_hio(group_id: int, device_id: str, hio_id: int, confirmer: int,
 
 def verify_hio(hio_id: int, verified_by: str, approve: bool = True, db_path=None) -> dict:
     with _closing(_conn(db_path)) as conn:
-        h = conn.execute("SELECT h.status, r.event_id FROM se_hio_claims h JOIN se_rounds r "
+        h = conn.execute("SELECT h.status, r.event_id, h.round_id, h.group_id, h.customer_id, "
+                         "h.hole_number FROM se_hio_claims h JOIN se_rounds r "
                          "ON r.id = h.round_id WHERE h.id = ?", (hio_id,)).fetchone()
         if not h:
             return {"error": "no such hole-in-one claim"}
@@ -2039,6 +2096,9 @@ def verify_hio(hio_id: int, verified_by: str, approve: bool = True, db_path=None
         conn.execute("UPDATE se_hio_claims SET status = ?, verified_by = ?, verified_at = ? "
                      "WHERE id = ?", ("verified" if approve else "rejected", verified_by, _now(),
                                       hio_id))
+        _log_manager(conn, "hio_verify" if approve else "hio_reject", verified_by,
+                     h["round_id"], h["group_id"], h["customer_id"],
+                     {"hio_id": hio_id, "hole": h["hole_number"]})
         _bump(conn, h["event_id"])
         conn.commit()
     return {"ok": True}

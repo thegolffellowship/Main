@@ -8,9 +8,10 @@ emails anyone.
 ## The day before
 1. **Save the PAIRINGS** on the event (EVENTS → the event → PAIRINGS →
    Generate or edit → Save). Nothing below works without saved pairings.
-2. In the **SCORE ENTRY** panel under the Pairings toolbar, tap
-   **Seed 9-hole score entry** (or 18). One scoring group per foursome
-   appears, each with its players.
+2. **Kerry (admin) seeds score entry** from the SCORE ENTRY panel under
+   the Pairings toolbar: **Seed 9-hole score entry** (or 18). One scoring
+   group per foursome appears, each with its players. Seeding is admin-only
+   for now; ask Kerry if it hasn't been done.
    - Changed the pairings after seeding? Tap **Update N-hole groups from
      pairings**. Groups and handicaps update, and scores are kept.
 3. Check that the panel shows **OPEN** and that every group has its players.
@@ -39,7 +40,7 @@ emails anyone.
   and the scorekeeper gets the flag to fix it.
 - **Hole-in-one:** a 1 on a par 3 or 4 opens a claim. The scorekeeper
   confirms, one other player in the group confirms, then it waits for
-  verification. Call Kerry to verify (see "Needs Kerry" below).
+  verification: **Verify** on the Live Scoring page (see "Manager actions").
 
 ## When a phone dies (or the scorekeeper changes)
 1. On any other phone in the group, open the same link (QR or text).
@@ -64,10 +65,23 @@ emails anyone.
 Keep the paper cards. Golf Genius is still the record, so the round is
 scored as it always was. Tell Kerry which group and what happened.
 
-## Needs Kerry (no manager button yet)
-- Settling a disputed closest-to-the-pin or longest-putt holder.
-- Verifying a hole-in-one.
-- Signing a card on a player's behalf, or clearing a flag by hand.
+## Manager actions (the Live Scoring page)
+Open the event → PAIRINGS → **Live Scoring**. Under each round, **Manager
+actions** has the four things only a manager does. Each one is logged
+with who did it, and the last few show at the bottom of the panel.
+- **CTP / Longest putt:** pick the winner and tap **Settle** to decide a
+  disagreement. It replaces the current holder for every group.
+- **Hole-in-one:** once the scorekeeper and one other player have
+  confirmed, tap **Verify** (or **Reject**). Nothing is announced to
+  members from here.
+- **Flags:** a player flagged a hole. Check with the group, then tap
+  **Clear the flag** and say how it was resolved.
+- **Sign for a player:** a complete card that wasn't signed (a player
+  left early). A note is required. A flagged card can't be signed until
+  its flag is cleared.
+
+## Needs Kerry
+- Seeding score entry for the event.
 - Turning on the **Members** or **Cart-sign QR** switches.
 
 ## Don'ts

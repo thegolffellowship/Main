@@ -744,6 +744,43 @@ check("admin: Close closes the round; its link stops opening; the scores are kep
       and se.get_entered_scores(900, hrid)["rounds"][0]["status"] == "closed"
       and any(p["thru"] for p in se.get_entered_scores(900, hrid)["rounds"][0]["players"]), cz.get_json())
 check("closing an unknown round is a 404", client.post("/api/score-entry/rounds/999999/close").status_code == 404)
+# CA #843: THE MANAGER PANEL — a chapter manager opens Live Scoring, and each
+# of the four actions is logged with who did it
+mgr = appmod.app.test_client()
+with mgr.session_transaction() as sess:
+    sess["role"] = "manager"; sess["authenticated"] = True; sess["chapter"] = "San Antonio"
+check("a manager can open the Live Scoring page and its read (the panel lives there)",
+      mgr.get("/events/900/live-scoring").status_code == 200
+      and mgr.get("/api/score-entry/events/900/admin").status_code == 200)
+check("...but seeding stays admin-only", mgr.post("/api/score-entry/events/900/seed",
+                                                  json={"holes": "9"}).status_code in (401, 403))
+check("...and the page hides the seed button from a manager",
+      b'id="seed"' not in mgr.get("/events/900/live-scoring").data
+      and b'id="seed"' in client.get("/events/900/live-scoring").data)
+ovm = mgr.get("/api/score-entry/events/900/admin").get_json()
+rm = next(r for r in ovm["rounds"] if r["round_id"] == sr)["manager"]
+check("the panel read carries the contests, flags, HIO claims, players and log",
+      {"contests", "flags", "hio", "players", "log"} <= set(rm)
+      and {c["hole"] for c in rm["contests"]} == {2, 6}, rm["contests"])
+r1 = mgr.post(f"/api/score-entry/rounds/{sr}/ctp", json={"hole": 6, "customer_id": 105})
+check("a manager settles a CTP holder", r1.status_code == 200
+      and se.get_group_card(sg)["ctp"]["6"]["holder_customer_id"] == 105, r1.get_json())
+se.flag_hole(sg, "p2", 102, 3, "843 test")
+fid = next(f["id"] for f in se.get_group_card(sg)["flags"] if f["hole"] == 3)
+check("a manager clears a flag", mgr.post(f"/api/score-entry/flags/{fid}/resolve",
+                                          json={"resolution": "score stands"}).status_code == 200
+      and not any(f["id"] == fid for f in se.get_group_card(sg)["flags"]))
+log843 = se.manager_log(sr)
+check("each action is logged with WHO did it (role and chapter)",
+      [x["kind"] for x in log843[:2]] == ["manager_flag", "manager_ctp"]
+      and all(x["actor"] == "manager:San Antonio" for x in log843[:2]), log843[:3])
+check("the log names the player", log843[1]["customer_id"] == 105)
+sf843 = mgr.post(f"/api/score-entry/groups/{sg}/sign-for", json={"customer_id": 101, "note": "left early, card checked"})
+check("a manager signs for a player (note required) and it's logged with who",
+      sf843.status_code == 200 and se.manager_log(sr)[0]["kind"] == "manager_sign"
+      and se.manager_log(sr)[0]["actor"] == "manager:San Antonio"
+      and mgr.post(f"/api/score-entry/groups/{sg}/sign-for", json={"customer_id": 101}).status_code == 400,
+      (sf843.get_json(), se.manager_log(sr)[:1]))
 pv = se.create_preview_round(900, [101, 102], holes=18, tees={101: "<50", 102: "65+"})
 se.set_round_matches(pv["round_id"], [{"id": "P-1", "format": "singles", "sides": [[101], [102]]}])
 check("only a PREVIEW round can be started over",

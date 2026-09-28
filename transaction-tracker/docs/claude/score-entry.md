@@ -564,6 +564,27 @@ with `since_version`. Latencies are measured at the client.
   CPUs in the health digest) and the scheduler jobs running beside the
   requests. Track B's member board is a separate read and was not measured.
 
+## Manager panel on Live Scoring (CA #843, v2.513.5)
+
+The Live Scoring page (`/events/<id>/live-scoring`) and its read
+(`admin_overview`) are open to MANAGERS as well as admin. Each round has
+a **Manager actions** block with exactly four actions, through the
+existing manager routes:
+- **settle a CTP / Longest Putt holder** (`rule_ctp`);
+- **verify or reject a hole-in-one** (`verify_hio`);
+- **sign for a player** (`sign_card` kind `manager`; a note is required,
+  and a flagged card is refused and not offered);
+- **clear a flag** (`resolve_flag`, with the resolution text).
+
+Every action writes an `se_audit` row in the same transaction: kind
+`manager_ctp` | `manager_hio_verify` | `manager_hio_reject` |
+`manager_sign` | `manager_flag`, with the actor in `device_id` (`_se_actor`:
+role plus chapter, e.g. `manager:San Antonio`). `manager_log(round_id)`
+reads the log back, and the panel shows the latest actions.
+
+Seeding and preview restarts stay admin-only; the page hides them from a
+manager. Screenshots: `docs/claude/screenshots/score-entry-2026-09-28-manager-panel/`.
+
 ## Manager runbook
 
 One page for chapter managers: seed, links and QR, take-over, when a phone

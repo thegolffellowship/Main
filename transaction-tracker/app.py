@@ -11515,12 +11515,20 @@ def api_se_hio_confirm():
     return (jsonify(res), 400) if "error" in res else jsonify(res)
 
 
+def _se_actor() -> str:
+    """Who did a score-entry manager action (CA #843): the role, and the
+    chapter for a chapter manager, e.g. 'manager:San Antonio'."""
+    role = session.get("role") or "unknown"
+    ch = session.get("chapter")
+    return f"{role}:{ch}" if ch else role
+
+
 @app.route("/api/score-entry/hio/<int:hio_id>/verify", methods=["POST"])
 @require_role("manager")
 def api_se_hio_verify(hio_id):
     from email_parser.score_entry import verify_hio
     b = request.get_json(silent=True) or {}
-    res = verify_hio(hio_id, session.get("role") or "manager", approve=b.get("approve", True) is not False)
+    res = verify_hio(hio_id, _se_actor(), approve=b.get("approve", True) is not False)
     return (jsonify(res), 400) if "error" in res else jsonify(res)
 
 
@@ -11529,7 +11537,8 @@ def api_se_hio_verify(hio_id):
 def api_se_flag_resolve(flag_id):
     from email_parser.score_entry import resolve_flag
     b = request.get_json(silent=True) or {}
-    res = resolve_flag(flag_id, (b.get("resolution") or "resolved by manager")[:200])
+    res = resolve_flag(flag_id, (b.get("resolution") or "resolved by manager")[:200],
+                       actor=_se_actor())
     return (jsonify(res), 400) if "error" in res else jsonify(res)
 
 
@@ -11539,7 +11548,7 @@ def api_se_ctp_rule(round_id):
     from email_parser.score_entry import rule_ctp
     b = request.get_json(silent=True) or {}
     try:
-        res = rule_ctp(round_id, int(b["hole"]), int(b["customer_id"]))
+        res = rule_ctp(round_id, int(b["hole"]), int(b["customer_id"]), actor=_se_actor())
     except (KeyError, TypeError, ValueError):
         return jsonify({"error": "hole and customer_id are required"}), 400
     return (jsonify(res), 400) if "error" in res else jsonify(res)
@@ -11552,7 +11561,7 @@ def api_se_sign_for(group_id):
     from email_parser.score_entry import sign_card
     b = request.get_json(silent=True) or {}
     try:
-        res = sign_card(group_id, "manager:" + (session.get("role") or ""), int(b["customer_id"]),
+        res = sign_card(group_id, _se_actor(), int(b["customer_id"]),
                         kind="manager", signed_by=None, note=b.get("note"))
     except (KeyError, TypeError, ValueError):
         return jsonify({"error": "customer_id is required"}), 400
@@ -11657,10 +11666,12 @@ def mockup_file(name):
 
 
 @app.route("/events/<int:event_id>/live-scoring")
-@require_role("admin")
+@require_role("manager")
 def live_scoring_admin_page(event_id):
     """The Tracker's door into score entry for one event (Kerry 2026-09-26).
-    Admin only while the feature is in its dry run."""
+    Managers too since CA #843: the manager panel's four actions (settle a
+    CTP / Longest Putt holder, verify a hole-in-one, sign for a player,
+    clear a flag) live here. Seeding and preview restarts stay admin-only."""
     from email_parser.database import get_connection
     conn = get_connection()
     try:
@@ -11670,11 +11681,12 @@ def live_scoring_admin_page(event_id):
         conn.close()
     if not ev:
         return "Event not found", 404
-    return render_template("score_entry_admin.html", ev=dict(ev))
+    return render_template("score_entry_admin.html", ev=dict(ev),
+                           is_admin=session.get("role") == "admin")
 
 
 @app.route("/api/score-entry/events/<int:event_id>/admin")
-@require_role("admin")
+@require_role("manager")
 def api_se_admin(event_id):
     from email_parser.score_entry import admin_overview
     return jsonify(admin_overview(event_id))

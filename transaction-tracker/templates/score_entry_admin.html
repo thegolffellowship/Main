@@ -50,6 +50,14 @@
         .empty { padding: 18px 14px; color: #6B7280; font-size: 14px; }
         .err { background: #FEE2E2; color: #991B1B; padding: 10px 12px; border-radius: 10px; margin-top: 12px; }
         .seed { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 6px; }
+        /* MANAGER PANEL (CA #843) */
+        .mgr { border-top: 1px solid #E5E7EB; padding: 12px 14px; }
+        .mgr h3 { font: 700 13px Bitter, Georgia, serif; letter-spacing: 1px; text-transform: uppercase; margin: 10px 0 6px; }
+        .mgr h3:first-child { margin-top: 0; }
+        .mgr-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 6px 0; border-bottom: 1px solid #F3F4F6; font-size: 14px; }
+        .mgr-row .lbl { min-width: 190px; }
+        .mgr-row .btn { padding: 5px 12px; font-size: 13px; }
+        .mgr-log { font-size: 12px; color: #6B7280; margin-top: 6px; }
         select { font: 14px 'Helvetica Neue', Helvetica, Arial, sans-serif; padding: 7px 10px; border-radius: 8px; border: 1px solid #E5E7EB; }
     </style>
 </head>
@@ -63,11 +71,11 @@
         <h1>{{ ev.item_name }}</h1>
         <div class="sub">Every scoring round on this event, each group's link, and where each card stands. Golf Genius stays the official record.</div>
         <div class="chips" id="chips"></div>
-        <div class="seed">
+        {% if is_admin %}<div class="seed">
             <button class="btn dark" id="seed">Build the round from PAIRINGS</button>
             <select id="seed-holes"><option value="9">9 holes</option><option value="18">18 holes</option></select>
             <span class="sub">Re-run safe: groups are updated, scores are kept.</span>
-        </div>
+        </div>{% endif %}
         <div id="err"></div>
         <div id="rounds"><div class="empty">Loading…</div></div>
         <div class="note">
@@ -79,6 +87,7 @@
 <script>
 (function () {
     const EV = {{ ev.id }};
+    const IS_ADMIN = {{ 'true' if is_admin else 'false' }};
     const esc = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
     const $ = (id) => document.getElementById(id);
     function chip(label, on, extra) {
@@ -101,7 +110,7 @@
             <div class="card">
               <div class="card-h"><div class="t">${esc(r.label || "Round")}${r.preview ? '<span class="pv">PREVIEW</span>' : ""}</div>
                 <div class="m">${r.holes} holes · ${esc(r.status)}${r.matches ? " · match play" : ""}
-                  ${r.preview && r.status === "open" ? `<button class="btn" style="margin-left:10px;padding:4px 12px;font-size:12px" data-restart="${r.round_id}">Start the preview over</button>` : ""}</div></div>
+                  ${IS_ADMIN && r.preview && r.status === "open" ? `<button class="btn" style="margin-left:10px;padding:4px 12px;font-size:12px" data-restart="${r.round_id}">Start the preview over</button>` : ""}</div></div>
               <div class="scroll"><table>
                 <thead><tr><th>Group</th><th>Players</th><th>Holes in</th><th>Scoring</th><th>Card</th><th></th></tr></thead>
                 <tbody>${r.groups.map((g) => `<tr>
@@ -113,7 +122,47 @@
                   <td><div class="row-actions"><a class="btn go" href="${g.url}" target="_blank" rel="noopener">Open</a>
                       <button class="btn" data-copy="${esc(g.url)}">Copy link</button></div></td>
                 </tr>`).join("")}</tbody></table></div>
+              ${mgrPanel(r)}
             </div>`).join("");
+    }
+    // THE MANAGER PANEL (CA #843): exactly four actions, each logged with who did it.
+    function mgrPanel(r) {
+        const m = r.manager;
+        if (!m) return "";
+        const opts = (sel) => m.players.map((p) => `<option value="${p.customer_id}" ${p.customer_id === sel ? "selected" : ""}>${esc(p.name)}</option>`).join("");
+        const ctp = m.contests.length ? m.contests.map((c) => `<div class="mgr-row">
+              <span class="lbl"><b>${c.kind === "longest_putt" ? "Longest putt" : "Closest to the pin"} · hole ${c.hole}</b><br>
+                <span class="muted">${c.holder ? esc(c.holder.name) + (c.holder.group_num != null ? " · Group " + c.holder.group_num : "") + (c.holder.by_manager ? " (settled by a manager)" : "") : "No one yet"}</span></span>
+              <select data-ctp-sel="${r.round_id}:${c.hole}"><option value="">Pick the winner…</option>${opts(c.holder && c.holder.customer_id)}</select>
+              <button class="btn" data-ctp-set="${r.round_id}:${c.hole}">Settle</button></div>`).join("")
+            : `<div class="mgr-row muted">No closest-to-the-pin or longest-putt holes in play${m.contest_source === "matrix" ? " at this field size" : ""}.</div>`;
+        const hio = m.hio.length ? m.hio.map((h) => `<div class="mgr-row">
+              <span class="lbl"><b>${esc(h.name || "#" + h.customer_id)}</b> · hole ${h.hole}<br><span class="muted">${esc(h.status)}${h.eligible ? "" : " · not eligible for the pot"}</span></span>
+              ${h.status === "witnessed" ? `<button class="btn go" data-hio="${h.id}" data-ok="1">Verify</button>` : ""}
+              ${["pending", "confirmed", "witnessed"].includes(h.status) ? `<button class="btn" data-hio="${h.id}" data-ok="0">Reject</button>` : ""}
+              ${h.status === "pending" || h.status === "confirmed" ? `<span class="muted">Waiting on the group to confirm first.</span>` : ""}</div>`).join("")
+            : `<div class="mgr-row muted">No hole-in-one claims.</div>`;
+        const flags = m.flags.length ? m.flags.map((f) => `<div class="mgr-row">
+              <span class="lbl"><b>${esc(f.name || "#" + f.customer_id)}</b> · hole ${f.hole} · Group ${f.group_num}<br><span class="muted">${esc(f.note || "flagged")}</span></span>
+              <button class="btn" data-flag="${f.id}">Clear the flag</button></div>`).join("")
+            : `<div class="mgr-row muted">No open flags.</div>`;
+        const unsigned = [];
+        // A flagged card can't be signed until the flag is cleared (the server refuses it).
+        const flagged = new Set(m.flags.map((f) => `${f.group_id}:${f.customer_id}`));
+        r.groups.forEach((g) => g.players.forEach((p) => { if (!p.signed && p.thru >= g.holes && !flagged.has(`${g.group_id}:${p.customer_id}`)) unsigned.push({g, p}); }));
+        const sign = unsigned.length ? unsigned.map(({g, p}) => `<div class="mgr-row">
+              <span class="lbl"><b>${esc(p.name)}</b> · Group ${g.group_num}<br><span class="muted">card complete, not signed</span></span>
+              <button class="btn" data-signfor="${g.group_id}:${p.customer_id}" data-nm="${esc(p.name)}">Sign for ${esc(String(p.name).split(" ")[0])}</button></div>`).join("")
+            : `<div class="mgr-row muted">No complete, unsigned cards.</div>`;
+        const log = (m.log || []).slice(0, 8).map((x) => `${esc(x.at.replace("T", " ").slice(0, 16))} · ${esc(x.actor)} · ${esc(x.kind.replace("manager_", ""))}${x.name ? " · " + esc(x.name) : ""}`).join("<br>");
+        return `<div class="mgr">
+            <h3>Manager actions</h3>
+            <h3>CTP / Longest putt</h3>${ctp}
+            <h3>Hole-in-one</h3>${hio}
+            <h3>Flags</h3>${flags}
+            <h3>Sign for a player</h3>${sign}
+            ${log ? `<div class="mgr-log"><b>Logged:</b><br>${log}</div>` : ""}
+          </div>`;
     }
     function load() {
         fetch(`/api/score-entry/events/${EV}/admin`).then((r) => r.json().then((j) => ({s: r.status, j})))
@@ -124,13 +173,44 @@
         return fetch(url, {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)})
             .then((r) => r.json()).then((j) => { if (j.error) $("err").innerHTML = `<div class="err">${esc(j.error)}</div>`; load(); });
     }
-    $("seed").onclick = () => post(`/api/score-entry/events/${EV}/seed`, {holes: $("seed-holes").value});
+    // The seed control is admin-only; a manager's page has none (CA #843).
+    if ($("seed")) $("seed").onclick = () => post(`/api/score-entry/events/${EV}/seed`, {holes: $("seed-holes").value});
     document.addEventListener("click", (e) => {
         const rs = e.target.closest("[data-restart]");
         if (rs) {
             if (confirm("Start this preview over? Its scores are kept on record, and a fresh card with a new link opens.")) {
                 post(`/api/score-entry/rounds/${rs.dataset.restart}/restart-preview`, {});
             }
+            return;
+        }
+        const cs = e.target.closest("[data-ctp-set]");
+        if (cs) {
+            const [rid, hole] = cs.dataset.ctpSet.split(":");
+            const sel = document.querySelector(`[data-ctp-sel="${rid}:${hole}"]`);
+            if (!sel || !sel.value) { alert("Pick the winner first."); return; }
+            post(`/api/score-entry/rounds/${rid}/ctp`, {hole: Number(hole), customer_id: Number(sel.value)});
+            return;
+        }
+        const hb = e.target.closest("[data-hio]");
+        if (hb) {
+            const ok = hb.dataset.ok === "1";
+            if (confirm(ok ? "Verify this hole-in-one? Nothing is announced to members from here." : "Reject this hole-in-one claim?")) {
+                post(`/api/score-entry/hio/${hb.dataset.hio}/verify`, {approve: ok});
+            }
+            return;
+        }
+        const fb = e.target.closest("[data-flag]");
+        if (fb) {
+            const why = prompt("How was it resolved? (kept in the log)", "Checked with the group; the score stands");
+            if (why !== null) post(`/api/score-entry/flags/${fb.dataset.flag}/resolve`, {resolution: why || "resolved by manager"});
+            return;
+        }
+        const sf = e.target.closest("[data-signfor]");
+        if (sf) {
+            const [gid, cid] = sf.dataset.signfor.split(":");
+            const note = prompt(`Sign ${sf.dataset.nm}'s card on their behalf. A note is required (kept in the log):`, "");
+            if (note && note.trim()) post(`/api/score-entry/groups/${gid}/sign-for`, {customer_id: Number(cid), note: note.trim()});
+            else if (note !== null) alert("A note is required to sign for a player.");
             return;
         }
         const b = e.target.closest("[data-copy]");
