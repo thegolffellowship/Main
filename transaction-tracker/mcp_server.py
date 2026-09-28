@@ -1825,6 +1825,7 @@ def _scoring_dispatch_inner(url: str, extract: str):
       scoring-entry-parity:<event_id>  read-only: entered gross vs the GG cards on the event, per player (customer_id) and hole
       scoring-tgf-event-ensure:<id>[,<id>...][|apply]  every Tracker event gets its tgf_events row (the home payouts hang off), from the Tracker event, events_id stamped (CA #786 GO 2); dry run by default
       scoring-course-card:<course_id>[|<card json>[|apply]]  read a course's card as held, or validate/plan/load one from the printed card (tees, bands, rating/slope incl. front/back nines, par/SI/yardage), source course_card (CA #786 GO 3)
+      scoring-membership-price:<term_id>|<amount>[|apply]  set price_paid on one membership term (dry run by default, audited)
       scoring-alias-delete:<alias id>[|confirm]  remove ONE customer_aliases row; preview first, |confirm deletes and audits
       scoring-liabilities          payouts owed, credits held, LSC shirt fund by Cup year, HIO pot, LSC skins pot, tax reserve by month
       scoring-expense-unpromoted[:<hours>]  read-only: expense rows APPROVED more than <hours> (default 24) ago with no ledger row (CA #785 item 6 guard, CFO 9/27)
@@ -4563,6 +4564,19 @@ def _scoring_dispatch_inner(url: str, extract: str):
                    item_id=int(_p["item_id"]),
                    outcome="ok" if _r.get("status") == "ok" else "failed")
             return json.dumps(_r, indent=2, default=str)
+        if cmd == "scoring-membership-price":
+            # "<term_id>|<amount>[|apply]" — set price_paid on ONE membership
+            # term (CA #788 item 5). Dry run by default; audited on apply.
+            from email_parser.memberships import set_term_price_paid
+            _p = [x.strip() for x in (arg or "").split("|")]
+            if len(_p) < 2 or not _p[0].isdigit():
+                return json.dumps({"error": "usage: scoring-membership-price:<term_id>|<amount>[|apply]"})
+            _apply = len(_p) > 2 and _p[2].lower() == "apply"
+            _res = set_term_price_paid(int(_p[0]), _p[1], apply=_apply)
+            if _apply and not _res.get("error"):
+                _audit("scoring-membership-price",
+                       f"term {_p[0]} price_paid {_res['term'].get('price_paid')} -> {_res['price_paid_after']}")
+            return json.dumps(_res, indent=2, default=str)
         if cmd == "scoring-acct-patch":
             # JSON: {"id": <acct_transaction_id>, "fields": {entity,
             #   category, event, append_note}} — connectivity patch for

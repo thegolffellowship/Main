@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.510.0";
+window.TGF_VERSION = "2.510.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.510.1",
+    date: "2026-09-28",
+    changes: [
+      "Two narrow write paths for Kerry\u2019s Talamantez ruling (CA #788 item 5: the $75 Venmo on 6/1 was his membership). scoring-acct-patch can now set customer_id on a ledger row; the id must name a real customer, and nothing else on the row changes. New bridge scoring-membership-price:<term_id>|<amount>[|apply] records what was paid for ONE membership term; it is a dry run by default, audited on apply, and refuses a negative amount or an unknown term. Guard test_talamantez_writes.py.",
+    ],
+  },
   {
     version: "2.510.0",
     date: "2026-09-28",
