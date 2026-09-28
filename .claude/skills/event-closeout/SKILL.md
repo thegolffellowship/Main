@@ -61,7 +61,7 @@ rule-3b change. Until then this table is the exclusion.
 Kerry 2026-09-27 (CA #787 item 1): "No Lone Star Cup round (four-ball,
 Chapman or singles) posts to TGF handicaps. Closeout: skip the handicap
 post and the handicap card for event 3329 and practice round 3330."
-The CODE enforces it (v2.504.x): `hcp_skip_events` (default 3329, 3330;
+The CODE enforces it (v2.505.1): `hcp_skip_events` (default 3329, 3330;
 app setting of the same name overrides) makes the handicap preview, the
 9-hole post, the two-nines post and `scoring-hcp-cards` refuse the event
 with the ruling as the reason. The cup also feeds no points race (#787

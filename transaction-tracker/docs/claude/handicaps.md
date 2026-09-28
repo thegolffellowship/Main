@@ -565,7 +565,7 @@ bridge `scoring-hcp-cards:<event>[|apply]` both call it. Rules:
   `|apply`, AFTER `scoring-hcp-import:<event>|apply` — never before.
   Guards: `test_handicap_cards_bridge.py`, `test_handicap_card_counts.js`.
 
-## Events ruled out of handicaps; the cup roster (v2.504.x)
+## Events ruled out of handicaps; the cup roster (v2.505.1)
 
 Kerry 2026-09-27 (CA #787): no Lone Star Cup round posts to TGF
 handicaps and no card goes out for it. `hcp_skip_events()` (database.py)
