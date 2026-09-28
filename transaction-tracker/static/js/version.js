@@ -1,11 +1,19 @@
-window.TGF_VERSION = "2.507.1";
+window.TGF_VERSION = "2.507.2";
 window.TGF_CHANGELOG = [
   {
-    version: "2.507.1",
+    version: "2.507.2",
     date: "2026-09-27",
     changes: [
       "COURSE CARDS WITHOUT GOLF GENIUS (CA #786 GO 3). Tees used to reach the Tracker only through the Golf Genius scorecard import, so a course GG never imported (The Hideout, the Lone Star Cup venue) had no tees, pars, stroke indexes, slope or rating: no course handicap, no pops, no net, no handicap posting. email_parser/course_card.py loads the printed card into the same tables the import writes: course_tees (source course_card, TGF age bands), tee_set_ratings (total plus front and back nines, which 9-hole posting needs) and course_tee_holes. The whole card is checked first (every hole listed once, stroke indexes 1-18 used once each, par 3-6, rating and slope in range, known bands); a bad card writes nothing. It is a dry run by default, and loading a corrected card updates in place. Score entry reads the holes through the event's course. Bridge scoring-course-card:<course_id> shows the card as held; add |<card json>[|apply] to load one. Guard test_course_card.py.",
     ],
+  },
+  {
+    version: "2.507.1",
+    date: "2026-09-28",
+    title: "Score Entry panel on PAIRINGS",
+    changes: [
+      "CA #782, Kerry: the score entry panel on PAIRINGS, before the 9/29 dry run. Admin only, under the PAIRINGS toolbar once the pairings are saved. Seed 9- or 18-hole score entry from the saved pairings (re-run safe; scores are kept). Each group has Open, Copy link and a QR of its link. Each round shows OPEN or CLOSED and how many groups have finished. Close round stops the links and deletes nothing. The members and cart-sign QR switches are shown and stay OFF. No new schema; the bridges stay the fallback."
+    ]
   },
   {
     version: "2.507.0",

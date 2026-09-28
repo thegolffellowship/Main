@@ -337,6 +337,36 @@
             background: var(--bg); color: var(--text); transition: 0.15s;
         }
         .pairings-action-btn:hover { border-color: var(--primary); color: var(--primary); }
+        /* SCORE ENTRY panel on PAIRINGS (CA #782, Kerry: before the 9/29 dry run) */
+        .se-pp { border: 1px solid var(--border); border-radius: 8px; margin: 0 0 0.7rem; background: var(--bg); }
+        .se-pp > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 0.5rem;
+            flex-wrap: wrap; padding: 0.45rem 0.7rem; font-size: 0.82rem; }
+        .se-pp > summary::-webkit-details-marker { display: none; }
+        .se-pp .se-pp-t { font-family: 'Bitter', serif; font-weight: 700; letter-spacing: 0.04em; }
+        .se-pp .se-pp-chev { transition: transform 0.15s; display: inline-block; }
+        .se-pp[open] .se-pp-chev { transform: rotate(90deg); }
+        .se-pp .se-chip { font-size: 0.7rem; font-weight: 700; padding: 1px 7px; border-radius: 999px; background: #F3F3F1; color: #6B7280; }
+        .se-pp .se-chip.on { background: #DCFCE7; color: #166534; }
+        .se-pp-body { padding: 0 0.7rem 0.6rem; font-size: 0.8rem; }
+        .se-pp-round { border-top: 1px solid var(--border); padding-top: 0.5rem; margin-top: 0.4rem; }
+        .se-pp-rh { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.35rem; }
+        .se-pp-rh b { font-size: 0.85rem; }
+        .se-pp-st { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; padding: 1px 7px; border-radius: 4px; }
+        .se-pp-st.open { background: #DCFCE7; color: #166534; } .se-pp-st.closed { background: #F3F3F1; color: #6B7280; }
+        /* one line per group on desktop; on a phone the buttons drop under the names */
+        .se-pp-g { display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem 0.6rem;
+            padding: 0.35rem 0.2rem; border-bottom: 1px solid #F1F2F4; }
+        .se-pp-g .n { font-weight: 700; width: 2rem; white-space: nowrap; }
+        .se-pp-g .p { flex: 1 1 14rem; min-width: 0; white-space: normal; }
+        .se-pp-g .h { white-space: nowrap; color: #6B7280; }
+        .se-pp-g .a { white-space: nowrap; margin-left: auto; display: flex; gap: 0.3rem; }
+        .se-pp-g .se-qr { flex-basis: 100%; }
+        .se-pp .pairings-action-btn { padding: 0.15rem 0.55rem; font-size: 0.74rem; }
+        .se-pp .se-qr { display: none; padding: 0.4rem 0 0.2rem; text-align: center; }
+        .se-pp .se-qr.show { display: block; }
+        .se-pp .se-qr img { width: 150px; height: 150px; }
+        .se-pp .se-pp-err { color: var(--red); margin: 0.3rem 0; }
+        .se-pp .se-pp-muted { color: #6B7280; }
         .fb-seg-group .fb-seg:first-child { border-left: 0 !important; }
         .fb-seg-group .fb-seg:not(.active):not([disabled]):hover { background: rgba(255,255,255,0.18) !important; }
         .fb-member.fb-dragging { opacity: 0.45; }
@@ -6906,6 +6936,110 @@
     }
     window.sendPrintPack = sendPrintPack;
 
+    // ── SCORE ENTRY panel on PAIRINGS (CA #782) ──────────────────────────
+    // Reuses the Live Scoring read (/api/score-entry/events/<id>/admin),
+    // the seed route (Build from PAIRINGS), and admin close / QR routes.
+    const SE_PP_CACHE = {};
+    const SE_PP_OPEN = {};
+    const SE_PP_AT = {};
+    function seSlots(evId) { return document.querySelectorAll(`.se-pp-slot[data-se-ev="${evId}"]`); }
+    function seFillPanel(evId, force) {
+        const slots = seSlots(evId);
+        if (!slots.length) return;
+        if (!force && SE_PP_AT[evId] && Date.now() - SE_PP_AT[evId] < 15000 && SE_PP_CACHE[evId]) {
+            slots.forEach((el) => { if (!el.innerHTML) el.innerHTML = SE_PP_CACHE[evId]; });
+            return;
+        }
+        SE_PP_AT[evId] = Date.now();
+        fetch(`/api/score-entry/events/${evId}/admin`).then((r) => r.json().then((j) => ({s: r.status, j})))
+            .then(({s, j}) => {
+                const h = s === 200 ? seRenderPanel(evId, j) : seWrap(evId, `<div class="se-pp-err">${escapeHtml(j.error || 'Could not load score entry')}</div>`, null);
+                SE_PP_CACHE[evId] = h;
+                seSlots(evId).forEach((el) => { el.innerHTML = h; });
+            })
+            .catch(() => { seSlots(evId).forEach((el) => { el.innerHTML = seWrap(evId, '<div class="se-pp-err">No connection. Try again.</div>', null); }); });
+    }
+    function seWrap(evId, body, d) {
+        const chips = d ? `<span class="se-chip ${d.live_for_members ? 'on' : ''}">Members: ${d.live_for_members ? 'ON' : 'OFF'}</span>`
+            + `<span class="se-chip ${d.qr ? 'on' : ''}">Cart-sign QR: ${d.qr ? 'ON' : 'OFF'}</span>` : '';
+        const open = SE_PP_OPEN[evId] !== false;
+        return `<details class="se-pp" data-se-ev="${evId}"${open ? ' open' : ''}><summary><span class="se-pp-chev">&#x25B8;</span>`
+            + `<span class="se-pp-t">&#x26F3; SCORE ENTRY</span>${chips}`
+            + `<a href="/events/${evId}/live-scoring" target="_blank" rel="noopener" style="margin-left:auto;font-size:0.75rem;" onclick="event.stopPropagation()">Full Live Scoring page &#x2197;</a></summary>`
+            + `<div class="se-pp-body">${body}</div></details>`;
+    }
+    function seRenderPanel(evId, d) {
+        const slot = seSlots(evId)[0];
+        const has = {"9": slot && slot.dataset.seH9 === "1", "18": slot && slot.dataset.seH18 === "1"};
+        const rounds = (d.rounds || []).filter((r) => !r.preview);
+        const seeded = {};
+        // A closed round stays closed: re-seeding updates it in place and
+        // never reopens it, so a closed nine offers no seed button.
+        rounds.forEach((r) => { seeded[String(r.holes)] = r.status === 'open' ? 'open' : (seeded[String(r.holes)] || 'closed'); });
+        let seed = '';
+        ["9", "18"].forEach((h) => {
+            if (!has[h] || seeded[h] === 'closed') return;
+            seed += seeded[h]
+                ? `<button class="pairings-action-btn" data-se-seed="${h}" data-se-ev="${evId}" title="Re-read the saved pairings: groups and handicaps update, scores are kept">&#x21BB; Update ${h}-hole groups from pairings</button> `
+                : `<button class="pairings-action-btn" data-se-seed="${h}" data-se-ev="${evId}" style="background:var(--green);color:#fff;border-color:var(--green);">Seed ${h}-hole score entry</button> `;
+        });
+        let body = `<div class="se-pp-rh">${seed}<span class="se-pp-muted">From the saved pairings. Re-run safe: scores are kept.</span></div>`;
+        if (!rounds.length) {
+            body += `<div class="se-pp-muted">No scoring round yet. Seed builds one group per pairing, with each group's link.</div>`;
+        }
+        rounds.forEach((r) => {
+            const inn = r.groups.filter((g) => g.holes_in >= r.holes).length;
+            body += `<div class="se-pp-round"><div class="se-pp-rh"><b>${escapeHtml(r.label || 'Round')}</b>`
+                + `<span class="se-pp-st ${r.status === 'open' ? 'open' : 'closed'}">${escapeHtml(r.status)}</span>`
+                + `<span class="se-pp-muted">${r.holes} holes · ${r.groups.length} groups · ${inn} finished${r.matches ? ' · match play' : ''}</span>`
+                + (r.status === 'open' ? `<button class="pairings-action-btn" data-se-close="${r.round_id}" data-se-ev="${evId}" style="margin-left:auto;color:var(--red);">Close round</button>` : '')
+                + `</div>${r.groups.map((g) => `<div class="se-pp-g">
+                    <span class="n">G${g.group_num != null ? g.group_num : ''}</span>
+                    <span class="p">${g.players.map((p) => escapeHtml(p.name) + (p.signed ? ' &#10003;' : '')).join(', ')}</span>
+                    <span class="h">${g.holes_in} / ${g.holes}</span>
+                    <span class="a">${r.status === 'open' ? `<a class="pairings-action-btn" href="${escapeHtml(g.url)}" target="_blank" rel="noopener">Open</a>
+                        <button class="pairings-action-btn" data-se-copy="${escapeHtml(g.url)}">Copy link</button>
+                        <button class="pairings-action-btn" data-se-qr="${g.group_id}">QR</button>` : ''}</span>
+                    <div class="se-qr" id="se-qr-${g.group_id}"></div></div>`).join('')}</div>`;
+        });
+        body += `<div class="se-pp-muted" style="margin-top:0.4rem;">While Members is OFF, a link opens only in a browser signed in as admin. Close stops the round's links; nothing is deleted.</div>`;
+        return seWrap(evId, body, d);
+    }
+    document.addEventListener('toggle', (e) => {
+        const d = e.target;
+        if (d.classList && d.classList.contains('se-pp')) SE_PP_OPEN[d.dataset.seEv] = d.open;
+    }, true);
+    document.addEventListener('click', (e) => {
+        const sd = e.target.closest('[data-se-seed]');
+        const cl = e.target.closest('[data-se-close]');
+        const cp = e.target.closest('[data-se-copy]');
+        const qr = e.target.closest('[data-se-qr]');
+        if (!sd && !cl && !cp && !qr) return;
+        e.preventDefault();
+        if (sd) {
+            const evId = sd.dataset.seEv;
+            sd.disabled = true;
+            fetch(`/api/score-entry/events/${evId}/seed`, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({holes: sd.dataset.seSeed})})
+                .then((r) => r.json()).then((j) => { if (j.error) alert(j.error); seFillPanel(evId, true); })
+                .catch(() => { alert('No connection. Try again.'); sd.disabled = false; });
+        } else if (cl) {
+            const evId = cl.dataset.seEv;
+            if (!confirm('Close this round? Its links stop opening. Scores are kept; nothing is deleted.')) return;
+            fetch(`/api/score-entry/rounds/${cl.dataset.seClose}/close`, {method: 'POST'})
+                .then((r) => r.json()).then((j) => { if (j.error) alert(j.error); seFillPanel(evId, true); })
+                .catch(() => alert('No connection. Try again.'));
+        } else if (cp) {
+            const done = () => { cp.textContent = 'Copied'; setTimeout(() => { cp.textContent = 'Copy link'; }, 1500); };
+            if (navigator.clipboard) navigator.clipboard.writeText(cp.dataset.seCopy).then(done, () => prompt('Copy this link', cp.dataset.seCopy));
+            else prompt('Copy this link', cp.dataset.seCopy);
+        } else if (qr) {
+            const box = document.getElementById('se-qr-' + qr.dataset.seQr);
+            if (!box) return;
+            if (!box.innerHTML) box.innerHTML = `<img src="/api/score-entry/groups/${qr.dataset.seQr}/qr.svg" alt="QR code for this group's scoring link"><div class="se-pp-muted">Scan to keep score</div>`;
+            box.classList.toggle('show');
+        }
+    });
+
     function renderPairingsPanel(ev, registrants, rosterExtra) {
         const state = getPairingsState(ev.id);
         // The pairings roster must be the SAME roster the Players tab
@@ -7097,6 +7231,16 @@
         }
         html += '</div>'; // .pairings-actions
         html += '</div>'; // .pairings-controls
+
+        // ── SCORE ENTRY panel (CA #782, Kerry: "before the 9/29 dry run") ──
+        // Seed from the SAVED pairings, each group's link and QR, round
+        // status, Close. Admin only; the member switches stay where they
+        // are. Filled after render by seFillPanel (cached, so re-renders
+        // don't flicker).
+        if (currentRole === "admin" && !state.isDirty && (state.groups_9.length || state.groups_18.length)) {
+            html += `<div class="se-pp-slot" data-se-ev="${ev.id}" data-se-h9="${state.groups_9.length ? 1 : 0}" data-se-h18="${state.groups_18.length ? 1 : 0}">${SE_PP_CACHE[ev.id] || ''}</div>`;
+            setTimeout(() => seFillPanel(ev.id), 0);
+        }
 
         // ── Match Play confirm panel (rule 8: "Match Play is king") ──────────
         // Shown before the first generate when the season state implies
