@@ -1,5 +1,16 @@
-window.TGF_VERSION = "2.507.0";
+window.TGF_VERSION = "2.507.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.507.1",
+    date: "2026-09-28",
+    title: "GO 6: the GG points ledger is written to the data volume, not piped through chat",
+    changes: [
+      "The first live captures worked \u2014 SAN ANTONIO Fall Net came back 41 of 41 players with every per-event row \u2014 but a race\u2019s full breakdown is several megabytes of tables, and hauling it back through an agent\u2019s context was the wrong shape. CA #786 allows \u2018the repo or data folder\u2019: each chunk is now MERGED into a JSON bundle beside the database on the persistent volume (`gg_points_ledger/<date>/<race>.json`), and the bridge returns a short status. Still no DB table and no schema change.",
+      "Merging is by player index and a later chunk wins, so re-running a slice after a transient Golf Genius 500 repairs that player in place. A race is only reported COMPLETE when every player is present and none errored.",
+      "New read-only bridges: `scoring-points-ledger-status:<date>` (completeness of every race) and `scoring-points-ledger-read:<date>|<race>` (one bundle back out, e.g. to commit a copy). The points-engine backtest runs on the deployed app and reads the bundle where it sits.",
+      "Two findings already visible in the captured data: GG scores an 18-hole event as separate FRONT and BACK nines (\u2018s18.11 POINTS Net - Front\u2019 / \u2018- Back\u2019), matching Kerry\u2019s #787 ruling; and Austin players earned AUSTIN Fall Net points at s18.10, a San Antonio event, so GG already credits by the player\u2019s home race across chapters, matching #784.",
+    ],
+  },
   {
     version: "2.507.0",
     date: "2026-09-28",
