@@ -1,0 +1,231 @@
+{
+ "db": "optc-run2.db",
+ "synthetic_index": true,
+ "rounds": {
+  "am": 1,
+  "pm": 2,
+  "sun": 3
+ },
+ "rows": [
+  {
+   "check": "board source is entered scores",
+   "result": "PASS",
+   "want": "entry",
+   "got": "entry"
+  },
+  {
+   "check": "member gate: board_live false",
+   "result": "PASS",
+   "want": false,
+   "got": false
+  },
+  {
+   "check": "am M1 result (final)",
+   "result": "PASS",
+   "want": [
+    "austin",
+    "2&1"
+   ],
+   "got": [
+    "austin",
+    "2&1"
+   ]
+  },
+  {
+   "check": "am M2 result (final)",
+   "result": "PASS",
+   "want": [
+    "halved",
+    null
+   ],
+   "got": [
+    "halved",
+    null
+   ]
+  },
+  {
+   "check": "pm M1 result (final)",
+   "result": "PASS",
+   "want": [
+    "sa",
+    "1 UP"
+   ],
+   "got": [
+    "sa",
+    "1 UP"
+   ]
+  },
+  {
+   "check": "pm M2 result (final)",
+   "result": "PASS",
+   "want": [
+    "austin",
+    "2&1"
+   ],
+   "got": [
+    "austin",
+    "2&1"
+   ]
+  },
+  {
+   "check": "sun S1 result (final)",
+   "result": "PASS",
+   "want": [
+    "halved",
+    null
+   ],
+   "got": [
+    "halved",
+    null
+   ]
+  },
+  {
+   "check": "sun S2 result (final)",
+   "result": "PASS",
+   "want": [
+    "sa",
+    "6&5"
+   ],
+   "got": [
+    "sa",
+    "6&5"
+   ]
+  },
+  {
+   "check": "sun S3 result (final)",
+   "result": "PASS",
+   "want": [
+    "sa",
+    "1 UP"
+   ],
+   "got": [
+    "sa",
+    "1 UP"
+   ]
+  },
+  {
+   "check": "sun S4 result (final)",
+   "result": "PASS",
+   "want": [
+    "austin",
+    "1 UP"
+   ],
+   "got": [
+    "austin",
+    "1 UP"
+   ]
+  },
+  {
+   "check": "points (sum of match points)",
+   "result": "PASS",
+   "want": {
+    "austin": 4.0,
+    "sa": 4.0
+   },
+   "got": {
+    "austin": 4.0,
+    "sa": 4.0
+   }
+  },
+  {
+   "check": "teams header points",
+   "result": "PASS",
+   "want": {
+    "austin": 4.0,
+    "sa": 4.0
+   },
+   "got": {
+    "austin": 4.0,
+    "sa": 4.0
+   }
+  },
+  {
+   "check": "cup status (4-4, SA defending)",
+   "result": "PASS",
+   "want": {
+    "status": "retained",
+    "winner": "sa",
+    "total": 8.0
+   },
+   "got": {
+    "status": "retained",
+    "winner": "sa",
+    "total": 8.0
+   }
+  },
+  {
+   "check": "am skins pot = $25 x buyers who play",
+   "result": "PASS",
+   "want": 15000,
+   "got": 15000
+  },
+  {
+   "check": "pm skins pot = $25 x buyers who play",
+   "result": "PASS",
+   "want": 15000,
+   "got": 15000
+  },
+  {
+   "check": "sun skins pot = $25 x buyers who play",
+   "result": "PASS",
+   "want": 17500,
+   "got": 17500
+  },
+  {
+   "check": "am team skins payout (mixed teams play, buyer gets full skin)",
+   "result": "FAIL",
+   "want": {
+    "6": 7500,
+    "37": 3750,
+    "315": 3750
+   },
+   "got": {
+    "37": 7500,
+    "315": 7500
+   }
+  },
+  {
+   "check": "pm team skins payout (mixed teams play, buyer gets full skin)",
+   "result": "FAIL",
+   "want": {
+    "35": 3750,
+    "6": 3750,
+    "13": 7500
+   },
+   "got": {
+    "35": 7500,
+    "6": 7500
+   }
+  },
+  {
+   "check": "sun flighted skins payout, oracle (index {7: 9.8, 35: 6.1, 37: 4.0, 130: 14.2, 315: 13.0, 6: 5.5, 13: 12.0})",
+   "result": "PASS",
+   "want": {
+    "6": 8750,
+    "13": 8750
+   },
+   "got": {
+    "6": 8750,
+    "13": 8750
+   }
+  },
+  {
+   "check": "sun flighted skins payout, by hand (12.0 break -> Flight 2)",
+   "result": "PASS",
+   "want": {
+    "6": 8750,
+    "13": 8750
+   },
+   "got": {
+    "6": 8750,
+    "13": 8750
+   }
+  },
+  {
+   "check": "outbound blocked before any write",
+   "result": "PASS",
+   "want": "RehearsalOutboundBlocked",
+   "got": "RehearsalOutboundBlocked"
+  }
+ ]
+}
