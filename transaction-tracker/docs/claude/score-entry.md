@@ -28,9 +28,9 @@ sign-off, access, CTP/HIO), #667 (ratified), #668/#669 (mockup = MVP).
   and the LSC match engine (`lsc_cup.py`, Track B) read the same rows.
 - **Playing handicap is the locked one**, snapshotted at seed time from
   `get_event_print_pack` (the number the starter sheet prints; handicaps.md
-  "The handicap lock"). Nobody derives it a second way. On 9-hole Tuesday
-  shadows the stroke convention is open (CA Queue #10 / #11): boards show
-  gross and net with the note "strokes per GG convention".
+  "The handicap lock"). Nobody derives it a second way. Strokes on a nine
+  collapse the nine's stroke indexes to 1–9 (Kerry ruled CA Queue #10/#11,
+  CA #771: "9 hole events collapse to 1-9 si. So it gets the full 3.").
 
 ## Lock / take-over
 
@@ -86,10 +86,13 @@ on the page — green means bought in.
   Changing the 1 withdraws an unverified claim. The staff alert and the
   member-wide blast are NOT built: the alert is a 10/6 item, the blast is a
   Platform requirement, and any member send is rule 3b.
-- **Strokes.** `_strokes_by_player` allocates the LOCKED PH on GG's full-
-  card setting; on a nine the card says "strokes per GG convention" until
-  CA Queue #10/#11 are ruled. A PH the card's stroke indexes cannot carry
-  (a nine indexed 1–9) is listed in `strokes._unresolved`, never guessed.
+- **Strokes.** `_strokes_by_player` allocates the LOCKED PH over the
+  round's own holes, re-ranked (`allocate_strokes(mode="subset")`): a nine
+  collapses to 1–9, so a 9-hole PH of 3 gets all 3 dots; an 18 uses the
+  full 1–18 card (CA #771, v2.503.3). The Team/Cart Net dots use the same
+  allocation, and the match engine is handed the same round holes. The old
+  "strokes per GG convention" note is gone. A PH that can't be allocated is
+  still listed in `strokes._unresolved`, never guessed.
 
 ## Preview and admin bridges (v2.493.1)
 

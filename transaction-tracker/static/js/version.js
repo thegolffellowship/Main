@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.503.2";
+window.TGF_VERSION = "2.503.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.503.3",
+    date: "2026-09-27",
+    title: "Score entry: pop dots on a nine collapse to 1-9",
+    changes: [
+      "CA #771, Kerry's ruling on CA Queue #10/#11: '9 hole events collapse to 1-9 si. So it gets the full 3.' The PH dots and the Team/Cart Net dots were on GG's full-card setting, so a 9-hole PH of 3 showed only 2 dots on the front nine. They now rank the round's own holes: a nine is re-ranked 1-9 and an 18 uses the full 1-18 card. Match strokes already used the round's own holes. The 'strokes per GG convention' note is gone.",
+      "A UI test read the database a fixed 1.5 s after a queued save and sometimes got nothing back. It now waits until the save lands."
+    ]
+  },
   {
     version: "2.503.2",
     date: "2026-09-27",

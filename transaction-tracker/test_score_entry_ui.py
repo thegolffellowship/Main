@@ -382,8 +382,13 @@ with sync_playwright() as p:
     pg.click("[data-act=pu][data-m=picked_up]")
     pg.click("[data-act=pudone]")
     pg.wait_for_selector("text=Hole 2", timeout=5000)
-    pg.wait_for_timeout(1500)
-    card = se.get_group_card(gidm)
+    # The save is queued and flushed in the background: poll for it, don't
+    # sleep a fixed time (a fixed 1.5 s read {} marks on a slow run).
+    for _ in range(50):
+        card = se.get_group_card(gidm)
+        if card["marks"].get("c:102"):
+            break
+        pg.wait_for_timeout(200)
     pg.wait_for_timeout(300)
     check("after hole 1 (Mark picked up) the standing reads Kerry 1 UP thru 1",
           "Kerry 1 UP thru 1" in pg.locator(".se-mc-head").get_attribute("aria-label")

@@ -1963,9 +1963,13 @@ def verify_hio(hio_id: int, verified_by: str, approve: bool = True, db_path=None
 
 
 def _strokes_by_player(players, course) -> dict:
-    """Handicap strokes per hole off the LOCKED playing handicap. On a nine
-    the convention is open (CA Queue #10/#11), so the screen labels it
-    'strokes per GG convention' — GG's league setting is the full card."""
+    """Handicap strokes per hole off the LOCKED playing handicap, ranked over
+    the round's OWN holes. Kerry ruled CA Queue #10/#11 (CA #771, 2026-09-27):
+    "9 hole events collapse to 1-9 si. So it gets the full 3." A nine's stroke
+    indexes are re-ranked 1-9, so a 9-hole PH of 3 gets all 3 dots; an 18
+    ranks the full 1-18 card, which is the same thing there. The match engine
+    (lsc_cup.strokes_received) is handed the same round holes, so the match
+    strokes follow the same rule."""
     try:
         from email_parser.handicap_calc import allocate_strokes
     except Exception:
@@ -1979,10 +1983,9 @@ def _strokes_by_player(players, course) -> dict:
         if ph is None:
             continue
         try:
-            alloc = allocate_strokes(int(round(ph)), si, mode="full_card")
+            alloc = allocate_strokes(int(round(ph)), si, mode="subset")
         except Exception:
-            # The card's stroke indexes can't carry this handicap on the full
-            # card (a nine indexed 1-9). Say so; never guess.
+            # Never guess: report a handicap the card can't allocate.
             out.setdefault("_unresolved", []).append(p["customer_id"])
             continue
         out[str(p["customer_id"])] = {str(k): v for k, v in alloc.items() if v}
@@ -2059,7 +2062,7 @@ def _card_extras(conn, g, group_id: int) -> dict:
             "tees": _tee_legend(conn, g["event_id"]),
             "strokes": _strokes_by_player(players, course),
             **_team_strokes(conn, g["round_id"], course),
-            "strokes_note": "strokes per GG convention" if g["holes"] == 9 else None}
+            "strokes_note": None}
 
 
 # ---------------------------------------------------------------------------

@@ -494,9 +494,23 @@ check("changing a 1 withdraws an unverified claim",
       102 not in {h["customer_id"] for h in se.get_group_card(sg)["hio"]})
 st = se.get_group_card(sg)["strokes"]
 check("strokes per hole come off the locked PH", st.get("102") == {str(h): 1 for h in (3, 7, 1, 9, 4, 8, 5)}, st)
-check("a PH the card's indexes can't carry is reported, not guessed", st.get("_unresolved") == [105], st)
-check("a nine carries the GG-convention note",
-      se.get_group_card(sg)["strokes_note"] == "strokes per GG convention")
+check("CA #771: a PH above 9 on a nine wraps: every hole gets 1, the two hardest get a 2nd (11)",
+      st.get("105") == {**{str(h): 1 for h in range(1, 10)}, "3": 2, "7": 2} and "_unresolved" not in st, st)
+check("CA #771: the old 'GG convention' note is gone", se.get_group_card(sg)["strokes_note"] is None)
+# CA #771 (Kerry: "9 hole events collapse to 1-9 si. So it gets the full 3."): a nine
+# carrying its 18-hole card indexes (odd 1-17 on the front) re-ranks to 1-9.
+_FRONT18 = [{"hole": h, "par": 4, "stroke_index": si} for h, si in
+            [(1, 7), (2, 15), (3, 1), (4, 11), (5, 5), (6, 17), (7, 3), (8, 9), (9, 13)]]
+_r771 = se.create_round(900, 9, label="ca771", course_holes=_FRONT18)["round_id"]
+_g771 = se.upsert_group(_r771, 1, players=[{"customer_id": 101, "display_name": "Kerry Niester",
+                                            "playing_handicap": 3}])["group_id"]
+check("CA #771: a 9-hole PH of 3 on a nine indexed off the 18-hole card gets all 3 dots (SI 1, 3, 5)",
+      se.get_group_card(_g771)["strokes"].get("101") == {"3": 1, "7": 1, "5": 1},
+      se.get_group_card(_g771)["strokes"])
+se.set_game_handicaps(_r771, {101: 2}, unit="cart", basis="Cart Net 85%")
+check("CA #771: Team/Cart Net dots follow the same collapse (2 on SI 1 and 3)",
+      se.get_group_card(_g771)["team_strokes"].get("101") == {"3": 1, "7": 1},
+      se.get_group_card(_g771)["team_strokes"])
 
 print("CA #717: entry stays open after a Lone Star Cup match is decided")
 cr = se.create_round(900, 9, label="closeout", course_holes=NINE)["round_id"]
