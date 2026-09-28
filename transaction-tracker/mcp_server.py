@@ -1989,6 +1989,46 @@ def _scoring_dispatch_inner(url: str, extract: str):
             return json.dumps(card if card else {"error": "not found"}, indent=2)
         if cmd == "scoring-courses":
             return json.dumps(db.list_courses(), indent=2)
+        if cmd == "scoring-home-chapter-audit":
+            # CA #784: READ-ONLY list of players whose HOME chapter looks
+            # wrong (blank, never plays at home, plays more elsewhere, or
+            # named by Kerry: Barna/Moore/Sharp/Franz/Williams), with where
+            # they play shown as EVIDENCE for Kerry to confirm. Sets nothing.
+            from email_parser.home_chapter import audit_home_chapters
+            return json.dumps(audit_home_chapters(arg.strip() or "2026"),
+                              indent=2, default=str)
+        if cmd == "scoring-home-chapter-set":
+            # CA #784: set ONE home chapter under a NAMED ruling —
+            # "scoring-home-chapter-set:<cid>=<chapter>|<ruling>". Refuses
+            # without a ruling or for a chapter not in `chapters`; logs
+            # before/after. The only door for a ruled NON-blank correction.
+            from email_parser.home_chapter import set_home_chapter
+            pair, _, ruling = arg.partition("|")
+            cid, _, ch = pair.partition("=")
+            return json.dumps(set_home_chapter(int(cid.strip()), ch.strip(),
+                                               ruling.strip()),
+                              indent=2, default=str)
+        if cmd == "scoring-points-ledger-races":
+            # GO 6 (CA #786): the races to capture — the named season races
+            # plus every Monthly page discovered on the chapter portals.
+            # READ-ONLY; arg = optional year.
+            from email_parser.points_ledger import list_ledger_races
+            yr = int(arg.strip()) if arg.strip().isdigit() else None
+            return json.dumps(list_ledger_races(yr), indent=2, default=str)
+        if cmd == "scoring-points-ledger":
+            # GO 6 (CA #786): one resumable chunk of one race's GG points
+            # ledger — "scoring-points-ledger:<ref>[|<start>[|<YYYY-MM-DD>]]".
+            # <ref> is a race key or a "page:<host>:<league>:<page_id>" ref
+            # from scoring-points-ledger-races. Call again with start=next
+            # until next is null. READ-ONLY: fetches GG, writes nothing.
+            from email_parser.points_ledger import capture_race_ledger
+            parts = [x.strip() for x in arg.split("|")]
+            ref = parts[0]
+            start = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else 0
+            eff = parts[2] if len(parts) > 2 and parts[2] else None
+            return json.dumps(capture_race_ledger(ref, start=start,
+                                                  effective_date=eff),
+                              indent=2, default=str)
         if cmd == "scoring-g2a":
             # G2a COMPUTE PARITY (A4 gate, mailbox #571 / CA #665).
             # "scoring-g2a:<event name>" — seeds a sandbox from the event's

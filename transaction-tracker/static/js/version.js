@@ -1,10 +1,31 @@
-window.TGF_VERSION = "2.505.4";
+window.TGF_VERSION = "2.507.1";
 window.TGF_CHANGELOG = [
   {
-    version: "2.505.4",
+    version: "2.507.1",
     date: "2026-09-27",
     changes: [
       "COURSE CARDS WITHOUT GOLF GENIUS (CA #786 GO 3). Tees used to reach the Tracker only through the Golf Genius scorecard import, so a course GG never imported (The Hideout, the Lone Star Cup venue) had no tees, pars, stroke indexes, slope or rating: no course handicap, no pops, no net, no handicap posting. email_parser/course_card.py loads the printed card into the same tables the import writes: course_tees (source course_card, TGF age bands), tee_set_ratings (total plus front and back nines, which 9-hole posting needs) and course_tee_holes. The whole card is checked first (every hole listed once, stroke indexes 1-18 used once each, par 3-6, rating and slope in range, known bands); a bad card writes nothing. It is a dry run by default, and loading a corrected card updates in place. Score entry reads the holes through the event's course. Bridge scoring-course-card:<course_id> shows the card as held; add |<card json>[|apply] to load one. Guard test_course_card.py.",
+    ],
+  },
+  {
+    version: "2.507.0",
+    date: "2026-09-28",
+    title: "Home chapter: the flagged list for Kerry, and a ruling-gated setter (CA #784)",
+    changes: [
+      "CA #784 (Kerry, rule 3b): points follow the player\u2019s HOME chapter, `customers.chapter` \u2014 never \u2018most events\u2019 or \u2018most recent\u2019. NEW read-only bridge `scoring-home-chapter-audit[:year]` lists everyone whose home chapter looks wrong (blank, never plays at home, or plays more elsewhere) plus the five Kerry named (Barna, Moore, Sharp, Franz, Williams), with where each actually plays shown as EVIDENCE for Kerry to confirm. It sets nothing.",
+      "NEW `scoring-home-chapter-set:<cid>=<chapter>|<ruling>` \u2014 the narrow door for a RULED correction. It refuses without a ruling reference, refuses a chapter not in the `chapters` table, and logs before and after. The existing chapter-guess confirm path deliberately fills only blank profiles, so it could not carry a ruling like Eric Pollard \u2192 DFW.",
+      "DFW was already a canonical chapter (chapters table and the Info-tab dropdown), so \u2018allow DFW as a valid home chapter\u2019 needed no change.",
+    ],
+  },
+  {
+    version: "2.506.0",
+    date: "2026-09-28",
+    title: "GO 6: read-only capture of Golf Genius\u2019s points ledger, before GG goes away",
+    changes: [
+      "CA #786 GO 6: capture a complete GG per-player, per-event points ledger while GG still exists \u2014 every race, every enrolled player, Monthly included \u2014 as a read-only JSON bundle, not a table. It is the answer key the points-engine backtest (#770, go/no-go Fri 10/9) diffs against at zero tolerance, and nothing else holds it: `gg_points_standings` is overwritten on every refresh and `gg_data_snapshots` keeps one row per key.",
+      "NEW `email_parser/points_ledger.py` + two READ-ONLY bridges: `scoring-points-ledger-races` lists the named season races and every Monthly page discovered on the chapter portals; `scoring-points-ledger:<ref>|<start>|<date>` returns one resumable chunk of one race, reusing the existing GG fetchers. No SQL, no writes. It runs on the deployed app because this build sandbox cannot reach golfgenius.com.",
+      "Each player\u2019s breakdown is kept as GG\u2019s RAW parsed tables; a normalised per-round view is derived beside it but the raw tables are the record. A player with no member card is recorded with the error, never dropped. #790: each race\u2019s exact event list is taken as the union of rounds across every captured player.",
+      "A bug caught before it ran: a chunk that spent its time budget on the standings fetch alone processed zero players and handed back the same resume point, so the caller would have looped forever. Every chunk now processes at least one player. The stubbed test hung exactly that way first.",
     ],
   },
   {
