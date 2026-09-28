@@ -1808,6 +1808,7 @@ def _scoring_dispatch_inner(url: str, extract: str):
       scoring-closeout-final:<event name or id>  READ-ONLY "results are final" test for the closeout: names every blocker (GG era: cards = field, identity, boards with purses, payouts; entry era: cards closed + signed, published, HIO settled, payouts)
       scoring-pairings-entry:<event name or id>[|apply]  pairing history from the score-entry groups (no-shows and blinds never pair; seats 1&2 / 3&4 rode); shadow diff vs GG pairs before the entry-record cutover, writes source='entry' after it
       scoring-recap-draft-email:<file>|<SECTION>[|to=..][|cc=..][|docx=<file>][|force][|apply]  mail one chapter's recap draft (docs/claude/recaps/<file>) to its sender as paste-ready HTML + the Word file; staff addresses only, once per file+section+recipients, dry run by default
+      scoring-event-financial:<event name or id>  READ-ONLY event P&L (get_event_financial_summary), incl. prize_fund + prize_fund_source; runs on the rehearsal copy via scoring-rehearsal:run|bridge
       scoring-event-day-email:<event_id>[|preview[|<staff addr>]]  the EVENT-DAY EMAIL (CA #829): dry build of every roster player's pairing message (ready / held with reasons, template hash, approval state, one sample); |preview mails ONE combined preview to STAFF only (default kerry@). There is NO member-send bridge
       scoring-hcp-cards:<event>[|apply]  email the TGF handicap card to every player on the event's roster who has one (dry run names who would get one; apply sends and logs to message_log)
       scoring-tee-bands:<course_id>   which four sets TGF plays (current designation + the yardage-standards proposal; read-only)
@@ -5904,6 +5905,21 @@ def _scoring_dispatch_inner(url: str, extract: str):
                                     dry_run="apply" not in _flags,
                                     force="force" in _flags)
             return json.dumps(_res, indent=2, default=str)
+        if cmd == "scoring-event-financial":
+            # "<event name or id>" — the event P&L (get_event_financial_summary)
+            # as a bridge, READ-ONLY, so it runs on the rehearsal copy
+            # through scoring-rehearsal:run|bridge (CFO #854).
+            _a = (arg or "").strip()
+            if not _a:
+                return json.dumps({"error": "usage: scoring-event-financial:<event name or id>"})
+            if _a.isdigit():
+                with db.get_connection() as _c:
+                    _r = _c.execute("SELECT item_name FROM events WHERE id = ?",
+                                    (int(_a),)).fetchone()
+                if not _r:
+                    return json.dumps({"error": f"no event {_a}"})
+                _a = _r[0]
+            return json.dumps(db.get_event_financial_summary(_a), indent=2, default=str)
         if cmd == "scoring-event-day-email":
             # "<event_id>[|preview[|<staff addr>]]" — CA #829. The dry build
             # sends nothing; |preview mails one combined preview to staff

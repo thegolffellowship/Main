@@ -665,6 +665,11 @@ concrete row follows `_event_tee_rows`: 18 holes take the legend's row, a
 nine takes the row labelled for the side played. An unresolved tee is
 published with `tee_id` NULL and reported (handicap posting then skips it
 for missing slope/rating, as it does for GG cards).
+A tee NAME with no gender mark ("Red") prefers the men's rows, but when
+they have no row of the right length it takes the other gender's row of
+that name (v, 3309: the women's Red nine rows 557 / 2894 beside a
+men's 18-hole Red). "Red (L)" pins the women's rows. Guard in
+`test_entry_publish.py`.
 
 **The GG gate**: `import_gg_scorecards` returns `skipped_entry_record` with
 a reason, writing no rows, when the resolved event already has entry rows;

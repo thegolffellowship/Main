@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.513.13";
+window.TGF_VERSION = "2.513.14";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.513.14",
+    date: "2026-09-28",
+    title: "Entered scores find the women's Red tee; read-only event P&L bridge",
+    changes: [
+      "G-0 publish could not resolve a bare 'Red' tee on a nine (Track A #853, 3309: DelCarmen, McCormick and Wade): a tee name with no gender mark is read as men's, and Brackenridge's only men's Red row is the 18-hole USGA one, so the women's Red nine rows (557 front, 2894 back) were filtered out and the card published with no rating. A bare name still prefers the men's rows, but now falls back to the other gender's row of that name when the preferred gender has none of the right length. 'Red (L)' still pins the women's rows. Closeout blocks 'final' on a tee-less card, so this would have held 3304's close-out. Guard in test_entry_publish.py.",
+      "New READ-ONLY bridge scoring-event-financial:<event name or id> returns get_event_financial_summary (with prize_fund and its source), so the CFO's P&L check runs on the rehearsal copy through scoring-rehearsal:run|bridge (CFO #854).",
+    ],
+  },
   {
     version: "2.513.13",
     date: "2026-09-28",

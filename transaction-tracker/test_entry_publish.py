@@ -312,6 +312,38 @@ for pat, why in [(r"\bNOCASE\b", "COLLATE NOCASE"), (r"INSERT\s+OR\s+(REPLACE|IG
                  (r"\blastrowid\b", "lastrowid"), (r"ALTER\s+TABLE", "ALTER")]:
     check(f"portable SQL: no {why}", not re.search(pat, src, re.I))
 
+print("tee: a bare name falls back to the other gender's row of the right length (3309 Red)")
+c = sqlite3.connect(DB)
+c.row_factory = sqlite3.Row
+bc = c.execute("INSERT INTO courses (name, status) VALUES ('Brack Test', 'active') "
+               "RETURNING course_id").fetchone()[0]
+ids = {}
+for nm, g, holes, nine, rating, slope, bands in [
+        ("Red", "F", 9, "front", 34.7, 120, "Forward"),     # GG 557
+        ("Red", "F", 9, "back", 33.2, 120, "Forward"),      # GG 2894
+        ("Red", "M", 18, "full", 64.0, 117, "Forward"),     # USGA 14679
+        ("White", "M", 9, "front", 34.5, 124, "50-64"),
+        ("White", "F", 9, "front", 36.0, 125, None)]:
+    ids[(nm, g, nine)] = c.execute(
+        "INSERT INTO course_tees (course_id, tee_name, gender, holes, nine, rating, slope, "
+        "tgf_bands, source) VALUES (?,?,?,?,?,?,?,?, 'import') RETURNING tee_id",
+        (bc, nm, g, holes, nine, rating, slope, bands)).fetchone()[0]
+c.commit()
+evb = {"id": None, "course_id": bc}
+r = ep._resolve_tee(c, evb, bc, "Red", False, "front")
+check("bare 'Red' on the front nine resolves to the women's front Red row",
+      r["tee_id"] == ids[("Red", "F", "front")], r)
+r = ep._resolve_tee(c, evb, bc, "Red", False, "back")
+check("…and on the back nine to the women's back Red row", r["tee_id"] == ids[("Red", "F", "back")], r)
+r = ep._resolve_tee(c, evb, bc, "Red", True, "full")
+check("bare 'Red' for 18 holes still prefers the men's 18-hole row", r["tee_id"] == ids[("Red", "M", "full")], r)
+r = ep._resolve_tee(c, evb, bc, "White", False, "front")
+check("bare 'White' keeps the men's row when one exists (no gender swap)",
+      r["tee_id"] == ids[("White", "M", "front")], r)
+r = ep._resolve_tee(c, evb, bc, "White (L)", False, "front")
+check("'White (L)' pins the women's row", r["tee_id"] == ids[("White", "F", "front")], r)
+c.close()
+
 try:
     os.remove(DB)
 except OSError:

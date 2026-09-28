@@ -53,6 +53,7 @@ table, no DDL.
 from __future__ import annotations
 
 import logging
+import re
 from datetime import datetime, timezone
 
 from email_parser import database as db
@@ -205,11 +206,20 @@ def _resolve_tee(conn, ev: dict, course_id, tee_value, is18: bool, side: str) ->
         want = db._gg_tee_parts(entry.get("tee_key") or entry.get("tee_name"))["master"].lower()
         want_id = entry.get("tee_id")
         ladies = bool(entry.get("ladies")) or band == "Forward"
+        unmarked = False
         how = "band"
     else:
         parts = db._gg_tee_parts(val)
         want = parts["master"].lower()
-        ladies = parts["gender"] == "F"
+        # A bare name ("Red") carries no gender mark, and _gg_tee_parts
+        # reads unmarked as M. Only an explicit mark ("Red (L)") pins the
+        # women's rows; an unmarked name prefers the men's rows but may
+        # fall back to any row of that name below (3309: DelCarmen,
+        # McCormick and Wade on "Red", whose only nine-hole Red rows are
+        # the women's 557 / 2894; the men's Red row is 18 holes).
+        explicit_f = bool(re.search(r"\((?:l|f|lady|ladies)\)|\bladies\b", val, re.I))
+        ladies = True if explicit_f else False
+        unmarked = not explicit_f
         how = "name"
     rows = [dict(r) for r in conn.execute(
         "SELECT tee_id, tee_name, gg_alias, gender, holes, nine, slope, rating "
@@ -219,6 +229,7 @@ def _resolve_tee(conn, ev: dict, course_id, tee_value, is18: bool, side: str) ->
         return db._gg_tee_parts(nm)["master"].lower() if nm else ""
 
     named = [r for r in rows if _label(r["tee_name"]) == want or _label(r.get("gg_alias")) == want]
+    all_named = named
     if ladies is not None:
         g = [r for r in named if (r.get("gender") == "F") == bool(ladies)]
         named = g or named
@@ -229,6 +240,11 @@ def _resolve_tee(conn, ev: dict, course_id, tee_value, is18: bool, side: str) ->
         return (r.get("holes") or 18) == 18
 
     cands = [r for r in named if _is18(r) == is18]
+    if not cands and how == "name" and unmarked:
+        # The preferred gender has no row of this length: take the
+        # other gender's row of that name rather than drop the rating.
+        named = all_named
+        cands = [r for r in named if _is18(r) == is18]
     if not cands:
         if not named:
             return {"tee_id": None, "how": how, "note": f"no tee named {want!r} on the course"}
