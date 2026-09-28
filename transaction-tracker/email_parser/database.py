@@ -57528,6 +57528,84 @@ def repair_teamnet_blind_draw_shares(event_name: str, dry_run: bool = True,
         return plan
 
 
+def _tgf_event_lookup(conn, ev: dict):
+    """The tgf_events row for a Tracker event, or None. Matches the
+    stamped events_id first, then the code convention: the FULL event name
+    ("s9.15 The Quarry", what the TGF sidebar and the Events-page PAYOUTS
+    tab key on), with the bare code prefix as a fallback for legacy and
+    manual rows. Returns (row, full, bare)."""
+    full = (ev.get("item_name") or "").strip()
+    m = _GG_EVENT_CODE_COMPOUND_RE.match(full)
+    bare = m.group(1).lower() if m else full.lower()
+    row = None
+    try:
+        row = conn.execute("SELECT id, code FROM tgf_events WHERE events_id = ?",
+                           (ev["id"],)).fetchone()
+    except sqlite3.OperationalError:
+        row = None  # events_id column not migrated yet
+    if not row:
+        row = conn.execute(
+            "SELECT id, code FROM tgf_events WHERE lower(code) = ? OR lower(code) = ?",
+            (full.lower(), bare)).fetchone()
+    return row, full, bare
+
+
+def _ensure_tgf_event_row(conn, ev: dict) -> tuple[int, bool]:
+    """Find or create the tgf_events row that payouts hang off, FROM THE
+    TRACKER EVENT (CA #786 GO 2: payouts need a home that never depended
+    on Golf Genius). The row carries events_id from birth, so readers that
+    join on it (lsc_skins_pot, the Events-page PAYOUTS tab) do not wait
+    for the boot backfill. Returns (tgf_event_id, created)."""
+    row, full, bare = _tgf_event_lookup(conn, ev)
+    if row:
+        if row["code"].strip().lower() == bare != full.lower():
+            conn.execute("UPDATE tgf_events SET code = ?, name = ? WHERE id = ?",
+                         (full, full, row["id"]))
+        try:
+            conn.execute("UPDATE tgf_events SET events_id = ? "
+                         "WHERE id = ? AND events_id IS NULL", (ev["id"], row["id"]))
+        except sqlite3.OperationalError:
+            pass
+        conn.commit()
+        return row["id"], False
+    new = conn.execute(
+        """INSERT INTO tgf_events (code, name, event_date, course, chapter, events_id)
+           VALUES (?, ?, ?, ?, ?, ?) RETURNING id""",
+        (full, full, ev.get("event_date") or "", ev.get("course"),
+         ev.get("chapter"), ev["id"])).fetchone()
+    conn.commit()
+    return new[0], True
+
+
+def ensure_tgf_events(event_ids: list, apply: bool = False, db_path=None) -> dict:
+    """Make sure each Tracker event has its tgf_events row (CA #786 GO 2:
+    LSC 3329 first, then every event from 10/13). Dry run by default: it
+    reports which rows exist and which would be created; apply creates the
+    missing ones. Never touches payouts."""
+    out = {"applied": bool(apply), "events": []}
+    with _connect(db_path) as conn:
+        for eid in event_ids:
+            ev = conn.execute("SELECT * FROM events WHERE id = ?", (int(eid),)).fetchone()
+            if not ev:
+                out["events"].append({"event_id": eid, "error": "no such event"})
+                continue
+            ev = dict(ev)
+            row, full, _ = _tgf_event_lookup(conn, ev)
+            if row:
+                if apply:
+                    _ensure_tgf_event_row(conn, ev)  # stamps events_id if missing
+                out["events"].append({"event_id": ev["id"], "name": full,
+                                      "tgf_event_id": row["id"], "status": "exists"})
+            elif apply:
+                tid, _ = _ensure_tgf_event_row(conn, ev)
+                out["events"].append({"event_id": ev["id"], "name": full,
+                                      "tgf_event_id": tid, "status": "created"})
+            else:
+                out["events"].append({"event_id": ev["id"], "name": full,
+                                      "status": "would create"})
+    return out
+
+
 def record_event_game_payouts(event_name: str, payouts: list,
                               force: bool = False, db_path=None) -> dict:
     """Record the Games-tab winners as PAYOUTS-tab rows (v2.38.0).
@@ -57558,26 +57636,7 @@ def record_event_game_payouts(event_name: str, payouts: list,
         # Quarry") — the TGF sidebar displays code and the Events-page
         # PAYOUTS tab matches code === item_name. Bare code prefix kept
         # as a lookup fallback for legacy/manual rows.
-        full = ev["item_name"].strip()
-        m = _GG_EVENT_CODE_COMPOUND_RE.match(full)
-        bare = m.group(1).lower() if m else full.lower()
-
-        trow = conn.execute(
-            "SELECT id, code FROM tgf_events WHERE LOWER(code) = ? OR LOWER(code) = ?",
-            (full.lower(), bare)).fetchone()
-        if trow:
-            tgf_event_id = trow["id"]
-            if trow["code"].strip().lower() == bare != full.lower():
-                conn.execute("UPDATE tgf_events SET code = ?, name = ? WHERE id = ?",
-                             (full, full, tgf_event_id))
-                conn.commit()
-        else:
-            cur = conn.execute(
-                """INSERT INTO tgf_events (code, name, event_date, course, chapter)
-                   VALUES (?, ?, ?, ?, ?)""",
-                (full, full, ev.get("event_date") or "",
-                 ev.get("course"), ev.get("chapter")))
-            tgf_event_id = cur.lastrowid
+        tgf_event_id, _created = _ensure_tgf_event_row(conn, ev)
 
         manual = conn.execute(
             "SELECT COUNT(*) FROM tgf_payouts WHERE event_id = ? "

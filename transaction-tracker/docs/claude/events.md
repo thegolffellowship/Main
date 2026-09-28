@@ -1403,6 +1403,7 @@ event showed default amounts ($8/$7) in Withdraw Player / Partial Refund.
   false-match repair skips legitimate month-account links. Monthly rows
   flow into Customers → Winnings automatically via /api/customers/winnings.
 - **Data** from `tgf_events` and `tgf_payouts` tables; golfer identity is the `customers` table (tgf_golfers was eliminated)
+- **Where a `tgf_events` row comes from (v2.505.2, CA #786 GO 2):** from the Tracker event, never from Golf Genius. `_ensure_tgf_event_row` (database.py) matches the stamped `events_id` first, then the code convention (full event name, bare code as a legacy fallback), and creates the row with `events_id` set at birth. The Games-tab payout recorder uses it; `scoring-tgf-event-ensure:<id>[,<id>…][|apply]` creates rows ahead of time (dry run by default). Guard `test_tgf_event_ensure.py`.
 - **API:** `GET /api/tgf` returns `{customers, events, winnings}` where customers is the list of payout recipients
 - **Sidebar totals are `tgf_events.total_purse`** (a stored column set at
   screenshot-import/record time), NOT `SUM(tgf_payouts.amount)`. A

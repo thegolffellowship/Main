@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.505.1";
+window.TGF_VERSION = "2.505.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.505.2",
+    date: "2026-09-27",
+    changes: [
+      "PAYOUTS HAVE A HOME WITHOUT GOLF GENIUS (CA #786 GO 2). Checked first: tgf_events rows were never GG-only. The payout recorders create them from the Tracker event on demand. But the new row was written without events_id and waited for the next boot backfill, so anything that joins on it (the LSC skins pot, the Events-page PAYOUTS tab) could miss a brand-new event. One helper now finds or creates the row: it matches the stamped events_id first, then the code convention, and stamps events_id at birth (RETURNING, per the portable-SQL rule). The Games-tab payout recorder uses it. New bridge scoring-tgf-event-ensure:<id>[,<id>...][|apply] creates the rows ahead of time (the Lone Star Cup first, then every event from 10/13); it is a dry run by default. Guard test_tgf_event_ensure.py.",
+      "New bridge scoring-alias-delete:<alias id>[|confirm]: removes ONE customer alias. The first call previews the row; |confirm deletes it and writes the audit log. It was built for the bare \u201cVictor Arias\u201d alias Kerry OK\u2019d removing (CA #788), so a bare-name order goes to a person instead of silently to the father. Every other alias delete still needs its own OK.",
+    ],
+  },
   {
     version: "2.505.1",
     date: "2026-09-27",
