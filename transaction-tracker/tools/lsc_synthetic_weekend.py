@@ -14,6 +14,9 @@ import os
 import sys
 
 DB = os.path.abspath(sys.argv[1])
+# BEFORE any email_parser import: importing the package installs the
+# outbound guard only when TGF_REHEARSAL=1 is already set (Health #813).
+os.environ["TGF_REHEARSAL"] = "1"
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # The ONE exception: Health's Railway rehearsal runner (CA #832) — a
 # secret-free child with TGF_REHEARSAL=1 on a file inside <volume>/rehearsal/.
@@ -159,21 +162,24 @@ def write_session(key, sess, rid):
                 team = se.add_team(rid, gid, pair[0], pair[1], db_path=DB)["team_id"]
                 sc = PM_TEAM[tuple(sorted(pair))]
                 for h in range(1, 19):
-                    ops.append({"op_id": f"{key}-{mid}-t{team}-{h}", "hole": h,
+                    ops.append({"op_id": f"r{rid}-{key}-{mid}-t{team}-{h}", "hole": h,
                                 "gross": sc[h], "team_id": team})
         else:
             grid_ = AM if key == "am" else SUN
             marks = AM_MARKS if key == "am" else SUN_MARKS
             for c in a + s:
                 for h in range(1, 19):
-                    op = {"op_id": f"{key}-{mid}-c{c}-{h}", "hole": h,
+                    op = {"op_id": f"r{rid}-{key}-{mid}-c{c}-{h}", "hole": h,
                           "gross": grid_[c][h], "customer_id": c}
                     if marks.get(c, {}).get(h):
                         op["mark"] = marks[c][h]
                     ops.append(op)
         for i in range(0, len(ops), 40):
             r = se.write_scores(gid, dev, a[0], ops[i:i + 40], db_path=DB)
-            bad = [x for x in r.get("results", []) if x["result"] not in ("ok", "dup")]
+            # op_ids are unique per round (score entry de-duplicates op_ids
+            # across ALL rounds), so a first write must be "ok": a "dup" here
+            # means nothing was applied to this round.
+            bad = [x for x in r.get("results", []) if x["result"] != "ok"]
             assert not bad and "error" not in r, (key, mid, bad or r)
         retry = se.write_scores(gid, dev, a[0], ops[:3], db_path=DB)   # retry
         assert all(x["result"] == "dup" for x in retry["results"]), retry
