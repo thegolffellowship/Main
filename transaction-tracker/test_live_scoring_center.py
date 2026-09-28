@@ -703,6 +703,24 @@ check("...and the session is refreshable from GG (it is seeded)",
       "error" not in db.ls_refresh_session_from_gg(up["session_id"], db_path=DB))
 
 
+print("\n== a nine plays nine holes, even when the tee carries both nines ==")
+
+n9 = db.ls_create_session("Nine on an 18-hole tee", holes=9, db_path=DB)
+n9sid = n9["session_id"]
+for h in range(10, 19):
+    db.ls_set_course_hole(n9sid, h, par=4, stroke_index=2 * (h - 9), db_path=DB)
+pn = db.ls_add_player(n9sid, "Front Niner", playing_handicap=6, db_path=DB)
+check("before any score, the course table is left alone",
+      len(db.ls_build_state(n9sid, db_path=DB)["holes"]) == 18)
+db.ls_set_score(n9sid, pn["player_id"], 1, 5, db_path=DB)
+st9 = db.ls_build_state(n9sid, db_path=DB)
+check("one front-nine score -> the state holds the WHOLE front nine",
+      [h["hole"] for h in st9["holes"]] == list(range(1, 10)),
+      [h["hole"] for h in st9["holes"]])
+lb9 = db.ls_leaderboard(n9sid, db_path=DB)
+check("...so the engine reads it as a 9-hole event", lb9["holes_key"] == "9",
+      lb9["holes_key"])
+
 print("\n" + "=" * 60)
 if FAILURES:
     print(f"{len(FAILURES)} FAILED: {FAILURES}")

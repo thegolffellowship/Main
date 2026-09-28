@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.510.7";
+window.TGF_VERSION = "2.510.8";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.510.8",
+    date: "2026-09-28",
+    title: "A nine plays nine holes in the scoring sandbox",
+    changes: [
+      "The first real G2a game diff (s9.24 Brackenridge, a9.24 Teravista) failed on skins and flights, and the cause was ours: a 9-hole session seeded from Golf Genius loads BOTH nines of the tee (the per-nine ratings are merged so an 18 scores all 18), so the engine read every nine as an 18-hole event. That picked the 18-hole flight, skins-variant and minimum-buyer bands, and spread a derived game's strokes over the full card instead of the ruled 1-9 collapse on a nine (CA #771). The player tier still matched because it plays off Golf Genius's own dots. ls_build_state now keeps the whole nine being played (front 1-9 or back 10-18) once any score is in; before the first score the course table is left alone, and it never trims to just the holes scored so far, which would move the allocation mid-round.",
+    ],
+  },
   {
     version: "2.510.7",
     date: "2026-09-28",

@@ -25440,6 +25440,22 @@ def ls_build_state(session_id: int, db_path: str | Path = DB_PATH) -> dict | Non
             "buys_net": bool(p["buys_net"]), "buys_gross": bool(p["buys_gross"]),
             "is_member": bool(p["is_member"]),
             "scores": scores, "strokes_received": received})
+    # A NINE PLAYS NINE HOLES. The course table carries both nines of a tee
+    # (_ls_tee_holes merges the per-nine ratings), so a 9-hole session seeded
+    # from GG held 18 course holes: the engine then read the round as an
+    # 18-hole event (wrong flight / skins / min-buyer bands) and allocated a
+    # derived game's strokes "full_card" instead of the ruled 1-9 collapse
+    # (CA #771). G2a on s9.24 / a9.24 caught it. Once any score is in, a
+    # nine keeps the WHOLE NINE it is being played on (front 1-9 or back
+    # 10-18) — never just the holes scored so far, which would move the
+    # stroke allocation and the thru count as the round progressed.
+    session_holes = (data["session"] or {}).get("holes")
+    if session_holes and int(session_holes) <= 9 and len(holes) > 9:
+        played = {int(hn) for p in players for hn in p["scores"]}
+        if played and max(played) <= 9:
+            holes = [h for h in holes if h["hole"] <= 9]
+        elif played and min(played) >= 10:
+            holes = [h for h in holes if h["hole"] >= 10]
     return {"holes": holes, "players": players, "meta": data["session"],
             "contests": data["contests"]}
 
