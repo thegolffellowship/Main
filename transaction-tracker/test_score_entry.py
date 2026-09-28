@@ -239,6 +239,14 @@ for pos, (cid, nm) in enumerate([(101, "Kerry Niester"), (102, "Adam Baker")], 1
                  (nm, pos, cid))
 conn.commit()
 with contextlib.redirect_stdout(io.StringIO()):
+    plan = se.seed_plan(900, "9")
+check("seed dry run names the players and writes nothing",
+      plan.get("dry_run") and plan["players"] == 2 and plan["existing_round"] is None
+      and conn.execute("SELECT COUNT(*) FROM se_rounds WHERE event_id = 900 "
+                       "AND pairings_holes = '9'").fetchone()[0] == 0, plan)
+check("seed dry run names seats with no tee", "no_tee" in plan.get("gaps", {}), plan)
+check("seed dry run refuses a nine with no pairings", "error" in se.seed_plan(900, "18"))
+with contextlib.redirect_stdout(io.StringIO()):
     s = se.seed_round_from_pairings(900, "9")
 check("seeded a round from PAIRINGS", "round_id" in s and s["groups"] == 1, s)
 check("no course card is said out loud", "warning" in s, s)

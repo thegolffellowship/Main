@@ -825,6 +825,44 @@ def add_team(round_id: int, group_id: int, customer_id_a: int, customer_id_b: in
     return {"team_id": tid}
 
 
+def seed_plan(event_id: int, holes: str = "9", db_path=None) -> dict:
+    """Dry run of seed_round_from_pairings: what seeding WOULD write, read
+    from the same starter-sheet pack. Writes nothing. Names every seat with
+    no customer_id, no tee band or no playing handicap, and says whether a
+    round for this event+holes already exists (a re-seed updates it)."""
+    from email_parser import database as db
+    pack = db.get_event_print_pack(event_id, db_path=db_path)
+    if not pack:
+        return {"error": "no such event"}
+    groups = [g for g in (pack.get("groups") or []) if str(g.get("holes")) == str(holes)]
+    if not groups:
+        return {"error": f"no saved {holes}-hole pairings for this event"}
+    with _closing(_conn(db_path)) as conn:
+        r = conn.execute("SELECT id, status FROM se_rounds WHERE event_id = ? AND pairings_holes = ? "
+                         "ORDER BY id LIMIT 1", (event_id, str(holes))).fetchone()
+    pev = pack.get("event") or {}
+    out_groups, gaps = [], {"no_customer_id": [], "no_tee": [], "no_playing_handicap": []}
+    for g in groups:
+        ps = []
+        for p in g.get("players") or []:
+            nm = p.get("name")
+            if not p.get("customer_id"):
+                gaps["no_customer_id"].append(nm)
+            if not p.get("tee_choice"):
+                gaps["no_tee"].append(nm)
+            if p.get("playing_handicap") is None:
+                gaps["no_playing_handicap"].append(nm)
+            ps.append({"customer_id": p.get("customer_id"), "name": nm,
+                       "tee": p.get("tee_choice"), "playing_handicap": p.get("playing_handicap")})
+        out_groups.append({"group_num": g.get("group_num"), "slot": g.get("slot_label"),
+                           "start": g.get("start_line") or g.get("hole_label"), "players": ps})
+    return {"dry_run": True, "event_id": event_id, "holes": str(holes),
+            "start_type": pev.get("start_type"), "start_clock": pev.get("start_clock"),
+            "existing_round": ({"round_id": r[0], "status": r[1]} if r else None),
+            "groups": out_groups, "players": sum(len(g["players"]) for g in out_groups),
+            "gaps": {k: v for k, v in gaps.items() if v}}
+
+
 def seed_round_from_pairings(event_id: int, holes: str = "9", *, round_date=None,
                              label=None, created_by=None, db_path=None) -> dict:
     """Build a round from the event's saved PAIRINGS (the one builder) via the

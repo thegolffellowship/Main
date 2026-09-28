@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.516.0";
+window.TGF_VERSION = "2.516.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.516.1",
+    date: "2026-09-28",
+    title: "Score entry: seed a round from the saved pairings by bridge",
+    changes: [
+      "New bridge scoring-se-seed:<event_id>[|9|18][|apply] does what the admin SCORE ENTRY panel's Seed button does: one scoring group per saved foursome, each player's tee band and locked playing handicap from the starter sheet. It's a dry run by default: seed_plan lists the groups and names any seat with no customer_id, no tee or no playing handicap, and writes nothing. Re-seeding updates groups in place and never touches a score. The Members and Cart-sign QR switches are untouched. Built so Track A can seed s9.25 Canyon Springs (3304) for Tuesday's dry run without an admin tap."
+    ]
+  },
   {
     version: "2.516.0",
     date: "2026-09-28",

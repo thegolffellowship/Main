@@ -1780,6 +1780,7 @@ def _scoring_dispatch_inner(url: str, extract: str):
       scoring-card:<round_id>      full scorecard with derivations
       scoring-courses              course/tee database listing
       scoring-se-preview:<event_id>|<cid,...>[|apply][|18][|match]  labelled PREVIEW score-entry round + link (admin-only open); 18 = an 18-hole preview, match = a demo singles match per pair (1v2, 3v4)
+      scoring-se-seed:<event_id>[|9|18][|apply]  seed score entry from the saved PAIRINGS (dry run by default; re-seed keeps scores)
       scoring-se-status:<event_id>  read-only: every score-entry round on the event, holes in, signatures, checks, marks, matches
       scoring-se-links:<round_id>  one score-entry link per group
       scoring-se-close:<round_id>|apply  close a score-entry round (links stop opening; nothing deleted)
@@ -3363,6 +3364,25 @@ def _scoring_dispatch_inner(url: str, extract: str):
             if "error" not in _res:
                 _res["links"] = _se.round_links(_res["round_id"])
                 _audit("scoring-se-preview", f"event {_ev} round {_res['round_id']} players {_ids}")
+            return json.dumps(_res, indent=2, default=str)
+        if cmd == "scoring-se-seed":
+            # scoring-se-seed:<event_id>[|9|18][|apply] — seed score entry from
+            # the event's saved PAIRINGS (the admin SCORE ENTRY panel's Seed
+            # button). Dry run by default. Re-seeding updates groups in place
+            # and never touches a score. Switches are not touched.
+            from email_parser import score_entry as _se
+            _parts = [x.strip() for x in arg.split("|")]
+            try:
+                _ev = int(_parts[0])
+            except (ValueError, IndexError):
+                return json.dumps({"error": "usage: scoring-se-seed:<event_id>[|9|18][|apply]"})
+            _holes = "18" if "18" in _parts[1:] else "9"
+            if "apply" not in [x.lower() for x in _parts[1:]]:
+                return json.dumps(_se.seed_plan(_ev, _holes), indent=2, default=str)
+            _res = _se.seed_round_from_pairings(_ev, _holes, created_by="bridge")
+            if "error" not in _res:
+                _res["links"] = _se.round_links(_res["round_id"])
+                _audit("scoring-se-seed", f"event {_ev} holes {_holes} round {_res['round_id']}")
             return json.dumps(_res, indent=2, default=str)
         if cmd == "scoring-se-status":
             from email_parser import score_entry as _se

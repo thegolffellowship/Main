@@ -684,3 +684,12 @@ run by default; apply is audited) and `scoring-entry-parity:<event_id>`
 **Guard test**: `test_entry_publish.py` (dry run, held players, apply,
 idempotency, edit + re-sign, shadow diff, cutover, the GG gate, tee by
 band / name / unresolved, and that the module names no score-entry table).
+
+## Seeding by bridge (v2.516.1)
+
+`scoring-se-seed:<event_id>[|9|18][|apply]` is the Seed button without the tap.
+With no `apply` it returns `seed_plan`: the groups, each player's tee band and
+locked PH, whether a round for that event+holes already exists, and `gaps` naming
+any seat with no customer_id, no tee or no PH. It writes nothing. With `apply` it
+runs `seed_round_from_pairings` and returns the round id and one link per group.
+The member switches (`score_entry_live`, `score_entry_qr`) are never touched.
