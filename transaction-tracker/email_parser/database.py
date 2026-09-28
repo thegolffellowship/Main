@@ -25885,8 +25885,18 @@ def event_engine_state(event_name: str, db_path=None) -> dict:
     championship = "championship" in ev["item_name"].lower()
     meta = {"event_id": ev["id"], "event_name": ev["item_name"],
             "holes": n_holes, "championship": championship}
+    # Par / SI come from the event's most-played tee (as the seeded sandbox
+    # does). A card with NO tee of its own is scored on that tee — say so by
+    # name rather than let it pass silently (rehearsal 9/28: the women's Red
+    # tee didn't resolve in G-0 for three 3309 players).
+    tee_less = sorted(r["player_name"] or f"round {r['id']}"
+                      for r in rounds if r.get("tee_id") is None)
+    warnings = ([f"{len(tee_less)} card(s) carry no tee and were scored on "
+                 f"the event's common tee: {', '.join(tee_less)}"]
+                if tee_less else [])
     return {"holes": _ls_trim_to_played_nine(holes, players, n_holes),
-            "players": players, "meta": meta, "contests": [], "event": ev}
+            "players": players, "meta": meta, "contests": [], "event": ev,
+            "warnings": warnings, "tee_less": tee_less}
 
 
 def engine_game_payouts(event_name: str, db_path=None, state: dict | None = None,
@@ -25926,7 +25936,9 @@ def engine_game_payouts(event_name: str, db_path=None, state: dict | None = None
     lb = _ls.compute_leaderboard(st, formulas)
     out = {"event": st["meta"]["event_name"], "event_id": ev_id,
            "board_state": fb.get("state"), "holes_key": lb["holes_key"],
-           "games": {}, "writes": "none"}
+           "games": {}, "writes": "none",
+           "warnings": list(st.get("warnings") or []),
+           "tee_less": list(st.get("tee_less") or [])}
     for entry in fb.get("games") or []:
         game = entry["game"]
         res = lb["games"].get(game)
@@ -25941,6 +25953,12 @@ def engine_game_payouts(event_name: str, db_path=None, state: dict | None = None
                           f"— nothing paid until they agree"]}
             continue
         pay = _fl.payouts_from_results(entry, res)
+        if st.get("tee_less") and pay.get("status") == "paid":
+            # Same rule as closeout's "final" check (v2.513.8): a card with
+            # no tee holds the money until its tee is resolved.
+            pay["status"] = "provisional"
+            pay["notes"].append("held: card(s) with no tee — "
+                                + ", ".join(st["tee_less"]))
         pay["flight_source"] = (res or {}).get("flight_source")
         pay["variant"] = (res or {}).get("gg_name") or frozen_variant
         pay["warnings"] = (res or {}).get("warnings") or []

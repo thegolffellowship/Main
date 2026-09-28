@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.513.12";
+window.TGF_VERSION = "2.513.13";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.513.13",
+    date: "2026-09-28",
+    title: "Engine payouts name any card with no tee and hold the money",
+    changes: [
+      "v2.513.7 refused an event where NO card had a tee. It still scored a MIXED field silently: when most cards resolve a tee and a few don't (the women's Red tee on 3309, #853), the engine takes par and stroke index from the event's most-played tee. engine_game_payouts now names every tee-less card (tee_less and warnings on the result) and holds each game as provisional until the tee resolves. This is the same rule closeout's 'final' check follows (v2.513.8).",
+    ],
+  },
   {
     version: "2.513.12",
     date: "2026-09-28",

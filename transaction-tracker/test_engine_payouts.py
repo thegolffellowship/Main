@@ -157,6 +157,25 @@ check("...and engine payouts pass the refusal through",
       "no tee" in (db.engine_game_payouts("s9.99 Nowhere", db_path=_tmp)
                    .get("error") or ""))
 
+print("\n== one tee-less card among tee'd ones is NAMED and holds the money ==")
+from unittest import mock
+_fake_state = {"holes": [{"hole": h, "par": 4, "yardage": 350, "stroke_index": h}
+                         for h in range(1, 10)],
+               "players": [], "contests": [],
+               "meta": {"event_id": 1, "event_name": "x", "holes": 9,
+                        "championship": False},
+               "warnings": ["1 card(s) carry no tee ..."], "tee_less": ["WADE, Mary"]}
+_board = {"state": "settled", "games": [{
+    "game": "individual_net", "active": True,
+    "selection": {"flights": [], "variant": {"name": "default"}},
+    "amounts": {"flights": []}}]}
+with mock.patch.object(db, "get_scoring_formulas", return_value={}):
+    _ep = db.engine_game_payouts("x", db_path=_tmp, state=_fake_state, board=_board)
+_g = _ep["games"]["individual_net"]
+check("a game with a tee-less card is provisional, and names her",
+      _g["status"] in ("provisional", "no_result") and _ep["tee_less"] == ["WADE, Mary"],
+      (_g["status"], _ep.get("tee_less")))
+
 print("\n" + "=" * 60)
 if FAILURES:
     print(f"{len(FAILURES)} FAILED: {FAILURES}")
