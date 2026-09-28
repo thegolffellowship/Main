@@ -111,6 +111,10 @@ check("the handicap post refuses it too", "no handicap posting" in (dr.get("erro
 c = sqlite3.connect(tmp)
 c.execute("DELETE FROM app_settings WHERE key = 'hcp_skip_events'")
 c.commit(); c.close()
+byid = db.send_handicap_cards(event_name="992", dry_run=True, db_path=tmp)
+check("an event id works in place of the name", byid.get("event_name") == "992" and not byid.get("http") == 400, byid)
+check("the bridge splits off only a trailing |apply (event names contain '|')",
+      'endswith("|apply")' in open(os.path.join(os.path.dirname(__file__), "mcp_server.py"), encoding="utf-8").read())
 check("with no setting, the default skips 3329 and 3330 (Kerry, CA #787)",
       set(db.hcp_skip_events(db_path=tmp)) == {3329, 3330})
 

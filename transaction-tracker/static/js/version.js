@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.505.1";
+window.TGF_VERSION = "2.505.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.505.2",
+    date: "2026-09-27",
+    changes: [
+      "scoring-hcp-cards kept only the text before the first \u2018|\u2019 as the event name, so an event named \u2018LONE STAR CUP | The Hideout\u2019 reached the lookup as \u2018LONE STAR CUP\u2019 and failed as \u2018no event matches\u2019 before the handicap ruling was checked. Only a trailing \u2018|apply\u2019 is an option now, and an event id works in place of the name. The Handicaps page was never affected (it sends the name whole).",
+    ],
+  },
   {
     version: "2.505.1",
     date: "2026-09-27",

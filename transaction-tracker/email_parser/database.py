@@ -40778,6 +40778,9 @@ def send_handicap_cards(event_name: str | None = None, chapter: str | None = Non
             ev = conn.execute(
                 "SELECT id, item_name FROM events WHERE item_name = ? COLLATE NOCASE",
                 (event_name,)).fetchone()
+            if not ev and event_name.isdigit():
+                ev = conn.execute("SELECT id, item_name FROM events WHERE id = ?",
+                                  (int(event_name),)).fetchone()
             if not ev:
                 ev = conn.execute(
                     """SELECT e.id, e.item_name FROM events e
