@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.507.3";
+window.TGF_VERSION = "2.508.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.508.0",
+    date: "2026-09-28",
+    changes: [
+      "G-0 KEYSTONE: ENTERED SCORES BECOME THE RECORD (CA #786 GO 1, Kerry D22/D23). Handicap posting, the Games-tab winners that become payouts, MVP, points, the closeout and the scorecards pages all read scoring_rounds, and until now only the Golf Genius import filled it, so off GG every one of them would have gone empty. email_parser/entry_publish.py copies a player's card into scoring_rounds/scoring_holes (source 'entry', customer_id, course, tee resolved through the same band legend the starter sheet uses, PH, 9 or 18) once the card is closed or submitted, he has signed (or the keeper signed for him) and every hole has a score. Anyone else is listed as held with the reason, never written.",
+      "It never double-counts. About 110 queries read scoring_rounds without looking at the source, so entered rows never sit beside Golf Genius rows for the same event. It WRITES only when the event has no GG rows and is on or after the entry_record_from setting (default 2026-10-10, the Lone Star Cup). Before that (9/29 and 10/6) it runs in SHADOW: it writes nothing and returns the per-player, per-hole diff against Golf Genius, which is the parity check. The GG import in turn refuses to write into an event, or a player's date, that entered scores already own. Both sources are kept: the entered cards in score entry, the GG pages in the archive.",
+      "Bridges: scoring-entry-publish:<event_id>[|<round_id>][|apply] (a dry run by default) and scoring-entry-parity:<event_id>. score_entry.get_entered_scores now also returns each round's course_id (one additive line; Track A to review). Guard test_entry_publish.py (53 checks); test_score_entry, the GG import tests and the customer_id guard all pass.",
+    ],
+  },
   {
     version: "2.507.3",
     date: "2026-09-28",
