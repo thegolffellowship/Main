@@ -971,6 +971,19 @@
             const c = (card.ctp || {})[String(n)] || {};
             const holder = c.holder_name ? `${esc(c.holder_name)} · Group ${esc(c.holder_group_num)}` : null;
             const btns = card.players.map((p) => `<button type="button" class="se-pill line" data-act="ctp" data-cid="${p.customer_id}">${esc(p.display_name)}</button>`).join("");
+            // A matrix slot with no par 3 left is a LONGEST PUTT on the last hole.
+            const lp = c.kind === "longest_putt", par = (info(n) || {}).par;
+            if (lp) return `<div class="se-eyebrow">Hole ${n}${par ? " · Par " + par : ""} · Scores saved</div>
+                <h1 class="se-h1">Longest putt</h1><div class="se-gap"></div>
+                <div class="se-box se-holder"><div class="se-flag">${ICON.flag}</div>
+                  <div><div class="se-lbl">Current longest</div><div style="font-size:18px;font-weight:700">${holder || "No one yet"}</div></div></div>
+                <div class="se-gap"></div>
+                <div style="font-size:20px;font-weight:700">${holder ? "Did anyone in your group hole a longer putt?" : "Did anyone in your group hole a long putt?"}</div>
+                <div class="se-gap"></div>
+                <div class="se-stack">${btns}<button type="button" class="se-pill dark" data-act="ctp" data-cid="">${holder ? "No one longer" : "No one"}</button></div>
+                <div class="se-gap"></div>
+                <div class="se-copy">No measuring needed. The next group sees whoever you pick. Your manager settles any disagreement.</div>
+                ${queue.length ? statusLine() : ""}`;
             return `<div class="se-eyebrow">Hole ${n} · Par 3 · Scores saved</div>
                 <h1 class="se-h1">Closest to the pin</h1><div class="se-gap"></div>
                 <div class="se-box se-holder"><div class="se-flag">${ICON.flag}</div>
@@ -1350,7 +1363,8 @@
                 const saved = hole;
                 commitDraft(); flush();
                 const c = (card.ctp || {})[String(saved)];
-                if (h.par === 3 && c && !c.answered) { ctpHole = saved; }
+                // CA #829: only the holes the matrix plays CTP / Longest Putt on.
+                if (c && !c.answered) { ctpHole = saved; }
                 const need = needsMark(saved);
                 if (need.length) { pickupHole = saved; pickupKeys = need; pickupAns = {}; }
                 const order = holeOrder(), i = order.indexOf(saved);

@@ -220,7 +220,11 @@ for dirpath, _, files in os.walk(ROOT):
         if path.endswith(os.path.join("email_parser", "score_entry.py")):
             continue
         src = open(path, encoding="utf-8", errors="ignore").read()
-        if re.search(r"\bse_(hole_scores|players|rounds|teams|groups)\b", src):
+        # SQL use, not a mention: a comment that names se_teams is not a reader
+        # (Track B's tools/lsc_synthetic_weekend.py drives the se_ API and
+        # only describes the tables in its comments).
+        if re.search(r"(?i)\b(from|join|into|update|table)\s+se_(hole_scores|players|rounds|teams|groups|"
+                     r"ctp_claims|hio_claims|signoffs|audit|group_locks|card_checks|hole_marks)\b", src):
             readers.append(os.path.relpath(path, ROOT))
 check("only score_entry.py touches se_* tables", readers == [], readers)
 for f in ("season_payouts.py", "gg_match_play.py", "match_play.py", "flighting.py"):
@@ -471,6 +475,35 @@ se.claim_ctp(sg2, "sk2", 2, 104)
 check("a closer claim takes over", se.get_group_card(sg)["ctp"]["2"]["holder_customer_id"] == 104)
 se.rule_ctp(sr, 2, 102)
 check("a manager ruling settles it", se.get_group_card(sg)["ctp"]["2"]["holder_customer_id"] == 102)
+# CA #829: CTP holes come from the games matrix via the proximity rule
+from email_parser import database as _dbm
+_real_prox = _dbm.event_proximity_report
+check("no course card: every par 3 (holes 2 and 6) is asked, and the card says it is a CTP",
+      set(se.get_group_card(sg)["ctp"]) == {"2", "6"}
+      and all(v["kind"] == "ctp" for v in se.get_group_card(sg)["ctp"].values()),
+      se.get_group_card(sg)["ctp"])
+try:
+    _dbm.event_proximity_report = lambda eid, db_path=None: {
+        "notes": ["1 par-3(s) for 2 slot(s) — the remaining entry becomes a Longest Putt"],
+        "contests": [{"kind": "ctp", "hole": 2}, {"kind": "longest_putt", "hole": 9}]}
+    se._CTP_CACHE.clear()
+    c829 = se.get_group_card(sg)["ctp"]
+    check("the matrix's holes are asked: CTP on the par 3, Longest Putt on the last hole",
+          {k: v["kind"] for k, v in c829.items()} == {"2": "ctp", "9": "longest_putt"}, c829)
+    check("a Longest Putt answer is taken on hole 9 (a par 5)",
+          se.claim_ctp(sg, "sk", 9, 102, claimed_by=101).get("ok"))
+    check("...and read back as the holder", se.get_group_card(sg)["ctp"]["9"]["holder_customer_id"] == 102)
+    check("a hole with no contest is refused", "error" in se.claim_ctp(sg, "sk", 5, 102))
+    check("the event read carries the contest kind",
+          se.get_entered_scores(900, sr)["rounds"][0]["ctp"]["9"]["kind"] == "longest_putt")
+    _dbm.event_proximity_report = lambda eid, db_path=None: {
+        "notes": ["12 entries — the games matrix funds no CTP at this count"], "contests": []}
+    se._CTP_CACHE.clear()
+    check("the matrix funds no CTP (under 16 on a nine): nothing is asked, par 3 or not",
+          se.get_group_card(sg)["ctp"] == {} and "error" in se.claim_ctp(sg, "sk", 2, 102))
+finally:
+    _dbm.event_proximity_report = _real_prox
+    se._CTP_CACHE.clear()
 
 # HIO on hole 2
 se.write_scores(sg, "sk", 101, [{"op_id": "H101", "customer_id": 101, "hole": 2, "gross": 1},

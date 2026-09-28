@@ -75,10 +75,25 @@ on the page — green means bought in.
   "So are you saying I can tap a hole on that summary scorecard to change
   it? Because that's not obvious." A player flags; only the scorekeeper
   changes a score (from Check the card, tap a number).
-- **Closest to the pin.** Par 3s only, answered from the scorekeeper's phone:
-  a player (claim) or "No one closer" (never unseats a holder). The latest
-  claim is the holder the next group sees; `rule_ctp` is the manager's
-  ruling. No distances.
+- **Closest to the pin / Longest Putt (CA #829, v2.511.1).** Asked ONLY on
+  the holes the games matrix plays. `ctp_contests(conn, round_id)` reads the
+  one ratified rule the proximity markers print from
+  (`database.event_proximity_report`):
+  - the matrix at the event's player count decides how many CTPs are funded
+    (none below 16 on a nine);
+  - the SHORTEST par 3s take them;
+  - a slot with no par 3 left is a LONGEST PUTT on the last hole (the phone
+    asks "Did anyone in your group hole a long putt?").
+
+  Answers come from the scorekeeper's phone: a player (claim), or "No one
+  closer" / "No one longer", which never unseats a holder. The latest claim
+  is the holder the next group sees. `rule_ctp` is the manager's ruling. No
+  distances.
+
+  The card and the read carry each hole's `kind` (`ctp` | `longest_putt`).
+  A claim on any other hole is refused. With no course hole card, every par 3
+  of the round is asked (source `par3_no_card`). The report is cached for 60
+  seconds per event.
 - **Hole-in-one.** A raw 1 opens a claim (`se_hio_claims`); `eligible` is a
   membership term covering the round date (`hio_eligible`), and an
   ineligible player's 1 is a score only. Chain: scorekeeper confirms (lock
@@ -548,6 +563,12 @@ with `since_version`. Latencies are measured at the client.
 - Not reproduced here: production's host load (load average 89–113 on 48
   CPUs in the health digest) and the scheduler jobs running beside the
   requests. Track B's member board is a separate read and was not measured.
+
+## Manager runbook
+
+One page for chapter managers: seed, links and QR, take-over, when a phone
+dies, finishing and closing, the paper fallback, and what still needs
+Kerry. See `docs/claude/sop/score-entry-manager-runbook.md` (CA #829).
 
 ## Entry replay + load harness (CA #800/#801, 2026-09-28)
 
