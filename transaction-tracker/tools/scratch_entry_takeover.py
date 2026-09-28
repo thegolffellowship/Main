@@ -167,6 +167,24 @@ def run(db: Path, event_ids: list[int], undo: bool = False, out_dir: Path | None
     shadow_path = out_dir / f"takeover-shadow-diff-{stamp}.json"
     shadow_path.write_text(json.dumps(shadow, indent=2, default=str))
     report["shadow_diff_file"] = str(shadow_path)
+    # The parity in the report itself, so the runner's job read returns it
+    # (the file stays on the volume): totals plus every differing hole and
+    # every one-sided player, per event.
+    report["shadow_parity"] = {}
+    for eid, s in shadow.items():
+        par = s.get("parity") or {}
+        report["shadow_parity"][eid] = {
+            "mode_before": (s.get("publish_dry_run") or {}).get("mode"),
+            "summary": par.get("summary"),
+            "differing": [
+                {"customer_id": p.get("customer_id"), "name": p.get("name"),
+                 "entered_total": p.get("entered_total"), "gg_total": p.get("gg_total"),
+                 "holes_differ": p.get("holes_differ")}
+                for r in par.get("rounds") or [] for p in r.get("players") or []
+                if not p.get("match")],
+            "only_entered": [x for r in par.get("rounds") or [] for x in r.get("only_entered") or []],
+            "only_gg": [x for r in par.get("rounds") or [] for x in r.get("only_gg") or []],
+        }
 
     # 2. Park the GG rows inside the scratch file.
     dates = []

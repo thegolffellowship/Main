@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.513.5";
+window.TGF_VERSION = "2.513.6";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.513.6",
+    date: "2026-09-28",
+    title: "Rehearsal takeover report carries the parity itself",
+    changes: [
+      "tools/scratch_entry_takeover.py: the Railway rehearsal runner returns a tool's printed report, not files on the volume, so the shadow diff (the G-0 parity result) saved beside the scratch copy was unreadable through scoring-rehearsal:job. The report now also carries shadow_parity per event: the totals, every player whose entered card differs from Golf Genius with the differing holes, and the one-sided players. Guard test_scratch_takeover.py.",
+    ],
+  },
   {
     version: "2.513.5",
     date: "2026-09-28",

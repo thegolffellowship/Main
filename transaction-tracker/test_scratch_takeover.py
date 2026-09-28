@@ -114,6 +114,10 @@ check("shadow diff saved first: it was a shadow run",
       s["publish_dry_run"]["mode"] == "shadow", s["publish_dry_run"].get("mode_reason"))
 check("shadow diff carries the per-hole parity (holes 3 and 9 differ)",
       s["parity"]["summary"]["players_differing"] == 1 and s["parity"]["summary"]["holes_differing"] == 2, s["parity"])
+sp = rep["shadow_parity"][EV]
+check("the report itself carries the parity (the runner returns stdout, not the file)",
+      sp["summary"]["holes_differing"] == 2 and sp["differing"][0]["customer_id"] == 301
+      and len(sp["differing"][0]["holes_differ"]) == 2, sp)
 check("GG round parked with its holes",
       rep["per_event"][EV]["park"] == {"rounds_parked": 1, "holes_parked": 9,
                                        "handicap_rounds_pointing": 0}, rep["per_event"][EV])
