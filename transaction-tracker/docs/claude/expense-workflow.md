@@ -158,6 +158,93 @@ only ~39% of what Venmo actually paid, so neither side alone is
 complete). Kerry to ratify the resolution direction before any
 cross-source merge of winnings rows.
 
+## Dedupe on ingest (CA #785 item 6)
+
+Kerry APPROVED (rule 3b): *"a new expense row that matches an already
+approved or promoted row on amount and merchant within ±3 days lands as
+'ignored: duplicate of N', never pending and never promoted. A P2P
+receipt matching an open credit-payout row by customer and amount links
+to it (stamp_credit_refunded) instead of promoting."*
+
+**Hook:** `save_expense_transaction` calls `dedupe_expense_on_ingest(conn,
+data)` immediately before its two NEW-row inserts (email uid not yet in
+the table / the no-uid content path). It never runs for a re-save of the
+same uid, a Graph re-key adoption, or a `statement` line (identical
+statement twins are real charges). Every ingest type in
+`check_expense_inbox` (Chase alert, P2P receipt, vendor receipt) lands
+through this one function, so the dedupe runs before a row can be
+pending, approved or promoted. No schema change: the loser uses the
+existing `review_status='ignored'` and `notes`.
+
+**Candidates (shapes 1-3):** an expense row that is `approved`/`corrected`
+or already promoted (`acct_transaction_id` set), not `ignored`, not
+P2P-sourced; amount equal to the cent; `transaction_date` within ±3 days
+(`EXPENSE_DEDUPE_WINDOW_DAYS`). The OLDEST such row (lowest id) is the
+record; the new row lands `review_status='ignored'`, notes
+`ignored: duplicate of <id> (<shape>; CA #785 item 6)` followed by its
+own note. Ignored rows are never promoted (the backfill and every
+matcher select approved/pending/corrected only).
+1. **Receipt + card alert** (Vercel, Zoom, Make, Brevo, HubSpot, La
+   Quinta, Hyatt $9,534.95, Railway $20.00) and
+2. **Chase pending → posted alert** (Airbnb $2,761.30, Silverhorn
+   $476.30, Quarry $3,429.36): same money direction (expense/payout vs
+   received/income) and merchants that match by
+   `expense_merchants_match` — lowercase alpha tokens with noise words
+   (inc/corp/llc/com/us/…), digits and a leading processor prefix
+   (SQ */TST*/PAYPAL *) removed; equal keys, or one key contains the
+   other (4+ chars), or one token set holds the other, or the same first
+   word of 4+ chars. A quote and the final charge ($3,168 vs $3,429.36)
+   differ in amount and never dedupe.
+3. **Card payment alerted from both sides** (7/12 $14,301.75, 9/24
+   Sapphire $2,241.01): both rows `transaction_type='transfer'`, merchant
+   NOT required (one side names the card, the other the bank) — except
+   when both carry the same `account_last4` with different merchants,
+   which is two real transfers from one account. A transfer never
+   dedupes an expense.
+
+**P2P rows never dedupe on shapes 1-3** — two same-day same-amount
+payments to one person are real (the Bob Atkinson twin rule), and each
+P2P email is exactly one payment.
+
+**Shape 4 — P2P credit refund** (Bear Clarkson $59, Daniel South $26).
+Outbound P2P `payout` receipt with a resolved `customer_id`, memo not
+"winnings":
+- **4a** an active `credit-payout-<item>` (or `wd-credit-payout-`) ledger
+  row whose item's `customer_id` equals the receipt's, same amount to the
+  cent, dated within ±3 days, and backing no expense row yet (unique):
+  the receipt LINKS to it — `acct_transaction_id` = that row,
+  `matched_item_id` = the item, note appended — and is never promoted
+  beside it. `stamp_credit_refunded` is called for the item (a no-op when
+  payout_credit already closed it).
+- **4b** no ledger row yet, the credit is still OPEN: exactly one
+  credited/WD item of that `customer_id` whose `_item_credit_value`
+  equals the amount, and the memo reads credit/refund (or an open refund
+  watch names that item and amount): `stamp_credit_refunded` closes it
+  with NO ledger write, the receipt is claimed (`matched_item_id`) and
+  stays the ONE ledger row for the refund.
+- **The class fix:** `auto_match_refund_watches` (watch and watchless
+  passes) now calls `stamp_credit_refunded` instead of `payout_credit`
+  — the auto path used to write a `credit-payout-N` row beside the
+  promoted receipt. A receipt already claimed for one credit is never
+  matched to another, and `check_expense_inbox` skips the winnings
+  matcher for a claimed receipt.
+
+**The guard — approved but never promoted (CFO 9/27, HubSpot $42.64 on
+9/26).** `get_expense_unpromoted(hours=24)`: read-only, expense rows
+`approved`/`corrected` with amount > 0 whose ledger link is missing
+(`acct_transaction_id` NULL or pointing at no row), created more than
+`hours` ago, excluding inbound rows a balance-due match booked (the
+backfill's own exclusions). Default 24h because promotion of an
+ingest-approved row happens in the boot backfill
+(`_backfill_approved_expenses_to_ledger`), so a row older than a day
+with no ledger row has missed at least a day's deploys. Surfaces:
+the daily health digest finding `expense_unpromoted` (medium → COO action
+item `HEALTH: expense_unpromoted`; dials `RULES["expense_unpromoted"]` /
+`["expense_unpromoted_hours"]` in `email_parser/health.py`) and the
+bridge `scoring-expense-unpromoted[:<hours>]`. Promote a listed row with
+`scoring-expense-promote:<id>` or dismiss it. Guard test:
+`test_expense_dedupe.py`.
+
 ## Approval → Ledger Promotion
 `_sync_expense_ledger_entry(conn, exp)` — called by `update_expense_transaction()` whenever
 an expense is set to `review_status IN ('approved', 'corrected')`.

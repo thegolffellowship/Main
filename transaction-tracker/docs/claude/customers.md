@@ -1027,9 +1027,12 @@ Credit modal, which now PAYS as well as records:
   amount exact to the cent AND (same customer_id | same normalized
   handle | watch memo contained in the receipt note); receipts
   predating the watch or already backing a tgf_payout are excluded;
-  one receipt verifies exactly one watch — then records through the
-  SAME `payout_credit` path as a manual Record Refund (receipt-dated,
-  identical acct rows). The modal polls `GET /refund-watch` and flips
+  one receipt verifies exactly one watch — then stamps the credit
+  refunded with `stamp_credit_refunded` (receipt-dated, same item
+  stamp as a manual Record Refund) and writes NO ledger row: the
+  promoted receipt is the one ledger entry for the refund (CA #785
+  item 6 — `payout_credit`'s `credit-payout-N` row used to sit beside
+  it; see expense-workflow.md "Dedupe on ingest"). The modal polls `GET /refund-watch` and flips
   Sent → verified & recorded live; the 5-minute inbox cycle is the
   backstop; manual Record Refund always remains.
 - **Safety properties**: double-tap can't double-record

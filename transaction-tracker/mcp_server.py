@@ -1825,6 +1825,7 @@ def _scoring_dispatch_inner(url: str, extract: str):
       scoring-course-card:<course_id>[|<card json>[|apply]]  read a course's card as held, or validate/plan/load one from the printed card (tees, bands, rating/slope incl. front/back nines, par/SI/yardage), source course_card (CA #786 GO 3)
       scoring-alias-delete:<alias id>[|confirm]  remove ONE customer_aliases row; preview first, |confirm deletes and audits
       scoring-liabilities          payouts owed, credits held, LSC shirt fund by Cup year, HIO pot, LSC skins pot, tax reserve by month
+      scoring-expense-unpromoted[:<hours>]  read-only: expense rows APPROVED more than <hours> (default 24) ago with no ledger row (CA #785 item 6 guard, CFO 9/27)
       scoring-membership-gap[:apply]  the membership gap group: booked vs today's decomposition by price/type/contests; apply rebooks membership rows only
       scoring-import-orders:<from>|<to>[|apply][|membership-only]  date-range import of "New Order" emails from the mailbox (dry-run counts; apply runs in the background, no member email)
       scoring-import-status        progress of the running/last import
@@ -2849,6 +2850,19 @@ def _scoring_dispatch_inner(url: str, extract: str):
             _fn = (db.event_flights_report if _p[1] == "flights"
                    else db.event_proximity_report)
             return json.dumps(_fn(int(_p[0])), indent=2, default=str)
+        if cmd == "scoring-expense-unpromoted":
+            # scoring-expense-unpromoted[:<hours>] — the 'approved but
+            # never promoted' guard (CA #785 item 6, CFO 9/27: HubSpot
+            # $42.64 approved 9/26, no ledger row). Read-only; the same
+            # query backs the daily health digest's finding.
+            _a = arg.strip()
+            try:
+                _h = float(_a) if _a else 24.0
+            except ValueError:
+                return json.dumps({"error": "usage: scoring-expense-unpromoted[:<hours>]"})
+            if _h < 0:
+                return json.dumps({"error": "hours must be >= 0"})
+            return json.dumps(db.get_expense_unpromoted(_h), indent=2, default=str)
         if cmd == "scoring-liabilities":
             # What TGF is holding for someone else or has earmarked:
             # prize payouts owed, credits held, LSC shirt fund by Cup

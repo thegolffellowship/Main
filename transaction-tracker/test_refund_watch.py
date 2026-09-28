@@ -6,7 +6,7 @@ Asserts:
 1. create_refund_watch guards (credited/wd rows only, positive amount,
    one open watch per item — re-tap replaces).
 2. auto_match_refund_watches verifies on amount + customer_id, records
-   via payout_credit (item flips off 'credited'), one receipt per watch.
+   via stamp_credit_refunded (item flips off 'credited'; the receipt is the one ledger row, CA #785 item 6), one receipt per watch.
 3. Receipts predating the watch are ignored; receipts backing a
    tgf_payout are off the table; wrong-amount receipts don't match.
 4. Memo-based matching works when the receipt lacks customer_id.
@@ -98,7 +98,7 @@ def main():
     res = db.auto_match_refund_watches(db_path=tmp)
     check("wrong amount ignored", res["verified"] == 0)
 
-    # 2. The real receipt verifies + records via payout_credit
+    # 2. The real receipt verifies + records via stamp_credit_refunded
     with db._connect(tmp) as conn:
         add_expense(conn, 9103, 76.59, customer_id=24,
                     notes=f"You paid Recipient — {memo}",
