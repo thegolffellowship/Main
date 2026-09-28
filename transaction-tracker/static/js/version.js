@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.513.16";
+window.TGF_VERSION = "2.513.17";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.513.17",
+    date: "2026-09-28",
+    title: "Entered cards: handicap dots are derived, never read as zero",
+    changes: [
+      "Rehearsal step 3 on the copy: engine payouts on the ENTERED 3309 cards matched GG's skins to the cent, but paid Individual Net Flight 1 to Kerry Niester (the low GROSS). GG paid Fehlis and Marroquin, tied at net 34. The entered rows carried the right playing handicaps and nets. The cause: G-0 stores strokes_received = 0 on every entered hole as a placeholder ('the formula layer derives pops'), and the engine takes any stored dots as GIVEN, so net became gross. event_engine_state and the G2a sandbox seed now ignore dots on source='entry' cards, and the engine derives them from the playing handicap under the ruled allocation. Tested. Other readers of entered scoring_holes (scorecards, MVP) should be checked for the same class.",
+    ],
+  },
   {
     version: "2.513.16",
     date: "2026-09-28",

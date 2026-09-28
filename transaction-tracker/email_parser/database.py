@@ -24993,6 +24993,9 @@ def ls_seed_session_from_event(event_name: str, name: str | None = None,
                  1 if (cid and cid in net_buyers) else 0,
                  1 if (cid and cid in gross_buyers) else 0,
                  r["id"])).lastrowid
+            # An ENTERED card carries placeholder zeros for dots (G-0);
+            # seed them as unknown so the engine derives them.
+            entered = (r.get("source") or "") == "entry"
             for h in conn.execute(
                     """SELECT hole_number, strokes, strokes_received
                        FROM scoring_holes WHERE scoring_round_id = ?""",
@@ -25003,7 +25006,7 @@ def ls_seed_session_from_event(event_name: str, name: str | None = None,
                             strokes_received)
                        VALUES (?, ?, ?, ?, ?)""",
                     (sid, pid, h["hole_number"], h["strokes"],
-                     h["strokes_received"]))
+                     None if entered else h["strokes_received"]))
             seeded += 1
         conn.commit()
         return {"session_id": sid, "event": ev["item_name"], "holes": holes,
@@ -25854,13 +25857,19 @@ def event_engine_state(event_name: str, db_path=None) -> dict:
         for r in rounds:
             cid = r["customer_id"]
             scores, received = {}, {}
+            # ENTERED cards are gross only: G-0 stores strokes_received = 0
+            # as a placeholder ("the formula layer derives pops from the
+            # playing handicap"). Taken as given, those zeros make net ==
+            # gross — rehearsal 9/28, 3309 Flight 1 went to the low GROSS.
+            # So an entry card's dots are always DERIVED, never read.
+            entered = (r.get("source") or "") == "entry"
             for h in conn.execute(
                     "SELECT hole_number, strokes, strokes_received "
                     "FROM scoring_holes WHERE scoring_round_id = ?",
                     (r["id"],)).fetchall():
                 if h["strokes"] is not None:
                     scores[int(h["hole_number"])] = h["strokes"]
-                if h["strokes_received"] is not None:
+                if h["strokes_received"] is not None and not entered:
                     received[int(h["hole_number"])] = h["strokes_received"]
             players.append({
                 "key": str(r["id"]), "customer_id": cid,

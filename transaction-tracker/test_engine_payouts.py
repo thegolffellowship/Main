@@ -176,6 +176,33 @@ check("a game with a tee-less card is provisional, and names her",
       _g["status"] in ("provisional", "no_result") and _ep["tee_less"] == ["WADE, Mary"],
       (_g["status"], _ep.get("tee_less")))
 
+print("\n== an ENTERED card's placeholder zero dots are derived, never read ==")
+with db._connect(_tmp) as _c:
+    _cols = {r[1] for r in _c.execute("PRAGMA table_info(course_tees)")}
+    _cid = 900001
+    _c.execute("INSERT INTO course_tees (course_id, tee_name) VALUES (?, 'White')", (_cid,))
+    _tee = _c.execute("SELECT max(tee_id) FROM course_tees").fetchone()[0]
+    for _h in range(1, 10):
+        _c.execute("INSERT INTO course_tee_holes (tee_id, hole_number, par, stroke_index) "
+                   "VALUES (?, ?, 4, ?)", (_tee, _h, _h))
+    _eid2 = _c.execute("INSERT INTO events (item_name, event_date) VALUES "
+                       "('s9.98 Entered', '2026-10-13')").lastrowid
+    _r = _c.execute("INSERT INTO scoring_rounds (player_name, event_id, holes_played, "
+                    "playing_handicap, tee_id, source) VALUES ('C D', ?, 9, 5, ?, 'entry')",
+                    (_eid2, _tee)).lastrowid
+    for _h in range(1, 10):
+        _c.execute("INSERT INTO scoring_holes (scoring_round_id, hole_number, strokes, "
+                   "strokes_received) VALUES (?, ?, 5, 0)", (_r, _h))
+    _c.commit()
+_st2 = db.event_engine_state("s9.98 Entered", db_path=_tmp)
+check("entered card: the stored zeros are NOT taken as given dots",
+      _st2.get("players") and _st2["players"][0]["strokes_received"] == {},
+      _st2.get("error") or _st2["players"][0]["strokes_received"])
+_cards = ls.build_cards(_st2, db.get_scoring_formulas(_tmp))
+check("...so the engine derives PH 5 over the nine (net = gross - 5)",
+      _cards[0]["allocation_source"] == "derived" and _cards[0]["net"] == 40,
+      (_cards[0]["allocation_source"], _cards[0]["net"]))
+
 print("\n" + "=" * 60)
 if FAILURES:
     print(f"{len(FAILURES)} FAILED: {FAILURES}")
