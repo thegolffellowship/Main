@@ -2711,3 +2711,61 @@ the wait is the payload and the client render, not the queries, and the
 next step is the page asking for the rows it needs (`?event_id=` per
 open event, or a `since=` window) — that is events.html work, to be
 coordinated with the flighting lane (#603), not a server fix.
+
+## The EVENT-DAY EMAIL — each player's pairing, from the Tracker (CA #829, built 2026-09-28, NOT approved)
+
+Golf Genius mails every player their pairing on event day and goes away
+after 10/10; from 10/13 the Tracker sends it. `email_parser/event_day_email.py`.
+**Kerry must OK the wording before any member send (rule 3b) — until he
+does, the member send refuses.**
+
+- **One message per roster player** (`_event_roster_rows`, deduped by
+  customer_id): the start as the Starter Sheet states it (`start_line`
+  from `get_event_print_pack` — "Hole 3A | 8:00 AM" on a shotgun,
+  "8:10 AM | Hole 1" on tee times; slot labels are the ones
+  `_pairing_time_slots` dealt), the group-mates (blinds are not people and
+  are not listed), the cart partner when the seat has one (1&2 / 3&4), the
+  course and date, the chapter manager's name and phone, and a games block.
+  Name and address through `resolve_player_name` / `resolve_player_email`.
+- **Games** come from `_event_game_buyers` (the Games tab's buyer rule:
+  parent + child add-ons, credited/refunded/transferred/RSVP out, a WD
+  whose bundle was credited back out) for each bundle the event OFFERS
+  (`get_event_bundle_offers`), named from the bundle catalog: "NET games
+  (Individual Net + MVP): you're in / not bought". **Left out, never
+  guessed**, on a day-games championship, a package event, an event
+  offering no bundle, and for an RSVP-only player. Included games (Team
+  Net, CTP, HIO) are not listed.
+- **Wording is DATA**: system template `Event Day — Your Pairing` in
+  `message_templates` (seeded by name in `init_db`, editable in the UI).
+  Variables: `{first_name} {player_name} {event_name} {course}
+  {event_date} {start_line} {group_label} {group_block} {cart_block}
+  {games_block} {manager_name} {manager_phone}`. Rendered with
+  `render_msg_template` (values HTML-escaped) + `normalize_email_html`;
+  plain text is derived from the HTML.
+- **HELD at the boundary** (handoff 2026-09-08 §7, "protect the class"):
+  no customer_id, no email, pairings not saved, not in a group on the
+  sheet, ANY variable the template uses that is empty (only `{cart_block}`
+  and `{games_block}` may be — each is a whole paragraph or nothing; a
+  player seated alone holds on `{group_block}`), any `{tag}` left after
+  rendering, any `[BRACKETED BLANK]`. A held message is reported with its
+  reason and never reaches Graph. The Message Players composer refuses
+  this template (its `{…_block}` tags are outside `KNOWN_VARS`).
+- **Preview** `send_event_day_preview(event_id, to)`: ONE mail — counts,
+  template hash + approval state, the first three rendered messages, the
+  held list — to STAFF only (`recap_mail.staff_only`:
+  `@thegolffellowship.com` or `recap_draft_allow`), default kerry@. Any
+  other address refuses the whole send.
+- **Member send** `send_event_day_emails(event_id, confirm=True)`: refuses
+  unless app setting `event_day_email_approved` equals the CURRENT
+  template hash (sha256 of subject + body, 16 hex; the dry build reports
+  it) — so editing the wording voids Kerry's stamp — and `confirm=True`.
+  Each message claims its `event_day_email_sends` row (UNIQUE event_id +
+  customer_id) BEFORE the Graph call; a second run skips, a `failed` row
+  may be retried. Logged to `message_log`. **No bridge sends to members,
+  and nothing schedules it yet.**
+- **Bridges**: `scoring-event-day-email:<event_id>` (dry build: counts,
+  ready list, held with reasons, one sample text, hash, approval);
+  `scoring-event-day-email:<event_id>|preview[|<staff addr>]`.
+- **To approve**: Kerry reads a preview, then
+  `scoring-setting-set:event_day_email_approved|<template_hash>`.
+- Test: `test_event_day_email.py` (Graph mocked).

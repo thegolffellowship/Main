@@ -555,3 +555,14 @@ every integrity check and restore drill paid for it.
   databases keep the table in main.
 - Health: `report["db"]["archive"]` (`gg_archive.status`) and the digest's
   **GG ARCHIVE FILE** line. Guard: `test_gg_archive.py`.
+
+## `event_day_email_sends` — the event-day email's never-twice record (CA #829, 2026-09-28)
+
+Created lazily by `event_day_email.ensure_event_day_tables` (`_once_per_db`,
+the same convention the se_* tables use; the repo has no migration-file
+directory yet). One row per event + player: `id`, `event_id` → events,
+`customer_id` → customers (NOT NULL), `email`, `template_hash` (the
+approved wording it went out under), `status` (`sending` / `sent` /
+`failed`), `sent_at`; UNIQUE (`event_id`, `customer_id`). The claim is
+`INSERT … ON CONFLICT DO UPDATE … WHERE status = 'failed' RETURNING id`,
+before the Graph call. See events.md "The EVENT-DAY EMAIL".

@@ -4576,6 +4576,34 @@ def init_db(db_path: str | Path | None = None) -> None:
                 None,
             ),
             (
+                # CA #829: the EVENT-DAY EMAIL that replaces Golf Genius's
+                # pairing email after 10/10. Rendered per player by
+                # email_parser/event_day_email.py, which fills the
+                # {…_block} variables (built there from the saved sheet)
+                # and HOLDS any message with a blank or a leftover {tag}.
+                # The wording is Kerry's to edit; the member send refuses
+                # until app setting `event_day_email_approved` carries the
+                # hash of the wording he approved. The Message Players
+                # composer refuses it (its {…_block} tags are outside
+                # KNOWN_VARS) — this template only sends from that module.
+                "Event Day — Your Pairing", "email",
+                "{event_name} — your group and start",
+                "<p>Hi {first_name},</p>"
+                "<p>Here is your pairing for <strong>{event_name}</strong> at "
+                "<strong>{course}</strong> on <strong>{event_date}</strong>.</p>"
+                "<p><strong>Your start:</strong> {start_line}</p>"
+                "<p><strong>Your group:</strong></p>"
+                "{group_block}"
+                "{cart_block}"
+                "{games_block}"
+                "<p>If your plans have changed and you cannot play, reply to this "
+                "email or text {manager_name} at {manager_phone} as soon as you "
+                "can so we can adjust the groups.</p>"
+                "<p>See you out there,<br>{manager_name}<br>"
+                "The Golf Fellowship</p>",
+                None,
+            ),
+            (
                 "Post-Event Results", "email",
                 "Results — {event_name}",
                 "<p>Hi {player_name},</p>"

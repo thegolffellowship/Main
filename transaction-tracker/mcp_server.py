@@ -1806,6 +1806,7 @@ def _scoring_dispatch_inner(url: str, extract: str):
       scoring-tee-nines-store:<full_tee_id>|<fr>,<fs>|<br>,<bs>[|apply]  front/back rating rows (each with its slope) on an 18-hole tee set (refuses a pair that does not sum to the 18)
       scoring-crdb-seed:<course_id>[|<json>][|apply]  write a course's USGA CRDB tee sets (gender, par, bogey, total/front/back, optional yardages) onto the record; JSON row = [name, gender, r18, s18, bogey, [fr, fs], [br, bs], [y18, yf, yb]]
       scoring-recap-draft-email:<file>|<SECTION>[|to=..][|cc=..][|docx=<file>][|force][|apply]  mail one chapter's recap draft (docs/claude/recaps/<file>) to its sender as paste-ready HTML + the Word file; staff addresses only, once per file+section+recipients, dry run by default
+      scoring-event-day-email:<event_id>[|preview[|<staff addr>]]  the EVENT-DAY EMAIL (CA #829): dry build of every roster player's pairing message (ready / held with reasons, template hash, approval state, one sample); |preview mails ONE combined preview to STAFF only (default kerry@). There is NO member-send bridge
       scoring-hcp-cards:<event>[|apply]  email the TGF handicap card to every player on the event's roster who has one (dry run names who would get one; apply sends and logs to message_log)
       scoring-tee-bands:<course_id>   which four sets TGF plays (current designation + the yardage-standards proposal; read-only)
       scoring-tee-bands-set:<tee_id>|<band[,band]|hide>[|apply]  designate a tee set (<50 / 50-64 / 65+ / Forward) or hide it; one set per band per course
@@ -5846,6 +5847,25 @@ def _scoring_dispatch_inner(url: str, extract: str):
                                     dry_run="apply" not in _flags,
                                     force="force" in _flags)
             return json.dumps(_res, indent=2, default=str)
+        if cmd == "scoring-event-day-email":
+            # "<event_id>[|preview[|<staff addr>]]" — CA #829. The dry build
+            # sends nothing; |preview mails one combined preview to staff
+            # (@thegolffellowship.com or recap_draft_allow) and refuses any
+            # other address. The MEMBER send is deliberately not bridged:
+            # it needs Kerry's approval stamp + confirm, in code.
+            _p = [x.strip() for x in (arg or "").split("|")]
+            if not _p[0].isdigit():
+                return json.dumps({"error": "<event_id>[|preview[|<staff addr>]]"})
+            from email_parser import event_day_email as _ede
+            if len(_p) > 1 and _p[1].lower() == "preview":
+                db.log_agent_action("mcp-claude", "scoring-event-day-email", arg)
+                return json.dumps(_ede.send_event_day_preview(
+                    int(_p[0]), to_address=(_p[2] if len(_p) > 2 and _p[2] else None)),
+                    indent=2, default=str)
+            if len(_p) > 1 and _p[1]:
+                return json.dumps({"error": f"unknown option {_p[1]!r}; only |preview"})
+            return json.dumps(_ede.summarize(_ede.build_event_day_emails(int(_p[0]))),
+                              indent=2, default=str)
         if cmd == "scoring-hcp-cards":
             # "<event>[|apply]" — the Handicaps page's By-Event card send as
             # a bridge (Kerry 2026-09-23), so the closeout can run it.
