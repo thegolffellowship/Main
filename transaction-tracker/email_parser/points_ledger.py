@@ -118,10 +118,14 @@ def _normalise_rounds(tables: list) -> list[dict]:
 
 def capture_race_ledger(ref: str, start: int = 0,
                         effective_date: str | None = None,
-                        time_budget: float = 35.0) -> dict:
+                        time_budget: float = 20.0) -> dict:
     """One chunk of one race's ledger. Call again with `start=next` until
     `next` is None. The standings table is returned on every chunk (cheap,
     and lets the assembler check the population did not move mid-capture).
+
+    Budget 20 s, not 35: the budget is only checked BETWEEN players, so a
+    chunk can overrun by one slow GG fetch. At 35 s two Austin chunks ran
+    past the gateway and were lost (2026-09-28); 20 s leaves the headroom.
     """
     from golf_genius_sync import (fetch_season_points_race,
                                   fetch_points_race_member_detail)
