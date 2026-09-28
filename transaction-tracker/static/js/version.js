@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.509.1";
+window.TGF_VERSION = "2.510.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.510.0",
+    date: "2026-09-28",
+    changes: [
+      "ONE MONEY EVENT, ONE ROW: DEDUPE ON INGEST (Kerry, CA #785 item 6, CA Queue #17). The expense inbox kept booking one charge two or three times, and the daily review kept reversing them by hand. save_expense_transaction now runs dedupe_expense_on_ingest before a new row is inserted. A row that matches an approved or promoted row on amount (to the cent), merchant (normalised) and date (plus or minus 3 days) is saved as ignored, with the note \u2018ignored: duplicate of <id>\u2019, and is never pending and never promoted. The first row is the record. It covers the four known shapes: (1) a vendor receipt plus the card alert for the same charge; (2) a pending alert then the posted alert; (3) a card payment alerted from both the checking and the card side (both transfers, merchant not required); (4) a Venmo/P2P receipt for an in-app credit refund, matched by customer_id and amount, which links to the credit-payout row or closes the open credit through stamp_credit_refunded instead of promoting a second row. A quote and a final charge with different amounts never dedupe; two same-day payments to one person are real and never dedupe; statement rows are exempt.",
+      "Behaviour change for the CFO lane: an auto-verified refund watch now closes the credit with stamp_credit_refunded instead of payout_credit. The promoted Venmo receipt is therefore the single ledger row for that refund, carrying the receipt\u2019s own category, and there is no separate credit-payout row categorised \u2018refund\u2019.",
+      "Guard for the new failure shape (HubSpot $42.64, 9/26): a row APPROVED at ingest but never PROMOTED. get_expense_unpromoted lists approved rows with no ledger row older than 24 hours. It is a medium finding in the daily health digest (COO item \u2018HEALTH: expense_unpromoted\u2019) and a read-only bridge, scoring-expense-unpromoted[:<hours>]. It acts on new rows only; past duplicates are not rewritten. Guard test_expense_dedupe.py (64 checks); the refund-watch, ledger-reversal, inbound-memo, duplicate-detective and health tests pass.",
+    ],
+  },
   {
     version: "2.509.1",
     date: "2026-09-28",
