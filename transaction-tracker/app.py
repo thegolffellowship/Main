@@ -941,8 +941,12 @@ def check_expense_inbox(force=False, days_back=None):
                     # PayPal, and Cash App)
                     if saved and saved.get("transaction_type") == "payout":
                         try:
-                            from email_parser.database import auto_match_venmo_payouts_to_tgf
-                            auto_match_venmo_payouts_to_tgf([saved["id"]])
+                            # A receipt the ingest dedupe already claimed
+                            # for a credit refund (matched_item_id) is not
+                            # winnings (CA #785 item 6).
+                            if not saved.get("matched_item_id"):
+                                from email_parser.database import auto_match_venmo_payouts_to_tgf
+                                auto_match_venmo_payouts_to_tgf([saved["id"]])
                         except Exception:
                             logger.warning("payout auto-match failed for exp %s",
                                            saved.get("id"), exc_info=True)

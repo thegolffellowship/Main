@@ -35848,6 +35848,16 @@ def mark_referral_fee_paid(fee_id: int, method: str = "Venmo",
     return {"ok": n > 0, "updated": n}
 
 
+def _claim_receipt_for_credit(expense_id: int, item_id: int, db_path) -> None:
+    """Point a P2P receipt at the credit item it refunded (matched_item_id)
+    so no later pass claims it for a second credit."""
+    with _connect(db_path) as conn:
+        conn.execute(
+            "UPDATE expense_transactions SET matched_item_id = ? "
+            "WHERE id = ? AND matched_item_id IS NULL", (item_id, expense_id))
+        conn.commit()
+
+
 def auto_match_refund_watches(expense_ids: list[int] | None= None,
                               db_path: str | Path | None = None) -> dict:
     """Verify open refund watches against outbound P2P payment receipts
@@ -35860,11 +35870,16 @@ def auto_match_refund_watches(expense_ids: list[int] | None= None,
     (same customer_id | same normalized handle | the watch memo appears
     in the receipt note). One receipt verifies exactly one watch.
 
-    On match: payout_credit(item, method, refund_date=receipt date,
-    note='Auto-verified …') — identical books to a manual Record Refund.
+    On match: stamp_credit_refunded(item, method, refund_date=receipt
+    date, note='Auto-verified …') — the item flips exactly as a manual
+    Record Refund, but NO ledger row is written: the receipt itself is
+    promoted as the one ledger entry for the refund (CA #785 item 6;
+    before that ruling this called payout_credit, whose 'credit-payout-N' row
+    sat beside the promoted receipt — Bear Clarkson $59, Daniel South
+    $26). The receipt is claimed (matched_item_id) for that item.
     If the item was already paid out manually in the meantime, the watch
-    is marked verified with recorded=0 (no double recording:
-    payout_credit refuses non-credited rows). Idempotent.
+    is marked verified with recorded=0 (no double recording: the stamp
+    refuses non-credited rows). Idempotent.
     """
     summary = {"verified": 0, "recorded": 0, "unmatched_watches": 0,
                "errors": 0, "matches": []}
@@ -35918,6 +35933,8 @@ def auto_match_refund_watches(expense_ids: list[int] | None= None,
                 continue
             if (exp.get("created_at") or "") < (w.get("initiated_at") or ""):
                 continue  # receipt predates the watch — not this payment
+            if exp.get("matched_item_id") and exp["matched_item_id"] != w["item_id"]:
+                continue  # already claimed for another credit (CA #785 item 6)
             same_cust = bool(w.get("customer_id")) and \
                 exp.get("customer_id") == w["customer_id"]
             same_handle = bool(norm_handle(w.get("handle"))) and \
@@ -35934,7 +35951,11 @@ def auto_match_refund_watches(expense_ids: list[int] | None= None,
         used.add(cand["id"])
         recorded = 0
         try:
-            res = payout_credit(
+            # The receipt IS the ledger row (CA #785 item 6): stamp the
+            # credit refunded without payout_credit's second
+            # 'credit-payout-N' ledger entry beside the promoted receipt
+            # (Bear Clarkson $59, Daniel South $26).
+            res = stamp_credit_refunded(
                 w["item_id"], method=w["method"],
                 note=(f"Auto-verified via {w['method']} receipt "
                       f"(expense #{cand['id']})"),
@@ -35942,6 +35963,8 @@ def auto_match_refund_watches(expense_ids: list[int] | None= None,
                 db_path=db_path,
             )
             recorded = 1 if res.get("ok") else 0
+            if recorded:
+                _claim_receipt_for_credit(cand["id"], w["item_id"], db_path)
             if not recorded:
                 logger.info("Refund watch %s verified but not recorded: %s",
                             w["id"], res.get("error"))
@@ -35981,6 +36004,8 @@ def auto_match_refund_watches(expense_ids: list[int] | None= None,
         for exp in expenses:
             if exp["id"] in used or exp["id"] in payout_backed:
                 continue
+            if exp.get("matched_item_id"):
+                continue  # already claimed for a credit (CA #785 item 6)
             notes = (exp.get("notes") or "").lower()
             if not any(k in notes for k in ("credit", "refund")):
                 continue
@@ -36003,13 +36028,16 @@ def auto_match_refund_watches(expense_ids: list[int] | None= None,
                 continue
             it = cands[0]
             try:
-                res = payout_credit(
+                # stamp, not payout_credit: the receipt is the ledger
+                # row (CA #785 item 6)
+                res = stamp_credit_refunded(
                     it["id"], method="Venmo",
                     note=(f"Auto-verified via Venmo receipt "
                           f"(expense #{exp['id']}, no watch)"),
                     refund_date=(exp.get("transaction_date") or "")[:10],
                     db_path=db_path)
                 if res.get("ok"):
+                    _claim_receipt_for_credit(exp["id"], it["id"], db_path)
                     used.add(exp["id"])
                     open_credits.remove(it)
                     summary["watchless_recorded"] += 1
@@ -51893,6 +51921,323 @@ def _expense_platform_txn_id(raw_extract) -> str | None:
         return None
 
 
+# ── Dedupe on ingest (CA #785 item 6, rule 3b, Kerry APPROVED) ──────────
+# One money event used to arrive as 2-3 expense rows (CA Queue #17): a
+# vendor receipt + the Chase alert for the same charge; a Chase "pending"
+# then "posted" alert; a card payment alerted from both the checking and
+# the card side; a P2P credit-refund receipt booked next to the in-app
+# credit-payout row. The first row already approved/promoted is the
+# record; the newcomer lands 'ignored' and never reaches the ledger.
+EXPENSE_DEDUPE_WINDOW_DAYS = 3
+_P2P_EXPENSE_SOURCES = ("venmo", "paypal", "cashapp", "zelle")
+# Words that carry no identity in a merchant string ("Railway Corp" vs
+# "RAILWAY", "ZOOM.US 888-799-9666" vs "Zoom Video Communications").
+_MERCHANT_NOISE_TOKENS = frozenset({
+    "inc", "corp", "corporation", "co", "company", "llc", "ltd", "limited",
+    "com", "net", "org", "io", "www", "http", "https", "the", "us", "usa",
+    "pos", "purchase", "debit", "online",
+})
+# Card-processor prefixes that ride in front of the real merchant on a
+# Chase alert ("SQ *SILVERHORN", "TST* ...", "PAYPAL *HUBSPOT").
+_MERCHANT_PREFIX_TOKENS = frozenset({"sq", "tst", "pp", "paypal", "sp", "py"})
+
+
+def _expense_merchant_tokens(name) -> list[str]:
+    """Lowercase alphabetic tokens of a merchant string, noise words,
+    digits, punctuation and a leading processor prefix removed."""
+    toks = re.findall(r"[a-z]+", str(name or "").lower())
+    while len(toks) > 1 and toks[0] in _MERCHANT_PREFIX_TOKENS:
+        toks = toks[1:]
+    return [t for t in toks if t not in _MERCHANT_NOISE_TOKENS]
+
+
+def expense_merchants_match(a, b) -> bool:
+    """Do two merchant strings name the same vendor? Conservative: the
+    normalized keys are equal, or one contains the other (4+ chars), or
+    one token set holds the other, or the first significant token is the
+    same word of 4+ chars. Callers also require the exact amount and a
+    ±3-day window, so this only has to separate vendors, not charges."""
+    ta, tb = _expense_merchant_tokens(a), _expense_merchant_tokens(b)
+    if not ta or not tb:
+        return False
+    ka, kb = "".join(ta), "".join(tb)
+    if ka == kb:
+        return True
+    if min(len(ka), len(kb)) >= 4 and (ka in kb or kb in ka):
+        return True
+    sa, sb = set(ta), set(tb)
+    if (sa <= sb or sb <= sa) and len("".join(sorted(sa & sb))) >= 4:
+        return True
+    return ta[0] == tb[0] and len(ta[0]) >= 4
+
+
+def _expense_date(value):
+    try:
+        return datetime.strptime(str(value or "")[:10], "%Y-%m-%d").date()
+    except ValueError:
+        return None
+
+
+def _expense_direction(txn_type) -> str:
+    t = (txn_type or "expense").lower()
+    if t in ("received", "income"):
+        return "in"
+    if t == "transfer":
+        return "transfer"
+    return "out"
+
+
+def dedupe_expense_on_ingest(conn, data: dict) -> dict | None:
+    """Decide, BEFORE a new expense row is inserted, whether it is a second
+    copy of a money event the books already hold (CA #785 item 6, rule 3b,
+    Kerry APPROVED: "a new expense row that matches an already approved or
+    promoted row on amount and merchant within ±3 days lands as 'ignored:
+    duplicate of N', never pending and never promoted. A P2P receipt
+    matching an open credit-payout row by customer and amount links to it
+    (stamp_credit_refunded) instead of promoting.").
+
+    Called from save_expense_transaction at its new-row inserts only (not
+    for a re-save of the same email_uid, a Graph re-key adoption, or a
+    statement line). Read-only; returns None or a decision:
+
+      {"action": "duplicate", "of_id": N, "shape": ...}
+          shapes 1-3. Candidate = an expense row approved/corrected or
+          already promoted (acct_transaction_id set), not ignored, not
+          P2P-sourced, amount equal to the cent, transaction_date within
+          ±3 days. Shape 1 (receipt + card alert) and shape 2 (pending +
+          posted alert): same money direction, merchants match by
+          expense_merchants_match. Shape 3 (card payment alerted from
+          both sides): both rows transaction_type 'transfer', merchant
+          not required (one side names the card, the other the bank) —
+          unless both carry the same account_last4 with different
+          merchants (two real payments from one account). The oldest
+          candidate (lowest id) is the record.
+      {"action": "credit_payout_link", "acct_id": A, "item_id": I}
+          shape 4, an in-app credit payout (payout_credit's
+          'credit-payout-<item>' ledger row) is already booked: the P2P
+          payout receipt for the same customer_id and exact amount within
+          ±3 days, not yet backing any other expense row, links to that
+          ledger row instead of being promoted beside it.
+      {"action": "credit_stamp", "item_id": I}
+          shape 4, the credit is still OPEN (credited/wd): exactly one
+          such item for the receipt's customer_id at exactly the credit
+          value, and the memo reads as a credit/refund (or an open refund
+          watch names that item and amount). The item is closed with
+          stamp_credit_refunded (no ledger write), so the receipt is the
+          one ledger row instead of payout_credit adding a second.
+
+    P2P rows never dedupe on shapes 1-3: two same-day same-amount payments
+    to one person are real (the Bob Atkinson twin-payment rule), and each
+    P2P email is one payment.
+    """
+    if (data.get("source_type") or "") == "statement":
+        return None
+    if (data.get("review_status") or "pending") == "ignored":
+        return None
+    try:
+        amount = round(float(data.get("amount")), 2)
+    except (TypeError, ValueError):
+        return None
+    if amount <= 0:
+        return None
+    new_date = _expense_date(data.get("transaction_date"))
+    if new_date is None:
+        return None
+    source = (data.get("source_type") or "").lower()
+    window = EXPENSE_DEDUPE_WINDOW_DAYS
+
+    if source in _P2P_EXPENSE_SOURCES:
+        return _dedupe_p2p_credit_refund(conn, data, amount, new_date)
+
+    new_dir = _expense_direction(data.get("transaction_type"))
+    new_last4 = (data.get("account_last4") or "").strip()
+    placeholders = ",".join("?" * len(_P2P_EXPENSE_SOURCES))
+    cands = conn.execute(
+        f"""SELECT id, source_type, merchant, amount, transaction_date,
+                   transaction_type, account_last4
+              FROM expense_transactions
+             WHERE amount BETWEEN ? AND ?
+               AND review_status != 'ignored'
+               AND (review_status IN ('approved', 'corrected')
+                    OR acct_transaction_id IS NOT NULL)
+               AND lower(COALESCE(source_type, '')) NOT IN ({placeholders})
+             ORDER BY id""",
+        (amount - 0.005, amount + 0.005, *_P2P_EXPENSE_SOURCES),
+    ).fetchall()
+    for c in cands:
+        c_date = _expense_date(c["transaction_date"])
+        if c_date is None or abs((c_date - new_date).days) > window:
+            continue
+        c_dir = _expense_direction(c["transaction_type"])
+        if new_dir == "transfer" and c_dir == "transfer":
+            c_last4 = (c["account_last4"] or "").strip()
+            if (new_last4 and c_last4 and new_last4 == c_last4
+                    and not expense_merchants_match(data.get("merchant"), c["merchant"])):
+                continue
+            return {"action": "duplicate", "of_id": c["id"],
+                    "shape": "card payment alerted from both sides"}
+        if new_dir != c_dir or new_dir == "transfer":
+            continue
+        if not expense_merchants_match(data.get("merchant"), c["merchant"]):
+            continue
+        same_src = (c["source_type"] or "") == source
+        return {"action": "duplicate", "of_id": c["id"],
+                "shape": ("pending + posted alert" if same_src
+                          else "receipt + card alert")}
+    return None
+
+
+def _dedupe_p2p_credit_refund(conn, data: dict, amount: float,
+                              new_date) -> dict | None:
+    """Shape 4 of dedupe_expense_on_ingest (see there)."""
+    if (data.get("transaction_type") or "").lower() != "payout":
+        return None
+    cid = data.get("customer_id")
+    if not cid:
+        return None
+    memo = (data.get("notes") or "").lower()
+    if "winnings" in memo:
+        return None   # winnings receipts belong to the payouts matcher
+    rows = conn.execute(
+        """SELECT a.id, a.date, a.amount, a.item_id,
+                  COALESCE(i.customer_id, a.customer_id) AS cid
+             FROM acct_transactions a
+             LEFT JOIN items i ON i.id = a.item_id
+            WHERE (lower(COALESCE(a.source_ref, '')) LIKE 'credit-payout-%'
+                   OR lower(COALESCE(a.source_ref, '')) LIKE 'wd-credit-payout-%')
+              AND COALESCE(a.status, 'active') = 'active'
+              AND abs(a.amount) BETWEEN ? AND ?
+              AND NOT EXISTS (SELECT 1 FROM expense_transactions e
+                               WHERE e.acct_transaction_id = a.id)""",
+        (amount - 0.005, amount + 0.005),
+    ).fetchall()
+    links = []
+    for r in rows:
+        if r["cid"] != cid:
+            continue
+        d = _expense_date(r["date"])
+        if d is None or abs((d - new_date).days) > EXPENSE_DEDUPE_WINDOW_DAYS:
+            continue
+        links.append(r)
+    if len(links) == 1:
+        return {"action": "credit_payout_link", "acct_id": links[0]["id"],
+                "item_id": links[0]["item_id"]}
+    if links:
+        return None   # ambiguous — leave it to review
+    watched = set()
+    try:
+        _ensure_refund_watch_table(conn)
+        for w in conn.execute(
+                "SELECT item_id, amount FROM refund_watches "
+                "WHERE verified_at IS NULL AND customer_id = ?", (cid,)):
+            if abs(round(float(w["amount"] or 0), 2) - amount) <= 0.005:
+                watched.add(w["item_id"])
+    except sqlite3.Error:
+        pass
+    says_credit = "credit" in memo or "refund" in memo
+    open_items = [dict(r) for r in conn.execute(
+        "SELECT * FROM items WHERE customer_id = ? "
+        "AND lower(COALESCE(transaction_status, '')) IN ('credited', 'wd')",
+        (cid,)).fetchall()]
+    hits = [it for it in open_items
+            if abs(_item_credit_value(conn, it) - amount) <= 0.005
+            and (says_credit or it["id"] in watched)]
+    if len(hits) == 1:
+        return {"action": "credit_stamp", "item_id": hits[0]["id"]}
+    return None
+
+
+def _ingest_dedupe_prepare(data: dict, decision: dict | None) -> dict:
+    """The row a duplicate lands as: 'ignored', note 'ignored: duplicate
+    of N' first (CA #785 item 6)."""
+    if not decision or decision["action"] != "duplicate":
+        return data
+    note = (f"ignored: duplicate of {decision['of_id']} "
+            f"({decision['shape']}; CA #785 item 6)")
+    if data.get("notes"):
+        note += f" · {data['notes']}"
+    return {**data, "review_status": "ignored", "notes": note}
+
+
+def _ingest_dedupe_link(conn, expense_id: int, decision: dict | None) -> None:
+    """Post-insert half for shape 4 (inside the insert's connection)."""
+    if not decision or not expense_id:
+        return
+    if decision["action"] == "credit_payout_link":
+        conn.execute(
+            "UPDATE expense_transactions SET acct_transaction_id = ?, "
+            "matched_item_id = ?, "
+            "notes = COALESCE(notes || ' · ', '') || ? WHERE id = ?",
+            (decision["acct_id"], decision["item_id"],
+             f"linked to credit-payout ledger row {decision['acct_id']} "
+             f"(item {decision['item_id']}), not promoted — CA #785 item 6",
+             expense_id))
+    elif decision["action"] == "credit_stamp":
+        conn.execute(
+            "UPDATE expense_transactions SET matched_item_id = ?, "
+            "notes = COALESCE(notes || ' · ', '') || ? WHERE id = ?",
+            (decision["item_id"],
+             f"credit refund for item {decision['item_id']} — stamped "
+             f"refunded; this receipt is the ledger row (CA #785 item 6)",
+             expense_id))
+
+
+def _ingest_dedupe_stamp(row: dict | None, decision: dict | None,
+                         db_path) -> None:
+    """After the insert commits: close the open credit without a ledger
+    write (stamp_credit_refunded). A credit already paid out refuses the
+    stamp harmlessly."""
+    if not row or not decision or decision["action"] not in (
+            "credit_stamp", "credit_payout_link") or not decision.get("item_id"):
+        return
+    try:
+        _prov = {"venmo": "Venmo", "paypal": "PayPal", "cashapp": "Cash App",
+                 "zelle": "Zelle"}.get((row.get("source_type") or "").lower(), "Venmo")
+        stamp_credit_refunded(
+            decision["item_id"], method=_prov,
+            refund_date=(row.get("transaction_date") or "")[:10],
+            note=f"receipt expense #{row['id']} (CA #785 item 6)",
+            db_path=db_path)
+    except Exception:
+        logger.warning("ingest dedupe: stamp_credit_refunded failed for item %s",
+                       decision.get("item_id"), exc_info=True)
+
+
+def get_expense_unpromoted(hours: float = 24,
+                           db_path: str | Path | None = None) -> dict:
+    """The 'approved but never promoted' guard (CA #785 item 6, CFO 9/27 —
+    HubSpot $42.64 approved at ingest 9/26 with no ledger row). Read-only.
+
+    Lists expense rows approved/corrected more than `hours` ago whose
+    ledger link is missing (acct_transaction_id NULL, or pointing at a row
+    that no longer exists). Same exclusions as the promotion backfill
+    (_backfill_approved_expenses_to_ledger): no amount, and inbound
+    receipts a balance-due match already booked (matched_item_id)."""
+    from datetime import timezone as _tz
+    hours = float(hours)
+    cutoff = (datetime.now(_tz.utc) - timedelta(hours=hours)).strftime(
+        "%Y-%m-%d %H:%M:%S")
+    with _connect(db_path) as conn:
+        rows = [dict(r) for r in conn.execute(
+            """SELECT e.id, e.source_type, e.merchant, e.amount,
+                      e.transaction_date, e.transaction_type,
+                      e.review_status, e.acct_transaction_id, e.created_at
+                 FROM expense_transactions e
+                WHERE e.review_status IN ('approved', 'corrected')
+                  AND e.amount IS NOT NULL AND e.amount > 0
+                  AND NOT (COALESCE(e.transaction_type, '') = 'received'
+                           AND e.matched_item_id IS NOT NULL)
+                  AND (e.acct_transaction_id IS NULL
+                       OR NOT EXISTS (SELECT 1 FROM acct_transactions a
+                                       WHERE a.id = e.acct_transaction_id))
+                  AND e.created_at <= ?
+                ORDER BY e.created_at, e.id""",
+            (cutoff,)).fetchall()]
+    return {"hours": hours, "cutoff_utc": cutoff, "count": len(rows),
+            "total": round(sum(float(r["amount"] or 0) for r in rows), 2),
+            "rows": rows}
+
+
 def save_expense_transaction(data: dict, db_path: str | Path | None = None) -> dict:
     """Insert or update an expense transaction. Returns the saved record.
 
@@ -51900,7 +52245,10 @@ def save_expense_transaction(data: dict, db_path: str | Path | None = None) -> d
     1. email_uid match — exact ON CONFLICT upsert
     2. Content match — (source_type, merchant, amount, transaction_date) already exists
        → update existing row so the same real-world transaction never appears twice
-    3. Insert new row
+    3. Insert new row — after dedupe_expense_on_ingest (CA #785 item 6):
+       a second copy of a money event already approved/promoted lands
+       'ignored: duplicate of N'; a P2P credit-refund receipt links to the
+       credit-payout ledger row or stamps the open credit refunded.
 
     Content/re-key matches are VETOED when both rows carry a platform
     transaction_id and the ids differ: same payee + amount + date is then a
@@ -52003,6 +52351,15 @@ def save_expense_transaction(data: dict, db_path: str | Path | None = None) -> d
                 ).fetchone()
                 return dict(row) if row else data
 
+            # Dedupe on ingest (CA #785 item 6): only a genuinely new
+            # email — a re-save of the same uid keeps its own row.
+            decision = None
+            if not conn.execute(
+                    "SELECT 1 FROM expense_transactions WHERE email_uid = ?",
+                    (email_uid,)).fetchone():
+                decision = dedupe_expense_on_ingest(conn, data)
+                data = _ingest_dedupe_prepare(data, decision)
+
             conn.execute(
                 """INSERT INTO expense_transactions
                    (email_uid, source_type, merchant, amount, transaction_date,
@@ -52036,6 +52393,13 @@ def save_expense_transaction(data: dict, db_path: str | Path | None = None) -> d
             row = conn.execute(
                 "SELECT * FROM expense_transactions WHERE email_uid = ?", (email_uid,)
             ).fetchone()
+            if row and decision and decision["action"] != "duplicate":
+                _ingest_dedupe_link(conn, row["id"], decision)
+                conn.commit()
+                _ingest_dedupe_stamp(dict(row), decision, db_path)
+                row = conn.execute(
+                    "SELECT * FROM expense_transactions WHERE id = ?", (row["id"],)
+                ).fetchone()
             return dict(row) if row else data
 
         # No email_uid — check content-based dedup before inserting
@@ -52078,13 +52442,16 @@ def save_expense_transaction(data: dict, db_path: str | Path | None = None) -> d
             ).fetchone()
             return dict(row) if row else data
 
-        # Genuinely new record
-        conn.execute(
+        # Genuinely new record — dedupe on ingest first (CA #785 item 6)
+        decision = dedupe_expense_on_ingest(conn, data)
+        data = _ingest_dedupe_prepare(data, decision)
+        new_id = conn.execute(
             """INSERT INTO expense_transactions
                (email_uid, source_type, merchant, amount, transaction_date,
                 account_last4, account_name, transaction_type, category, entity,
                 event_name, customer_id, confidence, review_status, notes, raw_extract)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+               RETURNING id""",
             (email_uid, data.get("source_type"), data.get("merchant"),
              data.get("amount"), data.get("transaction_date"),
              data.get("account_last4"), data.get("account_name"),
@@ -52093,11 +52460,19 @@ def save_expense_transaction(data: dict, db_path: str | Path | None = None) -> d
              data.get("customer_id"), data.get("confidence", 0),
              data.get("review_status", "pending"), data.get("notes"),
              data.get("raw_extract")),
-        )
+        ).fetchone()[0]
         conn.commit()
+        if decision and decision["action"] != "duplicate":
+            _ingest_dedupe_link(conn, new_id, decision)
+            conn.commit()
         row = conn.execute(
-            "SELECT * FROM expense_transactions ORDER BY id DESC LIMIT 1"
+            "SELECT * FROM expense_transactions WHERE id = ?", (new_id,)
         ).fetchone()
+        if row and decision and decision["action"] != "duplicate":
+            _ingest_dedupe_stamp(dict(row), decision, db_path)
+            row = conn.execute(
+                "SELECT * FROM expense_transactions WHERE id = ?", (new_id,)
+            ).fetchone()
     return dict(row) if row else data
 
 

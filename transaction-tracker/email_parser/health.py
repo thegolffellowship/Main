@@ -64,6 +64,8 @@ RULES = {
     "load_per_cpu": 4.0,                  # load1 / cpus over this → the box is saturated
     "volume_pct_warn": 80,                # the volume the DB sits on — medium finding
     "volume_pct_alarm": 90,               # ...high finding (9/22: 99% took the site down)
+    "expense_unpromoted": True,           # approved expense rows with no ledger row (CA #785 item 6, CFO 9/27)
+    "expense_unpromoted_hours": 24,       # ...older than this many hours (a deploy's backfill promotes the rest)
 }
 
 
@@ -177,6 +179,19 @@ def _provider_alerts(db_path) -> list[dict]:
     return [dict(r) for r in rows]
 
 
+def _expense_unpromoted(db_path) -> dict | None:
+    """The 'approved but never promoted' guard (CA #785 item 6, CFO 9/27:
+    HubSpot $42.64 approved at ingest 9/26, no ledger row). Read-only."""
+    if not RULES.get("expense_unpromoted"):
+        return None
+    try:
+        from .database import get_expense_unpromoted
+        return get_expense_unpromoted(RULES["expense_unpromoted_hours"], db_path=db_path)
+    except Exception:
+        logger.debug("health: expense_unpromoted query failed", exc_info=True)
+        return None
+
+
 def build_health_report(days: float = 1, db_path=None, record_size: bool = False) -> dict:
     """Everything the digest, the page and the bridge show."""
     from .timezone_utils import now_central, today_central_str
@@ -235,6 +250,7 @@ def build_health_report(days: float = 1, db_path=None, record_size: bool = False
         "cpus": os.cpu_count(),
         "hcp_cache": _hcp_cache_stats(),
         "provider_alerts": _provider_alerts(db_path),
+        "expense_unpromoted": _expense_unpromoted(db_path),
         "sample_count": sum(r["count"] for k in summary for r in summary[k]),
     }
     report["findings"] = find(report)
@@ -354,6 +370,19 @@ def find(report: dict) -> list[dict]:
                         "text": f"the box is saturated: load average {report['load1']} over "
                                 f"{report['cpus']} cpu(s) (host figure inside the container) — "
                                 f"every request waits for CPU before its first query"})
+    eu = report.get("expense_unpromoted") or {}
+    if eu.get("count"):
+        rows = eu.get("rows") or []
+        listed = ", ".join(
+            f"#{r['id']} {r.get('merchant') or '?'} ${float(r.get('amount') or 0):,.2f} "
+            f"({(r.get('transaction_date') or '')[:10]})" for r in rows[:6])
+        more = f" and {len(rows) - 6} more" if len(rows) > 6 else ""
+        out.append({"severity": "medium", "key": "expense_unpromoted",
+                    "text": f"{eu['count']} approved expense row(s) older than "
+                            f"{eu['hours']:g}h never reached the ledger "
+                            f"(${eu['total']:,.2f}): {listed}{more} — promote each with "
+                            f"scoring-expense-promote:<id> or mark it ignored; list: "
+                            f"scoring-expense-unpromoted (CA #785 item 6)"})
     n_err = sum(report["log_errors"].values())
     if n_err >= RULES["error_log_rows"]:
         top = ", ".join(f"{k} ×{v}" for k, v in list(report["log_errors"].items())[:4])
