@@ -25440,22 +25440,8 @@ def ls_build_state(session_id: int, db_path: str | Path = DB_PATH) -> dict | Non
             "buys_net": bool(p["buys_net"]), "buys_gross": bool(p["buys_gross"]),
             "is_member": bool(p["is_member"]),
             "scores": scores, "strokes_received": received})
-    # A NINE PLAYS NINE HOLES. The course table carries both nines of a tee
-    # (_ls_tee_holes merges the per-nine ratings), so a 9-hole session seeded
-    # from GG held 18 course holes: the engine then read the round as an
-    # 18-hole event (wrong flight / skins / min-buyer bands) and allocated a
-    # derived game's strokes "full_card" instead of the ruled 1-9 collapse
-    # (CA #771). G2a on s9.24 / a9.24 caught it. Once any score is in, a
-    # nine keeps the WHOLE NINE it is being played on (front 1-9 or back
-    # 10-18) — never just the holes scored so far, which would move the
-    # stroke allocation and the thru count as the round progressed.
-    session_holes = (data["session"] or {}).get("holes")
-    if session_holes and int(session_holes) <= 9 and len(holes) > 9:
-        played = {int(hn) for p in players for hn in p["scores"]}
-        if played and max(played) <= 9:
-            holes = [h for h in holes if h["hole"] <= 9]
-        elif played and min(played) >= 10:
-            holes = [h for h in holes if h["hole"] >= 10]
+    holes = _ls_trim_to_played_nine(
+        holes, players, (data["session"] or {}).get("holes"))
     return {"holes": holes, "players": players, "meta": data["session"],
             "contests": data["contests"]}
 
@@ -25708,13 +25694,21 @@ def _ls_course_coverage(state: dict) -> dict:
     return out
 
 
-def ls_leaderboard(session_id: int, db_path: str | Path = DB_PATH) -> dict:
-    """The live leaderboard: every game, computed from raw gross scores."""
+def ls_leaderboard(session_id: int, db_path: str | Path = DB_PATH,
+                   pin_flights: bool = False) -> dict:
+    """The live leaderboard: every game, computed from raw gross scores.
+
+    pin_flights: take each game's flights from the event's flight board
+    (the ratified SELECTION) instead of the engine's own bands — how G2a
+    grades a seeded event against GG."""
     from . import live_scoring as _ls
     state = ls_build_state(session_id, db_path=db_path)
     if not state:
         return {"error": f"session {session_id} not found"}
     meta = state["meta"]
+    if pin_flights and meta.get("event_id"):
+        fb = event_flights_board(meta["event_id"], db_path=db_path)
+        state["flight_pins"] = _flight_pins_for(fb, state["players"])
     formulas = (get_championship_formulas(db_path=db_path)
                 if meta.get("championship")
                 else get_scoring_formulas(db_path))
@@ -25733,6 +25727,171 @@ def ls_leaderboard(session_id: int, db_path: str | Path = DB_PATH) -> dict:
                           if rec else None)
         slot["note"] = rec["note"] if rec else None
     return board
+
+
+def _ls_trim_to_played_nine(holes: list, players: list, session_holes) -> list:
+    """A NINE PLAYS NINE HOLES (G2a #815). The course table carries both
+    nines of a tee (_ls_tee_holes merges the per-nine ratings), so a 9-hole
+    round would read as an 18-hole event: wrong flight / skins / min-buyer
+    bands, and a derived game's strokes spread 'full_card' instead of the
+    ruled 1-9 collapse (CA #771). Once any score is in, keep the WHOLE nine
+    being played (front 1-9 or back 10-18) — never just the holes scored so
+    far, which would move the allocation and the thru count mid-round."""
+    if not session_holes or int(session_holes) > 9 or len(holes) <= 9:
+        return holes
+    played = {int(hn) for p in players for hn in p["scores"]}
+    if played and max(played) <= 9:
+        return [h for h in holes if h["hole"] <= 9]
+    if played and min(played) >= 10:
+        return [h for h in holes if h["hole"] >= 10]
+    return holes
+
+
+def _flight_pins_for(board: dict | None, players: list) -> dict:
+    """{game: {player key: flight label}} from a flight board's SELECTION.
+
+    The board keys players by customer_id; the engine by its own card key.
+    A player with no customer_id cannot be pinned — the engine reports him
+    and falls back to its own bands for that game (never a half-pinned
+    field)."""
+    if not board:
+        return {}
+    key_by_cid = {int(p["customer_id"]): p["key"] for p in players
+                  if p.get("customer_id") is not None}
+    pins: dict = {}
+    for entry in board.get("games") or []:
+        sel = entry.get("selection") or {}
+        if not entry.get("active"):
+            continue
+        g: dict = {}
+        for f in sel.get("flights") or []:
+            for m in f.get("members") or []:
+                cid = m.get("customer_id")
+                if cid is not None and int(cid) in key_by_cid:
+                    g[key_by_cid[int(cid)]] = str(f["flight_no"])
+        if g:
+            pins[entry["game"]] = g
+    return pins
+
+
+def event_engine_state(event_name: str, db_path=None) -> dict:
+    """The engine's round state for a real event, built IN MEMORY from its
+    scorecards (`scoring_rounds` / `scoring_holes`, whichever source wrote
+    them — GG import or entered scores via G-0). Writes NOTHING: this is
+    `ls_seed_session_from_event` without the sandbox, for the paths that
+    run hourly (payout assembly) and must not grow sandbox rows."""
+    with _connect(db_path) as conn:
+        _ensure_scoring_tables(conn)
+        ev = conn.execute("SELECT * FROM events WHERE lower(item_name) = lower(?)",
+                          (event_name,)).fetchone()
+        if not ev:
+            return {"error": f"event not found: {event_name}"}
+        ev = dict(ev)
+        rounds = [dict(r) for r in conn.execute(
+            "SELECT * FROM scoring_rounds WHERE event_id = ? ORDER BY player_name",
+            (ev["id"],)).fetchall()]
+        if not rounds:
+            return {"error": "no scorecards for this event yet", "event": ev}
+
+        def _mode(key):
+            vals = [r[key] for r in rounds if r[key] is not None]
+            return max(set(vals), key=vals.count) if vals else None
+        tee_id = _mode("tee_id")
+        n_holes = 18 if max((r["holes_played"] or 0) for r in rounds) > 9 else 9
+        holes = [{"hole": r["hole_number"], "par": r["par"],
+                  "yardage": r["yardage"], "stroke_index": r["stroke_index"]}
+                 for r in _ls_tee_holes(conn, tee_id)]
+        net_buyers = _event_game_buyers(conn, ev["item_name"], "NET")["buyers"]
+        gross_buyers = _event_game_buyers(conn, ev["item_name"], "GROSS")["buyers"]
+        teams = {(p["player_name"] or "").strip().lower(): p["group_num"]
+                 for p in conn.execute(
+                     "SELECT group_num, player_name FROM event_pairings "
+                     "WHERE event_id = ?", (ev["id"],)).fetchall()}
+        players = []
+        for r in rounds:
+            cid = r["customer_id"]
+            scores, received = {}, {}
+            for h in conn.execute(
+                    "SELECT hole_number, strokes, strokes_received "
+                    "FROM scoring_holes WHERE scoring_round_id = ?",
+                    (r["id"],)).fetchall():
+                if h["strokes"] is not None:
+                    scores[int(h["hole_number"])] = h["strokes"]
+                if h["strokes_received"] is not None:
+                    received[int(h["hole_number"])] = h["strokes_received"]
+            players.append({
+                "key": str(r["id"]), "customer_id": cid,
+                "name": r["player_name"],
+                "playing_handicap": r["playing_handicap"],
+                "flight": r["flight"],
+                "team": teams.get((r["player_name"] or "").strip().lower()),
+                "buys_net": bool(cid and cid in net_buyers),
+                "buys_gross": bool(cid and cid in gross_buyers),
+                "is_member": True, "scores": scores,
+                "strokes_received": received})
+    championship = "championship" in ev["item_name"].lower()
+    meta = {"event_id": ev["id"], "event_name": ev["item_name"],
+            "holes": n_holes, "championship": championship}
+    return {"holes": _ls_trim_to_played_nine(holes, players, n_holes),
+            "players": players, "meta": meta, "contests": [], "event": ev}
+
+
+def engine_game_payouts(event_name: str, db_path=None, state: dict | None = None,
+                        board: dict | None = None) -> dict:
+    """FLIGHT PAYOUTS FROM THE FROZEN SELECTION (CA #829 GO), for
+    Individual Net, Individual Gross and Skins (gross or ½ Net — whichever
+    variant the selection froze).
+
+      1. the event's flight board (`event_flights_board`): SETTLED when
+         there is one, FROZEN re-read against the buyers now, else LIVE —
+         the SELECTION fixes who is in which flight, the AMOUNTS what each
+         flight pays;
+      2. the engine run on the event's scorecards with those flights PINNED
+         per game (so skins cut at 12.0 on the index, as ratified);
+      3. `flighting.payouts_from_results` pays the places / skins.
+
+    Read-only: nothing is written, nothing is paid. The caller decides what
+    to do with the rows (`assemble_event_game_payouts` uses them for events
+    Golf Genius does not score; G2a diffs them against GG's purses).
+    A game whose engine VARIANT differs from the frozen one pays nothing
+    and says so — the selection froze the game, the engine must not quietly
+    play another."""
+    from . import flighting as _fl
+    from . import live_scoring as _ls
+    st = state or event_engine_state(event_name, db_path=db_path)
+    if st.get("error"):
+        return {"error": st["error"]}
+    ev_id = st["meta"]["event_id"]
+    fb = board if board is not None else event_flights_board(ev_id, db_path=db_path)
+    if not fb:
+        return {"error": "no flight board for this event"}
+    st = dict(st, flight_pins=_flight_pins_for(fb, st["players"]))
+    formulas = (get_championship_formulas(db_path=db_path)
+                if st["meta"].get("championship")
+                else get_scoring_formulas(db_path))
+    lb = _ls.compute_leaderboard(st, formulas)
+    out = {"event": st["meta"]["event_name"], "event_id": ev_id,
+           "board_state": fb.get("state"), "holes_key": lb["holes_key"],
+           "games": {}, "writes": "none"}
+    for entry in fb.get("games") or []:
+        game = entry["game"]
+        res = lb["games"].get(game)
+        frozen_variant = ((entry.get("selection") or {}).get("variant") or {}).get("name")
+        if game == "skins" and entry.get("active") and res and \
+                frozen_variant and res.get("variant") != frozen_variant:
+            out["games"][game] = {
+                "game": game, "status": "variant_mismatch", "rows": [],
+                "unallocated": [], "total": 0.0, "sum_check": False,
+                "notes": [f"the flight board froze {frozen_variant} but the "
+                          f"engine's buyer count selects {res.get('variant')} "
+                          f"— nothing paid until they agree"]}
+            continue
+        pay = _fl.payouts_from_results(entry, res)
+        pay["flight_source"] = (res or {}).get("flight_source")
+        pay["variant"] = (res or {}).get("gg_name") or frozen_variant
+        pay["warnings"] = (res or {}).get("warnings") or []
+        out["games"][game] = pay
+    return out
 
 
 def ls_parity(session_id: int, db_path: str | Path = DB_PATH) -> dict:

@@ -164,6 +164,13 @@ SEED_LIVE_SCORING_CONFIG: dict = {
             # WINS over equal-size splitting; the parity harness exists to
             # confirm or refute it at every other band.
             "flight_breaks": {"9": {"2": [12.0]}},
+            # PLACES HAVE NO TIEBREAK (CA #832, 2026-09-28, from Season
+            # Contest Payouts v1.1 §3.2/§10 + Side Games Rules v1.0, where
+            # only City MVP has one, §2.2): equal Stableford points are a
+            # tie and split the tied places' money, as GG does (3309:
+            # Fehlis and Marroquin T1, $29.25 each). "score" would break
+            # the tie on the stroke score — the pre-ruling behaviour.
+            "tiebreak": "none",
         },
         "individual_gross": {
             "label": "Individual Gross",
@@ -181,6 +188,8 @@ SEED_LIVE_SCORING_CONFIG: dict = {
                 "9": [[16, 19, 3], [20, None, 4]],
                 "18": [[12, 15, 3], [16, None, 4]],
             },
+            # No tiebreak either (CA #832, 2026-09-28; see individual_net).
+            "tiebreak": "none",
         },
         "team_net": {
             "label": "Team Net",
@@ -497,8 +506,18 @@ def build_cards(state: dict, formulas: dict, derive_hole=None) -> list[dict]:
 # Flighting
 # ---------------------------------------------------------------------------
 
-def assign_flights(cards: list[dict], game_cfg: dict, holes_key: str) -> dict:
+def assign_flights(cards: list[dict], game_cfg: dict, holes_key: str,
+                   pins: dict | None = None) -> dict:
     """Return {flight_label: [card, ...]} for an eligible field.
+
+    `pins` ({card key: flight label}) is the GAME's own flight membership
+    from the flight board's SELECTION layer (frozen / settled when there is
+    one, else live) — `flighting.py`, the ratified cut lines. It wins over
+    everything below when it covers every card, because the selection is
+    the flighting of record: skins cut at 12.0 on the INDEX, which no
+    equal-size or playing-handicap split here reproduces (G2a #815, 3309).
+    A partial pin set is not used (a half-pinned field would mix two
+    rules); the caller reports the unpinned cards.
 
     Explicit per-player flights (set in the sandbox, or carried from a GG
     import) always win — that is how the harness pins a known-good GG
@@ -508,6 +527,11 @@ def assign_flights(cards: list[dict], game_cfg: dict, holes_key: str) -> dict:
     handicap thresholds; otherwise into equal-size bands.
     """
     n = len(cards)
+    if pins and cards and all(c["key"] in pins for c in cards):
+        pinned: dict = {}
+        for c in cards:
+            pinned.setdefault(str(pins[c["key"]]), []).append(c)
+        return dict(sorted(pinned.items()))
     bands = (game_cfg.get("flight_bands") or {}).get(holes_key)
     count = _bands_lookup(bands, n, 1) if bands else 1
     explicit = [c for c in cards if c.get("flight")]
@@ -795,8 +819,20 @@ def _rank(rows: list[dict], key, reverse: bool) -> list[dict]:
 # Games
 # ---------------------------------------------------------------------------
 
+def _flight_source(field: list[dict], pins: dict | None) -> dict:
+    """How this game's flights were decided, for the board to say."""
+    if not pins:
+        return {"flight_source": "engine bands"}
+    unpinned = sorted(c["name"] or c["key"] for c in field
+                      if c["key"] not in pins)
+    if unpinned:
+        return {"flight_source": "engine bands (pins incomplete)",
+                "unpinned": unpinned}
+    return {"flight_source": "flight board selection"}
+
+
 def game_individual(cards: list[dict], cfg: dict, holes_key: str,
-                    basis: str) -> dict:
+                    basis: str, pins: dict | None = None) -> dict:
     """Individual Net / Individual Gross — flighted Stableford."""
     gkey = "individual_net" if basis == "net" else "individual_gross"
     gc = cfg["games"][gkey]
@@ -811,17 +847,28 @@ def game_individual(cards: list[dict], cfg: dict, holes_key: str,
             f"({holes_key}-hole); {len(field)} bought in.")
         return out
     out["active"] = True
+    out.update(_flight_source(field, pins))
+    if out.get("unpinned"):
+        out["warnings"].append(
+            f"No frozen flight for {', '.join(out['unpinned'])}: the whole "
+            f"field fell back to the engine's own bands.")
     pts_key = "stableford_net" if basis == "net" else "stableford_gross"
     score_key = "net" if basis == "net" else "gross"
-    for label, members in assign_flights(field, gc, holes_key).items():
+    for label, members in assign_flights(field, gc, holes_key, pins).items():
         rows = [{"key": c["key"], "customer_id": c["customer_id"],
                  "name": c["name"], "playing_handicap": c["playing_handicap"],
                  "points": c[pts_key], "score": c[score_key],
                  "gross": c["gross"], "thru": c["thru"],
                  "complete": c["complete"]} for c in members]
-        # Stableford: most points wins; the stroke score breaks ties.
-        ranked = _rank(rows, key=lambda r: (-r["points"], r["score"]),
-                       reverse=False)
+        # Stableford: most points wins. Equal points are a TIE that splits
+        # the places' money (CA #832) unless the game's `tiebreak` dial says
+        # "score". Display order within a tie still follows the score.
+        rows.sort(key=lambda r: (-r["points"], r["score"]))
+        if gc.get("tiebreak", "none") == "score":
+            ranked = _rank(rows, key=lambda r: (-r["points"], r["score"]),
+                           reverse=False)
+        else:
+            ranked = _rank(rows, key=lambda r: -r["points"], reverse=False)
         out["flights"].append({
             "flight": label, "players": len(members), "rows": ranked,
             "provisional": any(not r["complete"] for r in ranked)})
@@ -1058,7 +1105,8 @@ def game_handicaps(cards: list[dict], handicap_cfg: dict | None,
 
 
 def game_skins(cards: list[dict], cfg: dict, holes_key: str,
-               strokes_override: dict | None = None) -> dict:
+               strokes_override: dict | None = None,
+               pins: dict | None = None) -> dict:
     """Skins — computed as the VARIANT the side-games matrix actually selects.
 
     The buyer count decides which game is played, not merely how big the pot
@@ -1132,7 +1180,12 @@ def game_skins(cards: list[dict], cfg: dict, holes_key: str,
             f"because no unrounded course handicap was available. GG rounds "
             f"ONCE, at the end — these strokes may differ from GG's.")
 
-    for label, members in assign_flights(field, gc, holes_key).items():
+    out.update(_flight_source(field, pins))
+    if out.get("unpinned"):
+        out["warnings"].append(
+            f"No frozen flight for {', '.join(out['unpinned'])}: the whole "
+            f"field fell back to the engine's own bands.")
+    for label, members in assign_flights(field, gc, holes_key, pins).items():
         hole_numbers = sorted({h["hole"] for c in members for h in c["holes"]})
         skins, carried = [], 0
         for hole in hole_numbers:
@@ -1289,6 +1342,9 @@ def compute_leaderboard(state: dict, formulas: dict,
     cards = build_cards(state, formulas, derive_hole=derive_hole)
     holes_count = len(state.get("holes") or [])
     holes_key = "18" if holes_count > 9 else "9"
+    # Per-game flight membership from the flight board ({game: {card key:
+    # flight label}}); absent -> the engine's own bands, as before.
+    pins = state.get("flight_pins") or {}
     overall = _rank(
         [{"key": c["key"], "customer_id": c["customer_id"], "name": c["name"],
           "playing_handicap": c["playing_handicap"],
@@ -1304,10 +1360,14 @@ def compute_leaderboard(state: dict, formulas: dict,
         "cards": cards,
         "overall": overall,
         "games": {
-            "individual_net": game_individual(cards, cfg, holes_key, "net"),
-            "individual_gross": game_individual(cards, cfg, holes_key, "gross"),
+            "individual_net": game_individual(cards, cfg, holes_key, "net",
+                                              pins=pins.get("individual_net")),
+            "individual_gross": game_individual(
+                cards, cfg, holes_key, "gross",
+                pins=pins.get("individual_gross")),
             "team_net": game_team_net(cards, cfg),
-            "skins": game_skins(cards, cfg, holes_key),
+            "skins": game_skins(cards, cfg, holes_key,
+                                pins=pins.get("skins")),
             "mvp": game_mvp(cards, cfg, holes_count),
             "ctp": ctp_slots(state, cfg),
             "hio": game_hio(cards, cfg),

@@ -1,5 +1,17 @@
-window.TGF_VERSION = "2.511.0";
+window.TGF_VERSION = "2.512.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.512.0",
+    date: "2026-09-28",
+    title: "Engine payouts from the frozen flight selection (read-only) and pinned skins flights",
+    changes: [
+      "CA #829 GO, Side Games: Individual Net, Individual Gross and Skins (gross or ½ Net) can now be paid by OUR engine under the ratified flight rules. The flight board's SELECTION (settled, frozen, or live) pins each game's flights; its AMOUNTS pay the places; the engine ranks the event's own scorecards, built in memory with no writes. Ties pool and split, skins pay per skin per flight, a flight with no skin reports its pot as unallocated rather than guessing, and an incomplete card leaves the game provisional. Read it with the bridge scoring-engine-payouts:<event name>, with GG's purses beside ours.",
+      "Skins flight membership is now pinned from the selection. The #815 failure at s9.24 Brackenridge was ours: the engine split the 10 skins buyers into equal halves by playing handicap, while the ratified rule, and GG, cut at index 12.0. Under the frozen flights, GG's skins purses come out to the cent ($65 / $26 / $26 / $13).",
+      "G2a now grades these engine payouts against GG's posted purses per player, to the cent (tiers.purses.engine). Our side no longer copies GG, so this is a real test.",
+      "Individual Net and Individual Gross places have NO tiebreak (CA #832, from Season Contest Payouts v1.1 \u00a73.2/\u00a710 and Side Games Rules v1.0, where only City MVP has one). Equal Stableford points are a tie, and the tied places' money pools and splits, as GG does: 3309 Fehlis and Marroquin are T1 at $29.25 each. Before this, the engine broke the tie on the stroke score. The rule is the dial games.individual_net/individual_gross.tiebreak = 'none'.",
+      "NOT wired into payout recording: assemble_event_game_payouts still uses GG purses and then the legacy ladder. Switching events GG doesn't score (from 10/13) over to engine payouts is the money step, and it waits for Kerry's OK.",
+    ],
+  },
   {
     version: "2.511.0",
     date: "2026-09-28",

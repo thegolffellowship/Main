@@ -2612,6 +2612,42 @@ FLIGHTING lane (spun off "TGF Tracker Improvements 2"; plan #584).
   is 0 — the Flighting Lab dial still exists to SHOW what merging would
   do; nothing merges by default any more.
 
+### Engine payouts from the frozen selection (CA #829 GO, v2.512.0) — READ-ONLY
+
+`engine_game_payouts(event_name)` (database.py) pays Individual Net,
+Individual Gross and Skins (gross or ½ Net) the way the ratified rules say,
+from our own engine, and writes nothing:
+
+1. the event's flight board (`event_flights_board`: SETTLED, else FROZEN
+   re-read against the buyers now, else LIVE). Its SELECTION pins each
+   game's flights; its AMOUNTS say what each flight pays;
+2. `event_engine_state` builds the engine's round state IN MEMORY from the
+   event's `scoring_rounds` / `scoring_holes` (GG import or entered scores),
+   a 9-hole round trimmed to the nine played (`_ls_trim_to_played_nine`);
+3. the engine runs with those flights PINNED per game (`state["flight_pins"]`,
+   `live_scoring.assign_flights(..., pins)`: skins are cut at 12.0 on the
+   INDEX, which no playing-handicap split reproduces). This was the #815
+   3309 skins failure;
+4. `flighting.payouts_from_results` pays places down the engine's ranking
+   (ties pool and split, the ratified rule) and skins per skin per flight.
+   A flight where nobody won a skin reports its pot UNALLOCATED; that rule
+   isn't ratified, so nothing is guessed. An incomplete card makes a game
+   `provisional`. If the engine's skins variant differs from the frozen
+   one, the game pays nothing (`variant_mismatch`).
+
+Ties: Individual Net and Gross places have NO tiebreak (CA #832, from the
+ratified Season Contest Payouts v1.1 §3.2/§10 and Side Games Rules v1.0,
+where only City MVP has one, §2.2). Equal Stableford points share the
+place and split the tied places' money, as GG does. The dial is
+`tiebreak: "none"` on both games in `SEED_LIVE_SCORING_CONFIG`.
+
+**Not wired into payout recording.** `assemble_event_game_payouts` still
+uses GG purses, then the legacy ladder. Wiring the engine in for events
+GG does not score (from 10/13) is the money step and waits for Kerry's OK.
+To read it: bridge `scoring-engine-payouts:<event name>`, which puts GG's
+purses beside ours. G2a grades it per player, to the cent
+(`tiers.purses.engine`). Tests: `test_engine_payouts.py`.
+
 ## The event PRINT PACK — one bound PDF, mailed the evening before (v2.465.0)
 
 Kerry 2026-09-18: "a bound PDF with all of them in one that I could
