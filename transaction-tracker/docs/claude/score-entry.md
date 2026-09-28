@@ -549,6 +549,28 @@ with `since_version`. Latencies are measured at the client.
   CPUs in the health digest) and the scheduler jobs running beside the
   requests. Track B's member board is a separate read and was not measured.
 
+## Entry replay + load harness (CA #800/#801, 2026-09-28)
+
+`tools/se_replay.py --db <SCRATCH.db> --events <ids> --workers 8 --i-am-scratch`
+replays each event's GG hole scores through the phone's own HTTP routes on a
+SCRATCH copy, 8 groups at once. Per group:
+- claim;
+- write hole by hole: a lost-ack resend must come back `dup`, and a batch
+  dropped mid-send is resent;
+- take over on a second phone after hole 6; the stale phone must then be
+  `refused_lock`;
+- the scorekeeper attests and every player signs.
+
+Then it closes the round and checks every entered hole against the card.
+- PASS needs 0 lost and 0 wrong, everyone signed, every group attested, and
+  the round closed.
+- A GG hole above triple bogey is entered at triple and reported as the named
+  class `above_max_triple` (Kerry: "GG is max triple").
+- It refuses to run inside Railway, on a production-looking path, or without
+  `--i-am-scratch`, and it strips outbound credentials from its environment.
+
+Validated on a synthetic 26-player nine: 234/234 holes checked, 0 lost; p95 118 ms.
+
 ## Portable-SQL rule (CA #682)
 
 The module follows it and `test_score_entry.py` holds it there: no
