@@ -1992,3 +1992,19 @@ database file** for 2,312 orders. The report now carries `cpus`, the
 file's free pages and the biggest tables (`perf.db_layout`, dbstat), and
 the findings rules name a saturated box, a VACUUM candidate and a table
 over half the file. Nothing runs a VACUUM — that is Kerry's call.
+
+## Pairing history from entered groups (v2.511.0, CA #829)
+
+Off Golf Genius the score-entry groups are the record of who played
+together. `email_parser/closeout_checks.py` `pairing_history_from_entry`
+(bridge `scoring-pairings-entry:<event>[|apply]`) reads entered scores only
+through `score_entry.get_entered_scores` and writes `pairing_history` rows
+with `source='entry'`, both customer_ids, `round_id='se:<score-entry round>'`
+and `rode` for seats 1&2 / 3&4. A seeded player with no entered hole is a
+no-show and never pairs; blinds are not people on the card and cannot pair;
+preview rounds are ignored. It follows the G-0 cutover (`entry_record_from`):
+it writes only when the event has no GG pair rows (`gg_teamnet`,
+`gg_teesheet`) and falls on or after the cutover, replacing the event's app
+plans and its own earlier write. Before that it runs in SHADOW and returns
+`parity` (pairs only entered, pairs only GG). Guard: test_closeout_checks.py.
+

@@ -1863,6 +1863,65 @@ def resolve_flag(flag_id: int, resolution: str, resolved_by: int | None = None,
     return {"ok": True}
 
 
+# CTP HOLES FROM THE MATRIX (CA #829 GO, for 10/13). The phone asks the CTP
+# question only on the holes the event actually plays for, from the ONE
+# ratified rule the proximity markers already print from
+# (database.event_proximity_report): the games matrix at the event's player
+# count decides how many CTPs are funded (none below 16 on a nine), the
+# SHORTEST par 3s of the nine take them, and a slot with no par 3 left
+# becomes a LONGEST PUTT on the last hole. The answer is cached per event
+# for a minute because the card is polled. When the course has no hole card
+# the report can't pick holes, so every par 3 of the round is asked and the
+# source says so (never a guess dressed up as the rule).
+_CTP_CACHE: dict = {}
+_CTP_TTL = 60.0
+
+
+def _ctp_report(event_id: int, db_path=None):
+    import time as _t
+    key = (event_id, db_path)
+    hit = _CTP_CACHE.get(key)
+    if hit and _t.monotonic() - hit[0] < _CTP_TTL:
+        return hit[1]
+    try:
+        from email_parser import database as db
+        rep = db.event_proximity_report(event_id, db_path=db_path)
+    except Exception:
+        rep = None
+    _CTP_CACHE[key] = (_t.monotonic(), rep)
+    return rep
+
+
+def refused_writes_kept(round_id: int, db_path=None) -> int:
+    """How many refused_lock writes on a round kept their value in se_audit
+    (a refused hole is never lost). Read by tools/se_replay.py."""
+    with _closing(_conn(db_path)) as conn:
+        return conn.execute(
+            "SELECT COUNT(*) FROM se_audit WHERE round_id = ? AND result = 'refused_lock' "
+            "AND detail LIKE '%gross%'", (round_id,)).fetchone()[0]
+
+
+def ctp_contests(conn, round_id: int, db_path=None) -> dict:
+    """{"holes": {hole: "ctp" | "longest_putt"}, "source": "matrix" |
+    "par3_no_card", "notes": [...]} for one round."""
+    r = conn.execute("SELECT event_id FROM se_rounds WHERE id = ?", (round_id,)).fetchone()
+    rh = {int(h[0]): h[1] for h in conn.execute(
+        "SELECT hole_number, par FROM se_round_holes WHERE round_id = ?", (round_id,))}
+    rep = _ctp_report(r[0], db_path) if r else None
+    no_card = (not rep) or any("No hole-by-hole card" in n for n in (rep.get("notes") or []))
+    if no_card:
+        return {"holes": {h: "ctp" for h, par in sorted(rh.items()) if par == 3},
+                "source": "par3_no_card",
+                "notes": ["No course card for the event, so every par 3 is asked."]}
+    holes: dict = {}
+    for c in rep.get("contests") or []:
+        h = int(c["hole"])
+        if h in rh and h not in holes:
+            holes[h] = "longest_putt" if c.get("kind") == "longest_putt" else "ctp"
+    return {"holes": dict(sorted(holes.items())), "source": "matrix",
+            "notes": list(rep.get("notes") or [])}
+
+
 def _ctp_current(conn, round_id: int, hole: int):
     """The current holder is the latest claim naming a person (a manager
     ruling included); 'No one closer' answers never unseat a holder."""
@@ -1877,7 +1936,8 @@ def _ctp_current(conn, round_id: int, hole: int):
 def claim_ctp(group_id: int, device_id: str, hole: int, customer_id: int | None,
               claimed_by: int | None = None, db_path=None) -> dict:
     """The scorekeeper answers "Did anyone in your group get closer?" with a
-    player (claim) or None ("No one closer"). Par 3s only; lock holder only."""
+    player (claim) or None ("No one closer"). Only on the round's CTP /
+    Longest Putt holes (ctp_contests); lock holder only."""
     with _closing(_conn(db_path)) as conn:
         conn.execute("BEGIN IMMEDIATE")
         g = _group_ctx(conn, group_id)
@@ -1889,11 +1949,9 @@ def claim_ctp(group_id: int, device_id: str, hole: int, customer_id: int | None,
         if not lock or lock[0] != device_id:
             conn.rollback()
             return {"error": "only the scorekeeper's phone can answer this"}
-        h = conn.execute("SELECT par FROM se_round_holes WHERE round_id = ? AND hole_number = ?",
-                         (g["round_id"], int(hole))).fetchone()
-        if not h or h[0] != 3:
+        if int(hole) not in ctp_contests(conn, g["round_id"], db_path)["holes"]:
             conn.rollback()
-            return {"error": "closest to the pin is on par 3s only"}
+            return {"error": "there is no closest-to-the-pin or longest-putt contest on that hole"}
         if customer_id is not None and not conn.execute(
                 "SELECT 1 FROM se_players WHERE group_id = ? AND customer_id = ?",
                 (group_id, customer_id)).fetchone():
@@ -2058,12 +2116,13 @@ def _card_extras(conn, g, group_id: int) -> dict:
         "SELECT id, customer_id, hole_number AS hole, note, at FROM se_card_flags "
         "WHERE group_id = ? AND resolved_at IS NULL ORDER BY id", (group_id,))]
     ctp = {}
-    for (hole,) in conn.execute("SELECT hole_number FROM se_round_holes WHERE round_id = ? "
-                                "AND par = 3", (g["round_id"],)).fetchall():
+    contests = ctp_contests(conn, g["round_id"])
+    for hole, kind in contests["holes"].items():
         cur = _ctp_current(conn, g["round_id"], hole)
         answered = conn.execute("SELECT 1 FROM se_ctp_claims WHERE round_id = ? AND hole_number = ? "
                                 "AND group_id = ?", (g["round_id"], hole, group_id)).fetchone()
-        ctp[str(hole)] = {"holder_customer_id": cur["customer_id"] if cur else None,
+        ctp[str(hole)] = {"kind": kind,
+                          "holder_customer_id": cur["customer_id"] if cur else None,
                           "holder_name": cur["display_name"] if cur else None,
                           "holder_group_num": cur["group_num"] if cur else None,
                           "answered": bool(answered)}
@@ -2158,11 +2217,12 @@ def get_entered_scores(event_id: int, round_id: int | None = None, db_path=None)
                 "photo_path IS NOT NULL AS has_photo, at FROM se_card_checks "
                 "WHERE round_id = ? ORDER BY id", (rid,))]
             ctp = {}
-            for (hole,) in conn.execute("SELECT hole_number FROM se_round_holes WHERE "
-                                        "round_id = ? AND par = 3", (rid,)).fetchall():
+            contests = ctp_contests(conn, rid, db_path)
+            for hole, kind in contests["holes"].items():
                 cur = _ctp_current(conn, rid, hole)
-                ctp[str(hole)] = ({"customer_id": cur["customer_id"], "name": cur["display_name"],
-                                   "group_num": cur["group_num"], "by_manager": cur["kind"] == "manager"}
+                ctp[str(hole)] = ({"kind": kind, "customer_id": cur["customer_id"],
+                                   "name": cur["display_name"], "group_num": cur["group_num"],
+                                   "by_manager": cur["kind"] == "manager"}
                                   if cur else None)
             hio = [dict(x) for x in conn.execute(
                 "SELECT id, customer_id, hole_number AS hole, eligible, status FROM se_hio_claims "

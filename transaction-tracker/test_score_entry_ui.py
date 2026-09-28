@@ -588,6 +588,38 @@ with sync_playwright() as p:
           cell.locator(".se-pops.cell .se-pop:not(.t)").count() == 1 and cell.locator(".se-pop.t").count() == 0,
           cell.inner_html())
     pp.screenshot(path=os.path.join(SHOTS, "pops-check-card.png"), full_page=True) if "SHOTS" in globals() else None
+
+    print("CA #829: CTP / Longest Putt holes come from the matrix")
+    from email_parser import database as _dbm
+    _real_prox = _dbm.event_proximity_report
+    try:
+        # the matrix funds one CTP but the nine's only par 3 isn't in play for it:
+        # the slot becomes a Longest Putt on the last hole (9)
+        _dbm.event_proximity_report = lambda eid, db_path=None: {
+            "notes": [], "contests": [{"kind": "longest_putt", "hole": 9}]}
+        se._CTP_CACHE.clear()
+        rl = se.create_round(900, 9, label="ctp829", course_holes=course(9))["round_id"]
+        gl = se.upsert_group(rl, 1, players=[
+            {"customer_id": 101, "display_name": "Kerry Niester", "seat": 1},
+            {"customer_id": 102, "display_name": "Mark Stich", "seat": 2}])["group_id"]
+        pl = open_as_kerry(se.make_group_token(gl))
+        par3 = [h for h in range(1, 9) if PARS[h - 1] == 3]
+        for _ in range(8):
+            pl.click("[data-act=save]")
+            pl.wait_for_timeout(250)
+        check("no CTP question on a par 3 the matrix doesn't play (holes %s)" % par3,
+              pl.locator("text=Closest to the pin").count() == 0)
+        pl.click("[data-act=save]")
+        pl.wait_for_selector("text=Longest putt", timeout=5000)
+        check("the last hole asks the Longest Putt question",
+              "Did anyone in your group hole a long putt?" in pl.inner_text("body"))
+        pl.click("button[data-act=ctp][data-cid='102']")
+        pl.wait_for_timeout(1200)
+        check("the answer is recorded as the holder on hole 9",
+              se.get_group_card(gl)["ctp"]["9"]["holder_customer_id"] == 102)
+    finally:
+        _dbm.event_proximity_report = _real_prox
+        se._CTP_CACHE.clear()
     b.close()
 
 try:

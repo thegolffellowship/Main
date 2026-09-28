@@ -72,6 +72,30 @@ The cup ROSTER for any card or roster read comes from Track B's frozen
 `lsc_roster_final` dial by customer_id, never from event registrations
 (CA #786 GO 5) — event 3329 holds one registration; the 27 are in the dial.
 
+## THE NO-PUSH WINDOW (standing rule, CA #829, 2026-09-28)
+
+"No lane pushes to main from the first tee time of a live score-entry
+event until its close-out is posted." Every push restarts the Tracker and
+drops in-flight score writes. The Front Desk posts WINDOW OPEN / WINDOW
+CLOSED; THIS ROUTINE'S CLOSE-OUT DIGEST is what closes the window. So:
+post the digest FIRST, wait for WINDOW CLOSED, and only then commit and
+push the recap drafts (the recap email needs them deployed). A recap
+commit inside an open window needs CA's OK — otherwise hold it for the
+5:30 AM catch-up.
+
+## IS IT FINAL? — `scoring-closeout-final:<event name or id>`
+
+Read-only (v2.511.0, CA #829). Run it first; act on the event only when
+`final: true`. It decides the era per event and names every blocker:
+- GG era: cards = field (missing players named), no null-customer_id
+  card, no duplicate card, every GG board posted WITH a purse, payouts
+  recorded.
+- Entry era (G-0 authoritative): every entered card closed and signed (a
+  disputed hole voids the signature, so disputes block), published into
+  scorecards (`scoring-entry-publish:<id>|apply`), no hole-in-one claim
+  still in flight, payouts computed. An unanswered CTP hole is a warning.
+Events on the NO HANDICAPS list show a warning, not a blocker.
+
 ## Phase 0 — what the machine already did
 
 The hourly auto-sync (`_GG_RESULT_PORTALS`, database.py) runs on any day
@@ -127,7 +151,14 @@ read it — but do not redo it either.
     `scoring-customer-set:<cid>|first_name|<value>` (safe for one field
     at a time since v2.348.0).
 
-1.2 **The final GG pairings — the forgotten step.**
+1.2 **Pairing history. Off GG (entry era): `scoring-pairings-entry:<event>`**
+    (dry run) → `…|apply` writes who played together from the score-entry
+    groups (v2.511.0, CA #829): no-shows (no entered hole) and blinds never
+    pair, seats 1&2 / 3&4 rode, each entered round its own round_id. Before
+    the entry-record cutover, or while GG pair rows exist, it runs in
+    SHADOW and returns the pair diff against GG — report it on 9/29 and
+    10/6. The GG recipe below stays for GG-era events.
+    **The final GG pairings — the forgotten step.**
     `scoring-pairings:team|<portal>|<round_id>` (dry run) → check
     `applied`, `blind_seats`, `unresolved_names: []`. Then `…|apply`.
     GG is the only source of pairing history; app rows are plans. Blind

@@ -1,5 +1,44 @@
-window.TGF_VERSION = "2.510.11";
+window.TGF_VERSION = "2.512.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.512.1",
+    date: "2026-09-28",
+    title: "Individual Net and Gross rank on stroke score, not Stableford points",
+    changes: [
+      "The last s9.24 Brackenridge G2a difference was an engine defect, not a tie rule. The ratified spec (side-games.md, 'Individual Net \u2014 definition v1') says Format: Stroke (not Stableford), and the config already said format 'stroke'. But game_individual ranked on Stableford points. Points cap a blow-up hole, so two players on the same net score came apart: Fehlis and Marroquin both shot net 34, GG had them T1 at $29.25 each, and we had Marroquin 1st on points. Individual Net now ranks on the lowest net score and Individual Gross on the lowest gross. Equal scores tie and split (CA #832, dial tiebreak 'none').",
+    ],
+  },
+  {
+    version: "2.512.0",
+    date: "2026-09-28",
+    title: "Engine payouts from the frozen flight selection (read-only) and pinned skins flights",
+    changes: [
+      "CA #829 GO, Side Games: Individual Net, Individual Gross and Skins (gross or ½ Net) can now be paid by OUR engine under the ratified flight rules. The flight board's SELECTION (settled, frozen, or live) pins each game's flights; its AMOUNTS pay the places; the engine ranks the event's own scorecards, built in memory with no writes. Ties pool and split, skins pay per skin per flight, a flight with no skin reports its pot as unallocated rather than guessing, and an incomplete card leaves the game provisional. Read it with the bridge scoring-engine-payouts:<event name>, with GG's purses beside ours.",
+      "Skins flight membership is now pinned from the selection. The #815 failure at s9.24 Brackenridge was ours: the engine split the 10 skins buyers into equal halves by playing handicap, while the ratified rule, and GG, cut at index 12.0. Under the frozen flights, GG's skins purses come out to the cent ($65 / $26 / $26 / $13).",
+      "G2a now grades these engine payouts against GG's posted purses per player, to the cent (tiers.purses.engine). Our side no longer copies GG, so this is a real test.",
+      "Individual Net and Individual Gross places have NO tiebreak (CA #832, from Season Contest Payouts v1.1 \u00a73.2/\u00a710 and Side Games Rules v1.0, where only City MVP has one). Equal Stableford points are a tie, and the tied places' money pools and splits, as GG does: 3309 Fehlis and Marroquin are T1 at $29.25 each. Before this, the engine broke the tie on the stroke score. The rule is the dial games.individual_net/individual_gross.tiebreak = 'none'.",
+      "NOT wired into payout recording: assemble_event_game_payouts still uses GG purses and then the legacy ladder. Switching events GG doesn't score (from 10/13) over to engine payouts is the money step, and it waits for Kerry's OK.",
+    ],
+  },
+  {
+    version: "2.511.1",
+    date: "2026-09-28",
+    title: "Score entry: CTP holes from the games matrix, Longest Putt, manager runbook",
+    changes: [
+      "CA #829 GO: the phone asks closest-to-the-pin only on the holes the games matrix plays, read from the same ratified rule the proximity markers print from (event_proximity_report). The matrix at the field size decides how many CTPs are funded (none below 16 on a nine), the shortest par 3s take them, and a slot with no par 3 left becomes a Longest Putt on the last hole, with its own question: 'Did anyone in your group hole a long putt?'. A claim on any other hole is refused. With no course hole card, every par 3 is asked, as before, and the source says so.",
+      "New one-page manager runbook, docs/claude/sop/score-entry-manager-runbook.md: seed from pairings, links and QR, take-over, what to do when a phone dies, finishing and closing, the paper fallback, and what still needs Kerry.",
+      "The se_* guard now looks for SQL use, not a mention in a comment, and the replay harness reads refused writes through score_entry (refused_writes_kept)."
+    ]
+  },
+  {
+    version: "2.511.0",
+    date: "2026-09-28",
+    changes: [
+      "The closeout works without Golf Genius (CA #829: \u2018Closeout: PAIRING HISTORY from entered groups, and the \u201cresults are final\u201d test rewrite\u2019). New email_parser/closeout_checks.py. Pairing history now comes from the score-entry groups: who entered scores together played together, no-shows and blinds never pair, seats 1&2 and 3&4 rode. Before the entry-record cutover it runs in shadow and names the pairs that differ from Golf Genius (the 9/29 and 10/6 parity check); after it, it writes the history itself. Bridge scoring-pairings-entry.",
+      "\u2018Is it final?\u2019 is one read-only check, scoring-closeout-final, that the 9 PM closeout runs before it acts. For Golf Genius events it checks cards against the field, missing identities, duplicate cards, every board posted with a purse, and payouts recorded. For events scored on the Tracker it checks every card closed and signed, published into scorecards, hole-in-one claims settled and payouts computed. Every blocker is named. Guard: test_closeout_checks.py.",
+      "The closeout skill now carries the standing no-push window (CA #829): the close-out digest is posted before any recap commit, and recap drafts are pushed only after the window closes.",
+    ],
+  },
   {
     version: "2.510.11",
     date: "2026-09-28",
