@@ -12,6 +12,29 @@ window.TGF_CHANGELOG = [
     ],
   },
   {
+    version: "2.505.3",
+    date: "2026-09-27",
+    changes: [
+      "PAYOUTS HAVE A HOME WITHOUT GOLF GENIUS (CA #786 GO 2). Checked first: tgf_events rows were never GG-only. The payout recorders create them from the Tracker event on demand. But the new row was written without events_id and waited for the next boot backfill, so anything that joins on it (the LSC skins pot, the Events-page PAYOUTS tab) could miss a brand-new event. One helper now finds or creates the row: it matches the stamped events_id first, then the code convention, and stamps events_id at birth (RETURNING, per the portable-SQL rule). The Games-tab payout recorder uses it. New bridge scoring-tgf-event-ensure:<id>[,<id>...][|apply] creates the rows ahead of time (the Lone Star Cup first, then every event from 10/13); it is a dry run by default. Guard test_tgf_event_ensure.py.",
+      "New bridge scoring-alias-delete:<alias id>[|confirm]: removes ONE customer alias. The first call previews the row; |confirm deletes it and writes the audit log. It was built for the bare \u201cVictor Arias\u201d alias Kerry OK\u2019d removing (CA #788), so a bare-name order goes to a person instead of silently to the father. Every other alias delete still needs its own OK.",
+    ],
+  },
+  {
+    version: "2.505.2",
+    date: "2026-09-27",
+    changes: [
+      "scoring-hcp-cards kept only the text before the first \u2018|\u2019 as the event name, so an event named \u2018LONE STAR CUP | The Hideout\u2019 reached the lookup as \u2018LONE STAR CUP\u2019 and failed as \u2018no event matches\u2019 before the handicap ruling was checked. Only a trailing \u2018|apply\u2019 is an option now, and an event id works in place of the name. The Handicaps page was never affected (it sends the name whole).",
+    ],
+  },
+  {
+    version: "2.505.1",
+    date: "2026-09-27",
+    changes: [
+      "No handicaps from the Lone Star Cup, enforced in code (Kerry 2026-09-27, CA #787: \u2018No Lone Star Cup round \u2026 posts to TGF handicaps \u2026 skip the handicap post and the handicap card for event 3329 and practice round 3330\u2019). A skip list (default 3329 and 3330, app setting hcp_skip_events overrides) makes the handicap preview, the 9-hole post, the two-nines post and the handicap-card send refuse those events with the ruling as the reason. Nothing is sent or posted for them.",
+      "The cup\u2019s roster for the card send comes from Track B\u2019s frozen lsc_roster_final dial by customer_id, not from event registrations (CA #786 GO 5). The cup event holds one registration; the 27 players live in the dial. Guard: test_handicap_cards_bridge.py (5 new checks).",
+    ],
+  },
+  {
     version: "2.505.0",
     date: "2026-09-28",
     title: "Team Net fivesome plays one rung down the ladder (Kerry, CA #783)",

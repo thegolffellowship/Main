@@ -1821,6 +1821,8 @@ def _scoring_dispatch_inner(url: str, extract: str):
       scoring-flights-close:<event_id>[|apply]  the CLOSEOUT step: a played event's board to SETTLED (frozen first if LIVE); dry run by default; the hourly sync runs it itself
       scoring-flights-board:<event_id>  the DIVISIONS/FLIGHTS board as data — ratified flighting + payout rules (SELECTION and AMOUNTS layers) beside what GG recorded; dry run, read-only
       scoring-pairings-counts:<event_id>[|<year>]  saved sheet scored against played history: times each pair has played together this year INCLUDING this event
+      scoring-tgf-event-ensure:<id>[,<id>...][|apply]  every Tracker event gets its tgf_events row (the home payouts hang off), from the Tracker event, events_id stamped (CA #786 GO 2); dry run by default
+      scoring-alias-delete:<alias id>[|confirm]  remove ONE customer_aliases row; preview first, |confirm deletes and audits
       scoring-liabilities          payouts owed, credits held, LSC shirt fund by Cup year, HIO pot, LSC skins pot, tax reserve by month
       scoring-membership-gap[:apply]  the membership gap group: booked vs today's decomposition by price/type/contests; apply rebooks membership rows only
       scoring-import-orders:<from>|<to>[|apply][|membership-only]  date-range import of "New Order" emails from the mailbox (dry-run counts; apply runs in the background, no member email)
@@ -4059,6 +4061,48 @@ def _scoring_dispatch_inner(url: str, extract: str):
             return json.dumps({"customer": _canon, "alias": _alias,
                                "customer_id": _cid,
                                "added": not bool(_dup)}, indent=2)
+        if cmd == "scoring-tgf-event-ensure":
+            # "<event_id>[,<event_id>...][|apply]" — CA #786 GO 2: every
+            # Tracker event gets its tgf_events row (the home payouts hang
+            # off) from the Tracker event itself. Dry run by default.
+            _p = [x.strip() for x in (arg or "").split("|")]
+            _ids = [int(x) for x in (_p[0] if _p else "").split(",") if x.strip().isdigit()]
+            if not _ids:
+                return json.dumps({"error": "usage: scoring-tgf-event-ensure:<id>[,<id>...][|apply]"})
+            _apply = len(_p) > 1 and _p[1].lower() == "apply"
+            _res = db.ensure_tgf_events(_ids, apply=_apply)
+            if _apply:
+                _audit("scoring-tgf-event-ensure", json.dumps(_res["events"])[:900])
+            return json.dumps(_res, indent=2, default=str)
+        if cmd == "scoring-alias-delete":
+            # "<alias id>[|confirm]" — remove ONE customer_aliases row.
+            # Preview by default (the row as it stands); "|confirm" deletes
+            # it through delete_customer_alias and audits. Built for the
+            # bare "Victor Arias" alias (#48) Kerry OK'd removing (CA #788)
+            # so a bare-name order goes to a person to decide. Every other
+            # alias delete still needs its own OK.
+            _p = [x.strip() for x in (arg or "").split("|")]
+            if not _p or not _p[0].isdigit():
+                return json.dumps({"error": "usage: scoring-alias-delete:<alias id>[|confirm]"})
+            _aid = int(_p[0])
+            with db._connect(None) as _c:
+                _row = _c.execute(
+                    "SELECT id, customer_id, customer_name, alias_type, alias_value, "
+                    "created_at FROM customer_aliases WHERE id = ?", (_aid,)).fetchone()
+            if not _row:
+                return json.dumps({"error": f"no alias {_aid}"})
+            _row = dict(_row)
+            if len(_p) < 2 or _p[1].lower() != "confirm":
+                return json.dumps({"confirmation_required": True, "alias": _row,
+                                   "will": "delete this one alias row; the customer "
+                                           "and every other alias stay",
+                                   "reversible": "re-add it with scoring-alias-add"},
+                                  indent=2, default=str)
+            _ok = db.delete_customer_alias(_aid)
+            _audit("scoring-alias-delete",
+                   f"alias {_aid} {_row['alias_type']} {_row['alias_value']!r} "
+                   f"-> cid {_row['customer_id']} deleted={_ok}")
+            return json.dumps({"deleted": _ok, "alias": _row}, indent=2, default=str)
         if cmd == "scoring-refund-watch-cancel":
             # Cancel an open (unverified) refund watch — "<name>|<amount>
             # [|apply]". Kerry 2026-07-20: an In-Flight row for a Venmo
@@ -5655,11 +5699,16 @@ def _scoring_dispatch_inner(url: str, extract: str):
         if cmd == "scoring-hcp-cards":
             # "<event>[|apply]" — the Handicaps page's By-Event card send as
             # a bridge (Kerry 2026-09-23), so the closeout can run it.
-            _p = [x.strip() for x in arg.split("|")]
-            if not _p or not _p[0]:
-                return json.dumps({"error": "<event>[|apply]"})
-            _apply = len(_p) > 1 and _p[-1].lower() == "apply"
-            _res = db.send_handicap_cards(event_name=_p[0], dry_run=not _apply,
+            # Only a TRAILING "|apply" is an option: event names carry "|"
+            # themselves ("LONE STAR CUP | The Hideout"), and splitting on
+            # every "|" sent a truncated name to the lookup. An event id
+            # ("3329") also works.
+            _a = (arg or "").strip()
+            _apply = _a.lower().endswith("|apply")
+            _ev = _a[: -len("|apply")].strip() if _apply else _a
+            if not _ev:
+                return json.dumps({"error": "<event name or id>[|apply]"})
+            _res = db.send_handicap_cards(event_name=_ev, dry_run=not _apply,
                                           sent_by="closeout")
             return json.dumps(_res, indent=2, default=str)
         if cmd in ("scoring-tee-bands", "scoring-tee-bands-apply"):

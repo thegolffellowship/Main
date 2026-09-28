@@ -19834,6 +19834,60 @@ def get_differential_parity(db_path: str | Path = DB_PATH) -> dict:
                 "rounds_with_missing_par": missing_par}
 
 
+
+# ── Events ruled OUT of TGF handicaps (v2.504.x) ─────────────────────────
+# Kerry 2026-09-27 (CA mailbox #787 item 1): "No Lone Star Cup round
+# (four-ball, Chapman or singles) posts to TGF handicaps. Closeout: skip
+# the handicap post and the handicap card for event 3329 and practice
+# round 3330." Rules-as-data: the app setting `hcp_skip_events`
+# ({"<event_id>": "<reason>"}) replaces this default when it holds a
+# valid JSON object; `{}` means no event is skipped.
+HCP_SKIP_EVENTS_DEFAULT = {
+    3329: "Lone Star Cup: no handicap posting or handicap card (Kerry 2026-09-27, CA #787)",
+    3330: "LSC practice round: no handicap posting or handicap card (Kerry 2026-09-27, CA #787)",
+}
+
+
+def hcp_skip_events(conn=None, db_path: str | Path | None = None) -> dict:
+    """{event_id: reason} for events whose rounds never post to TGF
+    handicaps and never draw a handicap card."""
+    raw = None
+    try:
+        if conn is not None:
+            row = conn.execute("SELECT value FROM app_settings WHERE key = 'hcp_skip_events'").fetchone()
+            raw = row[0] if row else None
+        else:
+            raw = get_app_setting("hcp_skip_events", db_path=db_path)
+    except Exception:
+        raw = None
+    if raw:
+        try:
+            val = json.loads(raw)
+            if isinstance(val, dict):
+                return {int(k): str(v) for k, v in val.items()}
+        except Exception:
+            logger.warning("hcp_skip_events setting is not valid JSON; using the default")
+    return dict(HCP_SKIP_EVENTS_DEFAULT)
+
+
+def _cup_roster_rows(conn) -> list:
+    """The Lone Star Cup roster as roster rows, read from Track B's
+    frozen `lsc_roster_final` dial by customer_id (Kerry via CA #786
+    GO 5: "send_handicap_cards and any cup roster read take LSC players
+    from Track B's roster dial, not event registrations")."""
+    from email_parser.lsc_cup import roster_names
+    return [{"customer_id": cid, "name": nm} for cid, nm in sorted(roster_names(conn).items())]
+
+
+def _cup_event_id(conn) -> int | None:
+    """The cup's event id, from Track B's `lsc_matches` dial."""
+    try:
+        row = conn.execute("SELECT value FROM app_settings WHERE key = 'lsc_matches'").fetchone()
+        eid = (json.loads(row[0]) or {}).get("event_id") if row and row[0] else None
+        return int(eid) if eid else None
+    except Exception:
+        return None
+
 def get_scoring_handicap_preview(event_query: str,
                                  db_path: str | Path = DB_PATH) -> dict:
     """READ-ONLY preview of the handicap rounds we WOULD derive from our
@@ -19868,7 +19922,7 @@ def get_scoring_handicap_preview(event_query: str,
                       sr.round_date, sr.holes_played, sr.gross, sr.tee_id,
                       COALESCE(sr.hcp_exclude, 0) AS hcp_exclude,
                       sr.hcp_exclude_note,
-                      e.item_name AS event_name, c.name AS course_name,
+                      e.id AS eid, e.item_name AS event_name, c.name AS course_name,
                       ct.tee_name, ct.slope, ct.rating,
                       (SELECT hr.id FROM handicap_rounds hr
                        WHERE hr.scoring_round_id = sr.id LIMIT 1) AS hr_id
@@ -19879,6 +19933,14 @@ def get_scoring_handicap_preview(event_query: str,
                WHERE e.item_name LIKE ?
                ORDER BY sr.player_name""",
             (f"%{event_query}%",)).fetchall()
+        _skip = hcp_skip_events(conn)
+        _ruled_out = sorted({(r["event_name"], _skip[r["eid"]]) for r in rounds
+                             if r["eid"] in _skip})
+        rounds = [r for r in rounds if r["eid"] not in _skip]
+        if not rounds and _ruled_out:
+            return {"error": "no handicap posting for "
+                             + "; ".join(f"{n} ({why})" for n, why in _ruled_out),
+                    "skipped_by_ruling": [n for n, _ in _ruled_out]}
         if not rounds:
             return {"error": f"no imported scoring rounds match event "
                              f"{event_query!r} — run the scorecard import first"}
@@ -22649,7 +22711,7 @@ def derive_18hole_rounds_as_two_nines(event_query: str, per_nine: dict | None = 
                       sr.course_id,
                       COALESCE(sr.hcp_exclude, 0) AS hcp_exclude,
                       sr.hcp_exclude_note,
-                      e.item_name AS event_name, c.name AS course_name,
+                      e.id AS eid, e.item_name AS event_name, c.name AS course_name,
                       ct.tee_name
                FROM scoring_rounds sr
                JOIN events e ON e.id = sr.event_id
@@ -22658,6 +22720,14 @@ def derive_18hole_rounds_as_two_nines(event_query: str, per_nine: dict | None = 
                WHERE e.item_name LIKE ?
                ORDER BY sr.player_name, sr.id""",
             (f"%{event_query}%",)).fetchall()
+        _skip = hcp_skip_events(conn)
+        _ruled_out = sorted({(r["event_name"], _skip[r["eid"]]) for r in rounds
+                             if r["eid"] in _skip})
+        rounds = [r for r in rounds if r["eid"] not in _skip]
+        if not rounds and _ruled_out:
+            return {"error": "no handicap posting for "
+                             + "; ".join(f"{n} ({why})" for n, why in _ruled_out),
+                    "skipped_by_ruling": [n for n, _ in _ruled_out]}
         if not rounds:
             return {"error": f"no imported scoring rounds match event "
                              f"{event_query!r} — run the scorecard import first"}
@@ -40708,6 +40778,9 @@ def send_handicap_cards(event_name: str | None = None, chapter: str | None = Non
             ev = conn.execute(
                 "SELECT id, item_name FROM events WHERE item_name = ? COLLATE NOCASE",
                 (event_name,)).fetchone()
+            if not ev and event_name.isdigit():
+                ev = conn.execute("SELECT id, item_name FROM events WHERE id = ?",
+                                  (int(event_name),)).fetchone()
             if not ev:
                 ev = conn.execute(
                     """SELECT e.id, e.item_name FROM events e
@@ -40721,7 +40794,15 @@ def send_handicap_cards(event_name: str | None = None, chapter: str | None = Non
                 # mailed a whole roster exactly that way. Refuse instead.
                 return {"error": f"No event matches {event_name!r} — nothing sent.",
                         "http": 400}
-            roster = _event_roster_rows(conn, ev["id"])
+            _skip = hcp_skip_events(conn)
+            if int(ev["id"]) in _skip:
+                return {"error": f"{ev['item_name']}: no handicap cards. "
+                                 f"{_skip[int(ev['id'])]}. Nothing sent.",
+                        "http": 409, "status": "skipped_by_ruling"}
+            if int(ev["id"]) == (_cup_event_id(conn) or -1):
+                roster = _cup_roster_rows(conn)
+            else:
+                roster = _event_roster_rows(conn, ev["id"])
         finally:
             conn.close()
 
@@ -57450,6 +57531,84 @@ def repair_teamnet_blind_draw_shares(event_name: str, dry_run: bool = True,
         return plan
 
 
+def _tgf_event_lookup(conn, ev: dict):
+    """The tgf_events row for a Tracker event, or None. Matches the
+    stamped events_id first, then the code convention: the FULL event name
+    ("s9.15 The Quarry", what the TGF sidebar and the Events-page PAYOUTS
+    tab key on), with the bare code prefix as a fallback for legacy and
+    manual rows. Returns (row, full, bare)."""
+    full = (ev.get("item_name") or "").strip()
+    m = _GG_EVENT_CODE_COMPOUND_RE.match(full)
+    bare = m.group(1).lower() if m else full.lower()
+    row = None
+    try:
+        row = conn.execute("SELECT id, code FROM tgf_events WHERE events_id = ?",
+                           (ev["id"],)).fetchone()
+    except sqlite3.OperationalError:
+        row = None  # events_id column not migrated yet
+    if not row:
+        row = conn.execute(
+            "SELECT id, code FROM tgf_events WHERE lower(code) = ? OR lower(code) = ?",
+            (full.lower(), bare)).fetchone()
+    return row, full, bare
+
+
+def _ensure_tgf_event_row(conn, ev: dict) -> tuple[int, bool]:
+    """Find or create the tgf_events row that payouts hang off, FROM THE
+    TRACKER EVENT (CA #786 GO 2: payouts need a home that never depended
+    on Golf Genius). The row carries events_id from birth, so readers that
+    join on it (lsc_skins_pot, the Events-page PAYOUTS tab) do not wait
+    for the boot backfill. Returns (tgf_event_id, created)."""
+    row, full, bare = _tgf_event_lookup(conn, ev)
+    if row:
+        if row["code"].strip().lower() == bare != full.lower():
+            conn.execute("UPDATE tgf_events SET code = ?, name = ? WHERE id = ?",
+                         (full, full, row["id"]))
+        try:
+            conn.execute("UPDATE tgf_events SET events_id = ? "
+                         "WHERE id = ? AND events_id IS NULL", (ev["id"], row["id"]))
+        except sqlite3.OperationalError:
+            pass
+        conn.commit()
+        return row["id"], False
+    new = conn.execute(
+        """INSERT INTO tgf_events (code, name, event_date, course, chapter, events_id)
+           VALUES (?, ?, ?, ?, ?, ?) RETURNING id""",
+        (full, full, ev.get("event_date") or "", ev.get("course"),
+         ev.get("chapter"), ev["id"])).fetchone()
+    conn.commit()
+    return new[0], True
+
+
+def ensure_tgf_events(event_ids: list, apply: bool = False, db_path=None) -> dict:
+    """Make sure each Tracker event has its tgf_events row (CA #786 GO 2:
+    LSC 3329 first, then every event from 10/13). Dry run by default: it
+    reports which rows exist and which would be created; apply creates the
+    missing ones. Never touches payouts."""
+    out = {"applied": bool(apply), "events": []}
+    with _connect(db_path) as conn:
+        for eid in event_ids:
+            ev = conn.execute("SELECT * FROM events WHERE id = ?", (int(eid),)).fetchone()
+            if not ev:
+                out["events"].append({"event_id": eid, "error": "no such event"})
+                continue
+            ev = dict(ev)
+            row, full, _ = _tgf_event_lookup(conn, ev)
+            if row:
+                if apply:
+                    _ensure_tgf_event_row(conn, ev)  # stamps events_id if missing
+                out["events"].append({"event_id": ev["id"], "name": full,
+                                      "tgf_event_id": row["id"], "status": "exists"})
+            elif apply:
+                tid, _ = _ensure_tgf_event_row(conn, ev)
+                out["events"].append({"event_id": ev["id"], "name": full,
+                                      "tgf_event_id": tid, "status": "created"})
+            else:
+                out["events"].append({"event_id": ev["id"], "name": full,
+                                      "status": "would create"})
+    return out
+
+
 def record_event_game_payouts(event_name: str, payouts: list,
                               force: bool = False, db_path=None) -> dict:
     """Record the Games-tab winners as PAYOUTS-tab rows (v2.38.0).
@@ -57480,26 +57639,7 @@ def record_event_game_payouts(event_name: str, payouts: list,
         # Quarry") — the TGF sidebar displays code and the Events-page
         # PAYOUTS tab matches code === item_name. Bare code prefix kept
         # as a lookup fallback for legacy/manual rows.
-        full = ev["item_name"].strip()
-        m = _GG_EVENT_CODE_COMPOUND_RE.match(full)
-        bare = m.group(1).lower() if m else full.lower()
-
-        trow = conn.execute(
-            "SELECT id, code FROM tgf_events WHERE LOWER(code) = ? OR LOWER(code) = ?",
-            (full.lower(), bare)).fetchone()
-        if trow:
-            tgf_event_id = trow["id"]
-            if trow["code"].strip().lower() == bare != full.lower():
-                conn.execute("UPDATE tgf_events SET code = ?, name = ? WHERE id = ?",
-                             (full, full, tgf_event_id))
-                conn.commit()
-        else:
-            cur = conn.execute(
-                """INSERT INTO tgf_events (code, name, event_date, course, chapter)
-                   VALUES (?, ?, ?, ?, ?)""",
-                (full, full, ev.get("event_date") or "",
-                 ev.get("course"), ev.get("chapter")))
-            tgf_event_id = cur.lastrowid
+        tgf_event_id, _created = _ensure_tgf_event_row(conn, ev)
 
         manual = conn.execute(
             "SELECT COUNT(*) FROM tgf_payouts WHERE event_id = ? "
