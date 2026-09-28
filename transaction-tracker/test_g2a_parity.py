@@ -162,6 +162,65 @@ check("a seeding error is an ERROR, not a quiet pass",
                    "blockers": []})["result"] == "ERROR")
 
 
+print("\n== the games tier grades OUR engine against GG, never GG against GG ==")
+
+_board = {
+    "cards": [{"key": "1", "name": "MURPHY, Mike", "customer_id": 11},
+              {"key": "2", "name": "FEHLIS, Chuck", "customer_id": 12},
+              {"key": "3", "name": "YOUNG, Jeff", "customer_id": None}],
+    "games": {
+        "individual_net": {"active": True, "flights": [{"flight": "F1", "rows": [
+            {"key": "1", "name": "MURPHY, Mike", "place": 1, "points": 20},
+            {"key": "2", "name": "FEHLIS, Chuck", "place": 2, "points": 18},
+            {"key": "3", "name": "YOUNG, Jeff", "place": 3, "points": 15}]}]},
+        "skins": {"flights": [{"skins": [{"key": "3", "hole": 9},
+                                         {"key": "1", "hole": 4}]}]},
+        "mvp": {"winners": [{"key": "1"}]},
+        "team_net": {"teams": []},
+    }}
+_gg = {"results": [
+    {"game": "individual_net", "player_name": "MURPHY, Mike", "customer_id": 11,
+     "position": "1"},
+    {"game": "individual_net", "player_name": "FEHLIS, Chuck", "customer_id": 12,
+     "position": "2"},
+    {"game": "skins", "player_name": "Jeff Young", "customer_id": None,
+     "detail": "Birdie on 9"},
+    {"game": "skins", "player_name": "MURPHY, Mike", "customer_id": 11,
+     "detail": "Par on 4"},
+    {"game": "ctp", "player_name": "YOUNG, Jeff", "customer_id": None},
+]}
+_d = g2._diff_games(_gg, "x", None, board=_board, gg_mvp=["Mike Murphy"])["games"]
+check("identical winners and places MATCH", _d["individual_net"]["status"] == "match",
+      _d["individual_net"])
+check("skins match on (player, hole), names normalised 'Last, First'",
+      _d["skins"]["status"] == "match", _d["skins"])
+check("MVP is graded from event_mvps", _d["mvp"]["status"] == "match", _d["mvp"])
+check("CTP is a measured fact, reported and NOT graded",
+      _d["ctp"]["status"] == "input_not_computed" and not _d["ctp"]["graded"])
+
+_gg2 = {"results": [dict(r) for r in _gg["results"]]}
+_gg2["results"][1]["position"] = "T1"
+_d2 = g2._diff_games(_gg2, "x", None, board=_board)["games"]
+check("a different place is a MISMATCH naming the player",
+      _d2["individual_net"]["status"] == "mismatch"
+      and "FEHLIS" in " ".join(_d2["individual_net"]["diffs"]))
+_gg3 = {"results": [r for r in _gg["results"] if r.get("detail") != "Par on 4"]}
+_d3 = g2._diff_games(_gg3, "x", None, board=_board)["games"]
+check("a skin ours paid and GG did not is a MISMATCH",
+      _d3["skins"]["status"] == "mismatch"
+      and "hole 4" in " ".join(_d3["skins"]["diffs"]))
+_gg4 = {"results": _gg["results"][1:2]}  # GG pays 2nd, omits our 1st
+_d4 = g2._diff_games(_gg4, "x", None, board=_board)["games"]
+check("a player ours places inside GG's paid places but GG omits is an EXTRA",
+      _d4["individual_net"]["status"] == "mismatch")
+
+_out = {"tiers": {"players": {"status": "graded", "fail": 0},
+                  "games": {"games": _d2}}, "blockers": []}
+check("a graded game mismatch FAILS the gate", g2._verdict(_out)["result"] == "FAIL")
+_p = g2._diff_games(_gg, "x", None, board=None)["games"]
+check("with no engine board every game is PENDING, never matched",
+      all(v["status"] == "pending_engine_side" for v in _p.values()))
+
 print("\n" + "=" * 60)
 if FAILURES:
     print(f"{len(FAILURES)} FAILED: {FAILURES}")

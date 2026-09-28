@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.510.5";
+window.TGF_VERSION = "2.510.6";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.510.6",
+    date: "2026-09-28",
+    title: "G2a grades our engine's games against Golf Genius, and a pending game can no longer read PASS",
+    changes: [
+      "G2a (CA #801) was reporting PASS on s9.24 and a9.24 while every game row said pending_engine_side: the player tier (handicaps, nets, Stableford) was graded, but the harness never filled in OUR game winners, and the verdict ignored the games tier. That was a hollow pass. The games tier now runs the engine on the seeded sandbox session (ls_leaderboard) and grades Individual Net/Gross (every GG winner must hold the same place in our flight, and anyone we place inside GG's paid places who GG omits is an extra), Skins (the set of player-and-hole skins must be identical) and MVP (event_mvps kind mvp) at zero tolerance, matching on customer_id and falling back to the name with 'Last, First' and Bl[..] normalised.",
+      "A graded game that differs is a FAIL of the whole gate, naming the player; a graded GG game with no engine equivalent is a blocker (INCOMPLETE), never a pass. Team Net and its board stay A3 report-only, with our teams shown beside GG's. CTP, longest putt and HIO are measured facts entered by the manager, so they are reported with no engine side.",
+    ],
+  },
   {
     version: "2.510.5",
     date: "2026-09-27",

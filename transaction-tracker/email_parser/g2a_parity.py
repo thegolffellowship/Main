@@ -51,6 +51,8 @@ the verdict.
 
 from __future__ import annotations
 
+import re
+
 # The two residual classes A2 allows. Anything else is a FAIL.
 RESIDUAL_DERIVED_DOTS_PLUS1 = "derived_dots_ph_plus1_no_ndb_cap"
 RESIDUAL_TIED_PAYOUT_ROUNDING = "tied_group_payout_1_2_cents_under_gg"
@@ -129,7 +131,7 @@ DRAFT_PURSE_MAP_AMBIGUOUS = {
 PURSE_MAP_RATIFIED = False
 
 # A3: reported, never graded.
-A3_REPORT_ONLY = ("team_net", "skins_half_net")
+A3_REPORT_ONLY = ("team_net", "team_net_board", "skins_half_net")
 
 
 def _classify_player_row(row: dict) -> tuple[str, str | None]:
@@ -206,7 +208,22 @@ def g2a_parity(event_name: str, db_path=None) -> dict:
     # ── tier 2: GAMES, ours vs GG's recorded board ──
     gg = (db.get_gg_game_results(event_name, db_path=db_path) if db_path
           else db.get_gg_game_results(event_name))
-    out["tiers"]["games"] = _diff_games(gg, event_name, db_path)
+    board = None
+    if (out["tiers"].get("players") or {}).get("status") == "graded":
+        sid = out["tiers"]["players"]["session_id"]
+        board = (db.ls_leaderboard(sid, db_path=db_path) if db_path
+                 else db.ls_leaderboard(sid))
+        if board.get("error"):
+            board = None
+    gg_mvp = _gg_recorded_mvp(event_name, db_path)
+    out["tiers"]["games"] = _diff_games(gg, event_name, db_path,
+                                        board=board, gg_mvp=gg_mvp)
+    for game, g in (out["tiers"]["games"].get("games") or {}).items():
+        if g.get("graded") and g.get("status") in ("pending_engine_side",
+                                                     "no_engine_equivalent"):
+            out["blockers"].append(
+                f"games tier: {game} has no engine-side result to grade "
+                f"({g['status']})")
 
     # ── tier 3: PURSES, our matrix assembly vs GG's recorded purse ──
     out["tiers"]["purses"] = _diff_purses(gg, event_name, db_path)
@@ -236,12 +253,155 @@ def g2a_parity(event_name: str, db_path=None) -> dict:
     return out
 
 
-def _diff_games(gg: dict, event_name: str, db_path) -> dict:
-    """GG's recorded winners vs ours, per game. A3 games are reported only."""
+def _norm_name(name) -> str:
+    """'MURPHY, Mike' / 'Mike Murphy' / 'Bl[PALACIOS, Richard]' -> 'mike murphy'.
+
+    Used only when a row carries no customer_id. The blind marker is
+    stripped so a blind resolves to the member whose score it borrowed.
+    """
+    s = (name or "").strip()
+    m = re.match(r"^bl\[(.*)\]", s, re.I)
+    if m:
+        s = m.group(1)
+    if "," in s:
+        last, first = s.split(",", 1)
+        s = f"{first.strip()} {last.strip()}"
+    return " ".join(s.lower().split())
+
+
+def _card_index(board: dict):
+    """(by customer_id, by normalised name) -> our card key."""
+    by_cid, by_name = {}, {}
+    for c in board.get("cards") or []:
+        if c.get("customer_id") is not None:
+            by_cid[c["customer_id"]] = c["key"]
+        by_name.setdefault(_norm_name(c.get("name")), c["key"])
+    return by_cid, by_name
+
+
+def _resolve(row_cid, row_name, idx):
+    by_cid, by_name = idx
+    if row_cid is not None and row_cid in by_cid:
+        return by_cid[row_cid]
+    return by_name.get(_norm_name(row_name))
+
+
+def _pos_int(pos):
+    m = re.search(r"\d+", str(pos or ""))
+    return int(m.group(0)) if m else None
+
+
+def _grade_individual(grows, ours: dict, idx, names) -> dict:
+    """GG's paid places vs our flight places, player by player.
+
+    Each GG winner must hold the same place in our engine. Any player our
+    engine places at or above the last paid place of that flight who is NOT
+    on GG's board is an extra. Competition ranking on both sides, so a tie
+    is 'T1' on GG and place 1 twice on ours.
+    """
+    if not ours or not ours.get("active"):
+        return {"status": "mismatch", "diffs": [
+            "our engine did not run this game "
+            + "; ".join((ours or {}).get("warnings") or [])]}
+    place_of, flight_of = {}, {}
+    for f in ours.get("flights") or []:
+        for r in f["rows"]:
+            place_of[r["key"]] = r["place"]
+            flight_of[r["key"]] = f["flight"]
+    diffs, gg_keys, worst = [], set(), {}
+    for r in grows:
+        k = _resolve(r.get("customer_id"), r.get("player_name"), idx)
+        pos = _pos_int(r.get("position"))
+        if k is None:
+            diffs.append(f"{r['player_name']}: on GG's board, not on our card")
+            continue
+        gg_keys.add(k)
+        fl = flight_of.get(k)
+        worst[fl] = max(worst.get(fl, 0), pos or 0)
+        if place_of.get(k) != pos:
+            diffs.append(f"{names.get(k, k)}: GG {r.get('position')}, ours "
+                         f"{place_of.get(k)} ({fl})")
+    for f in ours.get("flights") or []:
+        cut = worst.get(f["flight"])
+        if cut is None:
+            diffs.append(f"our flight {f['flight']} has no GG winner at all")
+            continue
+        for r in f["rows"]:
+            if r["place"] <= cut and r["key"] not in gg_keys:
+                diffs.append(f"{r['name']}: ours place {r['place']} in "
+                             f"{f['flight']}, not on GG's board")
+    ours_list = [{"player": r["name"], "flight": f["flight"],
+                  "place": r["place"], "points": r["points"]}
+                 for f in ours.get("flights") or [] for r in f["rows"]
+                 if r["place"] <= (worst.get(f["flight"]) or 0)]
+    return {"status": "mismatch" if diffs else "match", "diffs": diffs,
+            "ours": ours_list}
+
+
+_SKIN_RE = re.compile(r"on\s+(\d+)", re.I)
+
+
+def _grade_skins(grows, ours: dict, idx, names) -> dict:
+    """GG's (player, hole) skins vs ours — the set must be identical."""
+    gg_set, diffs = set(), []
+    for r in grows:
+        k = _resolve(r.get("customer_id"), r.get("player_name"), idx)
+        holes = [int(h) for h in _SKIN_RE.findall(r.get("detail") or "")]
+        if k is None:
+            diffs.append(f"{r['player_name']}: on GG's board, not on our card")
+            continue
+        if not holes:
+            diffs.append(f"{r['player_name']}: GG detail "
+                         f"{r.get('detail')!r} names no hole")
+        gg_set |= {(k, h) for h in holes}
+    our_set = {(sk["key"], sk["hole"])
+               for f in (ours or {}).get("flights") or []
+               for sk in f["skins"]}
+    for k, h in sorted(gg_set - our_set, key=lambda x: x[1]):
+        diffs.append(f"hole {h}: GG skin to {names.get(k, k)}, ours not")
+    for k, h in sorted(our_set - gg_set, key=lambda x: x[1]):
+        diffs.append(f"hole {h}: our skin to {names.get(k, k)}, GG not")
+    return {"status": "mismatch" if diffs else "match", "diffs": diffs,
+            "variant": (ours or {}).get("gg_name") or (ours or {}).get("label"),
+            "selection": ((ours or {}).get("selection") or {}).get("reason"),
+            "ours": sorted(f"{names.get(k, k)} #{h}" for k, h in our_set)}
+
+
+def _grade_mvp(gg_names: list, ours: dict, idx, names) -> dict:
+    gg_keys = {_resolve(None, n, idx) for n in gg_names}
+    our_keys = {w["key"] for w in (ours or {}).get("winners") or []}
+    diffs = []
+    if None in gg_keys:
+        diffs.append("a GG MVP is not on our card: " + ", ".join(gg_names))
+    if gg_keys - {None} != our_keys:
+        diffs.append(
+            "GG " + ", ".join(sorted(gg_names)) + " / ours "
+            + (", ".join(sorted(names.get(k, k) for k in our_keys))
+               or "none"))
+    return {"status": "mismatch" if diffs else "match", "diffs": diffs,
+            "ours": sorted(names.get(k, k) for k in our_keys)}
+
+
+# Games whose GG row is a MEASURED fact entered by the manager (a tape
+# measure, a witness), not something computable from hole scores. Reported
+# with GG's row; there is no engine side to grade.
+INPUT_NOT_COMPUTED = ("ctp", "longest_putt", "hio")
+
+
+def _diff_games(gg: dict, event_name: str, db_path, board=None,
+                gg_mvp=None) -> dict:
+    """GG's recorded winners vs our engine's, per game.
+
+    Graded games (A1): individual_net, individual_gross, skins, mvp —
+    zero tolerance, player by player. A3 games (team_net and its board,
+    skins_half_net) are reported with our side beside GG's, not graded.
+    CTP / longest putt / HIO are manager-entered facts, reported only.
+    A graded GG game with no engine equivalent is a BLOCKER, never a pass.
+    """
     if gg.get("error"):
         return {"status": "error", "error": gg["error"]}
     rows = gg.get("results") or []
-    if not rows:
+    if not rows and not gg_mvp:
         return {"status": "no_gg_data",
                 "note": ("GG has recorded no game results for this event "
                          "yet. Not a pass and not a fail — there is nothing "
@@ -249,24 +409,80 @@ def _diff_games(gg: dict, event_name: str, db_path) -> dict:
     by_game: dict = {}
     for r in rows:
         by_game.setdefault(r["game"], []).append(r)
+    ours_games = (board or {}).get("games") or {}
+    idx = _card_index(board or {})
+    names = {c["key"]: c["name"] for c in (board or {}).get("cards") or []}
     games = {}
     for game, grows in sorted(by_game.items()):
-        games[game] = {
-            "graded": game not in A3_REPORT_ONLY,
+        entry = {
+            "graded": game not in A3_REPORT_ONLY
+                      and game not in INPUT_NOT_COMPUTED,
             "a3_report_only": game in A3_REPORT_ONLY,
             "gg_winners": [
                 {"player": r["player_name"], "position": r.get("position"),
                  "detail": r.get("detail"), "purse": r.get("purse")}
                 for r in grows],
-            # Our side is filled by the caller that has the engine result for
-            # this game; the harness reports GG's board verbatim so the diff
-            # is auditable even where our engine has no opinion.
-            "ours": None,
-            "status": "pending_engine_side",
         }
-    return {"status": "collected", "games": games,
-            "note": ("GG's board is captured verbatim. Games listed "
-                     "a3_report_only are REPORTED, not graded, per #571 A3.")}
+        if board is None:
+            entry.update(ours=None, status="pending_engine_side")
+        elif game in INPUT_NOT_COMPUTED:
+            entry.update(ours=None, status="input_not_computed")
+        elif game in ("individual_net", "individual_gross"):
+            entry.update(_grade_individual(grows, ours_games.get(game),
+                                           idx, names))
+        elif game == "skins":
+            entry.update(_grade_skins(grows, ours_games.get("skins"),
+                                      idx, names))
+        elif game in ("team_net", "team_net_board"):
+            tn = ours_games.get("team_net") or {}
+            entry.update(status="reported", ours=[
+                {"team": t["team"], "place": t["place"],
+                 "vs_par": t["vs_par"], "members": t["members"]}
+                for t in tn.get("teams") or []][:6],
+                warnings=tn.get("warnings") or [])
+        else:
+            entry.update(ours=None, status="no_engine_equivalent")
+        games[game] = entry
+    # MVP lives in event_mvps, not gg_game_results.
+    if board is not None and gg_mvp:
+        games["mvp"] = dict(
+            graded=True, a3_report_only=False,
+            gg_winners=[{"player": n} for n in gg_mvp],
+            **_grade_mvp(gg_mvp, ours_games.get("mvp"), idx, names))
+    # A graded game our engine paid that GG has no board for is a diff too.
+    if board is not None:
+        for game in ("individual_net", "individual_gross", "skins"):
+            g = ours_games.get(game) or {}
+            paid = (any(f.get("skins") for f in g.get("flights") or [])
+                    if game == "skins" else g.get("active"))
+            if paid and game not in games:
+                games[game] = {"graded": True, "a3_report_only": False,
+                               "gg_winners": [], "status": "mismatch",
+                               "diffs": [f"our engine ran {game}; GG "
+                                         f"recorded no board for it"]}
+    return {"status": "graded" if board is not None else "collected",
+            "games": games,
+            "note": ("GG's board is captured verbatim beside ours. Games "
+                     "listed a3_report_only are REPORTED, not graded, per "
+                     "#571 A3; ctp / longest_putt / hio are manager-entered "
+                     "facts with no engine side.")}
+
+
+def _gg_recorded_mvp(event_name: str, db_path) -> list:
+    from . import database as db
+    try:
+        conn = (db.get_connection(db_path) if db_path
+                else db.get_connection())
+        try:
+            return [r["player_name"] for r in conn.execute(
+                "SELECT m.player_name FROM event_mvps m "
+                "JOIN events e ON e.id = m.event_id "
+                "WHERE lower(e.item_name) = lower(?) AND m.kind = 'mvp'",
+                (event_name,)).fetchall()]
+        finally:
+            conn.close()
+    except Exception:
+        return []
 
 
 def _diff_purses(gg: dict, event_name: str, db_path) -> dict:
@@ -320,6 +536,14 @@ def _verdict(out: dict) -> dict:
         return {"result": "FAIL",
                 "why": f"{fails} player(s) fail A1: "
                        f"{', '.join(p.get('failed_players') or [])}"}
+    g = out["tiers"].get("games") or {}
+    bad = sorted(k for k, v in (g.get("games") or {}).items()
+                 if v.get("graded") and v.get("status") == "mismatch")
+    if bad:
+        return {"result": "FAIL",
+                "why": "game(s) differ from GG: " + "; ".join(
+                    f"{k}: " + " | ".join(g["games"][k].get("diffs") or [])
+                    for k in bad)}
     if out["blockers"]:
         return {"result": "INCOMPLETE",
                 "why": "; ".join(out["blockers"]),
