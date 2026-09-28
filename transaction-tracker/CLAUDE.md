@@ -770,6 +770,21 @@ obviously they have to go to the right places. Horizon is NOT TGF. No connection
 - Rule 3b still applies: a change that needs Kerry's ratification is merged
   only after he gives it.
 
+## No-push window during live events (CA #829, 2026-09-28, standing rule)
+
+Every push to `main` restarts the Tracker and drops requests in flight
+(#812: the 502s on 9/27 lined up with pushes). A live score-entry round
+must never lose a hole to a deploy.
+- No lane pushes to `main` from the first tee time of a live score-entry
+  event until that event's close-out is posted. This covers Tue 9/29,
+  Tue 10/6, the Lone Star Cup (10/9-10/11) and every event from 10/13.
+- The Front Desk posts "WINDOW OPEN" and "WINDOW CLOSED" on the mailbox
+  (topic front-desk). Check the mailbox before any push on an event day.
+- An emergency fix during an open window needs CA's OK first.
+- Ship anything an event needs before its first tee time. Changes that
+  restart the app on purpose (a new start command, a migration) go outside
+  every window.
+
 ## Git Merge & PR Best Practices
 
 When merging branches that have diverged (especially long-running feature branches), follow these steps to avoid losing work:

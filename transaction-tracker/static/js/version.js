@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.510.9";
+window.TGF_VERSION = "2.510.10";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.510.10",
+    date: "2026-09-28",
+    changes: [
+      "Docs only: CLAUDE.md gains the no-push window rule (CA #829). No lane pushes to main from the first tee time of a live score-entry event until its close-out is posted; the Front Desk posts WINDOW OPEN and WINDOW CLOSED on the mailbox.",
+    ],
+  },
   {
     version: "2.510.9",
     date: "2026-09-28",
