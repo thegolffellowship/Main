@@ -23896,6 +23896,30 @@ def import_gg_scorecards(tournament_url: str, event_code: str | None = None,
         imported = replaced = upgraded = unresolved = skipped = bridged = 0
         skipped_empty = 0
         verified_ids: list = []
+        # G-0 GATE (CA #786 GO 1, email_parser/entry_publish.py): "A GG
+        # import may never double it." Once entered scores are the record
+        # for an event (source='entry' rows), GG writes NOTHING into it --
+        # ~110 readers of scoring_rounds do not filter on source, so a GG
+        # row beside an entry row double-counts everywhere. The raw GG
+        # pages are still archived above (both sources kept); the diff is
+        # entry_parity. Per player too: a card whose owner already has an
+        # entry row on this date/event is skipped (covers an import with
+        # no event_code, whose rows carry event_id NULL).
+        if event_id and conn.execute(
+                "SELECT 1 FROM scoring_rounds WHERE event_id = ? "
+                "AND lower(COALESCE(source, '')) = 'entry' LIMIT 1",
+                (event_id,)).fetchone():
+            conn.commit()
+            return {"imported": 0, "replaced": 0, "upgraded_with_handicap": 0,
+                    "skipped_other_tournament": 0, "skipped_empty_cards": 0,
+                    "unresolved_names": 0, "handicap_rounds_bridged": 0,
+                    "players_seen": len(data["players"]), "event_id": event_id,
+                    "verified_ok": 0, "discrepancies": [],
+                    "skipped_entry_record": True,
+                    "reason": ("entered scores are the record for this event; "
+                               "run entry_parity (scoring-entry-parity:"
+                               f"{event_id}) to diff Golf Genius against them")}
+        skipped_entry = 0
         for p in data["players"]:
             if not p.get("player_name") or not p.get("holes"):
                 continue
@@ -23906,6 +23930,14 @@ def import_gg_scorecards(tournament_url: str, event_code: str | None = None,
                 skipped_empty += 1
                 continue
             cid = _resolve_scoring_player(conn, p["player_name"])
+            # G-0 gate, per player (see above).
+            if cid and conn.execute(
+                    "SELECT 1 FROM scoring_rounds WHERE customer_id = ? "
+                    "AND lower(COALESCE(source, '')) = 'entry' "
+                    "AND (round_date = ? OR (event_id IS NOT NULL AND event_id = ?)) "
+                    "LIMIT 1", (cid, event_date, event_id or -1)).fetchone():
+                skipped_entry += 1
+                continue
             existing = conn.execute(
                 """SELECT id FROM scoring_rounds
                    WHERE gg_aggregate_id = ? AND player_name = ?""",
@@ -24200,7 +24232,8 @@ def import_gg_scorecards(tournament_url: str, event_code: str | None = None,
             "skipped_empty_cards": skipped_empty,
             "unresolved_names": unresolved, "handicap_rounds_bridged": bridged,
             "players_seen": len(data["players"]), "event_id": event_id,
-            "verified_ok": n_ok, "discrepancies": discrepancies}
+            "verified_ok": n_ok, "discrepancies": discrepancies,
+            "skipped_entry_record_players": skipped_entry}
 
 
 def get_scoring_rounds_list(player: str | None = None, event: str | None = None,

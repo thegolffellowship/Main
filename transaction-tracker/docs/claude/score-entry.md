@@ -545,3 +545,61 @@ back via `RETURNING`, no try-ALTER. `RETURNING` needs SQLite 3.35+; the
 sandbox has 3.45.1. The tables are still created lazily with `CREATE TABLE
 IF NOT EXISTS` (once per database), since the repo has no migration-file
 convention yet; that goes to CA with the hardening ruling.
+
+## Publishing entered scores (G-0 keystone, CA #786 GO 1)
+
+Kerry's ruling: when a group's card is CLOSED AND SIGNED, its gross scores
+are copied into `scoring_rounds` / `scoring_holes` with `source='entry'`; a
+GG import may never double it; where both sources exist for one event, keep
+both and diff them (the G2a/G2b parity check on 9/29 and 10/6). No new
+table. Module: `email_parser/entry_publish.py`. It reads entered scores
+only through `score_entry.get_entered_scores` (which now also returns each
+round's `course_id`).
+
+**Why two modes.** About a hundred readers of `scoring_rounds` do not filter
+on `source`, so an entry row must never sit beside a GG row for the same
+event and player.
+
+- **Authoritative**: the event has no non-entry `scoring_rounds` rows AND
+  its date is on/after the app setting `entry_record_from` (default
+  `2026-10-10`). Eligible players are upserted with
+  `gg_aggregate_id = 'entry:<score-entry round id>'`, `source='entry'`,
+  customer_id, the customers-table name, event_id, round date, course_id
+  (round, else event), tee_id, holes_played, the locked playing handicap,
+  gross, net (gross - PH), and one `scoring_holes` row per hole (strokes =
+  gross, strokes_received 0; the formula layer derives pops). Re-publishing
+  updates the same row; `imported_at` moves only when the card changed.
+- **Shadow**: the event has GG rows, or is before the cutover. Nothing is
+  written; the result carries `entry_parity`: per player (by customer_id),
+  per hole, entered vs GG, players on one side only, totals.
+
+**Eligibility** (`publish_eligibility`, the one place the rule lives): the
+round is closed OR the player's group card was submitted (a card check);
+AND he holds a live `player` signature (his own or the scorekeeper's for
+him); AND every hole of the round has a gross on his own card. Anyone else
+is listed as `held` with the reason. A player already published and now
+held (an edit voided his signature) is reported as `stale` and left as is
+until he signs again. PREVIEW rounds are never published. A player with an
+unlinked GG card (event_id NULL) on the same date is held.
+
+**Tee**: a band (`<50`, `50-64`, `65+`, `Forward`) resolves through
+`database.event_tee_legend` (the starter sheet's band-to-tee mapping); a
+tee name matches the course record by master name (`_gg_tee_parts`). The
+concrete row follows `_event_tee_rows`: 18 holes take the legend's row, a
+nine takes the row labelled for the side played. An unresolved tee is
+published with `tee_id` NULL and reported (handicap posting then skips it
+for missing slope/rating, as it does for GG cards).
+
+**The GG gate**: `import_gg_scorecards` returns `skipped_entry_record` with
+a reason, writing no rows, when the resolved event already has entry rows;
+per player it skips a card whose owner has an entry row on that date/event
+(`skipped_entry_record_players`). The raw GG pages are still archived. The
+`scoring-link-rounds` repair refuses to link GG cards into such an event.
+
+**Bridges**: `scoring-entry-publish:<event_id>[|<round_id>][|apply]` (dry
+run by default; apply is audited) and `scoring-entry-parity:<event_id>`
+(read-only).
+
+**Guard test**: `test_entry_publish.py` (dry run, held players, apply,
+idempotency, edit + re-sign, shadow diff, cutover, the GG gate, tee by
+band / name / unresolved, and that the module names no score-entry table).

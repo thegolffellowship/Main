@@ -1821,6 +1821,8 @@ def _scoring_dispatch_inner(url: str, extract: str):
       scoring-flights-close:<event_id>[|apply]  the CLOSEOUT step: a played event's board to SETTLED (frozen first if LIVE); dry run by default; the hourly sync runs it itself
       scoring-flights-board:<event_id>  the DIVISIONS/FLIGHTS board as data — ratified flighting + payout rules (SELECTION and AMOUNTS layers) beside what GG recorded; dry run, read-only
       scoring-pairings-counts:<event_id>[|<year>]  saved sheet scored against played history: times each pair has played together this year INCLUDING this event
+      scoring-entry-publish:<event_id>[|<round_id>][|apply]  G-0 (CA #786 GO 1): closed + signed entered cards -> scoring_rounds source='entry' when the event is entry-authoritative (no GG rows, on/after entry_record_from); a GG event writes nothing and returns the parity diff; dry run by default
+      scoring-entry-parity:<event_id>  read-only: entered gross vs the GG cards on the event, per player (customer_id) and hole
       scoring-tgf-event-ensure:<id>[,<id>...][|apply]  every Tracker event gets its tgf_events row (the home payouts hang off), from the Tracker event, events_id stamped (CA #786 GO 2); dry run by default
       scoring-course-card:<course_id>[|<card json>[|apply]]  read a course's card as held, or validate/plan/load one from the printed card (tees, bands, rating/slope incl. front/back nines, par/SI/yardage), source course_card (CA #786 GO 3)
       scoring-alias-delete:<alias id>[|confirm]  remove ONE customer_aliases row; preview first, |confirm deletes and audits
@@ -4081,6 +4083,34 @@ def _scoring_dispatch_inner(url: str, extract: str):
             return json.dumps({"customer": _canon, "alias": _alias,
                                "customer_id": _cid,
                                "added": not bool(_dup)}, indent=2)
+        if cmd == "scoring-entry-publish":
+            # "<event_id>[|<round_id>][|apply]" -- G-0 keystone (CA #786 GO 1):
+            # entered scores that are CLOSED AND SIGNED become the scoring
+            # record (source='entry') when the event is entry-authoritative;
+            # on a GG event it writes nothing and returns the parity diff.
+            # Dry run by default.
+            from email_parser import entry_publish as _ep
+            _p = [x.strip() for x in (arg or "").split("|") if x.strip()]
+            if not _p or not _p[0].isdigit():
+                return json.dumps({"error": "usage: scoring-entry-publish:<event_id>[|<round_id>][|apply]"})
+            _eid = int(_p[0])
+            _apply = any(x.lower() == "apply" for x in _p[1:])
+            _rid = next((int(x) for x in _p[1:] if x.isdigit()), None)
+            _res = (_ep.publish_entered_round(round_id=_rid, event_id=_eid, apply=_apply)
+                    if _rid is not None else _ep.publish_event(_eid, apply=_apply))
+            if _apply and _res.get("applied"):
+                _audit("scoring-entry-publish",
+                       json.dumps({"event_id": _eid, "round_id": _rid,
+                                   "summary": _res.get("summary")})[:900])
+            return json.dumps(_res, indent=2, default=str)
+        if cmd == "scoring-entry-parity":
+            # "<event_id>" -- read-only: entered gross vs the GG cards on the
+            # same event, per player (customer_id) and per hole (G2a/G2b).
+            from email_parser import entry_publish as _ep
+            _a = (arg or "").strip()
+            if not _a.isdigit():
+                return json.dumps({"error": "usage: scoring-entry-parity:<event_id>"})
+            return json.dumps(_ep.entry_parity(int(_a)), indent=2, default=str)
         if cmd == "scoring-tgf-event-ensure":
             # "<event_id>[,<event_id>...][|apply]" — CA #786 GO 2: every
             # Tracker event gets its tgf_events row (the home payouts hang
@@ -4745,6 +4775,15 @@ def _scoring_dispatch_inner(url: str, extract: str):
                     " = LOWER(?)", (_en,)).fetchone()
                 if not ev:
                     return json.dumps({"error": f"event {_en!r} not found"})
+                # G-0 gate (CA #786 GO 1): never link GG cards into an event
+                # whose entered scores are the record -- they would double.
+                if conn.execute(
+                        "SELECT 1 FROM scoring_rounds WHERE event_id = ? "
+                        "AND lower(COALESCE(source, '')) = 'entry' LIMIT 1",
+                        (ev["id"],)).fetchone():
+                    return json.dumps({"error": "entered scores are the record for "
+                                       "this event; run scoring-entry-parity:"
+                                       f"{ev['id']} instead of linking GG cards"})
                 if _sel.lower().startswith("gg_event="):
                     ids = [x.strip() for x in _sel[9:].split(",") if x.strip()]
                     ph = ",".join("?" * len(ids))
