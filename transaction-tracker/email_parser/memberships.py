@@ -1550,3 +1550,25 @@ def daily_membership_job(send_email: Callable) -> dict:
 
     logger.info("daily_membership_job: %s", counts)
     return counts
+
+
+def set_term_price_paid(term_id: int, amount, db_path=None, apply: bool = False) -> dict:
+    """Record what a member actually paid for one membership term (CA #788
+    item 5: Talamantez's term 157 was entered by hand with no price, and his
+    $75 Venmo was the payment). Dry run by default; changes nothing else."""
+    from .database import _connect
+    amt = round(float(amount), 2)
+    if amt < 0:
+        return {"error": "price_paid cannot be negative"}
+    with _connect(db_path) as conn:
+        row = conn.execute("SELECT id, customer_id, started_at, expires_at, source, "
+                           "price_paid, notes FROM customer_memberships WHERE id = ?",
+                           (int(term_id),)).fetchone()
+        if not row:
+            return {"error": f"no membership term {term_id}"}
+        before = dict(row)
+        if apply:
+            conn.execute("UPDATE customer_memberships SET price_paid = ?, "
+                         "updated_at = datetime('now') WHERE id = ?", (amt, int(term_id)))
+            conn.commit()
+    return {"applied": bool(apply), "term": before, "price_paid_after": amt}

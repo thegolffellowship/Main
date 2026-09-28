@@ -941,8 +941,12 @@ def check_expense_inbox(force=False, days_back=None):
                     # PayPal, and Cash App)
                     if saved and saved.get("transaction_type") == "payout":
                         try:
-                            from email_parser.database import auto_match_venmo_payouts_to_tgf
-                            auto_match_venmo_payouts_to_tgf([saved["id"]])
+                            # A receipt the ingest dedupe already claimed
+                            # for a credit refund (matched_item_id) is not
+                            # winnings (CA #785 item 6).
+                            if not saved.get("matched_item_id"):
+                                from email_parser.database import auto_match_venmo_payouts_to_tgf
+                                auto_match_venmo_payouts_to_tgf([saved["id"]])
                         except Exception:
                             logger.warning("payout auto-match failed for exp %s",
                                            saved.get("id"), exc_info=True)
@@ -16676,7 +16680,9 @@ _scheduler_lock = threading.Lock()
 with _scheduler_lock:
     _scheduler_pid = os.getenv("_SCHEDULER_STARTED_PID")
     _is_main_worker = _scheduler_pid is None or _scheduler_pid == str(os.getpid())
-    if os.getenv("EMAIL_ADDRESS") and _is_main_worker:
+    if os.getenv("TGF_REHEARSAL", "") == "1":
+        logger.warning("TGF_REHEARSAL=1 — scheduler NOT started (dress rehearsal copy)")
+    elif os.getenv("EMAIL_ADDRESS") and _is_main_worker:
         os.environ["_SCHEDULER_STARTED_PID"] = str(os.getpid())
         start_scheduler()
     elif not os.getenv("EMAIL_ADDRESS"):

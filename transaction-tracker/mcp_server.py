@@ -1825,8 +1825,10 @@ def _scoring_dispatch_inner(url: str, extract: str):
       scoring-entry-parity:<event_id>  read-only: entered gross vs the GG cards on the event, per player (customer_id) and hole
       scoring-tgf-event-ensure:<id>[,<id>...][|apply]  every Tracker event gets its tgf_events row (the home payouts hang off), from the Tracker event, events_id stamped (CA #786 GO 2); dry run by default
       scoring-course-card:<course_id>[|<card json>[|apply]]  read a course's card as held, or validate/plan/load one from the printed card (tees, bands, rating/slope incl. front/back nines, par/SI/yardage), source course_card (CA #786 GO 3)
+      scoring-membership-price:<term_id>|<amount>[|apply]  set price_paid on one membership term (dry run by default, audited)
       scoring-alias-delete:<alias id>[|confirm]  remove ONE customer_aliases row; preview first, |confirm deletes and audits
       scoring-liabilities          payouts owed, credits held, LSC shirt fund by Cup year, HIO pot, LSC skins pot, tax reserve by month
+      scoring-expense-unpromoted[:<hours>]  read-only: expense rows APPROVED more than <hours> (default 24) ago with no ledger row (CA #785 item 6 guard, CFO 9/27)
       scoring-membership-gap[:apply]  the membership gap group: booked vs today's decomposition by price/type/contests; apply rebooks membership rows only
       scoring-import-orders:<from>|<to>[|apply][|membership-only]  date-range import of "New Order" emails from the mailbox (dry-run counts; apply runs in the background, no member email)
       scoring-import-status        progress of the running/last import
@@ -1917,6 +1919,9 @@ def _scoring_dispatch_inner(url: str, extract: str):
       scoring-health-digest[:<days>][|post]  the daily health digest text; |post
                                    runs the real routine (mailbox `tracker-health`
                                    + COO action items + prune)
+      scoring-rehearsal[:status|restore]  dress-rehearsal scratch copy
+                                   (CA #800): restore = the restore drill into
+                                   <volume>/rehearsal/ + scrub (stays on the volume)
       scoring-gg-archive[:<step>][|go]  the GG raw archive's move to its own
                                    file (Kerry #627): plan (default, read-only)
                                    · migrate (resumable copy, ~20 s per call)
@@ -2869,6 +2874,19 @@ def _scoring_dispatch_inner(url: str, extract: str):
             _fn = (db.event_flights_report if _p[1] == "flights"
                    else db.event_proximity_report)
             return json.dumps(_fn(int(_p[0])), indent=2, default=str)
+        if cmd == "scoring-expense-unpromoted":
+            # scoring-expense-unpromoted[:<hours>] — the 'approved but
+            # never promoted' guard (CA #785 item 6, CFO 9/27: HubSpot
+            # $42.64 approved 9/26, no ledger row). Read-only; the same
+            # query backs the daily health digest's finding.
+            _a = arg.strip()
+            try:
+                _h = float(_a) if _a else 24.0
+            except ValueError:
+                return json.dumps({"error": "usage: scoring-expense-unpromoted[:<hours>]"})
+            if _h < 0:
+                return json.dumps({"error": "hours must be >= 0"})
+            return json.dumps(db.get_expense_unpromoted(_h), indent=2, default=str)
         if cmd == "scoring-liabilities":
             # What TGF is holding for someone else or has earmarked:
             # prize payouts owed, credits held, LSC shirt fund by Cup
@@ -3367,6 +3385,22 @@ def _scoring_dispatch_inner(url: str, extract: str):
             _res = ack_findings(_ids, _note.strip())
             _audit("scoring-health-ack", f"closed {_res['closed']} — {_note.strip()[:120]}")
             return json.dumps(_res, indent=2)
+        if cmd == "scoring-rehearsal":
+            # scoring-rehearsal[:status|restore] — the dress rehearsal
+            # scratch copy + restore drill (CA #800/#801). restore reads the
+            # newest OneDrive backup into <volume>/rehearsal/ and scrubs it.
+            # The copy never leaves the production volume.
+            from email_parser import rehearsal as _rh
+            _step, _, _lane = (arg or "status").partition("|")
+            _step = (_step or "status").strip().lower()
+            if _step == "status":
+                return json.dumps(_rh.status(), indent=2, default=str)
+            if _step == "restore":
+                _res = _rh.restore()
+                _audit("scoring-rehearsal", f"restore drill: ok={_res.get('ok')} "
+                       f"{_res.get('backup')} {_res.get('time_to_restore_ms')} ms")
+                return json.dumps(_res, indent=2, default=str)
+            return json.dumps({"error": "usage: scoring-rehearsal[:status|restore]"})
         if cmd == "scoring-gg-archive":
             # scoring-gg-archive[:<step>][|go] — the archive move, one
             # resumable step per call. cutover and vacuum refuse without
@@ -4549,6 +4583,19 @@ def _scoring_dispatch_inner(url: str, extract: str):
                    item_id=int(_p["item_id"]),
                    outcome="ok" if _r.get("status") == "ok" else "failed")
             return json.dumps(_r, indent=2, default=str)
+        if cmd == "scoring-membership-price":
+            # "<term_id>|<amount>[|apply]" — set price_paid on ONE membership
+            # term (CA #788 item 5). Dry run by default; audited on apply.
+            from email_parser.memberships import set_term_price_paid
+            _p = [x.strip() for x in (arg or "").split("|")]
+            if len(_p) < 2 or not _p[0].isdigit():
+                return json.dumps({"error": "usage: scoring-membership-price:<term_id>|<amount>[|apply]"})
+            _apply = len(_p) > 2 and _p[2].lower() == "apply"
+            _res = set_term_price_paid(int(_p[0]), _p[1], apply=_apply)
+            if _apply and not _res.get("error"):
+                _audit("scoring-membership-price",
+                       f"term {_p[0]} price_paid {_res['term'].get('price_paid')} -> {_res['price_paid_after']}")
+            return json.dumps(_res, indent=2, default=str)
         if cmd == "scoring-acct-patch":
             # JSON: {"id": <acct_transaction_id>, "fields": {entity,
             #   category, event, append_note}} — connectivity patch for

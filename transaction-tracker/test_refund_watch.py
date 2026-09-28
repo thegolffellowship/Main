@@ -6,7 +6,7 @@ Asserts:
 1. create_refund_watch guards (credited/wd rows only, positive amount,
    one open watch per item — re-tap replaces).
 2. auto_match_refund_watches verifies on amount + customer_id, records
-   via payout_credit (item flips off 'credited'), one receipt per watch.
+   via stamp_credit_refunded (item flips off 'credited'; the receipt is the one ledger row, CA #785 item 6), one receipt per watch.
 3. Receipts predating the watch are ignored; receipts backing a
    tgf_payout are off the table; wrong-amount receipts don't match.
 4. Memo-based matching works when the receipt lacks customer_id.
@@ -98,7 +98,7 @@ def main():
     res = db.auto_match_refund_watches(db_path=tmp)
     check("wrong amount ignored", res["verified"] == 0)
 
-    # 2. The real receipt verifies + records via payout_credit
+    # 2. The real receipt verifies + records via stamp_credit_refunded
     with db._connect(tmp) as conn:
         add_expense(conn, 9103, 76.59, customer_id=24,
                     notes=f"You paid Recipient — {memo}",
@@ -115,6 +115,27 @@ def main():
         st = conn.execute("SELECT transaction_status FROM items WHERE id=7002"
                           ).fetchone()[0]
     check("credit item no longer 'credited' (paid out)", st != "credited")
+
+    # CFO #804: the receipt is now the ONE ledger row for this refund, so
+    # once promoted it must carry what the old credit-payout row carried —
+    # category 'refund', the item and its event, and the customer.
+    with db._connect(tmp) as conn:
+        exp = dict(conn.execute("SELECT * FROM expense_transactions WHERE id=9103").fetchone())
+        check("receipt marked as the refund before promotion",
+              exp["category"] == "refund" and exp["event_name"] == "s9.90 Rained"
+              and exp["matched_item_id"] == 7002)
+        acct_id = db._sync_expense_ledger_entry(conn, exp)
+        conn.commit()
+        led = dict(conn.execute("SELECT * FROM acct_transactions WHERE id=?", (acct_id,)).fetchone())
+        n_refund_rows = conn.execute(
+            "SELECT COUNT(*) FROM acct_transactions WHERE item_id=7002 AND category='refund'"
+        ).fetchone()[0]
+    check("promoted refund row: category 'refund'", led.get("category") == "refund")
+    check("promoted refund row: event and item", led.get("event_name") == "s9.90 Rained"
+          and led.get("item_id") == 7002)
+    check("promoted refund row: customer", led.get("customer_id") == 24
+          and led.get("customer") == "Daniel South")
+    check("exactly one refund ledger row for the item", n_refund_rows == 1)
 
     # Idempotent — nothing left to match
     res = db.auto_match_refund_watches(db_path=tmp)
