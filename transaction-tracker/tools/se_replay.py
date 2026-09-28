@@ -116,6 +116,8 @@ def main() -> int:
     conn.row_factory = sqlite3.Row
     report = {"db": os.path.abspath(a.db), "outbound_env_removed": stripped, "events": []}
 
+    jobs = []           # (event state, group number) across ALL events: one shared pool
+    states = []
     for ev_id in [int(x) for x in a.events.split(",") if x.strip()]:
         ev = conn.execute("SELECT * FROM events WHERE id = ?", (ev_id,)).fetchone()
         cards = [dict(r) for r in conn.execute(
@@ -175,13 +177,14 @@ def main() -> int:
             gids[gnum] = res["group_id"]
         par = {h["hole"]: h["par"] for h in course}
 
-        def entered_value(n, strokes):
+        def entered_value(n, strokes, par=par):
             p = par.get(n)
             if p and strokes > p + 3:
                 return p + 3, "above_max_triple"
             return strokes, None
 
-        def run_group(gnum):
+        def run_group(gnum, gids=gids, groups=groups, holes_by=holes_by, played=played,
+                      entered_value=entered_value):
             gid = gids[gnum]
             cs = groups[gnum]
             tok = se.make_group_token(gid)
@@ -200,7 +203,7 @@ def main() -> int:
                     if s is None:
                         continue
                     v, cls = entered_value(n, s)
-                    if cls:
+                    if cls and device_tag != "Astale":
                         out["classes"].append({"class": cls, "customer_id": c["customer_id"],
                                                "hole": n, "gg": s, "entered": v})
                     seq[0] += 1
@@ -255,10 +258,38 @@ def main() -> int:
                     out["errors"].append(f"sign {c['customer_id']}: {s.get('error')}")
             return out
 
-        t0 = time.perf_counter()
-        with ThreadPoolExecutor(max_workers=a.workers) as ex:
-            gres = list(ex.map(run_group, sorted(groups)))
-        er["elapsed_s"] = round(time.perf_counter() - t0, 2)
+        st = {"er": er, "rid": rid, "cards": cards, "holes_by": holes_by, "groups": groups,
+              "entered_value": entered_value, "run_group": run_group, "gres": {}}
+        states.append(st)
+        jobs += [(st, g) for g in sorted(groups)]
+
+    # Every event's groups enter AT ONCE (8 at a time by default), the way a
+    # Tuesday with both chapters would hit the server.
+    t0 = time.perf_counter()
+    active = [0]
+    peak = [0]
+    alock = threading.Lock()
+
+    def one(job):
+        st, g = job
+        with alock:
+            active[0] += 1
+            peak[0] = max(peak[0], active[0])
+        try:
+            st["gres"][g] = st["run_group"](g)
+        finally:
+            with alock:
+                active[0] -= 1
+    with ThreadPoolExecutor(max_workers=a.workers) as ex:
+        list(ex.map(one, jobs))
+    report["load"] = {"groups_total": len(jobs), "workers": a.workers,
+                      "peak_concurrent_groups": peak[0],
+                      "elapsed_s": round(time.perf_counter() - t0, 2)}
+
+    for st in states:
+        er, rid, cards, holes_by, groups = st["er"], st["rid"], st["cards"], st["holes_by"], st["groups"]
+        entered_value, ev_id = st["entered_value"], er["event_id"]
+        gres = [st["gres"][g] for g in sorted(groups)]
         se.close_round(rid)
 
         # THE CHECK: every se_* hole against the card.
@@ -298,12 +329,17 @@ def main() -> int:
                               for k in {k for g in gres for k in g["results"]}},
             "errors": [e for g in gres for e in g["errors"]][:30],
             "round_status": se.get_entered_scores(ev_id, rid)["rounds"][0]["status"],
+            # a refused write is never lost: its value sits in se_audit.detail
+            "refused_kept_in_audit": conn.execute(
+                "SELECT COUNT(*) FROM se_audit WHERE round_id = ? AND result = 'refused_lock' "
+                "AND detail LIKE '%gross%'", (rid,)).fetchone()[0],
         })
         er["result"] = "PASS" if (lost == 0 and wrong == 0 and not er["errors"]
                                   and er["players_signed"] == len(cards)
                                   and er["groups_attested"] == len(groups)
                                   and er["stale_phone_refused_all"]
-                                  and er["round_status"] == "closed") else "FAIL"
+                                  and er["round_status"] == "closed"
+                                  and er["refused_kept_in_audit"] == len(cards)) else "FAIL"
         report["events"].append(er)
 
     srv.shutdown()

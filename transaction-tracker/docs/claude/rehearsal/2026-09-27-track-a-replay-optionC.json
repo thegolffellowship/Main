@@ -1,0 +1,118 @@
+{
+  "db": "/tmp/claude-0/-home-user-Main/01747d7b-5309-54c3-b422-120bba04e707/scratchpad/scratch_optC.db",
+  "outbound_env_removed": [
+    "CLAUDE_CODE_USER_EMAIL"
+  ],
+  "events": [
+    {
+      "event_id": 9309,
+      "event": "SYNTH-3309 s9.24 Brackenridge shape",
+      "cards": 22,
+      "holes": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9
+      ],
+      "round_id": 1,
+      "groups_from_pairings": false,
+      "groups": 6,
+      "holes_expected": 198,
+      "holes_exact": 196,
+      "holes_named_class": 2,
+      "holes_lost": 0,
+      "holes_wrong": 0,
+      "diffs": [],
+      "named_classes": [
+        {
+          "class": "above_max_triple",
+          "customer_id": 6012,
+          "hole": 1,
+          "gg": 8,
+          "entered": 7
+        },
+        {
+          "class": "above_max_triple",
+          "customer_id": 6015,
+          "hole": 9,
+          "gg": 9,
+          "entered": 8
+        }
+      ],
+      "players_signed": 22,
+      "groups_attested": 6,
+      "stale_phone_refused_all": true,
+      "write_results": {
+        "ok": 198,
+        "dup": 33
+      },
+      "errors": [],
+      "round_status": "closed",
+      "refused_kept_in_audit": 22,
+      "result": "PASS"
+    },
+    {
+      "event_id": 9315,
+      "event": "SYNTH-3315 a9.24 Teravista shape",
+      "cards": 11,
+      "holes": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9
+      ],
+      "round_id": 2,
+      "groups_from_pairings": false,
+      "groups": 3,
+      "holes_expected": 99,
+      "holes_exact": 98,
+      "holes_named_class": 1,
+      "holes_lost": 0,
+      "holes_wrong": 0,
+      "diffs": [],
+      "named_classes": [
+        {
+          "class": "above_max_triple",
+          "customer_id": 6023,
+          "hole": 7,
+          "gg": 7,
+          "entered": 6
+        }
+      ],
+      "players_signed": 11,
+      "groups_attested": 3,
+      "stale_phone_refused_all": true,
+      "write_results": {
+        "ok": 99,
+        "dup": 16
+      },
+      "errors": [],
+      "round_status": "closed",
+      "refused_kept_in_audit": 11,
+      "result": "PASS"
+    }
+  ],
+  "load": {
+    "groups_total": 9,
+    "workers": 8,
+    "peak_concurrent_groups": 8,
+    "elapsed_s": 2.22
+  },
+  "requests": {
+    "n": 168,
+    "p50_ms": 98.3,
+    "p95_ms": 137.2,
+    "max_ms": 245.9
+  },
+  "workers": 8
+}
