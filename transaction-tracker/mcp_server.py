@@ -1805,6 +1805,8 @@ def _scoring_dispatch_inner(url: str, extract: str):
       scoring-course-merge:<loser_id>|<winner_id>[|apply]  fold a duplicate course row into the canonical one (tees collapse/move, rounds/events/items re-point, names aliased); dry run by default
       scoring-tee-nines-store:<full_tee_id>|<fr>,<fs>|<br>,<bs>[|apply]  front/back rating rows (each with its slope) on an 18-hole tee set (refuses a pair that does not sum to the 18)
       scoring-crdb-seed:<course_id>[|<json>][|apply]  write a course's USGA CRDB tee sets (gender, par, bogey, total/front/back, optional yardages) onto the record; JSON row = [name, gender, r18, s18, bogey, [fr, fs], [br, bs], [y18, yf, yb]]
+      scoring-closeout-final:<event name or id>  READ-ONLY "results are final" test for the closeout: names every blocker (GG era: cards = field, identity, boards with purses, payouts; entry era: cards closed + signed, published, HIO settled, payouts)
+      scoring-pairings-entry:<event name or id>[|apply]  pairing history from the score-entry groups (no-shows and blinds never pair; seats 1&2 / 3&4 rode); shadow diff vs GG pairs before the entry-record cutover, writes source='entry' after it
       scoring-recap-draft-email:<file>|<SECTION>[|to=..][|cc=..][|docx=<file>][|force][|apply]  mail one chapter's recap draft (docs/claude/recaps/<file>) to its sender as paste-ready HTML + the Word file; staff addresses only, once per file+section+recipients, dry run by default
       scoring-hcp-cards:<event>[|apply]  email the TGF handicap card to every player on the event's roster who has one (dry run names who would get one; apply sends and logs to message_log)
       scoring-tee-bands:<course_id>   which four sets TGF plays (current designation + the yardage-standards proposal; read-only)
@@ -5829,6 +5831,22 @@ def _scoring_dispatch_inner(url: str, extract: str):
             finally:
                 _c.close()
             return json.dumps(_res, indent=2, default=str)
+        if cmd == "scoring-closeout-final":
+            # "<event name or id>" — READ-ONLY: is the event's result final
+            # enough to close out (CA #829)? GG era: cards = field, identity,
+            # boards with purses, payouts. Entry era: every card closed and
+            # signed, published, HIO settled, payouts. Names every blocker.
+            from email_parser.closeout_checks import closeout_final_check
+            return json.dumps(closeout_final_check((arg or "").strip()), indent=2, default=str)
+        if cmd == "scoring-pairings-entry":
+            # "<event name or id>[|apply]" — pairing history from the
+            # score-entry groups (CA #829). Shadow (diff vs GG pairs) until
+            # the entry-record cutover; writes source='entry' after it.
+            _a = (arg or "").strip()
+            _apply = _a.lower().endswith("|apply")
+            _ev = _a[: -len("|apply")].strip() if _apply else _a
+            from email_parser.closeout_checks import pairing_history_from_entry
+            return json.dumps(pairing_history_from_entry(_ev, apply=_apply), indent=2, default=str)
         if cmd == "scoring-recap-draft-email":
             # "<file>|<SECTION>[|to=a,b][|cc=a,b][|docx=<file>][|force][|apply]"
             # — mail one chapter's recap DRAFT to its sender (Kerry

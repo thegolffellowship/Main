@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.510.10";
+window.TGF_VERSION = "2.511.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.511.0",
+    date: "2026-09-28",
+    changes: [
+      "The closeout works without Golf Genius (CA #829: \u2018Closeout: PAIRING HISTORY from entered groups, and the \u201cresults are final\u201d test rewrite\u2019). New email_parser/closeout_checks.py. Pairing history now comes from the score-entry groups: who entered scores together played together, no-shows and blinds never pair, seats 1&2 and 3&4 rode. Before the entry-record cutover it runs in shadow and names the pairs that differ from Golf Genius (the 9/29 and 10/6 parity check); after it, it writes the history itself. Bridge scoring-pairings-entry.",
+      "\u2018Is it final?\u2019 is one read-only check, scoring-closeout-final, that the 9 PM closeout runs before it acts. For Golf Genius events it checks cards against the field, missing identities, duplicate cards, every board posted with a purse, and payouts recorded. For events scored on the Tracker it checks every card closed and signed, published into scorecards, hole-in-one claims settled and payouts computed. Every blocker is named. Guard: test_closeout_checks.py.",
+      "The closeout skill now carries the standing no-push window (CA #829): the close-out digest is posted before any recap commit, and recap drafts are pushed only after the window closes.",
+    ],
+  },
   {
     version: "2.510.10",
     date: "2026-09-28",
