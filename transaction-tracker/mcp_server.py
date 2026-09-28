@@ -5351,6 +5351,57 @@ def _scoring_dispatch_inner(url: str, extract: str):
                     indent=2, default=str)
             return json.dumps({"error": "usage: scoring-pairings:rounds|<portal> "
                                "or round|<portal>|<id>[|apply] or all|<portal>[|apply]"})
+        if cmd == "scoring-scorecards":
+            # scoring-scorecards:<event_id>[|layout=3up|grouping=team|qr=off|holes=18]
+            #   READ-ONLY summary: cards, sheets, gaps, print log.
+            # …|dump   the per-value source dump (#897-G).
+            # …|html   the rendered page (for a lane's visual check).
+            # …|pdf[|all][|send[|to=<staff>]]  bind the set (or all 12
+            #   layout x grouping combos + an 18-hole sample) into one PDF;
+            #   `send` mails it to Kerry only ("approve a template").
+            from email_parser import scorecards as _scm
+            parts = [p.strip() for p in (arg or "").split("|") if p.strip()]
+            eid = int(parts[0])
+            kv = {k: v for k, _, v in (p.partition("=") for p in parts[1:]) if v}
+            flags = {p.lower() for p in parts[1:] if "=" not in p}
+            one = {"layout": kv.get("layout", "3up"), "grouping": kv.get("grouping", "team"),
+                   "qr": kv.get("qr", "auto"), "holes": kv.get("holes")}
+            if "pdf" in flags:
+                from app import _print_pack_render, app as _app
+                sets = ([{"layout": l, "grouping": g, "qr": one["qr"], "holes": h}
+                         for h in (None, "18") for l, g in _scm.ALL_COMBOS]
+                        if "all" in flags else [one])
+                built = _scm.build_scorecards_pdf(_print_pack_render, eid,
+                                                  _app.static_folder, sets)
+                out = {k: built.get(k) for k in ("parts", "gaps", "filename", "engine", "error")}
+                out["bytes"] = len(built.get("pdf") or b"")
+                if "send" in flags and built.get("pdf"):
+                    db.log_agent_action("mcp-claude", "scoring-scorecards", arg)
+                    out["send"] = _scm.send_scorecards_pdf(built, kv.get("to"),
+                                                           note=kv.get("note", ""))
+                return json.dumps(out, indent=2, default=str)
+            sc = _scm.build_scorecards(eid, one["layout"], one["grouping"], qr=one["qr"],
+                                       holes_override=one["holes"])
+            if not sc:
+                return json.dumps({"error": "event not found"})
+            if "html" in flags:
+                from app import _print_pack_render
+                return _print_pack_render("scorecards.html", sc=sc)
+            if "dump" in flags:
+                return json.dumps({"event": sc["event"], "net": sc["net"], "gaps": sc["gaps"],
+                                   "log": sc["log"], "tees": [{k: t[k] for k in (
+                                       "band", "master", "tee_id", "code", "rating", "slope",
+                                       "band_text")} for t in sc["tees"]],
+                                   "grids": sc["grids"], "players": sc["dump"],
+                                   "pairings_saved": sc["pairings_saved"],
+                                   "handicap_as_of": sc["handicap_as_of"]},
+                                  indent=2, default=str)
+            return json.dumps({"event": sc["event"], "layout": sc["layout"],
+                               "grouping": sc["grouping"], "qr": sc["qr"],
+                               "cards": len(sc["cards"]), "sheets": len(sc["sheets"]),
+                               "qr_cards": sum(1 for c in sc["cards"] if c.get("qr")),
+                               "net": sc["net"], "gaps": sc["gaps"], "log": sc["log"]},
+                              indent=2, default=str)
         if cmd == "scoring-print-pack-pdf":
             # scoring-print-pack-pdf:<event_id>[|send[|<to>]] — build the bound
             # PDF (parts + page counts + hash); "send" mails it as an

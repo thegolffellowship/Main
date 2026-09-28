@@ -5472,6 +5472,41 @@ def starter_sheet_page(event_id):
     return render_template("starter_sheet.html", pack=pack)
 
 
+@app.route("/events/<int:event_id>/scorecards")
+@require_role("manager")
+def scorecards_page(event_id):
+    """THE PRINTED SCORECARD (design-claude #890-#897, CA #898): ?layout=
+    3up|2up|2land, ?grouping=team|cart, ?qr=auto|off|preview, ?holes=9|18.
+    A missing value shows the gaps instead of a card (#897-G)."""
+    from email_parser.scorecards import build_scorecards
+    sc = build_scorecards(event_id, request.args.get("layout", "3up"),
+                          request.args.get("grouping", "team"),
+                          qr=request.args.get("qr", "auto"),
+                          holes_override=request.args.get("holes") or None)
+    if not sc:
+        return "Event not found", 404
+    return render_template("scorecards.html", sc=sc)
+
+
+@app.route("/events/<int:event_id>/scorecards.pdf")
+@require_role("manager")
+@perf.timed_route("scorecards_pdf")
+def scorecards_pdf(event_id):
+    from flask import Response
+    from email_parser.scorecards import build_scorecards_pdf
+    built = build_scorecards_pdf(_print_pack_render, event_id, app.static_folder, [{
+        "layout": request.args.get("layout", "3up"),
+        "grouping": request.args.get("grouping", "team"),
+        "qr": request.args.get("qr", "auto"),
+        "holes": request.args.get("holes") or None}])
+    if built.get("error"):
+        if built.get("gaps"):
+            return scorecards_page(event_id)
+        return built["error"], 404
+    return Response(built["pdf"], mimetype="application/pdf",
+                    headers={"Content-Disposition": f'inline; filename="{built["filename"]}"'})
+
+
 def _print_pack_render(template, **ctx):
     """Render a print template for the PDF engine — inside an app context
     so the scheduler (no request) can do it too."""

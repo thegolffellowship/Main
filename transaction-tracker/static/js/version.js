@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.518.5";
+window.TGF_VERSION = "2.519.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.519.0",
+    date: "2026-09-28",
+    title: "The printed scorecard (design-claude #890-#897, CA #898)",
+    changes: [
+      "New printable at /events/<id>/scorecards (and .pdf): three layouts (3 per sheet portrait by default, 2 per sheet portrait, 2 per sheet landscape), 9 or 18 holes, and Team Net (one card per group) or Cart Net (one card per cart). Built to design-claude's handoff with CA's rulings: PH (not CH) upper-left, the net game's value lower-right, black PH dots and orange net-game dots in every hole cell, the start hole highlighted, riders 3-4 shaded under the cart-split rule, threesomes as 3 rows, 'Forward' as the band name.",
+      "Nothing on a card is typed or computed in the print layer (#897). Groups, slots, cart seats, PH and the Team/Cart value with its allowance and off-the-lowest come from get_event_print_pack, the Starter Sheet's own reader; tees from event_tee_legend; par, stroke index and yardage from course_tee_holes; dots from handicap_calc.ruled_dots, the one allocator the G-0 publish now also uses for stored pops; par-3 suppression of net dots follows the engine's own game rule. A missing value (no designated tees, no stroke index, a player with no PH or an undesignated tee) shows the named gaps instead of cards (#897-G).",
+      "QR: collapses unless the score-entry dials enable it; ?qr=preview fills every group's real scorer link for Kerry's look only (read-only score_entry.event_group_links, never seeds a round). The GGID slot collapses until the PAIRINGS field (#900) is built. Bridge scoring-scorecards:<id>[|layout=|grouping=|qr=|holes=][|dump|html|pdf[|all][|send]] gives the summary, the per-value source dump, the page, or a bound PDF mailed to Kerry only under 'approve a template'. Guard test_scorecards.py (all 12 combinations render one Letter page per sheet with no card overflowing).",
+    ],
+  },
   {
     version: "2.518.5",
     date: "2026-09-28",

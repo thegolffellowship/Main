@@ -2661,6 +2661,40 @@ To read it: bridge `scoring-engine-payouts:<event name>`, which puts GG's
 purses beside ours. G2a grades it per player, to the cent
 (`tiers.purses.engine`). Tests: `test_engine_payouts.py`.
 
+## The PRINTED SCORECARD (v2.519.0, design-claude #890-#897, CA #898/#900)
+
+`email_parser/scorecards.py` + `templates/scorecards.html`; routes
+`/events/<id>/scorecards[.pdf]?layout=3up|2up|2land&grouping=team|cart&qr=auto|off|preview&holes=9|18`;
+bridge `scoring-scorecards:<id>[|key=value…][|dump|html|pdf[|all][|send]]`.
+
+- **Every value comes from a Tracker reader, never the print layer (#897):**
+  groups / slot / cart seats / index / PH / net-game value, allowance and
+  off-the-lowest from `get_event_print_pack` (the Starter Sheet's reader);
+  tees from `event_tee_legend` (designated sets, first four); par, stroke
+  index and yardage from `course_tee_holes` (par/SI of the <50 set, a
+  disagreement is logged); dots from `handicap_calc.ruled_dots` — the same
+  function the G-0 publish stores pops with, so a card printed before the
+  round and the record written after it cannot disagree.
+- **PH, not CH** (#896, CA #898-3). The orange value is the engine's net
+  game: TEAM/T or CART/C by the matrix's team unit, the percentage and
+  "off the field's low" in the decode note. Par-3 net dots follow the
+  engine's `team_net.no_pops_on_par3` (OFF today; the print log says so,
+  #902-A open with CA). A plus handicap prints "+N" with no dots (the plus
+  comes off the round).
+- **Gaps stop the print (#897-G):** no course, no saved pairings, no
+  designated tees, a tee without rating/slope, a hole without par/SI, a
+  player on an undesignated tee or with no PH → the page lists the gaps
+  and no card renders; the PDF route shows the same page.
+- **Threesomes are 3 rows** (CA #898-4); Cart Net = one card per cart
+  (2 + 1 for a threesome), unshaded. Tee colours are a token map by master
+  name (CA #898-6); an unknown name prints black on white and is logged.
+- **QR:** `auto` follows the score-entry dials; `off` collapses it;
+  `preview` fills every group's real scorer link via the read-only
+  `score_entry.event_group_links` (never seeds a round) — for Kerry's look
+  only. **GGID** collapses until the PAIRINGS field (#900) exists.
+- **`send`** mails the bound PDF to Kerry only (staff addresses; subject
+  "approve a template"). Kerry approves before the card replaces GG's.
+
 ## The event PRINT PACK — one bound PDF, mailed the evening before (v2.465.0)
 
 Kerry 2026-09-18: "a bound PDF with all of them in one that I could

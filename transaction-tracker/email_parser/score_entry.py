@@ -1331,6 +1331,21 @@ def round_links(round_id: int, base_url: str | None = None, db_path=None) -> lis
             for r in rows]
 
 
+def event_group_links(event_id: int, holes: str = "9", base_url: str | None = None,
+                      db_path=None) -> dict:
+    """{group_num: scorer URL} for the event's newest OPEN round of that
+    hole count — READ ONLY (the printed scorecard's QR preview): never
+    seeds a round, so a group with no round simply has no link."""
+    with _closing(_conn(db_path)) as conn:
+        r = conn.execute(
+            "SELECT id FROM se_rounds WHERE event_id = ? AND status = 'open' "
+            "AND (pairings_holes = ? OR (pairings_holes IS NULL AND holes = ?)) "
+            "ORDER BY id DESC LIMIT 1", (int(event_id), str(holes), int(holes))).fetchone()
+    if not r:
+        return {}
+    return {x["group_num"]: x["url"] for x in round_links(r[0], base_url, db_path=db_path)}
+
+
 # ---------------------------------------------------------------------------
 # Cart-sign QR (Kerry #666 B: "QR Code printed on cart sign"). Which events
 # and groups carry one is a dial, `score_entry_qr` in app_settings:

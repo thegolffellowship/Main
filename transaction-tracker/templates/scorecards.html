@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ sc.event.file_stub or 'event' }}-Scorecards</title>
+  <link href="https://fonts.googleapis.com/css2?family=Bitter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  {% set lay = sc.layout_meta %}
+  {% set land = lay.orient == 'landscape' %}
+  <style>
+    /* THE PRINTED SCORECARD — design-claude #890-#897, CA #898. Every
+       size is in em off the layout's base font, so one card scales to
+       all three layouts (#895 §1). Values come from email_parser/
+       scorecards.py; only design constants live here (#897-F). */
+    * { box-sizing: border-box; }
+    @page { size: letter {{ 'landscape' if land else 'portrait' }}; margin: 0; }
+    html, body, .sheet, .card, td, th {
+      -webkit-print-color-adjust: exact; print-color-adjust: exact;
+    }
+    body { margin: 0; background: #8C8F94; color: #1B1B1B;
+      font-family: "Helvetica Neue", Arial, system-ui, sans-serif; }
+    .sheet { width: {{ '11in' if land else '8.5in' }}; height: {{ '8.5in' if land else '11in' }};
+      background: #fff; margin: 24px auto; overflow: hidden; position: relative;
+      display: flex; flex-direction: column; }
+    .card { height: calc(100% / {{ lay.per_sheet }}); flex: none; position: relative;
+      padding: 24px 24px 0.25in 24px; font-size: {{ lay.font }}px; overflow: hidden; }
+    .card + .card { border-top: 1px dashed #C9CDD3; }
+    .decode { position: absolute; left: 0; right: 0; bottom: 0; height: 0.25in;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 9px; color: #4B5563; white-space: nowrap; }
+    .decode b.k { color: #111; } .decode b.o { color: #E87C3E; }
+
+    /* Header (#891-B) */
+    .head { display: flex; align-items: center; gap: 1.1em; margin-bottom: 0.5em; }
+    .brand { display: flex; flex-direction: column; align-items: center;
+      padding-right: 1.1em; border-right: 2px solid #111; }
+    .brand img { height: 4.6em; width: auto; display: block; }
+    .brand .wm { font-family: "Bitter", Georgia, serif; font-weight: 700; font-size: 1em;
+      letter-spacing: 1px; line-height: 1.1; margin-top: 0.15em; white-space: nowrap; }
+    .mid { flex: 1; min-width: 0; }
+    .mid .course { font-family: "Bitter", Georgia, serif; font-weight: 700;
+      font-size: 2.7em; line-height: 1.05; white-space: nowrap; overflow: hidden;
+      text-overflow: ellipsis; }
+    .mid .date { font-size: 1.3em; color: #4B5563; }
+    .qr { display: flex; flex-direction: column; align-items: center; }
+    .qr .code { height: 4.6em; width: 4.6em; }
+    .qr .code svg { width: 100%; height: 100%; display: block; }
+    .qr .cap { font-weight: 700; font-size: 0.62em; letter-spacing: 0.5px; color: #6B7280;
+      white-space: nowrap; margin-top: 0.15em; }
+    .start { text-align: center; }
+    .start .t { font-family: "Bitter", Georgia, serif; font-weight: 700; font-size: 2.4em;
+      line-height: 1; white-space: nowrap; }
+    .start .cap { font-weight: 600; font-size: 0.864em; letter-spacing: 1.5px;
+      color: #6B7280; }
+    .badge { font-size: 3em; width: 1.7em; height: 1.7em; border-radius: 50%;
+      background: #E87C3E; color: #fff; display: flex; align-items: center;
+      justify-content: center; font-family: "Bitter", Georgia, serif; font-weight: 700;
+      flex: none; }
+    .badge span.l1 { font-size: 1em; } .badge span.l2 { font-size: 0.8em; }
+    .badge span.l3 { font-size: 0.62em; }
+
+    /* Grid (#891-C/D) */
+    .panels { display: flex; gap: 6px; }
+    .panels table { flex: 1; min-width: 0; }
+    table { table-layout: fixed; border-collapse: collapse; width: 100%; }
+    td, th { border: 1px solid #B0B0B0; padding: 0 0.25em; text-align: center;
+      white-space: nowrap; overflow: hidden; }
+    tr.hd th { height: 2.2em; background: #111; color: #fff; border-color: #111;
+      font-family: "Bitter", Georgia, serif; font-weight: 700; font-size: 1.05em; }
+    tr.hd th.lead { text-align: left; }
+    tr.hd th.lead .gl { font-size: 0.65em; font-family: "Helvetica Neue", Arial, sans-serif; }
+    tr.hd th.lead .gc { font-family: "Geist Mono", ui-monospace, monospace; color: #E87C3E;
+      font-size: 1.07em; margin-left: 0.3em; }
+    tr.tee td { height: 1.6em; font-size: 0.82em; }
+    tr.tee td.lead { text-align: left; }
+    tr.tee td.lead .age { float: right; opacity: 0.8; }
+    tr.par td, tr.hcp td { height: 1.6em; font-size: 0.82em; }
+    tr.par td { font-weight: 700; }
+    tr.hcp td { color: #4B5563; }
+    tr.par td.lead, tr.hcp td.lead { text-align: left; }
+    tr.pl td { height: 2.3em; border-color: #B0B0B0; position: relative; }
+    tr.pl + tr.pl td { border-top-color: #C7CBD1; }
+    tr.pl.rider td { background: #F5F6F7; }
+    tr.pl.split td { border-top: 2.5px solid #6B7280; }
+    tr.pl td.lead { text-align: left; font-family: "Bitter", Georgia, serif; font-weight: 700;
+      font-size: 1em; }
+    tr.pl td.lead .nm { display: inline-block; max-width: 80%; overflow: hidden;
+      text-overflow: ellipsis; vertical-align: bottom; }
+    tr.pl td.lead .tc { float: right; font-family: "Helvetica Neue", Arial, sans-serif;
+      font-weight: 400; font-size: 0.8em; color: #6B7280; line-height: 2.3em; }
+    .dk, .do { position: absolute; right: 0.15em; font-size: 1.05em; line-height: 1;
+      letter-spacing: -0.1em; }
+    .dk { top: 0.05em; color: #111; } .do { bottom: 0.05em; color: #E87C3E; }
+    td.thick, th.thick { border-right: 2.5px solid #6B7280; }
+    td.split-c, th.split-c { position: relative; padding: 0; }
+    .split-c svg.diag { position: absolute; inset: 0; width: 100%; height: 100%; }
+    .split-c svg.diag line { stroke: #B0B0B0; stroke-width: 1.2; }
+    th.split-c svg.diag line { stroke: #9CA3AF; }
+    .split-c .ul { position: absolute; left: 0.25em; top: 0.1em; font-weight: 700; }
+    .split-c .lr { position: absolute; right: 0.25em; bottom: 0.1em; font-weight: 700;
+      color: #E87C3E; }
+    th.split-c .ul { color: #fff; font-size: 0.8em; } th.split-c .lr { font-size: 0.8em; }
+    td.split-c .ul, td.split-c .lr { font-family: "Bitter", Georgia, serif; font-size: 1em; }
+    th.hl { background: #FFF176 !important; color: #111 !important; }
+    tr.par td.hl, tr.hcp td.hl { background: #FFF176; }
+    tr.pl td.hl { background: #FFFDE7; }
+
+    .gaps { max-width: 7.5in; margin: 40px auto; background: #fff; padding: 24px 28px;
+      border-left: 6px solid #C0392B; font-size: 14px; }
+    .gaps h1 { font-family: "Bitter", Georgia, serif; margin: 0 0 8px; font-size: 20px; }
+    .plog { max-width: 8.5in; margin: 0 auto 24px; color: #fff; font-size: 11px; }
+    @media print {
+      body { background: #fff; }
+      .sheet { margin: 0; break-after: page; page-break-after: always; }
+      .sheet:last-of-type { break-after: auto; page-break-after: auto; }
+      .plog, .noprint { display: none; }
+    }
+  </style>
+</head>
+<body>
+{% macro hcell(v, cls='') -%}
+  {%- set n = (v|string)|length -%}
+  <span class="{{ cls }} l{{ 1 if n == 1 else (2 if n == 2 else 3) }}">{{ v }}</span>
+{%- endmacro %}
+{% macro dots(n) -%}{% if n and n > 0 %}{{ '•' * n }}{% endif %}{%- endmacro %}
+
+{% if sc.gaps %}
+  <div class="gaps">
+    <h1>These cards can't print yet</h1>
+    <p>Nothing on a scorecard is guessed. Fix these, then print again:</p>
+    <ul>{% for g in sc.gaps %}<li>{{ g }}</li>{% endfor %}</ul>
+  </div>
+{% else %}
+{% for sheet in sc.sheets %}
+<div class="sheet">
+  {% for c in sheet %}
+  {% set grid = sc.grids[c.holes] %}
+  {% set is18 = c.holes == '18' %}
+  <div class="card">
+    <div class="head">
+      <div class="brand">
+        <img src="/static/tgf-logo-r.svg" alt="TGF">
+        <div class="wm">{{ sc.event.chapter }}</div>
+      </div>
+      <div class="mid">
+        <div class="course">{{ sc.event.course }}</div>
+        <div class="date">{{ sc.event.date }}</div>
+      </div>
+      {% if c.qr and c.qr.svg %}
+      <div class="qr"><div class="code">{{ c.qr.svg | safe }}</div>
+        <div class="cap">SCAN TO KEEP SCORE</div></div>
+      {% endif %}
+      <div class="start"><div class="cap">START</div><div class="t">{{ c.start_time }}</div></div>
+      <div class="badge">{{ hcell(c.start_hole) }}</div>
+    </div>
+
+    {% set front = grid.holes[:9] %}
+    {% set back = grid.holes[9:] %}
+    <div class="panels">
+    {# ---- panel 1: the 9-hole card, or the 18's front nine ---- #}
+    <table>
+      <colgroup>
+        {% if is18 %}
+          <col style="width:35.1%">{% for h in front %}<col style="width:6.28%">{% endfor %}<col style="width:8.3%">
+        {% else %}
+          <col style="width:24%">{% for h in front %}<col style="width:6.4%">{% endfor %}
+          <col style="width:6%"><col style="width:8.4%"><col style="width:4%">
+        {% endif %}
+      </colgroup>
+      <tr class="hd">
+        <th class="lead thick">{% if c.ggid %}<span class="gl">GGID</span><span class="gc">{{ c.ggid }}</span>{% endif %}</th>
+        {% for h in front %}<th class="{{ 'hl' if c.hl_hole == h else '' }} {{ 'thick' if loop.last else '' }}">{{ h }}</th>{% endfor %}
+        {% if is18 %}<th>Out</th>{% else %}
+          <th class="thick">Total</th>
+          <th class="split-c"><svg class="diag" viewBox="0 0 100 100" preserveAspectRatio="none"><line x1="0" y1="0" x2="100" y2="100" vector-effect="non-scaling-stroke"/></svg><span class="ul">PH</span><span class="lr">{{ sc.net.word }}</span></th>
+          <th>Net</th>{% endif %}
+      </tr>
+      {% for t in sc.tees %}
+      <tr class="tee">
+        <td class="lead thick" style="background:{{ t.bg }};color:{{ t.fg }}">{{ t.master }} ({{ t.rating }}/{{ t.slope }})<span class="age">{{ t.band_text }}</span></td>
+        {% for h in front %}<td class="{{ 'thick' if loop.last else '' }}" style="background:{{ t.bg }};color:{{ t.fg }}">{{ grid.yards.get(t.band, {}).get(h) or '' }}</td>{% endfor %}
+        {% if is18 %}<td style="background:{{ t.bg }};color:{{ t.fg }}">{{ t.totals[c.holes].out }}</td>
+        {% else %}<td class="thick" style="background:{{ t.bg }};color:{{ t.fg }}">{{ t.totals[c.holes].total }}</td><td></td><td></td>{% endif %}
+      </tr>
+      {% endfor %}
+      <tr class="par"><td class="lead thick">Par</td>
+        {% for h in front %}<td class="{{ 'hl' if c.hl_hole == h else '' }} {{ 'thick' if loop.last else '' }}">{{ grid.par.get(h, '') }}</td>{% endfor %}
+        {% if is18 %}<td>{{ grid.par_out }}</td>{% else %}<td class="thick">{{ grid.par_total }}</td><td></td><td></td>{% endif %}
+      </tr>
+      <tr class="hcp"><td class="lead thick">Handicap</td>
+        {% for h in front %}<td class="{{ 'hl' if c.hl_hole == h else '' }} {{ 'thick' if loop.last else '' }}">{{ grid.si.get(h, '') }}</td>{% endfor %}
+        {% if is18 %}<td></td>{% else %}<td class="thick"></td><td></td><td></td>{% endif %}
+      </tr>
+      {% for r in c.rows %}
+      <tr class="pl {{ 'rider' if r.rider else '' }} {{ 'split' if c.split_after is not none and loop.index0 == c.split_after else '' }}">
+        <td class="lead thick"><span class="nm">{{ r.name }}</span><span class="tc">{{ r.tee_code }}</span></td>
+        {% for h in front %}<td class="{{ 'hl' if c.hl_hole == h else '' }} {{ 'thick' if loop.last else '' }}"><span class="dk">{{ dots(r.ph_dots.get(h)) }}</span><span class="do">{{ dots(r.net_dots.get(h)) }}</span></td>{% endfor %}
+        {% if is18 %}<td></td>{% else %}
+          <td class="thick"></td>
+          <td class="split-c"><svg class="diag" viewBox="0 0 100 100" preserveAspectRatio="none"><line x1="0" y1="0" x2="100" y2="100" vector-effect="non-scaling-stroke"/></svg><span class="ul">{{ r.ph }}</span><span class="lr">{{ r.net }}</span></td>
+          <td></td>{% endif %}
+      </tr>
+      {% endfor %}
+    </table>
+    {% if is18 %}
+    {# ---- panel 2: the 18's back nine ---- #}
+    <table>
+      <colgroup>
+        <col style="width:6.7%">{% for h in back %}<col style="width:6.52%">{% endfor %}
+        <col style="width:8.64%"><col style="width:8.64%"><col style="width:8.64%"><col style="width:8.64%">
+      </colgroup>
+      <tr class="hd">
+        <th class="lead thick">Init</th>
+        {% for h in back %}<th class="{{ 'hl' if c.hl_hole == h else '' }} {{ 'thick' if loop.last else '' }}">{{ h }}</th>{% endfor %}
+        <th class="thick">In</th><th class="thick">TOT</th>
+        <th class="split-c"><svg class="diag" viewBox="0 0 100 100" preserveAspectRatio="none"><line x1="0" y1="0" x2="100" y2="100" vector-effect="non-scaling-stroke"/></svg><span class="ul">PH</span><span class="lr">{{ sc.net.short }}</span></th><th>Net</th>
+      </tr>
+      {% for t in sc.tees %}
+      <tr class="tee">
+        <td class="lead thick" style="background:{{ t.bg }};color:{{ t.fg }}">{{ t.code }}</td>
+        {% for h in back %}<td class="{{ 'thick' if loop.last else '' }}" style="background:{{ t.bg }};color:{{ t.fg }}">{{ grid.yards.get(t.band, {}).get(h) or '' }}</td>{% endfor %}
+        <td class="thick" style="background:{{ t.bg }};color:{{ t.fg }}">{{ t.totals[c.holes]['in'] }}</td>
+        <td class="thick" style="background:{{ t.bg }};color:{{ t.fg }}">{{ t.totals[c.holes].total }}</td><td></td><td></td>
+      </tr>
+      {% endfor %}
+      <tr class="par"><td class="lead thick">Par</td>
+        {% for h in back %}<td class="{{ 'hl' if c.hl_hole == h else '' }} {{ 'thick' if loop.last else '' }}">{{ grid.par.get(h, '') }}</td>{% endfor %}
+        <td class="thick">{{ grid.par_in }}</td><td class="thick">{{ grid.par_total }}</td><td></td><td></td>
+      </tr>
+      <tr class="hcp"><td class="lead thick">HCP</td>
+        {% for h in back %}<td class="{{ 'hl' if c.hl_hole == h else '' }} {{ 'thick' if loop.last else '' }}">{{ grid.si.get(h, '') }}</td>{% endfor %}
+        <td class="thick"></td><td class="thick"></td><td></td><td></td>
+      </tr>
+      {% for r in c.rows %}
+      <tr class="pl {{ 'rider' if r.rider else '' }} {{ 'split' if c.split_after is not none and loop.index0 == c.split_after else '' }}">
+        <td class="lead thick" style="text-align:center">{{ r.initials }}</td>
+        {% for h in back %}<td class="{{ 'hl' if c.hl_hole == h else '' }} {{ 'thick' if loop.last else '' }}"><span class="dk">{{ dots(r.ph_dots.get(h)) }}</span><span class="do">{{ dots(r.net_dots.get(h)) }}</span></td>{% endfor %}
+        <td class="thick"></td><td class="thick"></td>
+        <td class="split-c"><svg class="diag" viewBox="0 0 100 100" preserveAspectRatio="none"><line x1="0" y1="0" x2="100" y2="100" vector-effect="non-scaling-stroke"/></svg><span class="ul">{{ r.ph }}</span><span class="lr">{{ r.net }}</span></td><td></td>
+      </tr>
+      {% endfor %}
+    </table>
+    {% endif %}
+    </div>
+    <div class="decode"><span><b class="k">PH</b> — Playing Handicap (100%)&nbsp;|&nbsp;<b class="o">{{ sc.net.short if is18 else sc.net.word }}</b> — {{ sc.net.name }} Handicap ({{ sc.net.pct_note }})</span></div>
+  </div>
+  {% endfor %}
+</div>
+{% endfor %}
+<div class="plog noprint">
+  {{ sc.event.item_name }} · {{ sc.layout_meta.label }} · {{ 'Cart Net (pairs)' if sc.grouping == 'cart' else 'Team Net (foursome)' }} ·
+  pairings saved {{ sc.pairings_saved or '—' }} · handicaps as of {{ sc.handicap_as_of }} · printed {{ sc.printed_at }}
+  {% for l in sc.log %}<br>• {{ l }}{% endfor %}
+</div>
+{% endif %}
+</body>
+</html>

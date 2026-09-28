@@ -299,8 +299,8 @@ def _derived_dots(conn, rnd: dict, tee_id, ph, use_holes: list) -> dict:
     si = {h: si[h] for h in use_holes if h in si}
     if len(si) != len(use_holes):
         return {}
-    from email_parser.handicap_calc import allocate_strokes, ruled_allocation_mode
-    return allocate_strokes(int(round(ph)), si, mode=ruled_allocation_mode("ruled", si))
+    from email_parser.handicap_calc import ruled_dots
+    return ruled_dots(ph, si)
 
 
 def _existing_entry_row(conn, agg: str, cid: int):
