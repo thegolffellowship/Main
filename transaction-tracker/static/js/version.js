@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.510.8";
+window.TGF_VERSION = "2.510.9";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.510.9",
+    date: "2026-09-28",
+    changes: [
+      "The Golf Genius points-ledger capture (GO 6) has its own one-minute slow line in the health digest. Each chunk waits on live Golf Genius pages and took about 20 seconds overnight. Against the ten-second default, one capture run filled the digest with 60 false alarms.",
+    ],
+  },
   {
     version: "2.510.8",
     date: "2026-09-28",
