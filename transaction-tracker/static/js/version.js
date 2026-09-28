@@ -10,6 +10,13 @@ window.TGF_CHANGELOG = [
     ],
   },
   {
+    version: "2.510.11",
+    date: "2026-09-28",
+    changes: [
+      "Rehearsal: the scratch entry takeover tool (CA #811, GO in #829). tools/scratch_entry_takeover.py, on the rehearsal copy only, saves the shadow diff first (the G-0 parity result), parks the chosen events' Golf Genius scoring rows inside the scratch file, moves the file's entry cutover back, and publishes entered scores as the record so handicaps, games, MVP, payouts and points can run on them. --undo puts everything back. It refuses anything that is not a scratch file, is not wired into the app, and changes nothing in production. Guard test_scratch_takeover.py.",
+    ],
+  },
+  {
     version: "2.510.10",
     date: "2026-09-28",
     changes: [
