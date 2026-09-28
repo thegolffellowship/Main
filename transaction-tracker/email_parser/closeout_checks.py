@@ -188,7 +188,7 @@ def closeout_final_check(event: str | int, db_path=None, _read: dict | None = No
         blocking: list = []
         warnings: list = []
         cards = [dict(r) for r in conn.execute(
-            "SELECT id, customer_id, player_name, lower(COALESCE(source,'gg')) AS src "
+            "SELECT id, customer_id, player_name, tee_id, lower(COALESCE(source,'gg')) AS src "
             "FROM scoring_rounds WHERE event_id = ?", (eid,)).fetchall()]
         gg_cards = [c for c in cards if c["src"] != ep.ENTRY_SOURCE]
         entry_cards = [c for c in cards if c["src"] == ep.ENTRY_SOURCE]
@@ -271,6 +271,15 @@ def closeout_final_check(event: str | int, db_path=None, _read: dict | None = No
                                 f"(run scoring-entry-publish:{eid}|apply)")
             if not payouts:
                 blocking.append("no payouts computed for the event")
+        # A card with no tee has no rating/slope/par/stroke index: the handicap
+        # post skips it and engine payouts refuse the event (v2.513.7). Found
+        # on the 9/28 rehearsal copy, where all 33 entered cards were tee-less
+        # and this check still said "final". Both eras, by name.
+        own = entry_cards if era == "entry" else gg_cards
+        teeless = sorted(c["player_name"] or f"customer {c['customer_id']}" for c in own if not c.get("tee_id"))
+        if teeless:
+            blocking.append(f"{len(teeless)} card(s) with no tee (handicaps can't post, engine payouts refuse): "
+                            f"{', '.join(teeless)}")
         if eid in skip:
             warnings.append(f"no handicap post or card for this event: {skip[eid]}")
         out.update({"final": not blocking, "blocking": blocking, "warnings": warnings})

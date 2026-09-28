@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.513.7";
+window.TGF_VERSION = "2.513.8";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.513.8",
+    date: "2026-09-28",
+    title: "The \"results are final\" check blocks cards with no tee",
+    changes: [
+      "Rehearsal step 3 on the Railway scratch copy: scoring-closeout-final:3309 answered FINAL for s9.24 Brackenridge in the entry era, with all 22 published cards carrying tee_id NULL (#849, a replay-harness gap). A card with no tee has no rating, slope, par or stroke index, so the handicap post skips it and engine payouts refuse the event (v2.513.7). The 9 PM closeout would have gone ahead on that 'final' and posted nothing. closeout_final_check now blocks on any card with no tee, names each player, and does it in both eras (the GG-era Lee Vasquez card of 9/16 was the same class). Guard: test_closeout_checks.py, two new checks.",
+    ],
+  },
   {
     version: "2.513.7",
     date: "2026-09-28",

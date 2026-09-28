@@ -94,6 +94,9 @@ Read-only (v2.511.0, CA #829). Run it first; act on the event only when
   disputed hole voids the signature, so disputes block), published into
   scorecards (`scoring-entry-publish:<id>|apply`), no hole-in-one claim
   still in flight, payouts computed. An unanswered CTP hole is a warning.
+Both eras: a card with no tee blocks, by name (v2.513.8). No tee means no
+rating/slope/par, so the handicap post skips it and engine payouts refuse;
+the 9/28 rehearsal copy said "final" on 22 tee-less cards before this.
 Events on the NO HANDICAPS list show a warning, not a blocker.
 
 ## Phase 0 — what the machine already did

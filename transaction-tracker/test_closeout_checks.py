@@ -65,8 +65,8 @@ check("shadow names the pairs each side has alone",
 print("\nResults are final: entry era")
 c = sqlite3.connect(tmp)
 for cid in (401, 402, 403, 404, 405):
-    c.execute("INSERT INTO scoring_rounds (customer_id, player_name, event_id, round_date, holes_played, gross, source) "
-              "VALUES (?, ?, 771, '2026-10-13', 9, 36, 'entry')", (cid, " ".join(people[cid])))
+    c.execute("INSERT INTO scoring_rounds (customer_id, player_name, event_id, round_date, holes_played, gross, source, tee_id) "
+              "VALUES (?, ?, 771, '2026-10-13', 9, 36, 'entry', 1)", (cid, " ".join(people[cid])))
 c.execute("INSERT INTO tgf_events (id, code, name, event_date, events_id) VALUES (91, 's9.40', 's9.40 Future Links', '2026-10-13', 771)")
 c.execute("INSERT INTO tgf_payouts (event_id, customer_id, category, amount, description) VALUES (91, 401, 'Individual Net', 20, 'x')")
 c.commit(); c.close()
@@ -78,6 +78,11 @@ f = cc.closeout_final_check(771, db_path=tmp, _read=read(771, hio=[{"hole": 3, "
 check("a hole-in-one claim still in flight blocks", not f["final"] and any("hole-in-one" in b for b in f["blocking"]), f.get("blocking"))
 f = cc.closeout_final_check(771, db_path=tmp, _read=read(771, ctp={"3": None}))
 check("an unanswered CTP hole is a warning, not a blocker", f["final"] and any("CTP" in w for w in f["warnings"]), f)
+c = sqlite3.connect(tmp); c.execute("UPDATE scoring_rounds SET tee_id = NULL WHERE customer_id = 402 AND event_id = 771"); c.commit(); c.close()
+f = cc.closeout_final_check(771, db_path=tmp, _read=read(771))
+check("a published card with no tee blocks, by name (9/28 rehearsal)",
+      not f["final"] and any("no tee" in b and "Bob Baker" in b for b in f["blocking"]), f.get("blocking"))
+c = sqlite3.connect(tmp); c.execute("UPDATE scoring_rounds SET tee_id = 1 WHERE customer_id = 402 AND event_id = 771"); c.commit(); c.close()
 c = sqlite3.connect(tmp); c.execute("DELETE FROM scoring_rounds WHERE customer_id = 405 AND event_id = 771"); c.commit(); c.close()
 f = cc.closeout_final_check(771, db_path=tmp, _read=read(771))
 check("a signed card not yet published blocks and names the publish step",
@@ -90,7 +95,7 @@ for cid in (401, 402):
     c.execute("INSERT INTO items (email_uid, item_index, merchant, customer, customer_id, item_name, event_id, transaction_status, chapter, order_date, item_price) "
               "VALUES (?, 0, 'Manual Entry', ?, ?, 's9.38 Old Links', 773, 'active', 'San Antonio', '2026-09-20', '$50.00')",
               (f"manual-cc-{cid}", " ".join(people[cid]), cid))
-c.execute("INSERT INTO scoring_rounds (customer_id, player_name, event_id, round_date, holes_played, gross, source) VALUES (401, 'ABLE, Ann', 773, '2026-09-22', 9, 40, 'gg')")
+c.execute("INSERT INTO scoring_rounds (customer_id, player_name, event_id, round_date, holes_played, gross, source, tee_id) VALUES (401, 'ABLE, Ann', 773, '2026-09-22', 9, 40, 'gg', 1)")
 c.commit(); c.close()
 f = cc.closeout_final_check(773, db_path=tmp, _read={"rounds": []})
 check("GG era: a missing card, no boards and no payouts all block, by name",
@@ -112,6 +117,10 @@ check("a full-standings '_board' row at $0 never blocks; a game with no purse at
 c = sqlite3.connect(tmp); c.execute("UPDATE gg_game_results SET purse = 26 WHERE event_id = 773 AND game = 'skins'"); c.commit(); c.close()
 f = cc.closeout_final_check(773, db_path=tmp, _read={"rounds": []})
 check("with every paying game purse-entered, cards = field and payouts recorded: FINAL", f["final"] is True, f)
+c = sqlite3.connect(tmp); c.execute("UPDATE scoring_rounds SET tee_id = NULL WHERE event_id = 773"); c.commit(); c.close()
+f = cc.closeout_final_check(773, db_path=tmp, _read={"rounds": []})
+check("GG era: a tee-less card blocks too", not f["final"] and any("no tee" in b for b in f["blocking"]), f.get("blocking"))
+c = sqlite3.connect(tmp); c.execute("UPDATE scoring_rounds SET tee_id = 1 WHERE event_id = 773"); c.commit(); c.close()
 check("an unknown event is refused", "error" in cc.closeout_final_check("nope", db_path=tmp, _read={"rounds": []}))
 
 src = open(os.path.join(os.path.dirname(__file__), "email_parser", "closeout_checks.py"), encoding="utf-8").read()
