@@ -10935,24 +10935,25 @@ def get_points_race_standings(race_key: str,
     _n_pot = (sum(1 for r in out_rows if r["enrolled"])
               + len(enrolled_not_ranked))
     _final_flag = _points_race_final(race_key, db_path=db_path)
-    if race.get("enroll_season") == "fall":
-        # Fall payout ladder isn't ratified yet (rule 3b — money): the
-        # boards show standings + buy-in pills, but no projected payout
-        # strip until Kerry confirms the fall structure.
-        projected_payouts = None
-    else:
-        # A FINAL race LOCKS its strip to the recorded payouts (Kerry
-        # 2026-09-11: "freeze concluded races to recorded payouts") —
-        # recomputing from live enrollments is how the concluded cup
-        # advertised a phantom pool. Falls back to the projection only
-        # while no payout rows exist yet.
+    # A FINAL race LOCKS its strip to the recorded payouts (Kerry
+    # 2026-09-11: "freeze concluded races to recorded payouts") —
+    # recomputing from live enrollments is how the concluded cup
+    # advertised a phantom pool. Falls back to the projection only
+    # while no payout rows exist yet.
+    #
+    # FALL NET (SA, Austin) is now on the CITY NET FAMILY — Kerry ratified
+    # it (rule 3b, CA #788 item 4, 2026-09-27): places curve 30% @ N=10 ->
+    # 20% @ N=60, minimum 2, the 2-7 place ladders. The pot basis is the
+    # same $40 of every entry (Season Contest Payouts v1.1 §11), and
+    # `_n_pot` already counts only this race's own (fall) enrollments. Until
+    # the ruling the fall boards showed standings with no payout strip.
+    projected_payouts = (
+        _recorded_payout_strip(race_key, race, db_path)
+        if _final_flag else None)
+    if projected_payouts is None:
         projected_payouts = (
-            _recorded_payout_strip(race_key, race, db_path)
-            if _final_flag else None)
-        if projected_payouts is None:
-            projected_payouts = (
-                _sp.players_cup_payouts(_n_pot) if race.get("flights")
-                else _sp.city_net_payouts(_n_pot))
+            _sp.players_cup_payouts(_n_pot) if race.get("flights")
+            else _sp.city_net_payouts(_n_pot))
     return {
         "refresh_queued": queued_refresh,
         "race_key": race_key,

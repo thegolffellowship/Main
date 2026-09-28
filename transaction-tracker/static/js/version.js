@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.507.3";
+window.TGF_VERSION = "2.508.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.508.0",
+    date: "2026-09-28",
+    title: "Fall NET races show their payout ladder \u2014 the City Net family (Kerry, CA #788)",
+    changes: [
+      "KERRY RULED (rule 3b, CA #788 item 4): the SA FALL NET and AUSTIN FALL NET payout ladder is the CITY NET FAMILY \u2014 places curve 30% of the field at N=10 decaying to 20% at N=60, minimum 2 places, with the 2\u20137 place ladders (Season Contest Payouts v1.1 \u00a74), already encoded in season_payouts.py. The fall boards used to show standings and buy-in pills with NO payout strip, by design, until this ruling.",
+      "Verified before wiring: the Fall pot basis is the same $40 of every entry as City Net (Payouts v1.1 \u00a711), and the pot counts only the race\u2019s own fall enrollments. A final race still locks its strip to the recorded payouts, exactly as the other races do.",
+      "The payout ROWS for 10/31 are the CFO lane\u2019s to record; this change is the projection members see on the board.",
+    ],
+  },
   {
     version: "2.507.3",
     date: "2026-09-28",
