@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.510.3";
+window.TGF_VERSION = "2.510.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.510.4",
+    date: "2026-09-28",
+    title: "GO 6 capture complete; home-chapter audit treats TGF-wide events as neutral",
+    changes: [
+      "GO 6 (CA #786) CAPTURED: 13 race bundles on the data volume under gg_points_ledger/2026-09-27/ \u2014 SA NET 85, Austin NET 52, SA Fall 41, Austin Fall 34, Players Cup 134, and the Monthly boards for March, April, May, June, July and September \u2014 976 player-race records, every one complete, zero errors. Monthly is ONE TGF-wide race shown on both portals: the September and July copies were compared player by player and every total, rank and per-event row matched, so March\u2013June were captured once.",
+      "Capture chunks are 20 seconds. The real cause of the dropped chunks was not Golf Genius and not the budget: every push to main restarts the app and kills in-flight requests, and each 502 tonight landed a minute after some lane\u2019s push. The capture survived because every chunk persists server-side before it answers.",
+      "Home-chapter audit (CA #784): TGF-wide events (championships, the cup) no longer count as \u2018playing away from home\u2019 \u2014 the first live run flagged players whose only 2026 event was a TGF one.",
+    ],
+  },
   {
     version: "2.510.3",
     date: "2026-09-27",
