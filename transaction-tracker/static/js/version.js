@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.506.0";
+window.TGF_VERSION = "2.507.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.507.0",
+    date: "2026-09-28",
+    title: "Home chapter: the flagged list for Kerry, and a ruling-gated setter (CA #784)",
+    changes: [
+      "CA #784 (Kerry, rule 3b): points follow the player\u2019s HOME chapter, `customers.chapter` \u2014 never \u2018most events\u2019 or \u2018most recent\u2019. NEW read-only bridge `scoring-home-chapter-audit[:year]` lists everyone whose home chapter looks wrong (blank, never plays at home, or plays more elsewhere) plus the five Kerry named (Barna, Moore, Sharp, Franz, Williams), with where each actually plays shown as EVIDENCE for Kerry to confirm. It sets nothing.",
+      "NEW `scoring-home-chapter-set:<cid>=<chapter>|<ruling>` \u2014 the narrow door for a RULED correction. It refuses without a ruling reference, refuses a chapter not in the `chapters` table, and logs before and after. The existing chapter-guess confirm path deliberately fills only blank profiles, so it could not carry a ruling like Eric Pollard \u2192 DFW.",
+      "DFW was already a canonical chapter (chapters table and the Info-tab dropdown), so \u2018allow DFW as a valid home chapter\u2019 needed no change.",
+    ],
+  },
   {
     version: "2.506.0",
     date: "2026-09-28",
