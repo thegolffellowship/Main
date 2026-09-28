@@ -88,6 +88,27 @@ EXPENSES
 PROJECTED PROFIT = Net Income - Total Expenses
 ```
 
+### Server prize fund = recorded event-funded payouts (v2.513.1, CA #834)
+
+The Margin & Fee Standard v1.0 §1 subtracts prize_pool from the event P&L.
+Until v2.513.1 `get_event_financial_summary` (verified path) returned
+prize_fund 0 and left it to the Events page's `computeGamePotTotals()`, so
+every server reader (MCP tool, go/no-go, CFO) saw profit overstated by the
+prize money (#818/#820). Now `_event_funded_prize_payouts` sums the event's
+RECORDED `tgf_payouts` (found through `_tgf_event_lookup`: events_id, then
+code) whose category is in `EVENT_FUNDED_PAYOUT_CATEGORIES` (team_net,
+individual_net, individual_gross, skins, closest_to_pin/ctp, mvp, tgf_mvp;
+display labels such as "Individual Net" / "City MVP" are folded to the key).
+Payouts funded from money held elsewhere (hole_in_one, season/points-race
+"City Net"/"City Gross", monthly_points, any unknown category, and skins on a
+Lone Star Cup event, which the LSC skins pot pays) are excluded and listed in
+`expenses.prize_fund_detail.excluded` (CFO #822 condition 2). Paid and unpaid
+payouts both count. `expenses.prize_fund_source` is `payouts`, or
+`matrix_client` before any payout is recorded (server 0, the page supplies the
+matrix figure as before), or `allocations` on the fallback path. Course fees
+stay course_payable (owed); owed-vs-paid is the #18 view. Guard
+`test_prize_fund.py`.
+
 ## Critical: Transaction fees vs GoDaddy merchant fees
 - **Transaction fees (3.5%)** are intentionally collected revenue from players, parsed from
   each GoDaddy email invoice and stored in `items.transaction_fees`. They are NOT calculated —

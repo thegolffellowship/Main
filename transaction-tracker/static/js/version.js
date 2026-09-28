@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.513.0";
+window.TGF_VERSION = "2.513.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.513.1",
+    date: "2026-09-28",
+    title: "Event P&L subtracts the prize money actually recorded",
+    changes: [
+      "CA #834 (Margin & Fee Standard v1.0 §1): the server event P&L used to report a $0 prize fund and leave the figure to the Events page, so the MCP tool, the go/no-go and the CFO saw profit overstated by the prize money on every event (#818/#820). Once payouts are recorded, the prize fund is now the event-funded payout rows: the event's games plus City and TGF MVP, paid or not. Payouts funded from held pots (hole-in-one, season and points races, monthly points, the Lone Star Cup skins pot) are left out and listed so nothing is counted twice (CFO #822). Before any payout is recorded the page keeps using its games-matrix figure. Guard test_prize_fund.py.",
+    ],
+  },
   {
     version: "2.513.0",
     date: "2026-09-28",

@@ -49732,6 +49732,59 @@ def get_monthly_money_flow(month: str, debug: bool = False,
         return out
 
 
+# Payout categories paid out of THIS event's own entries (the event's game
+# buy-ins and its City / TGF MVP). Anything else recorded on an event's
+# payout sheet is funded from money HELD elsewhere — the hole-in-one pot,
+# season / points-race pots, monthly points, the Lone Star Cup skins pot —
+# and counting it against the event would count that money twice (CFO #822
+# condition 2). Unknown categories are excluded and reported, never guessed.
+EVENT_FUNDED_PAYOUT_CATEGORIES = frozenset({
+    "team_net", "individual_net", "individual_gross", "skins",
+    "closest_to_pin", "ctp", "mvp", "tgf_mvp",
+})
+
+
+def _event_funded_prize_payouts(conn, ev: dict) -> dict:
+    """The recorded, event-funded prize payouts for one Tracker event:
+    {total, rows, paid, unpaid, excluded: [{category, amount, rows}]}.
+    The event's tgf_events row is found by _tgf_event_lookup (events_id,
+    then the code). A Lone Star Cup event's skins are paid from the held
+    LSC skins pot (lsc_skins_pot), so they are excluded there too."""
+    out = {"total": 0.0, "rows": 0, "paid": 0.0, "unpaid": 0.0, "excluded": []}
+    if not ev or not ev.get("id"):
+        return out
+    try:
+        row, _full, _bare = _tgf_event_lookup(conn, ev)
+    except sqlite3.OperationalError:
+        return out  # tgf_events not created on this database yet
+    if not row:
+        return out
+    name = (ev.get("item_name") or "").lower()
+    is_cup = "lone star cup" in name or " lsc" in f" {name}"
+    excluded: dict = {}
+    for r in conn.execute(
+            "SELECT category, amount, paid_at FROM tgf_payouts WHERE event_id = ?",
+            (row["id"],)).fetchall():
+        # Rows written from a screenshot or by hand sometimes carry the
+        # display label ("Individual Net", "City MVP"): fold it to the key.
+        cat = "_".join((r["category"] or "").strip().lower().split())
+        cat = {"city_mvp": "mvp", "hio": "hole_in_one"}.get(cat, cat)
+        amt = float(r["amount"] or 0)
+        if cat in EVENT_FUNDED_PAYOUT_CATEGORIES and not (is_cup and cat == "skins"):
+            out["total"] += amt
+            out["rows"] += 1
+            out["paid" if r["paid_at"] else "unpaid"] += amt
+        else:
+            e = excluded.setdefault(r["category"] or "", {"category": r["category"],
+                                                           "amount": 0.0, "rows": 0})
+            e["amount"] += amt
+            e["rows"] += 1
+    for k in ("total", "paid", "unpaid"):
+        out[k] = round(out[k], 2)
+    out["excluded"] = [dict(e, amount=round(e["amount"], 2)) for e in excluded.values()]
+    return out
+
+
 def get_event_financial_summary(event_name: str, db_path: str | Path | None = None) -> dict:
     """Server-side financial summary for one event.
 
@@ -49870,15 +49923,21 @@ def get_event_financial_summary(event_name: str, db_path: str | Path | None = No
             aggregate_course_cost = course_cost_calc["total"]
             course_fees_by_holes = course_cost_calc["by_holes"]
 
-            # Prize fund: set to 0 so the client uses its game matrix calculation.
-            # Allocations only have partial coverage for prize_pool data — the client-side
-            # computeGamePotTotals() is authoritative for prize fund amounts.
+            # Prize fund (CA #834, Margin & Fee Standard v1.0 §1: the event
+            # P&L subtracts prize_pool). Once payouts are RECORDED it is the
+            # event-funded payout rows (#818/#820/#822). Before that the
+            # server has no matrix, so it reports 0 with source
+            # "matrix_client" and the Events page fills in its own
+            # computeGamePotTotals() figure, as it always did.
             allocs = conn.execute(
                 f"SELECT * FROM acct_allocations WHERE event_name COLLATE NOCASE IN ({name_placeholders})",
                 all_names,
             ).fetchall()
             allocs = [dict(r) for r in allocs]
-            total_prize_pool = 0  # client calculates from games matrix
+            prize_detail = _event_funded_prize_payouts(conn, event) if event else {
+                "total": 0.0, "rows": 0, "excluded": []}
+            total_prize_pool = prize_detail["total"]
+            prize_fund_source = "payouts" if prize_detail["rows"] else "matrix_client"
             total_tgf_operating = round(sum(a.get("tgf_operating", 0) for a in allocs), 2)
             total_tax_reserve = round(sum(a.get("tax_reserve", 0) for a in allocs), 2)
 
@@ -49957,6 +50016,8 @@ def get_event_financial_summary(event_name: str, db_path: str | Path | None = No
             aggregate_course_cost = course_cost_calc["total"]
             course_fees_by_holes = course_cost_calc["by_holes"]
             total_prize_pool = round(sum(a.get("prize_pool", 0) for a in allocs), 2)
+            prize_fund_source = "allocations"
+            prize_detail = None
             total_processing = round(sum(a.get("godaddy_fee", 0) for a in allocs), 2)
             total_tgf_operating = round(sum(a.get("tgf_operating", 0) for a in allocs), 2)
             total_tax_reserve = round(sum(a.get("tax_reserve", 0) for a in allocs), 2)
@@ -50023,6 +50084,8 @@ def get_event_financial_summary(event_name: str, db_path: str | Path | None = No
             "course_fees": aggregate_course_cost,
             "course_fees_by_holes": course_fees_by_holes,
             "prize_fund": total_prize_pool,
+            "prize_fund_source": prize_fund_source,
+            "prize_fund_detail": prize_detail,
             "processing_fees": total_processing,
             "tgf_operating": total_tgf_operating,
             "tax_reserve": total_tax_reserve,
