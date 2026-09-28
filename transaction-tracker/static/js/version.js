@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.518.2";
+window.TGF_VERSION = "2.518.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.518.3",
+    date: "2026-09-28",
+    title: "Rehearsal runner: handicap-card dry runs allowed",
+    changes: [
+      "CA #882 item 6, for closeout #865: the rehearsal runner now accepts scoring-hcp-cards:<event> as a bridge job. That's the DRY RUN, which returns who would get a card and sends nothing. scoring-hcp-cards:<event>|apply, the send, is still refused, and the child's outbound guard would block a send anyway. Guard: test_rehearsal_runner.py.",
+    ],
+  },
   {
     version: "2.518.2",
     date: "2026-09-28",

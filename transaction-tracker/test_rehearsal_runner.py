@@ -102,9 +102,16 @@ st2 = wait(j2["id"])
 check("a read bridge sees the scratch value", (st2.get("result") or {}).get("value") == "SCRATCH", st2.get("result"))
 
 print("\n== refused bridges ==")
-for ex in ("scoring-rehearsal:restore", "scoring-gg-archive:vacuum|go", "scoring-backup", "probe_golf_genius"):
+for ex in ("scoring-rehearsal:restore", "scoring-gg-archive:vacuum|go", "scoring-backup", "probe_golf_genius",
+           "scoring-hcp-cards:3309|apply", "scoring-hcp-cards:3309 | APPLY"):
     r = rh.start_job("bridge", ex, db_path=live)
     check(f"refused: {ex}", "error" in r, r)
+
+jh = rh.start_job("bridge", "scoring-hcp-cards:no such event", db_path=live)
+check("the handicap-card DRY RUN is admitted (CA #882 item 6)", jh.get("status") == "running", jh)
+sth = wait(jh["id"]) if jh.get("id") else {}
+check("...and answers as a dry run or a plain 'no event', never a send",
+      isinstance(sth.get("result"), dict) and ("error" in sth["result"] or sth["result"].get("dry_run") is True), sth.get("result"))
 
 print("\n== one job at a time ==")
 jd = rh._jobs_dir(live)
