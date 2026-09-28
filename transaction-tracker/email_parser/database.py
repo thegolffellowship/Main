@@ -25872,6 +25872,16 @@ def event_engine_state(event_name: str, db_path=None) -> dict:
                 "buys_gross": bool(cid and cid in gross_buyers),
                 "is_member": True, "scores": scores,
                 "strokes_received": received})
+    if not holes:
+        # No tee on the cards -> no par / stroke index. Guessing a tee would
+        # score every hole against the wrong card; a board of empty holes
+        # would read as "everyone tied, no skins". Refuse, and say why
+        # (rehearsal 9/28: entered rows published with tee_id NULL).
+        no_tee = sum(1 for r in rounds if r.get("tee_id") is None)
+        return {"error": (f"no course holes for this event: {no_tee} of "
+                          f"{len(rounds)} scorecards carry no tee, so par and "
+                          f"stroke index are unknown — seed each player's tee"),
+                "event": ev}
     championship = "championship" in ev["item_name"].lower()
     meta = {"event_id": ev["id"], "event_name": ev["item_name"],
             "holes": n_holes, "championship": championship}

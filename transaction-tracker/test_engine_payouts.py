@@ -138,6 +138,25 @@ check("a frozen gross Skins stays gross at 7 buyers",
       froze["variant"] == "gross" and froze["selection"].get("frozen"),
       froze.get("selection"))
 
+print("\n== a card with no tee is refused, never scored as empty holes ==")
+import os, tempfile
+from email_parser import database as db
+_tmp = os.path.join(tempfile.mkdtemp(prefix="tgf-engpay-"), "t.db")
+db.init_db(_tmp)
+with db._connect(_tmp) as _c:
+    db._ensure_scoring_tables(_c)
+    _eid = _c.execute("INSERT INTO events (item_name, event_date) VALUES "
+                      "('s9.99 Nowhere', '2026-10-13')").lastrowid
+    _c.execute("INSERT INTO scoring_rounds (player_name, event_id, holes_played, "
+               "playing_handicap, source) VALUES ('A B', ?, 9, 5, 'entry')", (_eid,))
+    _c.commit()
+_st = db.event_engine_state("s9.99 Nowhere", db_path=_tmp)
+check("event_engine_state refuses and names the missing tee",
+      "no tee" in (_st.get("error") or ""), _st.get("error"))
+check("...and engine payouts pass the refusal through",
+      "no tee" in (db.engine_game_payouts("s9.99 Nowhere", db_path=_tmp)
+                   .get("error") or ""))
+
 print("\n" + "=" * 60)
 if FAILURES:
     print(f"{len(FAILURES)} FAILED: {FAILURES}")

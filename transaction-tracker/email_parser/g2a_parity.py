@@ -175,11 +175,21 @@ def g2a_parity(event_name: str, db_path=None) -> dict:
         event_name, name=f"G2a — {event_name}", created_by="g2a-harness",
         db_path=db_path) if db_path else db.ls_seed_session_from_event(
         event_name, name=f"G2a — {event_name}", created_by="g2a-harness")
+    sid = None
+    if not seed.get("error"):
+        sid = seed.get("session_id") or seed.get("id")
+        sess = (db.ls_get_session(sid, db_path=db_path) if db_path
+                else db.ls_get_session(sid)) or {}
+        if not sess.get("holes"):
+            # No tee on the cards -> no par / SI -> every game would read
+            # "all tied, no skins". That is not a result; refuse it.
+            seed = {"error": "the event's scorecards carry no tee, so the "
+                             "sandbox has no course holes (par / stroke "
+                             "index unknown) — seed each player's tee"}
     if seed.get("error"):
         out["tiers"]["players"] = {"status": "error", "error": seed["error"]}
         out["blockers"].append(f"players tier: {seed['error']}")
     else:
-        sid = seed.get("session_id") or seed.get("id")
         par = (db.ls_parity(sid, db_path=db_path) if db_path
                else db.ls_parity(sid))
         rows = par.get("rows") or []

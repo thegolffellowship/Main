@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.513.6";
+window.TGF_VERSION = "2.513.7";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.513.7",
+    date: "2026-09-28",
+    title: "Engine payouts and G2a refuse cards with no tee",
+    changes: [
+      "Rehearsal step 3, on the scratch copy after Tracker Build's takeover: the entered cards are published with tee_id NULL (#849, a replay-harness gap). With no tee there is no par or stroke index. Engine payouts read every card as incomplete: 13 players 'tied' for Individual Net, every skins pot unallocated, all marked provisional. That was safe, but it read like a result. event_engine_state and G2a now REFUSE, naming how many cards carry no tee. They never guess a tee, the same rule G-0 follows.",
+    ],
+  },
   {
     version: "2.513.6",
     date: "2026-09-28",
