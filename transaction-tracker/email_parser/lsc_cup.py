@@ -86,6 +86,17 @@ def normalize_format(fmt: str | None) -> str:
     return "singles" if f in ("singles", "single", "") else f
 
 
+def _course_for(course: list[dict], si_by_player: dict | None, cid) -> list[dict]:
+    """The round's holes with THIS player's tee stroke index, when his
+    tee has its own (WHS: strokes fall on the index of the tee played)."""
+    si = (si_by_player or {}).get(cid) or (si_by_player or {}).get(str(cid))
+    if not si:
+        return course
+    return [{**h, "stroke_index": si.get(h.get("hole"), si.get(str(h.get("hole")),
+                                                                h.get("stroke_index")))}
+            for h in course]
+
+
 def match_format(match: dict, session: dict) -> str:
     """The format ONE match is played and handicapped under.
 
@@ -246,7 +257,8 @@ def _team_line(cids: list[int], hole: int, scores: dict, strokes: dict,
 def compute_match_detail(match: dict, session: dict, course: list[dict],
                          phs: dict, scores: dict,
                          names: dict | None = None,
-                         marks: dict | None = None) -> dict:
+                         marks: dict | None = None,
+                         si_by_player: dict | None = None) -> dict:
     """One match → the gg_match_play-shaped detail dict.
 
     match:   {"id", "austin": [cid, ...], "sa": [cid, ...], "tee_time"?}
@@ -258,6 +270,12 @@ def compute_match_detail(match: dict, session: dict, course: list[dict],
     marks:   {cid: {hole: "picked_up" | "holed"}} from score entry (a
              triple in a match is ball-in-hole or picked up). Picked up
              cannot win the hole; both sides picked up = a push.
+    si_by_player: {cid: {hole: stroke_index}} for a player whose tee has
+             its OWN stroke index (a women's tee). WHS: each player's
+             strokes fall on the stroke index of the tee HE plays (Kerry
+             2026-09-28: "Shouldn't matter where players play from").
+             Singles and four-ball use it; Chapman (one ball, partners
+             possibly on two tees) keeps the round's list.
     """
     names = names or {}
     n_holes = int(session.get("n_holes") or 18)
@@ -279,9 +297,12 @@ def compute_match_detail(match: dict, session: dict, course: list[dict],
             for c in t:
                 strokes[c] = smap
     else:
-        # singles 100% / four-ball 90%: every player off the low player
+        # singles 100% / four-ball 90%: every player off the low player,
+        # each on the stroke index of his own tee
         low = min(hcp.values()) if hcp else 0
-        strokes = {c: strokes_received(hcp[c], low, course, n_holes)
+        strokes = {c: strokes_received(hcp[c], low,
+                                       _course_for(course, si_by_player, c),
+                                       n_holes)
                    for c in everyone}
     # normalize per-player scores to int hole keys
     sc = {c: {int(h): g for h, g in (scores.get(c) or scores.get(str(c)) or {}).items()
@@ -857,12 +878,15 @@ def compute_board(dial: dict, session_data: dict,
         phs = {int(k): v for k, v in (data.get("phs") or {}).items()}
         scores = {int(k): v for k, v in (data.get("scores") or {}).items()}
         marks = {int(k): v for k, v in (data.get("marks") or {}).items()}
+        si_by_player = {int(k): {int(h): int(x) for h, x in v.items()}
+                        for k, v in (data.get("si_by_player") or {}).items()}
         s_out = {"id": sess.get("id"), "label": sess.get("label"),
                  "date": sess.get("date"), "format": sess.get("format"),
                  "points_per_match": win, "matches": [], "skins": None}
         for m in sess.get("matches") or []:
             total += win
-            detail = compute_match_detail(m, sess, course, phs, scores, names, marks)
+            detail = compute_match_detail(m, sess, course, phs, scores, names, marks,
+                                          si_by_player)
             state = _match_state(detail)
             ov = match_result_override(m)
             if ov:
@@ -991,9 +1015,64 @@ def merge_entry_feed(dial: dict, feed: dict) -> dict:
             slot.update(t["scores"])
             if t.get("marks"):
                 marks.setdefault(int(cids[0]), {}).update(t["marks"])
+        tees = {int(p["customer_id"]): p.get("tee")
+                for p in r.get("players") or [] if p.get("customer_id") and p.get("tee")}
         out[sess.get("id")] = {"course": r.get("course") or [],
-                               "phs": phs, "scores": scores, "marks": marks}
+                               "phs": phs, "scores": scores, "marks": marks,
+                               "tees": tees, "course_id": r.get("course_id")}
     return out
+
+
+def _tee_stroke_index(conn, course_id, tee) -> dict:
+    """{hole: stroke_index} for a player's tee on the course record. The
+    seat's tee may be a tee NAME ("Teal") or a TGF band ("Forward");
+    lower() on both sides (#682). {} when it can't be resolved."""
+    t = (str(tee or "")).strip().lower()
+    if not course_id or not t:
+        return {}
+    rows = conn.execute(
+        "SELECT tee_id, tee_name, tgf_bands FROM course_tees WHERE course_id = ?",
+        (int(course_id),)).fetchall()
+    pick = None
+    for r in rows:
+        if lower_eq(r[1], t) or t in [b.strip().lower() for b in str(r[2] or "").split(",")]:
+            pick = r[0]
+            break
+    if pick is None:
+        return {}
+    return {int(h): int(si) for h, si in conn.execute(
+        "SELECT hole_number, stroke_index FROM course_tee_holes "
+        "WHERE tee_id = ? AND stroke_index IS NOT NULL", (pick,)).fetchall()}
+
+
+def lower_eq(a, b) -> bool:
+    return str(a or "").strip().lower() == str(b or "").strip().lower()
+
+
+def _attach_player_stroke_index(conn, session_data: dict) -> None:
+    """For every session read from score entry, give each player whose
+    tee carries a DIFFERENT stroke index from the round's holes his own
+    list (si_by_player). Read-only; a failure leaves the round's list."""
+    for data in (session_data or {}).values():
+        if not isinstance(data, dict):      # e.g. the mock dial's "_note"
+            continue
+        tees, cid_course = data.get("tees") or {}, data.get("course_id")
+        if not tees or not cid_course:
+            continue
+        base = {int(h["hole"]): h.get("stroke_index") for h in data.get("course") or []}
+        cache, out = {}, {}
+        try:
+            for cid, tee in tees.items():
+                if tee not in cache:
+                    cache[tee] = _tee_stroke_index(conn, cid_course, tee)
+                si = cache[tee]
+                if si and any(si.get(h) != v for h, v in base.items()):
+                    out[int(cid)] = si
+        except Exception:
+            logger.exception("lsc_cup: per-player stroke index read failed")
+            continue
+        if out:
+            data["si_by_player"] = out
 
 
 def _skins_ctx(conn, dial: dict, db_path=None) -> dict:
@@ -1076,6 +1155,7 @@ def _board_payload(db_path=None, use_frozen: bool = True) -> dict:
                 logger.exception("lsc_cup: entered-scores feed read "
                                  "failed — board falls back to the "
                                  "mock dial")
+        _attach_player_stroke_index(conn, session_data)
         skins_ctx = _skins_ctx(conn, dial, db_path)
         board = compute_board(dial, session_data, names, skins_ctx)
         board["configured"] = True

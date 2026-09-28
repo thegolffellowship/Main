@@ -808,3 +808,47 @@ def test_results_snapshot_freezes_the_final_board(tmp_path):
     assert b["results_frozen"]["forced"] is False
     lsc_cup.clear_cup_results(db_path=str(db))
     assert lsc_cup.lsc_board_payload(db_path=str(db))["cup"]["winner"] == "sa"
+
+
+# -- Mixed tees (Kerry 2026-09-28): WHS, each player on his own tee --------
+_MEN_SI = [17, 15, 3, 1, 11, 7, 5, 13, 9, 16, 14, 6, 8, 2, 10, 18, 4, 12]
+_TEAL_SI = [11, 17, 5, 1, 15, 7, 9, 13, 3, 16, 4, 10, 18, 6, 14, 2, 8, 12]
+
+
+def test_teal_player_takes_strokes_on_her_own_stroke_index():
+    # The Hideout: a Teal (forward) player 3 strokes worse than a
+    # men's-tee player gets them on HER SI 1-3 (holes 4, 16, 9), not the
+    # men's SI 1-3 (holes 4, 14, 3).
+    from email_parser.lsc_cup import compute_match_detail
+    course = [{"hole": h, "par": 4, "stroke_index": _MEN_SI[h - 1]} for h in range(1, 19)]
+    sess = {"id": "sun", "format": "singles", "n_holes": 18}
+    m = {"id": "S1", "austin": [1], "sa": [23]}
+    teal = {23: {h: _TEAL_SI[h - 1] for h in range(1, 19)}}
+    d = compute_match_detail(m, sess, course, {1: 5, 23: 8}, {}, si_by_player=teal)
+    got = d["strokes"].get(23) or d["strokes"].get("23")
+    assert sorted(int(h) for h in got) == [4, 9, 16]
+    plain = compute_match_detail(m, sess, course, {1: 5, 23: 8}, {})
+    assert sorted(int(h) for h in (plain["strokes"].get(23) or plain["strokes"]["23"])) == [3, 4, 14]
+
+
+def test_player_stroke_index_resolves_tee_name_or_band(tmp_path):
+    import sqlite3
+    from email_parser.lsc_cup import _attach_player_stroke_index
+    conn = sqlite3.connect(tmp_path / "c.db")
+    conn.execute("CREATE TABLE course_tees (tee_id INTEGER, course_id INTEGER, "
+                 "tee_name TEXT, tgf_bands TEXT)")
+    conn.execute("CREATE TABLE course_tee_holes (tee_id INTEGER, hole_number INTEGER, "
+                 "par INTEGER, yardage INTEGER, stroke_index INTEGER)")
+    conn.executemany("INSERT INTO course_tees VALUES (?,?,?,?)",
+                     [(1, 65112, "Blue", "<50"), (2, 65112, "Teal", "Forward")])
+    for tid, si in ((1, _MEN_SI), (2, _TEAL_SI)):
+        conn.executemany("INSERT INTO course_tee_holes VALUES (?,?,?,?,?)",
+                         [(tid, h, 4, 400, si[h - 1]) for h in range(1, 19)])
+    course = [{"hole": h, "par": 4, "stroke_index": _MEN_SI[h - 1]} for h in range(1, 19)]
+    data = {"sun": {"course": course, "course_id": 65112,
+                    "tees": {7: "<50", 23: "Forward", 30: "teal", 99: "Nowhere"}}}
+    data["_note"] = "STAGED DEMO scores"      # the mock dial carries a string
+    _attach_player_stroke_index(conn, data)
+    si = data["sun"]["si_by_player"]
+    assert set(si) == {23, 30}                 # men's-tee and unknown: round list
+    assert si[23][9] == 3 and si[30][16] == 2

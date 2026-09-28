@@ -226,10 +226,30 @@ Gold 73.7/131 (7,003), Blue 71.7/129 (6,543), White 69.7/124 (6,109),
 Red (M) 66.7/117 (5,453), Teal (F) 69.4/118 (4,979), each with front
 and back nine ratings. Par 37/35/72 on every tee. The four men's tees
 share one stroke-index order; **Teal has its own.** Tees 14680-14684.
-**Open for Kerry:** which TGF band plays which tee here (Gold is the
-BACK tee at this course), and how strokes fall in a match between a
-Teal player and a men's-tee player (the board uses one stroke-index
-list per session today).
+**Bands (Kerry 2026-09-28: players play our standard yardage brackets;
+"the 7000 yard tees wouldn't be played"):** set with `scoring-tee-bands-apply`
+from the yardage standards, and it matches Kerry's own GG numbering
+(0 - Gold, 1 - Blue, 2 - White, 3 - Red, 4 - Teal): **Blue <50 (6,543),
+White 50-64 (6,109), Red 65+ (5,453), Teal Forward (4,979); Gold not
+played.**
+
+**Each player's tee: `lsc_tees`** (staff only): the tee of his usual 2026
+band ("check where they normally play"), with the order count as the
+source. 12 Blue, 12 White, Hogue Red, Mary Wade Teal. To confirm:
+Barstow (62) and Wetz (672) have no 2026 TGF orders; John Wade (4) is
+13 <50 / 10 50-64 (latest <50); Julius Jenkins (304) 2 of 3. Track A
+seeds the cup rounds' player tees from it.
+
+**Handicaps across tees (Kerry 2026-09-28): WHS.** Course handicap from
+the player's OWN tee (index x slope/113 + rating - par,
+`handicap_calc.course_handicap`), then the session allowance, then off
+the lowest. **Where strokes fall (v2.516.0):** each player takes his
+strokes on the stroke index of the tee he plays (`si_by_player`, read
+from the course record by the seat's tee name or band), so Mary Wade on
+Teal gets hers on Teal's SI 1-3 (holes 4, 16, 9), not the men's (4, 14,
+3). Singles and four-ball; Chapman (one ball, partners possibly on two
+tees) keeps the round's list: open if a Teal player is in a Chapman
+pair.
 
 ## Handicaps and races (Kerry, CA #787 items 1–2)
 

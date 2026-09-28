@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.515.0";
+window.TGF_VERSION = "2.516.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.516.0",
+    date: "2026-09-28",
+    title: "Lone Star Cup: each player's strokes on his own tee's stroke index",
+    changes: [
+      "Kerry 2026-09-28: handicaps across tees follow WHS, \"Shouldn't matter where players play from.\" Each player's course handicap already came from his own tee (index x slope/113 + rating - par), then the allowance, then off the lowest. Now the strokes also fall on the stroke index of the tee he plays: a player whose tee has its own index (The Hideout's Teal forward tee) gets his own list, read from the course record by his seat's tee name or band. Before, every player in a session took strokes on the round's one list. Singles and four-ball; a Chapman pair keeps the round's list (one ball).",
+      "The Hideout is banded to TGF's yardage standards, which match Kerry's own Golf Genius numbering: Blue under 50, White 50-64, Red 65+, Teal forward; the 7,003-yard Gold isn't played. Each cup player's tee is recorded (staff only) from his usual 2026 band, with three to confirm.",
+    ],
+  },
   {
     version: "2.515.0",
     date: "2026-09-28",
