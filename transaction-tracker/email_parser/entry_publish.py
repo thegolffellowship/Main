@@ -269,6 +269,40 @@ def _resolve_tee(conn, ev: dict, course_id, tee_value, is18: bool, side: str) ->
             "note": f"tee {want!r}: the course record does not say which nine row is the {side}"}
 
 
+
+def _derived_dots(conn, rnd: dict, tee_id, ph, use_holes: list) -> dict:
+    """{hole: strokes_received} for an entered card: the playing handicap
+    allocated by stroke index under the RULED mode (Kerry, CA #771: a nine
+    collapses its stroke indexes to 1-9, an 18 uses the full card) —
+    `handicap_calc.ruled_allocation_mode`, the same call the game engine
+    makes. Stroke index comes from the resolved tee's holes, else from the
+    round's own card. No playing handicap or no stroke index -> {} (zeros),
+    reported by the caller, never guessed.
+
+    Before this (CA #865/#866/#868) every entered hole was written with
+    strokes_received 0, so every reader that trusts stored pops (the
+    handicap net-double-bogey cap, get_scorecard / MVP Stableford, the
+    leaderboard) read net = gross."""
+    if ph is None:
+        return {}
+    si = {}
+    if tee_id:
+        try:
+            for h in db._ls_tee_holes(conn, tee_id):
+                if h.get("stroke_index"):
+                    si[int(h["hole_number"])] = int(h["stroke_index"])
+        except Exception:
+            si = {}
+    if not all(h in si for h in use_holes):
+        si = {int(h["hole"]): int(h["stroke_index"]) for h in (rnd.get("course") or [])
+              if h.get("stroke_index")}
+    si = {h: si[h] for h in use_holes if h in si}
+    if len(si) != len(use_holes):
+        return {}
+    from email_parser.handicap_calc import allocate_strokes, ruled_allocation_mode
+    return allocate_strokes(int(round(ph)), si, mode=ruled_allocation_mode("ruled", si))
+
+
 def _existing_entry_row(conn, agg: str, cid: int):
     return conn.execute(
         "SELECT id, gross, holes_played, net, tee_id FROM scoring_rounds "
@@ -347,17 +381,28 @@ def _publish_round(conn, ev: dict, rnd: dict, mode: str, apply: bool, db_path=No
         gross = sum(scores[h] for h in use_holes)
         ph = p.get("playing_handicap")
         net = (gross - ph) if ph is not None else None
+        dots = _derived_dots(conn, rnd, tee["tee_id"], ph, use_holes)
+        if ph and not dots:
+            out.setdefault("dots_unresolved", []).append(
+                {"customer_id": cid, "name": name,
+                 "why": "no stroke index for every hole played; pops written as 0"})
         row = {"customer_id": cid, "player_name": name, "event_id": ev["id"],
                "round_date": round_date, "course_id": course_id, "tee_id": tee["tee_id"],
                "tee": p.get("tee"), "holes_played": len(use_holes),
                "playing_handicap": ph, "gross": gross, "net": net,
-               "holes": {str(h): scores[h] for h in use_holes}}
+               "holes": {str(h): scores[h] for h in use_holes},
+               "strokes_received": {str(h): int(dots.get(h, 0) or 0) for h in use_holes}}
         prev = _existing_entry_row(conn, agg, cid)
         row["action"] = "update" if prev else "insert"
         if write:
             changed = (not prev or prev["gross"] != gross
                        or (prev["holes_played"] or 0) != len(use_holes)
                        or prev["net"] != net or prev["tee_id"] != tee["tee_id"])
+            if prev and not changed:
+                had = {r[0]: r[1] or 0 for r in conn.execute(
+                    "SELECT hole_number, strokes_received FROM scoring_holes "
+                    "WHERE scoring_round_id = ?", (prev["id"],)).fetchall()}
+                changed = any(had.get(h, 0) != int(dots.get(h, 0) or 0) for h in use_holes)
             if prev:
                 srid = prev["id"]
                 conn.execute(
@@ -377,13 +422,15 @@ def _publish_round(conn, ev: dict, rnd: dict, mode: str, apply: bool, db_path=No
                     "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?) RETURNING id",
                     (cid, name, ev["id"], agg, round_date, course_id, tee["tee_id"],
                      len(use_holes), ph, gross, net, ENTRY_SOURCE, _now_utc())).fetchone()[0]
-            # Holes: strokes = gross; strokes_received stays 0 (the formula
-            # layer derives pops from the playing handicap and the tee).
+            # Holes: strokes = gross; strokes_received = the DERIVED dots
+            # (_derived_dots), so readers that trust stored pops get the
+            # same net as the game engine.
             conn.execute("DELETE FROM scoring_holes WHERE scoring_round_id = ?", (srid,))
             for h in use_holes:
                 conn.execute(
                     "INSERT INTO scoring_holes (scoring_round_id, hole_number, strokes, "
-                    "strokes_received) VALUES (?,?,?,0)", (srid, h, scores[h]))
+                    "strokes_received) VALUES (?,?,?,?)",
+                    (srid, h, scores[h], int(dots.get(h, 0) or 0)))
             row["scoring_round_id"] = srid
             changed_any = changed_any or changed
         out[key].append(row)
@@ -451,7 +498,8 @@ def _publish(event_id: int, round_id, apply: bool, db_path) -> dict:
         "players_" + key: sum(len(r.get(key) or []) for r in rounds),
         "held": sum(len(r["held"]) for r in rounds),
         "tee_unresolved": sum(len(r["tee_unresolved"]) for r in rounds),
-        "stale": sum(len(r["stale"]) for r in rounds)}
+        "stale": sum(len(r["stale"]) for r in rounds),
+        "dots_unresolved": sum(len(r.get("dots_unresolved") or []) for r in rounds)}
     if out["applied"] and changed and ev.get("item_name"):
         # Same follow-on the GG import runs when scores land: refresh the
         # self-computed MVP badges for the event. Never fatal.
