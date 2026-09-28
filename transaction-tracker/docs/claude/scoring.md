@@ -667,6 +667,25 @@ short_name/city/state/status/chapter), `PATCH /api/course-db/<id>`
 (`update_course`, whitelisted fields). NOTE: `/api/courses` was already
 taken by the scoring API — the editor uses `/api/course-db`.
 
+## Course-card entry (CA #786 GO 3, 2026-09-27)
+
+Until this, tees reached the Tracker ONLY through the Golf Genius scorecard
+import (`_upsert_course_tee`). Off GG, a course never imported (The Hideout,
+course 65112) has no tees, pars, SI, slope or rating, so no course handicap,
+no pops, no net and no handicap posting. `email_parser/course_card.py` loads
+the printed card into the SAME tables the import writes: `course_tees`
+(source `course_card`, TGF bands in `tgf_bands`), `tee_set_ratings` (`total`
+plus `front`/`back` nines when given: 9-hole posting needs them) and
+`course_tee_holes` (par / SI / yardage per tee). The whole card is validated
+first (holes 1-9 or 1-18 exactly, SI used once each, par 3-6, rating and
+slope in range, known bands), a bad card writes nothing, the default is a
+dry run, and re-loading updates in place (tee found by course + name +
+gender + holes). Score entry picks the holes up through the event's
+`course_id` (`score_entry._event_course_holes`). Bridge:
+`scoring-course-card:<course_id>` reads the card as held;
+`scoring-course-card:<course_id>|<card json>[|apply]` plans or loads one.
+Card JSON shape is in the module docstring. Guard `test_course_card.py`.
+
 ## Course registry v1 (v2.126.0, Kerry-ratified 2026-07-20)
 
 **One course_id per real course per city, forever.** The boot migration

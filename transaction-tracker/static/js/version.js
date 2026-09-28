@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.505.3";
+window.TGF_VERSION = "2.505.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.505.4",
+    date: "2026-09-27",
+    changes: [
+      "COURSE CARDS WITHOUT GOLF GENIUS (CA #786 GO 3). Tees used to reach the Tracker only through the Golf Genius scorecard import, so a course GG never imported (The Hideout, the Lone Star Cup venue) had no tees, pars, stroke indexes, slope or rating: no course handicap, no pops, no net, no handicap posting. email_parser/course_card.py loads the printed card into the same tables the import writes: course_tees (source course_card, TGF age bands), tee_set_ratings (total plus front and back nines, which 9-hole posting needs) and course_tee_holes. The whole card is checked first (every hole listed once, stroke indexes 1-18 used once each, par 3-6, rating and slope in range, known bands); a bad card writes nothing. It is a dry run by default, and loading a corrected card updates in place. Score entry reads the holes through the event's course. Bridge scoring-course-card:<course_id> shows the card as held; add |<card json>[|apply] to load one. Guard test_course_card.py.",
+    ],
+  },
   {
     version: "2.505.3",
     date: "2026-09-27",

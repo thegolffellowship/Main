@@ -1822,6 +1822,7 @@ def _scoring_dispatch_inner(url: str, extract: str):
       scoring-flights-board:<event_id>  the DIVISIONS/FLIGHTS board as data — ratified flighting + payout rules (SELECTION and AMOUNTS layers) beside what GG recorded; dry run, read-only
       scoring-pairings-counts:<event_id>[|<year>]  saved sheet scored against played history: times each pair has played together this year INCLUDING this event
       scoring-tgf-event-ensure:<id>[,<id>...][|apply]  every Tracker event gets its tgf_events row (the home payouts hang off), from the Tracker event, events_id stamped (CA #786 GO 2); dry run by default
+      scoring-course-card:<course_id>[|<card json>[|apply]]  read a course's card as held, or validate/plan/load one from the printed card (tees, bands, rating/slope incl. front/back nines, par/SI/yardage), source course_card (CA #786 GO 3)
       scoring-alias-delete:<alias id>[|confirm]  remove ONE customer_aliases row; preview first, |confirm deletes and audits
       scoring-liabilities          payouts owed, credits held, LSC shirt fund by Cup year, HIO pot, LSC skins pot, tax reserve by month
       scoring-membership-gap[:apply]  the membership gap group: booked vs today's decomposition by price/type/contests; apply rebooks membership rows only
@@ -4052,6 +4053,32 @@ def _scoring_dispatch_inner(url: str, extract: str):
             _res = db.ensure_tgf_events(_ids, apply=_apply)
             if _apply:
                 _audit("scoring-tgf-event-ensure", json.dumps(_res["events"])[:900])
+            return json.dumps(_res, indent=2, default=str)
+        if cmd == "scoring-course-card":
+            # "<course_id>" reads the card as held; "<course_id>|<card json>"
+            # validates and plans a load; "...|apply" writes it (CA #786 GO 3:
+            # courses Golf Genius never imported, The Hideout first). Writes
+            # the same tables the GG import writes, source 'course_card'.
+            from email_parser.course_card import load_course_card, read_course_card
+            _a = (arg or "").strip()
+            _id, _, _rest = _a.partition("|")
+            if not _id.strip().isdigit():
+                return json.dumps({"error": "usage: scoring-course-card:<course_id>[|<card json>[|apply]]"})
+            if not _rest.strip():
+                return json.dumps(read_course_card(int(_id)), indent=2, default=str)
+            _apply = False
+            if _rest.rstrip().lower().endswith("|apply"):
+                _rest, _apply = _rest.rstrip()[:-len("|apply")], True
+            try:
+                _card = json.loads(_rest)
+            except ValueError as _e:
+                return json.dumps({"error": f"card is not valid JSON: {_e}"})
+            _res = load_course_card(int(_id), _card, apply=_apply)
+            if _res.get("applied"):
+                _audit("scoring-course-card",
+                       f"course {_id}: " + ", ".join(
+                           f"{t['tee_name']}/{t['gender']} {t['rating']}/{t['slope']} {t['action']}"
+                           for t in _res["tees"]))
             return json.dumps(_res, indent=2, default=str)
         if cmd == "scoring-alias-delete":
             # "<alias id>[|confirm]" — remove ONE customer_aliases row.
