@@ -17,13 +17,13 @@ ON PRODUCTION (bridge ``scoring-rehearsal:<step>``)
                    copy is rewritten with ``VACUUM INTO`` so no free page
                    still holds a scrubbed value. Names, scores, events,
                    money and ids stay — the replay needs them.
-  ``mint_link()``— a random one-use-per-lane download token (48 h, stored
-                   only as a SHA-256) and the URL that serves the scrubbed
-                   gzip: ``GET /rehearsal/snapshot.db.gz?t=<token>``.
-                   Anything else (no token, wrong, expired, file missing) → 404.
+  There is NO download path: the copy stays on the production volume.
+                   (A token-gated download to the lanes' sandboxes was built
+                   and refused on 2026-09-27 as data leaving Railway; how the
+                   lanes reach the copy is Kerry's decision.)
   Files live in ``<volume>/rehearsal/`` beside the live database, never at
   ``DB_PATH``. Nothing here writes to the live database except the drill
-  record in ``app_settings`` (``rehearsal_drill`` / ``rehearsal_tokens``).
+  record in ``app_settings`` (``rehearsal_drill``).
 
 IN A LANE'S SANDBOX (``guard()``)
   With ``TGF_REHEARSAL=1`` in the environment, importing ``email_parser``
@@ -37,19 +37,16 @@ IN A LANE'S SANDBOX (``guard()``)
 from __future__ import annotations
 
 import gzip
-import hashlib
-import hmac
 import json
 import logging
 import os
 import re
-import secrets
 import shutil
 import socket
 import sqlite3
 import tempfile
 import time
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -57,9 +54,7 @@ logger = logging.getLogger(__name__)
 DIRNAME = "rehearsal"
 SCRUBBED = "tracker_rehearsal.db"
 SCRUBBED_GZ = "tracker_rehearsal.db.gz"
-TOKEN_TTL_H = 48
 SETTING_DRILL = "rehearsal_drill"
-SETTING_TOKENS = "rehearsal_tokens"
 
 # Column-name patterns that carry contact details, secrets or raw message
 # text. Matched against every column of every table in the COPY.
@@ -349,44 +344,6 @@ def restore(db_path=None) -> dict:
         shutil.rmtree(tmpdir, ignore_errors=True)
 
 
-def _hash(tok: str) -> str:
-    return hashlib.sha256(tok.encode()).hexdigest()
-
-
-def _tokens(db_path=None) -> list:
-    from .database import get_app_setting
-    try:
-        return json.loads(get_app_setting(SETTING_TOKENS, db_path=db_path) or "[]")
-    except Exception:
-        return []
-
-
-def mint_link(lane: str = "", db_path=None, base_url: str = "") -> dict:
-    """A 48-hour download token for the scrubbed copy. Stored hashed."""
-    from .database import set_app_setting
-    gz = rehearsal_dir(db_path) / SCRUBBED_GZ
-    if not gz.exists():
-        return {"error": "no scratch copy yet — run scoring-rehearsal:restore first"}
-    tok = secrets.token_urlsafe(32)
-    now = datetime.utcnow()
-    keep = [x for x in _tokens(db_path) if x.get("exp", "") > now.isoformat()]
-    keep.append({"h": _hash(tok), "exp": (now + timedelta(hours=TOKEN_TTL_H)).isoformat(timespec="seconds"),
-                 "lane": (lane or "")[:60]})
-    set_app_setting(SETTING_TOKENS, json.dumps(keep[-50:]), db_path=db_path)
-    base = (base_url or os.getenv("PUBLIC_BASE_URL") or "https://tgf-tracker.up.railway.app").rstrip("/")
-    return {"url": f"{base}/rehearsal/snapshot.db.gz?t={tok}",
-            "expires_utc": keep[-1]["exp"], "bytes": gz.stat().st_size}
-
-
-def check_token(tok: str, db_path=None) -> bool:
-    if not tok:
-        return False
-    h = _hash(tok)
-    now = datetime.utcnow().isoformat()
-    return any(hmac.compare_digest(h, x.get("h", "")) and x.get("exp", "") > now
-               for x in _tokens(db_path))
-
-
 def status(db_path=None) -> dict:
     from .database import get_app_setting
     rdir = rehearsal_dir(db_path)
@@ -397,5 +354,4 @@ def status(db_path=None) -> dict:
     gz = rdir / SCRUBBED_GZ
     return {"last_drill": drill, "scratch_ready": gz.exists(),
             "download_bytes": gz.stat().st_size if gz.exists() else None,
-            "live_tokens": sum(1 for x in _tokens(db_path)
-                               if x.get("exp", "") > datetime.utcnow().isoformat())}
+            "scratch_path": str(rdir / SCRUBBED)}

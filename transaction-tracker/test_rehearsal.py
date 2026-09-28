@@ -1,5 +1,4 @@
-"""Dress rehearsal (CA #800/#801): the scrubbed scratch copy, the token-gated
-download, and the PROOF that every outbound channel is off with
+"""Dress rehearsal (CA #800/#801): the scrubbed scratch copy and the PROOF that every outbound channel is off with
 TGF_REHEARSAL=1.
 
 Run:  python test_rehearsal.py
@@ -75,37 +74,12 @@ check("...and the LIVE file was not touched",
       lc.execute("SELECT COUNT(*) FROM customer_emails WHERE email='pat.golfer@gmail.com'").fetchone()[0] == 1)
 lc.close()
 
-print("\n== the download link: token-gated, hashed, 48 h ==")
-rdir = rh.rehearsal_dir(live); rdir.mkdir(parents=True, exist_ok=True)
-check("mint_link refuses before a restore exists", "error" in rh.mint_link(db_path=live))
-with open(copy, "rb") as f_in, gzip.open(rdir / rh.SCRUBBED_GZ, "wb") as f_out:
-    shutil.copyfileobj(f_in, f_out)
-link = rh.mint_link(lane="Track A", db_path=live, base_url="https://x.test")
-tok = link["url"].split("t=", 1)[1]
-check("mint_link returns a URL with a token and an expiry", link["url"].startswith("https://x.test/rehearsal/snapshot.db.gz?t=") and link["expires_utc"], link)
-stored = db.get_app_setting(rh.SETTING_TOKENS, db_path=live)
-check("the token is stored only as a hash", tok not in stored and rh._hash(tok) in stored)
-check("check_token accepts the minted token", rh.check_token(tok, db_path=live))
-check("check_token refuses a wrong token and an empty one",
-      not rh.check_token(tok + "x", db_path=live) and not rh.check_token("", db_path=live))
-toks = json.loads(stored); toks[-1]["exp"] = (datetime.utcnow() - timedelta(minutes=1)).isoformat()
-db.set_app_setting(rh.SETTING_TOKENS, json.dumps(toks), db_path=live)
-check("an expired token is refused", not rh.check_token(tok, db_path=live))
-link2 = rh.mint_link(lane="Track B", db_path=live)
-tok2 = link2["url"].split("t=", 1)[1]
-
+print("\n== status ==")
+check("status() names the scratch path on the volume, beside the live file",
+      rh.status(db_path=live)["scratch_path"].startswith(os.path.join(root, "rehearsal")))
 import app as appmod
-cl = appmod.app.test_client()
-r = cl.get("/rehearsal/snapshot.db.gz")
-check("the route answers 404 with no token", r.status_code == 404, r.status_code)
-r = cl.get("/rehearsal/snapshot.db.gz?t=nope")
-check("...404 with a wrong token", r.status_code == 404, r.status_code)
-r = cl.get(f"/rehearsal/snapshot.db.gz?t={tok}")
-check("...404 with an expired token", r.status_code == 404, r.status_code)
-r = cl.get(f"/rehearsal/snapshot.db.gz?t={tok2}")
-check("...200 with a live token, and the body is the scrubbed copy",
-      r.status_code == 200 and gzip.decompress(r.data) == open(copy, "rb").read(), r.status_code)
-check("status() reports the scratch copy ready", rh.status(db_path=live)["scratch_ready"])
+check("there is no download route for the scratch copy",
+      not any("rehearsal" in str(r.rule) for r in appmod.app.url_map.iter_rules()))
 
 print("\n== TGF_REHEARSAL=1: every outbound channel is off (child process) ==")
 target = os.getenv("REHEARSAL_DB") or copy

@@ -2646,23 +2646,6 @@ def api_check_status():
     })
 
 
-@app.route("/rehearsal/snapshot.db.gz")
-def rehearsal_snapshot():
-    """The SCRUBBED dress-rehearsal copy (CA #800), for a rehearsal lane's
-    sandbox. Token-gated (a 48-hour token minted by the bridge
-    `scoring-rehearsal:link`, stored hashed); anything else is a plain 404
-    so the route does not advertise itself. Contact details and secrets are
-    blanked in this copy (email_parser/rehearsal.py scrub())."""
-    from email_parser import rehearsal as _rh
-    if not _rh.check_token(request.args.get("t", "")):
-        return jsonify({"error": "Not found"}), 404
-    gz = _rh.rehearsal_dir() / _rh.SCRUBBED_GZ
-    if not gz.is_file():
-        return jsonify({"error": "Not found"}), 404
-    return send_file(str(gz), mimetype="application/gzip", as_attachment=True,
-                     download_name=_rh.SCRUBBED_GZ)
-
-
 @app.route("/admin/backup")
 @require_role("admin")
 def admin_backup():
