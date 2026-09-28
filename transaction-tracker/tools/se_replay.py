@@ -126,8 +126,10 @@ def main() -> int:
     for ev_id in [int(x) for x in a.events.split(",") if x.strip()]:
         ev = conn.execute("SELECT * FROM events WHERE id = ?", (ev_id,)).fetchone()
         cards = [dict(r) for r in conn.execute(
-            "SELECT id, customer_id, player_name, playing_handicap, holes_played, course_id, tee_id "
-            "FROM scoring_rounds WHERE event_id = ? AND COALESCE(source,'gg') = 'gg' ORDER BY id",
+            "SELECT r.id, r.customer_id, r.player_name, r.playing_handicap, r.holes_played, "
+            "r.course_id, r.tee_id, t.tee_name FROM scoring_rounds r "
+            "LEFT JOIN course_tees t ON t.tee_id = r.tee_id "
+            "WHERE r.event_id = ? AND COALESCE(r.source,'gg') = 'gg' ORDER BY r.id",
             (ev_id,))]
         er = {"event_id": ev_id, "event": ev["item_name"] if ev else None, "cards": len(cards)}
         if not cards:
@@ -156,7 +158,10 @@ def main() -> int:
         er["holes"] = played
         rid = se.create_round(ev_id, n_holes, round_date=(ev["event_date"] if ev else None),
                               label=f"REPLAY #801 {ev['item_name'] if ev else ev_id}",
-                              course_holes=course, created_by="se_replay")["round_id"]
+                              course_holes=course, created_by="se_replay",
+                              # the cards' own course, so G-0 resolves each tee on it
+                              course_id=next((c["course_id"] for c in cards if c["course_id"]), None)
+                              )["round_id"]
         er["round_id"] = rid
         # Real foursomes where the saved pairings still hold them; else by 4.
         grp_of = {}
@@ -178,7 +183,10 @@ def main() -> int:
         for gnum, cs in sorted(groups.items()):
             res = se.upsert_group(rid, gnum, players=[{
                 "customer_id": c["customer_id"], "display_name": c["player_name"],
-                "playing_handicap": c["playing_handicap"]} for c in cs])
+                "playing_handicap": c["playing_handicap"],
+                # the GG card's tee, as the tee name (#849/#850): G-0 resolves a
+                # name through the same legend as a band, and never guesses one
+                "tee": c.get("tee_name")} for c in cs])
             gids[gnum] = res["group_id"]
         par = {h["hole"]: h["par"] for h in course}
 
@@ -336,13 +344,19 @@ def main() -> int:
             "round_status": se.get_entered_scores(ev_id, rid)["rounds"][0]["status"],
             # a refused write is never lost: its value sits in se_audit.detail
             "refused_kept_in_audit": se.refused_writes_kept(rid),
+            # every card that had a tee carries it onto the entered round (#849/#850)
+            "tee_expected": sum(1 for c in cards if c.get("tee_name")),
+            "tee_carried": sum(1 for p in read["players"]
+                               if p.get("tee") and any(c["customer_id"] == p["customer_id"]
+                                                       and c.get("tee_name") for c in cards)),
         })
         er["result"] = "PASS" if (lost == 0 and wrong == 0 and not er["errors"]
                                   and er["players_signed"] == len(cards)
                                   and er["groups_attested"] == len(groups)
                                   and er["stale_phone_refused_all"]
                                   and er["round_status"] == "closed"
-                                  and er["refused_kept_in_audit"] == len(cards)) else "FAIL"
+                                  and er["refused_kept_in_audit"] == len(cards)
+                                  and er["tee_carried"] == er["tee_expected"]) else "FAIL"
         report["events"].append(er)
 
     srv.shutdown()
