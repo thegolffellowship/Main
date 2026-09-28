@@ -389,23 +389,42 @@ check("...and both record that no GG screenshot verified them",
       all("NOT screenshot-verified" in ls._USGA_ALLOWANCES[k]["source"]
           for k in ("best_1_of_2", "best_2_of_2")))
 
-# Kerry 2026-09-16: "Fivesome 1 ball remains 75% now, but will need a dial
-# specifically for that." Rule 15f made a five-player team reachable.
-check("a FIVESOME best-1 resolves to 75%", _alw(5, 1)["pct"] == 75)
-check("...and is flagged PROVISIONAL, not settled",
-      _alw(5, 1)["provisional"] is True)
-check("...and is its OWN dial, not a fall-through to the four-player row",
-      "5" in _TN["allowance_pct_by_balls"]
-      and "1" in _TN["allowance_pct_by_balls"]["5"],
-      str(_TN["allowance_pct_by_balls"]))
+# CA #783 (Kerry, rule 3b): a five-player team plays ONE RUNG DOWN the
+# foursome ladder. One test per row, as CA asked.
+_LADDER = {
+    (2, 1): 85, (2, 2): 100,                                   # Cart Net
+    (4, 1): 75, (4, 2): 85, (4, 3): 100, (4, 4): 100,          # foursome
+    (5, 1): 65, (5, 2): 75, (5, 3): 85, (5, 4): 100, (5, 5): 100,  # fivesome
+}
+for (_n, _b), _pct in sorted(_LADDER.items()):
+    check(f"best {_b} of {_n} = {_pct}%", _alw(_n, _b)["pct"] == _pct,
+          str(_alw(_n, _b)))
+check("every ruled row is marked confirmed",
+      all(_alw(n, b)["confirmed"] for n, b in _LADDER))
+check("the fivesome rows are no longer provisional (ruled, not held)",
+      not any(_alw(5, b)["provisional"] for b in range(1, 6)))
+check("a fivesome is ONE RUNG DOWN: each 5-ball row equals the 4-ball row one "
+      "ball earlier",
+      [_alw(5, b)["pct"] for b in (2, 3, 4)]
+      == [_alw(4, b)["pct"] for b in (1, 2, 3)])
 
-# The whole point of the resolver: an unruled combination REPORTS.
-check("a five-player BEST 2 refuses rather than borrowing 85%",
-      _alw(5, 2)["pct"] is None and "no ruled allowance" in _alw(5, 2)["reason"],
-      str(_alw(5, 2)))
-check("an unruled TEAM SIZE refuses and names the sizes on file",
-      _alw(3, 1)["pct"] is None and "3-player" in _alw(3, 1)["reason"],
-      str(_alw(3, 1)))
+# CA #783: "Any team size without a row raises; never fall back to the
+# 4-player table."
+for _n, _b, _why in ((3, 1, "an unruled team SIZE"),
+                     (6, 1, "a six-player team"),
+                     (5, 6, "more balls than players"),
+                     (4, 5, "best 5 of a foursome")):
+    try:
+        ls.team_allowance_pct(_TN, _n, _b)
+        check(f"{_why} RAISES rather than falling back", False)
+    except ValueError as _e:
+        check(f"{_why} RAISES rather than falling back", True)
+try:
+    ls.team_allowance_pct(_TN, 3, 1)
+except ValueError as _e:
+    check("  ...and the error names the sizes that ARE ruled",
+          "2, 4, 5" in str(_e), str(_e))
+
 
 print("\n== pops are a property of the GAME, not of the card ==")
 

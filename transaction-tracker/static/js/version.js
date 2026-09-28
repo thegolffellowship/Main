@@ -1,5 +1,16 @@
-window.TGF_VERSION = "2.504.0";
+window.TGF_VERSION = "2.505.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.505.0",
+    date: "2026-09-28",
+    title: "Team Net fivesome plays one rung down the ladder (Kerry, CA #783)",
+    changes: [
+      "KERRY RULED CA Queue #9 (rule 3b, CA #783): a five-player team plays ONE RUNG DOWN the foursome ladder \u2014 Best 1 of 5 = 65%, Best 2 = 75%, Best 3 = 85%, Best 4 = 100%, Best 5 = 100%. Foursomes are unchanged at 75 / 85 / 100 / 100, and Cart Net stays 85 / 100. The provisional 75% holding figure for a fivesome is retired.",
+      "`team_allowance_pct` now RAISES on any team size or ball count without a ruled row, naming the rows that do exist \u2014 CA: \u2018never fall back to the 4-player table\u2019. It used to return an empty result with a reason, which a caller could read past.",
+      "One test per ladder row (11 rows across Cart Net, foursome and fivesome), plus four refusals: a 3-player team, a 6-player team, more balls than players, and best 5 of a foursome. Parity suites and Track A\u2019s score-entry suites all pass.",
+      "NOT CHANGED, flagged to Track A: score entry\u2019s team-handicap preview passes a team size of 2 or 4 only, so a fivesome there would still be read off the foursome row \u2014 the fall-back #783 forbids. It is their module.",
+    ],
+  },
   {
     version: "2.504.0",
     date: "2026-09-28",
