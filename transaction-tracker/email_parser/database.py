@@ -25737,6 +25737,7 @@ def ls_leaderboard(session_id: int, db_path: str | Path = DB_PATH,
     if pin_flights and meta.get("event_id"):
         fb = event_flights_board(meta["event_id"], db_path=db_path)
         state["flight_pins"] = _flight_pins_for(fb, state["players"])
+        state["variant_pins"] = _variant_pins_for(fb)
     formulas = (get_championship_formulas(db_path=db_path)
                 if meta.get("championship")
                 else get_scoring_formulas(db_path))
@@ -25800,6 +25801,20 @@ def _flight_pins_for(board: dict | None, players: list) -> dict:
         if g:
             pins[entry["game"]] = g
     return pins
+
+
+def _variant_pins_for(board: dict | None) -> dict:
+    """{game: variant name} a FROZEN / SETTLED board fixed (B5: the game
+    selection freezes with the flights). A LIVE board pins nothing — the
+    buyer count still chooses."""
+    if not board or board.get("state") not in ("frozen", "settled"):
+        return {}
+    out = {}
+    for entry in board.get("games") or []:
+        v = ((entry.get("selection") or {}).get("variant") or {}).get("name")
+        if entry.get("active") and v and v != "default":
+            out[entry["game"]] = v
+    return out
 
 
 def event_engine_state(event_name: str, db_path=None) -> dict:
@@ -25893,7 +25908,8 @@ def engine_game_payouts(event_name: str, db_path=None, state: dict | None = None
     fb = board if board is not None else event_flights_board(ev_id, db_path=db_path)
     if not fb:
         return {"error": "no flight board for this event"}
-    st = dict(st, flight_pins=_flight_pins_for(fb, st["players"]))
+    st = dict(st, flight_pins=_flight_pins_for(fb, st["players"]),
+              variant_pins=_variant_pins_for(fb))
     formulas = (get_championship_formulas(db_path=db_path)
                 if st["meta"].get("championship")
                 else get_scoring_formulas(db_path))

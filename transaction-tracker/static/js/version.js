@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.513.2";
+window.TGF_VERSION = "2.513.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.513.3",
+    date: "2026-09-28",
+    title: "A frozen Skins game stays the game it froze as",
+    changes: [
+      "B5 / #572 freezes the GAME SELECTION with the flights ('settlement recomputes amounts only \u2014 never structure'). The engine re-chose the Skins variant from the live buyer count, so a gross Skins frozen at 8 buyers would have switched to \u00bd Net after one credited WD, and engine payouts would have refused to pay it (variant_mismatch). A frozen or settled flight board now pins the variant (_variant_pins_for \u2192 game_skins(variant_name=)); a LIVE board still lets the buyer count choose. Found while answering CA #838 (live field size).",
+    ],
+  },
   {
     version: "2.513.2",
     date: "2026-09-28",
