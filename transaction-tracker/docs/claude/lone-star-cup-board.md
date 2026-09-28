@@ -61,12 +61,11 @@ tap-open hole-by-hole scorecards.
   weekend skins (the SKINS add-on in `oneoff_addons`). Saturday: team
   skins (four-ball best gross ball, Chapman one gross), each team skin
   split evenly between partners. **Mixed pair (only one partner bought),
-  RULED CA #753 item 4:** the team still plays for team skins and ONLY
-  the buyer is paid his half; the non-buyer's half stays in the pot.
-  How that half is redistributed is Kerry's pick (#757: A = back into
-  the same round's pot, recommended; B = fixed skin value, half held).
-  NOT BUILT until he picks: the engine still leaves a mixed pair out and
-  flags it. A pair where neither bought stays out. Sunday:
+  RULED CA #759, BUILT v2.514.0:** the team plays for team skins and
+  the partner who bought in is paid the FULL team skin; nothing is
+  left over or redistributed. A pair where neither bought stays out.
+  Staff see who is paid on a mixed team (`mixed`); members never do.
+  Sunday:
   individual gross skins flighted on the TGF 18-hole index FROZEN at the
   event (`_event_index_as_of` → `_handicap_index_18_by_customer`):
   Flight 1 < 12.0, Flight 2 ≥ 12.0, half the pot each; a player with no
@@ -157,19 +156,31 @@ FootJoy order). The SHIRT column shows it amber with a "?"; the boot
 seed never copies a noted pick onto `customers.shirt_size`; a size
 picked in the column confirms it and clears the note.
 
-## 14 v 13 odd-player rule (DRAFT, CA #753 item 2, mailbox #757 — NOT applied)
+## 14 v 13: the odd player (Kerry 2026-09-28, in session) — BUILT v2.514.0
 
-Only if Kerry finds no 14th SA player. Team sessions 6 v 6 pairs (SA sits
-1 player, Austin sits 1 pair, each session); Sunday 13 singles (one Austin
-player sits); no Austin player sits more than once; captains pick. 25
-points: SA retains at 12.5, Austin needs 13. No engine change — a sit-out
-is simply not listed in the dial. **Skins sit-out, RULED (Kerry, CA #787
-item 4):** a skins buyer who sits a session gets that round's $25 as a
-WALLET CREDIT, recorded as a credit owed on his customer record until the
-wallet ships (R3); the round's pot = $25 × buyers who PLAY it (already how
-`compute_skins_payout` counts `in_round`: only buyers listed in that
-session's matches). The CFO's `lsc_skins_pot` releases the $25 as a credit
-liability, not a payout. Applies only if 14 v 13 happens.
+Kerry: the side with the odd player sends him into a THREESOME against
+the other side's spare pair (their 13th and 14th players): two singles
+matches at once, "one whole point available for each of those
+matches". On Saturday the odd player and the two he faces switch
+between the AM four-ball and the PM Chapman so the same people aren't
+involved twice: 4 singles points on the day. Sunday works the same way:
+one player plays two opponents at once. Kept general, "something we
+need to always have in our back pocket for future match play events
+that have team matches".
+
+- **14 v 13 (if Mesa doesn't play):** Saturday 6 team matches + 2
+  singles per session = 16; Sunday 13 singles + the double = 14 → **30
+  points**, SA (defending) retains at 15, Austin needs 15½. Nobody sits,
+  so the sit-out credit (#787) doesn't arise.
+- **Engine (`lsc_cup.py`):** `match_format()` plays a one-v-one match
+  inside a team session as SINGLES at 100% (a match may also name its
+  own `format`). `skins_team_sides()` counts the odd player ONCE in team
+  skins and makes the two he faces ONE team entry, their better ball
+  (Kerry: "SA single vs Austin pair"); in singles skins a player in two
+  matches is one entry. The dial just lists the odd player in both
+  matches.
+- The earlier draft (sit one player / one pair each session, 25 points,
+  #757) is superseded.
 
 ## Handicaps and races (Kerry, CA #787 items 1–2)
 

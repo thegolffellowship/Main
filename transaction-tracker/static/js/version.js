@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.513.17";
+window.TGF_VERSION = "2.514.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.514.0",
+    date: "2026-09-28",
+    title: "Lone Star Cup: mixed-team skins, and the odd player at 14 v 13",
+    changes: [
+      "Mixed-team skins (Kerry, CA #759): a Lone Star Cup team where only one partner bought the weekend skins now plays for team skins, and the partner who bought in is paid the FULL team skin, with nothing left over or redistributed. Before this, such a team was left out and flagged, so on the staged Saturday pairings (8 of 10 teams mixed) the PM Chapman pot could not be won. A team where neither partner bought stays out. Staff see who is paid on a mixed team; members still see skins counts only, never money.",
+      "The odd player (Kerry, 2026-09-28): when one side is a player short, their odd player plays a threesome against the other side's spare pair: two singles matches at once, a full point each. A one-v-one match inside a four-ball or Chapman session is now played as SINGLES at 100% (a match can also name its own format), and in team skins the odd player counts once while the two he faces are one team entry (their better ball). In singles skins a player in two matches is one entry. At 14 v 13 that makes 30 points: San Antonio, as defending champion, keeps the Cup at 15. Built general for future team match-play events.",
+      "Rehearsal harness (tools/lsc_synthetic_weekend.py) now passes 21 of 21; tests/test_lsc_cup.py has 41 checks.",
+    ],
+  },
   {
     version: "2.513.17",
     date: "2026-09-28",

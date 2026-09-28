@@ -485,16 +485,139 @@ def test_uneven_money_splits_exactly_to_the_cent():
     assert sum(p["cents"] for p in g["payouts"]) == 17500
 
 
-def test_mixed_team_is_left_out_and_flagged_but_its_buyer_funds_the_pot():
+def test_mixed_team_plays_and_its_buyer_gets_the_full_team_skin():
+    # Kerry, CA #759: one partner bought, one didn't -> the team plays
+    # and the buyer is paid the WHOLE team skin; nothing left over.
     from email_parser.lsc_cup import compute_skins_payout
     scores = _all_fours(range(1, 9))
+    scores[1][1] = 3                    # mixed M1 Austin wins hole 1
+    scores[7][2] = 3                    # M2 SA (both bought) wins hole 2
     out = compute_skins_payout(_fb_session(), _flat_course(2), {}, scores,
                                buyers={1, 3, 4, 5, 6, 7, 8})   # 2 didn't buy
-    assert out["pot_cents"] == 7 * 2500
-    assert any(e["reason"].startswith("mixed") for e in out["excluded"])
-    assert any("one partner bought" in f for f in out["flags"])
-    keys = {t["key"] for t in out["groups"][0]["totals"]}
-    assert "M1:austin" not in keys and "M1:sa" in keys
+    assert out["pot_cents"] == 7 * 2500                        # $175
+    assert out["excluded"] == [] and out["flags"] == []
+    assert out["mixed"] and out["mixed"][0]["team"] == "austin"
+    g = out["groups"][0]
+    pay = {p["key"]: p for p in g["payouts"]}
+    assert pay["M1:austin"]["cents"] == 8750                   # half the pot
+    assert pay["M1:austin"]["per_player"] == [{"customer_id": 1, "cents": 8750}]
+    assert [p["cents"] for p in pay["M2:sa"]["per_player"]] == [4375, 4375]
+    paid = sum(pp["cents"] for p in g["payouts"] for pp in p["per_player"])
+    assert paid == out["pot_cents"] and g["unpaid_cents"] == 0
+
+
+def test_mixed_team_tie_is_still_a_tie():
+    from email_parser.lsc_cup import compute_skins_payout
+    scores = _all_fours(range(1, 9))
+    scores[1][1] = 3                    # mixed M1 Austin ties M2 SA on 1
+    scores[7][1] = 3
+    out = compute_skins_payout(_fb_session(), _flat_course(2), {}, scores,
+                               buyers={1, 3, 4, 5, 6, 7, 8})
+    g = out["groups"][0]
+    assert g["skins_won"] == 0 and g["unpaid_cents"] == out["pot_cents"]
+
+
+def test_team_where_neither_partner_bought_stays_out():
+    from email_parser.lsc_cup import compute_skins_payout
+    scores = _all_fours(range(1, 9))
+    scores[1][1] = 3                    # would win, but 1 and 2 didn't buy
+    out = compute_skins_payout(_fb_session(), _flat_course(2), {}, scores,
+                               buyers={3, 4, 5, 6, 7, 8})
+    assert out["pot_cents"] == 6 * 2500 and out["mixed"] == []
+    assert any(e["reason"] == "not bought in" for e in out["excluded"])
+    assert "M1:austin" not in {t["key"] for t in out["groups"][0]["totals"]}
+
+
+def test_member_view_never_sees_who_is_paid_on_a_mixed_team():
+    from email_parser.lsc_cup import compute_skins_payout, strip_money
+    scores = _all_fours(range(1, 9))
+    scores[1][1] = 3
+    sk = compute_skins_payout(_fb_session(), _flat_course(2), {}, scores,
+                              buyers={1, 3, 4, 5, 6, 7, 8})
+    msk = strip_money({"sessions": [{"id": "am", "skins": sk}]})["sessions"][0]["skins"]
+    assert "mixed" not in msk and "pot_cents" not in msk
+    assert all("payouts" not in g for g in msk["groups"])
+
+
+# -- 14 v 13: the odd player (Kerry 2026-09-28) --------------------------
+# The side with the odd player sends him into a THREESOME against the
+# other side's spare pair: two singles matches at once, a full point each.
+
+def _odd_session(fmt):
+    return {"id": "x", "format": fmt, "n_holes": 18,
+            "matches": [{"id": "M1", "austin": [1, 2], "sa": [3, 4]},
+                        {"id": "T1", "austin": [5], "sa": [9]},
+                        {"id": "T2", "austin": [6], "sa": [9]}]}
+
+
+def test_singles_inside_a_team_session_is_played_at_100_percent():
+    from email_parser.lsc_cup import compute_match_detail, match_format
+    course = _flat_course()
+    phs = {5: 11, 9: 0}
+    for fmt in ("fourball", "chapman"):
+        sess = _odd_session(fmt)
+        t1 = sess["matches"][1]
+        assert match_format(t1, sess) == "singles"
+        d = compute_match_detail(t1, sess, course, phs, {})
+        # 100% -> 11 strokes (four-ball's 90% would be 9.9 -> 10)
+        assert d["format"] == "singles"
+        assert sum(sum(v.values()) for v in [d["strokes"].get(5, {}) or
+                   d["strokes"].get("5", {})]) == 11
+    assert match_format(sess["matches"][0], sess) == "chapman"
+    assert match_format({"format": "fourball", "austin": [1], "sa": [2]},
+                        sess) == "fourball"             # explicit wins
+
+
+def test_odd_player_two_matches_are_two_full_points():
+    from email_parser.lsc_cup import compute_board
+    course = _flat_course()
+    sess = _odd_session("fourball")
+    phs = {c: 6 for c in (1, 2, 3, 4, 5, 6, 9)}
+    sc = {c: {h: 4 for h in range(1, 19)} for c in phs}
+    sc[9][1] = 3                        # the odd SA player wins both on hole 1
+    b = compute_board({"sessions": [sess], "defending_champion": "sa"},
+                      {"x": {"course": course, "phs": phs, "scores": sc}}, {})
+    res = {m["match_id"]: (m["state"], m["points"]) for m in b["sessions"][0]["matches"]}
+    assert res["T1"] == ("final", {"austin": 0.0, "sa": 1.0})
+    assert res["T2"] == ("final", {"austin": 0.0, "sa": 1.0})
+    assert b["cup"]["total"] == 3.0 and b["teams"]["sa"]["points"] == 2.5
+
+
+def test_odd_player_counted_once_in_team_skins_pair_is_one_entry():
+    # Kerry 2026-09-28: SA single vs Austin pair. The odd player's lone
+    # birdie WINS the skin (he can't tie himself), and the two players
+    # he faces are one team entry sharing their skin.
+    from email_parser.lsc_cup import compute_skins_payout, skins_team_sides
+    sess = _odd_session("fourball")
+    sides = skins_team_sides(sess["matches"])
+    assert {"id": "T1+T2", "sa": [9], "austin": [5, 6]} in sides
+    assert skins_team_sides(sides) == sides                      # idempotent
+    sc = {c: {1: 4, 2: 4} for c in (1, 2, 3, 4, 5, 6, 9)}
+    sc[9][1] = 3                        # odd player alone on hole 1
+    sc[6][2] = 3                        # Austin pair's better ball on 2
+    out = compute_skins_payout({**sess, "n_holes": 2}, _flat_course(2), {}, sc,
+                               buyers={1, 2, 3, 4, 5, 6, 9})
+    assert out["pot_cents"] == 7 * 2500                     # 9 counted once
+    g = out["groups"][0]
+    pay = {p["key"]: [pp["cents"] for pp in p["per_player"]] for p in g["payouts"]}
+    assert pay == {"T1+T2:sa": [8750], "T1+T2:austin": [4375, 4375]}
+
+
+def test_odd_player_in_two_sunday_singles_is_one_skins_entry():
+    from email_parser.lsc_cup import compute_skins_payout
+    sess = {"id": "sun", "format": "singles", "n_holes": 2,
+            "matches": [{"id": "S1", "austin": [5], "sa": [9]},
+                        {"id": "S2", "austin": [6], "sa": [9]},
+                        {"id": "S3", "austin": [7], "sa": [8]}]}
+    sc = {c: {1: 4, 2: 4} for c in (5, 6, 7, 8, 9)}
+    sc[9][1] = 3                        # alone on hole 1 -> wins, no self-tie
+    idx = {5: 5.0, 6: 5.0, 7: 20.0, 8: 20.0, 9: 5.0}
+    out = compute_skins_payout(sess, _flat_course(2), {}, sc,
+                               buyers={5, 6, 7, 8, 9}, index=idx)
+    assert out["pot_cents"] == 5 * 2500
+    f1 = next(g for g in out["groups"] if g["flight"] == 1)
+    assert f1["entrants"] == 3 and f1["skins_won"] == 1
+    assert [pp["customer_id"] for p in f1["payouts"] for pp in p["per_player"]] == [9]
 
 
 def test_singles_flight_at_12_with_half_the_pot_each():

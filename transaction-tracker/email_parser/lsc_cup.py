@@ -86,6 +86,69 @@ def normalize_format(fmt: str | None) -> str:
     return "singles" if f in ("singles", "single", "") else f
 
 
+def match_format(match: dict, session: dict) -> str:
+    """The format ONE match is played and handicapped under.
+
+    A match may name its own format; otherwise a one-v-one match inside a
+    team session (four-ball / Chapman) is SINGLES at 100% (Kerry
+    2026-09-28: with an odd player, he plays singles matches against the
+    other side's spare pair in the team sessions, "one whole point
+    available for each of those matches"). Everything else takes the
+    session's format. Kept general for any team match-play event."""
+    if match.get("format"):
+        return normalize_format(match.get("format"))
+    fmt = normalize_format(session.get("format"))
+    if fmt in ("fourball", "chapman") and all(
+            len(match.get(k) or []) == 1 for k in TEAM_KEYS):
+        return "singles"
+    return fmt
+
+
+def skins_team_sides(matches: list) -> list:
+    """The TEAM-SKINS entries of a team session, as match-shaped dicts
+    ({"id", "austin": [...], "sa": [...]}) that compute_skins keys as
+    "<id>:<side>".
+
+    Ordinary team matches stay as they are. Singles matches inside a
+    team session are regrouped so nobody is entered twice (Kerry
+    2026-09-28): a player who plays SEVERAL singles matches at once (the
+    odd player's threesome) is one entry, counted once, and the players
+    he faces are ONE team entry (their better ball). A lone one-v-one
+    match keeps one entry per side. Idempotent: regrouped output passes
+    through unchanged."""
+    singles, out = [], []
+    for m in matches or []:
+        if all(len(m.get(k) or []) == 1 for k in TEAM_KEYS):
+            singles.append(m)
+        else:
+            out.append(m)
+    seen = {}
+    for m in singles:
+        for k in TEAM_KEYS:
+            seen.setdefault(int(m[k][0]), []).append(m)
+    used = set()
+    for m in singles:
+        if m.get("id") in used:
+            continue
+        hub_side = next((k for k in TEAM_KEYS if len(seen[int(m[k][0])]) > 1), None)
+        if hub_side is None:
+            out.append(m)
+            used.add(m.get("id"))
+            continue
+        hub = int(m[hub_side][0])
+        other = "sa" if hub_side == "austin" else "austin"
+        group = [x for x in seen[hub] if x.get("id") not in used]
+        opps = []
+        for x in group:
+            c = int(x[other][0])
+            if c not in opps:
+                opps.append(c)
+            used.add(x.get("id"))
+        out.append({"id": "+".join(str(x.get("id")) for x in group),
+                    hub_side: [hub], other: opps})
+    return out
+
+
 def chapman_team_handicap(phs: list) -> int:
     """60% of the lower partner + 40% of the higher, rounded per WHS."""
     vals = sorted(float(v or 0) for v in phs) or [0.0]
@@ -198,7 +261,7 @@ def compute_match_detail(match: dict, session: dict, course: list[dict],
     """
     names = names or {}
     n_holes = int(session.get("n_holes") or 18)
-    fmt = normalize_format(session.get("format"))
+    fmt = match_format(match, session)
     teams = [[int(c) for c in (match.get(k) or [])] for k in TEAM_KEYS]
     everyone = [c for t in teams for c in t]
     hcp = session_handicaps(fmt, teams, phs)
@@ -394,7 +457,9 @@ def compute_skins(session: dict, course: list[dict], phs: dict,
     team_game = fmt in ("fourball", "chapman")
 
     entries = []
-    for m in session.get("matches") or []:
+    smatches = (skins_team_sides(session.get("matches") or []) if team_game
+                else (session.get("matches") or []))
+    for m in smatches:
         for side in TEAM_KEYS:
             cids = [int(c) for c in (m.get(side) or [])]
             if not cids:
@@ -404,6 +469,10 @@ def compute_skins(session: dict, course: list[dict], phs: dict,
                                 "team": side, "cids": cids})
             else:
                 for c in cids:
+                    # a player in two singles matches at once (the odd
+                    # player) is one skins entry, never two
+                    if any(c in e["cids"] for e in entries):
+                        continue
                     entries.append({"key": f"{m.get('id')}:{side}:{c}",
                                     "team": side, "cids": [c]})
     for e in entries:
@@ -507,9 +576,12 @@ def compute_skins_payout(session: dict, course: list[dict], phs: dict,
       roster). Pots are never pooled across rounds.
     - Saturday team sessions: team gross skins (four-ball best gross
       ball, Chapman one gross score), each team skin split evenly
-      between the partners. A team plays only when BOTH partners bought
-      in; a team where one did and one didn't is EXCLUDED and flagged,
-      because the ruling doesn't cover it (Kerry decides).
+      between the partners. A MIXED team (one partner bought, one
+      didn't) still plays, and the buyer is paid the FULL team skin
+      (Kerry, CA #759): nothing is left over, nothing redistributed. A
+      team where neither bought is out. An odd player's singles matches
+      inside a team session count him ONCE, and the pair he faces is one
+      team entry (skins_team_sides, Kerry 2026-09-28).
     - Sunday singles: individual gross skins flighted on the TGF
       18-hole index frozen at the event: Flight 1 below 12.0, Flight 2
       at 12.0 and up, each playing for half the pot. A player with no
@@ -535,7 +607,8 @@ def compute_skins_payout(session: dict, course: list[dict], phs: dict,
         return " / ".join(names.get(c) or names.get(str(c)) or f"#{c}"
                           for c in cids)
 
-    flags, excluded = [], []
+    flags, excluded, mixed = [], [], []
+    paid_cids = {}      # team key -> the partners who are paid (the buyers)
     in_round = set()
     for m in session.get("matches") or []:
         for side in TEAM_KEYS:
@@ -547,7 +620,7 @@ def compute_skins_payout(session: dict, course: list[dict], phs: dict,
     # entrants per group: [(group_key, label, pot_share_pct, matches)]
     if team_game:
         matches = []
-        for m in session.get("matches") or []:
+        for m in skins_team_sides(session.get("matches") or []):
             mm = {"id": m.get("id")}
             for side in TEAM_KEYS:
                 cids = [int(c) for c in (m.get(side) or [])]
@@ -555,29 +628,30 @@ def compute_skins_payout(session: dict, course: list[dict], phs: dict,
                 if cids and len(got) == len(cids):
                     mm[side] = cids
                 elif got:
-                    mm[side] = []
-                    excluded.append({"label": _label(cids), "team": side,
-                                     "reason": "mixed: " + _label(got)
-                                     + " bought skins, "
-                                     + _label([c for c in cids if c not in got])
-                                     + " did not"})
+                    # plays for team skins; only the buyer is paid, and
+                    # he takes the whole team skin (CA #759)
+                    mm[side] = cids
+                    paid_cids[f"{m.get('id')}:{side}"] = got
+                    mixed.append({"label": _label(cids), "team": side,
+                                  "paid": _label(got),
+                                  "not_paid": _label([c for c in cids
+                                                      if c not in got])})
                 elif cids:
                     mm[side] = []
                     excluded.append({"label": _label(cids), "team": side,
                                      "reason": "not bought in"})
             matches.append(mm)
         groups = [(None, "Team skins", 100.0, matches)]
-        if any(e["reason"].startswith("mixed") for e in excluded):
-            flags.append("A team where one partner bought skins and the "
-                         "other didn't is left out: the ruling doesn't "
-                         "cover it. Kerry decides; the buyer's $25 is "
-                         "still in the pot.")
     else:
         fl = {1: [], 2: []}
+        placed = set()
         for m in session.get("matches") or []:
             for side in TEAM_KEYS:
                 for c in (m.get(side) or []):
                     c = int(c)
+                    if c in placed:          # the odd player: one entry
+                        continue
+                    placed.add(c)
                     if not _bought(c):
                         excluded.append({"label": _label([c]), "team": side,
                                          "reason": "not bought in"})
@@ -633,7 +707,8 @@ def compute_skins_payout(session: dict, course: list[dict], phs: dict,
                     for side in TEAM_KEYS:
                         cids = m.get(side) or []
                         if team_game and cids:
-                            key_cids[f"{m.get('id')}:{side}"] = cids
+                            k = f"{m.get('id')}:{side}"
+                            key_cids[k] = paid_cids.get(k, cids)
                         for c in ([] if team_game else cids):
                             key_cids[f"{m.get('id')}:{side}:{c}"] = [c]
                 for t, c in zip(winners, cents):
@@ -657,7 +732,8 @@ def compute_skins_payout(session: dict, course: list[dict], phs: dict,
     return {"kind": "team" if team_game else "individual",
             "basis": SKINS_BASIS, "carryover": SKINS_CARRYOVER,
             "buyers_in_round": len(in_round), "pot_cents": pot_cents,
-            "groups": out_groups, "excluded": excluded, "flags": flags}
+            "groups": out_groups, "excluded": excluded, "mixed": mixed,
+            "flags": flags}
 
 
 def strip_money(board: dict) -> dict:
