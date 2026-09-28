@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.517.0";
+window.TGF_VERSION = "2.517.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.517.1",
+    date: "2026-09-28",
+    title: "Entered scorecards carry their handicap strokes",
+    changes: [
+      "G-0 publish wrote strokes_received = 0 on every entered hole (CA #865/#866/#868), so every reader that trusts stored pops read net = gross: the handicap preview's net-double-bogey cap (11 of 22 adjusted grosses off on the 3309 rehearsal), get_scorecard and so the City/TGF MVP (Niester 9 instead of Murphy 15), and the leaderboard. Each published hole now carries the derived dots: the playing handicap allocated by stroke index under the ruled mode (a nine collapses to 1-9, an 18 uses the full card; Kerry, CA #771), the same allocation the game engine uses, on the resolved tee's stroke index. A card whose holes lack a stroke index keeps 0 and is listed in dots_unresolved. A re-publish whose dots change re-runs the MVP recompute. Guard in test_entry_publish.py.",
+    ],
+  },
   {
     version: "2.517.0",
     date: "2026-09-28",

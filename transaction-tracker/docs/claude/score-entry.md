@@ -671,6 +671,16 @@ that name (v2.513.14, 3309: the women's Red nine rows 557 / 2894 beside a
 men's 18-hole Red). "Red (L)" pins the women's rows. Guard in
 `test_entry_publish.py`.
 
+**Pops (strokes_received)**: each published hole carries the DERIVED
+dots: the playing handicap allocated by stroke index under the ruled mode
+(`handicap_calc.ruled_allocation_mode`, Kerry CA #771: a nine collapses to
+SI 1-9, an 18 uses the full card), the same call the game engine makes.
+Stroke index comes from the resolved tee's holes, else the round's own card;
+a card with no stroke index for every hole played keeps 0 and is listed in
+`dots_unresolved`. Before this every entered hole stored 0, so the handicap
+cap, get_scorecard / MVP Stableford and the leaderboard read net = gross
+(CA #865/#866/#868). A re-publish with changed dots re-runs the MVP recompute.
+
 **The GG gate**: `import_gg_scorecards` returns `skipped_entry_record` with
 a reason, writing no rows, when the resolved event already has entry rows;
 per player it skips a card whose owner has an entry row on that date/event

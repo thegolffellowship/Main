@@ -169,9 +169,14 @@ check("course_id from the round", rows[0]["course_id"] == course_id, rows[0])
 check("round_date", rows[0]["round_date"] == "2026-10-13", rows[0])
 hs = q("SELECT hole_number, strokes, strokes_received FROM scoring_holes WHERE scoring_round_id = ? "
        "ORDER BY hole_number", (rows[0]["id"],))
-check("nine scoring_holes, strokes = gross, strokes_received 0",
-      len(hs) == 9 and all(h["strokes"] == CARD[h["hole_number"]] and h["strokes_received"] == 0
-                           for h in hs), hs)
+# PH 5 on a nine: the ruled allocation collapses the nine's SI to 1-9 and
+# gives one stroke to SI 1-5 = holes 3, 7, 1, 9, 4 (CA #865/#866/#868:
+# a stored 0 made every reader that trusts pops read net = gross).
+check("nine scoring_holes, strokes = gross",
+      len(hs) == 9 and all(h["strokes"] == CARD[h["hole_number"]] for h in hs), hs)
+check("strokes_received = the ruled allocation of PH 5 (holes 1, 3, 4, 7, 9)",
+      {h["hole_number"] for h in hs if h["strokes_received"] == 1} == {1, 3, 4, 7, 9}
+      and sum(h["strokes_received"] for h in hs) == 5, hs)
 
 print("idempotent re-publish")
 ep.publish_event(EV_A, apply=True, db_path=DB)
