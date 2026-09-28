@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.511.0";
+window.TGF_VERSION = "2.511.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.511.1",
+    date: "2026-09-28",
+    changes: [
+      "scoring-closeout-final read s9.24 Brackenridge as not final because Golf Genius\u2019s full Team Net standings list the non-paying places at $0. A game now blocks only when none of its rows carries a purse (money not entered on GG yet), and the full-standings boards never count. Verified live: Brackenridge and Teravista both read final.",
+    ],
+  },
   {
     version: "2.511.0",
     date: "2026-09-28",

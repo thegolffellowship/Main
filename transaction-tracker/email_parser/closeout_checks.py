@@ -213,8 +213,16 @@ def closeout_final_check(event: str | int, db_path=None, _read: dict | None = No
             missing = sorted(names[c] for c in field_ids - set(card_ids))
             extra = sorted(names[c] for c in set(card_ids) - field_ids)
             boards = db.get_gg_game_results(ev["item_name"], db_path=db_path).get("results") or []
-            zero = sorted({f"{b['game']} {b.get('game_label') or ''}".strip() for b in boards
-                           if not b.get("purse")})
+            # A game is unpaid only when NONE of its rows carries a purse
+            # (money not entered on GG yet). A "_board" game is GG's full
+            # standings (non-paying places at $0 by design) and never counts;
+            # s9.24's Team Net board read as a false block before this.
+            by_game: dict = {}
+            for b in boards:
+                if str(b.get("game") or "").endswith("_board"):
+                    continue
+                by_game.setdefault(f"{b['game']} {b.get('game_label') or ''}".strip(), []).append(b)
+            zero = sorted(g for g, rows in by_game.items() if not any(r.get("purse") for r in rows))
             out["checks"] = {"field": len(field_ids) + len(field_unid), "cards": len(gg_cards),
                              "gg_board_rows": len(boards), "payout_rows": len(payouts)}
             if not gg_cards:

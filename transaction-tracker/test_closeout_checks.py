@@ -96,6 +96,22 @@ f = cc.closeout_final_check(773, db_path=tmp, _read={"rounds": []})
 check("GG era: a missing card, no boards and no payouts all block, by name",
       f["era"] == "gg" and not f["final"] and any("Bob Baker" in b for b in f["blocking"])
       and any("results boards" in b for b in f["blocking"]) and any("payouts" in b for b in f["blocking"]), f)
+c = sqlite3.connect(tmp)
+c.execute("DELETE FROM items WHERE customer_id = 402 AND event_id = 773")
+db._ensure_gg_game_results_tables(c) if hasattr(db, "_ensure_gg_game_results_tables") else None
+for game, label, purse in (("team_net", "TEAM Net $", 44.0), ("team_net_board", "TEAM Net $", 0.0),
+                           ("skins", "SKINS Gross $", 0.0)):
+    c.execute("INSERT INTO gg_game_results (event_id, game, game_label, player_name, purse) VALUES (773, ?, ?, 'x', ?)",
+              (game, label, purse))
+c.execute("INSERT INTO tgf_events (id, code, name, event_date, events_id) VALUES (92, 's9.38', 's9.38 Old Links', '2026-09-22', 773)")
+c.execute("INSERT INTO tgf_payouts (event_id, customer_id, category, amount, description) VALUES (92, 401, 'Team Net', 11, 'auto: x')")
+c.commit(); c.close()
+f = cc.closeout_final_check(773, db_path=tmp, _read={"rounds": []})
+check("a full-standings '_board' row at $0 never blocks; a game with no purse at all does",
+      not f["final"] and any("SKINS" in b for b in f["blocking"]) and not any("team_net" in b for b in f["blocking"]), f.get("blocking"))
+c = sqlite3.connect(tmp); c.execute("UPDATE gg_game_results SET purse = 26 WHERE event_id = 773 AND game = 'skins'"); c.commit(); c.close()
+f = cc.closeout_final_check(773, db_path=tmp, _read={"rounds": []})
+check("with every paying game purse-entered, cards = field and payouts recorded: FINAL", f["final"] is True, f)
 check("an unknown event is refused", "error" in cc.closeout_final_check("nope", db_path=tmp, _read={"rounds": []}))
 
 src = open(os.path.join(os.path.dirname(__file__), "email_parser", "closeout_checks.py"), encoding="utf-8").read()
