@@ -2023,13 +2023,31 @@ def _scoring_dispatch_inner(url: str, extract: str):
             # <ref> is a race key or a "page:<host>:<league>:<page_id>" ref
             # from scoring-points-ledger-races. Call again with start=next
             # until next is null. READ-ONLY: fetches GG, writes nothing.
-            from email_parser.points_ledger import capture_race_ledger
+            # The chunk is MERGED into a JSON bundle on the data volume
+            # (CA #786: "repo or data folder", not a DB table) and only a
+            # short status comes back. Add "|raw" to also return the chunk.
+            from email_parser.points_ledger import (capture_race_ledger,
+                                                    persist_chunk)
             parts = [x.strip() for x in arg.split("|")]
             ref = parts[0]
             start = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else 0
             eff = parts[2] if len(parts) > 2 and parts[2] else None
-            return json.dumps(capture_race_ledger(ref, start=start,
-                                                  effective_date=eff),
+            chunk = capture_race_ledger(ref, start=start, effective_date=eff)
+            status = persist_chunk(chunk)
+            status["next"] = chunk["next"]
+            if "raw" in parts[3:]:
+                status["chunk"] = chunk
+            return json.dumps(status, indent=2, default=str)
+        if cmd == "scoring-points-ledger-status":
+            # GO 6: completeness of every race bundle for one capture date.
+            from email_parser.points_ledger import bundle_status
+            return json.dumps(bundle_status(arg.strip()), indent=2, default=str)
+        if cmd == "scoring-points-ledger-read":
+            # GO 6: "scoring-points-ledger-read:<YYYY-MM-DD>|<ref>" returns
+            # one stored race bundle, e.g. to commit a copy to the repo.
+            from email_parser.points_ledger import read_bundle
+            eff, _, ref = arg.partition("|")
+            return json.dumps(read_bundle(eff.strip(), ref.strip()),
                               indent=2, default=str)
         if cmd == "scoring-g2a":
             # G2a COMPUTE PARITY (A4 gate, mailbox #571 / CA #665).

@@ -11765,6 +11765,31 @@ def api_se_links(round_id):
                     for g in rd["groups"]])
 
 
+@app.route("/api/score-entry/rounds/<int:round_id>/close", methods=["POST"])
+@require_role("admin")
+def api_se_close(round_id):
+    """Close a round from the PAIRINGS panel (CA #782): its links stop
+    opening. Nothing is deleted. The bridge scoring-se-close stays the
+    fallback."""
+    from email_parser.score_entry import close_round
+    res = close_round(round_id)
+    return (jsonify(res), 404) if "error" in res else jsonify(res)
+
+
+@app.route("/api/score-entry/groups/<int:group_id>/qr.svg")
+@require_role("admin")
+def api_se_group_qr(group_id):
+    """The group's scoring link as a QR code, for the PAIRINGS panel (CA
+    #782). The same link the Live Scoring page copies; admin only, so it
+    works for the dry run while score_entry_qr (the cart signs) stays off."""
+    from email_parser.score_entry import group_link, qr_svg_file
+    url = group_link(group_id)
+    svg = qr_svg_file(url) if url else None
+    if not svg:
+        return ("no such group" if not url else "QR unavailable"), 404
+    return Response(svg, mimetype="image/svg+xml", headers={"Cache-Control": "no-store"})
+
+
 @app.route("/api/score-entry/groups/<int:group_id>/revoke", methods=["POST"])
 @require_role("admin")
 def api_se_revoke(group_id):

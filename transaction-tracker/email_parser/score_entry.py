@@ -1077,9 +1077,20 @@ def close_round(round_id: int, db_path=None) -> dict:
     return {"closed": round_id}
 
 
-def round_links(round_id: int, base_url: str | None = None, db_path=None) -> list[dict]:
-    base = (base_url or os.getenv("PUBLIC_BASE_URL")
+def _base_url(base_url: str | None = None) -> str:
+    return (base_url or os.getenv("PUBLIC_BASE_URL")
             or "https://tgf-tracker.up.railway.app").rstrip("/")
+
+
+def group_link(group_id: int, base_url: str | None = None, db_path=None) -> str | None:
+    """One group's scoring link (the same one round_links lists); None for
+    an unknown group."""
+    tok = make_group_token(group_id, db_path=db_path)
+    return f"{_base_url(base_url)}/member/score?t={tok}" if tok else None
+
+
+def round_links(round_id: int, base_url: str | None = None, db_path=None) -> list[dict]:
+    base = _base_url(base_url)
     with _closing(_conn(db_path)) as conn:
         rows = conn.execute("SELECT id, group_num, label FROM se_groups WHERE round_id = ? "
                             "ORDER BY group_num", (round_id,)).fetchall()
@@ -1117,6 +1128,19 @@ def qr_svg(url: str) -> str | None:
     except ImportError:
         return None
     return segno.make(url, error="m").svg_inline(scale=4, border=1, dark="#111111")
+
+
+def qr_svg_file(url: str) -> bytes | None:
+    """A standalone SVG file (with its XML namespace, so an <img> can show
+    it) for the PAIRINGS panel's QR button."""
+    try:
+        import io
+        import segno
+    except ImportError:
+        return None
+    buf = io.BytesIO()
+    segno.make(url, error="m").save(buf, kind="svg", scale=4, border=1, dark="#111111")
+    return buf.getvalue()
 
 
 def attach_cart_sign_qr(pack: dict, base_url: str | None = None, db_path=None) -> dict:

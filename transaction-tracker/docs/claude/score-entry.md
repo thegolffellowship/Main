@@ -103,9 +103,21 @@ on the page — green means bought in.
 - `scoring-se-close:<round_id>|apply` — status closed; the links stop
   opening; nothing is deleted.
 - While `score_entry_live` is off, a link opens only for an admin session.
-- **Proposed, not built (scope → CA):** a "Score entry" panel on the event's
-  PAIRINGS view — Seed from pairings, each group's link and QR, round status
-  and a Close button — so Kerry never needs a bridge.
+- **Score Entry panel on PAIRINGS (v2.507.1, CA #782, Kerry: "before the
+  9/29 dry run").** Admin only, under the PAIRINGS toolbar once the pairings
+  are saved. It shows:
+  - **Seed N-hole score entry** (`POST /api/score-entry/events/<id>/seed`),
+    which becomes **Update N-hole groups from pairings** once seeded.
+  - Each round's status (OPEN / CLOSED), groups and holes finished.
+  - For each group: Open, Copy link, and a **QR** of its link
+    (`GET /api/score-entry/groups/<gid>/qr.svg`, admin).
+  - **Close round** (`POST /api/score-entry/rounds/<rid>/close`, admin,
+    confirm first): the links stop opening; nothing is deleted. A closed
+    round offers no seed button, because re-seeding never reopens a round.
+  - The members switch and the cart-sign QR switch as read-only chips.
+    They stay where they are.
+  No new schema. The bridges stay the fallback. Screenshots:
+  docs/claude/screenshots/score-entry-2026-09-28-pairings-panel/.
 
 ## Tee colour bar (v2.493.5)
 

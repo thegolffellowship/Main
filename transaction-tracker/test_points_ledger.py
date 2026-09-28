@@ -69,6 +69,27 @@ try:
 except ValueError:
     check("a non-GG host is refused", True)
 
+
+print("\n== persisted bundle on the data volume ==")
+import tempfile
+root = tempfile.mkdtemp()
+st = None
+for c in chunks:
+    st = pl.persist_chunk(c, root=root)
+check("after every chunk, the bundle has every player", st["have"] == 5 and not st["missing"], st)
+check("  ...but it is NOT complete while a player errored (P2 had no card)",
+      st["complete"] is False and st["errors"] == ["P2"], st)
+fixed = dict(chunks[2], players=[dict(chunks[2]["players"][0], error=None,
+                                      raw_tables=[[["T","Points"],["x","1"]]])])
+fixed["players"][0].pop("error")
+st = pl.persist_chunk(fixed, root=root)
+check("re-running a slice REPAIRS it in place (later chunk wins)",
+      st["complete"] is True and st["errors"] == [], st)
+check("status lists the race", pl.bundle_status("2026-09-27", root=root)[0]["complete"])
+doc = pl.read_bundle("2026-09-27", "page:tgf-sa.golfgenius.com:514047:999", root=root)
+check("the stored bundle reads back with raw tables intact",
+      doc["players"]["0"]["raw_tables"][0][0] == ["Tournament", "Date", "Points"])
+
 print("\n" + "=" * 60)
 if FAILURES:
     print(f"{len(FAILURES)} FAILED: {FAILURES}"); sys.exit(1)

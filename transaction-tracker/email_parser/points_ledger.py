@@ -180,3 +180,79 @@ def race_event_list(players: list[dict]) -> list[str]:
             if label:
                 events.add(label)
     return sorted(events)
+
+
+# ── Persisted bundle on the data volume (CA #786: "repo or data folder") ──
+# Pulling a race's full ledger back through a chat context is the wrong shape
+# for several megabytes of tables, and the points-engine backtest runs on the
+# deployed app anyway (it needs our scored rounds). So each captured chunk is
+# MERGED into a JSON file beside the database, on the persistent volume, and
+# the bridge returns only a short status. `read_bundle` pulls a file back out
+# when someone wants a copy in the repo.
+
+def _bundle_dir(effective_date: str, root=None):
+    from pathlib import Path
+    from .database import DB_PATH
+    base = Path(root) if root else Path(DB_PATH).parent
+    return base / "gg_points_ledger" / effective_date
+
+
+def _safe(ref: str) -> str:
+    return re.sub(r"[^A-Za-z0-9_.-]", "_", ref)
+
+
+def persist_chunk(chunk: dict, root=None) -> dict:
+    """Merge one capture chunk into its race file; return a compact status.
+    Players merge by index and a LATER chunk wins, so re-running a slice
+    (e.g. after a transient GG 500) repairs it in place."""
+    import json
+    import os
+    d = _bundle_dir(chunk["effective_date"], root)
+    d.mkdir(parents=True, exist_ok=True)
+    path = d / f"{_safe(chunk['ref'])}.json"
+    doc = {"ref": chunk["ref"], "spec": chunk["spec"],
+           "effective_date": chunk["effective_date"], "players": {}}
+    if path.exists():
+        doc = json.loads(path.read_text())
+        doc["players"] = {int(k): v for k, v in doc.get("players", {}).items()}
+    doc["standings"] = chunk["standings"]
+    doc["total_players"] = chunk["total_players"]
+    doc["updated_at"] = time.strftime("%Y-%m-%dT%H:%M:%S")
+    for p in chunk["players"]:
+        doc["players"][int(p["index"])] = p
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps({**doc, "players": {str(k): v for k, v
+                                                  in sorted(doc["players"].items())}}))
+    os.replace(tmp, path)
+    return bundle_status_one(doc, str(path))
+
+
+def bundle_status_one(doc: dict, path: str) -> dict:
+    players = doc["players"]
+    total = doc.get("total_players", 0)
+    have = {int(k) for k in players}
+    return {"ref": doc["ref"], "file": path, "total": total, "have": len(have),
+            "missing": sorted(set(range(total)) - have)[:20],
+            "errors": sorted(v.get("player_name") for v in players.values()
+                             if v.get("error")),
+            "complete": have >= set(range(total)) and not any(
+                v.get("error") for v in players.values())}
+
+
+def bundle_status(effective_date: str, root=None) -> list[dict]:
+    import json
+    d = _bundle_dir(effective_date, root)
+    out = []
+    for f in sorted(d.glob("*.json")) if d.exists() else []:
+        doc = json.loads(f.read_text())
+        doc["players"] = {int(k): v for k, v in doc["players"].items()}
+        out.append(bundle_status_one(doc, str(f)))
+    return out
+
+
+def read_bundle(effective_date: str, ref: str, root=None) -> dict:
+    import json
+    f = _bundle_dir(effective_date, root) / f"{_safe(ref)}.json"
+    if not f.exists():
+        return {"error": f"no bundle for {ref} on {effective_date}"}
+    return json.loads(f.read_text())
