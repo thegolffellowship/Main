@@ -1,5 +1,12 @@
-window.TGF_VERSION = "2.509.0";
+window.TGF_VERSION = "2.509.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.509.1",
+    date: "2026-09-28",
+    changes: [
+      "Keystone fix, caught on the first live dry run: publish_entered_round skipped PREVIEW (test) rounds only when the label matched exactly, but score entry labels an 18-hole preview \u201cPREVIEW (test round, not a real card) \u00b7 18 holes\u201d. On s9.25 the dry run listed four test cards as \u201cwould write\u201d. Nothing was written (the event is in shadow mode until 10/10), but from the cutover those test scores would have become real rounds. It now matches the prefix, the same way score entry does, in both the publish and the parity paths, and a test covers both label forms.",
+    ],
+  },
   {
     version: "2.509.0",
     date: "2026-09-28",

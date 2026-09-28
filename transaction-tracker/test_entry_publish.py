@@ -287,6 +287,22 @@ check("…and the entered player's row is untouched",
             "AND round_date = '2026-10-13'")[0]["n"] == 1)
 
 print("this module stays off the score-entry tables")
+# PREVIEW rounds are never published, in BOTH label forms score_entry uses
+# (the plain label and "<label> · 18 holes"). The exact-match version let
+# the 18-hole previews on s9.25 through as "would write" (live, 2026-09-28).
+from email_parser import entry_publish as _ep  # noqa: E402
+from email_parser import score_entry as _se  # noqa: E402
+check("plain preview label is a preview", _ep._is_preview({"label": _se.PREVIEW_LABEL}))
+check("18-hole preview label is a preview",
+      _ep._is_preview({"label": f"{_se.PREVIEW_LABEL} · 18 holes"}))
+check("a real round is not a preview", not _ep._is_preview({"label": "s9.25 Canyon Springs"}))
+check("no label is not a preview", not _ep._is_preview({}))
+_prev = _ep._publish_round(None, {"id": 1}, {"round_id": 99, "label": f"{_se.PREVIEW_LABEL} · 18 holes",
+                                              "players": [{"customer_id": 5, "name": "X"}]},
+                           "authoritative", True)
+check("an 18-hole preview round is held, never written",
+      not _prev.get("written") and _prev["held"] and "preview" in _prev["held"][0]["reason"], _prev)
+
 src = open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
                         "email_parser", "entry_publish.py")).read()
 import re  # noqa: E402

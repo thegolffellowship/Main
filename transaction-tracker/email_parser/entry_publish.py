@@ -263,6 +263,16 @@ def _existing_entry_row(conn, agg: str, cid: int):
 # Publish
 # ---------------------------------------------------------------------------
 
+def _is_preview(rnd: dict) -> bool:
+    """A PREVIEW (test) round is never published or diffed. score_entry
+    labels them PREVIEW_LABEL, or PREVIEW_LABEL + " · 18 holes" when the
+    hole count differs from the event's, so match the PREFIX, the same way
+    score_entry itself does (an exact match let the 18-hole previews on
+    s9.25 through as "would write", caught live 2026-09-28)."""
+    lbl = getattr(se, "PREVIEW_LABEL", None)
+    return bool(lbl) and (rnd.get("label") or "").startswith(lbl)
+
+
 def _publish_round(conn, ev: dict, rnd: dict, mode: str, apply: bool, db_path=None) -> dict:
     rid = rnd["round_id"]
     agg = _agg_id(rid)
@@ -271,7 +281,7 @@ def _publish_round(conn, ev: dict, rnd: dict, mode: str, apply: bool, db_path=No
     out = {"round_id": rid, "label": rnd.get("label"), "date": rnd.get("date"),
            "holes": rnd.get("holes"), "status": rnd.get("status"),
            key: [], "held": [], "tee_unresolved": [], "stale": []}
-    if (rnd.get("label") or "") == getattr(se, "PREVIEW_LABEL", object()):
+    if _is_preview(rnd):
         out["held"] = [{"customer_id": p.get("customer_id"), "name": p.get("name"),
                         "reason": "preview (test) round, never published"}
                        for p in rnd.get("players") or []]
@@ -454,7 +464,7 @@ def entry_parity(event_id: int, db_path=None, _read: dict | None = None) -> dict
            "holes_differing": 0, "only_entered": 0, "only_gg": 0}
     rounds = read.get("rounds") or []
     for rnd in rounds:
-        if (rnd.get("label") or "") == getattr(se, "PREVIEW_LABEL", object()):
+        if _is_preview(rnd):
             continue
         rdate = str(rnd.get("date") or "")[:10]
         pool = [r for r in gg if str(r.get("round_date") or "")[:10] == rdate] if rdate else []
