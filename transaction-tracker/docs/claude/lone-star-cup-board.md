@@ -106,6 +106,15 @@ tap-open hole-by-hole scorecards.
   rule-3b staged preview. Missing holes are ABSENT, never zero.
   Cleared before cup weekend.
 
+- **`lsc_tentative`** (staff only; nothing reads it) — a player who
+  looks likely but hasn't accepted or paid, kept OFF `lsc_roster_final`
+  (members see that roster) until he confirms and Kerry OKs the roster
+  change. `{"3329": {"San Antonio": [{customer_id, status, accepted,
+  paid, pay_expected_by, shirt_size, ...}]}, "shirt_style": {...}}`.
+  First use: Michael Mesa (703), SA's 14th, 2026-09-28 (#871/#872).
+  If he confirms, the cup is 14 v 14: 7 + 7 + 14 = 28 points, SA
+  retains at 14; if not, the 14 v 13 draft stands.
+
 ## Rule-3b gate (member visibility)
 
 `GET /api/lsc/board` (member tier) returns `{configured: false}` until
