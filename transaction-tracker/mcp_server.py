@@ -1918,6 +1918,10 @@ def _scoring_dispatch_inner(url: str, extract: str):
       scoring-health-digest[:<days>][|post]  the daily health digest text; |post
                                    runs the real routine (mailbox `tracker-health`
                                    + COO action items + prune)
+      scoring-rehearsal[:status|restore|link[|<lane>]]  dress-rehearsal
+                                   scratch copy (CA #800): restore = the restore
+                                   drill into <volume>/rehearsal/ + scrub; link =
+                                   a 48 h download URL for a lane's sandbox
       scoring-gg-archive[:<step>][|go]  the GG raw archive's move to its own
                                    file (Kerry #627): plan (default, read-only)
                                    · migrate (resumable copy, ~20 s per call)
@@ -3381,6 +3385,26 @@ def _scoring_dispatch_inner(url: str, extract: str):
             _res = ack_findings(_ids, _note.strip())
             _audit("scoring-health-ack", f"closed {_res['closed']} — {_note.strip()[:120]}")
             return json.dumps(_res, indent=2)
+        if cmd == "scoring-rehearsal":
+            # scoring-rehearsal[:status|restore|link[|<lane>]] — the dress
+            # rehearsal scratch copy + restore drill (CA #800/#801). restore
+            # reads the newest OneDrive backup into <volume>/rehearsal/ and
+            # scrubs it; link mints a 48 h download token for one lane.
+            from email_parser import rehearsal as _rh
+            _step, _, _lane = (arg or "status").partition("|")
+            _step = (_step or "status").strip().lower()
+            if _step == "status":
+                return json.dumps(_rh.status(), indent=2, default=str)
+            if _step == "restore":
+                _res = _rh.restore()
+                _audit("scoring-rehearsal", f"restore drill: ok={_res.get('ok')} "
+                       f"{_res.get('backup')} {_res.get('time_to_restore_ms')} ms")
+                return json.dumps(_res, indent=2, default=str)
+            if _step == "link":
+                _res = _rh.mint_link(lane=_lane.strip())
+                _audit("scoring-rehearsal", f"download link minted for {_lane.strip() or 'a lane'}")
+                return json.dumps(_res, indent=2, default=str)
+            return json.dumps({"error": "usage: scoring-rehearsal[:status|restore|link[|<lane>]]"})
         if cmd == "scoring-gg-archive":
             # scoring-gg-archive[:<step>][|go] — the archive move, one
             # resumable step per call. cutover and vacuum refuse without
