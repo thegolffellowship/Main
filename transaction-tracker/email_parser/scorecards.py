@@ -294,8 +294,12 @@ def build_scorecards(event_id: int, layout: str = "3up", grouping: str = "team",
             ph = p.get("playing_handicap")
             net = p.get("team_handicap")
             if ph is None:
-                gaps.append(f"{p.get('name')} (group {g['group_num']}): no playing handicap "
-                            "(no index, or no rating for the tee) — fix before printing.")
+                gaps.append(
+                    f"{p.get('name')} (group {g['group_num']}): no playing handicap — "
+                    + ("no TGF index yet; set a starting handicap on his profile and reprint."
+                       if p.get("handicap_index_display") is None and tee else
+                       "his tee has no rating/slope for this event — fix the course card.")
+                    + " The Starter Sheet shows the same gap.")
             if net is None and ph is not None:
                 gaps.append(f"{p.get('name')} (group {g['group_num']}): no {net_name} handicap.")
             si_own = {}

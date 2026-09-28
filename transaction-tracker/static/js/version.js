@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.519.0";
+window.TGF_VERSION = "2.519.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.519.1",
+    date: "2026-09-28",
+    title: "Scorecards: the no-handicap gap names its fix",
+    changes: [
+      "A player with no playing handicap now says why on the gap page: no TGF index yet (set a starting handicap on the profile and reprint) or a tee with no rating for the event. First seen on 3304 with Lance Vest, a first-timer with no index; the Starter Sheet shows the same gap.",
+    ],
+  },
   {
     version: "2.519.0",
     date: "2026-09-28",
