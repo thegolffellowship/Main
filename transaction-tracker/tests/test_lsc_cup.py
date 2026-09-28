@@ -692,3 +692,119 @@ if __name__ == "__main__":
         fn()
         print(f"PASS {fn.__name__}")
     print(f"{len(fns)} passed")
+
+
+# -- Pivots (Kerry 2026-09-28): a withdrawal mid-weekend ------------------
+
+def test_13_v_13_pm_one_lone_singles_match_and_its_own_skins():
+    # "if it was 13 v 13 on Saturday PM after being 13 v 14 in AM, there
+    # would only then be one singles match in the PM session for the odd
+    # players 1 v 1. Skins would still apply if they were able to get one
+    # on their own."
+    from email_parser.lsc_cup import compute_board, compute_skins_payout
+    course = _flat_course()
+    sess = {"id": "pm", "format": "chapman", "n_holes": 18,
+            "matches": [{"id": "C1", "austin": [1, 2], "sa": [3, 4]},
+                        {"id": "S1", "austin": [5], "sa": [9]}]}
+    phs = {1: 10, 2: 10, 3: 10, 4: 10, 5: 11, 9: 0}
+    sc = {c: {h: 4 for h in range(1, 19)} for c in phs}
+    sc[5][7] = 3                        # the Austin odd player, on his own
+    b = compute_board({"sessions": [sess]}, {"pm": {"course": course,
+                                                    "phs": phs, "scores": sc}}, {})
+    s1 = next(m for m in b["sessions"][0]["matches"] if m["match_id"] == "S1")
+    assert s1["format"] == "singles"
+    assert s1["players"][0]["handicap"] == 11          # 100%, not Chapman
+    sk = compute_skins_payout(sess, course, phs, sc, buyers=set(phs))
+    g = sk["groups"][0]
+    assert {"S1:austin", "S1:sa"} <= {t["key"] for t in g["totals"]}
+    assert [(p["key"], [pp["cents"] for pp in p["per_player"]])
+            for p in g["payouts"]] == [("S1:austin", [15000])]
+
+
+def test_recorded_result_closes_a_match_an_injury_stopped():
+    from email_parser.lsc_cup import compute_board, strip_money
+    course = _flat_course()
+    sess = {"id": "sun", "format": "singles", "n_holes": 18,
+            "matches": [{"id": "S1", "austin": [1], "sa": [2],
+                         "result": {"winner": "sa", "note": "1 hurt on 6"}},
+                        {"id": "S2", "austin": [3], "sa": [4],
+                         "result": {"winner": "halved"}}]}
+    phs = {1: 5, 2: 5, 3: 5, 4: 5}
+    sc = {c: {h: 4 for h in range(1, 6)} for c in phs}   # stopped after 5
+    b = compute_board({"sessions": [sess], "defending_champion": "sa"},
+                      {"sun": {"course": course, "phs": phs, "scores": sc}}, {})
+    m = {x["match_id"]: x for x in b["sessions"][0]["matches"]}
+    assert m["S1"]["state"] == "final" and m["S1"]["points"] == {"austin": 0.0, "sa": 1.0}
+    assert m["S1"]["gg_margin"] == "Conceded"
+    assert m["S2"]["points"] == {"austin": 0.5, "sa": 0.5}
+    assert b["cup"]["status"] == "won" and b["cup"]["winner"] == "sa"
+    member = strip_money(b)
+    assert "note" not in member["sessions"][0]["matches"][0]["result_override"]
+
+
+def test_withdrawn_player_does_not_hold_skins_for_everyone():
+    from email_parser.lsc_cup import compute_skins
+    sess = {"id": "sun", "format": "singles", "n_holes": 3,
+            "matches": [{"id": "S1", "austin": [1], "sa": [2]},
+                        {"id": "S2", "austin": [3], "sa": [4]}]}
+    sc = {1: {1: 4, 2: 4, 3: 3}, 2: {1: 4, 2: 4, 3: 4},
+          3: {1: 4, 2: 4, 3: 4}, 4: {1: 4}}          # 4 hurt after hole 1
+    held = compute_skins(sess, _flat_course(3), {}, sc, basis="gross")
+    assert held["holes"][2]["status"] == "pending"
+    done = compute_skins({**sess, "withdrawn": [4]}, _flat_course(3), {}, sc,
+                         basis="gross")
+    assert done["holes"][2]["status"] == "won"
+
+
+def test_validate_matches_catches_a_bad_quick_edit():
+    from email_parser.lsc_cup import validate_matches
+    ok = {"sessions": [_odd_session("fourball")]}
+    assert validate_matches(ok) == []
+    bad = {"sessions": [{"id": "am", "format": "fourball", "matches": [
+        {"id": "M1", "austin": [1, 2], "sa": [3, 4]},
+        {"id": "M2", "austin": [1, 5], "sa": [6, 7]},        # 1 twice, team
+        {"id": "M3", "austin": [8], "sa": [8]},              # both teams
+        {"id": "M4", "austin": [9], "sa": [],                # empty side
+         "result": {"winner": "nobody"}}],
+        "withdrawn": [42]}]}
+    w = " | ".join(validate_matches(bad))
+    for frag in ("player 1 is in two matches", "player 8 is on both teams",
+                 "M4: no sa player", "M4: result must name",
+                 "withdrawn player 42"):
+        assert frag in w, frag
+
+
+def test_results_snapshot_freezes_the_final_board(tmp_path):
+    import json
+    import sqlite3
+    from email_parser import lsc_cup
+    db = tmp_path / "t.db"
+    conn = sqlite3.connect(db)
+    conn.execute("CREATE TABLE app_settings (key TEXT PRIMARY KEY, value TEXT, updated_at TEXT)")
+    sess = {"id": "sun", "format": "singles", "n_holes": 2,
+            "matches": [{"id": "S1", "austin": [1], "sa": [2]}]}
+    dial = {"event_id": 3329, "defending_champion": "sa", "sessions": [sess]}
+    mock = {"sun": {"course": _flat_course(2), "phs": {"1": 0, "2": 0},
+                    "scores": {"1": {"1": 4}, "2": {"1": 4}}}}     # hole 2 open
+    for k, v in (("lsc_matches", dial), ("lsc_mock_scores", mock)):
+        conn.execute("INSERT INTO app_settings (key, value) VALUES (?, ?)",
+                     (k, json.dumps(v)))
+    conn.commit()
+    refused = lsc_cup.freeze_cup_results(db_path=str(db))
+    assert refused["frozen"] is False and refused["blockers"]
+    mock["sun"]["scores"] = {"1": {"1": 4, "2": 3}, "2": {"1": 4, "2": 4}}
+    conn.execute("UPDATE app_settings SET value = ? WHERE key = 'lsc_mock_scores'",
+                 (json.dumps(mock),))
+    conn.commit()
+    res = lsc_cup.freeze_cup_results(db_path=str(db))
+    assert res["frozen"] is True and res["cup"]["winner"] == "austin"
+    # a later score edit does NOT change the frozen result
+    mock["sun"]["scores"]["2"]["2"] = 2
+    conn.execute("UPDATE app_settings SET value = ? WHERE key = 'lsc_mock_scores'",
+                 (json.dumps(mock),))
+    conn.commit()
+    b = lsc_cup.lsc_board_payload(db_path=str(db))
+    assert b["source"] == "final" and b["cup"]["winner"] == "austin"
+    assert b["results_frozen"]["forced"] is False
+    lsc_cup.clear_cup_results(db_path=str(db))
+    assert lsc_cup.lsc_board_payload(db_path=str(db))["cup"]["winner"] == "sa"

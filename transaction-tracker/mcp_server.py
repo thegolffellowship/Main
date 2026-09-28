@@ -1830,6 +1830,8 @@ def _scoring_dispatch_inner(url: str, extract: str):
       scoring-entry-publish:<event_id>[|<round_id>][|apply]  G-0 (CA #786 GO 1): closed + signed entered cards -> scoring_rounds source='entry' when the event is entry-authoritative (no GG rows, on/after entry_record_from); a GG event writes nothing and returns the parity diff; dry run by default
       scoring-entry-parity:<event_id>  read-only: entered gross vs the GG cards on the event, per player (customer_id) and hole
       scoring-tgf-event-ensure:<id>[,<id>...][|apply]  every Tracker event gets its tgf_events row (the home payouts hang off), from the Tracker event, events_id stamped (CA #786 GO 2); dry run by default
+      scoring-lsc-results[:freeze[|force]|:clear]  Lone Star Cup final-results snapshot (lsc_results): status, freeze (refused while anything is open unless force), clear
+      scoring-lsc-check  read-only check of the lsc_matches pairings (per session matches, points total, problems) before a change goes live
       scoring-course-card:<course_id>[|<card json>[|apply]]  read a course's card as held, or validate/plan/load one from the printed card (tees, bands, rating/slope incl. front/back nines, par/SI/yardage), source course_card (CA #786 GO 3)
       scoring-membership-price:<term_id>|<amount>[|apply]  set price_paid on one membership term (dry run by default, audited)
       scoring-alias-delete:<alias id>[|confirm]  remove ONE customer_aliases row; preview first, |confirm deletes and audits
@@ -3598,6 +3600,47 @@ def _scoring_dispatch_inner(url: str, extract: str):
             db.log_agent_action("mcp-claude", "scoring-lsc-freeze",
                                 f"frozen at {res.get('frozen_at')}")
             return json.dumps(res, indent=2)
+        if cmd == "scoring-lsc-results":
+            # Lone Star Cup FINAL results snapshot (Kerry 2026-09-28: "go
+            # ahead and build the results snapshot"). "" = read-only status
+            # (snapshot held? live blockers, dial check); "freeze" stores
+            # the final board in lsc_results (refused while a match is
+            # open or skins are held); "freeze|force" stores it anyway with
+            # the blockers recorded; "clear" goes back to live computing.
+            # No schema, no money moves. Audited.
+            from email_parser import lsc_cup as _lc
+            _a = [x.strip().lower() for x in arg.split("|") if x.strip()]
+            if not _a:
+                return json.dumps(_lc.cup_results_status(), indent=2, default=str)
+            if _a[0] == "clear":
+                res = _lc.clear_cup_results()
+                db.log_agent_action("mcp-claude", "scoring-lsc-results", "cleared")
+                return json.dumps(res)
+            if _a[0] == "freeze":
+                res = _lc.freeze_cup_results(force="force" in _a[1:])
+                db.log_agent_action(
+                    "mcp-claude", "scoring-lsc-results",
+                    f"freeze force={'force' in _a[1:]} -> frozen={res.get('frozen')} "
+                    f"blockers={len(res.get('blockers') or [])}")
+                return json.dumps(res, indent=2, default=str)
+            return json.dumps({"error": "use '', 'freeze', 'freeze|force' or 'clear'"})
+        if cmd == "scoring-lsc-check":
+            # Read-only check of the lsc_matches pairings before they go
+            # live (a withdrawal or the odd player changed at the course):
+            # per session the match count and points, plus every problem
+            # validate_matches finds. Kerry 2026-09-28: pivot quickly.
+            from email_parser import lsc_cup as _lc
+            _dial = json.loads(db.get_app_setting("lsc_matches") or "{}")
+            _sess = [{"id": s_.get("id"), "format": s_.get("format"),
+                      "matches": len(s_.get("matches") or []),
+                      "withdrawn": s_.get("withdrawn") or [],
+                      "results_recorded": [m.get("id") for m in s_.get("matches") or []
+                                           if _lc.match_result_override(m)]}
+                     for s_ in _dial.get("sessions") or []]
+            _tot = sum(x["matches"] for x in _sess)
+            return json.dumps({"sessions": _sess, "points_total": _tot,
+                               "defending_champion": _dial.get("defending_champion"),
+                               "warnings": _lc.validate_matches(_dial)}, indent=2)
         if cmd == "scoring-oneoff-addon":
             # "<event_id>|<customer_id>|<key>|<on|off>" — toggle a
             # player's add-on buy-in on a one-off event, same path the

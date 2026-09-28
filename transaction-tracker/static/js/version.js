@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.514.0";
+window.TGF_VERSION = "2.515.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.515.0",
+    date: "2026-09-28",
+    title: "Lone Star Cup: withdrawal pivots, results snapshot, The Hideout's card",
+    changes: [
+      "Withdrawal pivots (Kerry 2026-09-28: \"ability to pivot quickly, adjusting formats in worst case scenarios\"). A session can be re-paired in the cup dial, and a lone 1 v 1 inside a team session plays as singles with each odd player his own skins entry. A match an injury stops, or a concession, takes a recorded result (winner or halved, with a staff-only note) and reads final. A player listed as withdrawn no longer holds everyone's skins open. The new read-only bridge scoring-lsc-check lists each session's matches and points and flags any inconsistent pairing before it goes live.",
+      "Results snapshot (Kerry: \"go ahead and build the results snapshot\"). scoring-lsc-results:freeze stores the final Cup (points, every match, staff skins payouts) in the lsc_results setting and refuses while anything is still open, unless forced. The board then serves the snapshot, so a later score edit can't change the result. It can be cleared back to live. No schema change and no money moves.",
+      "The Hideout's course card is loaded (course 65112): Gold, Blue, White and Red men's tees and the Teal women's tee, with ratings, slopes, front and back nines, pars, stroke indexes and yardages from Kerry's Golf Genius screenshots.",
+    ],
+  },
   {
     version: "2.514.0",
     date: "2026-09-28",

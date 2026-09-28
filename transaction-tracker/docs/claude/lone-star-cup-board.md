@@ -182,6 +182,55 @@ that have team matches".
 - The earlier draft (sit one player / one pair each session, 25 points,
   #757) is superseded.
 
+## Pivots when someone withdraws (Kerry 2026-09-28) — BUILT v2.515.0
+
+"There's always also the possibility that someone would have to WD due
+to injury. We'd need ability to pivot quickly, adjusting formats in
+worst case scenarios." Example he gave: 13 v 13 on Saturday PM after
+13 v 14 in the AM leaves ONE singles match for the odd players, 1 v 1,
+and "skins would still apply if they were able to get one on their own".
+
+- **Re-pair a session:** edit that session's `matches` in `lsc_matches`
+  (the dial is per session, so AM and PM can differ). A 1 v 1 inside a
+  team session plays as singles at 100%; the odd players are each their
+  own skins entry. Then run **`scoring-lsc-check`** (read-only): match
+  count and points per session, and every problem `validate_matches`
+  finds (a player on both teams, in two team matches, in more than two
+  matches, an empty side, a bad recorded result, a stray withdrawal).
+  The staff board carries the same list as `dial_warnings`.
+- **A match an injury stops, or a concession:** put
+  `"result": {"winner": "austin"|"sa"|"halved", "note": "..."}` on the
+  match. It reads FINAL with that result ("Conceded" / "Halved" unless a
+  `margin` is given). Which way an injury goes is staff's call case by
+  case; the board never guesses. The note is staff-only.
+- **Skins after a mid-round withdrawal:** list him in the session's
+  `withdrawn`. An entry made only of withdrawn players stops holding
+  holes open (the money hold); the scores he posted still count.
+
+## Results snapshot — BUILT v2.515.0 (Kerry 2026-09-28: "go ahead")
+
+`scoring-lsc-results` reads the status (snapshot held? what would block
+a freeze now?). `scoring-lsc-results:freeze` stores the final board in
+the **`lsc_results`** app setting: points, every match, and the staff
+skins payouts. It refuses while a match is open or a skins group with
+entrants is still held; `freeze|force` stores it anyway with the
+blockers recorded. From then on `/api/lsc/board` serves the snapshot
+(`source: "final"`), so a later score edit can't change the result
+(principle 4). `:clear` goes back to live computing. No schema, no money
+moves. The recap and closeout read the snapshot.
+
+## The Hideout's card — LOADED 2026-09-28 (course 65112)
+
+From Kerry's GG tee screenshots, via Tracker Build's `scoring-course-card`:
+Gold 73.7/131 (7,003), Blue 71.7/129 (6,543), White 69.7/124 (6,109),
+Red (M) 66.7/117 (5,453), Teal (F) 69.4/118 (4,979), each with front
+and back nine ratings. Par 37/35/72 on every tee. The four men's tees
+share one stroke-index order; **Teal has its own.** Tees 14680-14684.
+**Open for Kerry:** which TGF band plays which tee here (Gold is the
+BACK tee at this course), and how strokes fall in a match between a
+Teal player and a men's-tee player (the board uses one stroke-index
+list per session today).
+
 ## Handicaps and races (Kerry, CA #787 items 1–2)
 
 - **No cup round posts to TGF handicaps** — not the four-ball, Chapman or

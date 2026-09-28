@@ -455,6 +455,10 @@ def compute_skins(session: dict, course: list[dict], phs: dict,
     fmt = normalize_format(session.get("format"))
     n_holes = int(session.get("n_holes") or 18)
     team_game = fmt in ("fourball", "chapman")
+    # A player who withdrew mid-round (injury, Kerry 2026-09-28) stops
+    # posting; an entry made only of withdrawn players no longer holds a
+    # hole open for everyone else. Scores he did post still count.
+    withdrawn = {int(c) for c in session.get("withdrawn") or []}
 
     entries = []
     smatches = (skins_team_sides(session.get("matches") or []) if team_game
@@ -522,7 +526,7 @@ def compute_skins(session: dict, course: list[dict], phs: dict,
                 v = g - strokes[e["key"]].get(c, {}).get(hn, 0)
                 if best is None or v < best:
                     best = v
-            if not posted:
+            if not posted and not all(c in withdrawn for c in e["cids"]):
                 posted_all = False
             best_by_entry[e["key"]] = best
         if not entries or not posted_all:
@@ -741,7 +745,13 @@ def strip_money(board: dict) -> dict:
     every staff flag goes (CA #726: the payout is staff only)."""
     import copy
     b = copy.deepcopy(board)
+    b.pop("dial_warnings", None)
+    b.pop("results_frozen", None)
     for sess in b.get("sessions") or []:
+        for m in sess.get("matches") or []:
+            if isinstance(m.get("result_override"), dict):
+                m["result_override"] = {k: v for k, v in m["result_override"].items()
+                                        if k != "note"}
         sk = sess.get("skins")
         if not sk:
             continue
@@ -751,6 +761,67 @@ def strip_money(board: dict) -> dict:
                                      "totals": g.get("totals")}
                                     for g in sk.get("groups") or []]}
     return b
+
+
+def match_result_override(match: dict) -> dict | None:
+    """A result staff record on the match in the dial:
+    "result": {"winner": "austin" | "sa" | "halved", "margin"?, "note"?}.
+    For a concession or a match an injury stopped (Kerry 2026-09-28:
+    "ability to pivot quickly ... in worst case scenarios"). Which way an
+    injury goes (conceded or halved) is decided by staff case by case;
+    the board records it and never guesses. None when absent or bad."""
+    r = match.get("result")
+    if not isinstance(r, dict):
+        return None
+    w = (r.get("winner") or "").strip().lower()
+    if w not in ("austin", "sa", "halved"):
+        return None
+    return {"winner": w,
+            "margin": r.get("margin") or ("Halved" if w == "halved" else "Conceded"),
+            "note": r.get("note")}
+
+
+def validate_matches(dial: dict) -> list[str]:
+    """Plain-sentence problems with the lsc_matches pairings, so a quick
+    change at the course (a withdrawal, the odd player) is checked before
+    it goes live. Empty = the dial is consistent.
+
+    Rules: every match has a player on each side; nobody plays for both
+    teams; a player is in at most one team match per session; only the
+    odd player may be in two matches in one session, and only as SINGLES
+    matches (his threesome); withdrawn players must be in the session."""
+    out = []
+    for sess in dial.get("sessions") or []:
+        sid = sess.get("id")
+        fmt = normalize_format(sess.get("format"))
+        if fmt not in ("singles", "fourball", "chapman"):
+            out.append(f"{sid}: unknown format {sess.get('format')!r}")
+        count, sides, singles_only = {}, {}, {}
+        for m in sess.get("matches") or []:
+            mid = m.get("id")
+            if match_result_override(m) is None and m.get("result") is not None:
+                out.append(f"{sid} {mid}: result must name winner austin, sa or halved")
+            one_v_one = all(len(m.get(k) or []) == 1 for k in TEAM_KEYS)
+            for k in TEAM_KEYS:
+                if not m.get(k):
+                    out.append(f"{sid} {mid}: no {k} player")
+                for c in m.get(k) or []:
+                    c = int(c)
+                    count[c] = count.get(c, 0) + 1
+                    sides.setdefault(c, set()).add(k)
+                    singles_only[c] = singles_only.get(c, True) and one_v_one
+        for c, n in count.items():
+            if len(sides[c]) > 1:
+                out.append(f"{sid}: player {c} is on both teams")
+            if n > 2:
+                out.append(f"{sid}: player {c} is in {n} matches (2 at most)")
+            elif n == 2 and not singles_only[c]:
+                out.append(f"{sid}: player {c} is in two matches, and only "
+                           "the odd player's singles threesome allows that")
+        for c in sess.get("withdrawn") or []:
+            if int(c) not in count:
+                out.append(f"{sid}: withdrawn player {c} isn't in this session")
+    return out
 
 
 def compute_board(dial: dict, session_data: dict,
@@ -793,6 +864,14 @@ def compute_board(dial: dict, session_data: dict,
             total += win
             detail = compute_match_detail(m, sess, course, phs, scores, names, marks)
             state = _match_state(detail)
+            ov = match_result_override(m)
+            if ov:
+                # a result recorded by staff (a concession, or a match an
+                # injury stopped, Kerry 2026-09-28) is FINAL as recorded
+                detail["gg_winner_idx"] = {"austin": 1, "sa": 2}.get(ov["winner"], 0)
+                detail["gg_margin"] = ov["margin"]
+                detail["result_override"] = ov
+                state = "final"
             pts = {"austin": 0.0, "sa": 0.0}
             if state == "final":
                 w = detail.get("gg_winner_idx")
@@ -950,11 +1029,31 @@ def lsc_board_payload(db_path=None) -> dict:
     (Track A's feed once its tables land; the lsc_mock_scores dial until
     then, and for the rule-3b static review). One cheap read — the
     member endpoint serves this."""
+    return _board_payload(db_path, use_frozen=True)
+
+
+RESULTS_KEY = "lsc_results"
+
+
+def _board_payload(db_path=None, use_frozen: bool = True) -> dict:
     from email_parser.database import _connect
     with _connect(db_path) as conn:
         dial = _setting_json(conn, "lsc_matches")
         if not dial:
             return {"configured": False}
+        if use_frozen:
+            # Past events are frozen (principle 4): once the final result
+            # is snapshotted the board serves the snapshot, so a later
+            # score edit can't quietly change who won the Cup.
+            res = _setting_json(conn, RESULTS_KEY)
+            if res and res.get("event_id") == dial.get("event_id") and res.get("board"):
+                b = dict(res["board"])
+                b["configured"] = True
+                b["source"] = "final"
+                b["results_frozen"] = {"frozen_at": res.get("frozen_at"),
+                                       "forced": res.get("forced", False)}
+                b["board_live"] = bool(dial.get("board_live"))
+                return b
         names = roster_names(conn)
         session_data = _setting_json(conn, "lsc_mock_scores") or {}
         # Real entered scores (Track A, live on main v2.493.0) take
@@ -986,4 +1085,74 @@ def lsc_board_payload(db_path=None) -> dict:
         # board_live in the dial (after his phone OK). Admin/manager
         # sessions preview it regardless — the route enforces this.
         board["board_live"] = bool(dial.get("board_live"))
+        board["dial_warnings"] = validate_matches(dial)
         return board
+
+
+def results_blockers(board: dict) -> list[str]:
+    """Why the Cup can't be snapshotted as final yet. Empty = final."""
+    out = []
+    cup = board.get("cup") or {}
+    if cup.get("status") not in ("won", "retained", "tied_pending"):
+        out.append(f"the Cup isn't decided (status {cup.get('status')})")
+    for sess in board.get("sessions") or []:
+        for m in sess.get("matches") or []:
+            if m.get("state") != "final":
+                out.append(f"{sess.get('id')} {m.get('match_id')} is {m.get('state')}")
+        sk = sess.get("skins") or {}
+        for g in sk.get("groups") or []:
+            # a group nobody is entered in can never finish; it's flagged
+            # on the board already and doesn't hold up the final result
+            if g.get("entrants") and not g.get("complete"):
+                out.append(f"{sess.get('id')} {g.get('label')}: skins still held")
+    return out
+
+
+def freeze_cup_results(db_path=None, force: bool = False) -> dict:
+    """Snapshot the FINAL Cup (Kerry 2026-09-28: "go ahead and build the
+    results snapshot"): points, every match, and the staff skins payouts,
+    into the lsc_results app setting. Refuses while anything is still
+    open unless forced (the blockers are stored with a forced snapshot).
+    The board then serves the snapshot; clear_cup_results() goes back to
+    live computing. No schema, no money moves: the payouts are a record
+    for staff, paid (or not) elsewhere."""
+    from datetime import datetime
+    from email_parser.database import set_app_setting
+    board = _board_payload(db_path, use_frozen=False)
+    if not board.get("configured"):
+        return {"frozen": False, "error": "no lsc_matches dial"}
+    blockers = results_blockers(board)
+    if blockers and not force:
+        return {"frozen": False, "blockers": blockers}
+    snap = {"event_id": board.get("event_id"),
+            "frozen_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "forced": bool(blockers), "blockers": blockers,
+            "board": {k: v for k, v in board.items()
+                      if k not in ("configured", "board_live", "source")}}
+    set_app_setting(RESULTS_KEY, json.dumps(snap, default=str), db_path=db_path)
+    return {"frozen": True, "frozen_at": snap["frozen_at"],
+            "forced": snap["forced"], "blockers": blockers,
+            "cup": board.get("cup"), "teams": board.get("teams")}
+
+
+def clear_cup_results(db_path=None) -> dict:
+    from email_parser.database import set_app_setting
+    set_app_setting(RESULTS_KEY, "", db_path=db_path)
+    return {"frozen": False, "cleared": True}
+
+
+def cup_results_status(db_path=None) -> dict:
+    """Read-only: is a snapshot stored, and what the live board would
+    freeze right now (its blockers and the dial check)."""
+    from email_parser.database import _connect
+    with _connect(db_path) as conn:
+        res = _setting_json(conn, RESULTS_KEY)
+    live = _board_payload(db_path, use_frozen=False)
+    return {"snapshot": ({"frozen_at": res.get("frozen_at"),
+                          "forced": res.get("forced"),
+                          "blockers": res.get("blockers"),
+                          "cup": (res.get("board") or {}).get("cup")}
+                         if res else None),
+            "live_cup": live.get("cup"),
+            "live_blockers": results_blockers(live) if live.get("configured") else None,
+            "dial_warnings": live.get("dial_warnings")}
