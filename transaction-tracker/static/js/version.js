@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.518.0";
+window.TGF_VERSION = "2.518.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.518.1",
+    date: "2026-09-28",
+    title: "Score entry: read-only gate check per event",
+    changes: [
+      "New bridge scoring-se-gate-check:<event_id>[|<chapter>] proves the per-event opt-in on production. Inside the app it makes a chapter manager's GETs (Live Scoring page, its read, the scores feed) and an anonymous player's GET on each open group's link, and reports the status codes (404 = refused). GETs only, writes nothing."
+    ]
+  },
   {
     version: "2.518.0",
     date: "2026-09-28",

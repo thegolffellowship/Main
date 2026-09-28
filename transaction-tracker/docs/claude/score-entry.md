@@ -721,3 +721,5 @@ The cart-sign QR (`attach_cart_sign_qr`) and the EVENTS page's SCORE ENTRY panel
 and Live Scoring button (`SE_EVENTS`, server-rendered) follow it too. Admin
 preview is unaffected. `score_entry_live` stays the member switch; both must be
 on for a member to score.
+Proof on production: `scoring-se-gate-check:<event_id>[|<chapter>]` (read-only)
+returns the status codes a chapter manager and a player link get on that event.

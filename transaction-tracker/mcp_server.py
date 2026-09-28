@@ -1782,6 +1782,7 @@ def _scoring_dispatch_inner(url: str, extract: str):
       scoring-se-preview:<event_id>|<cid,...>[|apply][|18][|match]  labelled PREVIEW score-entry round + link (admin-only open); 18 = an 18-hole preview, match = a demo singles match per pair (1v2, 3v4)
       scoring-se-seed:<event_id>[|9|18][|apply]  seed score entry from the saved PAIRINGS (dry run by default; re-seed keeps scores)
       scoring-se-cup-seed:<event_id>[|apply]  Lone Star Cup rounds from lsc_matches, tees from lsc_tees, PH off that tee (dry run by default)
+      scoring-se-gate-check:<event_id>[|<chapter>]  read-only: status codes a manager / a player link get (per-event opt-in proof)
       scoring-se-status:<event_id>  read-only: every score-entry round on the event, holes in, signatures, checks, marks, matches
       scoring-se-links:<round_id>  one score-entry link per group
       scoring-se-close:<round_id>|apply  close a score-entry round (links stop opening; nothing deleted)
@@ -3401,6 +3402,43 @@ def _scoring_dispatch_inner(url: str, extract: str):
                 _audit("scoring-se-cup-seed", f"event {_ev} rounds "
                        f"{[x.get('round_id') for x in _res.get('sessions') or []]}")
             return json.dumps(_res, indent=2, default=str)
+        if cmd == "scoring-se-gate-check":
+            # scoring-se-gate-check:<event_id>[|<chapter>] — READ-ONLY proof of the
+            # per-event opt-in (Kerry 2026-09-28): replays GETs inside the app as
+            # a chapter MANAGER and as an anonymous player with each group's
+            # link, and reports the status codes. Writes nothing (GETs only).
+            import app as _app
+            from email_parser import score_entry as _se
+            from email_parser.database import get_app_setting
+            _ev_s, _, _ch = arg.partition("|")
+            try:
+                _ev = int(_ev_s.strip())
+            except ValueError:
+                return json.dumps({"error": "usage: scoring-se-gate-check:<event_id>[|<chapter>]"})
+            _c = _app.app.test_client()
+            with _c.session_transaction() as _s:
+                _s["role"] = "manager"; _s["authenticated"] = True
+                if _ch.strip():
+                    _s["chapter"] = _ch.strip()
+            _out = {"event_id": _ev, "event_enabled": _se.event_enabled(_ev),
+                    "member_switch_on": (get_app_setting("score_entry_live") or "").strip() == "1",
+                    "as_manager": {
+                        "live_scoring_page": _c.get(f"/events/{_ev}/live-scoring").status_code,
+                        "admin_read": _c.get(f"/api/score-entry/events/{_ev}/admin").status_code,
+                        "scores_feed": _c.get(f"/api/score-entry/events/{_ev}/scores").status_code}}
+            _anon = _app.app.test_client()
+            _links = []
+            for _r in _se.get_entered_scores(_ev)["rounds"]:
+                if _r.get("status") != "open":
+                    continue
+                for _l in _se.round_links(_r["round_id"]):
+                    _tok = _l["url"].split("t=", 1)[1]
+                    _links.append({"round_id": _r["round_id"], "group_num": _l["group_num"],
+                                   "player_link": _anon.get(f"/api/score-entry/card?t={_tok}").status_code})
+            _out["player_links"] = _links
+            _out["note"] = ("404 = refused. A player link is also 404 while score_entry_live is off "
+                            "(member switch), so on an ENABLED event read the manager codes.")
+            return json.dumps(_out, indent=2)
         if cmd == "scoring-se-status":
             from email_parser import score_entry as _se
             try:
