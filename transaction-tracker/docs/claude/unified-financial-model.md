@@ -88,6 +88,22 @@ EXPENSES
 PROJECTED PROFIT = Net Income - Total Expenses
 ```
 
+### The boot-time "doubled totals" heal no longer re-stamps fees (v2.518.4, CA #882 2b)
+
+`app.py` carried an inline repair for an old writer bug that multiplied a
+multi-item order's total by its item count. It ran on EVERY boot and compared
+the order row's `amount` with the charged total, but the current writer
+stores the DEPOSIT in `amount`, so every new multi-item order differed by its
+merchant fee, looked "doubled", and had its splits rebuilt with the parser's
+per-item STAMPED fee. That is why one-order-one-fee offenders kept coming back
+after each deploy (CFO #854 Finding A). It now calls
+`fee_splits.heal_doubled_order_totals`: charged = deposit + merchant fee, only
+a real k-times doubling (k >= 2) is healed, the rebuild uses the writer's
+pro-rata shares in place, and any other gap is reported, never rewritten.
+Guard: `test_fee_splits.py`. (The dormant 2.7% -> 2.9% merchant-rate block
+beside it still splits merchant fees equally, but only fires if an old-rate
+row is detected, which no longer exists.)
+
 ### Server prize fund = recorded event-funded payouts (v2.513.1, CA #834)
 
 The Margin & Fee Standard v1.0 §1 subtracts prize_pool from the event P&L.

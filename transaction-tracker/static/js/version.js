@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.518.3";
+window.TGF_VERSION = "2.518.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.518.4",
+    date: "2026-09-28",
+    title: "One order, one fee: the boot repair stops re-stamping multi-item orders",
+    changes: [
+      "CA #882 item 2b (CFO #854 Finding A). The GoDaddy writer has split a multi-item order's fee by item price since 9/09, but a boot-time repair in app.py undid it: it compared the order row's amount (which the writer fills with the DEPOSIT) against the charged total, so every new multi-item order looked 'doubled' by its merchant fee and had its splits rebuilt with the parser's per-item stamped fee on the next deploy. That is why the offenders kept recurring. The repair now lives in fee_splits.heal_doubled_order_totals: it reads charged as deposit + merchant fee, heals only a real k-times doubling with the writer's pro-rata shares (in place, ids kept), and reports any other gap without touching it. Guard in test_fee_splits.py.",
+    ],
+  },
   {
     version: "2.518.3",
     date: "2026-09-28",

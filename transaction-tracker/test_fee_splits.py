@@ -436,6 +436,66 @@ def main():
     check("an August 2025 membership books the $10 shirt set-aside",
           later["lsc_shirt_fund"] == 10.0 and later["tgf_operating"] == 59.0, later)
 
+    print("Boot heal: a writer-correct order is LEFT ALONE (the recurring stamp, CA #882 2b)")
+    with db._connect(p) as conn:
+        before = [tuple(r) for r in conn.execute(
+            "SELECT s.item_id, s.split_type, s.amount FROM godaddy_order_splits s "
+            "JOIN acct_transactions t ON t.id = s.transaction_id "
+            "WHERE t.source_ref = 'godaddy-order-R343961029' "
+            "AND COALESCE(t.status,'active') = 'active' ORDER BY s.item_id, s.split_type")]
+        res = fs.heal_doubled_order_totals(conn)
+        conn.commit()
+        after = [tuple(r) for r in conn.execute(
+            "SELECT s.item_id, s.split_type, s.amount FROM godaddy_order_splits s "
+            "JOIN acct_transactions t ON t.id = s.transaction_id "
+            "WHERE t.source_ref = 'godaddy-order-R343961029' "
+            "AND COALESCE(t.status,'active') = 'active' ORDER BY s.item_id, s.split_type")]
+        check("the writer's own order (amount = the deposit) is not 'doubled'",
+              not any(o["order_id"] == "R343961029" for o in res["orders"]), res)
+        check("and its pro-rated splits are untouched (no per-item stamp)", before == after,
+              (before, after))
+        check("integrity still clean after the boot heal", fs.fee_split_integrity(conn)["ok"],
+              fs.fee_split_integrity(conn))
+
+        print("Boot heal: a REAL doubling is healed pro rata, in place")
+        tid = conn.execute("SELECT id FROM acct_transactions WHERE "
+                           "source_ref = 'godaddy-order-R343961029' "
+                           "AND COALESCE(status,'active') = 'active'").fetchone()[0]
+        conn.execute("UPDATE acct_transactions SET amount = ?, merchant_fee = ?, net_deposit = ? "
+                     "WHERE id = ?", (4 * 313.26, 4 * 9.66, 4 * 313.26, tid))
+        res = fs.heal_doubled_order_totals(conn)
+        conn.commit()
+        t = conn.execute("SELECT id, merchant_fee, net_deposit FROM acct_transactions "
+                         "WHERE id = ?", (tid,)).fetchone()
+        fee_rows = [round(r[0], 2) for r in conn.execute(
+            "SELECT amount FROM godaddy_order_splits WHERE transaction_id = ? "
+            "AND split_type = 'transaction_fee' ORDER BY item_id", (tid,))]
+        check("healed once, x4", [o["x"] for o in res["orders"] if o["order_id"] == "R343961029"] == [4],
+              res)
+        check("order row back to $9.66 / $313.26, same id",
+              t["id"] == tid and (round(t["merchant_fee"], 2), round(t["net_deposit"], 2))
+              == (9.66, 313.26), dict(t))
+        check("rebuilt fee rows are price shares of ONE $10.92", fee_rows == [4.20, 2.03, 2.24, 2.45],
+              fee_rows)
+        check("integrity clean after the heal", fs.fee_split_integrity(conn)["ok"],
+              fs.fee_split_integrity(conn))
+
+        print("Boot heal: any other gap (a refund moved the deposit) is reported, not rewritten")
+        conn.execute("UPDATE acct_transactions SET net_deposit = net_deposit - 58.0 WHERE id = ?",
+                     (tid,))
+        res = fs.heal_doubled_order_totals(conn)
+        check("left alone and named", any(o["order_id"] == "R343961029" for o in res["left_alone"])
+              and not any(o["order_id"] == "R343961029" for o in res["orders"]), res)
+        conn.execute("UPDATE acct_transactions SET net_deposit = net_deposit + 58.0 WHERE id = ?",
+                     (tid,))
+        conn.commit()
+
+    import re as _re
+    app_src = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "app.py")).read()
+    check("app.py boot no longer writes per-item transaction_fee splits itself",
+          "heal_doubled_order_totals" in app_src
+          and not _re.search(r"'transaction_fee', \?\)\"\"\",\s*\(_gdo", app_src))
+
     print("The audit report carries the check")
     rep = db.get_audit_report(p)
     check("fee_splits section present and clean", rep.get("fee_splits", {}).get("ok") is True,

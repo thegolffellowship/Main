@@ -457,3 +457,91 @@ def rebook_spread_since(since: str, dry_run: bool = True,
     out["tax_reserve_delta"] = round(
         out["tax_reserve_after"] - out["tax_reserve_before"], 2)
     return out
+
+
+def heal_doubled_order_totals(conn: sqlite3.Connection) -> dict:
+    """Boot-time heal for the OLD writer bug that multiplied a multi-item
+    order's total by its item count (it summed `total_amount`, which every
+    item row carries in full). Replaces an inline app.py repair that ran on
+    every boot and compared the order row's `amount` with the charged
+    total. The current writer stores the DEPOSIT in `amount`, so every new
+    multi-item order differed by its merchant fee, looked "doubled", and
+    had its splits rebuilt with the parser's per-item STAMPED fee: the
+    one-order-one-fee offenders that kept coming back (CFO #854 Finding A,
+    CA #882 item 2b).
+
+    Now:
+      * the order row's charged total is read as deposit + merchant fee
+        (both conventions agree on that), falling back to `amount`;
+      * only a real doubling is healed: charged ~= k x the true total for
+        a whole k >= 2. Any other gap is reported in `left_alone`, never
+        rewritten (refunds and credits legitimately move the deposit);
+      * the rebuild uses the same pro-rata shares as the writer
+        (`order_fee_from_items` + `prorate`), in place, so reconciliation
+        matches keep their ids; `amount` is written as the deposit, the
+        writer's convention.
+    The caller commits."""
+    from .database import _parse_dollar as _pd
+    out = {"checked": 0, "healed": 0, "left_alone": [], "orders": []}
+    rows = conn.execute(
+        """SELECT id, source_ref, amount, net_deposit, merchant_fee
+           FROM acct_transactions
+           WHERE category = 'godaddy_order'
+             AND COALESCE(status, 'active') NOT IN ('reversed', 'merged')
+             AND source_ref LIKE 'godaddy-order-%'""").fetchall()
+    for t in rows:
+        oid = (t["source_ref"] or "").replace("godaddy-order-", "")
+        items = [dict(i) for i in conn.execute(
+            """SELECT id, item_price, transaction_fees, total_amount,
+                      item_name, customer, coupon_amount, coupon_code
+               FROM items
+               WHERE order_id = ?
+                 AND COALESCE(transaction_status, 'active') NOT IN
+                     ('rsvp_only', 'credited', 'refunded', 'transferred')
+                 AND parent_item_id IS NULL
+                 AND transferred_from_id IS NULL
+               ORDER BY item_index""", (oid,)).fetchall()]
+        items = [i for i in items if _pd(i.get("item_price")) > 0]
+        if len(items) < 2:
+            continue
+        out["checked"] += 1
+        prices = [_pd(i.get("item_price")) for i in items]
+        fees = [_pd(i.get("transaction_fees")) for i in items]
+        order_fee = order_fee_from_items(prices, fees)
+        first_ta = _pd(items[0].get("total_amount"))
+        true_total = first_ta if first_ta > 0 else round(sum(prices) + order_fee, 2)
+        if true_total <= 0:
+            continue
+        if t["net_deposit"] is not None and t["merchant_fee"] is not None:
+            charged = round(float(t["net_deposit"]) + float(t["merchant_fee"]), 2)
+        else:
+            charged = round(float(t["amount"] or 0), 2)
+        if abs(charged - true_total) < 1.0:
+            continue
+        k = round(charged / true_total)
+        if k < 2 or abs(charged - k * true_total) > 1.0 * k:
+            out["left_alone"].append({"order_id": oid, "charged_on_row": charged,
+                                      "items_total": true_total})
+            continue
+        new_mf = round(true_total * 0.029 + 0.30, 2)
+        new_nd = round(true_total - new_mf, 2)
+        conn.execute("UPDATE acct_transactions SET amount = ?, merchant_fee = ?, "
+                     "net_deposit = ? WHERE id = ?", (new_nd, new_mf, new_nd, t["id"]))
+        conn.execute("DELETE FROM godaddy_order_splits WHERE transaction_id = ?", (t["id"],))
+        fee_shares = prorate(order_fee, prices)
+        merch_shares = prorate(new_mf, prices)
+        for k2, it in enumerate(items):
+            ev, cu = it.get("item_name") or "", it.get("customer") or ""
+            ins = ("INSERT INTO godaddy_order_splits (transaction_id, item_id, event_name, "
+                   "customer, split_type, amount) VALUES (?, ?, ?, ?, ?, ?)")
+            conn.execute(ins, (t["id"], it["id"], ev, cu, "registration", prices[k2]))
+            if fee_shares[k2] > 0:
+                conn.execute(ins, (t["id"], it["id"], ev, cu, "transaction_fee", fee_shares[k2]))
+            cp = _pd(it.get("coupon_amount"))
+            if cp > 0 and it.get("coupon_code"):
+                conn.execute(ins, (t["id"], it["id"], ev, cu, "coupon", -cp))
+            if merch_shares[k2] > 0:
+                conn.execute(ins, (t["id"], it["id"], ev, cu, "merchant_fee", -merch_shares[k2]))
+        out["healed"] += 1
+        out["orders"].append({"order_id": oid, "was": charged, "now": true_total, "x": k})
+    return out

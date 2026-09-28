@@ -16277,117 +16277,21 @@ try:
     except Exception:
         logger.warning("Merchant fee recalculation failed", exc_info=True)
 
-    # ── One-time fix: recalculate doubled order totals for multi-item orders ──
-    # Bug: _write_godaddy_order_entry() summed total_amount across all items,
-    # but total_amount stores the FULL ORDER total on each item row.  Multi-item
-    # orders got their amount doubled/tripled, causing wrong net_deposit values.
+    # ── Heal DOUBLED multi-item order totals (fee_splits.heal_doubled_order_totals) ──
+    # The inline version of this repair ran on EVERY boot and compared the
+    # order row's `amount` (the writer stores the DEPOSIT there) with the
+    # charged total, so every new multi-item order looked "doubled" by its
+    # merchant fee and had its splits rebuilt with the parser's per-item
+    # STAMPED fee: the recurring one-order-one-fee offenders (CFO #854
+    # Finding A, CA #882 item 2b). The function only touches a real
+    # doubling and rebuilds splits pro rata.
     try:
-        from email_parser.database import _parse_dollar as _pd
+        from email_parser.fee_splits import heal_doubled_order_totals
         with _startup_connect() as _otf:
-            _gd_orders = _otf.execute(
-                """SELECT t.id, t.source_ref, t.amount
-                   FROM acct_transactions t
-                   WHERE t.category = 'godaddy_order'
-                   AND COALESCE(t.status, 'active') NOT IN ('reversed', 'merged')
-                   AND t.source_ref LIKE 'godaddy-order-%'"""
-            ).fetchall()
-
-            _recalc_count = 0
-            for _gdo in _gd_orders:
-                _oid = _gdo["source_ref"].replace("godaddy-order-", "")
-
-                # Get items for this order (same filter as backfill)
-                _order_items = _otf.execute(
-                    """SELECT id, item_price, transaction_fees, total_amount,
-                              item_name, customer, coupon_amount, coupon_code
-                       FROM items
-                       WHERE order_id = ?
-                       AND COALESCE(transaction_status, 'active') NOT IN
-                           ('rsvp_only', 'credited', 'refunded', 'transferred')
-                       AND parent_item_id IS NULL
-                       AND transferred_from_id IS NULL
-                       ORDER BY item_index""",
-                    (_oid,),
-                ).fetchall()
-                _order_items = [
-                    dict(i) for i in _order_items if _pd(dict(i).get("item_price")) > 0
-                ]
-
-                if len(_order_items) < 2:
-                    continue  # Single-item orders unaffected by the doubling bug
-
-                # Correct order_total: total_amount from first item
-                _first_ta = _pd(_order_items[0].get("total_amount"))
-                _computed = sum(
-                    _pd(i.get("item_price")) + _pd(i.get("transaction_fees"))
-                    for i in _order_items
-                )
-                _correct_total = _first_ta if _first_ta > 0 else _computed
-
-                # Skip if already correct (within $1)
-                if abs(_gdo["amount"] - _correct_total) < 1.0:
-                    continue
-
-                # Update entry in-place (preserves ID → keeps reconciliation_matches)
-                _new_mf = round(_correct_total * 0.029 + 0.30, 2)
-                _new_nd = round(_correct_total - _new_mf, 2)
-                _otf.execute(
-                    "UPDATE acct_transactions SET amount = ?, merchant_fee = ?, net_deposit = ? WHERE id = ?",
-                    (_correct_total, _new_mf, _new_nd, _gdo["id"]),
-                )
-
-                # Recreate splits with correct proportions
-                _otf.execute(
-                    "DELETE FROM godaddy_order_splits WHERE transaction_id = ?",
-                    (_gdo["id"],),
-                )
-                for _oi in _order_items:
-                    _ip = _pd(_oi.get("item_price"))
-                    _tf = _pd(_oi.get("transaction_fees"))
-                    _it = _ip + _tf  # per-item contribution
-
-                    if _ip > 0:
-                        _otf.execute(
-                            """INSERT INTO godaddy_order_splits
-                               (transaction_id, item_id, event_name, customer, split_type, amount)
-                               VALUES (?, ?, ?, ?, 'registration', ?)""",
-                            (_gdo["id"], _oi["id"], _oi.get("item_name", ""),
-                             _oi.get("customer", ""), _ip),
-                        )
-                    if _tf > 0:
-                        _otf.execute(
-                            """INSERT INTO godaddy_order_splits
-                               (transaction_id, item_id, event_name, customer, split_type, amount)
-                               VALUES (?, ?, ?, ?, 'transaction_fee', ?)""",
-                            (_gdo["id"], _oi["id"], _oi.get("item_name", ""),
-                             _oi.get("customer", ""), _tf),
-                        )
-                    _coupon = _pd(_oi.get("coupon_amount"))
-                    if _coupon > 0 and _oi.get("coupon_code"):
-                        _otf.execute(
-                            """INSERT INTO godaddy_order_splits
-                               (transaction_id, item_id, event_name, customer, split_type, amount)
-                               VALUES (?, ?, ?, ?, 'coupon', ?)""",
-                            (_gdo["id"], _oi["id"], _oi.get("item_name", ""),
-                             _oi.get("customer", ""), -_coupon),
-                        )
-                    if _it > 0 and _correct_total > 0:
-                        _item_mf = round(_new_mf * _it / _computed, 2)
-                        _otf.execute(
-                            """INSERT INTO godaddy_order_splits
-                               (transaction_id, item_id, event_name, customer, split_type, amount)
-                               VALUES (?, ?, ?, ?, 'merchant_fee', ?)""",
-                            (_gdo["id"], _oi["id"], _oi.get("item_name", ""),
-                             _oi.get("customer", ""), -_item_mf),
-                        )
-
-                _recalc_count += 1
-
-            if _recalc_count > 0:
+            _res = heal_doubled_order_totals(_otf)
+            if _res["healed"]:
                 _otf.commit()
-                logger.info("Fixed doubled order totals for %d multi-item orders", _recalc_count)
-            else:
-                logger.info("No doubled order totals found — all multi-item orders correct")
+                logger.info("Healed doubled order totals: %s", _res)
     except Exception:
         logger.warning("Order total recalculation failed", exc_info=True)
 
