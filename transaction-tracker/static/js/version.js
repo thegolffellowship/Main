@@ -1,5 +1,16 @@
-window.TGF_VERSION = "2.505.0";
+window.TGF_VERSION = "2.506.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.506.0",
+    date: "2026-09-28",
+    title: "GO 6: read-only capture of Golf Genius\u2019s points ledger, before GG goes away",
+    changes: [
+      "CA #786 GO 6: capture a complete GG per-player, per-event points ledger while GG still exists \u2014 every race, every enrolled player, Monthly included \u2014 as a read-only JSON bundle, not a table. It is the answer key the points-engine backtest (#770, go/no-go Fri 10/9) diffs against at zero tolerance, and nothing else holds it: `gg_points_standings` is overwritten on every refresh and `gg_data_snapshots` keeps one row per key.",
+      "NEW `email_parser/points_ledger.py` + two READ-ONLY bridges: `scoring-points-ledger-races` lists the named season races and every Monthly page discovered on the chapter portals; `scoring-points-ledger:<ref>|<start>|<date>` returns one resumable chunk of one race, reusing the existing GG fetchers. No SQL, no writes. It runs on the deployed app because this build sandbox cannot reach golfgenius.com.",
+      "Each player\u2019s breakdown is kept as GG\u2019s RAW parsed tables; a normalised per-round view is derived beside it but the raw tables are the record. A player with no member card is recorded with the error, never dropped. #790: each race\u2019s exact event list is taken as the union of rounds across every captured player.",
+      "A bug caught before it ran: a chunk that spent its time budget on the standings fetch alone processed zero players and handed back the same resume point, so the caller would have looped forever. Every chunk now processes at least one player. The stubbed test hung exactly that way first.",
+    ],
+  },
   {
     version: "2.505.0",
     date: "2026-09-28",
