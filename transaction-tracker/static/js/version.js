@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.518.4";
+window.TGF_VERSION = "2.518.5";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.518.5",
+    date: "2026-09-28",
+    title: "A comp plays but doesn't fund the games (CA #882-4)",
+    changes: [
+      "CA #882-4 (from #843 f and the Margin Standard): funding N is PAID ENTRIES, and a comp collects nothing, so it funds nothing. The comp player still plays and can WIN. _event_player_counts, which feeds the proximity / CTP purse and the payout assembly's matrix rows, counted Kerry's $0 comp on 3304 as a player and a NET/GROSS buyer: 25 players and 2 CTPs at $25 each, where it should be 24 and $24. An EXPLICIT comp ('(comp)' in the price, or a manual-comp row) with no paid add-on now drops out of players / net / gross and is listed under comps. A bare $0.00 (a transfer, a legacy import) is left alone. Still to follow, after Tuesday's close-out: the flight board's AMOUNTS use paid N too, and the Games tab's client-side count mirrors this rule.",
+    ],
+  },
   {
     version: "2.518.4",
     date: "2026-09-28",

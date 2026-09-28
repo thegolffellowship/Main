@@ -203,6 +203,25 @@ check("...so the engine derives PH 5 over the nine (net = gross - 5)",
       _cards[0]["allocation_source"] == "derived" and _cards[0]["net"] == 40,
       (_cards[0]["allocation_source"], _cards[0]["net"]))
 
+print("\n== a COMP plays but does not fund the games (CA #882-4) ==")
+with db._connect(_tmp) as _c:
+    for _uid, _cust, _price, _sg in (("e1", "Paid One", "$55.00", "NET"),
+                                     ("e2", "Paid Two", "$86.00", "Both"),
+                                     ("manual-comp-1", "Comp Kerry", "$0.00 (comp)", "Both"),
+                                     ("legacy-0", "Zero Legacy", "$0.00", "NET")):
+        _c.execute("INSERT INTO items (email_uid, item_index, merchant, customer, "
+                   "item_name, item_price, side_games, transaction_status, order_date) "
+                   "VALUES (?, 0, 'x', ?, 's9.97 Comp', ?, ?, 'active', '2026-10-13')",
+                   (_uid, _cust, _price, _sg))
+    _c.commit()
+    _cnt = db._event_player_counts(_c, "s9.97 Comp")
+check("the explicit comp is out of players / net / gross",
+      (_cnt["players"], _cnt["net"], _cnt["gross"]) == (3, 3, 1), _cnt)
+check("...and is NAMED as a comp", [c["name"] for c in _cnt["comps"]] == ["Comp Kerry"],
+      _cnt["comps"])
+check("a bare $0.00 with no comp marker is NOT treated as a comp (transfer / legacy)",
+      _cnt["players"] == 3)
+
 print("\n" + "=" * 60)
 if FAILURES:
     print(f"{len(FAILURES)} FAILED: {FAILURES}")

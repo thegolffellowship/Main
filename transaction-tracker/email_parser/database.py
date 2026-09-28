@@ -57035,7 +57035,8 @@ def _event_player_counts(conn, event_name: str) -> dict:
         (event_name,)).fetchall() if r["alias_name"]]
     ph = ",".join("?" for _ in names)
     rows = [dict(r) for r in conn.execute(
-        f"SELECT id, parent_item_id, side_games, wd_credits, "
+        f"SELECT id, parent_item_id, side_games, wd_credits, item_price, "
+        f"       email_uid, customer, "
         f"       COALESCE(transaction_status,'active') AS ts "
         f"FROM items WHERE LOWER(item_name) IN ({ph})",
         [n.lower() for n in names]).fetchall()]
@@ -57052,8 +57053,25 @@ def _event_player_counts(conn, event_name: str) -> dict:
     total = net = gross = 0
     parents = [r for r in rows if not r["parent_item_id"]]
     not_playing = 0
+    comps = []
     for r in parents:
         if r["id"] in overrides or r["ts"] in ("credited", "refunded", "transferred"):
+            not_playing += 1
+            continue
+        # A COMP collects nothing, so it FUNDS nothing (CA #882-4 / #843 f:
+        # "funding N = paid entries"; the Margin Standard: purses come from
+        # collected money). The player still plays and can WIN — this only
+        # takes him out of the counts that size and fund the games. Only an
+        # EXPLICIT comp counts as one (a "(comp)" price or a manual-comp
+        # row) with no paid add-on; a $0 price alone can be a transfer or a
+        # legacy import and is left alone.
+        _is_comp = (("comp" in str(r.get("item_price") or "").lower()
+                     or str(r.get("email_uid") or "").startswith("manual-comp"))
+                    and _parse_money(r.get("item_price")) == 0
+                    and not any(_parse_money(c.get("item_price")) > 0
+                                for c in kids.get(str(r["id"]), [])))
+        if _is_comp and r["ts"] != "rsvp_only":
+            comps.append({"item_id": r["id"], "name": r.get("customer")})
             not_playing += 1
             continue
         t = _classify_side_games_type(r["side_games"])
@@ -57082,7 +57100,7 @@ def _event_player_counts(conn, event_name: str) -> dict:
         if has_gross:
             gross += 1
     total = len(parents) - not_playing
-    return {"players": total, "net": net, "gross": gross}
+    return {"players": total, "net": net, "gross": gross, "comps": comps}
 
 
 def _rows_from_place_ladder(ranking: list, amounts: list, category: str,
