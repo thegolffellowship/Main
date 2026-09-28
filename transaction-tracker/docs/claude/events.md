@@ -2639,7 +2639,10 @@ Ties: Individual Net and Gross places have NO tiebreak (CA #832, from the
 ratified Season Contest Payouts v1.1 §3.2/§10 and Side Games Rules v1.0,
 where only City MVP has one, §2.2). Equal Stableford points share the
 place and split the tied places' money, as GG does. The dial is
-`tiebreak: "none"` on both games in `SEED_LIVE_SCORING_CONFIG`.
+`tiebreak: "none"` on both games in `SEED_LIVE_SCORING_CONFIG`. The
+ranking is STROKE play: the lowest net (or gross) score wins, per the spec's
+"Format: Stroke (not Stableford)". Before v2.512.1 the engine ranked on
+Stableford points, which split 3309's net-34 tie.
 
 **Not wired into payout recording.** `assemble_event_game_payouts` still
 uses GG purses, then the legacy ladder. Wiring the engine in for events

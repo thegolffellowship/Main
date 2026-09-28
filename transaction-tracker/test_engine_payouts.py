@@ -99,7 +99,7 @@ check("a game not running pays nothing and says why",
                                "inactive_reason": "nobody bought"}, None)
       ["status"] == "not_running")
 
-print("\n== Individual Net: equal points are a TIE (CA #832) ==")
+print("\n== Individual Net is STROKE play; equal net scores TIE (CA #832) ==")
 def _card(key, pts, net):
     return {"key": key, "customer_id": None, "name": key, "playing_handicap": 5,
             "stableford_net": pts, "stableford_gross": 0, "net": net,
@@ -107,12 +107,15 @@ def _card(key, pts, net):
             "team": None, "buys_net": True, "buys_gross": False,
             "is_member": True}
 cfg = ls.SEED_LIVE_SCORING_CONFIG
-tie = ls.game_individual([_card("Fehlis", 12, 30), _card("Marroquin", 12, 29),
-                          _card("Other", 10, 33)], cfg, "9", "net")
+# 3309: Fehlis and Marroquin both net 34 — Marroquin had MORE Stableford
+# points (a capped blow-up hole), which is how the engine used to split them.
+tie = ls.game_individual([_card("Fehlis", 10, 34), _card("Marroquin", 12, 34),
+                          _card("Other", 14, 35)], cfg, "9", "net")
 places = {r["name"]: r["place"] for f in tie["flights"] for r in f["rows"]}
-check("equal points share 1st — no stroke-score tiebreak",
-      places["Fehlis"] == 1 and places["Marroquin"] == 1 and places["Other"] == 3,
-      places)
+check("lowest NET score wins, not most Stableford points",
+      places["Other"] == 3, places)
+check("equal net scores share 1st — no tiebreak",
+      places["Fehlis"] == 1 and places["Marroquin"] == 1, places)
 check("the dial says so, for both Individual games",
       cfg["games"]["individual_net"]["tiebreak"] == "none"
       and cfg["games"]["individual_gross"]["tiebreak"] == "none")

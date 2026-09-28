@@ -166,10 +166,10 @@ SEED_LIVE_SCORING_CONFIG: dict = {
             "flight_breaks": {"9": {"2": [12.0]}},
             # PLACES HAVE NO TIEBREAK (CA #832, 2026-09-28, from Season
             # Contest Payouts v1.1 §3.2/§10 + Side Games Rules v1.0, where
-            # only City MVP has one, §2.2): equal Stableford points are a
+            # only City MVP has one, §2.2): equal net scores are a
             # tie and split the tied places' money, as GG does (3309:
-            # Fehlis and Marroquin T1, $29.25 each). "score" would break
-            # the tie on the stroke score — the pre-ruling behaviour.
+            # Fehlis and Marroquin T1, $29.25 each). "points" would break
+            # the tie on Stableford points.
             "tiebreak": "none",
         },
         "individual_gross": {
@@ -833,7 +833,7 @@ def _flight_source(field: list[dict], pins: dict | None) -> dict:
 
 def game_individual(cards: list[dict], cfg: dict, holes_key: str,
                     basis: str, pins: dict | None = None) -> dict:
-    """Individual Net / Individual Gross — flighted Stableford."""
+    """Individual Net / Individual Gross — flighted STROKE play (low score)."""
     gkey = "individual_net" if basis == "net" else "individual_gross"
     gc = cfg["games"][gkey]
     field = _eligible(cards, gc["eligibility"])
@@ -860,15 +860,24 @@ def game_individual(cards: list[dict], cfg: dict, holes_key: str,
                  "points": c[pts_key], "score": c[score_key],
                  "gross": c["gross"], "thru": c["thru"],
                  "complete": c["complete"]} for c in members]
-        # Stableford: most points wins. Equal points are a TIE that splits
-        # the places' money (CA #832) unless the game's `tiebreak` dial says
-        # "score". Display order within a tie still follows the score.
-        rows.sort(key=lambda r: (-r["points"], r["score"]))
-        if gc.get("tiebreak", "none") == "score":
-            ranked = _rank(rows, key=lambda r: (-r["points"], r["score"]),
-                           reverse=False)
+        # STROKE PLAY, not Stableford (side-games.md "Individual Net —
+        # definition v1": Format **Stroke (not Stableford)**; config
+        # format "stroke"): the LOWEST net (gross, for Individual Gross)
+        # score wins. Ranking on Stableford points here was a defect —
+        # points cap a blow-up hole, so two players on the same net score
+        # separate (3309: Fehlis and Marroquin both net 34, GG T1; we had
+        # Marroquin 1st on points). Equal scores are a TIE that splits the
+        # places' money (CA #832) — the `tiebreak` dial stays "none"; "points"
+        # would break a tie on Stableford points. A card with no score yet
+        # sorts last.
+        def _score_key(r):
+            return r["score"] if r["score"] is not None and r["thru"] else 10 ** 6
+        if gc.get("tiebreak", "none") == "points":
+            key = lambda r: (_score_key(r), -(r["points"] or 0))
         else:
-            ranked = _rank(rows, key=lambda r: -r["points"], reverse=False)
+            key = _score_key
+        rows.sort(key=lambda r: (_score_key(r), r["name"] or ""))
+        ranked = _rank(rows, key=key, reverse=False)
         out["flights"].append({
             "flight": label, "players": len(members), "rows": ranked,
             "provisional": any(not r["complete"] for r in ranked)})

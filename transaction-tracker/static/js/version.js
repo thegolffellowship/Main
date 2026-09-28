@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.512.0";
+window.TGF_VERSION = "2.512.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.512.1",
+    date: "2026-09-28",
+    title: "Individual Net and Gross rank on stroke score, not Stableford points",
+    changes: [
+      "The last s9.24 Brackenridge G2a difference was an engine defect, not a tie rule. The ratified spec (side-games.md, 'Individual Net \u2014 definition v1') says Format: Stroke (not Stableford), and the config already said format 'stroke'. But game_individual ranked on Stableford points. Points cap a blow-up hole, so two players on the same net score came apart: Fehlis and Marroquin both shot net 34, GG had them T1 at $29.25 each, and we had Marroquin 1st on points. Individual Net now ranks on the lowest net score and Individual Gross on the lowest gross. Equal scores tie and split (CA #832, dial tiebreak 'none').",
+    ],
+  },
   {
     version: "2.512.0",
     date: "2026-09-28",
