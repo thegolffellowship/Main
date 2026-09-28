@@ -72,6 +72,15 @@ The cup ROSTER for any card or roster read comes from Track B's frozen
 `lsc_roster_final` dial by customer_id, never from event registrations
 (CA #786 GO 5) — event 3329 holds one registration; the 27 are in the dial.
 
+**Cup results are FROZEN before the recap (Track B #874, v2.515.0).** After
+the last card on Sun 10/11: `scoring-lsc-results` (status; it names every
+blocker), then `scoring-lsc-results:freeze`. It refuses while anything is
+open; `freeze|force` records the blockers and needs Kerry's word. The board
+then serves `source: "final"` from the app setting `lsc_results`, so a later
+score edit can't change who won. The cup recap reads `lsc_results`, never the
+live board. `:clear` returns it to live. `scoring-lsc-check` (read-only) shows
+pairing inconsistencies after a quick re-pairing.
+
 ## THE NO-PUSH WINDOW (standing rule, CA #829, 2026-09-28)
 
 "No lane pushes to main from the first tee time of a live score-entry
