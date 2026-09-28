@@ -15,16 +15,16 @@ CREATE TABLE chapters (chapter_id INTEGER PRIMARY KEY, name TEXT UNIQUE);
 INSERT INTO chapters (name) VALUES ('San Antonio'), ('Austin'), ('DFW');
 CREATE TABLE customers (customer_id INTEGER PRIMARY KEY, first_name TEXT,
                         last_name TEXT, chapter TEXT);
-INSERT INTO customers VALUES (50,'Eric','Pollard','San Antonio'),
+INSERT INTO customers VALUES (4,'Tee','Wide','Austin'),(50,'Eric','Pollard','San Antonio'),
   (1,'Sam','Home','San Antonio'), (2,'Al','Barna','Austin'), (3,'Bo','Blank',NULL);
 CREATE TABLE events (id INTEGER PRIMARY KEY, chapter TEXT);
-INSERT INTO events VALUES (10,'San Antonio'),(11,'San Antonio'),(20,'Austin');
+INSERT INTO events VALUES (10,'San Antonio'),(11,'San Antonio'),(20,'Austin'),(30,'TGF');
 CREATE TABLE scoring_rounds (id INTEGER PRIMARY KEY, customer_id INT,
                              event_id INT, round_date TEXT);
 INSERT INTO scoring_rounds (customer_id,event_id,round_date) VALUES
   (1,10,'2026-09-01'),(1,11,'2026-09-08'),
   (2,10,'2026-09-01'),(2,11,'2026-09-08'),(2,20,'2026-09-15'),
-  (3,20,'2026-09-15'),(50,20,'2026-09-15');
+  (3,20,'2026-09-15'),(50,20,'2026-09-15'),(1,30,'2026-10-10'),(4,30,'2026-10-10');
 """)
 c.commit(); c.close()
 LOG = []
@@ -39,6 +39,7 @@ check("  ...with where he plays shown as evidence",
       f[2]["events_by_chapter"] == {"San Antonio": 2, "Austin": 1}, f.get(2))
 check("a blank home chapter is flagged", 3 in f and "blank home chapter" in f[3]["reasons"])
 check("someone who never plays at home is flagged", 50 in f)
+check("a TGF-wide event is NOT 'playing away from home'", 4 not in f and 1 not in f, f.get(4))
 check("named players sort first", a["flagged"][0]["customer_id"] == 2)
 conn = sqlite3.connect(path)
 check("the audit wrote nothing", conn.execute(
