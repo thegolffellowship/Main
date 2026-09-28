@@ -48556,6 +48556,17 @@ def patch_acct_row(acct_id: int, fields: dict,
             return {"error": f"acct transaction {acct_id} not found"}
         row = dict(row)
         entity_id = category_id = event_id = None
+        # customer_id (CA #788 item 5, 2026-09-28): tie a ledger row to the
+        # customer it belongs to (Talamantez's $75 membership Venmo, ledger
+        # 4611, had none, so no per-customer read found it). The id must
+        # name a real customer; nothing else on the row changes.
+        if fields.get("customer_id") not in (None, ""):
+            cid = int(fields["customer_id"])
+            if not conn.execute("SELECT 1 FROM customers WHERE customer_id = ?",
+                                (cid,)).fetchone():
+                return {"error": f"no customer {cid}"}
+            conn.execute("UPDATE acct_transactions SET customer_id = ? WHERE id = ?",
+                         (cid, acct_id))
         if fields.get("entity"):
             name = str(fields["entity"]).strip()
             r = conn.execute(
