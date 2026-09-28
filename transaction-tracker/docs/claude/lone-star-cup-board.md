@@ -154,5 +154,21 @@ Only if Kerry finds no 14th SA player. Team sessions 6 v 6 pairs (SA sits
 1 player, Austin sits 1 pair, each session); Sunday 13 singles (one Austin
 player sits); no Austin player sits more than once; captains pick. 25
 points: SA retains at 12.5, Austin needs 13. No engine change — a sit-out
-is simply not listed in the dial. Open for Kerry: the $25 a sitting skins
-buyer didn't play for (the pot is $25 × buyers present).
+is simply not listed in the dial. **Skins sit-out, RULED (Kerry, CA #787
+item 4):** a skins buyer who sits a session gets that round's $25 as a
+WALLET CREDIT, recorded as a credit owed on his customer record until the
+wallet ships (R3); the round's pot = $25 × buyers who PLAY it (already how
+`compute_skins_payout` counts `in_round`: only buyers listed in that
+session's matches). The CFO's `lsc_skins_pot` releases the $25 as a credit
+liability, not a payout. Applies only if 14 v 13 happens.
+
+## Handicaps and races (Kerry, CA #787 items 1–2)
+
+- **No cup round posts to TGF handicaps** — not the four-ball, Chapman or
+  singles, nor the Friday practice round (3330). Closeout skips the post
+  and the card for 3329/3330.
+- The board's handicaps read the LOCKED pre-cup index, unchanged: match PHs
+  come from Track A's locked snapshot, and Sunday's skins flights read
+  `_event_index_as_of` (the index in effect the morning the event starts).
+- **The cup feeds no points race** (not Fall NET, not Monthly). Nothing in
+  `lsc_cup.py` writes to handicaps, points or standings.
