@@ -2169,6 +2169,7 @@ def get_entered_scores(event_id: int, round_id: int | None = None, db_path=None)
                 "WHERE round_id = ? AND status != 'withdrawn' ORDER BY id", (rid,))]
             rounds_out.append({"round_id": rid, "date": r["round_date"], "label": r["label"],
                                "holes": r["holes"], "status": r["status"],
+                               "course_id": r["course_id"],
                                "course": course, "groups": groups, "players": players,
                                "teams": teams, "signoffs": signed, "card_checks": checks,
                                "ctp": ctp, "hio": hio})
