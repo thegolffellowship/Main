@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.511.0";
+window.TGF_VERSION = "2.511.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.511.1",
+    date: "2026-09-28",
+    title: "Score entry: CTP holes from the games matrix, Longest Putt, manager runbook",
+    changes: [
+      "CA #829 GO: the phone asks closest-to-the-pin only on the holes the games matrix plays, read from the same ratified rule the proximity markers print from (event_proximity_report). The matrix at the field size decides how many CTPs are funded (none below 16 on a nine), the shortest par 3s take them, and a slot with no par 3 left becomes a Longest Putt on the last hole, with its own question: 'Did anyone in your group hole a long putt?'. A claim on any other hole is refused. With no course hole card, every par 3 is asked, as before, and the source says so.",
+      "New one-page manager runbook, docs/claude/sop/score-entry-manager-runbook.md: seed from pairings, links and QR, take-over, what to do when a phone dies, finishing and closing, the paper fallback, and what still needs Kerry.",
+      "The se_* guard now looks for SQL use, not a mention in a comment, and the replay harness reads refused writes through score_entry (refused_writes_kept)."
+    ]
+  },
   {
     version: "2.511.0",
     date: "2026-09-28",

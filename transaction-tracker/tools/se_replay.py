@@ -330,9 +330,7 @@ def main() -> int:
             "errors": [e for g in gres for e in g["errors"]][:30],
             "round_status": se.get_entered_scores(ev_id, rid)["rounds"][0]["status"],
             # a refused write is never lost: its value sits in se_audit.detail
-            "refused_kept_in_audit": conn.execute(
-                "SELECT COUNT(*) FROM se_audit WHERE round_id = ? AND result = 'refused_lock' "
-                "AND detail LIKE '%gross%'", (rid,)).fetchone()[0],
+            "refused_kept_in_audit": se.refused_writes_kept(rid),
         })
         er["result"] = "PASS" if (lost == 0 and wrong == 0 and not er["errors"]
                                   and er["players_signed"] == len(cards)
