@@ -49,12 +49,17 @@ OUTBOUND_ENV = ("SMTP", "MAIL", "BREVO", "TWILIO", "STRIPE", "SENDGRID", "GMAIL"
 def _guard(db: str, ok: bool) -> None:
     if not ok:
         sys.exit("refusing: pass --i-am-scratch (this writes score-entry rows)")
-    if os.getenv("RAILWAY_ENVIRONMENT") or os.getenv("RAILWAY_PROJECT_ID"):
+    # The ONE exception: Health's Railway rehearsal runner (CA #832, Kerry's
+    # B) runs this in a separate, secret-free child with TGF_REHEARSAL=1 on
+    # a file inside <volume>/rehearsal/. Nothing else passes.
+    from email_parser.rehearsal import runner_scratch_ok
+    runner = runner_scratch_ok(db)
+    if (os.getenv("RAILWAY_ENVIRONMENT") or os.getenv("RAILWAY_PROJECT_ID")) and not runner:
         sys.exit("refusing: this looks like a Railway (production) process")
     p = os.path.abspath(db)
     if not os.path.exists(p):
         sys.exit(f"no such database: {p}")
-    if p.startswith("/data/") or os.path.basename(p) == "transactions.db" and "scratch" not in p:
+    if not runner and (p.startswith("/data/") or os.path.basename(p) == "transactions.db" and "scratch" not in p):
         sys.exit(f"refusing: {p} looks like a production database path; copy it to a scratch name")
 
 

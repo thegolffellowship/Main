@@ -146,9 +146,17 @@ check("cutover restored", db.get_app_setting("entry_record_from", str(DB)) == be
 
 print("the app never imports the tool")
 import subprocess  # noqa: E402
-hits = subprocess.run(["grep", "-rln", "scratch_entry_takeover", "app.py", "mcp_server.py",
-                       "email_parser"], cwd=HERE, capture_output=True, text=True).stdout.strip()
-check("no app/bridge reference", hits == "", hits)
+hits = subprocess.run(["grep", "-rln", "--include=*.py", "scratch_entry_takeover", "app.py", "mcp_server.py",
+                       "email_parser"], cwd=HERE, capture_output=True, text=True).stdout.split()
+# The ONE sanctioned caller: Health's Railway rehearsal runner (CA #829/#832,
+# Kerry's B) LAUNCHES the tool as a separate secret-free TGF_REHEARSAL=1
+# process on the scratch copy. It never imports it.
+check("no app/bridge reference except the rehearsal runner",
+      [h for h in hits if h != "email_parser/rehearsal.py"] == [], hits)
+imports = subprocess.run(["grep", "-rnE", "--include=*.py", r"(import|from)\s+[\w.]*scratch_entry_takeover",
+                          "app.py", "mcp_server.py", "email_parser"], cwd=HERE,
+                         capture_output=True, text=True).stdout.strip()
+check("nothing in the app imports the tool", imports == "", imports)
 
 print(f"\n{len(FAILURES)} failure(s)")
 sys.exit(1 if FAILURES else 0)

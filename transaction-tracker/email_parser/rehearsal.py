@@ -40,6 +40,7 @@ import gzip
 import json
 import logging
 import os
+import sys
 import re
 import shutil
 import socket
@@ -369,3 +370,258 @@ def status(db_path=None) -> dict:
     return {"last_drill": drill, "scratch_ready": gz.exists(),
             "download_bytes": gz.stat().st_size if gz.exists() else None,
             "scratch_path": str(rdir / SCRUBBED)}
+
+
+# ── the RAILWAY REHEARSAL RUNNER (CA #832: Kerry chose B) ────────────────
+# The dress-rehearsal lanes cannot take the scratch copy off Railway, so
+# the rehearsal runs HERE, against <volume>/rehearsal/tracker_rehearsal.db,
+# in a SEPARATE PROCESS:
+#   * the child's environment is an ALLOW-LIST (no Graph / Brevo / Stripe /
+#     Twilio / Anthropic / HubSpot / Meta secrets, no RAILWAY_* vars), plus
+#     TGF_REHEARSAL=1, so importing email_parser installs the outbound guard
+#     before any code runs;
+#   * a TOOL job runs one of the lane harnesses below with the scratch path
+#     filled in by the runner and every argument checked against that tool's
+#     allow-list — no free-form command line, no other file;
+#   * a BRIDGE job runs one `scoring-*` bridge through mcp_server with
+#     DATABASE_PATH pointing at the scratch copy (never the live file);
+#   * one job at a time (the lanes share one copy), a hard time limit, and
+#     the output kept in <volume>/rehearsal/jobs/ for `job|<id>`.
+# Results come back through the bridge like any other bridge answer; the
+# database file itself never leaves the volume.
+
+import re as _re
+import shlex as _shlex
+import subprocess as _subprocess
+import threading as _threading
+
+JOBS = "jobs"
+JOB_TIMEOUT_S = 30 * 60
+_ENV_KEEP = ("PATH", "HOME", "LANG", "LC_ALL", "TZ", "PYTHONPATH", "VIRTUAL_ENV",
+             "PYTHONHOME", "NIXPACKS_PATH", "LD_LIBRARY_PATH")
+_NUM_LIST = r"^\d+(,\d+)*$"
+RUNNER_TOOLS = {
+    # Track A: replay GG cards through score entry (tools/se_replay.py)
+    "se_replay": {"script": "tools/se_replay.py", "db_flag": "--db",
+                  "flags": {"--events": _NUM_LIST, "--workers": r"^[1-9]\d?$"},
+                  "switches": set(), "out_flag": "--out", "db_env": False},
+    # Tracker Build: park GG rows + publish entered rows (#811 GO, #833)
+    "takeover": {"script": "tools/scratch_entry_takeover.py", "db_flag": None,
+                 "flags": {"--events": _NUM_LIST}, "switches": {"--undo"},
+                 "out_flag": None, "db_env": False},
+    # Track B: the synthetic Lone Star Cup weekend (tools/lsc_synthetic_weekend.py)
+    "lsc_weekend": {"script": "tools/lsc_synthetic_weekend.py", "db_flag": None,
+                    "flags": {}, "switches": {"--synthetic-index"},
+                    "out_flag": "--out", "db_env": False},
+}
+# Bridges a rehearsal must not run: the runner itself, the archive mover,
+# and anything that only exists to reach outside (it would be refused by
+# the guard anyway; refusing here says so plainly).
+_BRIDGE_REFUSE = _re.compile(
+    r"^scoring-(rehearsal|gg-archive|import-orders|brevo|insider|recap-draft-email|"
+    r"hcp-cards|print-pack-pdf|backup)", _re.I)
+
+
+def runner_scratch_ok(path) -> bool:
+    """True only inside a rehearsal-runner child, for a file inside the
+    rehearsal folder. The lane tools call this so their 'never on Railway,
+    never under /data' guards admit exactly this case and nothing else."""
+    if os.getenv("TGF_REHEARSAL_RUNNER") != "1" or os.getenv("TGF_REHEARSAL") != "1":
+        return False
+    rd = os.getenv("TGF_REHEARSAL_DIR") or ""
+    if not rd:
+        return False
+    p = os.path.realpath(str(path))
+    root = os.path.realpath(rd)
+    return p.startswith(root + os.sep) and os.path.basename(p) != "transactions.db"
+
+
+def _repo_root() -> Path:
+    return Path(__file__).resolve().parent.parent
+
+
+def _jobs_dir(db_path=None) -> Path:
+    d = rehearsal_dir(db_path) / JOBS
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def _child_env(rdir: Path, scratch: Path, bridge: bool) -> dict:
+    env = {k: os.environ[k] for k in _ENV_KEEP if k in os.environ}
+    env.update({"TGF_REHEARSAL": "1", "TGF_REHEARSAL_RUNNER": "1",
+                "TGF_REHEARSAL_DIR": str(rdir), "PYTHONUNBUFFERED": "1",
+                "SECRET_KEY": "rehearsal-runner", "PERF_SAMPLES": "0"})
+    if bridge:
+        env["DATABASE_PATH"] = str(scratch)
+    return env
+
+
+def _pid_alive(pid) -> bool:
+    try:
+        os.kill(int(pid), 0)
+        return True
+    except (OSError, ValueError, TypeError):
+        return False
+
+
+def _running(jd: Path):
+    for m in sorted(jd.glob("*.json")):
+        try:
+            meta = json.loads(m.read_text())
+        except Exception:
+            continue
+        if meta.get("status") == "running" and _pid_alive(meta.get("pid")):
+            return meta
+    return None
+
+
+def build_tool_argv(tool: str, args: str, scratch: Path, out_path: Path) -> list:
+    """The exact argv a tool job runs, or ValueError naming what was refused."""
+    spec = RUNNER_TOOLS.get(tool)
+    if not spec:
+        raise ValueError(f"unknown tool {tool!r}; one of {sorted(RUNNER_TOOLS)}")
+    toks = _shlex.split(args or "")
+    argv = [sys.executable, str(_repo_root() / spec["script"])]
+    argv += [spec["db_flag"], str(scratch)] if spec["db_flag"] else [str(scratch)]
+    i, seen = 0, set()
+    while i < len(toks):
+        t = toks[i]
+        if t in spec["switches"]:
+            argv.append(t); i += 1; continue
+        if t in spec["flags"]:
+            if i + 1 >= len(toks) or not _re.match(spec["flags"][t], toks[i + 1]):
+                raise ValueError(f"{t} needs a value matching {spec['flags'][t]}")
+            argv += [t, toks[i + 1]]; seen.add(t); i += 2; continue
+        raise ValueError(f"argument {t!r} is not allowed for {tool} "
+                         f"(allowed: {sorted(spec['flags']) + sorted(spec['switches'])})")
+    if tool in ("se_replay", "takeover") and "--events" not in seen:
+        raise ValueError("--events <id,id> is required")
+    if spec["out_flag"]:
+        argv += [spec["out_flag"], str(out_path)]
+    argv.append("--i-am-scratch")
+    return argv
+
+
+_BRIDGE_CHILD = r'''
+import json, os, sys
+sys.path.insert(0, os.getcwd())
+import email_parser                      # installs the outbound guard first
+from email_parser import rehearsal as rh
+assert rh._GUARDED, "outbound guard not installed - refusing"
+import mcp_server
+ex = sys.argv[1]
+url = sys.argv[2] if len(sys.argv) > 2 else "https://tgf-sa.golfgenius.com/"
+out = mcp_server._scoring_dispatch(url, ex)
+print("RESULT_BEGIN")
+print(out if isinstance(out, str) else json.dumps(out, default=str))
+print("RESULT_END")
+'''
+
+
+def start_job(kind: str, spec: str, args: str = "", db_path=None) -> dict:
+    """Start one rehearsal job in a separate process. kind = 'tool' (spec =
+    a RUNNER_TOOLS key, args = its flags) or 'bridge' (spec = the scoring-*
+    extract). Returns the job id; read it back with job_status()."""
+    rdir = rehearsal_dir(db_path)
+    scratch = rdir / SCRUBBED
+    if not scratch.is_file():
+        return {"error": "no scratch copy — run scoring-rehearsal:restore first"}
+    jd = _jobs_dir(db_path)
+    busy = _running(jd)
+    if busy:
+        return {"error": f"job {busy['id']} is still running ({busy['kind']} {busy['spec']}); "
+                         "one job at a time on the shared copy"}
+    jid = datetime.utcnow().strftime("%Y%m%dT%H%M%S") + "-" + _re.sub(r"[^a-z0-9]+", "-", f"{kind}-{spec}".lower())[:40]
+    log = jd / f"{jid}.log"
+    out_path = jd / f"{jid}-report.json"
+    try:
+        if kind == "tool":
+            argv = build_tool_argv(spec, args, scratch, out_path)
+            env = _child_env(rdir, scratch, bridge=False)
+        elif kind == "bridge":
+            ex = (spec or "").strip()
+            if not ex.startswith("scoring-"):
+                return {"error": "a bridge job runs one scoring-* bridge"}
+            if _BRIDGE_REFUSE.match(ex):
+                return {"error": f"{ex.split(':')[0]} is not run in a rehearsal (it only reaches outside, or is the runner itself)"}
+            argv = [sys.executable, "-c", _BRIDGE_CHILD, ex]
+            env = _child_env(rdir, scratch, bridge=True)
+        else:
+            return {"error": "kind is tool or bridge"}
+    except ValueError as e:
+        return {"error": str(e)}
+    fh = open(log, "wb")
+    proc = _subprocess.Popen(argv, cwd=str(_repo_root()), env=env, stdout=fh,
+                             stderr=_subprocess.STDOUT, stdin=_subprocess.DEVNULL,
+                             start_new_session=True)
+    meta = {"id": jid, "kind": kind, "spec": spec, "args": args, "pid": proc.pid,
+            "status": "running", "started_at": datetime.utcnow().isoformat(timespec="seconds"),
+            "argv": [a if a != _BRIDGE_CHILD else "<bridge child>" for a in argv[1:]],
+            "scratch": str(scratch)}
+    mp = jd / f"{jid}.json"
+    mp.write_text(json.dumps(meta))
+
+    def _wait():
+        t0 = time.monotonic()
+        try:
+            rc = proc.wait(timeout=JOB_TIMEOUT_S)
+            status = "done" if rc == 0 else "failed"
+        except _subprocess.TimeoutExpired:
+            try:
+                os.killpg(proc.pid, 9)
+            except OSError:
+                proc.kill()
+            rc, status = None, "timeout"
+        fh.close()
+        meta.update({"status": status, "exit_code": rc,
+                     "ended_at": datetime.utcnow().isoformat(timespec="seconds"),
+                     "secs": round(time.monotonic() - t0, 1)})
+        mp.write_text(json.dumps(meta))
+    _threading.Thread(target=_wait, daemon=True, name=f"rehearsal-{jid}").start()
+    return {"id": jid, "status": "running", "kind": kind, "spec": spec,
+            "read_with": f"scoring-rehearsal:job|{jid}"}
+
+
+def job_status(jid: str, db_path=None, tail_chars: int = 12000) -> dict:
+    jd = _jobs_dir(db_path)
+    jid = _re.sub(r"[^A-Za-z0-9T\-]", "", jid or "")
+    mp = jd / f"{jid}.json"
+    if not jid or not mp.is_file():
+        return {"error": f"no job {jid!r}"}
+    meta = json.loads(mp.read_text())
+    if meta.get("status") == "running" and not _pid_alive(meta.get("pid")):
+        meta["status"] = "lost"      # the process ended without the waiter (e.g. a restart)
+    log = jd / f"{jid}.log"
+    text = log.read_text(errors="replace") if log.is_file() else ""
+    if "RESULT_BEGIN" in text and "RESULT_END" in text:
+        body = text.split("RESULT_BEGIN", 1)[1].split("RESULT_END", 1)[0].strip()
+        try:
+            meta["result"] = json.loads(body)
+        except ValueError:
+            meta["result"] = body[-tail_chars:]
+    rp = jd / f"{jid}-report.json"
+    if rp.is_file():
+        try:
+            meta["report"] = json.loads(rp.read_text())
+        except ValueError:
+            meta["report"] = rp.read_text()[-tail_chars:]
+    meta["log_tail"] = text[-tail_chars:]
+    return meta
+
+
+def list_jobs(db_path=None, limit: int = 20) -> list:
+    jd = _jobs_dir(db_path)
+    out = []
+    for m in sorted(jd.glob("*.json"), reverse=True):
+        if m.name.endswith("-report.json"):
+            continue
+        try:
+            meta = json.loads(m.read_text())
+        except Exception:
+            continue
+        if meta.get("status") == "running" and not _pid_alive(meta.get("pid")):
+            meta["status"] = "lost"
+        out.append({k: meta.get(k) for k in ("id", "kind", "spec", "args", "status", "secs", "started_at")})
+        if len(out) >= limit:
+            break
+    return out

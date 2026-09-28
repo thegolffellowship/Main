@@ -1926,6 +1926,11 @@ def _scoring_dispatch_inner(url: str, extract: str):
       scoring-rehearsal[:status|restore]  dress-rehearsal scratch copy
                                    (CA #800): restore = the restore drill into
                                    <volume>/rehearsal/ + scrub (stays on the volume)
+      scoring-rehearsal:run|tool|<se_replay|takeover|lsc_weekend>|<flags>
+      scoring-rehearsal:run|bridge|<scoring-… extract>   the RAILWAY RUNNER
+                                   (CA #832, Kerry's B): one job at a time in a
+                                   separate secret-free TGF_REHEARSAL=1 process
+                                   on the scratch copy; read with job|<id>
       scoring-gg-archive[:<step>][|go]  the GG raw archive's move to its own
                                    file (Kerry #627): plan (default, read-only)
                                    · migrate (resumable copy, ~20 s per call)
@@ -3416,13 +3421,28 @@ def _scoring_dispatch_inner(url: str, extract: str):
             _step, _, _lane = (arg or "status").partition("|")
             _step = (_step or "status").strip().lower()
             if _step == "status":
-                return json.dumps(_rh.status(), indent=2, default=str)
+                return json.dumps({**_rh.status(), "jobs": _rh.list_jobs()}, indent=2, default=str)
+            if _step == "run":
+                # run|tool|<se_replay|takeover|lsc_weekend>|<flags>  or
+                # run|bridge|<scoring-... extract>  — Kerry's B (CA #832):
+                # a separate, secret-free process with TGF_REHEARSAL=1 on
+                # the scratch copy. Nothing leaves the volume.
+                _kind, _, _rest = _lane.partition("|")
+                if _kind.strip() == "tool":
+                    _tool, _, _args = _rest.partition("|")
+                    _res = _rh.start_job("tool", _tool.strip(), _args.strip())
+                else:
+                    _res = _rh.start_job(_kind.strip(), _rest.strip())
+                _audit("scoring-rehearsal", f"run {_kind.strip()} {_rest.strip()[:80]} -> {_res.get('id') or _res.get('error')}")
+                return json.dumps(_res, indent=2, default=str)
+            if _step == "job":
+                return json.dumps(_rh.job_status(_lane.strip()), indent=2, default=str)
             if _step == "restore":
                 _res = _rh.restore()
                 _audit("scoring-rehearsal", f"restore drill: ok={_res.get('ok')} "
                        f"{_res.get('backup')} {_res.get('time_to_restore_ms')} ms")
                 return json.dumps(_res, indent=2, default=str)
-            return json.dumps({"error": "usage: scoring-rehearsal[:status|restore]"})
+            return json.dumps({"error": "usage: scoring-rehearsal[:status|restore|run|tool|<tool>|<flags>|run|bridge|<scoring-…>|job|<id>]"})
         if cmd == "scoring-gg-archive":
             # scoring-gg-archive[:<step>][|go] — the archive move, one
             # resumable step per call. cutover and vacuum refuse without

@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.513.2";
+window.TGF_VERSION = "2.513.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.513.3",
+    date: "2026-09-28",
+    changes: [
+      "Dress rehearsal on real data (Kerry chose B: the copy never leaves Railway). The rehearsal lanes can now run their steps ON the server against the scratch copy. Each job runs as its own process with no passwords or keys available to it and every outbound connection blocked, one job at a time. A job is either one of the three rehearsal tools (score-entry replay, the scorecard takeover, the Lone Star Cup weekend) with only their listed options, or any Tracker bridge pointed at the copy instead of the live database.",
+      "A handicap test that had started failing on 9/22 passes again. The 18-hole index is still exactly twice the 9-hole index; the test was looking in the wrong function after a speed-up moved the calculation behind a short cache.",
+    ],
+  },
   {
     version: "2.513.2",
     date: "2026-09-28",

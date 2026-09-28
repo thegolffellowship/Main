@@ -50,14 +50,43 @@ it and sets `TGF_REHEARSAL=1`. It is not imported by the app and has no route
 or bridge. Under Kerry's B it runs inside the rehearsal runner on Railway,
 against `<volume>/rehearsal/`. Guard: `test_scratch_takeover.py`.
 
-## Not built, on purpose: getting the copy to the lanes
+## The Railway runner (Kerry chose B, CA #832, 2026-09-28)
 
-The copy stays on the production volume. A token-gated download of the
-scrubbed copy to the lanes' sandboxes was written on 2026-09-27 and refused
-by the session's permission system as data leaving Railway. How the replay
-lanes reach real data is Kerry's decision (mailbox, 2026-09-27):
-- **A.** Approve a download of the scrubbed copy to the lanes' sandboxes;
-- **B.** run the replay ON Railway against the scratch file, in a separate
-  process with `TGF_REHEARSAL=1` (needs a runner; no arbitrary code);
-- **C.** lanes replay against their own synthetic fixtures now, and the
-  real-data run waits for A or B.
+The copy never leaves the volume. The lanes run their rehearsal steps ON
+Railway through the bridge; each job is a SEPARATE PROCESS:
+
+- its environment is an allow-list (PATH, HOME, locale, Python paths) plus
+  `TGF_REHEARSAL=1`, `TGF_REHEARSAL_RUNNER=1`, `TGF_REHEARSAL_DIR`. No Graph,
+  Brevo, Stripe, Twilio, Anthropic, HubSpot or Meta secret and no `RAILWAY_*`
+  variable reaches it; importing `email_parser` installs the outbound guard
+  before anything runs;
+- one job at a time on the shared copy; 30-minute limit; output kept in
+  `<volume>/rehearsal/jobs/<id>.log` (plus `-report.json` for tools).
+
+```
+# (re)make the scratch copy from last night's backup: the restore drill
+scoring-rehearsal:restore
+# a lane harness: the runner fills in the scratch path and --i-am-scratch;
+# only each tool's listed flags are accepted
+scoring-rehearsal:run|tool|se_replay|--events 3309,3315 --workers 8
+scoring-rehearsal:run|tool|takeover|--events 3309,3315          (add --undo to revert)
+scoring-rehearsal:run|tool|lsc_weekend|--synthetic-index
+# any read or write bridge, against the scratch copy instead of production
+scoring-rehearsal:run|bridge|scoring-closeout-final:3309
+scoring-rehearsal:run|bridge|scoring-engine-payouts:s9.24 Brackenridge
+# read a job back (status, parsed bridge answer, report, log tail)
+scoring-rehearsal:job|<id>
+scoring-rehearsal:status        (includes the last 20 jobs)
+```
+
+Refused in a rehearsal: `scoring-rehearsal` itself, `scoring-gg-archive`,
+order import, Brevo, Insider, and the recap, handicap-card, print-pack and
+backup sends. They either reach outside or act on the volume, and the guard
+would stop the outside ones anyway. The lane tools' own "never on Railway,
+never under /data" guards admit exactly one case: `runner_scratch_ok(path)`,
+true only in a runner child for a file inside `<volume>/rehearsal/`.
+Guard: `test_rehearsal_runner.py`.
+
+The download path (option A) was written on 2026-09-27, refused by the
+session's permission system as data leaving Railway, removed, and not
+pursued. Kerry chose B.

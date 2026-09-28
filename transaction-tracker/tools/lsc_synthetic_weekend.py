@@ -14,7 +14,11 @@ import os
 import sys
 
 DB = os.path.abspath(sys.argv[1])
-if DB.startswith("/data") or "transactions.db" == os.path.basename(DB) and "scratch" not in DB:
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# The ONE exception: Health's Railway rehearsal runner (CA #832) — a
+# secret-free child with TGF_REHEARSAL=1 on a file inside <volume>/rehearsal/.
+from email_parser.rehearsal import runner_scratch_ok as _runner_ok   # noqa: E402
+if not _runner_ok(DB) and (DB.startswith("/data") or "transactions.db" == os.path.basename(DB) and "scratch" not in DB):
     sys.exit(f"refusing: {DB} does not look like a scratch copy")
 if any(k.startswith("RAILWAY_") for k in os.environ) and "--i-am-scratch" not in sys.argv:
     sys.exit("refusing: this looks like Railway; pass --i-am-scratch only for the scratch file")

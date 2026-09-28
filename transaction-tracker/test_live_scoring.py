@@ -662,9 +662,14 @@ check("flighting reads the 18-hole scale by ruling",
 # The 18-hole TGF handicap is a CONVENTION (2 x the 9-hole), not a WHS
 # derivation from an 18-hole rating. Every producer in the codebase must
 # agree, or flighting silently mis-bands people near a break.
-from email_parser.database import get_all_handicap_players  # noqa: E402
+# get_all_handicap_players became a short-lived CACHE in front of
+# _get_all_handicap_players_uncached (v2.484.3, 9/22); the producer lives
+# in the uncached function. Read both so a move either way stays covered
+# (CTO Health triage 2026-09-28).
+from email_parser import database as _dbmod  # noqa: E402
 import inspect  # noqa: E402
-_src = inspect.getsource(get_all_handicap_players)
+_src = inspect.getsource(_dbmod.get_all_handicap_players) + inspect.getsource(
+    getattr(_dbmod, "_get_all_handicap_players_uncached", _dbmod.get_all_handicap_players))
 check("the 18-hole index is literally 2x the 9-hole index, not rating-derived",
       "round(index * 2, 1)" in _src, "producer changed — re-verify the ruling")
 
