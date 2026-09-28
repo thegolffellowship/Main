@@ -97,6 +97,22 @@ def _course_for(course: list[dict], si_by_player: dict | None, cid) -> list[dict
             for h in course]
 
 
+def _chapman_course(course: list[dict], si_by_player: dict | None,
+                    tee_gender: dict | None, team: list) -> list[dict]:
+    """The stroke-index table a Chapman pair plays on (Kerry 2026-09-28):
+    the men's when either partner plays a men's tee, the women's when
+    both play women's tees; the round's list when the tees are unknown."""
+    g = {c: ((tee_gender or {}).get(c) or (tee_gender or {}).get(str(c)) or "").upper()
+         for c in team}
+    men = [c for c in team if g[c] == "M"]
+    if men:
+        return _course_for(course, si_by_player, men[0])
+    women = [c for c in team if g[c] == "F"]
+    if women and len(women) == len(team):
+        return _course_for(course, si_by_player, women[0])
+    return course
+
+
 def match_format(match: dict, session: dict) -> str:
     """The format ONE match is played and handicapped under.
 
@@ -258,7 +274,8 @@ def compute_match_detail(match: dict, session: dict, course: list[dict],
                          phs: dict, scores: dict,
                          names: dict | None = None,
                          marks: dict | None = None,
-                         si_by_player: dict | None = None) -> dict:
+                         si_by_player: dict | None = None,
+                         tee_gender: dict | None = None) -> dict:
     """One match → the gg_match_play-shaped detail dict.
 
     match:   {"id", "austin": [cid, ...], "sa": [cid, ...], "tee_time"?}
@@ -274,8 +291,14 @@ def compute_match_detail(match: dict, session: dict, course: list[dict],
              its OWN stroke index (a women's tee). WHS: each player's
              strokes fall on the stroke index of the tee HE plays (Kerry
              2026-09-28: "Shouldn't matter where players play from").
-             Singles and four-ball use it; Chapman (one ball, partners
-             possibly on two tees) keeps the round's list.
+             Singles and four-ball use it per player.
+    tee_gender: {cid: "M" | "F"}, the gender of the tee each player
+             plays. A CHAPMAN pair (one ball) takes its strokes on the
+             men's stroke index when either partner plays a men's tee,
+             and on the women's when both play women's tees (Kerry
+             2026-09-28, a TGF term of competition: WHS leaves which
+             table a mixed pair uses to the Committee). Unknown tees
+             keep the round's list.
     """
     names = names or {}
     n_holes = int(session.get("n_holes") or 18)
@@ -293,7 +316,9 @@ def compute_match_detail(match: dict, session: dict, course: list[dict],
         low = min(team_vals) if team_vals else 0
         strokes = {}
         for t, th in zip(teams, team_vals):
-            smap = strokes_received(th, low, course, n_holes)
+            smap = strokes_received(
+                th, low, _chapman_course(course, si_by_player, tee_gender, t),
+                n_holes)
             for c in t:
                 strokes[c] = smap
     else:
@@ -880,13 +905,14 @@ def compute_board(dial: dict, session_data: dict,
         marks = {int(k): v for k, v in (data.get("marks") or {}).items()}
         si_by_player = {int(k): {int(h): int(x) for h, x in v.items()}
                         for k, v in (data.get("si_by_player") or {}).items()}
+        tee_gender = {int(k): v for k, v in (data.get("tee_gender") or {}).items()}
         s_out = {"id": sess.get("id"), "label": sess.get("label"),
                  "date": sess.get("date"), "format": sess.get("format"),
                  "points_per_match": win, "matches": [], "skins": None}
         for m in sess.get("matches") or []:
             total += win
             detail = compute_match_detail(m, sess, course, phs, scores, names, marks,
-                                          si_by_player)
+                                          si_by_player, tee_gender)
             state = _match_state(detail)
             ov = match_result_override(m)
             if ov:
@@ -1023,26 +1049,32 @@ def merge_entry_feed(dial: dict, feed: dict) -> dict:
     return out
 
 
-def _tee_stroke_index(conn, course_id, tee) -> dict:
-    """{hole: stroke_index} for a player's tee on the course record. The
-    seat's tee may be a tee NAME ("Teal") or a TGF band ("Forward");
-    lower() on both sides (#682). {} when it can't be resolved."""
+def _tee_info(conn, course_id, tee) -> tuple:
+    """(gender, {hole: stroke_index}) for a player's tee on the course
+    record. The seat's tee may be a tee NAME ("Teal") or a TGF band
+    ("Forward"); lower() on both sides (#682). (None, {}) when it can't
+    be resolved."""
     t = (str(tee or "")).strip().lower()
     if not course_id or not t:
-        return {}
+        return None, {}
     rows = conn.execute(
-        "SELECT tee_id, tee_name, tgf_bands FROM course_tees WHERE course_id = ?",
+        "SELECT tee_id, tee_name, tgf_bands, gender FROM course_tees WHERE course_id = ?",
         (int(course_id),)).fetchall()
     pick = None
     for r in rows:
         if lower_eq(r[1], t) or t in [b.strip().lower() for b in str(r[2] or "").split(",")]:
-            pick = r[0]
+            pick = r
             break
     if pick is None:
-        return {}
-    return {int(h): int(si) for h, si in conn.execute(
+        return None, {}
+    si = {int(h): int(x) for h, x in conn.execute(
         "SELECT hole_number, stroke_index FROM course_tee_holes "
-        "WHERE tee_id = ? AND stroke_index IS NOT NULL", (pick,)).fetchall()}
+        "WHERE tee_id = ? AND stroke_index IS NOT NULL", (pick[0],)).fetchall()}
+    return ((pick[3] or "").upper() or None), si
+
+
+def _tee_stroke_index(conn, course_id, tee) -> dict:
+    return _tee_info(conn, course_id, tee)[1]
 
 
 def lower_eq(a, b) -> bool:
@@ -1060,12 +1092,14 @@ def _attach_player_stroke_index(conn, session_data: dict) -> None:
         if not tees or not cid_course:
             continue
         base = {int(h["hole"]): h.get("stroke_index") for h in data.get("course") or []}
-        cache, out = {}, {}
+        cache, out, genders = {}, {}, {}
         try:
             for cid, tee in tees.items():
                 if tee not in cache:
-                    cache[tee] = _tee_stroke_index(conn, cid_course, tee)
-                si = cache[tee]
+                    cache[tee] = _tee_info(conn, cid_course, tee)
+                gender, si = cache[tee]
+                if gender:
+                    genders[int(cid)] = gender
                 if si and any(si.get(h) != v for h, v in base.items()):
                     out[int(cid)] = si
         except Exception:
@@ -1073,6 +1107,8 @@ def _attach_player_stroke_index(conn, session_data: dict) -> None:
             continue
         if out:
             data["si_by_player"] = out
+        if genders:
+            data["tee_gender"] = genders
 
 
 def _skins_ctx(conn, dial: dict, db_path=None) -> dict:

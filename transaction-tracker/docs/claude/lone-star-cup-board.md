@@ -247,9 +247,17 @@ the lowest. **Where strokes fall (v2.516.0):** each player takes his
 strokes on the stroke index of the tee he plays (`si_by_player`, read
 from the course record by the seat's tee name or band), so Mary Wade on
 Teal gets hers on Teal's SI 1-3 (holes 4, 16, 9), not the men's (4, 14,
-3). Singles and four-ball; Chapman (one ball, partners possibly on two
-tees) keeps the round's list: open if a Teal player is in a Chapman
-pair.
+3). Singles and four-ball, per player.
+
+**Chapman pairs on two tees (Kerry 2026-09-28, BUILT v2.517.0):** WHS
+sets each partner's course handicap and the 60/40 team allowance, and
+the Rules of Golf let the Committee set each partner's tees, but which
+stroke-index table a mixed pair plays on is left to the Committee. TGF's
+term of competition: **a pair takes its strokes on the men's stroke
+index when either partner plays a men's tee, and on the women's when
+both play women's tees.** The tee's gender comes from the course record
+(`tee_gender`, beside `si_by_player`); tees that can't be resolved keep
+the round's list.
 
 ## Handicaps and races (Kerry, CA #787 items 1–2)
 

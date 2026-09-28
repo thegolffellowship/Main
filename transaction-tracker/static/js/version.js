@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.516.1";
+window.TGF_VERSION = "2.517.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.517.0",
+    date: "2026-09-28",
+    title: "Lone Star Cup: a Chapman pair on two tees takes strokes on the men's holes",
+    changes: [
+      "Kerry 2026-09-28, a TGF term of competition: a Chapman pair takes its handicap strokes on the MEN'S stroke index when either partner plays a men's tee, and on the WOMEN'S when both play women's tees. WHS sets each partner's course handicap and the 60/40 team allowance, but leaves which table a mixed pair uses to the Committee. The board reads each seat's tee gender from the course record; a tee it can't resolve keeps the round's list. At The Hideout this means Mary Wade's Chapman pair takes strokes on the men's holes, and two women paired together at a future event would use the women's.",
+    ],
+  },
   {
     version: "2.516.1",
     date: "2026-09-28",

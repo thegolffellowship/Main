@@ -836,11 +836,11 @@ def test_player_stroke_index_resolves_tee_name_or_band(tmp_path):
     from email_parser.lsc_cup import _attach_player_stroke_index
     conn = sqlite3.connect(tmp_path / "c.db")
     conn.execute("CREATE TABLE course_tees (tee_id INTEGER, course_id INTEGER, "
-                 "tee_name TEXT, tgf_bands TEXT)")
+                 "tee_name TEXT, tgf_bands TEXT, gender TEXT)")
     conn.execute("CREATE TABLE course_tee_holes (tee_id INTEGER, hole_number INTEGER, "
                  "par INTEGER, yardage INTEGER, stroke_index INTEGER)")
-    conn.executemany("INSERT INTO course_tees VALUES (?,?,?,?)",
-                     [(1, 65112, "Blue", "<50"), (2, 65112, "Teal", "Forward")])
+    conn.executemany("INSERT INTO course_tees VALUES (?,?,?,?,?)",
+                     [(1, 65112, "Blue", "<50", "M"), (2, 65112, "Teal", "Forward", "F")])
     for tid, si in ((1, _MEN_SI), (2, _TEAL_SI)):
         conn.executemany("INSERT INTO course_tee_holes VALUES (?,?,?,?,?)",
                          [(tid, h, 4, 400, si[h - 1]) for h in range(1, 19)])
@@ -852,3 +852,29 @@ def test_player_stroke_index_resolves_tee_name_or_band(tmp_path):
     si = data["sun"]["si_by_player"]
     assert set(si) == {23, 30}                 # men's-tee and unknown: round list
     assert si[23][9] == 3 and si[30][16] == 2
+    assert data["sun"]["tee_gender"] == {7: "M", 23: "F", 30: "F"}
+
+
+def _chapman_pops(tee_gender, si_by_player):
+    from email_parser.lsc_cup import compute_match_detail
+    course = [{"hole": h, "par": 4, "stroke_index": _MEN_SI[h - 1]} for h in range(1, 19)]
+    sess = {"id": "pm", "format": "chapman", "n_holes": 18}
+    m = {"id": "C1", "austin": [1, 2], "sa": [23, 24]}
+    # SA pair 60/40 of (5, 5) = 5 strokes more than Austin's (0)
+    phs = {1: 0, 2: 0, 23: 5, 24: 5}
+    d = compute_match_detail(m, sess, course, phs, {}, si_by_player=si_by_player,
+                             tee_gender=tee_gender)
+    return sorted(int(h) for h in (d["strokes"].get(23) or d["strokes"]["23"]))
+
+
+def test_chapman_mixed_pair_takes_strokes_on_the_mens_holes():
+    # Kerry 2026-09-28: a man-and-woman Chapman pair plays on the men's
+    # stroke index; two women play on the women's.
+    teal = {h: _TEAL_SI[h - 1] for h in range(1, 19)}
+    mixed = _chapman_pops({1: "M", 2: "M", 23: "F", 24: "M"}, {23: teal})
+    assert mixed == [3, 4, 7, 14, 17]                    # men's SI 1-5
+    two_women = _chapman_pops({1: "M", 2: "M", 23: "F", 24: "F"},
+                              {23: teal, 24: teal})
+    assert two_women == [3, 4, 9, 11, 16]                # Teal SI 1-5
+    unknown = _chapman_pops({}, {23: teal})
+    assert unknown == [3, 4, 7, 14, 17]                  # round's list
