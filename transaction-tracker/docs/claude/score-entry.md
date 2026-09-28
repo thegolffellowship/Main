@@ -694,7 +694,7 @@ any seat with no customer_id, no tee or no PH. It writes nothing. With `apply` i
 runs `seed_round_from_pairings` and returns the round id and one link per group.
 The member switches (`score_entry_live`, `score_entry_qr`) are never touched.
 
-## Lone Star Cup seeding (v2.516.2, Track B #875/#876)
+## Lone Star Cup seeding (v2.517.1, Track B #875/#876)
 
 `scoring-se-cup-seed:<event_id>[|apply]` reads the `lsc_matches` dial and
 `lsc_tees`. It makes one round per session (key `pairings_holes = 'lsc:<session id>'`)
