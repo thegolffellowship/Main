@@ -1,5 +1,11 @@
-window.TGF_VERSION = "2.513.9";
+window.TGF_VERSION = "2.513.10";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.513.10",
+    date: "2026-09-28",
+    title: "Docs: RSVP matcher note carries the right version",
+    changes: ["Docs only: events.md's note on the RSVP first-name identity guard named v2.513.7; the release was v2.513.9."],
+  },
   {
     version: "2.513.9",
     date: "2026-09-28",

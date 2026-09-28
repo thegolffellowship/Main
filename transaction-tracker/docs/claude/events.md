@@ -846,7 +846,7 @@ with the frontend's `unmatchedPlaying` filter (including the
 matched-but-different-email branch) or mis-matched players silently
 lose their Credit badge. Regression: `test_rsvp_credit_map.py`.
 
-**The matcher itself now refuses the cross-person pin (v2.513.7, s9.25
+**The matcher itself now refuses the cross-person pin (v2.513.9, s9.25
 Canyon Springs):** `match_rsvp_to_item`'s first-name fallback returns
 the single "<first name>%" item ONLY when the RSVP's email does not
 resolve to a DIFFERENT customer_id than the item's, and the two emails do
