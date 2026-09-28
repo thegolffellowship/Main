@@ -211,8 +211,8 @@ def g2a_parity(event_name: str, db_path=None) -> dict:
     board = None
     if (out["tiers"].get("players") or {}).get("status") == "graded":
         sid = out["tiers"]["players"]["session_id"]
-        board = (db.ls_leaderboard(sid, db_path=db_path) if db_path
-                 else db.ls_leaderboard(sid))
+        board = (db.ls_leaderboard(sid, db_path=db_path, pin_flights=True)
+                 if db_path else db.ls_leaderboard(sid, pin_flights=True))
         if board.get("error"):
             board = None
     gg_mvp = _gg_recorded_mvp(event_name, db_path)
@@ -227,6 +227,12 @@ def g2a_parity(event_name: str, db_path=None) -> dict:
 
     # ── tier 3: PURSES, our matrix assembly vs GG's recorded purse ──
     out["tiers"]["purses"] = _diff_purses(gg, event_name, db_path)
+    if board is not None:
+        st = (db.ls_build_state(sid, db_path=db_path) if db_path
+              else db.ls_build_state(sid))
+        eng = (db.engine_game_payouts(event_name, db_path=db_path, state=st)
+               if db_path else db.engine_game_payouts(event_name, state=st))
+        out["tiers"]["purses"]["engine"] = _grade_engine_purses(gg, eng)
 
     # ── tier 4: RACES — descoped to G2c by CA (#682); reported, not blocking ──
     out["tiers"]["races"] = {
@@ -522,6 +528,68 @@ def _diff_purses(gg: dict, event_name: str, db_path) -> dict:
     }
 
 
+ENGINE_PURSE_GAMES = ("individual_net", "individual_gross", "skins")
+
+
+def _grade_engine_purses(gg: dict, eng: dict) -> dict:
+    """Our ENGINE's payouts (flight board AMOUNTS x engine results, flights
+    pinned from the frozen selection) vs GG's posted purses, per player per
+    game, to the cent. Unlike the matrix-assembly totals above this is an
+    independent computation — nothing on our side is copied from GG — so a
+    match here is a real result. A2(ii) applies: a TIED row may land
+    $0.01-$0.02 under GG because ours sums to the pot; that is EXPLAINED,
+    anything else is a mismatch."""
+    if eng.get("error"):
+        return {"status": "error", "error": eng["error"]}
+    games = {}
+    gg_rows = gg.get("results") or []
+    for game in ENGINE_PURSE_GAMES:
+        ours = (eng.get("games") or {}).get(game)
+        theirs = [r for r in gg_rows if r.get("game") == game
+                  and (r.get("purse") or 0) > 0]
+        if not ours or ours.get("status") in ("not_running",):
+            if theirs:
+                games[game] = {"status": "mismatch", "diffs": [
+                    f"GG paid {game}; our flight board has it not running"]}
+            continue
+        gg_by, gg_name = {}, {}
+        for r in theirs:
+            k = r.get("customer_id") or _norm_name(r.get("player_name"))
+            gg_by[k] = round(gg_by.get(k, 0.0) + float(r["purse"]), 2)
+            gg_name[k] = r.get("player_name")
+        our_by, our_name, tied = {}, {}, set()
+        for r in ours.get("rows") or []:
+            k = r.get("customer_id") or _norm_name(r.get("name"))
+            our_by[k] = round(our_by.get(k, 0.0) + float(r["amount"]), 2)
+            our_name[k] = r.get("name")
+            if "(T)" in (r.get("detail") or ""):
+                tied.add(k)
+        diffs, explained = [], []
+        for k in sorted(set(gg_by) | set(our_by), key=str):
+            a, b = our_by.get(k, 0.0), gg_by.get(k, 0.0)
+            if abs(a - b) < 0.005:
+                continue
+            who = our_name.get(k) or gg_name.get(k) or k
+            if k in tied and 0 < round(b - a, 2) <= 0.02:
+                explained.append(f"{who}: ours ${a:.2f}, GG ${b:.2f} "
+                                 f"({RESIDUAL_TIED_PAYOUT_ROUNDING})")
+            else:
+                diffs.append(f"{who}: ours ${a:.2f}, GG ${b:.2f}")
+        games[game] = {
+            "status": "mismatch" if diffs else "match",
+            "engine_status": ours.get("status"),
+            "flight_source": ours.get("flight_source"),
+            "variant": ours.get("variant"),
+            "ours_total": ours.get("total"), "gg_total": round(sum(gg_by.values()), 2),
+            "unallocated": ours.get("unallocated") or [],
+            "diffs": diffs, "explained": explained}
+    return {"status": "graded", "games": games,
+            "board_state": eng.get("board_state"),
+            "note": ("Engine payouts: the flight board's AMOUNTS applied to "
+                     "our engine's results with the frozen flights pinned. "
+                     "Independent of GG, so this grades.")}
+
+
 def _verdict(out: dict) -> dict:
     """PASS only when everything gradeable passed AND nothing is blocked.
 
@@ -539,11 +607,16 @@ def _verdict(out: dict) -> dict:
     g = out["tiers"].get("games") or {}
     bad = sorted(k for k, v in (g.get("games") or {}).items()
                  if v.get("graded") and v.get("status") == "mismatch")
+    ep = ((out["tiers"].get("purses") or {}).get("engine") or {}).get("games") or {}
+    bad += sorted(f"purse:{k}" for k, v in ep.items()
+                  if v.get("status") == "mismatch")
     if bad:
+        def _why(k):
+            if k.startswith("purse:"):
+                return f"{k}: " + " | ".join(ep[k[6:]].get("diffs") or [])
+            return f"{k}: " + " | ".join(g["games"][k].get("diffs") or [])
         return {"result": "FAIL",
-                "why": "game(s) differ from GG: " + "; ".join(
-                    f"{k}: " + " | ".join(g["games"][k].get("diffs") or [])
-                    for k in bad)}
+                "why": "differ from GG: " + "; ".join(_why(k) for k in bad)}
     if out["blockers"]:
         return {"result": "INCOMPLETE",
                 "why": "; ".join(out["blockers"]),

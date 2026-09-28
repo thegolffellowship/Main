@@ -1808,6 +1808,7 @@ def _scoring_dispatch_inner(url: str, extract: str):
       scoring-closeout-final:<event name or id>  READ-ONLY "results are final" test for the closeout: names every blocker (GG era: cards = field, identity, boards with purses, payouts; entry era: cards closed + signed, published, HIO settled, payouts)
       scoring-pairings-entry:<event name or id>[|apply]  pairing history from the score-entry groups (no-shows and blinds never pair; seats 1&2 / 3&4 rode); shadow diff vs GG pairs before the entry-record cutover, writes source='entry' after it
       scoring-recap-draft-email:<file>|<SECTION>[|to=..][|cc=..][|docx=<file>][|force][|apply]  mail one chapter's recap draft (docs/claude/recaps/<file>) to its sender as paste-ready HTML + the Word file; staff addresses only, once per file+section+recipients, dry run by default
+      scoring-event-day-email:<event_id>[|preview[|<staff addr>]]  the EVENT-DAY EMAIL (CA #829): dry build of every roster player's pairing message (ready / held with reasons, template hash, approval state, one sample); |preview mails ONE combined preview to STAFF only (default kerry@). There is NO member-send bridge
       scoring-hcp-cards:<event>[|apply]  email the TGF handicap card to every player on the event's roster who has one (dry run names who would get one; apply sends and logs to message_log)
       scoring-tee-bands:<course_id>   which four sets TGF plays (current designation + the yardage-standards proposal; read-only)
       scoring-tee-bands-set:<tee_id>|<band[,band]|hide>[|apply]  designate a tee set (<50 / 50-64 / 65+ / Forward) or hide it; one set per band per course
@@ -1821,6 +1822,7 @@ def _scoring_dispatch_inner(url: str, extract: str):
       scoring-flights-mode:<event_id>|<game>|<equal_size|fixed_bands|default>  the CUT toggle per game (Kerry 2026-09-22); LIVE boards only; clears custom moves
       scoring-flights-move:<event_id>|<game>|<customer_id>|<flight_no>  move one player to another flight → CUSTOM (#599); dropping him back on his rule flight clears the move
       scoring-flights-close:<event_id>[|apply]  the CLOSEOUT step: a played event's board to SETTLED (frozen first if LIVE); dry run by default; the hourly sync runs it itself
+      scoring-engine-payouts:<event name>  Ind Net / Gross + Skins (gross or ½ Net) paid by OUR engine under the flight board's frozen selection, beside GG's purses; read-only, writes nothing (CA #829)
       scoring-flights-board:<event_id>  the DIVISIONS/FLIGHTS board as data — ratified flighting + payout rules (SELECTION and AMOUNTS layers) beside what GG recorded; dry run, read-only
       scoring-pairings-counts:<event_id>[|<year>]  saved sheet scored against played history: times each pair has played together this year INCLUDING this event
       scoring-entry-publish:<event_id>[|<round_id>][|apply]  G-0 (CA #786 GO 1): closed + signed entered cards -> scoring_rounds source='entry' when the event is entry-authoritative (no GG rows, on/after entry_record_from); a GG event writes nothing and returns the parity diff; dry run by default
@@ -2071,6 +2073,24 @@ def _scoring_dispatch_inner(url: str, extract: str):
             # against GG compares GG to itself. See g2a_parity.__doc__.
             from email_parser.g2a_parity import g2a_parity
             return json.dumps(g2a_parity(arg.strip()), indent=2, default=str)
+        if cmd == "scoring-engine-payouts":
+            # "scoring-engine-payouts:<event name>" (CA #829 GO): Individual
+            # Net / Gross and Skins (gross or ½ Net) PAID BY OUR ENGINE —
+            # the flight board's frozen SELECTION pins each game's flights,
+            # its AMOUNTS pay the places, the engine ranks the event's
+            # scorecards. READ-ONLY: built in memory, writes nothing, pays
+            # nothing, and is NOT wired into payout recording (that needs
+            # Kerry's OK). Beside it, GG's posted purses for comparison.
+            ev_name = arg.strip()
+            eng = db.engine_game_payouts(ev_name)
+            gg = db.get_gg_game_results(ev_name)
+            eng["gg_purses"] = [
+                {"game": r.get("game"), "player": r.get("player_name"),
+                 "customer_id": r.get("customer_id"), "purse": r.get("purse")}
+                for r in (gg.get("results") or [])
+                if (r.get("purse") or 0) > 0 and r.get("game") in
+                ("individual_net", "individual_gross", "skins")]
+            return json.dumps(eng, indent=2, default=str)
         if cmd == "scoring-parity":
             return json.dumps(db.get_differential_parity(), indent=2)
         if cmd == "scoring-mvp-import":
@@ -5864,6 +5884,25 @@ def _scoring_dispatch_inner(url: str, extract: str):
                                     dry_run="apply" not in _flags,
                                     force="force" in _flags)
             return json.dumps(_res, indent=2, default=str)
+        if cmd == "scoring-event-day-email":
+            # "<event_id>[|preview[|<staff addr>]]" — CA #829. The dry build
+            # sends nothing; |preview mails one combined preview to staff
+            # (@thegolffellowship.com or recap_draft_allow) and refuses any
+            # other address. The MEMBER send is deliberately not bridged:
+            # it needs Kerry's approval stamp + confirm, in code.
+            _p = [x.strip() for x in (arg or "").split("|")]
+            if not _p[0].isdigit():
+                return json.dumps({"error": "<event_id>[|preview[|<staff addr>]]"})
+            from email_parser import event_day_email as _ede
+            if len(_p) > 1 and _p[1].lower() == "preview":
+                db.log_agent_action("mcp-claude", "scoring-event-day-email", arg)
+                return json.dumps(_ede.send_event_day_preview(
+                    int(_p[0]), to_address=(_p[2] if len(_p) > 2 and _p[2] else None)),
+                    indent=2, default=str)
+            if len(_p) > 1 and _p[1]:
+                return json.dumps({"error": f"unknown option {_p[1]!r}; only |preview"})
+            return json.dumps(_ede.summarize(_ede.build_event_day_emails(int(_p[0]))),
+                              indent=2, default=str)
         if cmd == "scoring-hcp-cards":
             # "<event>[|apply]" — the Handicaps page's By-Event card send as
             # a bridge (Kerry 2026-09-23), so the closeout can run it.

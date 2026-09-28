@@ -1,11 +1,51 @@
-window.TGF_VERSION = "2.511.1";
+window.TGF_VERSION = "2.513.1";
 window.TGF_CHANGELOG = [
   {
-    version: "2.511.1",
+    version: "2.513.1",
     date: "2026-09-28",
     changes: [
       "scoring-closeout-final read s9.24 Brackenridge as not final because Golf Genius\u2019s full Team Net standings list the non-paying places at $0. A game now blocks only when none of its rows carries a purse (money not entered on GG yet), and the full-standings boards never count. Verified live: Brackenridge and Teravista both read final.",
     ],
+  },
+  {
+    version: "2.513.0",
+    date: "2026-09-28",
+    title: "Event-day email: each player's pairing from the Tracker (built, not yet approved)",
+    changes: [
+      "CA #829 GO: Golf Genius goes away after 10/10, and it is what mails each player their pairing on event day. email_parser/event_day_email.py builds one message per roster player: their start as the Starter Sheet states it, their group-mates, their cart partner, the course and date, the chapter manager, and which game bundles they bought (the Games tab's own buyer rule; left out, never guessed, when it can't be read). The wording is the system template 'Event Day — Your Pairing', editable in the UI.",
+      "Any message with a blank, a leftover {tag} or a [BRACKETED BLANK] is HELD with its reason and never reaches Graph, as are players with no email, no customer_id, or no seat on a saved sheet. A preview mails to staff only (kerry@ by default). The member send refuses unless app setting event_day_email_approved carries the current template's hash (Kerry's approval, voided by any edit) and confirm is passed, and it records one row per event + customer in event_day_email_sends so nobody is mailed twice. Nobody has approved it and nothing schedules it.",
+      "Bridges: scoring-event-day-email:<event_id> (dry build) and scoring-event-day-email:<event_id>|preview[|<staff addr>]. There is no member-send bridge. Test: test_event_day_email.py.",
+    ],
+  },
+  {
+    version: "2.512.1",
+    date: "2026-09-28",
+    title: "Individual Net and Gross rank on stroke score, not Stableford points",
+    changes: [
+      "The last s9.24 Brackenridge G2a difference was an engine defect, not a tie rule. The ratified spec (side-games.md, 'Individual Net \u2014 definition v1') says Format: Stroke (not Stableford), and the config already said format 'stroke'. But game_individual ranked on Stableford points. Points cap a blow-up hole, so two players on the same net score came apart: Fehlis and Marroquin both shot net 34, GG had them T1 at $29.25 each, and we had Marroquin 1st on points. Individual Net now ranks on the lowest net score and Individual Gross on the lowest gross. Equal scores tie and split (CA #832, dial tiebreak 'none').",
+    ],
+  },
+  {
+    version: "2.512.0",
+    date: "2026-09-28",
+    title: "Engine payouts from the frozen flight selection (read-only) and pinned skins flights",
+    changes: [
+      "CA #829 GO, Side Games: Individual Net, Individual Gross and Skins (gross or ½ Net) can now be paid by OUR engine under the ratified flight rules. The flight board's SELECTION (settled, frozen, or live) pins each game's flights; its AMOUNTS pay the places; the engine ranks the event's own scorecards, built in memory with no writes. Ties pool and split, skins pay per skin per flight, a flight with no skin reports its pot as unallocated rather than guessing, and an incomplete card leaves the game provisional. Read it with the bridge scoring-engine-payouts:<event name>, with GG's purses beside ours.",
+      "Skins flight membership is now pinned from the selection. The #815 failure at s9.24 Brackenridge was ours: the engine split the 10 skins buyers into equal halves by playing handicap, while the ratified rule, and GG, cut at index 12.0. Under the frozen flights, GG's skins purses come out to the cent ($65 / $26 / $26 / $13).",
+      "G2a now grades these engine payouts against GG's posted purses per player, to the cent (tiers.purses.engine). Our side no longer copies GG, so this is a real test.",
+      "Individual Net and Individual Gross places have NO tiebreak (CA #832, from Season Contest Payouts v1.1 \u00a73.2/\u00a710 and Side Games Rules v1.0, where only City MVP has one). Equal Stableford points are a tie, and the tied places' money pools and splits, as GG does: 3309 Fehlis and Marroquin are T1 at $29.25 each. Before this, the engine broke the tie on the stroke score. The rule is the dial games.individual_net/individual_gross.tiebreak = 'none'.",
+      "NOT wired into payout recording: assemble_event_game_payouts still uses GG purses and then the legacy ladder. Switching events GG doesn't score (from 10/13) over to engine payouts is the money step, and it waits for Kerry's OK.",
+    ],
+  },
+  {
+    version: "2.511.1",
+    date: "2026-09-28",
+    title: "Score entry: CTP holes from the games matrix, Longest Putt, manager runbook",
+    changes: [
+      "CA #829 GO: the phone asks closest-to-the-pin only on the holes the games matrix plays, read from the same ratified rule the proximity markers print from (event_proximity_report). The matrix at the field size decides how many CTPs are funded (none below 16 on a nine), the shortest par 3s take them, and a slot with no par 3 left becomes a Longest Putt on the last hole, with its own question: 'Did anyone in your group hole a long putt?'. A claim on any other hole is refused. With no course hole card, every par 3 is asked, as before, and the source says so.",
+      "New one-page manager runbook, docs/claude/sop/score-entry-manager-runbook.md: seed from pairings, links and QR, take-over, what to do when a phone dies, finishing and closing, the paper fallback, and what still needs Kerry.",
+      "The se_* guard now looks for SQL use, not a mention in a comment, and the replay harness reads refused writes through score_entry (refused_writes_kept)."
+    ]
   },
   {
     version: "2.511.0",

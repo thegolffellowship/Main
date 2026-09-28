@@ -775,3 +775,129 @@ def _delta(before_fl, after_fl, before_am, after_am, added, dropped,
         "flights": flights,
         "changed": bool(added or dropped or any(f["changed"] for f in flights)),
     }
+
+
+# ---------------------------------------------------------------------------
+# PAYOUTS: the board's AMOUNTS applied to the engine's RESULTS
+# ---------------------------------------------------------------------------
+
+def payouts_from_results(entry: dict, result: dict | None) -> dict:
+    """One game's payout rows from the flight board and the engine's board.
+
+    `entry` is one game of a flight board (`build` / `settle`): its
+    SELECTION fixed who is in which flight (the engine was run with those
+    flights pinned, so the engine's flight labels ARE the flight numbers)
+    and its AMOUNTS say what each flight pays. `result` is the engine's
+    result for the same game (`live_scoring.game_individual` /
+    `game_skins`). Pure: no DB, no rounding outside `split_exact`.
+
+    Individual Net / Gross: each flight's places pay down the engine's
+    competition ranking; a tie pools the tied places' money and splits it
+    evenly (`tie_split`, the ratified rule). Whether equal POINTS are a tie
+    or are broken on the stroke score is the ENGINE's ranking key — that
+    question is with Kerry (#815) and is not decided here.
+    Individual Gross also pays the Overall Low Gross bonus to the lowest
+    gross score in the whole field (tie: split).
+    Skins: each flight's pot is divided by the skins won in that flight and
+    paid per skin. A flight where nobody won a skin pays nothing and says
+    so — what happens to that money is not a ratified rule, so it is
+    reported as UNALLOCATED, never guessed.
+
+    Returns {game, status, rows: [{customer_id, name, flight_no, amount,
+    detail}], unallocated, notes, total, sum_check}. status is 'paid',
+    'provisional' (a card in the game is not complete) or 'not_running'.
+    """
+    game = entry.get("game")
+    out = {"game": game, "status": "paid", "rows": [], "unallocated": [],
+           "notes": [], "total": 0.0, "sum_check": True}
+    amounts = entry.get("amounts")
+    if not entry.get("active") or not amounts:
+        out["status"] = "not_running"
+        out["notes"].append(entry.get("inactive_reason")
+                            or f"{game} is not running")
+        return out
+    if not result or result.get("active") is False:
+        out["status"] = "no_result"
+        out["notes"].append(f"the engine did not run {game}")
+        return out
+    by_label = {str(f["flight"]): f for f in result.get("flights") or []}
+    provisional = False
+    pot_total = 0.0
+    for af in amounts.get("flights") or []:
+        no = af["flight_no"]
+        ef = by_label.get(str(no))
+        pot_total += float(af.get("pot") or 0.0)
+        if ef is None:
+            out["unallocated"].append({"flight_no": no, "amount": af.get("pot"),
+                                       "why": "the engine has no such flight"})
+            continue
+        provisional = provisional or bool(ef.get("provisional"))
+        if game == "skins":
+            skins = ef.get("skins") or []
+            if not skins:
+                if (af.get("pot") or 0) > 0:
+                    out["unallocated"].append({
+                        "flight_no": no, "amount": af["pot"],
+                        "why": "no skin won in this flight"})
+                continue
+            per = split_exact(af["pot"], [1.0] * len(skins))
+            won: dict = {}
+            for sk, amt in zip(sorted(skins, key=lambda s: s["hole"]), per):
+                w = won.setdefault(sk["key"], {
+                    "customer_id": sk.get("customer_id"), "name": sk["winner"],
+                    "flight_no": no, "amount": 0.0, "holes": []})
+                w["amount"] = round(w["amount"] + amt, 2)
+                w["holes"].append(sk["hole"])
+            for w in won.values():
+                w["detail"] = (f"Skins F{no} ×{len(w['holes'])} holes "
+                               + ", ".join(str(h) for h in w["holes"]))
+                out["rows"].append(w)
+            continue
+        places = [float(p["amount"]) for p in af.get("places") or []]
+        rows = ef.get("rows") or []
+        by_place: dict = {}
+        for r in rows:
+            by_place.setdefault(r["place"], []).append(r)
+        for place in sorted(by_place):
+            if place > len(places):
+                break
+            tied = by_place[place]
+            shares = tie_split(places, place, len(tied))
+            for r, amt in zip(sorted(tied, key=lambda r: r["name"] or ""), shares):
+                if amt <= 0:
+                    continue
+                t = " (T)" if len(tied) > 1 else ""
+                out["rows"].append({
+                    "customer_id": r.get("customer_id"), "name": r["name"],
+                    "flight_no": no, "amount": amt, "place": place,
+                    "detail": f"F{no} place {place}{t}"})
+    if game == "individual_gross" and (amounts.get("bonus") or 0) > 0:
+        pot_total += float(amounts["bonus"])
+        field = [r for f in result.get("flights") or [] for r in f["rows"]
+                 if r.get("gross") is not None and r.get("thru")]
+        if field:
+            low = min(r["gross"] for r in field)
+            winners = sorted((r for r in field if r["gross"] == low),
+                             key=lambda r: r["name"] or "")
+            for r, amt in zip(winners, split_exact(amounts["bonus"],
+                                                   [1.0] * len(winners))):
+                out["rows"].append({
+                    "customer_id": r.get("customer_id"), "name": r["name"],
+                    "flight_no": None, "amount": amt,
+                    "detail": f"{amounts.get('bonus_label') or 'Overall Low Gross'}"
+                              f"{' (T)' if len(winners) > 1 else ''}"})
+        else:
+            out["unallocated"].append({"flight_no": None,
+                                       "amount": amounts["bonus"],
+                                       "why": "no gross score to award"})
+    out["total"] = round(sum(r["amount"] for r in out["rows"]), 2)
+    left = round(sum(float(u["amount"] or 0) for u in out["unallocated"]), 2)
+    out["sum_check"] = abs(out["total"] + left - round(pot_total, 2)) < 0.005
+    if not out["sum_check"]:
+        out["notes"].append(f"paid ${out['total']:.2f} + unallocated "
+                            f"${left:.2f} != pot ${pot_total:.2f}")
+    if provisional:
+        out["status"] = "provisional"
+        out["notes"].append("a card in this game is not complete — "
+                            "provisional, not payable")
+    return out
