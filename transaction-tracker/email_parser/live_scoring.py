@@ -1115,7 +1115,8 @@ def game_handicaps(cards: list[dict], handicap_cfg: dict | None,
 
 def game_skins(cards: list[dict], cfg: dict, holes_key: str,
                strokes_override: dict | None = None,
-               pins: dict | None = None) -> dict:
+               pins: dict | None = None,
+               variant_name: str | None = None) -> dict:
     """Skins — computed as the VARIANT the side-games matrix actually selects.
 
     The buyer count decides which game is played, not merely how big the pot
@@ -1137,6 +1138,21 @@ def game_skins(cards: list[dict], cfg: dict, holes_key: str,
     gc = cfg["games"]["skins"]
     field = _eligible(cards, gc["eligibility"])
     variant = select_variant(gc, holes_key, len(field))
+    # A FROZEN selection froze the game too (B5, #572: "settlement
+    # recomputes amounts only — never structure"): a gross Skins frozen at 8
+    # buyers stays gross when a credited WD drops the count to 7, and a ½ Net
+    # frozen at 7 stays ½ Net when an 8th arrives. The flight board passes
+    # its frozen variant; the buyer count only chooses when nothing froze.
+    if variant_name and variant_name != variant.get("name"):
+        frozen = next((v for v in gc.get("variants") or []
+                       if v.get("name") == variant_name), None)
+        if frozen:
+            variant = dict(frozen)
+            variant["selection"] = {
+                "buyers": len(field), "holes": holes_key, "frozen": True,
+                "reason": (f"frozen selection: {frozen.get('gg_name') or frozen.get('label')} "
+                           f"(the buyer count now, {len(field)}, would select "
+                           f"another form; the freeze holds the game)")}
     hcfg = variant.get("handicap")
     si_by_hole = {}
     for c in field:
@@ -1376,7 +1392,9 @@ def compute_leaderboard(state: dict, formulas: dict,
                 pins=pins.get("individual_gross")),
             "team_net": game_team_net(cards, cfg),
             "skins": game_skins(cards, cfg, holes_key,
-                                pins=pins.get("skins")),
+                                pins=pins.get("skins"),
+                                variant_name=(state.get("variant_pins")
+                                              or {}).get("skins")),
             "mvp": game_mvp(cards, cfg, holes_count),
             "ctp": ctp_slots(state, cfg),
             "hio": game_hio(cards, cfg),

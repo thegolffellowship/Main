@@ -120,6 +120,24 @@ check("the dial says so, for both Individual games",
       cfg["games"]["individual_net"]["tiebreak"] == "none"
       and cfg["games"]["individual_gross"]["tiebreak"] == "none")
 
+print("\n== a frozen skins VARIANT holds when the buyer count crosses 8 (B5) ==")
+def _sk(key, gross_by_hole, ph=10):
+    holes = [{"hole": h, "par": 4, "stroke_index": h, "strokes": g,
+              "strokes_received": 0} for h, g in gross_by_hole.items()]
+    return {"key": key, "customer_id": None, "name": key, "playing_handicap": ph,
+            "course_handicap_unrounded": None, "holes": holes, "thru": 9,
+            "complete": True, "buys_net": True, "buys_gross": True,
+            "is_member": True, "flight": None, "team": None,
+            "stableford_net": 0, "stableford_gross": 0, "net": 0, "gross": 0}
+field7 = [_sk(f"p{i}", {h: 4 for h in range(1, 10)}) for i in range(7)]
+live = ls.game_skins(field7, cfg, "9")
+froze = ls.game_skins(field7, cfg, "9", variant_name="gross")
+check("7 buyers on a nine select ½ Net when nothing froze",
+      live["variant"] != "gross", live["variant"])
+check("a frozen gross Skins stays gross at 7 buyers",
+      froze["variant"] == "gross" and froze["selection"].get("frozen"),
+      froze.get("selection"))
+
 print("\n" + "=" * 60)
 if FAILURES:
     print(f"{len(FAILURES)} FAILED: {FAILURES}")

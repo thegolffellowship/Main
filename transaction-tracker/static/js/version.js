@@ -1,11 +1,19 @@
-window.TGF_VERSION = "2.513.3";
+window.TGF_VERSION = "2.513.4";
 window.TGF_CHANGELOG = [
   {
-    version: "2.513.3",
+    version: "2.513.4",
     date: "2026-09-28",
     changes: [
       "Dress rehearsal on real data (Kerry chose B: the copy never leaves Railway). The rehearsal lanes can now run their steps ON the server against the scratch copy. Each job runs as its own process with no passwords or keys available to it and every outbound connection blocked, one job at a time. A job is either one of the three rehearsal tools (score-entry replay, the scorecard takeover, the Lone Star Cup weekend) with only their listed options, or any Tracker bridge pointed at the copy instead of the live database.",
       "A handicap test that had started failing on 9/22 passes again. The 18-hole index is still exactly twice the 9-hole index; the test was looking in the wrong function after a speed-up moved the calculation behind a short cache.",
+    ],
+  },
+  {
+    version: "2.513.3",
+    date: "2026-09-28",
+    title: "A frozen Skins game stays the game it froze as",
+    changes: [
+      "B5 / #572 freezes the GAME SELECTION with the flights ('settlement recomputes amounts only \u2014 never structure'). The engine re-chose the Skins variant from the live buyer count, so a gross Skins frozen at 8 buyers would have switched to \u00bd Net after one credited WD, and engine payouts would have refused to pay it (variant_mismatch). A frozen or settled flight board now pins the variant (_variant_pins_for \u2192 game_skins(variant_name=)); a LIVE board still lets the buyer count choose. Found while answering CA #838 (live field size).",
     ],
   },
   {
