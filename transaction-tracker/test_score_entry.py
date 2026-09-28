@@ -695,6 +695,22 @@ check("admin: the overview lists every round's groups with a working link and ho
       ov["rounds"] and all(g["url"] and "/member/score?t=" in g["url"] for g in g0)
       and all("holes_in" in g and "players" in g for g in g0), ov["rounds"][:1])
 check("admin: the overview carries the dials", {"live_for_members", "keeper_signs", "qr"} <= set(ov))
+# CA #782: the Score Entry panel on PAIRINGS (QR per group, Close) — admin only
+check("anonymous cannot get a group's QR or close a round",
+      anon.get(f"/api/score-entry/groups/{hgid}/qr.svg").status_code in (401, 403, 302)
+      and anon.post(f"/api/score-entry/rounds/{hrid}/close").status_code in (401, 403, 302))
+q = client.get(f"/api/score-entry/groups/{hgid}/qr.svg")
+check("admin: a group's QR is an SVG of its link", q.status_code == 200
+      and q.mimetype == "image/svg+xml" and b"<svg" in q.data
+      and b'xmlns="http://www.w3.org/2000/svg"' in q.data, q.status_code)
+check("admin: an unknown group has no QR", client.get("/api/score-entry/groups/999999/qr.svg").status_code == 404)
+check("the QR encodes the same link the panel copies", se.group_link(hgid).split("t=", 1)[1] == htok)
+cz = client.post(f"/api/score-entry/rounds/{hrid}/close")
+check("admin: Close closes the round; its link stops opening; the scores are kept",
+      cz.status_code == 200 and anon.get(f"/api/score-entry/card?t={htok}").status_code == 401
+      and se.get_entered_scores(900, hrid)["rounds"][0]["status"] == "closed"
+      and any(p["thru"] for p in se.get_entered_scores(900, hrid)["rounds"][0]["players"]), cz.get_json())
+check("closing an unknown round is a 404", client.post("/api/score-entry/rounds/999999/close").status_code == 404)
 pv = se.create_preview_round(900, [101, 102], holes=18, tees={101: "<50", 102: "65+"})
 se.set_round_matches(pv["round_id"], [{"id": "P-1", "format": "singles", "sides": [[101], [102]]}])
 check("only a PREVIEW round can be started over",

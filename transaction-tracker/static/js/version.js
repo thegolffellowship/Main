@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.507.0";
+window.TGF_VERSION = "2.507.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.507.1",
+    date: "2026-09-28",
+    title: "Score Entry panel on PAIRINGS",
+    changes: [
+      "CA #782, Kerry: the score entry panel on PAIRINGS, before the 9/29 dry run. Admin only, under the PAIRINGS toolbar once the pairings are saved. Seed 9- or 18-hole score entry from the saved pairings (re-run safe; scores are kept). Each group has Open, Copy link and a QR of its link. Each round shows OPEN or CLOSED and how many groups have finished. Close round stops the links and deletes nothing. The members and cart-sign QR switches are shown and stay OFF. No new schema; the bridges stay the fallback."
+    ]
+  },
   {
     version: "2.507.0",
     date: "2026-09-28",
