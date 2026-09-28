@@ -929,6 +929,112 @@ def seed_round_from_pairings(event_id: int, holes: str = "9", *, round_date=None
     return out
 
 
+# ---------------------------------------------------------------------------
+# LONE STAR CUP rounds from the lsc_matches dial (Track B #875/#876). The cup
+# players have no cup orders, so the PAIRINGS seed has no tee_choice to read.
+# Each player's tee comes from the staff setting `lsc_tees` (Kerry 2026-09-28:
+# "check where they normally play"); his PH is WHS off THAT tee through the
+# preview's own pieces (the locked index, the event's tee rows). One round per
+# session, one group per match; the odd player's threesome (Kerry 2026-09-28)
+# is one group holding both his matches. Dry run by default. Binding each
+# session's se_round to the returned round id stays with Track B (the dial).
+# ---------------------------------------------------------------------------
+
+def _json_setting(key: str, db_path=None) -> dict:
+    from email_parser.database import get_app_setting
+    try:
+        raw = get_app_setting(key, db_path) or ""
+        return json.loads(raw) if raw.strip() else {}
+    except (ValueError, TypeError):
+        return {}
+
+
+def cup_seed(event_id: int, *, apply: bool = False, db_path=None) -> dict:
+    dial = _json_setting("lsc_matches", db_path)
+    if int(dial.get("event_id") or 0) != int(event_id):
+        return {"error": f"lsc_matches is not set for event {event_id}"}
+    tees_cfg = (_json_setting("lsc_tees", db_path).get(str(event_id)) or {})
+    by_player = {int(k): v for k, v in (tees_cfg.get("players") or {}).items()}
+    with _closing(_conn(db_path)) as conn:
+        ev = conn.execute("SELECT * FROM events WHERE id = ?", (event_id,)).fetchone()
+        if not ev:
+            return {"error": "no such event"}
+        ev = dict(ev)
+        course_id = tees_cfg.get("course_id") or ev.get("course_id")
+        course = _event_course_holes(conn, {**ev, "course_id": course_id}, 18)
+        sessions_out = []
+        for sess in dial.get("sessions") or []:
+            key = f"lsc:{sess.get('id')}"
+            r = conn.execute("SELECT id, status FROM se_rounds WHERE event_id = ? AND pairings_holes = ? "
+                             "ORDER BY id LIMIT 1", (event_id, key)).fetchone()
+            groups, seat_of = [], {}
+            for m in sess.get("matches") or []:
+                cids = [int(c) for side in ("austin", "sa") for c in (m.get(side) or []) if c]
+                hit = next((seat_of[c] for c in cids if c in seat_of), None)
+                if hit is None:
+                    groups.append({"label": m.get("id"), "tee_time": m.get("tee_time"),
+                                   "matches": [m.get("id")], "cids": []})
+                    hit = len(groups) - 1
+                else:
+                    groups[hit]["matches"].append(m.get("id"))
+                    groups[hit]["label"] = " + ".join(groups[hit]["matches"])
+                for c in cids:
+                    if c not in seat_of:
+                        seat_of[c] = hit
+                        groups[hit]["cids"].append(c)
+            sessions_out.append({"session": sess.get("id"), "label": sess.get("label"),
+                                 "date": sess.get("date"), "format": sess.get("format"),
+                                 "matches": sess.get("matches") or [],
+                                 "existing_round": ({"round_id": r[0], "status": r[1]} if r else None),
+                                 "groups": groups})
+        all_ids = sorted({c for s_ in sessions_out for g in s_["groups"] for c in g["cids"]})
+        names = {}
+        if all_ids:
+            names = {row[0]: row[1] for row in conn.execute(
+                "SELECT customer_id, TRIM(COALESCE(first_name,'') || ' ' || COALESCE(last_name,'')) "
+                f"FROM customers WHERE customer_id IN ({','.join('?' * len(all_ids))})", all_ids)}
+    bands = {c: (by_player.get(c) or {}).get("band") for c in all_ids}
+    hc = _preview_handicaps(event_id, all_ids, {c: b for c, b in bands.items() if b}, 18,
+                            db_path=db_path) if all_ids else {"ph": {}}
+    phs = hc.get("ph") or {}
+    gaps = {"no_tee": [f"{names.get(c, c)} ({c})" for c in all_ids if not bands.get(c)],
+            "no_playing_handicap": [f"{names.get(c, c)} ({c})" for c in all_ids
+                                    if bands.get(c) and phs.get(c) is None],
+            "not_a_customer": [c for c in all_ids if c not in names]}
+    out = {"dry_run": not apply, "event_id": event_id, "course_id": course_id,
+           "course_holes": len(course), "players": len(all_ids),
+           "gaps": {k: v for k, v in gaps.items() if v}, "sessions": []}
+    if hc.get("error"):
+        out["handicaps_error"] = hc["error"]
+    for so in sessions_out:
+        view = {k: so[k] for k in ("session", "label", "date", "format", "existing_round")}
+        view["groups"] = [{"label": g["label"], "tee_time": g["tee_time"],
+                           "players": [{"customer_id": c, "name": names.get(c),
+                                        "band": bands.get(c),
+                                        "tee": (by_player.get(c) or {}).get("tee"),
+                                        "playing_handicap": phs.get(c)} for c in g["cids"]]}
+                          for g in so["groups"]]
+        if apply and not out["gaps"].get("not_a_customer"):
+            rid = so["existing_round"]["round_id"] if so["existing_round"] else create_round(
+                event_id, 18, round_date=so["date"], label=f"{ev.get('item_name') or 'Lone Star Cup'}"
+                f" · {so['label']}", course_holes=course, course_id=course_id,
+                pairings_holes=f"lsc:{so['session']}", created_by="lsc_seed",
+                db_path=db_path)["round_id"]
+            if so["existing_round"] and course:
+                set_course_holes(rid, course, db_path=db_path)
+            for n, g in enumerate(so["groups"], 1):
+                upsert_group(rid, n, label=g["label"], start_hole=1, tee_time=g["tee_time"],
+                             players=[{"customer_id": c, "display_name": names.get(c),
+                                       "tee": bands.get(c), "playing_handicap": phs.get(c),
+                                       "seat": i + 1} for i, c in enumerate(g["cids"])],
+                             db_path=db_path)
+            # The matches come from the dial once Track B binds this round
+            # (session se_round = round_id); round_matches reads them there.
+            view["round_id"] = rid
+        out["sessions"].append(view)
+    return out
+
+
 def _first_hole(ev: dict, n_holes: int) -> int:
     if n_holes == 9 and (ev.get("nine_side") or "").strip().lower() == "back":
         return 10

@@ -1781,6 +1781,7 @@ def _scoring_dispatch_inner(url: str, extract: str):
       scoring-courses              course/tee database listing
       scoring-se-preview:<event_id>|<cid,...>[|apply][|18][|match]  labelled PREVIEW score-entry round + link (admin-only open); 18 = an 18-hole preview, match = a demo singles match per pair (1v2, 3v4)
       scoring-se-seed:<event_id>[|9|18][|apply]  seed score entry from the saved PAIRINGS (dry run by default; re-seed keeps scores)
+      scoring-se-cup-seed:<event_id>[|apply]  Lone Star Cup rounds from lsc_matches, tees from lsc_tees, PH off that tee (dry run by default)
       scoring-se-status:<event_id>  read-only: every score-entry round on the event, holes in, signatures, checks, marks, matches
       scoring-se-links:<round_id>  one score-entry link per group
       scoring-se-close:<round_id>|apply  close a score-entry round (links stop opening; nothing deleted)
@@ -3383,6 +3384,22 @@ def _scoring_dispatch_inner(url: str, extract: str):
             if "error" not in _res:
                 _res["links"] = _se.round_links(_res["round_id"])
                 _audit("scoring-se-seed", f"event {_ev} holes {_holes} round {_res['round_id']}")
+            return json.dumps(_res, indent=2, default=str)
+        if cmd == "scoring-se-cup-seed":
+            # scoring-se-cup-seed:<event_id>[|apply] — Lone Star Cup rounds from
+            # the lsc_matches dial, each player's tee from lsc_tees and his PH
+            # WHS off that tee. Dry run by default; re-seed updates in place.
+            from email_parser import score_entry as _se
+            _ev_s, _, _flag = arg.partition("|")
+            try:
+                _ev = int(_ev_s.strip())
+            except ValueError:
+                return json.dumps({"error": "usage: scoring-se-cup-seed:<event_id>[|apply]"})
+            _apply = _flag.strip().lower() == "apply"
+            _res = _se.cup_seed(_ev, apply=_apply)
+            if _apply and "error" not in _res:
+                _audit("scoring-se-cup-seed", f"event {_ev} rounds "
+                       f"{[x.get('round_id') for x in _res.get('sessions') or []]}")
             return json.dumps(_res, indent=2, default=str)
         if cmd == "scoring-se-status":
             from email_parser import score_entry as _se

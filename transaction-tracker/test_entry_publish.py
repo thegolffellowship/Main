@@ -124,6 +124,10 @@ check("event A is authoritative", dry["mode"] == "authoritative", dry["mode_reas
 r0 = dry["rounds"][0]
 check("nothing eligible while the round is open and unsubmitted",
       r0["would_write"] == [] and len(r0["held"]) == 5, r0)
+check("tees are resolved for held players too (prove tees before play)",
+      sum(t["players"] for t in r0["tees"].values()) == 5
+      and len(r0["tee_unresolved"]) == sum(t["players"] for t in r0["tees"].values()
+                                           if t["tee_id"] is None), r0["tees"])
 
 print("submit group 1's card")
 sub = se.submit_card(g1, "dev1", 201, print_scorer_name="Paper Guy", db_path=DB)

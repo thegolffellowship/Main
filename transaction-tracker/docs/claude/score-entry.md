@@ -693,3 +693,19 @@ locked PH, whether a round for that event+holes already exists, and `gaps` namin
 any seat with no customer_id, no tee or no PH. It writes nothing. With `apply` it
 runs `seed_round_from_pairings` and returns the round id and one link per group.
 The member switches (`score_entry_live`, `score_entry_qr`) are never touched.
+
+## Lone Star Cup seeding (v2.516.2, Track B #875/#876)
+
+`scoring-se-cup-seed:<event_id>[|apply]` reads the `lsc_matches` dial and
+`lsc_tees`. It makes one round per session (key `pairings_holes = 'lsc:<session id>'`)
+and one group per match. A player in two matches in one session (the odd
+player's threesome) is one group holding both matches. `se_players.tee` = the
+player's `lsc_tees` band; PH = WHS off that tee (`_preview_handicaps`, 18 holes,
+locked index). Dry run by default; `gaps` names no tee / no PH / not a customer,
+and apply refuses while any player isn't a customer. Track B binds each session's
+`se_round` to the returned round id. Seed after Kerry's real pairings are in the
+dial; the staged demo should not be applied.
+
+The G-0 publish dry run (`scoring-entry-publish`) resolves EVERY player's tee,
+held or not, and returns `tees: {tee value: {tee_id, players[, why]}}` per round.
+Use it to prove tees after seeding, before anyone plays.

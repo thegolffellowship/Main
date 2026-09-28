@@ -259,6 +259,44 @@ with contextlib.redirect_stdout(io.StringIO()):
     s2 = se.seed_round_from_pairings(900, "9")
 check("re-seed reuses the round", s2["round_id"] == s["round_id"], s2)
 
+print("Lone Star Cup rounds from the dial, tees from lsc_tees (Track B #875/#876)")
+db.set_app_setting("lsc_matches", json.dumps({"event_id": 900, "sessions": [
+    {"id": "sat-am", "label": "Saturday AM", "date": "2026-10-10", "format": "fourball",
+     "se_round": None, "matches": [{"id": "M1", "tee_time": "8:30", "austin": [101, 102], "sa": [103, 104]}]},
+    {"id": "sun", "label": "Sunday", "date": "2026-10-11", "format": "singles", "se_round": None,
+     "matches": [{"id": "S1", "tee_time": "9:00", "austin": [101], "sa": [103]},
+                 {"id": "S2", "tee_time": "9:00", "austin": [102], "sa": [103]},
+                 {"id": "S3", "tee_time": "9:10", "austin": [104], "sa": [106]}]}]}))
+conn.execute("INSERT INTO customers (customer_id, first_name, last_name) VALUES (106, 'Bill', 'Barstow')")
+conn.commit()
+db.set_app_setting("lsc_tees", json.dumps({"900": {"course_id": None, "players": {
+    "101": {"band": "<50", "tee": "Blue"}, "102": {"band": "50-64", "tee": "White"},
+    "103": {"band": "<50", "tee": "Blue"}, "104": {"band": "Forward", "tee": "Teal"}}}}))
+_n0 = conn.execute("SELECT COUNT(*) FROM se_rounds").fetchone()[0]
+with contextlib.redirect_stdout(io.StringIO()):
+    cp = se.cup_seed(900)
+check("cup seed dry run writes nothing", cp.get("dry_run") and
+      conn.execute("SELECT COUNT(*) FROM se_rounds").fetchone()[0] == _n0, cp)
+_sun = next(x for x in cp["sessions"] if x["session"] == "sun")
+check("the odd player's two singles are ONE group (Kerry's threesome)",
+      len(_sun["groups"]) == 2 and sorted(p["customer_id"] for p in _sun["groups"][0]["players"]) == [101, 102, 103]
+      and _sun["groups"][0]["label"] == "S1 + S2", _sun["groups"])
+check("a cup player with no lsc_tees row is named, not guessed",
+      any("(106)" in x for x in cp["gaps"].get("no_tee", [])), cp["gaps"])
+with contextlib.redirect_stdout(io.StringIO()):
+    ca = se.cup_seed(900, apply=True)
+_rids = [x.get("round_id") for x in ca["sessions"]]
+check("cup seed apply: one round per session", all(_rids) and len(set(_rids)) == 2, ca)
+_tees = {r[0]: r[1] for r in conn.execute(
+    "SELECT customer_id, tee FROM se_players WHERE round_id = ?", (_rids[0],))}
+check("each cup player's tee is his lsc_tees band", _tees == {101: "<50", 102: "50-64", 103: "<50", 104: "Forward"}, _tees)
+with contextlib.redirect_stdout(io.StringIO()):
+    ca2 = se.cup_seed(900, apply=True)
+check("cup re-seed reuses the rounds", [x.get("round_id") for x in ca2["sessions"]] == _rids, ca2)
+check("cup seed refuses another event's dial", "error" in se.cup_seed(901))
+db.set_app_setting("lsc_matches", "")
+db.set_app_setting("lsc_tees", "")
+
 print("sign-off, flags, CTP, HIO (Kerry #666, ratified #667)")
 conn.execute("INSERT INTO customers (customer_id, first_name, last_name) VALUES (105, 'Mark', 'Stich')")
 conn.execute("INSERT INTO customer_memberships (customer_id, started_at, expires_at) "

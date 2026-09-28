@@ -296,7 +296,7 @@ def _publish_round(conn, ev: dict, rnd: dict, mode: str, apply: bool, db_path=No
     key = "written" if write else "would_write"
     out = {"round_id": rid, "label": rnd.get("label"), "date": rnd.get("date"),
            "holes": rnd.get("holes"), "status": rnd.get("status"),
-           key: [], "held": [], "tee_unresolved": [], "stale": []}
+           key: [], "held": [], "tee_unresolved": [], "stale": [], "tees": {}}
     if _is_preview(rnd):
         out["held"] = [{"customer_id": p.get("customer_id"), "name": p.get("name"),
                         "reason": "preview (test) round, never published"}
@@ -324,6 +324,15 @@ def _publish_round(conn, ev: dict, rnd: dict, mode: str, apply: bool, db_path=No
             if unl:
                 ok, why = False, (f"an unlinked Golf Genius card (scoring round {unl[0]}) "
                                   "exists for him on this date; link or remove it first")
+        # Every player's tee is resolved, held or not, so a lane can prove the
+        # tees BEFORE the round is played (Track A, 3304 on 9/28). Read-only.
+        tee = _resolve_tee(conn, ev, course_id, p.get("tee"), is18, side)
+        out["tees"].setdefault(str(p.get("tee")), {"tee_id": tee["tee_id"], "players": 0,
+                                                   **({"why": tee["note"]} if tee["tee_id"] is None else {})})
+        out["tees"][str(p.get("tee"))]["players"] += 1
+        if tee["tee_id"] is None:
+            out["tee_unresolved"].append({"customer_id": cid, "name": name,
+                                          "tee": p.get("tee"), "why": tee["note"]})
         if not ok:
             out["held"].append({"customer_id": cid, "name": name, "reason": why})
             prev = _existing_entry_row(conn, agg, cid) if cid else None
@@ -338,10 +347,6 @@ def _publish_round(conn, ev: dict, rnd: dict, mode: str, apply: bool, db_path=No
         gross = sum(scores[h] for h in use_holes)
         ph = p.get("playing_handicap")
         net = (gross - ph) if ph is not None else None
-        tee = _resolve_tee(conn, ev, course_id, p.get("tee"), is18, side)
-        if tee["tee_id"] is None:
-            out["tee_unresolved"].append({"customer_id": cid, "name": name,
-                                          "tee": p.get("tee"), "why": tee["note"]})
         row = {"customer_id": cid, "player_name": name, "event_id": ev["id"],
                "round_date": round_date, "course_id": course_id, "tee_id": tee["tee_id"],
                "tee": p.get("tee"), "holes_played": len(use_holes),

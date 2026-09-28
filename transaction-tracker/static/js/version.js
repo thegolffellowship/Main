@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.517.0";
+window.TGF_VERSION = "2.517.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.517.1",
+    date: "2026-09-28",
+    title: "Lone Star Cup rounds seed each player's tee from lsc_tees; publish dry run proves tees before play",
+    changes: [
+      "New bridge scoring-se-cup-seed:<event_id>[|apply] builds the Lone Star Cup score-entry rounds from the lsc_matches dial: one round per session, one group per match, with the odd player's threesome (Kerry 2026-09-28) as one group holding both his matches. The cup players have no cup orders, so each player's tee comes from Track B's staff setting lsc_tees (Kerry: \"check where they normally play\"), stored as his band, and his playing handicap is WHS off that tee through the preview's own pieces (locked index, the event's tee rows). It's a dry run by default and names any player with no tee, no playing handicap or no customer record. Apply refuses while a player isn't a customer. Re-seeding updates the rounds in place. Binding each session's se_round to the returned round id stays with Track B.",
+      "G-0 publish dry run now resolves every player's tee, held or not, and reports a per-tee summary (tees). Before this, tees were only checked for cards ready to publish, so a round that hadn't been played always showed 0 unresolved and proved nothing. Read-only; nothing else about publishing changes."
+    ]
+  },
   {
     version: "2.517.0",
     date: "2026-09-28",
