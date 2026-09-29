@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.522.9";
+window.TGF_VERSION = "2.522.10";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.522.10",
+    date: "2026-09-29",
+    title: "Scorecards: name circles match their tee rows exactly; women's tee solid unless shared",
+    changes: [
+      "Kerry 9/29: \"are all of the tee dots by names matching the colors of the tee rows? We need to make that happen.\" The circles came from the Starter Sheet's swatch palette while the rows used the scorecard's own shades, which is why Gold read browner and Blue brighter. Each circle now takes the exact colour of its own tee row, one source, with a same-colour edge instead of a darker ring. White stays white with a dark outline.",
+      "\"When they have their own color tee, I think we should just make it solid.\" A women's tee prints as an outline only when it shares its colour with another row on the card (women on Gold beside 65+ Gold); with a colour of its own it is solid. At Canyon Springs tonight, the Forward (Red) circles are solid.",
+      "Guard: test_scorecards.py checks every name circle against its row on all three layouts, and both outline cases."
+    ]
+  },
   {
     version: "2.522.9",
     date: "2026-09-29",

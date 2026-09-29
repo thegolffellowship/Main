@@ -87,6 +87,22 @@ def _row_colour(tee_id, master: str, overrides: dict):
     return (hx, ink)
 
 
+def chip_styles(tees: list) -> tuple[dict, dict]:
+    """Name-circle colour and outline per band, from the card's own tee rows.
+
+    Kerry 2026-09-29: the circle beside a name must be the SAME colour as
+    that tee's row ("are all of the tee dots by names matching the colors
+    of the tee rows?"), so it is read from the row, never a second palette.
+    A women's tee prints as an OUTLINE only when it shares its colour with
+    another row on the card (women on Gold beside 65+ Gold); with a colour
+    of its own it is solid ("it doesn't need to differentiate")."""
+    bg = {t["band"]: t["bg"] for t in tees}
+    outline = {t["band"]: bool(t.get("ladies")) and any(
+        o is not t and (o["bg"] or "").lower() == (t["bg"] or "").lower() for o in tees)
+        for t in tees}
+    return bg, outline
+
+
 def _short_code(master: str, ladies: bool) -> str:
     base = re.sub(r"\s*\((?:l|lady|ladies)\)\s*", "", master or "", flags=re.I).strip()
     base = re.sub(r"\s+tees?$", "", base, flags=re.I)
@@ -219,6 +235,7 @@ def build_scorecards(event_id: int, layout: str = "3up", grouping: str = "team",
         if not row:
             gaps.append(f"Tee '{master}' ({_band_text(t['band'])}) has no rating/slope for "
                         "this event's holes — fix the course card before printing.")
+    _chip_bg, _chip_outline = chip_styles(tees)
     if len(legend) > 4:
         log.append(f"{len(legend)} designated tees; the first four print.")
     by_band = {t["band"]: t for t in tees}
@@ -354,8 +371,13 @@ def build_scorecards(event_id: int, layout: str = "3up", grouping: str = "team",
                 "tee_code": tee["code"] if tee else "?",
                 # The Starter Sheet's own swatch for this band (Kerry: "same
                 # as the Starter Sheet").
-                "chip": (pack.get("tee_swatches") or {}).get(band),
-                "chip_ladies": bool((pack.get("tee_ladies") or {}).get(band)),
+                # ONE source (Kerry 9/29: "are all of the tee dots by names
+                # matching the colors of the tee rows? We need to make that
+                # happen"): the circle is the band's own tee-row colour.
+                "chip": _chip_bg.get(band),
+                # Outline only when a women's tee SHARES its colour with
+                # another row on this card (Kerry 9/29); its own colour → solid.
+                "chip_ladies": bool(_chip_outline.get(band)),
                 "cart_pos": p.get("cart_pos"), "customer_id": p.get("customer_id"),
                 "ph": _hcp_text(ph) or "", "net": _hcp_text(net) or "",
                 "ph_dots": {h: max(0, int(v or 0)) for h, v in ph_dots.items()},

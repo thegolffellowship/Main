@@ -2736,6 +2736,11 @@ bridge `scoring-scorecards:<id>[|key=value…][|dump|html|pdf[|all][|send]]`.
   team pop, `build_scorecards` keeps it as `net_ghost` and the card draws
   it as an OUTLINE dot (same box, same inset); the legend shows the hollow
   dot beside "no pops on par 3s". Print only: scoring never reads it.
+- **Name circles (v2.522.10, Kerry 9/29):** `scorecards.chip_styles(tees)` gives
+  each band's circle the EXACT colour of its tee row (one source; never
+  the Starter Sheet swatch palette), edge in the same colour; a women's tee
+  is an OUTLINE only when it shares its row colour with another row on the
+  card, otherwise solid. White = white with a dark outline.
 - **Back to Pairings (v2.522.3, Kerry 9/29 "gets stuck loading"):** the
   scorecards' Back goes to `/events?event=<id>&view=pairings`; that deep
   link now LOADS the pairings (`loadPairings` then re-render) instead of

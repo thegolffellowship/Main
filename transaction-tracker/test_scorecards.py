@@ -321,5 +321,22 @@ for _rule in ("table { border: 2px solid #374151; }", "tr.hd th { border-bottom:
               "tr.par td { border-top: 2px solid #374151; }", "tr.hcp td { border-bottom: 2px solid #374151; }"):
     check(f"heavy rule: {_rule}", _rule in _tpl)
 
+print("tee circle = tee row colour; outline only when a women's tee shares a colour (Kerry 9/29)")
+for _lay in ("3up", "2up", "2land"):
+    _sx = scm.build_scorecards(3304, _lay, "team", qr="off", db_path=DB)
+    _bg = {t["band"]: t["bg"] for t in _sx["tees"]}
+    _bad = [(r["name"], r["chip"], _bg.get(b)) for c in _sx["cards"] for r in c["rows"]
+            for b in [next((p["band"] for p in _sx.get("dump") or [] if p["customer_id"] == r["customer_id"]), None)]
+            if b in _bg and (r["chip"] or "").lower() != (_bg[b] or "").lower()]
+    check(f"{_lay}: every name circle is its tee row's exact colour", not _bad, _bad[:3])
+_T = lambda band, bg, ladies=False: {"band": band, "bg": bg, "ladies": ladies}
+_bgm, _out = scm.chip_styles([_T("<50", "#2F5FA6"), _T("65+", "#FFCF40"), _T("Forward", "#C0392B", True)])
+check("women on their own colour (Red) print SOLID", _out["Forward"] is False and _bgm["Forward"] == "#C0392B")
+_bgm, _out = scm.chip_styles([_T("<50", "#2F5FA6"), _T("65+", "#FFCF40"), _T("Forward", "#ffcf40", True)])
+check("women sharing Gold with 65+ print as an OUTLINE (the men's row stays solid)",
+      _out["Forward"] is True and _out["65+"] is False)
+check("the circle's edge is its own colour, not a darker ring",
+      "border:1px solid {{ r.chip or '#1B1B1B' }}" in _tpl and "rgba(0,0,0,.25)" not in _tpl)
+
 print(f"\n{len(FAILURES)} failure(s)")
 sys.exit(1 if FAILURES else 0)
