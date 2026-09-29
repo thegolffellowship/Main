@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.522.1";
+window.TGF_VERSION = "2.522.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.522.2",
+    date: "2026-09-29",
+    title: "Score entry: a group moved to another hole or tee time keeps its link",
+    changes: [
+      "Kerry wants the group links stable through hole, tee-time and player changes. A group whose starting hole or tee time changes (1A relabelled 5A, 8:10 moved to 8:20) now keeps its link, and the link opens on the new hole. It counts as the same group when most of its players are the same before and after; group numbers renumber, so they are not used. A slot that really left the sheet still says so."
+    ]
+  },
   {
     version: "2.522.1",
     date: "2026-09-29",

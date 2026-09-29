@@ -738,8 +738,9 @@ returns the status codes a chapter manager and a player link get on that event.
 
 A group link is the `se_groups` row. `seed_round_from_pairings` matches each saved
 pairings group to an existing row by SLOT (`slot_key`: "Hole 2A | 5:00 PM" → "2A";
-"8:10a | Hole 1" → "8:10A"), never by the pairings' group number. A new slot gets a
-fresh group number; a slot that left the sheet keeps its row and its card answers 410
+"8:10a | Hole 1" → "8:10A"), never by the pairings' group number. A sheet group whose hole or tee time changed
+keeps its row (and link) when most of its players are the same on both sides. A new
+slot gets a fresh group number; a slot that left the sheet keeps its row and its card answers 410
 "This group isn't on tonight's pairings any more". `upsert_group` moves a moved
 player's `se_hole_scores` / `se_hole_marks` rows to his new group; nothing is deleted.
 `sync_from_pairings(round_id)` re-seeds an OPEN round seeded from PAIRINGS whenever

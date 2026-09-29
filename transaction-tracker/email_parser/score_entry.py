@@ -996,6 +996,32 @@ def seed_round_from_pairings(event_id: int, holes: str = "9", *, round_date=None
         k = slot_key(g.get("start_line") or g.get("slot_label"))
         if k in have:
             num_for[id(g)] = have[k]
+    # A group whose HOLE or TIME changed (1A relabelled 5A, 8:10 moved to
+    # 8:20) keeps its link: an unmatched sheet group takes the existing row
+    # with its own group number, when that row's slot is no longer on the
+    # sheet. Its start hole and label then follow the sheet.
+    # It is the same group when most of its players are the same on both
+    # sides (group numbers renumber; people mostly stay together).
+    sheet_slots = {slot_key(g.get("start_line") or g.get("slot_label")) for g in groups}
+    orphan_nums = {n for k, n in have.items() if k not in sheet_slots}
+    if orphan_nums:
+        with _closing(_conn(db_path)) as conn:
+            members = {}
+            for pr in conn.execute(
+                    "SELECT g.group_num, p.customer_id FROM se_players p JOIN se_groups g "
+                    "ON g.id = p.group_id WHERE p.round_id = ?", (rid,)):
+                members.setdefault(pr[0], set()).add(pr[1])
+        for g in groups:
+            if id(g) in num_for or not orphan_nums:
+                continue
+            mine = {p.get("customer_id") for p in g.get("players") or [] if p.get("customer_id")}
+            best = max(orphan_nums, key=lambda n: len(mine & members.get(n, set())))
+            theirs = members.get(best, set())
+            both = len(mine & theirs)
+            # the SAME group re-labelled: most of its players on both sides
+            if mine and theirs and both * 2 > len(mine) and both * 2 > len(theirs):
+                num_for[id(g)] = best
+                orphan_nums.discard(best)
     for g in groups:
         if id(g) in num_for:
             continue

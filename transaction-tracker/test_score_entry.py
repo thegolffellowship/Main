@@ -344,6 +344,16 @@ with contextlib.redirect_stdout(io.StringIO()):
 check("nothing changed since: no re-seed", again is None)
 check("no score row was deleted", conn.execute("SELECT COUNT(*) FROM se_hole_scores WHERE round_id = ?",
                                                (r910,)).fetchone()[0] == 2)
+# Kerry moves 3A's start to hole 5 (same group number): the 3A link is kept
+# and now opens on hole 5.
+g3a = L1["3A"]["group_id"]
+_pair([(1, "2A", [103, 101]), (2, "5A", [102, 104])])
+with contextlib.redirect_stdout(io.StringIO()):
+    c5 = se.get_group_card(g3a)
+L2 = {se.slot_key(l["label"]): l for l in se.round_links(r910)}
+check("a group moved to another starting hole keeps its link and opens on the new hole",
+      c5["start_hole"] == 5 and "5A" in L2 and L2["5A"]["group_id"] == g3a
+      and sorted(p["customer_id"] for p in c5["players"]) == [102, 104], (c5.get("start_hole"), L2))
 
 print("sign-off, flags, CTP, HIO (Kerry #666, ratified #667)")
 conn.execute("INSERT INTO customers (customer_id, first_name, last_name) VALUES (105, 'Mark', 'Stich')")
