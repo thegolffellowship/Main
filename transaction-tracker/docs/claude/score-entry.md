@@ -749,3 +749,13 @@ re-seeds an OPEN round seeded from PAIRINGS whenever the saved pairings' fingerp
 (v2.522.0–.2 matched by label first; on 9/29 Kerry's relabel reused "4A" for another
 group and slot 7's link opened the wrong group before any score. v2.522.5 fixed it.)
 
+
+### No member nav on the score-entry page (v2.522.22, Kerry 2026-09-29)
+
+"If players click PLAYERS, LEADERBOARD or HANDICAPS, how will they get back to
+the LIVE SCORING? I'd say hide that for now." `score_entry.html` sets
+`SHELL_SLIM`, and `_shell_nav.html` then renders the member header with the TGF
+mark only, centered and not tappable ("centered TGF Logo on black header for all
+screens but don't allow it to link anywhere"): no tabs, no CTA button or sheet.
+It shows on every screen, the hole screen included (it used to hide there). The safe-area block in shell.css is untouched.
+Other /member pages keep their nav.

@@ -355,3 +355,11 @@ body::before {
 }
 header.shell-nav { top: env(safe-area-inset-top, 0px); }
 .shell-drawer { padding-top: env(safe-area-inset-top, 0px); }
+
+/* SLIM member header on the score-entry page (Kerry 2026-09-29): the TGF mark
+   only, no tabs, no CTA — nothing that leaves the card mid-round. The safe-area
+   block above still applies (body padding + the dark strip under the clock). */
+header.shell-nav.shell-member.shell-slim { min-height: 44px; justify-content: center; }
+header.shell-nav.shell-member.shell-slim .shell-brand { margin: 0 auto; pointer-events: none; user-select: none; -webkit-user-select: none; }
+header.shell-nav.shell-member.shell-slim .shell-brand img { width: 30px; height: 30px; -webkit-touch-callout: none; }
+header.shell-nav.shell-member.shell-slim .shell-wordmark { display: none; }

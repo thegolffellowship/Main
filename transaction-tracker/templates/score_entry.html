@@ -111,7 +111,9 @@
            getting everything to fit in the window without scrolling"). The hole
            screen drops the site nav, the keeper line and the saved-count line,
            and every row keeps its name and details to one line each. */
-        body.se-focus .shell-nav { display: none; }
+        /* Kerry 2026-09-29: "Provide a centered TGF Logo on black header for all
+           screens but don't allow it to link anywhere." The slim header now stays
+           on the hole screen too (it was hidden here for the one-screen fit). */
         /* CHECK THE CARD fits one screen too (Kerry 2026-09-26: "Now make Check
            the card fit too"), and in each cell the pops sit ABOVE (black, PH)
            and BELOW (orange, team) the number ("Pops here should go above and
@@ -193,7 +195,9 @@
         .se-lblrow { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; }
         .se-keepnote { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: #4B5563; }
         .se-keepnote svg { width: 14px; height: 14px; }
-        body.se-focus .se-wrap { padding-top: 10px; padding-bottom: 16px; }
+        body.se-focus .se-wrap { padding-top: 6px; padding-bottom: 16px; }
+        body.se-focus header.shell-nav.shell-slim { min-height: 24px; padding-top: 2px; padding-bottom: 2px; }
+        body.se-focus header.shell-nav.shell-slim .shell-brand img { width: 20px; height: 20px; }
         .se-hole .se-top { align-items: center; }
         .se-hole .se-h1.big { font-size: 30px; line-height: 1.05; }
         .se-hole .se-sub { font-size: 14px; margin-top: 2px; }
@@ -398,7 +402,7 @@
     </style>
 </head>
 <body>
-    {% set SHELL_TITLE = 'Scorecard' %}{% set SHELL_ACTIVE = '' %}
+    {% set SHELL_TITLE = 'Scorecard' %}{% set SHELL_ACTIVE = '' %}{% set SHELL_SLIM = True %}
     {% include '_shell_nav.html' %}
     <main class="se-wrap" id="se-app" aria-live="polite"></main>
 

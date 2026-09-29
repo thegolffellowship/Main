@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.522.23";
+window.TGF_VERSION = "2.522.24";
 window.TGF_CHANGELOG = [
+    {
+        version: "2.522.24",
+        date: "2026-09-29",
+        title: "Live scoring: no member nav on the score-entry page",
+        changes: [
+            "Kerry 2026-09-29: \"If players click PLAYERS, LEADERBOARD or HANDICAPS, how will they get back to the LIVE SCORING? I'd say hide that for now.\" and \"Provide a centered TGF Logo on black header for all screens but don't allow it to link anywhere.\" /member/score now renders a slim black header with the TGF mark CENTERED and untappable, on every screen (Who are you?, each hole, sign-off, card check; the hole screen used to drop the header): no Players / Leaderboard / Handicaps tabs and no Enter Events & Contests button, so a scorer can't leave the card mid-round. A SHELL_SLIM flag on the shared member header; every other /member page keeps its nav.",
+            "The safe-area fix (v2.522.16) is unchanged: the dark strip under the iPhone clock, the header starting below it and the bottom clearing the home indicator, checked at 390x844 with a 47 px top / 34 px bottom inset on Who are you? and a hole screen."
+        ]
+    },
   {
     version: "2.522.23",
     date: "2026-09-29",

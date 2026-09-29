@@ -492,7 +492,11 @@ with sync_playwright() as p:
     check("the hole screen fits without scrolling", fh <= 660, fh)
     check("the PREVIEW label is not on the scoring screen", "PREVIEW" not in fpg.inner_text(".se-eyebrow").upper())
     check("the save button is on screen", fpg.locator("[data-act=save]").bounding_box()["y"] + 50 <= 660)
-    check("the site nav steps aside while scoring", not fpg.locator(".shell-nav").first.is_visible())
+    # Kerry 2026-09-29: "Provide a centered TGF Logo on black header for all
+    # screens but don't allow it to link anywhere." The header stays, with no links.
+    check("the header shows the mark and has no links while scoring",
+          fpg.locator(".shell-nav").first.is_visible()
+          and fpg.locator(".shell-nav a, .shell-nav button").count() == 0)
     fdev = fpg.evaluate("JSON.parse(localStorage.getItem('se_device'))")
     se.write_scores(gf, fdev, 101, [{"op_id": f"fit{c_}-{h}", "customer_id": c_, "hole": h, "gross": PARS[h - 1]}
                                     for h in range(1, 19) for c_ in (101, 102, 107, 108)])

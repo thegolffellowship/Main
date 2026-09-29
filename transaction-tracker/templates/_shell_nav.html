@@ -17,11 +17,15 @@
 {# ↓ ↑ Enter in every typeahead (Kerry 2026-09-23) #}
 <script src="/static/js/typeahead-keys.js?v={{ app_version }}"></script>
 {% if member_mode %}
-<header class="shell-nav shell-member">
+<header class="shell-nav shell-member{{ ' shell-slim' if SHELL_SLIM else '' }}">
     <div class="shell-brand">
         <img src="/static/tgf-icon-white.svg" alt="TGF">
         <span class="shell-wordmark">The Golf Fellowship</span>
     </div>
+    {# SHELL_SLIM (Kerry 2026-09-29: "If players click PLAYERS, LEADERBOARD or
+       HANDICAPS, how will they get back to the LIVE SCORING? I'd say hide that
+       for now."): the score-entry page keeps only the mark, no way off the card. #}
+    {% if not SHELL_SLIM %}
     <nav class="shell-member-tabs">
         {# Order + labels (Kerry 2026-07-14): Spotlight first (member landing
            = the individual player), Season Contests renamed Leaderboard. #}
@@ -41,6 +45,9 @@
     <a href="https://thegolffellowship.com/shop/ols/products/season-contests"
        target="_blank" rel="noopener">Season Contests</a>
 </div>
+{% else %}
+</header>
+{% endif %}
 {% else %}
 <header class="shell-nav" id="shell-nav">
     <button class="shell-burger" id="shell-burger" aria-label="Open menu" aria-expanded="false">
