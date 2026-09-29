@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.522.22";
+window.TGF_VERSION = "2.522.23";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.522.23",
+    date: "2026-09-29",
+    title: "Scorecards and print-pack PDFs follow the report file-name convention",
+    changes: [
+      "Kerry 9/29: \"The Scorecards print and download pdf features are different than the other reports and the file naming convention is different than the others and incorrect.\" The Scorecards PDF (still built by the server, which prints the card layout exactly) now downloads the way the other reports' PDFs do, named <event code>-Scorecards.pdf (e.g. 26-s9-25-Scorecards.pdf); the flagged \"anyway\" state and the email attachment use the same name. The print pack follows suit: <event code>-PrintPack.pdf. No em dash anywhere in a file name. Guard in test_download_headers.py."
+    ]
+  },
   {
     version: "2.522.22",
     date: "2026-09-29",

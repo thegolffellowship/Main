@@ -484,6 +484,7 @@ def build_scorecards_pdf(render, event_id: int, static_dir: str, sets: list[dict
     from email_parser.print_pack import _render_pdf_chromium
     htmls, meta, gaps = [], [], {}
     ev_name = None
+    stub = None
     for s in sets:
         sc = build_scorecards(event_id, s.get("layout", "3up"), s.get("grouping", "team"),
                               qr=s.get("qr", "auto"), holes_override=s.get("holes"),
@@ -491,6 +492,7 @@ def build_scorecards_pdf(render, event_id: int, static_dir: str, sets: list[dict
         if not sc:
             return {"error": "event not found"}
         ev_name = sc["event"]["item_name"]
+        stub = sc["event"].get("file_stub") or stub
         slug = f"{sc['layout']}-{sc['grouping']}-{s.get('holes') or 'event'}-qr{sc['qr']}"
         if sc["gaps"]:
             gaps[slug] = sc["gaps"]
@@ -506,7 +508,9 @@ def build_scorecards_pdf(render, event_id: int, static_dir: str, sets: list[dict
         m["one_page_per_sheet"] = m["pages"] == m["sheets"]
     code = (ev_name or f"event-{event_id}").replace("/", "-")
     return {"pdf": pdf, "parts": meta, "gaps": gaps, "engine": engine,
-            "filename": f"{code} — scorecards.pdf", "event_name": ev_name}
+            # <stub>-Scorecards.pdf, the convention every report uses (Kerry
+            # 9/29: "the file naming convention is different … and incorrect").
+            "filename": f"{stub or code}-Scorecards.pdf", "event_name": ev_name}
 
 
 def send_scorecards_pdf(built: dict, to_address: str | None = None, note: str = "") -> dict:

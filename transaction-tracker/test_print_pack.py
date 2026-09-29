@@ -56,8 +56,9 @@ check("the mail body carries the first tee, every seated player and the blinds (
       all(n in _body for n in ("Jeff Rideout", "Mary Wade", "Gus Vasquez", "Dan Stich")) and "8:10 AM" in _body
       and "1T" in _body and "Attached:" in _body, _body[:400])
 check("…and is escaped HTML with no template leftovers", "{{" not in _body and "<script" not in _body)
-check("the filename names the event and the date",
-      bool(built) and "s18.11 CEDAR CREEK" in built["filename"] and "2026-09-19" in built["filename"])
+check("the filename is <stub>-PrintPack.pdf, the report convention (Kerry 9/29)",
+      bool(built) and built["filename"].endswith("-PrintPack.pdf") and "s18-11" in built["filename"]
+      and "—" not in built["filename"], built and built["filename"])
 check("unknown event → None", appmod.build_print_pack_for_event(424242) is None)
 
 print("2. The route")

@@ -153,11 +153,13 @@ def build_event_print_pack(render, event_id: int, static_dir: str,
         except Exception as exc2:                  # engine absent on this deploy
             return {"error": f"PDF engine unavailable: {exc2}", "sha": sha, "engine_note": engine_note,
                     "parts": [{"slug": s_, "pages": None} for s_, _ in htmls], "event": ev}
+    from email_parser.database import print_file_stub as _pfs
     return {"pdf": pdf, "parts": parts, "sha": sha, "event": ev, "engine": engine,
             "scorecards": sc_info,
             "engine_note": engine_note, "pack": sheet_pack,
             "assets": sorted(set(getattr(_render_pdf_chromium, "last_served", []))) if engine == "chromium" else None,
-            "filename": f"{code} — print pack — {ev.get('event_date')}.pdf"}
+            # <stub>-PrintPack.pdf, the report file-name convention (Kerry 9/29).
+            "filename": f"{_pfs(ev) or code}-PrintPack.pdf"}
 
 
 PRINT_STATIC_ORIGIN = "http://tgf-print.local"   # never fetched: the route answers it

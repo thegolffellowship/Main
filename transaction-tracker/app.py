@@ -5559,7 +5559,7 @@ def scorecards_pdf(event_id):
             return scorecards_page(event_id)
         return built["error"], 404
     return Response(built["pdf"], mimetype="application/pdf",
-                    headers={"Content-Disposition": content_disposition(built["filename"], inline=True)})
+                    headers={"Content-Disposition": content_disposition(built["filename"])})
 
 
 def _print_pack_render(template, **ctx):

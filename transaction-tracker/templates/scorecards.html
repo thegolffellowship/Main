@@ -225,7 +225,7 @@
 
 {% macro sc_bar(extra_style='') -%}
 {% if not sc.gaps %}{% with rb_event_id=sc.event.id, rb_width='8.5in', rb_file=(sc.event.file_stub or 'scorecards') ~ '-Scorecards', rb_pdf_js='return scPdf(false)' %}{% include "_report_bar.html" %}{% endwith %}
-{% elif sc.player_gaps %}{% with rb_event_id=sc.event.id, rb_width='8.5in', rb_print_js='return scFlagged()', rb_pdf_js='return scPdf(true)', rb_print_label='Print anyway, flagged', rb_pdf_label='PDF anyway, flagged' %}{% include "_report_bar.html" %}{% endwith %}
+{% elif sc.player_gaps %}{% with rb_event_id=sc.event.id, rb_width='8.5in', rb_file=(sc.event.file_stub or 'scorecards') ~ '-Scorecards', rb_print_js='return scFlagged()', rb_pdf_js='return scPdf(true)', rb_print_label='Print anyway, flagged', rb_pdf_label='PDF anyway, flagged' %}{% include "_report_bar.html" %}{% endwith %}
 {% else %}{% with rb_event_id=sc.event.id, rb_width='8.5in', rb_disabled=True, rb_disabled_why='Fix the gaps below first' %}{% include "_report_bar.html" %}{% endwith %}
 {% endif %}
 {%- endmacro %}

@@ -50,5 +50,16 @@ src = open("app.py", encoding="utf-8").read()
 hand = [m.group(0) for m in re.finditer(r'"Content-Disposition":\s*f?["\']', src)]
 check("every Content-Disposition in app.py goes through content_disposition()", not hand, hand)
 
+print("\n== report file names: <stub>-<Report>.pdf (Kerry 9/29) ==")
+_sc = open("email_parser/scorecards.py", encoding="utf-8").read()
+_pp = open("email_parser/print_pack.py", encoding="utf-8").read()
+check("scorecards PDF is <stub>-Scorecards.pdf, no em dash", '-Scorecards.pdf"' in _sc and "— scorecards.pdf" not in _sc)
+check("print pack PDF is <stub>-PrintPack.pdf, no em dash", '-PrintPack.pdf"' in _pp and "— print pack —" not in _pp)
+check("the scorecards PDF downloads like the others (attachment, not inline)",
+      'content_disposition(built["filename"])})' in src)
+_bar_sc = open("templates/scorecards.html", encoding="utf-8").read()
+check("both scorecard bar states name the file <stub>-Scorecards",
+      _bar_sc.count("~ '-Scorecards'") >= 2)
+
 print("\nALL PASSED" if not F else f"\n{len(F)} FAILED: {F}")
 sys.exit(1 if F else 0)
