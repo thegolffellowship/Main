@@ -203,11 +203,15 @@
         /* The 50 px header logo (v2.522.25) fits a 390x844 phone with four players;
            on a short screen (under 700 px) the hole page shrinks it back so the card
            and Save still fit without scrolling. */
-        @media (max-height: 700px) {
-            body.se-focus header.shell-nav.shell-slim { min-height: 26px; padding-top: 1px; padding-bottom: 1px; }
-            body.se-focus header.shell-nav.shell-slim .shell-brand img { width: 24px; height: 24px; }
-            body.se-focus .se-hole .se-popkey { margin-top: 6px; }
-        }
+        /* Kerry 2026-09-29, 4:11 PM: "That black bar up top shows right size for a
+           flash on mobile then gets small." A max-height media query fired on every
+           iPhone (Safari's visible area with its toolbar is under 700 px). Now the
+           header shrinks ONLY when the rendered page would actually overflow the
+           screen (render() measures and sets se-tight), so a normal card keeps
+           the full logo. */
+        body.se-tight header.shell-nav.shell-slim { min-height: 26px; padding-top: 1px; padding-bottom: 1px; }
+        body.se-tight header.shell-nav.shell-slim .shell-brand img { width: 24px; height: 24px; }
+        body.se-tight .se-hole .se-popkey { margin-top: 6px; }
         .se-hole .se-top { align-items: center; }
         .se-hole .se-h1.big { font-size: 30px; line-height: 1.05; }
         .se-hole .se-sub { font-size: 14px; margin-top: 2px; }
@@ -667,7 +671,12 @@
                 body = keeping() && !(allDone() && hole === "done") ? holeScreen() : cardScreen();
             }
             app.innerHTML = banner + body;
-            document.body.classList.toggle("se-focus", !!app.querySelector(".se-hole, .se-chk"));
+            const focus = !!app.querySelector(".se-hole, .se-chk");
+            document.body.classList.toggle("se-focus", focus);
+            // Full logo unless this card would not fit the screen (then the
+            // header gives up its height so Save stays on screen, no scrolling).
+            document.body.classList.remove("se-tight");
+            if (focus && document.documentElement.scrollHeight > window.innerHeight + 1) document.body.classList.add("se-tight");
         }
 
         function joinScreen() {

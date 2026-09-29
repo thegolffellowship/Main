@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.522.27";
+window.TGF_VERSION = "2.522.28";
 window.TGF_CHANGELOG = [
+    {
+        version: "2.522.28",
+        date: "2026-09-29",
+        title: "Live scoring: the header logo no longer shrinks on every iPhone",
+        changes: [
+            "Kerry 2026-09-29, 4:11 PM, from his phone on the live Hole 4: \"That black bar up top shows right size for a flash on mobile then gets small.\" The v2.522.27 short-screen rule was a max-height: 700px media query, and iPhone Safari's visible area with its toolbar is under 700 px, so it fired on every phone once render() added the focus class (the flash was the full header before that). The header now shrinks only when the rendered card would actually overflow the screen: render() measures scrollHeight against innerHeight and sets body.se-tight; a normal 9-hole card keeps the full 64 px mark, and the 4-player 18-hole-with-match card on a 390x660 screen still fits without scrolling."
+        ]
+    },
     {
         version: "2.522.27",
         date: "2026-09-29",
