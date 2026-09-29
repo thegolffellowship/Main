@@ -146,11 +146,36 @@
 {%- endmacro %}
 {% macro dots(n) -%}{% if n and n > 0 %}{{ '•' * n }}{% endif %}{%- endmacro %}
 
-<div class="sc-bar noprint">
+{% macro sc_bar(extra_style='') -%}
+<div class="sc-bar noprint" style="{{ extra_style }}">
   <a href="/events?event={{ sc.event.id }}&amp;view=pairings">&#8592; Back to Pairings</a>
-  {% if not sc.gaps %}<button type="button" onclick="window.print()">Print</button>
-  <a class="dark" href="#" onclick="var u = new URL(location.href); u.pathname = u.pathname.replace(/\/scorecards$/, '/scorecards.pdf'); location.href = u; return false;">&#8681; PDF</a>{% endif %}
+  {% if not sc.gaps %}
+  <button type="button" onclick="window.print()">&#128424; Print</button>
+  <a class="dark" href="#" onclick="return scPdf(false)">&#8681; PDF</a>
+  {% elif sc.player_gaps %}
+  <a href="#" onclick="return scFlagged()">&#128424; Print anyway, flagged</a>
+  <a class="dark" href="#" onclick="return scPdf(true)">&#8681; PDF anyway, flagged</a>
+  {% else %}
+  <button type="button" disabled title="Fix the gaps below first" style="opacity:.5">&#128424; Print</button>
+  <button type="button" class="dark" disabled title="Fix the gaps below first" style="opacity:.5">&#8681; PDF</button>
+  {% endif %}
 </div>
+{%- endmacro %}
+<script>
+  // PDF keeps the page's layout / grouping / QR / holes; `flagged` adds
+  // allow_gaps=1 (a player with no PH prints blank, named in the log).
+  function scPdf(flagged) {
+    var u = new URL(location.href);
+    u.pathname = u.pathname.replace(/\/scorecards$/, '/scorecards.pdf');
+    if (flagged) u.searchParams.set('allow_gaps', '1');
+    location.href = u; return false;
+  }
+  function scFlagged() {
+    var u = new URL(location.href); u.searchParams.set('allow_gaps', '1');
+    location.href = u; return false;
+  }
+</script>
+{{ sc_bar() }}
 <form class="ggid-form noprint" id="ggidForm" onsubmit="return saveGgid(event)">
   <h2>GGID codes</h2>
   <div style="color:#4B5563;margin-bottom:6px">Type each group's Golf Genius code, then Save. It prints on the scorecard header, the Starter Sheet group box and the cart signs. Leave a box blank for no code.</div>
@@ -314,6 +339,6 @@
   {% for l in sc.log %}<br>• {{ l }}{% endfor %}
 </div>
 {% endif %}
-<div class="sc-bar noprint" style="margin-bottom:24px"><a href="/events?event={{ sc.event.id }}&amp;view=pairings">&#8592; Back to Pairings</a></div>
+{{ sc_bar('margin-bottom:24px') }}
 </body>
 </html>

@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.520.4";
+window.TGF_VERSION = "2.520.5";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.520.5",
+    date: "2026-09-28",
+    title: "Scorecards: Print and PDF top and bottom, flagged when a player has no handicap",
+    changes: [
+      "Kerry 2026-09-28: \"Needs to be a PDF/Print button for every report.\" The scorecards page carries the same bar top and bottom: Back to Pairings, Print (the browser's print) and PDF (scorecards.pdf with the page's layout, grouping, QR and holes). When the only gap is a player with no handicap the two become 'Print anyway, flagged' and 'PDF anyway, flagged' (allow_gaps=1); an event-level gap shows them disabled with 'fix the gaps below first' instead of failing silently. The audit of every other report follows 3304's close-out.",
+    ],
+  },
   {
     version: "2.520.4",
     date: "2026-09-28",
