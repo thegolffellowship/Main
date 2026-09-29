@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.522.3";
+window.TGF_VERSION = "2.522.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.522.4",
+    date: "2026-09-29",
+    title: "Pairings: player swap by bridge",
+    changes: [
+      "New bridge scoring-pairings-swap:<event_id>|<customer_id>|<customer_id>[|apply] does the Pairings page's Player swap on the saved pairings: the two people trade seats, and each seat keeps its group, slot and cart position. It's keyed by customer_id and saved through save_event_pairings, the same path the page uses. Dry run by default. Built for Kerry's 'Swap Lance and Brian' on s9.25 Canyon Springs."
+    ]
+  },
   {
     version: "2.522.3",
     date: "2026-09-29",

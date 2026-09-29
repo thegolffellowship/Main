@@ -355,6 +355,19 @@ check("a group moved to another starting hole keeps its link and opens on the ne
       c5["start_hole"] == 5 and "5A" in L2 and L2["5A"]["group_id"] == g3a
       and sorted(p["customer_id"] for p in c5["players"]) == [102, 104], (c5.get("start_hole"), L2))
 
+print("Player swap on the saved pairings (Kerry 2026-09-29 'Swap Lance and Brian')")
+_pair([(1, "2A", [103, 101]), (2, "5A", [102, 104])])
+dry = db.swap_pairings_seats(910, 101, 104)
+check("swap dry run changes nothing", dry["dry_run"] and conn.execute(
+    "SELECT group_num FROM event_pairings WHERE event_id = 910 AND customer_id = 101").fetchone()[0] == 1, dry)
+with contextlib.redirect_stdout(io.StringIO()):
+    db.swap_pairings_seats(910, 101, 104, apply=True)
+_seats = {r[0]: (r[1], r[2]) for r in conn.execute(
+    "SELECT customer_id, group_num, cart_pos FROM event_pairings WHERE event_id = 910")}
+check("swap: 101 takes 104's seat (group and cart position) and 104 takes 101's",
+      _seats[101] == (2, 2) and _seats[104] == (1, 2) and _seats[103] == (1, 1), _seats)
+check("swap refuses someone not on the pairings", "error" in db.swap_pairings_seats(910, 101, 999))
+
 print("sign-off, flags, CTP, HIO (Kerry #666, ratified #667)")
 conn.execute("INSERT INTO customers (customer_id, first_name, last_name) VALUES (105, 'Mark', 'Stich')")
 conn.execute("INSERT INTO customer_memberships (customer_id, started_at, expires_at) "

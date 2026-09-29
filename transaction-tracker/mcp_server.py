@@ -5950,6 +5950,21 @@ def _scoring_dispatch_inner(url: str, extract: str):
                                "history": [{"customer_id": k, **v}
                                            for k, v in rows]},
                               indent=2, default=str)
+        if cmd == "scoring-pairings-swap":
+            # scoring-pairings-swap:<event_id>|<customer_id>|<customer_id>[|apply]
+            # Player swap on the saved pairings (seats keep group, slot and
+            # cart position), saved through save_event_pairings. Dry run default.
+            from email_parser.database import swap_pairings_seats
+            _p = [x.strip() for x in arg.split("|")]
+            try:
+                _ev, _a, _b = int(_p[0]), int(_p[1]), int(_p[2])
+            except (ValueError, IndexError):
+                return json.dumps({"error": "usage: scoring-pairings-swap:<event_id>|<cid>|<cid>[|apply]"})
+            _apply = len(_p) > 3 and _p[3].lower() == "apply"
+            _res = swap_pairings_seats(_ev, _a, _b, apply=_apply)
+            if _apply and "error" not in _res:
+                _audit("scoring-pairings-swap", f"event {_ev} swap {_a}<->{_b}")
+            return json.dumps(_res, indent=2, default=str)
         if cmd == "scoring-pairings-remove":
             # "<event>|<player>[|dry]" — pull one player from the event's
             # SAVED pairings and re-seat the group per Kerry's adjustment

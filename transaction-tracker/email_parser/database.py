@@ -63870,6 +63870,52 @@ def _reseat_event_blinds(conn, event_id: int) -> dict:
     return {"reseated": reseated, "loosened": loosened}
 
 
+def swap_pairings_seats(event_id: int, customer_id_a: int, customer_id_b: int,
+                        apply: bool = False, db_path=None) -> dict:
+    """PLAYER SWAP on the saved pairings (the Pairings page's Player swap,
+    Kerry 2026-09-29 "Swap Lance and Brian"): the two people trade SEATS
+    (group, slot and cart position stay with the seat), by customer_id.
+    Saved through save_event_pairings, the same path as the page. Dry run
+    by default: returns both seats before and after."""
+    a, b = int(customer_id_a), int(customer_id_b)
+    with _connect(db_path) as conn:
+        _ensure_pairing_tables(conn)
+        rows = [dict(r) for r in conn.execute(
+            "SELECT holes, group_num, slot_label, player_name, cart_pos, tee_choice, "
+            "handicap_index, customer_id FROM event_pairings WHERE event_id = ? "
+            "ORDER BY holes, group_num, cart_pos", (event_id,))]
+    seat = {r["customer_id"]: r for r in rows if r["customer_id"] in (a, b)}
+    if a == b or len(seat) != 2:
+        return {"error": f"both players must be on the saved pairings (found {sorted(seat)})"}
+    ra, rb = seat[a], seat[b]
+    if ra["holes"] != rb["holes"]:
+        return {"error": "the two players are on different hole counts"}
+    before = {k: {"group": r["group_num"], "slot": r["slot_label"], "cart_pos": r["cart_pos"],
+                  "name": r["player_name"]} for k, r in seat.items()}
+    moving = ("player_name", "tee_choice", "handicap_index", "customer_id")
+    va, vb = {k: ra[k] for k in moving}, {k: rb[k] for k in moving}
+    ra.update(vb)
+    rb.update(va)
+    after = {r["customer_id"]: {"group": r["group_num"], "slot": r["slot_label"],
+                                "cart_pos": r["cart_pos"], "name": r["player_name"]}
+             for r in (ra, rb)}
+    out = {"event_id": event_id, "dry_run": not apply, "before": before, "after": after}
+    if not apply:
+        return out
+    groups_by_holes: dict = {}
+    for r in rows:
+        gl = groups_by_holes.setdefault(r["holes"], [])
+        g = next((x for x in gl if x["group_num"] == r["group_num"]), None)
+        if g is None:
+            g = {"group_num": r["group_num"], "slot_label": r["slot_label"], "players": []}
+            gl.append(g)
+        g["players"].append({"name": r["player_name"], "cart_pos": r["cart_pos"],
+                             "tee_choice": r["tee_choice"], "handicap_index": r["handicap_index"],
+                             "customer_id": r["customer_id"]})
+    save_event_pairings(event_id, groups_by_holes, db_path=db_path)
+    return out
+
+
 def save_event_pairings(event_id: int, groups_by_holes: dict, db_path=None) -> None:
     """Persist pairings for an event and rebuild pairing_history rows.
 
