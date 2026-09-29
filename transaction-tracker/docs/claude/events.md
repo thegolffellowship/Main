@@ -2740,9 +2740,9 @@ bridge `scoring-scorecards:<id>[|key=value…][|dump|html|pdf[|all][|send]]`.
   foot, "PH – Playing Handicap Stroke ("Pops") at 100% · {net name} Stroke at
   {pct}%[, off the field's low] · No {net name} Strokes on par 3s", every part
   from `sc.net` (`name`, `pct`, `off_low`, `par3_suppressed`). A par-3-removed
-  net stroke is `<i class="g">`: the orange ring with a `::after` slash 230%
-  wide, rotated −45°, so it runs past the circle; the box and inset are a real
-  stroke's.
+  net stroke is `<i class="g">`: a bold orange × (v2.522.15, two 1.5px strokes
+  corner to corner, `::before`/`::after`; the slashed ring was "lost at that
+  scale"); the box and inset are a real stroke's.
 - **Dots at 75% (v2.522.12, Kerry 9/29, CD #962 ruling a):** `--dd` 4 / 6 / 5 px
   (3-up / 2-up / landscape), `--dsp` 2px, inset `--dg` unchanged (3 / 4 px →
   0.79 / 1.06 mm, equal on both lines). Fractional sizes snap unevenly in

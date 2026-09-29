@@ -147,14 +147,17 @@
     .dk i, .do i { display: block; width: var(--dd); height: var(--dd);
       border-radius: 50%; }
     .dk i { background: #111; } .do i { background: #C2410C; }
-    /* A Team/Cart Net stroke the par-3 rule removed: the circle with a slash
-       running PAST it on both ends, like a no-entry sign (Kerry 9/29: "the
-       slash needs to extend beyond the circle"). Same box, same inset as a
-       real stroke; the slash is drawn outside the box and moves nothing. */
-    .do i.g, .decode i.lx { background: transparent; border: 1px solid #C2410C;
-      box-sizing: border-box; position: relative; overflow: visible; }
-    .do i.g::after, .decode i.lx::after { content: ""; position: absolute; left: 50%; top: 50%;
-      width: 230%; height: 1px; background: #C2410C; transform: translate(-50%, -50%) rotate(-45deg); }
+    /* A Team/Cart Net stroke the par-3 rule removed: a small orange ×
+       (Kerry 9/29: "The no strokes circle is lost at that scale" … "Go with
+       the X"). Same box and corner inset as a real stroke; two strokes
+       corner to corner, heavy enough for a laser print. */
+    .do i.g, .decode i.lx { background: transparent; border: 0; border-radius: 0;
+      position: relative; overflow: visible; }
+    .do i.g::before, .do i.g::after, .decode i.lx::before, .decode i.lx::after {
+      content: ""; position: absolute; left: 50%; top: 50%; width: 141%; height: 1.5px;
+      background: #C2410C; border-radius: 1px; }
+    .do i.g::before, .decode i.lx::before { transform: translate(-50%, -50%) rotate(45deg); }
+    .do i.g::after, .decode i.lx::after { transform: translate(-50%, -50%) rotate(-45deg); }
     td.thick, th.thick { border-right: 2px solid #374151; }
     td.split-c, th.split-c { position: relative; padding: 0; }
     .split-c svg.diag { position: absolute; inset: 0; width: 100%; height: 100%; }

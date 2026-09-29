@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.522.14";
+window.TGF_VERSION = "2.522.15";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.522.15",
+    date: "2026-09-29",
+    title: "Scorecards: par-3 removed stroke is a bold orange ×",
+    changes: [
+      "Kerry 9/29: \"The no strokes circle is lost at that scale\" … \"YES! Go with the X\". A Team/Cart Net stroke removed by the par-3 rule now prints as a small, bold orange × in the same box and the same equal 0.8 mm corner inset as a stroke dot, in the net strokes' own orange so it reads on a laser print. The legend's third item shows the same ×: \"No Team Net Strokes on par 3s\" (game name from the net-game rule), still one line on every layout."
+    ]
+  },
   {
     version: "2.522.14",
     date: "2026-09-29",

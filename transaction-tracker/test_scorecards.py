@@ -322,7 +322,7 @@ check("par-3 removed strokes render, and the one-line legend reads as Kerry wrot
 _s9o = dict(_s9); _s9o["net"] = dict(_s9["net"], off_low=True)
 check("off the field's low prints when the rule applies it",
       "Team Net Stroke at 75%, off the field&rsquo;s low" in env.get_template("scorecards.html").render(sc=_s9o))
-check("the slash runs well past the circle (230% of it)", "width: 230%" in _tpl and "rotate(-45deg)" in _tpl)
+check("the par-3 removed stroke is an orange × (two strokes, corner to corner)", "width: 141%" in _tpl and "rotate(45deg)" in _tpl and "rotate(-45deg)" in _tpl and "border-radius: 0;" in _tpl)
 check("9-hole card: Total and Net are hole-width, PH/TEAM narrower",
       '<col style="width:6.45%"><col style="width:5.05%"><col style="width:6.45%">' in _h9)
 for _rule in ("table { border: 2px solid #374151; }", "tr.hd th { border-bottom: 2px solid #374151; }",
