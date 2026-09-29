@@ -2692,6 +2692,16 @@ bridge `scoring-scorecards:<id>[|key=value…][|dump|html|pdf[|all][|send]]`.
   `preview` fills every group's real scorer link via the read-only
   `score_entry.event_group_links` (never seeds a round) — for Kerry's look
   only. **GGID** collapses until the PAIRINGS field (#900) exists.
+- **GGID per group (v2.520.0, Kerry #900/#912):** table `event_group_codes`
+  (event_id, holes, group_num → ggid), typed in the GGID box at the top of
+  the scorecards page (POST `/api/events/<id>/group-codes`, blank clears,
+  junk refused), attached to every print-pack group by
+  `get_event_print_pack` and printed on the scorecard header, the Starter
+  Sheet group box footer and each cart sign. Survives a PAIRINGS re-save.
+  Bridge `scoring-group-codes:<id>[|<holes>:<group>=<code>;…]`.
+- **Print anyway, flagged (CA #915):** `?allow_gaps=1` lets a player with no
+  PH print with PH/net blank and no dots (named in the print log); every
+  event-level gap still stops the print.
 - **`send`** mails the bound PDF to Kerry only (staff addresses; subject
   "approve a template"). Kerry approves before the card replaces GG's.
 

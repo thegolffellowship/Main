@@ -105,6 +105,18 @@
     tr.par td.hl, tr.hcp td.hl { background: #FFF176; }
     tr.pl td.hl { background: #FFFDE7; }
 
+    .ggid-form { max-width: 8.5in; margin: 24px auto 0; background: #fff; padding: 14px 18px;
+      border-radius: 6px; font-size: 13px; }
+    .ggid-form h2 { font-family: "Bitter", Georgia, serif; font-size: 16px; margin: 0 0 6px; }
+    .ggid-form table { width: 100%; table-layout: auto; }
+    .ggid-form td, .ggid-form th { border: 0; border-bottom: 1px solid #E5E7EB; text-align: left;
+      padding: 4px 6px; white-space: normal; }
+    .ggid-form input { font: 14px "Geist Mono", ui-monospace, monospace; padding: 4px 8px;
+      width: 11em; border: 1px solid #9CA3AF; border-radius: 6px; }
+    .ggid-form button { font: inherit; font-weight: 700; padding: 6px 16px; border: 0;
+      border-radius: 999px; background: #1B1B1B; color: #fff; cursor: pointer; }
+    .ggid-form .msg { margin-left: 10px; color: #15803D; }
+    .ggid-form .msg.err { color: #C0392B; }
     .gaps { max-width: 7.5in; margin: 40px auto; background: #fff; padding: 24px 28px;
       border-left: 6px solid #C0392B; font-size: 14px; }
     .gaps h1 { font-family: "Bitter", Georgia, serif; margin: 0 0 8px; font-size: 20px; }
@@ -124,11 +136,45 @@
 {%- endmacro %}
 {% macro dots(n) -%}{% if n and n > 0 %}{{ '•' * n }}{% endif %}{%- endmacro %}
 
+<form class="ggid-form noprint" id="ggidForm" onsubmit="return saveGgid(event)">
+  <h2>GGID codes</h2>
+  <div style="color:#4B5563;margin-bottom:6px">Type each group's Golf Genius code, then Save. It prints on the scorecard header, the Starter Sheet group box and the cart signs. Leave a box blank for no code.</div>
+  <table>
+    <tr><th>Group</th><th>Start</th><th>Players</th><th>GGID</th></tr>
+    {% for g in sc.groups %}
+    <tr><td>{{ g.group_num }}{% if g.holes == '18' %} · 18{% endif %}</td><td>{{ g.slot }}</td>
+      <td>{{ g.players }}</td>
+      <td><input name="ggid" data-holes="{{ g.holes }}" data-group="{{ g.group_num }}" value="{{ g.ggid }}" maxlength="24" autocomplete="off"></td></tr>
+    {% endfor %}
+  </table>
+  <div style="margin-top:8px"><button type="submit">Save GGID codes</button><span class="msg" id="ggidMsg"></span></div>
+</form>
+<script>
+  function saveGgid(e) {
+    e.preventDefault();
+    var codes = [].map.call(document.querySelectorAll('#ggidForm input[name=ggid]'), function (i) {
+      return {holes: i.dataset.holes, group_num: +i.dataset.group, ggid: i.value.trim()};
+    });
+    var msg = document.getElementById('ggidMsg');
+    msg.className = 'msg'; msg.textContent = 'Saving…';
+    fetch('/api/events/{{ sc.event.id }}/group-codes', {method: 'POST', credentials: 'same-origin',
+      headers: {'Content-Type': 'application/json'}, body: JSON.stringify({codes: codes})})
+      .then(function (r) { return r.json().then(function (j) { return [r.ok, j]; }); })
+      .then(function (x) {
+        if (!x[0] || !x[1].ok) { msg.className = 'msg err'; msg.textContent = (x[1] && x[1].error) || 'Not saved'; return; }
+        msg.textContent = 'Saved. Reloading…'; setTimeout(function () { location.reload(); }, 400);
+      }).catch(function (err) { msg.className = 'msg err'; msg.textContent = 'Not saved: ' + err; });
+    return false;
+  }
+</script>
 {% if sc.gaps %}
   <div class="gaps">
     <h1>These cards can't print yet</h1>
     <p>Nothing on a scorecard is guessed. Fix these, then print again:</p>
     <ul>{% for g in sc.gaps %}<li>{{ g }}</li>{% endfor %}</ul>
+    {% if sc.player_gaps %}
+    <p><a href="#" onclick="var u = new URL(location.href); u.searchParams.set('allow_gaps', '1'); location.href = u; return false;">Print anyway, flagged</a> — a player with no handicap prints with PH blank and no dots; the print log names him. Nothing else can be printed past.</p>
+    {% endif %}
   </div>
 {% else %}
 {% for sheet in sc.sheets %}

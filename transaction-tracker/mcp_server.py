@@ -5351,6 +5351,23 @@ def _scoring_dispatch_inner(url: str, extract: str):
                     indent=2, default=str)
             return json.dumps({"error": "usage: scoring-pairings:rounds|<portal> "
                                "or round|<portal>|<id>[|apply] or all|<portal>[|apply]"})
+        if cmd == "scoring-group-codes":
+            # scoring-group-codes:<event_id>  READ the GGID per group.
+            # scoring-group-codes:<event_id>|<holes>:<group>=<code>;…  save
+            #   (blank clears) — the same writer the scorecards page uses.
+            parts = (arg or "").split("|", 1)
+            eid = int(parts[0])
+            if len(parts) > 1 and parts[1].strip():
+                codes = {}
+                for pair in parts[1].split(";"):
+                    if "=" in pair:
+                        k, v = pair.split("=", 1)
+                        h, _, gn = k.strip().partition(":")
+                        codes[(h or "9", int(gn))] = v.strip()
+                db.log_agent_action("mcp-claude", "scoring-group-codes", arg)
+                return json.dumps(db.set_group_codes(eid, codes, by="mcp-claude"), indent=2)
+            return json.dumps({f"{h}:{g}": c for (h, g), c in db.get_group_codes(eid).items()},
+                              indent=2)
         if cmd == "scoring-scorecards":
             # scoring-scorecards:<event_id>[|layout=3up|grouping=team|qr=off|holes=18]
             #   READ-ONLY summary: cards, sheets, gaps, print log.
@@ -5365,10 +5382,12 @@ def _scoring_dispatch_inner(url: str, extract: str):
             kv = {k: v for k, _, v in (p.partition("=") for p in parts[1:]) if v}
             flags = {p.lower() for p in parts[1:] if "=" not in p}
             one = {"layout": kv.get("layout", "3up"), "grouping": kv.get("grouping", "team"),
-                   "qr": kv.get("qr", "auto"), "holes": kv.get("holes")}
+                   "qr": kv.get("qr", "auto"), "holes": kv.get("holes"),
+                   "allow_gaps": "allow_gaps" in flags}
             if "pdf" in flags:
                 from app import _print_pack_render, app as _app
-                sets = ([{"layout": l, "grouping": g, "qr": one["qr"], "holes": h}
+                sets = ([{"layout": l, "grouping": g, "qr": one["qr"], "holes": h,
+                          "allow_gaps": one["allow_gaps"]}
                          for h in (None, "18") for l, g in _scm.ALL_COMBOS]
                         if "all" in flags else [one])
                 built = _scm.build_scorecards_pdf(_print_pack_render, eid,
@@ -5381,7 +5400,8 @@ def _scoring_dispatch_inner(url: str, extract: str):
                                                            note=kv.get("note", ""))
                 return json.dumps(out, indent=2, default=str)
             sc = _scm.build_scorecards(eid, one["layout"], one["grouping"], qr=one["qr"],
-                                       holes_override=one["holes"])
+                                       holes_override=one["holes"],
+                                       allow_gaps=one["allow_gaps"])
             if not sc:
                 return json.dumps({"error": "event not found"})
             if "html" in flags:
@@ -5400,7 +5420,10 @@ def _scoring_dispatch_inner(url: str, extract: str):
                                "grouping": sc["grouping"], "qr": sc["qr"],
                                "cards": len(sc["cards"]), "sheets": len(sc["sheets"]),
                                "qr_cards": sum(1 for c in sc["cards"] if c.get("qr")),
-                               "net": sc["net"], "gaps": sc["gaps"], "log": sc["log"]},
+                               "net": sc["net"], "gaps": sc["gaps"], "log": sc["log"],
+                               "flagged": sc["flagged"],
+                               "ggid": {f"{g['holes']}:{g['group_num']}": g["ggid"]
+                                        for g in sc["groups"]}},
                               indent=2, default=str)
         if cmd == "scoring-print-pack-pdf":
             # scoring-print-pack-pdf:<event_id>[|send[|<to>]] — build the bound

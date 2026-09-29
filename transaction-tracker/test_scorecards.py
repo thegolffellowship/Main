@@ -116,8 +116,10 @@ check("shotgun 5B: start hole 5B, highlight 5, time = the shotgun",
       t5["start_hole"] == "5B" and t5["hl_hole"] == 5 and t5["start_time"] == "5:00 PM", t5)
 check("Forward band prints 'Forward' (CA #898-7)",
       [t["band_text"] for t in sc["tees"]][-1] == "Forward", [t["band_text"] for t in sc["tees"]])
-check("par-3 net dots follow the engine rule (off today)", sc["net"]["par3_suppressed"] is False
-      and any("par 3" in l for l in sc["log"]), sc["log"])
+_flag = scm._team_no_par3_pops()
+check("par-3 net dots follow the engine rule, and the log says when they print",
+      sc["net"]["par3_suppressed"] is _flag and (_flag or any("par 3" in l for l in sc["log"])),
+      sc["log"])
 check("decode label is TEAM at 75%", sc["net"]["word"] == "TEAM" and sc["net"]["pct"] == 75)
 check("source dump carries every printed player with ids", len(sc["dump"]) == 26
       and all(d["customer_id"] and d["tee_id"] for d in sc["dump"]))
@@ -145,6 +147,48 @@ groups[1]["players"][0]["tee_choice"] = "Purple"
 g = scm.build_scorecards(3304, "3up", "team", qr="off", db_path=DB)
 check("a tee not designated is a named gap", any("'Purple'" in x for x in g["gaps"]), g["gaps"])
 groups[1]["players"][0]["tee_choice"] = "<50"
+
+print("print anyway, flagged (CA #915)")
+groups[0]["players"][0]["playing_handicap"] = None
+groups[0]["players"][0]["team_handicap"] = None
+fa = scm.build_scorecards(3304, "3up", "team", qr="off", allow_gaps=True, db_path=DB)
+check("a no-PH player no longer blocks the set", fa["gaps"] == [] and len(fa["cards"]) == 7, fa["gaps"])
+k = fa["cards"][0]["rows"][0]
+check("his card prints PH/net blank and no dots", k["ph"] == "" and k["net"] == ""
+      and not any(k["ph_dots"].values()), k)
+check("the print log names him", any("PRINTED ANYWAY" in l and "Kerry Niester" in l for l in fa["log"]),
+      fa["log"])
+bad = dict(groups[1]["players"][0]); groups[1]["players"][0]["tee_choice"] = "Purple"
+fb = scm.build_scorecards(3304, "3up", "team", qr="off", allow_gaps=True, db_path=DB)
+check("an undesignated tee still stops the print", any("'Purple'" in x for x in fb["gaps"]), fb["gaps"])
+groups[1]["players"][0]["tee_choice"] = "<50"
+groups[0]["players"][0]["playing_handicap"] = 5
+groups[0]["players"][0]["team_handicap"] = 4
+
+print("GGID per group (Kerry #900/#912)")
+r = db.set_group_codes(3304, {("9", 1): " AB-12 ", ("9", 2): "C3"}, db_path=DB)
+check("codes save trimmed", r["ok"] and db.get_group_codes(3304, db_path=DB) == {("9", 1): "AB-12",
+                                                                                 ("9", 2): "C3"}, r)
+r = db.set_group_codes(3304, {("9", 2): "bad code!"}, db_path=DB)
+check("a code with junk is refused, nothing written", not r["ok"]
+      and db.get_group_codes(3304, db_path=DB)[("9", 2)] == "C3", r)
+db.set_group_codes(3304, {("9", 2): ""}, db_path=DB)
+check("blank clears", ("9", 2) not in db.get_group_codes(3304, db_path=DB))
+for g in groups:
+    g["ggid"] = db.get_group_codes(3304, db_path=DB).get((g["holes"], g["group_num"]))
+gg = scm.build_scorecards(3304, "3up", "team", qr="off", db_path=DB)
+check("the card header carries the group's code; others collapse",
+      gg["cards"][0]["ggid"] == "AB-12" and gg["cards"][1]["ggid"] is None, gg["cards"][0]["ggid"])
+
+print("par-3 net dots follow the engine flag (Kerry #912-2)")
+from email_parser import live_scoring as _ls  # noqa: E402
+_ls.SEED_LIVE_SCORING_CONFIG["games"]["team_net"]["no_pops_on_par3"] = True
+p3 = scm.build_scorecards(3304, "3up", "team", qr="off", db_path=DB)
+pat = p3["cards"][0]["rows"][2]
+check("no orange dot on any par 3 (holes 3, 7)", pat["net_dots"].get(3, 0) == 0
+      and pat["net_dots"].get(7, 0) == 0 and pat["ph_dots"].get(3, 0) > 0, pat)
+check("decode says so", "no pops on par 3s" in p3["net"]["pct_note"], p3["net"])
+_ls.SEED_LIVE_SCORING_CONFIG["games"]["team_net"]["no_pops_on_par3"] = _flag
 
 print("render")
 from jinja2 import Environment, FileSystemLoader, StrictUndefined  # noqa: E402

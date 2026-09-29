@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.519.1";
+window.TGF_VERSION = "2.520.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.520.0",
+    date: "2026-09-28",
+    title: "GGID per group, print-anyway for a player with no handicap, par-3 note on the scorecard",
+    changes: [
+      "GGID codes (Kerry #900/#912: \"Got to have GGID codes for tomorrow's print at 9am\"). A new table event_group_codes keyed (event_id, holes, group_num) holds Golf Genius's code per group, so a PAIRINGS re-save never loses one. Kerry types them in the GGID box at the top of /events/<id>/scorecards and presses Save (POST /api/events/<id>/group-codes; blank clears; junk is refused by name). The code prints in the scorecard header's name cell, a footer on each Starter Sheet group box and a line on each cart sign; no code, no slot. Bridge scoring-group-codes:<id>[|<holes>:<group>=<code>;…].",
+      "Print anyway, flagged (CA #915). One player with no playing handicap no longer blocks every card: ?allow_gaps=1 (the 'Print anyway, flagged' link on the gap page) prints his card with PH and net blank and no dots, and the print log names him. Event-level gaps (course, tees, pairings, par/SI, an undesignated tee) still stop the print.",
+      "Par-3 pops (Kerry #912-2): the orange net-game dots already read the engine's team_net no_pops_on_par3 rule; once Side Games flips it the card drops them on par 3s and the decode line adds 'no pops on par 3s'.",
+    ],
+  },
   {
     version: "2.519.1",
     date: "2026-09-28",

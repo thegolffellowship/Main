@@ -5482,10 +5482,31 @@ def scorecards_page(event_id):
     sc = build_scorecards(event_id, request.args.get("layout", "3up"),
                           request.args.get("grouping", "team"),
                           qr=request.args.get("qr", "auto"),
-                          holes_override=request.args.get("holes") or None)
+                          holes_override=request.args.get("holes") or None,
+                          allow_gaps=request.args.get("allow_gaps") == "1")
     if not sc:
         return "Event not found", 404
     return render_template("scorecards.html", sc=sc)
+
+
+@app.route("/api/events/<int:event_id>/group-codes", methods=["GET", "POST"])
+@require_role("manager")
+def api_event_group_codes(event_id):
+    """GGID per group (Kerry #900/#912). GET lists; POST {codes: [{holes,
+    group_num, ggid}]} saves (blank clears). Printed on the scorecard
+    header, the Starter Sheet group box and the cart signs."""
+    from email_parser.database import get_group_codes, set_group_codes
+    if request.method == "GET":
+        return jsonify({f"{h}:{g}": c for (h, g), c in get_group_codes(event_id).items()})
+    data = request.get_json(silent=True) or {}
+    codes = {}
+    for c in data.get("codes") or []:
+        try:
+            codes[(str(c.get("holes") or "9"), int(c.get("group_num")))] = c.get("ggid") or ""
+        except (TypeError, ValueError):
+            return jsonify({"ok": False, "error": "bad group number"}), 400
+    res = set_group_codes(event_id, codes, by=session.get("role") or "manager")
+    return jsonify(res), (200 if res.get("ok") else 400)
 
 
 @app.route("/events/<int:event_id>/scorecards.pdf")
@@ -5498,7 +5519,8 @@ def scorecards_pdf(event_id):
         "layout": request.args.get("layout", "3up"),
         "grouping": request.args.get("grouping", "team"),
         "qr": request.args.get("qr", "auto"),
-        "holes": request.args.get("holes") or None}])
+        "holes": request.args.get("holes") or None,
+        "allow_gaps": request.args.get("allow_gaps") == "1"}])
     if built.get("error"):
         if built.get("gaps"):
             return scorecards_page(event_id)

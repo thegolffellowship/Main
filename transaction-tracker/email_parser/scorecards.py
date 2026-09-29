@@ -114,12 +114,17 @@ def _team_no_par3_pops() -> bool:
 
 def build_scorecards(event_id: int, layout: str = "3up", grouping: str = "team",
                      qr: str = "auto", holes_override: str | None = None,
-                     db_path=None) -> dict | None:
+                     allow_gaps: bool = False, db_path=None) -> dict | None:
     """Everything the scorecard template prints, or `gaps` saying why not.
 
     layout: 3up | 2up | 2land.  grouping: team (one card per group) | cart
     (one card per cart). qr: auto (the score-entry dials) | off | preview
-    (every group's real scorer link, for Kerry's look only)."""
+    (every group's real scorer link, for Kerry's look only).
+
+    allow_gaps (CA #915): a player-level gap — one player with no PH — no
+    longer blocks the other cards; that card prints with PH and net BLANK,
+    no dots, and the print log names him. Every event-level gap (course,
+    tees, pairings, par/SI) still stops the print."""
     from email_parser import database as db
     layout = layout if layout in LAYOUTS else "3up"
     grouping = grouping if grouping in GROUPINGS else "team"
@@ -128,6 +133,7 @@ def build_scorecards(event_id: int, layout: str = "3up", grouping: str = "team",
         return None
     gaps: list[str] = []
     log: list[str] = []
+    flagged: list[str] = []
     with db._connect(db_path) as conn:
         ev = dict(conn.execute("SELECT * FROM events WHERE id = ?", (int(event_id),)).fetchone())
         course_name = None
@@ -294,7 +300,7 @@ def build_scorecards(event_id: int, layout: str = "3up", grouping: str = "team",
             ph = p.get("playing_handicap")
             net = p.get("team_handicap")
             if ph is None:
-                gaps.append(
+                (flagged if allow_gaps else gaps).append(
                     f"{p.get('name')} (group {g['group_num']}): no playing handicap — "
                     + ("no TGF index yet; set a starting handicap on his profile and reprint."
                        if p.get("handicap_index_display") is None and tee else
@@ -321,7 +327,7 @@ def build_scorecards(event_id: int, layout: str = "3up", grouping: str = "team",
                 "name": nm, "initials": ((p["_first"][:1] + p["_last"][:1]).upper()),
                 "tee_code": tee["code"] if tee else "?",
                 "cart_pos": p.get("cart_pos"), "customer_id": p.get("customer_id"),
-                "ph": _hcp_text(ph), "net": _hcp_text(net),
+                "ph": _hcp_text(ph) or "", "net": _hcp_text(net) or "",
                 "ph_dots": {h: max(0, int(v or 0)) for h, v in ph_dots.items()},
                 "net_dots": {h: max(0, int(v or 0)) for h, v in net_dots.items()},
                 "rider": (p.get("cart_pos") or 0) >= 3,
@@ -338,7 +344,7 @@ def build_scorecards(event_id: int, layout: str = "3up", grouping: str = "team",
                          "net_dots": row["net_dots"]})
         base = {"group_num": g["group_num"], "holes": hk, "slot_label": g["slot_label"],
                 "start_time": start_time, "start_hole": start_hole, "hl_hole": hl_hole,
-                "qr": None, "ggid": None}
+                "qr": None, "ggid": g.get("ggid")}
         url = (links.get(g["holes"]) or {}).get(g["group_num"]) if qr_on else None
         if url:
             from email_parser.score_entry import qr_svg
@@ -362,7 +368,10 @@ def build_scorecards(event_id: int, layout: str = "3up", grouping: str = "team",
         gaps.append("This event has 5+ tees; the 3-per-sheet card cannot hold them. "
                     "Use a 2-per-sheet layout.")
     sheets = [cards[i:i + lay["per_sheet"]] for i in range(0, len(cards), lay["per_sheet"])]
-    pct_note = f"{allow_pct}%" + (", off the field's low" if off_low.get("applied") else "")
+    pct_note = (f"{allow_pct}%" + (", off the field's low" if off_low.get("applied") else "")
+                + ("; no pops on par 3s" if suppress_par3 else ""))
+    for f in flagged:
+        log.append("PRINTED ANYWAY (flagged): " + f + " His PH and net print blank, no dots.")
     return {
         "event": {"id": int(event_id), "item_name": ev.get("item_name"),
                   "chapter": (ev.get("chapter") or "").upper(),
@@ -376,6 +385,14 @@ def build_scorecards(event_id: int, layout: str = "3up", grouping: str = "team",
                 "basis": pack.get("team_basis"), "low": off_low.get("low"),
                 "par3_suppressed": suppress_par3},
         "gaps": list(dict.fromkeys(gaps)), "log": list(dict.fromkeys(log)),
+        "flagged": list(dict.fromkeys(flagged)), "allow_gaps": bool(allow_gaps),
+        "player_gaps": any("no playing handicap" in x for x in gaps),
+        "groups": [{"holes": g["holes"], "group_num": g["group_num"],
+                    "slot": re.sub(r"^HOLE\s+", "", g["slot_label"] or "", flags=re.I),
+                    "players": ", ".join((p.get("_last") or p.get("name") or "")
+                                         for p in sorted(g["players"],
+                                                         key=lambda x: x.get("cart_pos") or 0)),
+                    "ggid": g.get("ggid") or ""} for g in pack["groups"]],
         "pairings_saved": pairings_saved,
         "handicap_as_of": ev.get("event_date") if db._event_index_as_of(ev) else "today",
         "printed_at": datetime.now().strftime("%Y-%m-%d %H:%M UTC"),
@@ -402,7 +419,7 @@ def build_scorecards_pdf(render, event_id: int, static_dir: str, sets: list[dict
     for s in sets:
         sc = build_scorecards(event_id, s.get("layout", "3up"), s.get("grouping", "team"),
                               qr=s.get("qr", "auto"), holes_override=s.get("holes"),
-                              db_path=db_path)
+                              allow_gaps=bool(s.get("allow_gaps")), db_path=db_path)
         if not sc:
             return {"error": "event not found"}
         ev_name = sc["event"]["item_name"]

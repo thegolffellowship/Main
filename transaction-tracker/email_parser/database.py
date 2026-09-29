@@ -63242,6 +63242,71 @@ def _first_event_as_member(conn, roster_row: dict, event_date: str) -> bool:
         return False
 
 
+# ── GGID per group (Kerry #900/#912, 2026-09-28: "Got to have GGID codes
+# for tomorrow's print at 9am") ─────────────────────────────────────────────
+# Golf Genius's per-group code, typed by the manager until GG is retired
+# (R2, 10/31). Its own small table keyed (event_id, holes, group_num) — the
+# "group row's equivalent" #900 allows — so a PAIRINGS re-save, which
+# rewrites event_pairings, never loses a code, and a swap moves players but
+# not the code. Blank = no row = the slot collapses on every printable.
+
+GGID_MAX_LEN = 24
+
+
+@_once_per_db
+def _ensure_group_codes(conn):
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS event_group_codes ("
+        " event_id   INTEGER NOT NULL REFERENCES events(id),"
+        " holes      TEXT NOT NULL,"
+        " group_num  INTEGER NOT NULL,"
+        " ggid       TEXT NOT NULL,"
+        " updated_at TEXT,"
+        " updated_by TEXT,"
+        " PRIMARY KEY (event_id, holes, group_num))")
+
+
+def get_group_codes(event_id: int, db_path=None) -> dict:
+    """{(holes, group_num): ggid} for the event."""
+    with _connect(db_path) as conn:
+        _ensure_group_codes(conn)
+        return {(str(r["holes"]), int(r["group_num"])): r["ggid"] for r in conn.execute(
+            "SELECT holes, group_num, ggid FROM event_group_codes WHERE event_id = ?",
+            (int(event_id),)).fetchall()}
+
+
+def set_group_codes(event_id: int, codes: dict, by: str = "manager", db_path=None) -> dict:
+    """codes = {(holes, group_num): "code" | ""}. A blank clears the code.
+    Codes are trimmed; anything but letters, digits, '-' or '.' (or longer
+    than GGID_MAX_LEN) is refused by name and nothing is written."""
+    bad, clean = [], {}
+    for (holes, gnum), raw in (codes or {}).items():
+        code = re.sub(r"\s+", "", str(raw or ""))
+        if code and (len(code) > GGID_MAX_LEN or not re.fullmatch(r"[A-Za-z0-9.\-]+", code)):
+            bad.append(f"group {gnum}: '{raw}'")
+            continue
+        clean[(str(holes), int(gnum))] = code
+    if bad:
+        return {"ok": False, "error": "not a GGID code: " + "; ".join(bad)}
+    stamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+    with _connect(db_path) as conn:
+        _ensure_group_codes(conn)
+        for (holes, gnum), code in clean.items():
+            if code:
+                conn.execute(
+                    "INSERT INTO event_group_codes (event_id, holes, group_num, ggid, "
+                    "updated_at, updated_by) VALUES (?,?,?,?,?,?) "
+                    "ON CONFLICT (event_id, holes, group_num) DO UPDATE SET "
+                    "ggid = excluded.ggid, updated_at = excluded.updated_at, "
+                    "updated_by = excluded.updated_by",
+                    (int(event_id), holes, gnum, code, stamp, by))
+            else:
+                conn.execute("DELETE FROM event_group_codes WHERE event_id = ? AND holes = ? "
+                             "AND group_num = ?", (int(event_id), holes, gnum))
+        conn.commit()
+    return {"ok": True, "saved": {f"{h}:{g}": c for (h, g), c in clean.items()}}
+
+
 def get_event_print_pack(event_id: int, db_path=None) -> dict | None:
     """Assemble the data for the Starter Sheet + Cart Signs printables (B5).
 
@@ -63289,6 +63354,11 @@ def get_event_print_pack(event_id: int, db_path=None) -> dict | None:
                              event_id)
     idx_map = _handicap_index_18_by_customer(db_path, as_of=_event_index_as_of(ev))
     pairings = get_event_pairings(event_id, db_path=db_path)
+    try:
+        _ggids = get_group_codes(event_id, db_path=db_path)
+    except Exception:
+        logger.exception("Non-fatal: GGID codes unavailable for %s", event_id)
+        _ggids = {}
 
     def _carts(players: list) -> list:
         ps = sorted(players, key=lambda p: p.get("cart_pos") or 0)
@@ -63314,6 +63384,7 @@ def get_event_print_pack(event_id: int, db_path=None) -> dict | None:
             groups.append({
                 "holes": holes,
                 "group_num": g.get("group_num"),
+                "ggid": _ggids.get((holes, int(g.get("group_num") or 0))),
                 "slot_label": g.get("slot_label") or f"Group {g.get('group_num')}",
                 "players": players,
                 "carts": _carts(players),

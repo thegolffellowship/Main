@@ -82,6 +82,12 @@
       font-size: 13px; letter-spacing: 0.02em;
     }
     .gbox-head .grp { font-size: 10px; color: #bbb; }
+    /* GGID (Kerry #900/#912): Golf Genius's group code, typed on the
+       scorecards page; the footer collapses when there is none. */
+    .gbox-foot { border-top: 1px solid #E5E7EB; padding: 2px 7px; font-size: 9px;
+      color: #6B7280; letter-spacing: .06em; text-transform: uppercase; }
+    .gbox-foot b { font: 700 11px "Geist Mono", ui-monospace, monospace; color: #1B1B1B;
+      letter-spacing: 0; text-transform: none; margin-left: 4px; }
     /* TEE LEGEND (Kerry 2026-09-15: "add colors for the tee assignments
        according to our course info. With a legend up above the
        foursomes"). The colour comes off the COURSE CARD, and the tee's
@@ -301,6 +307,7 @@
             <span class="tee">{% if pack.team_unit == 'cart' %}cart{% else %}team{% endif %}</span>
           </div>
         {% endfor %}
+        {% if g.ggid %}<div class="gbox-foot">GGID<b>{{ g.ggid }}</b></div>{% endif %}
       </div>
     {% endfor %}
   </div>
