@@ -35,10 +35,14 @@ import base64
 import hashlib
 import hmac
 import json
+import logging
 import os
+import re
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 GROSS_MIN, GROSS_MAX = 1, 20
 # TGF plays MAX TRIPLE (Kerry, 2026-09-25: "We do Max Triple, so it can't be
@@ -144,6 +148,7 @@ _EVENT_OF = {
              "JOIN se_rounds r ON r.id = g.round_id WHERE f.id = ?"),
     "hio": ("SELECT r.event_id FROM se_hio_claims h JOIN se_groups g ON g.id = h.group_id "
             "JOIN se_rounds r ON r.id = g.round_id WHERE h.id = ?"),
+    "round_of_group": "SELECT round_id FROM se_groups WHERE id = ?",
 }
 
 
@@ -213,6 +218,12 @@ def admin_overview(event_id: int, base_url: str | None = None, db_path=None) -> 
     score-entry round, its groups with players, holes in, who is scoring,
     signatures, the card check and photo, and each group's link."""
     from email_parser.database import get_app_setting
+    with _closing(_conn(db_path)) as conn:
+        _open = [x[0] for x in conn.execute(
+            "SELECT id FROM se_rounds WHERE event_id = ? AND status = 'open' "
+            "AND pairings_holes IS NOT NULL", (event_id,))]
+    for _rid in _open:
+        sync_from_pairings(_rid, db_path=db_path)
     feed = get_entered_scores(event_id, db_path=db_path)
     rounds = []
     for r in feed["rounds"]:
@@ -839,6 +850,15 @@ def upsert_group(round_id: int, group_num: int, *, label=None, start_hole=1,
             if not cid:
                 missing.append(p.get("display_name") or "?")
                 continue
+            # A player moved to another group takes his scores and marks with
+            # him (Kerry 2026-09-29): the rows are his, the group is where he
+            # is now. Nothing is deleted.
+            was = conn.execute("SELECT group_id FROM se_players WHERE round_id = ? AND customer_id = ?",
+                               (round_id, int(cid))).fetchone()
+            if was and was[0] != gid:
+                for tbl in ("se_hole_scores", "se_hole_marks"):
+                    conn.execute(f"UPDATE {tbl} SET group_id = ? WHERE round_id = ? AND group_id = ? "
+                                 "AND subject_key = ?", (gid, round_id, was[0], f"c:{int(cid)}"))
             conn.execute(
                 "INSERT INTO se_players (round_id, group_id, customer_id, display_name, "
                 "tee, playing_handicap, seat) VALUES (?,?,?,?,?,?,?) "
@@ -959,10 +979,35 @@ def seed_round_from_pairings(event_id: int, holes: str = "9", *, round_date=None
     first = _first_hole(evrow, n_holes)
     pev = pack.get("event") or {}
     shotgun = (pev.get("start_type") or "").strip().lower().startswith("shotgun")
+    # A LINK BELONGS TO ITS SLOT (Kerry 2026-09-29: "I'm probably gonna be
+    # making pairing changes but anything like that should never affect group
+    # links. Right?"). The link is the se_groups row; the row is matched to the
+    # saved pairings by SLOT (1A, 2B, 8:10a), never by the pairings' group
+    # number, which renumbers when a group is added or removed. A new slot
+    # gets a fresh number; a slot no longer on the sheet keeps its row (its
+    # link says so) and its players move to wherever the sheet has them.
+    with _closing(_conn(db_path)) as conn:
+        have = {}
+        for er in conn.execute("SELECT group_num, label FROM se_groups WHERE round_id = ?", (rid,)):
+            have.setdefault(slot_key(er[1]), er[0])
+    used = set(have.values())
+    num_for = {}
+    for g in groups:
+        k = slot_key(g.get("start_line") or g.get("slot_label"))
+        if k in have:
+            num_for[id(g)] = have[k]
+    for g in groups:
+        if id(g) in num_for:
+            continue
+        n = int(g["group_num"])
+        if n in used:
+            n = max(used | {0}) + 1
+        used.add(n)
+        num_for[id(g)] = n
     for g in groups:
         start = _start_hole(g.get("hole_label"), first)
         res = upsert_group(
-            rid, int(g["group_num"]), label=g.get("start_line") or g.get("slot_label"),
+            rid, num_for[id(g)], label=g.get("start_line") or g.get("slot_label"),
             start_hole=start,
             # On a shotgun the slot is a hole and the time is the one start
             # clock; on tee times the slot IS the time.
@@ -1092,6 +1137,60 @@ def cup_seed(event_id: int, *, apply: bool = False, db_path=None) -> dict:
             view["round_id"] = rid
         out["sessions"].append(view)
     return out
+
+
+def slot_key(label) -> str:
+    """The slot a group label names: "Hole 2A | 5:00 PM" -> "2A",
+    "8:10a | Hole 1" -> "8:10A", "HOLE 4" -> "4". The same text the starter
+    sheet prints, so a link and the sheet agree on which group is which."""
+    t = str(label or "").split("|")[0].strip()
+    t = re.sub(r"^hole\s+", "", t, flags=re.I)
+    return t.strip().upper()
+
+
+def _pairings_fingerprint(conn, event_id: int, holes: str) -> str:
+    rows = conn.execute(
+        "SELECT group_num, slot_label, cart_pos, customer_id, player_name, tee_choice "
+        "FROM event_pairings WHERE event_id = ? AND holes = ? "
+        "ORDER BY group_num, cart_pos", (event_id, str(holes))).fetchall()
+    return hashlib.sha256(json.dumps([list(r) for r in rows], default=str).encode()).hexdigest()[:16]
+
+
+PAIRINGS_FP_SETTING = "score_entry_pairings_fp"
+
+
+def sync_from_pairings(round_id: int, db_path=None) -> dict | None:
+    """THE ROUND FOLLOWS THE SAVED PAIRINGS (Kerry 2026-09-29). When a round
+    seeded from PAIRINGS is opened (a scorer's link, the Live Scoring page),
+    re-seed it if the saved pairings changed since the last seed. Re-seeding
+    matches groups by slot, moves players and their scores, and never deletes
+    a score, so every link already handed out keeps working. Returns the seed
+    result when it re-seeded, else None. Never raises."""
+    from email_parser.database import get_app_setting, set_app_setting
+    try:
+        with _closing(_conn(db_path)) as conn:
+            r = conn.execute("SELECT event_id, pairings_holes, status FROM se_rounds WHERE id = ?",
+                             (round_id,)).fetchone()
+            if not r or r[2] != "open" or r[1] not in ("9", "18"):
+                return None
+            from email_parser.database import _ensure_pairing_tables
+            _ensure_pairing_tables(conn)
+            fp = _pairings_fingerprint(conn, r[0], r[1])
+        try:
+            fps = json.loads(get_app_setting(PAIRINGS_FP_SETTING, db_path) or "{}")
+        except (ValueError, TypeError):
+            fps = {}
+        if fps.get(str(round_id)) == fp:
+            return None
+        res = seed_round_from_pairings(r[0], r[1], db_path=db_path)
+        if "error" in res:
+            return None
+        fps[str(round_id)] = fp
+        set_app_setting(PAIRINGS_FP_SETTING, json.dumps(fps, sort_keys=True), db_path)
+        return res
+    except Exception:
+        logger.exception("score entry: pairings re-sync failed for round %s", round_id)
+        return None
 
 
 def _first_hole(ev: dict, n_holes: int) -> int:
@@ -1491,6 +1590,9 @@ def _ensure_cup_teams(group_id: int, db_path=None) -> list:
 
 def get_group_card(group_id: int, device_id: str | None = None, db_path=None) -> dict:
     """Everything the entry screen needs for one group."""
+    rid0 = event_of("round_of_group", group_id, db_path)
+    if rid0:
+        sync_from_pairings(rid0, db_path=db_path)
     _ensure_cup_teams(group_id, db_path=db_path)
     with _closing(_conn(db_path)) as conn:
         g = _group_ctx(conn, group_id)
@@ -1500,6 +1602,12 @@ def get_group_card(group_id: int, device_id: str | None = None, db_path=None) ->
             "SELECT customer_id, display_name, tee, playing_handicap, seat "
             "FROM se_players WHERE group_id = ? ORDER BY COALESCE(seat, 99), id",
             (group_id,))]
+        if not players and not conn.execute("SELECT 1 FROM se_teams WHERE group_id = ? LIMIT 1",
+                                            (group_id,)).fetchone():
+            # A slot no longer on the pairings (Kerry 2026-09-29): say so
+            # plainly rather than open an empty card.
+            return {"error": "This group isn't on tonight's pairings any more. "
+                             "Ask the manager for your group's link.", "gone": True}
         names = {p["customer_id"]: p["display_name"] for p in players}
         # TEE MARK STANDARD (Kerry 2026-09-26): "men's tees is solid color
         # except for white. If shared with women, women's tees are outlined,

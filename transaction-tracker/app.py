@@ -11486,7 +11486,10 @@ def api_se_card():
     gid, err = _se_group_from_request()
     if err:
         return err
-    return jsonify(get_group_card(gid, request.args.get("device_id") or None))
+    card = get_group_card(gid, request.args.get("device_id") or None)
+    if "error" in card:
+        return jsonify(card), 410
+    return jsonify(card)
 
 
 @app.route("/api/score-entry/claim", methods=["POST"])

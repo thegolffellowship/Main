@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.521.2";
+window.TGF_VERSION = "2.522.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.522.0",
+    date: "2026-09-29",
+    title: "Score entry: a group link belongs to its slot, and the round follows the saved pairings",
+    changes: [
+      "Kerry 2026-09-29: \"I'm probably gonna be making pairing changes but anything like that should never affect group links. Right?\" Now true. A scorer link is tied to its slot (1A, 2B, or the tee time on a tee-time event), matched to the saved pairings by slot and never by the pairings' group number, which renumbers when a group is added or removed.",
+      "The round follows the saved pairings by itself. When a link or the Live Scoring page opens and the saved pairings have changed since the last seed (fingerprint in app setting score_entry_pairings_fp), the round re-seeds: players move to their new slot, a player moved after scoring takes his scores and marks with him, a new slot gets a new link, and a slot no longer on the sheet keeps its link, which says \"This group isn't on tonight's pairings any more\". Nothing is deleted, and no one needs to tap Update groups or re-send a link.",
+      "Links already handed out keep working: their slot and start hole are unchanged."
+    ]
+  },
   {
     version: "2.521.2",
     date: "2026-09-29",

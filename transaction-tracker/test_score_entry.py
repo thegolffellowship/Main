@@ -299,6 +299,52 @@ check("cup seed refuses another event's dial", "error" in se.cup_seed(901))
 db.set_app_setting("lsc_matches", "")
 db.set_app_setting("lsc_tees", "")
 
+print("LINKS BELONG TO SLOTS; the round follows the saved pairings (Kerry 2026-09-29)")
+conn.execute("INSERT INTO events (id, item_name, event_date, start_type, start_time) "
+             "VALUES (910, 'slots', '2026-09-29', 'Shotgun', '17:00')")
+def _pair(rows):
+    conn.execute("DELETE FROM event_pairings WHERE event_id = 910")
+    for gnum, slot, cids in rows:
+        for pos, cid in enumerate(cids, 1):
+            conn.execute("INSERT INTO event_pairings (event_id, holes, group_num, slot_label, "
+                         "player_name, cart_pos, customer_id) VALUES (910, '9', ?, ?, ?, ?, ?)",
+                         (gnum, slot, f"P{cid}", pos, cid))
+    conn.commit()
+_pair([(1, "1A", [101, 102]), (2, "2A", [103, 104])])
+with contextlib.redirect_stdout(io.StringIO()):
+    s910 = se.seed_round_from_pairings(910, "9")
+r910 = s910["round_id"]
+L0 = {se.slot_key(l["label"]): l for l in se.round_links(r910)}
+check("seeded slots 1A and 2A, 2A starts on hole 2",
+      set(L0) == {"1A", "2A"} and se.get_group_card(L0["2A"]["group_id"])["start_hole"] == 2, L0)
+g2a = L0["2A"]["group_id"]
+tok2a = L0["2A"]["url"].split("t=", 1)[1]
+se.claim_group(g2a, "k", 103)
+se.write_scores(g2a, "k", 103, [{"op_id": "SL1", "customer_id": 103, "hole": 2, "gross": 4},
+                                {"op_id": "SL2", "customer_id": 104, "hole": 2, "gross": 5}])
+# Kerry re-pairs: 1A is gone, 2A renumbered to group 1 and gains 101, 104
+# moves to a NEW slot 3A, and 102 moves with him.
+_pair([(1, "2A", [103, 101]), (2, "3A", [102, 104])])
+with contextlib.redirect_stdout(io.StringIO()):
+    c2a = se.get_group_card(g2a)
+check("the 2A link still opens 2A after re-pairing, with its new players, on hole 2",
+      se.verify_group_token(tok2a) == g2a and c2a["start_hole"] == 2
+      and sorted(p["customer_id"] for p in c2a["players"]) == [101, 103], c2a.get("players"))
+check("103's score stayed with him in 2A", c2a["scores"].get("c:103", {}).get("2") == 4, c2a["scores"])
+L1 = {se.slot_key(l["label"]): l for l in se.round_links(r910)}
+check("a new slot gets its own link; the old links are unchanged",
+      "3A" in L1 and L1["2A"]["url"] == L0["2A"]["url"] and L1["1A"]["url"] == L0["1A"]["url"], L1)
+c3a = se.get_group_card(L1["3A"]["group_id"])
+check("104 moved after scoring: his score went with him to 3A",
+      c3a["scores"].get("c:104", {}).get("2") == 5 and "c:104" not in c2a["scores"], (c3a["scores"], c2a["scores"]))
+c1a = se.get_group_card(L0["1A"]["group_id"])
+check("a slot no longer on the sheet says so plainly", c1a.get("gone") and "pairings" in c1a["error"], c1a)
+with contextlib.redirect_stdout(io.StringIO()):
+    again = se.sync_from_pairings(r910)
+check("nothing changed since: no re-seed", again is None)
+check("no score row was deleted", conn.execute("SELECT COUNT(*) FROM se_hole_scores WHERE round_id = ?",
+                                               (r910,)).fetchone()[0] == 2)
+
 print("sign-off, flags, CTP, HIO (Kerry #666, ratified #667)")
 conn.execute("INSERT INTO customers (customer_id, first_name, last_name) VALUES (105, 'Mark', 'Stich')")
 conn.execute("INSERT INTO customer_memberships (customer_id, started_at, expires_at) "
