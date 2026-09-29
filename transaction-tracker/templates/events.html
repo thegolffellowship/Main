@@ -3068,6 +3068,32 @@
             console.error("ensureHcpAsOf:", err);
         }
     }
+    // THE PHONE CAN SET A HANDICAP TOO (Kerry 2026-09-28, #920: "I need
+    // same mobile abilities as desktop. I need to be able to add a players
+    // handicap like for Lance Vest."). The mobile card's HCP field is the
+    // desktop cell's twin: a player with no handicap gets the tappable
+    // dash, a STARTING placeholder is tappable to change, and a computed
+    // index stays read-only. Same .btn-set-hcp control, same endpoint
+    // (POST /api/customers/<id>/starting-handicap), same field.
+    function _mobileHcpField(r, ev, showHcp18Only) {
+        const lh = hcpEntryFor(r.customer, r.customer_id, ev);
+        const btn = (label, cur, extra) => ({html: `<button class="btn-set-hcp" data-customer-id="${r.customer_id}"
+            data-player="${escapeHtml(r.customer || '')}"${cur ? ` data-current="${cur}"` : ''}
+            title="Tap to set a starting handicap"
+            style="background:#fff7ed;border:1px dashed #fb923c;color:#c2410c;border-radius:6px;
+                   padding:4px 14px;font-size:0.95rem;font-weight:700;cursor:pointer;min-height:32px;${extra || ''}"
+            >${label}</button>`});
+        if (lh === undefined) {
+            if (r.handicap) return r.handicap;
+            return r.customer_id ? btn("\u2014 Set", "", "") : "\u2014";
+        }
+        const shown = showHcp18Only ? lh.index_18.toFixed(1) : (lh.index_9.toFixed(1) + 'N');
+        if (lh.source === "starting" && r.customer_id) {
+            return btn(`${shown} P`, lh.index_18.toFixed(1), "");
+        }
+        return shown;
+    }
+
     function hcpEntryFor(name, customerId, ev) {
         const map = (ev && ev.handicap_as_of && hcpAsOfMaps[ev.handicap_as_of]) || handicapIndexMap;
         if (customerId) {
@@ -3369,11 +3395,7 @@
                 ["Team", _mFp.team === "A" ? "AUSTIN (A)"
                     : _mFp.team === "SA" ? "SAN ANTONIO (SA)"
                     : (_mFp.team || "\u2014")],
-                ["HCP", (() => {
-                    const lh = hcpEntryFor(r.customer, r.customer_id, ev);
-                    if (lh === undefined) return r.handicap || "\u2014";
-                    return showHcp18Only ? lh.index_18.toFixed(1) : (lh.index_9.toFixed(1) + 'N');
-                })()],
+                ["HCP", _mobileHcpField(r, ev, showHcp18Only)],
                 ["Buy-ins", _mFp.addons
                     ? (Object.keys(_mFp.addons).filter(k => _mFp.addons[k])
                         .map(k => k.toUpperCase()).join(" + ") || "\u2014")
@@ -3399,11 +3421,7 @@
             ] : [
                 ["Order Date", r.order_date || "\u2014"],
                 ["Price", stripPriceSuffix(r.item_price) || "\u2014"],
-                ["HCP", (() => {
-                    const lh = hcpEntryFor(r.customer, r.customer_id, ev);
-                    if (lh === undefined) return r.handicap || "\u2014";
-                    return showHcp18Only ? lh.index_18.toFixed(1) : (lh.index_9.toFixed(1) + 'N');
-                })()],
+                ["HCP", _mobileHcpField(r, ev, showHcp18Only)],
                 ["Holes", rowHoles(ev, r) || "\u2014"],
                 ["Status", _cleanStatus(r.user_status)],
                 ["Partner Request", r.partner_request || "\u2014"],
@@ -3432,7 +3450,7 @@
                 </div>
                 <div class="mobile-card-details">
                     <div class="mc-field-grid">
-                        ${fields.map(([l, v]) => `<div class="mc-field"><span class="mc-field-label">${l}</span><span class="mc-field-value">${escapeHtml(v)}</span></div>`).join("")}
+                        ${fields.map(([l, v]) => `<div class="mc-field"><span class="mc-field-label">${l}</span><span class="mc-field-value">${(v && typeof v === "object" && v.html) ? v.html : escapeHtml(v)}</span></div>`).join("")}
                     </div>
                     ${actionBtn ? `<div class="mc-actions">${actionBtn}</div>` : ''}
                 </div>
@@ -7222,6 +7240,10 @@
                 // Printables read the SAVED pairings — only offer when clean.
                 html += `<button class="pairings-action-btn" onclick="window.open('/events/${ev.id}/starter-sheet','_blank')" title="Print starter sheet">&#x1F5A8; Starter Sheet</button>`;
                 html += `<button class="pairings-action-btn" onclick="window.open('/events/${ev.id}/cart-signs','_blank')" title="Print cart signs">&#x1F5A8; Cart Signs</button>`;
+                // SCORECARDS (Kerry 2026-09-28, #919: "Where's the scorecard
+                // report?") — the printed card with the GGID box and the
+                // layout / Team-Cart / QR options.
+                html += `<button class="pairings-action-btn" onclick="window.open('/events/${ev.id}/scorecards','_blank')" title="Print scorecards (GGID codes, layouts, Team/Cart Net)">&#x1F5A8; Scorecards</button>`;
                 // Kerry 2026-09-21: "there should be a button to SEND PACK"
                 // — the bound PDF (starter sheet, cart signs, divisions,
                 // proximity) mailed now, on demand; the 6 AM routine then

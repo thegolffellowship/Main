@@ -2502,12 +2502,26 @@ def api_set_starting_handicap(customer_id):
     (a MEMBER first timer has the same gap). Body: `starting_handicap_18`
     (null clears), optional `note`. Never creates a handicap round.
     """
-    from email_parser.database import set_starting_handicap
+    from email_parser.database import set_starting_handicap, log_agent_action
     body = request.get_json(silent=True) or {}
+    who = session.get("role") or "unknown"
+    if session.get("chapter"):
+        who += f" ({session.get('chapter')})"
     res = set_starting_handicap(
         customer_id, body.get("starting_handicap_18"),
-        set_by=f"manual:{session.get('role')}",
+        set_by=f"manual:{who}",
         note=(body.get("note") or "").strip() or None)
+    # Every starting handicap set or cleared is on the record, with who set
+    # it (Kerry 2026-09-28, #920) — it feeds PH, the Starter Sheet, the
+    # scorecard and score entry.
+    try:
+        log_agent_action(
+            f"manager:{who}", "starting_handicap_set",
+            f"customer {customer_id} ({res.get('customer_name') or '?'}): starting handicap "
+            f"{body.get('starting_handicap_18')!r} (18-hole); note={body.get('note')!r}",
+            outcome="error: " + res["error"] if "error" in res else "ok")
+    except Exception:
+        logger.exception("starting handicap: action log failed")
     return (jsonify(res), 400) if "error" in res else jsonify(res)
 
 

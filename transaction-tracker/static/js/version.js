@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.520.1";
+window.TGF_VERSION = "2.520.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.520.2",
+    date: "2026-09-28",
+    title: "Phone can set a starting handicap from the roster; Scorecards button on PAIRINGS",
+    changes: [
+      "Kerry 2026-09-28 (#920): \"I need same mobile abilities as desktop. I need to be able to add a players handicap like for Lance Vest.\" The mobile roster card's HCP field is now the desktop cell's twin: no handicap shows a tappable '— Set', a STARTING placeholder is tappable to change, a computed index stays read-only. Same .btn-set-hcp control and endpoint, writing customers.starting_handicap_18, so PH, the Starter Sheet, the scorecard and score entry all pick it up. Every set/clear is now in the agent action log with who set it (role and chapter).",
+      "Kerry (#919): \"Where's the scorecard report?\" PAIRINGS' print row has a Scorecards button next to Cart Signs, opening /events/<id>/scorecards (the GGID box and print options). Guard test_mobile_manager_parity.js.",
+    ],
+  },
   {
     version: "2.520.1",
     date: "2026-09-28",
