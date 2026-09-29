@@ -2706,6 +2706,11 @@ bridge `scoring-scorecards:<id>[|key=value…][|dump|html|pdf[|all][|send]]`.
   `/api/customers/<id>/starting-handicap`, now logged with who set it;
   Kerry #920 "same mobile abilities as desktop"). Guard
   `test_mobile_manager_parity.js`.
+- **In the print pack (v2.521.0, Kerry 9/29):** after the cart signs, for the
+  events app setting `print_pack_scorecards` names ("all" or ids); 3-up,
+  grouping from the engine's net game, gap sheet (never a guessed card) when
+  a gap stands, `?allow_gaps=1` on `/events/<id>/print-pack.pdf` prints it
+  flagged. `print_pack.scorecards_in_pack`.
 - **Print anyway, flagged (CA #915):** `?allow_gaps=1` lets a player with no
   PH print with PH/net blank and no dots (named in the print log); every
   event-level gap still stops the print.

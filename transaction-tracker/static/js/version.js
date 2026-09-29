@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.520.9";
+window.TGF_VERSION = "2.521.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.521.0",
+    date: "2026-09-29",
+    title: "Scorecards in the print pack",
+    changes: [
+      "Kerry 2026-09-29: \"Include the scorecards in the print pack now.\" The bound pack (PAIRINGS Send Pack, /events/<id>/print-pack.pdf and the day-before/day-of mail) now carries the scorecards right after the cart signs, for the events the app setting print_pack_scorecards names (\"all\" or event ids; 3304 today, the rest waits on Kerry). Pack defaults: 3 per sheet, the grouping the engine's net game uses (Cart Net = one card per cart), the event's holes, QR only per the score-entry dials, the saved GGID codes. A named gap prints the gap sheet in that slot, never a guessed card; ?allow_gaps=1 on the pack PDF prints it flagged. The pack's result and bridge report the scorecards part (grouping, cards, sheets, gaps).",
+    ],
+  },
   {
     version: "2.520.9",
     date: "2026-09-29",

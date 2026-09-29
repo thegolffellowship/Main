@@ -207,6 +207,32 @@ check("junk colour refused", not db.set_tee_colors({1: "sparkly"}, db_path=DB)["
 aud = db.tee_color_audit(db_path=DB)
 check("audit lists every designated tee", aud["designated_tees"] == 4 and aud["unresolved"] == [], aud)
 
+print("scorecards in the print pack (Kerry 9/29)")
+from email_parser import print_pack as pp  # noqa: E402
+check("off by default", not pp.scorecards_in_pack(3304, db_path=DB))
+db.set_app_setting("print_pack_scorecards", "3304", db_path=DB)
+check("on for a listed event only", pp.scorecards_in_pack(3304, db_path=DB)
+      and not pp.scorecards_in_pack(3317, db_path=DB))
+db.set_app_setting("print_pack_scorecards", "all", db_path=DB)
+check("'all' turns every event on", pp.scorecards_in_pack(3317, db_path=DB))
+_parts_saved, _pdf_saved = pp.PRINT_PACK_PARTS, pp._render_pdf_chromium
+pp.PRINT_PACK_PARTS = (("starter-sheet", "x", "get_event_print_pack", "pack"),
+                       ("cart-signs", "x", "get_event_print_pack", "pack"),
+                       ("proximity-markers", "x", "get_event_print_pack", "pack"))
+pp._render_pdf_chromium = lambda htmls, sd: (b"%PDF", [{"slug": sl, "pages": 1} for sl, _ in htmls], "chromium")
+_orig_all = db.get_all_events
+db.get_all_events = lambda db_path=None: [{"id": 3304, "item_name": "s9.25", "event_date": "2026-09-29"}]
+built = pp.build_event_print_pack(lambda t, **k: "<html>" + t + "</html>", 3304, "/tmp", db_path=DB)
+db.get_all_events = _orig_all
+pp.PRINT_PACK_PARTS, pp._render_pdf_chromium = _parts_saved, _pdf_saved
+check("the scorecards part sits right after the cart signs",
+      [p["slug"] for p in built["parts"]] == ["starter-sheet", "cart-signs", "scorecards", "proximity-markers"],
+      built["parts"])
+check("the pack reports the scorecards (Team Net, 7 cards, no gaps)",
+      built["scorecards"]["grouping"] == "team" and built["scorecards"]["cards"] == 7
+      and built["scorecards"]["gaps"] == [], built["scorecards"])
+db.set_app_setting("print_pack_scorecards", "", db_path=DB)
+
 print("render")
 from jinja2 import Environment, FileSystemLoader, StrictUndefined  # noqa: E402
 env = Environment(loader=FileSystemLoader(os.path.join(HERE, "templates")), autoescape=True,

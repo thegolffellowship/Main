@@ -5568,9 +5568,10 @@ def _print_pack_render(template, **ctx):
         return render_template(template, **ctx)
 
 
-def build_print_pack_for_event(event_id: int) -> dict | None:
+def build_print_pack_for_event(event_id: int, allow_gaps: bool = False) -> dict | None:
     from email_parser.print_pack import build_event_print_pack
-    return build_event_print_pack(_print_pack_render, event_id, app.static_folder)
+    return build_event_print_pack(_print_pack_render, event_id, app.static_folder,
+                                  allow_gaps=allow_gaps)
 
 
 @app.route("/events/<int:event_id>/print-pack.pdf")
@@ -5579,7 +5580,9 @@ def build_print_pack_for_event(event_id: int) -> dict | None:
 def print_pack_pdf(event_id):
     """Every print sheet for the event bound into one PDF (v2.465.0)."""
     from flask import Response
-    built = build_print_pack_for_event(event_id)
+    # ?allow_gaps=1 prints the pack's scorecards flagged (a player with no
+    # handicap prints blank) instead of the gap sheet (Kerry 2026-09-29).
+    built = build_print_pack_for_event(event_id, allow_gaps=request.args.get("allow_gaps") == "1")
     if not built:
         return "Event not found or nothing to print", 404
     if built.get("error"):
