@@ -2699,6 +2699,13 @@ bridge `scoring-scorecards:<id>[|key=value…][|dump|html|pdf[|all][|send]]`.
   `get_event_print_pack` and printed on the scorecard header, the Starter
   Sheet group box footer and each cart sign. Survives a PAIRINGS re-save.
   Bridge `scoring-group-codes:<id>[|<holes>:<group>=<code>;…]`.
+- **Entry points (v2.520.2):** PAIRINGS' print row has 🖨 Scorecards next to
+  Cart Signs (Kerry #919). A missing handicap is fixed from the ROSTER on
+  phone or desktop: the mobile card's HCP field is the desktop cell's twin
+  (`_mobileHcpField` → `.btn-set-hcp` → POST
+  `/api/customers/<id>/starting-handicap`, now logged with who set it;
+  Kerry #920 "same mobile abilities as desktop"). Guard
+  `test_mobile_manager_parity.js`.
 - **Print anyway, flagged (CA #915):** `?allow_gaps=1` lets a player with no
   PH print with PH/net blank and no dots (named in the print log); every
   event-level gap still stops the print.
