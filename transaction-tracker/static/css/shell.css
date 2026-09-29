@@ -337,3 +337,21 @@ header.shell-nav {
     animation: tgf-ptr-spin 0.7s linear infinite;
 }
 @keyframes tgf-ptr-spin { to { transform: rotate(360deg); } }
+
+/* ── iPhone safe areas (Kerry 2026-09-29: "These are opening too high.
+   See the top nav bar is hidden") ─────────────────────────────────────
+   A page drawn edge to edge (viewport-fit=cover, e.g. the score-entry
+   link) or an installed PWA with a translucent status bar puts the top of
+   the page UNDER the clock and battery. Pad for the notch here, once, for
+   every page that uses the shell: a dark strip behind the status bar, the
+   nav sticking just below it, the page starting below it, and the bottom
+   clearing the home indicator. env() is 0 everywhere else, so nothing
+   moves on a desktop or on a page that isn't drawn edge to edge. */
+body { padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+body::before {
+    content: ""; position: fixed; top: 0; left: 0; right: 0; z-index: 101;
+    height: env(safe-area-inset-top, 0px);
+    background: var(--surface-dark, #1B1B1B); pointer-events: none;
+}
+header.shell-nav { top: env(safe-area-inset-top, 0px); }
+.shell-drawer { padding-top: env(safe-area-inset-top, 0px); }

@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.522.15";
+window.TGF_VERSION = "2.522.16";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.522.16",
+    date: "2026-09-29",
+    title: "iPhone: the top nav no longer hides under the status bar",
+    changes: [
+      "Kerry 2026-09-29, on a score-entry link on his iPhone: \"These are opening too high. See the top nav bar is hidden.\" The scorer page is drawn edge to edge (viewport-fit=cover), and the shared nav never padded for the notch, so the clock and battery printed over it. shell.css now pads every shell page for the safe areas: a dark strip behind the status bar, the sticky nav just below it, the page starting below it, and the bottom clearing the home indicator. env() is 0 on desktops and on pages that aren't drawn edge to edge, so nothing else moves. Tested at 390x844 with a 47 px top / 34 px bottom inset."
+    ]
+  },
   {
     version: "2.522.15",
     date: "2026-09-29",
