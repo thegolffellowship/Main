@@ -2364,6 +2364,19 @@ def _team_strokes(conn, round_id: int, course) -> dict:
     alloc = _strokes_by_player([{"customer_id": r[0], "playing_handicap": r[1]} for r in rows],
                                course)
     alloc.pop("_unresolved", None)
+    # Team / Cart Net take NO pops on a par 3 (Kerry 9/28, CA #912-2: "remove
+    # par 3 pops for both card and side game results"). The rule lives in
+    # the engine config (team_net.no_pops_on_par3), read here so the phone
+    # card and the side-game results can't disagree. A par-3 stroke is
+    # removed, not moved to another hole — the same as the engine.
+    from email_parser.live_scoring import SEED_LIVE_SCORING_CONFIG
+    if (SEED_LIVE_SCORING_CONFIG["games"].get("team_net") or {}).get("no_pops_on_par3"):
+        par3 = {str(r[0]) for r in conn.execute(
+            "SELECT hole_number FROM se_round_holes WHERE round_id = ? AND par = 3",
+            (round_id,))}
+        if par3:
+            alloc = {cid: {h: n for h, n in by_hole.items() if h not in par3}
+                     for cid, by_hole in alloc.items()}
     unit = rows[0][2]
     return {"team_strokes": alloc,
             "team_game": {"unit": unit, "label": "Cart Net" if unit == "cart" else "Team Net",

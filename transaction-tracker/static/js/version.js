@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.520.0";
+window.TGF_VERSION = "2.520.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.520.1",
+    date: "2026-09-28",
+    title: "Team / Cart Net: no pops on a par 3; comps fund the games again",
+    changes: [
+      "Kerry 9/28 (CA #912-2), verbatim: \"Got to have the team/cart Net remove par 3 pops for both card and side game results now.\" team_net.no_pops_on_par3 is now True. It's one dial, and it covers Team Net and Cart Net (the same game at team size 2). Three places read it: the engine's Team Net results (game_team_net), the printed scorecard's orange dots (scorecards.py), and the phone card's team pops (score_entry._team_strokes, which drops a par-3 team stroke without moving it to another hole). There was no GG parity gate first, by the ruling; a Team Net comparison with GG follows for information only.",
+      "Kerry 9/28 (CA #912-3), verbatim: \"CTPs are for every player bought in. My money goes in there too. I thought we ruled on that.\" CA withdrew #882-4. The v2.518.5 comp exclusion in _event_player_counts is reverted: a comp counts toward the games' funding N again (3304: 25 players, 2 CTPs at $25). Comps are only LISTED under comps for a reader. The only players who don't fund a game are those who didn't buy it (#843 f).",
+    ],
+  },
   {
     version: "2.520.0",
     date: "2026-09-28",

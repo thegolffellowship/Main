@@ -57058,22 +57058,17 @@ def _event_player_counts(conn, event_name: str) -> dict:
         if r["id"] in overrides or r["ts"] in ("credited", "refunded", "transferred"):
             not_playing += 1
             continue
-        # A COMP collects nothing, so it FUNDS nothing (CA #882-4 / #843 f:
-        # "funding N = paid entries"; the Margin Standard: purses come from
-        # collected money). The player still plays and can WIN — this only
-        # takes him out of the counts that size and fund the games. Only an
-        # EXPLICIT comp counts as one (a "(comp)" price or a manual-comp
-        # row) with no paid add-on; a $0 price alone can be a transfer or a
-        # legacy import and is left alone.
-        _is_comp = (("comp" in str(r.get("item_price") or "").lower()
-                     or str(r.get("email_uid") or "").startswith("manual-comp"))
-                    and _parse_money(r.get("item_price")) == 0
-                    and not any(_parse_money(c.get("item_price")) > 0
-                                for c in kids.get(str(r["id"]), [])))
-        if _is_comp and r["ts"] != "rsvp_only":
+        # A COMP FUNDS THE GAMES (Kerry 9/28, CA #912-3, verbatim: "CTPs are
+        # for every player bought in. My money goes in there too. I thought
+        # we ruled on that." The comp is on the course fee / markup, not the
+        # games). v2.518.5 excluded comps under the since-withdrawn #882-4;
+        # they are now COUNTED again and only LISTED under `comps` so a
+        # reader can see who they are. The only players who don't fund a
+        # game are those who didn't buy it (#843 f).
+        if (("comp" in str(r.get("item_price") or "").lower()
+             or str(r.get("email_uid") or "").startswith("manual-comp"))
+                and r["ts"] != "rsvp_only"):
             comps.append({"item_id": r["id"], "name": r.get("customer")})
-            not_playing += 1
-            continue
         t = _classify_side_games_type(r["side_games"])
         has_net = t in ("NET", "BOTH")
         has_gross = t in ("GROSS", "BOTH")
