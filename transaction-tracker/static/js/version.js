@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.522.20";
+window.TGF_VERSION = "2.522.21";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.522.21",
+    date: "2026-09-29",
+    title: "Fix: scorecards and print-pack PDF downloads no longer 500 on the em dash in the file name",
+    changes: [
+      "Kerry 9/29: \"I just got an Internal Server Error when I tried to download the PDF for the Scorecards.\" The file name carries an em dash (\"s9.25 — scorecards.pdf\"); HTTP headers must be latin-1, and the server raised an error while writing the header, after the PDF was already built. The print-pack download had the same flaw. Every download header now comes from one helper (email_parser/http_headers.py): an ASCII file name (dashes become -, accents fold) plus the exact name in the RFC 5987 filename* field, which browsers prefer. All six download routes use it; test_download_headers.py drives the real routes with an em dash and an accent and fails if any route builds the header by hand."
+    ]
+  },
   {
     version: "2.522.20",
     date: "2026-09-29",

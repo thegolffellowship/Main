@@ -21,6 +21,7 @@ from functools import wraps
 
 import anthropic as _anthropic
 from flask import Flask, Response, jsonify, redirect, render_template, request, send_file, session
+from email_parser.http_headers import content_disposition
 from dotenv import load_dotenv
 from apscheduler.schedulers.background import BackgroundScheduler
 
@@ -3292,7 +3293,7 @@ def api_duplicate_detective_export_csv():
     return Response(
         buf.getvalue(),
         mimetype="text/csv",
-        headers={"Content-Disposition": f"attachment; filename={fname}"},
+        headers={"Content-Disposition": content_disposition(fname)},
     )
 
 
@@ -3352,7 +3353,7 @@ def api_duplicate_detective_export_md():
     return Response(
         body,
         mimetype="text/markdown",
-        headers={"Content-Disposition": f"attachment; filename={fname}"},
+        headers={"Content-Disposition": content_disposition(fname)},
     )
 
 
@@ -5558,7 +5559,7 @@ def scorecards_pdf(event_id):
             return scorecards_page(event_id)
         return built["error"], 404
     return Response(built["pdf"], mimetype="application/pdf",
-                    headers={"Content-Disposition": f'inline; filename="{built["filename"]}"'})
+                    headers={"Content-Disposition": content_disposition(built["filename"], inline=True)})
 
 
 def _print_pack_render(template, **ctx):
@@ -5589,7 +5590,7 @@ def print_pack_pdf(event_id):
         return built["error"], 503
     return Response(built["pdf"], mimetype="application/pdf",
                     headers={"Content-Disposition":
-                             f'inline; filename="{built["filename"]}"'})
+                             content_disposition(built["filename"], inline=True)})
 
 
 def send_due_print_packs_job():
@@ -10336,7 +10337,7 @@ def api_handicap_export_csv():
     return Response(
         buf.getvalue(),
         mimetype="text/csv",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        headers={"Content-Disposition": content_disposition(filename)},
     )
 
 
@@ -13347,7 +13348,7 @@ def api_leads_export_csv():
     return Response(
         buf.getvalue(),
         mimetype="text/csv",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        headers={"Content-Disposition": content_disposition(filename)},
     )
 
 
