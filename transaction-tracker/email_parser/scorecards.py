@@ -69,6 +69,24 @@ def _tee_colour(master: str):
     return TEE_TOKENS.get(m)
 
 
+def _row_colour(tee_id, master: str, overrides: dict):
+    """(bg, fg) for a tee row from THE resolver (database.resolve_tee_color:
+    explicit colour, else the colour word anywhere in the name — Kerry
+    2026-09-28, Star Ranch's "Champ - Blue"). A word with a design token
+    (#890 §4) prints the design's shade; anything else prints the
+    resolver's hex with ink picked for contrast. None = unresolved."""
+    from email_parser.database import resolve_tee_color
+    res = resolve_tee_color(tee_id, master, overrides)
+    if res["word"] and res["word"] in TEE_TOKENS:
+        return TEE_TOKENS[res["word"]]
+    hx = res["hex"]
+    if not hx:
+        return None
+    r, g, b = (int(hx[i:i + 2], 16) for i in (1, 3, 5))
+    ink = "#1B1B1B" if (0.299 * r + 0.587 * g + 0.114 * b) > 150 else "#FFFFFF"
+    return (hx, ink)
+
+
 def _short_code(master: str, ladies: bool) -> str:
     base = re.sub(r"\s*\((?:l|lady|ladies)\)\s*", "", master or "", flags=re.I).strip()
     base = re.sub(r"\s+tees?$", "", base, flags=re.I)
@@ -180,13 +198,15 @@ def build_scorecards(event_id: int, layout: str = "3up", grouping: str = "team",
         return list(range(10, 19)) if nine == "back" else list(range(1, 10))
 
     # ---- tees in play: one row each, in legend order (max four) --------
+    _overrides = db.tee_color_overrides(db_path=db_path)
     tees = []
     for t in legend[:4]:
         master = _master(t.get("tee_name") or "")
         row = tee_rows.get(t["band"])
-        col = _tee_colour(master)
+        col = _row_colour(t.get("tee_id"), master, _overrides)
         if not col:
-            log.append(f"Tee '{master}' has no colour token; printed black on white.")
+            log.append(f"Tee '{master}' has no colour (none set, no colour word in its name); "
+                       "printed black on white. Name its colour (scoring-tee-colors).")
             col = ("#FFFFFF", "#1B1B1B")
         tees.append({
             "band": t["band"], "master": master, "ladies": bool(t.get("ladies")),

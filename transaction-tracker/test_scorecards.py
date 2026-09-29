@@ -192,6 +192,21 @@ check("no orange dot on any par 3 (holes 3, 7)", pat["net_dots"].get(3, 0) == 0
 check("decode says so", "no pops on par 3s" in p3["net"]["pct_note"], p3["net"])
 _ls.SEED_LIVE_SCORING_CONFIG["games"]["team_net"]["no_pops_on_par3"] = _flag
 
+print("one tee-colour resolver (Kerry 9/28, Star Ranch)")
+r = db.resolve_tee_color(1, "Champ - Blue", {})
+check("a colour word anywhere in the name resolves", r["word"] == "blue" and r["source"] == "name", r)
+check("no colour word = unresolved", db.resolve_tee_color(2, "Forward - Ladies", {})["hex"] is None)
+check("an explicit colour wins", db.resolve_tee_color(2, "Forward - Ladies", {2: "red"})["word"] == "red")
+check("scorecard rows use the design shade for a known word",
+      scm._row_colour(1, "Champ - Blue", {}) == scm.TEE_TOKENS["blue"])
+check("an unknown-to-design word still colours, with readable ink",
+      scm._row_colour(1, "Executive - Teal", {}) == ("#0F766E", "#FFFFFF"))
+r = db.set_tee_colors({tee_ids["Forward"]: "red"}, db_path=DB)
+check("set_tee_colors stores by tee_id", r["ok"] and db.tee_color_overrides(db_path=DB)[tee_ids["Forward"]] == "red", r)
+check("junk colour refused", not db.set_tee_colors({1: "sparkly"}, db_path=DB)["ok"])
+aud = db.tee_color_audit(db_path=DB)
+check("audit lists every designated tee", aud["designated_tees"] == 4 and aud["unresolved"] == [], aud)
+
 print("render")
 from jinja2 import Environment, FileSystemLoader, StrictUndefined  # noqa: E402
 env = Environment(loader=FileSystemLoader(os.path.join(HERE, "templates")), autoescape=True,

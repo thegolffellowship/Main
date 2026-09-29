@@ -5351,6 +5351,20 @@ def _scoring_dispatch_inner(url: str, extract: str):
                     indent=2, default=str)
             return json.dumps({"error": "usage: scoring-pairings:rounds|<portal> "
                                "or round|<portal>|<id>[|apply] or all|<portal>[|apply]"})
+        if cmd == "scoring-tee-colors":
+            # scoring-tee-colors            READ-ONLY audit: every course's
+            #   designated tees and the colour the one resolver gives them;
+            #   `unresolved` = the ones Kerry must name.
+            # scoring-tee-colors:set|<tee_id>=<colour word or #hex>;…  ('' clears)
+            if (arg or "").lower().startswith("set|"):
+                colors = {}
+                for pair in arg.split("|", 1)[1].split(";"):
+                    if "=" in pair:
+                        k, v = pair.split("=", 1)
+                        colors[int(k.strip())] = v.strip()
+                db.log_agent_action("mcp-claude", "scoring-tee-colors", arg)
+                return json.dumps(db.set_tee_colors(colors), indent=2, default=str)
+            return json.dumps(db.tee_color_audit(), indent=2, default=str)
         if cmd == "scoring-group-codes":
             # scoring-group-codes:<event_id>  READ the GGID per group.
             # scoring-group-codes:<event_id>|<holes>:<group>=<code>;…  save

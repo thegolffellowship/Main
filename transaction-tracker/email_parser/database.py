@@ -61813,6 +61813,87 @@ def _tee_color_for(tee_name: str) -> str | None:
     return None
 
 
+# ── ONE TEE-COLOUR RESOLVER (Kerry 2026-09-28: "Colors aren't printing on
+# tee rows for Star Ranch. Make sure all courses have colors assigned.") ──
+# Order: (a) an explicit colour set for that tee (app setting `tee_colors`,
+# JSON {tee_id: "#hex" | colour word} — no schema, CA #898-6), (b) the
+# colour word found ANYWHERE in the master name ("Champ - Blue" is blue),
+# (c) unresolved. The Starter Sheet legend, cart signs, the scorecard's tee
+# rows and its player chips all read this one function.
+TEE_COLORS_SETTING = "tee_colors"
+
+
+def tee_color_overrides(conn=None, db_path=None) -> dict:
+    import json as _json
+    try:
+        raw = (_setting_via(conn, TEE_COLORS_SETTING) if conn is not None
+               else get_app_setting(TEE_COLORS_SETTING, db_path))
+        d = _json.loads(raw) if raw else {}
+        return {int(k): str(v).strip() for k, v in d.items() if str(v).strip()}
+    except Exception:
+        return {}
+
+
+def resolve_tee_color(tee_id, tee_name: str, overrides: dict | None = None) -> dict:
+    """{"hex", "word", "source"}: source 'explicit' | 'name' | None."""
+    ov = (overrides or {}).get(int(tee_id)) if tee_id else None
+    if ov:
+        w = ov.lower()
+        if w in _TEE_COLOR_WORDS:
+            return {"hex": _TEE_COLOR_WORDS[w], "word": w, "source": "explicit"}
+        if re.fullmatch(r"#[0-9a-fA-F]{6}", ov):
+            return {"hex": ov.upper(), "word": None, "source": "explicit"}
+    low = " ".join((tee_name or "").split()).lower()
+    for word, hexv in _TEE_COLOR_WORDS.items():
+        if re.search(rf"\b{word}\b", low):
+            return {"hex": hexv, "word": word, "source": "name"}
+    return {"hex": None, "word": None, "source": None}
+
+
+def set_tee_colors(colors: dict, db_path=None) -> dict:
+    """colors = {tee_id: colour word | '#RRGGBB' | ''} ('' clears)."""
+    import json as _json
+    cur = tee_color_overrides(db_path=db_path)
+    bad = []
+    for k, v in colors.items():
+        v = str(v or "").strip()
+        if not v:
+            cur.pop(int(k), None)
+        elif v.lower() in _TEE_COLOR_WORDS or re.fullmatch(r"#[0-9a-fA-F]{6}", v):
+            cur[int(k)] = v.lower() if v.lower() in _TEE_COLOR_WORDS else v.upper()
+        else:
+            bad.append(f"{k}: '{v}'")
+    if bad:
+        return {"ok": False, "error": "not a colour: " + "; ".join(bad),
+                "words": sorted(_TEE_COLOR_WORDS)}
+    set_app_setting(TEE_COLORS_SETTING, _json.dumps({str(k): v for k, v in cur.items()}),
+                    db_path=db_path)
+    return {"ok": True, "tee_colors": cur}
+
+
+def tee_color_audit(db_path=None) -> dict:
+    """Every course's DESIGNATED tees (tgf_bands set) with the colour the
+    resolver gives each; `unresolved` lists the ones to name."""
+    with _connect(db_path) as conn:
+        ov = tee_color_overrides(conn)
+        rows = [dict(r) for r in conn.execute(
+            "SELECT t.tee_id, t.tee_name, t.gender, t.tgf_bands, c.course_id, c.name AS course "
+            "FROM course_tees t JOIN courses c ON c.course_id = t.course_id "
+            "WHERE t.tgf_bands IS NOT NULL AND trim(t.tgf_bands) <> '' "
+            "ORDER BY c.name, t.tee_id").fetchall()]
+    out, unresolved = [], []
+    for r in rows:
+        master = _gg_tee_parts(r["tee_name"] or "")["master"]
+        res = resolve_tee_color(r["tee_id"], master or r["tee_name"], ov)
+        item = {"course": r["course"], "course_id": r["course_id"], "tee_id": r["tee_id"],
+                "tee": master or r["tee_name"], "bands": r["tgf_bands"], "gender": r["gender"],
+                **res}
+        out.append(item)
+        if not res["hex"]:
+            unresolved.append(item)
+    return {"designated_tees": len(out), "unresolved": unresolved, "tees": out}
+
+
 # THE YARDAGE STANDARDS (Kerry 2026-09-20, verbatim: "<50 6300-6799 /
 # 50-64 5800-6299 / 65+ 5300-5799 / Women - shortest tees not less than
 # 4800"), stored as DATA in app_settings `tee_yardage_standards` so a
@@ -62127,7 +62208,8 @@ def event_tee_legend(conn, event_id: int, ev: dict) -> list:
         nm = picks.get(band)
         if not nm:
             continue
-        col = _tee_color_for(nm) or "#374151"
+        _tid_for_col = (pick_ids.get(band) or (None, False))[0]
+        col = resolve_tee_color(_tid_for_col, nm, tee_color_overrides(conn))["hex"] or "#374151"
         # HOW THE LEGEND READS (Kerry 2026-09-15): "Change (L) to
         # (Ladies) in legend, <50 to Men <50, 50-64 to Men 50-64, 65+ to
         # Men 65+, and Forward to Women [Color]". A member should not

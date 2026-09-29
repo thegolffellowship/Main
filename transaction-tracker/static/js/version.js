@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.520.6";
+window.TGF_VERSION = "2.520.7";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.520.7",
+    date: "2026-09-28",
+    title: "One tee-colour resolver for every printable; colour audit of every course",
+    changes: [
+      "Kerry 2026-09-28: \"Colors aren't printing on tee rows for Star Ranch. Make sure all courses have colors assigned.\" Star Ranch's master names are compound (\"Champ - Blue\"), and the scorecard's tee rows matched the whole name while the chips and the Starter Sheet searched for the colour word, so the two disagreed. database.resolve_tee_color is now the one lookup for the Starter Sheet legend, cart signs, the scorecard's tee rows and its chips: (a) an explicit colour for the tee (app setting tee_colors, keyed by tee_id — no schema, CA #898-6), (b) the colour word anywhere in the name, (c) unresolved. Scorecard rows keep the design's shade for a known word and otherwise print the resolver's colour with readable ink; an unresolved tee prints black on white and the print log names it.",
+      "Bridge scoring-tee-colors: the read-only audit of every course's designated tees and what each resolves to (the unresolved list is Kerry's to name), and scoring-tee-colors:set|<tee_id>=<colour>;… to store his answers.",
+    ],
+  },
   {
     version: "2.520.6",
     date: "2026-09-28",
