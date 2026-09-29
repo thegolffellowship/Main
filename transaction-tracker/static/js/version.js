@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.520.7";
+window.TGF_VERSION = "2.520.8";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.520.8",
+    date: "2026-09-29",
+    title: "Health: slow lines for the scorecard PDFs",
+    changes: [
+      "The 9/29 5:00 AM health digest (#929) rated scoring-scorecards HIGH (p95 26.4 s against the 10 s default) and scorecards_pdf MEDIUM (4.3 s against 2 s). Both are the new scorecard set rendered in headless Chromium. The |pdf|all form binds all 24 layout combinations into one PDF. They now carry the print pack's lines: 15 s for the page route and 60 s for the bridge. Nothing else changes.",
+    ],
+  },
   {
     version: "2.520.7",
     date: "2026-09-28",

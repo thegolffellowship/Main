@@ -58,6 +58,7 @@ SLOW_MS = {
     "rsvps_bulk": 1500,
     "flights_board": 2500,
     "print_pack_pdf": 15_000,        # headless Chromium renders
+    "scorecards_pdf": 15_000,        # the scorecard set, the same Chromium render (4.3 s on 9/29)
     "coo_context": 6000,
     "customers_list": 1500,
     "dashboard_api": 2500,
@@ -71,6 +72,7 @@ SLOW_MS = {
     # Bridges that SEND — one Graph call per recipient — are long by nature
     "scoring-hcp-cards": 60_000,     # a card email per player who played (9/23: 18.7 s for 23)
     "scoring-print-pack-pdf": 60_000,
+    "scoring-scorecards": 60_000,    # |pdf|all binds 24 layout combos in Chromium (21-26 s on 9/29)
     "scoring-recap-draft-email": 30_000,
     "auto_gg_results_sync": 600_000,
     # Live score entry: a phone waits on these. One save is ~40 ms of write
