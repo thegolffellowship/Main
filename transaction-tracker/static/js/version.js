@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.522.0";
+window.TGF_VERSION = "2.522.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.522.1",
+    date: "2026-09-29",
+    title: "Scorecard dots in print units, equally inset",
+    changes: [
+      "Kerry 2026-09-29: \"Dots seem small. Make sure dots are equally padded off each edge.\" Dots are drawn circles now, not bullet glyphs, sized in millimetres: 1.6 mm across, 0.5 mm apart when two of a kind, inset 0.8 mm from both edges of their corner (black top + right, orange bottom + right), the same in shaded cart-B rows and the yellow start-hole column. 2-up layouts scale diameter, gap and inset with the player-row height (x1.32 portrait, x1.24 landscape). Measured on a 300-dpi render of a 3-up Letter card: every inset within about 0.1 mm of 0.8 mm.",
+    ],
+  },
   {
     version: "2.522.0",
     date: "2026-09-29",

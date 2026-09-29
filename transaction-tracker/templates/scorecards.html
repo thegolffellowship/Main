@@ -22,7 +22,8 @@
     .sheet { width: {{ '11in' if land else '8.5in' }}; height: {{ '8.5in' if land else '11in' }};
       background: #fff; margin: 24px auto; overflow: hidden; position: relative;
       display: flex; flex-direction: column; }
-    .card { height: calc(100% / {{ lay.per_sheet }}); flex: none; position: relative;
+    .card { --ds: {{ '1' if sc.layout == '3up' else ('1.32' if sc.layout == '2up' else '1.24') }};
+      height: calc(100% / {{ lay.per_sheet }}); flex: none; position: relative;
       padding: 24px 24px 0.25in 24px; font-size: {{ lay.font }}px; overflow: hidden; }
     .card + .card { border-top: 1px dashed #C9CDD3; }
     .decode { position: absolute; left: 0; right: 0; bottom: 0; height: 0.25in;
@@ -102,12 +103,18 @@
     /* DOTS (Kerry 2026-09-28: "bigger and easier to read"): black PH dots
        top-right, orange net-game dots bottom-right, in a darker orange that
        reads on white and on the shaded cart-B rows. */
-    /* Kerry 2026-09-29: "way too big now" — ~60% of v2.520.6, still well
-       above the original specks. Two of a kind sit tight, side by side in
-       their corner; the middle of the box stays clear for the score. */
-    .dk, .do { position: absolute; right: 0.14em; font-size: 1.3em; line-height: 0.6;
-      letter-spacing: -0.18em; font-weight: 700; }
-    .dk { top: 0.1em; color: #111; } .do { bottom: 0.14em; color: #C2410C; }
+    /* DOTS IN PRINT UNITS (Kerry 2026-09-29: "Dots seem small. Make sure
+       dots are equally padded off each edge"). Drawn circles, not glyphs:
+       1.6 mm across, 0.5 mm apart, inset exactly 0.8 mm from BOTH edges of
+       their corner, measured from the inside of the border (the cell's
+       padding box). Black: top + right. Orange: bottom + right. 2-up
+       layouts scale with the player-row height (--ds). */
+    .dk, .do { position: absolute; right: calc(0.8mm * var(--ds)); display: flex;
+      gap: calc(0.5mm * var(--ds)); line-height: 0; }
+    .dk { top: calc(0.8mm * var(--ds)); } .do { bottom: calc(0.8mm * var(--ds)); }
+    .dk i, .do i { display: block; width: calc(1.6mm * var(--ds)); height: calc(1.6mm * var(--ds));
+      border-radius: 50%; }
+    .dk i { background: #111; } .do i { background: #C2410C; }
     td.thick, th.thick { border-right: 2.5px solid #374151; }
     td.split-c, th.split-c { position: relative; padding: 0; }
     .split-c svg.diag { position: absolute; inset: 0; width: 100%; height: 100%; }
@@ -162,7 +169,7 @@
   {%- set n = (v|string)|length -%}
   <span class="{{ cls }} l{{ 1 if n == 1 else (2 if n == 2 else 3) }}">{{ v }}</span>
 {%- endmacro %}
-{% macro dots(n) -%}{% if n and n > 0 %}{{ '•' * n }}{% endif %}{%- endmacro %}
+{% macro dots(n) -%}{% if n and n > 0 %}{% for _ in range(n) %}<i></i>{% endfor %}{% endif %}{%- endmacro %}
 
 {% macro sc_bar(extra_style='') -%}
 <div class="sc-bar noprint" style="{{ extra_style }}">
