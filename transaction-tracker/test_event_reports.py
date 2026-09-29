@@ -744,15 +744,16 @@ for _t, _rep, _f in (("divisions_flights.html", db.event_flights_report(EV, db_p
                      ("proximity_markers.html", db.event_proximity_report(EV, db_path=tmp), "Proxies")):
     _h = _env.get_template(_t).render(rep=_rep)
     check(f"{_t}: Back, Print and Download PDF render, hidden in print",
-          'class="rbar noprint"' in _h and "window.print()" in _h and "&#8681; PDF" in _h
+          'class="rbar noprint"' in _h and 'onclick="rbPrint()"' in _h and "&#8681; PDF" not in _h
           and f"/events?event={EV}&amp;view=reports" in _h and ".rbar { display: none !important; }" in _h)
-    check(f"{_t}: Download PDF names the file <stub>-{_f}", f'"26-s9-23-{_f}"' in _h)
+    check(f"{_t}: Print names the document <stub>-{_f} (Save as PDF proposes it)", f'"26-s9-23-{_f}"' in _h)
     check(f"{_t}: bar wraps at the 560px phone breakpoint", "@media (max-width: 560px)" in _h)
 
 print("\n== ONE report bar on every report page (Kerry 9/29: \"it's not the same as the other reports\") ==")
 _bar = open("templates/_report_bar.html", encoding="utf-8").read()
-check("the bar is Back to Reports · Print · PDF, white / white / black, never printed",
-      "&#8592; Back to Reports" in _bar and "view=reports" in _bar and 'class="dark"' in _bar
+check("the bar is Back to Reports · Print (no PDF button, Kerry 9/29), never printed",
+      "&#8592; Back to Reports" in _bar and "view=reports" in _bar and "&#8681;" not in _bar
+      and "document.title" in _bar
       and "@media print { .rbar { display: none !important; } }" in _bar and "max-width: 560px" in _bar)
 for _t in ("starter_sheet", "cart_signs", "scorecards", "divisions_flights", "proximity_markers"):
     _src = open(f"templates/{_t}.html", encoding="utf-8").read()

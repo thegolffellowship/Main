@@ -1,4 +1,4 @@
-window.TGF_VERSION = "2.522.24";
+window.TGF_VERSION = "2.522.25";
 window.TGF_CHANGELOG = [
     {
         version: "2.522.24",

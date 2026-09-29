@@ -224,20 +224,14 @@
 {% macro ghosts(n) -%}{% if n and n > 0 %}{% for _ in range(n) %}<i class="g"></i>{% endfor %}{% endif %}{%- endmacro %}
 
 {% macro sc_bar(extra_style='') -%}
-{% if not sc.gaps %}{% with rb_event_id=sc.event.id, rb_width='8.5in', rb_file=(sc.event.file_stub or 'scorecards') ~ '-Scorecards', rb_pdf_js='return scPdf(false)' %}{% include "_report_bar.html" %}{% endwith %}
-{% elif sc.player_gaps %}{% with rb_event_id=sc.event.id, rb_width='8.5in', rb_file=(sc.event.file_stub or 'scorecards') ~ '-Scorecards', rb_print_js='return scFlagged()', rb_pdf_js='return scPdf(true)', rb_print_label='Print anyway, flagged', rb_pdf_label='PDF anyway, flagged' %}{% include "_report_bar.html" %}{% endwith %}
+{% if not sc.gaps %}{% with rb_event_id=sc.event.id, rb_width='8.5in', rb_file=(sc.event.file_stub or 'scorecards') ~ '-Scorecards' %}{% include "_report_bar.html" %}{% endwith %}
+{% elif sc.player_gaps %}{% with rb_event_id=sc.event.id, rb_width='8.5in', rb_file=(sc.event.file_stub or 'scorecards') ~ '-Scorecards', rb_print_js='return scFlagged()', rb_print_label='Print anyway, flagged' %}{% include "_report_bar.html" %}{% endwith %}
 {% else %}{% with rb_event_id=sc.event.id, rb_width='8.5in', rb_disabled=True, rb_disabled_why='Fix the gaps below first' %}{% include "_report_bar.html" %}{% endwith %}
 {% endif %}
 {%- endmacro %}
 <script>
-  // PDF keeps the page's layout / grouping / QR / holes; `flagged` adds
-  // allow_gaps=1 (a player with no PH prints blank, named in the log).
-  function scPdf(flagged) {
-    var u = new URL(location.href);
-    u.pathname = u.pathname.replace(/\/scorecards$/, '/scorecards.pdf');
-    if (flagged) u.searchParams.set('allow_gaps', '1');
-    location.href = u; return false;
-  }
+  // Print anyway, flagged: reload with allow_gaps=1 (a player with no PH
+  // prints blank, named in the log), then Print from the bar.
   function scFlagged() {
     var u = new URL(location.href); u.searchParams.set('allow_gaps', '1');
     location.href = u; return false;
