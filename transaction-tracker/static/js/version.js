@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.521.0";
+window.TGF_VERSION = "2.521.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.521.1",
+    date: "2026-09-29",
+    title: "Scorecard dots about 60% of v2.520.6",
+    changes: [
+      "Kerry 2026-09-29: \"The dots on the scorecard are way too big now.\" Dots go from 2.1em to 1.3em (about 60% of the diameter, still well above the original specks), two of a kind tighter side by side, black top-right and orange bottom-right in the darker orange, so the middle of every box stays clear for the written score. Checked on a 3-up Letter card at print size before and after.",
+    ],
+  },
   {
     version: "2.521.0",
     date: "2026-09-29",

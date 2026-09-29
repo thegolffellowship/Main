@@ -102,9 +102,12 @@
     /* DOTS (Kerry 2026-09-28: "bigger and easier to read"): black PH dots
        top-right, orange net-game dots bottom-right, in a darker orange that
        reads on white and on the shaded cart-B rows. */
-    .dk, .do { position: absolute; right: 0.12em; font-size: 2.1em; line-height: 0.55;
-      letter-spacing: -0.12em; font-weight: 700; }
-    .dk { top: 0.08em; color: #111; } .do { bottom: 0.12em; color: #C2410C; }
+    /* Kerry 2026-09-29: "way too big now" — ~60% of v2.520.6, still well
+       above the original specks. Two of a kind sit tight, side by side in
+       their corner; the middle of the box stays clear for the score. */
+    .dk, .do { position: absolute; right: 0.14em; font-size: 1.3em; line-height: 0.6;
+      letter-spacing: -0.18em; font-weight: 700; }
+    .dk { top: 0.1em; color: #111; } .do { bottom: 0.14em; color: #C2410C; }
     td.thick, th.thick { border-right: 2.5px solid #374151; }
     td.split-c, th.split-c { position: relative; padding: 0; }
     .split-c svg.diag { position: absolute; inset: 0; width: 100%; height: 100%; }
