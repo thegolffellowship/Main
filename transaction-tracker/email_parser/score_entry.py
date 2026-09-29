@@ -979,57 +979,16 @@ def seed_round_from_pairings(event_id: int, holes: str = "9", *, round_date=None
     first = _first_hole(evrow, n_holes)
     pev = pack.get("event") or {}
     shotgun = (pev.get("start_type") or "").strip().lower().startswith("shotgun")
-    # A LINK BELONGS TO ITS SLOT (Kerry 2026-09-29: "I'm probably gonna be
-    # making pairing changes but anything like that should never affect group
-    # links. Right?"). The link is the se_groups row; the row is matched to the
-    # saved pairings by SLOT (1A, 2B, 8:10a), never by the pairings' group
-    # number, which renumbers when a group is added or removed. A new slot
-    # gets a fresh number; a slot no longer on the sheet keeps its row (its
-    # link says so) and its players move to wherever the sheet has them.
-    with _closing(_conn(db_path)) as conn:
-        have = {}
-        for er in conn.execute("SELECT group_num, label FROM se_groups WHERE round_id = ?", (rid,)):
-            have.setdefault(slot_key(er[1]), er[0])
-    used = set(have.values())
-    num_for = {}
-    for g in groups:
-        k = slot_key(g.get("start_line") or g.get("slot_label"))
-        if k in have:
-            num_for[id(g)] = have[k]
-    # A group whose HOLE or TIME changed (1A relabelled 5A, 8:10 moved to
-    # 8:20) keeps its link: an unmatched sheet group takes the existing row
-    # with its own group number, when that row's slot is no longer on the
-    # sheet. Its start hole and label then follow the sheet.
-    # It is the same group when most of its players are the same on both
-    # sides (group numbers renumber; people mostly stay together).
-    sheet_slots = {slot_key(g.get("start_line") or g.get("slot_label")) for g in groups}
-    orphan_nums = {n for k, n in have.items() if k not in sheet_slots}
-    if orphan_nums:
-        with _closing(_conn(db_path)) as conn:
-            members = {}
-            for pr in conn.execute(
-                    "SELECT g.group_num, p.customer_id FROM se_players p JOIN se_groups g "
-                    "ON g.id = p.group_id WHERE p.round_id = ?", (rid,)):
-                members.setdefault(pr[0], set()).add(pr[1])
-        for g in groups:
-            if id(g) in num_for or not orphan_nums:
-                continue
-            mine = {p.get("customer_id") for p in g.get("players") or [] if p.get("customer_id")}
-            best = max(orphan_nums, key=lambda n: len(mine & members.get(n, set())))
-            theirs = members.get(best, set())
-            both = len(mine & theirs)
-            # the SAME group re-labelled: most of its players on both sides
-            if mine and theirs and both * 2 > len(mine) and both * 2 > len(theirs):
-                num_for[id(g)] = best
-                orphan_nums.discard(best)
-    for g in groups:
-        if id(g) in num_for:
-            continue
-        n = int(g["group_num"])
-        if n in used:
-            n = max(used | {0}) + 1
-        used.add(n)
-        num_for[id(g)] = n
+    # A LINK IS A SLOT NUMBER (Kerry 2026-09-29: "there should be underlying
+    # group numbers in sequence that don't adjust ... group one would be the
+    # first group in the list regardless if it's tee time or hole assignment
+    # changed ... slot one and slot two through how many ever slots there
+    # are"). The se_groups row is matched to the saved pairings by the
+    # pairings' GROUP NUMBER (its place in the list), never by the hole or
+    # tee-time label: relabelling 2A to 3 keeps the link, which then opens on
+    # the new start hole. A new group number gets a new link; a group number
+    # no longer on the sheet keeps its row, and its link says so.
+    num_for = {id(g): int(g["group_num"]) for g in groups}
     for g in groups:
         start = _start_hole(g.get("hole_label"), first)
         res = upsert_group(

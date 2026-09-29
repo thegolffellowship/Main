@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.522.4";
+window.TGF_VERSION = "2.522.5";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.522.5",
+    date: "2026-09-29",
+    title: "Score entry: a link is the group's slot number, not its hole label",
+    changes: [
+      "Kerry 2026-09-29: links are 'slot one and slot two through how many ever slots there are', whatever the hole or tee time. v2.522.0 matched groups by their hole label first, so when Kerry relabelled tonight's holes and '4A' moved to a different group, slot 7's link opened the wrong group (caught before any score was entered). Groups are now matched only by the pairings' group number, their place in the list. A relabel keeps the link and moves its start hole; a moved player's scores still go with him; a new group number gets a new link."
+    ]
+  },
   {
     version: "2.522.4",
     date: "2026-09-29",

@@ -299,7 +299,7 @@ check("cup seed refuses another event's dial", "error" in se.cup_seed(901))
 db.set_app_setting("lsc_matches", "")
 db.set_app_setting("lsc_tees", "")
 
-print("LINKS BELONG TO SLOTS; the round follows the saved pairings (Kerry 2026-09-29)")
+print("LINKS ARE SLOT NUMBERS; the round follows the saved pairings (Kerry 2026-09-29)")
 conn.execute("INSERT INTO events (id, item_name, event_date, start_type, start_time) "
              "VALUES (910, 'slots', '2026-09-29', 'Shotgun', '17:00')")
 def _pair(rows):
@@ -310,50 +310,51 @@ def _pair(rows):
                          "player_name, cart_pos, customer_id) VALUES (910, '9', ?, ?, ?, ?, ?)",
                          (gnum, slot, f"P{cid}", pos, cid))
     conn.commit()
-_pair([(1, "1A", [101, 102]), (2, "2A", [103, 104])])
+_pair([(1, "1A", [101, 102]), (2, "2A", [103, 104]), (3, "3A", [105])])
 with contextlib.redirect_stdout(io.StringIO()):
     s910 = se.seed_round_from_pairings(910, "9")
 r910 = s910["round_id"]
-L0 = {se.slot_key(l["label"]): l for l in se.round_links(r910)}
-check("seeded slots 1A and 2A, 2A starts on hole 2",
-      set(L0) == {"1A", "2A"} and se.get_group_card(L0["2A"]["group_id"])["start_hole"] == 2, L0)
-g2a = L0["2A"]["group_id"]
-tok2a = L0["2A"]["url"].split("t=", 1)[1]
-se.claim_group(g2a, "k", 103)
-se.write_scores(g2a, "k", 103, [{"op_id": "SL1", "customer_id": 103, "hole": 2, "gross": 4},
-                                {"op_id": "SL2", "customer_id": 104, "hole": 2, "gross": 5}])
-# Kerry re-pairs: 1A is gone, 2A renumbered to group 1 and gains 101, 104
-# moves to a NEW slot 3A, and 102 moves with him.
-_pair([(1, "2A", [103, 101]), (2, "3A", [102, 104])])
+L0 = {l["group_num"]: l for l in se.round_links(r910)}
+check("seeded slots 1-3; slot 2 starts on hole 2",
+      set(L0) == {1, 2, 3} and se.get_group_card(L0[2]["group_id"])["start_hole"] == 2, L0)
+g2 = L0[2]["group_id"]
+tok2 = L0[2]["url"].split("t=", 1)[1]
+se.claim_group(g2, "k", 103)
+se.write_scores(g2, "k", 103, [{"op_id": "SL1", "customer_id": 103, "hole": 2, "gross": 4},
+                               {"op_id": "SL2", "customer_id": 104, "hole": 2, "gross": 5}])
+# Kerry relabels every hole (1A->1, 2A->4, 3A->2A: the old 2A label now on
+# slot 3) and swaps 101 and 104 between slots 1 and 2 after 104 has scored.
+_pair([(1, "1", [104, 102]), (2, "4", [103, 101]), (3, "2A", [105])])
 with contextlib.redirect_stdout(io.StringIO()):
-    c2a = se.get_group_card(g2a)
-check("the 2A link still opens 2A after re-pairing, with its new players, on hole 2",
-      se.verify_group_token(tok2a) == g2a and c2a["start_hole"] == 2
-      and sorted(p["customer_id"] for p in c2a["players"]) == [101, 103], c2a.get("players"))
-check("103's score stayed with him in 2A", c2a["scores"].get("c:103", {}).get("2") == 4, c2a["scores"])
-L1 = {se.slot_key(l["label"]): l for l in se.round_links(r910)}
-check("a new slot gets its own link; the old links are unchanged",
-      "3A" in L1 and L1["2A"]["url"] == L0["2A"]["url"] and L1["1A"]["url"] == L0["1A"]["url"], L1)
-c3a = se.get_group_card(L1["3A"]["group_id"])
-check("104 moved after scoring: his score went with him to 3A",
-      c3a["scores"].get("c:104", {}).get("2") == 5 and "c:104" not in c2a["scores"], (c3a["scores"], c2a["scores"]))
-c1a = se.get_group_card(L0["1A"]["group_id"])
-check("a slot no longer on the sheet says so plainly", c1a.get("gone") and "pairings" in c1a["error"], c1a)
+    c2 = se.get_group_card(g2)
+check("slot 2's link still opens slot 2, now on hole 4, with its new players",
+      se.verify_group_token(tok2) == g2 and c2["start_hole"] == 4
+      and sorted(p["customer_id"] for p in c2["players"]) == [101, 103], (c2.get("start_hole"), c2.get("players")))
+c3 = se.get_group_card(L0[3]["group_id"])
+check("slot 3 took the old '2A' label and keeps its own link and player (the label is not the slot)",
+      c3["start_hole"] == 2 and [p["customer_id"] for p in c3["players"]] == [105], c3.get("players"))
+check("103's score stayed with him in slot 2", c2["scores"].get("c:103", {}).get("2") == 4, c2["scores"])
+c1 = se.get_group_card(L0[1]["group_id"])
+check("104 moved after scoring: his score went with him to slot 1",
+      c1["scores"].get("c:104", {}).get("2") == 5 and "c:104" not in c2["scores"], (c1["scores"], c2["scores"]))
+L1 = {l["group_num"]: l for l in se.round_links(r910)}
+check("the three links are unchanged; no new link", set(L1) == {1, 2, 3}
+      and all(L1[n]["url"] == L0[n]["url"] for n in (1, 2, 3)), L1)
+_pair([(1, "1", [104, 102]), (2, "4", [103, 101]), (3, "2A", [105]), (4, "6", [106])])
+with contextlib.redirect_stdout(io.StringIO()):
+    se.sync_from_pairings(r910)
+L2 = {l["group_num"]: l for l in se.round_links(r910)}
+check("a new slot 4 gets its own link", 4 in L2 and all(L2[n]["url"] == L0[n]["url"] for n in (1, 2, 3)), L2)
+_pair([(1, "1", [104, 102]), (2, "4", [103, 101, 105, 106])])
+with contextlib.redirect_stdout(io.StringIO()):
+    se.sync_from_pairings(r910)
+c4 = se.get_group_card(L2[4]["group_id"])
+check("a slot no longer on the sheet says so plainly", c4.get("gone") and "pairings" in c4["error"], c4)
 with contextlib.redirect_stdout(io.StringIO()):
     again = se.sync_from_pairings(r910)
 check("nothing changed since: no re-seed", again is None)
 check("no score row was deleted", conn.execute("SELECT COUNT(*) FROM se_hole_scores WHERE round_id = ?",
                                                (r910,)).fetchone()[0] == 2)
-# Kerry moves 3A's start to hole 5 (same group number): the 3A link is kept
-# and now opens on hole 5.
-g3a = L1["3A"]["group_id"]
-_pair([(1, "2A", [103, 101]), (2, "5A", [102, 104])])
-with contextlib.redirect_stdout(io.StringIO()):
-    c5 = se.get_group_card(g3a)
-L2 = {se.slot_key(l["label"]): l for l in se.round_links(r910)}
-check("a group moved to another starting hole keeps its link and opens on the new hole",
-      c5["start_hole"] == 5 and "5A" in L2 and L2["5A"]["group_id"] == g3a
-      and sorted(p["customer_id"] for p in c5["players"]) == [102, 104], (c5.get("start_hole"), L2))
 
 print("Player swap on the saved pairings (Kerry 2026-09-29 'Swap Lance and Brian')")
 _pair([(1, "2A", [103, 101]), (2, "5A", [102, 104])])
