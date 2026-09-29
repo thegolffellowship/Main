@@ -74,7 +74,7 @@
   </style>
 </head>
 <body>
-{% with rb_event_id=(rep.event or {}).get("id"), rb_label="Divisions / Flights", rb_file=(rep.file_stub or "") ~ "-DivisionsFlights", rb_width="8.5in" %}{% include "_report_bar.html" %}{% endwith %}
+{% with rb_event_id=(rep.event or {}).get("id"), rb_file=(rep.file_stub or "") ~ "-DivisionsFlights", rb_width="8.5in" %}{% include "_report_bar.html" %}{% endwith %}
 <div class="sheet">
   <div class="sheet-head">
     <div class="sheet-brand">

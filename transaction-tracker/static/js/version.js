@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.522.21";
+window.TGF_VERSION = "2.522.22";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.522.22",
+    date: "2026-09-29",
+    title: "One report button bar on every report page",
+    changes: [
+      "Kerry 9/29: \"And it's not the same as the other reports.\" Starter Sheet, Cart Signs, Scorecards, Divisions & Flights and Proximity Markers now all show the same bar, from ONE partial (templates/_report_bar.html): \"← Back to Reports\" · \"Print\" · \"⇩ PDF\", back and Print as white pills, PDF as a black pill. Back lands on the event's REPORTS tab. Page tools (the Scorecards GGID editor, the cart-sign cutting note) sit below the bar. The bar never prints and wraps at phone width. The Scorecards keeps its server PDF and its flagged / blocked states through the same bar. Guard in test_event_reports.py: every report page includes the partial and draws no print button of its own."
+    ]
+  },
   {
     version: "2.522.21",
     date: "2026-09-29",

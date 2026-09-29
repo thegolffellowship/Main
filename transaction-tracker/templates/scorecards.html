@@ -224,19 +224,10 @@
 {% macro ghosts(n) -%}{% if n and n > 0 %}{% for _ in range(n) %}<i class="g"></i>{% endfor %}{% endif %}{%- endmacro %}
 
 {% macro sc_bar(extra_style='') -%}
-<div class="sc-bar noprint" style="{{ extra_style }}">
-  <a href="/events?event={{ sc.event.id }}&amp;view=reports">&#8592; Back to Reports</a>
-  {% if not sc.gaps %}
-  <button type="button" onclick="window.print()">&#128424; Print</button>
-  <a class="dark" href="#" onclick="return scPdf(false)">&#8681; PDF</a>
-  {% elif sc.player_gaps %}
-  <a href="#" onclick="return scFlagged()">&#128424; Print anyway, flagged</a>
-  <a class="dark" href="#" onclick="return scPdf(true)">&#8681; PDF anyway, flagged</a>
-  {% else %}
-  <button type="button" disabled title="Fix the gaps below first" style="opacity:.5">&#128424; Print</button>
-  <button type="button" class="dark" disabled title="Fix the gaps below first" style="opacity:.5">&#8681; PDF</button>
-  {% endif %}
-</div>
+{% if not sc.gaps %}{% with rb_event_id=sc.event.id, rb_width='8.5in', rb_file=(sc.event.file_stub or 'scorecards') ~ '-Scorecards', rb_pdf_js='return scPdf(false)' %}{% include "_report_bar.html" %}{% endwith %}
+{% elif sc.player_gaps %}{% with rb_event_id=sc.event.id, rb_width='8.5in', rb_print_js='return scFlagged()', rb_pdf_js='return scPdf(true)', rb_print_label='Print anyway, flagged', rb_pdf_label='PDF anyway, flagged' %}{% include "_report_bar.html" %}{% endwith %}
+{% else %}{% with rb_event_id=sc.event.id, rb_width='8.5in', rb_disabled=True, rb_disabled_why='Fix the gaps below first' %}{% include "_report_bar.html" %}{% endwith %}
+{% endif %}
 {%- endmacro %}
 <script>
   // PDF keeps the page's layout / grouping / QR / holes; `flagged` adds

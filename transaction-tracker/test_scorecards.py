@@ -248,7 +248,7 @@ check("18-hole: two panels, Init column, T header", "Init" in html18 and ">T<" i
 check("a Back link to the REPORTS tab, top and bottom (Kerry 9/28, 9/29)",
       html_gap.count("view=reports") == 2 and "Back to Reports" in html_gap)
 check("Print and PDF, top and bottom (Kerry 9/28: every report)",
-      html_gap.count("window.print()") == 2 and html_gap.count("scPdf(false)") == 2)
+      html_gap.count('onclick="window.print()"') == 2 and html_gap.count("scPdf(false)") == 2)
 groups[0]["players"][0]["playing_handicap"] = None
 _hf = env.get_template("scorecards.html").render(sc=scm.build_scorecards(3304, "3up", "team", qr="off", db_path=DB))
 check("with a player gap, the buttons offer print/PDF anyway, flagged",

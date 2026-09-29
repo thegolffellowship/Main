@@ -1,30 +1,37 @@
-{#- Print / Download PDF bar for a print report (Kerry 9/28-29: "Needs to be
-    a PDF/Print button for every report" / "Divisions/Flights and Proxies
-    need the print/download buttons"). Same pipeline as the Starter Sheet
-    and Cart Signs: Print = window.print(); Download PDF = the same print
-    with the tab renamed so "Save as PDF" proposes the event file name.
-    Hidden in print (and so in the server-rendered print pack). Wraps at
-    phone width. Caller sets: rb_event_id, rb_label, rb_file, rb_width. -#}
+{#- THE report button bar (Kerry 9/29: "And it's not the same as the other
+    reports"). Every report page includes THIS partial, so the pages cannot
+    drift: "← Back to Reports" · "Print" · "⇩ PDF", back and Print white
+    pills, PDF a black pill (the Scorecards style). Back lands on the event's
+    REPORTS tab. Never prints; wraps at phone width. Page-specific tools go
+    BELOW the bar, never in it.
+    Caller sets: rb_event_id, rb_file (download name for the print-to-PDF),
+    rb_width. Optional: rb_print_js / rb_pdf_js (a page whose PDF comes from
+    the server), rb_print_label / rb_pdf_label, rb_disabled (+ rb_disabled_why). -#}
 <style>
-  .rbar { width: {{ rb_width }}; max-width: 100%; margin: 0 auto; padding: 14px 0;
-          display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
-          font-family: "Helvetica Neue", Arial, sans-serif; box-sizing: border-box; }
-  .rbar button { font: inherit; font-size: 14px; padding: 8px 16px; border: 0; border-radius: 999px;
-                 background: #E87C3E; color: #fff; font-weight: 600; cursor: pointer; min-height: 40px; }
-  .rbar button.back { background: #fff; color: #1B1B1B; border: 2px solid #1B1B1B; padding: 6px 14px; }
-  .rbar button.pdf { background: #1B1B1B; }
-  @media (max-width: 560px) { .rbar { padding: 10px 12px; } .rbar button { flex: 1 1 auto; } }
+  .rbar { width: {{ rb_width|default('8.5in') }}; max-width: 100%; margin: 16px auto 0; padding: 0 0 12px;
+          display: flex; flex-wrap: wrap; gap: 8px; align-items: center; box-sizing: border-box; }
+  .rbar a, .rbar button { font: 600 15px "Helvetica Neue", Arial, sans-serif; padding: 10px 18px;
+          border-radius: 999px; border: 1.5px solid #1B1B1B; background: #fff; color: #1B1B1B;
+          text-decoration: none; cursor: pointer; line-height: 1.2; min-height: 40px; box-sizing: border-box; }
+  .rbar .dark { background: #1B1B1B; color: #fff; }
+  .rbar [disabled] { opacity: .5; cursor: default; }
+  @media (max-width: 560px) { .rbar { padding: 0 12px 12px; } .rbar a, .rbar button { flex: 1 1 auto; text-align: center; } }
   @media print { .rbar { display: none !important; } }
 </style>
 <div class="rbar noprint">
-  <button class="back" onclick="location.href = '/events?event={{ rb_event_id }}&view=reports';">&#8592; Back</button>
-  <button onclick="window.print()">Print {{ rb_label }}</button>
-  <button class="pdf" onclick="rbDownloadPdf()">&#8681; Download PDF</button>
+  <a class="back" href="/events?event={{ rb_event_id }}&amp;view=reports">&#8592; Back to Reports</a>
+  {% if rb_disabled|default(false) %}
+  <button type="button" disabled title="{{ rb_disabled_why|default('') }}">{{ rb_print_label|default('Print') }}</button>
+  <button type="button" class="dark" disabled title="{{ rb_disabled_why|default('') }}">&#8681; {{ rb_pdf_label|default('PDF') }}</button>
+  {% else %}
+  <button type="button" onclick="{{ rb_print_js|default('window.print()') }}">{{ rb_print_label|default('Print') }}</button>
+  <button type="button" class="dark" onclick="{{ rb_pdf_js|default('rbDownloadPdf()') }}">&#8681; {{ rb_pdf_label|default('PDF') }}</button>
+  {% endif %}
 </div>
 <script>
   function rbDownloadPdf() {
     var was = document.title;
-    document.title = {{ rb_file | tojson }};
+    document.title = {{ rb_file|default('report') | tojson }};
     window.addEventListener("afterprint", function once() {
       document.title = was;
       window.removeEventListener("afterprint", once);

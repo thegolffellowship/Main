@@ -91,13 +91,8 @@
   </style>
 </head>
 <body>
-  <div class="toolbar noprint">
-    <button style="font:inherit;padding:6px 14px;border:2px solid #1B1B1B;border-radius:999px;background:#fff;color:#1B1B1B;font-weight:600;cursor:pointer;margin-right:8px;"
-            onclick="location.href = '/events?event={{ pack.event.id }}&view=reports';">&#8592; Back</button>
-    <button onclick="window.print()">Print Cart Signs</button>
-    <button class="pdf" style="font:inherit;padding:8px 16px;border:0;border-radius:999px;background:#1B1B1B;color:#fff;font-weight:600;cursor:pointer;margin-left:8px;" onclick="downloadPdf()">&#8681; Download PDF</button>
-    <span style="color:#666;font-size:13px;margin-left:10px;">Two signs per page &middot; cut along the centre line.</span>
-  </div>
+  {% with rb_event_id=pack.event.id, rb_width='100%', rb_file=(pack.event.file_stub or '') ~ '-CartSigns' %}{% include "_report_bar.html" %}{% endwith %}
+  <div class="noprint" style="color:#666;font-size:13px;margin:0 0 12px;">Two signs per page &middot; cut along the centre line.</div>
 
   {% if not pack.groups %}
     <div class="empty">No pairings saved for this event yet. Generate &amp; save pairings first.</div>
