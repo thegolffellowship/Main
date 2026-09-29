@@ -7446,6 +7446,169 @@ def close_ca_queue_item(item_id: int,
     return json.dumps(res, indent=2, default=str)
 
 
+# ═══════ READ-ONLY EVENT VIEWS (Kerry 2026-09-29, Front Desk #954) ═══════
+# Kerry: "Why can't you see the games tab info? You need to create a tool
+# that allows you to see it and any other tools if you're blind to any
+# other stuff." Each tool reads through the SAME code the page reads — a
+# page's own GET endpoint replayed in-process, or the server reader the
+# page is built from — never a recomputation, so a tool cannot drift from
+# the screen. Read-only: GETs and readers only. Logged via _audit.
+
+def _page_get(path: str, role: str = "manager") -> tuple[int, object]:
+    """Replay a page's own GET inside the app with a staff session and
+    return (status, json). GET only — nothing here can write."""
+    import app as _app
+    c = _app.app.test_client()
+    with c.session_transaction() as sess:
+        sess["role"] = role
+        sess["authenticated"] = True
+    r = c.get(path)
+    try:
+        body = r.get_json(silent=True)
+    except Exception:
+        body = None
+    return r.status_code, body
+
+
+def _missing_ids(rows) -> list:
+    """Names of person rows that carry no customer_id (should be none)."""
+    return [r.get("name") or r.get("customer_name") or r.get("golfer") or "?"
+            for r in rows if isinstance(r, dict) and not r.get("customer_id")]
+
+
+@mcp.tool()
+def get_event_pairings(event_id: int) -> str:
+    """The SAVED pairings for an event, as the Starter Sheet prints them.
+
+    Per group: slot (group_num), label, start line (hole / tee time), GGID,
+    cart seats, and each player with customer_id, tee band, index, PH and
+    team handicap; blinds as drawn. Reads get_event_print_pack — the
+    Starter Sheet's own reader. Read-only.
+    """
+    from email_parser.database import get_event_print_pack
+    _audit("read_event_pairings", f"event {event_id}")
+    pack = get_event_print_pack(int(event_id))
+    if not pack:
+        return json.dumps({"error": f"event {event_id} not found"})
+    groups, people = [], []
+    for g in pack.get("groups") or []:
+        players = [{
+            "customer_id": p.get("customer_id"), "name": p.get("name"),
+            "cart_pos": p.get("cart_pos"),
+            "cart": "A" if (p.get("cart_pos") or 0) in (1, 2) else "B",
+            "tee": p.get("tee_choice"),
+            "index": p.get("handicap_index_display", p.get("handicap_index")),
+            "playing_handicap": p.get("playing_handicap"),
+            "team_handicap": p.get("team_allowed"),
+            "is_new": bool(p.get("is_new")), "is_first_timer": bool(p.get("is_first_timer")),
+        } for p in sorted(g.get("players") or [], key=lambda x: x.get("cart_pos") or 0)]
+        people += players
+        groups.append({
+            "holes": g.get("holes"), "slot": g.get("group_num"),
+            "label": g.get("slot_label"), "start": g.get("start_line"),
+            "ggid": g.get("ggid"), "players": players,
+            "blinds": [{"customer_id": b.get("customer_id"), "name": b.get("name")}
+                       for b in g.get("blinds") or []],
+        })
+    ev = pack.get("event") or {}
+    return json.dumps({
+        "event": {k: ev.get(k) for k in ("id", "item_name", "event_date", "course",
+                                          "chapter", "start_type", "start_time", "start_label")},
+        "group_count": len(groups), "player_count": len(people),
+        "groups": groups, "missing_customer_id": _missing_ids(people),
+        "source": "get_event_print_pack (the Starter Sheet's reader)",
+    }, indent=2, default=str)
+
+
+@mcp.tool()
+def get_event_flights(event_id: int) -> str:
+    """The DIVISIONS/FLIGHTS tab for an event: each game's variant, flight
+    count and edges, every player's flight, pots and places, freeze state.
+    The page's own endpoint (/api/events/<id>/flights-board). Read-only."""
+    _audit("read_event_flights", f"event {event_id}")
+    st, body = _page_get(f"/api/events/{int(event_id)}/flights-board")
+    return json.dumps({"status": st, "board": body,
+                       "source": "/api/events/<id>/flights-board (the FLIGHTS tab)"},
+                      indent=2, default=str)
+
+
+@mcp.tool()
+def get_event_payouts(event_id: int) -> str:
+    """The PAYOUTS tab for an event: recorded winners, amounts, paid or
+    unpaid, total purse. The page's own data (/api/tgf, filtered to this
+    event's code exactly as the tab does). Read-only."""
+    from email_parser.database import get_connection
+    _audit("read_event_payouts", f"event {event_id}")
+    conn = get_connection()
+    try:
+        row = conn.execute("SELECT item_name FROM events WHERE id = ?", (int(event_id),)).fetchone()
+    finally:
+        conn.close()
+    if not row:
+        return json.dumps({"error": f"event {event_id} not found"})
+    st, body = _page_get("/api/tgf", role="admin")
+    ev = next((e for e in (body or {}).get("events") or [] if e.get("code") == row[0]), None)
+    return json.dumps({"status": st, "event_code": row[0], "payouts_tab": ev,
+                       "note": None if ev else "No payouts recorded for this event (the tab says the same).",
+                       "missing_customer_id": _missing_ids((ev or {}).get("payouts") or []),
+                       "source": "/api/tgf (the PAYOUTS tab)"}, indent=2, default=str)
+
+
+@mcp.tool()
+def get_score_entry_status(event_id: int) -> str:
+    """Live score entry for an event, as the Live Scoring page shows it:
+    rounds, each group's link slot and players, holes entered, signatures,
+    card checks, open/closed; plus the member switch and QR dial. The
+    page's own read (/api/score-entry/events/<id>/admin). Read-only — it
+    never seeds a round, changes a switch or touches a link."""
+    from email_parser.database import get_app_setting
+    from email_parser import score_entry as _se
+    _audit("read_score_entry_status", f"event {event_id}")
+    st, body = _page_get(f"/api/score-entry/events/{int(event_id)}/admin", role="admin")
+    return json.dumps({
+        "status": st,
+        "event_enabled": _se.event_enabled(int(event_id)),
+        "member_switch_on": (get_app_setting("score_entry_live") or "").strip() == "1",
+        "qr_on": (get_app_setting("score_entry_qr") or "").strip() == "1",
+        "live_scoring": body,
+        "source": "/api/score-entry/events/<id>/admin (the Live Scoring page)",
+    }, indent=2, default=str)
+
+
+@mcp.tool()
+def get_live_version() -> str:
+    """What is actually running: the served version (static/js/version.js
+    of THIS process) and, when Railway provides it, the commit and
+    deployment it was built from. A push that has not gone live shows up
+    as main's newer version elsewhere; Railway's own deploy queue needs a
+    Railway API token, which this tool does not have. Read-only."""
+    import os, re as _re
+    _audit("read_live_version", "version.js + Railway build env")
+    root = Path(__file__).resolve().parent
+    txt = (root / "static" / "js" / "version.js").read_text()
+    ver = _re.search(r'TGF_VERSION\s*=\s*"([^"]+)"', txt)
+    top = _re.search(r'title:\s*"([^"]*)"', txt)
+    return json.dumps({
+        "running_version": ver.group(1) if ver else None,
+        "running_title": top.group(1) if top else None,
+        "commit": os.environ.get("RAILWAY_GIT_COMMIT_SHA"),
+        "commit_message": os.environ.get("RAILWAY_GIT_COMMIT_MESSAGE"),
+        "branch": os.environ.get("RAILWAY_GIT_BRANCH"),
+        "deployment_id": os.environ.get("RAILWAY_DEPLOYMENT_ID"),
+        "railway_deploy_state": "unavailable (no Railway API token; Kerry's call)",
+    }, indent=2, default=str)
+
+
+@mcp.tool()
+def get_hio_pot() -> str:
+    """The running Hole-in-One pot: carry-in, each event's contribution,
+    payouts, current pot — the GAMES tab banner's own reader
+    (database.get_hio_pot, served at /api/hio-pot). Read-only."""
+    from email_parser.database import get_hio_pot as _hio
+    _audit("read_hio_pot", "running HIO pot")
+    return json.dumps(_hio(), indent=2, default=str)
+
+
 @mcp.tool()
 def get_side_games_matrix(holes: int = 0) -> str:
     """Return the LIVE side-games prize matrix (both hole counts).
