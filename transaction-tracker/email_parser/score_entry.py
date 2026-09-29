@@ -2495,9 +2495,35 @@ def _tee_legend(conn, event_id: int) -> dict:
         ev = conn.execute("SELECT * FROM events WHERE id = ?", (event_id,)).fetchone()
         if not ev:
             return {}
-        return {t["band"]: {"color": t.get("color"), "ring": bool(t.get("ring") or t.get("ladies")),
-                            "tee_name": t.get("tee_name"), "band_label": t.get("band_label")}
-                for t in event_tee_legend(conn, event_id, dict(ev)) if t.get("band")}
+        # The SAME colour the printed scorecard's tee row uses (Kerry
+        # 2026-09-29: the phone's Blue read brighter and Gold darker than the
+        # card's #2F5FA6 / #FFCF40): scorecards._row_colour over
+        # resolve_tee_color and the design tokens; the legend's own colour
+        # only when that resolver has none.
+        colour_of = None
+        try:
+            from email_parser.scorecards import _row_colour, _master
+            from email_parser.database import tee_color_overrides
+            _ov = tee_color_overrides()
+            def colour_of(t):
+                rc = _row_colour(t.get("tee_id"), _master(t.get("tee_name") or ""), _ov)
+                return rc[0] if rc else None
+        except Exception:
+            colour_of = None
+        out = {}
+        for t in event_tee_legend(conn, event_id, dict(ev)):
+            if not t.get("band"):
+                continue
+            col = None
+            if colour_of:
+                try:
+                    col = colour_of(t)
+                except Exception:
+                    col = None
+            out[t["band"]] = {"color": col or t.get("color"),
+                              "ring": bool(t.get("ring") or t.get("ladies")),
+                              "tee_name": t.get("tee_name"), "band_label": t.get("band_label")}
+        return out
     except Exception:
         return {}
 

@@ -97,7 +97,7 @@ def review_ok(page, n, label):
     """Once every hole is in: CHECK THE CARD (Kerry 2026-09-25, option A)."""
     page.wait_for_selector("text=Check the card", timeout=5000)
     body = page.inner_text("body")
-    check(f"{label}: no 'Save last hole' once every hole is saved", "Save last hole" not in body)
+    check(f"{label}: no 'Save Last Hole' once every hole is saved", "Save Last Hole" not in body)
     cells = page.locator(".se-check.cur button.cell")
     check(f"{label}: one nine on screen, every number a button (2 players x 9)",
           cells.count() == 18, cells.count())
@@ -252,7 +252,7 @@ with sync_playwright() as p:
     pg.wait_for_selector("text=Front nine done")
     check("the turn shows each player's nine under his name (2 x 9 tappable holes)",
           pg.locator(".se-turnrow .se-mini button[data-act=goto]").count() == 18)
-    pg.click("[data-act=goto] >> text=Back to hole 9")
+    pg.click("[data-act=goto] >> text=Back to Hole 9")
     pg.wait_for_selector("text=Hole 9")
     check("Back to hole 9 goes back a hole", "Hole 9" in pg.inner_text(".se-h1"))
     pg.click("[data-act=save]")

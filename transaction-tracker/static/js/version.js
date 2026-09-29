@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.522.19";
+window.TGF_VERSION = "2.522.20";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.522.20",
+    date: "2026-09-29",
+    title: "Live scoring: dots clear the + button, Go/Hole capitalised, tee bars in the printed card's colours",
+    changes: [
+      "Kerry: \"Dots, at least on the desktop view here are getting into the plus circle.\" The number box now keeps a 12px lane on its right for the stroke dots, so the dot column sits between the number and the + with a clear gap (measured 5px at 390px and at 1280px). Black stays at the top of the + circle and orange at the bottom.",
+      "Kerry: \"Change the 'go' to 'Go' everywhere and 'hole' to 'Hole'.\" Buttons now read Save & Go to Hole N, Save Hole N, Save Last Hole, Go to Hole N, Back to Hole N, Flag Hole N and Ball in Hole. Running sentences and screen-reader labels keep ordinary English.",
+      "The tee colour bar beside each player uses the printed scorecard's colour for that tee (scorecards._row_colour over resolve_tee_color and the design tokens, e.g. Blue #2F5FA6, Gold #FFCF40), falling back to the legend's colour only when the resolver has none."
+    ]
+  },
   {
     version: "2.522.19",
     date: "2026-09-29",

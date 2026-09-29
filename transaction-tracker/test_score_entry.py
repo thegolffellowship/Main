@@ -776,8 +776,12 @@ tg = se.upsert_group(tr, 1, players=[
     {"customer_id": 103, "display_name": "Chris Best", "tee": "Forward"},
     {"customer_id": 104, "display_name": "Robert Hogue"}])["group_id"]
 tees = se.get_group_card(tg)["tees"]
-check("the card carries the tee sheet's legend, colour for colour",
-      set(tees) == set(legend) and all(tees[b]["color"] == legend[b]["color"] for b in legend), (tees, legend))
+from email_parser.scorecards import _row_colour, _master
+_card_col = {b: (_row_colour(t_.get("tee_id"), _master(t_.get("tee_name") or ""), db.tee_color_overrides()) or (None,))[0]
+             or t_.get("color") for b, t_ in legend.items()}
+check("the card carries the tee sheet's bands, each in the PRINTED scorecard's colour (Kerry 9/29)",
+      set(tees) == set(legend) and all(tees[b]["color"] == _card_col[b] for b in legend)
+      and tees["<50"]["color"] == "#2F5FA6", (tees, _card_col))
 check("the women's tee is marked as an outline, as on the sheet", tees.get("Forward", {}).get("ring") is True, tees)
 check("a player with no tee has no colour here (the screen shows grey, never a guess)",
       not se.get_group_card(tg)["players"][3]["tee"])
