@@ -91,8 +91,12 @@
         /* The dot column sits OUTSIDE the + circle with a clear gap (Kerry
            2026-09-29: "Dots ... are getting into the plus circle"): the
            number box keeps a 12px lane on its right for the dots. */
-        .se-score { margin-right: 12px; }
-        .se-pops { position: absolute; top: 50%; height: 48px; transform: translateY(-50%); right: -11px;
+        /* Kerry 2026-09-29: "Numbers aren't centered between +/-. the pops are
+           pushing it left." The lane is the same width on BOTH sides of the number,
+           so the number sits at the midpoint of - and +; the dots hang in the
+           right-hand lane, a little closer to the number. */
+        .se-score { margin: 0 6px; }
+        .se-pops { position: absolute; top: 50%; height: 48px; transform: translateY(-50%); right: -9px;
                    display: flex; flex-direction: column; justify-content: space-between; }
         .se-pops .g { display: flex; flex-direction: column; gap: 2px; }
 
@@ -202,6 +206,7 @@
         @media (max-height: 700px) {
             body.se-focus header.shell-nav.shell-slim { min-height: 26px; padding-top: 1px; padding-bottom: 1px; }
             body.se-focus header.shell-nav.shell-slim .shell-brand img { width: 24px; height: 24px; }
+            body.se-focus .se-hole .se-popkey { margin-top: 6px; }
         }
         .se-hole .se-top { align-items: center; }
         .se-hole .se-h1.big { font-size: 30px; line-height: 1.05; }
@@ -220,11 +225,21 @@
         .se-hole .se-minus, .se-hole .se-plus { width: 44px; height: 44px; }
         .se-hole .se-pops { height: 44px; }
         .se-hole .se-score { width: 40px; }
-        .se-hole .se-popkey { margin-top: 6px; }
+        /* Kerry 2026-09-29: the key sits BELOW Save & Go, "so the hole number and
+           button are always in the same place"; one line at 390 px when it fits. */
+        .se-hole .se-popkey { margin-top: 14px; font-size: 11.5px; gap: 12px; }
         .se-hole .se-cell { height: 34px; }
         .se-hole .se-pill { height: 50px; margin-top: 10px; }
         .se-popkey { display: flex; gap: 14px; align-items: center; font-size: 12px; color: #4B5563; margin-top: 8px; }
         .se-popkey span { display: inline-flex; align-items: center; gap: 5px; }
+        /* Kerry 2026-09-29: "I don't love how the legend renders wrapping like it
+           does." Each item stays on one line; whole items move to the next row. */
+        .se-popkey { flex-wrap: wrap; row-gap: 4px; justify-content: center; } /* Kerry 2026-09-29: "Center the legend" */
+        .se-popkey > span { white-space: nowrap; }
+        /* Kerry 2026-09-29: "Legend showing oval pops". A two-line label squeezed the
+           dots into ovals (flex shrink); they stay round at the pops' size. */
+        .se-popkey .se-pop { flex: none; }
+        .se-popkey .se-pop:not(.x) { width: 7px; height: 7px; }
         .se-card td { position: relative; }
         .se-strip { display: grid; gap: 4px; }
         .se-cell { height: 44px; border-radius: 8px; display: flex; flex-direction: column; align-items: center;
@@ -541,16 +556,23 @@
             const cup = subs.some((x) => cupOf(x.cids)), reg = subs.some((x) => matchOf(x.cids) && !cupOf(x.cids));
             return `<div class="se-popkey se-pukey">${reg ? `<span><span class="se-pu sm">7</span>Picked up</span>` : ""}${cup ? `<span><span class="se-x">X</span>Picked up (the card keeps the triple)</span>` : ""}</div>`;
         }
-        function popKey() {
+        function popKey(hole) {
             // Only a player's own row draws dots (a foursomes pair's ball does not).
+            // With a hole given (the hole screen) the key names only the dots ON
+            // THAT HOLE and disappears when there are none (Kerry 2026-09-29:
+            // "If there are no pops on a hole, the legend disappears"); the
+            // check card passes none and keys the whole round.
             const solo = new Set(subjects().filter((x) => x.cids.length === 1).map((x) => String(x.cids[0])));
-            const any = (m) => Object.entries(m || {}).some(([c, h]) => solo.has(c) && Object.values(h || {}).some((v) => v > 0));
+            const on = (h) => hole ? (h || {})[hole] > 0 : Object.values(h || {}).some((v) => v > 0);
+            const any = (m) => Object.entries(m || {}).some(([c, h]) => solo.has(c) && on(h));
             const a = any(card.strokes), b = any(card.team_strokes), x = any(card.team_par3_ghost);
             const tm = subjects().some((x) => x.cids.length === 2 && (card.match_status || []).some((m) => (m.card || []).some((h) => (h.p || h.s).some((v) => v > 0))));
             if (!a && !b && !tm && !x) return "";
-            const tg = esc((card.team_game || {}).label || "Team Net");
-            // Kerry's words on the printed card (2026-09-29).
-            return `<div class="se-popkey">${a ? `<span><i class="se-pop"></i>PH \u2013 Playing Handicap Stroke</span>` : ""}${tm ? `<span><i class="se-pop"></i>Team match stroke</span>` : ""}${b ? `<span><i class="se-pop t"></i>${tg} Stroke</span>` : ""}${x ? `<span><i class="se-pop x"></i>No ${tg} Strokes on par 3s</span>` : ""}${card.strokes_note ? `<span style="color:#9CA3AF">${esc(card.strokes_note)}</span>` : ""}</div>`;
+            // Kerry's words (2026-09-29): "100% Handicap Stroke", "X% Team (or Cart
+            // when applicable) Stroke", "No Team Strokes on Par 3s".
+            const tgm = card.team_game || {}, unit = tgm.unit === "cart" ? "Cart" : "Team";
+            const pct = tgm.pct != null ? tgm.pct + "% " : "";
+            return `<div class="se-popkey">${a ? `<span><i class="se-pop"></i>100% Handicap Stroke</span>` : ""}${tm ? `<span><i class="se-pop"></i>Team match stroke</span>` : ""}${b ? `<span><i class="se-pop t"></i>${pct}${unit} Stroke</span>` : ""}${x ? `<span><i class="se-pop x"></i>No ${unit} Strokes on Par 3s</span>` : ""}${card.strokes_note ? `<span style="color:#9CA3AF">${esc(card.strokes_note)}</span>` : ""}</div>`;
         }
         // The tee a player plays, from the tee sheet's legend (card.tees).
         function teeOf(cid) {
@@ -731,11 +753,11 @@
                 ${hio}
                 ${maxNote ? `<div class="se-warn">${ICON.warn}<span>${esc(maxNote)}</span></div>` : ""}
                 <div class="se-stack">${rows}</div>
-                ${popKey()}
                 <div class="se-lblrow"><span class="se-lbl">Group card</span><span class="se-keepnote">${ICON.pen}<span>You're keeping score</span></span></div>
                 <div class="se-strip" style="margin-top:6px;grid-template-columns:repeat(${Math.min(order.length, 9)}, minmax(0, 1fr))">${cells}</div>
                 ${queue.length ? statusLine() : ""}
-                <button type="button" class="se-pill go" data-act="save">${cta}</button></div>`;
+                <button type="button" class="se-pill go" data-act="save">${cta}</button>
+                ${popKey(hole)}</div>`;
         }
 
         function stripCells(order, current) {

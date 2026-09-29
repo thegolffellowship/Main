@@ -1781,6 +1781,7 @@ def _scoring_dispatch_inner(url: str, extract: str):
       scoring-courses              course/tee database listing
       scoring-se-preview:<event_id>|<cid,...>[|apply][|18][|match]  labelled PREVIEW score-entry round + link (admin-only open); 18 = an 18-hole preview, match = a demo singles match per pair (1v2, 3v4)
       scoring-se-seed:<event_id>[|9|18][|apply]  seed score entry from the saved PAIRINGS (dry run by default; re-seed keeps scores)
+      scoring-se-yardage:<round_id>[|apply]  re-read a seeded round's hole yardages from the Men <50 tee (yardage only; dry run by default)
       scoring-se-cup-seed:<event_id>[|apply]  Lone Star Cup rounds from lsc_matches, tees from lsc_tees, PH off that tee (dry run by default)
       scoring-se-gate-check:<event_id>[|<chapter>]  read-only: status codes a manager / a player link get (per-event opt-in proof)
       scoring-se-status:<event_id>  read-only: every score-entry round on the event, holes in, signatures, checks, marks, matches
@@ -3386,6 +3387,21 @@ def _scoring_dispatch_inner(url: str, extract: str):
                 _res["links"] = _se.round_links(_res["round_id"])
                 _audit("scoring-se-seed", f"event {_ev} holes {_holes} round {_res['round_id']}")
             return json.dumps(_res, indent=2, default=str)
+        if cmd == "scoring-se-yardage":
+            # scoring-se-yardage:<round_id>[|apply] — re-read hole yardages from
+            # the Men <50 tee for a seeded round; yardage column only. Dry run default.
+            from email_parser import score_entry as _se
+            _r_s, _, _flag = arg.partition("|")
+            try:
+                _r = int(_r_s.strip())
+            except ValueError:
+                return json.dumps({"error": "usage: scoring-se-yardage:<round_id>[|apply]"})
+            _apply = _flag.strip().lower() == "apply"
+            _res = _se.refresh_round_yardage(_r, apply=_apply)
+            if _res.get("applied"):
+                _audit("scoring-se-yardage", f"round {_r} yardage from the <50 tee "
+                       f"({len(_res.get('changes') or [])} holes)")
+            return json.dumps(_res, default=str)
         if cmd == "scoring-se-cup-seed":
             # scoring-se-cup-seed:<event_id>[|apply] — Lone Star Cup rounds from
             # the lsc_matches dial, each player's tee from lsc_tees and his PH

@@ -1190,6 +1190,55 @@ def _start_hole(hole_label, default: int) -> int:
     return int(m.group(1)) if m else default
 
 
+def _yardage_tee_id(conn, ev: dict):
+    """The tee whose yardage the phone shows under each hole: the Men <50 tee
+    from the event's tee legend (Kerry 2026-09-29: "use the <50 back tee
+    yardages. 314 seems short"). A course with no legend falls back to its
+    newest tee row, as before."""
+    from email_parser import database as db
+    cid = ev.get("course_id")
+    if not cid:
+        return None
+    try:
+        legend = db.event_tee_legend(conn, ev.get("id") or 0, ev)
+    except Exception:
+        logger.exception("score entry: tee legend failed for course %s", cid)
+        legend = []
+    for t in legend:
+        if t.get("band") == "<50" and t.get("tee_id"):
+            return t["tee_id"]
+    t = conn.execute("SELECT tee_id FROM course_tees WHERE course_id = ? "
+                     "ORDER BY tee_id DESC LIMIT 1", (cid,)).fetchone()
+    return t[0] if t else None
+
+
+def refresh_round_yardage(round_id: int, apply: bool = False) -> dict:
+    """Re-read each hole's yardage from the <50 tee for a round already
+    seeded. Writes the yardage column only (par, stroke index, groups,
+    scores and links untouched). Dry run by default."""
+    from email_parser import database as db
+    with db.get_connection() as conn:
+        r = conn.execute("SELECT id, event_id, holes, course_id FROM se_rounds WHERE id = ?",
+                         (int(round_id),)).fetchone()
+        if not r:
+            return {"error": f"round {round_id} not found"}
+        ev = conn.execute("SELECT * FROM events WHERE id = ?", (r["event_id"],)).fetchone()
+        ev = {**(dict(ev) if ev else {}), "course_id": r["course_id"] or (ev["course_id"] if ev else None)}
+        have = {h["hole_number"]: h["yardage"] for h in conn.execute(
+            "SELECT hole_number, yardage FROM se_round_holes WHERE round_id = ?", (r["id"],))}
+        want = {h["hole"]: h["yardage"] for h in _event_course_holes(conn, ev, int(r["holes"]))}
+        changes = [{"hole": n, "from": have.get(n), "to": y}
+                   for n, y in sorted(want.items()) if n in have and y and y != have.get(n)]
+        if apply and changes:
+            for c in changes:
+                conn.execute("UPDATE se_round_holes SET yardage = ? WHERE round_id = ? AND hole_number = ?",
+                             (c["to"], r["id"], c["hole"]))
+            _bump(conn, r["event_id"])
+            conn.commit()
+        return {"round_id": r["id"], "event_id": r["event_id"], "tee_id": _yardage_tee_id(conn, ev),
+                "changes": changes, "applied": bool(apply and changes)}
+
+
 def _event_course_holes(conn, ev: dict, n_holes: int) -> list[dict]:
     """Par / stroke index / yardage for the event's course, merged across the
     tee's per-nine ratings (database._ls_tee_holes). A nine picks its side."""
@@ -1197,11 +1246,10 @@ def _event_course_holes(conn, ev: dict, n_holes: int) -> list[dict]:
     cid = ev.get("course_id")
     if not cid:
         return []
-    t = conn.execute("SELECT tee_id FROM course_tees WHERE course_id = ? "
-                     "ORDER BY tee_id DESC LIMIT 1", (cid,)).fetchone()
-    if not t:
+    tee_id = _yardage_tee_id(conn, ev)
+    if tee_id is None:
         return []
-    holes = db._ls_tee_holes(conn, t[0])
+    holes = db._ls_tee_holes(conn, tee_id)
     by = {h["hole_number"]: h for h in holes}
     first = _first_hole(ev, n_holes)
     want = range(first, first + n_holes)
@@ -2481,7 +2529,15 @@ def _team_strokes(conn, round_id: int, course) -> dict:
     unit = rows[0][2]
     return {"team_strokes": alloc, "team_par3_ghost": ghost,
             "team_game": {"unit": unit, "label": "Cart Net" if unit == "cart" else "Team Net",
-                          "basis": rows[0][3]}}
+                          "basis": rows[0][3],
+                          # The allowance the phone's legend names ("X% Team Stroke",
+                          # Kerry 2026-09-29); the basis text carries it.
+                          "pct": _basis_pct(rows[0][3])}}
+
+
+def _basis_pct(basis) -> int | None:
+    m = re.search(r"(\d+)\s*%", basis or "")
+    return int(m.group(1)) if m else None
 
 
 def _tee_legend(conn, event_id: int) -> dict:

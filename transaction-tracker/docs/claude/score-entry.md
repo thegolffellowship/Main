@@ -761,3 +761,22 @@ It shows on every screen, the hole screen included (it used to hide there). The 
 Other /member pages keep their nav.
 
 The mark is 50 px (v2.522.26, Kerry: "Make the logger bigger. Like 2.5 times"); under 700 px of screen height the hole page shrinks it to 24 px so the card still fits.
+
+### Hole yardage comes from the Men <50 tee (v2.522.27, Kerry 2026-09-29)
+
+"For the yardage under each hole number, use the <50 back tee yardages. 314
+seems short." `_event_course_holes` reads par / SI / yardage from the tee the
+event's legend (`database.event_tee_legend`) assigns to the `<50` band, via
+`_yardage_tee_id`; before, it took the course's newest `course_tees` row, which
+could be any tee. No legend → the old fallback. `refresh_round_yardage(round_id,
+apply)` / bridge `scoring-se-yardage:<round_id>[|apply]` re-read a seeded
+round's yardage column only (par, SI, groups, scores, links untouched).
+
+### The stroke legend (v2.522.27, Kerry 2026-09-29)
+
+`popKey(hole)` in score_entry.html: on the hole screen it keys only the dots
+on that hole ("100% Handicap Stroke", "X% Team|Cart Stroke" from
+`team_game.pct`, "No Team Strokes on Par 3s") and renders nothing when the
+hole has none; it sits below Save & Go. The check card calls `popKey()` with
+no hole and keys the whole round. `_basis_pct` reads the allowance out of the
+se_game_handicaps basis text.

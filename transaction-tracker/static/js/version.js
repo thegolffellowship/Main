@@ -1,5 +1,17 @@
-window.TGF_VERSION = "2.522.26";
+window.TGF_VERSION = "2.522.27";
 window.TGF_CHANGELOG = [
+    {
+        version: "2.522.27",
+        date: "2026-09-29",
+        title: "Live scoring: bigger logo with less padding, round legend dots, legend items on one line, <50 tee yardages",
+        changes: [
+            "Kerry 2026-09-29: \"Make the logo 10% larger\", then \"It looks like you increased the padding not the logo. Reduce the padding some now. It's too much.\" The centered TGF mark on /member/score is drawn at 64 px (the SVG carries its own margin, so the circle is about 54 px, up from 46) with 5 px above and 8 px below it inside the black bar, under the safe-area inset.",
+            "Kerry 2026-09-29: \"For the yardage under each hole number, use the <50 back tee yardages. 314 seems short.\" A round seeded from the course now takes par / stroke index / yardage from the Men <50 tee of the event's tee legend (event_tee_legend) instead of the course's newest tee row, which could be any tee. score_entry._yardage_tee_id; a course with no legend keeps the old fallback. New bridge scoring-se-yardage:<round_id>[|apply] re-reads an already-seeded round's yardages from that tee (yardage column only, dry run by default) so tonight's rounds can be corrected without re-seeding.",
+            "Kerry 2026-09-29: \"Numbers aren't centered between +/-. the pops are pushing it left.\" The number box now has the same 6 px lane on both sides, so the score sits at the exact midpoint of - and +; the pops hang in the right-hand lane 2 px off the number box (they used to push the box 12 px left). Also \"Center the legend\": the stroke legend rows are centered.",
+            "Kerry 2026-09-29: the stroke legend on the hole screen now reads \"100% Handicap Stroke\", \"X% Team Stroke\" (or \"X% Cart Stroke\" when the game is Cart Net; the allowance comes from the team-game basis, team_game.pct) and \"No Team Strokes on Par 3s\", in Kerry's words. It names only the dots ON THAT HOLE and disappears on a hole with none, and it sits BELOW the Save & Go button with 14 px of padding \"so the hole number and button are always in the same place\". Team Stroke (non par 3s) and No Team Strokes (par 3s) can never show on the same hole, so the key is one line at 390 px. Under 700 px of height the gap shrinks to 6 px so the screen still fits. The check card keeps the whole-round key where it was.",
+            "Kerry 2026-09-29: \"Legend showing oval pops\" and \"I don't love how the legend renders wrapping like it does.\" The PH and Team Net dots in the stroke legend no longer shrink into ovals (flex: none, 7 x 7 like the pops by the score). Each legend item stays on one line, and whole items move to the next row."
+        ]
+    },
     {
         version: "2.522.26",
         date: "2026-09-29",

@@ -1,3 +1,4 @@
+import re
 """Score entry screen, driven in headless Chromium at phone size.
 
 Kerry, 2026-09-25: "Save last hole shouldn't be available after you saved
@@ -583,8 +584,10 @@ with sync_playwright() as p:
     check("the low man shows no dots", pp.locator(".se-row").nth(0).locator(".se-pop").count() == 0)
     check("no stroke text on the row", "stroke here" not in pp.inner_text("body"))
     check("a small key names the two dots in Kerry's words (9/29)",
-          "PH \u2013 Playing Handicap Stroke" in pp.inner_text(".se-popkey")
-          and "Cart Net Stroke" in pp.inner_text(".se-popkey"))
+          "100% Handicap Stroke" in pp.inner_text(".se-popkey")
+          and re.search(r"\d+% Cart Stroke", pp.inner_text(".se-popkey")) is not None)
+    check("the key sits below the Save button (Kerry 9/29)",
+          pp.locator("[data-act=save]").bounding_box()["y"] < pp.locator(".se-popkey").bounding_box()["y"])
     play(pp, 9)
     pp.wait_for_selector("text=Check the card")
     pp.wait_for_timeout(800)
