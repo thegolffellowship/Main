@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.520.2";
+window.TGF_VERSION = "2.520.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.520.3",
+    date: "2026-09-28",
+    title: "A signed-out page asks for the PIN instead of showing raw JSON",
+    changes: [
+      "Kerry 2026-09-28: the scorecards link, tapped from outside the Tracker app, opened in Safari (whose sign-in is separate from the installed app's) and showed only {\"error\":\"Not authenticated\"}. require_role now answers a signed-out browser GET to any PAGE route (scorecards, their PDF, Starter Sheet, cart signs, every print sheet) with a small sign-in page (templates/login_gate.html); the PIN signs in and the same address reloads. /api/ routes, the MCP endpoint and non-browser requests still get the JSON 401. Guard test_page_login_gate.py.",
+    ],
+  },
   {
     version: "2.520.2",
     date: "2026-09-28",

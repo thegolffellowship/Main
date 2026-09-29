@@ -1432,6 +1432,17 @@ def validate_json_fields(data: dict, required: list[str] = None,
 _ROLE_RANK = {"member": 0, "view-only": 1, "manager": 2, "admin": 3}
 
 
+def _wants_page(req) -> bool:
+    """A browser navigating to a page (not /api/, not the MCP endpoint, a
+    GET that accepts HTML) — the case that should see a sign-in page
+    rather than a JSON 401."""
+    path = req.path or ""
+    if req.method != "GET" or path.startswith("/api/") or path.startswith("/mcp"):
+        return False
+    accept = (req.headers.get("Accept") or "").lower()
+    return "text/html" in accept
+
+
 def require_role(role):
     """Decorator that checks the session for a minimum role level.
 
@@ -1451,6 +1462,13 @@ def require_role(role):
                 return f(*args, **kwargs)
             user_role = session.get("role")
             if not user_role:
+                # A PAGE asks for the PIN; only the API answers JSON (Kerry
+                # 2026-09-28: the scorecards link, opened in Safari outside
+                # the Tracker app, showed raw JSON). Signed in, it reloads
+                # the same address — every print sheet and page route, not
+                # just the one that hurt.
+                if _wants_page(request):
+                    return render_template("login_gate.html"), 401
                 return jsonify({"error": "Not authenticated. Please log in."}), 401
             if _ROLE_RANK.get(user_role, 0) < _ROLE_RANK.get(role, 0):
                 label = "Admin" if role == "admin" else "Manager"
