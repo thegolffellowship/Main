@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.520.5";
+window.TGF_VERSION = "2.520.6";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.520.6",
+    date: "2026-09-28",
+    title: "Scorecard review fixes: bigger dots, / diagonal, one grid, tee chips, Stroke Index, game label",
+    changes: [
+      "Kerry's review of the live 3304 card (2026-09-28). Dots are about twice the size, black PH top-right and orange net-game bottom-right in a darker orange (#C2410C) that reads on white and on the shaded cart-B rows. The PH/TEAM cell's diagonal now runs bottom-left to top-right; PH stays top-left, the net value bottom-right.",
+      "One grid: every cell border the same 1px line through the full width and height (the header's verticals included), heavy 2.5px only on the lead|holes, Out/Total, In, TOT and cart-split dividers. The grey tee letter beside each name is now the Starter Sheet's own tee swatch (women's tee as an outline ring, white with a black rim). 'Handicap' reads 'Stroke Index' ('SI' on the 18's back panel), and the net game's name from the engine ('Team Net' / 'Cart Net') sits under the start badge.",
+    ],
+  },
   {
     version: "2.520.5",
     date: "2026-09-28",

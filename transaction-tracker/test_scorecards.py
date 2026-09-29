@@ -76,6 +76,8 @@ def make_pack(groups):
                        for n, b, g in TEES],
         "team_unit": "group", "team_allowance": 0.75,
         "team_off_lowest": {"low": 0, "applied": False}, "team_basis": "test",
+        "tee_swatches": {"<50": "#2F5FA6", "50-64": "#FFFFFF", "65+": "#C99A2E", "Forward": "#C0392B"},
+        "tee_ladies": {"Forward": True},
     }
 
 

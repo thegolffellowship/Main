@@ -28,7 +28,7 @@
     .decode { position: absolute; left: 0; right: 0; bottom: 0; height: 0.25in;
       display: flex; align-items: center; justify-content: center;
       font-size: 9px; color: #4B5563; white-space: nowrap; }
-    .decode b.k { color: #111; } .decode b.o { color: #E87C3E; }
+    .decode b.k { color: #111; } .decode b.o { color: #C2410C; }
 
     /* Header (#891-B) */
     .head { display: flex; align-items: center; gap: 1.1em; margin-bottom: 0.5em; }
@@ -63,9 +63,15 @@
     .panels { display: flex; gap: 6px; }
     .panels table { flex: 1; min-width: 0; }
     table { table-layout: fixed; border-collapse: collapse; width: 100%; }
-    td, th { border: 1px solid #B0B0B0; padding: 0 0.25em; text-align: center;
+    /* ONE GRID (Kerry 2026-09-28: "Borders and lineweights are not
+       consistent and don't extend all the way thru"): every cell border
+       the same 1px, every line through the full width and height, heavy
+       2.5px only on the deliberate dividers (lead | holes, Out/Total,
+       In, TOT, the cart split). */
+    table { border: 1px solid #6B7280; }
+    td, th { border: 1px solid #8A9099; padding: 0 0.25em; text-align: center;
       white-space: nowrap; overflow: hidden; }
-    tr.hd th { height: 2.2em; background: #111; color: #fff; border-color: #111;
+    tr.hd th { height: 2.2em; background: #111; color: #fff; border-color: #6B7280;
       font-family: "Bitter", Georgia, serif; font-weight: 700; font-size: 1.05em; }
     tr.hd th.lead { text-align: left; }
     tr.hd th.lead .gl { font-size: 0.65em; font-family: "Helvetica Neue", Arial, sans-serif; }
@@ -78,28 +84,37 @@
     tr.par td { font-weight: 700; }
     tr.hcp td { color: #4B5563; }
     tr.par td.lead, tr.hcp td.lead { text-align: left; }
-    tr.pl td { height: 2.3em; border-color: #B0B0B0; position: relative; }
-    tr.pl + tr.pl td { border-top-color: #C7CBD1; }
+    tr.pl td { height: 2.3em; position: relative; }
     tr.pl.rider td { background: #F5F6F7; }
-    tr.pl.split td { border-top: 2.5px solid #6B7280; }
+    tr.pl.split td { border-top: 2.5px solid #374151; }
     tr.pl td.lead { text-align: left; font-family: "Bitter", Georgia, serif; font-weight: 700;
       font-size: 1em; }
     tr.pl td.lead .nm { display: inline-block; max-width: 80%; overflow: hidden;
       text-overflow: ellipsis; vertical-align: bottom; }
-    tr.pl td.lead .tc { float: right; font-family: "Helvetica Neue", Arial, sans-serif;
-      font-weight: 400; font-size: 0.8em; color: #6B7280; line-height: 2.3em; }
-    .dk, .do { position: absolute; right: 0.15em; font-size: 1.05em; line-height: 1;
-      letter-spacing: -0.1em; }
-    .dk { top: 0.05em; color: #111; } .do { bottom: 0.05em; color: #E87C3E; }
-    td.thick, th.thick { border-right: 2.5px solid #6B7280; }
+    /* Tee chip "same as the Starter Sheet" (Kerry 2026-09-28): the tee's
+       colour dot; a women's tee is an outline ring; white gets a black rim. */
+    tr.pl td.lead .tc { float: right; width: 0.95em; height: 0.95em; border-radius: 50%;
+      margin-top: 0.68em; box-sizing: border-box; }
+    /* Game label under the start badge (Kerry 2026-09-28). */
+    .badge-wrap { display: flex; flex-direction: column; align-items: center; flex: none; }
+    .game { font-weight: 700; font-size: 0.78em; letter-spacing: 1px; text-transform: uppercase;
+      color: #C2410C; margin-top: 0.15em; white-space: nowrap; }
+    /* DOTS (Kerry 2026-09-28: "bigger and easier to read"): black PH dots
+       top-right, orange net-game dots bottom-right, in a darker orange that
+       reads on white and on the shaded cart-B rows. */
+    .dk, .do { position: absolute; right: 0.12em; font-size: 2.1em; line-height: 0.55;
+      letter-spacing: -0.12em; font-weight: 700; }
+    .dk { top: 0.08em; color: #111; } .do { bottom: 0.12em; color: #C2410C; }
+    td.thick, th.thick { border-right: 2.5px solid #374151; }
     td.split-c, th.split-c { position: relative; padding: 0; }
     .split-c svg.diag { position: absolute; inset: 0; width: 100%; height: 100%; }
-    .split-c svg.diag line { stroke: #B0B0B0; stroke-width: 1.2; }
+    .split-c svg.diag line { stroke: #8A9099; stroke-width: 1.2; }
     th.split-c svg.diag line { stroke: #9CA3AF; }
     .split-c .ul { position: absolute; left: 0.25em; top: 0.1em; font-weight: 700; }
     .split-c .lr { position: absolute; right: 0.25em; bottom: 0.1em; font-weight: 700;
-      color: #E87C3E; }
-    th.split-c .ul { color: #fff; font-size: 0.8em; } th.split-c .lr { font-size: 0.8em; }
+      color: #C2410C; }
+    th.split-c .ul { color: #fff; font-size: 0.72em; }
+    th.split-c .lr { font-size: 0.72em; color: #FB923C; }
     td.split-c .ul, td.split-c .lr { font-family: "Bitter", Georgia, serif; font-size: 1em; }
     th.hl { background: #FFF176 !important; color: #111 !important; }
     tr.par td.hl, tr.hcp td.hl { background: #FFF176; }
@@ -237,7 +252,8 @@
         <div class="cap">SCAN TO KEEP SCORE</div></div>
       {% endif %}
       <div class="start"><div class="cap">START</div><div class="t">{{ c.start_time }}</div></div>
-      <div class="badge">{{ hcell(c.start_hole) }}</div>
+      <div class="badge-wrap"><div class="badge">{{ hcell(c.start_hole) }}</div>
+        <div class="game">{{ sc.net.name }}</div></div>
     </div>
 
     {% set front = grid.holes[:9] %}
@@ -258,7 +274,7 @@
         {% for h in front %}<th class="{{ 'hl' if c.hl_hole == h else '' }} {{ 'thick' if loop.last else '' }}">{{ h }}</th>{% endfor %}
         {% if is18 %}<th>Out</th>{% else %}
           <th class="thick">Total</th>
-          <th class="split-c"><svg class="diag" viewBox="0 0 100 100" preserveAspectRatio="none"><line x1="0" y1="0" x2="100" y2="100" vector-effect="non-scaling-stroke"/></svg><span class="ul">PH</span><span class="lr">{{ sc.net.word }}</span></th>
+          <th class="split-c"><svg class="diag" viewBox="0 0 100 100" preserveAspectRatio="none"><line x1="0" y1="100" x2="100" y2="0" vector-effect="non-scaling-stroke"/></svg><span class="ul">PH</span><span class="lr">{{ sc.net.word }}</span></th>
           <th>Net</th>{% endif %}
       </tr>
       {% for t in sc.tees %}
@@ -273,17 +289,17 @@
         {% for h in front %}<td class="{{ 'hl' if c.hl_hole == h else '' }} {{ 'thick' if loop.last else '' }}">{{ grid.par.get(h, '') }}</td>{% endfor %}
         {% if is18 %}<td>{{ grid.par_out }}</td>{% else %}<td class="thick">{{ grid.par_total }}</td><td></td><td></td>{% endif %}
       </tr>
-      <tr class="hcp"><td class="lead thick">Handicap</td>
+      <tr class="hcp"><td class="lead thick">Stroke Index</td>
         {% for h in front %}<td class="{{ 'hl' if c.hl_hole == h else '' }} {{ 'thick' if loop.last else '' }}">{{ grid.si.get(h, '') }}</td>{% endfor %}
         {% if is18 %}<td></td>{% else %}<td class="thick"></td><td></td><td></td>{% endif %}
       </tr>
       {% for r in c.rows %}
       <tr class="pl {{ 'rider' if r.rider else '' }} {{ 'split' if c.split_after is not none and loop.index0 == c.split_after else '' }}">
-        <td class="lead thick"><span class="nm">{{ r.name }}</span><span class="tc">{{ r.tee_code }}</span></td>
+        <td class="lead thick"><span class="nm">{{ r.name }}</span><span class="tc" title="{{ r.tee_code }}" style="{% if r.chip_ladies %}background:#fff;border:2px solid {{ r.chip }};{% elif (r.chip or '')|lower in ['#ffffff', '#fff'] %}background:#fff;border:1.5px solid #1B1B1B;{% else %}background:{{ r.chip or '#fff' }};border:1px solid rgba(0,0,0,.25);{% endif %}"></span></td>
         {% for h in front %}<td class="{{ 'hl' if c.hl_hole == h else '' }} {{ 'thick' if loop.last else '' }}"><span class="dk">{{ dots(r.ph_dots.get(h)) }}</span><span class="do">{{ dots(r.net_dots.get(h)) }}</span></td>{% endfor %}
         {% if is18 %}<td></td>{% else %}
           <td class="thick"></td>
-          <td class="split-c"><svg class="diag" viewBox="0 0 100 100" preserveAspectRatio="none"><line x1="0" y1="0" x2="100" y2="100" vector-effect="non-scaling-stroke"/></svg><span class="ul">{{ r.ph }}</span><span class="lr">{{ r.net }}</span></td>
+          <td class="split-c"><svg class="diag" viewBox="0 0 100 100" preserveAspectRatio="none"><line x1="0" y1="100" x2="100" y2="0" vector-effect="non-scaling-stroke"/></svg><span class="ul">{{ r.ph }}</span><span class="lr">{{ r.net }}</span></td>
           <td></td>{% endif %}
       </tr>
       {% endfor %}
@@ -299,7 +315,7 @@
         <th class="lead thick">Init</th>
         {% for h in back %}<th class="{{ 'hl' if c.hl_hole == h else '' }} {{ 'thick' if loop.last else '' }}">{{ h }}</th>{% endfor %}
         <th class="thick">In</th><th class="thick">TOT</th>
-        <th class="split-c"><svg class="diag" viewBox="0 0 100 100" preserveAspectRatio="none"><line x1="0" y1="0" x2="100" y2="100" vector-effect="non-scaling-stroke"/></svg><span class="ul">PH</span><span class="lr">{{ sc.net.short }}</span></th><th>Net</th>
+        <th class="split-c"><svg class="diag" viewBox="0 0 100 100" preserveAspectRatio="none"><line x1="0" y1="100" x2="100" y2="0" vector-effect="non-scaling-stroke"/></svg><span class="ul">PH</span><span class="lr">{{ sc.net.short }}</span></th><th>Net</th>
       </tr>
       {% for t in sc.tees %}
       <tr class="tee">
@@ -313,7 +329,7 @@
         {% for h in back %}<td class="{{ 'hl' if c.hl_hole == h else '' }} {{ 'thick' if loop.last else '' }}">{{ grid.par.get(h, '') }}</td>{% endfor %}
         <td class="thick">{{ grid.par_in }}</td><td class="thick">{{ grid.par_total }}</td><td></td><td></td>
       </tr>
-      <tr class="hcp"><td class="lead thick">HCP</td>
+      <tr class="hcp"><td class="lead thick">SI</td>
         {% for h in back %}<td class="{{ 'hl' if c.hl_hole == h else '' }} {{ 'thick' if loop.last else '' }}">{{ grid.si.get(h, '') }}</td>{% endfor %}
         <td class="thick"></td><td class="thick"></td><td></td><td></td>
       </tr>
@@ -322,7 +338,7 @@
         <td class="lead thick" style="text-align:center">{{ r.initials }}</td>
         {% for h in back %}<td class="{{ 'hl' if c.hl_hole == h else '' }} {{ 'thick' if loop.last else '' }}"><span class="dk">{{ dots(r.ph_dots.get(h)) }}</span><span class="do">{{ dots(r.net_dots.get(h)) }}</span></td>{% endfor %}
         <td class="thick"></td><td class="thick"></td>
-        <td class="split-c"><svg class="diag" viewBox="0 0 100 100" preserveAspectRatio="none"><line x1="0" y1="0" x2="100" y2="100" vector-effect="non-scaling-stroke"/></svg><span class="ul">{{ r.ph }}</span><span class="lr">{{ r.net }}</span></td><td></td>
+        <td class="split-c"><svg class="diag" viewBox="0 0 100 100" preserveAspectRatio="none"><line x1="0" y1="100" x2="100" y2="0" vector-effect="non-scaling-stroke"/></svg><span class="ul">{{ r.ph }}</span><span class="lr">{{ r.net }}</span></td><td></td>
       </tr>
       {% endfor %}
     </table>

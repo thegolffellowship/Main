@@ -326,6 +326,10 @@ def build_scorecards(event_id: int, layout: str = "3up", grouping: str = "team",
             row = {
                 "name": nm, "initials": ((p["_first"][:1] + p["_last"][:1]).upper()),
                 "tee_code": tee["code"] if tee else "?",
+                # The Starter Sheet's own swatch for this band (Kerry: "same
+                # as the Starter Sheet").
+                "chip": (pack.get("tee_swatches") or {}).get(band),
+                "chip_ladies": bool((pack.get("tee_ladies") or {}).get(band)),
                 "cart_pos": p.get("cart_pos"), "customer_id": p.get("customer_id"),
                 "ph": _hcp_text(ph) or "", "net": _hcp_text(net) or "",
                 "ph_dots": {h: max(0, int(v or 0)) for h, v in ph_dots.items()},
