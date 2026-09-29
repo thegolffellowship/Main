@@ -75,7 +75,9 @@
        the same 1px, every line through the full width and height, heavy
        2px only on the deliberate dividers (lead | holes, Out/Total,
        In, TOT, the cart split). */
-    table { border: 1px solid #6B7280; }
+    /* Heavy (the cart-split weight, Kerry 9/29): the card's outer border,
+       under the hole-number row, above Par, under Stroke Index. */
+    table { border: 2px solid #374151; }
     td, th { border: 1px solid #8A9099; padding: 0 0.25em; text-align: center;
       white-space: nowrap; overflow: hidden; }
     tr.hd th { height: 2.2em; background: #111; color: #fff; border-color: #6B7280;
@@ -94,6 +96,9 @@
     tr.pl td { height: 2.3em; position: relative; }
     tr.pl.rider td { background: #F5F6F7; }
     tr.pl.split td { border-top: 2px solid #374151; }
+    tr.hd th { border-bottom: 2px solid #374151; }
+    tr.par td { border-top: 2px solid #374151; }
+    tr.hcp td { border-bottom: 2px solid #374151; }
     tr.pl td.lead { text-align: left; font-family: "Bitter", Georgia, serif; font-weight: 700;
       font-size: 1em; }
     /* NAME + TEE CHIP on one centred line (Kerry 2026-09-29: names bigger
@@ -133,6 +138,9 @@
     .dk i, .do i { display: block; width: var(--dd); height: var(--dd);
       border-radius: 50%; }
     .dk i { background: #111; } .do i { background: #C2410C; }
+    .do i.g { background: transparent; border: 1px solid #C2410C; box-sizing: border-box; }
+    .decode i.lg { display: inline-block; width: var(--dd); height: var(--dd); border-radius: 50%;
+      border: 1px solid #C2410C; box-sizing: border-box; vertical-align: middle; margin: 0 0.3em 0 0; }
     td.thick, th.thick { border-right: 2px solid #374151; }
     td.split-c, th.split-c { position: relative; padding: 0; }
     .split-c svg.diag { position: absolute; inset: 0; width: 100%; height: 100%; }
@@ -141,8 +149,8 @@
     .split-c .ul { position: absolute; left: 0.25em; top: 0.1em; font-weight: 700; }
     .split-c .lr { position: absolute; right: 0.25em; bottom: 0.1em; font-weight: 700;
       color: #C2410C; }
-    th.split-c .ul { color: #fff; font-size: 0.72em; }
-    th.split-c .lr { font-size: 0.72em; color: #FB923C; }
+    th.split-c .ul { color: #fff; font-size: 0.62em; left: 0.2em; }
+    th.split-c .lr { font-size: 0.56em; color: #FB923C; right: 0.15em; bottom: 0.05em; }
     td.split-c .ul, td.split-c .lr { font-family: "Bitter", Georgia, serif; font-size: 1em; }
     th.hl { background: #FFF176 !important; color: #111 !important; }
     tr.par td.hl, tr.hcp td.hl { background: #FFF176; }
@@ -188,6 +196,8 @@
   <span class="{{ cls }} l{{ 1 if n == 1 else (2 if n == 2 else 3) }}">{{ v }}</span>
 {%- endmacro %}
 {% macro dots(n) -%}{% if n and n > 0 %}{% for _ in range(n) %}<i></i>{% endfor %}{% endif %}{%- endmacro %}
+{# A par-3 team pop the no-pops rule removed: outline only (Kerry 9/29). #}
+{% macro ghosts(n) -%}{% if n and n > 0 %}{% for _ in range(n) %}<i class="g"></i>{% endfor %}{% endif %}{%- endmacro %}
 
 {% macro sc_bar(extra_style='') -%}
 <div class="sc-bar noprint" style="{{ extra_style }}">
@@ -291,10 +301,12 @@
     <table>
       <colgroup>
         {% if is18 %}
-          <col style="width:35.1%">{% for h in front %}<col style="width:6.28%">{% endfor %}<col style="width:8.3%">
+          <col style="width:37.2%">{% for h in front %}<col style="width:6.28%">{% endfor %}<col style="width:6.28%">
         {% else %}
-          <col style="width:24%">{% for h in front %}<col style="width:6.4%">{% endfor %}
-          <col style="width:6%"><col style="width:8.4%"><col style="width:4%">
+          {# Kerry 9/29: Total and Net are hole-width; PH/TEAM is an info
+             column only and narrows to fit its two numbers. #}
+          <col style="width:24%">{% for h in front %}<col style="width:6.45%">{% endfor %}
+          <col style="width:6.45%"><col style="width:5.05%"><col style="width:6.45%">
         {% endif %}
       </colgroup>
       <tr class="hd">
@@ -324,7 +336,7 @@
       {% for r in c.rows %}
       <tr class="pl {{ 'rider' if r.rider else '' }} {{ 'split' if c.split_after is not none and loop.index0 == c.split_after else '' }}">
         <td class="lead thick"><div class="ln"><span class="nm" style="font-size:{{ r.name_em_18 if is18 else r.name_em }}em">{{ r.name }}</span><span class="tc" title="{{ r.tee_code }}" style="{% if r.chip_ladies %}background:#fff;border:2px solid {{ r.chip }};{% elif (r.chip or '')|lower in ['#ffffff', '#fff'] %}background:#fff;border:1.5px solid #1B1B1B;{% else %}background:{{ r.chip or '#fff' }};border:1px solid rgba(0,0,0,.25);{% endif %}"></span></div></td>
-        {% for h in front %}<td class="{{ 'hl' if c.hl_hole == h else '' }} {{ 'thick' if loop.last else '' }}"><span class="dk">{{ dots(r.ph_dots.get(h)) }}</span><span class="do">{{ dots(r.net_dots.get(h)) }}</span></td>{% endfor %}
+        {% for h in front %}<td class="{{ 'hl' if c.hl_hole == h else '' }} {{ 'thick' if loop.last else '' }}"><span class="dk">{{ dots(r.ph_dots.get(h)) }}</span><span class="do">{{ dots(r.net_dots.get(h)) }}{{ ghosts((r.net_ghost or {}).get(h)) }}</span></td>{% endfor %}
         {% if is18 %}<td></td>{% else %}
           <td class="thick"></td>
           <td class="split-c"><svg class="diag" viewBox="0 0 100 100" preserveAspectRatio="none"><line x1="0" y1="100" x2="100" y2="0" vector-effect="non-scaling-stroke"/></svg><span class="ul">{{ r.ph }}</span><span class="lr">{{ r.net }}</span></td>
@@ -336,8 +348,8 @@
     {# ---- panel 2: the 18's back nine ---- #}
     <table>
       <colgroup>
-        <col style="width:6.7%">{% for h in back %}<col style="width:6.52%">{% endfor %}
-        <col style="width:8.64%"><col style="width:8.64%"><col style="width:8.64%"><col style="width:8.64%">
+        <col style="width:6.7%">{% for h in back %}<col style="width:7.23%">{% endfor %}
+        <col style="width:7.23%"><col style="width:7.23%"><col style="width:6.54%"><col style="width:7.23%">
       </colgroup>
       <tr class="hd">
         <th class="lead thick">Init</th>
@@ -364,7 +376,7 @@
       {% for r in c.rows %}
       <tr class="pl {{ 'rider' if r.rider else '' }} {{ 'split' if c.split_after is not none and loop.index0 == c.split_after else '' }}">
         <td class="lead thick" style="text-align:center">{{ r.initials }}</td>
-        {% for h in back %}<td class="{{ 'hl' if c.hl_hole == h else '' }} {{ 'thick' if loop.last else '' }}"><span class="dk">{{ dots(r.ph_dots.get(h)) }}</span><span class="do">{{ dots(r.net_dots.get(h)) }}</span></td>{% endfor %}
+        {% for h in back %}<td class="{{ 'hl' if c.hl_hole == h else '' }} {{ 'thick' if loop.last else '' }}"><span class="dk">{{ dots(r.ph_dots.get(h)) }}</span><span class="do">{{ dots(r.net_dots.get(h)) }}{{ ghosts((r.net_ghost or {}).get(h)) }}</span></td>{% endfor %}
         <td class="thick"></td><td class="thick"></td>
         <td class="split-c"><svg class="diag" viewBox="0 0 100 100" preserveAspectRatio="none"><line x1="0" y1="100" x2="100" y2="0" vector-effect="non-scaling-stroke"/></svg><span class="ul">{{ r.ph }}</span><span class="lr">{{ r.net }}</span></td><td></td>
       </tr>
@@ -372,7 +384,7 @@
     </table>
     {% endif %}
     </div>
-    <div class="decode"><span><b class="k">PH</b> — Playing Handicap (100%)&nbsp;|&nbsp;<b class="o">{{ sc.net.short if is18 else sc.net.word }}</b> — {{ sc.net.name }} Handicap ({{ sc.net.pct_note }})</span></div>
+    <div class="decode"><span><b class="k">PH</b> — Playing Handicap (100%)&nbsp;|&nbsp;<b class="o">{{ sc.net.short if is18 else sc.net.word }}</b> — {{ sc.net.name }} Handicap ({% set _pn = sc.net.pct_note or '' %}{% if 'no pops on par 3s' in _pn %}{{ _pn.replace('no pops on par 3s', '') }}<i class="lg"></i>no pops on par 3s{% else %}{{ _pn }}{% endif %})</span></div>
   </div>
   {% endfor %}
 </div>

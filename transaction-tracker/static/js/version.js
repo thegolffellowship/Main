@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.522.6";
+window.TGF_VERSION = "2.522.7";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.522.7",
+    date: "2026-09-29",
+    title: "Scorecards: hole-width Total/Net, outline par-3 pops, heavy rules",
+    changes: [
+      "Kerry 9/29: Total and Net are the same width as a hole column, and the PH/TEAM column (information only) narrows to fit its two numbers. On 18-hole cards Out, In, TOT and Net follow the same rule.",
+      "On a par 3, a Team Net pop that the no-pops-on-par-3s rule takes away now prints as a hollow orange dot, the same size and position as a real one. The legend shows the hollow dot beside \"no pops on par 3s\". The black PH dots are unchanged, and scoring still gives no pop there.",
+      "The heavy line used between carts now also runs under the hole-number row, above Par, under Stroke Index and around the whole grid. Dot insets re-measured on the PDF: still identical on both sides of every corner."
+    ]
+  },
   {
     version: "2.522.6",
     date: "2026-09-29",

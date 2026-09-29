@@ -341,7 +341,13 @@ def build_scorecards(event_id: int, layout: str = "3up", grouping: str = "team",
             from email_parser.handicap_calc import ruled_dots
             ph_dots = ruled_dots(ph, si_own) if (ph is not None and ph > 0 and si_own) else {}
             net_dots = ruled_dots(net, si_own) if (net is not None and net > 0 and si_own) else {}
+            # Kerry 9/29: on a par 3 the team pop the rule takes away still
+            # prints, as an OUTLINE ("would-be" pop), so the card shows what
+            # the rule removed. Scoring reads net_dots only.
+            net_ghost = {}
             if suppress_par3 and grid:
+                net_ghost = {h: v for h, v in net_dots.items()
+                             if grid["par"].get(h) == 3 and (v or 0) > 0}
                 net_dots = {h: (0 if grid["par"].get(h) == 3 else v) for h, v in net_dots.items()}
             row = {
                 "name": nm, "initials": ((p["_first"][:1] + p["_last"][:1]).upper()),
@@ -354,6 +360,7 @@ def build_scorecards(event_id: int, layout: str = "3up", grouping: str = "team",
                 "ph": _hcp_text(ph) or "", "net": _hcp_text(net) or "",
                 "ph_dots": {h: max(0, int(v or 0)) for h, v in ph_dots.items()},
                 "net_dots": {h: max(0, int(v or 0)) for h, v in net_dots.items()},
+                "net_ghost": {h: int(v) for h, v in net_ghost.items()},
                 "rider": (p.get("cart_pos") or 0) >= 3,
             }
             rows.append(row)
@@ -401,7 +408,7 @@ def build_scorecards(event_id: int, layout: str = "3up", grouping: str = "team",
     for c in cards:
         for r in c["rows"]:
             r["name_em"] = _name_em(r["name"], 0.24 * _w)
-            r["name_em_18"] = _name_em(r["name"], 0.351 * (_w - 6) / 2)
+            r["name_em_18"] = _name_em(r["name"], 0.372 * (_w - 6) / 2)
     if layout == "3up" and len(tees) >= 5:
         gaps.append("This event has 5+ tees; the 3-per-sheet card cannot hold them. "
                     "Use a 2-per-sheet layout.")

@@ -2729,6 +2729,13 @@ bridge `scoring-scorecards:<id>[|key=value…][|dump|html|pdf[|all][|send]]`.
   as large as the lead cell allows (`name_em` / `name_em_18` per row,
   shrink-to-fit for long names), the tee chip centred on the name line.
   Guard in `test_scorecards.py`.
+- **Grid + par-3 outline pops (v2.522.7, Kerry 9/29):** Total / Out / In /
+  TOT / Net are hole-width; PH/TEAM is an info column and narrower. The
+  cart-split weight (2px #374151) also rules under the hole row, above Par,
+  under Stroke Index and around the grid. When `no_pops_on_par3` removes a
+  team pop, `build_scorecards` keeps it as `net_ghost` and the card draws
+  it as an OUTLINE dot (same box, same inset); the legend shows the hollow
+  dot beside "no pops on par 3s". Print only: scoring never reads it.
 - **Back to Pairings (v2.522.3, Kerry 9/29 "gets stuck loading"):** the
   scorecards' Back goes to `/events?event=<id>&view=pairings`; that deep
   link now LOADS the pairings (`loadPairings` then re-render) instead of

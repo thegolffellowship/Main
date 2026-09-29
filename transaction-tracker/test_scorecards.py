@@ -304,5 +304,22 @@ _head = _ss[_ss.index('<div class="gbox-head">'):_ss.index('</div>', _ss.index('
 check("Starter Sheet GGID rides in the group header line, never its own row (it pushed 3304 to 2 pages)",
       "g.ggid" in _head and "gbox-foot" not in _ss)
 
+print("Kerry 9/29: par-3 would-be team pops as outlines; hole-width Total/Net; heavy rules")
+_s9 = scm.build_scorecards(3304, "3up", "team", qr="off", db_path=DB)
+_par = _s9["grids"]["9"]["par"] if "grids" in _s9 else None
+_rows = [r for c in _s9["cards"] for r in c["rows"]]
+_gh = [(h, r) for r in _rows for h in (r.get("net_ghost") or {})]
+check("par-3 team pops the rule removed come back as net_ghost, on par 3s only, never in net_dots",
+      bool(_gh) and all((r["net_dots"].get(h) or 0) == 0 for h, r in _gh), len(_gh))
+# autoescape ON, as Flask renders it (a |replace on escaped text escapes the tag)
+_h9 = env.get_template("scorecards.html").render(sc=_s9)
+check("outline dots render, and the legend carries the symbol beside 'no pops on par 3s'",
+      '<i class="g"></i>' in _h9 and '<i class="lg"></i>no pops on par 3s' in _h9)
+check("9-hole card: Total and Net are hole-width, PH/TEAM narrower",
+      '<col style="width:6.45%"><col style="width:5.05%"><col style="width:6.45%">' in _h9)
+for _rule in ("table { border: 2px solid #374151; }", "tr.hd th { border-bottom: 2px solid #374151; }",
+              "tr.par td { border-top: 2px solid #374151; }", "tr.hcp td { border-bottom: 2px solid #374151; }"):
+    check(f"heavy rule: {_rule}", _rule in _tpl)
+
 print(f"\n{len(FAILURES)} failure(s)")
 sys.exit(1 if FAILURES else 0)
