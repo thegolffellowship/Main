@@ -4646,7 +4646,9 @@ def _scoring_dispatch_inner(url: str, extract: str):
                 indent=2, default=str)
         if cmd == "scoring-expense-patch":
             # JSON: {"id": <expense_id>, "fields": {category, event_name,
-            #   transaction_type, customer_id, merchant, append_note}}
+            #   transaction_type, customer_id, merchant, notes (replaces),
+            #   append_note}} — the reply lists `patched` (written) and
+            #   `ignored` (unknown keys, by name).
             _p = json.loads(arg)
             return json.dumps(db.patch_expense_row(
                 int(_p["id"]), _p.get("fields") or {}), indent=2, default=str)

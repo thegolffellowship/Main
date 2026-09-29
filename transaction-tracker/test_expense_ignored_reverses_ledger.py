@@ -34,6 +34,12 @@ with db._connect(p) as conn:
     st = conn.execute("SELECT status FROM acct_transactions WHERE id=?", (acct_id,)).fetchone()[0]
     assert st == "reversed", f"re-sync resurrected the row: {st}"
 
+# fields.notes REPLACES the note and is reported only if written (CFO 9/29:
+# it said "patched: notes" and changed nothing); an unknown key is ignored BY NAME
+r = db.patch_expense_row(2550, {"notes": "replaced note", "bogus_field": 1}, db_path=p)
+assert r["patched"] == ["notes"] and r["ignored"] == ["bogus_field"], r
+assert r["expense"]["notes"] == "replaced note", r
+
 # patch_acct_row status=reversed on a bare ledger row, then back to active
 with db._connect(p) as conn:
     conn.execute("""INSERT INTO acct_transactions (date, description, total_amount, amount, type, entry_type, source, source_ref)

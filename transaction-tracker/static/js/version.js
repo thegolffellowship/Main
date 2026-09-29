@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.520.8";
+window.TGF_VERSION = "2.520.9";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.520.9",
+    date: "2026-09-29",
+    title: "scoring-expense-patch: notes can be set, and the reply never claims a field it did not write",
+    changes: [
+      "CFO 2026-09-29: scoring-expense-patch with fields.notes answered \"patched: notes\" and changed nothing — notes was not a patchable field, and the reply listed every key it was given. notes is now patchable (it replaces the note; append_note still appends), and the reply lists `patched` (written) and `ignored` (unknown keys, by name). Guard in test_expense_ignored_reverses_ledger.py.",
+    ],
+  },
   {
     version: "2.520.8",
     date: "2026-09-29",

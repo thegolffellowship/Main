@@ -48789,7 +48789,7 @@ def patch_expense_row(expense_id: int, fields: dict,
     (recategorize, link event, fix type). append_note adds to notes."""
     allowed = {"category", "transaction_type", "event_name", "customer_id",
                "merchant", "entity", "email_uid", "account_id",
-               "review_status", "matched_item_id"}
+               "review_status", "matched_item_id", "notes"}
     if "review_status" in fields and fields["review_status"] not in (
             "pending", "approved", "corrected", "ignored"):
         # 'ignored' is the schema's dismissal state (CHECK constraint on
@@ -48802,8 +48802,14 @@ def patch_expense_row(expense_id: int, fields: dict,
         if not row:
             return {"error": f"expense {expense_id} not found"}
         exp = dict(row)
-        sets, vals = [], []
+        sets, vals, applied, ignored = [], [], [], []
         for k, v in fields.items():
+            if k not in allowed and k != "append_note":
+                # Never report a field as patched that was not written
+                # (CFO 2026-09-29: fields.notes said "patched" and did nothing).
+                ignored.append(k)
+                continue
+            applied.append(k)
             if k == "append_note":
                 sets.append("notes = COALESCE(notes || ' · ', '') || ?")
                 vals.append(str(v))
@@ -48842,7 +48848,7 @@ def patch_expense_row(expense_id: int, fields: dict,
                 or exp.get("acct_transaction_id")):
             _sync_expense_ledger_entry(conn, exp)
         conn.commit()
-        return {"patched": sorted(k for k in fields),
+        return {"patched": sorted(applied), "ignored": sorted(ignored),
                 "ledger_row_reversed": reversed_acct,
                 "expense": dict(conn.execute(
                     "SELECT id, merchant, amount, category, transaction_type, "
