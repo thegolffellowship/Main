@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.522.18";
+window.TGF_VERSION = "2.522.19";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.522.19",
+    date: "2026-09-29",
+    title: "Scorecards: thinner × in the hole cells",
+    changes: [
+      "Kerry 9/29: \"The X lines are too thick. They need to be thinner on the holes so the X reads.\" In the hole cells the × arms are now one print pixel (half the weight) and a touch longer, so it reads as a clear x at print size instead of a blob; same box and the same equal 0.8 mm corner gap. The legend × keeps its heavier stroke."
+    ]
+  },
   {
     version: "2.522.18",
     date: "2026-09-29",

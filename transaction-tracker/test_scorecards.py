@@ -361,5 +361,7 @@ _oranges = {h for h in _hexes if h in {"#C2410C", "#FB923C", "#F97316", "#EA580C
 check("ONE TGF Orange: every orange mark reads --tgf-orange (#E87C3E), no other orange hex",
       not _oranges and _tpl.count("#E87C3E") == 1 and "--tgf-orange" in _tpl, _oranges)
 
+check("the × in the hole cells is drawn with one-print-pixel arms", ".do i.g::before, .do i.g::after { height: 1px;" in _tpl)
+
 print(f"\n{len(FAILURES)} failure(s)")
 sys.exit(1 if FAILURES else 0)

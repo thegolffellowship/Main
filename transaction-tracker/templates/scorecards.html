@@ -160,6 +160,10 @@
       content: ""; position: absolute; left: 50%; top: 50%; width: 141%; height: 1.5px;
       background: var(--tgf-orange); border-radius: 1px; }
     .do i.g::before, .decode i.lx::before { transform: translate(-50%, -50%) rotate(45deg); }
+    /* In the hole cells the arms are ONE print px so the x reads as an x
+       at print size (Kerry 9/29: "The X lines are too thick"); the legend
+       keeps the heavier stroke. */
+    .do i.g::before, .do i.g::after { height: 1px; border-radius: 0; width: 150%; }
     .do i.g::after, .decode i.lx::after { transform: translate(-50%, -50%) rotate(-45deg); }
     td.thick, th.thick { border-right: 2px solid #374151; }
     td.split-c, th.split-c { position: relative; padding: 0; }
