@@ -7477,6 +7477,30 @@ def _missing_ids(rows) -> list:
 
 
 @mcp.tool()
+def get_event_games(event_id: int) -> str:
+    """The GAMES tab for an event, exactly as the page shows it.
+
+    Counts (players / net / gross), each section's games with pot, MWP,
+    flights and place amounts, subtotals and TOTAL, the Hole-in-One banner
+    (day fund + running pot), per-bucket purses for bucket events, and WHO
+    COUNTS in each count with customer_id. Computed by the Events page's
+    own renderGamesPanel / computeGameStats run headless on the server
+    (email_parser.page_probe), so the tool cannot drift from the screen.
+    `buyer_lists_match_counts` proves the lists add up to the tab's counts.
+    Read-only: the page's non-GET requests are refused. Takes ~5-15 s.
+    """
+    from email_parser.page_probe import event_games_tab
+    _audit("read_event_games", f"event {event_id}")
+    try:
+        out = event_games_tab(int(event_id))
+    except Exception as exc:
+        return json.dumps({"error": f"games tab probe failed: {exc}"})
+    people = [w for lst in (out.get("buyers") or {}).values() for w in lst]
+    out["missing_customer_id"] = _missing_ids(people)
+    return json.dumps(out, indent=2, default=str)
+
+
+@mcp.tool()
 def get_event_pairings(event_id: int) -> str:
     """The SAVED pairings for an event, as the Starter Sheet prints them.
 

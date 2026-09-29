@@ -79,6 +79,33 @@ check("running version is this build's version.js", v.get("running_version") == 
 h = json.loads(mcp_server.get_hio_pot())
 check("HIO pot reads the banner's own reader", isinstance(h, dict) and h, h)
 
+print("\n== get_event_games: the GAMES tab by the page's own code ==")
+k = sqlite3.connect(DB)
+k.execute("UPDATE items SET side_games = 'NET' WHERE customer_id IN (9001, 9002)")
+k.execute("UPDATE items SET side_games = 'BOTH' WHERE customer_id = 9003")
+k.commit(); k.close()
+if os.environ.get("SKIP_PDF"):
+    print("  (SKIP_PDF: Chromium checks skipped)")
+else:
+    gm = json.loads(mcp_server.get_event_games(EV))
+    check("no error", "error" not in gm, gm.get("error"))
+    check("counts: 3 players, 3 net, 1 gross", gm.get("counts", {}).get("players") == 3
+          and gm["counts"].get("net") == 3 and gm["counts"].get("gross") == 1, gm.get("counts"))
+    check("who counts, with customer_id, adds up to the tab's counts",
+          gm.get("buyer_lists_match_counts") is True and not gm.get("missing_customer_id")
+          and sorted(w["customer_id"] for w in gm["buyers"]["net"]) == [9001, 9002, 9003], gm.get("buyers"))
+    check("the page's own load-time POST (events sync) was refused, never reached the app",
+          "POST /api/events/sync" in (gm.get("refused_writes") or []), gm.get("refused_writes"))
+    check("the tab's header and sections came back", "9-HOLE GAMES" in (gm.get("header") or "")
+          and any("NET GAMES" in (x.get("section") or "") for x in gm.get("sections") or []), gm.get("header"))
+    _m9 = json.loads(mcp_server.get_side_games_matrix(9))
+    _m9 = _m9["matrix9"]
+    _net = next(x for x in gm["sections"] if "NET GAMES" in x["section"])
+    _row = _m9["3"]
+    check("Net subtotal equals the live matrix's netTotalPot for 3 net buyers",
+          float((_net.get("subtotal") or {}).get("pot", "0").replace("$", "").replace(",", ""))
+          == float(_row.get("netTotalPot") or -1), (_net.get("subtotal"), _row and _row.get("netTotalPot")))
+
 print("\n== read-only, and logged ==")
 check("no event / item / customer / pairing row changed", counts() == before, (before, counts()))
 logs_after = sqlite3.connect(DB).execute("SELECT COUNT(*) FROM agent_action_log").fetchone()[0]
