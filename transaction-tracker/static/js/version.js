@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.522.13";
+window.TGF_VERSION = "2.522.14";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.522.14",
+    date: "2026-09-29",
+    title: "Scorecards: TEAM NET label dropped a hair off the hole badge",
+    changes: [
+      "Kerry 9/29: \"Drop the TEAM NET a hair. It's tucked too close to the Hole dot.\" The game label under the start badge sits a little lower (0.45em instead of 0.15em); nothing else on the card moves, and every layout still fits its page."
+    ]
+  },
   {
     version: "2.522.13",
     date: "2026-09-29",
