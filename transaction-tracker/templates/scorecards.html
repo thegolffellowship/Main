@@ -33,9 +33,11 @@
       padding: 24px 24px 0.25in 24px; font-size: {{ lay.font }}px; overflow: hidden; }
     .card + .card { border-top: 1px dashed #C9CDD3; }
     .decode { position: absolute; left: 0; right: 0; bottom: 0; height: 0.25in;
-      display: flex; align-items: center; justify-content: center;
-      font-size: 9px; color: #4B5563; white-space: nowrap; }
-    .decode b.k { color: #111; } .decode b.o { color: #C2410C; }
+      display: flex; align-items: center; justify-content: center; gap: 1.6em;
+      font-size: 10px; color: #374151; white-space: nowrap; }
+    .decode .li { display: inline-flex; align-items: center; gap: 0.4em; }
+    .decode i { display: inline-block; width: 7px; height: 7px; border-radius: 50%; flex: none; position: relative; }
+    .decode i.lk { background: #111; } .decode i.lo { background: #C2410C; }
 
     /* Header (#891-B) */
     .head { display: flex; align-items: center; gap: 1.1em; margin-bottom: 0.5em; }
@@ -144,9 +146,14 @@
     .dk i, .do i { display: block; width: var(--dd); height: var(--dd);
       border-radius: 50%; }
     .dk i { background: #111; } .do i { background: #C2410C; }
-    .do i.g { background: transparent; border: 1px solid #C2410C; box-sizing: border-box; }
-    .decode i.lg { display: inline-block; width: var(--dd); height: var(--dd); border-radius: 50%;
-      border: 1px solid #C2410C; box-sizing: border-box; vertical-align: middle; margin: 0 0.3em 0 0; }
+    /* A Team/Cart Net stroke the par-3 rule removed: the circle with a slash
+       running PAST it on both ends, like a no-entry sign (Kerry 9/29: "the
+       slash needs to extend beyond the circle"). Same box, same inset as a
+       real stroke; the slash is drawn outside the box and moves nothing. */
+    .do i.g, .decode i.lx { background: transparent; border: 1px solid #C2410C;
+      box-sizing: border-box; position: relative; overflow: visible; }
+    .do i.g::after, .decode i.lx::after { content: ""; position: absolute; left: 50%; top: 50%;
+      width: 230%; height: 1px; background: #C2410C; transform: translate(-50%, -50%) rotate(-45deg); }
     td.thick, th.thick { border-right: 2px solid #374151; }
     td.split-c, th.split-c { position: relative; padding: 0; }
     .split-c svg.diag { position: absolute; inset: 0; width: 100%; height: 100%; }
@@ -390,7 +397,10 @@
     </table>
     {% endif %}
     </div>
-    <div class="decode"><span><b class="k">PH</b> — Playing Handicap (100%)&nbsp;|&nbsp;<b class="o">{{ sc.net.short if is18 else sc.net.word }}</b> — {{ sc.net.name }} Handicap ({% set _pn = sc.net.pct_note or '' %}{% if 'no pops on par 3s' in _pn %}{{ _pn.replace('no pops on par 3s', '') }}<i class="lg"></i>no pops on par 3s{% else %}{{ _pn }}{% endif %})</span></div>
+    {# ONE line, the words Kerry chose (9/29: "we need to maintain terminology.
+       Pops are strokes"): game name, % and basis come from the net-game
+       rule, never typed. #}
+    <div class="decode"><span class="li"><i class="lk"></i>PH &ndash; Playing Handicap Stroke (&ldquo;Pops&rdquo;) at 100%</span><span class="li"><i class="lo"></i>{{ sc.net.name }} Stroke at {{ sc.net.pct }}%{% if sc.net.off_low %}, off the field&rsquo;s low{% endif %}</span>{% if sc.net.par3_suppressed %}<span class="li"><i class="lx"></i>No {{ sc.net.name }} Strokes on par 3s</span>{% endif %}</div>
   </div>
   {% endfor %}
 </div>

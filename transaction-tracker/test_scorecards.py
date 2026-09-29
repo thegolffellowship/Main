@@ -313,8 +313,16 @@ check("par-3 team pops the rule removed come back as net_ghost, on par 3s only, 
       bool(_gh) and all((r["net_dots"].get(h) or 0) == 0 for h, r in _gh), len(_gh))
 # autoescape ON, as Flask renders it (a |replace on escaped text escapes the tag)
 _h9 = env.get_template("scorecards.html").render(sc=_s9)
-check("outline dots render, and the legend carries the symbol beside 'no pops on par 3s'",
-      '<i class="g"></i>' in _h9 and '<i class="lg"></i>no pops on par 3s' in _h9)
+check("par-3 removed strokes render, and the one-line legend reads as Kerry wrote it",
+      '<i class="g"></i>' in _h9
+      and "PH &ndash; Playing Handicap Stroke (&ldquo;Pops&rdquo;) at 100%" in _h9
+      and (("Team Net Stroke at 75%, off the field&rsquo;s low" in _h9) == bool(_s9["net"].get("off_low")))
+      and "Team Net Stroke at 75%" in _h9
+      and '<i class="lx"></i>No Team Net Strokes on par 3s' in _h9, _h9[_h9.find('class="decode"'):][:400])
+_s9o = dict(_s9); _s9o["net"] = dict(_s9["net"], off_low=True)
+check("off the field's low prints when the rule applies it",
+      "Team Net Stroke at 75%, off the field&rsquo;s low" in env.get_template("scorecards.html").render(sc=_s9o))
+check("the slash runs well past the circle (230% of it)", "width: 230%" in _tpl and "rotate(-45deg)" in _tpl)
 check("9-hole card: Total and Net are hole-width, PH/TEAM narrower",
       '<col style="width:6.45%"><col style="width:5.05%"><col style="width:6.45%">' in _h9)
 for _rule in ("table { border: 2px solid #374151; }", "tr.hd th { border-bottom: 2px solid #374151; }",

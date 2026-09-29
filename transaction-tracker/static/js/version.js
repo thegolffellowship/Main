@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.522.12";
+window.TGF_VERSION = "2.522.13";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.522.13",
+    date: "2026-09-29",
+    title: "Scorecards: one-line stroke legend and the no-stroke par-3 symbol; read-only event tools",
+    changes: [
+      "Kerry 9/29: \"we need to maintain terminology. Pops are strokes.\" The card foot is one line: ● PH – Playing Handicap Stroke (\"Pops\") at 100%  ● Team Net Stroke at 75%, off the field's low  ⊘ No Team Net Strokes on par 3s. The game name (Team Net / Cart Net), the % and the off-the-low clause come from the event's net-game rule; nothing is typed. 10 px (7.5 pt) on every layout, measured to fit on one line.",
+      "A Team/Cart Net stroke removed by the par-3 rule prints as an orange circle with a slash running past it on both ends, like a no-entry sign (\"the slash needs to extend beyond the circle\"). Same size and corner inset as a real stroke; the black PH strokes are unchanged.",
+      "Seven read-only tools for the lanes (Kerry: \"You need to create a tool that allows you to see it\"): get_event_games (the GAMES tab, computed by the Events page's own code run headless, with who counts and customer_id), get_event_pairings, get_event_flights, get_event_payouts, get_score_entry_status, get_live_version, get_hio_pot. Each reads through the page's own code, writes nothing and is logged."
+    ]
+  },
   {
     version: "2.522.12",
     date: "2026-09-29",

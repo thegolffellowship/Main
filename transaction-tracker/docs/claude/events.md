@@ -2736,6 +2736,13 @@ bridge `scoring-scorecards:<id>[|key=value…][|dump|html|pdf[|all][|send]]`.
   team pop, `build_scorecards` keeps it as `net_ghost` and the card draws
   it as an OUTLINE dot (same box, same inset); the legend shows the hollow
   dot beside "no pops on par 3s". Print only: scoring never reads it.
+- **Legend + no-stroke symbol (v2.522.13, Kerry 9/29):** one line at the card
+  foot, "PH – Playing Handicap Stroke ("Pops") at 100% · {net name} Stroke at
+  {pct}%[, off the field's low] · No {net name} Strokes on par 3s", every part
+  from `sc.net` (`name`, `pct`, `off_low`, `par3_suppressed`). A par-3-removed
+  net stroke is `<i class="g">`: the orange ring with a `::after` slash 230%
+  wide, rotated −45°, so it runs past the circle; the box and inset are a real
+  stroke's.
 - **Dots at 75% (v2.522.12, Kerry 9/29, CD #962 ruling a):** `--dd` 4 / 6 / 5 px
   (3-up / 2-up / landscape), `--dsp` 2px, inset `--dg` unchanged (3 / 4 px →
   0.79 / 1.06 mm, equal on both lines). Fractional sizes snap unevenly in
