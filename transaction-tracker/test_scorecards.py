@@ -202,6 +202,9 @@ html18 = env.get_template("scorecards.html").render(sc=h18)
 check("18-hole: two panels, Init column, T header", "Init" in html18 and ">T<" in html18
       and "TOT" in html18, "")
 
+check("a Back to Pairings link, top and bottom (Kerry 9/28)",
+      html_gap.count("view=pairings") == 2 and "Back to Pairings" in html_gap)
+
 try:
     from email_parser.print_pack import _chromium_executable
     exe = _chromium_executable()

@@ -105,6 +105,16 @@
     tr.par td.hl, tr.hcp td.hl { background: #FFF176; }
     tr.pl td.hl { background: #FFFDE7; }
 
+    /* CLOSE / BACK (Kerry 2026-09-28: "needs a close button to go back to
+       pairings page") — top and bottom, phone and desktop; the same
+       target the cart signs' Back uses. */
+    .sc-bar { max-width: 8.5in; margin: 16px auto 0; display: flex; gap: 8px; flex-wrap: wrap;
+      padding: 0 8px; box-sizing: border-box; }
+    .sc-bar a, .sc-bar button { font: 600 15px "Helvetica Neue", Arial, sans-serif; padding: 10px 18px;
+      border-radius: 999px; border: 2px solid #fff; background: #fff; color: #1B1B1B;
+      text-decoration: none; cursor: pointer; min-height: 44px; box-sizing: border-box;
+      display: inline-flex; align-items: center; }
+    .sc-bar .dark { background: #1B1B1B; color: #fff; border-color: #1B1B1B; }
     .ggid-form { max-width: 8.5in; margin: 24px auto 0; background: #fff; padding: 14px 18px;
       border-radius: 6px; font-size: 13px; }
     .ggid-form h2 { font-family: "Bitter", Georgia, serif; font-size: 16px; margin: 0 0 6px; }
@@ -136,6 +146,11 @@
 {%- endmacro %}
 {% macro dots(n) -%}{% if n and n > 0 %}{{ '•' * n }}{% endif %}{%- endmacro %}
 
+<div class="sc-bar noprint">
+  <a href="/events?event={{ sc.event.id }}&amp;view=pairings">&#8592; Back to Pairings</a>
+  {% if not sc.gaps %}<button type="button" onclick="window.print()">Print</button>
+  <a class="dark" href="#" onclick="var u = new URL(location.href); u.pathname = u.pathname.replace(/\/scorecards$/, '/scorecards.pdf'); location.href = u; return false;">&#8681; PDF</a>{% endif %}
+</div>
 <form class="ggid-form noprint" id="ggidForm" onsubmit="return saveGgid(event)">
   <h2>GGID codes</h2>
   <div style="color:#4B5563;margin-bottom:6px">Type each group's Golf Genius code, then Save. It prints on the scorecard header, the Starter Sheet group box and the cart signs. Leave a box blank for no code.</div>
@@ -299,5 +314,6 @@
   {% for l in sc.log %}<br>• {{ l }}{% endfor %}
 </div>
 {% endif %}
+<div class="sc-bar noprint" style="margin-bottom:24px"><a href="/events?event={{ sc.event.id }}&amp;view=pairings">&#8592; Back to Pairings</a></div>
 </body>
 </html>

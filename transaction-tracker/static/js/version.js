@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.520.3";
+window.TGF_VERSION = "2.520.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.520.4",
+    date: "2026-09-28",
+    title: "Scorecards page: Back to Pairings, Print and PDF buttons",
+    changes: [
+      "Kerry 2026-09-28: \"needs a close button to go back to pairings page\". The scorecards page has a button bar at the top (Back to Pairings, Print, PDF — the last two only when the cards can print) and a Back to Pairings at the bottom, sized for a thumb. Back goes to /events?event=<id>&view=pairings, the same target the cart signs use, so it works from a new tab or a phone.",
+    ],
+  },
   {
     version: "2.520.3",
     date: "2026-09-28",
