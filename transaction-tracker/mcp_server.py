@@ -3431,9 +3431,21 @@ def _scoring_dispatch_inner(url: str, extract: str):
             for _r in _se.get_entered_scores(_ev)["rounds"]:
                 if _r.get("status") != "open":
                     continue
+                _gs = {g["group_id"]: g for g in _r.get("groups") or []}
+                _nums = [h["hole"] for h in _r.get("course") or []] or list(range(1, int(_r.get("holes") or 9) + 1))
                 for _l in _se.round_links(_r["round_id"]):
                     _tok = _l["url"].split("t=", 1)[1]
+                    _g = _gs.get(_l["group_id"]) or {}
+                    _st = _g.get("start_hole") or 1
+                    _i = _nums.index(_st) if _st in _nums else 0
+                    _order = _nums[_i:] + _nums[:_i]
+                    # the phone opens on the first hole in play order with no
+                    # score for everyone (score_entry.html holeOrder)
+                    _pl = [p for p in _r.get("players") or [] if p.get("group_id") == _l["group_id"]]
+                    _open = next((h for h in _order if not all(str(h) in (p.get("scores") or {}) for p in _pl)), None)
                     _links.append({"round_id": _r["round_id"], "group_num": _l["group_num"],
+                                   "label": _l.get("label"), "start_hole": _st,
+                                   "play_order": _order, "opens_on": _open,
                                    "player_link": _anon.get(f"/api/score-entry/card?t={_tok}").status_code})
             _out["player_links"] = _links
             _out["note"] = ("404 = refused. A player link is also 404 while score_entry_live is off "

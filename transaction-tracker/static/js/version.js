@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.521.1";
+window.TGF_VERSION = "2.521.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.521.2",
+    date: "2026-09-29",
+    title: "Score entry gate check reports each group's starting hole",
+    changes: [
+      "Kerry 2026-09-29: \"make sure that each group lands on the hole that they're starting on when they open it up at the Link\". The phone already starts a shotgun group on its own hole and wraps (2A plays 2 to 9, then 1), and opens on the first hole in that order with no score. The read-only bridge scoring-se-gate-check now reports, per group link, start_hole (from the saved pairings' hole label), play_order, and opens_on, the hole the phone lands on right now, so it can be proved on production before the round."
+    ]
+  },
   {
     version: "2.521.1",
     date: "2026-09-29",
