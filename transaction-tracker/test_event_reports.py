@@ -322,8 +322,9 @@ check("both reports are manager-gated routes",
       and '@app.route("/events/<int:event_id>/proximity-markers")' in app
       and app.count('@require_role("manager")') >= 4)
 ev_html = open("templates/events.html", encoding="utf-8").read()
-check("both sit with the other PAIRINGS print buttons",
-      "/divisions-flights','_blank')" in ev_html and "/proximity-markers','_blank')" in ev_html)
+_rp = ev_html[ev_html.index("function renderReportsPanel(ev)"):ev_html.index("function renderFlightsPanel(ev)")]
+check("both sit with the other print reports on the REPORTS tab (Kerry 9/29)",
+      'open("divisions-flights"' in _rp and 'open("proximity-markers"' in _rp)
 
 print("\n== downloaded files are named the way Kerry names them ==")
 # Kerry 2026-09-15: "[YY]-[chapter acronym][event type]-[event type
@@ -744,7 +745,7 @@ for _t, _rep, _f in (("divisions_flights.html", db.event_flights_report(EV, db_p
     _h = _env.get_template(_t).render(rep=_rep)
     check(f"{_t}: Back, Print and Download PDF render, hidden in print",
           'class="rbar noprint"' in _h and "window.print()" in _h and "Download PDF" in _h
-          and f"/events?event={EV}&view=pairings" in _h and ".rbar { display: none !important; }" in _h)
+          and f"/events?event={EV}&view=reports" in _h and ".rbar { display: none !important; }" in _h)
     check(f"{_t}: Download PDF names the file <stub>-{_f}", f'"26-s9-23-{_f}"' in _h)
     check(f"{_t}: bar wraps at the 560px phone breakpoint", "@media (max-width: 560px)" in _h)
 

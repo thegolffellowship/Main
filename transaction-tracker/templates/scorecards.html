@@ -201,7 +201,7 @@
 
 {% macro sc_bar(extra_style='') -%}
 <div class="sc-bar noprint" style="{{ extra_style }}">
-  <a href="/events?event={{ sc.event.id }}&amp;view=pairings">&#8592; Back to Pairings</a>
+  <a href="/events?event={{ sc.event.id }}&amp;view=reports">&#8592; Back to Reports</a>
   {% if not sc.gaps %}
   <button type="button" onclick="window.print()">&#128424; Print</button>
   <a class="dark" href="#" onclick="return scPdf(false)">&#8681; PDF</a>

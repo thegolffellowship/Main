@@ -17,7 +17,19 @@ check("mobile fields can carry HTML (the button) while text stays escaped",
       /v\.html\) \? v\.html : escapeHtml\(v\)/.test(s));
 check("one handler serves both: .btn-set-hcp posts to the starting-handicap endpoint",
       /querySelectorAll\("\.btn-set-hcp"\)[\s\S]{0,4000}\/api\/customers\/\$\{cid\}\/starting-handicap/.test(s));
-check("PAIRINGS print row has a Scorecards button", /\/events\/\$\{ev\.id\}\/scorecards'/.test(s));
+// REPORTS tab (Kerry 2026-09-29: "move the print reports stuff to it's own
+// tab on the toggle bar. After Flights") — desktop AND phone.
+const rp = s.slice(s.indexOf("function renderReportsPanel(ev)"), s.indexOf("function renderFlightsPanel(ev)"));
+for (const r of ["starter-sheet", "cart-signs", "scorecards", "divisions-flights", "proximity-markers"])
+    check(`REPORTS panel opens ${r}`, rp.includes(`open("${r}"`));
+check("REPORTS panel has Send Pack", /sendPrintPack\(\$\{ev\.id\}, this\)/.test(rp));
+check("REPORTS badge sits right after FLIGHTS on desktop and phone",
+      (s.match(/FLIGHTS<\/span>`;\s*\}\s*(?:\/\/[^\n]*\n\s*)*(?:html|badgesHtml) \+= `<span class="game-stat-badge \$\{(?:reportsView|mobileReportsView)/g) || []).length === 2);
+check("the phone renders the REPORTS panel", /mobileReportsView\) \{\s*detailHtml = badgesHtml \+ renderReportsPanel\(ev\)/.test(s));
+check("print buttons are gone from the PAIRINGS row (pairing tools stay)",
+      !/renderPairingsPanel[\s\S]*starter-sheet','_blank'/.test(s.slice(s.indexOf("function renderPairingsPanel"), s.indexOf("// ── SCORE ENTRY panel")))
+      && /data-pairings-action="gg-import"/.test(s) && /pairings-blinds-btn/.test(s));
+check("?view=reports opens the REPORTS tab", /params\.get\("view"\) === "reports"[\s\S]{0,120}applyDetailView\(byId\.id, "6"\)/.test(s));
 // Back from a print view (?event=<id>&view=pairings) must LOAD the pairings,
 // not just open the tab (Kerry 2026-09-29: "stuck loading").
 const deep = s.slice(s.indexOf('const evParam = params.get("event");'), s.indexOf("// Plain refresh with a row open"));

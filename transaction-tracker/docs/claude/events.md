@@ -2751,6 +2751,15 @@ bridge `scoring-scorecards:<id>[|key=value…][|dump|html|pdf[|all][|send]]`.
   `<stub>-DivisionsFlights` / `<stub>-Proxies`; hidden in print; wraps at
   560px). Guard `test_event_reports.py`.
 
+- **The REPORTS tab (v2.522.9, Kerry 9/29: "move the print reports stuff
+  to it's own tab on the toggle bar. After Flights"):** view "6"
+  (`reportsOpenForEvent`, `renderReportsPanel`), ROSTER · PAIRINGS · GAMES ·
+  FLIGHTS · REPORTS · PAYOUTS · FINANCIAL on desktop and phone. Starter
+  Sheet, Cart Signs, Scorecards, Divisions & Flights, Proximity, Send Pack
+  live there; PAIRINGS keeps Undo/Redo, Generate, GG Sheet, Clear, Save,
+  Live Scoring, Blinds and the Score Entry panel. Every report's Back goes
+  to `/events?event=<id>&view=reports`. Guard `test_mobile_manager_parity.js`.
+
 ## The event PRINT PACK — one bound PDF, mailed the evening before (v2.465.0)
 
 Kerry 2026-09-18: "a bound PDF with all of them in one that I could

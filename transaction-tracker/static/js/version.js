@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.522.8";
+window.TGF_VERSION = "2.522.9";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.522.9",
+    date: "2026-09-29",
+    title: "Events: print reports get their own REPORTS tab, after FLIGHTS",
+    changes: [
+      "Kerry 9/29: \"We need to move the print reports stuff to it's own tab on the toggle bar. After Flights\". The event toggle now reads ROSTER · PAIRINGS · GAMES · FLIGHTS · REPORTS · PAYOUTS · FINANCIAL, on phone and desktop. REPORTS holds Starter Sheet, Cart Signs, Scorecards, Divisions & Flights, Proximity and Send Pack, each opening in a new tab with its own Print and Download PDF.",
+      "PAIRINGS keeps the pairing tools: Undo/Redo, Generate, GG Sheet, Clear, Save, Live Scoring, Blinds and the Score Entry panel. If PAIRINGS has unsaved changes, REPORTS says so, because the reports print the saved pairings.",
+      "Every report's Back button now returns to the REPORTS tab (?view=reports), which opens ready, with nothing left loading."
+    ]
+  },
   {
     version: "2.522.8",
     date: "2026-09-29",

@@ -245,8 +245,8 @@ html18 = env.get_template("scorecards.html").render(sc=h18)
 check("18-hole: two panels, Init column, T header", "Init" in html18 and ">T<" in html18
       and "TOT" in html18, "")
 
-check("a Back to Pairings link, top and bottom (Kerry 9/28)",
-      html_gap.count("view=pairings") == 2 and "Back to Pairings" in html_gap)
+check("a Back link to the REPORTS tab, top and bottom (Kerry 9/28, 9/29)",
+      html_gap.count("view=reports") == 2 and "Back to Reports" in html_gap)
 check("Print and PDF, top and bottom (Kerry 9/28: every report)",
       html_gap.count("window.print()") == 2 and html_gap.count("scPdf(false)") == 2)
 groups[0]["players"][0]["playing_handicap"] = None
