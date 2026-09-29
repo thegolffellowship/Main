@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.522.10";
+window.TGF_VERSION = "2.522.11";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.522.11",
+    date: "2026-09-29",
+    title: "Scorecards: bigger GGID; TOTAL and NET in capitals",
+    changes: [
+      "Kerry 9/29: \"Make the GGID Number larger. Capitalize TOTAL and NET.\" The GGID code in the black header cell prints about 60% larger so a player can read it at arm's length and type it into the GG app; the GGID label stays small. It fits the header on 3-up, 2-up and landscape without changing the row height (slightly smaller on the 18-hole card's half-width column). Column heads read TOTAL and NET, and OUT and IN on 18-hole cards to match."
+    ]
+  },
   {
     version: "2.522.10",
     date: "2026-09-29",
