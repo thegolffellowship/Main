@@ -25,9 +25,9 @@
     .card { --ds: {{ '1' if sc.layout == '3up' else ('1.32' if sc.layout == '2up' else '1.24') }};
       /* dot geometry in WHOLE CSS px: print snaps every box edge to the px
          grid, so a fractional inset rounds differently on each side. */
-      --dd: {{ '6px' if sc.layout == '3up' else ('8px' if sc.layout == '2up' else '7px') }};
+      --dd: {{ '4px' if sc.layout == '3up' else ('6px' if sc.layout == '2up' else '5px') }};
       --dg: {{ '3px' if sc.layout == '3up' else '4px' }};
-      --dsp: {{ '3px' if sc.layout == '2up' else '2px' }};
+      --dsp: 2px;
       --tcs: {{ '10px' if sc.layout == '3up' else ('14px' if sc.layout == '2up' else '13px') }};
       height: calc(100% / {{ lay.per_sheet }}); flex: none; position: relative;
       padding: 24px 24px 0.25in 24px; font-size: {{ lay.font }}px; overflow: hidden; }

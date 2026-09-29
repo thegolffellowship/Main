@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.522.11";
+window.TGF_VERSION = "2.522.12";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.522.12",
+    date: "2026-09-29",
+    title: "Scorecards: stroke dots at 75%, same equal 0.8 mm corner gap",
+    changes: [
+      "Kerry's ruling on design-claude's review (#962, option a: \"keep the 0.8 mm corner gap\"): the black PH dots, the orange net dots and the hollow par-3 circles print at 75% of their size, in whole print pixels so both corner gaps stay identical. 3-up 1.06 mm (4 px; 75% falls between two print pixels and the smaller one keeps more writing room), 2-up portrait 1.59 mm (exactly 75%), 2-up landscape 1.32 mm. Double dots sit 2 px apart, tight in the corner. Measured on the PDF: every dot's top (or bottom) gap equals its right gap exactly — 0.79 mm on 3-up, 1.06 mm on the 2-up layouts."
+    ]
+  },
   {
     version: "2.522.11",
     date: "2026-09-29",

@@ -293,7 +293,7 @@ check("dot inset / size / spacing read the whole-px vars, no mm and no half-stro
       "var(--dg)" in _dotcss and "var(--dd)" in _dotcss and "mm" not in _dotcss and "--hb" not in _dotcss,
       _dotcss)
 import re as _re
-for _v in ("--dd", "--dg", "--dsp"):
+for _v in ("--dd", "--dg"):
     _vals = _re.findall(_v + r": \{\{ (.*?) \}\}", _tpl)
     check(f"{_v} is set per layout in whole px", bool(_vals) and all(
         _re.fullmatch(r"\d+px", x) for x in _re.findall(r"'([^']+)'", _vals[0]) if x not in ("3up", "2up", "2land")), _vals)
@@ -342,6 +342,10 @@ check("column heads read TOTAL and NET (Kerry 9/29: \"Capitalize TOTAL and NET\"
       '<th class="thick">TOTAL</th>' in _tpl and "<th>NET</th>" in _tpl and ">Total<" not in _tpl and ">Net<" not in _tpl)
 check("the GGID code prints large (1.75em; 1.4em on the 18's half-width column)",
       "font-size: 1.75em" in _tpl and ".card.h18 tr.hd th.lead .gc { font-size: 1.4em" in _tpl)
+
+check("double-dot spacing is a whole 2px", "--dsp: 2px;" in _tpl)
+check("dots at 75% of the 9/29 size (Kerry, CD #962 ruling a): 4 / 6 / 5 px",
+      "--dd: {{ '4px' if sc.layout == '3up' else ('6px' if sc.layout == '2up' else '5px') }};" in _tpl)
 
 print(f"\n{len(FAILURES)} failure(s)")
 sys.exit(1 if FAILURES else 0)

@@ -2736,6 +2736,10 @@ bridge `scoring-scorecards:<id>[|key=value…][|dump|html|pdf[|all][|send]]`.
   team pop, `build_scorecards` keeps it as `net_ghost` and the card draws
   it as an OUTLINE dot (same box, same inset); the legend shows the hollow
   dot beside "no pops on par 3s". Print only: scoring never reads it.
+- **Dots at 75% (v2.522.12, Kerry 9/29, CD #962 ruling a):** `--dd` 4 / 6 / 5 px
+  (3-up / 2-up / landscape), `--dsp` 2px, inset `--dg` unchanged (3 / 4 px →
+  0.79 / 1.06 mm, equal on both lines). Fractional sizes snap unevenly in
+  print, so every dot dimension stays a whole px.
 - **Name circles (v2.522.10, Kerry 9/29):** `scorecards.chip_styles(tees)` gives
   each band's circle the EXACT colour of its tee row (one source; never
   the Starter Sheet swatch palette), edge in the same colour; a women's tee
