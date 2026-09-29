@@ -299,5 +299,10 @@ for _v in ("--dd", "--dg", "--dsp"):
         _re.fullmatch(r"\d+px", x) for x in _re.findall(r"'([^']+)'", _vals[0]) if x not in ("3up", "2up", "2land")), _vals)
 check("thick dividers are a whole 2px (print rounds 2.5px down anyway)", "2.5px" not in _tpl)
 
+_ss = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates", "starter_sheet.html")).read()
+_head = _ss[_ss.index('<div class="gbox-head">'):_ss.index('</div>', _ss.index('<div class="gbox-head">'))]
+check("Starter Sheet GGID rides in the group header line, never its own row (it pushed 3304 to 2 pages)",
+      "g.ggid" in _head and "gbox-foot" not in _ss)
+
 print(f"\n{len(FAILURES)} failure(s)")
 sys.exit(1 if FAILURES else 0)

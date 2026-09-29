@@ -2697,7 +2697,8 @@ bridge `scoring-scorecards:<id>[|key=value…][|dump|html|pdf[|all][|send]]`.
   the scorecards page (POST `/api/events/<id>/group-codes`, blank clears,
   junk refused), attached to every print-pack group by
   `get_event_print_pack` and printed on the scorecard header, the Starter
-  Sheet group box footer and each cart sign. Survives a PAIRINGS re-save.
+  Sheet group box's header line (v2.522.6: a footer row pushed a one-page
+  sheet to two) and each cart sign. Survives a PAIRINGS re-save.
   Bridge `scoring-group-codes:<id>[|<holes>:<group>=<code>;…]`.
 - **Entry points (v2.520.2):** PAIRINGS' print row has 🖨 Scorecards next to
   Cart Signs (Kerry #919). A missing handicap is fixed from the ROSTER on

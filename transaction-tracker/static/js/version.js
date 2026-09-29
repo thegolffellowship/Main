@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.522.5";
+window.TGF_VERSION = "2.522.6";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.522.6",
+    date: "2026-09-29",
+    title: "Starter Sheet: GGID in the group header, back to one page",
+    changes: [
+      "Kerry's Golf Genius group codes for s9.25 Canyon Springs are stored per group (slot 1–7) and print on every scorecard, the Starter Sheet and the cart signs. The Starter Sheet printed each GGID on a row of its own under the group, and that extra height pushed the one-page sheet onto a second page. The GGID now rides in the group's black header line, beside the start label, so the sheet is one page again."
+    ]
+  },
   {
     version: "2.522.5",
     date: "2026-09-29",
