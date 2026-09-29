@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.522.17";
+window.TGF_VERSION = "2.522.18";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.522.18",
+    date: "2026-09-29",
+    title: "Live scoring: the par-3 x and the printed card's stroke wording",
+    changes: [
+      "Kerry 2026-09-29: \"Will the x's also show on the live scoring holes? On the par 3s where there's no pops.\" On a par 3 where a player would have had a Team or Cart Net stroke but for the no-strokes-on-par-3s rule, the scorer page now draws a small orange x in the team-pop position, as the printed scorecard does. It's the same allocation the card uses: the server keeps the par-3 strokes it removes (team_par3_ghost), and scoring never reads them. Black PH dots are unchanged, and a player with no team stroke there shows nothing.",
+      "The key now reads as on the printed card: \"PH \u2013 Playing Handicap Stroke\", \"Cart Net Stroke\" (or Team Net), and \"No Cart Net Strokes on par 3s\" when an x shows."
+    ]
+  },
   {
     version: "2.522.17",
     date: "2026-09-29",

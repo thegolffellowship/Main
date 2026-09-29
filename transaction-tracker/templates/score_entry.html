@@ -94,6 +94,14 @@
 
         .se-pop { width: 7px; height: 7px; border-radius: 50%; background: #1B1B1B; display: block; }
         .se-pop.t { background: #E87C3E; }
+        /* Par-3 ×: the team stroke the no-strokes-on-par-3s rule removed
+           (Kerry 2026-09-29), in the team-pop position, as on the print. */
+        .se-pop.x { background: none; width: 9px; height: 9px; border-radius: 0; position: relative; }
+        .se-pop.x::before, .se-pop.x::after { content: ""; position: absolute; left: 50%; top: 50%;
+            width: 10px; height: 2px; background: #E87C3E; border-radius: 1px; }
+        .se-pop.x::before { transform: translate(-50%, -50%) rotate(45deg); }
+        .se-pop.x::after { transform: translate(-50%, -50%) rotate(-45deg); }
+        .se-popkey .se-pop.x { display: inline-block; vertical-align: middle; }
 
         /* ONE SCREEN, NO SCROLLING (Kerry 2026-09-26: "We've got to work on
            getting everything to fit in the window without scrolling"). The hole
@@ -479,7 +487,7 @@
         // Dots, not words: k PH pops (black) + t team pops (orange).
         function popsOf(cid, n) {
             const g = (m) => Math.max(0, Number(((m || {})[String(cid)] || {})[String(n)]) || 0);
-            return {k: g(card.strokes), t: g(card.team_strokes)};
+            return {k: g(card.strokes), t: g(card.team_strokes), x: g(card.team_par3_ghost)};
         }
         // A one-ball team (Chapman in the cup) gets its pops from the match
         // engine's own strokes for that side (CA #721: "Draw the Chapman team's
@@ -502,8 +510,8 @@
             }
             if (!cids || cids.length !== 1) return "";
             const p = popsOf(cids[0], n);
-            if (!p.k && !p.t) return "";
-            const d = `<span class="g">${"<i class=\"se-pop\"></i>".repeat(p.k)}</span><span class="g">${"<i class=\"se-pop t\"></i>".repeat(p.t)}</span>`;
+            if (!p.k && !p.t && !p.x) return "";
+            const d = `<span class="g">${"<i class=\"se-pop\"></i>".repeat(p.k)}</span><span class="g">${"<i class=\"se-pop t\"></i>".repeat(p.t)}${"<i class=\"se-pop x\"></i>".repeat(p.x)}</span>`;
             return `<span class="se-pops${small ? " cell" : ""}" aria-hidden="true">${d}</span>`;
         }
         function popLabel(cids, n) {
@@ -524,10 +532,12 @@
             // Only a player's own row draws dots (a foursomes pair's ball does not).
             const solo = new Set(subjects().filter((x) => x.cids.length === 1).map((x) => String(x.cids[0])));
             const any = (m) => Object.entries(m || {}).some(([c, h]) => solo.has(c) && Object.values(h || {}).some((v) => v > 0));
-            const a = any(card.strokes), b = any(card.team_strokes);
+            const a = any(card.strokes), b = any(card.team_strokes), x = any(card.team_par3_ghost);
             const tm = subjects().some((x) => x.cids.length === 2 && (card.match_status || []).some((m) => (m.card || []).some((h) => (h.p || h.s).some((v) => v > 0))));
-            if (!a && !b && !tm) return "";
-            return `<div class="se-popkey">${a ? `<span><i class="se-pop"></i>PH pop</span>` : ""}${tm ? `<span><i class="se-pop"></i>Team match stroke</span>` : ""}${b ? `<span><i class="se-pop t"></i>${esc((card.team_game || {}).label || "Team Net")} pop</span>` : ""}${card.strokes_note ? `<span style="color:#9CA3AF">${esc(card.strokes_note)}</span>` : ""}</div>`;
+            if (!a && !b && !tm && !x) return "";
+            const tg = esc((card.team_game || {}).label || "Team Net");
+            // Kerry's words on the printed card (2026-09-29).
+            return `<div class="se-popkey">${a ? `<span><i class="se-pop"></i>PH \u2013 Playing Handicap Stroke</span>` : ""}${tm ? `<span><i class="se-pop"></i>Team match stroke</span>` : ""}${b ? `<span><i class="se-pop t"></i>${tg} Stroke</span>` : ""}${x ? `<span><i class="se-pop x"></i>No ${tg} Strokes on par 3s</span>` : ""}${card.strokes_note ? `<span style="color:#9CA3AF">${esc(card.strokes_note)}</span>` : ""}</div>`;
         }
         // The tee a player plays, from the tee sheet's legend (card.tees).
         function teeOf(cid) {

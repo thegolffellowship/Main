@@ -578,8 +578,9 @@ with sync_playwright() as p:
           row.inner_html()[:400])
     check("the low man shows no dots", pp.locator(".se-row").nth(0).locator(".se-pop").count() == 0)
     check("no stroke text on the row", "stroke here" not in pp.inner_text("body"))
-    check("a small key names the two dots",
-          "PH pop" in pp.inner_text(".se-popkey") and "Cart Net pop" in pp.inner_text(".se-popkey"))
+    check("a small key names the two dots in Kerry's words (9/29)",
+          "PH \u2013 Playing Handicap Stroke" in pp.inner_text(".se-popkey")
+          and "Cart Net Stroke" in pp.inner_text(".se-popkey"))
     play(pp, 9)
     pp.wait_for_selector("text=Check the card")
     pp.wait_for_timeout(800)

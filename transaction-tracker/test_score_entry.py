@@ -707,6 +707,14 @@ check("the game is named for the unit", tc["team_game"]["label"] == "Cart Net", 
 se.set_game_handicaps(sr, {102: 2}, unit="cart", basis="Cart Net 85%")
 check("a re-seed updates the number in place",
       se.get_group_card(sg)["team_strokes"].get("102") == {"3": 1, "7": 1})
+se.set_game_handicaps(sr, {102: 9}, unit="cart", basis="Cart Net 85%")
+_c9 = se.get_group_card(sg)
+check("par-3 x (Kerry 9/29): the team strokes the par-3 rule removes are on the card as would-be strokes",
+      _c9["team_par3_ghost"].get("102") == {"2": 1, "6": 1}
+      and not set(_c9["team_strokes"].get("102", {})) & {"2", "6"}, (_c9["team_par3_ghost"], _c9["team_strokes"]))
+se.set_game_handicaps(sr, {102: 2}, unit="cart", basis="Cart Net 85%")
+check("...and nothing on a par 3 where he gets no team stroke anyway",
+      not se.get_group_card(sg)["team_par3_ghost"].get("102"))
 
 print("cart-sign QR (Kerry #666 B), behind the score_entry_qr dial")
 pack = db.get_event_print_pack(900)
