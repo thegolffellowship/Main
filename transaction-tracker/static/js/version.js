@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.522.25";
+window.TGF_VERSION = "2.522.26";
 window.TGF_CHANGELOG = [
+    {
+        version: "2.522.26",
+        date: "2026-09-29",
+        title: "Live scoring: bigger TGF logo in the score-entry header",
+        changes: [
+            "Kerry 2026-09-29, 3:28 PM, from the live Hole 3 screen: \"Make the logger bigger. Like 2.5 times.\" The centered, non-link TGF mark in the black header on /member/score is now 50 px (it was 20 px on the hole screen, 30 px elsewhere) on every screen, and the header grows only to fit it (56 px). The safe-area inset is unchanged. A four-player, 18-hole card with a match still fits one 390x844 screen with the iPhone insets. On a screen under 700 px tall, the hole page shrinks the mark back to 24 px so the card and Save still fit without scrolling."
+        ]
+    },
     {
         version: "2.522.24",
         date: "2026-09-29",

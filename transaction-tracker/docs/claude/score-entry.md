@@ -759,3 +759,5 @@ mark only, centered and not tappable ("centered TGF Logo on black header for all
 screens but don't allow it to link anywhere"): no tabs, no CTA button or sheet.
 It shows on every screen, the hole screen included (it used to hide there). The safe-area block in shell.css is untouched.
 Other /member pages keep their nav.
+
+The mark is 50 px (v2.522.26, Kerry: "Make the logger bigger. Like 2.5 times"); under 700 px of screen height the hole page shrinks it to 24 px so the card still fits.
