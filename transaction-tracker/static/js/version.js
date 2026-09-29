@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.522.16";
+window.TGF_VERSION = "2.522.17";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.522.17",
+    date: "2026-09-29",
+    title: "Scorecards: every orange mark is the one TGF Orange",
+    changes: [
+      "Kerry 9/29: \"Are all the pops and orange marks the correct TGF Orange? The pops look redder than they should be.\" They were: the net strokes, the par-3 ×, the legend marks, the TEAM NET label and the TEAM numbers printed a darker burnt orange, and the header TEAM a lighter one, while the hole badge and GGID used TGF Orange #E87C3E. Every orange on the card now reads ONE token, --tgf-orange (#E87C3E). The dots still read on the shaded cart rows, and their corner gaps are unchanged. Guard: no other orange hex may appear in the scorecard template."
+    ]
+  },
   {
     version: "2.522.16",
     date: "2026-09-29",

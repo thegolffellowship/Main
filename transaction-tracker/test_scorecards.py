@@ -355,5 +355,11 @@ check("double-dot spacing is a whole 2px", "--dsp: 2px;" in _tpl)
 check("dots at 75% of the 9/29 size (Kerry, CD #962 ruling a): 4 / 6 / 5 px",
       "--dd: {{ '4px' if sc.layout == '3up' else ('6px' if sc.layout == '2up' else '5px') }};" in _tpl)
 
+import re as _re2
+_hexes = {h.upper() for h in _re2.findall(r"#[0-9A-Fa-f]{6}", _tpl)}
+_oranges = {h for h in _hexes if h in {"#C2410C", "#FB923C", "#F97316", "#EA580C", "#D06B2E", "#FDBA74"}}
+check("ONE TGF Orange: every orange mark reads --tgf-orange (#E87C3E), no other orange hex",
+      not _oranges and _tpl.count("#E87C3E") == 1 and "--tgf-orange" in _tpl, _oranges)
+
 print(f"\n{len(FAILURES)} failure(s)")
 sys.exit(1 if FAILURES else 0)

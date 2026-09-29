@@ -17,6 +17,9 @@
     html, body, .sheet, .card, td, th {
       -webkit-print-color-adjust: exact; print-color-adjust: exact;
     }
+    /* ONE orange (Kerry 9/29: "Are all the pops and orange marks the correct
+       TGF Orange?"): every orange mark on the card reads this token. */
+    :root { --tgf-orange: #E87C3E; }
     body { margin: 0; background: #8C8F94; color: #1B1B1B;
       font-family: "Helvetica Neue", Arial, system-ui, sans-serif; }
     .sheet { width: {{ '11in' if land else '8.5in' }}; height: {{ '8.5in' if land else '11in' }};
@@ -37,7 +40,7 @@
       font-size: 10px; color: #374151; white-space: nowrap; }
     .decode .li { display: inline-flex; align-items: center; gap: 0.4em; }
     .decode i { display: inline-block; width: 7px; height: 7px; border-radius: 50%; flex: none; position: relative; }
-    .decode i.lk { background: #111; } .decode i.lo { background: #C2410C; }
+    .decode i.lk { background: #111; } .decode i.lo { background: var(--tgf-orange); }
 
     /* Header (#891-B) */
     .head { display: flex; align-items: center; gap: 1.1em; margin-bottom: 0.5em; }
@@ -62,7 +65,7 @@
     .start .cap { font-weight: 600; font-size: 0.864em; letter-spacing: 1.5px;
       color: #6B7280; }
     .badge { font-size: 3em; width: 1.7em; height: 1.7em; border-radius: 50%;
-      background: #E87C3E; color: #fff; display: flex; align-items: center;
+      background: var(--tgf-orange); color: #fff; display: flex; align-items: center;
       justify-content: center; font-family: "Bitter", Georgia, serif; font-weight: 700;
       flex: none; }
     .badge span.l1 { font-size: 1em; } .badge span.l2 { font-size: 0.8em; }
@@ -88,7 +91,7 @@
     tr.hd th.lead .gl { font-size: 0.65em; font-family: "Helvetica Neue", Arial, sans-serif; }
     /* The code a player types into the GG app — large enough to read at
        arm's length (Kerry 9/29: "Make the GGID Number larger"). */
-    tr.hd th.lead .gc { font-family: "Geist Mono", ui-monospace, monospace; color: #E87C3E;
+    tr.hd th.lead .gc { font-family: "Geist Mono", ui-monospace, monospace; color: var(--tgf-orange);
       font-size: 1.75em; line-height: 1; letter-spacing: 0.06em; margin-left: 0.3em;
       vertical-align: middle; }
     tr.hd th.lead .gl { vertical-align: middle; }
@@ -125,7 +128,7 @@
        off the badge (9/29: "It's tucked too close to the Hole dot"). */
     .badge-wrap { display: flex; flex-direction: column; align-items: center; flex: none; }
     .game { font-weight: 700; font-size: 0.78em; letter-spacing: 1px; text-transform: uppercase;
-      color: #C2410C; margin-top: 0.45em; white-space: nowrap; }
+      color: var(--tgf-orange); margin-top: 0.45em; white-space: nowrap; }
     /* DOTS (Kerry 2026-09-28: "bigger and easier to read"): black PH dots
        top-right, orange net-game dots bottom-right, in a darker orange that
        reads on white and on the shaded cart-B rows. */
@@ -146,7 +149,7 @@
     .dk { top: var(--dg); } .do { bottom: var(--dg); }
     .dk i, .do i { display: block; width: var(--dd); height: var(--dd);
       border-radius: 50%; }
-    .dk i { background: #111; } .do i { background: #C2410C; }
+    .dk i { background: #111; } .do i { background: var(--tgf-orange); }
     /* A Team/Cart Net stroke the par-3 rule removed: a small orange ×
        (Kerry 9/29: "The no strokes circle is lost at that scale" … "Go with
        the X"). Same box and corner inset as a real stroke; two strokes
@@ -155,7 +158,7 @@
       position: relative; overflow: visible; }
     .do i.g::before, .do i.g::after, .decode i.lx::before, .decode i.lx::after {
       content: ""; position: absolute; left: 50%; top: 50%; width: 141%; height: 1.5px;
-      background: #C2410C; border-radius: 1px; }
+      background: var(--tgf-orange); border-radius: 1px; }
     .do i.g::before, .decode i.lx::before { transform: translate(-50%, -50%) rotate(45deg); }
     .do i.g::after, .decode i.lx::after { transform: translate(-50%, -50%) rotate(-45deg); }
     td.thick, th.thick { border-right: 2px solid #374151; }
@@ -165,9 +168,9 @@
     th.split-c svg.diag line { stroke: #9CA3AF; }
     .split-c .ul { position: absolute; left: 0.25em; top: 0.1em; font-weight: 700; }
     .split-c .lr { position: absolute; right: 0.25em; bottom: 0.1em; font-weight: 700;
-      color: #C2410C; }
+      color: var(--tgf-orange); }
     th.split-c .ul { color: #fff; font-size: 0.62em; left: 0.2em; }
-    th.split-c .lr { font-size: 0.56em; color: #FB923C; right: 0.15em; bottom: 0.05em; }
+    th.split-c .lr { font-size: 0.56em; color: var(--tgf-orange); right: 0.15em; bottom: 0.05em; }
     td.split-c .ul, td.split-c .lr { font-family: "Bitter", Georgia, serif; font-size: 1em; }
     th.hl { background: #FFF176 !important; color: #111 !important; }
     tr.par td.hl, tr.hcp td.hl { background: #FFF176; }
