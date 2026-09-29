@@ -286,5 +286,18 @@ if exe and os.getenv("SKIP_PDF") != "1":
 else:
     print("  (Chromium not present: PDF page checks skipped)")
 
+print("dot geometry is whole CSS px (Kerry 9/29: equal insets off both lines)")
+_tpl = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates", "scorecards.html")).read()
+_dotcss = _tpl[_tpl.index(".dk, .do {"):_tpl.index(".dk i { background")]
+check("dot inset / size / spacing read the whole-px vars, no mm and no half-stroke",
+      "var(--dg)" in _dotcss and "var(--dd)" in _dotcss and "mm" not in _dotcss and "--hb" not in _dotcss,
+      _dotcss)
+import re as _re
+for _v in ("--dd", "--dg", "--dsp"):
+    _vals = _re.findall(_v + r": \{\{ (.*?) \}\}", _tpl)
+    check(f"{_v} is set per layout in whole px", bool(_vals) and all(
+        _re.fullmatch(r"\d+px", x) for x in _re.findall(r"'([^']+)'", _vals[0]) if x not in ("3up", "2up", "2land")), _vals)
+check("thick dividers are a whole 2px (print rounds 2.5px down anyway)", "2.5px" not in _tpl)
+
 print(f"\n{len(FAILURES)} failure(s)")
 sys.exit(1 if FAILURES else 0)

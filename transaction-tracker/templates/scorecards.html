@@ -23,6 +23,12 @@
       background: #fff; margin: 24px auto; overflow: hidden; position: relative;
       display: flex; flex-direction: column; }
     .card { --ds: {{ '1' if sc.layout == '3up' else ('1.32' if sc.layout == '2up' else '1.24') }};
+      /* dot geometry in WHOLE CSS px: print snaps every box edge to the px
+         grid, so a fractional inset rounds differently on each side. */
+      --dd: {{ '6px' if sc.layout == '3up' else ('8px' if sc.layout == '2up' else '7px') }};
+      --dg: {{ '3px' if sc.layout == '3up' else '4px' }};
+      --dsp: {{ '3px' if sc.layout == '2up' else '2px' }};
+      --tcs: {{ '10px' if sc.layout == '3up' else ('14px' if sc.layout == '2up' else '13px') }};
       height: calc(100% / {{ lay.per_sheet }}); flex: none; position: relative;
       padding: 24px 24px 0.25in 24px; font-size: {{ lay.font }}px; overflow: hidden; }
     .card + .card { border-top: 1px dashed #C9CDD3; }
@@ -67,7 +73,7 @@
     /* ONE GRID (Kerry 2026-09-28: "Borders and lineweights are not
        consistent and don't extend all the way thru"): every cell border
        the same 1px, every line through the full width and height, heavy
-       2.5px only on the deliberate dividers (lead | holes, Out/Total,
+       2px only on the deliberate dividers (lead | holes, Out/Total,
        In, TOT, the cart split). */
     table { border: 1px solid #6B7280; }
     td, th { border: 1px solid #8A9099; padding: 0 0.25em; text-align: center;
@@ -87,15 +93,21 @@
     tr.par td.lead, tr.hcp td.lead { text-align: left; }
     tr.pl td { height: 2.3em; position: relative; }
     tr.pl.rider td { background: #F5F6F7; }
-    tr.pl.split td { border-top: 2.5px solid #374151; }
+    tr.pl.split td { border-top: 2px solid #374151; }
     tr.pl td.lead { text-align: left; font-family: "Bitter", Georgia, serif; font-weight: 700;
       font-size: 1em; }
-    tr.pl td.lead .nm { display: inline-block; max-width: 80%; overflow: hidden;
-      text-overflow: ellipsis; vertical-align: bottom; }
+    /* NAME + TEE CHIP on one centred line (Kerry 2026-09-29: names bigger
+       "to maximize legibility", the tee circle "centered with the names").
+       Each name carries its own size (scorecards.py `name_em`): as large as
+       the cell allows, shrinking only the long ones so nothing wraps. */
+    tr.pl td.lead .ln { display: flex; align-items: center; justify-content: space-between;
+      gap: 0.3em; height: 100%; }
+    tr.pl td.lead .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      line-height: 1.1; }
     /* Tee chip "same as the Starter Sheet" (Kerry 2026-09-28): the tee's
        colour dot; a women's tee is an outline ring; white gets a black rim. */
-    tr.pl td.lead .tc { float: right; width: 0.95em; height: 0.95em; border-radius: 50%;
-      margin-top: 0.68em; box-sizing: border-box; }
+    tr.pl td.lead .tc { flex: none; width: var(--tcs); height: var(--tcs); border-radius: 50%;
+      box-sizing: border-box; }
     /* Game label under the start badge (Kerry 2026-09-28). */
     .badge-wrap { display: flex; flex-direction: column; align-items: center; flex: none; }
     .game { font-weight: 700; font-size: 0.78em; letter-spacing: 1px; text-transform: uppercase;
@@ -104,18 +116,24 @@
        top-right, orange net-game dots bottom-right, in a darker orange that
        reads on white and on the shaded cart-B rows. */
     /* DOTS IN PRINT UNITS (Kerry 2026-09-29: "Dots seem small. Make sure
-       dots are equally padded off each edge"). Drawn circles, not glyphs:
-       1.6 mm across, 0.5 mm apart, inset exactly 0.8 mm from BOTH edges of
-       their corner, measured from the inside of the border (the cell's
-       padding box). Black: top + right. Orange: bottom + right. 2-up
-       layouts scale with the player-row height (--ds). */
-    .dk, .do { position: absolute; right: calc(0.8mm * var(--ds)); display: flex;
-      gap: calc(0.5mm * var(--ds)); line-height: 0; }
-    .dk { top: calc(0.8mm * var(--ds)); } .do { bottom: calc(0.8mm * var(--ds)); }
-    .dk i, .do i { display: block; width: calc(1.6mm * var(--ds)); height: calc(1.6mm * var(--ds));
+       dots are equally padded off each edge"). Drawn circles, not glyphs.
+       Equal insets MEASURED FROM THE INNER EDGE OF THE LINE (Kerry 9/29:
+       "dots still don't look like they're equally distanced from the two
+       bordering lines"). Two facts, both verified on the PDF's vectors:
+       (1) a collapsed-border cell's padding box already starts at the
+       inner edge of its line, so no half-stroke is added; (2) print snaps
+       every box edge to the whole CSS px, so --dd / --dg / --dsp (set on
+       .card per layout) are whole px — a fractional inset rounds one way
+       on one side and the other way on the other. Result: black top +
+       right, orange bottom + right, both gaps identical (0.79 mm 3-up,
+       1.06 mm 2-up). */
+    .dk, .do { position: absolute; right: var(--dg); display: flex;
+      gap: var(--dsp); line-height: 0; }
+    .dk { top: var(--dg); } .do { bottom: var(--dg); }
+    .dk i, .do i { display: block; width: var(--dd); height: var(--dd);
       border-radius: 50%; }
     .dk i { background: #111; } .do i { background: #C2410C; }
-    td.thick, th.thick { border-right: 2.5px solid #374151; }
+    td.thick, th.thick { border-right: 2px solid #374151; }
     td.split-c, th.split-c { position: relative; padding: 0; }
     .split-c svg.diag { position: absolute; inset: 0; width: 100%; height: 100%; }
     .split-c svg.diag line { stroke: #8A9099; stroke-width: 1.2; }
@@ -305,7 +323,7 @@
       </tr>
       {% for r in c.rows %}
       <tr class="pl {{ 'rider' if r.rider else '' }} {{ 'split' if c.split_after is not none and loop.index0 == c.split_after else '' }}">
-        <td class="lead thick"><span class="nm">{{ r.name }}</span><span class="tc" title="{{ r.tee_code }}" style="{% if r.chip_ladies %}background:#fff;border:2px solid {{ r.chip }};{% elif (r.chip or '')|lower in ['#ffffff', '#fff'] %}background:#fff;border:1.5px solid #1B1B1B;{% else %}background:{{ r.chip or '#fff' }};border:1px solid rgba(0,0,0,.25);{% endif %}"></span></td>
+        <td class="lead thick"><div class="ln"><span class="nm" style="font-size:{{ r.name_em_18 if is18 else r.name_em }}em">{{ r.name }}</span><span class="tc" title="{{ r.tee_code }}" style="{% if r.chip_ladies %}background:#fff;border:2px solid {{ r.chip }};{% elif (r.chip or '')|lower in ['#ffffff', '#fff'] %}background:#fff;border:1.5px solid #1B1B1B;{% else %}background:{{ r.chip or '#fff' }};border:1px solid rgba(0,0,0,.25);{% endif %}"></span></div></td>
         {% for h in front %}<td class="{{ 'hl' if c.hl_hole == h else '' }} {{ 'thick' if loop.last else '' }}"><span class="dk">{{ dots(r.ph_dots.get(h)) }}</span><span class="do">{{ dots(r.net_dots.get(h)) }}</span></td>{% endfor %}
         {% if is18 %}<td></td>{% else %}
           <td class="thick"></td>

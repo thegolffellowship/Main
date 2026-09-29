@@ -2678,8 +2678,8 @@ bridge `scoring-scorecards:<id>[|key=value…][|dump|html|pdf[|all][|send]]`.
 - **PH, not CH** (#896, CA #898-3). The orange value is the engine's net
   game: TEAM/T or CART/C by the matrix's team unit, the percentage and
   "off the field's low" in the decode note. Par-3 net dots follow the
-  engine's `team_net.no_pops_on_par3` (OFF today; the print log says so,
-  #902-A open with CA). A plus handicap prints "+N" with no dots (the plus
+  engine's `team_net.no_pops_on_par3` (ON since Kerry 9/28: "remove par 3
+  pops"; the decode note says "no pops on par 3s"). A plus handicap prints "+N" with no dots (the plus
   comes off the round).
 - **Gaps stop the print (#897-G):** no course, no saved pairings, no
   designated tees, a tee without rating/slope, a hole without par/SI, a
@@ -2714,6 +2714,25 @@ bridge `scoring-scorecards:<id>[|key=value…][|dump|html|pdf[|all][|send]]`.
 - **Print anyway, flagged (CA #915):** `?allow_gaps=1` lets a player with no
   PH print with PH/net blank and no dots (named in the print log); every
   event-level gap still stops the print.
+- **Print geometry (v2.522.3, Kerry 9/29 "the dots still don't look like
+  they're equally distanced from the two bordering lines"):** Chromium's
+  PDF snaps every box edge to a whole CSS px, so the dot size, inset and
+  spacing and the tee chip are whole px per layout (`--dd` / `--dg` /
+  `--dsp` / `--tcs` on `.card`), measured from the cell's padding box,
+  which in a collapsed-border table already starts at the line's inner
+  edge. Verified on the PDF's own vectors (PyMuPDF `get_drawings`): every
+  dot's top/bottom gap equals its right gap exactly (0.79 mm 3-up, 1.06 mm
+  2-up). A fractional inset (0.8 mm = 3.02 px) plus a half-stroke rounded
+  one way on one side and the other way on the other; that was the uneven
+  look. Thick dividers are 2px (2.5px printed as 2 anyway). Names print
+  as large as the lead cell allows (`name_em` / `name_em_18` per row,
+  shrink-to-fit for long names), the tee chip centred on the name line.
+  Guard in `test_scorecards.py`.
+- **Back to Pairings (v2.522.3, Kerry 9/29 "gets stuck loading"):** the
+  scorecards' Back goes to `/events?event=<id>&view=pairings`; that deep
+  link now LOADS the pairings (`loadPairings` then re-render) instead of
+  opening the tab on an empty "Loading…". Guard
+  `test_mobile_manager_parity.js`.
 - **`send`** mails the bound PDF to Kerry only (staff addresses; subject
   "approve a template"). Kerry approves before the card replaces GG's.
 

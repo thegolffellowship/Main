@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.522.2";
+window.TGF_VERSION = "2.522.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.522.3",
+    date: "2026-09-29",
+    title: "Scorecards: Back to Pairings loads; dots equally inset; bigger names",
+    changes: [
+      "Back to Pairings from the scorecards no longer sticks on \"Loading…\" (Kerry 9/29). The deep link it uses opened the PAIRINGS tab without ever loading the pairings; it now loads them and redraws, on phone and desktop.",
+      "The dots sit exactly the same distance from both lines of their corner (Kerry 9/29). The PDF snaps every edge to a whole pixel, and the old 0.8 mm inset plus a half-line allowance rounded one way on one side and the other way on the other. Dot size, inset, spacing and the tee chip are now whole pixels per layout; measured on the PDF itself, every dot's two gaps are identical (0.79 mm on 3-up, 1.06 mm on 2-up).",
+      "Player names print as large as the name cell allows, with long names shrunk to fit, and the tee colour chip is centred on the name line and prints perfectly round."
+    ]
+  },
   {
     version: "2.522.2",
     date: "2026-09-29",

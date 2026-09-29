@@ -4210,11 +4210,26 @@
         if (evParam && expandedEventId === null) {
             const byId = allEvents.find(e => String(e.id) === String(evParam));
             if (byId) {
-                if (params.get("view") === "pairings") {
+                const _wantPairings = params.get("view") === "pairings";
+                if (_wantPairings) {
                     applyDetailView(byId.id, "2");
                 }
                 _openRestored = true;
-                toggleEventDetail(byId.id);
+                // LOAD what the tab shows (Kerry 2026-09-29: "When I go Back
+                // to Pairings from scorecards it gets stuck loading"). The
+                // deep link opened the PAIRINGS tab but never fetched the
+                // pairings, so the panel spun on "Loading…" forever — the
+                // plain-refresh restore below always did this step; every
+                // print view's Back (scorecards, starter sheet, cart signs)
+                // takes this path.
+                Promise.resolve(toggleEventDetail(byId.id)).then(async () => {
+                    if (!_wantPairings) return;
+                    const st = getPairingsState(byId.id);
+                    if (!st.loaded) await loadPairings(byId.id);
+                    const c = detailContainerFor(byId.id);
+                    const ev2 = allEvents.find(e => e.id === byId.id);
+                    if (c && ev2) rerenderDetail(c, ev2);
+                });
                 return;
             }
         }

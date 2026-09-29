@@ -388,6 +388,20 @@ def build_scorecards(event_id: int, layout: str = "3up", grouping: str = "team",
                           "split_after": split if split not in (None, 0) else None})
 
     lay = LAYOUTS[layout]
+    # NAME SIZE (Kerry 2026-09-29: bigger "to maximize legibility"): each
+    # name as large as its cell allows — up to 1.35x the card font — and
+    # only the long ones shrink, so nothing wraps. Cell width follows the
+    # locked column widths (#895: 9-hole lead 24%; 18-hole left lead 35.1%
+    # of half the card); ~0.62 em per Bitter-bold character is the estimate.
+    _w = 1008 if lay["orient"] == "landscape" else 768
+    _base = lay["font"]
+    def _name_em(name: str, lead_px: float) -> float:
+        avail = lead_px - 1.75 * _base
+        return round(max(0.7, min(1.35, avail / (0.62 * _base * max(len(name), 1)))), 2)
+    for c in cards:
+        for r in c["rows"]:
+            r["name_em"] = _name_em(r["name"], 0.24 * _w)
+            r["name_em_18"] = _name_em(r["name"], 0.351 * (_w - 6) / 2)
     if layout == "3up" and len(tees) >= 5:
         gaps.append("This event has 5+ tees; the 3-per-sheet card cannot hold them. "
                     "Use a 2-per-sheet layout.")
