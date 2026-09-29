@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.522.7";
+window.TGF_VERSION = "2.522.8";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.522.8",
+    date: "2026-09-29",
+    title: "Divisions/Flights and Proxies get Print and Download PDF",
+    changes: [
+      "Kerry 9/29: \"Divisions/Flights and Proxies need the print/download buttons\". Both reports now carry the same bar as the Starter Sheet and Cart Signs: Back to Pairings, Print, and Download PDF (the file is named after the event, e.g. 26-s9-25-DivisionsFlights). The bar wraps on a phone, never prints, and stays out of the bound print pack. One shared partial, templates/_report_bar.html, for any report that needs it next."
+    ]
+  },
   {
     version: "2.522.7",
     date: "2026-09-29",

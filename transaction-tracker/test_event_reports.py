@@ -735,5 +735,18 @@ _rows, _basis, _note = db._event_tee_rows(_c3, {"course_id": 800, "item_name": "
 check("an unresolved tee yields NO playing handicap rather than a caveat",
       _rows == {} and "middle rating" not in _note and "Import the 18-hole" in _note, _note)
 
+print("\n== every report has Print + Download PDF (Kerry 9/29) ==")
+from jinja2 import Environment as _Env, FileSystemLoader as _FSL
+_env = _Env(loader=_FSL("templates"), autoescape=True)
+_env.globals["print_stamp"] = lambda *a, **k: ""
+for _t, _rep, _f in (("divisions_flights.html", db.event_flights_report(EV, db_path=tmp), "DivisionsFlights"),
+                     ("proximity_markers.html", db.event_proximity_report(EV, db_path=tmp), "Proxies")):
+    _h = _env.get_template(_t).render(rep=_rep)
+    check(f"{_t}: Back, Print and Download PDF render, hidden in print",
+          'class="rbar noprint"' in _h and "window.print()" in _h and "Download PDF" in _h
+          and f"/events?event={EV}&view=pairings" in _h and ".rbar { display: none !important; }" in _h)
+    check(f"{_t}: Download PDF names the file <stub>-{_f}", f'"26-s9-23-{_f}"' in _h)
+    check(f"{_t}: bar wraps at the 560px phone breakpoint", "@media (max-width: 560px)" in _h)
+
 print("\nALL PASSED" if not F else f"\n{len(F)} FAILED: {F}")
 sys.exit(1 if F else 0)

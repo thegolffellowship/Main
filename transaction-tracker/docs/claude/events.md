@@ -2744,6 +2744,13 @@ bridge `scoring-scorecards:<id>[|key=value…][|dump|html|pdf[|all][|send]]`.
 - **`send`** mails the bound PDF to Kerry only (staff addresses; subject
   "approve a template"). Kerry approves before the card replaces GG's.
 
+- **Every standalone print report has Print + Download PDF (v2.522.8,
+  Kerry 9/28-29):** Starter Sheet, Cart Signs and Scorecards carry their own
+  bar; Divisions/Flights and Proximity Markers include the shared
+  `templates/_report_bar.html` (Back, Print, Download PDF with the file named
+  `<stub>-DivisionsFlights` / `<stub>-Proxies`; hidden in print; wraps at
+  560px). Guard `test_event_reports.py`.
+
 ## The event PRINT PACK — one bound PDF, mailed the evening before (v2.465.0)
 
 Kerry 2026-09-18: "a bound PDF with all of them in one that I could
