@@ -1780,6 +1780,7 @@ def _scoring_dispatch_inner(url: str, extract: str):
       scoring-card:<round_id>      full scorecard with derivations
       scoring-courses              course/tee database listing
       scoring-sales-tax-filing:<json row>[|apply]  record one month's Texas sales-tax filing (dry run by default; evidence 'confirmation' needs webfile_ref or confirmation_path); scoring-sales-tax-filings lists the record; scoring-sales-tax-backfill[:apply] loads the CFO register (6 confirmed months + Kerry's-word months)
+      scoring-home-chapter-backfill[:apply]  the approved home-chapter backfill (#1084): dry run, then apply; blank list for Kerry/Robert
       scoring-player-archive:<full name> | c<customer_id>  a player's GG history archive rounds + scoring rounds (read-only)
       scoring-schema-audit:chapter|scan  read-only: the home-chapter migration dry run, or the redundant/denormalized-data scan
       scoring-missing-hcp[:<event_id> | days=<n>]  players with no handicap on an event (or every upcoming event), with the fix per player
@@ -6177,6 +6178,12 @@ def _scoring_dispatch_inner(url: str, extract: str):
             except ValueError as _e:
                 return json.dumps({"error": f"bad JSON: {_e}"})
             return json.dumps(_st.record_filing(_row, apply=_flag.strip().lower() == "apply"), indent=2, default=str)
+        if cmd == "scoring-home-chapter-backfill":
+            # "" = dry run; "apply" = write (Kerry APPROVED the migration,
+            # CoS #1084). Copies customers.chapter -> home_chapter_id and one
+            # history row; blanks listed, never derived from play.
+            from email_parser.home_chapter import backfill_home_chapters as _bh
+            return json.dumps(_bh(apply=(arg or "").strip().lower() == "apply"), indent=2, default=str)
         if cmd == "scoring-player-archive":
             # "<full name>" or "c<customer_id>": the player's GG history
             # archive rounds and scoring_rounds. Read-only (#1078-4).

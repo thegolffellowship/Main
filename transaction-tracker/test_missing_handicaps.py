@@ -12,6 +12,10 @@ def _fixture():
         db.init_db(tmp)
     c = sqlite3.connect(tmp)
     c.row_factory = sqlite3.Row
+    # A lazy _ensure_* helper can be marked done for this path while its
+    # ALTERs were rolled back (seen as a ~1-in-6 flake); run it for real.
+    db._ensure_scoring_tables._ensure_inner(c)
+    c.commit()
     EV = "s9.99 Future Quarry"
     c.execute("INSERT INTO events (id, item_name, event_date, course, chapter, format, status) "
               "VALUES (1, ?, '2099-01-06', 'The Quarry', 'San Antonio', '9 Holes', 'active')", (EV,))

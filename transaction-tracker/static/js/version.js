@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.522.55";
+window.TGF_VERSION = "2.522.56";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.522.56",
+    date: "2026-09-30",
+    title: "Home chapter by id: migration, backfill and the one setter",
+    changes: [
+      "Kerry approved it (#1084): every member carries ONE home chapter by chapter_id. Migration 0005 adds customers.home_chapter_id, a customer_chapter_history table (a move closes the open row and opens a new one, never an overwrite), and chapter fields: city, state, manager_customer_id, sender_email, launched_on. Two proposed fields were dropped under Kerry's standing rule that every fact is typed data (#1087): gg_portal_ids (a JSON list; it becomes a chapter_portals table) and default_tee_band (waits on the tee-band decision).",
+      "The backfill (scoring-home-chapter-backfill, dry run then apply) copies from customers.chapter, the ruled source (CA #784), never from where someone plays. Blanks stay NULL and are listed for Kerry and Robert. set_home_chapter is the only writer: it sets the id, writes history and mirrors the name into customers.chapter, which is read-only by rule until its readers move. Guard test_home_chapter_migration.py."
+    ]
+  },
   {
     version: "2.522.55",
     date: "2026-09-30",

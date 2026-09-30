@@ -105,7 +105,7 @@ low risk. The ones with real drift:
 
 ## Proposed order (by blast radius; each a separate Kerry ruling)
 
-1. **A-2 home chapter** (#1064-2): shape and dry run ready (below). 0 rows fail to resolve.
+1. **A-2 home chapter** (#1064-2): **APPROVED by Kerry (#1084) and built in v2.522.56** (migration 0005, backfill bridge, the one setter). 0 rows fail to resolve.
 2. **Money rows keyed by event name** (A-1, B-1, B-2): `event_id` on
    `acct_transactions`, backfilled on `godaddy_order_splits` and
    `acct_allocations`, with the unmatched listed. This touches the CFO's audit

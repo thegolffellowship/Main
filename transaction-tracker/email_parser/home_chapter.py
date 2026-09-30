@@ -87,16 +87,98 @@ def audit_home_chapters(year: str = "2026", db_path=None) -> dict:
     }
 
 
+def _first_played(conn, customer_id: int, fallback: str | None) -> str:
+    r = conn.execute(
+        """SELECT MIN(substr(e.event_date, 1, 10)) FROM scoring_rounds sr
+             JOIN events e ON e.id = sr.event_id WHERE sr.customer_id = ?""",
+        (customer_id,)).fetchone()
+    return (r[0] if r and r[0] else None) or (str(fallback or "")[:10] or "2007-01-01")
+
+
+def backfill_home_chapters(apply: bool = False, db_path=None) -> dict:
+    """The reported backfill of the approved migration (#1084): for every
+    customer with no home_chapter_id, copy the id from customers.chapter
+    (resolved against `chapters` by name or short code, lower() both sides)
+    and open ONE history row (from_date = first event played, else
+    created_at; set_by 'backfill'). Never derived from play. Blanks stay
+    NULL and are listed for Kerry/Robert to set. Vendor profiles are
+    skipped. Dry run unless apply."""
+    from .database import get_connection, vendor_customer_ids
+    conn = get_connection(db_path)
+    try:
+        cmap = {}
+        for r in conn.execute("SELECT chapter_id, name, short_code FROM chapters"):
+            cmap[(r["name"] or "").strip().lower()] = (r["chapter_id"], r["name"])
+            if r["short_code"]:
+                cmap.setdefault(r["short_code"].strip().lower(), (r["chapter_id"], r["name"]))
+        vendors = vendor_customer_ids(conn)
+        rows = [dict(r) for r in conn.execute(
+            """SELECT customer_id, first_name, last_name, chapter, current_player_status,
+                      created_at, home_chapter_id
+                 FROM customers WHERE COALESCE(account_status, 'active') = 'active'
+                ORDER BY customer_id""")]
+        will, blank, unresolved, by_chapter = [], [], [], {}
+        for r in rows:
+            if r["customer_id"] in vendors or r["home_chapter_id"] is not None:
+                continue
+            raw = (r["chapter"] or "").strip()
+            name = f"{r['first_name'] or ''} {r['last_name'] or ''}".strip()
+            if not raw:
+                blank.append({"customer_id": r["customer_id"], "name": name,
+                              "status": r["current_player_status"]})
+                continue
+            hit = cmap.get(raw.lower())
+            if not hit:
+                unresolved.append({"customer_id": r["customer_id"], "name": name, "chapter": raw})
+                continue
+            will.append((r["customer_id"], hit[0], _first_played(conn, r["customer_id"], r["created_at"])))
+            by_chapter[hit[1]] = by_chapter.get(hit[1], 0) + 1
+        if apply:
+            for cid, chid, frm in will:
+                conn.execute("UPDATE customers SET home_chapter_id = ? WHERE customer_id = ? "
+                             "AND home_chapter_id IS NULL", (chid, cid))
+                conn.execute(
+                    """INSERT INTO customer_chapter_history
+                           (customer_id, chapter_id, from_date, set_by, reason)
+                       VALUES (?, ?, ?, 'backfill', 'from customers.chapter (CA #784; migration #1084)')""",
+                    (cid, chid, frm))
+            conn.commit()
+        drift = conn.execute(
+            """SELECT COUNT(*) FROM customers c JOIN chapters ch ON ch.chapter_id = c.home_chapter_id
+                WHERE lower(COALESCE(c.chapter, '')) <> lower(ch.name)""").fetchone()[0]
+    finally:
+        conn.close()
+    blank.sort(key=lambda b: ((b["status"] or "") != "active_member", b["name"].lower()))
+    return {"dry_run": not apply, "would_set" if not apply else "set": len(will),
+            "by_chapter": by_chapter, "blank": len(blank), "blank_list": blank,
+            "unresolved": unresolved, "vendors_skipped": len(vendors),
+            "text_vs_id_drift": drift}
+
+
+def home_chapter_id_of(conn, customer_id: int):
+    """THE reader for a member's home chapter id (readers move here from
+    customers.chapter, one at a time)."""
+    r = conn.execute("SELECT home_chapter_id FROM customers WHERE customer_id = ?",
+                     (customer_id,)).fetchone()
+    return r[0] if r else None
+
+
 def set_home_chapter(customer_id: int, chapter: str, ruling: str,
                      db_path=None) -> dict:
     """Set ONE customer's home chapter under a NAMED ruling. Refuses without
-    a ruling reference, and refuses a chapter not in `chapters`."""
+    a ruling reference, and refuses a chapter not in `chapters`.
+
+    The ONLY writer of a home chapter (#1084). It sets home_chapter_id,
+    closes the open history row and opens a new one (a move is never an
+    overwrite), and mirrors the name into the read-only customers.chapter
+    so its remaining readers stay right until they move."""
     from .database import get_connection, log_agent_action
+    from .timezone_utils import today_central_str
     if not (ruling or "").strip():
         return {"error": "a ruling reference (e.g. 'CA #784') is required"}
     conn = get_connection(db_path)
     try:
-        ok = conn.execute("SELECT name FROM chapters WHERE lower(name) = lower(?)",
+        ok = conn.execute("SELECT chapter_id, name FROM chapters WHERE lower(name) = lower(?)",
                           (chapter,)).fetchone()
         if not ok:
             return {"error": f"unknown chapter {chapter!r}"}
@@ -105,11 +187,28 @@ def set_home_chapter(customer_id: int, chapter: str, ruling: str,
         if not cur:
             return {"error": f"customer {customer_id} not found"}
         before = cur["chapter"]
-        if (before or "") == ok["name"]:
+        try:
+            before_id = conn.execute("SELECT home_chapter_id FROM customers WHERE customer_id = ?",
+                                     (customer_id,)).fetchone()[0]
+        except Exception:
+            before_id = ok["chapter_id"]  # migration 0004 not applied yet: text only
+        if (before or "") == ok["name"] and before_id == ok["chapter_id"]:
             return {"customer_id": customer_id, "unchanged": True,
                     "home_chapter": before}
+        today = today_central_str()
         conn.execute("UPDATE customers SET chapter = ? WHERE customer_id = ?",
                      (ok["name"], customer_id))
+        try:
+            conn.execute("UPDATE customers SET home_chapter_id = ? WHERE customer_id = ?",
+                         (ok["chapter_id"], customer_id))
+            conn.execute("UPDATE customer_chapter_history SET to_date = ? "
+                         "WHERE customer_id = ? AND to_date IS NULL", (today, customer_id))
+            conn.execute("""INSERT INTO customer_chapter_history
+                                (customer_id, chapter_id, from_date, set_by, reason)
+                            VALUES (?, ?, ?, 'mcp-claude', ?)""",
+                         (customer_id, ok["chapter_id"], today, ruling))
+        except Exception:
+            pass  # pre-migration database: the text column is still the record
         conn.commit()
     finally:
         conn.close()
@@ -118,4 +217,5 @@ def set_home_chapter(customer_id: int, chapter: str, ruling: str,
                      f"under {ruling}")
     return {"customer_id": customer_id,
             "name": f"{cur['first_name']} {cur['last_name']}",
-            "before": before, "after": ok["name"], "ruling": ruling}
+            "before": before, "after": ok["name"], "chapter_id": ok["chapter_id"],
+            "ruling": ruling}

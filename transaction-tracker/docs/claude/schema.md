@@ -612,3 +612,27 @@ These record why a blind was drawn:
 `holes` already existed and means the 9/18 sheet, so the hole list has its
 own name. Readers go through `_blind_cols(conn)`, so a database that
 predates the migration still draws. Rule: pairings.md 15i.
+
+## Home chapter by id: `customers.home_chapter_id` + `customer_chapter_history` (Kerry APPROVED, CoS #1084, v2.522.56)
+
+`migrations/0005_home_chapter.sql`:
+- `customers.home_chapter_id → chapters`. There is ONE home chapter per member.
+- `customer_chapter_history (customer_id, chapter_id, from_date, to_date,
+  set_by, reason)`. A move closes the open row and opens a new one; it never
+  overwrites.
+- New `chapters` fields: `city`, `state`, `manager_customer_id`,
+  `sender_email`, `launched_on`. `gg_portal_ids` (JSON) and
+  `default_tee_band` were dropped under Kerry's standing rule (#1087: every
+  fact typed; JSON needs his OK). Portals become a `chapter_portals` table;
+  the tee band waits on the A-6 decision.
+
+**Backfill:** `home_chapter.backfill_home_chapters` (bridge
+`scoring-home-chapter-backfill[:apply]`) copies from `customers.chapter`, the
+ruled source (CA #784), never from where someone plays. Blanks stay NULL and
+are listed for Kerry/Robert. Vendor profiles are skipped.
+
+**Writing it:** `home_chapter.set_home_chapter` is the ONLY writer. It sets the
+id, writes the history row, and mirrors the name into `customers.chapter`.
+That text column is **read-only by rule** until its ~40 readers move to
+`home_chapter_id` (reader: `home_chapter_id_of`); then it's dropped in its
+own migration. The org_units rename waits for the Postgres move.
