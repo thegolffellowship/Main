@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.522.38";
+window.TGF_VERSION = "2.522.39";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.522.39",
+    date: "2026-09-30",
+    title: "Event P&L v1.1: keyed to the standard's 9/5 cutover; HIO, TGF MVP share and fellowship meals as a dry run",
+    changes: [
+      "The v1.1 revenue fixes now start at the Margin & Fee Standard's own cutover, 9/5 (#1034 §2: filed months are frozen), through app setting event_pnl_v11_from, instead of the margin_model_cutover setting (8/27 on production). s18.10 Landa Park (8/29) returns to its old figures.",
+      "New in the standard_v11 block, as a DRY RUN: the event's HIO contribution from the HIO ledger (§8.4, deducted from margin, not the prize fund); its own TGF MVP share as a prize-fund line on a two-city day ($2 x net buyers on a nine, $4 on 18, less any TGF MVP payout recorded on it, so the winner's event gives back the other city's half; §8.7); and fellowship meals from the meal and fellowship expense rows tagged to the event (§8.8). The headline takes them only when a second setting, event_pnl_v11_pots, is on. Guard: test_event_pnl_v11.py.",
+    ],
+  },
   {
     version: "2.522.38",
     date: "2026-09-30",

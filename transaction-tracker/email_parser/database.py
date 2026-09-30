@@ -49988,6 +49988,69 @@ def _event_funded_prize_payouts(conn, ev: dict) -> dict:
     return out
 
 
+def _event_pots_v11(conn, event: dict, all_names: list, db_path=None) -> dict:
+    """The three held-pot / event-cost lines the Margin & Fee Standard v1.1
+    takes out of an event's margin (#1029 §8.4, 8.7, 8.8; #1034):
+      - HIO: the event's own contribution in the HIO ledger (get_hio_pot:
+        $1 per final player on a nine), deducted from margin, NOT prize_fund;
+      - TGF MVP share: on a day with 2+ same-format events and a recorded
+        TGF MVP payout, each event carries its OWN share ($2 x net buyers on
+        a nine, $4 x on 18) as a prize_fund line: + its share - whatever TGF
+        MVP payout is recorded on it (the winner's event holds the full pot);
+      - fellowship meals: M&E expense rows tagged to the event.
+    """
+    out = {"hio": 0.0, "tgf_mvp_share": 0.0, "tgf_mvp_recorded": 0.0,
+           "tgf_mvp_adjust": 0.0, "meals": 0.0, "meal_rows": [], "notes": []}
+    name = event.get("item_name") or ""
+    try:
+        for r in (get_hio_pot(db_path=db_path).get("events") or []):
+            if (r.get("event") or "").lower() == name.lower():
+                out["hio"] = round(float(r.get("hio") or 0), 2)
+    except Exception:
+        out["notes"].append("HIO ledger unreadable")
+    ph = ",".join(["?"] * len(all_names))
+    for r in conn.execute(
+            f"""SELECT id, description, category, amount FROM acct_transactions
+                WHERE lower(event_name) IN ({ph}) AND entry_type = 'expense'
+                  AND COALESCE(status, 'active') = 'active'""",
+            [n.lower() for n in all_names]).fetchall():
+        cat = (r["category"] or "").lower()
+        if "meal" in cat or "fellowship" in cat or "entertainment" in cat:
+            out["meals"] += float(r["amount"] or 0)
+            out["meal_rows"].append({"id": r["id"], "description": r["description"],
+                                     "amount": float(r["amount"] or 0)})
+    out["meals"] = round(out["meals"], 2)
+    date = str(event.get("event_date") or "")[:10]
+    holes = _event_holes_type(name, event.get("format"))
+    if date and holes in (9, 18):
+        peers = [dict(x) for x in conn.execute(
+            "SELECT id, item_name, format, event_date FROM events WHERE substr(event_date, 1, 10) = ?",
+            (date,)).fetchall()]
+        peers = [x for x in peers if _event_holes_type(x["item_name"], x.get("format")) == holes]
+
+        def _tgf_mvp_recorded(ev):
+            try:
+                row, _f, _b = _tgf_event_lookup(conn, ev)
+            except sqlite3.OperationalError:
+                return 0.0
+            if not row:
+                return 0.0
+            return sum(float(x["amount"] or 0) for x in conn.execute(
+                "SELECT category, amount FROM tgf_payouts WHERE event_id = ?", (row["id"],)).fetchall()
+                if "_".join((x["category"] or "").lower().split()) == "tgf_mvp")
+        recorded = {x["id"]: _tgf_mvp_recorded(x) for x in peers}
+        if len(peers) >= 2 and sum(recorded.values()) > 0:
+            try:
+                net_n = int(_event_player_counts(conn, name).get("net") or 0)
+            except sqlite3.OperationalError:
+                net_n = 0
+            share = (2 if holes == 9 else 4) * net_n
+            out["tgf_mvp_share"] = float(share)
+            out["tgf_mvp_recorded"] = round(recorded.get(event.get("id"), 0.0), 2)
+            out["tgf_mvp_adjust"] = round(share - out["tgf_mvp_recorded"], 2)
+    return out
+
+
 def _event_revenue_v11(conn, all_names: list, all_items: list) -> dict:
     """Event GoDaddy revenue by the Margin & Fee Standard v1.1 (platform-claude
     #1029 §8.1, 8.5, 8.6 — Kerry's 9/9 and 9/30 rulings; CFO #1024/#1027):
@@ -50091,6 +50154,7 @@ def get_event_financial_summary(event_name: str, db_path: str | Path | None = No
     Returns a dict with revenue, expenses, profit, player counts, and an
     ``accounting_verified`` flag indicating which path was used.
     """
+    _hio_line = _meal_line = 0.0      # v1.1 pot lines; set only when that dial is on
     with _connect(db_path) as conn:
         # ── Resolve event ──
         event_row = conn.execute(
@@ -50248,7 +50312,9 @@ def get_event_financial_summary(event_name: str, db_path: str | Path | None = No
             # only when the dial says so.
             standard_v11 = None
             try:
-                _cut = (_setting_via(conn, "margin_model_cutover") or MARGIN_MODEL_CUTOVER)[:10]
+                # v1.1 keys off the STANDARD's cutover, 9/5 (§2; #1034), not the
+                # margin_model_cutover app setting (8/27 on production).
+                _cut = (_setting_via(conn, "event_pnl_v11_from") or "2026-09-05")[:10]
                 _applies = str(event.get("event_date") or "")[:10] >= _cut
                 v = _event_revenue_v11(conn, all_names, all_items)
                 _cred = set(v["credited_ids"])
@@ -50271,9 +50337,20 @@ def get_event_financial_summary(event_name: str, db_path: str | Path | None = No
                     "coupon_orders": v["coupon_orders"],
                     "delta_profit": round(v_profit - projected_profit, 2),
                 }
+                # The pots (§8.4, 8.7, 8.8), DRY RUN behind their own dial.
+                pots = _event_pots_v11(conn, event, all_names, db_path=db_path)
+                p_prize = round(total_prize_pool + pots["tgf_mvp_adjust"], 2)
+                p_expenses = round(total_expenses + pots["tgf_mvp_adjust"] + pots["hio"] + pots["meals"], 2)
+                p_profit = round(v_net - p_expenses, 2)
+                _pots_on = str(_setting_via(conn, "event_pnl_v11_pots") or "").strip().lower() in ("1", "on", "true", "yes")
+                standard_v11["pots"] = {**pots, "live": bool(_on and _pots_on and _applies),
+                                        "prize_fund": p_prize, "profit_after_pots": p_profit}
                 if _on and _applies:
                     godaddy_revenue, tx_fee_total = v_godaddy, v["tx_fees"]
                     total_revenue, net_revenue, projected_profit = v_total, v_net, v_profit
+                    if _pots_on:
+                        total_prize_pool, total_expenses, projected_profit = p_prize, p_expenses, p_profit
+                        _hio_line, _meal_line = pots["hio"], pots["meals"]
             except Exception:
                 logger.exception("Non-fatal: v1.1 revenue read failed for %s", event_name)
 
@@ -50423,6 +50500,8 @@ def get_event_financial_summary(event_name: str, db_path: str | Path | None = No
             "processing_fees": total_processing,
             "tgf_operating": total_tgf_operating,
             "tax_reserve": total_tax_reserve,
+            "hio_contribution": _hio_line,
+            "fellowship_meals": _meal_line,
             "total": total_expenses,
         },
         "projected_profit": projected_profit,

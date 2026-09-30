@@ -22,8 +22,9 @@ def check(l, c, d=""):
     if not c: F.append(l)
 
 c = sqlite3.connect(DB)
-EVN, OTHER, OLD = "s9.98 Testhorn", "s9.97 Elsewhere", "s9.01 Oldhorn"
-for eid, n, d in [(5001, EVN, "2026-09-29"), (5002, OTHER, "2026-09-29"), (5003, OLD, "2026-08-25")]:
+EVN, OTHER, OLD, GAP = "s9.98 Testhorn", "a9.97 Elsewhere", "s9.01 Oldhorn", "s18.9 Gapcreek"
+for eid, n, d in [(5001, EVN, "2026-09-29"), (5002, OTHER, "2026-09-29"), (5003, OLD, "2026-08-25"),
+                  (5004, GAP, "2026-08-29")]:
     c.execute("INSERT INTO events (id, item_name, event_date) VALUES (?,?,?)", (eid, n, d))
 
 def item(iid, name, cust, price, fee, status="active", order="R1", coupon=None):
@@ -63,7 +64,25 @@ txn("R4-other", OTHER)   # the other event's own ledger row puts it on the verif
 # OLD: pre-cutover event with a credited item
 item(7, OLD, "E", 70, 2.45, status="credited", order="R5"); t = txn("R5", OLD)
 split(t, 7, OLD, "registration", 70); split(t, 7, OLD, "transaction_fee", 2.45)
+# GAP: 8/29, after the app's margin cutover (8/27) but before the standard's 9/5
+item(8, GAP, "G", 120, 4.20, status="credited", order="R6"); t = txn("R6", GAP)
+split(t, 8, GAP, "registration", 120); split(t, 8, GAP, "transaction_fee", 4.20)
+c.execute("INSERT INTO app_settings (key, value) VALUES ('margin_model_cutover', '2026-08-27')")
+# pots: a fellowship meal on EVN; the TGF MVP paid out on OTHER (the winner's event)
+c.execute("INSERT INTO acct_transactions (date, description, total_amount, type, event_name, entry_type, "
+          "amount, category, source) VALUES ('2026-09-29', 'Aldacos', 24.18, 'expense', ?, 'expense', "
+          "24.18, 'Business Meals', 'chase_alert')", (EVN,))
+for eid, n in [(5001, EVN), (5002, OTHER)]:
+    tid = c.execute("INSERT INTO tgf_events (code, name, event_date, events_id) VALUES (?,?,?,?) RETURNING id",
+                    (n, n, "2026-09-29", eid)).fetchone()[0]
+    if eid == 5002:
+        c.execute("INSERT INTO customers (customer_id, first_name, last_name) VALUES (85, 'Lou', 'S')")
+        c.execute("INSERT INTO tgf_payouts (event_id, customer_id, category, amount) VALUES (?, 85, 'tgf_mvp', 68)", (tid,))
 c.commit(); c.close()
+db.get_hio_pot = lambda db_path=None: {"events": [{"event": EVN, "hio": 25.0, "running": 100.0},
+                                                   {"event": OTHER, "hio": 19.0, "running": 119.0}]}
+_counts = db._event_player_counts
+db._event_player_counts = lambda conn, name: {"players": 25, "net": 17, "gross": 13}
 
 s = db.get_event_financial_summary(EVN, db_path=DB)
 v = s["standard_v11"]
@@ -97,5 +116,32 @@ s2 = db.get_event_financial_summary(EVN, db_path=DB)
 check("dial on: the headline takes the v1.1 figures", s2["standard_v11"]["live"]
       and s2["net_revenue"] == a["net_revenue"] and s2["projected_profit"] == a["projected_profit"]
       and s2["revenue"]["godaddy"] == 338.0, (s2["net_revenue"], s2["revenue"]))
+
+gap = db.get_event_financial_summary(GAP, db_path=DB)["standard_v11"]
+check("v1.1 keys off the STANDARD's 9/5 cutover, not margin_model_cutover (8/27): 8/29 stays frozen",
+      gap["cutover"] == "2026-09-05" and not gap["applies"] and not gap["live"], gap)
+
+db.set_app_setting("event_pnl_v11", "off", db_path=DB)
+pe = db.get_event_financial_summary(EVN, db_path=DB)
+po = pe["standard_v11"]["pots"]
+check("pots dry run: HIO from the ledger ($25), meals from the tagged expense ($24.18)",
+      po["hio"] == 25.0 and po["meals"] == 24.18 and not po["live"], po)
+check("pots: this event's TGF MVP share is a prize-fund line (+$34 = $2 x 17 net), nothing recorded here",
+      po["tgf_mvp_share"] == 34.0 and po["tgf_mvp_recorded"] == 0 and po["tgf_mvp_adjust"] == 34.0, po)
+check("pots: profit after pots = v1.1 profit - HIO - MVP share - meals",
+      po["profit_after_pots"] == round(pe["standard_v11"]["after"]["projected_profit"] - 25 - 34 - 24.18, 2), po)
+oo = db.get_event_financial_summary(OTHER, db_path=DB)["standard_v11"]["pots"]
+check("the winner's event gives back the other city's half (-$34: share 34 - recorded 68)",
+      oo["tgf_mvp_adjust"] == -34.0, oo)
+check("pots dial off: the headline carries no pot lines", pe["expenses"]["hio_contribution"] == 0
+      and pe["expenses"]["fellowship_meals"] == 0)
+db.set_app_setting("event_pnl_v11", "on", db_path=DB); db.set_app_setting("event_pnl_v11_pots", "on", db_path=DB)
+pl = db.get_event_financial_summary(EVN, db_path=DB)
+check("both dials on: headline profit = profit after pots; lines shown",
+      pl["projected_profit"] == po["profit_after_pots"] and pl["expenses"]["hio_contribution"] == 25.0
+      and pl["expenses"]["fellowship_meals"] == 24.18
+      and pl["expenses"]["prize_fund"] == round(pe["expenses"]["prize_fund"] + 34, 2), pl["expenses"])
+db._event_player_counts = _counts
+
 print(f"\n{len(F)} FAILURE(S): {F}" if F else "\nALL PASS")
 sys.exit(1 if F else 0)
