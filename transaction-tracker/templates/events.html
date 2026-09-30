@@ -5309,9 +5309,17 @@
         const totalPrizeFund = gamePots.hio + gamePots.included + gamePots.net + gamePots.gross;
         // Use server prize fund if available, otherwise fallback to client
         const prizeFund = exp.prize_fund > 0 ? exp.prize_fund : totalPrizeFund;
-        // Recalc total expenses and profit with potentially better prize fund
-        const totalExpenses = exp.course_fees + prizeFund + exp.processing_fees;
-        const adjProfit = netRev - totalExpenses;
+        // Recalc total expenses and profit with potentially better prize fund.
+        // When the server has the recorded prize fund, its own total is the
+        // record (Margin Standard v1.1 #1048: the page and get_event_
+        // financial_summary must agree, HIO / TGF MVP share / fellowship
+        // meals included); the client sum is only the no-payouts fallback.
+        const serverTotals = exp.prize_fund > 0 && typeof exp.total === "number";
+        const totalExpenses = serverTotals ? exp.total
+            : exp.course_fees + prizeFund + exp.processing_fees;
+        const adjProfit = serverTotals ? profit : netRev - totalExpenses;
+        const _pots = (data.standard_v11 && data.standard_v11.pots && data.standard_v11.pots.live)
+            ? data.standard_v11.pots : null;
         const adjProfitColor = adjProfit >= 0 ? "#166534" : "#dc2626";
 
         const badge = `<span style="display:inline-block; font-size:0.65rem; padding:0.1rem 0.4rem; border-radius:4px; background:#dcfce7; color:#166534; font-weight:600; margin-left:0.5rem; vertical-align:middle;">VERIFIED (${coveragePct}%)</span>`;
@@ -5380,7 +5388,10 @@
         html += `<span style="padding-left:1rem; color:var(--text-muted); font-size:0.75rem;">Included Games</span><span style="text-align:right; color:var(--text-muted); font-size:0.75rem;">$${gamePots.included.toFixed(2)}</span>`;
         if (gamePots.net > 0) html += `<span style="padding-left:1rem; color:var(--text-muted); font-size:0.75rem;">Net Games</span><span style="text-align:right; color:var(--text-muted); font-size:0.75rem;">$${gamePots.net.toFixed(2)}</span>`;
         if (gamePots.gross > 0) html += `<span style="padding-left:1rem; color:var(--text-muted); font-size:0.75rem;">Gross Games</span><span style="text-align:right; color:var(--text-muted); font-size:0.75rem;">$${gamePots.gross.toFixed(2)}</span>`;
+        if (_pots && _pots.tgf_mvp_adjust) html += `<span style="padding-left:1rem; color:var(--text-muted); font-size:0.75rem;">TGF MVP share (this event's own; in Prize Fund)</span><span style="text-align:right; color:var(--text-muted); font-size:0.75rem;">${_pots.tgf_mvp_adjust < 0 ? "-" : "+"}$${Math.abs(_pots.tgf_mvp_adjust).toFixed(2)}</span>`;
         html += `<span>Processing Fees</span><span style="text-align:right;">$${exp.processing_fees.toFixed(2)}</span>`;
+        if (exp.hio_contribution > 0) html += `<span>Hole-In-One Pot contribution</span><span style="text-align:right;">$${exp.hio_contribution.toFixed(2)}</span>`;
+        if (exp.fellowship_meals > 0) html += `<span>Fellowship Meals</span><span style="text-align:right;">$${exp.fellowship_meals.toFixed(2)}</span>`;
         html += `<span style="font-weight:700; border-top:1px solid var(--border); padding-top:0.2rem;">Total Expenses</span><span style="font-weight:700; text-align:right; border-top:1px solid var(--border); padding-top:0.2rem;">$${totalExpenses.toFixed(2)}</span>`;
         html += `</div></div>`;
         html += `</div>`;

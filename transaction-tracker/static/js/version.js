@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.522.41";
+window.TGF_VERSION = "2.522.42";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.522.42",
+    date: "2026-09-30",
+    title: "Events FINANCIAL panel shows the same bottom line as the P&L (HIO, TGF MVP share, fellowship meals)",
+    changes: [
+      "Kerry asked (#1048) whether each event's FINANCIAL page reads the same math as get_event_financial_summary. It read the server's revenue, but re-added expenses itself (course + prize fund + processing), so after the v1.1 pots went on (Kerry: \"Go on the pots\") 3304 would have shown $200.07 instead of $150.89.",
+      "When the event has recorded payouts, the panel now takes the server's total expenses and bottom line and lists the Hole-In-One Pot contribution, Fellowship Meals and the TGF MVP share line. With no payouts recorded it still falls back to the GAMES-matrix sum, as before. The same panel serves desktop and phone. Guard: test_financial_panel_parity.js.",
+    ],
+  },
   {
     version: "2.522.41",
     date: "2026-09-30",
