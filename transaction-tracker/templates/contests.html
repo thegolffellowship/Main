@@ -9101,11 +9101,11 @@
 
         const nav = months.map(x => {
             const on = x.month === sel.month;
-            return `<button data-mp="${x.month}" title="${x.complete ? "Final" : "In progress"}"
+            return `<button data-mp="${x.month}" title="${(x.complete || x.final) ? "Final" : "In progress"}"
                 style="padding:0.35rem 0.75rem;cursor:pointer;font-size:0.78rem;font-weight:600;letter-spacing:0.03em;
                        border:1px solid ${on ? "var(--primary)" : "var(--border)"};border-radius:999px;
                        background:${on ? "var(--primary)" : "var(--surface)"};color:${on ? "#fff" : "var(--text-muted)"};">
-                ${compact ? x.name.slice(0, 3) : x.name}${x.complete ? "" : " •"}</button>`;
+                ${compact ? x.name.slice(0, 3) : x.name}${(x.complete || x.final) ? "" : " •"}</button>`;
         }).join(" ");
 
         const rankStyle = `width:${compact ? "28px" : "56px"};`;
@@ -9113,7 +9113,10 @@
         const ptsStyle = `width:${compact ? "40px" : "90px"};text-align:center;font-weight:700;border-left:2px solid #cbd5e1;border-right:2px solid #cbd5e1;`;
         const purseStyle = `width:${compact ? "48px" : "90px"};text-align:center;`;
         const rows = sel.standings.map(r => {
-            const win = sel.complete && sel.winners.some(w =>
+            // FINAL (the day after the month's last event) highlights the
+            // winner; the $ share waits for the month to close (Kerry 9/29).
+            const winList = sel.complete ? sel.winners : (sel.final ? (sel.final_winners || []) : []);
+            const win = winList.some(w =>
                 (w.customer_id != null && w.customer_id === r.customer_id) || w.player_name === r.player_name);
             const bg = win ? "background:#fde68a;" : "";
             // Points detail comes from the player's chapter pages — the
@@ -9132,7 +9135,8 @@
                 ? ' <span class="pr-chevron tgf-exp" title="This month&#39;s rounds & scorecards">&#9654;</span>'
                 : '';
             let purse = "";
-            if (win) purse = `<strong>$${sel.winners[0].share}</strong>`;
+            if (win && sel.complete) purse = `<strong>$${sel.winners[0].share}</strong>`;
+            else if (win) purse = `<span title="Paid when the month closes">$${sel.purse}</span>`;
             else if (!sel.complete && r.rank === 1)
                 purse = `<span style="color:var(--text-muted);" title="Projected — month in progress">$${sel.purse}</span>`;
             return `<tr${r.customer_id ? ` data-cid="${r.customer_id}"` : ""}${r.member_card_id ? ` data-card="${escapeHtml(String(r.member_card_id))}" data-race="${race}" data-race2="${race2}"` : ""} style="${bg}${r.customer_id ? "cursor:pointer;" : ""}">
@@ -9146,7 +9150,9 @@
 
         // chip sits BELOW the month tabs so they never move when a
         // different month is selected (Kerry, 2026-07-10)
-        const statusChip = sel.complete ? "" : `
+        const statusChip = (sel.final && !sel.complete) ? `
+            <div style="margin:0 0 0.6rem;"><span style="display:inline-flex;align-items:center;gap:8px;height:30px;padding:0 14px;background:#fde68a;color:#78350F;border-radius:9999px;font:700 11px/1 'Bitter',serif;letter-spacing:1px;text-transform:uppercase;">&#9733;&nbsp;${escapeHtml(sel.name)} &middot; Final</span></div>`
+            : sel.complete ? "" : `
             <div style="margin:0 0 0.6rem;"><span style="display:inline-flex;align-items:center;gap:8px;height:30px;padding:0 14px;background:#FDF0E6;color:#BF5700;border-radius:9999px;font:700 11px/1 'Bitter',serif;letter-spacing:1px;text-transform:uppercase;">&#9679;&nbsp;${escapeHtml(sel.name)} &middot; In Progress</span></div>`;
 
         cont.innerHTML = `

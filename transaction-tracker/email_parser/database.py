@@ -14289,6 +14289,35 @@ def get_events_leaderboard(chapter: str | None = None,
             "pilot": bool(codes), "pilot_codes": codes}
 
 
+def _placed_flight_index(row: dict, bounds: list, index_ladder: bool,
+                         holes) -> int | None:
+    """Which flight (0-based) a NON-BUYER is placed in on the EVENTS board,
+    or None when there is nothing to measure him by.
+
+    Kerry 2026-09-29: "Why are Lance Vest and Michele McCormick in the
+    first flight? … they shouldn't be in the 1st flight based on
+    handicaps." A label ladder ("HCP <12.0" / "12.0+") is an 18-hole TGF
+    INDEX ladder, so a placed player is measured by his index locked as of
+    the event (`flight_index`), else his current index on the 18-hole
+    scale; `>= edge` moves him up (12.0 is Flight 2). Only a ladder with no
+    number in its labels falls back to the buyers' playing-handicap
+    midpoints (`> midpoint`). Measuring a PH of 9 against 12.0 put an
+    index-18.0 player in Flight 1."""
+    if index_ladder:
+        val = row.get("flight_index")
+        if val is None and row.get("index") is not None:
+            val = row["index"] * (2 if (holes or 18) == 9 else 1)
+    else:
+        val = row.get("hcp")
+    if val is None:
+        return None
+    idx = 0
+    for i, b in enumerate(bounds):
+        if (val >= b) if index_ladder else (val > b):
+            idx = i + 1
+    return idx
+
+
 def get_event_leaderboard(event_name: str,
                           db_path: str | Path = DB_PATH) -> dict | None:
     """One event's combined boards for the EVENTS leaderboard tab."""
@@ -14548,6 +14577,21 @@ def get_event_leaderboard(event_name: str,
             logger.warning("event leaderboard index lookup failed",
                            exc_info=True)
 
+        # FLIGHT PLACEMENT reads the index of record, not the playing
+        # handicap (Kerry 2026-09-29: "Why are Lance Vest and Michele
+        # McCormick in the first flight? … they shouldn't be in the 1st
+        # flight based on handicaps"). The flight lines ("HCP <12.0") are on
+        # the 18-hole TGF index; comparing a PH of 9 against 12.0 put an
+        # index-18.0 player in Flight 1. THE LOCK: the index in effect the
+        # morning the event began — the same number the FLIGHTS tab uses.
+        flight_idx18: dict = {}
+        try:
+            flight_idx18 = _handicap_index_18_by_customer(
+                db_path, as_of=_event_index_as_of(ev))
+        except Exception:
+            logger.warning("event leaderboard flight-index lookup failed",
+                           exc_info=True)
+
         # per-round hole strokes (compact) — feeds the skins grid and the
         # team best-ball cards client-side
         cards: dict = {}
@@ -14774,6 +14818,7 @@ def get_event_leaderboard(event_name: str,
             "scoring_round_id": p["scoring_round_id"],
             "gross": p["gross"], "net": p["net"], "hcp": p["hcp"],
             "index": indexes.get(cid) if cid is not None else None,
+            "flight_index": flight_idx18.get(cid) if cid is not None else None,
             "buyer": cid in buyer_set if cid is not None else False,
             "won": _won_cats(cid, won_cats) if cid is not None else [],
         }
@@ -14853,13 +14898,15 @@ def get_event_leaderboard(event_name: str,
                 idx = next(i for i, s in enumerate(stats) if s[0] == lab)
                 out[idx]["rows"].append(r)
                 continue
-            if r["hcp"] is None:
+            # A label ladder is an INDEX ladder (18-hole TGF index), so a
+            # placed player is measured by his locked index against it;
+            # only a label with no number falls back to the buyers'
+            # playing-handicap midpoints (Kerry 2026-09-29, Vest/McCormick).
+            idx = _placed_flight_index(r, bounds, label_bounds is not None,
+                                       ev["holes"])
+            if idx is None:
                 overflow["rows"].append(dict(r, assigned=True))
                 continue
-            idx = 0
-            for i, b in enumerate(bounds):
-                if r["hcp"] > b:
-                    idx = i + 1
             out[idx]["rows"].append(dict(r, assigned=True))
         if overflow["rows"]:
             out.append(overflow)
@@ -19274,6 +19321,22 @@ def get_monthly_points(db_path: str | Path = DB_PATH) -> dict:
             last_day = calendar.monthrange(year, mnum)[1]
             month_end = f"{year:04d}-{mnum:02d}-{last_day:02d}"
             complete = today > month_end
+            # FINAL once the month's last scheduled event is behind us
+            # (Kerry 2026-09-29: "September points is over now so the
+            # winner should be highlighted") — the page shows the winner
+            # the day after the last event. DISPLAY ONLY: `complete` (the
+            # calendar month over) still gates the recorded payout, so no
+            # money moves a day early on a points total GG may not have
+            # finished awarding.
+            try:
+                _last_ev = conn.execute(
+                    """SELECT MAX(event_date) AS d FROM events
+                       WHERE event_date BETWEEN ? AND ?
+                         AND lower(COALESCE(status, 'active')) NOT IN ('cancelled', 'canceled')""",
+                    (f"{year:04d}-{mnum:02d}-01", month_end)).fetchone()["d"]
+            except sqlite3.OperationalError:
+                _last_ev = None
+            final = complete or bool(_last_ev and today > _last_ev)
             member_count = conn.execute(
                 """SELECT COUNT(DISTINCT customer_id) AS c
                    FROM customer_memberships
@@ -19326,6 +19389,14 @@ def get_monthly_points(db_path: str | Path = DB_PATH) -> dict:
                 "name": calendar.month_name[mnum].upper(),
                 "month_end": month_end,
                 "complete": complete,
+                "final": final,
+                "last_event_date": _last_ev,
+                # the leaders, shown once the month is FINAL; `winners`
+                # below (with the $ share) still waits for `complete`
+                "final_winners": ([{"player_name": w["player_name"],
+                                    "customer_id": w["customer_id"],
+                                    "points": w["points"]} for w in winners]
+                                  if final else []),
                 "member_count": member_count,
                 "purse": member_count,
                 "winners": ([{"player_name": w["player_name"],

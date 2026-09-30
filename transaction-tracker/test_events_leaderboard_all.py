@@ -50,4 +50,17 @@ check("the EVENTS tab is manager-only (admin + manager), marked BETA, and never 
       '{% if not member_mode %}<button class="top-tab manager-only" data-top="events"' in html and 'class="evlb-beta">BETA' in html)
 print()
 if F: print(f"{len(F)} FAILED"); sys.exit(1)
+print("\n== non-buyers are placed by INDEX against an index ladder (Kerry 9/29: Vest / McCormick) ==")
+_P = db._placed_flight_index
+_mcc = {"hcp": 9, "index": 9.0, "flight_index": 18.0}       # PH 9, index 18.0 (18-hole)
+_vest = {"hcp": 5, "index": 5.7, "flight_index": 11.4}      # PH 5, index 11.4
+check("McCormick (PH 9, index 18.0) goes to Flight 2 on a <12.0 / 12.0+ ladder", _P(_mcc, [12.0], True, 9) == 1)
+check("…where measuring her PH (9) would have put her in Flight 1 (the bug)", _P(_mcc, [12.0], False, 9) == 0)
+check("Vest (index 11.4) stays in Flight 1 — the index, not the PH, decides", _P(_vest, [12.0], True, 9) == 0)
+check("exactly 12.0 is Flight 2 (the label reads 12.0+)", _P({"flight_index": 12.0}, [12.0], True, 9) == 1)
+check("no locked index: the current 9-hole index doubled to the 18-hole scale",
+      _P({"index": 7.0, "hcp": 3}, [12.0], True, 9) == 1 and _P({"index": 5.0, "hcp": 3}, [12.0], True, 9) == 0)
+check("nothing to measure by → UNFLIGHTED, never a guess", _P({"hcp": None, "index": None}, [12.0], True, 9) is None)
+check("a ladder with no numbers still uses the buyers' PH midpoints", _P({"hcp": 10}, [8.5], False, 9) == 1)
+
 print("ALL PASS")
