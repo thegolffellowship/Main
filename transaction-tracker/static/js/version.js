@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.522.42";
+window.TGF_VERSION = "2.522.43";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.522.43",
+    date: "2026-09-30",
+    title: "query_customers: a read-only field read of customers for the lanes",
+    changes: [
+      "The Chief of Staff could not list customers by gender without asking a crew (#1048). New MCP tool query_customers and bridge scoring-query-customers:<gender>|<chapter>|<status>|<played_since>|<limit> filter customers by gender (F / M / NULL = unknown), chapter and membership status. Each row returns customer_id, name, chapter, status, gender and rounds played since a date (default 2026-01-01), active members first. Read-only and audit-logged. Guard: test_query_customers.py.",
+    ],
+  },
   {
     version: "2.522.42",
     date: "2026-09-30",

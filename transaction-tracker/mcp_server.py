@@ -1779,6 +1779,7 @@ def _scoring_dispatch_inner(url: str, extract: str):
       scoring-verify:<round_id>    verify one round vs GG's numbers
       scoring-card:<round_id>      full scorecard with derivations
       scoring-courses              course/tee database listing
+      scoring-query-customers:<gender F|M|NULL>|<chapter>|<status>|<played_since>|<limit>  READ-ONLY field read of customers: id, name, chapter, status, gender, rounds since (default 2026-01-01); active members first
       scoring-mail-kerry:<subject>|<html>  DRY RUN: render a mail to KERRY (hard-wired, the only recipient); scoring-mail-kerry-send:<subject>|<html> sends it through the Tracker's Graph mailer, logged (Kerry 2026-09-30 #1050: "Go with the Tracker mailer")
       scoring-se-preview:<event_id>|<cid,...>[|apply][|18][|match]  labelled PREVIEW score-entry round + link (admin-only open); 18 = an 18-hole preview, match = a demo singles match per pair (1v2, 3v4)
       scoring-se-seed:<event_id>[|9|18][|apply]  seed score entry from the saved PAIRINGS (dry run by default; re-seed keeps scores)
@@ -6149,6 +6150,12 @@ def _scoring_dispatch_inner(url: str, extract: str):
             _ev = _a[: -len("|apply")].strip() if _apply else _a
             from email_parser.closeout_checks import pairing_history_from_entry
             return json.dumps(pairing_history_from_entry(_ev, apply=_apply), indent=2, default=str)
+        if cmd == "scoring-query-customers":
+            # "<gender>|<chapter>|<status>|<played_since>|<limit>" (any part
+            # blank) — READ-ONLY field read of customers (CoS #1048).
+            _p = (arg.split("|") + [""] * 5)[:5]
+            from email_parser.customer_query import query_customers as _qc
+            return json.dumps(_qc(_p[0], _p[1], _p[2], _p[3], int(_p[4] or 500)), indent=2, default=str)
         if cmd in ("scoring-mail-kerry", "scoring-mail-kerry-send"):
             # "<subject>|<html>" — mail KERRY ONLY through the Tracker's Graph
             # mailer (Kerry 2026-09-30, #1050). The recipient is hard-wired.
@@ -7658,6 +7665,24 @@ def get_hio_pot() -> str:
     from email_parser.database import get_hio_pot as _hio
     _audit("read_hio_pot", "running HIO pot")
     return json.dumps(_hio(), indent=2, default=str)
+
+
+@mcp.tool()
+def query_customers(gender: str = "", chapter: str = "", status: str = "",
+                    played_since: str = "", limit: int = 500) -> str:
+    """READ-ONLY field-level read of customers (Chief of Staff #1048).
+
+    Args:
+        gender: "F", "M" or "NULL" (unknown); blank = any
+        chapter: e.g. "San Antonio" / "Austin"; blank = any
+        status: active_member | expired_member | active_guest | inactive | first_timer
+        played_since: YYYY-MM-DD for the rounds count (default 2026-01-01)
+        limit: max rows (default 500, cap 2000)
+    Returns customer_id, name, chapter, status, gender, rounds_since;
+    active members first, then this year's players, then name."""
+    from email_parser.customer_query import query_customers as _qc
+    _audit("read_query_customers", f"gender={gender} chapter={chapter} status={status}")
+    return json.dumps(_qc(gender, chapter, status, played_since, limit), indent=2, default=str)
 
 
 @mcp.tool()
