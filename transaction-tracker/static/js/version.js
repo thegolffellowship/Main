@@ -1,13 +1,23 @@
-window.TGF_VERSION = "2.522.50";
+window.TGF_VERSION = "2.522.51";
 window.TGF_CHANGELOG = [
   {
-    version: "2.522.50",
+    version: "2.522.51",
     date: "2026-09-30",
     title: "Schema audit reads: home-chapter dry run and the redundant-data scan",
     changes: [
       "Read-only, nothing written. scoring-schema-audit:chapter is the dry run for Kerry's home-chapter direction (#1064-2): the chapters table, every customers.chapter value and whether it resolves to a chapter_id, the rows that would not, and the proposed migration text (customers.home_chapter_id, customer_chapter_history, chapter fields). It is NOT applied; Kerry rules (rule 3b).",
       "scoring-schema-audit:scan sweeps every table for Kerry's 9/30 directive (#1067-2): text columns naming an entity that has its own table (chapter, course, event, customer, tee, game, account), a text column sitting beside its own id (the same fact twice), money-named columns holding TEXT, and status/type/category columns with no CHECK, with row counts and the names that match nothing. Module email_parser/schema_audit.py; guard test_schema_audit.py."
     ]
+  },
+  {
+    version: "2.522.50",
+    date: "2026-09-30",
+    title: "Ambassadors: a flag Kerry sets, per chapter, with one reader for pairings",
+    changes: [
+      "Pairings Spec v1.2 (#1036-4, Kerry: \"I will currently determine the Ambassador role. Definitely not something to be derived right now.\") needs to know who the Ambassadors are, and the Tracker had no record of it. New table customer_ambassadors (migration 0002, approved by the Chief of Staff in #1046, shape confirmed by Tracker Build in #1055): one row per customer per chapter, with who set it, when and why.",
+      "Setting the flag is refused unless the call cites a mailbox post carrying Kerry's word, the same rule-3b guard as set_customer_field. It is a dry run unless applied, and every change is action-logged. Removing an Ambassador sets the flag to 0 and keeps the row, so the pairings history stays explainable.",
+      "The pairings rules (R-A, 1st Timer with an Ambassador; R-F, same-gender preference) read ONLY ambassadors.chapter_ambassadors(conn, chapter_id). test_ambassadors.py fails if any other module queries the table. Bridges scoring-ambassadors (read) and scoring-ambassador-set (write). No Ambassadors are set yet; Kerry names them.",
+    ],
   },
   {
     version: "2.522.49",

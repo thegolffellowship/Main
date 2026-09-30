@@ -119,7 +119,8 @@ def set_customer_field(customer_ids, field: str, value, reason: str, kerry_ok_po
                 conn.execute("SELECT 1 FROM customer_ambassadors LIMIT 1")
             except Exception:
                 return {"refused": "customer_ambassadors is not built yet (Side Games, #1060-5)"}
-            return {"refused": "ambassador writes go through Side Games' customer_ambassadors bridge"}
+            return {"refused": "ambassador writes go through scoring-ambassador-set "
+                               "(email_parser/ambassadors.py: per chapter, keeps rows)"}
         ph = ",".join("?" * len(ids))
         rows = {r["customer_id"]: r["gender"] for r in conn.execute(
             f"SELECT customer_id, gender FROM customers WHERE customer_id IN ({ph})", ids).fetchall()}

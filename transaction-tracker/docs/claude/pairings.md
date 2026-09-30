@@ -132,7 +132,10 @@ matters too, not just the foursome.
     two, cheapest history, never breaking rule 12).
 
 14. **First-timers ride with an ambassador (Kerry-ratified 2026-09-15,
-    v2.420.0).** "1st Timers also need to be paired up (carted) with an
+    v2.420.0).** *(Who IS an Ambassador is now a flag Kerry sets, per
+    chapter, in `customer_ambassadors` (v2.522.50, schema.md). The pairings
+    engine reads it only through `ambassadors.chapter_ambassadors(conn,
+    chapter_id)`; R-A / R-F of Spec v1.2 build on that reader.)* "1st Timers also need to be paired up (carted) with an
     Ambassador of the same tees whenever possible." `is_first_timer` =
     order label `1ST TIMER`, profile status `first_timer`, **or the
     player's first event ever** (v2.421.0 — see "1st timer means FIRST
