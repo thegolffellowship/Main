@@ -23,7 +23,7 @@ That is 830 rows, from 2025-12 to 2026-09. Each payee name is normalized by patt
 | Tax agencies (Comptroller WebFile, IRS) | 1 | 3 | $5,794.87 |
 | Likely personal or mixed (gym, streaming, retail, restaurants, fuel) | 5 | 167 | $6,032.38 |
 | Lodging and travel | 3 | 9 | $3,614.46 |
-| Supplies and event meals | 4 | 76 | $2,685.16 |
+| Supplies and event meals | 5 | 76 | $2,685.16 |
 | Marketing, printing, dues | 5 | 20 | $1,519.92 |
 
 ## Findings
