@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.522.49";
+window.TGF_VERSION = "2.522.50";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.522.50",
+    date: "2026-09-30",
+    title: "Schema audit reads: home-chapter dry run and the redundant-data scan",
+    changes: [
+      "Read-only, nothing written. scoring-schema-audit:chapter is the dry run for Kerry's home-chapter direction (#1064-2): the chapters table, every customers.chapter value and whether it resolves to a chapter_id, the rows that would not, and the proposed migration text (customers.home_chapter_id, customer_chapter_history, chapter fields). It is NOT applied; Kerry rules (rule 3b).",
+      "scoring-schema-audit:scan sweeps every table for Kerry's 9/30 directive (#1067-2): text columns naming an entity that has its own table (chapter, course, event, customer, tee, game, account), a text column sitting beside its own id (the same fact twice), money-named columns holding TEXT, and status/type/category columns with no CHECK, with row counts and the names that match nothing. Module email_parser/schema_audit.py; guard test_schema_audit.py."
+    ]
+  },
   {
     version: "2.522.49",
     date: "2026-09-30",
