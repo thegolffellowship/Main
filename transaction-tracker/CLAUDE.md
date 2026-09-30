@@ -512,6 +512,15 @@ which is how every section of Kerry's 11-second opens was slow at once
 must be decorated the same way, stay idempotent, and never be relied on
 to re-create a table dropped mid-process. See schema.md.
 
+## Never hold the write lock across a network call (v2.522.33)
+
+SQLite has one writer. A code path that writes, then fetches Golf Genius
+(or any HTTP) before committing, makes every other writer wait. After 5 s
+the other writer fails with "database is locked". On 9/29 6:11 PM that
+failed a live scorer's save during the hourly GG results walk. Commit
+before the fetch (`_commit_before_network` in database.py), or fetch first
+and write after. Guard: `test_gg_walk_lock.py`.
+
 ## Timezone (IMPORTANT — Railway runs in UTC)
 
 The container clock is UTC, so any naive `datetime.now()`/`utcnow()`/

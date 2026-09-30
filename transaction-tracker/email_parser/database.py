@@ -18238,6 +18238,23 @@ def _game_winners_from_table(table: list, winners_only: bool = True) -> list[dic
     return winners
 
 
+def _commit_before_network(conns) -> None:
+    """Commit what a Golf Genius walk has written BEFORE its next HTTP
+    fetch, so the database write lock is never held across a network call.
+    9/29 6:11 PM, live score entry on s9.25: the hourly results walk held
+    the lock across GG page fetches (seconds each, committed once per
+    round), and a scorer's save failed with "database is locked" after
+    sqlite's 5 s wait (Tracker Health, digest #1008). Each game's rows
+    still commit together; upserts and the end-of-round done marker make
+    a re-walk after a failure safe."""
+    for c in conns:
+        try:
+            if c.in_transaction:
+                c.commit()
+        except sqlite3.Error:
+            pass
+
+
 def import_gg_game_results(widget_url: str, db_path: str | Path = DB_PATH,
                            time_budget: float = 42.0,
                            rewalk_recent: int = 0,
@@ -18282,7 +18299,10 @@ def import_gg_game_results(widget_url: str, db_path: str | Path = DB_PATH,
     only_round = (qs.pop("round", [None]) or [None])[0]
     base_url = urlunparse(parts._replace(query=urlencode(qs, doseq=True)))
 
+    _open: list = []     # the walk's connection, once it is open
+
     def fetch(url):
+        _commit_before_network(_open)
         page = fetch_public_page(url, xhr=False)
         if page["status_code"] != 200:
             raise RuntimeError(f"GG returned HTTP {page['status_code']} for {url}")
@@ -18299,6 +18319,7 @@ def import_gg_game_results(widget_url: str, db_path: str | Path = DB_PATH,
     result = {"rounds_done": 0, "rounds_skipped": 0, "winners_recorded": 0,
               "rounds_left": 0, "unresolved_names": [], "notes": []}
     with _connect(db_path) as conn:
+        _open.append(conn)
         _ensure_gg_game_results_tables(conn)
         done = {r["gg_round_id"] for r in conn.execute(
             "SELECT gg_round_id FROM gg_game_results_rounds WHERE host = ?",
@@ -18699,7 +18720,10 @@ def import_gg_game_flights(widget_url: str, db_path: str | Path = DB_PATH,
     only_round = (qs.pop("round", [None]) or [None])[0]
     base_url = urlunparse(parts._replace(query=urlencode(qs, doseq=True)))
 
+    _open: list = []     # the walk's connection, once it is open
+
     def fetch(url, xhr=False):
+        _commit_before_network(_open)
         page = fetch_public_page(url, xhr=xhr)
         if page["status_code"] != 200:
             raise RuntimeError(f"GG returned HTTP {page['status_code']} for {url}")
@@ -18716,6 +18740,7 @@ def import_gg_game_flights(widget_url: str, db_path: str | Path = DB_PATH,
     result = {"rounds_done": 0, "rounds_skipped": 0, "flights_recorded": 0,
               "rounds_left": 0, "per_game": {}, "unresolved_names": []}
     with _connect(db_path) as conn:
+        _open.append(conn)
         _ensure_gg_game_flights_tables(conn)
         if reset:
             # Re-walk (e.g. after a parser extension like the skins

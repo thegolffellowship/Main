@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.522.32";
+window.TGF_VERSION = "2.522.33";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.522.33",
+    date: "2026-09-30",
+    title: "Golf Genius walks no longer hold the database lock while fetching pages",
+    changes: [
+      "Tuesday 9/29 at 6:11 PM, during live score entry on s9.25, one scorer's save failed with \"database is locked\" after 5.1 s. The hourly Golf Genius results sync was running. Its games and flights walks wrote a round's rows, then fetched the next Golf Genius page (seconds each) inside the same open write transaction, committing only once per round. SQLite has one writer and waits 5 s, so the save gave up. The phone's queue resends, so no hole was lost, but the Lone Star Cup and every event from 10/13 run the same sync during play.",
+      "Both walks now commit what they've written before every Golf Genius fetch, so the lock is never held across a network call. Each game's rows still commit together; the upserts and the end-of-round done marker make a re-walk after a failure safe. A standing rule in CLAUDE.md covers the whole class. Guard: test_gg_walk_lock.py (an open write blocks a scorer; after the pre-fetch commit the scorer's write goes straight through; both walks commit before they call Golf Genius).",
+    ],
+  },
   {
     version: "2.522.32",
     date: "2026-09-30",
