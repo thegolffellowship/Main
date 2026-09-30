@@ -33,6 +33,23 @@ check("bad gender refused", "error" in qc("X", db_path=DB))
 b = json.loads(mcp_server._scoring_dispatch("", "scoring-query-customers:F||||"))
 check("bridge returns the same F list", [x["customer_id"] for x in b["customers"]] == [901], b)
 c = sqlite3.connect(DB)
-check("read-only: customers unchanged", c.execute("SELECT COUNT(*), SUM(COALESCE(length(gender),0)) FROM customers").fetchone() == before)
+check("read-only: customers unchanged by the reads", c.execute("SELECT COUNT(*), SUM(COALESCE(length(gender),0)) FROM customers").fetchone() == before)
+
+# ── set_customer_field (gender only, Kerry-OK post required) ──
+from email_parser.customer_query import set_customer_field as scf
+c.execute("INSERT INTO platform_dialogue (author, topic, body) VALUES ('platform-claude', 'x', 'nothing here')")
+c.execute("INSERT INTO platform_dialogue (author, topic, body) VALUES ('platform-claude', 'x', 'KERRY confirms the F list')")
+c.commit()
+bad_id, ok_id = [r[0] for r in c.execute("SELECT id FROM platform_dialogue ORDER BY id DESC LIMIT 2")][::-1]
+check("refused without a Kerry post", "refused" in scf([903], "gender", "M", "r", bad_id, db_path=DB))
+check("refused for a field other than gender/ambassador", "refused" in scf([903], "chapter", "x", "r", ok_id, db_path=DB))
+d = scf([903, 904, 902], "gender", "M", "Kerry: rest are male", ok_id, db_path=DB)
+check("dry run: 2 changes (902 already M), nothing written", d["changes"] == 2 and d["unchanged"] == 1
+      and c.execute("SELECT gender FROM customers WHERE customer_id = 903").fetchone()[0] is None, d)
+a = scf([903, 904, 902], "gender", "M", "Kerry: rest are male", ok_id, apply=True, db_path=DB)
+check("apply writes and logs before/after", a.get("applied") and
+      c.execute("SELECT gender FROM customers WHERE customer_id = 904").fetchone()[0] == "M" and
+      c.execute("SELECT COUNT(*) FROM agent_action_log WHERE action_type = 'set_customer_field'").fetchone()[0] == 2, a)
+
 print(f"\n{len(F)} FAILURE(S): {F}" if F else "\nALL PASS")
 sys.exit(1 if F else 0)

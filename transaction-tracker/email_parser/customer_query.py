@@ -52,3 +52,79 @@ def query_customers(gender: str = "", chapter: str = "", status: str = "",
     return {"count": len(out), "shown": min(len(out), limit), "rounds_since": year_from,
             "filters": {"gender": g or None, "chapter": chapter or None, "status": st or None},
             "customers": out[:limit]}
+
+
+# ---------------------------------------------------------------------------
+# set_customer_field — the ONE write the Chief of Staff gets (#1048/#1060):
+# gender and the ambassador flag only, refused unless it cites a mailbox post
+# that carries Kerry's OK (rule 3b), dry run by default, every change logged
+# with its before and after.
+# ---------------------------------------------------------------------------
+SETTABLE = ("gender", "ambassador")
+
+
+def _kerry_ok(conn, post_id) -> tuple[bool, str]:
+    try:
+        r = conn.execute("SELECT id, author, body FROM platform_dialogue WHERE id = ?",
+                         (int(post_id),)).fetchone()
+    except (TypeError, ValueError):
+        return False, "kerry_ok_post must be a mailbox post id"
+    if not r:
+        return False, f"mailbox post #{post_id} not found"
+    body = r["body"] or ""
+    if (r["author"] or "").lower() == "kerry" or "kerry" in body.lower():
+        return True, f"#{r['id']} ({r['author']})"
+    return False, f"mailbox post #{post_id} does not carry Kerry's word"
+
+
+def set_customer_field(customer_ids, field: str, value, reason: str, kerry_ok_post,
+                       apply: bool = False, set_by: str = "mcp-claude", db_path=None) -> dict:
+    from email_parser import database as db
+    field = (field or "").strip().lower()
+    if field not in SETTABLE:
+        return {"refused": f"only {', '.join(SETTABLE)} can be set here"}
+    if not (reason or "").strip():
+        return {"refused": "a reason is required"}
+    ids = customer_ids if isinstance(customer_ids, (list, tuple)) else [customer_ids]
+    try:
+        ids = sorted({int(i) for i in ids})
+    except (TypeError, ValueError):
+        return {"refused": "customer_ids must be integers"}
+    if not ids:
+        return {"refused": "no customer_ids"}
+    if field == "gender":
+        v = (str(value).strip().upper() if value not in (None, "") else "NULL")
+        if v not in ("M", "F", "NULL"):
+            return {"refused": "gender must be M, F or NULL"}
+        value = None if v == "NULL" else v
+    with db._connect(db_path) as conn:
+        ok, why = _kerry_ok(conn, kerry_ok_post)
+        if not ok:
+            return {"refused": f"rule 3b: {why}"}
+        if field == "ambassador":
+            try:
+                conn.execute("SELECT 1 FROM customer_ambassadors LIMIT 1")
+            except Exception:
+                return {"refused": "customer_ambassadors is not built yet (Side Games, #1060-5)"}
+            return {"refused": "ambassador writes go through Side Games' customer_ambassadors bridge"}
+        ph = ",".join("?" * len(ids))
+        rows = {r["customer_id"]: r["gender"] for r in conn.execute(
+            f"SELECT customer_id, gender FROM customers WHERE customer_id IN ({ph})", ids).fetchall()}
+        missing = [i for i in ids if i not in rows]
+        changes = [{"customer_id": i, "before": rows[i], "after": value}
+                   for i in ids if i in rows and (rows[i] or None) != value]
+        out = {"field": field, "value": value, "authority": why, "reason": reason,
+               "missing": missing, "unchanged": len(rows) - len(changes),
+               "changes": len(changes), "sample": changes[:10], "dry_run": not apply}
+        if not apply or not changes:
+            return out
+        for ch in changes:
+            conn.execute("UPDATE customers SET gender = ? WHERE customer_id = ?",
+                         (value, ch["customer_id"]))
+        conn.commit()
+    for ch in changes:
+        db.log_agent_action(set_by, "set_customer_field",
+                            f"customer {ch['customer_id']} gender {ch['before']!r} -> {ch['after']!r}; "
+                            f"{reason}; authority {why}")
+    out["applied"] = True
+    return out

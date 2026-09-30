@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.522.45";
+window.TGF_VERSION = "2.522.46";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.522.46",
+    date: "2026-09-30",
+    title: "Chief of Staff tools 2-4: set_customer_field, and reading and searching the mailbox",
+    changes: [
+      "set_customer_field (MCP tool + scoring-set-customer-field bridge) writes customers.gender for a list of customer_ids. It is refused unless it cites a mailbox post that exists and carries Kerry's OK (rule 3b, CoS #1060-3). It is a dry run unless apply is passed, and every change is logged to agent_action_log with before and after. The ambassador flag is refused here: it belongs to Side Games' customer_ambassadors table.",
+      "read_platform_dialogue takes id= to read one post and max_chars to trim bodies. With since_id it now returns the OLDEST posts after that id first, and says more:true with next_since_id when the window was cut off. Before, it returned the newest N, which hid the earliest new posts on a catch-up read (CoS #1048). Without since_id it is unchanged: newest first.",
+      "search_platform_dialogue(text, topic, author, since): precedent search, newest first, bodies trimmed, every word of text must appear, case-insensitive with lower() on both sides (#682). Bridges scoring-mailbox-read and scoring-mailbox-search reach both from sessions that opened before the tools existed. Guard test_mailbox_read_v2.py."
+    ]
+  },
   {
     version: "2.522.45",
     date: "2026-09-30",

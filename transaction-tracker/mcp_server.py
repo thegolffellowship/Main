@@ -1780,6 +1780,9 @@ def _scoring_dispatch_inner(url: str, extract: str):
       scoring-card:<round_id>      full scorecard with derivations
       scoring-courses              course/tee database listing
       scoring-sales-tax-filing:<json row>[|apply]  record one month's Texas sales-tax filing (dry run by default; evidence 'confirmation' needs webfile_ref or confirmation_path); scoring-sales-tax-filings lists the record; scoring-sales-tax-backfill[:apply] loads the CFO register (6 confirmed months + Kerry's-word months)
+      scoring-mailbox-read:<id> | since=<id>|limit=<n>|topic=<t>|max=<chars>  read ONE post, or a catch-up window OLDEST-first with more/next_since_id
+      scoring-mailbox-search:text=<words>|topic=<t>|author=<a>|since=<YYYY-MM-DD>|limit=<n>|max=<chars>  precedent search, newest first, bodies trimmed
+      scoring-set-customer-field:<json>  WRITE gender only (M/F/NULL) for customer_ids, refused without "kerry_ok_post" (a mailbox post id carrying Kerry's word), dry run unless "apply": true; before/after in agent_action_log
       scoring-query-customers:<gender F|M|NULL>|<chapter>|<status>|<played_since>|<limit>  READ-ONLY field read of customers: id, name, chapter, status, gender, rounds since (default 2026-01-01); active members first
       scoring-mail-kerry:<subject>|<html>  DRY RUN: render a mail to KERRY (hard-wired, the only recipient); scoring-mail-kerry-send:<subject>|<html> sends it through the Tracker's Graph mailer, logged (Kerry 2026-09-30 #1050: "Go with the Tracker mailer")
       scoring-se-preview:<event_id>|<cid,...>[|apply][|18][|match]  labelled PREVIEW score-entry round + link (admin-only open); 18 = an 18-hole preview, match = a demo singles match per pair (1v2, 3v4)
@@ -6166,6 +6169,33 @@ def _scoring_dispatch_inner(url: str, extract: str):
             except ValueError as _e:
                 return json.dumps({"error": f"bad JSON: {_e}"})
             return json.dumps(_st.record_filing(_row, apply=_flag.strip().lower() == "apply"), indent=2, default=str)
+        if cmd in ("scoring-mailbox-read", "scoring-mailbox-search"):
+            # read:   "<id>" or "since=<id>|limit=<n>|topic=<t>|max=<chars>"
+            # search: "text=<words>|topic=<t>|author=<a>|since=<date>|limit=<n>|max=<chars>"
+            from email_parser.database import read_platform_dialogue_v2 as _rd
+            _a = (arg or "").strip()
+            if cmd == "scoring-mailbox-read" and _a.isdigit():
+                return json.dumps(_rd(1, post_id=int(_a)), indent=2)
+            _kw = {k.strip(): v.strip() for k, _, v in (x.partition("=") for x in _a.split("|") if "=" in x)}
+            return json.dumps(_rd(int(_kw.get("limit") or 20), _kw.get("topic", ""),
+                                  int(_kw.get("since") or 0) if cmd == "scoring-mailbox-read" else 0,
+                                  max_chars=int(_kw.get("max") or (600 if cmd == "scoring-mailbox-search" else 0)),
+                                  text=_kw.get("text", ""), author=_kw.get("author", ""),
+                                  since=_kw.get("since", "") if cmd == "scoring-mailbox-search" else ""),
+                              indent=2)
+        if cmd == "scoring-set-customer-field":
+            # JSON {"customer_ids": [..], "field": "gender", "value": "M",
+            #  "reason": "...", "kerry_ok_post": 1234, "apply": false}
+            # — gender only (ambassador via Side Games), refused without a
+            # cited Kerry-OK post (rule 3b), dry run by default (CoS #1060).
+            try:
+                _p = json.loads(arg)
+            except ValueError as _e:
+                return json.dumps({"error": f"bad JSON: {_e}"})
+            from email_parser.customer_query import set_customer_field as _scf
+            return json.dumps(_scf(_p.get("customer_ids"), _p.get("field"), _p.get("value"),
+                                   _p.get("reason"), _p.get("kerry_ok_post"),
+                                   apply=bool(_p.get("apply"))), indent=2, default=str)
         if cmd == "scoring-query-customers":
             # "<gender>|<chapter>|<status>|<played_since>|<limit>" (any part
             # blank) — READ-ONLY field read of customers (CoS #1048).
@@ -7702,6 +7732,19 @@ def query_customers(gender: str = "", chapter: str = "", status: str = "",
 
 
 @mcp.tool()
+def set_customer_field(customer_ids: list, field: str, value: str, reason: str,
+                       kerry_ok_post: int, apply: bool = False) -> str:
+    """WRITE one customer field (Chief of Staff #1048/#1060). GENDER ONLY
+    today (M, F or NULL); ambassador goes through Side Games' table.
+    Refused unless `kerry_ok_post` is a mailbox post id carrying Kerry's
+    word (rule 3b). Dry run unless apply=True. Every change is logged with
+    its before and after."""
+    from email_parser.customer_query import set_customer_field as _scf
+    return json.dumps(_scf(customer_ids, field, value, reason, kerry_ok_post, apply=apply),
+                      indent=2, default=str)
+
+
+@mcp.tool()
 def get_side_games_matrix(holes: int = 0) -> str:
     """Return the LIVE side-games prize matrix (both hole counts).
 
@@ -7776,8 +7819,9 @@ def get_current_time() -> str:
 
 
 @mcp.tool()
-def read_platform_dialogue(limit: int = 20, topic: str = "", since_id: int = 0) -> str:
-    """Read the tracker-claude <-> platform-claude planning mailbox (newest first).
+def read_platform_dialogue(limit: int = 20, topic: str = "", since_id: int = 0,
+                           id: int = 0, max_chars: int = 0) -> str:
+    """Read the tracker-claude <-> platform-claude planning mailbox.
 
     The durable two-way channel between the Claude building the Tracker
     codebase ('tracker-claude') and the claude.ai Golf Fellowship Project
@@ -7788,16 +7832,36 @@ def read_platform_dialogue(limit: int = 20, topic: str = "", since_id: int = 0) 
     Args:
         limit: Max entries to return (default 20, cap 200)
         topic: Filter by topic substring (e.g. 'live-scoring')
-        since_id: Only entries with id greater than this (catch-up reads)
+        since_id: Only entries with id greater than this, OLDEST FIRST
+            (catch-up reads). `more: true` means the window was cut off;
+            read again from `next_since_id`. Without since_id: the newest
+            `limit` posts, newest first.
+        id: Read ONE post by its id.
+        max_chars: Trim each body to this many characters (0 = whole).
     """
-    from email_parser.database import read_platform_dialogue_entries
+    from email_parser.database import read_platform_dialogue_v2
     clock = _central_clock()
+    res = read_platform_dialogue_v2(limit, topic, since_id, post_id=id, max_chars=max_chars)
     return json.dumps({
         "server_time_local": clock["friendly"],
         "server_time_utc": clock["utc"],
         "note": "post created_at fields are UTC — current local time is server_time_local (post #81)",
-        "posts": read_platform_dialogue_entries(limit, topic, since_id),
+        **res,
     }, indent=2)
+
+
+@mcp.tool()
+def search_platform_dialogue(text: str = "", topic: str = "", author: str = "",
+                             since: str = "", limit: int = 20, max_chars: int = 600) -> str:
+    """Search the mailbox for precedent (Chief of Staff #1048). Every word
+    of `text` must appear in the body; `topic` is a substring; `author` is
+    exact (tracker-claude, platform-claude, design-claude, kerry); `since`
+    is a UTC date (YYYY-MM-DD). Newest first; bodies trimmed to max_chars
+    (read a whole post with read_platform_dialogue(id=...)). Read-only."""
+    from email_parser.database import read_platform_dialogue_v2
+    _audit("search_platform_dialogue", f"text={text!r} topic={topic!r} author={author!r} since={since!r}")
+    return json.dumps(read_platform_dialogue_v2(limit, topic, 0, text=text, author=author,
+                                                since=since, max_chars=max_chars), indent=2)
 
 
 @mcp.tool()

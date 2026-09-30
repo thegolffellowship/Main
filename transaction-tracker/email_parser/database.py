@@ -19629,6 +19629,55 @@ def read_platform_dialogue_entries(limit: int = 20, topic: str = "",
     return [dict(r) for r in rows]
 
 
+def read_platform_dialogue_v2(limit: int = 20, topic: str = "", since_id: int = 0,
+                              post_id: int = 0, max_chars: int = 0, text: str = "",
+                              author: str = "", since: str = "",
+                              db_path: str | Path = DB_PATH) -> dict:
+    """The mailbox read the lanes asked for (Chief of Staff #1048):
+    - `post_id` reads ONE post;
+    - with `since_id` the window is OLDEST-first (catch-up reads see every
+      post in order; the old newest-first window hid the earliest ones);
+      without it, the newest `limit` posts, newest first, as before;
+    - `more` says whether the window was cut off, and `next_since_id` is
+      where the next catch-up read starts;
+    - `max_chars` trims each body (0 = whole);
+    - `text` / `author` / `since` (a UTC date) filter, for precedent search.
+    Every filter is `lower()` on both sides (portable SQL, #682)."""
+    lim = max(1, min(int(limit or 20), 200))
+    with _connect(db_path) as conn:
+        _ensure_platform_dialogue_table(conn)
+        clauses, params = [], []
+        if post_id:
+            clauses.append("id = ?"); params.append(int(post_id))
+        if topic:
+            clauses.append("lower(topic) LIKE ?"); params.append(f"%{topic.lower()}%")
+        if author:
+            clauses.append("lower(author) = ?"); params.append(author.strip().lower())
+        if text:
+            for word in [w for w in text.lower().split() if w][:6]:
+                clauses.append("lower(body) LIKE ?"); params.append(f"%{word}%")
+        if since:
+            clauses.append("created_at >= ?"); params.append(since.strip())
+        if since_id:
+            clauses.append("id > ?"); params.append(int(since_id))
+        where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
+        order = "ASC" if since_id else "DESC"
+        rows = [dict(r) for r in conn.execute(
+            f"""SELECT id, author, topic, body, created_at FROM platform_dialogue{where}
+                ORDER BY id {order} LIMIT ?""", params + [lim + 1]).fetchall()]
+    more = len(rows) > lim
+    rows = rows[:lim]
+    mc = int(max_chars or 0)
+    if mc > 0:
+        for r in rows:
+            if len(r["body"] or "") > mc:
+                r["body"] = r["body"][:mc] + f" … [{len(r['body']) - mc} more chars; read with post_id={r['id']}]"
+    out = {"posts": rows, "more": more, "order": "oldest-first" if since_id else "newest-first"}
+    if since_id and rows:
+        out["next_since_id"] = rows[-1]["id"]
+    return out
+
+
 def _seed_platform_dialogue(conn) -> None:
     """Boot step: post #1 welcomes the Platform Claude and points it at
     the docs tool. Idempotent — fires only on an empty table."""
