@@ -50,35 +50,46 @@ $280.50 filed, and February 2026 reserve $97.39 against $140.17 filed.
 | 2026-05 | 6/20/26 | PAID (Kerry, 9/30; confirmation in iCloud, not yet in OneDrive) | | | | | | | |
 | 2026-06 | 7/20/26 | PAID (Kerry, 9/30; confirmation in iCloud, not yet in OneDrive) | | | | | | | |
 | 2026-07 | 8/20/26 | PAID (Kerry, 9/30; confirmation in iCloud, not yet in OneDrive) | | | | | | | |
-| **2026-08** | **9/20/26** | **NOT FILED — LATE** (Kerry, 9/30). Draft computed 9/30, see below. | | 18,627 | 1,993 | 164.42 | none (late) | | |
+| **2026-08** | **9/20/26** | **NOT FILED — LATE** (Kerry, 9/30). FINAL figures 9/30, see below. | | 19,152 | 2,075 | 171.19 | none (late) | | |
 | 2026-09 | 10/20/26 | OPEN | | | | | | | |
 
 - **Kerry, 9/30:** "We have record of all of those, but some are in another part of iCloud. I've made payment on all but August." So every month except 2026-08 is PAID. Where the confirmation is in iCloud, the amounts are left blank until a copy is saved to OneDrive. Copying them over is housekeeping and does not block anything.
 - **Paid with evidence, 2025:** $635.77 across 4 months.
 - **Paid with evidence, 2026 to date:** $428.01 across 2 months.
 
-## August 2026 draft return (computed 9/30 per tgf-sales-tax and Pricing Master v2.2; revised the same day after Kerry's Championship ruling)
+## August 2026 return: FINAL (Kerry 9/30: "Those markups are right (I believe), go ahead with August")
 
 | Taxable component | Amount |
 |---|---|
 | Memberships (3 New at $44, including Kannon Brown's $100 = $50 membership plus the Fall NET markup; 2 Returning at $69) | 280.00 |
-| Season contest markups ($10 each; includes the Fall NET points bundled into Burlingame, Vasquez and South's event orders, not refunded) | 110.00 |
+| Season contest markups at $10 each. Includes the Fall NET points bundled into the Burlingame, Vasquez and South event orders (not refunded), J. Wade's $150 (3 contests: Fellowship Cup, Players Cup, Austin Fall NET) and Marques's $100 (2 contests), both paid by Venmo | 160.00 |
 | Regular-season event markups plus rounding surplus (s9.21, a9.21, a18.5, s18.10, SA Match Play Finals) | 887.92 |
+| 2026 TGF Championship: markup backed out from the Lost Pines invoice. Includes Marroquin's $105 Friday practice round (Venmo 8/18) and Y. Williams's Sunday round ($170 Venmo 8/15, "TGF Sunday-Lost Pines") | 711.79 |
 | Coupons (tgf-jeff ×2, Advisory Board) | −20.00 |
-| 2026 TGF Championship: markup backed out from the Lost Pines invoice (below) | 679.82 |
 | TGF retained transaction fees (3.5% collected less GoDaddy 2.9% + $0.30, per order) | 55.29 |
-| **Taxable sales** | **1,993.03 → WebFile 1,993** |
+| **Taxable sales** | **2,075.00** |
 
-- **Total Texas Sales:** $18,627.07. That is 92 GoDaddy orders at $17,194.53, plus $1,432.54 paid by Venmo or entered manually. WebFile takes 18,627.
-- **Tax:** 1,993 × 6.25% = $124.56 state, plus 1,993 × 2% = $39.86 local, for **$164.42**. There is no timely discount, and WebFile adds the late penalty ($50 plus 5% if filed by 10/20).
-- **Championship markup method.** Kerry, 9/30: "The NET/GROSS bundles at the Championship did not carry a markup. Markups were only on the event and the Friday Practice Round."
-  - The Hyatt Regency Lost Pines invoice was $9,534.95 (paid 8/18). It is exactly 62 championship rounds at $146.1375 ($135 + 8.25%) plus 5 practice rounds at $94.885.
-  - Each package's base price = course + HIO $2 per day + TGF markup.
-  - That gives these markups: Both Days $23.73; One Day $21.86; Practice Round $10.11; One Day guest $41.86. Full Weekend = Both Days + Practice = $33.84.
-  - Kerry to confirm these against what he intended.
-- **Excluded:** comps (Straiton ×2, Kerry, and J. Wade and Marques's comped contests), fully refunded items (Sharitz contest, McDonnell guest practice), WD (Reed a9.21), the refunded Fall points portions (Mazanec, Vasquez s9.21, Sharitz, Baker, Rideout s18.10), and the refunded practice rounds (Young, McDonnell).
-- **July orders are excluded from August:** Mazanec's $313 top-up and Callaway's $334 complete July/credit orders, and Barstow is a comp-tagged row, yet Venmo shows he paid $420. Callaway's and Barstow's entries are counted here; Mazanec's is not.
-- **Lone Star Cup deposits:** none are recorded as sales in the Tracker. Only Cannon's $325 is (9/10). Open for Kerry, and the recommended treatment is in the mailbox.
+- **Total Texas Sales: $19,152.07 (WebFile 19,152).** That is:
+  - 92 GoDaddy orders at $17,194.53;
+  - Venmo and manual event and contest payments at $1,957.54: J. Jenkins, Callaway and Mazanec (Championship), three Match Play Finals, J. Wade $150, Marques $100, Marroquin $105 and Y. Williams $170.
+- **Tax:** 2,075 × 6.25% = $129.69 state, plus 2,075 × 2% = $41.50 local, for **$171.19**.
+  - The return is late, so there is no timely discount.
+  - WebFile adds $50 plus 5% (if filed by 10/20), about $58.56, for an expected balance of about **$229.75**. Pay what WebFile shows.
+- **Championship markups (Kerry-confirmed 9/30).** The Lost Pines invoice was $9,534.95: 62 rounds at $146.1375 ($135 + 8.25%) plus 5 practice rounds at $94.885.
+  - Each package's base price = course + HIO $2 per day + markup. The NET/GROSS bundles carry no markup (Kerry).
+  - Markups: Both Days $23.73; One Day $21.86; Practice Round $10.11; One Day guest $41.86. Full Weekend = $33.84.
+- **Excluded:**
+  - comps (Straiton ×2, Kerry);
+  - fully refunded items (Sharitz contest, McDonnell guest practice);
+  - the WD (Reed a9.21);
+  - refunded Fall points portions (Mazanec, Vasquez s9.21, Sharitz, Baker, Rideout s18.10);
+  - refunded practice rounds (Young, McDonnell);
+  - Mazanec's $313, which completes a July credit-transfer order.
+- **Not sales, so reclassify** (tracked, not changed; rule 3b):
+  - Ann Jaber $100 on 8/25 (memo "Happy Birthday. I love you") is personal, not TGF revenue;
+  - David Hooper $100 on 8/8 was sent from @tgf-payments itself, which looks like an internal move.
+  - Both sit in the ledger as TGF income.
+- **Lone Star Cup deposits:** $8,140 was received by Venmo/Zelle from August through September and recorded against the event, not against items. It is excluded from August and September. The LSC markup ($55 per entry, $12 per practice round, per event config) is reported on the **October** return, for the month the Cup is played. Deposits are customer money until then. This is the CFO recommendation. Kerry can override, and the CPA should confirm.
 
 ## Late-filing terms (Texas Comptroller)
 
