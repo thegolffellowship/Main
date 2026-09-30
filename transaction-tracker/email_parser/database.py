@@ -61006,9 +61006,16 @@ def _write_blind_row(conn, has_reason: bool, event_id, ev: dict, holes,
     if has_reason:
         cols.append("reason")
         vals.append(reason if reason in BLIND_REASONS else "open_seat")
+    # UPSERT on the seat, never INSERT OR REPLACE (#682; CoS #1100-2): a
+    # REPLACE deletes and re-inserts the row, so a redraw would take a new id
+    # and cascade away (or orphan) its blind_draw_holes rows. The row keeps
+    # its id; created_at stays the first draw's.
+    upd = ", ".join(f"{c} = excluded.{c}" for c in cols
+                    if c not in ("event_id", "slot_key"))
     conn.execute(
-        f"INSERT OR REPLACE INTO blind_draws ({', '.join(cols)}) "
-        f"VALUES ({', '.join('?' * len(cols))})", vals)
+        f"INSERT INTO blind_draws ({', '.join(cols)}) "
+        f"VALUES ({', '.join('?' * len(cols))}) "
+        f"ON CONFLICT (event_id, slot_key) DO UPDATE SET {upd}", vals)
 
 
 def draw_event_blinds(event_id: int, dry_run: bool = True, redraw: bool = False,

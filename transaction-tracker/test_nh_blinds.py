@@ -90,10 +90,9 @@ db.save_event_pairings(EV, SHEET, db_path=tmp)
 print("\n== schema: migration 0004 ==")
 cols = db._blind_cols(c)
 check("blind_draws has reason", "reason" in cols, cols)
-check("0007: the JSON missed_holes column is gone (#1087)", "missed_holes" not in cols, cols)
 check("0006: blind_draw_holes exists",
       c.execute("SELECT 1 FROM sqlite_master WHERE name = 'blind_draw_holes'").fetchone() is not None)
-for _f in ("0006_blind_draw_holes.sql", "0007_drop_blind_draws_missed_holes.sql"):
+for _f in ("0006_blind_draw_holes.sql",):
     _u = pathlib.Path("migrations/" + _f).read_text().upper()
     check(f"{_f}: portable, and carries its 'not redundant' / reason note",
           "INSERT OR REPLACE" not in _u and "NOCASE" not in _u and "JSON" not in _u.split("--")[-1])
@@ -173,6 +172,19 @@ try:
 except sqlite3.IntegrityError:
     ok = True
 check("a hole outside 1-18 is refused by the table", ok)
+# A redraw of that seat keeps the row's id, so its hole rows survive
+# (the writer upserts; INSERT OR REPLACE would have re-keyed the row).
+c.execute("DELETE FROM blind_draw_holes WHERE blind_draw_id = ?", (_bid,))
+c.execute("INSERT INTO blind_draw_holes (blind_draw_id, hole) VALUES (?, 6)", (_bid,)); c.commit()
+_other = next(x for x in (1, 2, 3, 6, 7) if x not in
+              {b["customer_id"] for g, seats in db.get_event_blinds(EV, db_path=tmp)["9"].items() for b in seats})
+db.set_event_blind(EV, "9", 2, 4, _other, db_path=tmp)
+_row = c.execute("SELECT id, customer_id FROM blind_draws WHERE event_id = ? AND group_num = 2 AND cart_pos = 4",
+                 (EV,)).fetchone()
+check("a redraw upserts: same row id, new player, hole rows kept",
+      _row[0] == _bid and _row[1] == _other
+      and c.execute("SELECT COUNT(*) FROM blind_draw_holes WHERE blind_draw_id = ?", (_bid,)).fetchone()[0] == 1,
+      (tuple(_row), _bid, _other))
 c.execute("DELETE FROM blind_draw_holes WHERE blind_draw_id = ?", (_bid,)); c.commit()
 
 print("\n== CHOOSE on a seat ==")

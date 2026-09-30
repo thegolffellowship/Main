@@ -600,7 +600,7 @@ engine plays them at zero with a blind for the money. Clearing sets nh = 0
 and keeps the row. Read ONLY through `nh_flags.event_nh_players(conn,
 event_id)`; written only by `nh_flags.set_nh` (logged). See handicaps.md.
 
-## `blind_draws.reason` (0004) and `blind_draw_holes` (0006 / 0007; Kerry OK #1078, CoS #1090-2)
+## `blind_draws.reason` (0004) and `blind_draw_holes` (0006; Kerry OK #1078, CoS #1090-2)
 
 `blind_draws.reason` records why a blind was drawn. It is a closed enum:
 
@@ -610,13 +610,16 @@ event_id)`; written only by `nh_flags.set_nh` (logged). See handicaps.md.
 
 `blind_draw_holes (blind_draw_id → blind_draws.id, hole 1–18)` lists the
 holes a missed-hole blind covers, one row per hole. No rows means every
-hole. It replaced the JSON column `blind_draws.missed_holes` that 0004
-added and nothing ever wrote; 0007 drops that column, under Kerry's #1087
-rule that facts are rows. `blind_draws.holes` is a different fact: the
+hole. It replaces the JSON column `blind_draws.missed_holes` that 0004
+added and nothing ever wrote (Kerry's #1087 rule: facts are rows). The
+column is read by nothing and is dropped in its own migration once
+production's SQLite version (3.35+ for DROP COLUMN) is on the record
+(CoS #1100-2). `blind_draws.holes` is a different fact: the
 9/18 sheet. `get_event_blinds` returns the list as `missed_holes`, and the
 engine takes it as `holes`. The missed-hole WRITER ships with Track A's
-#1021 wave. It must write with UPDATE / ON CONFLICT, never INSERT OR
-REPLACE, because a REPLACE on `blind_draws` cascades away the hole rows.
+#1021 wave. `_write_blind_row` upserts on `(event_id, slot_key)` (ON
+CONFLICT DO UPDATE; #682, CoS #1100-2), so a redraw keeps the row's id and
+its hole rows; an INSERT OR REPLACE would have re-keyed the row.
 Rule: pairings.md 15i.
 
 ## Home chapter by id: `customers.home_chapter_id` + `customer_chapter_history` (Kerry APPROVED, CoS #1084, v2.522.56)
