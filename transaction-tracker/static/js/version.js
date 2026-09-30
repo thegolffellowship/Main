@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.522.51";
+window.TGF_VERSION = "2.522.52";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.522.52",
+    date: "2026-09-30",
+    title: "Schema audit report and the home-chapter migration proposal (docs only)",
+    changes: [
+      "docs/claude/schema-audit-2026-09-30.md: Kerry's 9/30 directive to find every place like the chapters text field (#1067-2), with production counts from scoring-schema-audit:scan: 158 tables, 161 flags, compared with the April Alignment Audit / Schema v3.0 (chapter, credits, side games and TEXT dollars are all still open), and a fix order by blast radius. The home-chapter migration shape and dry run (#1064-2) is in the same doc: 590 of 768 customers resolve, 178 blank, 0 fail. Nothing was changed; Kerry rules each fix."
+    ]
+  },
   {
     version: "2.522.51",
     date: "2026-09-30",
