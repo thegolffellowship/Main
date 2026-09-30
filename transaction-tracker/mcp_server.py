@@ -1780,6 +1780,7 @@ def _scoring_dispatch_inner(url: str, extract: str):
       scoring-card:<round_id>      full scorecard with derivations
       scoring-courses              course/tee database listing
       scoring-sales-tax-filing:<json row>[|apply]  record one month's Texas sales-tax filing (dry run by default; evidence 'confirmation' needs webfile_ref or confirmation_path); scoring-sales-tax-filings lists the record; scoring-sales-tax-backfill[:apply] loads the CFO register (6 confirmed months + Kerry's-word months)
+      scoring-player-archive:<full name> | c<customer_id>  a player's GG history archive rounds + scoring rounds (read-only)
       scoring-schema-audit:chapter|scan  read-only: the home-chapter migration dry run, or the redundant/denormalized-data scan
       scoring-missing-hcp[:<event_id> | days=<n>]  players with no handicap on an event (or every upcoming event), with the fix per player
       scoring-se-card:<event_id>|g<group> | <event_id>|c<customer_id>  one group's / player's LIVE entered card (read-only)
@@ -6176,6 +6177,13 @@ def _scoring_dispatch_inner(url: str, extract: str):
             except ValueError as _e:
                 return json.dumps({"error": f"bad JSON: {_e}"})
             return json.dumps(_st.record_filing(_row, apply=_flag.strip().lower() == "apply"), indent=2, default=str)
+        if cmd == "scoring-player-archive":
+            # "<full name>" or "c<customer_id>": the player's GG history
+            # archive rounds and scoring_rounds. Read-only (#1078-4).
+            from email_parser.cos_reads import player_archive as _pa
+            _a = (arg or "").strip()
+            return json.dumps(_pa(customer_id=int(_a[1:])) if _a[:1] == "c" and _a[1:].isdigit()
+                              else _pa(name=_a), indent=2, default=str)
         if cmd == "scoring-schema-audit":
             # "chapter" = the home-chapter migration dry run (#1064-2);
             # "scan" = the redundancy scan (#1067-2). Read-only: no writes.

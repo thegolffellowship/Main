@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.522.53";
+window.TGF_VERSION = "2.522.54";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.522.54",
+    date: "2026-09-30",
+    title: "Read a player's Golf Genius archive",
+    changes: [
+      "scoring-player-archive:<full name> or c<customer_id> returns a player's rounds from the Golf Genius history archive (portal, season, course, GG's playing handicap, gross, net) and any scoring rounds. Built to propose a starting handicap for an alumnus with no TGF handicap today (David Wetz, DFW, #1078-4). Read-only; guard test_cos_reads.py."
+    ]
+  },
   {
     version: "2.522.53",
     date: "2026-09-30",

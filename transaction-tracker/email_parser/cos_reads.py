@@ -209,3 +209,58 @@ def get_standard(name: str = "", section: str = "") -> dict:
             return {"error": f"no heading in {key} contains {section!r}", "headings": heads[:200]}
         text = part
     return {"name": key, "path": str(f.relative_to(ROOT)), "chars": len(text), "text": text}
+
+
+# ── a player's Golf Genius archive (David Wetz, #1078-4) ────────────────────
+def player_archive(name: str = "", customer_id: int = 0, db_path=None) -> dict:
+    """Every archived round for one player: the GG history results (per
+    portal/season, with GG's own playing handicap, gross and net) and any
+    scoring_rounds rows. For an alumnus who has no TGF handicap today, the
+    playing handicaps GG used are the evidence a starting handicap is
+    proposed from. Matches customer_id, or the full name lower-cased on both
+    sides (#682). Read-only."""
+    from email_parser import database as db
+    nm = (name or "").strip().lower()
+    if not nm and not customer_id:
+        return {"error": "give name or customer_id"}
+    with db._connect(db_path) as conn:
+        if customer_id and not nm:
+            r = conn.execute("SELECT first_name, last_name FROM customers WHERE customer_id = ?",
+                             (int(customer_id),)).fetchone()
+            nm = f"{r['first_name']} {r['last_name']}".strip().lower() if r else ""
+        hist = []
+        try:
+            hist = [dict(r) for r in conn.execute(
+                """SELECT e.event_date, e.season, e.chapter, e.event_label, e.course,
+                          p.subdomain AS portal, r.game_label, r.player_name, r.customer_id,
+                          r.playing_handicap, r.gross, r.net, r.position, r.money_cents
+                     FROM gg_history_results r
+                     JOIN gg_history_events e ON e.id = r.gg_event_id
+                     LEFT JOIN gg_history_portals p ON p.id = e.portal_id
+                    WHERE (? > 0 AND r.customer_id = ?) OR lower(trim(r.player_name)) = ?
+                    ORDER BY e.event_date DESC, e.id DESC""",
+                (int(customer_id or 0), int(customer_id or 0), nm))]
+        except Exception as exc:
+            hist = [{"error": str(exc)}]
+        rounds = [dict(r) for r in conn.execute(
+            """SELECT sr.round_date, sr.source, sr.holes_played, sr.playing_handicap, sr.gross,
+                      sr.net, sr.player_name, sr.customer_id, c.name AS course
+                 FROM scoring_rounds sr LEFT JOIN courses c ON c.course_id = sr.course_id
+                WHERE (? > 0 AND sr.customer_id = ?) OR lower(trim(sr.player_name)) = ?
+                ORDER BY sr.round_date DESC""",
+            (int(customer_id or 0), int(customer_id or 0), nm))]
+    # One row per round for the summary (a result row per game repeats it).
+    seen, per_round = set(), []
+    for h in hist:
+        k = (h.get("event_date"), h.get("event_label"))
+        if "error" in h or k in seen or h.get("playing_handicap") is None:
+            continue
+        seen.add(k)
+        per_round.append(h)
+    ph = [h["playing_handicap"] for h in per_round]
+    return {"name": nm, "customer_id": customer_id or None,
+            "archive_rounds": len(per_round), "scoring_rounds": len(rounds),
+            "latest": per_round[:10], "playing_handicaps_latest_first": ph[:20],
+            "archive_rows": hist[:200], "scoring_rows": rounds[:100],
+            "note": "playing handicaps are GG's, at the time, on that course and tee; "
+                    "a proposal, not an index"}

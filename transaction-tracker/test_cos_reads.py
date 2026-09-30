@@ -81,3 +81,33 @@ def test_standard_by_name_and_section():
     part = cr.get_standard("side-games", heads[0][3:])
     assert part["text"].startswith(heads[0]) and part["chars"] < whole["chars"]
     assert "error" in cr.get_standard("nope") and "error" in cr.get_standard("side-games", "zzqq no such")
+
+
+def test_player_archive_reads_gg_history_by_name():
+    from email_parser import gg_history as ggh
+    tmp = _db()
+    with db._connect(tmp) as c:
+        ggh._ensure_tables(c) if hasattr(ggh, "_ensure_tables") else None
+    try:
+        ggh.seed_portal_registry(db_path=tmp)
+    except TypeError:
+        pass
+    with db._connect(tmp) as c:
+        try:
+            c.execute("SELECT 1 FROM gg_history_results LIMIT 1")
+        except Exception:
+            import pytest
+            pytest.skip("gg_history tables are created lazily elsewhere")
+        pid = c.execute("SELECT id FROM gg_history_portals LIMIT 1").fetchone()
+        pid = pid[0] if pid else c.execute(
+            "INSERT INTO gg_history_portals (subdomain, chapter, season, kind, brand, source, status) "
+            "VALUES ('tgf-dfw2024','DFW','2024','season','tgf','t','done')").lastrowid
+        for i, (d, ph) in enumerate((("2024-09-10", 11.0), ("2024-08-01", 12.0))):
+            eid = c.execute("INSERT INTO gg_history_events (portal_id, event_date, event_label, chapter, course) "
+                            "VALUES (?,?,?,?,?)", (pid, d, f"d9.{i}", "DFW", "X")).lastrowid
+            for game in ("ALL Net", "Skins"):
+                c.execute("INSERT INTO gg_history_results (gg_event_id, game_label, player_name, playing_handicap, gross, raw_row) "
+                          "VALUES (?,?,?,?,?, '{}')", (eid, game, "David Wetz", ph, 44))
+        c.commit()
+    r = cr.player_archive(name="david wetz", db_path=tmp)
+    assert r["archive_rounds"] == 2 and r["playing_handicaps_latest_first"] == [11.0, 12.0]
