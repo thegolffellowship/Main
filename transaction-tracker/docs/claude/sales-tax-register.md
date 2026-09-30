@@ -12,6 +12,13 @@ completely for the year."
 - **Rates:** state 6.25% and local 2.0%, 8.25% total. A 0.5% timely-filing discount applies only if the return is filed on time.
 - **Routine:** `trig_01FwwncqoaN72PVHcH58W7kx` runs at 7:52 AM Central on the 1st and the 15th, into the CFO session. The 1st sends the obligation email; the 15th sends a reminder only if a month is still unpaid.
 
+## Delivery rule (Kerry, 9/30)
+
+"Go with the Tracker mailer. I believe that's standard now for our other emails, and should be standard when I request that moving forward."
+
+- Every email to Kerry goes through the Tracker's own mail path (bridge `scoring-mail-kerry`, requested in mailbox #1049/#1050). No Claude connector sends it; Microsoft 365 is read-only.
+- Until that bridge ships, the fallback is the mailbox plus the session notification.
+
 ## The rule: a month is PAID only with evidence or Kerry's word
 
 The evidence is the WebFile **"Confirmation: You Have Filed Successfully"** PDF,
@@ -89,7 +96,7 @@ $280.50 filed, and February 2026 reserve $97.39 against $140.17 filed.
   - Ann Jaber $100 on 8/25 (memo "Happy Birthday. I love you") is personal, not TGF revenue;
   - David Hooper $100 on 8/8 was sent from @tgf-payments itself, which looks like an internal move.
   - Both sit in the ledger as TGF income.
-- **Lone Star Cup deposits:** $8,140 was received by Venmo/Zelle from August through September and recorded against the event, not against items. It is excluded from August and September. The LSC markup ($55 per entry, $12 per practice round, per event config) is reported on the **October** return, for the month the Cup is played. Deposits are customer money until then. This is the CFO recommendation. Kerry can override, and the CPA should confirm.
+- **Lone Star Cup deposits:** $8,140 was received by Venmo/Zelle from August through September and recorded against the event, not against items. It is excluded from August and September. The LSC markup ($55 per entry, $12 per practice round, per event config) is reported on the **October** return, for the month the Cup is played. Deposits are customer money until then. **Kerry ruled 9/30: "Lone Star Cup is liabilities right now, for sure."** The deposits are customer deposits held until the Cup is played, and are not revenue before then.
 
 ## Late-filing terms (Texas Comptroller)
 
