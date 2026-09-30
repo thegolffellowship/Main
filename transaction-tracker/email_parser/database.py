@@ -61324,11 +61324,22 @@ def move_event_flight_player(event_id: int, game: str, customer_id, flight_no,
         for m in f.get("members") or []:
             if m.get("customer_id") is not None and int(m["customer_id"]) == cid:
                 cur, name = int(f["flight_no"]), m.get("name")
+    unindexed = False
     if cur is None:
-        return {"ok": False, "error": f"customer_id {cid} is not flighted in {game} on this board"}
+        # A buyer with no handicap index sits in `unflighted`; a move PLACES
+        # him (Kerry 2026-09-30, matching GG's flights on 3317).
+        u = next((m for m in sel.get("unflighted") or []
+                  if m.get("customer_id") is not None and int(m["customer_id"]) == cid), None)
+        if u is None:
+            return {"ok": False, "error": f"customer_id {cid} is not in {game} on this board"}
+        name, unindexed = u.get("name"), True
     prior = {int(m["customer_id"]): m for m in (sel.get("moves") or [])
              if m.get("customer_id") is not None}
-    base_flight = int(prior[cid]["from_flight"]) if cid in prior else cur
+    if cid in prior:
+        base_flight = (int(prior[cid]["from_flight"])
+                       if prior[cid].get("from_flight") else None)
+    else:
+        base_flight = cur
     modes = event_flight_modes(event_id, db_path=db_path)
     spec = modes.get(game)
     if isinstance(spec, dict):
@@ -61340,7 +61351,8 @@ def move_event_flight_player(event_id: int, game: str, customer_id, flight_no,
         what = f"back to Flight {to} (where the {base.replace('_', ' ')} cut puts him) — move cleared"
     else:
         moves[str(cid)] = to
-        what = f"Flight {cur} → Flight {to}"
+        what = (f"(no index) placed in Flight {to}" if unindexed or cur is None
+                else f"Flight {cur} → Flight {to}")
     if moves:
         modes[game] = {"mode": _fl.CUSTOM_MODE, "base": base, "moves": moves}
     else:
