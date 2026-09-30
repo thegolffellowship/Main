@@ -8402,6 +8402,17 @@ def api_reverse_credit(item_id):
     return jsonify({"error": "Item not found or not in credited/transferred state."}), 400
 
 
+@app.route("/api/events/<int:event_id>/missing-handicaps")
+@require_role("manager")
+def api_event_missing_handicaps(event_id):
+    """Players on this event's roster with no index and no starting
+    handicap, with the fix per player (Kerry 2026-09-30, CoS #1064-1).
+    Read-only; the events page shows it above every tab."""
+    from email_parser.handicap_warnings import missing_handicaps
+    res = missing_handicaps(event_id)
+    return jsonify(res), (404 if res.get("error") else 200)
+
+
 @app.route("/api/events/<int:event_id>/flights-board")
 @require_role("manager")
 @perf.timed_route("flights_board")

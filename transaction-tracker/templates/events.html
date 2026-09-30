@@ -3060,6 +3060,38 @@
     // read in place of the live map wherever an `ev` is known. A site
     // with no event in hand reads the live map, as before.
     const hcpAsOfMaps = {};
+    // MISSING-HANDICAP WARNING (Kerry 2026-09-30, CoS #1064-1): players on
+    // the roster with no TGF index and no starting handicap. The server
+    // read (/api/events/<id>/missing-handicaps, email_parser/
+    // handicap_warnings.py) is the ONE computation; the MCP tool and the
+    // Front Desk brief read the same module. The banner sits above every
+    // tab (roster, PAIRINGS, GAMES) and renders in the phone card too,
+    // because both layouts draw through renderDetailContent.
+    const missingHcp = {};
+    async function fetchMissingHcp(ev) {
+        if (!ev || !ev.id) return;
+        try {
+            const res = await fetch(`/api/events/${ev.id}/missing-handicaps`, {cache: "no-store"});
+            if (res.ok) missingHcp[ev.id] = await res.json();
+        } catch (err) {
+            console.error("fetchMissingHcp:", err);
+        }
+    }
+    function missingHcpBannerHtml(ev) {
+        const m = ev && missingHcp[ev.id];
+        if (!m || !m.count || !m.upcoming) return '';
+        const rows = (m.players || []).map(p =>
+            `<li><b>${escapeHtml(p.name)}</b>${p.status ? ` <span style="color:#6B7280;">(${escapeHtml(String(p.status).replace(/_/g, ' '))})</span>` : ''}: ${escapeHtml(p.fix)}</li>`).join('');
+        return `<div class="hcp-missing-warn" role="alert"
+            style="white-space:normal;background:#fff7ed;border:1px solid #fb923c;border-left:4px solid #E87C3E;
+                   border-radius:8px;padding:0.55rem 0.75rem;margin:0 0 0.6rem;font-size:0.85rem;color:#1B1B1B;">
+            <div style="font-weight:700;">&#9888; ${escapeHtml(m.message)}</div>
+            <details style="margin-top:0.25rem;"><summary style="cursor:pointer;color:#c2410c;">How to fix</summary>
+              <ul style="margin:0.35rem 0 0.25rem 1.1rem;padding:0;">${rows}</ul>
+              <div style="color:#6B7280;">Set it from the roster: tap the orange dash in the HCP column. ${escapeHtml(m.nh_note || '')}</div>
+            </details></div>`;
+    }
+
     async function ensureHcpAsOf(ev) {
         const d = ev && ev.handicap_as_of;
         if (!d || hcpAsOfMaps[d]) return;
@@ -8798,7 +8830,7 @@
     // is wrapped in [data-ev-body] so an in-panel change can swap the body
     // alone — the header and its handlers stay put.
     function renderDetailContent(ev) {
-        const html = renderDetailContentInner(ev);
+        const html = missingHcpBannerHtml(ev) + renderDetailContentInner(ev);
         return html.indexOf('data-ev-body="') >= 0 ? html + "</div>" : html;
     }
     function renderDetailContentInner(ev) {
@@ -9859,6 +9891,7 @@
             fetchRsvpCreditMap(ev.item_name),
             fetchBalanceDueSendMap(ev.item_name),
             ensureHcpAsOf(ev),
+            fetchMissingHcp(ev),
         ]);
 
         // Desktop: render detail into table row
@@ -10676,7 +10709,16 @@
                     // FIRST, so the number lands the moment it is saved and
                     // does not wait on three round-trips (or get lost if one
                     // of them fails).
+                    // The warning drops this player now; the re-read below
+                    // confirms it from the server.
+                    if (missingHcp[ev.id] && missingHcp[ev.id].players) {
+                        const _m = missingHcp[ev.id];
+                        _m.players = _m.players.filter(p => String(p.customer_id || '') !== String(cid));
+                        _m.count = _m.players.length;
+                        _m.message = _m.count ? `${_m.count} player${_m.count === 1 ? '' : 's'} ha${_m.count === 1 ? 's' : 've'} no handicap: ${_m.players.map(p => p.name).join(', ')}` : '';
+                    }
                     rerenderDetail(container, ev);
+                    fetchMissingHcp(ev).then(() => rerenderDetail(detailContainerFor(ev.id), ev));
                     await fetchHandicapIndexMap();
                     await fetchItems();
                     // fetchEvents() -> renderEvents() rebuilds the table and

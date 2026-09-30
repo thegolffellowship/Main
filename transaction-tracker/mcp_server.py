@@ -1780,6 +1780,7 @@ def _scoring_dispatch_inner(url: str, extract: str):
       scoring-card:<round_id>      full scorecard with derivations
       scoring-courses              course/tee database listing
       scoring-sales-tax-filing:<json row>[|apply]  record one month's Texas sales-tax filing (dry run by default; evidence 'confirmation' needs webfile_ref or confirmation_path); scoring-sales-tax-filings lists the record; scoring-sales-tax-backfill[:apply] loads the CFO register (6 confirmed months + Kerry's-word months)
+      scoring-missing-hcp[:<event_id> | days=<n>]  players with no handicap on an event (or every upcoming event), with the fix per player
       scoring-se-card:<event_id>|g<group> | <event_id>|c<customer_id>  one group's / player's LIVE entered card (read-only)
       scoring-pair-history:c<customer_id>[|<year>] | e<event_id>  partners, rode-with, solo carts (read-only)
       scoring-standard:[<name>[|<section words>]]  a standard of record by name, whole or one section
@@ -6172,6 +6173,15 @@ def _scoring_dispatch_inner(url: str, extract: str):
             except ValueError as _e:
                 return json.dumps({"error": f"bad JSON: {_e}"})
             return json.dumps(_st.record_filing(_row, apply=_flag.strip().lower() == "apply"), indent=2, default=str)
+        if cmd == "scoring-missing-hcp":
+            # "<event_id>" for one event, or "days=<n>" / empty for every
+            # upcoming event (the Front Desk brief's read). Read-only.
+            from email_parser import handicap_warnings as _hw
+            _a = (arg or "").strip()
+            if _a.isdigit():
+                return json.dumps(_hw.missing_handicaps(int(_a)), indent=2, default=str)
+            _d = int(_a.split("=", 1)[1]) if _a.startswith("days=") else 14
+            return json.dumps(_hw.upcoming_missing_handicaps(_d), indent=2, default=str)
         if cmd in ("scoring-se-card", "scoring-pair-history", "scoring-standard"):
             # se-card:      <event_id>|g<group> or <event_id>|c<customer_id>
             # pair-history: c<customer_id>[|<year>] or e<event_id>
@@ -7869,6 +7879,19 @@ def read_platform_dialogue(limit: int = 20, topic: str = "", since_id: int = 0,
         "note": "post created_at fields are UTC — current local time is server_time_local (post #81)",
         **res,
     }, indent=2)
+
+
+@mcp.tool()
+def get_missing_handicaps(event_id: int = 0, days: int = 14) -> str:
+    """Players with NO handicap (no TGF index, no starting handicap) on an
+    event's roster, with which case applies and the fix per player (Kerry
+    2026-09-30, CoS #1064-1). With event_id: that event. Without: every
+    event from today through `days` ahead that has any — the Front Desk
+    brief's read. Read-only."""
+    from email_parser import handicap_warnings as hw
+    _audit("get_missing_handicaps", f"event={event_id} days={days}")
+    res = hw.missing_handicaps(event_id) if event_id else hw.upcoming_missing_handicaps(days)
+    return json.dumps(res, indent=2, default=str)
 
 
 @mcp.tool()

@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.522.48";
+window.TGF_VERSION = "2.522.49";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.522.49",
+    date: "2026-09-30",
+    title: "Missing-handicap warning for managers",
+    changes: [
+      "Kerry 2026-09-30 (#1064): \"There needs to be a warning to the manager that either a handicap index needs to be entered.\" An upcoming event whose roster has players with no TGF index and no starting handicap now shows an orange banner above every tab (roster, PAIRINGS, GAMES), on desktop and phone: \"N players have no handicap: [names]\". It is managers and admins only.",
+      "Each player's fix names the case: no rounds on file (ask for their index, enter 75% of it as the starting handicap, the Handicap Standard's intro rule), some rounds but not enough for an index yet (same fix), or a Golf Genius RSVP that matches no customer (link or add them first). With no handicap they play N/H; the blind that stands in for their money is Side Games' build. Setting a starting handicap from the roster's orange dash clears the player at once.",
+      "One computation (email_parser/handicap_warnings.py, the same index map the ROSTER and PAIRINGS read) serves the page, the MCP tool get_missing_handicaps and the bridge scoring-missing-hcp, which the Front Desk brief reads for every event in the next N days. Read-only. Guard test_missing_handicaps.py; handicaps.md."
+    ]
+  },
   {
     version: "2.522.48",
     date: "2026-09-30",
