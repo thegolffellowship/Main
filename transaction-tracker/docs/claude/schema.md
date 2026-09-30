@@ -566,3 +566,27 @@ approved wording it went out under), `status` (`sending` / `sent` /
 `failed`), `sent_at`; UNIQUE (`event_id`, `customer_id`). The claim is
 `INSERT … ON CONFLICT DO UPDATE … WHERE status = 'failed' RETURNING id`,
 before the Graph call. See events.md "The EVENT-DAY EMAIL".
+
+## `customer_ambassadors` — the Ambassador flag (Pairings Spec v1.2 #1036-4, v2.522.50)
+
+Kerry: "I will currently determine the Ambassador role. Definitely not
+something to be derived right now." So the flag is SET, never computed, by
+Kerry (or Robert for Austin on Kerry's say-so). Approved CoS #1046; shape
+confirmed by Tracker Build #1055. Created by `migrations/0002_customer_ambassadors.sql`.
+
+| column | |
+|---|---|
+| `customer_id` | FK → customers; part of the key |
+| `chapter_id` | FK → chapters; part of the key (a member can be an Ambassador per chapter) |
+| `ambassador` | 1 / 0. Unflagging sets 0; a row is **never deleted**, so "was an ambassador on 10/6" stays answerable (#1055-3) |
+| `set_by`, `set_at`, `note` | who / when / why of the last change |
+
+- **Code:** `email_parser/ambassadors.py`. The ONE reader for pairings is
+  `chapter_ambassadors(conn, chapter_id) -> set[int]` (#1055-2); R-A / R-F read
+  only that. `list_ambassadors`, `set_ambassador` (refused unless the cited
+  mailbox post carries Kerry's word, the `set_customer_field` guard; dry run
+  unless applied; every change in `agent_action_log` as `set_ambassador`).
+- **Bridges:** `scoring-ambassadors:[<chapter>][|all]` (read),
+  `scoring-ambassador-set:<json>` (write, dry run by default).
+- **Guard:** `test_ambassadors.py` fails if any other module queries the table
+  directly.

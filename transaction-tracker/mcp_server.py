@@ -1787,6 +1787,8 @@ def _scoring_dispatch_inner(url: str, extract: str):
       scoring-mailbox-read:<id> | since=<id>|limit=<n>|topic=<t>|max=<chars>  read ONE post, or a catch-up window OLDEST-first with more/next_since_id
       scoring-mailbox-search:text=<words>|topic=<t>|author=<a>|since=<YYYY-MM-DD>|limit=<n>|max=<chars>  precedent search, newest first, bodies trimmed
       scoring-set-customer-field:<json>  WRITE gender only (M/F/NULL) for customer_ids, refused without "kerry_ok_post" (a mailbox post id carrying Kerry's word), dry run unless "apply": true; before/after in agent_action_log
+      scoring-ambassadors:[<chapter>][|all]  READ the Ambassador flags (customer_ambassadors), current or with removed rows
+      scoring-ambassador-set:<json>  WRITE one Ambassador flag {"customer_id","chapter","on","kerry_ok_post","note","apply"}: refused without a mailbox post carrying Kerry's word, dry run unless apply, action-logged, unflag keeps the row
       scoring-query-customers:<gender F|M|NULL>|<chapter>|<status>|<played_since>|<limit>  READ-ONLY field read of customers: id, name, chapter, status, gender, rounds since (default 2026-01-01); active members first
       scoring-mail-kerry:<subject>|<html>  DRY RUN: render a mail to KERRY (hard-wired, the only recipient); scoring-mail-kerry-send:<subject>|<html> sends it through the Tracker's Graph mailer, logged (Kerry 2026-09-30 #1050: "Go with the Tracker mailer")
       scoring-se-preview:<event_id>|<cid,...>[|apply][|18][|match]  labelled PREVIEW score-entry round + link (admin-only open); 18 = an 18-hole preview, match = a demo singles match per pair (1v2, 3v4)
@@ -6226,6 +6228,28 @@ def _scoring_dispatch_inner(url: str, extract: str):
             return json.dumps(_scf(_p.get("customer_ids"), _p.get("field"), _p.get("value"),
                                    _p.get("reason"), _p.get("kerry_ok_post"),
                                    apply=bool(_p.get("apply"))), indent=2, default=str)
+        if cmd == "scoring-ambassadors":
+            # "[<chapter>][|all]" — READ the Ambassador flags (Pairings v1.2
+            # #1036-4); "all" includes removed (ambassador = 0) rows.
+            _p = [x.strip() for x in (arg or "").split("|")]
+            from email_parser.ambassadors import list_ambassadors as _la
+            return json.dumps(_la(_p[0] or None, include_removed=("all" in _p[1:])),
+                              indent=2, default=str)
+        if cmd == "scoring-ambassador-set":
+            # JSON {"customer_id": 23, "chapter": "SA", "on": true,
+            #  "kerry_ok_post": 1234, "note": "...", "apply": false} — the
+            # ONE write for the flag: refused without a cited Kerry-OK post
+            # (rule 3b), dry run by default, action-logged; unflagging keeps
+            # the row (ambassador = 0) per #1055-3.
+            try:
+                _p = json.loads(arg)
+            except ValueError as _e:
+                return json.dumps({"error": f"bad JSON: {_e}"})
+            from email_parser.ambassadors import set_ambassador as _sa
+            _res = _sa(_p.get("customer_id"), _p.get("chapter"), _p.get("on", True),
+                       _p.get("kerry_ok_post"), note=_p.get("note") or "",
+                       apply=bool(_p.get("apply")))
+            return json.dumps(_res, indent=2, default=str)
         if cmd == "scoring-query-customers":
             # "<gender>|<chapter>|<status>|<played_since>|<limit>" (any part
             # blank) — READ-ONLY field read of customers (CoS #1048).

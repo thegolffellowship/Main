@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.522.49";
+window.TGF_VERSION = "2.522.50";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.522.50",
+    date: "2026-09-30",
+    title: "Ambassadors: a flag Kerry sets, per chapter, with one reader for pairings",
+    changes: [
+      "Pairings Spec v1.2 (#1036-4, Kerry: \"I will currently determine the Ambassador role. Definitely not something to be derived right now.\") needs to know who the Ambassadors are, and the Tracker had no record of it. New table customer_ambassadors (migration 0002, approved by the Chief of Staff in #1046, shape confirmed by Tracker Build in #1055): one row per customer per chapter, with who set it, when and why.",
+      "Setting the flag is refused unless the call cites a mailbox post carrying Kerry's word, the same rule-3b guard as set_customer_field. It is a dry run unless applied, and every change is action-logged. Removing an Ambassador sets the flag to 0 and keeps the row, so the pairings history stays explainable.",
+      "The pairings rules (R-A, 1st Timer with an Ambassador; R-F, same-gender preference) read ONLY ambassadors.chapter_ambassadors(conn, chapter_id). test_ambassadors.py fails if any other module queries the table. Bridges scoring-ambassadors (read) and scoring-ambassador-set (write). No Ambassadors are set yet; Kerry names them.",
+    ],
+  },
   {
     version: "2.522.49",
     date: "2026-09-30",
