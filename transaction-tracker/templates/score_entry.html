@@ -88,18 +88,36 @@
         /* Kerry 2026-09-26: black PH pops align with the TOP of the + circle,
            orange team pops with its BOTTOM. The column is the +'s own 48px,
            centred the same way, so the two groups sit on its edges. */
-        .se-pops { position: absolute; top: 50%; height: 48px; transform: translateY(-50%); right: -8px;
+        /* The dot column sits OUTSIDE the + circle with a clear gap (Kerry
+           2026-09-29: "Dots ... are getting into the plus circle"): the
+           number box keeps a 12px lane on its right for the dots. */
+        /* Kerry 2026-09-29: "Numbers aren't centered between +/-. the pops are
+           pushing it left." The lane is the same width on BOTH sides of the number,
+           so the number sits at the midpoint of - and +; the dots hang in the
+           right-hand lane, a little closer to the number. */
+        .se-score { margin: 0 6px; }
+        .se-pops { position: absolute; top: 50%; height: 48px; transform: translateY(-50%); right: -9px;
                    display: flex; flex-direction: column; justify-content: space-between; }
         .se-pops .g { display: flex; flex-direction: column; gap: 2px; }
 
         .se-pop { width: 7px; height: 7px; border-radius: 50%; background: #1B1B1B; display: block; }
         .se-pop.t { background: #E87C3E; }
+        /* Par-3 ×: the team stroke the no-strokes-on-par-3s rule removed
+           (Kerry 2026-09-29), in the team-pop position, as on the print. */
+        .se-pop.x { background: none; width: 9px; height: 9px; border-radius: 0; position: relative; }
+        .se-pop.x::before, .se-pop.x::after { content: ""; position: absolute; left: 50%; top: 50%;
+            width: 10px; height: 2px; background: #E87C3E; border-radius: 1px; }
+        .se-pop.x::before { transform: translate(-50%, -50%) rotate(45deg); }
+        .se-pop.x::after { transform: translate(-50%, -50%) rotate(-45deg); }
+        .se-popkey .se-pop.x { display: inline-block; vertical-align: middle; }
 
         /* ONE SCREEN, NO SCROLLING (Kerry 2026-09-26: "We've got to work on
            getting everything to fit in the window without scrolling"). The hole
            screen drops the site nav, the keeper line and the saved-count line,
            and every row keeps its name and details to one line each. */
-        body.se-focus .shell-nav { display: none; }
+        /* Kerry 2026-09-29: "Provide a centered TGF Logo on black header for all
+           screens but don't allow it to link anywhere." The slim header now stays
+           on the hole screen too (it was hidden here for the one-screen fit). */
         /* CHECK THE CARD fits one screen too (Kerry 2026-09-26: "Now make Check
            the card fit too"), and in each cell the pops sit ABOVE (black, PH)
            and BELOW (orange, team) the number ("Pops here should go above and
@@ -181,7 +199,19 @@
         .se-lblrow { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; }
         .se-keepnote { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: #4B5563; }
         .se-keepnote svg { width: 14px; height: 14px; }
-        body.se-focus .se-wrap { padding-top: 10px; padding-bottom: 16px; }
+        body.se-focus .se-wrap { padding-top: 6px; padding-bottom: 16px; }
+        /* The 50 px header logo (v2.522.25) fits a 390x844 phone with four players;
+           on a short screen (under 700 px) the hole page shrinks it back so the card
+           and Save still fit without scrolling. */
+        /* Kerry 2026-09-29, 4:11 PM: "That black bar up top shows right size for a
+           flash on mobile then gets small." A max-height media query fired on every
+           iPhone (Safari's visible area with its toolbar is under 700 px). Now the
+           header shrinks ONLY when the rendered page would actually overflow the
+           screen (render() measures and sets se-tight), so a normal card keeps
+           the full logo. */
+        body.se-tight header.shell-nav.shell-slim { min-height: 26px; padding-top: 1px; padding-bottom: 1px; }
+        body.se-tight header.shell-nav.shell-slim .shell-brand img { width: 24px; height: 24px; }
+        body.se-tight .se-hole .se-popkey { margin-top: 6px; }
         .se-hole .se-top { align-items: center; }
         .se-hole .se-h1.big { font-size: 30px; line-height: 1.05; }
         .se-hole .se-sub { font-size: 14px; margin-top: 2px; }
@@ -199,11 +229,21 @@
         .se-hole .se-minus, .se-hole .se-plus { width: 44px; height: 44px; }
         .se-hole .se-pops { height: 44px; }
         .se-hole .se-score { width: 40px; }
-        .se-hole .se-popkey { margin-top: 6px; }
+        /* Kerry 2026-09-29: the key sits BELOW Save & Go, "so the hole number and
+           button are always in the same place"; one line at 390 px when it fits. */
+        .se-hole .se-popkey { margin-top: 14px; font-size: 11.5px; gap: 12px; }
         .se-hole .se-cell { height: 34px; }
         .se-hole .se-pill { height: 50px; margin-top: 10px; }
         .se-popkey { display: flex; gap: 14px; align-items: center; font-size: 12px; color: #4B5563; margin-top: 8px; }
         .se-popkey span { display: inline-flex; align-items: center; gap: 5px; }
+        /* Kerry 2026-09-29: "I don't love how the legend renders wrapping like it
+           does." Each item stays on one line; whole items move to the next row. */
+        .se-popkey { flex-wrap: wrap; row-gap: 4px; justify-content: center; } /* Kerry 2026-09-29: "Center the legend" */
+        .se-popkey > span { white-space: nowrap; }
+        /* Kerry 2026-09-29: "Legend showing oval pops". A two-line label squeezed the
+           dots into ovals (flex shrink); they stay round at the pops' size. */
+        .se-popkey .se-pop { flex: none; }
+        .se-popkey .se-pop:not(.x) { width: 7px; height: 7px; }
         .se-card td { position: relative; }
         .se-strip { display: grid; gap: 4px; }
         .se-cell { height: 44px; border-radius: 8px; display: flex; flex-direction: column; align-items: center;
@@ -386,7 +426,7 @@
     </style>
 </head>
 <body>
-    {% set SHELL_TITLE = 'Scorecard' %}{% set SHELL_ACTIVE = '' %}
+    {% set SHELL_TITLE = 'Scorecard' %}{% set SHELL_ACTIVE = '' %}{% set SHELL_SLIM = True %}
     {% include '_shell_nav.html' %}
     <main class="se-wrap" id="se-app" aria-live="polite"></main>
 
@@ -479,7 +519,7 @@
         // Dots, not words: k PH pops (black) + t team pops (orange).
         function popsOf(cid, n) {
             const g = (m) => Math.max(0, Number(((m || {})[String(cid)] || {})[String(n)]) || 0);
-            return {k: g(card.strokes), t: g(card.team_strokes)};
+            return {k: g(card.strokes), t: g(card.team_strokes), x: g(card.team_par3_ghost)};
         }
         // A one-ball team (Chapman in the cup) gets its pops from the match
         // engine's own strokes for that side (CA #721: "Draw the Chapman team's
@@ -502,8 +542,8 @@
             }
             if (!cids || cids.length !== 1) return "";
             const p = popsOf(cids[0], n);
-            if (!p.k && !p.t) return "";
-            const d = `<span class="g">${"<i class=\"se-pop\"></i>".repeat(p.k)}</span><span class="g">${"<i class=\"se-pop t\"></i>".repeat(p.t)}</span>`;
+            if (!p.k && !p.t && !p.x) return "";
+            const d = `<span class="g">${"<i class=\"se-pop\"></i>".repeat(p.k)}</span><span class="g">${"<i class=\"se-pop t\"></i>".repeat(p.t)}${"<i class=\"se-pop x\"></i>".repeat(p.x)}</span>`;
             return `<span class="se-pops${small ? " cell" : ""}" aria-hidden="true">${d}</span>`;
         }
         function popLabel(cids, n) {
@@ -520,14 +560,23 @@
             const cup = subs.some((x) => cupOf(x.cids)), reg = subs.some((x) => matchOf(x.cids) && !cupOf(x.cids));
             return `<div class="se-popkey se-pukey">${reg ? `<span><span class="se-pu sm">7</span>Picked up</span>` : ""}${cup ? `<span><span class="se-x">X</span>Picked up (the card keeps the triple)</span>` : ""}</div>`;
         }
-        function popKey() {
+        function popKey(hole) {
             // Only a player's own row draws dots (a foursomes pair's ball does not).
+            // With a hole given (the hole screen) the key names only the dots ON
+            // THAT HOLE and disappears when there are none (Kerry 2026-09-29:
+            // "If there are no pops on a hole, the legend disappears"); the
+            // check card passes none and keys the whole round.
             const solo = new Set(subjects().filter((x) => x.cids.length === 1).map((x) => String(x.cids[0])));
-            const any = (m) => Object.entries(m || {}).some(([c, h]) => solo.has(c) && Object.values(h || {}).some((v) => v > 0));
-            const a = any(card.strokes), b = any(card.team_strokes);
+            const on = (h) => hole ? (h || {})[hole] > 0 : Object.values(h || {}).some((v) => v > 0);
+            const any = (m) => Object.entries(m || {}).some(([c, h]) => solo.has(c) && on(h));
+            const a = any(card.strokes), b = any(card.team_strokes), x = any(card.team_par3_ghost);
             const tm = subjects().some((x) => x.cids.length === 2 && (card.match_status || []).some((m) => (m.card || []).some((h) => (h.p || h.s).some((v) => v > 0))));
-            if (!a && !b && !tm) return "";
-            return `<div class="se-popkey">${a ? `<span><i class="se-pop"></i>PH pop</span>` : ""}${tm ? `<span><i class="se-pop"></i>Team match stroke</span>` : ""}${b ? `<span><i class="se-pop t"></i>${esc((card.team_game || {}).label || "Team Net")} pop</span>` : ""}${card.strokes_note ? `<span style="color:#9CA3AF">${esc(card.strokes_note)}</span>` : ""}</div>`;
+            if (!a && !b && !tm && !x) return "";
+            // Kerry's words (2026-09-29): "100% Handicap Stroke", "X% Team (or Cart
+            // when applicable) Stroke", "No Team Strokes on Par 3s".
+            const tgm = card.team_game || {}, unit = tgm.unit === "cart" ? "Cart" : "Team";
+            const pct = tgm.pct != null ? tgm.pct + "% " : "";
+            return `<div class="se-popkey">${a ? `<span><i class="se-pop"></i>100% Handicap Stroke</span>` : ""}${tm ? `<span><i class="se-pop"></i>Team match stroke</span>` : ""}${b ? `<span><i class="se-pop t"></i>${pct}${unit} Stroke</span>` : ""}${x ? `<span><i class="se-pop x"></i>No ${unit} Strokes on Par 3s</span>` : ""}${card.strokes_note ? `<span style="color:#9CA3AF">${esc(card.strokes_note)}</span>` : ""}</div>`;
         }
         // The tee a player plays, from the tee sheet's legend (card.tees).
         function teeOf(cid) {
@@ -622,7 +671,12 @@
                 body = keeping() && !(allDone() && hole === "done") ? holeScreen() : cardScreen();
             }
             app.innerHTML = banner + body;
-            document.body.classList.toggle("se-focus", !!app.querySelector(".se-hole, .se-chk"));
+            const focus = !!app.querySelector(".se-hole, .se-chk");
+            document.body.classList.toggle("se-focus", focus);
+            // Full logo unless this card would not fit the screen (then the
+            // header gives up its height so Save stays on screen, no scrolling).
+            document.body.classList.remove("se-tight");
+            if (focus && document.documentElement.scrollHeight > window.innerHeight + 1) document.body.classList.add("se-tight");
         }
 
         function joinScreen() {
@@ -694,8 +748,8 @@
             const cells = stripCells(order, hole);
             const next = order[i + 1];
             const editing = order.every((n) => n === hole || holeDone(n));   // the rest are in
-            const cta = editing ? "Save hole " + hole
-                      : next == null ? "Save last hole" : "Save &amp; go to hole " + next;
+            const cta = editing ? "Save Hole " + hole
+                      : next == null ? "Save Last Hole" : "Save &amp; Go to Hole " + next;
             const hio = hioForKeeper();
             return `<div class="se-hole"><div class="se-top"><div style="min-width:0">
                     <div class="se-eyebrow">${esc(eyebrow())}</div>
@@ -708,11 +762,11 @@
                 ${hio}
                 ${maxNote ? `<div class="se-warn">${ICON.warn}<span>${esc(maxNote)}</span></div>` : ""}
                 <div class="se-stack">${rows}</div>
-                ${popKey()}
                 <div class="se-lblrow"><span class="se-lbl">Group card</span><span class="se-keepnote">${ICON.pen}<span>You're keeping score</span></span></div>
                 <div class="se-strip" style="margin-top:6px;grid-template-columns:repeat(${Math.min(order.length, 9)}, minmax(0, 1fr))">${cells}</div>
                 ${queue.length ? statusLine() : ""}
-                <button type="button" class="se-pill go" data-act="save">${cta}</button></div>`;
+                <button type="button" class="se-pill go" data-act="save">${cta}</button>
+                ${popKey(hole)}</div>`;
         }
 
         function stripCells(order, current) {
@@ -954,7 +1008,7 @@
                     <div class="se-pu-name" style="font-size:17px;font-weight:700">${esc(sub.name)}${mtag(sub.cids)} · ${hi}</div>
                     <div class="se-meta">${esc(vsText(sub.cids))}</div>
                     <div class="se-chips" style="margin-top:10px">
-                      <button type="button" class="se-chip ${a === "holed" ? "on" : ""}" data-act="pu" data-key="${k}" data-m="holed">Ball in hole</button>
+                      <button type="button" class="se-chip ${a === "holed" ? "on" : ""}" data-act="pu" data-key="${k}" data-m="holed">Ball in Hole</button>
                       <button type="button" class="se-chip ${a === "picked_up" ? "on" : ""}" data-act="pu" data-key="${k}" data-m="picked_up">Picked up</button>
                     </div></div>`;
             }).join("");
@@ -1024,9 +1078,9 @@
                 <div class="se-gap" style="height:8px"></div><div class="se-stack" style="gap:6px">${rows}</div>
                 ${puKey()}
                 ${statusLine()}
-                <button type="button" class="se-pill go" data-act="turn">Go to hole ${next}</button>
+                <button type="button" class="se-pill go" data-act="turn">Go to Hole ${next}</button>
                 <div class="se-gap" style="height:10px"></div>
-                <button type="button" class="se-pill line" data-act="goto" data-h="${last}">Back to hole ${last}</button>`;
+                <button type="button" class="se-pill line" data-act="goto" data-h="${last}">Back to Hole ${last}</button>`;
         }
 
         function cardBlock(holes, label, subs, mine, flagsMine, withTotal, eighteen) {
@@ -1105,7 +1159,7 @@
                     const v = value(mine.key, flagPick).v;
                     actions += `<div class="se-box" style="margin-bottom:10px"><div style="font-size:17px;font-weight:700;margin-bottom:6px">Hole ${flagPick} shows ${v == null ? "no score" : v}. Is that wrong?</div>
                         <div class="se-copy" style="margin-bottom:10px">${esc(first(kept) || "The scorekeeper")} gets the flag to fix it, then you sign. ${maxText(flagPick)}${v != null && v === hiOf(flagPick) ? " Anything worse is still entered as " + v + "." : ""}</div>
-                        <button type="button" class="se-pill dark" data-act="flaghole" data-h="${flagPick}">Flag hole ${flagPick}</button><div class="se-gap"></div>
+                        <button type="button" class="se-pill dark" data-act="flaghole" data-h="${flagPick}">Flag Hole ${flagPick}</button><div class="se-gap"></div>
                         <button type="button" class="se-pill line" data-act="unflag">Cancel, it's right</button></div>`;
                 } else if (flagging) {
                     actions += `<div class="se-copy" style="margin-bottom:10px"><strong>Tap the hole that's wrong on your row</strong> (outlined above).</div>

@@ -63,8 +63,18 @@ def _static_url_fetcher(static_dir: str):
     return fetch
 
 
+def scorecards_in_pack(event_id: int, db_path=None) -> bool:
+    """Does this event's pack carry scorecards? App setting
+    `print_pack_scorecards`: "all" or a comma/space list of event ids."""
+    from email_parser import database as db
+    raw = (db.get_app_setting("print_pack_scorecards", db_path) or "").strip().lower()
+    if raw == "all":
+        return True
+    return str(int(event_id)) in {t for t in re.split(r"[\s,\[\]\"']+", raw) if t}
+
+
 def build_event_print_pack(render, event_id: int, static_dir: str,
-                           db_path=None) -> dict | None:
+                           db_path=None, allow_gaps: bool = False) -> dict | None:
     """Render every part and bind them into one PDF.
 
     `render(template_name, **context) -> str` is the caller's template
@@ -94,6 +104,30 @@ def build_event_print_pack(render, event_id: int, static_dir: str,
             htmls.append((slug, render(template, **{key: ctx})))
         except Exception:
             logger.exception("print pack: %s failed to render for event %s", slug, event_id)
+    # SCORECARDS IN THE PACK (Kerry 2026-09-29: "Include the scorecards in
+    # the print pack now"), right after the cart signs. Which events is a
+    # dial, `print_pack_scorecards`: "all", or event ids ("3304,3317").
+    # Defaults: 3-up, the grouping the engine's net game uses (Cart Net ->
+    # one card per cart), the event's holes, QR only per the score-entry
+    # dials, the saved GGID codes. A named gap does not print a guessed
+    # card: the part is the gap sheet, and `scorecards.gaps` says why.
+    sc_info = None
+    if htmls and scorecards_in_pack(int(event_id), db_path=db_path):
+        try:
+            from email_parser.scorecards import build_scorecards
+            unit = (sheet_pack or {}).get("team_unit")
+            sc = build_scorecards(int(event_id), "3up", "cart" if unit == "cart" else "team",
+                                  qr="auto", allow_gaps=allow_gaps, db_path=db_path)
+            if sc:
+                at = next((i + 1 for i, (sl, _) in enumerate(htmls) if sl == "cart-signs"),
+                          len(htmls))
+                htmls.insert(at, ("scorecards", render("scorecards.html", sc=sc)))
+                sc_info = {"grouping": sc["grouping"], "cards": len(sc["cards"]),
+                           "sheets": len(sc["sheets"]), "gaps": sc["gaps"],
+                           "flagged": sc.get("flagged") or []}
+        except Exception:
+            logger.exception("print pack: scorecards failed for event %s", event_id)
+            sc_info = {"error": "scorecards failed to render; see the log"}
     if not htmls:
         return None
     sha = hashlib.sha256("\n".join(_hash_view(h) for _, h in htmls).encode("utf-8")).hexdigest()[:16]
@@ -119,10 +153,13 @@ def build_event_print_pack(render, event_id: int, static_dir: str,
         except Exception as exc2:                  # engine absent on this deploy
             return {"error": f"PDF engine unavailable: {exc2}", "sha": sha, "engine_note": engine_note,
                     "parts": [{"slug": s_, "pages": None} for s_, _ in htmls], "event": ev}
+    from email_parser.database import print_file_stub as _pfs
     return {"pdf": pdf, "parts": parts, "sha": sha, "event": ev, "engine": engine,
+            "scorecards": sc_info,
             "engine_note": engine_note, "pack": sheet_pack,
             "assets": sorted(set(getattr(_render_pdf_chromium, "last_served", []))) if engine == "chromium" else None,
-            "filename": f"{code} — print pack — {ev.get('event_date')}.pdf"}
+            # <stub>-PrintPack.pdf, the report file-name convention (Kerry 9/29).
+            "filename": f"{_pfs(ev) or code}-PrintPack.pdf"}
 
 
 PRINT_STATIC_ORIGIN = "http://tgf-print.local"   # never fetched: the route answers it

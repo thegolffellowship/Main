@@ -82,6 +82,14 @@
       font-size: 13px; letter-spacing: 0.02em;
     }
     .gbox-head .grp { font-size: 10px; color: #bbb; }
+    /* GGID (Kerry #900/#912): Golf Genius's group code, typed on the
+       scorecards page. It rides in the black header line, never a row of
+       its own: a footer row added height and pushed 3304's one-page sheet
+       onto a second page (Kerry 9/29). Absent → nothing prints. */
+    .gbox-head .ggid { font-size: 9px; color: #bbb; letter-spacing: .06em;
+      text-transform: uppercase; margin-left: auto; margin-right: 8px; }
+    .gbox-head .ggid b { font: 700 11px "Geist Mono", ui-monospace, monospace; color: #fff;
+      letter-spacing: 0; text-transform: none; margin-left: 3px; }
     /* TEE LEGEND (Kerry 2026-09-15: "add colors for the tee assignments
        according to our course info. With a legend up above the
        foursomes"). The colour comes off the COURSE CARD, and the tee's
@@ -212,15 +220,7 @@
   </style>
 </head>
 <body>
-  <div class="toolbar noprint">
-    <button class="back" onclick="location.href = '/events?event={{ pack.event.id }}&view=pairings';">&#8592; Back</button>
-    <button onclick="window.print()">Print Starter Sheet</button>
-    <!-- Download PDF is the same print pipeline with the filename
-         pre-named (Kerry 2026-09-08). A page cannot choose "Save as
-         PDF" for you — what it can do is stop the file being called
-         after the URL, which was the slow part. -->
-    <button class="pdf" onclick="downloadPdf()">&#8681; Download PDF</button>
-  </div>
+  {% with rb_event_id=pack.event.id, rb_width='8.5in', rb_file=(pack.event.file_stub or '') ~ '-StarterSheet' %}{% include "_report_bar.html" %}{% endwith %}
   <div class="sheet">
   <div class="sheet-head">
     <div class="sheet-brand">
@@ -281,6 +281,7 @@
       <div class="gbox">
         <div class="gbox-head">
           <span class="slot">{{ g.start_line or g.slot_label }}</span>
+          {% if g.ggid %}<span class="ggid">GGID<b>{{ g.ggid }}</b></span>{% endif %}
           <span class="grp">{{ g.group_num }}{% if g.holes == '18' %} · 18{% endif %}</span>
         </div>
         {% for p in g.players %}

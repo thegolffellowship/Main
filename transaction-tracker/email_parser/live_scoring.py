@@ -218,10 +218,15 @@ SEED_LIVE_SCORING_CONFIG: dict = {
                 "2": {"1": 85, "2": 100},   # CART Net, Kerry ruling
             },
             "off_lowest": True,
-            # game-engine.md lists disallow-strokes-on-par-3 as a team-game
-            # attribute. TGF's ratified side-games spec does not assert it,
-            # so it ships OFF and is a config toggle, never a code branch.
-            "no_pops_on_par3": False,
+            # NO POPS ON A PAR 3 for Team AND Cart Net (Kerry 2026-09-28, CA
+            # #912-2, verbatim: "Got to have the team/cart Net remove par 3
+            # pops for both card and side game results now." Go-Live
+            # Checklist B2 and #891-F said the same). Read by this engine
+            # (game_team_net), the printed scorecard's orange dots
+            # (scorecards.py) and the phone card's team pops
+            # (score_entry._team_strokes), so all three agree. A config
+            # toggle, never a code branch.
+            "no_pops_on_par3": True,
         },
         "skins": {
             "label": "Skins",

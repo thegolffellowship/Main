@@ -203,6 +203,36 @@ check("...so the engine derives PH 5 over the nine (net = gross - 5)",
       _cards[0]["allocation_source"] == "derived" and _cards[0]["net"] == 40,
       (_cards[0]["allocation_source"], _cards[0]["net"]))
 
+print("\n== a COMP FUNDS the games (Kerry 9/28, CA #912-3; #882-4 withdrawn) ==")
+with db._connect(_tmp) as _c:
+    for _uid, _cust, _price, _sg in (("e1", "Paid One", "$55.00", "NET"),
+                                     ("e2", "Paid Two", "$86.00", "Both"),
+                                     ("manual-comp-1", "Comp Kerry", "$0.00 (comp)", "Both"),
+                                     ("legacy-0", "Zero Legacy", "$0.00", "NET")):
+        _c.execute("INSERT INTO items (email_uid, item_index, merchant, customer, "
+                   "item_name, item_price, side_games, transaction_status, order_date) "
+                   "VALUES (?, 0, 'x', ?, 's9.97 Comp', ?, ?, 'active', '2026-10-13')",
+                   (_uid, _cust, _price, _sg))
+    _c.commit()
+    _cnt = db._event_player_counts(_c, "s9.97 Comp")
+check("the comp COUNTS in players / net / gross",
+      (_cnt["players"], _cnt["net"], _cnt["gross"]) == (4, 4, 2), _cnt)
+check("...and is LISTED as a comp for the reader", [c["name"] for c in _cnt["comps"]] == ["Comp Kerry"],
+      _cnt["comps"])
+
+print("\n== Team / Cart Net take NO pops on a par 3 (Kerry 9/28, CA #912-2) ==")
+check("the dial is ON", cfg["games"]["team_net"]["no_pops_on_par3"] is True)
+_tc = [{"key": "a", "name": "A", "team": 1, "holes": [
+            {"hole": 1, "par": 3, "strokes": 4, "strokes_received": 1},
+            {"hole": 2, "par": 4, "strokes": 5, "strokes_received": 1}]},
+       {"key": "b", "name": "B", "team": 1, "holes": [
+            {"hole": 1, "par": 3, "strokes": 5, "strokes_received": 0},
+            {"hole": 2, "par": 4, "strokes": 6, "strokes_received": 0}]}]
+_tn = ls.game_team_net(_tc, cfg)
+_h = {r["hole"]: r["best"] for r in _tn["teams"][0]["holes"]}
+check("par 3: the pop is removed (4 on a par 3 = +1, not net par)", _h[1] == 1, _h)
+check("par 4: the pop still counts (5 - 1 = net par)", _h[2] == 0, _h)
+
 print("\n" + "=" * 60)
 if FAILURES:
     print(f"{len(FAILURES)} FAILED: {FAILURES}")

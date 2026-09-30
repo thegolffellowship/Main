@@ -671,6 +671,16 @@ that name (v2.513.14, 3309: the women's Red nine rows 557 / 2894 beside a
 men's 18-hole Red). "Red (L)" pins the women's rows. Guard in
 `test_entry_publish.py`.
 
+**Pops (strokes_received)**: each published hole carries the DERIVED
+dots: the playing handicap allocated by stroke index under the ruled mode
+(`handicap_calc.ruled_allocation_mode`, Kerry CA #771: a nine collapses to
+SI 1-9, an 18 uses the full card), the same call the game engine makes.
+Stroke index comes from the resolved tee's holes, else the round's own card;
+a card with no stroke index for every hole played keeps 0 and is listed in
+`dots_unresolved`. Before this every entered hole stored 0, so the handicap
+cap, get_scorecard / MVP Stableford and the leaderboard read net = gross
+(CA #865/#866/#868). A re-publish with changed dots re-runs the MVP recompute.
+
 **The GG gate**: `import_gg_scorecards` returns `skipped_entry_record` with
 a reason, writing no rows, when the resolved event already has entry rows;
 per player it skips a card whose owner has an entry row on that date/event
@@ -684,3 +694,89 @@ run by default; apply is audited) and `scoring-entry-parity:<event_id>`
 **Guard test**: `test_entry_publish.py` (dry run, held players, apply,
 idempotency, edit + re-sign, shadow diff, cutover, the GG gate, tee by
 band / name / unresolved, and that the module names no score-entry table).
+
+## Seeding by bridge (v2.516.1)
+
+`scoring-se-seed:<event_id>[|9|18][|apply]` is the Seed button without the tap.
+With no `apply` it returns `seed_plan`: the groups, each player's tee band and
+locked PH, whether a round for that event+holes already exists, and `gaps` naming
+any seat with no customer_id, no tee or no PH. It writes nothing. With `apply` it
+runs `seed_round_from_pairings` and returns the round id and one link per group.
+The member switches (`score_entry_live`, `score_entry_qr`) are never touched.
+
+## Lone Star Cup seeding (v2.517.1, Track B #875/#876)
+
+`scoring-se-cup-seed:<event_id>[|apply]` reads the `lsc_matches` dial and
+`lsc_tees`. It makes one round per session (key `pairings_holes = 'lsc:<session id>'`)
+and one group per match. A player in two matches in one session (the odd
+player's threesome) is one group holding both matches. `se_players.tee` = the
+player's `lsc_tees` band; PH = WHS off that tee (`_preview_handicaps`, 18 holes,
+locked index). Dry run by default; `gaps` names no tee / no PH / not a customer,
+and apply refuses while any player isn't a customer. Track B binds each session's
+`se_round` to the returned round id. Seed after Kerry's real pairings are in the
+dial; the staged demo should not be applied.
+
+The G-0 publish dry run (`scoring-entry-publish`) resolves EVERY player's tee,
+held or not, and returns `tees: {tee value: {tee_id, players[, why]}}` per round.
+Use it to prove tees after seeding, before anyone plays.
+
+## Per-event opt-in (Kerry 2026-09-28)
+
+Score entry is OFF for every event unless its id is in the app setting
+`score_entry_events` (JSON list or comma list). Set it with
+`scoring-setting-set:score_entry_events|[3304]`. Below admin, every door checks
+it: the scorer link routes (`_se_group_from_request`), the Live Scoring page and
+read, the scores feed and the four manager actions (`_se_event_gate` in app.py).
+The cart-sign QR (`attach_cart_sign_qr`) and the EVENTS page's SCORE ENTRY panel
+and Live Scoring button (`SE_EVENTS`, server-rendered) follow it too. Admin
+preview is unaffected. `score_entry_live` stays the member switch; both must be
+on for a member to score.
+Proof on production: `scoring-se-gate-check:<event_id>[|<chapter>]` (read-only)
+returns the status codes a chapter manager and a player link get on that event.
+
+## Links are slot numbers; the round follows the saved pairings (Kerry 2026-09-29)
+
+A group link is the `se_groups` row, and the row is the pairings' GROUP NUMBER, its
+place in the list ("slot one and slot two through how many ever slots there are").
+It is never matched by the hole or tee-time label: relabelling 2A to 3 keeps the link,
+which opens on the new start hole. A new group number gets a new link; a group number
+that left the sheet keeps its row and its card answers 410 "This group isn't on
+tonight's pairings any more". `upsert_group` moves a moved player's `se_hole_scores` /
+`se_hole_marks` rows to his new group; nothing is deleted. `sync_from_pairings(round_id)`
+re-seeds an OPEN round seeded from PAIRINGS whenever the saved pairings' fingerprint
+(`score_entry_pairings_fp` app setting) differs; it runs when a link's card opens
+(`get_group_card`) and when the Live Scoring page / panel reads (`admin_overview`).
+(v2.522.0–.2 matched by label first; on 9/29 Kerry's relabel reused "4A" for another
+group and slot 7's link opened the wrong group before any score. v2.522.5 fixed it.)
+
+
+### No member nav on the score-entry page (v2.522.22, Kerry 2026-09-29)
+
+"If players click PLAYERS, LEADERBOARD or HANDICAPS, how will they get back to
+the LIVE SCORING? I'd say hide that for now." `score_entry.html` sets
+`SHELL_SLIM`, and `_shell_nav.html` then renders the member header with the TGF
+mark only, centered and not tappable ("centered TGF Logo on black header for all
+screens but don't allow it to link anywhere"): no tabs, no CTA button or sheet.
+It shows on every screen, the hole screen included (it used to hide there). The safe-area block in shell.css is untouched.
+Other /member pages keep their nav.
+
+The mark is 50 px (v2.522.26, Kerry: "Make the logger bigger. Like 2.5 times"); under 700 px of screen height the hole page shrinks it to 24 px so the card still fits.
+
+### Hole yardage comes from the Men <50 tee (v2.522.27, Kerry 2026-09-29)
+
+"For the yardage under each hole number, use the <50 back tee yardages. 314
+seems short." `_event_course_holes` reads par / SI / yardage from the tee the
+event's legend (`database.event_tee_legend`) assigns to the `<50` band, via
+`_yardage_tee_id`; before, it took the course's newest `course_tees` row, which
+could be any tee. No legend → the old fallback. `refresh_round_yardage(round_id,
+apply)` / bridge `scoring-se-yardage:<round_id>[|apply]` re-read a seeded
+round's yardage column only (par, SI, groups, scores, links untouched).
+
+### The stroke legend (v2.522.27, Kerry 2026-09-29)
+
+`popKey(hole)` in score_entry.html: on the hole screen it keys only the dots
+on that hole ("100% Handicap Stroke", "X% Team|Cart Stroke" from
+`team_game.pct`, "No Team Strokes on Par 3s") and renders nothing when the
+hole has none; it sits below Save & Go. The check card calls `popKey()` with
+no hole and keys the whole round. `_basis_pct` reads the allowance out of the
+se_game_handicaps basis text.

@@ -80,8 +80,9 @@ scoring-rehearsal:status        (includes the last 20 jobs)
 ```
 
 Refused in a rehearsal: `scoring-rehearsal` itself, `scoring-gg-archive`,
-order import, Brevo, Insider, and the recap, handicap-card, print-pack and
-backup sends. They either reach outside or act on the volume, and the guard
+order import, Brevo, Insider, and the recap, print-pack and backup sends.
+`scoring-hcp-cards` runs as a DRY RUN only (CA #882 item 6, for closeout
+#865): it returns `would_send` and sends nothing; `|apply` is refused. They either reach outside or act on the volume, and the guard
 would stop the outside ones anyway. The lane tools' own "never on Railway,
 never under /data" guards admit exactly one case: `runner_scratch_ok(path)`,
 true only in a runner child for a file inside `<volume>/rehearsal/`.

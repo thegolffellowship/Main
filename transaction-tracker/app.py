@@ -21,6 +21,7 @@ from functools import wraps
 
 import anthropic as _anthropic
 from flask import Flask, Response, jsonify, redirect, render_template, request, send_file, session
+from email_parser.http_headers import content_disposition
 from dotenv import load_dotenv
 from apscheduler.schedulers.background import BackgroundScheduler
 
@@ -1432,6 +1433,17 @@ def validate_json_fields(data: dict, required: list[str] = None,
 _ROLE_RANK = {"member": 0, "view-only": 1, "manager": 2, "admin": 3}
 
 
+def _wants_page(req) -> bool:
+    """A browser navigating to a page (not /api/, not the MCP endpoint, a
+    GET that accepts HTML) — the case that should see a sign-in page
+    rather than a JSON 401."""
+    path = req.path or ""
+    if req.method != "GET" or path.startswith("/api/") or path.startswith("/mcp"):
+        return False
+    accept = (req.headers.get("Accept") or "").lower()
+    return "text/html" in accept
+
+
 def require_role(role):
     """Decorator that checks the session for a minimum role level.
 
@@ -1451,6 +1463,13 @@ def require_role(role):
                 return f(*args, **kwargs)
             user_role = session.get("role")
             if not user_role:
+                # A PAGE asks for the PIN; only the API answers JSON (Kerry
+                # 2026-09-28: the scorecards link, opened in Safari outside
+                # the Tracker app, showed raw JSON). Signed in, it reloads
+                # the same address — every print sheet and page route, not
+                # just the one that hurt.
+                if _wants_page(request):
+                    return render_template("login_gate.html"), 401
                 return jsonify({"error": "Not authenticated. Please log in."}), 401
             if _ROLE_RANK.get(user_role, 0) < _ROLE_RANK.get(role, 0):
                 label = "Admin" if role == "admin" else "Manager"
@@ -2502,12 +2521,26 @@ def api_set_starting_handicap(customer_id):
     (a MEMBER first timer has the same gap). Body: `starting_handicap_18`
     (null clears), optional `note`. Never creates a handicap round.
     """
-    from email_parser.database import set_starting_handicap
+    from email_parser.database import set_starting_handicap, log_agent_action
     body = request.get_json(silent=True) or {}
+    who = session.get("role") or "unknown"
+    if session.get("chapter"):
+        who += f" ({session.get('chapter')})"
     res = set_starting_handicap(
         customer_id, body.get("starting_handicap_18"),
-        set_by=f"manual:{session.get('role')}",
+        set_by=f"manual:{who}",
         note=(body.get("note") or "").strip() or None)
+    # Every starting handicap set or cleared is on the record, with who set
+    # it (Kerry 2026-09-28, #920) — it feeds PH, the Starter Sheet, the
+    # scorecard and score entry.
+    try:
+        log_agent_action(
+            f"manager:{who}", "starting_handicap_set",
+            f"customer {customer_id} ({res.get('customer_name') or '?'}): starting handicap "
+            f"{body.get('starting_handicap_18')!r} (18-hole); note={body.get('note')!r}",
+            outcome="error: " + res["error"] if "error" in res else "ok")
+    except Exception:
+        logger.exception("starting handicap: action log failed")
     return (jsonify(res), 400) if "error" in res else jsonify(res)
 
 
@@ -3260,7 +3293,7 @@ def api_duplicate_detective_export_csv():
     return Response(
         buf.getvalue(),
         mimetype="text/csv",
-        headers={"Content-Disposition": f"attachment; filename={fname}"},
+        headers={"Content-Disposition": content_disposition(fname)},
     )
 
 
@@ -3320,7 +3353,7 @@ def api_duplicate_detective_export_md():
     return Response(
         body,
         mimetype="text/markdown",
-        headers={"Content-Disposition": f"attachment; filename={fname}"},
+        headers={"Content-Disposition": content_disposition(fname)},
     )
 
 
@@ -4448,7 +4481,13 @@ def api_fix_guest_customers():
 @app.route("/events")
 def events_page():
     matrix9, matrix18 = _load_matrix()
-    return render_template("events.html", matrix9=matrix9, matrix18=matrix18)
+    try:
+        from email_parser.score_entry import enabled_events as _se_enabled
+        se_events = sorted(_se_enabled())
+    except Exception:
+        se_events = []
+    return render_template("events.html", matrix9=matrix9, matrix18=matrix18,
+                           se_events=se_events)
 
 
 @app.route("/customers")
@@ -5466,6 +5505,63 @@ def starter_sheet_page(event_id):
     return render_template("starter_sheet.html", pack=pack)
 
 
+@app.route("/events/<int:event_id>/scorecards")
+@require_role("manager")
+def scorecards_page(event_id):
+    """THE PRINTED SCORECARD (design-claude #890-#897, CA #898): ?layout=
+    3up|2up|2land, ?grouping=team|cart, ?qr=auto|off|preview, ?holes=9|18.
+    A missing value shows the gaps instead of a card (#897-G)."""
+    from email_parser.scorecards import build_scorecards
+    sc = build_scorecards(event_id, request.args.get("layout", "3up"),
+                          request.args.get("grouping", "team"),
+                          qr=request.args.get("qr", "auto"),
+                          holes_override=request.args.get("holes") or None,
+                          allow_gaps=request.args.get("allow_gaps") == "1")
+    if not sc:
+        return "Event not found", 404
+    return render_template("scorecards.html", sc=sc)
+
+
+@app.route("/api/events/<int:event_id>/group-codes", methods=["GET", "POST"])
+@require_role("manager")
+def api_event_group_codes(event_id):
+    """GGID per group (Kerry #900/#912). GET lists; POST {codes: [{holes,
+    group_num, ggid}]} saves (blank clears). Printed on the scorecard
+    header, the Starter Sheet group box and the cart signs."""
+    from email_parser.database import get_group_codes, set_group_codes
+    if request.method == "GET":
+        return jsonify({f"{h}:{g}": c for (h, g), c in get_group_codes(event_id).items()})
+    data = request.get_json(silent=True) or {}
+    codes = {}
+    for c in data.get("codes") or []:
+        try:
+            codes[(str(c.get("holes") or "9"), int(c.get("group_num")))] = c.get("ggid") or ""
+        except (TypeError, ValueError):
+            return jsonify({"ok": False, "error": "bad group number"}), 400
+    res = set_group_codes(event_id, codes, by=session.get("role") or "manager")
+    return jsonify(res), (200 if res.get("ok") else 400)
+
+
+@app.route("/events/<int:event_id>/scorecards.pdf")
+@require_role("manager")
+@perf.timed_route("scorecards_pdf")
+def scorecards_pdf(event_id):
+    from flask import Response
+    from email_parser.scorecards import build_scorecards_pdf
+    built = build_scorecards_pdf(_print_pack_render, event_id, app.static_folder, [{
+        "layout": request.args.get("layout", "3up"),
+        "grouping": request.args.get("grouping", "team"),
+        "qr": request.args.get("qr", "auto"),
+        "holes": request.args.get("holes") or None,
+        "allow_gaps": request.args.get("allow_gaps") == "1"}])
+    if built.get("error"):
+        if built.get("gaps"):
+            return scorecards_page(event_id)
+        return built["error"], 404
+    return Response(built["pdf"], mimetype="application/pdf",
+                    headers={"Content-Disposition": content_disposition(built["filename"])})
+
+
 def _print_pack_render(template, **ctx):
     """Render a print template for the PDF engine — inside an app context
     so the scheduler (no request) can do it too."""
@@ -5473,9 +5569,10 @@ def _print_pack_render(template, **ctx):
         return render_template(template, **ctx)
 
 
-def build_print_pack_for_event(event_id: int) -> dict | None:
+def build_print_pack_for_event(event_id: int, allow_gaps: bool = False) -> dict | None:
     from email_parser.print_pack import build_event_print_pack
-    return build_event_print_pack(_print_pack_render, event_id, app.static_folder)
+    return build_event_print_pack(_print_pack_render, event_id, app.static_folder,
+                                  allow_gaps=allow_gaps)
 
 
 @app.route("/events/<int:event_id>/print-pack.pdf")
@@ -5484,14 +5581,16 @@ def build_print_pack_for_event(event_id: int) -> dict | None:
 def print_pack_pdf(event_id):
     """Every print sheet for the event bound into one PDF (v2.465.0)."""
     from flask import Response
-    built = build_print_pack_for_event(event_id)
+    # ?allow_gaps=1 prints the pack's scorecards flagged (a player with no
+    # handicap prints blank) instead of the gap sheet (Kerry 2026-09-29).
+    built = build_print_pack_for_event(event_id, allow_gaps=request.args.get("allow_gaps") == "1")
     if not built:
         return "Event not found or nothing to print", 404
     if built.get("error"):
         return built["error"], 503
     return Response(built["pdf"], mimetype="application/pdf",
                     headers={"Content-Disposition":
-                             f'inline; filename="{built["filename"]}"'})
+                             content_disposition(built["filename"], inline=True)})
 
 
 def send_due_print_packs_job():
@@ -10238,7 +10337,7 @@ def api_handicap_export_csv():
     return Response(
         buf.getvalue(),
         mimetype="text/csv",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        headers={"Content-Disposition": content_disposition(filename)},
     )
 
 
@@ -11340,6 +11439,26 @@ def _score_entry_live() -> bool:
         return False
 
 
+def _se_is_admin() -> bool:
+    return _ROLE_RANK.get(session.get("role"), 0) >= _ROLE_RANK["admin"]
+
+
+def _se_event_gate(kind: str, obj_id):
+    """PER-EVENT OPT-IN (Kerry 2026-09-28, SA-only test): anyone below admin
+    reaches score entry only on an event listed in `score_entry_events`.
+    Returns an error response, or None when allowed."""
+    if _se_is_admin():
+        return None
+    from email_parser.score_entry import event_enabled, event_of
+    try:
+        ev = obj_id if kind == "event" else event_of(kind, obj_id)
+    except Exception:
+        ev = None
+    if ev is None or not event_enabled(ev):
+        return jsonify({"error": "score entry is not open for this event"}), 404
+    return None
+
+
 def _se_group_from_request(body=None):
     """(group_id, error_response). The link is the only key."""
     from email_parser.score_entry import verify_group_token
@@ -11349,6 +11468,9 @@ def _se_group_from_request(body=None):
     gid = verify_group_token(tok)
     if not gid:
         return None, (jsonify({"error": "this scoring link is not valid any more"}), 401)
+    gate = _se_event_gate("group", gid)
+    if gate:
+        return None, gate
     return gid, None
 
 
@@ -11365,7 +11487,10 @@ def api_se_card():
     gid, err = _se_group_from_request()
     if err:
         return err
-    return jsonify(get_group_card(gid, request.args.get("device_id") or None))
+    card = get_group_card(gid, request.args.get("device_id") or None)
+    if "error" in card:
+        return jsonify(card), 410
+    return jsonify(card)
 
 
 @app.route("/api/score-entry/claim", methods=["POST"])
@@ -11532,6 +11657,9 @@ def _se_actor() -> str:
 @require_role("manager")
 def api_se_hio_verify(hio_id):
     from email_parser.score_entry import verify_hio
+    gate = _se_event_gate("hio", hio_id)
+    if gate:
+        return gate
     b = request.get_json(silent=True) or {}
     res = verify_hio(hio_id, _se_actor(), approve=b.get("approve", True) is not False)
     return (jsonify(res), 400) if "error" in res else jsonify(res)
@@ -11541,6 +11669,9 @@ def api_se_hio_verify(hio_id):
 @require_role("manager")
 def api_se_flag_resolve(flag_id):
     from email_parser.score_entry import resolve_flag
+    gate = _se_event_gate("flag", flag_id)
+    if gate:
+        return gate
     b = request.get_json(silent=True) or {}
     res = resolve_flag(flag_id, (b.get("resolution") or "resolved by manager")[:200],
                        actor=_se_actor())
@@ -11551,6 +11682,9 @@ def api_se_flag_resolve(flag_id):
 @require_role("manager")
 def api_se_ctp_rule(round_id):
     from email_parser.score_entry import rule_ctp
+    gate = _se_event_gate("round", round_id)
+    if gate:
+        return gate
     b = request.get_json(silent=True) or {}
     try:
         res = rule_ctp(round_id, int(b["hole"]), int(b["customer_id"]), actor=_se_actor())
@@ -11564,6 +11698,9 @@ def api_se_ctp_rule(round_id):
 def api_se_sign_for(group_id):
     """Manager signs on the player's behalf, with a note (#666 A.5)."""
     from email_parser.score_entry import sign_card
+    gate = _se_event_gate("group", group_id)
+    if gate:
+        return gate
     b = request.get_json(silent=True) or {}
     try:
         res = sign_card(group_id, _se_actor(), int(b["customer_id"]),
@@ -11579,6 +11716,9 @@ def api_se_scores(event_id):
     """THE READ (CA #661): event-scoped, rounds plural, one version per
     event. ?since_version=N returns 304 when nothing changed."""
     from email_parser.score_entry import event_version, get_entered_scores
+    gate = _se_event_gate("event", event_id)
+    if gate:
+        return gate
     since = request.args.get("since_version", type=int)
     ver = event_version(event_id)
     if since is not None and since == ver:
@@ -11678,6 +11818,9 @@ def live_scoring_admin_page(event_id):
     CTP / Longest Putt holder, verify a hole-in-one, sign for a player,
     clear a flag) live here. Seeding and preview restarts stay admin-only."""
     from email_parser.database import get_connection
+    gate = _se_event_gate("event", event_id)
+    if gate:
+        return "Score entry is not open for this event.", 404
     conn = get_connection()
     try:
         ev = conn.execute("SELECT id, item_name, event_date, course FROM events WHERE id = ?",
@@ -11694,6 +11837,9 @@ def live_scoring_admin_page(event_id):
 @require_role("manager")
 def api_se_admin(event_id):
     from email_parser.score_entry import admin_overview
+    gate = _se_event_gate("event", event_id)
+    if gate:
+        return gate
     return jsonify(admin_overview(event_id))
 
 
@@ -13202,7 +13348,7 @@ def api_leads_export_csv():
     return Response(
         buf.getvalue(),
         mimetype="text/csv",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        headers={"Content-Disposition": content_disposition(filename)},
     )
 
 
@@ -16227,117 +16373,21 @@ try:
     except Exception:
         logger.warning("Merchant fee recalculation failed", exc_info=True)
 
-    # ── One-time fix: recalculate doubled order totals for multi-item orders ──
-    # Bug: _write_godaddy_order_entry() summed total_amount across all items,
-    # but total_amount stores the FULL ORDER total on each item row.  Multi-item
-    # orders got their amount doubled/tripled, causing wrong net_deposit values.
+    # ── Heal DOUBLED multi-item order totals (fee_splits.heal_doubled_order_totals) ──
+    # The inline version of this repair ran on EVERY boot and compared the
+    # order row's `amount` (the writer stores the DEPOSIT there) with the
+    # charged total, so every new multi-item order looked "doubled" by its
+    # merchant fee and had its splits rebuilt with the parser's per-item
+    # STAMPED fee: the recurring one-order-one-fee offenders (CFO #854
+    # Finding A, CA #882 item 2b). The function only touches a real
+    # doubling and rebuilds splits pro rata.
     try:
-        from email_parser.database import _parse_dollar as _pd
+        from email_parser.fee_splits import heal_doubled_order_totals
         with _startup_connect() as _otf:
-            _gd_orders = _otf.execute(
-                """SELECT t.id, t.source_ref, t.amount
-                   FROM acct_transactions t
-                   WHERE t.category = 'godaddy_order'
-                   AND COALESCE(t.status, 'active') NOT IN ('reversed', 'merged')
-                   AND t.source_ref LIKE 'godaddy-order-%'"""
-            ).fetchall()
-
-            _recalc_count = 0
-            for _gdo in _gd_orders:
-                _oid = _gdo["source_ref"].replace("godaddy-order-", "")
-
-                # Get items for this order (same filter as backfill)
-                _order_items = _otf.execute(
-                    """SELECT id, item_price, transaction_fees, total_amount,
-                              item_name, customer, coupon_amount, coupon_code
-                       FROM items
-                       WHERE order_id = ?
-                       AND COALESCE(transaction_status, 'active') NOT IN
-                           ('rsvp_only', 'credited', 'refunded', 'transferred')
-                       AND parent_item_id IS NULL
-                       AND transferred_from_id IS NULL
-                       ORDER BY item_index""",
-                    (_oid,),
-                ).fetchall()
-                _order_items = [
-                    dict(i) for i in _order_items if _pd(dict(i).get("item_price")) > 0
-                ]
-
-                if len(_order_items) < 2:
-                    continue  # Single-item orders unaffected by the doubling bug
-
-                # Correct order_total: total_amount from first item
-                _first_ta = _pd(_order_items[0].get("total_amount"))
-                _computed = sum(
-                    _pd(i.get("item_price")) + _pd(i.get("transaction_fees"))
-                    for i in _order_items
-                )
-                _correct_total = _first_ta if _first_ta > 0 else _computed
-
-                # Skip if already correct (within $1)
-                if abs(_gdo["amount"] - _correct_total) < 1.0:
-                    continue
-
-                # Update entry in-place (preserves ID → keeps reconciliation_matches)
-                _new_mf = round(_correct_total * 0.029 + 0.30, 2)
-                _new_nd = round(_correct_total - _new_mf, 2)
-                _otf.execute(
-                    "UPDATE acct_transactions SET amount = ?, merchant_fee = ?, net_deposit = ? WHERE id = ?",
-                    (_correct_total, _new_mf, _new_nd, _gdo["id"]),
-                )
-
-                # Recreate splits with correct proportions
-                _otf.execute(
-                    "DELETE FROM godaddy_order_splits WHERE transaction_id = ?",
-                    (_gdo["id"],),
-                )
-                for _oi in _order_items:
-                    _ip = _pd(_oi.get("item_price"))
-                    _tf = _pd(_oi.get("transaction_fees"))
-                    _it = _ip + _tf  # per-item contribution
-
-                    if _ip > 0:
-                        _otf.execute(
-                            """INSERT INTO godaddy_order_splits
-                               (transaction_id, item_id, event_name, customer, split_type, amount)
-                               VALUES (?, ?, ?, ?, 'registration', ?)""",
-                            (_gdo["id"], _oi["id"], _oi.get("item_name", ""),
-                             _oi.get("customer", ""), _ip),
-                        )
-                    if _tf > 0:
-                        _otf.execute(
-                            """INSERT INTO godaddy_order_splits
-                               (transaction_id, item_id, event_name, customer, split_type, amount)
-                               VALUES (?, ?, ?, ?, 'transaction_fee', ?)""",
-                            (_gdo["id"], _oi["id"], _oi.get("item_name", ""),
-                             _oi.get("customer", ""), _tf),
-                        )
-                    _coupon = _pd(_oi.get("coupon_amount"))
-                    if _coupon > 0 and _oi.get("coupon_code"):
-                        _otf.execute(
-                            """INSERT INTO godaddy_order_splits
-                               (transaction_id, item_id, event_name, customer, split_type, amount)
-                               VALUES (?, ?, ?, ?, 'coupon', ?)""",
-                            (_gdo["id"], _oi["id"], _oi.get("item_name", ""),
-                             _oi.get("customer", ""), -_coupon),
-                        )
-                    if _it > 0 and _correct_total > 0:
-                        _item_mf = round(_new_mf * _it / _computed, 2)
-                        _otf.execute(
-                            """INSERT INTO godaddy_order_splits
-                               (transaction_id, item_id, event_name, customer, split_type, amount)
-                               VALUES (?, ?, ?, ?, 'merchant_fee', ?)""",
-                            (_gdo["id"], _oi["id"], _oi.get("item_name", ""),
-                             _oi.get("customer", ""), -_item_mf),
-                        )
-
-                _recalc_count += 1
-
-            if _recalc_count > 0:
+            _res = heal_doubled_order_totals(_otf)
+            if _res["healed"]:
                 _otf.commit()
-                logger.info("Fixed doubled order totals for %d multi-item orders", _recalc_count)
-            else:
-                logger.info("No doubled order totals found — all multi-item orders correct")
+                logger.info("Healed doubled order totals: %s", _res)
     except Exception:
         logger.warning("Order total recalculation failed", exc_info=True)
 

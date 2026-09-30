@@ -124,6 +124,10 @@ check("event A is authoritative", dry["mode"] == "authoritative", dry["mode_reas
 r0 = dry["rounds"][0]
 check("nothing eligible while the round is open and unsubmitted",
       r0["would_write"] == [] and len(r0["held"]) == 5, r0)
+check("tees are resolved for held players too (prove tees before play)",
+      sum(t["players"] for t in r0["tees"].values()) == 5
+      and len(r0["tee_unresolved"]) == sum(t["players"] for t in r0["tees"].values()
+                                           if t["tee_id"] is None), r0["tees"])
 
 print("submit group 1's card")
 sub = se.submit_card(g1, "dev1", 201, print_scorer_name="Paper Guy", db_path=DB)
@@ -169,9 +173,14 @@ check("course_id from the round", rows[0]["course_id"] == course_id, rows[0])
 check("round_date", rows[0]["round_date"] == "2026-10-13", rows[0])
 hs = q("SELECT hole_number, strokes, strokes_received FROM scoring_holes WHERE scoring_round_id = ? "
        "ORDER BY hole_number", (rows[0]["id"],))
-check("nine scoring_holes, strokes = gross, strokes_received 0",
-      len(hs) == 9 and all(h["strokes"] == CARD[h["hole_number"]] and h["strokes_received"] == 0
-                           for h in hs), hs)
+# PH 5 on a nine: the ruled allocation collapses the nine's SI to 1-9 and
+# gives one stroke to SI 1-5 = holes 3, 7, 1, 9, 4 (CA #865/#866/#868:
+# a stored 0 made every reader that trusts pops read net = gross).
+check("nine scoring_holes, strokes = gross",
+      len(hs) == 9 and all(h["strokes"] == CARD[h["hole_number"]] for h in hs), hs)
+check("strokes_received = the ruled allocation of PH 5 (holes 1, 3, 4, 7, 9)",
+      {h["hole_number"] for h in hs if h["strokes_received"] == 1} == {1, 3, 4, 7, 9}
+      and sum(h["strokes_received"] for h in hs) == 5, hs)
 
 print("idempotent re-publish")
 ep.publish_event(EV_A, apply=True, db_path=DB)

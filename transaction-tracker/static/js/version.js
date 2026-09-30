@@ -1,5 +1,452 @@
-window.TGF_VERSION = "2.516.0";
+window.TGF_VERSION = "2.522.28";
 window.TGF_CHANGELOG = [
+    {
+        version: "2.522.28",
+        date: "2026-09-29",
+        title: "Live scoring: the header logo no longer shrinks on every iPhone",
+        changes: [
+            "Kerry 2026-09-29, 4:11 PM, from his phone on the live Hole 4: \"That black bar up top shows right size for a flash on mobile then gets small.\" The v2.522.27 short-screen rule was a max-height: 700px media query, and iPhone Safari's visible area with its toolbar is under 700 px, so it fired on every phone once render() added the focus class (the flash was the full header before that). The header now shrinks only when the rendered card would actually overflow the screen: render() measures scrollHeight against innerHeight and sets body.se-tight; a normal 9-hole card keeps the full 64 px mark, and the 4-player 18-hole-with-match card on a 390x660 screen still fits without scrolling."
+        ]
+    },
+    {
+        version: "2.522.27",
+        date: "2026-09-29",
+        title: "Live scoring: bigger logo with less padding, round legend dots, legend items on one line, <50 tee yardages",
+        changes: [
+            "Kerry 2026-09-29: \"Make the logo 10% larger\", then \"It looks like you increased the padding not the logo. Reduce the padding some now. It's too much.\" The centered TGF mark on /member/score is drawn at 64 px (the SVG carries its own margin, so the circle is about 54 px, up from 46) with 5 px above and 8 px below it inside the black bar, under the safe-area inset.",
+            "Kerry 2026-09-29: \"For the yardage under each hole number, use the <50 back tee yardages. 314 seems short.\" A round seeded from the course now takes par / stroke index / yardage from the Men <50 tee of the event's tee legend (event_tee_legend) instead of the course's newest tee row, which could be any tee. score_entry._yardage_tee_id; a course with no legend keeps the old fallback. New bridge scoring-se-yardage:<round_id>[|apply] re-reads an already-seeded round's yardages from that tee (yardage column only, dry run by default) so tonight's rounds can be corrected without re-seeding.",
+            "Kerry 2026-09-29: \"Numbers aren't centered between +/-. the pops are pushing it left.\" The number box now has the same 6 px lane on both sides, so the score sits at the exact midpoint of - and +; the pops hang in the right-hand lane 2 px off the number box (they used to push the box 12 px left). Also \"Center the legend\": the stroke legend rows are centered.",
+            "Kerry 2026-09-29: the stroke legend on the hole screen now reads \"100% Handicap Stroke\", \"X% Team Stroke\" (or \"X% Cart Stroke\" when the game is Cart Net; the allowance comes from the team-game basis, team_game.pct) and \"No Team Strokes on Par 3s\", in Kerry's words. It names only the dots ON THAT HOLE and disappears on a hole with none, and it sits BELOW the Save & Go button with 14 px of padding \"so the hole number and button are always in the same place\". Team Stroke (non par 3s) and No Team Strokes (par 3s) can never show on the same hole, so the key is one line at 390 px. Under 700 px of height the gap shrinks to 6 px so the screen still fits. The check card keeps the whole-round key where it was.",
+            "Kerry 2026-09-29: \"Legend showing oval pops\" and \"I don't love how the legend renders wrapping like it does.\" The PH and Team Net dots in the stroke legend no longer shrink into ovals (flex: none, 7 x 7 like the pops by the score). Each legend item stays on one line, and whole items move to the next row."
+        ]
+    },
+    {
+        version: "2.522.26",
+        date: "2026-09-29",
+        title: "Live scoring: bigger TGF logo in the score-entry header",
+        changes: [
+            "Kerry 2026-09-29, 3:28 PM, from the live Hole 3 screen: \"Make the logger bigger. Like 2.5 times.\" The centered, non-link TGF mark in the black header on /member/score is now 50 px (it was 20 px on the hole screen, 30 px elsewhere) on every screen, and the header grows only to fit it (56 px). The safe-area inset is unchanged. A four-player, 18-hole card with a match still fits one 390x844 screen with the iPhone insets. On a screen under 700 px tall, the hole page shrinks the mark back to 24 px so the card and Save still fit without scrolling."
+        ]
+    },
+    {
+        version: "2.522.24",
+        date: "2026-09-29",
+        title: "Live scoring: no member nav on the score-entry page",
+        changes: [
+            "Kerry 2026-09-29: \"If players click PLAYERS, LEADERBOARD or HANDICAPS, how will they get back to the LIVE SCORING? I'd say hide that for now.\" and \"Provide a centered TGF Logo on black header for all screens but don't allow it to link anywhere.\" /member/score now renders a slim black header with the TGF mark CENTERED and untappable, on every screen (Who are you?, each hole, sign-off, card check; the hole screen used to drop the header): no Players / Leaderboard / Handicaps tabs and no Enter Events & Contests button, so a scorer can't leave the card mid-round. A SHELL_SLIM flag on the shared member header; every other /member page keeps its nav.",
+            "The safe-area fix (v2.522.16) is unchanged: the dark strip under the iPhone clock, the header starting below it and the bottom clearing the home indicator, checked at 390x844 with a 47 px top / 34 px bottom inset on Who are you? and a hole screen."
+        ]
+    },
+  {
+    version: "2.522.23",
+    date: "2026-09-29",
+    title: "Scorecards and print-pack PDFs follow the report file-name convention",
+    changes: [
+      "Kerry 9/29: \"The Scorecards print and download pdf features are different than the other reports and the file naming convention is different than the others and incorrect.\" The Scorecards PDF (still built by the server, which prints the card layout exactly) now downloads the way the other reports' PDFs do, named <event code>-Scorecards.pdf (e.g. 26-s9-25-Scorecards.pdf); the flagged \"anyway\" state and the email attachment use the same name. The print pack follows suit: <event code>-PrintPack.pdf. No em dash anywhere in a file name. Guard in test_download_headers.py."
+    ]
+  },
+  {
+    version: "2.522.22",
+    date: "2026-09-29",
+    title: "One report button bar on every report page",
+    changes: [
+      "Kerry 9/29: \"And it's not the same as the other reports.\" Starter Sheet, Cart Signs, Scorecards, Divisions & Flights and Proximity Markers now all show the same bar, from ONE partial (templates/_report_bar.html): \"← Back to Reports\" · \"Print\" · \"⇩ PDF\", back and Print as white pills, PDF as a black pill. Back lands on the event's REPORTS tab. Page tools (the Scorecards GGID editor, the cart-sign cutting note) sit below the bar. The bar never prints and wraps at phone width. The Scorecards keeps its server PDF and its flagged / blocked states through the same bar. Guard in test_event_reports.py: every report page includes the partial and draws no print button of its own."
+    ]
+  },
+  {
+    version: "2.522.21",
+    date: "2026-09-29",
+    title: "Fix: scorecards and print-pack PDF downloads no longer 500 on the em dash in the file name",
+    changes: [
+      "Kerry 9/29: \"I just got an Internal Server Error when I tried to download the PDF for the Scorecards.\" The file name carries an em dash (\"s9.25 — scorecards.pdf\"); HTTP headers must be latin-1, and the server raised an error while writing the header, after the PDF was already built. The print-pack download had the same flaw. Every download header now comes from one helper (email_parser/http_headers.py): an ASCII file name (dashes become -, accents fold) plus the exact name in the RFC 5987 filename* field, which browsers prefer. All six download routes use it; test_download_headers.py drives the real routes with an em dash and an accent and fails if any route builds the header by hand."
+    ]
+  },
+  {
+    version: "2.522.20",
+    date: "2026-09-29",
+    title: "Live scoring: dots clear the + button, Go/Hole capitalised, tee bars in the printed card's colours",
+    changes: [
+      "Kerry: \"Dots, at least on the desktop view here are getting into the plus circle.\" The number box now keeps a 12px lane on its right for the stroke dots, so the dot column sits between the number and the + with a clear gap (measured 5px at 390px and at 1280px). Black stays at the top of the + circle and orange at the bottom.",
+      "Kerry: \"Change the 'go' to 'Go' everywhere and 'hole' to 'Hole'.\" Buttons now read Save & Go to Hole N, Save Hole N, Save Last Hole, Go to Hole N, Back to Hole N, Flag Hole N and Ball in Hole. Running sentences and screen-reader labels keep ordinary English.",
+      "The tee colour bar beside each player uses the printed scorecard's colour for that tee (scorecards._row_colour over resolve_tee_color and the design tokens, e.g. Blue #2F5FA6, Gold #FFCF40), falling back to the legend's colour only when the resolver has none."
+    ]
+  },
+  {
+    version: "2.522.19",
+    date: "2026-09-29",
+    title: "Scorecards: thinner × in the hole cells",
+    changes: [
+      "Kerry 9/29: \"The X lines are too thick. They need to be thinner on the holes so the X reads.\" In the hole cells the × arms are now one print pixel (half the weight) and a touch longer, so it reads as a clear x at print size instead of a blob; same box and the same equal 0.8 mm corner gap. The legend × keeps its heavier stroke."
+    ]
+  },
+  {
+    version: "2.522.18",
+    date: "2026-09-29",
+    title: "Live scoring: the par-3 x and the printed card's stroke wording",
+    changes: [
+      "Kerry 2026-09-29: \"Will the x's also show on the live scoring holes? On the par 3s where there's no pops.\" On a par 3 where a player would have had a Team or Cart Net stroke but for the no-strokes-on-par-3s rule, the scorer page now draws a small orange x in the team-pop position, as the printed scorecard does. It's the same allocation the card uses: the server keeps the par-3 strokes it removes (team_par3_ghost), and scoring never reads them. Black PH dots are unchanged, and a player with no team stroke there shows nothing.",
+      "The key now reads as on the printed card: \"PH \u2013 Playing Handicap Stroke\", \"Cart Net Stroke\" (or Team Net), and \"No Cart Net Strokes on par 3s\" when an x shows."
+    ]
+  },
+  {
+    version: "2.522.17",
+    date: "2026-09-29",
+    title: "Scorecards: every orange mark is the one TGF Orange",
+    changes: [
+      "Kerry 9/29: \"Are all the pops and orange marks the correct TGF Orange? The pops look redder than they should be.\" They were: the net strokes, the par-3 ×, the legend marks, the TEAM NET label and the TEAM numbers printed a darker burnt orange, and the header TEAM a lighter one, while the hole badge and GGID used TGF Orange #E87C3E. Every orange on the card now reads ONE token, --tgf-orange (#E87C3E). The dots still read on the shaded cart rows, and their corner gaps are unchanged. Guard: no other orange hex may appear in the scorecard template."
+    ]
+  },
+  {
+    version: "2.522.16",
+    date: "2026-09-29",
+    title: "iPhone: the top nav no longer hides under the status bar",
+    changes: [
+      "Kerry 2026-09-29, on a score-entry link on his iPhone: \"These are opening too high. See the top nav bar is hidden.\" The scorer page is drawn edge to edge (viewport-fit=cover), and the shared nav never padded for the notch, so the clock and battery printed over it. shell.css now pads every shell page for the safe areas: a dark strip behind the status bar, the sticky nav just below it, the page starting below it, and the bottom clearing the home indicator. env() is 0 on desktops and on pages that aren't drawn edge to edge, so nothing else moves. Tested at 390x844 with a 47 px top / 34 px bottom inset."
+    ]
+  },
+  {
+    version: "2.522.15",
+    date: "2026-09-29",
+    title: "Scorecards: par-3 removed stroke is a bold orange ×",
+    changes: [
+      "Kerry 9/29: \"The no strokes circle is lost at that scale\" … \"YES! Go with the X\". A Team/Cart Net stroke removed by the par-3 rule now prints as a small, bold orange × in the same box and the same equal 0.8 mm corner inset as a stroke dot, in the net strokes' own orange so it reads on a laser print. The legend's third item shows the same ×: \"No Team Net Strokes on par 3s\" (game name from the net-game rule), still one line on every layout."
+    ]
+  },
+  {
+    version: "2.522.14",
+    date: "2026-09-29",
+    title: "Scorecards: TEAM NET label dropped a hair off the hole badge",
+    changes: [
+      "Kerry 9/29: \"Drop the TEAM NET a hair. It's tucked too close to the Hole dot.\" The game label under the start badge sits a little lower (0.45em instead of 0.15em); nothing else on the card moves, and every layout still fits its page."
+    ]
+  },
+  {
+    version: "2.522.13",
+    date: "2026-09-29",
+    title: "Scorecards: one-line stroke legend and the no-stroke par-3 symbol; read-only event tools",
+    changes: [
+      "Kerry 9/29: \"we need to maintain terminology. Pops are strokes.\" The card foot is one line: ● PH – Playing Handicap Stroke (\"Pops\") at 100%  ● Team Net Stroke at 75%, off the field's low  ⊘ No Team Net Strokes on par 3s. The game name (Team Net / Cart Net), the % and the off-the-low clause come from the event's net-game rule; nothing is typed. 10 px (7.5 pt) on every layout, measured to fit on one line.",
+      "A Team/Cart Net stroke removed by the par-3 rule prints as an orange circle with a slash running past it on both ends, like a no-entry sign (\"the slash needs to extend beyond the circle\"). Same size and corner inset as a real stroke; the black PH strokes are unchanged.",
+      "Seven read-only tools for the lanes (Kerry: \"You need to create a tool that allows you to see it\"): get_event_games (the GAMES tab, computed by the Events page's own code run headless, with who counts and customer_id), get_event_pairings, get_event_flights, get_event_payouts, get_score_entry_status, get_live_version, get_hio_pot. Each reads through the page's own code, writes nothing and is logged."
+    ]
+  },
+  {
+    version: "2.522.12",
+    date: "2026-09-29",
+    title: "Scorecards: stroke dots at 75%, same equal 0.8 mm corner gap",
+    changes: [
+      "Kerry's ruling on design-claude's review (#962, option a: \"keep the 0.8 mm corner gap\"): the black PH dots, the orange net dots and the hollow par-3 circles print at 75% of their size, in whole print pixels so both corner gaps stay identical. 3-up 1.06 mm (4 px; 75% falls between two print pixels and the smaller one keeps more writing room), 2-up portrait 1.59 mm (exactly 75%), 2-up landscape 1.32 mm. Double dots sit 2 px apart, tight in the corner. Measured on the PDF: every dot's top (or bottom) gap equals its right gap exactly — 0.79 mm on 3-up, 1.06 mm on the 2-up layouts."
+    ]
+  },
+  {
+    version: "2.522.11",
+    date: "2026-09-29",
+    title: "Scorecards: bigger GGID; TOTAL and NET in capitals",
+    changes: [
+      "Kerry 9/29: \"Make the GGID Number larger. Capitalize TOTAL and NET.\" The GGID code in the black header cell prints about 60% larger so a player can read it at arm's length and type it into the GG app; the GGID label stays small. It fits the header on 3-up, 2-up and landscape without changing the row height (slightly smaller on the 18-hole card's half-width column). Column heads read TOTAL and NET, and OUT and IN on 18-hole cards to match."
+    ]
+  },
+  {
+    version: "2.522.10",
+    date: "2026-09-29",
+    title: "Scorecards: name circles match their tee rows exactly; women's tee solid unless shared",
+    changes: [
+      "Kerry 9/29: \"are all of the tee dots by names matching the colors of the tee rows? We need to make that happen.\" The circles came from the Starter Sheet's swatch palette while the rows used the scorecard's own shades, which is why Gold read browner and Blue brighter. Each circle now takes the exact colour of its own tee row, one source, with a same-colour edge instead of a darker ring. White stays white with a dark outline.",
+      "\"When they have their own color tee, I think we should just make it solid.\" A women's tee prints as an outline only when it shares its colour with another row on the card (women on Gold beside 65+ Gold); with a colour of its own it is solid. At Canyon Springs tonight, the Forward (Red) circles are solid.",
+      "Guard: test_scorecards.py checks every name circle against its row on all three layouts, and both outline cases."
+    ]
+  },
+  {
+    version: "2.522.9",
+    date: "2026-09-29",
+    title: "Events: print reports get their own REPORTS tab, after FLIGHTS",
+    changes: [
+      "Kerry 9/29: \"We need to move the print reports stuff to it's own tab on the toggle bar. After Flights\". The event toggle now reads ROSTER · PAIRINGS · GAMES · FLIGHTS · REPORTS · PAYOUTS · FINANCIAL, on phone and desktop. REPORTS holds Starter Sheet, Cart Signs, Scorecards, Divisions & Flights, Proximity and Send Pack, each opening in a new tab with its own Print and Download PDF.",
+      "PAIRINGS keeps the pairing tools: Undo/Redo, Generate, GG Sheet, Clear, Save, Live Scoring, Blinds and the Score Entry panel. If PAIRINGS has unsaved changes, REPORTS says so, because the reports print the saved pairings.",
+      "Every report's Back button now returns to the REPORTS tab (?view=reports), which opens ready, with nothing left loading."
+    ]
+  },
+  {
+    version: "2.522.8",
+    date: "2026-09-29",
+    title: "Divisions/Flights and Proxies get Print and Download PDF",
+    changes: [
+      "Kerry 9/29: \"Divisions/Flights and Proxies need the print/download buttons\". Both reports now carry the same bar as the Starter Sheet and Cart Signs: Back to Pairings, Print, and Download PDF (the file is named after the event, e.g. 26-s9-25-DivisionsFlights). The bar wraps on a phone, never prints, and stays out of the bound print pack. One shared partial, templates/_report_bar.html, for any report that needs it next."
+    ]
+  },
+  {
+    version: "2.522.7",
+    date: "2026-09-29",
+    title: "Scorecards: hole-width Total/Net, outline par-3 pops, heavy rules",
+    changes: [
+      "Kerry 9/29: Total and Net are the same width as a hole column, and the PH/TEAM column (information only) narrows to fit its two numbers. On 18-hole cards Out, In, TOT and Net follow the same rule.",
+      "On a par 3, a Team Net pop that the no-pops-on-par-3s rule takes away now prints as a hollow orange dot, the same size and position as a real one. The legend shows the hollow dot beside \"no pops on par 3s\". The black PH dots are unchanged, and scoring still gives no pop there.",
+      "The heavy line used between carts now also runs under the hole-number row, above Par, under Stroke Index and around the whole grid. Dot insets re-measured on the PDF: still identical on both sides of every corner."
+    ]
+  },
+  {
+    version: "2.522.6",
+    date: "2026-09-29",
+    title: "Starter Sheet: GGID in the group header, back to one page",
+    changes: [
+      "Kerry's Golf Genius group codes for s9.25 Canyon Springs are stored per group (slot 1–7) and print on every scorecard, the Starter Sheet and the cart signs. The Starter Sheet printed each GGID on a row of its own under the group, and that extra height pushed the one-page sheet onto a second page. The GGID now rides in the group's black header line, beside the start label, so the sheet is one page again."
+    ]
+  },
+  {
+    version: "2.522.5",
+    date: "2026-09-29",
+    title: "Score entry: a link is the group's slot number, not its hole label",
+    changes: [
+      "Kerry 2026-09-29: links are 'slot one and slot two through how many ever slots there are', whatever the hole or tee time. v2.522.0 matched groups by their hole label first, so when Kerry relabelled tonight's holes and '4A' moved to a different group, slot 7's link opened the wrong group (caught before any score was entered). Groups are now matched only by the pairings' group number, their place in the list. A relabel keeps the link and moves its start hole; a moved player's scores still go with him; a new group number gets a new link."
+    ]
+  },
+  {
+    version: "2.522.4",
+    date: "2026-09-29",
+    title: "Pairings: player swap by bridge",
+    changes: [
+      "New bridge scoring-pairings-swap:<event_id>|<customer_id>|<customer_id>[|apply] does the Pairings page's Player swap on the saved pairings: the two people trade seats, and each seat keeps its group, slot and cart position. It's keyed by customer_id and saved through save_event_pairings, the same path the page uses. Dry run by default. Built for Kerry's 'Swap Lance and Brian' on s9.25 Canyon Springs."
+    ]
+  },
+  {
+    version: "2.522.3",
+    date: "2026-09-29",
+    title: "Scorecards: Back to Pairings loads; dots equally inset; bigger names",
+    changes: [
+      "Back to Pairings from the scorecards no longer sticks on \"Loading…\" (Kerry 9/29). The deep link it uses opened the PAIRINGS tab without ever loading the pairings; it now loads them and redraws, on phone and desktop.",
+      "The dots sit exactly the same distance from both lines of their corner (Kerry 9/29). The PDF snaps every edge to a whole pixel, and the old 0.8 mm inset plus a half-line allowance rounded one way on one side and the other way on the other. Dot size, inset, spacing and the tee chip are now whole pixels per layout; measured on the PDF itself, every dot's two gaps are identical (0.79 mm on 3-up, 1.06 mm on 2-up).",
+      "Player names print as large as the name cell allows, with long names shrunk to fit, and the tee colour chip is centred on the name line and prints perfectly round."
+    ]
+  },
+  {
+    version: "2.522.2",
+    date: "2026-09-29",
+    title: "Score entry: a group moved to another hole or tee time keeps its link",
+    changes: [
+      "Kerry wants the group links stable through hole, tee-time and player changes. A group whose starting hole or tee time changes (1A relabelled 5A, 8:10 moved to 8:20) now keeps its link, and the link opens on the new hole. It counts as the same group when most of its players are the same before and after; group numbers renumber, so they are not used. A slot that really left the sheet still says so."
+    ]
+  },
+  {
+    version: "2.522.1",
+    date: "2026-09-29",
+    title: "Scorecard dots in print units, equally inset",
+    changes: [
+      "Kerry 2026-09-29: \"Dots seem small. Make sure dots are equally padded off each edge.\" Dots are drawn circles now, not bullet glyphs, sized in millimetres: 1.6 mm across, 0.5 mm apart when two of a kind, inset 0.8 mm from both edges of their corner (black top + right, orange bottom + right), the same in shaded cart-B rows and the yellow start-hole column. 2-up layouts scale diameter, gap and inset with the player-row height (x1.32 portrait, x1.24 landscape). Measured on a 300-dpi render of a 3-up Letter card: every inset within about 0.1 mm of 0.8 mm.",
+    ],
+  },
+  {
+    version: "2.522.0",
+    date: "2026-09-29",
+    title: "Score entry: a group link belongs to its slot, and the round follows the saved pairings",
+    changes: [
+      "Kerry 2026-09-29: \"I'm probably gonna be making pairing changes but anything like that should never affect group links. Right?\" Now true. A scorer link is tied to its slot (1A, 2B, or the tee time on a tee-time event), matched to the saved pairings by slot and never by the pairings' group number, which renumbers when a group is added or removed.",
+      "The round follows the saved pairings by itself. When a link or the Live Scoring page opens and the saved pairings have changed since the last seed (fingerprint in app setting score_entry_pairings_fp), the round re-seeds: players move to their new slot, a player moved after scoring takes his scores and marks with him, a new slot gets a new link, and a slot no longer on the sheet keeps its link, which says \"This group isn't on tonight's pairings any more\". Nothing is deleted, and no one needs to tap Update groups or re-send a link.",
+      "Links already handed out keep working: their slot and start hole are unchanged."
+    ]
+  },
+  {
+    version: "2.521.2",
+    date: "2026-09-29",
+    title: "Score entry gate check reports each group's starting hole",
+    changes: [
+      "Kerry 2026-09-29: \"make sure that each group lands on the hole that they're starting on when they open it up at the Link\". The phone already starts a shotgun group on its own hole and wraps (2A plays 2 to 9, then 1), and opens on the first hole in that order with no score. The read-only bridge scoring-se-gate-check now reports, per group link, start_hole (from the saved pairings' hole label), play_order, and opens_on, the hole the phone lands on right now, so it can be proved on production before the round."
+    ]
+  },
+  {
+    version: "2.521.1",
+    date: "2026-09-29",
+    title: "Scorecard dots about 60% of v2.520.6",
+    changes: [
+      "Kerry 2026-09-29: \"The dots on the scorecard are way too big now.\" Dots go from 2.1em to 1.3em (about 60% of the diameter, still well above the original specks), two of a kind tighter side by side, black top-right and orange bottom-right in the darker orange, so the middle of every box stays clear for the written score. Checked on a 3-up Letter card at print size before and after.",
+    ],
+  },
+  {
+    version: "2.521.0",
+    date: "2026-09-29",
+    title: "Scorecards in the print pack",
+    changes: [
+      "Kerry 2026-09-29: \"Include the scorecards in the print pack now.\" The bound pack (PAIRINGS Send Pack, /events/<id>/print-pack.pdf and the day-before/day-of mail) now carries the scorecards right after the cart signs, for the events the app setting print_pack_scorecards names (\"all\" or event ids; 3304 today, the rest waits on Kerry). Pack defaults: 3 per sheet, the grouping the engine's net game uses (Cart Net = one card per cart), the event's holes, QR only per the score-entry dials, the saved GGID codes. A named gap prints the gap sheet in that slot, never a guessed card; ?allow_gaps=1 on the pack PDF prints it flagged. The pack's result and bridge report the scorecards part (grouping, cards, sheets, gaps).",
+    ],
+  },
+  {
+    version: "2.520.9",
+    date: "2026-09-29",
+    title: "scoring-expense-patch: notes can be set, and the reply never claims a field it did not write",
+    changes: [
+      "CFO 2026-09-29: scoring-expense-patch with fields.notes answered \"patched: notes\" and changed nothing — notes was not a patchable field, and the reply listed every key it was given. notes is now patchable (it replaces the note; append_note still appends), and the reply lists `patched` (written) and `ignored` (unknown keys, by name). Guard in test_expense_ignored_reverses_ledger.py.",
+    ],
+  },
+  {
+    version: "2.520.8",
+    date: "2026-09-29",
+    title: "Health: slow lines for the scorecard PDFs",
+    changes: [
+      "The 9/29 5:00 AM health digest (#929) rated scoring-scorecards HIGH (p95 26.4 s against the 10 s default) and scorecards_pdf MEDIUM (4.3 s against 2 s). Both are the new scorecard set rendered in headless Chromium. The |pdf|all form binds all 24 layout combinations into one PDF. They now carry the print pack's lines: 15 s for the page route and 60 s for the bridge. Nothing else changes.",
+    ],
+  },
+  {
+    version: "2.520.7",
+    date: "2026-09-28",
+    title: "One tee-colour resolver for every printable; colour audit of every course",
+    changes: [
+      "Kerry 2026-09-28: \"Colors aren't printing on tee rows for Star Ranch. Make sure all courses have colors assigned.\" Star Ranch's master names are compound (\"Champ - Blue\"), and the scorecard's tee rows matched the whole name while the chips and the Starter Sheet searched for the colour word, so the two disagreed. database.resolve_tee_color is now the one lookup for the Starter Sheet legend, cart signs, the scorecard's tee rows and its chips: (a) an explicit colour for the tee (app setting tee_colors, keyed by tee_id — no schema, CA #898-6), (b) the colour word anywhere in the name, (c) unresolved. Scorecard rows keep the design's shade for a known word and otherwise print the resolver's colour with readable ink; an unresolved tee prints black on white and the print log names it.",
+      "Bridge scoring-tee-colors: the read-only audit of every course's designated tees and what each resolves to (the unresolved list is Kerry's to name), and scoring-tee-colors:set|<tee_id>=<colour>;… to store his answers.",
+    ],
+  },
+  {
+    version: "2.520.6",
+    date: "2026-09-28",
+    title: "Scorecard review fixes: bigger dots, / diagonal, one grid, tee chips, Stroke Index, game label",
+    changes: [
+      "Kerry's review of the live 3304 card (2026-09-28). Dots are about twice the size, black PH top-right and orange net-game bottom-right in a darker orange (#C2410C) that reads on white and on the shaded cart-B rows. The PH/TEAM cell's diagonal now runs bottom-left to top-right; PH stays top-left, the net value bottom-right.",
+      "One grid: every cell border the same 1px line through the full width and height (the header's verticals included), heavy 2.5px only on the lead|holes, Out/Total, In, TOT and cart-split dividers. The grey tee letter beside each name is now the Starter Sheet's own tee swatch (women's tee as an outline ring, white with a black rim). 'Handicap' reads 'Stroke Index' ('SI' on the 18's back panel), and the net game's name from the engine ('Team Net' / 'Cart Net') sits under the start badge.",
+    ],
+  },
+  {
+    version: "2.520.5",
+    date: "2026-09-28",
+    title: "Scorecards: Print and PDF top and bottom, flagged when a player has no handicap",
+    changes: [
+      "Kerry 2026-09-28: \"Needs to be a PDF/Print button for every report.\" The scorecards page carries the same bar top and bottom: Back to Pairings, Print (the browser's print) and PDF (scorecards.pdf with the page's layout, grouping, QR and holes). When the only gap is a player with no handicap the two become 'Print anyway, flagged' and 'PDF anyway, flagged' (allow_gaps=1); an event-level gap shows them disabled with 'fix the gaps below first' instead of failing silently. The audit of every other report follows 3304's close-out.",
+    ],
+  },
+  {
+    version: "2.520.4",
+    date: "2026-09-28",
+    title: "Scorecards page: Back to Pairings, Print and PDF buttons",
+    changes: [
+      "Kerry 2026-09-28: \"needs a close button to go back to pairings page\". The scorecards page has a button bar at the top (Back to Pairings, Print, PDF — the last two only when the cards can print) and a Back to Pairings at the bottom, sized for a thumb. Back goes to /events?event=<id>&view=pairings, the same target the cart signs use, so it works from a new tab or a phone.",
+    ],
+  },
+  {
+    version: "2.520.3",
+    date: "2026-09-28",
+    title: "A signed-out page asks for the PIN instead of showing raw JSON",
+    changes: [
+      "Kerry 2026-09-28: the scorecards link, tapped from outside the Tracker app, opened in Safari (whose sign-in is separate from the installed app's) and showed only {\"error\":\"Not authenticated\"}. require_role now answers a signed-out browser GET to any PAGE route (scorecards, their PDF, Starter Sheet, cart signs, every print sheet) with a small sign-in page (templates/login_gate.html); the PIN signs in and the same address reloads. /api/ routes, the MCP endpoint and non-browser requests still get the JSON 401. Guard test_page_login_gate.py.",
+    ],
+  },
+  {
+    version: "2.520.2",
+    date: "2026-09-28",
+    title: "Phone can set a starting handicap from the roster; Scorecards button on PAIRINGS",
+    changes: [
+      "Kerry 2026-09-28 (#920): \"I need same mobile abilities as desktop. I need to be able to add a players handicap like for Lance Vest.\" The mobile roster card's HCP field is now the desktop cell's twin: no handicap shows a tappable '— Set', a STARTING placeholder is tappable to change, a computed index stays read-only. Same .btn-set-hcp control and endpoint, writing customers.starting_handicap_18, so PH, the Starter Sheet, the scorecard and score entry all pick it up. Every set/clear is now in the agent action log with who set it (role and chapter).",
+      "Kerry (#919): \"Where's the scorecard report?\" PAIRINGS' print row has a Scorecards button next to Cart Signs, opening /events/<id>/scorecards (the GGID box and print options). Guard test_mobile_manager_parity.js.",
+    ],
+  },
+  {
+    version: "2.520.1",
+    date: "2026-09-28",
+    title: "Team / Cart Net: no pops on a par 3; comps fund the games again",
+    changes: [
+      "Kerry 9/28 (CA #912-2), verbatim: \"Got to have the team/cart Net remove par 3 pops for both card and side game results now.\" team_net.no_pops_on_par3 is now True. It's one dial, and it covers Team Net and Cart Net (the same game at team size 2). Three places read it: the engine's Team Net results (game_team_net), the printed scorecard's orange dots (scorecards.py), and the phone card's team pops (score_entry._team_strokes, which drops a par-3 team stroke without moving it to another hole). There was no GG parity gate first, by the ruling; a Team Net comparison with GG follows for information only.",
+      "Kerry 9/28 (CA #912-3), verbatim: \"CTPs are for every player bought in. My money goes in there too. I thought we ruled on that.\" CA withdrew #882-4. The v2.518.5 comp exclusion in _event_player_counts is reverted: a comp counts toward the games' funding N again (3304: 25 players, 2 CTPs at $25). Comps are only LISTED under comps for a reader. The only players who don't fund a game are those who didn't buy it (#843 f).",
+    ],
+  },
+  {
+    version: "2.520.0",
+    date: "2026-09-28",
+    title: "GGID per group, print-anyway for a player with no handicap, par-3 note on the scorecard",
+    changes: [
+      "GGID codes (Kerry #900/#912: \"Got to have GGID codes for tomorrow's print at 9am\"). A new table event_group_codes keyed (event_id, holes, group_num) holds Golf Genius's code per group, so a PAIRINGS re-save never loses one. Kerry types them in the GGID box at the top of /events/<id>/scorecards and presses Save (POST /api/events/<id>/group-codes; blank clears; junk is refused by name). The code prints in the scorecard header's name cell, a footer on each Starter Sheet group box and a line on each cart sign; no code, no slot. Bridge scoring-group-codes:<id>[|<holes>:<group>=<code>;…].",
+      "Print anyway, flagged (CA #915). One player with no playing handicap no longer blocks every card: ?allow_gaps=1 (the 'Print anyway, flagged' link on the gap page) prints his card with PH and net blank and no dots, and the print log names him. Event-level gaps (course, tees, pairings, par/SI, an undesignated tee) still stop the print.",
+      "Par-3 pops (Kerry #912-2): the orange net-game dots already read the engine's team_net no_pops_on_par3 rule; once Side Games flips it the card drops them on par 3s and the decode line adds 'no pops on par 3s'.",
+    ],
+  },
+  {
+    version: "2.519.1",
+    date: "2026-09-28",
+    title: "Scorecards: the no-handicap gap names its fix",
+    changes: [
+      "A player with no playing handicap now says why on the gap page: no TGF index yet (set a starting handicap on the profile and reprint) or a tee with no rating for the event. First seen on 3304 with Lance Vest, a first-timer with no index; the Starter Sheet shows the same gap.",
+    ],
+  },
+  {
+    version: "2.519.0",
+    date: "2026-09-28",
+    title: "The printed scorecard (design-claude #890-#897, CA #898)",
+    changes: [
+      "New printable at /events/<id>/scorecards (and .pdf): three layouts (3 per sheet portrait by default, 2 per sheet portrait, 2 per sheet landscape), 9 or 18 holes, and Team Net (one card per group) or Cart Net (one card per cart). Built to design-claude's handoff with CA's rulings: PH (not CH) upper-left, the net game's value lower-right, black PH dots and orange net-game dots in every hole cell, the start hole highlighted, riders 3-4 shaded under the cart-split rule, threesomes as 3 rows, 'Forward' as the band name.",
+      "Nothing on a card is typed or computed in the print layer (#897). Groups, slots, cart seats, PH and the Team/Cart value with its allowance and off-the-lowest come from get_event_print_pack, the Starter Sheet's own reader; tees from event_tee_legend; par, stroke index and yardage from course_tee_holes; dots from handicap_calc.ruled_dots, the one allocator the G-0 publish now also uses for stored pops; par-3 suppression of net dots follows the engine's own game rule. A missing value (no designated tees, no stroke index, a player with no PH or an undesignated tee) shows the named gaps instead of cards (#897-G).",
+      "QR: collapses unless the score-entry dials enable it; ?qr=preview fills every group's real scorer link for Kerry's look only (read-only score_entry.event_group_links, never seeds a round). The GGID slot collapses until the PAIRINGS field (#900) is built. Bridge scoring-scorecards:<id>[|layout=|grouping=|qr=|holes=][|dump|html|pdf[|all][|send]] gives the summary, the per-value source dump, the page, or a bound PDF mailed to Kerry only under 'approve a template'. Guard test_scorecards.py (all 12 combinations render one Letter page per sheet with no card overflowing).",
+    ],
+  },
+  {
+    version: "2.518.5",
+    date: "2026-09-28",
+    title: "A comp plays but doesn't fund the games (CA #882-4)",
+    changes: [
+      "CA #882-4 (from #843 f and the Margin Standard): funding N is PAID ENTRIES, and a comp collects nothing, so it funds nothing. The comp player still plays and can WIN. _event_player_counts, which feeds the proximity / CTP purse and the payout assembly's matrix rows, counted Kerry's $0 comp on 3304 as a player and a NET/GROSS buyer: 25 players and 2 CTPs at $25 each, where it should be 24 and $24. An EXPLICIT comp ('(comp)' in the price, or a manual-comp row) with no paid add-on now drops out of players / net / gross and is listed under comps. A bare $0.00 (a transfer, a legacy import) is left alone. Still to follow, after Tuesday's close-out: the flight board's AMOUNTS use paid N too, and the Games tab's client-side count mirrors this rule.",
+    ],
+  },
+  {
+    version: "2.518.4",
+    date: "2026-09-28",
+    title: "One order, one fee: the boot repair stops re-stamping multi-item orders",
+    changes: [
+      "CA #882 item 2b (CFO #854 Finding A). The GoDaddy writer has split a multi-item order's fee by item price since 9/09, but a boot-time repair in app.py undid it: it compared the order row's amount (which the writer fills with the DEPOSIT) against the charged total, so every new multi-item order looked 'doubled' by its merchant fee and had its splits rebuilt with the parser's per-item stamped fee on the next deploy. That is why the offenders kept recurring. The repair now lives in fee_splits.heal_doubled_order_totals: it reads charged as deposit + merchant fee, heals only a real k-times doubling with the writer's pro-rata shares (in place, ids kept), and reports any other gap without touching it. Guard in test_fee_splits.py.",
+    ],
+  },
+  {
+    version: "2.518.3",
+    date: "2026-09-28",
+    title: "Rehearsal runner: handicap-card dry runs allowed",
+    changes: [
+      "CA #882 item 6, for closeout #865: the rehearsal runner now accepts scoring-hcp-cards:<event> as a bridge job. That's the DRY RUN, which returns who would get a card and sends nothing. scoring-hcp-cards:<event>|apply, the send, is still refused, and the child's outbound guard would block a send anyway. Guard: test_rehearsal_runner.py.",
+    ],
+  },
+  {
+    version: "2.518.2",
+    date: "2026-09-28",
+    title: "Entered scorecards carry their handicap strokes",
+    changes: [
+      "G-0 publish wrote strokes_received = 0 on every entered hole (CA #865/#866/#868), so every reader that trusts stored pops read net = gross: the handicap preview's net-double-bogey cap (11 of 22 adjusted grosses off on the 3309 rehearsal), get_scorecard and so the City/TGF MVP (Niester 9 instead of Murphy 15), and the leaderboard. Each published hole now carries the derived dots: the playing handicap allocated by stroke index under the ruled mode (a nine collapses to 1-9, an 18 uses the full card; Kerry, CA #771), the same allocation the game engine uses, on the resolved tee's stroke index. A card whose holes lack a stroke index keeps 0 and is listed in dots_unresolved. A re-publish whose dots change re-runs the MVP recompute. Guard in test_entry_publish.py.",
+    ],
+  },
+  {
+    version: "2.518.1",
+    date: "2026-09-28",
+    title: "Score entry: read-only gate check per event",
+    changes: [
+      "New bridge scoring-se-gate-check:<event_id>[|<chapter>] proves the per-event opt-in on production. Inside the app it makes a chapter manager's GETs (Live Scoring page, its read, the scores feed) and an anonymous player's GET on each open group's link, and reports the status codes (404 = refused). GETs only, writes nothing."
+    ]
+  },
+  {
+    version: "2.518.0",
+    date: "2026-09-28",
+    title: "Score entry is opt-in per event: only s9.25 Canyon Springs is on",
+    changes: [
+      "Kerry 2026-09-28: \"I don't want that available to Robert yet in Austin. We need to only test it here in San Antonio at the Canyon Springs event.\" Score entry is now OFF for every event unless its id is in the new app setting score_entry_events (a JSON or comma list of event ids). Staff turn an event on; nothing turns one on by itself. It's set to [3304] only.",
+      "On an event that isn't on, a manager can't open the Live Scoring page, its read, the scores feed, or any manager action (CTP settle, HIO verify, clear a flag, sign for a player). A player's link doesn't open even with the member switch (score_entry_live) on, and no cart sign gets a QR code. Admin preview use is unaffected.",
+      "On the EVENTS page the SCORE ENTRY panel and the Live Scoring button under PAIRINGS show only on events that are on, even for admin. That's why both Tuesday events showed Live Scoring before: the panel appeared on every event with saved pairings."
+    ]
+  },
+  {
+    version: "2.517.1",
+    date: "2026-09-28",
+    title: "Lone Star Cup rounds seed each player's tee from lsc_tees; publish dry run proves tees before play",
+    changes: [
+      "New bridge scoring-se-cup-seed:<event_id>[|apply] builds the Lone Star Cup score-entry rounds from the lsc_matches dial: one round per session, one group per match, with the odd player's threesome (Kerry 2026-09-28) as one group holding both his matches. The cup players have no cup orders, so each player's tee comes from Track B's staff setting lsc_tees (Kerry: \"check where they normally play\"), stored as his band, and his playing handicap is WHS off that tee through the preview's own pieces (locked index, the event's tee rows). It's a dry run by default and names any player with no tee, no playing handicap or no customer record. Apply refuses while a player isn't a customer. Re-seeding updates the rounds in place. Binding each session's se_round to the returned round id stays with Track B.",
+      "G-0 publish dry run now resolves every player's tee, held or not, and reports a per-tee summary (tees). Before this, tees were only checked for cards ready to publish, so a round that hadn't been played always showed 0 unresolved and proved nothing. Read-only; nothing else about publishing changes."
+    ]
+  },
+  {
+    version: "2.517.0",
+    date: "2026-09-28",
+    title: "Lone Star Cup: a Chapman pair on two tees takes strokes on the men's holes",
+    changes: [
+      "Kerry 2026-09-28, a TGF term of competition: a Chapman pair takes its handicap strokes on the MEN'S stroke index when either partner plays a men's tee, and on the WOMEN'S when both play women's tees. WHS sets each partner's course handicap and the 60/40 team allowance, but leaves which table a mixed pair uses to the Committee. The board reads each seat's tee gender from the course record; a tee it can't resolve keeps the round's list. At The Hideout this means Mary Wade's Chapman pair takes strokes on the men's holes, and two women paired together at a future event would use the women's.",
+    ],
+  },
+  {
+    version: "2.516.1",
+    date: "2026-09-28",
+    title: "Score entry: seed a round from the saved pairings by bridge",
+    changes: [
+      "New bridge scoring-se-seed:<event_id>[|9|18][|apply] does what the admin SCORE ENTRY panel's Seed button does: one scoring group per saved foursome, each player's tee band and locked playing handicap from the starter sheet. It's a dry run by default: seed_plan lists the groups and names any seat with no customer_id, no tee or no playing handicap, and writes nothing. Re-seeding updates groups in place and never touches a score. The Members and Cart-sign QR switches are untouched. Built so Track A can seed s9.25 Canyon Springs (3304) for Tuesday's dry run without an admin tap."
+    ]
+  },
   {
     version: "2.516.0",
     date: "2026-09-28",

@@ -35,10 +35,14 @@ import base64
 import hashlib
 import hmac
 import json
+import logging
 import os
+import re
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 GROSS_MIN, GROSS_MAX = 1, 20
 # TGF plays MAX TRIPLE (Kerry, 2026-09-25: "We do Max Triple, so it can't be
@@ -99,6 +103,65 @@ def round_matches(round_id: int, db_path=None) -> dict:
 ROUND_MATCHES_SETTING = "score_entry_matches"
 
 
+# ---------------------------------------------------------------------------
+# PER-EVENT OPT-IN (Kerry 2026-09-28: "I don't want that available to Robert
+# yet in Austin. We need to only test it here in San Antonio at the Canyon
+# Springs event."). Score entry is OFF for every event unless its id is in
+# the app setting `score_entry_events` (a JSON list or comma list of event
+# ids). Staff turn an event on; nothing turns one on by itself. Admin
+# PREVIEW use is unaffected; everything a manager or a player can reach
+# checks this.
+# ---------------------------------------------------------------------------
+EVENTS_SETTING = "score_entry_events"
+
+
+def enabled_events(db_path=None) -> set:
+    from email_parser.database import get_app_setting
+    raw = (get_app_setting(EVENTS_SETTING, db_path) or "").strip()
+    if not raw:
+        return set()
+    try:
+        val = json.loads(raw)
+        items = val if isinstance(val, list) else list(val.keys()) if isinstance(val, dict) else [val]
+    except (ValueError, TypeError):
+        items = raw.split(",")
+    out = set()
+    for x in items:
+        try:
+            out.add(int(str(x).strip()))
+        except ValueError:
+            continue
+    return out
+
+
+def event_enabled(event_id, db_path=None) -> bool:
+    try:
+        return int(event_id) in enabled_events(db_path)
+    except (TypeError, ValueError):
+        return False
+
+
+_EVENT_OF = {
+    "group": "SELECT r.event_id FROM se_groups g JOIN se_rounds r ON r.id = g.round_id WHERE g.id = ?",
+    "round": "SELECT event_id FROM se_rounds WHERE id = ?",
+    "flag": ("SELECT r.event_id FROM se_card_flags f JOIN se_groups g ON g.id = f.group_id "
+             "JOIN se_rounds r ON r.id = g.round_id WHERE f.id = ?"),
+    "hio": ("SELECT r.event_id FROM se_hio_claims h JOIN se_groups g ON g.id = h.group_id "
+            "JOIN se_rounds r ON r.id = g.round_id WHERE h.id = ?"),
+    "round_of_group": "SELECT round_id FROM se_groups WHERE id = ?",
+}
+
+
+def event_of(kind: str, obj_id, db_path=None):
+    """The event a group / round / flag / HIO claim belongs to, or None."""
+    sql = _EVENT_OF.get(kind)
+    if not sql:
+        return None
+    with _closing(_conn(db_path)) as conn:
+        r = conn.execute(sql, (int(obj_id),)).fetchone()
+    return r[0] if r else None
+
+
 def set_round_matches(round_id: int, matches: list | None, db_path=None) -> dict:
     """Bind (or with None, clear) round-level matches: [{"id", "format",
     "sides": [[cid...], [cid...]]}]. Every cid must be in the round."""
@@ -155,6 +218,12 @@ def admin_overview(event_id: int, base_url: str | None = None, db_path=None) -> 
     score-entry round, its groups with players, holes in, who is scoring,
     signatures, the card check and photo, and each group's link."""
     from email_parser.database import get_app_setting
+    with _closing(_conn(db_path)) as conn:
+        _open = [x[0] for x in conn.execute(
+            "SELECT id FROM se_rounds WHERE event_id = ? AND status = 'open' "
+            "AND pairings_holes IS NOT NULL", (event_id,))]
+    for _rid in _open:
+        sync_from_pairings(_rid, db_path=db_path)
     feed = get_entered_scores(event_id, db_path=db_path)
     rounds = []
     for r in feed["rounds"]:
@@ -211,6 +280,7 @@ def admin_overview(event_id: int, base_url: str | None = None, db_path=None) -> 
                                    "log": manager_log(r["round_id"], db_path=db_path)}})
     return {"event_id": event_id, "rounds": rounds,
             "live_for_members": (get_app_setting("score_entry_live", db_path) or "").strip() == "1",
+            "event_enabled": event_enabled(event_id, db_path),
             "keeper_signs": keeper_signs(event_id, db_path),
             "qr": _qr_dial(event_id, db_path)}
 
@@ -780,6 +850,15 @@ def upsert_group(round_id: int, group_num: int, *, label=None, start_hole=1,
             if not cid:
                 missing.append(p.get("display_name") or "?")
                 continue
+            # A player moved to another group takes his scores and marks with
+            # him (Kerry 2026-09-29): the rows are his, the group is where he
+            # is now. Nothing is deleted.
+            was = conn.execute("SELECT group_id FROM se_players WHERE round_id = ? AND customer_id = ?",
+                               (round_id, int(cid))).fetchone()
+            if was and was[0] != gid:
+                for tbl in ("se_hole_scores", "se_hole_marks"):
+                    conn.execute(f"UPDATE {tbl} SET group_id = ? WHERE round_id = ? AND group_id = ? "
+                                 "AND subject_key = ?", (gid, round_id, was[0], f"c:{int(cid)}"))
             conn.execute(
                 "INSERT INTO se_players (round_id, group_id, customer_id, display_name, "
                 "tee, playing_handicap, seat) VALUES (?,?,?,?,?,?,?) "
@@ -825,6 +904,44 @@ def add_team(round_id: int, group_id: int, customer_id_a: int, customer_id_b: in
     return {"team_id": tid}
 
 
+def seed_plan(event_id: int, holes: str = "9", db_path=None) -> dict:
+    """Dry run of seed_round_from_pairings: what seeding WOULD write, read
+    from the same starter-sheet pack. Writes nothing. Names every seat with
+    no customer_id, no tee band or no playing handicap, and says whether a
+    round for this event+holes already exists (a re-seed updates it)."""
+    from email_parser import database as db
+    pack = db.get_event_print_pack(event_id, db_path=db_path)
+    if not pack:
+        return {"error": "no such event"}
+    groups = [g for g in (pack.get("groups") or []) if str(g.get("holes")) == str(holes)]
+    if not groups:
+        return {"error": f"no saved {holes}-hole pairings for this event"}
+    with _closing(_conn(db_path)) as conn:
+        r = conn.execute("SELECT id, status FROM se_rounds WHERE event_id = ? AND pairings_holes = ? "
+                         "ORDER BY id LIMIT 1", (event_id, str(holes))).fetchone()
+    pev = pack.get("event") or {}
+    out_groups, gaps = [], {"no_customer_id": [], "no_tee": [], "no_playing_handicap": []}
+    for g in groups:
+        ps = []
+        for p in g.get("players") or []:
+            nm = p.get("name")
+            if not p.get("customer_id"):
+                gaps["no_customer_id"].append(nm)
+            if not p.get("tee_choice"):
+                gaps["no_tee"].append(nm)
+            if p.get("playing_handicap") is None:
+                gaps["no_playing_handicap"].append(nm)
+            ps.append({"customer_id": p.get("customer_id"), "name": nm,
+                       "tee": p.get("tee_choice"), "playing_handicap": p.get("playing_handicap")})
+        out_groups.append({"group_num": g.get("group_num"), "slot": g.get("slot_label"),
+                           "start": g.get("start_line") or g.get("hole_label"), "players": ps})
+    return {"dry_run": True, "event_id": event_id, "holes": str(holes),
+            "start_type": pev.get("start_type"), "start_clock": pev.get("start_clock"),
+            "existing_round": ({"round_id": r[0], "status": r[1]} if r else None),
+            "groups": out_groups, "players": sum(len(g["players"]) for g in out_groups),
+            "gaps": {k: v for k, v in gaps.items() if v}}
+
+
 def seed_round_from_pairings(event_id: int, holes: str = "9", *, round_date=None,
                              label=None, created_by=None, db_path=None) -> dict:
     """Build a round from the event's saved PAIRINGS (the one builder) via the
@@ -862,10 +979,20 @@ def seed_round_from_pairings(event_id: int, holes: str = "9", *, round_date=None
     first = _first_hole(evrow, n_holes)
     pev = pack.get("event") or {}
     shotgun = (pev.get("start_type") or "").strip().lower().startswith("shotgun")
+    # A LINK IS A SLOT NUMBER (Kerry 2026-09-29: "there should be underlying
+    # group numbers in sequence that don't adjust ... group one would be the
+    # first group in the list regardless if it's tee time or hole assignment
+    # changed ... slot one and slot two through how many ever slots there
+    # are"). The se_groups row is matched to the saved pairings by the
+    # pairings' GROUP NUMBER (its place in the list), never by the hole or
+    # tee-time label: relabelling 2A to 3 keeps the link, which then opens on
+    # the new start hole. A new group number gets a new link; a group number
+    # no longer on the sheet keeps its row, and its link says so.
+    num_for = {id(g): int(g["group_num"]) for g in groups}
     for g in groups:
         start = _start_hole(g.get("hole_label"), first)
         res = upsert_group(
-            rid, int(g["group_num"]), label=g.get("start_line") or g.get("slot_label"),
+            rid, num_for[id(g)], label=g.get("start_line") or g.get("slot_label"),
             start_hole=start,
             # On a shotgun the slot is a hole and the time is the one start
             # clock; on tee times the slot IS the time.
@@ -891,6 +1018,166 @@ def seed_round_from_pairings(event_id: int, holes: str = "9", *, round_date=None
     return out
 
 
+# ---------------------------------------------------------------------------
+# LONE STAR CUP rounds from the lsc_matches dial (Track B #875/#876). The cup
+# players have no cup orders, so the PAIRINGS seed has no tee_choice to read.
+# Each player's tee comes from the staff setting `lsc_tees` (Kerry 2026-09-28:
+# "check where they normally play"); his PH is WHS off THAT tee through the
+# preview's own pieces (the locked index, the event's tee rows). One round per
+# session, one group per match; the odd player's threesome (Kerry 2026-09-28)
+# is one group holding both his matches. Dry run by default. Binding each
+# session's se_round to the returned round id stays with Track B (the dial).
+# ---------------------------------------------------------------------------
+
+def _json_setting(key: str, db_path=None) -> dict:
+    from email_parser.database import get_app_setting
+    try:
+        raw = get_app_setting(key, db_path) or ""
+        return json.loads(raw) if raw.strip() else {}
+    except (ValueError, TypeError):
+        return {}
+
+
+def cup_seed(event_id: int, *, apply: bool = False, db_path=None) -> dict:
+    dial = _json_setting("lsc_matches", db_path)
+    if int(dial.get("event_id") or 0) != int(event_id):
+        return {"error": f"lsc_matches is not set for event {event_id}"}
+    tees_cfg = (_json_setting("lsc_tees", db_path).get(str(event_id)) or {})
+    by_player = {int(k): v for k, v in (tees_cfg.get("players") or {}).items()}
+    with _closing(_conn(db_path)) as conn:
+        ev = conn.execute("SELECT * FROM events WHERE id = ?", (event_id,)).fetchone()
+        if not ev:
+            return {"error": "no such event"}
+        ev = dict(ev)
+        course_id = tees_cfg.get("course_id") or ev.get("course_id")
+        course = _event_course_holes(conn, {**ev, "course_id": course_id}, 18)
+        sessions_out = []
+        for sess in dial.get("sessions") or []:
+            key = f"lsc:{sess.get('id')}"
+            r = conn.execute("SELECT id, status FROM se_rounds WHERE event_id = ? AND pairings_holes = ? "
+                             "ORDER BY id LIMIT 1", (event_id, key)).fetchone()
+            groups, seat_of = [], {}
+            for m in sess.get("matches") or []:
+                cids = [int(c) for side in ("austin", "sa") for c in (m.get(side) or []) if c]
+                hit = next((seat_of[c] for c in cids if c in seat_of), None)
+                if hit is None:
+                    groups.append({"label": m.get("id"), "tee_time": m.get("tee_time"),
+                                   "matches": [m.get("id")], "cids": []})
+                    hit = len(groups) - 1
+                else:
+                    groups[hit]["matches"].append(m.get("id"))
+                    groups[hit]["label"] = " + ".join(groups[hit]["matches"])
+                for c in cids:
+                    if c not in seat_of:
+                        seat_of[c] = hit
+                        groups[hit]["cids"].append(c)
+            sessions_out.append({"session": sess.get("id"), "label": sess.get("label"),
+                                 "date": sess.get("date"), "format": sess.get("format"),
+                                 "matches": sess.get("matches") or [],
+                                 "existing_round": ({"round_id": r[0], "status": r[1]} if r else None),
+                                 "groups": groups})
+        all_ids = sorted({c for s_ in sessions_out for g in s_["groups"] for c in g["cids"]})
+        names = {}
+        if all_ids:
+            names = {row[0]: row[1] for row in conn.execute(
+                "SELECT customer_id, TRIM(COALESCE(first_name,'') || ' ' || COALESCE(last_name,'')) "
+                f"FROM customers WHERE customer_id IN ({','.join('?' * len(all_ids))})", all_ids)}
+    bands = {c: (by_player.get(c) or {}).get("band") for c in all_ids}
+    hc = _preview_handicaps(event_id, all_ids, {c: b for c, b in bands.items() if b}, 18,
+                            db_path=db_path) if all_ids else {"ph": {}}
+    phs = hc.get("ph") or {}
+    gaps = {"no_tee": [f"{names.get(c, c)} ({c})" for c in all_ids if not bands.get(c)],
+            "no_playing_handicap": [f"{names.get(c, c)} ({c})" for c in all_ids
+                                    if bands.get(c) and phs.get(c) is None],
+            "not_a_customer": [c for c in all_ids if c not in names]}
+    out = {"dry_run": not apply, "event_id": event_id, "course_id": course_id,
+           "course_holes": len(course), "players": len(all_ids),
+           "gaps": {k: v for k, v in gaps.items() if v}, "sessions": []}
+    if hc.get("error"):
+        out["handicaps_error"] = hc["error"]
+    for so in sessions_out:
+        view = {k: so[k] for k in ("session", "label", "date", "format", "existing_round")}
+        view["groups"] = [{"label": g["label"], "tee_time": g["tee_time"],
+                           "players": [{"customer_id": c, "name": names.get(c),
+                                        "band": bands.get(c),
+                                        "tee": (by_player.get(c) or {}).get("tee"),
+                                        "playing_handicap": phs.get(c)} for c in g["cids"]]}
+                          for g in so["groups"]]
+        if apply and not out["gaps"].get("not_a_customer"):
+            rid = so["existing_round"]["round_id"] if so["existing_round"] else create_round(
+                event_id, 18, round_date=so["date"], label=f"{ev.get('item_name') or 'Lone Star Cup'}"
+                f" · {so['label']}", course_holes=course, course_id=course_id,
+                pairings_holes=f"lsc:{so['session']}", created_by="lsc_seed",
+                db_path=db_path)["round_id"]
+            if so["existing_round"] and course:
+                set_course_holes(rid, course, db_path=db_path)
+            for n, g in enumerate(so["groups"], 1):
+                upsert_group(rid, n, label=g["label"], start_hole=1, tee_time=g["tee_time"],
+                             players=[{"customer_id": c, "display_name": names.get(c),
+                                       "tee": bands.get(c), "playing_handicap": phs.get(c),
+                                       "seat": i + 1} for i, c in enumerate(g["cids"])],
+                             db_path=db_path)
+            # The matches come from the dial once Track B binds this round
+            # (session se_round = round_id); round_matches reads them there.
+            view["round_id"] = rid
+        out["sessions"].append(view)
+    return out
+
+
+def slot_key(label) -> str:
+    """The slot a group label names: "Hole 2A | 5:00 PM" -> "2A",
+    "8:10a | Hole 1" -> "8:10A", "HOLE 4" -> "4". The same text the starter
+    sheet prints, so a link and the sheet agree on which group is which."""
+    t = str(label or "").split("|")[0].strip()
+    t = re.sub(r"^hole\s+", "", t, flags=re.I)
+    return t.strip().upper()
+
+
+def _pairings_fingerprint(conn, event_id: int, holes: str) -> str:
+    rows = conn.execute(
+        "SELECT group_num, slot_label, cart_pos, customer_id, player_name, tee_choice "
+        "FROM event_pairings WHERE event_id = ? AND holes = ? "
+        "ORDER BY group_num, cart_pos", (event_id, str(holes))).fetchall()
+    return hashlib.sha256(json.dumps([list(r) for r in rows], default=str).encode()).hexdigest()[:16]
+
+
+PAIRINGS_FP_SETTING = "score_entry_pairings_fp"
+
+
+def sync_from_pairings(round_id: int, db_path=None) -> dict | None:
+    """THE ROUND FOLLOWS THE SAVED PAIRINGS (Kerry 2026-09-29). When a round
+    seeded from PAIRINGS is opened (a scorer's link, the Live Scoring page),
+    re-seed it if the saved pairings changed since the last seed. Re-seeding
+    matches groups by slot, moves players and their scores, and never deletes
+    a score, so every link already handed out keeps working. Returns the seed
+    result when it re-seeded, else None. Never raises."""
+    from email_parser.database import get_app_setting, set_app_setting
+    try:
+        with _closing(_conn(db_path)) as conn:
+            r = conn.execute("SELECT event_id, pairings_holes, status FROM se_rounds WHERE id = ?",
+                             (round_id,)).fetchone()
+            if not r or r[2] != "open" or r[1] not in ("9", "18"):
+                return None
+            from email_parser.database import _ensure_pairing_tables
+            _ensure_pairing_tables(conn)
+            fp = _pairings_fingerprint(conn, r[0], r[1])
+        try:
+            fps = json.loads(get_app_setting(PAIRINGS_FP_SETTING, db_path) or "{}")
+        except (ValueError, TypeError):
+            fps = {}
+        if fps.get(str(round_id)) == fp:
+            return None
+        res = seed_round_from_pairings(r[0], r[1], db_path=db_path)
+        if "error" in res:
+            return None
+        fps[str(round_id)] = fp
+        set_app_setting(PAIRINGS_FP_SETTING, json.dumps(fps, sort_keys=True), db_path)
+        return res
+    except Exception:
+        logger.exception("score entry: pairings re-sync failed for round %s", round_id)
+        return None
+
+
 def _first_hole(ev: dict, n_holes: int) -> int:
     if n_holes == 9 and (ev.get("nine_side") or "").strip().lower() == "back":
         return 10
@@ -903,6 +1190,55 @@ def _start_hole(hole_label, default: int) -> int:
     return int(m.group(1)) if m else default
 
 
+def _yardage_tee_id(conn, ev: dict):
+    """The tee whose yardage the phone shows under each hole: the Men <50 tee
+    from the event's tee legend (Kerry 2026-09-29: "use the <50 back tee
+    yardages. 314 seems short"). A course with no legend falls back to its
+    newest tee row, as before."""
+    from email_parser import database as db
+    cid = ev.get("course_id")
+    if not cid:
+        return None
+    try:
+        legend = db.event_tee_legend(conn, ev.get("id") or 0, ev)
+    except Exception:
+        logger.exception("score entry: tee legend failed for course %s", cid)
+        legend = []
+    for t in legend:
+        if t.get("band") == "<50" and t.get("tee_id"):
+            return t["tee_id"]
+    t = conn.execute("SELECT tee_id FROM course_tees WHERE course_id = ? "
+                     "ORDER BY tee_id DESC LIMIT 1", (cid,)).fetchone()
+    return t[0] if t else None
+
+
+def refresh_round_yardage(round_id: int, apply: bool = False) -> dict:
+    """Re-read each hole's yardage from the <50 tee for a round already
+    seeded. Writes the yardage column only (par, stroke index, groups,
+    scores and links untouched). Dry run by default."""
+    from email_parser import database as db
+    with db.get_connection() as conn:
+        r = conn.execute("SELECT id, event_id, holes, course_id FROM se_rounds WHERE id = ?",
+                         (int(round_id),)).fetchone()
+        if not r:
+            return {"error": f"round {round_id} not found"}
+        ev = conn.execute("SELECT * FROM events WHERE id = ?", (r["event_id"],)).fetchone()
+        ev = {**(dict(ev) if ev else {}), "course_id": r["course_id"] or (ev["course_id"] if ev else None)}
+        have = {h["hole_number"]: h["yardage"] for h in conn.execute(
+            "SELECT hole_number, yardage FROM se_round_holes WHERE round_id = ?", (r["id"],))}
+        want = {h["hole"]: h["yardage"] for h in _event_course_holes(conn, ev, int(r["holes"]))}
+        changes = [{"hole": n, "from": have.get(n), "to": y}
+                   for n, y in sorted(want.items()) if n in have and y and y != have.get(n)]
+        if apply and changes:
+            for c in changes:
+                conn.execute("UPDATE se_round_holes SET yardage = ? WHERE round_id = ? AND hole_number = ?",
+                             (c["to"], r["id"], c["hole"]))
+            _bump(conn, r["event_id"])
+            conn.commit()
+        return {"round_id": r["id"], "event_id": r["event_id"], "tee_id": _yardage_tee_id(conn, ev),
+                "changes": changes, "applied": bool(apply and changes)}
+
+
 def _event_course_holes(conn, ev: dict, n_holes: int) -> list[dict]:
     """Par / stroke index / yardage for the event's course, merged across the
     tee's per-nine ratings (database._ls_tee_holes). A nine picks its side."""
@@ -910,11 +1246,10 @@ def _event_course_holes(conn, ev: dict, n_holes: int) -> list[dict]:
     cid = ev.get("course_id")
     if not cid:
         return []
-    t = conn.execute("SELECT tee_id FROM course_tees WHERE course_id = ? "
-                     "ORDER BY tee_id DESC LIMIT 1", (cid,)).fetchone()
-    if not t:
+    tee_id = _yardage_tee_id(conn, ev)
+    if tee_id is None:
         return []
-    holes = db._ls_tee_holes(conn, t[0])
+    holes = db._ls_tee_holes(conn, tee_id)
     by = {h["hole_number"]: h for h in holes}
     first = _first_hole(ev, n_holes)
     want = range(first, first + n_holes)
@@ -1128,6 +1463,21 @@ def round_links(round_id: int, base_url: str | None = None, db_path=None) -> lis
             for r in rows]
 
 
+def event_group_links(event_id: int, holes: str = "9", base_url: str | None = None,
+                      db_path=None) -> dict:
+    """{group_num: scorer URL} for the event's newest OPEN round of that
+    hole count — READ ONLY (the printed scorecard's QR preview): never
+    seeds a round, so a group with no round simply has no link."""
+    with _closing(_conn(db_path)) as conn:
+        r = conn.execute(
+            "SELECT id FROM se_rounds WHERE event_id = ? AND status = 'open' "
+            "AND (pairings_holes = ? OR (pairings_holes IS NULL AND holes = ?)) "
+            "ORDER BY id DESC LIMIT 1", (int(event_id), str(holes), int(holes))).fetchone()
+    if not r:
+        return {}
+    return {x["group_num"]: x["url"] for x in round_links(r[0], base_url, db_path=db_path)}
+
+
 # ---------------------------------------------------------------------------
 # Cart-sign QR (Kerry #666 B: "QR Code printed on cart sign"). Which events
 # and groups carry one is a dial, `score_entry_qr` in app_settings:
@@ -1175,6 +1525,8 @@ def attach_cart_sign_qr(pack: dict, base_url: str | None = None, db_path=None) -
     out = {"groups": 0}
     try:
         event_id = int((pack.get("event") or {}).get("id"))
+        if not event_enabled(event_id, db_path):
+            return out
         want = _qr_dial(event_id, db_path)
         if not want:
             return out
@@ -1271,6 +1623,9 @@ def _ensure_cup_teams(group_id: int, db_path=None) -> list:
 
 def get_group_card(group_id: int, device_id: str | None = None, db_path=None) -> dict:
     """Everything the entry screen needs for one group."""
+    rid0 = event_of("round_of_group", group_id, db_path)
+    if rid0:
+        sync_from_pairings(rid0, db_path=db_path)
     _ensure_cup_teams(group_id, db_path=db_path)
     with _closing(_conn(db_path)) as conn:
         g = _group_ctx(conn, group_id)
@@ -1280,6 +1635,12 @@ def get_group_card(group_id: int, device_id: str | None = None, db_path=None) ->
             "SELECT customer_id, display_name, tee, playing_handicap, seat "
             "FROM se_players WHERE group_id = ? ORDER BY COALESCE(seat, 99), id",
             (group_id,))]
+        if not players and not conn.execute("SELECT 1 FROM se_teams WHERE group_id = ? LIMIT 1",
+                                            (group_id,)).fetchone():
+            # A slot no longer on the pairings (Kerry 2026-09-29): say so
+            # plainly rather than open an empty card.
+            return {"error": "This group isn't on tonight's pairings any more. "
+                             "Ask the manager for your group's link.", "gone": True}
         names = {p["customer_id"]: p["display_name"] for p in players}
         # TEE MARK STANDARD (Kerry 2026-09-26): "men's tees is solid color
         # except for white. If shared with women, women's tees are outlined,
@@ -2140,14 +2501,43 @@ def _team_strokes(conn, round_id: int, course) -> dict:
     rows = conn.execute("SELECT customer_id, handicap, unit, basis FROM se_game_handicaps "
                         "WHERE round_id = ? AND game = 'team_net'", (round_id,)).fetchall()
     if not rows:
-        return {"team_strokes": {}, "team_game": None}
+        return {"team_strokes": {}, "team_par3_ghost": {}, "team_game": None}
     alloc = _strokes_by_player([{"customer_id": r[0], "playing_handicap": r[1]} for r in rows],
                                course)
     alloc.pop("_unresolved", None)
+    ghost: dict = {}
+    # Team / Cart Net take NO pops on a par 3 (Kerry 9/28, CA #912-2: "remove
+    # par 3 pops for both card and side game results"). The rule lives in
+    # the engine config (team_net.no_pops_on_par3), read here so the phone
+    # card and the side-game results can't disagree. A par-3 stroke is
+    # removed, not moved to another hole — the same as the engine.
+    from email_parser.live_scoring import SEED_LIVE_SCORING_CONFIG
+    if (SEED_LIVE_SCORING_CONFIG["games"].get("team_net") or {}).get("no_pops_on_par3"):
+        par3 = {str(r[0]) for r in conn.execute(
+            "SELECT hole_number FROM se_round_holes WHERE round_id = ? AND par = 3",
+            (round_id,))}
+        if par3:
+            # The removed par-3 strokes, kept for the × the phone draws where a
+            # stroke WOULD have been (Kerry 2026-09-29: "On the par 3s where
+            # there's no pops"), the same "would-be" pop the printed
+            # scorecard marks. Scoring never reads it.
+            ghost = {cid: {h: n for h, n in by_hole.items() if h in par3 and n}
+                     for cid, by_hole in alloc.items()}
+            ghost = {cid: g for cid, g in ghost.items() if g}
+            alloc = {cid: {h: n for h, n in by_hole.items() if h not in par3}
+                     for cid, by_hole in alloc.items()}
     unit = rows[0][2]
-    return {"team_strokes": alloc,
+    return {"team_strokes": alloc, "team_par3_ghost": ghost,
             "team_game": {"unit": unit, "label": "Cart Net" if unit == "cart" else "Team Net",
-                          "basis": rows[0][3]}}
+                          "basis": rows[0][3],
+                          # The allowance the phone's legend names ("X% Team Stroke",
+                          # Kerry 2026-09-29); the basis text carries it.
+                          "pct": _basis_pct(rows[0][3])}}
+
+
+def _basis_pct(basis) -> int | None:
+    m = re.search(r"(\d+)\s*%", basis or "")
+    return int(m.group(1)) if m else None
 
 
 def _tee_legend(conn, event_id: int) -> dict:
@@ -2161,9 +2551,35 @@ def _tee_legend(conn, event_id: int) -> dict:
         ev = conn.execute("SELECT * FROM events WHERE id = ?", (event_id,)).fetchone()
         if not ev:
             return {}
-        return {t["band"]: {"color": t.get("color"), "ring": bool(t.get("ring") or t.get("ladies")),
-                            "tee_name": t.get("tee_name"), "band_label": t.get("band_label")}
-                for t in event_tee_legend(conn, event_id, dict(ev)) if t.get("band")}
+        # The SAME colour the printed scorecard's tee row uses (Kerry
+        # 2026-09-29: the phone's Blue read brighter and Gold darker than the
+        # card's #2F5FA6 / #FFCF40): scorecards._row_colour over
+        # resolve_tee_color and the design tokens; the legend's own colour
+        # only when that resolver has none.
+        colour_of = None
+        try:
+            from email_parser.scorecards import _row_colour, _master
+            from email_parser.database import tee_color_overrides
+            _ov = tee_color_overrides()
+            def colour_of(t):
+                rc = _row_colour(t.get("tee_id"), _master(t.get("tee_name") or ""), _ov)
+                return rc[0] if rc else None
+        except Exception:
+            colour_of = None
+        out = {}
+        for t in event_tee_legend(conn, event_id, dict(ev)):
+            if not t.get("band"):
+                continue
+            col = None
+            if colour_of:
+                try:
+                    col = colour_of(t)
+                except Exception:
+                    col = None
+            out[t["band"]] = {"color": col or t.get("color"),
+                              "ring": bool(t.get("ring") or t.get("ladies")),
+                              "tee_name": t.get("tee_name"), "band_label": t.get("band_label")}
+        return out
     except Exception:
         return {}
 

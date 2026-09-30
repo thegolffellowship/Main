@@ -1780,6 +1780,10 @@ def _scoring_dispatch_inner(url: str, extract: str):
       scoring-card:<round_id>      full scorecard with derivations
       scoring-courses              course/tee database listing
       scoring-se-preview:<event_id>|<cid,...>[|apply][|18][|match]  labelled PREVIEW score-entry round + link (admin-only open); 18 = an 18-hole preview, match = a demo singles match per pair (1v2, 3v4)
+      scoring-se-seed:<event_id>[|9|18][|apply]  seed score entry from the saved PAIRINGS (dry run by default; re-seed keeps scores)
+      scoring-se-yardage:<round_id>[|apply]  re-read a seeded round's hole yardages from the Men <50 tee (yardage only; dry run by default)
+      scoring-se-cup-seed:<event_id>[|apply]  Lone Star Cup rounds from lsc_matches, tees from lsc_tees, PH off that tee (dry run by default)
+      scoring-se-gate-check:<event_id>[|<chapter>]  read-only: status codes a manager / a player link get (per-event opt-in proof)
       scoring-se-status:<event_id>  read-only: every score-entry round on the event, holes in, signatures, checks, marks, matches
       scoring-se-links:<round_id>  one score-entry link per group
       scoring-se-close:<round_id>|apply  close a score-entry round (links stop opening; nothing deleted)
@@ -3364,6 +3368,105 @@ def _scoring_dispatch_inner(url: str, extract: str):
                 _res["links"] = _se.round_links(_res["round_id"])
                 _audit("scoring-se-preview", f"event {_ev} round {_res['round_id']} players {_ids}")
             return json.dumps(_res, indent=2, default=str)
+        if cmd == "scoring-se-seed":
+            # scoring-se-seed:<event_id>[|9|18][|apply] — seed score entry from
+            # the event's saved PAIRINGS (the admin SCORE ENTRY panel's Seed
+            # button). Dry run by default. Re-seeding updates groups in place
+            # and never touches a score. Switches are not touched.
+            from email_parser import score_entry as _se
+            _parts = [x.strip() for x in arg.split("|")]
+            try:
+                _ev = int(_parts[0])
+            except (ValueError, IndexError):
+                return json.dumps({"error": "usage: scoring-se-seed:<event_id>[|9|18][|apply]"})
+            _holes = "18" if "18" in _parts[1:] else "9"
+            if "apply" not in [x.lower() for x in _parts[1:]]:
+                return json.dumps(_se.seed_plan(_ev, _holes), indent=2, default=str)
+            _res = _se.seed_round_from_pairings(_ev, _holes, created_by="bridge")
+            if "error" not in _res:
+                _res["links"] = _se.round_links(_res["round_id"])
+                _audit("scoring-se-seed", f"event {_ev} holes {_holes} round {_res['round_id']}")
+            return json.dumps(_res, indent=2, default=str)
+        if cmd == "scoring-se-yardage":
+            # scoring-se-yardage:<round_id>[|apply] — re-read hole yardages from
+            # the Men <50 tee for a seeded round; yardage column only. Dry run default.
+            from email_parser import score_entry as _se
+            _r_s, _, _flag = arg.partition("|")
+            try:
+                _r = int(_r_s.strip())
+            except ValueError:
+                return json.dumps({"error": "usage: scoring-se-yardage:<round_id>[|apply]"})
+            _apply = _flag.strip().lower() == "apply"
+            _res = _se.refresh_round_yardage(_r, apply=_apply)
+            if _res.get("applied"):
+                _audit("scoring-se-yardage", f"round {_r} yardage from the <50 tee "
+                       f"({len(_res.get('changes') or [])} holes)")
+            return json.dumps(_res, default=str)
+        if cmd == "scoring-se-cup-seed":
+            # scoring-se-cup-seed:<event_id>[|apply] — Lone Star Cup rounds from
+            # the lsc_matches dial, each player's tee from lsc_tees and his PH
+            # WHS off that tee. Dry run by default; re-seed updates in place.
+            from email_parser import score_entry as _se
+            _ev_s, _, _flag = arg.partition("|")
+            try:
+                _ev = int(_ev_s.strip())
+            except ValueError:
+                return json.dumps({"error": "usage: scoring-se-cup-seed:<event_id>[|apply]"})
+            _apply = _flag.strip().lower() == "apply"
+            _res = _se.cup_seed(_ev, apply=_apply)
+            if _apply and "error" not in _res:
+                _audit("scoring-se-cup-seed", f"event {_ev} rounds "
+                       f"{[x.get('round_id') for x in _res.get('sessions') or []]}")
+            return json.dumps(_res, indent=2, default=str)
+        if cmd == "scoring-se-gate-check":
+            # scoring-se-gate-check:<event_id>[|<chapter>] — READ-ONLY proof of the
+            # per-event opt-in (Kerry 2026-09-28): replays GETs inside the app as
+            # a chapter MANAGER and as an anonymous player with each group's
+            # link, and reports the status codes. Writes nothing (GETs only).
+            import app as _app
+            from email_parser import score_entry as _se
+            from email_parser.database import get_app_setting
+            _ev_s, _, _ch = arg.partition("|")
+            try:
+                _ev = int(_ev_s.strip())
+            except ValueError:
+                return json.dumps({"error": "usage: scoring-se-gate-check:<event_id>[|<chapter>]"})
+            _c = _app.app.test_client()
+            with _c.session_transaction() as _s:
+                _s["role"] = "manager"; _s["authenticated"] = True
+                if _ch.strip():
+                    _s["chapter"] = _ch.strip()
+            _out = {"event_id": _ev, "event_enabled": _se.event_enabled(_ev),
+                    "member_switch_on": (get_app_setting("score_entry_live") or "").strip() == "1",
+                    "as_manager": {
+                        "live_scoring_page": _c.get(f"/events/{_ev}/live-scoring").status_code,
+                        "admin_read": _c.get(f"/api/score-entry/events/{_ev}/admin").status_code,
+                        "scores_feed": _c.get(f"/api/score-entry/events/{_ev}/scores").status_code}}
+            _anon = _app.app.test_client()
+            _links = []
+            for _r in _se.get_entered_scores(_ev)["rounds"]:
+                if _r.get("status") != "open":
+                    continue
+                _gs = {g["group_id"]: g for g in _r.get("groups") or []}
+                _nums = [h["hole"] for h in _r.get("course") or []] or list(range(1, int(_r.get("holes") or 9) + 1))
+                for _l in _se.round_links(_r["round_id"]):
+                    _tok = _l["url"].split("t=", 1)[1]
+                    _g = _gs.get(_l["group_id"]) or {}
+                    _st = _g.get("start_hole") or 1
+                    _i = _nums.index(_st) if _st in _nums else 0
+                    _order = _nums[_i:] + _nums[:_i]
+                    # the phone opens on the first hole in play order with no
+                    # score for everyone (score_entry.html holeOrder)
+                    _pl = [p for p in _r.get("players") or [] if p.get("group_id") == _l["group_id"]]
+                    _open = next((h for h in _order if not all(str(h) in (p.get("scores") or {}) for p in _pl)), None)
+                    _links.append({"round_id": _r["round_id"], "group_num": _l["group_num"],
+                                   "label": _l.get("label"), "start_hole": _st,
+                                   "play_order": _order, "opens_on": _open,
+                                   "player_link": _anon.get(f"/api/score-entry/card?t={_tok}").status_code})
+            _out["player_links"] = _links
+            _out["note"] = ("404 = refused. A player link is also 404 while score_entry_live is off "
+                            "(member switch), so on an ENABLED event read the manager codes.")
+            return json.dumps(_out, indent=2)
         if cmd == "scoring-se-status":
             from email_parser import score_entry as _se
             try:
@@ -4571,7 +4674,9 @@ def _scoring_dispatch_inner(url: str, extract: str):
                 indent=2, default=str)
         if cmd == "scoring-expense-patch":
             # JSON: {"id": <expense_id>, "fields": {category, event_name,
-            #   transaction_type, customer_id, merchant, append_note}}
+            #   transaction_type, customer_id, merchant, notes (replaces),
+            #   append_note}} — the reply lists `patched` (written) and
+            #   `ignored` (unknown keys, by name).
             _p = json.loads(arg)
             return json.dumps(db.patch_expense_row(
                 int(_p["id"]), _p.get("fields") or {}), indent=2, default=str)
@@ -5276,6 +5381,94 @@ def _scoring_dispatch_inner(url: str, extract: str):
                     indent=2, default=str)
             return json.dumps({"error": "usage: scoring-pairings:rounds|<portal> "
                                "or round|<portal>|<id>[|apply] or all|<portal>[|apply]"})
+        if cmd == "scoring-tee-colors":
+            # scoring-tee-colors            READ-ONLY audit: every course's
+            #   designated tees and the colour the one resolver gives them;
+            #   `unresolved` = the ones Kerry must name.
+            # scoring-tee-colors:set|<tee_id>=<colour word or #hex>;…  ('' clears)
+            if (arg or "").lower().startswith("set|"):
+                colors = {}
+                for pair in arg.split("|", 1)[1].split(";"):
+                    if "=" in pair:
+                        k, v = pair.split("=", 1)
+                        colors[int(k.strip())] = v.strip()
+                db.log_agent_action("mcp-claude", "scoring-tee-colors", arg)
+                return json.dumps(db.set_tee_colors(colors), indent=2, default=str)
+            return json.dumps(db.tee_color_audit(), indent=2, default=str)
+        if cmd == "scoring-group-codes":
+            # scoring-group-codes:<event_id>  READ the GGID per group.
+            # scoring-group-codes:<event_id>|<holes>:<group>=<code>;…  save
+            #   (blank clears) — the same writer the scorecards page uses.
+            parts = (arg or "").split("|", 1)
+            eid = int(parts[0])
+            if len(parts) > 1 and parts[1].strip():
+                codes = {}
+                for pair in parts[1].split(";"):
+                    if "=" in pair:
+                        k, v = pair.split("=", 1)
+                        h, _, gn = k.strip().partition(":")
+                        codes[(h or "9", int(gn))] = v.strip()
+                db.log_agent_action("mcp-claude", "scoring-group-codes", arg)
+                return json.dumps(db.set_group_codes(eid, codes, by="mcp-claude"), indent=2)
+            return json.dumps({f"{h}:{g}": c for (h, g), c in db.get_group_codes(eid).items()},
+                              indent=2)
+        if cmd == "scoring-scorecards":
+            # scoring-scorecards:<event_id>[|layout=3up|grouping=team|qr=off|holes=18]
+            #   READ-ONLY summary: cards, sheets, gaps, print log.
+            # …|dump   the per-value source dump (#897-G).
+            # …|html   the rendered page (for a lane's visual check).
+            # …|pdf[|all][|send[|to=<staff>]]  bind the set (or all 12
+            #   layout x grouping combos + an 18-hole sample) into one PDF;
+            #   `send` mails it to Kerry only ("approve a template").
+            from email_parser import scorecards as _scm
+            parts = [p.strip() for p in (arg or "").split("|") if p.strip()]
+            eid = int(parts[0])
+            kv = {k: v for k, _, v in (p.partition("=") for p in parts[1:]) if v}
+            flags = {p.lower() for p in parts[1:] if "=" not in p}
+            one = {"layout": kv.get("layout", "3up"), "grouping": kv.get("grouping", "team"),
+                   "qr": kv.get("qr", "auto"), "holes": kv.get("holes"),
+                   "allow_gaps": "allow_gaps" in flags}
+            if "pdf" in flags:
+                from app import _print_pack_render, app as _app
+                sets = ([{"layout": l, "grouping": g, "qr": one["qr"], "holes": h,
+                          "allow_gaps": one["allow_gaps"]}
+                         for h in (None, "18") for l, g in _scm.ALL_COMBOS]
+                        if "all" in flags else [one])
+                built = _scm.build_scorecards_pdf(_print_pack_render, eid,
+                                                  _app.static_folder, sets)
+                out = {k: built.get(k) for k in ("parts", "gaps", "filename", "engine", "error")}
+                out["bytes"] = len(built.get("pdf") or b"")
+                if "send" in flags and built.get("pdf"):
+                    db.log_agent_action("mcp-claude", "scoring-scorecards", arg)
+                    out["send"] = _scm.send_scorecards_pdf(built, kv.get("to"),
+                                                           note=kv.get("note", ""))
+                return json.dumps(out, indent=2, default=str)
+            sc = _scm.build_scorecards(eid, one["layout"], one["grouping"], qr=one["qr"],
+                                       holes_override=one["holes"],
+                                       allow_gaps=one["allow_gaps"])
+            if not sc:
+                return json.dumps({"error": "event not found"})
+            if "html" in flags:
+                from app import _print_pack_render
+                return _print_pack_render("scorecards.html", sc=sc)
+            if "dump" in flags:
+                return json.dumps({"event": sc["event"], "net": sc["net"], "gaps": sc["gaps"],
+                                   "log": sc["log"], "tees": [{k: t[k] for k in (
+                                       "band", "master", "tee_id", "code", "rating", "slope",
+                                       "band_text")} for t in sc["tees"]],
+                                   "grids": sc["grids"], "players": sc["dump"],
+                                   "pairings_saved": sc["pairings_saved"],
+                                   "handicap_as_of": sc["handicap_as_of"]},
+                                  indent=2, default=str)
+            return json.dumps({"event": sc["event"], "layout": sc["layout"],
+                               "grouping": sc["grouping"], "qr": sc["qr"],
+                               "cards": len(sc["cards"]), "sheets": len(sc["sheets"]),
+                               "qr_cards": sum(1 for c in sc["cards"] if c.get("qr")),
+                               "net": sc["net"], "gaps": sc["gaps"], "log": sc["log"],
+                               "flagged": sc["flagged"],
+                               "ggid": {f"{g['holes']}:{g['group_num']}": g["ggid"]
+                                        for g in sc["groups"]}},
+                              indent=2, default=str)
         if cmd == "scoring-print-pack-pdf":
             # scoring-print-pack-pdf:<event_id>[|send[|<to>]] — build the bound
             # PDF (parts + page counts + hash); "send" mails it as an
@@ -5292,7 +5485,7 @@ def _scoring_dispatch_inner(url: str, extract: str):
             built = build_print_pack_for_event(int(parts[0]))
             if not built:
                 return json.dumps({"error": "event not found or nothing to print"})
-            summary = {k: built.get(k) for k in ("parts", "sha", "filename", "engine", "engine_note", "assets", "error")}
+            summary = {k: built.get(k) for k in ("parts", "sha", "filename", "engine", "engine_note", "assets", "error", "scorecards")}
             summary["bytes"] = len(built.get("pdf") or b"")
             if len(parts) > 1 and parts[1].lower() == "send" and not built.get("error"):
                 db.log_agent_action("mcp-claude", "scoring-print-pack-pdf", arg)
@@ -5773,6 +5966,21 @@ def _scoring_dispatch_inner(url: str, extract: str):
                                "history": [{"customer_id": k, **v}
                                            for k, v in rows]},
                               indent=2, default=str)
+        if cmd == "scoring-pairings-swap":
+            # scoring-pairings-swap:<event_id>|<customer_id>|<customer_id>[|apply]
+            # Player swap on the saved pairings (seats keep group, slot and
+            # cart position), saved through save_event_pairings. Dry run default.
+            from email_parser.database import swap_pairings_seats
+            _p = [x.strip() for x in arg.split("|")]
+            try:
+                _ev, _a, _b = int(_p[0]), int(_p[1]), int(_p[2])
+            except (ValueError, IndexError):
+                return json.dumps({"error": "usage: scoring-pairings-swap:<event_id>|<cid>|<cid>[|apply]"})
+            _apply = len(_p) > 3 and _p[3].lower() == "apply"
+            _res = swap_pairings_seats(_ev, _a, _b, apply=_apply)
+            if _apply and "error" not in _res:
+                _audit("scoring-pairings-swap", f"event {_ev} swap {_a}<->{_b}")
+            return json.dumps(_res, indent=2, default=str)
         if cmd == "scoring-pairings-remove":
             # "<event>|<player>[|dry]" — pull one player from the event's
             # SAVED pairings and re-seat the group per Kerry's adjustment
@@ -7252,6 +7460,193 @@ def close_ca_queue_item(item_id: int,
     if res.get("ok"):
         _audit("ca_queue_close", f"[{author}] closed queue item #{item_id}")
     return json.dumps(res, indent=2, default=str)
+
+
+# ═══════ READ-ONLY EVENT VIEWS (Kerry 2026-09-29, Front Desk #954) ═══════
+# Kerry: "Why can't you see the games tab info? You need to create a tool
+# that allows you to see it and any other tools if you're blind to any
+# other stuff." Each tool reads through the SAME code the page reads — a
+# page's own GET endpoint replayed in-process, or the server reader the
+# page is built from — never a recomputation, so a tool cannot drift from
+# the screen. Read-only: GETs and readers only. Logged via _audit.
+
+def _page_get(path: str, role: str = "manager") -> tuple[int, object]:
+    """Replay a page's own GET inside the app with a staff session and
+    return (status, json). GET only — nothing here can write."""
+    import app as _app
+    c = _app.app.test_client()
+    with c.session_transaction() as sess:
+        sess["role"] = role
+        sess["authenticated"] = True
+    r = c.get(path)
+    try:
+        body = r.get_json(silent=True)
+    except Exception:
+        body = None
+    return r.status_code, body
+
+
+def _missing_ids(rows) -> list:
+    """Names of person rows that carry no customer_id (should be none)."""
+    return [r.get("name") or r.get("customer_name") or r.get("golfer") or "?"
+            for r in rows if isinstance(r, dict) and not r.get("customer_id")]
+
+
+@mcp.tool()
+def get_event_games(event_id: int) -> str:
+    """The GAMES tab for an event, exactly as the page shows it.
+
+    Counts (players / net / gross), each section's games with pot, MWP,
+    flights and place amounts, subtotals and TOTAL, the Hole-in-One banner
+    (day fund + running pot), per-bucket purses for bucket events, and WHO
+    COUNTS in each count with customer_id. Computed by the Events page's
+    own renderGamesPanel / computeGameStats run headless on the server
+    (email_parser.page_probe), so the tool cannot drift from the screen.
+    `buyer_lists_match_counts` proves the lists add up to the tab's counts.
+    Read-only: the page's non-GET requests are refused. Takes ~5-15 s.
+    """
+    from email_parser.page_probe import event_games_tab
+    _audit("read_event_games", f"event {event_id}")
+    try:
+        out = event_games_tab(int(event_id))
+    except Exception as exc:
+        return json.dumps({"error": f"games tab probe failed: {exc}"})
+    people = [w for lst in (out.get("buyers") or {}).values() for w in lst]
+    out["missing_customer_id"] = _missing_ids(people)
+    return json.dumps(out, indent=2, default=str)
+
+
+@mcp.tool()
+def get_event_pairings(event_id: int) -> str:
+    """The SAVED pairings for an event, as the Starter Sheet prints them.
+
+    Per group: slot (group_num), label, start line (hole / tee time), GGID,
+    cart seats, and each player with customer_id, tee band, index, PH and
+    team handicap; blinds as drawn. Reads get_event_print_pack — the
+    Starter Sheet's own reader. Read-only.
+    """
+    from email_parser.database import get_event_print_pack
+    _audit("read_event_pairings", f"event {event_id}")
+    pack = get_event_print_pack(int(event_id))
+    if not pack:
+        return json.dumps({"error": f"event {event_id} not found"})
+    groups, people = [], []
+    for g in pack.get("groups") or []:
+        players = [{
+            "customer_id": p.get("customer_id"), "name": p.get("name"),
+            "cart_pos": p.get("cart_pos"),
+            "cart": "A" if (p.get("cart_pos") or 0) in (1, 2) else "B",
+            "tee": p.get("tee_choice"),
+            "index": p.get("handicap_index_display", p.get("handicap_index")),
+            "playing_handicap": p.get("playing_handicap"),
+            "team_handicap": p.get("team_allowed"),
+            "is_new": bool(p.get("is_new")), "is_first_timer": bool(p.get("is_first_timer")),
+        } for p in sorted(g.get("players") or [], key=lambda x: x.get("cart_pos") or 0)]
+        people += players
+        groups.append({
+            "holes": g.get("holes"), "slot": g.get("group_num"),
+            "label": g.get("slot_label"), "start": g.get("start_line"),
+            "ggid": g.get("ggid"), "players": players,
+            "blinds": [{"customer_id": b.get("customer_id"), "name": b.get("name")}
+                       for b in g.get("blinds") or []],
+        })
+    ev = pack.get("event") or {}
+    return json.dumps({
+        "event": {k: ev.get(k) for k in ("id", "item_name", "event_date", "course",
+                                          "chapter", "start_type", "start_time", "start_label")},
+        "group_count": len(groups), "player_count": len(people),
+        "groups": groups, "missing_customer_id": _missing_ids(people),
+        "source": "get_event_print_pack (the Starter Sheet's reader)",
+    }, indent=2, default=str)
+
+
+@mcp.tool()
+def get_event_flights(event_id: int) -> str:
+    """The DIVISIONS/FLIGHTS tab for an event: each game's variant, flight
+    count and edges, every player's flight, pots and places, freeze state.
+    The page's own endpoint (/api/events/<id>/flights-board). Read-only."""
+    _audit("read_event_flights", f"event {event_id}")
+    st, body = _page_get(f"/api/events/{int(event_id)}/flights-board")
+    return json.dumps({"status": st, "board": body,
+                       "source": "/api/events/<id>/flights-board (the FLIGHTS tab)"},
+                      indent=2, default=str)
+
+
+@mcp.tool()
+def get_event_payouts(event_id: int) -> str:
+    """The PAYOUTS tab for an event: recorded winners, amounts, paid or
+    unpaid, total purse. The page's own data (/api/tgf, filtered to this
+    event's code exactly as the tab does). Read-only."""
+    from email_parser.database import get_connection
+    _audit("read_event_payouts", f"event {event_id}")
+    conn = get_connection()
+    try:
+        row = conn.execute("SELECT item_name FROM events WHERE id = ?", (int(event_id),)).fetchone()
+    finally:
+        conn.close()
+    if not row:
+        return json.dumps({"error": f"event {event_id} not found"})
+    st, body = _page_get("/api/tgf", role="admin")
+    ev = next((e for e in (body or {}).get("events") or [] if e.get("code") == row[0]), None)
+    return json.dumps({"status": st, "event_code": row[0], "payouts_tab": ev,
+                       "note": None if ev else "No payouts recorded for this event (the tab says the same).",
+                       "missing_customer_id": _missing_ids((ev or {}).get("payouts") or []),
+                       "source": "/api/tgf (the PAYOUTS tab)"}, indent=2, default=str)
+
+
+@mcp.tool()
+def get_score_entry_status(event_id: int) -> str:
+    """Live score entry for an event, as the Live Scoring page shows it:
+    rounds, each group's link slot and players, holes entered, signatures,
+    card checks, open/closed; plus the member switch and QR dial. The
+    page's own read (/api/score-entry/events/<id>/admin). Read-only — it
+    never seeds a round, changes a switch or touches a link."""
+    from email_parser.database import get_app_setting
+    from email_parser import score_entry as _se
+    _audit("read_score_entry_status", f"event {event_id}")
+    st, body = _page_get(f"/api/score-entry/events/{int(event_id)}/admin", role="admin")
+    return json.dumps({
+        "status": st,
+        "event_enabled": _se.event_enabled(int(event_id)),
+        "member_switch_on": (get_app_setting("score_entry_live") or "").strip() == "1",
+        "qr_on": (get_app_setting("score_entry_qr") or "").strip() == "1",
+        "live_scoring": body,
+        "source": "/api/score-entry/events/<id>/admin (the Live Scoring page)",
+    }, indent=2, default=str)
+
+
+@mcp.tool()
+def get_live_version() -> str:
+    """What is actually running: the served version (static/js/version.js
+    of THIS process) and, when Railway provides it, the commit and
+    deployment it was built from. A push that has not gone live shows up
+    as main's newer version elsewhere; Railway's own deploy queue needs a
+    Railway API token, which this tool does not have. Read-only."""
+    import os, re as _re
+    _audit("read_live_version", "version.js + Railway build env")
+    root = Path(__file__).resolve().parent
+    txt = (root / "static" / "js" / "version.js").read_text()
+    ver = _re.search(r'TGF_VERSION\s*=\s*"([^"]+)"', txt)
+    top = _re.search(r'title:\s*"([^"]*)"', txt)
+    return json.dumps({
+        "running_version": ver.group(1) if ver else None,
+        "running_title": top.group(1) if top else None,
+        "commit": os.environ.get("RAILWAY_GIT_COMMIT_SHA"),
+        "commit_message": os.environ.get("RAILWAY_GIT_COMMIT_MESSAGE"),
+        "branch": os.environ.get("RAILWAY_GIT_BRANCH"),
+        "deployment_id": os.environ.get("RAILWAY_DEPLOYMENT_ID"),
+        "railway_deploy_state": "unavailable (no Railway API token; Kerry's call)",
+    }, indent=2, default=str)
+
+
+@mcp.tool()
+def get_hio_pot() -> str:
+    """The running Hole-in-One pot: carry-in, each event's contribution,
+    payouts, current pot — the GAMES tab banner's own reader
+    (database.get_hio_pot, served at /api/hio-pot). Read-only."""
+    from email_parser.database import get_hio_pot as _hio
+    _audit("read_hio_pot", "running HIO pot")
+    return json.dumps(_hio(), indent=2, default=str)
 
 
 @mcp.tool()

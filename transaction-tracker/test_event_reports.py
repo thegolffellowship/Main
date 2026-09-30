@@ -15,7 +15,7 @@ applied as ratified in side-games.md.
 
 Run: python3 test_event_reports.py
 """
-import os, sqlite3, sys, tempfile, contextlib, io, logging
+import os, re, sqlite3, sys, tempfile, contextlib, io, logging
 os.environ.setdefault("DATABASE_PATH", ":memory:")
 from email_parser import database as db  # noqa: E402
 logging.getLogger("email_parser.database").setLevel(logging.ERROR)
@@ -322,8 +322,9 @@ check("both reports are manager-gated routes",
       and '@app.route("/events/<int:event_id>/proximity-markers")' in app
       and app.count('@require_role("manager")') >= 4)
 ev_html = open("templates/events.html", encoding="utf-8").read()
-check("both sit with the other PAIRINGS print buttons",
-      "/divisions-flights','_blank')" in ev_html and "/proximity-markers','_blank')" in ev_html)
+_rp = ev_html[ev_html.index("function renderReportsPanel(ev)"):ev_html.index("function renderFlightsPanel(ev)")]
+check("both sit with the other print reports on the REPORTS tab (Kerry 9/29)",
+      'open("divisions-flights"' in _rp and 'open("proximity-markers"' in _rp)
 
 print("\n== downloaded files are named the way Kerry names them ==")
 # Kerry 2026-09-15: "[YY]-[chapter acronym][event type]-[event type
@@ -734,6 +735,32 @@ _rows, _basis, _note = db._event_tee_rows(_c3, {"course_id": 800, "item_name": "
                                           [{"band": "<50", "tee_name": "Gold Tee", "color": "#B8860B", "ring": False}])
 check("an unresolved tee yields NO playing handicap rather than a caveat",
       _rows == {} and "middle rating" not in _note and "Import the 18-hole" in _note, _note)
+
+print("\n== every report has Print + Download PDF (Kerry 9/29) ==")
+from jinja2 import Environment as _Env, FileSystemLoader as _FSL
+_env = _Env(loader=_FSL("templates"), autoescape=True)
+_env.globals["print_stamp"] = lambda *a, **k: ""
+for _t, _rep, _f in (("divisions_flights.html", db.event_flights_report(EV, db_path=tmp), "DivisionsFlights"),
+                     ("proximity_markers.html", db.event_proximity_report(EV, db_path=tmp), "Proxies")):
+    _h = _env.get_template(_t).render(rep=_rep)
+    check(f"{_t}: Back, Print and Download PDF render, hidden in print",
+          'class="rbar noprint"' in _h and 'onclick="rbPrint()"' in _h and "&#8681; PDF" not in _h
+          and f"/events?event={EV}&amp;view=reports" in _h and ".rbar { display: none !important; }" in _h)
+    check(f"{_t}: Print names the document <stub>-{_f} (Save as PDF proposes it)", f'"26-s9-23-{_f}"' in _h)
+    check(f"{_t}: bar wraps at the 560px phone breakpoint", "@media (max-width: 560px)" in _h)
+
+print("\n== ONE report bar on every report page (Kerry 9/29: \"it's not the same as the other reports\") ==")
+_bar = open("templates/_report_bar.html", encoding="utf-8").read()
+check("the bar is Back to Reports · Print (no PDF button, Kerry 9/29), never printed",
+      "&#8592; Back to Reports" in _bar and "view=reports" in _bar and "&#8681;" not in _bar
+      and "document.title" in _bar
+      and "@media print { .rbar { display: none !important; } }" in _bar and "max-width: 560px" in _bar)
+for _t in ("starter_sheet", "cart_signs", "scorecards", "divisions_flights", "proximity_markers"):
+    _src = open(f"templates/{_t}.html", encoding="utf-8").read()
+    _body = _src[_src.find("<body"):]
+    check(f"{_t} includes the shared bar and draws no print/PDF button of its own",
+          '{% include "_report_bar.html" %}' in _src
+          and not re.search(r'<button[^>]*onclick="(?:window\.print\(\)|downloadPdf\(\))"', _body), _t)
 
 print("\nALL PASSED" if not F else f"\n{len(F)} FAILED: {F}")
 sys.exit(1 if F else 0)

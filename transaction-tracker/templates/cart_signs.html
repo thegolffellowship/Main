@@ -63,6 +63,10 @@
       border-top: 2px solid #111; width: 78%;
       font-variant-numeric: tabular-nums;
     }
+    .ggid { font-size: 13px; letter-spacing: 1.5px; color: #9CA3AF; margin-top: 6px;
+            text-transform: uppercase; font-weight: 600; }
+    .ggid span { font: 600 14px "Geist Mono", ui-monospace, monospace; color: #4B5563;
+                 letter-spacing: 0; margin-left: 4px; }
     .sign-foot {
       font-family: "Bitter", Georgia, serif; font-weight: 600;
       font-size: 15px; color: #444; margin-top: 11px;
@@ -87,13 +91,8 @@
   </style>
 </head>
 <body>
-  <div class="toolbar noprint">
-    <button style="font:inherit;padding:6px 14px;border:2px solid #1B1B1B;border-radius:999px;background:#fff;color:#1B1B1B;font-weight:600;cursor:pointer;margin-right:8px;"
-            onclick="location.href = '/events?event={{ pack.event.id }}&view=pairings';">&#8592; Back</button>
-    <button onclick="window.print()">Print Cart Signs</button>
-    <button class="pdf" style="font:inherit;padding:8px 16px;border:0;border-radius:999px;background:#1B1B1B;color:#fff;font-weight:600;cursor:pointer;margin-left:8px;" onclick="downloadPdf()">&#8681; Download PDF</button>
-    <span style="color:#666;font-size:13px;margin-left:10px;">Two signs per page &middot; cut along the centre line.</span>
-  </div>
+  {% with rb_event_id=pack.event.id, rb_width='100%', rb_file=(pack.event.file_stub or '') ~ '-CartSigns' %}{% include "_report_bar.html" %}{% endwith %}
+  <div class="noprint" style="color:#666;font-size:13px;margin:0 0 12px;">Two signs per page &middot; cut along the centre line.</div>
 
   {% if not pack.groups %}
     <div class="empty">No pairings saved for this event yet. Generate &amp; save pairings first.</div>
@@ -113,6 +112,7 @@
           {% endfor %}
         </div>
         <div class="start">{{ s.g.start_line or s.g.slot_label }}</div>
+        {% if s.g.ggid %}<div class="ggid">GGID<span>{{ s.g.ggid }}</span></div>{% endif %}
         {% if s.g.score_qr %}
         {#- Score entry (Kerry #666 B): scan, tap your name, keep or follow
             the group's card. Only on groups the score_entry_qr dial enables. #}

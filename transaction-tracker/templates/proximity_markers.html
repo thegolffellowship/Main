@@ -92,6 +92,7 @@
   </style>
 </head>
 <body>
+{% with rb_event_id=(rep.event or {}).get("id"), rb_file=(rep.file_stub or "") ~ "-Proxies", rb_width="11in" %}{% include "_report_bar.html" %}{% endwith %}
 {% if not rep.contests %}
   <div class="empty">
     <strong>No proximity markers to print.</strong>

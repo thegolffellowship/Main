@@ -1,0 +1,43 @@
+{#- THE report button bar (Kerry 9/29: "And it's not the same as the other
+    reports"). Every report page includes THIS partial, so the pages cannot
+    drift: "← Back to Reports" · "Print", white pills (Kerry 9/29 removed the
+    PDF button: Print → Save as PDF is faster, and Print names the file). Back lands on the event's
+    REPORTS tab. Never prints; wraps at phone width. Page-specific tools go
+    BELOW the bar, never in it.
+    Caller sets: rb_event_id, rb_file (the document title, i.e. the name a
+    "Save as PDF" proposes), rb_width. Optional: rb_print_js, rb_print_label,
+    rb_disabled (+ rb_disabled_why). -#}
+<style>
+  .rbar { width: {{ rb_width|default('8.5in') }}; max-width: 100%; margin: 16px auto 0; padding: 0 0 12px;
+          display: flex; flex-wrap: wrap; gap: 8px; align-items: center; box-sizing: border-box; }
+  .rbar a, .rbar button { font: 600 15px "Helvetica Neue", Arial, sans-serif; padding: 10px 18px;
+          border-radius: 999px; border: 1.5px solid #1B1B1B; background: #fff; color: #1B1B1B;
+          text-decoration: none; cursor: pointer; line-height: 1.2; min-height: 40px; box-sizing: border-box; }
+  .rbar .dark { background: #1B1B1B; color: #fff; }
+  .rbar [disabled] { opacity: .5; cursor: default; }
+  @media (max-width: 560px) { .rbar { padding: 0 12px 12px; } .rbar a, .rbar button { flex: 1 1 auto; text-align: center; } }
+  @media print { .rbar { display: none !important; } }
+</style>
+<div class="rbar noprint">
+  <a class="back" href="/events?event={{ rb_event_id }}&amp;view=reports">&#8592; Back to Reports</a>
+  {% if rb_disabled|default(false) %}
+  <button type="button" disabled title="{{ rb_disabled_why|default('') }}">{{ rb_print_label|default('Print') }}</button>
+  {% else %}
+  <button type="button" onclick="{{ rb_print_js|default('rbPrint()') }}">{{ rb_print_label|default('Print') }}</button>
+  {% endif %}
+</div>
+<script>
+  // Print names the document <stub>-<Report> first, so "Save as PDF" from
+  // the print dialog proposes the right file name (Kerry 9/29: the separate
+  // PDF button went — "They actually take longer to save than the Print
+  // button sequence does").
+  function rbPrint() {
+    var was = document.title;
+    document.title = {{ rb_file|default('report') | tojson }};
+    window.addEventListener("afterprint", function once() {
+      document.title = was;
+      window.removeEventListener("afterprint", once);
+    });
+    window.print();
+  }
+</script>

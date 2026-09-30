@@ -50,6 +50,8 @@ for cid, fn, ln in [(101, "Kerry", "Niester"), (102, "Adam", "Baker"),
 conn.execute("INSERT INTO events (id, item_name, event_date, start_type, start_time) "
              "VALUES (900, 's9.25 Canyon Springs', '2026-09-29', 'Shotgun', '17:30')")
 conn.commit()
+# Kerry 2026-09-28: score entry is opt-in per event. The test event is on.
+db.set_app_setting("score_entry_events", "[900]")
 
 NINE = [{"hole": h, "par": p, "stroke_index": si} for h, p, si in
         [(1, 4, 3), (2, 3, 9), (3, 5, 1), (4, 4, 5), (5, 4, 7), (6, 3, 8),
@@ -239,6 +241,14 @@ for pos, (cid, nm) in enumerate([(101, "Kerry Niester"), (102, "Adam Baker")], 1
                  (nm, pos, cid))
 conn.commit()
 with contextlib.redirect_stdout(io.StringIO()):
+    plan = se.seed_plan(900, "9")
+check("seed dry run names the players and writes nothing",
+      plan.get("dry_run") and plan["players"] == 2 and plan["existing_round"] is None
+      and conn.execute("SELECT COUNT(*) FROM se_rounds WHERE event_id = 900 "
+                       "AND pairings_holes = '9'").fetchone()[0] == 0, plan)
+check("seed dry run names seats with no tee", "no_tee" in plan.get("gaps", {}), plan)
+check("seed dry run refuses a nine with no pairings", "error" in se.seed_plan(900, "18"))
+with contextlib.redirect_stdout(io.StringIO()):
     s = se.seed_round_from_pairings(900, "9")
 check("seeded a round from PAIRINGS", "round_id" in s and s["groups"] == 1, s)
 check("no course card is said out loud", "warning" in s, s)
@@ -250,6 +260,114 @@ check("shotgun: tee time is the one start clock", grp["tee_time"] == "5:30 PM", 
 with contextlib.redirect_stdout(io.StringIO()):
     s2 = se.seed_round_from_pairings(900, "9")
 check("re-seed reuses the round", s2["round_id"] == s["round_id"], s2)
+
+print("Lone Star Cup rounds from the dial, tees from lsc_tees (Track B #875/#876)")
+db.set_app_setting("lsc_matches", json.dumps({"event_id": 900, "sessions": [
+    {"id": "sat-am", "label": "Saturday AM", "date": "2026-10-10", "format": "fourball",
+     "se_round": None, "matches": [{"id": "M1", "tee_time": "8:30", "austin": [101, 102], "sa": [103, 104]}]},
+    {"id": "sun", "label": "Sunday", "date": "2026-10-11", "format": "singles", "se_round": None,
+     "matches": [{"id": "S1", "tee_time": "9:00", "austin": [101], "sa": [103]},
+                 {"id": "S2", "tee_time": "9:00", "austin": [102], "sa": [103]},
+                 {"id": "S3", "tee_time": "9:10", "austin": [104], "sa": [106]}]}]}))
+conn.execute("INSERT INTO customers (customer_id, first_name, last_name) VALUES (106, 'Bill', 'Barstow')")
+conn.commit()
+db.set_app_setting("lsc_tees", json.dumps({"900": {"course_id": None, "players": {
+    "101": {"band": "<50", "tee": "Blue"}, "102": {"band": "50-64", "tee": "White"},
+    "103": {"band": "<50", "tee": "Blue"}, "104": {"band": "Forward", "tee": "Teal"}}}}))
+_n0 = conn.execute("SELECT COUNT(*) FROM se_rounds").fetchone()[0]
+with contextlib.redirect_stdout(io.StringIO()):
+    cp = se.cup_seed(900)
+check("cup seed dry run writes nothing", cp.get("dry_run") and
+      conn.execute("SELECT COUNT(*) FROM se_rounds").fetchone()[0] == _n0, cp)
+_sun = next(x for x in cp["sessions"] if x["session"] == "sun")
+check("the odd player's two singles are ONE group (Kerry's threesome)",
+      len(_sun["groups"]) == 2 and sorted(p["customer_id"] for p in _sun["groups"][0]["players"]) == [101, 102, 103]
+      and _sun["groups"][0]["label"] == "S1 + S2", _sun["groups"])
+check("a cup player with no lsc_tees row is named, not guessed",
+      any("(106)" in x for x in cp["gaps"].get("no_tee", [])), cp["gaps"])
+with contextlib.redirect_stdout(io.StringIO()):
+    ca = se.cup_seed(900, apply=True)
+_rids = [x.get("round_id") for x in ca["sessions"]]
+check("cup seed apply: one round per session", all(_rids) and len(set(_rids)) == 2, ca)
+_tees = {r[0]: r[1] for r in conn.execute(
+    "SELECT customer_id, tee FROM se_players WHERE round_id = ?", (_rids[0],))}
+check("each cup player's tee is his lsc_tees band", _tees == {101: "<50", 102: "50-64", 103: "<50", 104: "Forward"}, _tees)
+with contextlib.redirect_stdout(io.StringIO()):
+    ca2 = se.cup_seed(900, apply=True)
+check("cup re-seed reuses the rounds", [x.get("round_id") for x in ca2["sessions"]] == _rids, ca2)
+check("cup seed refuses another event's dial", "error" in se.cup_seed(901))
+db.set_app_setting("lsc_matches", "")
+db.set_app_setting("lsc_tees", "")
+
+print("LINKS ARE SLOT NUMBERS; the round follows the saved pairings (Kerry 2026-09-29)")
+conn.execute("INSERT INTO events (id, item_name, event_date, start_type, start_time) "
+             "VALUES (910, 'slots', '2026-09-29', 'Shotgun', '17:00')")
+def _pair(rows):
+    conn.execute("DELETE FROM event_pairings WHERE event_id = 910")
+    for gnum, slot, cids in rows:
+        for pos, cid in enumerate(cids, 1):
+            conn.execute("INSERT INTO event_pairings (event_id, holes, group_num, slot_label, "
+                         "player_name, cart_pos, customer_id) VALUES (910, '9', ?, ?, ?, ?, ?)",
+                         (gnum, slot, f"P{cid}", pos, cid))
+    conn.commit()
+_pair([(1, "1A", [101, 102]), (2, "2A", [103, 104]), (3, "3A", [105])])
+with contextlib.redirect_stdout(io.StringIO()):
+    s910 = se.seed_round_from_pairings(910, "9")
+r910 = s910["round_id"]
+L0 = {l["group_num"]: l for l in se.round_links(r910)}
+check("seeded slots 1-3; slot 2 starts on hole 2",
+      set(L0) == {1, 2, 3} and se.get_group_card(L0[2]["group_id"])["start_hole"] == 2, L0)
+g2 = L0[2]["group_id"]
+tok2 = L0[2]["url"].split("t=", 1)[1]
+se.claim_group(g2, "k", 103)
+se.write_scores(g2, "k", 103, [{"op_id": "SL1", "customer_id": 103, "hole": 2, "gross": 4},
+                               {"op_id": "SL2", "customer_id": 104, "hole": 2, "gross": 5}])
+# Kerry relabels every hole (1A->1, 2A->4, 3A->2A: the old 2A label now on
+# slot 3) and swaps 101 and 104 between slots 1 and 2 after 104 has scored.
+_pair([(1, "1", [104, 102]), (2, "4", [103, 101]), (3, "2A", [105])])
+with contextlib.redirect_stdout(io.StringIO()):
+    c2 = se.get_group_card(g2)
+check("slot 2's link still opens slot 2, now on hole 4, with its new players",
+      se.verify_group_token(tok2) == g2 and c2["start_hole"] == 4
+      and sorted(p["customer_id"] for p in c2["players"]) == [101, 103], (c2.get("start_hole"), c2.get("players")))
+c3 = se.get_group_card(L0[3]["group_id"])
+check("slot 3 took the old '2A' label and keeps its own link and player (the label is not the slot)",
+      c3["start_hole"] == 2 and [p["customer_id"] for p in c3["players"]] == [105], c3.get("players"))
+check("103's score stayed with him in slot 2", c2["scores"].get("c:103", {}).get("2") == 4, c2["scores"])
+c1 = se.get_group_card(L0[1]["group_id"])
+check("104 moved after scoring: his score went with him to slot 1",
+      c1["scores"].get("c:104", {}).get("2") == 5 and "c:104" not in c2["scores"], (c1["scores"], c2["scores"]))
+L1 = {l["group_num"]: l for l in se.round_links(r910)}
+check("the three links are unchanged; no new link", set(L1) == {1, 2, 3}
+      and all(L1[n]["url"] == L0[n]["url"] for n in (1, 2, 3)), L1)
+_pair([(1, "1", [104, 102]), (2, "4", [103, 101]), (3, "2A", [105]), (4, "6", [106])])
+with contextlib.redirect_stdout(io.StringIO()):
+    se.sync_from_pairings(r910)
+L2 = {l["group_num"]: l for l in se.round_links(r910)}
+check("a new slot 4 gets its own link", 4 in L2 and all(L2[n]["url"] == L0[n]["url"] for n in (1, 2, 3)), L2)
+_pair([(1, "1", [104, 102]), (2, "4", [103, 101, 105, 106])])
+with contextlib.redirect_stdout(io.StringIO()):
+    se.sync_from_pairings(r910)
+c4 = se.get_group_card(L2[4]["group_id"])
+check("a slot no longer on the sheet says so plainly", c4.get("gone") and "pairings" in c4["error"], c4)
+with contextlib.redirect_stdout(io.StringIO()):
+    again = se.sync_from_pairings(r910)
+check("nothing changed since: no re-seed", again is None)
+check("no score row was deleted", conn.execute("SELECT COUNT(*) FROM se_hole_scores WHERE round_id = ?",
+                                               (r910,)).fetchone()[0] == 2)
+
+print("Player swap on the saved pairings (Kerry 2026-09-29 'Swap Lance and Brian')")
+_pair([(1, "2A", [103, 101]), (2, "5A", [102, 104])])
+dry = db.swap_pairings_seats(910, 101, 104)
+check("swap dry run changes nothing", dry["dry_run"] and conn.execute(
+    "SELECT group_num FROM event_pairings WHERE event_id = 910 AND customer_id = 101").fetchone()[0] == 1, dry)
+with contextlib.redirect_stdout(io.StringIO()):
+    db.swap_pairings_seats(910, 101, 104, apply=True)
+_seats = {r[0]: (r[1], r[2]) for r in conn.execute(
+    "SELECT customer_id, group_num, cart_pos FROM event_pairings WHERE event_id = 910")}
+check("swap: 101 takes 104's seat (group and cart position) and 104 takes 101's",
+      _seats[101] == (2, 2) and _seats[104] == (1, 2) and _seats[103] == (1, 1), _seats)
+check("swap refuses someone not on the pairings", "error" in db.swap_pairings_seats(910, 101, 999))
 
 print("sign-off, flags, CTP, HIO (Kerry #666, ratified #667)")
 conn.execute("INSERT INTO customers (customer_id, first_name, last_name) VALUES (105, 'Mark', 'Stich')")
@@ -589,6 +707,14 @@ check("the game is named for the unit", tc["team_game"]["label"] == "Cart Net", 
 se.set_game_handicaps(sr, {102: 2}, unit="cart", basis="Cart Net 85%")
 check("a re-seed updates the number in place",
       se.get_group_card(sg)["team_strokes"].get("102") == {"3": 1, "7": 1})
+se.set_game_handicaps(sr, {102: 9}, unit="cart", basis="Cart Net 85%")
+_c9 = se.get_group_card(sg)
+check("par-3 x (Kerry 9/29): the team strokes the par-3 rule removes are on the card as would-be strokes",
+      _c9["team_par3_ghost"].get("102") == {"2": 1, "6": 1}
+      and not set(_c9["team_strokes"].get("102", {})) & {"2", "6"}, (_c9["team_par3_ghost"], _c9["team_strokes"]))
+se.set_game_handicaps(sr, {102: 2}, unit="cart", basis="Cart Net 85%")
+check("...and nothing on a par 3 where he gets no team stroke anyway",
+      not se.get_group_card(sg)["team_par3_ghost"].get("102"))
 
 print("cart-sign QR (Kerry #666 B), behind the score_entry_qr dial")
 pack = db.get_event_print_pack(900)
@@ -650,8 +776,12 @@ tg = se.upsert_group(tr, 1, players=[
     {"customer_id": 103, "display_name": "Chris Best", "tee": "Forward"},
     {"customer_id": 104, "display_name": "Robert Hogue"}])["group_id"]
 tees = se.get_group_card(tg)["tees"]
-check("the card carries the tee sheet's legend, colour for colour",
-      set(tees) == set(legend) and all(tees[b]["color"] == legend[b]["color"] for b in legend), (tees, legend))
+from email_parser.scorecards import _row_colour, _master
+_card_col = {b: (_row_colour(t_.get("tee_id"), _master(t_.get("tee_name") or ""), db.tee_color_overrides()) or (None,))[0]
+             or t_.get("color") for b, t_ in legend.items()}
+check("the card carries the tee sheet's bands, each in the PRINTED scorecard's colour (Kerry 9/29)",
+      set(tees) == set(legend) and all(tees[b]["color"] == _card_col[b] for b in legend)
+      and tees["<50"]["color"] == "#2F5FA6", (tees, _card_col))
 check("the women's tee is marked as an outline, as on the sheet", tees.get("Forward", {}).get("ring") is True, tees)
 check("a player with no tee has no colour here (the screen shows grey, never a guess)",
       not se.get_group_card(tg)["players"][3]["tee"])
@@ -781,6 +911,28 @@ check("a manager signs for a player (note required) and it's logged with who",
       and se.manager_log(sr)[0]["actor"] == "manager:San Antonio"
       and mgr.post(f"/api/score-entry/groups/{sg}/sign-for", json={"customer_id": 101}).status_code == 400,
       (sf843.get_json(), se.manager_log(sr)[:1]))
+print("PER-EVENT OPT-IN (Kerry 2026-09-28: SA-only test, nothing for Austin)")
+db.set_app_setting("score_entry_events", "[3304]")
+check("an event not turned on: a manager can't open Live Scoring or its read",
+      mgr.get("/events/900/live-scoring").status_code == 404
+      and mgr.get("/api/score-entry/events/900/admin").status_code == 404
+      and mgr.get("/api/score-entry/events/900/scores").status_code == 404)
+check("...nor settle a CTP, clear a flag or sign for a player there",
+      mgr.post(f"/api/score-entry/rounds/{sr}/ctp", json={"hole": 6, "customer_id": 105}).status_code == 404
+      and mgr.post(f"/api/score-entry/groups/{sg}/sign-for", json={"customer_id": 101, "note": "x"}).status_code == 404)
+_tk = se.group_link(sg).split("t=", 1)[1]
+check("...and a player's link doesn't open, even with the member switch on",
+      anon.get(f"/api/score-entry/card?t={_tk}").status_code == 404)
+check("...while an admin still can (preview)", client.get("/events/900/live-scoring").status_code == 200
+      and client.get(f"/api/score-entry/card?t={_tk}").status_code == 200)
+check("...and no cart sign gets a code", se.attach_cart_sign_qr(
+      {"event": {"id": 900}, "groups": []}) == {"groups": 0})
+check("the setting reads a comma list too", se.enabled_events() == {3304}
+      and (db.set_app_setting("score_entry_events", "3304, 900") or se.event_enabled(900)))
+check("an empty setting turns every event off", (db.set_app_setting("score_entry_events", "") or True)
+      and not se.event_enabled(900) and se.enabled_events() == set())
+db.set_app_setting("score_entry_events", "[900]")
+check("turned back on: the manager is back in", mgr.get("/api/score-entry/events/900/admin").status_code == 200)
 pv = se.create_preview_round(900, [101, 102], holes=18, tees={101: "<50", 102: "65+"})
 se.set_round_matches(pv["round_id"], [{"id": "P-1", "format": "singles", "sides": [[101], [102]]}])
 check("only a PREVIEW round can be started over",

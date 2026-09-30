@@ -77,6 +77,20 @@ def ruled_allocation_mode(mode: str, si_by_hole: dict) -> str:
     return "subset" if len(si_by_hole) <= 9 else "full_card"
 
 
+def ruled_dots(playing_hcp, stroke_index_by_hole: dict) -> dict:
+    """{hole: strokes} for a playing handicap under the RULED allocation
+    (CA #771: a nine collapses to 1-9, an 18 uses the full card). The ONE
+    call both the G-0 publish (stored pops) and the printed scorecard
+    (dots before the round) make, so the card and the record cannot
+    disagree. None -> {}. A plus handicap is returned as the allocator
+    gives it (strokes back, negative); a printer shows no dot for it
+    because the plus comes off the ROUND (Kerry 2026-09-15)."""
+    if playing_hcp is None or not stroke_index_by_hole:
+        return {}
+    return allocate_strokes(int(round(playing_hcp)), stroke_index_by_hole,
+                            mode=ruled_allocation_mode("ruled", stroke_index_by_hole))
+
+
 def allocate_strokes(playing_hcp: int, stroke_index_by_hole: dict,
                      max_pops: int = 2, mode: str = "subset") -> dict:
     """Distribute a playing handicap across holes by stroke index.

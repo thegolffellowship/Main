@@ -441,7 +441,11 @@ RUNNER_TOOLS = {
 # the guard anyway; refusing here says so plainly).
 _BRIDGE_REFUSE = _re.compile(
     r"^scoring-(rehearsal|gg-archive|import-orders|brevo|insider|recap-draft-email|"
-    r"hcp-cards|print-pack-pdf|backup)", _re.I)
+    r"print-pack-pdf|backup)", _re.I)
+# Handicap cards: the DRY RUN only (CA #882 item 6, for closeout #865). It
+# sends nothing and returns would_send; "|apply" is the send and stays
+# refused, with the outbound guard behind it either way.
+_BRIDGE_DRY_ONLY = _re.compile(r"^scoring-hcp-cards(:|$)", _re.I)
 
 
 def runner_scratch_ok(path) -> bool:
@@ -662,6 +666,8 @@ def start_job(kind: str, spec: str, args: str = "", db_path=None) -> dict:
                 return {"error": "a bridge job runs one scoring-* bridge"}
             if _BRIDGE_REFUSE.match(ex):
                 return {"error": f"{ex.split(':')[0]} is not run in a rehearsal (it only reaches outside, or is the runner itself)"}
+            if _BRIDGE_DRY_ONLY.match(ex) and _re.search(r"\|\s*apply\s*$", ex, _re.I):
+                return {"error": f"{ex.split(':')[0]} runs in a rehearsal as a DRY RUN only; drop |apply"}
             argv = [sys.executable, "-c", _BRIDGE_CHILD, ex]
             env = _child_env(rdir, scratch, bridge=True)
         else:

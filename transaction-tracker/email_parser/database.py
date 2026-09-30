@@ -48789,7 +48789,7 @@ def patch_expense_row(expense_id: int, fields: dict,
     (recategorize, link event, fix type). append_note adds to notes."""
     allowed = {"category", "transaction_type", "event_name", "customer_id",
                "merchant", "entity", "email_uid", "account_id",
-               "review_status", "matched_item_id"}
+               "review_status", "matched_item_id", "notes"}
     if "review_status" in fields and fields["review_status"] not in (
             "pending", "approved", "corrected", "ignored"):
         # 'ignored' is the schema's dismissal state (CHECK constraint on
@@ -48802,8 +48802,14 @@ def patch_expense_row(expense_id: int, fields: dict,
         if not row:
             return {"error": f"expense {expense_id} not found"}
         exp = dict(row)
-        sets, vals = [], []
+        sets, vals, applied, ignored = [], [], [], []
         for k, v in fields.items():
+            if k not in allowed and k != "append_note":
+                # Never report a field as patched that was not written
+                # (CFO 2026-09-29: fields.notes said "patched" and did nothing).
+                ignored.append(k)
+                continue
+            applied.append(k)
             if k == "append_note":
                 sets.append("notes = COALESCE(notes || ' · ', '') || ?")
                 vals.append(str(v))
@@ -48842,7 +48848,7 @@ def patch_expense_row(expense_id: int, fields: dict,
                 or exp.get("acct_transaction_id")):
             _sync_expense_ledger_entry(conn, exp)
         conn.commit()
-        return {"patched": sorted(k for k in fields),
+        return {"patched": sorted(applied), "ignored": sorted(ignored),
                 "ledger_row_reversed": reversed_acct,
                 "expense": dict(conn.execute(
                     "SELECT id, merchant, amount, category, transaction_type, "
@@ -57035,7 +57041,8 @@ def _event_player_counts(conn, event_name: str) -> dict:
         (event_name,)).fetchall() if r["alias_name"]]
     ph = ",".join("?" for _ in names)
     rows = [dict(r) for r in conn.execute(
-        f"SELECT id, parent_item_id, side_games, wd_credits, "
+        f"SELECT id, parent_item_id, side_games, wd_credits, item_price, "
+        f"       email_uid, customer, "
         f"       COALESCE(transaction_status,'active') AS ts "
         f"FROM items WHERE LOWER(item_name) IN ({ph})",
         [n.lower() for n in names]).fetchall()]
@@ -57052,10 +57059,22 @@ def _event_player_counts(conn, event_name: str) -> dict:
     total = net = gross = 0
     parents = [r for r in rows if not r["parent_item_id"]]
     not_playing = 0
+    comps = []
     for r in parents:
         if r["id"] in overrides or r["ts"] in ("credited", "refunded", "transferred"):
             not_playing += 1
             continue
+        # A COMP FUNDS THE GAMES (Kerry 9/28, CA #912-3, verbatim: "CTPs are
+        # for every player bought in. My money goes in there too. I thought
+        # we ruled on that." The comp is on the course fee / markup, not the
+        # games). v2.518.5 excluded comps under the since-withdrawn #882-4;
+        # they are now COUNTED again and only LISTED under `comps` so a
+        # reader can see who they are. The only players who don't fund a
+        # game are those who didn't buy it (#843 f).
+        if (("comp" in str(r.get("item_price") or "").lower()
+             or str(r.get("email_uid") or "").startswith("manual-comp"))
+                and r["ts"] != "rsvp_only"):
+            comps.append({"item_id": r["id"], "name": r.get("customer")})
         t = _classify_side_games_type(r["side_games"])
         has_net = t in ("NET", "BOTH")
         has_gross = t in ("GROSS", "BOTH")
@@ -57082,7 +57101,7 @@ def _event_player_counts(conn, event_name: str) -> dict:
         if has_gross:
             gross += 1
     total = len(parents) - not_playing
-    return {"players": total, "net": net, "gross": gross}
+    return {"players": total, "net": net, "gross": gross, "comps": comps}
 
 
 def _rows_from_place_ladder(ranking: list, amounts: list, category: str,
@@ -61800,6 +61819,87 @@ def _tee_color_for(tee_name: str) -> str | None:
     return None
 
 
+# ── ONE TEE-COLOUR RESOLVER (Kerry 2026-09-28: "Colors aren't printing on
+# tee rows for Star Ranch. Make sure all courses have colors assigned.") ──
+# Order: (a) an explicit colour set for that tee (app setting `tee_colors`,
+# JSON {tee_id: "#hex" | colour word} — no schema, CA #898-6), (b) the
+# colour word found ANYWHERE in the master name ("Champ - Blue" is blue),
+# (c) unresolved. The Starter Sheet legend, cart signs, the scorecard's tee
+# rows and its player chips all read this one function.
+TEE_COLORS_SETTING = "tee_colors"
+
+
+def tee_color_overrides(conn=None, db_path=None) -> dict:
+    import json as _json
+    try:
+        raw = (_setting_via(conn, TEE_COLORS_SETTING) if conn is not None
+               else get_app_setting(TEE_COLORS_SETTING, db_path))
+        d = _json.loads(raw) if raw else {}
+        return {int(k): str(v).strip() for k, v in d.items() if str(v).strip()}
+    except Exception:
+        return {}
+
+
+def resolve_tee_color(tee_id, tee_name: str, overrides: dict | None = None) -> dict:
+    """{"hex", "word", "source"}: source 'explicit' | 'name' | None."""
+    ov = (overrides or {}).get(int(tee_id)) if tee_id else None
+    if ov:
+        w = ov.lower()
+        if w in _TEE_COLOR_WORDS:
+            return {"hex": _TEE_COLOR_WORDS[w], "word": w, "source": "explicit"}
+        if re.fullmatch(r"#[0-9a-fA-F]{6}", ov):
+            return {"hex": ov.upper(), "word": None, "source": "explicit"}
+    low = " ".join((tee_name or "").split()).lower()
+    for word, hexv in _TEE_COLOR_WORDS.items():
+        if re.search(rf"\b{word}\b", low):
+            return {"hex": hexv, "word": word, "source": "name"}
+    return {"hex": None, "word": None, "source": None}
+
+
+def set_tee_colors(colors: dict, db_path=None) -> dict:
+    """colors = {tee_id: colour word | '#RRGGBB' | ''} ('' clears)."""
+    import json as _json
+    cur = tee_color_overrides(db_path=db_path)
+    bad = []
+    for k, v in colors.items():
+        v = str(v or "").strip()
+        if not v:
+            cur.pop(int(k), None)
+        elif v.lower() in _TEE_COLOR_WORDS or re.fullmatch(r"#[0-9a-fA-F]{6}", v):
+            cur[int(k)] = v.lower() if v.lower() in _TEE_COLOR_WORDS else v.upper()
+        else:
+            bad.append(f"{k}: '{v}'")
+    if bad:
+        return {"ok": False, "error": "not a colour: " + "; ".join(bad),
+                "words": sorted(_TEE_COLOR_WORDS)}
+    set_app_setting(TEE_COLORS_SETTING, _json.dumps({str(k): v for k, v in cur.items()}),
+                    db_path=db_path)
+    return {"ok": True, "tee_colors": cur}
+
+
+def tee_color_audit(db_path=None) -> dict:
+    """Every course's DESIGNATED tees (tgf_bands set) with the colour the
+    resolver gives each; `unresolved` lists the ones to name."""
+    with _connect(db_path) as conn:
+        ov = tee_color_overrides(conn)
+        rows = [dict(r) for r in conn.execute(
+            "SELECT t.tee_id, t.tee_name, t.gender, t.tgf_bands, c.course_id, c.name AS course "
+            "FROM course_tees t JOIN courses c ON c.course_id = t.course_id "
+            "WHERE t.tgf_bands IS NOT NULL AND trim(t.tgf_bands) <> '' "
+            "ORDER BY c.name, t.tee_id").fetchall()]
+    out, unresolved = [], []
+    for r in rows:
+        master = _gg_tee_parts(r["tee_name"] or "")["master"]
+        res = resolve_tee_color(r["tee_id"], master or r["tee_name"], ov)
+        item = {"course": r["course"], "course_id": r["course_id"], "tee_id": r["tee_id"],
+                "tee": master or r["tee_name"], "bands": r["tgf_bands"], "gender": r["gender"],
+                **res}
+        out.append(item)
+        if not res["hex"]:
+            unresolved.append(item)
+    return {"designated_tees": len(out), "unresolved": unresolved, "tees": out}
+
+
 # THE YARDAGE STANDARDS (Kerry 2026-09-20, verbatim: "<50 6300-6799 /
 # 50-64 5800-6299 / 65+ 5300-5799 / Women - shortest tees not less than
 # 4800"), stored as DATA in app_settings `tee_yardage_standards` so a
@@ -62114,7 +62214,8 @@ def event_tee_legend(conn, event_id: int, ev: dict) -> list:
         nm = picks.get(band)
         if not nm:
             continue
-        col = _tee_color_for(nm) or "#374151"
+        _tid_for_col = (pick_ids.get(band) or (None, False))[0]
+        col = resolve_tee_color(_tid_for_col, nm, tee_color_overrides(conn))["hex"] or "#374151"
         # HOW THE LEGEND READS (Kerry 2026-09-15): "Change (L) to
         # (Ladies) in legend, <50 to Men <50, 50-64 to Men 50-64, 65+ to
         # Men 65+, and Forward to Women [Color]". A member should not
@@ -63224,6 +63325,71 @@ def _first_event_as_member(conn, roster_row: dict, event_date: str) -> bool:
         return False
 
 
+# ── GGID per group (Kerry #900/#912, 2026-09-28: "Got to have GGID codes
+# for tomorrow's print at 9am") ─────────────────────────────────────────────
+# Golf Genius's per-group code, typed by the manager until GG is retired
+# (R2, 10/31). Its own small table keyed (event_id, holes, group_num) — the
+# "group row's equivalent" #900 allows — so a PAIRINGS re-save, which
+# rewrites event_pairings, never loses a code, and a swap moves players but
+# not the code. Blank = no row = the slot collapses on every printable.
+
+GGID_MAX_LEN = 24
+
+
+@_once_per_db
+def _ensure_group_codes(conn):
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS event_group_codes ("
+        " event_id   INTEGER NOT NULL REFERENCES events(id),"
+        " holes      TEXT NOT NULL,"
+        " group_num  INTEGER NOT NULL,"
+        " ggid       TEXT NOT NULL,"
+        " updated_at TEXT,"
+        " updated_by TEXT,"
+        " PRIMARY KEY (event_id, holes, group_num))")
+
+
+def get_group_codes(event_id: int, db_path=None) -> dict:
+    """{(holes, group_num): ggid} for the event."""
+    with _connect(db_path) as conn:
+        _ensure_group_codes(conn)
+        return {(str(r["holes"]), int(r["group_num"])): r["ggid"] for r in conn.execute(
+            "SELECT holes, group_num, ggid FROM event_group_codes WHERE event_id = ?",
+            (int(event_id),)).fetchall()}
+
+
+def set_group_codes(event_id: int, codes: dict, by: str = "manager", db_path=None) -> dict:
+    """codes = {(holes, group_num): "code" | ""}. A blank clears the code.
+    Codes are trimmed; anything but letters, digits, '-' or '.' (or longer
+    than GGID_MAX_LEN) is refused by name and nothing is written."""
+    bad, clean = [], {}
+    for (holes, gnum), raw in (codes or {}).items():
+        code = re.sub(r"\s+", "", str(raw or ""))
+        if code and (len(code) > GGID_MAX_LEN or not re.fullmatch(r"[A-Za-z0-9.\-]+", code)):
+            bad.append(f"group {gnum}: '{raw}'")
+            continue
+        clean[(str(holes), int(gnum))] = code
+    if bad:
+        return {"ok": False, "error": "not a GGID code: " + "; ".join(bad)}
+    stamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+    with _connect(db_path) as conn:
+        _ensure_group_codes(conn)
+        for (holes, gnum), code in clean.items():
+            if code:
+                conn.execute(
+                    "INSERT INTO event_group_codes (event_id, holes, group_num, ggid, "
+                    "updated_at, updated_by) VALUES (?,?,?,?,?,?) "
+                    "ON CONFLICT (event_id, holes, group_num) DO UPDATE SET "
+                    "ggid = excluded.ggid, updated_at = excluded.updated_at, "
+                    "updated_by = excluded.updated_by",
+                    (int(event_id), holes, gnum, code, stamp, by))
+            else:
+                conn.execute("DELETE FROM event_group_codes WHERE event_id = ? AND holes = ? "
+                             "AND group_num = ?", (int(event_id), holes, gnum))
+        conn.commit()
+    return {"ok": True, "saved": {f"{h}:{g}": c for (h, g), c in clean.items()}}
+
+
 def get_event_print_pack(event_id: int, db_path=None) -> dict | None:
     """Assemble the data for the Starter Sheet + Cart Signs printables (B5).
 
@@ -63271,6 +63437,11 @@ def get_event_print_pack(event_id: int, db_path=None) -> dict | None:
                              event_id)
     idx_map = _handicap_index_18_by_customer(db_path, as_of=_event_index_as_of(ev))
     pairings = get_event_pairings(event_id, db_path=db_path)
+    try:
+        _ggids = get_group_codes(event_id, db_path=db_path)
+    except Exception:
+        logger.exception("Non-fatal: GGID codes unavailable for %s", event_id)
+        _ggids = {}
 
     def _carts(players: list) -> list:
         ps = sorted(players, key=lambda p: p.get("cart_pos") or 0)
@@ -63296,6 +63467,7 @@ def get_event_print_pack(event_id: int, db_path=None) -> dict | None:
             groups.append({
                 "holes": holes,
                 "group_num": g.get("group_num"),
+                "ggid": _ggids.get((holes, int(g.get("group_num") or 0))),
                 "slot_label": g.get("slot_label") or f"Group {g.get('group_num')}",
                 "players": players,
                 "carts": _carts(players),
@@ -63696,6 +63868,52 @@ def _reseat_event_blinds(conn, event_id: int) -> dict:
                 seat["holes"], seat["group_num"], seat["cart_pos"]):
             reseated += 1
     return {"reseated": reseated, "loosened": loosened}
+
+
+def swap_pairings_seats(event_id: int, customer_id_a: int, customer_id_b: int,
+                        apply: bool = False, db_path=None) -> dict:
+    """PLAYER SWAP on the saved pairings (the Pairings page's Player swap,
+    Kerry 2026-09-29 "Swap Lance and Brian"): the two people trade SEATS
+    (group, slot and cart position stay with the seat), by customer_id.
+    Saved through save_event_pairings, the same path as the page. Dry run
+    by default: returns both seats before and after."""
+    a, b = int(customer_id_a), int(customer_id_b)
+    with _connect(db_path) as conn:
+        _ensure_pairing_tables(conn)
+        rows = [dict(r) for r in conn.execute(
+            "SELECT holes, group_num, slot_label, player_name, cart_pos, tee_choice, "
+            "handicap_index, customer_id FROM event_pairings WHERE event_id = ? "
+            "ORDER BY holes, group_num, cart_pos", (event_id,))]
+    seat = {r["customer_id"]: r for r in rows if r["customer_id"] in (a, b)}
+    if a == b or len(seat) != 2:
+        return {"error": f"both players must be on the saved pairings (found {sorted(seat)})"}
+    ra, rb = seat[a], seat[b]
+    if ra["holes"] != rb["holes"]:
+        return {"error": "the two players are on different hole counts"}
+    before = {k: {"group": r["group_num"], "slot": r["slot_label"], "cart_pos": r["cart_pos"],
+                  "name": r["player_name"]} for k, r in seat.items()}
+    moving = ("player_name", "tee_choice", "handicap_index", "customer_id")
+    va, vb = {k: ra[k] for k in moving}, {k: rb[k] for k in moving}
+    ra.update(vb)
+    rb.update(va)
+    after = {r["customer_id"]: {"group": r["group_num"], "slot": r["slot_label"],
+                                "cart_pos": r["cart_pos"], "name": r["player_name"]}
+             for r in (ra, rb)}
+    out = {"event_id": event_id, "dry_run": not apply, "before": before, "after": after}
+    if not apply:
+        return out
+    groups_by_holes: dict = {}
+    for r in rows:
+        gl = groups_by_holes.setdefault(r["holes"], [])
+        g = next((x for x in gl if x["group_num"] == r["group_num"]), None)
+        if g is None:
+            g = {"group_num": r["group_num"], "slot_label": r["slot_label"], "players": []}
+            gl.append(g)
+        g["players"].append({"name": r["player_name"], "cart_pos": r["cart_pos"],
+                             "tee_choice": r["tee_choice"], "handicap_index": r["handicap_index"],
+                             "customer_id": r["customer_id"]})
+    save_event_pairings(event_id, groups_by_holes, db_path=db_path)
+    return out
 
 
 def save_event_pairings(event_id: int, groups_by_holes: dict, db_path=None) -> None:

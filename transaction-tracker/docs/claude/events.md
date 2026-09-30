@@ -2661,6 +2661,121 @@ To read it: bridge `scoring-engine-payouts:<event name>`, which puts GG's
 purses beside ours. G2a grades it per player, to the cent
 (`tiers.purses.engine`). Tests: `test_engine_payouts.py`.
 
+## The PRINTED SCORECARD (v2.519.0, design-claude #890-#897, CA #898/#900)
+
+`email_parser/scorecards.py` + `templates/scorecards.html`; routes
+`/events/<id>/scorecards[.pdf]?layout=3up|2up|2land&grouping=team|cart&qr=auto|off|preview&holes=9|18`;
+bridge `scoring-scorecards:<id>[|key=value…][|dump|html|pdf[|all][|send]]`.
+
+- **Every value comes from a Tracker reader, never the print layer (#897):**
+  groups / slot / cart seats / index / PH / net-game value, allowance and
+  off-the-lowest from `get_event_print_pack` (the Starter Sheet's reader);
+  tees from `event_tee_legend` (designated sets, first four); par, stroke
+  index and yardage from `course_tee_holes` (par/SI of the <50 set, a
+  disagreement is logged); dots from `handicap_calc.ruled_dots` — the same
+  function the G-0 publish stores pops with, so a card printed before the
+  round and the record written after it cannot disagree.
+- **PH, not CH** (#896, CA #898-3). The orange value is the engine's net
+  game: TEAM/T or CART/C by the matrix's team unit, the percentage and
+  "off the field's low" in the decode note. Par-3 net dots follow the
+  engine's `team_net.no_pops_on_par3` (ON since Kerry 9/28: "remove par 3
+  pops"; the decode note says "no pops on par 3s"). A plus handicap prints "+N" with no dots (the plus
+  comes off the round).
+- **Gaps stop the print (#897-G):** no course, no saved pairings, no
+  designated tees, a tee without rating/slope, a hole without par/SI, a
+  player on an undesignated tee or with no PH → the page lists the gaps
+  and no card renders; the PDF route shows the same page.
+- **Threesomes are 3 rows** (CA #898-4); Cart Net = one card per cart
+  (2 + 1 for a threesome), unshaded. Tee colours are a token map by master
+  name (CA #898-6); an unknown name prints black on white and is logged.
+- **QR:** `auto` follows the score-entry dials; `off` collapses it;
+  `preview` fills every group's real scorer link via the read-only
+  `score_entry.event_group_links` (never seeds a round) — for Kerry's look
+  only. **GGID** collapses until the PAIRINGS field (#900) exists.
+- **GGID per group (v2.520.0, Kerry #900/#912):** table `event_group_codes`
+  (event_id, holes, group_num → ggid), typed in the GGID box at the top of
+  the scorecards page (POST `/api/events/<id>/group-codes`, blank clears,
+  junk refused), attached to every print-pack group by
+  `get_event_print_pack` and printed on the scorecard header, the Starter
+  Sheet group box's header line (v2.522.6: a footer row pushed a one-page
+  sheet to two) and each cart sign. Survives a PAIRINGS re-save.
+  Bridge `scoring-group-codes:<id>[|<holes>:<group>=<code>;…]`.
+- **Entry points (v2.520.2):** PAIRINGS' print row has 🖨 Scorecards next to
+  Cart Signs (Kerry #919). A missing handicap is fixed from the ROSTER on
+  phone or desktop: the mobile card's HCP field is the desktop cell's twin
+  (`_mobileHcpField` → `.btn-set-hcp` → POST
+  `/api/customers/<id>/starting-handicap`, now logged with who set it;
+  Kerry #920 "same mobile abilities as desktop"). Guard
+  `test_mobile_manager_parity.js`.
+- **In the print pack (v2.521.0, Kerry 9/29):** after the cart signs, for the
+  events app setting `print_pack_scorecards` names ("all" or ids); 3-up,
+  grouping from the engine's net game, gap sheet (never a guessed card) when
+  a gap stands, `?allow_gaps=1` on `/events/<id>/print-pack.pdf` prints it
+  flagged. `print_pack.scorecards_in_pack`.
+- **Print anyway, flagged (CA #915):** `?allow_gaps=1` lets a player with no
+  PH print with PH/net blank and no dots (named in the print log); every
+  event-level gap still stops the print.
+- **Print geometry (v2.522.3, Kerry 9/29 "the dots still don't look like
+  they're equally distanced from the two bordering lines"):** Chromium's
+  PDF snaps every box edge to a whole CSS px, so the dot size, inset and
+  spacing and the tee chip are whole px per layout (`--dd` / `--dg` /
+  `--dsp` / `--tcs` on `.card`), measured from the cell's padding box,
+  which in a collapsed-border table already starts at the line's inner
+  edge. Verified on the PDF's own vectors (PyMuPDF `get_drawings`): every
+  dot's top/bottom gap equals its right gap exactly (0.79 mm 3-up, 1.06 mm
+  2-up). A fractional inset (0.8 mm = 3.02 px) plus a half-stroke rounded
+  one way on one side and the other way on the other; that was the uneven
+  look. Thick dividers are 2px (2.5px printed as 2 anyway). Names print
+  as large as the lead cell allows (`name_em` / `name_em_18` per row,
+  shrink-to-fit for long names), the tee chip centred on the name line.
+  Guard in `test_scorecards.py`.
+- **Grid + par-3 outline pops (v2.522.7, Kerry 9/29):** Total / Out / In /
+  TOT / Net are hole-width; PH/TEAM is an info column and narrower. The
+  cart-split weight (2px #374151) also rules under the hole row, above Par,
+  under Stroke Index and around the grid. When `no_pops_on_par3` removes a
+  team pop, `build_scorecards` keeps it as `net_ghost` and the card draws
+  it as an OUTLINE dot (same box, same inset); the legend shows the hollow
+  dot beside "no pops on par 3s". Print only: scoring never reads it.
+- **Legend + no-stroke symbol (v2.522.13, Kerry 9/29):** one line at the card
+  foot, "PH – Playing Handicap Stroke ("Pops") at 100% · {net name} Stroke at
+  {pct}%[, off the field's low] · No {net name} Strokes on par 3s", every part
+  from `sc.net` (`name`, `pct`, `off_low`, `par3_suppressed`). A par-3-removed
+  net stroke is `<i class="g">`: a bold orange × (v2.522.15, two 1.5px strokes
+  corner to corner, `::before`/`::after`; the slashed ring was "lost at that
+  scale"); the box and inset are a real stroke's.
+- **Dots at 75% (v2.522.12, Kerry 9/29, CD #962 ruling a):** `--dd` 4 / 6 / 5 px
+  (3-up / 2-up / landscape), `--dsp` 2px, inset `--dg` unchanged (3 / 4 px →
+  0.79 / 1.06 mm, equal on both lines). Fractional sizes snap unevenly in
+  print, so every dot dimension stays a whole px.
+- **Name circles (v2.522.10, Kerry 9/29):** `scorecards.chip_styles(tees)` gives
+  each band's circle the EXACT colour of its tee row (one source; never
+  the Starter Sheet swatch palette), edge in the same colour; a women's tee
+  is an OUTLINE only when it shares its row colour with another row on the
+  card, otherwise solid. White = white with a dark outline.
+- **Back to Pairings (v2.522.3, Kerry 9/29 "gets stuck loading"):** the
+  scorecards' Back goes to `/events?event=<id>&view=pairings`; that deep
+  link now LOADS the pairings (`loadPairings` then re-render) instead of
+  opening the tab on an empty "Loading…". Guard
+  `test_mobile_manager_parity.js`.
+- **`send`** mails the bound PDF to Kerry only (staff addresses; subject
+  "approve a template"). Kerry approves before the card replaces GG's.
+
+- **Every standalone print report has Print + Download PDF (v2.522.8,
+  Kerry 9/28-29):** Starter Sheet, Cart Signs and Scorecards carry their own
+  bar; Divisions/Flights and Proximity Markers include the shared
+  `templates/_report_bar.html` (Back, Print, Download PDF with the file named
+  `<stub>-DivisionsFlights` / `<stub>-Proxies`; hidden in print; wraps at
+  560px). Guard `test_event_reports.py`.
+
+- **The REPORTS tab (v2.522.9, Kerry 9/29: "move the print reports stuff
+  to it's own tab on the toggle bar. After Flights"):** view "6"
+  (`reportsOpenForEvent`, `renderReportsPanel`), ROSTER · PAIRINGS · GAMES ·
+  FLIGHTS · REPORTS · PAYOUTS · FINANCIAL on desktop and phone. Starter
+  Sheet, Cart Signs, Scorecards, Divisions & Flights, Proximity, Send Pack
+  live there; PAIRINGS keeps Undo/Redo, Generate, GG Sheet, Clear, Save,
+  Live Scoring, Blinds and the Score Entry panel. Every report's Back goes
+  to `/events?event=<id>&view=reports`. Guard `test_mobile_manager_parity.js`.
+
 ## The event PRINT PACK — one bound PDF, mailed the evening before (v2.465.0)
 
 Kerry 2026-09-18: "a bound PDF with all of them in one that I could

@@ -207,8 +207,11 @@ strokes_state = {"holes": NINE, "players": [
 ]}
 tn2 = ls.game_team_net(ls.build_cards(strokes_state, FORMULAS),
                        ls.SEED_LIVE_SCORING_CONFIG)
-check("team net uses NET balls (bogeys with strokes = even)",
-      tn2["teams"][0]["vs_par"] == 0, f"got {tn2['teams'][0]['vs_par']}")
+# Team/Cart Net take NO pops on a par 3 (Kerry 9/28, CA #912-2): the bogeys
+# on the par 3s stay bogeys, every other hole nets to par.
+_par3s = sum(1 for h in NINE if h["par"] == 3)
+check("team net uses NET balls (bogeys with strokes = even, par 3s excepted)",
+      tn2["teams"][0]["vs_par"] == _par3s, f"got {tn2['teams'][0]['vs_par']}")
 
 no_team = ls.game_team_net(ls.build_cards(
     {"holes": NINE, "players": [player("z", "Z", 0, even_par())]}, FORMULAS),

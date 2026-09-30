@@ -1,3 +1,4 @@
+import re
 """Score entry screen, driven in headless Chromium at phone size.
 
 Kerry, 2026-09-25: "Save last hole shouldn't be available after you saved
@@ -74,6 +75,7 @@ def make(holes, start, label):
 
 
 db.set_app_setting("score_entry_live", "1")
+db.set_app_setting("score_entry_events", "[900, 905]")
 PORT = 5093
 threading.Thread(target=lambda: appmod.app.run(port=PORT, use_reloader=False), daemon=True).start()
 time.sleep(2)
@@ -96,7 +98,7 @@ def review_ok(page, n, label):
     """Once every hole is in: CHECK THE CARD (Kerry 2026-09-25, option A)."""
     page.wait_for_selector("text=Check the card", timeout=5000)
     body = page.inner_text("body")
-    check(f"{label}: no 'Save last hole' once every hole is saved", "Save last hole" not in body)
+    check(f"{label}: no 'Save Last Hole' once every hole is saved", "Save Last Hole" not in body)
     cells = page.locator(".se-check.cur button.cell")
     check(f"{label}: one nine on screen, every number a button (2 players x 9)",
           cells.count() == 18, cells.count())
@@ -251,7 +253,7 @@ with sync_playwright() as p:
     pg.wait_for_selector("text=Front nine done")
     check("the turn shows each player's nine under his name (2 x 9 tappable holes)",
           pg.locator(".se-turnrow .se-mini button[data-act=goto]").count() == 18)
-    pg.click("[data-act=goto] >> text=Back to hole 9")
+    pg.click("[data-act=goto] >> text=Back to Hole 9")
     pg.wait_for_selector("text=Hole 9")
     check("Back to hole 9 goes back a hole", "Hole 9" in pg.inner_text(".se-h1"))
     pg.click("[data-act=save]")
@@ -491,7 +493,11 @@ with sync_playwright() as p:
     check("the hole screen fits without scrolling", fh <= 660, fh)
     check("the PREVIEW label is not on the scoring screen", "PREVIEW" not in fpg.inner_text(".se-eyebrow").upper())
     check("the save button is on screen", fpg.locator("[data-act=save]").bounding_box()["y"] + 50 <= 660)
-    check("the site nav steps aside while scoring", not fpg.locator(".shell-nav").first.is_visible())
+    # Kerry 2026-09-29: "Provide a centered TGF Logo on black header for all
+    # screens but don't allow it to link anywhere." The header stays, with no links.
+    check("the header shows the mark and has no links while scoring",
+          fpg.locator(".shell-nav").first.is_visible()
+          and fpg.locator(".shell-nav a, .shell-nav button").count() == 0)
     fdev = fpg.evaluate("JSON.parse(localStorage.getItem('se_device'))")
     se.write_scores(gf, fdev, 101, [{"op_id": f"fit{c_}-{h}", "customer_id": c_, "hole": h, "gross": PARS[h - 1]}
                                     for h in range(1, 19) for c_ in (101, 102, 107, 108)])
@@ -577,8 +583,11 @@ with sync_playwright() as p:
           row.inner_html()[:400])
     check("the low man shows no dots", pp.locator(".se-row").nth(0).locator(".se-pop").count() == 0)
     check("no stroke text on the row", "stroke here" not in pp.inner_text("body"))
-    check("a small key names the two dots",
-          "PH pop" in pp.inner_text(".se-popkey") and "Cart Net pop" in pp.inner_text(".se-popkey"))
+    check("a small key names the two dots in Kerry's words (9/29)",
+          "100% Handicap Stroke" in pp.inner_text(".se-popkey")
+          and re.search(r"\d+% Cart Stroke", pp.inner_text(".se-popkey")) is not None)
+    check("the key sits below the Save button (Kerry 9/29)",
+          pp.locator("[data-act=save]").bounding_box()["y"] < pp.locator(".se-popkey").bounding_box()["y"])
     play(pp, 9)
     pp.wait_for_selector("text=Check the card")
     pp.wait_for_timeout(800)
