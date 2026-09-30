@@ -12,7 +12,7 @@ completely for the year."
 - **Rates:** state 6.25% and local 2.0%, 8.25% total. A 0.5% timely-filing discount applies only if the return is filed on time.
 - **Routine:** `trig_01FwwncqoaN72PVHcH58W7kx` runs at 7:52 AM Central on the 1st and the 15th, into the CFO session. The 1st sends the obligation email; the 15th sends a reminder only if a month is still unpaid.
 
-## The rule: a month is PAID only with evidence
+## The rule: a month is PAID only with evidence or Kerry's word
 
 The evidence is the WebFile **"Confirmation: You Have Filed Successfully"** PDF,
 saved to OneDrive. Save each new one to
@@ -34,28 +34,48 @@ $280.50 filed, and February 2026 reserve $97.39 against $140.17 filed.
 | 2025-01 | 2/20/25 | PAID | 2/20/25 | 2,433 | 1,250 | 103.13 | −0.52 | **102.61** | 5125311547 |
 | 2025-02 | 3/20/25 | PAID | 3/20/25 | 2,675 | 1,343 | 110.80 | −0.55 | **110.25** | 7925264448 |
 | 2025-03 | 4/21/25 (4/20 was a Sunday) | PAID | 4/21/25 | 6,271 | 1,752 | 144.54 | −0.73 | **143.81** | 11125470461 |
-| 2025-04 | 5/20/25 | UNVERIFIED | | | | | | | |
-| 2025-05 | 6/20/25 | UNVERIFIED | | | | | | | |
-| 2025-06 | 7/20/25 | UNVERIFIED | | | | | | | |
+| 2025-04 | 5/20/25 | PAID (Kerry, 9/30; confirmation in iCloud, not yet in OneDrive) | | | | | | | |
+| 2025-05 | 6/20/25 | PAID (Kerry, 9/30; confirmation in iCloud, not yet in OneDrive) | | | | | | | |
+| 2025-06 | 7/20/25 | PAID (Kerry, 9/30; confirmation in iCloud, not yet in OneDrive) | | | | | | | |
 | 2025-07 | 8/20/25 | PAID | 8/18/25 | 25,440 | 3,400 | 280.50 | −1.40 | **279.10** | 23025237478 |
-| 2025-08 | 9/20/25 | UNVERIFIED | | | | | | | |
-| 2025-09 | 10/20/25 | UNVERIFIED | | | | | | | |
-| 2025-10 | 11/20/25 | UNVERIFIED | | | | | | | |
-| 2025-11 | 12/20/25 | UNVERIFIED | | | | | | | |
-| 2025-12 | 1/20/26 | UNVERIFIED | | | | | | | |
-| 2026-01 | 2/20/26 | UNVERIFIED | | | | | | | |
+| 2025-08 | 9/20/25 | PAID (Kerry, 9/30; confirmation in iCloud, not yet in OneDrive) | | | | | | | |
+| 2025-09 | 10/20/25 | PAID (Kerry, 9/30; confirmation in iCloud, not yet in OneDrive) | | | | | | | |
+| 2025-10 | 11/20/25 | PAID (Kerry, 9/30; confirmation in iCloud, not yet in OneDrive) | | | | | | | |
+| 2025-11 | 12/20/25 | PAID (Kerry, 9/30; confirmation in iCloud, not yet in OneDrive) | | | | | | | |
+| 2025-12 | 1/20/26 | PAID (Kerry, 9/30; confirmation in iCloud, not yet in OneDrive) | | | | | | | |
+| 2026-01 | 2/20/26 | PAID (Kerry, 9/30; confirmation in iCloud, not yet in OneDrive) | | | | | | | |
 | 2026-02 | 3/20/26 | PAID | 3/20/26 | 7,810 | 1,699 | 140.17 | −0.70 | **139.47** | 7926255547 |
 | 2026-03 | 4/20/26 | PAID | 4/4/26 | 22,057 | 3,515 | 289.99 | −1.45 | **288.54** | 9426022559 |
-| 2026-04 | 5/20/26 | UNVERIFIED | | | | | | | |
-| 2026-05 | 6/20/26 | UNVERIFIED | | | | | | | |
-| 2026-06 | 7/20/26 | UNVERIFIED | | | | | | | |
-| 2026-07 | 8/20/26 | UNVERIFIED | | | | | | | |
-| **2026-08** | **9/20/26** | **NOT FILED — LATE** (Kerry, 9/30) | | | | | | | |
+| 2026-04 | 5/20/26 | PAID (Kerry, 9/30; confirmation in iCloud, not yet in OneDrive) | | | | | | | |
+| 2026-05 | 6/20/26 | PAID (Kerry, 9/30; confirmation in iCloud, not yet in OneDrive) | | | | | | | |
+| 2026-06 | 7/20/26 | PAID (Kerry, 9/30; confirmation in iCloud, not yet in OneDrive) | | | | | | | |
+| 2026-07 | 8/20/26 | PAID (Kerry, 9/30; confirmation in iCloud, not yet in OneDrive) | | | | | | | |
+| **2026-08** | **9/20/26** | **NOT FILED — LATE** (Kerry, 9/30). Draft computed 9/30, see below. | | 18,627 | 2,297 | 189.50 | none (late) | | |
 | 2026-09 | 10/20/26 | OPEN | | | | | | | |
 
-- **UNVERIFIED** means no confirmation PDF was found in OneDrive and there is no other record. The month may well have been filed. Kerry can confirm in one pass from WebFile → Sales Tax → "View/Print filed returns", and should save any missing confirmations to OneDrive.
+- **Kerry, 9/30:** "We have record of all of those, but some are in another part of iCloud. I've made payment on all but August." So every month except 2026-08 is PAID. Where the confirmation is in iCloud, the amounts are left blank until a copy is saved to OneDrive. Copying them over is housekeeping and does not block anything.
 - **Paid with evidence, 2025:** $635.77 across 4 months.
 - **Paid with evidence, 2026 to date:** $428.01 across 2 months.
+
+## August 2026 draft return (computed 9/30 per tgf-sales-tax and Pricing Master v2.2; script in the CFO scratchpad)
+
+| Taxable component | Amount |
+|---|---|
+| Memberships (3 New at $44, including Kannon Brown's $100 = $50 membership plus the Fall NET markup; 2 Returning at $69) | 280.00 |
+| Season contest markups ($10 each; includes the Fall NET points bundled into Burlingame, Vasquez and South's event orders, not refunded) | 110.00 |
+| Regular-season event markups plus rounding surplus (s9.21, a9.21, a18.5, s18.10, SA Match Play Finals) | 887.92 |
+| Coupons (tgf-jeff ×2, Advisory Board) | −20.00 |
+| 2026 TGF Championship, on the Tracker's configured basis ($32 per entry plus $4 per bundle; practice round $0) | 984.00 |
+| TGF retained transaction fees (3.5% collected less GoDaddy 2.9% + $0.30, per order) | 55.29 |
+| **Taxable sales** | **2,297.21 → WebFile 2,297** |
+
+- **Total Texas Sales:** $18,627.07. That is 92 GoDaddy orders at $17,194.53, plus $1,432.54 paid by Venmo or entered manually. WebFile takes 18,627.
+- **Tax:** 2,297 × 6.25% = $143.56 state, plus 2,297 × 2% = $45.94 local, for **$189.50**. There is no timely discount, and WebFile adds the late penalty and fee.
+- **Excluded:** comps (Straiton ×2, Kerry, Barstow, and J. Wade and Marques's comped contests), fully refunded items (Sharitz contest, McDonnell guest), WD (Reed a9.21), and the refunded Fall points portions (Mazanec, Vasquez s9.21, Sharitz, Baker, Rideout s18.10).
+- **Open (Kerry): 2026 Championship pricing.** It isn't in the Pricing Master (special events are priced per event). Two assumptions sit in the figure above.
+  - If the NET and GROSS bundles carried no TGF markup (the 2025 precedent), Championship taxable falls by $152 and tax to $176.96.
+  - The six day-rate or partial entries ($170–$220) are carried at $32 each.
+- **Mazanec's $313 top-up** completes a July order (item 2488). Its markup is not counted here.
 
 ## Late-filing terms (Texas Comptroller)
 
@@ -71,7 +91,7 @@ $280.50 filed, and February 2026 reserve $97.39 against $140.17 filed.
 2. Load `tgf-pricing`, then `tgf-sales-tax`.
    - The latest Pricing & Services Master Document is required. Look in OneDrive `01_STANDARDS/`, then the mailbox (Chief of Staff), then this repo.
    - If it is missing, mark taxable sales NOT COMPUTED. Never compute from memory.
-3. Re-verify every month in the table against OneDrive confirmations, and update this file.
+3. Re-verify every month in the table against OneDrive confirmations, and update this file. A month Kerry has stated is paid stays PAID; a new month becomes PAID only when its confirmation PDF appears in OneDrive or Kerry says so.
 4. For the month just ended, and for every UNVERIFIED or NOT FILED month past its due date, compute the WebFile inputs by the skill:
    - Total Texas Sales: gross per unique order, including Venmo and manual payments;
    - Taxable Sales, with its breakdown;
