@@ -49988,6 +49988,99 @@ def _event_funded_prize_payouts(conn, ev: dict) -> dict:
     return out
 
 
+def _event_revenue_v11(conn, all_names: list, all_items: list) -> dict:
+    """Event GoDaddy revenue by the Margin & Fee Standard v1.1 (platform-claude
+    #1029 §8.1, 8.5, 8.6 — Kerry's 9/9 and 9/30 rulings; CFO #1024/#1027):
+
+    - a CREDITED item leaves event revenue (its money sits in credits owed
+      and comes back as credit_transfer_in revenue when it is spent), unless
+      a contra row already takes it out;
+    - the 3.5% transaction fee is read from the prorated `transaction_fee`
+      splits (one order, one fee), never the order fee repeated per item;
+      an item with no fee split falls back to its own field, as before;
+    - fees on credited items STAY revenue (Kerry 9/30: "We will not refund
+      transaction fees/merchant fees");
+    - a coupon is revenue reduction, counted ONCE per order (the coupon
+      split is repeated on every item of the order) and apportioned to the
+      order's items by registration amount; a credited item carries none.
+    """
+    ph = ",".join(["?"] * len(all_names))
+    names_l = [n.lower() for n in all_names]
+    by_id = {i["id"]: i for i in all_items}
+    status = {i["id"]: (i.get("transaction_status") or "active") for i in all_items}
+    contra_ids = {r[0] for r in conn.execute(
+        f"""SELECT DISTINCT item_id FROM acct_transactions
+            WHERE lower(event_name) IN ({ph}) AND entry_type = 'contra'
+              AND item_id IS NOT NULL AND COALESCE(status, 'active') = 'active'""",
+        names_l).fetchall()}
+    rows = [dict(r) for r in conn.execute(
+        f"""SELECT s.transaction_id, s.item_id, s.split_type, s.amount, s.event_name
+            FROM godaddy_order_splits s
+            JOIN acct_transactions t ON t.id = s.transaction_id
+            WHERE COALESCE(t.status, 'active') = 'active'
+              AND s.transaction_id IN (
+                  SELECT s2.transaction_id FROM godaddy_order_splits s2
+                  WHERE lower(s2.event_name) IN ({ph}))""", names_l).fetchall()]
+    mine = lambda r: (r.get("event_name") or "").lower() in names_l
+    credited = {iid for iid, st in status.items() if st == "credited" and iid not in contra_ids}
+    reg = removed = 0.0
+    removed_rows = []
+    for r in rows:
+        if r["split_type"] != "registration" or not mine(r):
+            continue
+        if r["item_id"] in credited:
+            removed += r["amount"]
+            removed_rows.append({"item_id": r["item_id"], "amount": round(r["amount"], 2),
+                                 "customer": (by_id.get(r["item_id"]) or {}).get("customer")})
+        else:
+            reg += r["amount"]
+    # transaction fees: splits first (credited items included), field fallback
+    fee = 0.0
+    fee_items = set()
+    for r in rows:
+        if r["split_type"] == "transaction_fee" and mine(r):
+            if status.get(r["item_id"]) in ("refunded", "transferred"):
+                continue
+            fee += r["amount"]
+            fee_items.add(r["item_id"])
+    for i in all_items:
+        if i["id"] in fee_items or i.get("parent_item_id") or i.get("transferred_from_id"):
+            continue
+        if status[i["id"]] in ("refunded", "transferred", "rsvp_only"):
+            continue
+        if (i.get("email_uid") or "").startswith("manual-comp"):
+            continue
+        has_reg_split = any(r["item_id"] == i["id"] and r["split_type"] == "registration" for r in rows)
+        if has_reg_split:
+            continue          # a split order with no fee split charged no fee on this item
+        fee += _parse_dollar(i.get("transaction_fees"))
+    # coupons, once per order, apportioned by registration amount
+    coupon = 0.0
+    coupons = []
+    by_txn: dict = {}
+    for r in rows:
+        by_txn.setdefault(r["transaction_id"], []).append(r)
+    for tid, rs in by_txn.items():
+        cps = [abs(r["amount"]) for r in rs if r["split_type"] == "coupon"]
+        if not cps:
+            continue
+        order_coupon = max(cps)
+        regs = [r for r in rs if r["split_type"] == "registration"]
+        base = sum(r["amount"] for r in regs) or 0
+        if base <= 0:
+            continue
+        share = sum(r["amount"] for r in regs if mine(r) and r["item_id"] not in credited) / base
+        amt = round(order_coupon * share, 2)
+        if amt:
+            coupon += amt
+            coupons.append({"transaction_id": tid, "order_coupon": order_coupon,
+                            "this_event": amt, "dup_splits": len(cps)})
+    return {"registration": round(reg, 2), "credited_removed": round(removed, 2),
+            "credited_ids": sorted(credited),
+            "credited_rows": removed_rows, "tx_fees": round(fee, 2),
+            "coupons": round(coupon, 2), "coupon_orders": coupons}
+
+
 def get_event_financial_summary(event_name: str, db_path: str | Path | None = None) -> dict:
     """Server-side financial summary for one event.
 
@@ -50147,6 +50240,43 @@ def get_event_financial_summary(event_name: str, db_path: str | Path | None = No
             total_expenses = round(aggregate_course_cost + total_prize_pool + total_processing, 2)
             projected_profit = round(net_revenue - total_expenses, 2)
 
+            # MARGIN & FEE STANDARD v1.1 (#1029): credited items out, coupons
+            # netted once per order, fees from the prorated splits. Past
+            # periods stay frozen: only events on/after the margin-model
+            # cutover take it. DRY RUN until the `event_pnl_v11` dial is on:
+            # the block rides along with before/after; the headline moves
+            # only when the dial says so.
+            standard_v11 = None
+            try:
+                _cut = (_setting_via(conn, "margin_model_cutover") or MARGIN_MODEL_CUTOVER)[:10]
+                _applies = str(event.get("event_date") or "")[:10] >= _cut
+                v = _event_revenue_v11(conn, all_names, all_items)
+                _cred = set(v["credited_ids"])
+                _old_kept = sum(e["amount"] for e in income_entries
+                                if e.get("category") == "registration" and e.get("item_id") not in _cred)
+                v["credited_removed"] = round(v["credited_removed"] + (old_reg_revenue - _old_kept), 2)
+                v_godaddy = round(v["registration"] + _old_kept, 2)
+                v_total = round(v_godaddy - v["coupons"] + external_revenue + xfer_in_revenue
+                                + addon_revenue + v["tx_fees"], 2)
+                v_net = round(v_total - contra_total, 2)
+                v_profit = round(v_net - total_expenses, 2)
+                _on = str(_setting_via(conn, "event_pnl_v11") or "").strip().lower() in ("1", "on", "true", "yes")
+                standard_v11 = {
+                    "applies": _applies, "cutover": _cut, "live": bool(_on and _applies),
+                    "before": {"godaddy": godaddy_revenue, "tx_fees": tx_fee_total,
+                               "net_revenue": net_revenue, "projected_profit": projected_profit},
+                    "after": {"godaddy": v_godaddy, "coupons": -v["coupons"], "tx_fees": v["tx_fees"],
+                              "net_revenue": v_net, "projected_profit": v_profit},
+                    "credited_removed": v["credited_removed"], "credited_rows": v["credited_rows"],
+                    "coupon_orders": v["coupon_orders"],
+                    "delta_profit": round(v_profit - projected_profit, 2),
+                }
+                if _on and _applies:
+                    godaddy_revenue, tx_fee_total = v_godaddy, v["tx_fees"]
+                    total_revenue, net_revenue, projected_profit = v_total, v_net, v_profit
+            except Exception:
+                logger.exception("Non-fatal: v1.1 revenue read failed for %s", event_name)
+
             # Coverage based on acct_transactions entries + order splits
             items_needing_entry = [i for i in all_items
                                    if i.get("transaction_status") in (None, "active")
@@ -50227,6 +50357,7 @@ def get_event_financial_summary(event_name: str, db_path: str | Path | None = No
 
             total_expenses = round(aggregate_course_cost + total_prize_pool + total_processing, 2)
             projected_profit = round(net_revenue - total_expenses, 2)
+            standard_v11 = None
 
             items_needing_alloc = [i for i in all_items
                                    if i.get("transaction_status") in (None, "active")
@@ -50295,6 +50426,7 @@ def get_event_financial_summary(event_name: str, db_path: str | Path | None = No
             "total": total_expenses,
         },
         "projected_profit": projected_profit,
+        "standard_v11": standard_v11,
         "player_counts": {
             "paid": paid_count,
             "comp": comp_count,

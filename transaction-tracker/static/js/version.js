@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.522.37";
+window.TGF_VERSION = "2.522.38";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.522.38",
+    date: "2026-09-30",
+    title: "Event P&L: Margin & Fee Standard v1.1 revenue, as a dry run beside the current figures",
+    changes: [
+      "The CFO found four revenue bugs in the event P&L (#1024/#1027), and the Chief of Staff ruled them under the Margin & Fee Standard v1.1 (#1029). First, a credited no-show stayed in event revenue while its money also sat in credits owed; on 3304 that was $156. Second, coupons were never subtracted, and a coupon's split repeats on every item of its order. Third, the order-level 3.5% fee was counted once per item on multi-event orders ($637.90 across 54 events). Fourth, fees on credited items fell out of revenue although Kerry never refunds them.",
+      "get_event_financial_summary now carries a standard_v11 block with BEFORE and AFTER figures. In AFTER, credited items are out of registration revenue but keep their fees, each coupon is counted once per order and apportioned by item price, and the fee comes from the prorated transaction_fee splits. Events before the margin-model cutover (9/5) are frozen and never take it.",
+      "DRY RUN: the headline does not move until the event_pnl_v11 app setting is on; the block shows what would change and by how much. Guard: test_event_pnl_v11.py.",
+    ],
+  },
     {
         version: "2.522.37",
         date: "2026-09-30",
