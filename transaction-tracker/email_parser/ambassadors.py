@@ -2,7 +2,8 @@
 shape Tracker Build #1055).
 
 Kerry: "I will currently determine the Ambassador role. Definitely not
-something to be derived right now." So the flag is SET, never computed: by
+something to be derived right now." So the flag is SET, never computed
+(and only on an active member with an established TGF handicap, #1080-1): by
 Kerry, or by Robert for Austin on Kerry's say-so. Every write cites a
 mailbox post carrying Kerry's word (the same rule-3b guard as
 `set_customer_field`), is a dry run unless applied, and is action-logged
@@ -105,6 +106,17 @@ def set_ambassador(customer_id, chapter, on: bool, kerry_ok_post, note: str = ""
         if not c:
             return {"refused": f"customer {cust} not found"}
         name = f"{c['first_name'] or ''} {c['last_name'] or ''}".strip()
+        # AN AMBASSADOR IS ALWAYS BLIND-ELIGIBLE (Kerry, CoS #1080-1): an
+        # active member with an established TGF handicap, so every
+        # Ambassador is a valid 1st-Timer host and a valid blind. The same
+        # gate as the blind draw (`database.blind_gate`), same words.
+        if on:
+            why_not = db.customer_blind_gate(conn, cust, db_path=db_path)
+            if why_not:
+                return {"refused": f"{name} cannot be an Ambassador: {why_not} "
+                                   f"(an Ambassador must be an active member with an "
+                                   f"established TGF handicap, #1080-1)",
+                        "customer_id": cust, "name": name}
         prev = conn.execute(
             "SELECT ambassador FROM customer_ambassadors WHERE customer_id = ? AND chapter_id = ?",
             (cust, chap_id)).fetchone()

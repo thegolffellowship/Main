@@ -889,8 +889,50 @@ def game_individual(cards: list[dict], cfg: dict, holes_key: str,
     return out
 
 
-def game_team_net(cards: list[dict], cfg: dict) -> dict:
-    """Team Net — foursomes, one best NET ball per hole vs par."""
+def _team_blind_members(cards: list[dict], teams: dict, blinds: list,
+                        warnings: list) -> dict:
+    """Fold the drawn blinds into the teams (spec #1073 sections 3-5).
+
+    `blinds`: [{"team", "customer_id", "name", "reason", "replaces_key",
+    "holes"}] where reason is open_seat | nh | missed_hole and `holes` is
+    None (every hole) or the hole numbers the blind covers.
+
+    - open_seat : the blind's card is added to the short team.
+    - nh        : the N/H player's card leaves his team's best ball (his
+                  scores still count everywhere else); the blind's card
+                  plays in his slot (Kerry: "the blind would win the money
+                  and not the customer").
+    - missed_hole: the absent player keeps the holes he played; the blind's
+                  card plays only the listed holes.
+    The blind plays at HIS OWN strokes (his card's `strokes_received`), the
+    same allowance and no-par-3-pops rule as any member. His slot shows as
+    "Bl[Name]"."""
+    by_cid = {c.get("customer_id"): c for c in cards if c.get("customer_id")}
+    out = {t: list(m) for t, m in teams.items()}
+    for b in blinds or []:
+        t = b.get("team")
+        if t is None:
+            continue
+        card = by_cid.get(b.get("customer_id"))
+        if card is None:
+            warnings.append(
+                f"Team {t}: the blind {b.get('name') or b.get('customer_id')} "
+                f"has no card in this round, so the slot plays empty.")
+            continue
+        members = out.setdefault(t, [])
+        if b.get("reason") == "nh" and b.get("replaces_key") is not None:
+            members[:] = [m for m in members if m.get("key") != b["replaces_key"]]
+        holes = b.get("holes")
+        members.append({**card, "name": f"Bl[{b.get('name') or card['name']}]",
+                        "blind": True, "blind_reason": b.get("reason") or "open_seat",
+                        "blind_holes": set(int(h) for h in holes) if holes else None})
+    return out
+
+
+def game_team_net(cards: list[dict], cfg: dict,
+                  blinds: list | None = None) -> dict:
+    """Team Net — foursomes, one best NET ball per hole vs par. `blinds`
+    (from `blind_draws`) complete short teams and stand in for N/H seats."""
     gc = cfg["games"]["team_net"]
     out = {"game": "team_net", "label": gc["label"], "teams": [],
            "warnings": []}
@@ -899,6 +941,8 @@ def game_team_net(cards: list[dict], cfg: dict) -> dict:
         if c.get("team") is None:
             continue
         teams.setdefault(c["team"], []).append(c)
+    if blinds:
+        teams = _team_blind_members(cards, teams, blinds, out["warnings"])
     if not teams:
         out["warnings"].append(
             "No team assignments — Team Net needs players grouped into "
@@ -910,15 +954,17 @@ def game_team_net(cards: list[dict], cfg: dict) -> dict:
         members = teams[team_num]
         if len(members) < size:
             out["warnings"].append(
-                f"Team {team_num} has {len(members)} of {size} players — the "
-                f"ratified rule fills short teams with a blind draw "
-                f"(\"Bl[Name]\"), which this engine does not yet generate.")
+                f"Team {team_num} has {len(members)} of {size} players and no "
+                f"blind drawn for the empty slot — draw one on PAIRINGS "
+                f"(BLINDS), and the \"Bl[Name]\" card plays here.")
         hole_rows, total, thru = [], 0, 0
         hole_numbers = sorted({h["hole"] for c in members for h in c["holes"]})
         for hole in hole_numbers:
             best, best_by = None, None
             par = None
             for c in members:
+                if c.get("blind_holes") is not None and hole not in c["blind_holes"]:
+                    continue
                 h = next((x for x in c["holes"] if x["hole"] == hole), None)
                 if not h or h["strokes"] is None:
                     continue
@@ -943,6 +989,10 @@ def game_team_net(cards: list[dict], cfg: dict) -> dict:
         out["teams"].append({
             "team": team_num,
             "members": [c["name"] for c in members],
+            "blinds": [{"name": c["name"], "customer_id": c.get("customer_id"),
+                        "reason": c.get("blind_reason"),
+                        "holes": sorted(c["blind_holes"]) if c.get("blind_holes") else None}
+                       for c in members if c.get("blind")],
             "vs_par": total, "thru": thru,
             "complete": thru == len(hole_numbers) and bool(hole_numbers),
             "holes": hole_rows})
@@ -1395,7 +1445,7 @@ def compute_leaderboard(state: dict, formulas: dict,
             "individual_gross": game_individual(
                 cards, cfg, holes_key, "gross",
                 pins=pins.get("individual_gross")),
-            "team_net": game_team_net(cards, cfg),
+            "team_net": game_team_net(cards, cfg, blinds=state.get("blinds")),
             "skins": game_skins(cards, cfg, holes_key,
                                 pins=pins.get("skins"),
                                 variant_name=(state.get("variant_pins")

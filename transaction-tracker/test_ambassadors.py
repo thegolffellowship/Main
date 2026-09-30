@@ -23,8 +23,22 @@ check("migration 0002 applied once and recorded", c.execute(
 if not c.execute("SELECT 1 FROM chapters WHERE lower(name) = 'san antonio'").fetchone():
     c.execute("INSERT INTO chapters (name, short_code) VALUES ('San Antonio', 'SA')")
 sa = c.execute("SELECT chapter_id FROM chapters WHERE lower(name) = 'san antonio'").fetchone()[0]
-c.execute("INSERT INTO customers (customer_id, first_name, last_name, gender) VALUES (9001, 'Mary', 'Wade', 'F')")
+c.execute("INSERT INTO customers (customer_id, first_name, last_name, gender, current_player_status) "
+          "VALUES (9001, 'Mary', 'Wade', 'F', 'active_member')")
 c.execute("INSERT INTO customers (customer_id, first_name, last_name) VALUES (9002, 'Jim', 'Test')")
+c.execute("INSERT INTO customers (customer_id, first_name, last_name, current_player_status) "
+          "VALUES (9003, 'Ian', 'Intro', 'active_member')")
+c.execute("INSERT INTO customers (customer_id, first_name, last_name, current_player_status) "
+          "VALUES (9004, 'Al', 'Alumni', 'expired_member')")
+# Established: 3 posted differentials inside the lookback (Mary, Al); Ian has one.
+import datetime as _dt
+_d = (_dt.date.today() - _dt.timedelta(days=10)).isoformat()
+for _nm, _cid, _n in (("Mary Wade", 9001, 3), ("Al Alumni", 9004, 3), ("Ian Intro", 9003, 1)):
+    c.execute("INSERT INTO handicap_player_links (player_name, customer_id) VALUES (?, ?)", (_nm, _cid))
+    for _i in range(_n):
+        c.execute("INSERT INTO handicap_rounds (player_name, round_date, adjusted_score, rating, slope, differential) "
+                  "VALUES (?, ?, 90, 72.0, 113, ?)",
+                  (_nm, _d, 10.0 + _i))
 kerry = c.execute("INSERT INTO platform_dialogue (author, topic, body) VALUES "
                   "('platform-claude', 'pairings', 'Kerry: \"Mary Wade is an Ambassador.\"') "
                   "RETURNING id").fetchone()[0]
@@ -37,6 +51,14 @@ r = amb.set_ambassador(9001, "SA", True, lane, db_path=DB)
 check("refused without Kerry's word (a lane post that only mentions him)", "refused" in r, r)
 r = amb.set_ambassador(9001, "Nowhere", True, kerry, db_path=DB)
 check("an unknown chapter is refused", "refused" in r and "chapter" in r["refused"], r)
+r = amb.set_ambassador(9003, "SA", True, kerry, db_path=DB)
+check("#1080-1: an intro handicap (not established) cannot be an Ambassador",
+      "refused" in r and "established" in r["refused"], r)
+r = amb.set_ambassador(9004, "SA", True, kerry, db_path=DB)
+check("#1080-1: an alumnus (expired) cannot be an Ambassador",
+      "refused" in r and "not a member" in r["refused"], r)
+r = amb.set_ambassador(9002, "SA", True, kerry, db_path=DB)
+check("#1080-1: a guest with no status cannot be an Ambassador", "refused" in r, r)
 r = amb.set_ambassador(9001, "SA", True, kerry, note="Kerry #test", db_path=DB)
 check("dry run by default: says what it would do, writes nothing",
       r["dry_run"] and r["changed"] and c.execute("SELECT COUNT(*) FROM customer_ambassadors").fetchone()[0] == 0, r)

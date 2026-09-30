@@ -1859,6 +1859,68 @@ the button asks first — keep them and fill only the open seats (no
 now previews without deleting). Guards: `test_blind_draws.py`,
 `test_blinds_ui.js`.
 
+### 15i — N/H players, and who serves vs who receives a blind (v2.522.55)
+
+The same rule as 15h, extended to a player with no handicap. Kerry,
+verbatim:
+
+- *"if a customer doesn't enter a handicap, then their team deserves a
+  blind from the field (team) or the other cart (cart net)… the blind would
+  win the money and not the customer"* (#1064);
+- *"A player cannot fill in as their own cart partner blind...their score
+  would be the same. Our standard is that in a threesome (or a situation
+  like the one we're discussing with someone without a handicap) if one of
+  the carts has a single player, then someone (who meets the requirements)
+  from the other cart in their group becomes their blind partner."* (#1067-1);
+- *"When I say meets the requirements, I mean meets our blind eligibility
+  requirements that we've recently discussed that have to do with them
+  being a member with an actual TGF Handicap established, NOT an intro
+  handicap and not a guest or alumni."* (#1068);
+- *"if they ARE missing someone and they have an actual intro handicap,
+  then they definitely deserve a blind as well, because buying into any
+  regular event means you're automatically entered into the team game."*
+  (#1078-2).
+
+**Two tests, kept apart in code:**
+
+- **ELIGIBLE (who may SERVE as a blind):** `blind_gate(customer_id,
+  status, established_index)`. The member must be active_member or
+  member_plus, with an established TGF index (≥ `min_rounds` posted
+  differentials in the lookback). This excludes intro / 75% / starting
+  handicaps, guests, 1st Timers, alumni and anyone with no customer
+  record. Every door asks it: the whole-sheet draw, the single-seat
+  RANDOM, CHOOSE, the Cart Net other-cart pick, the N/H seat, the
+  missed-hole blind (#1021), and the Ambassador flag (#1080-1). A test
+  fails if any other code tests the member statuses.
+- **ENTITLED (who RECEIVES a blind):** any buyer in a regular event whose
+  cart or team is short, including intro handicaps. There's no gate: every
+  open seat is filled.
+
+**N/H** means on the roster with NO index of record AND NO starting
+handicap, whether or not a manager has pressed "Play N/H" (Tracker
+Build's `event_nh_flags`, #1085). `event_nh_seat_set` reads the banner's
+own computation (`handicap_warnings.missing_handicaps`: `players` plus the
+flagged `nh_players`), so the banner and the draw can't disagree. A flag
+left on a player who has since been given a handicap does not make him
+N/H. An intro player is not N/H:
+he plays his handicap and counts for his team.
+
+- He plays at 0, and his gross is entered like anyone's. He can win
+  Individual Net / Gross and Skins.
+- His team's ball in HIS slot is a blind's. `draw_event_blinds` treats
+  his seat like an open one: Team Net draws from the field outside the
+  group; Cart Net draws from the other cart, then the field (flagged).
+- The row is keyed to his seat with `reason = 'nh'`.
+- If he later gets a handicap, the draw reports the blind in `stale_nh`.
+  It doesn't remove it; clearing is the manager's click.
+- CHOOSE on a seat held by a player WITH a handicap is refused.
+
+**Money:** the Team / Cart Net slot pays the blind, not the N/H player. The
+engine (`live_scoring.game_team_net(..., blinds=)`) drops his card from
+the best ball and plays the blind's card, labelled `Bl[Name]`, at the
+blind's own strokes. GG stays the payer of record until the entry-record
+cutover (#846). Guards: `test_nh_blinds.py`.
+
 ### Surfaces
 
 * `POST /api/events/<id>/pairings/blinds` — `{apply, redraw, clear}`

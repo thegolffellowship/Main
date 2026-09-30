@@ -7967,6 +7967,17 @@
 
             // A blind past the seat count (a sheet edited after the draw)
             // still has to be visible rather than silently dropped.
+            // An N/H player's blind (spec #1073) sits on a seat that is
+            // NOT empty — he keeps his card, the blind plays his slot — so
+            // the empty-seat lookup above never shows it. Listed here.
+            (grp.blinds || []).filter(b => b.reason === 'nh' && (b.cart_pos || 0) <= seatCount)
+                .forEach(b => {
+                    const who = (byPos[b.cart_pos] || {}).name || '';
+                    html += `<div class="pairing-player-row pairing-blind-row" data-blind-seat="${holes}:${grp.group_num}:${b.cart_pos}" data-ev-id="${ev.id}" title="BLIND for N/H — ${escapeHtml(b.name || '')}'s card plays ${escapeHtml(who)}'s slot for this team; ${escapeHtml(who)} has no handicap.">`
+                        + '<span class="pairing-cart-dot" style="background:#bbb;"></span>'
+                        + `<span class="pairing-player-name">BLIND for N/H ${escapeHtml(who)} &middot; ${escapeHtml(b.name || '')}</span>`
+                        + '</div>';
+                });
             (grp.blinds || []).filter(b => (b.cart_pos || 0) > seatCount)
                 .forEach(b => {
                     html += `<div class="pairing-player-row pairing-blind-row" data-blind-seat="${holes}:${grp.group_num}:${b.cart_pos}" data-ev-id="${ev.id}" title="BLIND — ${escapeHtml(b.name || '')}'s card plays for this team.">`

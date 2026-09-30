@@ -25901,6 +25901,44 @@ def _ls_course_coverage(state: dict) -> dict:
     return out
 
 
+def _ls_event_blinds(meta: dict, players: list, db_path=None) -> list:
+    """The event's drawn blinds, in the engine's shape (spec #1073 section
+    7): team = the pairing group (a session's team_num IS the group,
+    `ls_seed_*`), the blind's card found by customer_id, and for an N/H
+    seat the session key of the player whose slot the blind takes."""
+    event_id = meta.get("event_id")
+    holes = str(meta.get("holes") or "")
+    out = []
+    try:
+        blinds = get_event_blinds(int(event_id), db_path=db_path)
+    except Exception:  # noqa: BLE001 — no pairing tables yet
+        return out
+    if holes in blinds:
+        blinds = {holes: blinds[holes]}
+    seat_cid = {}
+    if any(b.get("reason") == "nh" for hs in blinds.values()
+           for seats in hs.values() for b in seats):
+        with _connect(db_path) as conn:
+            for r in conn.execute(
+                    "SELECT holes, group_num, cart_pos, customer_id, player_name "
+                    "FROM event_pairings WHERE event_id = ?", (int(event_id),)):
+                seat_cid[(str(r["holes"]), r["group_num"], r["cart_pos"])] = (
+                    r["customer_id"], (r["player_name"] or "").strip().lower())
+    key_by_cid = {p.get("customer_id"): p["key"] for p in players if p.get("customer_id")}
+    key_by_name = {(p.get("name") or "").strip().lower(): p["key"] for p in players}
+    for h, groups in blinds.items():
+        for gnum, seats in groups.items():
+            for b in seats:
+                row = {"team": gnum, "customer_id": b.get("customer_id"),
+                       "name": b.get("name"), "reason": b.get("reason") or "open_seat",
+                       "holes": b.get("missed_holes"), "replaces_key": None}
+                if row["reason"] == "nh":
+                    cid, nm = seat_cid.get((str(h), gnum, b.get("cart_pos")), (None, ""))
+                    row["replaces_key"] = key_by_cid.get(cid) or key_by_name.get(nm)
+                out.append(row)
+    return out
+
+
 def ls_leaderboard(session_id: int, db_path: str | Path = DB_PATH,
                    pin_flights: bool = False) -> dict:
     """The live leaderboard: every game, computed from raw gross scores.
@@ -25917,6 +25955,8 @@ def ls_leaderboard(session_id: int, db_path: str | Path = DB_PATH,
         fb = event_flights_board(meta["event_id"], db_path=db_path)
         state["flight_pins"] = _flight_pins_for(fb, state["players"])
         state["variant_pins"] = _variant_pins_for(fb)
+    if meta.get("event_id"):
+        state["blinds"] = _ls_event_blinds(meta, state["players"], db_path=db_path)
     formulas = (get_championship_formulas(db_path=db_path)
                 if meta.get("championship")
                 else get_scoring_formulas(db_path))
@@ -60600,9 +60640,12 @@ def get_event_blinds(event_id: int, conn=None, db_path=None) -> dict:
     the blind exactly as it reaches the sheet."""
     def _run(c):
         _ensure_pairing_tables(c)
+        _has = _blind_cols(c)
+        _extra = ("b.reason" if "reason" in _has else "'open_seat'") + " AS reason, " + \
+                 ("b.missed_holes" if "missed_holes" in _has else "NULL") + " AS missed_holes,"
         rows = c.execute(
-            """SELECT b.holes, b.group_num, b.cart_pos, b.customer_id,
-                      b.source,
+            f"""SELECT b.holes, b.group_num, b.cart_pos, b.customer_id,
+                      b.source, {_extra}
                       COALESCE(NULLIF(TRIM(COALESCE(cu.first_name,'') || ' ' ||
                                            COALESCE(cu.last_name,'')), ''),
                                b.player_name) AS player_name
@@ -60613,9 +60656,14 @@ def get_event_blinds(event_id: int, conn=None, db_path=None) -> dict:
             (event_id,)).fetchall()
         out: dict = {}
         for r in rows:
+            try:
+                _mh = json.loads(r["missed_holes"]) if r["missed_holes"] else None
+            except (TypeError, ValueError):
+                _mh = None
             out.setdefault(r["holes"], {}).setdefault(r["group_num"], []).append({
                 "cart_pos": r["cart_pos"], "name": r["player_name"],
-                "customer_id": r["customer_id"], "source": r["source"]})
+                "customer_id": r["customer_id"], "source": r["source"],
+                "reason": r["reason"] or "open_seat", "missed_holes": _mh})
         return out
     if conn is not None:
         return _run(conn)
@@ -60745,6 +60793,97 @@ def _established_index_by_customer(db_path=None) -> dict:
     return out
 
 
+BLIND_REASONS = ("open_seat", "nh", "missed_hole")
+
+
+def _blind_cols(conn) -> set:
+    """Columns blind_draws has on THIS database. `reason` / `missed_holes`
+    arrive by migration 0003; a database built by `_ensure_pairing_tables`
+    alone (tests, a fresh file before init_db) does not have them, and the
+    draw must still work there."""
+    try:
+        return {r[1] for r in conn.execute("PRAGMA table_info(blind_draws)")}
+    except sqlite3.Error:
+        return set()
+
+
+def _conn_db_path(conn):
+    try:
+        _f = conn.execute("PRAGMA database_list").fetchone()
+        return (_f[2] if _f and len(_f) > 2 else None) or None
+    except sqlite3.Error:
+        return None
+
+
+def event_nh_seat_set(conn, event_id: int, db_path=None) -> dict:
+    """Who plays N/H tonight, for the blind draw: {"cids": {...}, "names": {...}}.
+
+    N/H = on the roster with NO TGF index of record AND NO starting handicap
+    (CoS #1075-1 / #1078-2), whether or not a manager has pressed "Play N/H"
+    yet: the missing-handicap list's `players` (unflagged) plus its
+    `nh_players` (flagged through Tracker Build's `nh_flags.event_nh_players`,
+    #1085). A flag left on a player who has SINCE been given a handicap does
+    not make him N/H: he has a handicap, so he plays it and his seat keeps
+    his ball (the draw reports the old blind in `stale_nh`).
+    An intro / 75% / starting handicap is NOT N/H: that player plays his
+    handicap and counts for his team; he just cannot SERVE as a blind
+    (`blind_gate`). Sharing the banner's computation means the banner and
+    the draw can never disagree about who is N/H."""
+    from email_parser.handicap_warnings import missing_handicaps
+    m = missing_handicaps(int(event_id), db_path=db_path or _conn_db_path(conn))
+    cids, names = set(), set()
+    for p in (m.get("players") or []) + (m.get("nh_players") or []):
+        if p.get("customer_id"):
+            cids.add(int(p["customer_id"]))
+        if p.get("name"):
+            names.add(p["name"].strip().lower())
+    return {"cids": cids, "names": names}
+
+
+def _is_nh(player: dict, nh: dict) -> bool:
+    cid = player.get("customer_id")
+    if cid:
+        return int(cid) in nh["cids"]
+    nm = (player.get("player_name") or player.get("name") or "").strip().lower()
+    return bool(nm) and nm in nh["names"]
+
+
+def blind_gate(customer_id, status, established_index) -> str | None:
+    """THE blind-eligibility rule, as one test (CoS #1068, Kerry verbatim:
+    "a member with an actual TGF Handicap established, NOT an intro
+    handicap and not a guest or alumni"). None = eligible; otherwise the
+    reason, in words a manager reads.
+
+    Every door asks this: the open-seat draw, the Cart Net other-cart pick,
+    the N/H replacement, the missed-hole blind (#1021), and the Ambassador
+    flag (#1080-1: an Ambassador must always be blind-eligible). Guests, 1st
+    Timers and alumni fail on status; an intro / 75% / starting handicap
+    fails on ESTABLISHED because it has no posted rounds.
+
+    This is ELIGIBLE (who may SERVE as a blind). Who RECEIVES one is a
+    separate test and deliberately looser (#1078-2): any buyer in a regular
+    event whose cart or team is short, intro handicaps included."""
+    if customer_id is None:
+        return "no customer record"
+    st = (status or "").strip().lower()
+    if st not in BLIND_MEMBER_STATUSES:
+        return f"not a member ({st or 'unknown'})"
+    if established_index is None:
+        return "no established TGF handicap yet"
+    return None
+
+
+def customer_blind_gate(conn, customer_id: int, db_path=None) -> str | None:
+    """`blind_gate` for one customer outside any event (the Ambassador
+    flag). Same rule, same words."""
+    row = conn.execute("SELECT current_player_status FROM customers "
+                       "WHERE customer_id = ?", (int(customer_id),)).fetchone()
+    if not row:
+        return "no customer record"
+    idx = _established_index_by_customer(db_path or _conn_db_path(conn)).get(int(customer_id))
+    return blind_gate(int(customer_id), row[0], idx)
+
+
 def event_blind_pool(conn, event_id: int, year: int | None = None,
                      db_path=None, roster_rows=None) -> dict:
     """Who may be drawn as a blind for this event, and who may not.
@@ -60787,13 +60926,9 @@ def event_blind_pool(conn, event_id: int, year: int | None = None,
         entry = {"customer_id": cid, "name": nm, "status": status,
                  "handicap_index": idx, "blinds_ytd": h.get("count", 0),
                  "last_blind": h.get("last_date")}
-        if cid is None:
-            excluded.append({**entry, "why": "no customer record"})
-        elif status not in BLIND_MEMBER_STATUSES:
-            excluded.append({**entry, "why": f"not a member ({status or 'unknown'})"})
-        elif idx is None:
-            excluded.append({**entry,
-                             "why": "no established TGF handicap yet"})
+        why = blind_gate(cid, status, idx)
+        if why:
+            excluded.append({**entry, "why": why})
         else:
             eligible.append(entry)
     eligible.sort(key=lambda e: (e["blinds_ytd"], e["last_blind"] or "",
@@ -60850,6 +60985,25 @@ def _event_blind_unit(pairings: dict, db_path=None) -> str:
     return unit
 
 
+def _write_blind_row(conn, has_reason: bool, event_id, ev: dict, holes,
+                     group_num, slot_label, pos, customer_id, name,
+                     reason: str = "open_seat") -> None:
+    """One app-drawn blind, keyed to its seat. `reason` is written when the
+    database has the column (migration 0003)."""
+    cols = ["event_id", "event_date", "chapter", "holes", "group_num",
+            "slot_label", "cart_pos", "customer_id", "player_name",
+            "slot_key", "source"]
+    vals = [event_id, ev.get("event_date"), ev.get("chapter"), holes,
+            group_num, slot_label, pos, customer_id, name,
+            _blind_slot_key(holes, group_num, pos), "app"]
+    if has_reason:
+        cols.append("reason")
+        vals.append(reason if reason in BLIND_REASONS else "open_seat")
+    conn.execute(
+        f"INSERT OR REPLACE INTO blind_draws ({', '.join(cols)}) "
+        f"VALUES ({', '.join('?' * len(cols))})", vals)
+
+
 def draw_event_blinds(event_id: int, dry_run: bool = True, redraw: bool = False,
                       year: int | None = None, db_path=None, team_unit: str | None = None,
                       picks: list | None = None) -> dict:
@@ -60883,6 +61037,13 @@ def draw_event_blinds(event_id: int, dry_run: bool = True, redraw: bool = False,
         pairings = get_event_pairings(event_id, db_path=db_path)
         pool = event_blind_pool(conn, event_id, year=year, db_path=db_path)
         by_cid = {e["customer_id"]: e for e in pool["eligible"]}
+        # N/H SEATS (spec #1073 section 3-4, Kerry: "the blind would win
+        # the money and not the customer"). A seated player with no handicap
+        # at all keeps his seat and his card, but his team's ball in that
+        # slot is a blind's — drawn by exactly the open-seat rule, keyed to
+        # HIS seat, reason 'nh'.
+        nh = event_nh_seat_set(conn, event_id, db_path=db_path)
+        has_reason = "reason" in _blind_cols(conn)
         existing = get_event_blinds(event_id, conn=conn)
         if redraw and not dry_run:
             conn.execute("DELETE FROM blind_draws WHERE event_id = ? "
@@ -60920,6 +61081,7 @@ def draw_event_blinds(event_id: int, dry_run: bool = True, redraw: bool = False,
                 ORDER BY b.id""", (event_id,)).fetchall()]
         taken |= {r["customer_id"] for r in loose if r["customer_id"] is not None}
         drawn, open_seats, unfilled, covered = [], 0, [], []
+        nh_seats, stale_nh = 0, []
         # CART NET DRAWS FROM THE OTHER CART OF THE SAME FOURSOME (rule 15h,
         # Kerry 2026-09-18: "On Cart Net, when there are OPEN slots in need
         # of a Blind, the blind is from the other cart in the foursome (the
@@ -60932,19 +61094,39 @@ def draw_event_blinds(event_id: int, dry_run: bool = True, redraw: bool = False,
             _unit = team_unit
         for holes, groups in sorted(pairings.items()):
             for g in sorted(groups, key=lambda x: x["group_num"]):
-                seated = {p.get("cart_pos") for p in (g.get("players") or [])}
-                have = {b["cart_pos"] for b in
-                        (existing.get(holes, {}).get(g["group_num"]) or [])}
+                by_pos = {p.get("cart_pos"): p for p in (g.get("players") or [])}
+                seated = set(by_pos)
+                have_rows = existing.get(holes, {}).get(g["group_num"]) or []
+                have = {b["cart_pos"] for b in have_rows}
+                # An 'nh' blind whose seat now holds someone with a handicap
+                # (a starting handicap was entered after the draw) is
+                # REPORTED, not removed: clearing a seat stays a manager's
+                # click (`set_event_blind(..., customer_id=None)`).
+                for b in have_rows:
+                    sp = by_pos.get(b["cart_pos"])
+                    if b.get("reason") == "nh" and (sp is None or not _is_nh(sp, nh)):
+                        stale_nh.append({"holes": holes, "group_num": g["group_num"],
+                                         "cart_pos": b["cart_pos"], "blind": b["name"],
+                                         "seat_player": (sp or {}).get("name"),
+                                         "why": "the seat's player is no longer N/H"})
                 for pos in range(1, size + 1):
-                    if pos in seated or pos in have:
+                    if pos in have:
                         continue
-                    open_seats += 1
+                    if pos in seated:
+                        if not _is_nh(by_pos[pos], nh):
+                            continue
+                        reason = "nh"
+                        nh_seats += 1
+                    else:
+                        reason = "open_seat"
+                        open_seats += 1
                     if loose:
                         already = loose.pop(0)
                         covered.append({"holes": holes,
                                         "group_num": g["group_num"],
                                         "slot_label": g.get("slot_label"),
-                                        "cart_pos": pos, **already})
+                                        "cart_pos": pos, "reason": reason,
+                                        **already})
                         continue
                     cands, source = _blind_seat_candidates(
                         pool["eligible"], taken, g, pos, _unit)
@@ -60952,7 +61134,7 @@ def draw_event_blinds(event_id: int, dry_run: bool = True, redraw: bool = False,
                         unfilled.append({"holes": holes,
                                          "group_num": g["group_num"],
                                          "slot_label": g.get("slot_label"),
-                                         "cart_pos": pos,
+                                         "cart_pos": pos, "reason": reason,
                                          "why": "no eligible player left"})
                         continue
                     wanted = pick_map.get((str(holes), int(g["group_num"]), int(pos)))
@@ -60967,28 +61149,24 @@ def draw_event_blinds(event_id: int, dry_run: bool = True, redraw: bool = False,
                            "name": pick["name"],
                            "blinds_ytd": pick["blinds_ytd"],
                            "last_blind": pick["last_blind"],
-                           "drawn_from": source,
+                           "drawn_from": source, "reason": reason,
                            "gg_text": f"Bl[{_sort_name(pick['name'])}]"}
+                    if reason == "nh":
+                        row["replaces"] = by_pos[pos].get("name")
                     drawn.append(row)
                     if dry_run:
                         continue
-                    conn.execute(
-                        """INSERT OR REPLACE INTO blind_draws
-                               (event_id, event_date, chapter, holes, group_num,
-                                slot_label, cart_pos, customer_id, player_name,
-                                slot_key, source)
-                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'app')""",
-                        (event_id, ev.get("event_date"), ev.get("chapter"),
-                         holes, g["group_num"], g.get("slot_label"), pos,
-                         pick["customer_id"], pick["name"],
-                         _blind_slot_key(holes, g["group_num"], pos)))
+                    _write_blind_row(conn, has_reason, event_id, ev, holes,
+                                     g["group_num"], g.get("slot_label"), pos,
+                                     pick["customer_id"], pick["name"], reason)
         if not dry_run:
             conn.commit()
     return {"event_id": event_id, "event": ev.get("item_name"),
             "dry_run": bool(dry_run), "team_size": size,
             "team_unit": _unit,
-            "open_seats": open_seats, "drawn": drawn, "unfilled": unfilled,
-            "covered_by_existing": covered,
+            "open_seats": open_seats, "nh_seats": nh_seats,
+            "drawn": drawn, "unfilled": unfilled,
+            "covered_by_existing": covered, "stale_nh": stale_nh,
             "eligible": len(pool["eligible"]),
             "excluded": pool["excluded"],
             "already_drawn": [b for hs in existing.values()
@@ -61039,6 +61217,17 @@ def set_event_blind(event_id: int, holes: str, group_num: int, cart_pos: int,
         pairings = get_event_pairings(event_id, db_path=db_path)
         grp = next((g for g in (pairings.get(holes) or [])
                     if g["group_num"] == group_num), None)
+        # A SEAT WITH SOMEONE IN IT takes a blind only when that someone is
+        # N/H (spec #1073): his card stays, his team's ball in that slot is
+        # the blind's. A seat held by a player with a handicap has no blind.
+        sitter = next((p for p in ((grp or {}).get("players") or [])
+                       if p.get("cart_pos") == int(cart_pos)), None)
+        reason = "open_seat"
+        if sitter is not None:
+            if not _is_nh(sitter, event_nh_seat_set(conn, event_id, db_path=db_path)):
+                return {"error": f"{sitter.get('name')} is in that seat and has a "
+                                 f"handicap: a blind replaces only an N/H player"}
+            reason = "nh"
         me = next((p for p in ((grp or {}).get("players") or [])
                    if p.get("customer_id") == int(customer_id)), None)
         if me:
@@ -61053,17 +61242,11 @@ def set_event_blind(event_id: int, holes: str, group_num: int, cart_pos: int,
                                  f"{'cart' if unit == 'cart' else 'group'} — a "
                                  f"card cannot fill its own team"}
         slot_label = (grp or {}).get("slot_label")
-        conn.execute(
-            """INSERT OR REPLACE INTO blind_draws
-                   (event_id, event_date, chapter, holes, group_num,
-                    slot_label, cart_pos, customer_id, player_name,
-                    slot_key, source)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'app')""",
-            (event_id, ev.get("event_date"), ev.get("chapter"), holes,
-             group_num, slot_label, cart_pos, pick["customer_id"],
-             pick["name"], key))
+        _write_blind_row(conn, "reason" in _blind_cols(conn), event_id, ev,
+                         holes, group_num, slot_label, cart_pos,
+                         pick["customer_id"], pick["name"], reason)
         conn.commit()
-        return {"seat": key, "name": pick["name"],
+        return {"seat": key, "name": pick["name"], "reason": reason,
                 "customer_id": pick["customer_id"],
                 "blinds_ytd": pick["blinds_ytd"],
                 "gg_text": f"Bl[{_sort_name(pick['name'])}]"}

@@ -23,7 +23,11 @@ prize matrix (analysis below). Open flags listed at the bottom.
 ## Included games (every player)
 
 - **TEAM Net** — foursomes, one best NET ball per hole vs par; blind
-  draw ("Bl[Name]") fills short teams. 9h winner-take-all; 18h pays
+  draw ("Bl[Name]") fills short teams, and stands in for an N/H player's
+  slot (no index and no starting handicap: his ball leaves the best ball,
+  and the blind wins that slot's money). Cart Net takes the blind from
+  the other cart of the group first (the threesome rule). Who may serve
+  and who receives are separate tests: pairings.md 15h / 15i. 9h winner-take-all; 18h pays
   1st + 2nd; ties split. Guests/cross-chapter included.
 - **Closest to Pin** — flat $2 (9h) / $4 (18h) entry, max 2 CTPs per
   nine, winner-take-all each. Fewer par-3s than slots → remaining

@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.522.54";
+window.TGF_VERSION = "2.522.55";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.522.55",
+    date: "2026-09-30",
+    title: "N/H players get a blind; one rule for who can be a blind",
+    changes: [
+      "Kerry: \"if a customer doesn't enter a handicap, then their team deserves a blind from the field (team) or the other cart (cart net)… the blind would win the money and not the customer\" (spec #1073, approved #1075, Kerry OK #1078). A player with no TGF index AND no starting handicap is N/H: he plays at 0 and his scores count everywhere, but his seat on the sheet gets a blind, drawn by the same rule as an empty seat (Team Net from the field, Cart Net from the other cart first).",
+      "ONE eligibility test for every blind (blind_gate): an active member with an established TGF handicap. Intro / 75% handicaps, guests, 1st Timers and alumni cannot SERVE as a blind. Who RECEIVES one is separate (#1078-2): any short cart or team, intro players included. The Ambassador flag now uses the same test (#1080-1).",
+      "The draw reads N/H as the banner does: every player with no index and no starting handicap, including anyone a manager marked with Tracker Build's Play N/H button (v2.522.53). blind_draws records why a blind was drawn (open seat, N/H, missed hole; migration 0004). The Tracker's Team Net leaderboard drops the N/H card and plays the blind's as Bl[Name]. The pairings card lists the N/H blind. Payouts are unchanged: GG stays the payer until the entry-record cutover (#846).",
+    ],
+  },
   {
     version: "2.522.54",
     date: "2026-09-30",
