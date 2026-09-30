@@ -2476,6 +2476,14 @@ FLIGHTING lane (spun off "TGF Tracker Improvements 2"; plan #584).
   Clicking EVEN or HCP re-cuts from scratch and clears the moves
   (`moves_cleared` in the response; a toast says so). A frozen board
   refuses both. Bridge `scoring-flights-move:<id>|<game>|<cid>|<flight>`.
+  **A move can also PLACE a no-index buyer (v2.522.40, Kerry 2026-09-30
+  "Update our Flights on the tracker" to match GG on 3317):** a buyer
+  with no handicap index sits in `unflighted`; a move naming him places
+  him in that flight (`flighting._place_unindexed`, `from_flight: None`,
+  note "(no index) placed in Flight N"). Flight labels read the indexed
+  members only. There is no "back to unflighted" drop; clear the game
+  with EVEN / HCP to start over. The automatic PH-implied placement of a
+  no-index late add (#843 e) is separate and not built yet.
   **Auto-save:** on FLIGHTS every toggle/drop is the save (one POST, the
   response is the board). On PAIRINGS `rerenderDetail` arms
   `schedulePairingsAutosave` whenever the sheet is dirty: 1.2 s after the
