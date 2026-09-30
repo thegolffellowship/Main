@@ -5,6 +5,8 @@ status, gender and the player's rounds this year, ordered active members
 first, then this year's players, then name. Never writes."""
 from __future__ import annotations
 
+import re
+
 _GENDER = {"F": "F", "M": "M", "NULL": None, "NONE": None, "UNKNOWN": None}
 _STATUSES = ("active_member", "expired_member", "active_guest", "inactive", "first_timer")
 
@@ -63,6 +65,14 @@ def query_customers(gender: str = "", chapter: str = "", status: str = "",
 SETTABLE = ("gender", "ambassador")
 
 
+# Who may carry Kerry's word into a write (rule 3b). Kerry himself, or the
+# Chief of Staff / Front Desk relaying him VERBATIM. A lane's own post that
+# only mentions Kerry is not his OK (9/30: the first guard accepted #1057,
+# a tracker-claude post, in a dry run; this is the fix).
+RELAYS = ("platform-claude", "front-desk")
+_KERRY_QUOTE = re.compile(r"\bkerry\b[^\n\"\u201c]{0,60}[\"\u201c]\s*\S", re.IGNORECASE)
+
+
 def _kerry_ok(conn, post_id) -> tuple[bool, str]:
     try:
         r = conn.execute("SELECT id, author, body FROM platform_dialogue WHERE id = ?",
@@ -71,10 +81,13 @@ def _kerry_ok(conn, post_id) -> tuple[bool, str]:
         return False, "kerry_ok_post must be a mailbox post id"
     if not r:
         return False, f"mailbox post #{post_id} not found"
-    body = r["body"] or ""
-    if (r["author"] or "").lower() == "kerry" or "kerry" in body.lower():
-        return True, f"#{r['id']} ({r['author']})"
-    return False, f"mailbox post #{post_id} does not carry Kerry's word"
+    author = (r["author"] or "").strip().lower()
+    if author == "kerry":
+        return True, f"#{r['id']} (kerry)"
+    if author in RELAYS and _KERRY_QUOTE.search(r["body"] or ""):
+        return True, f"#{r['id']} ({author}, quoting Kerry)"
+    return False, (f"mailbox post #{post_id} ({author}) does not carry Kerry's word: it must be "
+                   f"Kerry's own post, or {' / '.join(RELAYS)} quoting him verbatim")
 
 
 def set_customer_field(customer_ids, field: str, value, reason: str, kerry_ok_post,

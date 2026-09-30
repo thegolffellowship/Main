@@ -1,5 +1,16 @@
-window.TGF_VERSION = "2.522.46";
+window.TGF_VERSION = "2.522.47";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.522.47",
+    date: "2026-09-30",
+    title: "Chief of Staff tools 7-9, and a stricter Kerry-OK guard on set_customer_field",
+    changes: [
+      "set_customer_field now accepts only a post by Kerry himself, or by platform-claude / front-desk quoting him verbatim (KERRY: \"…\"). The first guard took any post that mentioned Kerry, and a production dry run accepted #1057, a tracker-claude post. Nothing was written: it was a dry run. Guarded in test_query_customers.py.",
+      "get_score_entry_card(event_id, group | customer_id): one group's or one player's live entered card (hole-by-hole gross, marks, signatures, card check, CTP and HIO claims). It filters score_entry.get_entered_scores, so se_* is still read only by score_entry.py.",
+      "get_pairing_history(customer_id | event_id, year): partners with played-with and rode-with counts, the cart record per round including solo carts, or every pair on one event. It counts what the pairings engine counts (Golf Genius rows, played dates) and states that rule in the answer.",
+      "get_standard(name, section): the standards of record by name (side-games, pairings, event-recaps, handicap, financial-model, score-entry, facebook-events, insider-voice, and anything under docs/standards/), whole or one section, so lanes stop re-posting whole documents. Bridges scoring-se-card, scoring-pair-history and scoring-standard. Module email_parser/cos_reads.py; guard test_cos_reads.py."
+    ]
+  },
   {
     version: "2.522.46",
     date: "2026-09-30",

@@ -38,10 +38,14 @@ check("read-only: customers unchanged by the reads", c.execute("SELECT COUNT(*),
 # ── set_customer_field (gender only, Kerry-OK post required) ──
 from email_parser.customer_query import set_customer_field as scf
 c.execute("INSERT INTO platform_dialogue (author, topic, body) VALUES ('platform-claude', 'x', 'nothing here')")
-c.execute("INSERT INTO platform_dialogue (author, topic, body) VALUES ('platform-claude', 'x', 'KERRY confirms the F list')")
+c.execute("INSERT INTO platform_dialogue (author, topic, body) VALUES ('platform-claude', 'x', ?)", ('KERRY: "Those 19 are right, the rest are male."',))
+c.execute("INSERT INTO platform_dialogue (author, topic, body) VALUES ('tracker-claude', 'x', ?)", ('TO: kerry. Kerry, please confirm "the F list".',))
+c.execute("INSERT INTO platform_dialogue (author, topic, body) VALUES ('platform-claude', 'x', ?)", ('KERRY confirms the 19 F names or names the wrong ones.',))
 c.commit()
-bad_id, ok_id = [r[0] for r in c.execute("SELECT id FROM platform_dialogue ORDER BY id DESC LIMIT 2")][::-1]
+bad_id, ok_id, lane_id, noquote_id = [r[0] for r in c.execute("SELECT id FROM platform_dialogue ORDER BY id DESC LIMIT 4")][::-1]
 check("refused without a Kerry post", "refused" in scf([903], "gender", "M", "r", bad_id, db_path=DB))
+check("refused: a lane's own post that mentions Kerry is not his OK", "refused" in scf([903], "gender", "M", "r", lane_id, db_path=DB))
+check("refused: a relay that names Kerry without quoting him", "refused" in scf([903], "gender", "M", "r", noquote_id, db_path=DB))
 check("refused for a field other than gender/ambassador", "refused" in scf([903], "chapter", "x", "r", ok_id, db_path=DB))
 d = scf([903, 904, 902], "gender", "M", "Kerry: rest are male", ok_id, db_path=DB)
 check("dry run: 2 changes (902 already M), nothing written", d["changes"] == 2 and d["unchanged"] == 1

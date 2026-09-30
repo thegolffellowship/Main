@@ -1780,6 +1780,9 @@ def _scoring_dispatch_inner(url: str, extract: str):
       scoring-card:<round_id>      full scorecard with derivations
       scoring-courses              course/tee database listing
       scoring-sales-tax-filing:<json row>[|apply]  record one month's Texas sales-tax filing (dry run by default; evidence 'confirmation' needs webfile_ref or confirmation_path); scoring-sales-tax-filings lists the record; scoring-sales-tax-backfill[:apply] loads the CFO register (6 confirmed months + Kerry's-word months)
+      scoring-se-card:<event_id>|g<group> | <event_id>|c<customer_id>  one group's / player's LIVE entered card (read-only)
+      scoring-pair-history:c<customer_id>[|<year>] | e<event_id>  partners, rode-with, solo carts (read-only)
+      scoring-standard:[<name>[|<section words>]]  a standard of record by name, whole or one section
       scoring-mailbox-read:<id> | since=<id>|limit=<n>|topic=<t>|max=<chars>  read ONE post, or a catch-up window OLDEST-first with more/next_since_id
       scoring-mailbox-search:text=<words>|topic=<t>|author=<a>|since=<YYYY-MM-DD>|limit=<n>|max=<chars>  precedent search, newest first, bodies trimmed
       scoring-set-customer-field:<json>  WRITE gender only (M/F/NULL) for customer_ids, refused without "kerry_ok_post" (a mailbox post id carrying Kerry's word), dry run unless "apply": true; before/after in agent_action_log
@@ -6169,6 +6172,23 @@ def _scoring_dispatch_inner(url: str, extract: str):
             except ValueError as _e:
                 return json.dumps({"error": f"bad JSON: {_e}"})
             return json.dumps(_st.record_filing(_row, apply=_flag.strip().lower() == "apply"), indent=2, default=str)
+        if cmd in ("scoring-se-card", "scoring-pair-history", "scoring-standard"):
+            # se-card:      <event_id>|g<group> or <event_id>|c<customer_id>
+            # pair-history: c<customer_id>[|<year>] or e<event_id>
+            # standard:     [<name>[|<section words>]]
+            from email_parser import cos_reads as _cr
+            _p = [x.strip() for x in (arg or "").split("|")]
+            if cmd == "scoring-standard":
+                return json.dumps(_cr.get_standard(_p[0] if _p else "", _p[1] if len(_p) > 1 else ""), indent=2)
+            if cmd == "scoring-se-card":
+                _sel = _p[1] if len(_p) > 1 else ""
+                return json.dumps(_cr.score_entry_card(
+                    int(_p[0]), int(_sel[1:]) if _sel[:1] == "g" else None,
+                    int(_sel[1:]) if _sel[:1] == "c" else None), indent=2, default=str)
+            _who = _p[0] if _p else ""
+            return json.dumps(_cr.pairing_history_view(
+                int(_who[1:]) if _who[:1] == "c" else 0, int(_who[1:]) if _who[:1] == "e" else 0,
+                int(_p[1]) if len(_p) > 1 and _p[1] else 0), indent=2, default=str)
         if cmd in ("scoring-mailbox-read", "scoring-mailbox-search"):
             # read:   "<id>" or "since=<id>|limit=<n>|topic=<t>|max=<chars>"
             # search: "text=<words>|topic=<t>|author=<a>|since=<date>|limit=<n>|max=<chars>"
@@ -7736,8 +7756,9 @@ def set_customer_field(customer_ids: list, field: str, value: str, reason: str,
                        kerry_ok_post: int, apply: bool = False) -> str:
     """WRITE one customer field (Chief of Staff #1048/#1060). GENDER ONLY
     today (M, F or NULL); ambassador goes through Side Games' table.
-    Refused unless `kerry_ok_post` is a mailbox post id carrying Kerry's
-    word (rule 3b). Dry run unless apply=True. Every change is logged with
+    Refused unless `kerry_ok_post` is a mailbox post by Kerry himself, or by
+    platform-claude / front-desk QUOTING him verbatim (KERRY: "…"); a
+    lane's own post that mentions Kerry is not his OK (rule 3b). Dry run unless apply=True. Every change is logged with
     its before and after."""
     from email_parser.customer_query import set_customer_field as _scf
     return json.dumps(_scf(customer_ids, field, value, reason, kerry_ok_post, apply=apply),
@@ -7848,6 +7869,41 @@ def read_platform_dialogue(limit: int = 20, topic: str = "", since_id: int = 0,
         "note": "post created_at fields are UTC — current local time is server_time_local (post #81)",
         **res,
     }, indent=2)
+
+
+@mcp.tool()
+def get_score_entry_card(event_id: int, group: int = 0, customer_id: int = 0) -> str:
+    """One group's (or one player's) LIVE entered card: hole-by-hole gross,
+    thru, marks (ball in hole / picked up), signatures, the card check and
+    photo flag, CTP and HIO claims (Front Desk #1051). Give the group number
+    from the sheet or a customer_id. Live entries, not the money record.
+    Read-only."""
+    from email_parser.cos_reads import score_entry_card
+    _audit("get_score_entry_card", f"event={event_id} group={group} customer={customer_id}")
+    return json.dumps(score_entry_card(event_id, group or None, customer_id or None), indent=2, default=str)
+
+
+@mcp.tool()
+def get_pairing_history(customer_id: int = 0, event_id: int = 0, year: int = 0) -> str:
+    """Who played with whom (CoS #1048). With customer_id: every partner
+    with played-with and rode-with counts, and the cart record per round
+    including solo carts. With event_id: every pair on the event and the
+    rode pairs. Counts what the pairings engine counts (Golf Genius rows,
+    played dates); the rule is in the answer. Read-only."""
+    from email_parser.cos_reads import pairing_history_view
+    _audit("get_pairing_history", f"customer={customer_id} event={event_id} year={year}")
+    return json.dumps(pairing_history_view(customer_id, event_id, year), indent=2, default=str)
+
+
+@mcp.tool()
+def get_standard(name: str = "", section: str = "") -> str:
+    """Serve a standard of record by name (CoS #1048): side-games, pairings,
+    event-recaps, handicap, financial-model, score-entry, facebook-events,
+    insider-voice, plus anything a crew commits under docs/standards/.
+    No name lists them. `section` returns only the part under the first
+    heading containing those words. Read-only."""
+    from email_parser.cos_reads import get_standard as _gs
+    return json.dumps(_gs(name, section), indent=2)
 
 
 @mcp.tool()
