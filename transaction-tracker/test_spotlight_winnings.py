@@ -283,7 +283,7 @@ _c = sqlite3.connect(_db2)
 _c.executescript("""
 CREATE TABLE app_settings (key TEXT PRIMARY KEY, value TEXT);
 CREATE TABLE events (id INTEGER PRIMARY KEY, item_name TEXT, event_date TEXT,
-  course TEXT, chapter TEXT, format TEXT);
+  course TEXT, chapter TEXT, format TEXT, nine_side TEXT);
 CREATE TABLE event_aliases (alias_name TEXT, canonical_event_name TEXT);
 CREATE TABLE items (id INTEGER PRIMARY KEY, item_name TEXT, customer_id INT,
   customer TEXT, parent_item_id INT, side_games TEXT, transaction_status TEXT,
@@ -291,7 +291,7 @@ CREATE TABLE items (id INTEGER PRIMARY KEY, item_name TEXT, customer_id INT,
 CREATE TABLE tgf_events (id INTEGER PRIMARY KEY, code TEXT, name TEXT);
 CREATE TABLE tgf_payouts (id INTEGER PRIMARY KEY, event_id INT, customer_id INT,
   category TEXT, amount REAL, description TEXT);
-INSERT INTO events VALUES (50, 's9.99 Testhorn', '2026-09-08', 'Testhorn', 'San Antonio', '9-hole');
+INSERT INTO events VALUES (50, 's9.99 Testhorn', '2026-09-08', 'Testhorn', 'San Antonio', '9-hole', 'back');
 -- NET buyers: cid 1 (hcp 5, Flight 1), cid 2 (hcp 20, Flight 2);
 -- cid 3 non-buyer hcp 14 -> placed Flight 2; guest (no cid) hcp NULL -> UNFLIGHTED
 INSERT INTO items VALUES
@@ -338,7 +338,15 @@ VALUES (50, 't4', 'team_net', 'TEAM Net $', 'BUYER, Low + BUYER, High TGF San An
 """)
     _cn.commit()
 
-evd = db.get_event_leaderboard("s9.99 Testhorn", db_path=_db2)
+# The ladder is an 18-hole INDEX ladder (Kerry 2026-09-29): a non-buyer is
+# placed by his index locked as of the event, not his playing handicap.
+# cid 3 carries index 14.0 (-> Flight 2); the guest has none (-> UNFLIGHTED).
+_orig_idx18 = db._handicap_index_18_by_customer
+db._handicap_index_18_by_customer = lambda *a, **k: {3: 14.0}
+try:
+    evd = db.get_event_leaderboard("s9.99 Testhorn", db_path=_db2)
+finally:
+    db._handicap_index_18_by_customer = _orig_idx18
 check("event leaderboard assembles", evd is not None and evd["field"] == 4)
 _nb = evd["net_board"]
 check("net board flight-sectioned, low flight first",
@@ -347,7 +355,7 @@ check("net board flight-sectioned, low flight first",
       repr([s["label"] for s in _nb]))
 f2 = next(s for s in _nb if s["label"] == "Flight 2 (HCP 12.0+)")
 placed = [r for r in f2["rows"] if r.get("assigned")]
-check("non-buyer hcp 14 PLACED into Flight 2",
+check("non-buyer index 14.0 PLACED into Flight 2",
       any(r["customer_id"] == 3 for r in placed), repr(f2["rows"]))
 check("guest with no handicap lands in UNFLIGHTED",
       _nb[-1]["label"] == "UNFLIGHTED"
@@ -394,11 +402,13 @@ check("team_board carries GG posted totals (winner + board rows)",
 tm = evd["teams"]
 check("all teams built from the pairing groups (2 teams)",
       len(tm) == 2, repr([(t["team_num"], t["total_net"]) for t in tm]))
-t1 = next(t for t in tm if t["team_num"] == 1)
+# A 4-player field is below 16, so the matrix runs CART Net: group 1's
+# cart A is team "1a" (group + cart), not the bare group number.
+t1 = next(t for t in tm if str(t["team_num"]) in ("1", "1a"))
 # team 1 best ball: hole 10 min(4, 6-1=5)=4; hole 11 min(5, 5-1=4)=4 → 8
 check("team best-ball net total (dots applied)",
       t1["total_net"] == 8, t1["total_net"])
-t2 = next(t for t in tm if t["team_num"] == 2)
+t2 = next(t for t in tm if str(t["team_num"]) in ("2", "2a"))
 # GG's board rows (winner T1 + team_net_board 2) rank the board and
 # carry the posted totals — the score of record (v2.381.0)
 check("teams ranked by GG's recorded positions",
@@ -432,8 +442,10 @@ check("skin cells mark the buyer's winning holes",
 check("everyone NOT in skins is placed on the board (grey rows)",
       {r["player_name"] for s in sk for r in s["rows"] if not r["buyer"]}
       == {"BUYER, Low", "NONBUYER, Mid", "GUEST, Someone"})
+# a back-nine event (nine_side) shows all of 10-18, played or not
 check("cards + hole_cols feed the grids",
-      evd["hole_cols"] == [10, 11] and "101" in evd["cards"])
+      evd["hole_cols"] == list(range(10, 19)) and "101" in evd["cards"],
+      repr(evd["hole_cols"]))
 # PAR row (Kerry 2026-09-13): par per HOLE for the board headers,
 # published only where the tees in play agree
 # ── flight placement reads the LABEL's boundary (Kerry 2026-09-14) ──
@@ -519,15 +531,20 @@ check("flight ordinals ride on overall rows (net 1/2, skins 1)",
       (o1["net_flight"], o2["net_flight"], o2["skins_flight"]))
 
 lst = db.get_events_leaderboard(db_path=_db2)
-check("pilot dial gates the event list (s9.99 not in seed)",
-      lst["pilot"] and all(not e["item_name"].startswith("s9.99")
-                           for e in lst["events"]))
+# The pilot list is retired (Kerry 2026-09-23): every event with cards
+# shows; test_events_leaderboard_all owns that rule.
+check("every event with cards is listed (pilot retired)",
+      [e["item_name"] for e in lst["events"]] == ["s9.99 Testhorn"],
+      repr(lst["events"]))
 with db._connect(_db2) as _cn:
     _cn.execute("INSERT INTO app_settings VALUES ('events_leaderboard_events', '[\"s9.99\"]')")
     _cn.commit()
 lst2 = db.get_events_leaderboard(db_path=_db2)
-check("dial change admits the event, pot from payouts",
-      len(lst2["events"]) == 1 and lst2["events"][0]["pot"] == 112.5,
+# MONEY WAITS FOR THE FIELD (Kerry 2026-09-15): with scores still
+# pending the pot is held at 0 and the reason says why.
+check("a stored old pilot list narrows nothing; pot held while scores pend",
+      len(lst2["events"]) == 1 and lst2["events"][0]["pot"] == 0
+      and lst2["events"][0]["money_reason"] == "scores",
       repr(lst2["events"]))
 os.unlink(_db2)
 
