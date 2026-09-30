@@ -1779,6 +1779,7 @@ def _scoring_dispatch_inner(url: str, extract: str):
       scoring-verify:<round_id>    verify one round vs GG's numbers
       scoring-card:<round_id>      full scorecard with derivations
       scoring-courses              course/tee database listing
+      scoring-mail-kerry:<subject>|<html>  DRY RUN: render a mail to KERRY (hard-wired, the only recipient); scoring-mail-kerry-send:<subject>|<html> sends it through the Tracker's Graph mailer, logged (Kerry 2026-09-30 #1050: "Go with the Tracker mailer")
       scoring-se-preview:<event_id>|<cid,...>[|apply][|18][|match]  labelled PREVIEW score-entry round + link (admin-only open); 18 = an 18-hole preview, match = a demo singles match per pair (1v2, 3v4)
       scoring-se-seed:<event_id>[|9|18][|apply]  seed score entry from the saved PAIRINGS (dry run by default; re-seed keeps scores)
       scoring-se-yardage:<round_id>[|apply]  re-read a seeded round's hole yardages from the Men <50 tee (yardage only; dry run by default)
@@ -6148,6 +6149,16 @@ def _scoring_dispatch_inner(url: str, extract: str):
             _ev = _a[: -len("|apply")].strip() if _apply else _a
             from email_parser.closeout_checks import pairing_history_from_entry
             return json.dumps(pairing_history_from_entry(_ev, apply=_apply), indent=2, default=str)
+        if cmd in ("scoring-mail-kerry", "scoring-mail-kerry-send"):
+            # "<subject>|<html>" — mail KERRY ONLY through the Tracker's Graph
+            # mailer (Kerry 2026-09-30, #1050). The recipient is hard-wired.
+            # scoring-mail-kerry renders only (dry run); -send sends.
+            _subj, _, _html = (arg or "").partition("|")
+            from email_parser.mail_kerry import mail_kerry
+            _res = mail_kerry(_subj, _html, send=(cmd == "scoring-mail-kerry-send"))
+            if cmd == "scoring-mail-kerry" and "html" in _res:
+                _res["html"] = _res["html"][:4000]
+            return json.dumps(_res, indent=2, default=str)
         if cmd == "scoring-recap-draft-email":
             # "<file>|<SECTION>[|to=a,b][|cc=a,b][|docx=<file>][|force][|apply]"
             # — mail one chapter's recap DRAFT to its sender (Kerry

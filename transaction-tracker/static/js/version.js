@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.522.40";
+window.TGF_VERSION = "2.522.41";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.522.41",
+    date: "2026-09-30",
+    title: "Mail to Kerry through the Tracker mailer: scoring-mail-kerry",
+    changes: [
+      "Kerry 9/30 (#1050): \"Go with the Tracker mailer. I believe that's standard now for our other emails, and should be standard when I request that moving forward.\" The Microsoft 365 connector is read-only, so the sales-tax obligation routine (1st and 15th, 7:52 AM) and the monthly snapshot had no way to email him.",
+      "New bridge scoring-mail-kerry:<subject>|<html> renders only (a dry run); scoring-mail-kerry-send:<subject>|<html> sends through the same Graph path the recap drafts use. The recipient is hard-wired to Kerry, so no argument or setting can point it anywhere else. A leftover {tag} or [BLANK] holds the message. Every send is written to message_log and agent_action_log. email_parser/mail_kerry.py; guard test_mail_kerry.py.",
+    ],
+  },
   {
     version: "2.522.40",
     date: "2026-09-30",
