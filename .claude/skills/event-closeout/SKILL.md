@@ -228,6 +228,17 @@ read it — but do not redo it either.
     `scoring-payouts-unpaid` is the one-call answer. On 2026-09-10 a
     morning report repeated "31 PENDING" from the night before; Kerry had
     paid all 31 in between, and the Tracker already knew.
+    **Check every row against GG before reporting a total.** A row
+    without "(GG $)" in its description came from an engine pass, not
+    GG's board. On a9.25 Star Ranch (2026-09-29) all 15 recorded rows
+    named the wrong winners, because two players with no index pushed
+    the engine onto its own flight bands. Compare the rows with
+    `scoring-payouts-preview:<event>`, which re-assembles them from GG
+    and the GAMES tab. With Kerry's go, `scoring-record-payouts:<event>`
+    force re-records the event: it replaces the PENDING auto rows and
+    never removes a paid row. From 9/28 to v2.522.29 that command
+    returned "name 'full' is not defined" after writing the rows. Read
+    `scoring-payouts-inspect` to see what actually landed.
 2.2b **Flights settled.** `scoring-flights-board:<event_id>` → `state`
     must read `settled` (the board is the record: frozen selection priced
     from the actual buyers, with the delta since the freeze). `live` or

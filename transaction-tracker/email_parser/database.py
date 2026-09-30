@@ -58454,6 +58454,7 @@ def record_event_game_payouts(event_name: str, payouts: list,
         if not ev:
             return {"error": f"event not found: {event_name}"}
         ev = dict(ev)
+        full = ev["item_name"].strip()  # reported back as tgf_event_code
         # tgf_events.code convention = the FULL event name ("s9.15 The
         # Quarry") — the TGF sidebar displays code and the Events-page
         # PAYOUTS tab matches code === item_name. Bare code prefix kept

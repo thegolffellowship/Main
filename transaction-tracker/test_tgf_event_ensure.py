@@ -79,6 +79,25 @@ def main():
           rows and rows[0]["code"] == "s10.13 The Quarry" and rows[0]["events_id"] == eid,
           rows)
     check("adoption reported as exists", adopt["events"][0]["status"] == "exists", adopt)
+
+    # Recording payouts returns a result instead of raising (v2.505.2 left a
+    # stale `full` reference that raised AFTER the insert, skipping the
+    # Venmo auto-match; found on a9.25 Star Ranch 2026-09-29).
+    rows_in = [{"golferName": "SCHNEIDER, Lou", "category": "skins",
+                "amount": 10.0, "description": "Skins Par on 2"}]
+    try:
+        rec = db.record_event_game_payouts("s10.13 The Quarry", rows_in, db_path=p)
+    except Exception as e:  # noqa: BLE001
+        rec = {"raised": repr(e)}
+    check("recording payouts does not raise", "raised" not in rec, rec)
+    check("result names the event code",
+          rec.get("tgf_event_code") == "s10.13 The Quarry", rec)
+    try:
+        again = db.record_event_game_payouts("s10.13 The Quarry", rows_in,
+                                             force=True, db_path=p)
+    except Exception as e:  # noqa: BLE001
+        again = {"raised": repr(e)}
+    check("forced re-record does not raise", "raised" not in again, again)
     os.remove(p)
 
     print(f"\n{len(FAILURES)} failure(s)")

@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.522.28";
+window.TGF_VERSION = "2.522.29";
 window.TGF_CHANGELOG = [
+    {
+        version: "2.522.29",
+        date: "2026-09-29",
+        title: "Recording payouts no longer crashes after the rows are written; s9.25 / a9.25 recap drafts",
+        changes: [
+            "Re-recording a9.25 Star Ranch's payouts (Kerry's go, 2026-09-29) returned \"name 'full' is not defined\". v2.505.2 moved the tgf_events lookup into _ensure_tgf_event_row and dropped the local `full`, but record_event_game_payouts still reported it as tgf_event_code, so every recording since 9/28 (the Record Payouts button, scoring-record-payouts and the hourly auto-sync refresh) raised AFTER inserting its rows and skipped the Venmo auto-match that follows. The rows were right; the result and the match were lost. `full` is the event's item_name again; test_tgf_event_ensure.py now records and force re-records without raising.",
+            "Recap drafts for s9.25 Canyon Springs and a9.25 Star Ranch with their Word files (docs/claude/recaps/), sent to Kerry and Robert as staff drafts."
+        ]
+    },
     {
         version: "2.522.28",
         date: "2026-09-29",
