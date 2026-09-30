@@ -287,11 +287,72 @@ text is the SA section of `recaps/2026-09-22-s9.24-brackenridge-a9.24-teravista.
     register link, because members do not register for it.
 51. **Sign-off: "See you Next Tuesday!"**
 
+**s9.25 Canyon Springs, Kerry's send 2026-09-30** (he pasted the sent HTML
+back: "Learn from my edits. Including all formatting and spacing." The
+SENT text is the SA section of `recaps/2026-09-29-s9.25-canyon-springs-a9.25-star-ranch.md`;
+the renderers — `email_parser/recap_mail.py` and `tools/recap_docx.js` —
+now produce his layout, so lessons 62–64 are built in, not remembered):
+
+52. **The WHOLE name is bold, surname in CAPS: `**Mike MURPHY**`** — not
+    `Mike **MURPHY**`. Every member, every mention where the name leads a
+    sentence or a list, partners included (`**Jeff YOUNG**, **Pat YOUNGS**
+    and **Justin ANGELONE**`). Supersedes the bold-surname-only form of
+    lessons 30 and 45.
+53. **The other chapter's people get the same treatment.** Austin's Lou
+    Schneider in the SA head-to-head became `**Lou SCHNEIDER**` (the draft
+    had him plain). A first-timer who is not a member is bold but not
+    capped (`**Lance Vest**` in NEW FACES).
+54. **The course name in the lede links to the chapter's Event Results
+    page with NO round id** (`https://tgf-sa.golfgenius.com/pages/5783307`);
+    only FULL EVENT RESULTS carries `?round_id=`. **Austin's Event Results
+    page is `pages/5790752`** — `pages/5783305` (which the a9.24 and a9.25
+    drafts used) is San Antonio's SCHEDULE page served on the Austin host.
+    The Insider already had it right (`insider.py` RESULTS_PAGES); read it
+    from there.
+55. **"Hole of the night," not "shot of the night"** when the story is a
+    hole score (Jeff Young's eagle 3).
+56. **"BUYING IN" is a link** to the season-contests store
+    (`https://thegolffellowship.com/shop/ols/products/season-contests`) —
+    rule 10 applied to the fall-race graf.
+57. **Standings links are the MEMBER pages and name BOTH chapters**, on
+    their own line under the race graf: `[SAN ANTONIO STANDINGS]
+    (…/member/contests#race=fall_sa) | [AUSTIN STANDINGS]
+    (…/member/contests#race=fall_austin)` — the chapter's own first.
+    `/contests` is the staff page; members get `/member/contests`.
+    Supersedes lesson 48's URL.
+58. **When the month is decided the head says so: "SEPTEMBER POINTS IS
+    FINAL."** The graf opens "Every member is in automatically, no buy-in
+    required." and closes with its own line `[FINAL SEPTEMBER STANDINGS]
+    (…/member/contests#race=monthly)`.
+59. **The Hole-in-One line stands alone, in green, between rules** —
+    `***` then `{green}**HOLE-IN-ONE Pot stands at $3,476** after
+    Tuesday.{/green}`. No "BTW...", no section head; it is not tucked
+    into the monthly graf any more.
+60. **Fellowship: "good food, good drinks, and good conversation."**
+    "Banter" is out, and so is "It's the best part, and it's yours if
+    you want it." Count + place stay (lesson 49).
+61. **LONE STAR CUP is bold** in UP NEXT, like the chapter's own course
+    names.
+62. **Spacing (built into the renderer):** flat paragraphs with ONE empty
+    paragraph between blocks — after the greeting, between body grafs,
+    between a graf and its link line, before "See you Next Tuesday!" and
+    before the signature. Nothing is added before a rule.
+63. **Every section head has a plain rule above it and an empty paragraph
+    under it** (`<hr />`, then the CAPS head, then a blank line). The
+    Hole-in-One block is ruled above and below with no head.
+64. **Markup for the drafts:** `***` on its own line = a rule with no
+    head; `{green}…{/green}` = green text (`#27ae60`, Kerry's color). Both
+    renderers read them; neither leaks into the paste.
+
 Draft-time checklist derived from the above: two-week trend table for
 the headliner (previous event's card + payout), team score on Team Net,
 acquisition source per first-timer, links for every proper noun, both
 chapters' next three events with deadlines, and NO line a named member
 could read as a dig.
+
+## Sent template of record — s9.25 Canyon Springs (Kerry's send, 2026-09-30)
+
+The SA section of `recaps/2026-09-29-s9.25-canyon-springs-a9.25-star-ranch.md` is the current template of record: text, markup and spacing (lessons 52–64). The older templates below are kept as history.
 
 ## Sent template of record — s9.22 Silverhorn (Kerry's send, 2026-09-10)
 

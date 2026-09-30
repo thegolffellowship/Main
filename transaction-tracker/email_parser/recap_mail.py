@@ -36,6 +36,17 @@ DEFAULT_TO = {
 }
 DEFAULT_CC = "kerry@thegolffellowship.com"            # "Copy me", 2026-09-23
 BLANK_RE = re.compile(r"\[(__[^\]]*__)\]")
+# Kerry's s9.25 send (2026-09-30, "Learn from my edits. Including all
+# formatting and spacing."): the pasted email is flat paragraphs with an
+# empty paragraph between blocks, a plain rule above every section head
+# and an empty paragraph under it, and the Hole-in-One line in green in a
+# ruled block of its own. The draft is rendered in that exact shape so it
+# pastes into Golf Genius as he sends it. Paragraphs carry margin:0 so the
+# spacers ARE the spacing, in the draft email and after the paste alike.
+GREEN = "#27ae60"
+P = '<p style="margin:0">'
+SPACER = P + "&nbsp;</p>"
+RULE = "<hr />"
 
 
 def _slug(s: str) -> str:
@@ -67,6 +78,7 @@ def _inline(s: str) -> str:
     s = re.sub(r"\[([^\]]+)\]\((https?:[^)\s]+)\)",
                r'<a href="\2"><strong>\1</strong></a>', s)
     s = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", s)
+    s = re.sub(r"\{green\}(.+?)\{/green\}", rf'<span style="color:{GREEN};">\1</span>', s)
     s = BLANK_RE.sub(lambda m: f'<strong style="background:#fff59d">[{m.group(1)}]</strong>', s)
     return s
 
@@ -78,17 +90,24 @@ def _is_head(line: str) -> bool:
 
 def render_recap_html(body: str) -> tuple[str | None, str]:
     """The recap markup (the same rules as tools/recap_docx.js) as HTML.
-    Returns (member subject line or None, html)."""
-    out, para, bullets = [], [], []
+    Returns (member subject line or None, html).
+
+    Markup: **bold**, [text](url), {green}…{/green}, "- " bullets, a CAPS
+    line ending in "." is a section head (rule above, spacer below), a
+    line of "***" is a rule with no head (the Hole-in-One block), blank
+    line = new block. Blocks inside a section are separated by one empty
+    paragraph; nothing is added before a rule."""
+    blocks: list[str] = []   # rendered blocks; RULE and heads are markers
+    para, bullets = [], []
     subject = None
 
     def flush():
         nonlocal para, bullets
         if para:
-            out.append("<p>" + _inline(" ".join(para)) + "</p>")
+            blocks.append(P + _inline(" ".join(para)) + "</p>")
             para = []
         if bullets:
-            out.append("<ul>" + "".join(f"<li>{_inline(b)}</li>" for b in bullets) + "</ul>")
+            blocks.append("<ul>" + "".join(f"<li>{_inline(b)}</li>" for b in bullets) + "</ul>")
             bullets = []
 
     for raw in body.replace("\r", "").split("\n"):
@@ -99,10 +118,14 @@ def render_recap_html(body: str) -> tuple[str | None, str]:
         if line.startswith("**Subject:**"):
             subject = re.sub(r"^\*\*Subject:\*\*\s*", "", line).strip()
             continue
+        if line.strip() == "***":
+            flush()
+            blocks.append(RULE)
+            continue
         if _is_head(line):
             flush()
-            out.append('<hr style="border:0;border-top:1px solid #d9d9d9">'
-                       f"<p><strong>{_html.escape(line.strip())}</strong></p>")
+            blocks.append(RULE)
+            blocks.append("HEAD:" + P + f"<strong>{_html.escape(line.strip())}</strong></p>")
             continue
         if re.match(r"^\s*[-•]\s+", line):
             if para:
@@ -113,6 +136,21 @@ def render_recap_html(body: str) -> tuple[str | None, str]:
             flush()
         para.append(line.strip())
     flush()
+
+    out: list[str] = []
+    prev = None
+    for b in blocks:
+        if b == RULE:
+            out.append(RULE)
+        elif b.startswith("HEAD:"):
+            out.append(b[5:])
+            out.append(SPACER)
+            b = RULE  # a head is followed directly by its content (spacer already in)
+        else:
+            if prev not in (None, RULE):
+                out.append(SPACER)
+            out.append(b)
+        prev = b
     return subject, "\n".join(out)
 
 

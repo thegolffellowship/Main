@@ -343,7 +343,16 @@ read it — but do not redo it either.
     `rounds` includes last night before printing), `scoring-hio-pot`,
     `list_events` for the next dates. "% cashed" = distinct payout
     recipients ÷ field, from GG-backed rows only. Results link:
-    `<portal>/pages/<results page>?round_id=<gg league round id>`.
+    `<portal>/pages/<results page>?round_id=<gg league round id>`, and
+    the course name in the lede links the same page WITHOUT the round
+    id. Event Results pages: **SA `pages/5783307`, Austin
+    `pages/5790752`** (`insider.py` RESULTS_PAGES). `pages/5783305` is
+    SA's SCHEDULE page — the a9.24/a9.25 drafts linked it by mistake.
+    **Template of record: Kerry's s9.25 send** (event-recaps.md lessons
+    52–64: whole name bold with CAPS surname, both chapters' member
+    standings links, "… POINTS IS FINAL." when a month is decided, the
+    green Hole-in-One block between rules, the spacing the renderers
+    now produce).
     Store links for the "up next" events come from
     `events.registration_url` (derived + verified nightly since
     v2.357.0; `scoring-event-links` shows the state) — do not hand-build

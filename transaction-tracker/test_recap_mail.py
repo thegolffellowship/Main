@@ -34,6 +34,9 @@ Pat **SMITH** won at [Test Links](https://example.com/r).
 FALL POINTS RACE.
 Pat leads. [CURRENT STANDINGS](https://tgf-tracker.up.railway.app/contests#race=fall_austin)
 
+***
+{green}**HOLE-IN-ONE Pot stands at $3,476** after Tuesday.{/green}
+
 UP NEXT.
 - **Tue, Oct 6** | [__ time __] | **[__ course __]**
 - Sat, Oct 10 | LONE STAR CUP | Qualifiers Only
@@ -66,6 +69,15 @@ try:
     check("bullets are a list", html.count("<li>") == 2)
     check("blanks are highlighted", "background:#fff59d" in html)
     check("signature keeps its line breaks", "Robert Straiton<br>The Golf Fellowship" in html, html[-160:])
+    # Kerry's s9.25 send (2026-09-30): "Including all formatting and spacing."
+    check("an empty paragraph separates blocks", '<p style="margin:0">&nbsp;</p>' in html)
+    check("a section head is ruled above and spaced below",
+          '<hr />\n<p style="margin:0"><strong>FALL POINTS RACE.</strong></p>\n<p style="margin:0">&nbsp;</p>' in html, html)
+    check("no spacer before a rule", "&nbsp;</p>\n<hr />" not in html, html)
+    check("*** is a rule with no head, green renders",
+          '<hr />\n<p style="margin:0"><span style="color:#27ae60;"><strong>HOLE-IN-ONE Pot stands at $3,476</strong> after Tuesday.</span></p>' in html, html)
+    check("the sign-off and signature are spaced like the send",
+          'See you Next Tuesday!</p>\n<p style="margin:0">&nbsp;</p>\n<p style="margin:0">Robert Straiton<br>' in html, html[-300:])
     check("draft notes never render", "secret notes" not in html and "SA thing" not in html)
 
     print("\nRecipients")

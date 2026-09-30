@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.522.34";
+window.TGF_VERSION = "2.522.35";
 window.TGF_CHANGELOG = [
+    {
+        version: "2.522.35",
+        date: "2026-09-30",
+        title: "Recap drafts now come out in Kerry's sent format, spacing included",
+        changes: [
+            "Kerry 2026-09-30, pasting his s9.25 Canyon Springs send back: \"Learn from my edits. Including all formatting and spacing.\" The recap-draft email (email_parser/recap_mail.py) and the Word file (tools/recap_docx.js) now render his layout: flat paragraphs with one empty paragraph between blocks, a plain rule above every section head and an empty line under it, nothing added before a rule, the sign-off and signature spaced as he sends them. Two new markups: a line of *** is a rule with no head, and {green}…{/green} is green text (#27ae60), used for the Hole-in-One line, which now stands alone between rules. test_recap_mail.py checks each rule.",
+            "The editorial lessons (docs/claude/event-recaps.md 52–64): the whole name bold with the surname in CAPS (Mike MURPHY), the other chapter's people too; the lede's course name links the Event Results page without the round id; BUYING IN links the season-contests store; standings links are the member pages for BOTH chapters; a decided month reads \"SEPTEMBER POINTS IS FINAL.\" with its own standings line; fellowship is \"good conversation\"; LONE STAR CUP is bold.",
+            "Found while checking his link change: the Austin drafts linked pages/5783305, which is San Antonio's SCHEDULE page. Austin's Event Results page is pages/5790752 (as insider.py already had it). The a9.25 draft and the closeout skill are corrected."
+        ]
+    },
   {
     version: "2.522.34",
     date: "2026-09-30",
