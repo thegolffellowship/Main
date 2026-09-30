@@ -447,6 +447,12 @@ def liability_buckets(db_path: str | Path | None = None,
         except Exception:
             logger.warning("LSC skins pot read failed", exc_info=True)
             out["lsc_skins_pot"] = {"error": "unavailable"}
+        # Pre-sold event deposits held for customers (Kerry 9/30, #1050).
+        try:
+            out["held_deposits"] = [d for d in db.held_deposits_all(db_path) if d["held_now"]]
+        except Exception:
+            logger.warning("held deposits read failed", exc_info=True)
+            out["held_deposits"] = {"error": "unavailable"}
         # Sales tax reserve by month
         from email_parser import sales_tax as _st
         _filed = _st.filings(conn)

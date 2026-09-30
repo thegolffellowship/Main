@@ -49994,6 +49994,75 @@ def _event_funded_prize_payouts(conn, ev: dict) -> dict:
     return out
 
 
+# PRE-SOLD EVENTS HOLD CUSTOMER DEPOSITS (Kerry 2026-09-30, #1050: "Lone
+# Star Cup is liabilities right now, for sure."). Money received for an
+# event listed here is customer money held until the event is played: it
+# sits in scoring-liabilities as a held bucket and the event P&L shows no
+# profit on it before its release date. Any future pre-sold event joins by
+# app setting `deposit_events` ({"<event_id>": "<release YYYY-MM-DD>"}).
+DEPOSIT_EVENTS_DEFAULT = {"3329": "2026-10-12"}   # LONE STAR CUP | The Hideout, 10/9-10/11
+
+
+def _deposit_events(conn) -> dict:
+    raw = _setting_via(conn, "deposit_events")
+    if raw:
+        try:
+            return {str(k): str(v)[:10] for k, v in json.loads(raw).items()}
+        except (ValueError, AttributeError):
+            logger.warning("deposit_events setting unreadable; using the default")
+    return dict(DEPOSIT_EVENTS_DEFAULT)
+
+
+def _held_deposits(conn, event: dict, all_names: list) -> dict | None:
+    """Received less refunded for a pre-sold event before its release date,
+    or None when the event is not one (or has been played)."""
+    release = _deposit_events(conn).get(str(event.get("id")))
+    if not release:
+        return None
+    ph = ",".join(["?"] * len(all_names))
+    rows = [dict(r) for r in conn.execute(
+        f"""SELECT id, date, description, entry_type, category, source, amount
+              FROM acct_transactions
+             WHERE lower(event_name) IN ({ph}) AND COALESCE(status, 'active') = 'active'
+               AND entry_type IN ('income', 'expense')""",
+        [n.lower() for n in all_names]).fetchall()]
+    received = [r for r in rows if r["entry_type"] == "income"]
+    # A refund of a deposit comes back out through the same payment rails,
+    # booked as an uncategorized or 'refund' expense (Reed, L. Vasquez 9/13-14).
+    refunds = [r for r in rows if r["entry_type"] == "expense"
+               and (r["category"] or "refund").lower() == "refund"
+               and (r["source"] or "").lower() in ("venmo", "zelle", "paypal", "cashapp", "cash", "check")]
+    rec = round(sum(float(r["amount"] or 0) for r in received), 2)
+    ref = round(sum(float(r["amount"] or 0) for r in refunds), 2)
+    today = today_central_str()
+    return {"event_id": event.get("id"), "event_name": event.get("item_name"),
+            "release_on": release, "held_now": today < release,
+            "received": rec, "refunded": ref, "held": round(rec - ref, 2),
+            "received_rows": len(received),
+            "uncategorized_income": [{"id": r["id"], "date": r["date"], "description": r["description"],
+                                      "amount": r["amount"]} for r in received if not r["category"]],
+            "refund_rows": [{"id": r["id"], "date": r["date"], "description": r["description"],
+                             "amount": r["amount"]} for r in refunds]}
+
+
+def held_deposits_all(db_path=None) -> list:
+    """Every pre-sold event's held deposit, for scoring-liabilities."""
+    out = []
+    with _connect(db_path) as conn:
+        for eid in _deposit_events(conn):
+            ev = conn.execute("SELECT * FROM events WHERE id = ?", (int(eid),)).fetchone()
+            if not ev:
+                continue
+            ev = dict(ev)
+            names = [ev["item_name"]] + [r[0] for r in conn.execute(
+                "SELECT alias_name FROM event_aliases WHERE lower(canonical_event_name) = lower(?)",
+                (ev["item_name"],)).fetchall()]
+            d = _held_deposits(conn, ev, names)
+            if d:
+                out.append(d)
+    return out
+
+
 def _event_pots_v11(conn, event: dict, all_names: list, db_path=None) -> dict:
     """The three held-pot / event-cost lines the Margin & Fee Standard v1.1
     takes out of an event's margin (#1029 §8.4, 8.7, 8.8; #1034):
@@ -50360,6 +50429,26 @@ def get_event_financial_summary(event_name: str, db_path: str | Path | None = No
             except Exception:
                 logger.exception("Non-fatal: v1.1 revenue read failed for %s", event_name)
 
+            # PRE-SOLD EVENT DEPOSITS (#1050): before the release date the
+            # money is held for the customers, so the P&L shows none of it as
+            # revenue. DRY RUN until app setting `event_pnl_deposits` is on.
+            deposits = None
+            try:
+                deposits = _held_deposits(conn, event, all_names) if event else None
+                if deposits:
+                    _dep_on = str(_setting_via(conn, "event_pnl_deposits") or "").strip().lower() in ("1", "on", "true", "yes")
+                    deposits["live"] = bool(_dep_on and deposits["held_now"])
+                    deposits["before"] = {"net_revenue": net_revenue, "projected_profit": projected_profit}
+                    _held_rev = round(net_revenue, 2) if deposits["held_now"] else 0.0
+                    deposits["after"] = {"net_revenue": round(net_revenue - _held_rev, 2),
+                                         "projected_profit": round(projected_profit - _held_rev, 2)}
+                    if deposits["live"]:
+                        contra_total = round(contra_total + _held_rev, 2)
+                        net_revenue = deposits["after"]["net_revenue"]
+                        projected_profit = deposits["after"]["projected_profit"]
+            except Exception:
+                logger.exception("Non-fatal: deposit read failed for %s", event_name)
+
             # Coverage based on acct_transactions entries + order splits
             items_needing_entry = [i for i in all_items
                                    if i.get("transaction_status") in (None, "active")
@@ -50441,6 +50530,7 @@ def get_event_financial_summary(event_name: str, db_path: str | Path | None = No
             total_expenses = round(aggregate_course_cost + total_prize_pool + total_processing, 2)
             projected_profit = round(net_revenue - total_expenses, 2)
             standard_v11 = None
+            deposits = None
 
             items_needing_alloc = [i for i in all_items
                                    if i.get("transaction_status") in (None, "active")
@@ -50494,8 +50584,11 @@ def get_event_financial_summary(event_name: str, db_path: str | Path | None = No
         "contra_revenue": {
             "credit_transfers_out": xfer_out,
             "refunds": refund_total,
+            "deposits_held": (round(deposits["before"]["net_revenue"] - deposits["after"]["net_revenue"], 2)
+                              if deposits and deposits.get("live") else 0.0),
             "total": contra_total,
         },
+        "deposits": deposits,
         "net_revenue": net_revenue,
         "expenses": {
             "course_fees": aggregate_course_cost,

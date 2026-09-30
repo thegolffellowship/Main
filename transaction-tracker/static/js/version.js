@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.522.44";
+window.TGF_VERSION = "2.522.45";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.522.45",
+    date: "2026-09-30",
+    title: "Pre-sold event deposits are held liabilities (Lone Star Cup first), as a dry run",
+    changes: [
+      "Kerry 9/30 (#1050): \"Lone Star Cup is liabilities right now, for sure.\" The $8,140 of Venmo and Zelle deposits for the Cup were booked as event income, so its P&L showed $7,945 profit before a shot was hit.",
+      "An event listed in app setting deposit_events ({event_id: release date}; the code default is the Lone Star Cup, released 10/12) now holds everything received for it, less deposit refunds paid back through Venmo, Zelle, PayPal or cash, until its release date. scoring-liabilities lists it as held_deposits, and names any income row with no category so the CFO can check it.",
+      "The event P&L carries a deposits block with before and after figures, showing no revenue on deposits before the release date. It moves the headline only when app setting event_pnl_deposits is on (a DRY RUN until then). Any future pre-sold event joins by adding its id to deposit_events. Guard: test_held_deposits.py.",
+    ],
+  },
   {
     version: "2.522.44",
     date: "2026-09-30",
