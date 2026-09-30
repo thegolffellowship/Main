@@ -448,6 +448,8 @@ def liability_buckets(db_path: str | Path | None = None,
             logger.warning("LSC skins pot read failed", exc_info=True)
             out["lsc_skins_pot"] = {"error": "unavailable"}
         # Sales tax reserve by month
+        from email_parser import sales_tax as _st
+        _filed = _st.filings(conn)
         months = {}
         for r in conn.execute(
                 """SELECT substr(allocation_date,1,7) AS m,
@@ -468,12 +470,19 @@ def liability_buckets(db_path: str | Path | None = None,
             months[m] = {"tax_reserve": round(max(r["tax"], 0.0), 2),
                          "tax_reserve_signed_sum": round(r["tax"], 2),
                          "margin": round(r["margin"], 2), "rows": r["rows"],
-                         "due": due, "status": "filed" if due < today else "open"}
+                         "due": due,
+                         # FILED only from the filing record (Kerry 9/30,
+                         # #1047); the calendar alone made August read
+                         # "filed" when it never was.
+                         "status": _st.status_for(m, _filed.get(m), today).lower(),
+                         "filing": _filed.get(m)}
         out["sales_tax_reserve"] = {
             "rate": ("8.25% of TGF margin per row, signed; a negative row is a "
                      "credit against its month; the month floors at zero"),
             "by_month": months,
             "open_total": round(sum(v["tax_reserve"] for v in months.values()
-                                    if v["status"] == "open"), 2),
+                                    if v["status"] in ("open", "late")), 2),
+            "late": sorted(k for k, v in months.items() if v["status"] == "late"),
+            "status_rule": "FILED only from sales_tax_filings; otherwise LATE past the 20th, else OPEN",
         }
     return out

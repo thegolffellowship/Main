@@ -6321,6 +6321,12 @@ def init_db(db_path: str | Path | None = None) -> None:
             _migrate_gender_v1(conn)
         except Exception:
             logger.exception("Non-fatal: _migrate_gender_v1 failed")
+        # Plain-SQL migration files (CA #682), applied once each.
+        try:
+            from email_parser.migrations import apply_migrations
+            apply_migrations(conn)
+        except Exception:
+            logger.exception("Non-fatal: SQL migrations failed")
 
         # Re-point FK rows orphaned by pre-v2.16.13 merges (which deleted the
         # source customers row without moving memberships/statuses/roles/...),

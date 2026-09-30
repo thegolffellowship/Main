@@ -1779,6 +1779,7 @@ def _scoring_dispatch_inner(url: str, extract: str):
       scoring-verify:<round_id>    verify one round vs GG's numbers
       scoring-card:<round_id>      full scorecard with derivations
       scoring-courses              course/tee database listing
+      scoring-sales-tax-filing:<json row>[|apply]  record one month's Texas sales-tax filing (dry run by default; evidence 'confirmation' needs webfile_ref or confirmation_path); scoring-sales-tax-filings lists the record; scoring-sales-tax-backfill[:apply] loads the CFO register (6 confirmed months + Kerry's-word months)
       scoring-query-customers:<gender F|M|NULL>|<chapter>|<status>|<played_since>|<limit>  READ-ONLY field read of customers: id, name, chapter, status, gender, rounds since (default 2026-01-01); active members first
       scoring-mail-kerry:<subject>|<html>  DRY RUN: render a mail to KERRY (hard-wired, the only recipient); scoring-mail-kerry-send:<subject>|<html> sends it through the Tracker's Graph mailer, logged (Kerry 2026-09-30 #1050: "Go with the Tracker mailer")
       scoring-se-preview:<event_id>|<cid,...>[|apply][|18][|match]  labelled PREVIEW score-entry round + link (admin-only open); 18 = an 18-hole preview, match = a demo singles match per pair (1v2, 3v4)
@@ -6150,6 +6151,21 @@ def _scoring_dispatch_inner(url: str, extract: str):
             _ev = _a[: -len("|apply")].strip() if _apply else _a
             from email_parser.closeout_checks import pairing_history_from_entry
             return json.dumps(pairing_history_from_entry(_ev, apply=_apply), indent=2, default=str)
+        if cmd in ("scoring-sales-tax-filing", "scoring-sales-tax-filings", "scoring-sales-tax-backfill"):
+            # filing: "<json row>[|apply]" record one month (Kerry 9/30 #1047)
+            # filings: list the record; backfill: "[apply]" the CFO register.
+            from email_parser import sales_tax as _st
+            if cmd == "scoring-sales-tax-filings":
+                with db.get_connection() as _c:
+                    return json.dumps(_st.filings(_c), indent=2, default=str)
+            if cmd == "scoring-sales-tax-backfill":
+                return json.dumps(_st.backfill(apply=arg.strip().lower() == "apply"), indent=2, default=str)
+            _j, _, _flag = arg.rpartition("|") if arg.rstrip().endswith("|apply") else (arg, "", "")
+            try:
+                _row = json.loads(_j)
+            except ValueError as _e:
+                return json.dumps({"error": f"bad JSON: {_e}"})
+            return json.dumps(_st.record_filing(_row, apply=_flag.strip().lower() == "apply"), indent=2, default=str)
         if cmd == "scoring-query-customers":
             # "<gender>|<chapter>|<status>|<played_since>|<limit>" (any part
             # blank) — READ-ONLY field read of customers (CoS #1048).

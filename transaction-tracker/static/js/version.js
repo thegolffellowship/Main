@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.522.43";
+window.TGF_VERSION = "2.522.44";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.522.44",
+    date: "2026-09-30",
+    title: "Sales tax: a filing record; a month is FILED only when recorded",
+    changes: [
+      "Kerry 9/30 (#1047): \"I approve the sales_tax_filings table.\" The liabilities read (scoring-liabilities) marked every past-due month \"filed\" by the calendar alone, which is how August 2026 read filed while it never was. The new sales_tax_filings table records each month: due date, filed date, Total Texas Sales, taxable sales, tax, discount, penalty, interest, amount paid, WebFile and payment refs, confirmation path, evidence (WebFile confirmation or Kerry's word) and who entered it.",
+      "A month now reads FILED only when a row exists; otherwise LATE once past the 20th, else OPEN. Bridges: scoring-sales-tax-filing:<json>[|apply] records one month (dry run by default), scoring-sales-tax-filings lists the record, and scoring-sales-tax-backfill[:apply] loads the CFO's verified register. Every applied write is action-logged.",
+      "First plain-SQL migration file (CA #682): migrations/0001_sales_tax_filings.sql, applied once per database by email_parser/migrations.py and recorded in schema_migrations. Guard: test_sales_tax_filings.py.",
+    ],
+  },
   {
     version: "2.522.43",
     date: "2026-09-30",
