@@ -300,6 +300,25 @@ toward full automation (see governing docs).
   behavior; do NOT "fix" it to match GG. Consequence to expect: on odd
   splits an individual's amount may read one penny below GG's
   published figure — that is the pot balancing, not an error.
+  **Why GG differs — GG's rule, derived from paid shares (mailbox #1033,
+  recorded by CA #1034, 2026-09-30):** each winner's share = (their skins
+  or tied count) × pot ÷ (count in the flight or tie group), **rounded
+  to the cent HALF UP, per winner, with no remainder reconciliation** —
+  so a GG flight can pay a cent or two UNDER or OVER the pot. Evidence:
+  3304 s9.25 skins $84.50 ÷ 6 = 14.0833 → GG $14.08 × 6 = $84.48; 3317
+  a9.25 skins $84.50 ÷ 4 = 21.125 → GG $21.13, and 3 skins 63.375 → GG
+  $63.38 = $84.51; s9.17 Ind Gross $68.03 on $68.01. Not truncation
+  (that would pay 21.12 / 63.37). The 7/12 ruling stands (CA #1029 item
+  2, "adopt GG's convention", was withdrawn in #1034): money stays
+  exact-to-pot. The PAYOUTS tab records GG's own dollars ("(GG $)"), so
+  what was paid already matches GG. **G2a grading (v2.522.40):** A2(ii)
+  counts a player EXPLAINED — named — only when the difference is at
+  most $0.01, the player's rows sit in one shared-pot group (a tied
+  place or a skins flight), GG's figure equals the half-up rounding of
+  the exact share, and our group sums exactly to the pot
+  (`g2a_parity._half_up_explained`; the engine rows carry
+  `share_group` / `group_pot` / `exact_share_cents` for it). Anything
+  else is still a mismatch.
 
 **Blind-draw partners ARE PAID (Kerry RATIFIED 2026-07-13).** When a
 team is completed with a blind draw, GG renders that slot as

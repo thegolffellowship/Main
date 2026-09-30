@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.522.39";
+window.TGF_VERSION = "2.522.40";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.522.40",
+    date: "2026-09-30",
+    title: "G2a: a one-cent skins or tie difference is EXPLAINED only when it is Golf Genius's half-up rounding",
+    changes: [
+      "The first live G2a run (#1001) failed both 9/29 events on cents. On 3304 Golf Genius paid six skins $14.08 each ($84.48 on an $84.50 pot), where we pay two of them $14.09 so the flight sums to the pot. On 3317 it paid $21.13 for a $21.125 share, where we pay $21.12. Golf Genius rounds each winner's share half up on its own and never reconciles, so its flights land a cent or two under or over the pot. Kerry's 7/12 ruling (MONEY OUT = MONEY IN) keeps our money exact to the pot, and it stands (CA #1034 withdrew #1029 item 2). This release changes no payout.",
+      "The grader's A2(ii) class, approved by CA in #1034 as proposed in #1033: a player's difference is EXPLAINED, and named, only when all four hold. It is at most one cent. The player's rows sit in one shared-pot group, a tied place or a skins flight (before, only tied places qualified, which is why the skins read FAIL). Golf Genius's figure equals the half-up rounding of the exact share. And our rows in that group sum exactly to the pot. A one-cent gap that is NOT Golf Genius's rounding, anything over a cent, and a group that doesn't sum to its pot all stay mismatches.",
+      "To grade this, the engine's payout rows now carry share_group, group_pot and exact_share_cents; the amounts are unchanged. Golf Genius's rounding rule and its evidence are recorded in side-games.md under the 7/12 ruling, as \"why GG differs\". Guard: test_g2a_parity.py (8 new checks, including the 3304 and 3317 figures).",
+    ],
+  },
   {
     version: "2.522.39",
     date: "2026-09-30",

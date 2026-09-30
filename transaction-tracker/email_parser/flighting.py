@@ -851,6 +851,13 @@ def payouts_from_results(entry: dict, result: dict | None) -> dict:
             for w in won.values():
                 w["detail"] = (f"Skins F{no} ×{len(w['holes'])} holes "
                                + ", ".join(str(h) for h in w["holes"]))
+                # The unrounded share, as an exact fraction of cents, and
+                # the pot it was cut from — for the G2a grader only
+                # (CA #1034); the money above is unchanged.
+                w.update(share_group=f"skins F{no}",
+                         group_pot=float(af["pot"]),
+                         exact_share_cents=[_cents(af["pot"]) * len(w["holes"]),
+                                            len(skins)])
                 out["rows"].append(w)
             continue
         places = [float(p["amount"]) for p in af.get("places") or []]
@@ -863,6 +870,7 @@ def payouts_from_results(entry: dict, result: dict | None) -> dict:
                 break
             tied = by_place[place]
             shares = tie_split(places, place, len(tied))
+            pool = round(sum(places[place - 1:place - 1 + len(tied)]), 2)
             for r, amt in zip(sorted(tied, key=lambda r: r["name"] or ""), shares):
                 if amt <= 0:
                     continue
@@ -870,7 +878,10 @@ def payouts_from_results(entry: dict, result: dict | None) -> dict:
                 out["rows"].append({
                     "customer_id": r.get("customer_id"), "name": r["name"],
                     "flight_no": no, "amount": amt, "place": place,
-                    "detail": f"F{no} place {place}{t}"})
+                    "detail": f"F{no} place {place}{t}",
+                    "share_group": f"F{no} place {place}",
+                    "group_pot": pool,
+                    "exact_share_cents": [_cents(pool), len(tied)]})
     if game == "individual_gross" and (amounts.get("bonus") or 0) > 0:
         pot_total += float(amounts["bonus"])
         field = [r for f in result.get("flights") or [] for r in f["rows"]

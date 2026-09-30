@@ -221,6 +221,84 @@ _p = g2._diff_games(_gg, "x", None, board=None)["games"]
 check("with no engine board every game is PENDING, never matched",
       all(v["status"] == "pending_engine_side" for v in _p.values()))
 
+print("\n== A2(ii): shared-pot cents, GG half-up vs ours exact-to-pot (CA #1034) ==")
+from email_parser import flighting as _fl
+
+
+def _skins_eng(per_player):
+    """per_player: [(name, holes)] in ONE flight with an $84.50 pot, paid by
+    the real flighting code so the exact-share fields are the real ones."""
+    entry = {"game": "skins", "active": True,
+             "amounts": {"flights": [{"flight_no": 1, "pot": 84.5}]}}
+    skins = [{"key": n, "winner": n, "customer_id": None, "hole": h}
+             for n, hs in per_player for h in hs]
+    res = {"flights": [{"flight": "1", "skins": skins, "rows": []}]}
+    return {"games": {"skins": _fl.payouts_from_results(entry, res)}}
+
+
+# 3304: six single skins, $84.50 / 6 = 14.0833; GG paid 14.08 x 6.
+_e = _skins_eng([(n, [h]) for n, h in
+                 [("A", 1), ("B", 2), ("C", 3), ("D", 6), ("E", 7), ("F", 8)]])
+_row = _e["games"]["skins"]["rows"][0]
+check("a skins row carries its group, pot and exact share (for grading only)",
+      _row.get("share_group") == "skins F1" and _row.get("group_pot") == 84.5
+      and _row.get("exact_share_cents") == [8450, 6], _row)
+check("  ...and the money is unchanged: the flight still sums to the pot",
+      round(sum(r["amount"] for r in _e["games"]["skins"]["rows"]), 2) == 84.5)
+_gg = {"results": [{"game": "skins", "player_name": n, "purse": 14.08}
+                   for n in "ABCDEF"]}
+_g = g2._grade_engine_purses(_gg, _e)["games"]["skins"]
+check("3304: GG's half-up $14.08 vs our $14.09 is EXPLAINED, named, not a fail",
+      _g["status"] == "match" and len(_g["explained"]) == 2
+      and all("shared_pot_gg_half_up_1c" in x for x in _g["explained"]), _g)
+
+# 3317: Schneider 3 skins + Compton 1 = 4 skins; GG 63.38 / 21.13.
+_e = _skins_eng([("SCHNEIDER", [2, 3, 4]), ("COMPTON", [8])])
+_gg = {"results": [{"game": "skins", "player_name": "SCHNEIDER", "purse": 63.38},
+                   {"game": "skins", "player_name": "COMPTON", "purse": 21.13}]}
+_g = g2._grade_engine_purses(_gg, _e)["games"]["skins"]
+check("3317: 21.125 -> GG $21.13 vs our $21.12 is EXPLAINED",
+      _g["status"] == "match" and any("COMPTON" in x for x in _g["explained"]),
+      _g)
+
+# Truncation is not GG's rule: a GG figure that is NOT the half-up of the
+# exact share stays a mismatch even at one cent.
+_gg = {"results": [{"game": "skins", "player_name": "SCHNEIDER", "purse": 63.37},
+                   {"game": "skins", "player_name": "COMPTON", "purse": 21.12}]}
+_g = g2._grade_engine_purses(_gg, _e)["games"]["skins"]
+check("a 1-cent difference that is NOT GG's half-up rounding is a MISMATCH",
+      _g["status"] == "mismatch", _g)
+
+_e = _skins_eng([(n, [h]) for n, h in
+                 [("A", 1), ("B", 2), ("C", 3), ("D", 6), ("E", 7), ("F", 8)]])
+_gg = {"results": [{"game": "skins", "player_name": n, "purse": 14.06}
+                   for n in "ABCDEF"]}
+_g = g2._grade_engine_purses(_gg, _e)["games"]["skins"]
+check("a 2-3 cent difference is never explained", _g["status"] == "mismatch", _g)
+
+# Our group must sum to the pot, or the class does not apply.
+_e = _skins_eng([("SCHNEIDER", [2, 3, 4]), ("COMPTON", [8])])
+_e["games"]["skins"]["rows"][0]["amount"] = 63.37   # break exact-to-pot
+_gg = {"results": [{"game": "skins", "player_name": "SCHNEIDER", "purse": 63.38},
+                   {"game": "skins", "player_name": "COMPTON", "purse": 21.13}]}
+_g = g2._grade_engine_purses(_gg, _e)["games"]["skins"]
+check("if ours does not sum to the pot, nothing is explained",
+      _g["status"] == "mismatch" and not _g["explained"], _g)
+
+# Tied place: 3 players share $22.67 + 0 (one place) -> 7.5567 each.
+_entry = {"game": "individual_net", "active": True,
+          "amounts": {"flights": [{"flight_no": 1, "pot": 22.67,
+                                   "places": [{"place": 1, "amount": 22.67}]}]}}
+_res = {"flights": [{"flight": "1", "rows": [
+    {"key": n, "name": n, "customer_id": None, "place": 1} for n in "XYZ"]}]}
+_e = {"games": {"individual_net": _fl.payouts_from_results(_entry, _res)}}
+_ours = {r["name"]: r["amount"] for r in _e["games"]["individual_net"]["rows"]}
+_gg = {"results": [{"game": "individual_net", "player_name": n, "purse": 7.56}
+                   for n in "XYZ"]}
+_g = g2._grade_engine_purses(_gg, _e)["games"]["individual_net"]
+check("a TIED place group follows the same test (7.5567 -> GG $7.56)",
+      _g["status"] == "match" and _g["explained"], (_ours, _g))
+
 print("\n" + "=" * 60)
 if FAILURES:
     print(f"{len(FAILURES)} FAILED: {FAILURES}")
