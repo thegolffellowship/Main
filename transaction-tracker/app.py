@@ -5843,11 +5843,15 @@ def api_get_pairings(event_id):
         # underneath each name in a foursome").
         _lap("standings")
         pair_counts = {}
+        rode_counts = {}
         try:
             from email_parser.database import roster_pair_counts
             _hconn = get_connection()
             try:
                 pair_counts = roster_pair_counts(
+                    _hconn, event_id, [d.get("name") for d in event_players])
+                from email_parser.database import roster_rode_counts
+                rode_counts = roster_rode_counts(
                     _hconn, event_id, [d.get("name") for d in event_players])
             finally:
                 _hconn.close()
@@ -5879,6 +5883,7 @@ def api_get_pairings(event_id):
             "slots_18": slots_18,
             "event_players": event_players,
             "pair_counts": pair_counts,
+            "rode_counts": rode_counts,
             "mp_matches": mp_matches,
             "partner_requests": partner_requests,
             "standings_points": standings_points,

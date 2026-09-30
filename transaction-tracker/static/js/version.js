@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.522.47";
+window.TGF_VERSION = "2.522.48";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.522.48",
+    date: "2026-09-30",
+    title: "Pairings R-G: cart variety",
+    changes: [
+      "Kerry 2026-09-30 (#1038): \"A player plays one event in the same cart as another, then the next time they're paired, they're in different carts.\" When two players who have shared a cart before land in the same group again, the seater now puts them in different carts. It is the lowest seat term (0.4, below a same-tee cart match), so it only breaks ties: Match Play opponents, partner requests, captain-with-newest, 1st Timer with Ambassador and same-tee carts all outrank it. Group composition is unchanged.",
+      "Shared-cart history is pairing_history.rode = 1, counted by the same rules as the pair counts (played dates only, never the app's saved sheets), across all years. The PAIRINGS History line shows an italic grey 'repeat cart' beside a cart-mate who has ridden with that player before; it recomputes as seats move, and a requested partner is exempt. A mark, never a break. Guard test_pairings_cart_variety.py; pairings.md 'R-G'."
+    ]
+  },
   {
     version: "2.522.47",
     date: "2026-09-30",

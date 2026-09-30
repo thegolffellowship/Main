@@ -515,6 +515,7 @@
         /* A requested pair is a decision, not a repeat (Kerry 2026-09-15). */
         .pairing-hist-row .ph-req { color: var(--muted); font-weight: 400; }
         .pairing-hist-row .ph-hot { color: #b91c1c; font-weight: 700; }
+        .pairing-hist-row .ph-cart { color: #6B7280; font-style: italic; }
         .pairing-repeat-chip {
             float: right; margin-right: 0.5rem; font-weight: 700;
             color: #7f1d1d; background: #fecaca; border-radius: 999px;
@@ -6633,6 +6634,7 @@
                 // added at render time by pairPlayedTotal.
                 showHistoryRow: pairingsHistoryPref(),
                 pairCounts: {},
+                rodeCounts: {},   // R-G: prior SHARED-CART counts (#1038)
                 // Undo/redo of GROUP edits (Kerry 2026-07-31). Snapshots of
                 // {groups_9, groups_18} with a cursor; `hist[histIdx]` is
                 // always what is on screen.
@@ -8035,6 +8037,7 @@
             state.standingsPoints = data.standings_points || {};
             state.standingsEnrolled = data.standings_enrolled || {};
             state.pairCounts = data.pair_counts || {};
+            state.rodeCounts = data.rode_counts || {};
             state.blindPool = data.blind_pool || null;
             return state.event_players.length;
         } catch (e) {
@@ -8074,6 +8077,7 @@
             state.standingsPoints = data.standings_points || {};
             state.standingsEnrolled = data.standings_enrolled || {};
             state.pairCounts = data.pair_counts || {};
+            state.rodeCounts = data.rode_counts || {};
             state.blindPool = data.blind_pool || null;
             state.isDirty = false;
             state.loaded = true;
@@ -10978,6 +10982,7 @@
             if (data.standings_points) state.standingsPoints = data.standings_points;
             if (data.standings_enrolled) state.standingsEnrolled = data.standings_enrolled;
             if (data.pair_counts) state.pairCounts = data.pair_counts;
+            if (data.rode_counts) state.rodeCounts = data.rode_counts;
             if (data.blind_pool) state.blindPool = data.blind_pool;
             state.isDirty = true;
             state.swapMode = null; state.selection = null;
@@ -12240,7 +12245,22 @@
             return `<span class="ph-item${cls}" title="${escapeHtml(t)}">${
                 escapeHtml(pairShortName(m.name))} ${n}${req ? '&#x2691;' : ''}</span>`;
         }).join('');
-        return `<div class="pairing-hist-row">${bits}</div>`;
+        // R-G cart variety (Kerry 2026-09-30, #1038): a cart-mate this player
+        // has shared a cart with before is marked "repeat cart" — a mark,
+        // never a break. A requested partner is exempt (riding together
+        // is the request). Recomputed from seats, so it follows every swap.
+        const myCart = (player.cart_pos || 0) <= 2 ? 0 : 1;
+        const mate = mates.find(m => ((m.cart_pos || 0) <= 2 ? 0 : 1) === myCart);
+        let repeat = '';
+        if (mate && !pairIsRequested(state, player.name, mate.name)) {
+            const ka = pairCountKey(player.name), kb = pairCountKey(mate.name);
+            const rode = Number((state.rodeCounts || {})[ka < kb ? `${ka}|${kb}` : `${kb}|${ka}`]) || 0;
+            if (rode > 0) {
+                repeat = `<span class="ph-item ph-cart" title="${escapeHtml(
+                    `Repeat cart: has shared a cart with ${mate.name} ${rode} time${rode === 1 ? '' : 's'} before`)}">repeat cart</span>`;
+            }
+        }
+        return `<div class="pairing-hist-row">${bits}${repeat}</div>`;
     }
 
     // Worst repeat in a group, for the header chip. 1 = nobody in this

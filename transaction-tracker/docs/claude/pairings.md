@@ -2008,3 +2008,30 @@ it writes only when the event has no GG pair rows (`gg_teamnet`,
 plans and its own earlier write. Before that it runs in SHADOW and returns
 `parity` (pairs only entered, pairs only GG). Guard: test_closeout_checks.py.
 
+
+## R-G — cart variety (v2.522.48, Spec v1.2 §11, #1038)
+
+Kerry 2026-09-30, verbatim: *"A player plays one event in the same cart as
+another, then the next time they're paired, they're in different carts. Just
+more variety built in."*
+
+- **Where it acts:** only the seater, `_arrange_group_seats(..., rode_before=)`.
+  Group composition is untouched. A cart pair (seats 1&2, 3&4) that has shared
+  a cart before costs 0.4. That is the lowest term, below the same-tee cart
+  term (1), so R-G only ever breaks a tie: two repeats (0.8) still cost less
+  than one tee mismatch. Match Play opponents (1000), partner requests (100),
+  captain-with-newest and 1st Timer with Ambassador (10) all outrank it.
+- **History:** `_rode_counts_from_conn` counts `pairing_history.rode = 1` rows
+  by the same rules as the pair counts (played dates only; `app` rows are plans
+  and never count), across ALL years: a shared cart is a shared cart whenever
+  it was. `rode` is the GG tee-sheet seat order (1&2 / 3&4), and the entered
+  groups' seat order for `entry` rows from the entry-record cutover
+  (`entry_record_from`, default 2026-10-10). Before the cutover the entered
+  groups are diffed, not written, and the GG tee sheet stays the record.
+- **The view marks it, never breaks it:** the generator tags both players
+  `repeat_cart`; the PAIRINGS GET ships `rode_counts` for the roster
+  (`roster_rode_counts`), and the History line under a name shows an italic
+  grey "repeat cart" when the cart-mate has shared a cart with them before.
+  It recomputes from the seats, so it follows every swap and drag. A requested
+  partner is exempt: riding together is the request.
+- Guard: `test_pairings_cart_variety.py`.

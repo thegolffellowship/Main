@@ -65362,6 +65362,42 @@ def _pair_counts_from_conn(conn, year: int | None = None,
     return counts
 
 
+def _rode_counts_from_conn(conn, exclude_event_id: int | None = None) -> dict:
+    """R-G, cart variety (Pairings Spec v1.2 §11, Kerry 2026-09-30, #1038:
+    "A player plays one event in the same cart as another, then the next
+    time they're paired, they're in different carts. Just more variety
+    built in."). Times each pair has SHARED A CART, keyed like
+    `_pair_counts_from_conn` and counted by the same rules (played dates
+    only, never the app's own saved sheets), across all years: a shared
+    cart is a shared cart whenever it was. `rode` is the tee-sheet seat
+    order (1&2 / 3&4) for Golf Genius rows and the entered groups' seat
+    order for `entry` rows after the entry-record cutover."""
+    _ensure_pairing_tables(conn)
+    rows = conn.execute(
+        """SELECT player_a, player_b, COUNT(*) AS cnt FROM pairing_history ph
+           WHERE COALESCE(ph.rode, 0) = 1
+             AND (? IS NULL OR ph.event_id IS NULL OR ph.event_id <> ?)
+             AND ph.event_date < ?
+             AND lower(COALESCE(ph.source, 'app')) <> 'app'
+           GROUP BY player_a, player_b""",
+        (exclude_event_id, exclude_event_id, today_central_str())).fetchall()
+    out: dict = {}
+    for r in rows:
+        a, b = _pair_key_name(r["player_a"]), _pair_key_name(r["player_b"])
+        key = (min(a, b), max(a, b))
+        out[key] = out.get(key, 0) + r["cnt"]
+    return out
+
+
+def roster_rode_counts(conn, event_id: int, names) -> dict:
+    """`{"a|b": n}` shared-cart counts between the people on one roster,
+    non-zero only — the page's "repeat cart" mark (R-G) recomputes from it
+    as the manager moves seats, like the History line does."""
+    want = {k for k in (_pair_key_name(n) for n in names if n) if k}
+    return {f"{a}|{b}": n for (a, b), n in _rode_counts_from_conn(conn, event_id).items()
+            if n and a in want and b in want}
+
+
 def roster_pair_counts(conn, event_id: int, names,
                        year: int | None = None) -> dict:
     """Prior play counts BETWEEN the players on one event's roster, as
@@ -67838,6 +67874,14 @@ def generate_event_pairings(
     # ── Pairing history for current year ─────────────────────────────
     pair_counts = get_pairing_history_counts(db_path=db_path,
                                              exclude_event_id=event_id)
+    # R-G: pairs that have shared a cart before (any year, played only).
+    try:
+        with _connect(db_path) as _rc:
+            rode_before = {frozenset(k) for k, n in
+                           _rode_counts_from_conn(_rc, event_id).items() if n}
+    except Exception:
+        logger.exception("R-G rode history failed for event %s (non-fatal)", event_id)
+        rode_before = set()
 
     # ── Confirmed Match Play pairs: roster + holes validation ────────
     # (rule 8 amendment — opponents must share a holes bucket to share
@@ -68148,7 +68192,8 @@ def generate_event_pairings(
                                         captains=captains, newbies=newbies,
                                         experience=experience,
                                         ambassadors=ambassadors,
-                                        first_timers=first_timers)
+                                        first_timers=first_timers,
+                                        rode_before=rode_before)
 
         is_shotgun = (ev.get("start_type" if holes == "9" else "start_type_18") == "Shotgun")
 
@@ -68340,6 +68385,16 @@ def generate_event_pairings(
                             if pk in pair and next(iter(pair - {pk})) in norms]
                     if opps:
                         p["mp_opponent"] = " & ".join(opps)
+
+        # R-G view feed: a cart-mate this player has shared a cart with
+        # before is marked "repeat cart" — a mark, never a break (#1038).
+        for g in ordered:
+            seats = {p.get("cart_pos"): p for p in g["players"] if p.get("name")}
+            for lo, hi in ((1, 2), (3, 4)):
+                a, b = seats.get(lo), seats.get(hi)
+                if a and b and frozenset((_pair_key_name(a["name"]),
+                                          _pair_key_name(b["name"]))) in rode_before:
+                    a["repeat_cart"], b["repeat_cart"] = b["name"], a["name"]
 
         result[holes] = ordered
 
@@ -68612,7 +68667,8 @@ def _arrange_group_seats(names: list[str], mp_opponents: set,
                          newbies: set | None = None,
                          experience: dict | None = None,
                          ambassadors: set | None = None,
-                         first_timers: set | None = None) -> list[str]:
+                         first_timers: set | None = None,
+                         rode_before: set | None = None) -> list[str]:
     """Seat order for a settled group — foursomes are already decided;
     this only decides who RIDES with whom. Carts are seats 1&2 and 3&4
     (Kerry's cart-pair ruling).
@@ -68631,9 +68687,16 @@ def _arrange_group_seats(names: list[str], mp_opponents: set,
       captain, else the most experienced non-new player; a first-season
       player never drives.
 
+    - R-G cart variety (Spec v1.2 §11, Kerry 2026-09-30): two players
+      who have shared a cart before ride in DIFFERENT carts when they
+      land in one group again (weight 0.4 per repeat cart). The lowest
+      term here, below the tee match, so it only ever breaks a tie; two
+      repeats (0.8) still cost less than one tee mismatch.
+
     Groups are ≤ 4 players (24 permutations), so brute force is exact.
     """
     from itertools import permutations
+    rode_before = rode_before or set()
 
     captains = {_pair_key_name(n) for n in (captains or set())}
     newbies = {_pair_key_name(n) for n in (newbies or set())}
@@ -68670,6 +68733,8 @@ def _arrange_group_seats(names: list[str], mp_opponents: set,
                 ta, tb = _tee(perm[i]), _tee(perm[j])
                 if ta and tb and ta != tb:
                     cost += 1
+                if frozenset((keys[perm[i]], keys[perm[j]])) in rode_before:
+                    cost += 0.4
         if newest is not None:
             ni = perm.index(newest)
             if not any(_cart(k) == _cart(ni) and keys[perm[k]] in captains
