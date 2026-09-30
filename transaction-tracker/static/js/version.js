@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.522.31";
+window.TGF_VERSION = "2.522.32";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.522.32",
+    date: "2026-09-30",
+    title: "Health: the digest sees every slow or failed sample; monthly-points live refresh is manager-only",
+    changes: [
+      "The health digest's slow/error list was built from the newest 2,000 samples only. Event night 9/29 logged about 6,000, so anything older than about 8 hours never reached the digest, including the one score-entry save that failed (se_write, 5.1 s). The list now asks the database for slow and error samples directly. Guard: test_health_digest.py (an error buried under 2,100 newer samples is still listed).",
+      "/api/season-contests/monthly-points?force=1 refetches Golf Genius live, about 12 s on the one worker. The Refresh button that sends it is manager-only, but the server honoured force from anyone. At 11:04 PM on 9/29 an anonymous read held the worker for 12.8 s. Now only a manager or admin forces the refetch; everyone else gets the saved snapshot, which is what members already see.",
+    ],
+  },
     {
         version: "2.522.30",
         date: "2026-09-29",

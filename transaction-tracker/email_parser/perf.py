@@ -481,8 +481,11 @@ def _since(days: float) -> str:
 
 
 def samples(days: float = 1, name: str | None = None, kind: str | None = None,
-            limit: int = 500, db_path=None) -> list[dict]:
+            limit: int = 500, db_path=None, statuses=None) -> list[dict]:
     clauses, params = ["at >= ?"], [_since(days)]
+    if statuses:
+        clauses.append("status IN (%s)" % ",".join("?" * len(statuses)))
+        params.extend(statuses)
     if name:
         clauses.append("name = ?"); params.append(name)
     if kind:

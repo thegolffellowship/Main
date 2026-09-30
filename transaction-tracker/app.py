@@ -12419,7 +12419,12 @@ def api_season_contest_monthly_points():
     TGF member at the close of the month; ties split it.
     """
     from email_parser.database import load_gg_snapshot, refresh_monthly_points_snapshot
-    force = request.args.get("force") == "1"
+    # ?force=1 refetches Golf Genius live (~12 s on the one worker). The
+    # Refresh button is manager-only, so the refetch is too; everyone else
+    # gets the snapshot (9/29 11:04 PM: an anonymous forced read held the
+    # worker 12.8 s).
+    force = (request.args.get("force") == "1"
+             and _ROLE_RANK.get(session.get("role"), 0) >= _ROLE_RANK["manager"])
     snapshot = load_gg_snapshot("monthly_points")
     if snapshot and not force:
         return jsonify(snapshot)

@@ -197,8 +197,10 @@ def build_health_report(days: float = 1, db_path=None, record_size: bool = False
     from .timezone_utils import now_central, today_central_str
     db_path = perf._db_path(db_path)
     summary = perf.summary(days, db_path=db_path)
-    slow = [s for s in perf.samples(days, db_path=db_path, limit=2000)
-            if s["status"] in ("slow", "error")]
+    # Ask for slow/error samples BY STATUS: filtering the newest 2,000 after
+    # the fact dropped everything older once a day passed ~6,000 samples
+    # (event night 9/29: the one se_write error never reached the digest).
+    slow = perf.samples(days, db_path=db_path, limit=500, statuses=("slow", "error"))
     slow.sort(key=lambda s: -s["total_ms"])
     jobs = {}
     for s in perf.samples(days, kind="job", db_path=db_path, limit=5000):

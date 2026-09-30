@@ -168,6 +168,18 @@ hist = json.loads(db.get_app_setting("health_db_size_history", db_path=tmp))
 check("the database size is recorded once per day for the growth line", len(hist) == 1 and hist[0]["bytes"] > 0)
 c.close()
 
+# A busy day: an error 10 h ago buried under >2,000 newer ok samples must
+# still reach the slow/error list (event night 9/29 logged ~6,000).
+c = sqlite3.connect(tmp)
+c.execute("INSERT INTO perf_samples (at, kind, name, total_ms, status, detail) VALUES "
+          "(datetime('now', '-10 hours'), 'route', 'se_write', 5113, 'error', '{\"error\": \"OperationalError(database is locked)\"}')")
+c.executemany("INSERT INTO perf_samples (at, kind, name, total_ms, status) VALUES (datetime('now', '-1 minute'), 'route', 'se_card', 100, 'ok')",
+              [()] * 2100)
+c.commit(); c.close()
+rep = health.build_health_report(1, db_path=tmp)
+check("an old error under 2,100 newer samples still reaches the slow/error list",
+      any(s["name"] == "se_write" and s["status"] == "error" for s in rep["slow"]), [s["name"] for s in rep["slow"]][:10])
+
 print()
 if F:
     print(f"{len(F)} FAILED: " + "; ".join(F))
