@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.522.29";
+window.TGF_VERSION = "2.522.30";
 window.TGF_CHANGELOG = [
+    {
+        version: "2.522.30",
+        date: "2026-09-29",
+        title: "Recap drafts updated: fall races, September winner, Austin CTPs, SA fellowship",
+        changes: [
+            "Kerry 2026-09-29, 11 PM: \"Everything is done on GG. Points awarded so consideration for fall points races and the September monthly points finale and winner should be included. Btw, SA went to Aldaco's Restaurant afterward. 8 of us went.\" The s9.25 / a9.25 recap drafts now carry the fall races after Tuesday's points (SA: Rideout 56, Mazanec 51, Baker 49; Austin: Youngs 62, Wade 50, Schneider 36), the September finish (Luke Youngs 64, Luke Mazanec 62 — Youngs came into the last Tuesday a point behind), Austin's closest-to-the-pin winners (Schneider on 4, Moore on 7), Schneider's $254 night, and SA's fellowship (8 at Aldaco's). The Word files are re-rendered and re-sent to Kerry and Robert as staff drafts."
+        ]
+    },
     {
         version: "2.522.29",
         date: "2026-09-29",
