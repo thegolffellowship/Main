@@ -60641,8 +60641,18 @@ def get_event_blinds(event_id: int, conn=None, db_path=None) -> dict:
     def _run(c):
         _ensure_pairing_tables(c)
         _has = _blind_cols(c)
-        _extra = ("b.reason" if "reason" in _has else "'open_seat'") + " AS reason, " + \
-                 ("b.missed_holes" if "missed_holes" in _has else "NULL") + " AS missed_holes,"
+        _extra = ("b.reason" if "reason" in _has else "'open_seat'") + " AS reason, b.id AS blind_id,"
+        # Missed holes are ROWS (blind_draw_holes, migration 0006; Kerry's
+        # #1087 rule), never a JSON column. No rows = every hole.
+        _mh_by: dict = {}
+        try:
+            for _h in c.execute(
+                    """SELECT h.blind_draw_id, h.hole FROM blind_draw_holes h
+                         JOIN blind_draws b ON b.id = h.blind_draw_id
+                        WHERE b.event_id = ? ORDER BY h.hole""", (event_id,)):
+                _mh_by.setdefault(_h[0], []).append(int(_h[1]))
+        except sqlite3.Error:
+            pass            # no table yet (a database before 0006)
         rows = c.execute(
             f"""SELECT b.holes, b.group_num, b.cart_pos, b.customer_id,
                       b.source, {_extra}
@@ -60656,10 +60666,7 @@ def get_event_blinds(event_id: int, conn=None, db_path=None) -> dict:
             (event_id,)).fetchall()
         out: dict = {}
         for r in rows:
-            try:
-                _mh = json.loads(r["missed_holes"]) if r["missed_holes"] else None
-            except (TypeError, ValueError):
-                _mh = None
+            _mh = _mh_by.get(r["blind_id"]) or None
             out.setdefault(r["holes"], {}).setdefault(r["group_num"], []).append({
                 "cart_pos": r["cart_pos"], "name": r["player_name"],
                 "customer_id": r["customer_id"], "source": r["source"],
@@ -60797,8 +60804,8 @@ BLIND_REASONS = ("open_seat", "nh", "missed_hole")
 
 
 def _blind_cols(conn) -> set:
-    """Columns blind_draws has on THIS database. `reason` / `missed_holes`
-    arrive by migration 0003; a database built by `_ensure_pairing_tables`
+    """Columns blind_draws has on THIS database. `reason` arrives by
+    migration 0004; a database built by `_ensure_pairing_tables`
     alone (tests, a fresh file before init_db) does not have them, and the
     draw must still work there."""
     try:

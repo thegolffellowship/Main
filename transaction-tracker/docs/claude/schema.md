@@ -600,18 +600,24 @@ engine plays them at zero with a blind for the money. Clearing sets nh = 0
 and keeps the row. Read ONLY through `nh_flags.event_nh_players(conn,
 event_id)`; written only by `nh_flags.set_nh` (logged). See handicaps.md.
 
-## `blind_draws.reason` / `missed_holes` (migration 0004, v2.522.55; Kerry OK #1078)
+## `blind_draws.reason` (0004) and `blind_draw_holes` (0006 / 0007; Kerry OK #1078, CoS #1090-2)
 
-These record why a blind was drawn:
+`blind_draws.reason` records why a blind was drawn. It is a closed enum:
 
-- `open_seat`: an empty seat. Existing rows backfilled to this.
+- `open_seat`: an empty seat. Existing rows were backfilled to this.
 - `nh`: the seat's player has no handicap at all; the blind plays his slot.
-- `missed_hole`: a player marked absent. `missed_holes` is a JSON list of
-  the holes the blind covers; NULL means every hole.
+- `missed_hole`: a player marked absent.
 
-`holes` already existed and means the 9/18 sheet, so the hole list has its
-own name. Readers go through `_blind_cols(conn)`, so a database that
-predates the migration still draws. Rule: pairings.md 15i.
+`blind_draw_holes (blind_draw_id → blind_draws.id, hole 1–18)` lists the
+holes a missed-hole blind covers, one row per hole. No rows means every
+hole. It replaced the JSON column `blind_draws.missed_holes` that 0004
+added and nothing ever wrote; 0007 drops that column, under Kerry's #1087
+rule that facts are rows. `blind_draws.holes` is a different fact: the
+9/18 sheet. `get_event_blinds` returns the list as `missed_holes`, and the
+engine takes it as `holes`. The missed-hole WRITER ships with Track A's
+#1021 wave. It must write with UPDATE / ON CONFLICT, never INSERT OR
+REPLACE, because a REPLACE on `blind_draws` cascades away the hole rows.
+Rule: pairings.md 15i.
 
 ## Home chapter by id: `customers.home_chapter_id` + `customer_chapter_history` (Kerry APPROVED, CoS #1084, v2.522.56)
 

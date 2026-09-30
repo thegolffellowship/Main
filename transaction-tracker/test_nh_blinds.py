@@ -89,7 +89,14 @@ db.save_event_pairings(EV, SHEET, db_path=tmp)
 
 print("\n== schema: migration 0004 ==")
 cols = db._blind_cols(c)
-check("blind_draws has reason and missed_holes", {"reason", "missed_holes"} <= cols, cols)
+check("blind_draws has reason", "reason" in cols, cols)
+check("0007: the JSON missed_holes column is gone (#1087)", "missed_holes" not in cols, cols)
+check("0006: blind_draw_holes exists",
+      c.execute("SELECT 1 FROM sqlite_master WHERE name = 'blind_draw_holes'").fetchone() is not None)
+for _f in ("0006_blind_draw_holes.sql", "0007_drop_blind_draws_missed_holes.sql"):
+    _u = pathlib.Path("migrations/" + _f).read_text().upper()
+    check(f"{_f}: portable, and carries its 'not redundant' / reason note",
+          "INSERT OR REPLACE" not in _u and "NOCASE" not in _u and "JSON" not in _u.split("--")[-1])
 check("0003 recorded once", c.execute("SELECT COUNT(*) FROM schema_migrations WHERE name = "
                                       "'0004_blind_draws_reason.sql'").fetchone()[0] == 1)
 sql = pathlib.Path("migrations/0004_blind_draws_reason.sql").read_text().upper()
@@ -154,7 +161,19 @@ bl = db.get_event_blinds(EV, db_path=tmp)
 seat = {(g, b["cart_pos"]): b for g, seats in bl["9"].items() for b in seats}
 check("N/H blind stored reason 'nh'", seat[(1, 4)]["reason"] == "nh", seat.get((1, 4)))
 check("open-seat blind stored reason 'open_seat'", seat[(2, 4)]["reason"] == "open_seat")
-check("missed_holes NULL (every hole)", seat[(1, 4)]["missed_holes"] is None)
+check("no hole rows = every hole (missed_holes None)", seat[(1, 4)]["missed_holes"] is None)
+_bid = c.execute("SELECT id FROM blind_draws WHERE event_id = ? AND cart_pos = 4 AND group_num = 2",
+                 (EV,)).fetchone()[0]
+c.executemany("INSERT INTO blind_draw_holes (blind_draw_id, hole) VALUES (?, ?)", [(_bid, 7), (_bid, 5)])
+c.commit()
+_b = next(b for b in db.get_event_blinds(EV, db_path=tmp)["9"][2] if b["cart_pos"] == 4)
+check("hole rows read back as a sorted list", _b["missed_holes"] == [5, 7], _b)
+try:
+    c.execute("INSERT INTO blind_draw_holes (blind_draw_id, hole) VALUES (?, 19)", (_bid,)); ok = False
+except sqlite3.IntegrityError:
+    ok = True
+check("a hole outside 1-18 is refused by the table", ok)
+c.execute("DELETE FROM blind_draw_holes WHERE blind_draw_id = ?", (_bid,)); c.commit()
 
 print("\n== CHOOSE on a seat ==")
 _busy = {b["customer_id"] for b in seat.values()}
