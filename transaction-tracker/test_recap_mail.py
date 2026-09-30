@@ -90,6 +90,8 @@ try:
     print("\nThe send path")
     r = rm.send_recap_draft(name, "AUSTIN", dry_run=True, db_path=tmp)
     check("dry run renders and sends nothing", r.get("status") == "dry_run" and "html" in r, r.get("error"))
+    check("the cover says to paste from the email, not Word",
+          "Copy the recap from this email" in (r.get("html") or ""), (r.get("html") or "")[:300])
     check("dry run lists the blanks", r.get("blanks") == ["__ course __", "__ time __"], r.get("blanks"))
     r = rm.send_recap_draft(name, "AUSTIN", to="pat@gmail.com", dry_run=False, db_path=tmp)
     check("a member recipient is refused before any send", "staff only" in (r.get("error") or ""), r)

@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.522.35";
+window.TGF_VERSION = "2.522.36";
 window.TGF_CHANGELOG = [
+    {
+        version: "2.522.36",
+        date: "2026-09-30",
+        title: "Recap draft email says to paste from the email; membership decides CAPS",
+        changes: [
+            "Kerry 2026-09-30: \"the Word document is nice, but when I opened it and copied it into the Golf Genius editor, it lost all formatting. I had to copy from the email that was sent instead...and that maintained all the formatting.\" The recap-draft email's cover now tells the sender to copy the recap from the email and paste it into Golf Genius, and says the attached Word file is a reference copy that loses formatting in that editor. test_recap_mail.py checks the wording.",
+            "event-recaps.md lessons 53, 54, 65 and 66. CAPS follows membership, not chapter: Lou Schneider (customer 85, active member through 3/15/2027, alias Louis Schneider) is capped in the other chapter's recap too, and each name is checked by customer_id at draft time. The course name links the chapter's generic results page (always the latest event), and FULL EVENT RESULTS is the event-specific link. After Golf Genius, results links move to the Tracker's own pages and player names link to their Spotlight page; that deep link already works (/member/spotlight?player=<customer_id>)."
+        ]
+    },
     {
         version: "2.522.35",
         date: "2026-09-30",

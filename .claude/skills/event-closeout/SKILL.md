@@ -346,10 +346,15 @@ read it — but do not redo it either.
     `<portal>/pages/<results page>?round_id=<gg league round id>`, and
     the course name in the lede links the same page WITHOUT the round
     id. Event Results pages: **SA `pages/5783307`, Austin
-    `pages/5790752`** (`insider.py` RESULTS_PAGES). `pages/5783305` is
-    SA's SCHEDULE page — the a9.24/a9.25 drafts linked it by mistake.
+    `pages/5790752`** (`insider.py` RESULTS_PAGES) — the GENERIC page,
+    always the latest event; FULL EVENT RESULTS adds `?round_id=` for
+    this event. `pages/5783305` is SA's SCHEDULE page — the a9.24/a9.25
+    drafts linked it by mistake. CAPS a name by MEMBERSHIP (look the
+    customer_id up), never by chapter. Robert and Kerry paste from the
+    draft EMAIL; the Word file loses its formatting in the Golf Genius
+    editor.
     **Template of record: Kerry's s9.25 send** (event-recaps.md lessons
-    52–64: whole name bold with CAPS surname, both chapters' member
+    52–66: whole name bold with CAPS surname, both chapters' member
     standings links, "… POINTS IS FINAL." when a month is decided, the
     green Hole-in-One block between rules, the spacing the renderers
     now produce).

@@ -298,13 +298,24 @@ now produce his layout, so lessons 62–64 are built in, not remembered):
     sentence or a list, partners included (`**Jeff YOUNG**, **Pat YOUNGS**
     and **Justin ANGELONE**`). Supersedes the bold-surname-only form of
     lessons 30 and 45.
-53. **The other chapter's people get the same treatment.** Austin's Lou
-    Schneider in the SA head-to-head became `**Lou SCHNEIDER**` (the draft
-    had him plain). A first-timer who is not a member is bold but not
-    capped (`**Lance Vest**` in NEW FACES).
-54. **The course name in the lede links to the chapter's Event Results
-    page with NO round id** (`https://tgf-sa.golfgenius.com/pages/5783307`);
-    only FULL EVENT RESULTS carries `?round_id=`. **Austin's Event Results
+53. **CAPS follows MEMBERSHIP, never chapter.** The draft left Austin's
+    Lou Schneider plain in the SA head-to-head as if an other-chapter name
+    were a guest; Kerry capped him. Kerry 2026-09-30: "Lou SCHNEIDER is a
+    member. Verify. Former (alias) was Louis SCHNEIDER." Verified:
+    customer 85, `active_member` through 2027-03-15, alias "Louis
+    Schneider" on the same record (GG and the handicap link still carry
+    "Louis"). **Draft-time check: every person named in a recap is looked
+    up by customer_id (`list_customer_contacts` / `get_customer_profile`)
+    and capped when `current_player_status` is a member status**, whatever
+    chapter, whatever name spelling the source used. A first-timer or
+    guest who is not a member is bold but not capped (`**Lance Vest**`).
+54. **Two different results links, on purpose** (Kerry 2026-09-30: "I gave
+    you the generic results links for San Antonio and Austin which just
+    shows the latest event results. Then I gave the specific event results
+    for the FULL EVENT RESULTS"). The course name in the lede links the
+    chapter's GENERIC Event Results page, no round id — it always shows
+    the latest event (`https://tgf-sa.golfgenius.com/pages/5783307`); FULL
+    EVENT RESULTS is the event-SPECIFIC link with `?round_id=`. **Austin's Event Results
     page is `pages/5790752`** — `pages/5783305` (which the a9.24 and a9.25
     drafts used) is San Antonio's SCHEDULE page served on the Austin host.
     The Insider already had it right (`insider.py` RESULTS_PAGES); read it
@@ -344,6 +355,22 @@ now produce his layout, so lessons 62–64 are built in, not remembered):
     head; `{green}…{/green}` = green text (`#27ae60`, Kerry's color). Both
     renderers read them; neither leaks into the paste.
 
+65. **The EMAIL is the paste source, not the Word file** (Kerry
+    2026-09-30: "the Word document is nice, but when I opened it and
+    copied it into the Golf Genius editor, it lost all formatting. I had
+    to copy from the email that was sent instead...and that maintained all
+    the formatting."). The draft email's cover now says so; the .docx
+    stays attached as a reference copy.
+66. **After Golf Genius (Kerry 2026-09-30):** "When we ditch Golf Genius,
+    obviously we're changing links to our own pages. It will also be nice
+    to tie in hyperlinks to each player to their player spotlight page."
+    Results links move to the Tracker's own event pages at cutover, and
+    every player name links to his Spotlight page. The deep link already
+    exists: `https://tgf-tracker.up.railway.app/member/spotlight?player=<customer_id>`
+    (spotlight.html reads `?player=`), and the recap already knows each
+    player's customer_id — so the player links can ship before the
+    results links do, on Kerry's word.
+
 Draft-time checklist derived from the above: two-week trend table for
 the headliner (previous event's card + payout), team score on Team Net,
 acquisition source per first-timer, links for every proper noun, both
@@ -352,7 +379,7 @@ could read as a dig.
 
 ## Sent template of record — s9.25 Canyon Springs (Kerry's send, 2026-09-30)
 
-The SA section of `recaps/2026-09-29-s9.25-canyon-springs-a9.25-star-ranch.md` is the current template of record: text, markup and spacing (lessons 52–64). The older templates below are kept as history.
+The SA section of `recaps/2026-09-29-s9.25-canyon-springs-a9.25-star-ranch.md` is the current template of record: text, markup and spacing (lessons 52–66). The older templates below are kept as history.
 
 ## Sent template of record — s9.22 Silverhorn (Kerry's send, 2026-09-10)
 

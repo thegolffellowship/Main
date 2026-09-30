@@ -234,15 +234,20 @@ def send_recap_draft(file_name: str, section: str, to=None, cc=None,
     recap_html = recap_html.replace("\u2028", "<br>")
     blanks = sorted(set(BLANK_RE.findall(body)))
     title = re.sub(r"\s*\((?:DRAFT|SENT)[^)]*\)\s*$", "", heading).strip()
-    cover = [f"<p>Recap draft for <strong>{_html.escape(title)}</strong>, ready to paste "
-             "into Golf Genius.</p>"]
+    # Kerry 2026-09-30: the Word file "lost all formatting" when pasted into
+    # the Golf Genius editor; copying from this email kept it. The email
+    # body is the paste source; the .docx is a reference copy.
+    cover = [f"<p>Recap draft for <strong>{_html.escape(title)}</strong>. "
+             "<strong>Copy the recap from this email</strong> (below the orange line) "
+             "and paste it into Golf Genius; it keeps the formatting.</p>"]
     if blanks:
         cover.append("<p>Yours to fill (highlighted below): "
                      + ", ".join(_html.escape(f"[{b}]") for b in blanks) + ".</p>")
     else:
         cover.append("<p>No blanks left to fill.</p>")
     if attach:
-        cover.append(f"<p>The Word version is attached ({_html.escape(attach[0])}).</p>")
+        cover.append(f"<p>The Word version is attached ({_html.escape(attach[0])}) for "
+                     "reference; pasting from Word into Golf Genius loses the formatting.</p>")
     if member_subject:
         cover.append(f"<p><strong>Subject:</strong> {_html.escape(member_subject)}</p>")
     cover.append('<hr style="border:0;border-top:2px solid #E87C3E">')
