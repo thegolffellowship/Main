@@ -12,7 +12,10 @@ _STATUSES = ("active_member", "expired_member", "active_guest", "inactive", "fir
 
 
 def query_customers(gender: str = "", chapter: str = "", status: str = "",
-                    played_since: str = "", limit: int = 500, db_path=None) -> dict:
+                    played_since: str = "", limit: int = 500, include_vendors: bool = False,
+                    db_path=None) -> dict:
+    """Vendor profiles (role=vendor) are people-list noise and are left out
+    unless include_vendors=True (#1075-3)."""
     from email_parser import database as db
     where, args = ["COALESCE(c.account_status, 'active') = 'active'"], []
     g = (gender or "").strip().upper()
@@ -45,6 +48,8 @@ def query_customers(gender: str = "", chapter: str = "", status: str = "",
                            AND substr(e.event_date, 1, 10) >= ?) AS rounds_since
                   FROM customers c
                  WHERE {' AND '.join(where)}""", [year_from] + args).fetchall()
+        vendors = set() if include_vendors else db.vendor_customer_ids(conn)
+    rows = [r for r in rows if r["customer_id"] not in vendors]
     out = [{"customer_id": r["customer_id"],
             "name": f"{r['first_name'] or ''} {r['last_name'] or ''}".strip(),
             "chapter": r["chapter"], "status": r["status"],
@@ -52,7 +57,8 @@ def query_customers(gender: str = "", chapter: str = "", status: str = "",
     out.sort(key=lambda x: (x["status"] != "active_member", -(x["rounds_since"] or 0),
                             (x["name"] or "").lower()))
     return {"count": len(out), "shown": min(len(out), limit), "rounds_since": year_from,
-            "filters": {"gender": g or None, "chapter": chapter or None, "status": st or None},
+            "filters": {"gender": g or None, "chapter": chapter or None, "status": st or None,
+                        "vendors": "included" if include_vendors else f"excluded ({len(vendors)})"},
             "customers": out[:limit]}
 
 
@@ -125,10 +131,14 @@ def set_customer_field(customer_ids, field: str, value, reason: str, kerry_ok_po
         rows = {r["customer_id"]: r["gender"] for r in conn.execute(
             f"SELECT customer_id, gender FROM customers WHERE customer_id IN ({ph})", ids).fetchall()}
         missing = [i for i in ids if i not in rows]
+        # A vendor profile is not a person: no gender (#1075-3).
+        vendors = db.vendor_customer_ids(conn)
+        skipped_vendors = [i for i in ids if i in rows and i in vendors]
         changes = [{"customer_id": i, "before": rows[i], "after": value}
-                   for i in ids if i in rows and (rows[i] or None) != value]
+                   for i in ids if i in rows and i not in vendors and (rows[i] or None) != value]
         out = {"field": field, "value": value, "authority": why, "reason": reason,
-               "missing": missing, "unchanged": len(rows) - len(changes),
+               "missing": missing, "skipped_vendors": skipped_vendors,
+               "unchanged": len(rows) - len(changes) - len(skipped_vendors),
                "changes": len(changes), "sample": changes[:10], "dry_run": not apply}
         if not apply or not changes:
             return out

@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.522.52";
+window.TGF_VERSION = "2.522.53";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.522.53",
+    date: "2026-09-30",
+    title: "The N/H flag, and vendor profiles out of people lists",
+    changes: [
+      "Kerry approved an explicit N/H flag (\"Good on both\", #1078). In the missing-handicap banner, a manager can now tap Play N/H beside a player with no handicap: the warning clears for that player, the roster's HCP cell reads N/H (desktop and phone), and Side Games' engine sees the player as N/H through one reader, event_nh_players. Their scores are still entered; a blind stands in for their money. Undo N/H clears it and keeps the history. It is refused for a player who has a handicap or isn't on the roster, and every change is logged. New table event_nh_flags (migration 0003).",
+      "Vendor profiles (Anthropic, Brevo, Arcis Golf, Alamo City Golf Trail and the rest of the role=vendor set) stay in customers so vendor spend links to them, but they no longer appear in people lists: the pairings roster, the missing-handicap warning, query_customers (unless include_vendors) and gender writes (reported as skipped_vendors). One test, database.vendor_customer_ids (CFO's proposal, approved #1075-3)."
+    ]
+  },
   {
     version: "2.522.52",
     date: "2026-09-30",

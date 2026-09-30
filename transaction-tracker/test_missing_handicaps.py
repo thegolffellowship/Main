@@ -68,3 +68,44 @@ def test_setting_a_starting_handicap_clears_the_player():
     db.set_starting_handicap(4, 24.0, set_by="test", db_path=tmp)
     names = [p["name"] for p in hw.missing_handicaps(1, db_path=tmp)["players"]]
     assert "Dee Newbie" not in names and len(names) == 2
+
+
+def test_nh_flag_moves_player_out_of_the_warning_and_back():
+    from email_parser import nh_flags
+    tmp = _fixture()
+    r = nh_flags.set_nh(1, 4, True, set_by="manager:test", db_path=tmp)
+    assert r["nh"] is True and r["before"] is False
+    m = hw.missing_handicaps(1, db_path=tmp)
+    assert [p["name"] for p in m["nh_players"]] == ["Dee Newbie"]
+    assert "Dee Newbie" not in [p["name"] for p in m["players"]] and m["count"] == 2
+    with db._connect(tmp) as c:
+        assert nh_flags.event_nh_players(c, 1) == {4}
+    nh_flags.set_nh(1, 4, False, set_by="manager:test", db_path=tmp)
+    m = hw.missing_handicaps(1, db_path=tmp)
+    assert m["count"] == 3 and m["nh_players"] == []
+    with db._connect(tmp) as c:  # the row is kept, cleared, not deleted
+        assert c.execute("SELECT nh FROM event_nh_flags WHERE event_id=1 AND customer_id=4").fetchone()[0] == 0
+
+
+def test_nh_flag_refused_for_a_player_with_a_handicap_or_off_the_roster():
+    from email_parser import nh_flags
+    tmp = _fixture()
+    assert "refused" in nh_flags.set_nh(1, 1, True, set_by="t", db_path=tmp)   # Ann has an index
+    assert "refused" in nh_flags.set_nh(1, 999, True, set_by="t", db_path=tmp)
+
+
+def test_vendor_rows_are_not_people():
+    from email_parser.customer_query import query_customers, set_customer_field
+    tmp = _fixture()
+    with db._connect(tmp) as c:
+        c.execute("INSERT INTO customers (customer_id, first_name, last_name, acquisition_source) "
+                  "VALUES (394, 'Anthropic', '', 'vendor')")
+        c.execute("INSERT INTO platform_dialogue (author, topic, body) VALUES ('kerry', 'x', 'ok')")
+        c.commit()
+        post = c.execute("SELECT MAX(id) FROM platform_dialogue").fetchone()[0]
+        assert 394 in db.vendor_customer_ids(c)
+    ids = [x["customer_id"] for x in query_customers(db_path=tmp)["customers"]]
+    assert 394 not in ids and 1 in ids
+    assert 394 in [x["customer_id"] for x in query_customers(include_vendors=True, db_path=tmp)["customers"]]
+    r = set_customer_field([394, 4], "gender", "M", "t", post, db_path=tmp)
+    assert r["skipped_vendors"] == [394] and r["changes"] == 1

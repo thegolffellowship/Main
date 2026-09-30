@@ -590,3 +590,12 @@ confirmed by Tracker Build #1055. Created by `migrations/0002_customer_ambassado
   `scoring-ambassador-set:<json>` (write, dry run by default).
 - **Guard:** `test_ambassadors.py` fails if any other module queries the table
   directly.
+
+## `event_nh_flags` — the N/H flag (Kerry "Good on both", CoS #1078, v2.522.53)
+
+`(event_id → events.id, customer_id → customers, nh 0|1, set_by, set_at, note)`,
+PRIMARY KEY (event_id, customer_id), `migrations/0003_event_nh_flags.sql`.
+A manager marks a player with no handicap as N/H for one event; Side Games'
+engine plays them at zero with a blind for the money. Clearing sets nh = 0
+and keeps the row. Read ONLY through `nh_flags.event_nh_players(conn,
+event_id)`; written only by `nh_flags.set_nh` (logged). See handicaps.md.

@@ -3077,19 +3077,60 @@
             console.error("fetchMissingHcp:", err);
         }
     }
+    // N/H FLAG (Kerry, "Good on both", CoS #1078): a manager marks a player
+    // with no handicap as N/H for this event. The server keeps the flag
+    // (event_nh_flags); the page reads it from the same payload.
+    function isNhFlagged(ev, cid) {
+        const m = ev && missingHcp[ev.id];
+        return !!(m && cid && (m.nh_players || []).some(p => String(p.customer_id) === String(cid)));
+    }
+    const _nhBtn = (ev, p, on) => p.customer_id
+        ? ` <button class="btn-nh-set" data-event-id="${ev.id}" data-customer-id="${p.customer_id}" data-nh="${on ? 1 : 0}"
+             style="margin-left:6px;border:1px solid #c2410c;background:#fff;color:#c2410c;border-radius:999px;
+                    padding:2px 10px;font-size:0.8rem;font-weight:700;cursor:pointer;min-height:28px;"
+             title="${on ? 'Play this player N/H: scores still entered, a blind stands in for the money' : 'Clear N/H'}"
+             >${on ? 'Play N/H' : 'Undo N/H'}</button>` : '';
+    async function setNhFlag(evId, cid, on) {
+        try {
+            const res = await fetch(`/api/events/${evId}/nh`, {method: "POST",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({customer_id: cid, nh: !!on})});
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) { alert(data.refused || data.error || "Could not save N/H."); return; }
+            const ev = allEvents.find(e => e.id === evId);
+            if (!ev) return;
+            await fetchMissingHcp(ev);
+            rerenderDetail(detailContainerFor(ev.id), ev);
+        } catch (err) { console.error("setNhFlag:", err); alert("Could not save N/H."); }
+    }
+    document.addEventListener("click", e => {
+        const b = e.target.closest && e.target.closest(".btn-nh-set");
+        if (!b) return;
+        e.preventDefault(); e.stopPropagation();
+        setNhFlag(parseInt(b.dataset.eventId), parseInt(b.dataset.customerId), b.dataset.nh === "1");
+    });
     function missingHcpBannerHtml(ev) {
         const m = ev && missingHcp[ev.id];
-        if (!m || !m.count || !m.upcoming) return '';
+        if (!m || !m.upcoming) return '';
+        const nhList = (m.nh_players || []);
+        if (!m.count && !nhList.length) return '';
+        const nhRow = nhList.length
+            ? `<div style="margin-top:0.3rem;color:#374151;">Playing N/H: ${nhList.map(p =>
+                  `${escapeHtml(p.name)}${_nhBtn(ev, p, false)}`).join(', ')}</div>` : '';
+        if (!m.count) {
+            return `<div class="hcp-missing-warn hcp-nh-only" style="white-space:normal;background:#F8F8F8;border:1px solid #E5E7EB;
+                border-radius:8px;padding:0.45rem 0.75rem;margin:0 0 0.6rem;font-size:0.85rem;">${nhRow}</div>`;
+        }
         const rows = (m.players || []).map(p =>
-            `<li><b>${escapeHtml(p.name)}</b>${p.status ? ` <span style="color:#6B7280;">(${escapeHtml(String(p.status).replace(/_/g, ' '))})</span>` : ''}: ${escapeHtml(p.fix)}</li>`).join('');
+            `<li><b>${escapeHtml(p.name)}</b>${p.status ? ` <span style="color:#6B7280;">(${escapeHtml(String(p.status).replace(/_/g, ' '))})</span>` : ''}: ${escapeHtml(p.fix)}${_nhBtn(ev, p, true)}</li>`).join('');
         return `<div class="hcp-missing-warn" role="alert"
             style="white-space:normal;background:#fff7ed;border:1px solid #fb923c;border-left:4px solid #E87C3E;
                    border-radius:8px;padding:0.55rem 0.75rem;margin:0 0 0.6rem;font-size:0.85rem;color:#1B1B1B;">
             <div style="font-weight:700;">&#9888; ${escapeHtml(m.message)}</div>
             <details style="margin-top:0.25rem;"><summary style="cursor:pointer;color:#c2410c;">How to fix</summary>
               <ul style="margin:0.35rem 0 0.25rem 1.1rem;padding:0;">${rows}</ul>
-              <div style="color:#6B7280;">Set it from the roster: tap the orange dash in the HCP column. ${escapeHtml(m.nh_note || '')}</div>
-            </details></div>`;
+              <div style="color:#6B7280;">Set it from the roster: tap the orange dash in the HCP column. Or tap Play N/H: their scores are still entered and a blind stands in for their money.</div>
+            </details>${nhRow}</div>`;
     }
 
     async function ensureHcpAsOf(ev) {
@@ -3119,7 +3160,7 @@
             >${label}</button>`});
         if (lh === undefined) {
             if (r.handicap) return r.handicap;
-            return r.customer_id ? btn("\u2014 Set", "", "") : "\u2014";
+            return r.customer_id ? btn(isNhFlagged(ev, r.customer_id) ? "N/H" : "\u2014 Set", "", "") : "\u2014";
         }
         const shown = showHcp18Only ? lh.index_18.toFixed(1) : (lh.index_9.toFixed(1) + 'N');
         if (lh.source === "starting" && r.customer_id) {
@@ -9489,11 +9530,11 @@
                             ? `<td style="${style}"><button class="btn-set-hcp"
                                  data-customer-id="${r.customer_id}"
                                  data-player="${escapeHtml(r.customer || '')}"
-                                 title="No handicap on record — click to set a starting handicap"
+                                 title="${isNhFlagged(ev, r.customer_id) ? 'Playing N/H this event — click to set a starting handicap instead' : 'No handicap on record — click to set a starting handicap'}"
                                  style="background:#fff7ed;border:1px dashed #fb923c;color:#c2410c;
                                         border-radius:6px;padding:1px 9px;font-size:0.78rem;
                                         font-weight:700;cursor:pointer;line-height:1.5;"
-                                 >&mdash;</button></td>`
+                                 >${isNhFlagged(ev, r.customer_id) ? 'N/H' : '&mdash;'}</button></td>`
                             : `<td style="${style}" title="No handicap, and this registration is not linked to a customer record">\u2014</td>`;
                     }
                 } else if (c.key === "holes") {

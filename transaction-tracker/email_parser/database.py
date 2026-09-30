@@ -67238,6 +67238,24 @@ def _event_rsvp_only_players(conn, event_id: int) -> list[dict]:
     return out
 
 
+def vendor_customer_ids(conn) -> set:
+    """Customer rows that are VENDORS, not people (CFO #1066-6, approved
+    CoS #1075-3 / Front Desk routing 9/30): the counterparty profiles
+    Anthropic, Brevo, Arcis Golf, Alamo City Golf Trail and the rest of the
+    role=vendor set. They stay in `customers` so vendor spend links to them,
+    and they NEVER appear in a people list (gender, pairings, rosters,
+    query_customers). One test, read in one place: a `customer_roles` row
+    with role_type 'vendor', or acquisition_source 'vendor'."""
+    out: set = set()
+    for sql in ("SELECT customer_id FROM customer_roles WHERE lower(role_type) = 'vendor'",
+                "SELECT customer_id FROM customers WHERE lower(COALESCE(acquisition_source, '')) = 'vendor'"):
+        try:
+            out |= {int(r[0]) for r in conn.execute(sql).fetchall() if r[0] is not None}
+        except sqlite3.OperationalError:
+            pass
+    return out
+
+
 def _event_roster_rows(conn, event_id: int) -> list[dict]:
     """THE pairings roster: one row per active order row plus one per
     PLAYING GG RSVP with no order (`_event_rsvp_only_players`). Every
@@ -67294,10 +67312,13 @@ def _event_roster_rows(conn, event_id: int) -> list[dict]:
         ev_year = None
     out: list[dict] = []
     keys: set = set()
+    _vendors = vendor_customer_ids(conn)
     for r in rows:
         d = dict(r)
         if not (d.get("customer") or "").strip():
             continue
+        if d.get("customer_id") is not None and int(d["customer_id"]) in _vendors:
+            continue  # a vendor profile is never a player (#1075-3)
         d["name"] = d["customer"]
         d["rsvp_only"] = (d.get("transaction_status") or "active") == "rsvp_only"
         # A row saved without a tee (RSVP Only, a comp, an order form that
@@ -67313,6 +67334,8 @@ def _event_roster_rows(conn, event_id: int) -> list[dict]:
         keys.add(_pair_key_name(d["customer"]))
     for d in _event_rsvp_only_players(conn, event_id):
         if _pair_key_name(d["name"]) in keys:
+            continue
+        if d.get("customer_id") is not None and int(d["customer_id"]) in _vendors:
             continue
         _decorate_roster_roles(d, ev_year)
         out.append(d)

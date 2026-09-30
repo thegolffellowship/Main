@@ -8413,6 +8413,26 @@ def api_event_missing_handicaps(event_id):
     return jsonify(res), (404 if res.get("error") else 200)
 
 
+@app.route("/api/events/<int:event_id>/nh", methods=["POST"])
+@require_role("manager")
+def api_event_set_nh(event_id):
+    """Mark (or clear) a player as N/H for this event (Kerry, "Good on both",
+    CoS #1078). Body: customer_id, nh (bool), optional note. Refused for a
+    player not on the roster or one who has a handicap. Logged."""
+    from email_parser.nh_flags import set_nh
+    body = request.get_json(silent=True) or {}
+    who = session.get("role") or "unknown"
+    if session.get("chapter"):
+        who += f" ({session.get('chapter')})"
+    try:
+        cid = int(body.get("customer_id"))
+    except (TypeError, ValueError):
+        return jsonify({"error": "customer_id is required"}), 400
+    res = set_nh(event_id, cid, bool(body.get("nh")), set_by=f"manager:{who}",
+                 note=(body.get("note") or "").strip())
+    return jsonify(res), (409 if res.get("refused") else 200)
+
+
 @app.route("/api/events/<int:event_id>/flights-board")
 @require_role("manager")
 @perf.timed_route("flights_board")

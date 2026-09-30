@@ -53,7 +53,9 @@ def missing_handicaps(event_id: int, db_path=None) -> dict:
             return {"error": f"no event {event_id}"}
         ev = dict(ev)
         hcp = db._roster_handicap_index_map(conn, as_of=db._event_index_as_of(ev), db_path=db_path)
-        seen, players = set(), []
+        from email_parser.nh_flags import event_nh_players
+        nh_ids = event_nh_players(conn, int(event_id))
+        seen, players, nh_players = set(), [], []
         for r in db._event_roster_rows(conn, int(event_id)):
             cid = r.get("customer_id")
             name = (r.get("customer") or r.get("name") or "").strip()
@@ -76,10 +78,13 @@ def missing_handicaps(event_id: int, db_path=None) -> dict:
             else:
                 case = "new"
                 fix = "no rounds on file: ask for their current index and " + FIX_75
-            players.append({"customer_id": cid, "name": name, "case": case,
-                            "rounds_on_file": n_rounds,
-                            "status": r.get("current_player_status") or r.get("user_status"),
-                            "rsvp_only": bool(r.get("rsvp_only")), "fix": fix})
+            row = {"customer_id": cid, "name": name, "case": case,
+                   "rounds_on_file": n_rounds,
+                   "status": r.get("current_player_status") or r.get("user_status"),
+                   "rsvp_only": bool(r.get("rsvp_only")), "fix": fix}
+            # Marked N/H by a manager (CoS #1078): no longer a warning; the
+            # player plays at zero and Side Games' blind stands in for money.
+            (nh_players if cid and int(cid) in nh_ids else players).append(row)
     from email_parser.timezone_utils import today_central_str
     upcoming = str(ev.get("event_date") or "")[:10] >= today_central_str()
     players.sort(key=lambda p: p["name"].lower())
@@ -88,7 +93,8 @@ def missing_handicaps(event_id: int, db_path=None) -> dict:
            + ", ".join(p["name"] for p in players)) if n else ""
     return {"event_id": int(event_id), "event": ev.get("item_name"),
             "event_date": ev.get("event_date"), "upcoming": upcoming, "count": n, "message": msg,
-            "players": players, "nh_note": NH_NOTE if n else ""}
+            "players": players, "nh_players": sorted(nh_players, key=lambda p: p["name"].lower()),
+            "nh_note": NH_NOTE if n else ""}
 
 
 def upcoming_missing_handicaps(days: int = 14, db_path=None) -> dict:
