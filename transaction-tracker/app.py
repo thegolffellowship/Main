@@ -5632,6 +5632,21 @@ def api_send_print_pack(event_id):
     return jsonify(res), (200 if res.get("sent") else 502)
 
 
+@app.route("/events/<int:event_id>/games-payouts")
+@require_role("manager")
+def games_payouts_page(event_id):
+    """Print-optimized GAMES & PAYOUTS sheet (CD #967 + Kerry's 9/29
+    amendments): every pot, place, entrant count and total read from the
+    event's own GAMES tab (run headless by page_probe), CTP holes from the
+    Proximity report, Stableford values from the scoring formulas, the HIO
+    pot from its ledger. One Letter page."""
+    from email_parser.games_sheet import build_games_sheet
+    gs = build_games_sheet(event_id)
+    if not gs:
+        return "Event not found", 404
+    return render_template("games_payouts.html", gs=gs)
+
+
 @app.route("/events/<int:event_id>/divisions-flights")
 @require_role("manager")
 def divisions_flights_page(event_id):

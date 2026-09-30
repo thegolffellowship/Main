@@ -1,0 +1,7 @@
+{"event":{"id":267,"item_name":"s18.4 LANDA PARK","event_date":"2026-04-11","course":"Landa Park Golf Course","chapter":"San Antonio","format":"18 Holes"},
+"holes":18,"counts":{"players":32,"net":20,"gross":15,"no_games":11,"not_playing":0},
+"sections":[
+{"section":"INCLUDED GAMES (32 players)","rows":[{"game":"TEAM Net","pot":"$256","1st":"$170.67","2nd":"$85.33"},{"game":"CTP #1","pot":"$32"},{"game":"CTP #2","pot":"$32"},{"game":"CTP #3","pot":"$32"},{"game":"CTP #4","pot":"$32"}],"subtotal":{"pot":"$384"}},
+{"section":"NET GAMES (20 players)","rows":[{"game":"Individual Net","pot":"$420","flights":"2"},{"game":"Low Flight","1st":"$105","2nd":"$63","3rd":"$42","4th":"—","sub":true},{"game":"High Flight","1st":"$105","2nd":"$63","3rd":"$42","4th":"—","sub":true},{"game":"City MVP (incl. TGF $, capped)","pot":"$100"}],"subtotal":{"pot":"$520"}},
+{"section":"GROSS GAMES (15 players)","rows":[{"game":"Skins Gross","pot":"$270","flights":"2"},{"game":"Per skin","sub":true},{"game":"Ind. Gross","pot":"$120","mwp":"$40","flights":"3","1st":"1st: $40"}],"subtotal":{"pot":"$390"}}],
+"total":{"pot":"$1294","mwp":"$550.67"},"buckets":null,"empty":null,"mvp_link":null}

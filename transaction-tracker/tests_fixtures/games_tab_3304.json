@@ -1,0 +1,9 @@
+{"event":{"id":3304,"item_name":"s9.25 Canyon Springs","event_date":"2026-09-29","course":"Canyon Springs Golf Club","chapter":"San Antonio","format":"9 Holes"},
+"holes":9,"counts":{"players":25,"net":17,"gross":13,"no_games":6,"not_playing":2},
+"sections":[
+{"section":"INCLUDED GAMES (25 players)","rows":[{"game":"TEAM Net","pot":"$100","mwp":"$25","1st":"$100","2nd":"—"},{"game":"CTP #1","pot":"$25","mwp":"$25"},{"game":"CTP #2","pot":"$25","mwp":"$25"}],"subtotal":{"game":"Subtotal","pot":"$150","mwp":"$75"}},
+{"section":"NET GAMES (17 players)","rows":[{"game":"Individual Net","pot":"$153","mwp":"$51","flights":"2"},{"game":"Low Flight","mwp":"$51","1st":"$51","2nd":"$25.50","3rd":"—","4th":"—","sub":true},{"game":"High Flight","mwp":"$51","1st":"$51","2nd":"$25.50","3rd":"—","4th":"—","sub":true},{"game":"City MVP","pot":"$34","mwp":"$34"},{"game":"TGF MVP 🔗","pot":"$68","mwp":"$68"},{"game":"Canyon Springs Golf Club","pot":"$34","sub":true},{"game":"The Golf Club at Star Ranch ✖","pot":"$34","sub":true}],"subtotal":{"game":"Subtotal","pot":"$255","mwp":"$153"}},
+{"section":"GROSS GAMES (13 players)","rows":[{"game":"Skins Gross","pot":"$169","mwp":"$84.50","flights":"2"},{"game":"Per skin: 1=$84.50","sub":true},{"game":"Ind. Gross","note":"No Game","disabled":true}],"subtotal":{"game":"Subtotal","pot":"$169","mwp":"$84.50"}}],
+"total":{"pot":"$574","mwp":"$312.50"},"buckets":null,"empty":null,
+"mvp_link":{"combined_pot":68,"this_event_tgf_mvp":34,"this_chapter":"San Antonio","linked":[{"event_name":"a9.25 Star Ranch","course":"The Golf Club at Star Ranch","tgf_mvp":34,"chapter":"Austin"}]},
+"source":"test fixture copied from production get_event_games 2026-09-30"}

@@ -1,5 +1,16 @@
-window.TGF_VERSION = "2.524.1";
+window.TGF_VERSION = "2.524.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.524.2",
+    date: "2026-10-04",
+    title: "Games & Payouts sheet (Kerry: \"good for now\", 10/3): one Letter page on the REPORTS tab and in the print pack",
+    changes: [
+      "The Games & Payouts sheet design-claude specified in #967 and Kerry approved on 9/29, with all five of his amendments: FIELD on two lines, Individual Gross from 16 gross entrants on a nine, the Event MVP \"Tiebreakers: 1st = Total Net | 2nd = Total Gross | 3rd = Split winnings.\" line, a Net Stableford Points box under the MVPs, and \"Ties: winners split pot\" on the other games. At /events/<id>/games-payouts (manager+), on the REPORTS tab, and in the print pack after the scorecards.",
+      "Every figure is the GAMES tab's own: email_parser/games_sheet.py reads the Events page's renderGamesPanel through the same headless probe as get_event_games, so the sheet and the tab can't disagree. The probe now also returns the same-day TGF MVP link (other city, event and share). CTP lines say \"Hole n\" from the Proximity report's par-3s; the Stableford values come from get_scoring_formulas (the championship table on championship events); the Hole-in-One band comes from the HIO ledger (the running pot through the day plus each city's add today). Rule text lives in one place, GAME_RULES.",
+      "The pot check adds the four buckets and must equal the tab's TOTAL. A mismatch is a warning on screen and in the print pack's result, never a silent print. A course with no hole card prints a blank hole number and says so. A bucket-account event prints no sheet and says why.",
+      "One page, type never shrunk: when a long 18-hole field overflows, the Gross games carry over under the Stableford box, then the sheet tightens its spacing (not its type), and the proxies go two across. If it still can't fit, the screen says so. Guard: test_games_sheet.py (40 checks on two real GAMES-tab reads, s9.25 Canyon Springs and s18.4 Landa Park); test_readonly_tools.py parses a live probe read.",
+    ],
+  },
   {
     version: "2.524.1",
     date: "2026-10-03",

@@ -2784,13 +2784,58 @@ bridge `scoring-scorecards:<id>[|key=value…][|dump|html|pdf[|all][|send]]`.
   Live Scoring, Blinds and the Score Entry panel. Every report's Back goes
   to `/events?event=<id>&view=reports`. Guard `test_mobile_manager_parity.js`.
 
+## The GAMES & PAYOUTS sheet (v2.524.2, design-claude #967 + Kerry's 9/29 amendments)
+
+One Letter page for the players: every game's pot, places and write-in
+lines, the Net Stableford values the MVP is scored on, and the
+Hole-in-One pot. `/events/<id>/games-payouts` (manager+), the REPORTS
+tab, and the print pack (after the scorecards). Builder
+`email_parser/games_sheet.py`, template `templates/games_payouts.html`,
+guard `test_games_sheet.py`.
+
+- **Every figure is the GAMES tab's (the #897 rule).** `build_games_sheet`
+  reads the tab through `page_probe.event_games_tab` (the Events page's
+  own `renderGamesPanel`, headless, the same reader as `get_event_games`)
+  and parses its rows (`parse_games_tab`). Nothing recomputes a pot. The
+  probe also returns `mvp_link` (the page's `getMvpLinkedEvents`, with
+  each linked event's chapter) for the TGF MVP line.
+- **Other sources, each the one the tab itself leans on:** CTP hole
+  numbers from `event_proximity_report` ("Hole n"; "Putt · n" for a
+  Longest Putt; a blank "Hole ___" + a warning when the course has no hole
+  card, never "CTP #1"); Stableford from `get_scoring_formulas()`
+  (championship table on championship events); the HIO band from
+  `get_hio_pot()` (the running pot through the day, and each city's add
+  today); the Individual Gross minimum from the live matrix; the Team/Cart
+  Net allowance, off-the-low and par-3 rule from the same dials the
+  scorecards' legend reads.
+- **Entry fee in the strips** ("17 entrants @ $13") = section total ÷
+  entrants; the net section first takes out the OTHER city's TGF MVP share,
+  which sits in the tab's net subtotal but was not paid by these entrants.
+- **Rule text** lives in `GAME_RULES`, Kerry's words: "Ties: winners split
+  pot" on Team Net, Proxies ("Ball must be on the green."), Individual Net;
+  "Winners split pot by skins won." on Skins; Event MVP "Most net
+  Stableford points. Tiebreakers: 1st = Total Net | 2nd = Total Gross |
+  3rd = Split winnings."
+- **Pot check:** Team + CTP + Net + Gross must equal the tab's TOTAL. A
+  mismatch prints red in the footer and warns on screen and in the print
+  pack's `games_sheet` result; it is never silent. A bucket-account event
+  prints no sheet and says why.
+- **One page, type never shrinks:** if the left column (Included + Gross)
+  runs long, the Gross games carry over one block at a time into "Gross
+  Games (cont.)" under the Stableford box; if that isn't enough the sheet
+  goes `.tight` (less padding and row height, same type sizes, proxies two
+  across). Still too long → an on-screen warning (`data-fits="0"`).
+- **No green anywhere** (CD #967 §8): money is ink, section totals orange
+  on black. The test fails on any green hex.
+
 ## The event PRINT PACK — one bound PDF, mailed the evening before (v2.465.0)
 
 Kerry 2026-09-18: "a bound PDF with all of them in one that I could
 print, rather than each separately" / "Build the PDF routine and have it
 emailed to me."
 
-- **What:** Starter Sheet, Cart Signs, Divisions & Flights, Proximity
+- **What:** Starter Sheet, Cart Signs, (Scorecards), Games & Payouts
+  (v2.524.2), Divisions & Flights, Proximity
   Markers — the same templates the browser prints — rendered server-side
   by **headless Chromium** (Playwright, `email_parser/print_pack.py`),
   WeasyPrint as the fallback engine, and bound in that order (pypdf).

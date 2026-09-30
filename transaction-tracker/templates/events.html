@@ -6067,11 +6067,12 @@
         h += open("starter-sheet", "Starter Sheet", "Print starter sheet");
         h += open("cart-signs", "Cart Signs", "Print cart signs");
         h += open("scorecards", "Scorecards", "Print scorecards (GGID codes, layouts, Team/Cart Net)");
+        h += open("games-payouts", "Games &amp; Payouts", "Print the Games &amp; Payouts sheet — every pot, place and write-in line, from this GAMES tab");
         h += open("divisions-flights", "Divisions &amp; Flights", "Print Divisions &amp; Flights — NET, Skins and Gross on one page");
         h += open("proximity-markers", "Proximity", "Print Closest-to-the-Pin markers for the par 3s");
         // Kerry 2026-09-21: "there should be a button to SEND PACK" — the
         // bound PDF mailed now, on demand.
-        h += `<button class="pairings-action-btn send-pack-btn" onclick="sendPrintPack(${ev.id}, this)" title="Email the bound print pack (starter sheet, cart signs, scorecards, divisions & flights, proximity markers) now">&#x2709; Send Pack</button>`;
+        h += `<button class="pairings-action-btn send-pack-btn" onclick="sendPrintPack(${ev.id}, this)" title="Email the bound print pack (starter sheet, cart signs, scorecards, games & payouts, divisions & flights, proximity markers) now">&#x2709; Send Pack</button>`;
         h += '</div>';
         h += '<div style="font-size:0.75rem;color:var(--text-muted);margin-top:0.5rem;">Each report opens in a new tab with its own Print and Download PDF buttons.</div>';
         h += '</div>';

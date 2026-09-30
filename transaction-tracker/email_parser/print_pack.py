@@ -128,6 +128,26 @@ def build_event_print_pack(render, event_id: int, static_dir: str,
         except Exception:
             logger.exception("print pack: scorecards failed for event %s", event_id)
             sc_info = {"error": "scorecards failed to render; see the log"}
+    # GAMES & PAYOUTS (CD #967, Kerry 2026-09-29: "go in the print pack"),
+    # right after the scorecards (or the cart signs). Its figures are the
+    # GAMES tab's own; an event with no regular games (bucket accounts)
+    # prints no sheet and says why in `games_sheet`.
+    gs_info = None
+    if htmls:
+        try:
+            from email_parser.games_sheet import build_games_sheet
+            gs = build_games_sheet(int(event_id), db_path=db_path)
+            if gs and not gs.get("error"):
+                after = "scorecards" if any(sl == "scorecards" for sl, _ in htmls) else "cart-signs"
+                at = next((i + 1 for i, (sl, _) in enumerate(htmls) if sl == after), len(htmls))
+                htmls.insert(at, ("games-payouts", render("games_payouts.html", gs=gs)))
+                gs_info = {"fund": gs["fund"], "pot_check_ok": gs["pot_check"]["ok"],
+                           "warnings": gs["warnings"]}
+            elif gs:
+                gs_info = {"skipped": gs.get("error")}
+        except Exception:
+            logger.exception("print pack: games & payouts failed for event %s", event_id)
+            gs_info = {"error": "games & payouts failed to render; see the log"}
     if not htmls:
         return None
     sha = hashlib.sha256("\n".join(_hash_view(h) for _, h in htmls).encode("utf-8")).hexdigest()[:16]
@@ -155,7 +175,7 @@ def build_event_print_pack(render, event_id: int, static_dir: str,
                     "parts": [{"slug": s_, "pages": None} for s_, _ in htmls], "event": ev}
     from email_parser.database import print_file_stub as _pfs
     return {"pdf": pdf, "parts": parts, "sha": sha, "event": ev, "engine": engine,
-            "scorecards": sc_info,
+            "scorecards": sc_info, "games_sheet": gs_info,
             "engine_note": engine_note, "pack": sheet_pack,
             "assets": sorted(set(getattr(_render_pdf_chromium, "last_served", []))) if engine == "chromium" else None,
             # <stub>-PrintPack.pdf, the report file-name convention (Kerry 9/29).
