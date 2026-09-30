@@ -19,6 +19,15 @@ completely for the year."
 - Every email to Kerry goes through the Tracker's own mail path (bridge `scoring-mail-kerry`, requested in mailbox #1049/#1050). No Claude connector sends it; Microsoft 365 is read-only.
 - Until that bridge ships, the fallback is the mailbox plus the session notification.
 
+## System of record (from 9/30, v2.522.44)
+
+The Tracker's `sales_tax_filings` table is authoritative for filing status (bridges `scoring-sales-tax-filings` and `scoring-sales-tax-filing:<json>[|apply]`).
+
+- The six confirmed months are recorded with evidence `confirmation`. The 13 months Kerry says are paid are recorded as `kerry_word` (#1058, #1060).
+- August 2026 has no row, so it reads LATE.
+- This file keeps the working and the August return.
+- Delivery is `scoring-mail-kerry-send`: Kerry-only and live, with a dry run first through `scoring-mail-kerry`.
+
 ## The rule: a month is PAID only with evidence or Kerry's word
 
 The evidence is the WebFile **"Confirmation: You Have Filed Successfully"** PDF,
