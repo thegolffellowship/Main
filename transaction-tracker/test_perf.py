@@ -257,6 +257,14 @@ check("the warmer knows the Spotlight is in use but every entry is fresh", db.wa
 res = db.warm_spotlight(tmp, force=True); perf.flush(tmp)
 check("forced, it rebuilds every shared entry for the last-viewed player without counting as a page open",
       res["warmed"] is True and res["cid"] == 302 and res["entries"] >= 1 and db._SPOTLIGHT_LAST_USED["cid"] == 302, str(res))
+# A deploy restarts the process: the in-memory "last used" is gone. The
+# warmer must still know the Spotlight is in use (digest #1008: every first
+# open after a restart paid the whole cold build on event night).
+db._SPOTLIGHT_LAST_USED.update(at=0.0, cid=None, db_path=None)
+db._SPOTLIGHT_SHARED_CACHE.clear()
+res = db.warm_spotlight(tmp)
+check("after a restart the warmer reads the saved last-used and warms (no page pays the cold build)",
+      res.get("warmed") is True and res.get("cid") in (301, 302), str(res))
 check("the scheduler carries the spotlight_warm job", appmod.scheduler.get_job("spotlight_warm") is not None or os.getenv("EMAIL_ADDRESS") is None)
 for nm in ("spotlight_search", "contests_list", "points_race", "handicap_rounds", "payouts_list", "leads_list", "rsvps_list", "expense_queue", "ca_queue_list", "gg_history_overview", "action_items_list", "scoring_rounds", "matrix_get", "parse_warnings", "coo_action_items", "recon_unreconciled", "monthly_points"):
     pass

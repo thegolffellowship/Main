@@ -15382,6 +15382,13 @@ _SPOTLIGHT_SHARED_TTL = 120.0
 # (every race's live board + the two cup projections, ~3.5 s on the
 # fixture) then lands on the scheduler thread, never on a page open.
 _SPOTLIGHT_LAST_USED: dict = {"at": 0.0, "cid": None, "db_path": None}
+# The same fact, saved as app setting `spotlight_last_used` at most every
+# 10 minutes: every deploy restarts the process and empties the dict above,
+# so the warmer went quiet and the FIRST open after each restart paid the
+# whole cold build (9/29 event night, ~30 deploys: 18.0 s and 14.8 s opens,
+# Tracker Health digest #1008). The warmer reads it back after a restart.
+_SPOTLIGHT_PERSIST_EVERY_S = 600.0
+_SPOTLIGHT_PERSISTED_AT: dict = {"at": 0.0}
 _SPOTLIGHT_WARM_ACTIVE_S = 24 * 3600      # warm only if opened in the last day
 _SPOTLIGHT_WARM_AGE_S = 90.0              # rebuild entries older than this
 
@@ -15419,6 +15426,16 @@ def warm_spotlight(db_path=None, force: bool = False) -> dict:
     import time as _t
     now = _t.time()
     last = _SPOTLIGHT_LAST_USED
+    if not force and not last.get("cid"):
+        # Just restarted? The last open survives in app settings.
+        try:
+            saved = json.loads(get_app_setting("spotlight_last_used",
+                                               db_path=db_path or DB_PATH) or "null")
+        except Exception:
+            saved = None
+        if saved and saved.get("cid") and now - float(saved.get("at") or 0) <= _SPOTLIGHT_WARM_ACTIVE_S:
+            last.update(at=float(saved["at"]), cid=int(saved["cid"]),
+                        db_path=str(db_path or DB_PATH))
     if not force and (not last.get("cid") or now - last.get("at", 0) > _SPOTLIGHT_WARM_ACTIVE_S):
         return {"warmed": False, "why": "spotlight not in use"}
     path = db_path or last.get("db_path") or DB_PATH
@@ -15458,6 +15475,14 @@ def get_player_spotlight(customer_id: int,
     if _touch:
         import time as _t
         _SPOTLIGHT_LAST_USED.update(at=_t.time(), cid=int(customer_id), db_path=str(db_path))
+        if _t.time() - _SPOTLIGHT_PERSISTED_AT["at"] >= _SPOTLIGHT_PERSIST_EVERY_S:
+            _SPOTLIGHT_PERSISTED_AT["at"] = _t.time()
+            try:
+                set_app_setting("spotlight_last_used",
+                                json.dumps({"at": _t.time(), "cid": int(customer_id)}),
+                                db_path=db_path)
+            except Exception:
+                logger.debug("spotlight: could not save last-used", exc_info=True)
     with _connect(db_path) as conn:
         cust = conn.execute(
             """SELECT customer_id, first_name, last_name, suffix, chapter,

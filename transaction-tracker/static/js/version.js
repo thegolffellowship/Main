@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.522.33";
+window.TGF_VERSION = "2.522.34";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.522.34",
+    date: "2026-09-30",
+    title: "Spotlight stays warm across deploys",
+    changes: [
+      "On 9/29 event night two Player Spotlight opens took 18.0 s (a member) and 14.8 s. The warmer rebuilds the Spotlight's shared boards every 90 s, but only while it knows the Spotlight is in use, and it kept that in memory. Every deploy restarted the process and wiped it, so the first open after each of Tuesday's ~30 deploys paid the whole cold build.",
+      "The last open is now also saved as app setting spotlight_last_used, at most once every 10 minutes. After a restart the warmer reads it back and keeps warming. Guard: test_perf.py (after a simulated restart the warmer still warms).",
+    ],
+  },
   {
     version: "2.522.33",
     date: "2026-09-30",
