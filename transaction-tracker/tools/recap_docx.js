@@ -12,6 +12,7 @@
  * [text](url) → real hyperlink, lines "- " → bullets, a line of CAPS ending
  * in "." → section head (rule above, bold, all caps, empty line below),
  * a "***" line → a rule with no head, {green}…{/green} → green text,
+ * [[Name|customer_id]] → bold link to the player's Spotlight page,
  * "**Subject:** …" → subject line, "[__ …]" placeholders → yellow
  * highlight, blank line → new block. Blocks are separated by ONE empty
  * paragraph (no paragraph spacing), and the lines after "See you…" keep
@@ -42,11 +43,13 @@ const run = (t, o = {}) => new TextRun({ text: t, font: FONT, size: SIZE, ...o }
 // inline: **bold**, [text](url), [__ blank __]
 function inline(s, base = {}) {
   const outRuns = [];
-  const re = /(\*\*(.+?)\*\*)|(\[([^\]]+)\]\((https?:[^)\s]+)\))|(\[(_[^\]]*)\])|(\{green\}(.+?)\{\/green\})/g;
+  const re = /(\*\*(.+?)\*\*)|(\[([^\]]+)\]\((https?:[^)\s]+)\))|(\[(_[^\]]*)\])|(\{green\}(.+?)\{\/green\})|(\[\[([^\]|]+)\|(\d+)\]\])/g;
   let i = 0, m;
   while ((m = re.exec(s))) {
     if (m.index > i) outRuns.push(run(s.slice(i, m.index), base));
-    if (m[9] !== undefined) outRuns.push(...inline(m[9], { ...base, color: "27AE60" }));
+    // [[Name|customer_id]] → the player's Spotlight page (Kerry 2026-09-30)
+    if (m[11] !== undefined) outRuns.push(new ExternalHyperlink({ link: `https://tgf-tracker.up.railway.app/member/spotlight?player=${m[12]}`, children: [run(m[11], { ...base, style: "Hyperlink", bold: true })] }));
+    else if (m[9] !== undefined) outRuns.push(...inline(m[9], { ...base, color: "27AE60" }));
     else if (m[2] !== undefined) outRuns.push(run(m[2], { ...base, bold: true }));
     else if (m[4] !== undefined) outRuns.push(new ExternalHyperlink({ link: m[5], children: [run(m[4], { ...base, style: "Hyperlink", bold: true })] }));
     else outRuns.push(run(`[${m[7]}]`, { ...base, highlight: "yellow" }));

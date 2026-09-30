@@ -371,6 +371,18 @@ now produce his layout, so lessons 62–64 are built in, not remembered):
     player's customer_id — so the player links can ship before the
     results links do, on Kerry's word.
 
+67. **Every player name links to his Spotlight page, from s9.26 / a9.26
+    (Tue 10/6) on** (Kerry 2026-09-30: "Yes, add Spotlight links starting
+    next week"). Write each named player as `[[Mike MURPHY|131]]` — name as
+    it prints (lessons 52–53), then the customer_id — and both renderers
+    emit a bold link to `https://tgf-tracker.up.railway.app/member/spotlight?player=<customer_id>`
+    (the public member Spotlight page). Every named player gets one,
+    members and first-timers alike, the other chapter's included. The
+    draft email's dry run reports `unlinked_names` — bold `First SURNAME`
+    names written without the link — and that list must be empty before
+    the draft is sent. Results links stay on Golf Genius until the
+    cutover (lesson 66).
+
 Draft-time checklist derived from the above: two-week trend table for
 the headliner (previous event's card + payout), team score on Team Net,
 acquisition source per first-timer, links for every proper noun, both
@@ -379,7 +391,7 @@ could read as a dig.
 
 ## Sent template of record — s9.25 Canyon Springs (Kerry's send, 2026-09-30)
 
-The SA section of `recaps/2026-09-29-s9.25-canyon-springs-a9.25-star-ranch.md` is the current template of record: text, markup and spacing (lessons 52–66). The older templates below are kept as history.
+The SA section of `recaps/2026-09-29-s9.25-canyon-springs-a9.25-star-ranch.md` is the current template of record: text, markup and spacing (lessons 52–67). The older templates below are kept as history.
 
 ## Sent template of record — s9.22 Silverhorn (Kerry's send, 2026-09-10)
 

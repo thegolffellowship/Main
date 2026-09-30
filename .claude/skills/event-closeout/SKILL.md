@@ -353,8 +353,11 @@ read it — but do not redo it either.
     customer_id up), never by chapter. Robert and Kerry paste from the
     draft EMAIL; the Word file loses its formatting in the Golf Genius
     editor.
+    **Every player name is a Spotlight link from 10/6 on:** write
+    `[[Mike MURPHY|131]]` (name, customer_id); the draft email's dry run
+    must report `unlinked_names: []` before `|apply` (lesson 67).
     **Template of record: Kerry's s9.25 send** (event-recaps.md lessons
-    52–66: whole name bold with CAPS surname, both chapters' member
+    52–67: whole name bold with CAPS surname, both chapters' member
     standings links, "… POINTS IS FINAL." when a month is decided, the
     green Hole-in-One block between rules, the spacing the renderers
     now produce).

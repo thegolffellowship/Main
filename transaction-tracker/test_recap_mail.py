@@ -29,7 +29,7 @@ Good Afternoon, %first_name%!
 
 Good Afternoon, %first_name%!
 
-Pat **SMITH** won at [Test Links](https://example.com/r).
+Pat **SMITH** won at [Test Links](https://example.com/r). [[Lou SCHNEIDER|85]] was second and **Kyle COMPTON** third.
 
 FALL POINTS RACE.
 Pat leads. [CURRENT STANDINGS](https://tgf-tracker.up.railway.app/contests#race=fall_austin)
@@ -78,6 +78,9 @@ try:
           '<hr />\n<p style="margin:0"><span style="color:#27ae60;"><strong>HOLE-IN-ONE Pot stands at $3,476</strong> after Tuesday.</span></p>' in html, html)
     check("the sign-off and signature are spaced like the send",
           'See you Next Tuesday!</p>\n<p style="margin:0">&nbsp;</p>\n<p style="margin:0">Robert Straiton<br>' in html, html[-300:])
+    # Kerry 2026-09-30: "Yes, add Spotlight links starting next week"
+    check("[[Name|cid]] links the player's Spotlight page, bold",
+          '<a href="https://tgf-tracker.up.railway.app/member/spotlight?player=85"><strong>Lou SCHNEIDER</strong></a>' in html, html[:600])
     check("draft notes never render", "secret notes" not in html and "SA thing" not in html)
 
     print("\nRecipients")
@@ -92,6 +95,8 @@ try:
     check("dry run renders and sends nothing", r.get("status") == "dry_run" and "html" in r, r.get("error"))
     check("the cover says to paste from the email, not Word",
           "Copy the recap from this email" in (r.get("html") or ""), (r.get("html") or "")[:300])
+    check("a bold member name with no Spotlight link is reported",
+          r.get("unlinked_names") == ["Kyle COMPTON"], r.get("unlinked_names"))
     check("dry run lists the blanks", r.get("blanks") == ["__ course __", "__ time __"], r.get("blanks"))
     r = rm.send_recap_draft(name, "AUSTIN", to="pat@gmail.com", dry_run=False, db_path=tmp)
     check("a member recipient is refused before any send", "staff only" in (r.get("error") or ""), r)

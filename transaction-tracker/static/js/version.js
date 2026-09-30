@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.522.36";
+window.TGF_VERSION = "2.522.37";
 window.TGF_CHANGELOG = [
+    {
+        version: "2.522.37",
+        date: "2026-09-30",
+        title: "Recap drafts link every player to his Spotlight page",
+        changes: [
+            "Kerry 2026-09-30: \"Yes, add Spotlight links starting next week\" (after \"It will also be nice to tie in hyperlinks to each player to their player spotlight page\"). New recap markup [[Name|customer_id]] renders as a bold link to the public member Spotlight page (/member/spotlight?player=<customer_id>) in both the draft email (recap_mail.py) and the Word file (recap_docx.js). The draft email's dry run now reports unlinked_names (bold First SURNAME names written without the link) so a draft can't go out half-linked. event-recaps.md lesson 67; starts with s9.26 / a9.26 on Tue 10/6. test_recap_mail.py covers the link and the report."
+        ]
+    },
     {
         version: "2.522.36",
         date: "2026-09-30",

@@ -73,8 +73,20 @@ def extract_section(md_text: str, section: str) -> tuple[str, str]:
     return m.group(1).strip(), body
 
 
+# Player names link to their Spotlight page (Kerry 2026-09-30: "Yes, add
+# Spotlight links starting next week"). Markup [[Name|customer_id]] →
+# the member Spotlight deep link (public, PII-free), bold like every name.
+SPOTLIGHT_URL = "https://tgf-tracker.up.railway.app/member/spotlight?player={cid}"
+PLAYER_RE = re.compile(r"\[\[([^\]|]+)\|(\d+)\]\]")
+# A bold member name (First SURNAME) left without a player link — reported
+# by the dry run so the draft can be fixed before it goes out.
+UNLINKED_NAME_RE = re.compile(r"\*\*([A-Z][a-z][\w'.-]* [A-Z][A-Za-z'-]*[A-Z]{2,}[A-Za-z'-]*)\*\*")
+
+
 def _inline(s: str) -> str:
     s = _html.escape(s, quote=False)
+    s = PLAYER_RE.sub(lambda m: f'<a href="{SPOTLIGHT_URL.format(cid=m.group(2))}">'
+                                f'<strong>{m.group(1)}</strong></a>', s)
     s = re.sub(r"\[([^\]]+)\]\((https?:[^)\s]+)\)",
                r'<a href="\2"><strong>\1</strong></a>', s)
     s = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", s)
@@ -233,6 +245,7 @@ def send_recap_draft(file_name: str, section: str, to=None, cc=None,
     member_subject, recap_html = render_recap_html(_signature_breaks(body))
     recap_html = recap_html.replace("\u2028", "<br>")
     blanks = sorted(set(BLANK_RE.findall(body)))
+    unlinked = sorted(set(UNLINKED_NAME_RE.findall(body)))
     title = re.sub(r"\s*\((?:DRAFT|SENT)[^)]*\)\s*$", "", heading).strip()
     # Kerry 2026-09-30: the Word file "lost all formatting" when pasted into
     # the Golf Genius editor; copying from this email kept it. The email
@@ -257,6 +270,7 @@ def send_recap_draft(file_name: str, section: str, to=None, cc=None,
     out = {"dry_run": bool(dry_run), "file": path.name, "section": heading,
            "to": to_l, "cc": cc_l, "subject": subject,
            "member_subject": member_subject, "blanks": blanks,
+           "unlinked_names": unlinked,
            "attachment": attach[0] if attach else None,
            "html_chars": len(html_body)}
 
