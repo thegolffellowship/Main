@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.522.58";
+window.TGF_VERSION = "2.522.59";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.522.59",
+    date: "2026-09-30",
+    title: "A missed-hole blind's holes are rows, not a JSON list",
+    changes: [
+      "Kerry's 9/30 rule (#1087: every fact is a typed column or a row, no JSON by default) applied to the blind draw: new table blind_draw_holes (blind, hole 1-18), migration 0006, passed by the Database lane (#1108). It replaces blind_draws.missed_holes, which nothing ever wrote; that column is dropped in its own migration next. No rows for a blind means every hole, which is every blind drawn today.",
+      "The blind writer now upserts on the seat instead of INSERT OR REPLACE (#682), so a redraw keeps the row and its hole rows. Nothing about who is drawn, or the money, changes.",
+    ],
+  },
   {
     version: "2.522.58",
     date: "2026-09-30",
