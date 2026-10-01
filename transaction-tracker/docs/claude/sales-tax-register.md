@@ -67,7 +67,7 @@ $280.50 filed, and February 2026 reserve $97.39 against $140.17 filed.
 | 2026-06 | 7/20/26 | PAID (Kerry, 9/30; confirmation in iCloud, not yet in OneDrive) | | | | | | | |
 | 2026-07 | 8/20/26 | PAID (Kerry, 9/30; confirmation in iCloud, not yet in OneDrive) | | | | | | | |
 | **2026-08** | **9/20/26** | **NOT FILED — LATE** (Kerry, 9/30). FINAL figures 9/30, see below. | | 19,152 | 2,075 | 171.19 | none (late) | | |
-| 2026-09 | 10/20/26 | OPEN | | | | | | | |
+| 2026-09 | 10/20/26 | OPEN. Computed 10/1, see below; emailed to Kerry 10/1. | | 18,577 | 2,964 | 244.53 | −1.22 (if filed by 10/20) | | |
 
 - **Kerry, 9/30:** "We have record of all of those, but some are in another part of iCloud. I've made payment on all but August." So every month except 2026-08 is PAID. Where the confirmation is in iCloud, the amounts are left blank until a copy is saved to OneDrive. Copying them over is housekeeping and does not block anything.
 - **Paid with evidence, 2025:** $635.77 across 4 months.
@@ -107,6 +107,28 @@ $280.50 filed, and February 2026 reserve $97.39 against $140.17 filed.
   - Both sit in the ledger as TGF income.
 - **Lone Star Cup deposits:** $8,140 was received by Venmo/Zelle from August through September and recorded against the event, not against items. It is excluded from August and September. The LSC markup ($55 per entry, $12 per practice round, per event config) is reported on the **October** return, for the month the Cup is played. Deposits are customer money until then. **Kerry ruled 9/30: "Lone Star Cup is liabilities right now, for sure."** The deposits are customer deposits held until the Cup is played, and are not revenue before then.
 
+## September 2026 return: computed 10/1 by the routine (rate card; Pricing Master v2.2, #1045)
+
+| Taxable component | Amount |
+|---|---|
+| Event markups plus rounding surplus. Each item is backed out from its price: price less the bundle pools, less the exact course cost, less the included games ($7/$14). The base is floored at $0 for 1st Timers, then $3/$4 is added per bundle. Covers s9.21–s9.28, a9.22–a9.26, s18.11 and a18.5 | 2,177.14 |
+| Memberships: 13 New at $44, Wade Lewis New $100 ($44 + the Fall NET $10), 2 Returning at $69 (Post, Mazanec) | 764.00 |
+| Season contest markups: Fall NET at $10 each (L. Youngs, McCrary, M. Wade) | 30.00 |
+| Coupons (tgf-jeff ×4, Advisory Board, once per order) | −40.00 |
+| TGF retained transaction fees (3.5% collected less GoDaddy 2.9% + $0.30, per order; fees are never refunded) | 32.73 |
+| **Taxable sales** | **2,963.87 → WebFile 2,964** |
+
+- **Total Texas Sales: $18,577.46 (WebFile 18,577).** That is:
+  - 189 GoDaddy orders at $18,436.46;
+  - manual and Venmo event payments at $141: Cloer $99 (a18.5 balance), Compton $15 (a18.5 guest fee), M. Wade $16 (s9.21 NET), P. Youngs $11 (s9.25 balance).
+- **Tax:** 2,964 × 6.25% = $185.25 state, plus 2,964 × 2% = $59.28 local, for **$244.53**. If filed by 10/20, less the 0.5% timely discount of $1.22, the total is **$243.31**.
+- **Method rulings applied (Margin Standard v1.1 §8):**
+  - **Credited items leave revenue.** Excluded: Wallace s9.23 $58 and s9.25 $70, Burlingame s9.25 $86, and the excess-credit rows.
+  - **Transfers.** A transferred item is not a sale; the redemption row (credit or credit transfer) is taxed as the standard member package of the event the money landed on. That covers Cloer a9.21 → a18.5 (full $203 BOTH via the $99 top-up), South a18.5 → s9.23 + s9.24 ($26 refunded), Melchor a9.24 → a9.25, P. Youngs and Sharitz s9.24 → s9.25, and the redemptions by J. Wilson (s9.25) and Sharitz (s9.22).
+  - **Also excluded:** refunds (both Billeauds and Clarkson's s9.23), Rideout's Fall NET $50 (refunded, so his s9.25 is taxed as NET $86), comps (Straiton, Kerry), Espinosa's $0 contest row, and **all Lone Star Cup money**: Cannon's $325 item, the 6 practice-round rows, and the Venmo/Zelle deposits. Those are liabilities until the Cup (Kerry 9/30); the October return carries the markup.
+- **Open question (not in the return):** a $203 Venmo "external payment" for Kaleb McDonnell on a18.5 (9/10, ledger `ext-pay-2843`) points at item 2843, which no longer exists. His a18.5 entry was paid on GoDaddy order R514052706. His $250 Venmo on 9/25 has no event tag, and he is on the LSC roster, so it is treated as an LSC deposit. Both are logged for the CFO daily.
+- **Working:** the scratchpad `sep_tax.py` (the CFO session), with per-item lines.
+
 ## Late-filing terms (Texas Comptroller)
 
 - Late penalty: $50 per late report, plus 5% of the tax due if 1–30 days late, or 10% if more than 30 days late.
@@ -127,7 +149,7 @@ $280.50 filed, and February 2026 reserve $97.39 against $140.17 filed.
    - Taxable Sales, with its breakdown;
    - tax, discount and balance due.
    Apply Margin Standard v1.1 §8: coupons net once per order; credited items leave revenue; fees are never refunded. WebFile rounds sales to whole dollars.
-5. Email `kerry@thegolffellowship.com` (Microsoft 365 `outlook_send_mail`, HTML, short enough for a phone). Include:
+5. Email Kerry through the Tracker mailer: the dry run `scoring-mail-kerry:<subject>|<html>`, then `scoring-mail-kerry-send:` (Kerry-only, and no `|` inside the content). Keep it HTML and short enough for a phone. Include:
    - the amounts to pay now, past-due first;
    - the WebFile link;
    - the instruction to save the confirmation PDF;
