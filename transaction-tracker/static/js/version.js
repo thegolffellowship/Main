@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.522.59";
+window.TGF_VERSION = "2.522.60";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.522.60",
+    date: "2026-10-01",
+    title: "Ambassador set/rescind writes the chip and the kept row together",
+    changes: [
+      "A rescind for a 9/15-seeded Ambassador (Rolando Campos, Kerry #1110) read \"not an ambassador; nothing to remove\" and changed nothing: the seed lives on customers.ambassador (the AMB chip, the list of record per #1103, and what the pairings engine reads), and customer_ambassadors had no row for him. set_ambassador now reads the chip as the before-state when there is no row, and every applied change writes BOTH: the kept customer_ambassadors row (with who, when and the note) and the chip. This holds until the roles table replaces both (#1090-1). Guard test_ambassadors.py."
+    ]
+  },
   {
     version: "2.522.59",
     date: "2026-09-30",

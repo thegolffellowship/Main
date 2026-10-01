@@ -85,6 +85,25 @@ check("bridge scoring-ambassadors reads", out.get("count") == 1, out)
 out = json.loads(mcp_server._scoring_dispatch("", "scoring-ambassador-set:" + json.dumps(
     {"customer_id": 9001, "chapter": "SA", "on": True, "kerry_ok_post": kerry})))
 check("bridge scoring-ambassador-set is a dry run unless apply", out.get("dry_run") is True, out)
+# #1110 (Rolando): a 9/15-seeded Ambassador carries the CHIP
+# (customers.ambassador = 1) and no customer_ambassadors row. Rescinding must
+# clear the chip AND leave a kept row (ambassador = 0), not "nothing to remove".
+c.execute("INSERT INTO customers (customer_id, first_name, last_name, current_player_status, ambassador) "
+          "VALUES (9005, 'Rolo', 'Seeded', 'active_member', 1)")
+c.commit()
+r = amb.set_ambassador(9005, "SA", False, kerry, note="auto-rescind standard", db_path=DB)
+check("#1110 dry run: a seeded chip with no row reads as an Ambassador and would change",
+      r.get("before") is True and r.get("changed") is True and r.get("dry_run") is True, r)
+r = amb.set_ambassador(9005, "SA", False, kerry, note="auto-rescind standard", apply=True, db_path=DB)
+_chip = c.execute("SELECT ambassador FROM customers WHERE customer_id = 9005").fetchone()[0]
+_row = c.execute("SELECT ambassador, note FROM customer_ambassadors WHERE customer_id = 9005").fetchone()
+check("#1110 applied: the chip is off and a row is kept (ambassador 0, with the note)",
+      r.get("applied") and _chip == 0 and _row is not None and _row[0] == 0 and _row[1] == "auto-rescind standard",
+      (r, _chip, _row))
+r = amb.set_ambassador(9005, "SA", False, kerry, apply=True, db_path=DB)
+check("#1110 a second rescind changes nothing", not r.get("applied"), r)
+_chip_mary = c.execute("SELECT ambassador FROM customers WHERE customer_id = 9001").fetchone()[0]
+check("the chip mirrors every applied change (Mary was set then unset)", _chip_mary == 0, _chip_mary)
 check("the reader survives a database without the table", amb.chapter_ambassadors(sqlite3.connect(":memory:"), 1) == set())
 
 # Guard (#1055-6): only this module (and the migration) names the table,

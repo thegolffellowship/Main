@@ -120,11 +120,23 @@ def set_ambassador(customer_id, chapter, on: bool, kerry_ok_post, note: str = ""
         prev = conn.execute(
             "SELECT ambassador FROM customer_ambassadors WHERE customer_id = ? AND chapter_id = ?",
             (cust, chap_id)).fetchone()
-        before = None if prev is None else bool(prev[0])
+        # THE CHIP IS THE LIST OF RECORD (Kerry #1103: the 9/15 seed on
+        # customers.ambassador; the AMB chip and the pairings engine read
+        # it). The table had no rows for the seeded Ambassadors, so a
+        # rescind read "nothing to remove" and changed nothing (#1110,
+        # Rolando). Until the roles table (#1090-1), BOTH stores are written
+        # together and "before" falls back to the chip.
+        try:
+            chip = conn.execute("SELECT ambassador FROM customers WHERE customer_id = ?",
+                                (cust,)).fetchone()[0]
+        except Exception:
+            chip = None
+        before = bool(prev[0]) if prev is not None else (None if chip is None else bool(chip))
         out = {"customer_id": cust, "name": name, "chapter_id": chap_id, "chapter": chap_name,
                "before": before, "after": on, "authority": why, "note": note or None,
                "dry_run": not apply, "changed": before != on}
-        if before == on:
+        out["chip_before"] = None if chip is None else bool(chip)
+        if before == on and (chip is None or bool(chip) == on) and (prev is not None or not on):
             out["changed"] = False
             return out
         if before is None and not on:
@@ -142,6 +154,11 @@ def set_ambassador(customer_id, chapter, on: bool, kerry_ok_post, note: str = ""
                 "UPDATE customer_ambassadors SET ambassador = ?, set_by = ?, "
                 "set_at = datetime('now'), note = ? WHERE customer_id = ? AND chapter_id = ?",
                 (1 if on else 0, set_by, note or None, cust, chap_id))
+        try:  # the chip mirrors the row (see above)
+            conn.execute("UPDATE customers SET ambassador = ? WHERE customer_id = ?",
+                         (1 if on else 0, cust))
+        except Exception:
+            pass
         conn.commit()
     db.log_agent_action(set_by, "set_ambassador",
                         f"customer {cust} ({name}) {chap_name}: ambassador {before!r} -> {on!r}; "
