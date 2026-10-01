@@ -90,9 +90,10 @@ db.save_event_pairings(EV, SHEET, db_path=tmp)
 print("\n== schema: migration 0004 ==")
 cols = db._blind_cols(c)
 check("blind_draws has reason", "reason" in cols, cols)
+check("0007: the JSON missed_holes column is gone (#1087, db-claude #1124)", "missed_holes" not in cols, cols)
 check("0006: blind_draw_holes exists",
       c.execute("SELECT 1 FROM sqlite_master WHERE name = 'blind_draw_holes'").fetchone() is not None)
-for _f in ("0006_blind_draw_holes.sql",):
+for _f in ("0006_blind_draw_holes.sql", "0007_drop_blind_draws_missed_holes.sql"):
     _u = pathlib.Path("migrations/" + _f).read_text().upper()
     check(f"{_f}: portable, and carries its 'not redundant' / reason note",
           "INSERT OR REPLACE" not in _u and "NOCASE" not in _u and "JSON" not in _u.split("--")[-1])

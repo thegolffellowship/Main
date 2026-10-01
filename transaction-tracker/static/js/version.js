@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.522.60";
+window.TGF_VERSION = "2.522.61";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.522.61",
+    date: "2026-10-01",
+    title: "Drop the unused JSON hole list from blind draws",
+    changes: [
+      "Migration 0007 (Database lane PASS #1124) drops blind_draws.missed_holes, the JSON column that 0004 added and nothing ever wrote. The holes a missed-hole blind covers live as rows in blind_draw_holes (0006), under Kerry's #1087 rule that facts are rows. Nothing about the draw or the money changes.",
+    ],
+  },
   {
     version: "2.522.60",
     date: "2026-10-01",
