@@ -1,5 +1,22 @@
-window.TGF_VERSION = "2.522.56";
+window.TGF_VERSION = "2.522.58";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.522.58",
+    date: "2026-09-30",
+    title: "Read-only database engine facts for the Database lane",
+    changes: [
+      "scoring-db-version returns sqlite_version(), page size and count, free pages, journal mode (WAL), synchronous and foreign-key settings, the database, WAL and SHM file sizes, and the migrations applied with their times. db-claude's daily digest reads it for its Backups section (CoS #1100-2). Read-only; no schema change."
+    ]
+  },
+  {
+    version: "2.522.57",
+    date: "2026-09-30",
+    title: "Live role-chip read, and a Kerry-guarded starting-handicap bridge",
+    changes: [
+      "scoring-role-flags lists who carries the AMB / CAPT / BACK chips right now, with home chapter and status, and what changed since Kerry's 9/15 seed, so he confirms the live lists (#1090-3). Read-only.",
+      "scoring-starting-handicap:<cid>|<value>|<kerry post>[|apply] sets a starting handicap only on a cited post by Kerry or a verbatim relay of him (the same guard as set_customer_field). Dry run by default, action-logged. First use: David Wetz 9.0 for the Lone Star Cup (Kerry, #1091)."
+    ]
+  },
   {
     version: "2.522.56",
     date: "2026-09-30",

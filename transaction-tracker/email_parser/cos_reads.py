@@ -264,3 +264,42 @@ def player_archive(name: str = "", customer_id: int = 0, db_path=None) -> dict:
             "archive_rows": hist[:200], "scoring_rows": rounds[:100],
             "note": "playing handicaps are GG's, at the time, on that course and tee; "
                     "a proposal, not an index"}
+
+
+# ── the live role chips (#1090-3) ───────────────────────────────────────────
+def role_flags(db_path=None) -> dict:
+    """Who carries each role chip NOW (customers.ambassador / group_captain /
+    solo_back_ok, the AMB / CAPT / BACK chips on the Customers page), with
+    home chapter, status and the latest chip change from agent_action_log,
+    so Kerry confirms the current lists, not the 9/15 seed. Read-only."""
+    from email_parser import database as db
+    out: dict = {}
+    with db._connect(db_path) as conn:
+        for flag in db.PLAYER_ROLE_FLAGS:
+            try:
+                rows = [dict(r) for r in conn.execute(
+                    f"""SELECT c.customer_id, TRIM(c.first_name || ' ' || c.last_name) AS name,
+                               COALESCE(ch.name, c.chapter) AS home_chapter,
+                               c.current_player_status AS status
+                          FROM customers c LEFT JOIN chapters ch ON ch.chapter_id = c.home_chapter_id
+                         WHERE c.{flag} = 1 ORDER BY c.last_name, c.first_name""")]
+            except Exception:
+                rows = [dict(r) for r in conn.execute(
+                    f"""SELECT customer_id, TRIM(first_name || ' ' || last_name) AS name,
+                               chapter AS home_chapter, current_player_status AS status
+                          FROM customers WHERE {flag} = 1 ORDER BY last_name, first_name""")]
+            off = conn.execute(f"SELECT COUNT(*) FROM customers WHERE {flag} = 0").fetchone()[0]
+            out[flag] = {"count": len(rows), "explicitly_off": off, "customers": rows}
+        seed = {f: list(v) for f, v in db._PLAYER_ROLE_SEED.items()}
+        changes = [dict(r) for r in conn.execute(
+            """SELECT created_at, agent_name, action_type, description FROM agent_action_log
+                WHERE lower(action_type) LIKE '%role%' OR lower(description) LIKE '%ambassador%'
+                   OR lower(description) LIKE '%group_captain%' OR lower(description) LIKE '%solo_back%'
+                ORDER BY id DESC LIMIT 50""")]
+    for flag, names in seed.items():
+        have = {r["name"].lower() for r in out[flag]["customers"]}
+        out[flag]["added_since_seed"] = sorted(r["name"] for r in out[flag]["customers"]
+                                               if r["name"].lower() not in {n.lower() for n in names})
+        out[flag]["seed_names_not_on_now"] = sorted(n for n in names if n.lower() not in have)
+    out["chip_changes_logged"] = changes
+    return out

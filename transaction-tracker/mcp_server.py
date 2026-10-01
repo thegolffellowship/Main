@@ -1780,6 +1780,9 @@ def _scoring_dispatch_inner(url: str, extract: str):
       scoring-card:<round_id>      full scorecard with derivations
       scoring-courses              course/tee database listing
       scoring-sales-tax-filing:<json row>[|apply]  record one month's Texas sales-tax filing (dry run by default; evidence 'confirmation' needs webfile_ref or confirmation_path); scoring-sales-tax-filings lists the record; scoring-sales-tax-backfill[:apply] loads the CFO register (6 confirmed months + Kerry's-word months)
+      scoring-db-version  read-only: sqlite_version(), page size/count, journal (WAL) mode, file sizes, migrations applied (db-claude's digest)
+      scoring-role-flags  the live AMB / CAPT / BACK chips with home chapter, vs the 9/15 seed (read-only)
+      scoring-starting-handicap:<cid>|<18-hole value|NULL>|<kerry_ok_post>[|apply]  set a starting handicap on Kerry's cited word (dry run default)
       scoring-home-chapter-backfill[:apply]  the approved home-chapter backfill (#1084): dry run, then apply; blank list for Kerry/Robert
       scoring-player-archive:<full name> | c<customer_id>  a player's GG history archive rounds + scoring rounds (read-only)
       scoring-schema-audit:chapter|scan  read-only: the home-chapter migration dry run, or the redundant/denormalized-data scan
@@ -6178,6 +6181,68 @@ def _scoring_dispatch_inner(url: str, extract: str):
             except ValueError as _e:
                 return json.dumps({"error": f"bad JSON: {_e}"})
             return json.dumps(_st.record_filing(_row, apply=_flag.strip().lower() == "apply"), indent=2, default=str)
+        if cmd == "scoring-db-version":
+            # Read-only engine facts for db-claude's daily digest (CoS
+            # #1100-2): SQLite version, page size, journal mode, size, and
+            # the migrations applied. No writes, no schema change.
+            import os as _os
+            _out = {}
+            with db._connect() as _c:
+                _out["sqlite_version"] = _c.execute("SELECT sqlite_version()").fetchone()[0]
+                for _pr in ("page_size", "page_count", "freelist_count", "journal_mode",
+                            "wal_autocheckpoint", "synchronous", "foreign_keys", "user_version"):
+                    try:
+                        _out[_pr] = _c.execute(f"PRAGMA {_pr}").fetchone()[0]
+                    except Exception as _e:
+                        _out[_pr] = f"error: {_e}"
+                _path = next((r[2] for r in _c.execute("PRAGMA database_list") if r[1] == "main"), None)
+                try:
+                    _out["migrations"] = [dict(r) for r in _c.execute(
+                        "SELECT name, applied_at FROM schema_migrations ORDER BY name")]
+                except Exception:
+                    _out["migrations"] = []
+            _out["db_path"] = _path
+            for _suffix in ("", "-wal", "-shm"):
+                try:
+                    _out["file_bytes" + (_suffix.replace("-", "_") or "")] = _os.path.getsize(_path + _suffix)
+                except Exception:
+                    pass
+            if isinstance(_out.get("page_size"), int) and isinstance(_out.get("page_count"), int):
+                _out["pages_bytes"] = _out["page_size"] * _out["page_count"]
+            return json.dumps(_out, indent=2, default=str)
+        if cmd == "scoring-role-flags":
+            # The live AMB / CAPT / BACK chips (#1090-3). Read-only.
+            from email_parser.cos_reads import role_flags as _rf
+            return json.dumps(_rf(), indent=2, default=str)
+        if cmd == "scoring-starting-handicap":
+            # "<customer_id>|<18-hole value or NULL>|<kerry_ok_post>[|apply]"
+            # Sets a starting (placeholder) handicap on Kerry's cited word
+            # (e.g. Wetz 9.0, #1091). Refused without a post by Kerry or a
+            # verbatim relay of him; dry run unless apply; action-logged.
+            from email_parser.customer_query import _kerry_ok
+            _p = [x.strip() for x in (arg or "").split("|")]
+            if len(_p) < 3:
+                return json.dumps({"error": "customer_id|value|kerry_ok_post[|apply]"})
+            _cid, _val, _post = int(_p[0]), _p[1], _p[2]
+            _val = None if _val.upper() in ("", "NULL", "NONE") else float(_val)
+            with db._connect() as _c:
+                _ok, _why = _kerry_ok(_c, _post)
+                _cur = _c.execute("SELECT first_name, last_name, starting_handicap_18 FROM customers "
+                                  "WHERE customer_id = ?", (_cid,)).fetchone()
+            if not _ok:
+                return json.dumps({"refused": f"rule 3b: {_why}"})
+            if not _cur:
+                return json.dumps({"error": f"customer {_cid} not found"})
+            _plan = {"customer_id": _cid, "name": f"{_cur['first_name']} {_cur['last_name']}",
+                     "before": _cur["starting_handicap_18"], "after": _val, "authority": _why}
+            if len(_p) < 4 or _p[3].lower() != "apply":
+                return json.dumps({**_plan, "dry_run": True})
+            res = db.set_starting_handicap(_cid, _val, set_by=f"mcp-claude ({_why})",
+                                           note=f"Kerry's word, {_why}")
+            db.log_agent_action("mcp-claude", "starting_handicap_set",
+                                f"customer {_cid}: starting handicap {_plan['before']!r} -> {_val!r} (18-hole); {_why}",
+                                outcome="error: " + res["error"] if "error" in res else "ok")
+            return json.dumps({**_plan, "result": res}, indent=2, default=str)
         if cmd == "scoring-home-chapter-backfill":
             # "" = dry run; "apply" = write (Kerry APPROVED the migration,
             # CoS #1084). Copies customers.chapter -> home_chapter_id and one
