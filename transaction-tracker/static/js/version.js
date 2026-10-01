@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.522.57";
+window.TGF_VERSION = "2.522.58";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.522.58",
+    date: "2026-09-30",
+    title: "Read-only database engine facts for the Database lane",
+    changes: [
+      "scoring-db-version returns sqlite_version(), page size and count, free pages, journal mode (WAL), synchronous and foreign-key settings, the database, WAL and SHM file sizes, and the migrations applied with their times. db-claude's daily digest reads it for its Backups section (CoS #1100-2). Read-only; no schema change."
+    ]
+  },
   {
     version: "2.522.57",
     date: "2026-09-30",

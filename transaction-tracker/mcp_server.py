@@ -1780,6 +1780,7 @@ def _scoring_dispatch_inner(url: str, extract: str):
       scoring-card:<round_id>      full scorecard with derivations
       scoring-courses              course/tee database listing
       scoring-sales-tax-filing:<json row>[|apply]  record one month's Texas sales-tax filing (dry run by default; evidence 'confirmation' needs webfile_ref or confirmation_path); scoring-sales-tax-filings lists the record; scoring-sales-tax-backfill[:apply] loads the CFO register (6 confirmed months + Kerry's-word months)
+      scoring-db-version  read-only: sqlite_version(), page size/count, journal (WAL) mode, file sizes, migrations applied (db-claude's digest)
       scoring-role-flags  the live AMB / CAPT / BACK chips with home chapter, vs the 9/15 seed (read-only)
       scoring-starting-handicap:<cid>|<18-hole value|NULL>|<kerry_ok_post>[|apply]  set a starting handicap on Kerry's cited word (dry run default)
       scoring-home-chapter-backfill[:apply]  the approved home-chapter backfill (#1084): dry run, then apply; blank list for Kerry/Robert
@@ -6180,6 +6181,35 @@ def _scoring_dispatch_inner(url: str, extract: str):
             except ValueError as _e:
                 return json.dumps({"error": f"bad JSON: {_e}"})
             return json.dumps(_st.record_filing(_row, apply=_flag.strip().lower() == "apply"), indent=2, default=str)
+        if cmd == "scoring-db-version":
+            # Read-only engine facts for db-claude's daily digest (CoS
+            # #1100-2): SQLite version, page size, journal mode, size, and
+            # the migrations applied. No writes, no schema change.
+            import os as _os
+            _out = {}
+            with db._connect() as _c:
+                _out["sqlite_version"] = _c.execute("SELECT sqlite_version()").fetchone()[0]
+                for _pr in ("page_size", "page_count", "freelist_count", "journal_mode",
+                            "wal_autocheckpoint", "synchronous", "foreign_keys", "user_version"):
+                    try:
+                        _out[_pr] = _c.execute(f"PRAGMA {_pr}").fetchone()[0]
+                    except Exception as _e:
+                        _out[_pr] = f"error: {_e}"
+                _path = next((r[2] for r in _c.execute("PRAGMA database_list") if r[1] == "main"), None)
+                try:
+                    _out["migrations"] = [dict(r) for r in _c.execute(
+                        "SELECT name, applied_at FROM schema_migrations ORDER BY name")]
+                except Exception:
+                    _out["migrations"] = []
+            _out["db_path"] = _path
+            for _suffix in ("", "-wal", "-shm"):
+                try:
+                    _out["file_bytes" + (_suffix.replace("-", "_") or "")] = _os.path.getsize(_path + _suffix)
+                except Exception:
+                    pass
+            if isinstance(_out.get("page_size"), int) and isinstance(_out.get("page_count"), int):
+                _out["pages_bytes"] = _out["page_size"] * _out["page_count"]
+            return json.dumps(_out, indent=2, default=str)
         if cmd == "scoring-role-flags":
             # The live AMB / CAPT / BACK chips (#1090-3). Read-only.
             from email_parser.cos_reads import role_flags as _rf
