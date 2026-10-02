@@ -1,0 +1,32 @@
+# Continuous off-site replication: both SQLite files -> Cloudflare R2 (CA #834,
+# hard gate (a) of #731). Read by `litestream replicate` (scripts/start.sh) and
+# by `litestream restore|generations` (email_parser/replication.py).
+# NO SECRETS HERE: the access key id and secret come from the environment
+# (LITESTREAM_ACCESS_KEY_ID / LITESTREAM_SECRET_ACCESS_KEY, Railway variables),
+# and Litestream expands ${VAR} in this file from the environment too.
+# GG_ARCHIVE_PATH is set beside DATABASE_PATH by start.sh / replication.py.
+dbs:
+  - path: ${DATABASE_PATH}
+    replicas:
+      - type: s3
+        bucket: ${LITESTREAM_R2_BUCKET}
+        path: transactions.db
+        endpoint: ${LITESTREAM_R2_ENDPOINT}
+        region: auto
+        force-path-style: true
+        sign-payload: true
+        sync-interval: 10s        # CA #829: 10 s satisfies (a)
+        snapshot-interval: 6h
+        retention: 168h           # a week of point-in-time restore
+  - path: ${GG_ARCHIVE_PATH}
+    replicas:
+      - type: s3
+        bucket: ${LITESTREAM_R2_BUCKET}
+        path: transactions_gg_archive.db
+        endpoint: ${LITESTREAM_R2_ENDPOINT}
+        region: auto
+        force-path-style: true
+        sign-payload: true
+        sync-interval: 10s
+        snapshot-interval: 24h
+        retention: 168h

@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.523.1";
+window.TGF_VERSION = "2.523.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.523.2",
+    date: "2026-10-02",
+    title: "Off-site replication: Litestream streams both databases to Cloudflare R2 every 10 seconds",
+    changes: [
+      "Hard gate (a) of #731. The app now starts through scripts/start.sh, which runs `litestream replicate` BESIDE gunicorn and then starts gunicorn exactly as before. Replication cannot stop the app: a missing binary, a bad config or an unreachable bucket only stops replication, and the health digest says so. With any of the four LITESTREAM_* Railway variables missing, startup is identical to the old command. This push restarts the app once, on purpose, outside every event window.",
+      "Both SQLite files (transactions.db and transactions_gg_archive.db) replicate every 10 s into the bucket Kerry created, with a week of point-in-time restore. The config (litestream.yml) holds no secret; the key and secret come from the environment. The Litestream binary is pinned (v0.3.13, sha256-checked) and fetched once in the background into the volume, so the build is unchanged.",
+      "The health digest gets a REPLICATION line (streaming, lag, generations) and findings: not configured is info; no binary, no running process or lag over 300 s is HIGH. New restore drill `scoring-rehearsal:restore|replica` restores the database from the replica into the rehearsal folder (never the live file), checks integrity and counts, scrubs it, and records the result as the replica drill; gate (a) passes only when that drill passes. Guard: test_replication.py (real Litestream against a local replica, the start script's fallbacks, the digest findings, and the drill end to end).",
+    ],
+  },
   {
     version: "2.523.1",
     date: "2026-10-02",

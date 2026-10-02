@@ -3538,7 +3538,7 @@ def _scoring_dispatch_inner(url: str, extract: str):
             _audit("scoring-health-ack", f"closed {_res['closed']} — {_note.strip()[:120]}")
             return json.dumps(_res, indent=2)
         if cmd == "scoring-rehearsal":
-            # scoring-rehearsal[:status|restore] — the dress rehearsal
+            # scoring-rehearsal[:status|restore[|replica]] — the dress rehearsal
             # scratch copy + restore drill (CA #800/#801). restore reads the
             # newest OneDrive backup into <volume>/rehearsal/ and scrubs it.
             # The copy never leaves the production volume.
@@ -3563,8 +3563,11 @@ def _scoring_dispatch_inner(url: str, extract: str):
             if _step == "job":
                 return json.dumps(_rh.job_status(_lane.strip()), indent=2, default=str)
             if _step == "restore":
-                _res = _rh.restore()
-                _audit("scoring-rehearsal", f"restore drill: ok={_res.get('ok')} "
+                # restore            -> from the newest OneDrive backup
+                # restore|replica    -> from the continuous Litestream replica (gate (a))
+                _src = "replica" if _lane.strip().lower() == "replica" else "onedrive"
+                _res = _rh.restore(source=_src)
+                _audit("scoring-rehearsal", f"restore drill ({_src}): ok={_res.get('ok')} "
                        f"{_res.get('backup')} {_res.get('time_to_restore_ms')} ms")
                 return json.dumps(_res, indent=2, default=str)
             return json.dumps({"error": "usage: scoring-rehearsal[:status|restore|run|tool|<tool>|<flags>|run|bridge|<scoring-…>|job|<id>]"})
