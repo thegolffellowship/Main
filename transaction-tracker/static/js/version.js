@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.523.0";
+window.TGF_VERSION = "2.523.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.523.1",
+    date: "2026-10-02",
+    title: "The SCORING | LEADERBOARD toggle is pinned under the header",
+    changes: [
+      "Kerry 2026-10-02: \"The SCORING | LEADERBOARD toggle needs to pin to the top as a bar under the header and allow scrolling underneath it. I want it to always be visible.\" The toggle is now a sticky, opaque bar directly under the (also sticky) TGF header on the scoring page and the scorer's board page; the board scrolls underneath it. Its offset is the header's measured height, re-measured when the header shrinks on a tight card, so the two never overlap or gap.",
+    ],
+  },
   {
     version: "2.523.0",
     date: "2026-10-02",

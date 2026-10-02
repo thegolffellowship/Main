@@ -171,6 +171,18 @@ if sync_playwright and CHROME:
         })""")
         check("every name cell is one row high with its tee dot inside it", rows and all(x["lines"] <= 1 and x["dotIn"] for x in rows), str([x for x in rows if not (x["lines"] <= 1 and x["dotIn"])][:3]))
         check("the long name is there, unwrapped", any("VANDERSCHOONHOVEN" in x["name"] for x in rows))
+        # Kerry 2026-10-02: "pin to the top as a bar under the header and
+        # allow scrolling underneath it. I want it to always be visible."
+        # (a six-player board can be shorter than the screen: give the page
+        # something to scroll so the pin itself is what gets tested)
+        pg.evaluate("document.body.style.minHeight = '3000px'; window.scrollTo(0, 900)"); pg.wait_for_timeout(400)
+        pin = pg.evaluate("""(() => { const h = document.querySelector('header.shell-nav').getBoundingClientRect();
+            const t = document.getElementById('se-toggle').getBoundingClientRect();
+            const under = document.elementFromPoint(195, t.top + t.height / 2);
+            return {scrollY: window.scrollY, hdrBottom: h.bottom, top: t.top, bottom: t.bottom, opaque: getComputedStyle(document.getElementById('se-toggle')).backgroundColor,
+                    onTop: !!under && !!under.closest('#se-toggle')}; })()""")
+        check("scrolled to the bottom: the toggle stays pinned right under the header, on top of the page", pin["scrollY"] > 100 and abs(pin["top"] - pin["hdrBottom"]) <= 1 and pin["bottom"] > 0 and pin["onTop"] and pin["opaque"] not in ("rgba(0, 0, 0, 0)", "transparent"), str(pin))
+        pg.evaluate("window.scrollTo(0, 0)"); pg.wait_for_timeout(200)
         pg.click("#se-tg-score"); pg.wait_for_timeout(1500)
         check("SCORING returns to Hole 5, toggle back to Scoring", pg.url.startswith(f"{B}/member/score?t=") and pg.inner_text(".se-h1") == "Hole 5" and tg()[0] == "active|SCORING", str((pg.url, tg())))
         pg.evaluate("() => { const s = JSON.parse(localStorage.getItem('se_live')); s.queued = 2; s.hole = 7; localStorage.setItem('se_live', JSON.stringify(s)); }")

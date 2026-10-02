@@ -53,10 +53,10 @@
    opened with his group link ?t=): Scoring (his hole; amber with a count
    while holes are saved on the phone but not sent) | Leaderboard (just his
    event). Kerry-approved from the real-code mockup, mailbox #1158. #}
-<nav class="se-toggle" id="se-toggle" hidden aria-label="Scoring or leaderboard">
+<nav class="se-toggle" id="se-toggle" hidden aria-label="Scoring or leaderboard"><div class="se-tg-in">
     <a id="se-tg-score"><span class="se-tg-l">Scoring</span><span class="se-tg-s" id="se-tg-sub"></span></a>
     <a id="se-tg-board"><span class="se-tg-l">Leaderboard</span></a>
-</nav>
+</div></nav>
 <script>
 (function () {
     try {
@@ -64,6 +64,19 @@
         if (!t) return;
         var onBoard = location.pathname.indexOf("/member/score/board") === 0;
         var nav = document.getElementById("se-toggle");
+        // Pinned under the header (Kerry 2026-10-02: "always be visible"): the
+        // header is sticky too, so the bar's top is the header's measured
+        // height, re-measured whenever the header's size changes.
+        var hdr = document.querySelector("header.shell-nav");
+        var place = function () {
+            if (!hdr) return;
+            var cs = getComputedStyle(hdr);
+            var stuck = cs.position === "sticky" || cs.position === "fixed";
+            nav.style.top = (stuck ? hdr.offsetHeight + (parseFloat(cs.top) || 0) : 0) + "px";
+        };
+        place();
+        if (window.ResizeObserver && hdr) new ResizeObserver(place).observe(hdr);
+        window.addEventListener("resize", place);
         var a = document.getElementById("se-tg-score"), b = document.getElementById("se-tg-board");
         a.href = "/member/score?t=" + encodeURIComponent(t);
         b.href = "/member/score/board?t=" + encodeURIComponent(t);

@@ -785,6 +785,11 @@ dots all fit on one row without wrapping."
   amber with "· N to sync" while holes are saved on the phone but not sent.
   No other member page renders it. The CoS's pinned "Back to scoring" bar
   (#1148) was mocked, shown, and replaced by this on Kerry's word.
+  **Pinned (v2.523.1)**: Kerry, "pin to the top as a bar under the header
+  and allow scrolling underneath it. I want it to always be visible." The
+  nav is `position: sticky`, opaque, with `top` set by the shell script to
+  the sticky header's measured height (ResizeObserver, so the tight-card
+  shrink is followed).
 - **The hole screen's bottom bar**: previous / Save & Go / next sit in
   `.se-bottom`, fixed above the home indicator (#1152: "I do like the bottom
   aligned buttons"). Placement only. The one-screen rule still holds with
