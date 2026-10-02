@@ -368,16 +368,17 @@ header.shell-nav.shell-member.shell-slim .shell-brand { margin: 0 auto; pointer-
 header.shell-nav.shell-member.shell-slim .shell-brand img { width: 64px; height: 64px; -webkit-touch-callout: none; }
 header.shell-nav.shell-member.shell-slim .shell-wordmark { display: none; }
 
-/* BACK TO SCORING bar (MOCKUP, Kerry 2026-10-02): pinned above the home
-   indicator on every member page while the scorer's round is open. Green is
-   the proceed colour (CTA Standard §3); amber is Warning, never red. */
-.se-backbar { position: fixed; left: 16px; right: 16px; bottom: calc(12px + env(safe-area-inset-bottom, 0px)); z-index: 400;
-              display: grid; grid-template-columns: 1fr auto; grid-template-rows: auto auto; column-gap: 10px; align-items: center;
-              padding: 10px 14px 10px 18px; border-radius: 16px; background: #0d7556; color: #fff; text-decoration: none;
-              box-shadow: 0 6px 20px rgba(0,0,0,.22); font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; }
-.se-backbar[hidden] { display: none; }   /* the attribute must win over display:grid */
-.se-backbar.amber { background: #D97706; }
-.se-backbar .l1 { font: 700 17px/1.2 Bitter, Georgia, serif; }
-.se-backbar .l2 { font-size: 13px; opacity: .92; margin-top: 2px; }
-.se-backbar svg { grid-column: 2; grid-row: 1 / span 2; }
-body.has-backbar main, body.has-backbar .se-wrap { padding-bottom: 110px; }
+/* SCORING | LEADERBOARD toggle (MOCKUP v3, Kerry 2026-10-02): under the mark
+   on the scorer's two pages. Active = dark (the house segmented control, as
+   on the leaderboard); amber marks holes saved on the phone but not sent. */
+.se-toggle { display: flex; max-width: 480px; margin: 10px auto 0; padding: 0 16px; gap: 0; }
+.se-toggle[hidden] { display: none; }
+.se-toggle a { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 40px;
+               border: 1px solid #E5E7EB; background: #fff; color: #6B7280; text-decoration: none;
+               font: 700 12px/1 Bitter, Georgia, serif; letter-spacing: .06em; text-transform: uppercase; }
+.se-toggle a:first-child { border-radius: 99px 0 0 99px; }
+.se-toggle a:last-child { border-radius: 0 99px 99px 0; border-left: 0; }
+.se-toggle a.active { background: #1B1B1B; border-color: #1B1B1B; color: #fff; }
+.se-toggle a.amber { background: #FFFBEB; border-color: #D97706; color: #92400E; }
+.se-toggle .se-tg-s { font: 600 10.5px/1 'Helvetica Neue', Helvetica, Arial, sans-serif; letter-spacing: .02em; text-transform: none; margin-top: 3px; }
+.se-toggle .se-tg-s:empty { display: none; }

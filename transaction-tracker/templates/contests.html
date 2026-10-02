@@ -252,8 +252,16 @@
            like in other places we do that. It will save on space") */
         .evlb-chips { display: flex; align-items: center; gap: 8px; margin: 1rem 0 0.5rem; flex-wrap: wrap; }
         .evlb-chips[hidden], .top-tabs-wrap[hidden], .contest-cta-row[hidden] { display: none; }
-        .evlb-solo-h { margin: 14px 0 4px; }
-        .se-eyebrow-lb { font-family: 'Bitter', Georgia, serif; font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--primary, #E87C3E); }
+        /* The scorer's board page (MOCKUP v3): one event bar, then the tabs. */
+        .evlb-solo-bar { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin: 10px 0 8px;
+            padding: 0 0 8px; border-bottom: 1px solid var(--border, #E5E7EB); }
+        .evlb-solo-bar .nm { font: 700 17px/1.2 'Bitter', serif; color: #1B1B1B; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .evlb-solo-bar .st { font: 700 10.5px/1 'Bitter', serif; letter-spacing: .06em; text-transform: uppercase; color: #92400E; white-space: nowrap; }
+        .evlb-solo-bar .st.posted { color: #1B7F4B; }
+        body.evlb-solo main { padding-top: 0; }
+        body.evlb-solo details.evlb-ev { border: 0; border-radius: 0; margin-top: 0; background: transparent; }
+        body.evlb-solo details.evlb-ev > summary { display: none; }
+        body.evlb-solo .evlb-body { border-top: 0; padding: 0; }
         .evlb-seg { display: inline-flex; border: 1px solid var(--border, #E5E7EB);
             border-radius: 99px; overflow: hidden; background: #fff; }
         .evlb-seg button { appearance: none; border: 0; border-left: 1px solid var(--border, #E5E7EB);
@@ -288,6 +296,15 @@
             color: #9CA3AF; letter-spacing: 0.5px; }
         .evlb-body { border-top: 1px solid #F0EEE9; padding: 10px 14px 14px; }
         .evlb-subtabs { margin-bottom: 10px; }
+        /* MOCKUP v3 (Kerry 2026-10-02: "not all toggles for the leaderboard
+           views: OVERALL | TEAM | NET etc fit on the mobile screen"): on a
+           phone the seven game tabs wrap into two rows of equal-width cells
+           instead of running off the right edge. */
+        @media (max-width: 560px) {
+            .evlb-seg-sub { display: flex; flex-wrap: wrap; border-radius: 12px; }
+            .evlb-seg-sub button { flex: 1 1 25%; padding: 9px 4px; font-size: 10.5px; letter-spacing: .3px; border-top: 1px solid var(--border, #E5E7EB); margin-top: -1px; }
+            .evlb-seg-sub button:nth-child(5) { border-left: 0; }
+        }
         .evlb-scroll { overflow-x: auto; }
         /* tables compress LEFT instead of filling the width (Kerry) */
         table.evlb-tbl { width: auto; border-collapse: collapse; }
@@ -1851,7 +1868,7 @@
         @keyframes tgfChampShine { 0% { left: -60%; } 55% { left: 135%; } 100% { left: 135%; } }
     </style>
 </head>
-<body>
+<body{% if SOLO_EVENT %} class="evlb-solo"{% endif %}>
     {% if shell_v2 %}
     {# The mobile bar follows the nav label (Kerry 2026-09-14) — tapping
        "Leaderboard" must not land on a page headed "Season Contests". #}
@@ -2126,7 +2143,10 @@
              money game combined, buyers highlighted, winners badged) ═══ -->
         <div id="section-events" class="section-hidden">
             {% if SOLO_EVENT %}
-            <div class="evlb-solo-h"><span class="se-eyebrow-lb">Live leaderboard &middot; your event</span></div>
+            {# MOCKUP v3 (Kerry 2026-10-02: "It should just have the event showing on a
+               top bar and then go straight into the leaderboard toggles, checkboxes
+               for viewing and leaderboards themselves.") #}
+            <div class="evlb-solo-bar"><span class="nm">{{ SOLO_EVENT }}</span><span class="st" id="evlb-solo-st"></span></div>
             {% endif %}
             <div class="evlb-chips"{% if SOLO_EVENT %} hidden{% endif %}>
                 <div class="evlb-seg" id="evlb-chips">
@@ -2985,6 +3005,12 @@
                     if ((el.dataset.ev || "").toLowerCase() !== want) el.remove();
                 });
                 const mine = box.querySelector("details.evlb-ev");
+                const st = $("evlb-solo-st");
+                const ev = (d.events || []).find(e => (e.item_name || "").toLowerCase() === want);
+                if (st && ev) {
+                    st.textContent = ev.money_visible === false ? "In play" : evlbDate(ev.event_date) + " · final";
+                    st.classList.toggle("posted", ev.money_visible !== false);
+                }
                 if (mine) { mine.open = true; }
                 else box.innerHTML = '<p style="color:var(--text-muted);margin-top:1rem;">No scores posted for this event yet.</p>';
             }

@@ -245,10 +245,10 @@
         .se-hole .se-bottom .se-pill { flex: 1; min-width: 0; }
         .se-hole .se-bottom .se-nav { padding: 0; }
         .se-hole .se-bottom .se-nav button { width: 50px; height: 50px; border-radius: 25px; }
-        .se-hole .se-lbl-link { display: block; text-align: center; margin-top: 6px; font-size: 13px; font-weight: 600;
-                                color: #1B1B1B; text-decoration: none; }
-        .se-hole .se-lbl-link svg { vertical-align: -2px; }
-        body.se-focus .se-hole { padding-bottom: 112px; }
+        body.se-focus .se-hole { padding-bottom: 84px; }
+        /* the toggle sits between the mark and the card; on a tight screen it
+           keeps its height and the mark gives up its own, as before */
+        body.se-tight .se-toggle { margin-top: 6px; }
         .se-popkey { display: flex; gap: 14px; align-items: center; font-size: 12px; color: #4B5563; margin-top: 8px; }
         .se-popkey span { display: inline-flex; align-items: center; gap: 5px; }
         /* Kerry 2026-09-29: "I don't love how the legend renders wrapping like it
@@ -792,7 +792,7 @@
                   <div class="se-nav"><button type="button" data-act="prev" aria-label="Previous hole" ${i <= 0 ? "disabled" : ""}>${ICON.back}</button></div>
                   <button type="button" class="se-pill go" data-act="save">${cta}</button>
                   <div class="se-nav"><button type="button" data-act="next" aria-label="Next hole" ${i >= order.length - 1 ? "disabled" : ""}>${ICON.fwd}</button></div>
-                </div><a class="se-lbl-link" href="/member/score/board?t=${encodeURIComponent(new URLSearchParams(location.search).get("t") || "")}" data-act="leaderboard">Event leaderboard ${ICON.fwd}</a></div></div>`;
+                </div></div></div>`;
         }
 
         function stripCells(order, current) {
