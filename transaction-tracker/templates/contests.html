@@ -252,7 +252,7 @@
            like in other places we do that. It will save on space") */
         .evlb-chips { display: flex; align-items: center; gap: 8px; margin: 1rem 0 0.5rem; flex-wrap: wrap; }
         .evlb-chips[hidden], .top-tabs-wrap[hidden], .contest-cta-row[hidden] { display: none; }
-        /* The scorer's board page (MOCKUP v3): one event bar, then the tabs. */
+        /* The scorer's board page (v2.523.0): one event bar, then the tabs. */
         .evlb-solo-bar { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin: 10px 0 8px;
             padding: 0 0 8px; border-bottom: 1px solid var(--border, #E5E7EB); }
         .evlb-solo-bar .nm { font: 700 17px/1.2 'Bitter', serif; color: #1B1B1B; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -296,8 +296,8 @@
             color: #9CA3AF; letter-spacing: 0.5px; }
         .evlb-body { border-top: 1px solid #F0EEE9; padding: 10px 14px 14px; }
         .evlb-subtabs { margin-bottom: 10px; }
-        /* MOCKUP v3 (Kerry 2026-10-02: "not all toggles for the leaderboard
-           views: OVERALL | TEAM | NET etc fit on the mobile screen"): on a
+        /* Kerry 2026-10-02: "not all toggles for the leaderboard views:
+           OVERALL | TEAM | NET etc fit on the mobile screen". On a
            phone the seven game tabs wrap into two rows of equal-width cells
            instead of running off the right edge. */
         @media (max-width: 560px) {
@@ -383,9 +383,14 @@
             border-radius: 50%; margin-left: 7px; vertical-align: middle; }
         /* In a board's name cell the swatch is right-justified (Kerry
            2026-09-15); everywhere else it sits beside the name. */
-        .evlb-tee-dot.right { float: right; margin-top: 4px; }
+        /* ONE ROW per name (Kerry 2026-10-02: "I'd like the names column with
+           the tee color dots all fit on one row without wrapping"): the dot
+           is pinned to the cell's right edge instead of floated, so it can
+           never drop under a long name, and the cell reserves its room. */
+        .evlb-tee-dot.right { float: none; position: absolute; right: 8px; top: 50%; margin: -4px 0 0; }
         .evlb-holes td.nm, .evlb-holes th.nm { text-align: left; min-width: 110px;
-            font-weight: 600; color: #475569; }
+            font-weight: 600; color: #475569; white-space: nowrap; }
+        .evlb-holes td.nm { position: relative; padding-right: 24px; }
         .evlb-holes th.nm { color: #fff; }
         .evlb-holes tr.mute td { color: #9CA3AF; }
         .evlb-holes tr.teamrow td { background: #F3F1EC; font-weight: 700;
@@ -493,6 +498,12 @@
            a right-aligned column of figures. */
         .evlb-holes td.won, .evlb-holes th.won { text-align: center; font-weight: 700;
             color: var(--money-green, #15803D); font-variant-numeric: tabular-nums; min-width: 58px; }
+        /* NO WON COLUMN UNTIL EVERY SCORE IS IN (Kerry 2026-10-02: "hide the
+           WON column on any view until all scores are in"). While the money
+           is held the column leaves every board, the proxies' $ included;
+           it returns with the money. */
+        .evlb-holes.no-won td.won, .evlb-holes.no-won th.won { display: none; }
+        .evlb-prox.no-won th:nth-child(4), .evlb-prox.no-won td:nth-child(4) { display: none; }
         /* OVERALL sortable headers (Kerry 2026-09-11: no arrow glyphs —
            they widened every numeric column; the ACTIVE sort column is
            simply its header cell in TGF orange) */
@@ -1873,8 +1884,10 @@
     {# The mobile bar follows the nav label (Kerry 2026-09-14) — tapping
        "Leaderboard" must not land on a page headed "Season Contests". #}
     {% set SHELL_TITLE = 'Leaderboard' %}{% set SHELL_ACTIVE = 'contests' %}
-    {# MOCKUP (Kerry 2026-10-02): a scorer's event-only board keeps the slim
-       shell of the scoring page — the mark, no tabs, no way off the round. #}
+    {# THE SCORER'S BOARD (v2.523.0, Kerry 2026-10-02): /member/score/board
+       renders this page for ONE event with the slim shell of the scoring page
+       (the mark, the SCORING | LEADERBOARD toggle, no tabs, no way off the
+       round). See docs/claude/score-entry.md "Scorer navigation". #}
     {% if SOLO_EVENT %}{% set SHELL_SLIM = True %}{% endif %}
     {% include '_shell_nav.html' %}
     {% else %}
@@ -1941,7 +1954,7 @@
                    until he approves member exposure; applyRole reveals it,
                    the member-page CSS backstop keeps it off /member #}
                 {# Kerry 2026-09-23: admin + manager, still BETA; never on /member #}
-                {# MOCKUP branch only: the Events tab as members will see it after Tracker Build's #1149 release #}<button class="top-tab" data-top="events">Events <span class="evlb-beta">BETA</span></button>
+                {% if not member_mode %}<button class="top-tab manager-only" data-top="events" style="display:none;">Events <span class="evlb-beta">BETA</span></button>{% endif %}
                 <button class="top-tab active" data-top="points-race">Points Races</button>
                 {# Lone Star Cup sits LEFT of Match Play (Kerry 2026-09-12) #}
                 <button class="top-tab" data-top="lone-star-cup">Lone Star Cup</button>
@@ -2143,9 +2156,9 @@
              money game combined, buyers highlighted, winners badged) ═══ -->
         <div id="section-events" class="section-hidden">
             {% if SOLO_EVENT %}
-            {# MOCKUP v3 (Kerry 2026-10-02: "It should just have the event showing on a
-               top bar and then go straight into the leaderboard toggles, checkboxes
-               for viewing and leaderboards themselves.") #}
+            {# Kerry 2026-10-02: "It should just have the event showing on a top
+               bar and then go straight into the leaderboard toggles, checkboxes
+               for viewing and leaderboards themselves." #}
             <div class="evlb-solo-bar"><span class="nm">{{ SOLO_EVENT }}</span><span class="st" id="evlb-solo-st"></span></div>
             {% endif %}
             <div class="evlb-chips"{% if SOLO_EVENT %} hidden{% endif %}>
@@ -2459,7 +2472,7 @@
     <script>window.MATCHPLAY_V2 = {% if MATCHPLAY_V2 %}true{% else %}false{% endif %};</script>
     {% if lsc_landing %}<script>window.LSC_LANDING = true;</script>{% endif %}
     {% if mp_landing %}<script>window.MP_LANDING = {{ mp_landing|tojson }};</script>{% endif %}
-    {% if SOLO_EVENT %}<script>window.SOLO_EVENT = {{ SOLO_EVENT|tojson }};</script>{% endif %}
+    {% if SOLO_EVENT %}<script>window.SOLO_EVENT = {{ SOLO_EVENT|tojson }}; window.SOLO_T = {{ (SOLO_T or "")|tojson }};</script>{% endif %}
     {% if member_mode %}<script>window.MEMBER_MODE = true;</script><script src="/static/js/member-nudges.js" defer></script>
     <style>
         /* Member view: manager/admin controls can NEVER show, including
@@ -2966,8 +2979,11 @@
         evlbLoaded = true;
         box.innerHTML = '<p style="color:var(--text-muted);margin-top:1rem;">Loading events&hellip;</p>';
         try {
-            const res = await fetch("/api/events-leaderboard" +
-                (evlbChapter ? "?chapter=" + encodeURIComponent(evlbChapter) : ""));
+            // The scorer's board page reads with his group link (SOLO_T),
+            // which the API accepts for his own event only.
+            const res = await fetch("/api/events-leaderboard?" +
+                (evlbChapter ? "chapter=" + encodeURIComponent(evlbChapter) + "&" : "") +
+                (window.SOLO_T ? "t=" + encodeURIComponent(window.SOLO_T) : ""));
             const d = await res.json();
             if (!res.ok || d.error) throw new Error(d.error || res.statusText);
             $("evlb-pilot").textContent = d.pilot
@@ -2997,8 +3013,9 @@
                     evlbPinToTop(el);
                 });
             });
-            // MOCKUP (Kerry 2026-10-02): a scorer's board is JUST his event —
-            // the other events leave the page and his opens by itself.
+            // THE SCORER'S BOARD (Kerry 2026-10-02: "The leaderboard that they
+            // would go to would be JUST for that event"): the other events
+            // leave the page and his opens by itself.
             if (window.SOLO_EVENT) {
                 const want = String(window.SOLO_EVENT).toLowerCase();
                 box.querySelectorAll("details.evlb-ev").forEach(el => {
@@ -3130,7 +3147,8 @@
         if (EVLB_LOADED_EVENTS[name]) return;
         EVLB_LOADED_EVENTS[name] = true;
         try {
-            const res = await fetch("/api/events-leaderboard/event?name=" + encodeURIComponent(name));
+            const res = await fetch("/api/events-leaderboard/event?name=" + encodeURIComponent(name)
+                + (window.SOLO_T ? "&t=" + encodeURIComponent(window.SOLO_T) : ""));
             const d = await res.json();
             if (!res.ok || d.error) throw new Error(d.error || res.statusText);
             // MONEY WAITS FOR THE FIELD (Kerry 2026-09-15: "Winnings
@@ -3700,7 +3718,7 @@
                 ? `<label class="evlb-holetog"><input type="checkbox" data-ovr-all${evlbShowAll ? " checked" : ""}> Show All Players</label>`
                 : "") +
             `</div>` + evlbTeeLegend(d) + `</div>` +
-            `<div class="evlb-scroll"><table class="evlb-holes evlb-ovr${showHoles ? "" : " no-holes"}${evlbShowHcp ? "" : " no-hcp"}" data-board="${id}"><thead>` +
+            `<div class="evlb-scroll"><table class="evlb-holes evlb-ovr${showHoles ? "" : " no-holes"}${evlbShowHcp ? "" : " no-hcp"}${d._moneyHeld ? " no-won" : ""}" data-board="${id}"><thead>` +
             `<tr><th data-k="${board.netCol === false ? "gross" : "net"}" class="sortable">#</th>` +
             `<th data-k="player" class="nm sortable">Player</th>` +
             // Won sits right of the name (Kerry 2026-09-13) — the money
@@ -3978,7 +3996,7 @@
                 `<td class="r">${p.purse != null ? "$" + Number(p.purse).toFixed(2) : ""}</td></tr>`;
         };
         const proxHtml = ((d.proxies || []).length || (d.hio || []).length)
-            ? `<div class="evlb-scroll"><table class="evlb-tbl evlb-prox"><thead><tr><th>Contest</th><th>Winner</th><th>Detail</th><th style="text-align:right;">$</th></tr></thead><tbody>` +
+            ? `<div class="evlb-scroll"><table class="evlb-tbl evlb-prox${d._moneyHeld ? " no-won" : ""}"><thead><tr><th>Contest</th><th>Winner</th><th>Detail</th><th style="text-align:right;">$</th></tr></thead><tbody>` +
               (d.proxies || []).map(p => proxRow(p.label || "", p)).join("") +
               (d.hio || []).map(p => proxRow("Hole-in-One", p)).join("") +
               `</tbody></table></div>`
@@ -9539,8 +9557,8 @@
         // trick as the LSC link, plus a ch= hash the block below reads.
         if (window.MP_LANDING && !hash)
             hash = "#tab=mp&ch=" + (/anto/i.test(window.MP_LANDING) ? "sa" : "austin");
-        // MOCKUP (Kerry 2026-10-02): /member/score/board lands on the
-        // events board, which the solo filter above narrows to his event.
+        // /member/score/board lands on the events board, which the solo
+        // filter above narrows to the scorer's event.
         if (window.SOLO_EVENT) hash = "#tab=events";
         const raceMatch = hash.match(/race=([a-z_]+)/);
         const wantRace = raceMatch && document.querySelector(`.sub-tab[data-pr="${raceMatch[1]}"]`)
@@ -9555,10 +9573,15 @@
             if (chip) chip.style.display =
                 (wantRace === "monthly" || wantRace.startsWith("fall")) ? "none" : "inline-flex";
         }
-        if (hash.includes("tab=mp") || hash.includes("tab=enr") || hash.includes("tab=lsc") || hash.includes("tab=events")) {
+        // #tab=events opens the EVENTS board on load — for the scorer's board
+        // page and for a manager; a member page without the tab ignores it
+        // (the member flip is Tracker Build's #1149).
+        const wantEvents = hash.includes("tab=events")
+            && !!(window.SOLO_EVENT || document.querySelector('.top-tab[data-top="events"]'));
+        if (hash.includes("tab=mp") || hash.includes("tab=enr") || hash.includes("tab=lsc") || wantEvents) {
             const top = hash.includes("tab=mp") ? "match-play"
                 : (hash.includes("tab=lsc") ? "lone-star-cup"
-                : (hash.includes("tab=events") ? "events" : "enrollment"));
+                : (wantEvents ? "events" : "enrollment"));
             $$(".top-tab").forEach(b => b.classList.toggle("active", b.dataset.top === top));
             ["events", "match-play", "points-race", "enrollment", "lone-star-cup"].forEach(k =>
                 $("section-" + k).classList.toggle("section-hidden", k !== top));

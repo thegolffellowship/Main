@@ -586,8 +586,15 @@ with sync_playwright() as p:
     check("a small key names the two dots in Kerry's words (9/29)",
           "100% Handicap Stroke" in pp.inner_text(".se-popkey")
           and re.search(r"\d+% Cart Stroke", pp.inner_text(".se-popkey")) is not None)
-    check("the key sits below the Save button (Kerry 9/29)",
-          pp.locator("[data-act=save]").bounding_box()["y"] < pp.locator(".se-popkey").bounding_box()["y"])
+    # Kerry 9/29: the key goes with the Save button "so the hole number and
+    # button are always in the same place". Since v2.523.0 (Kerry 10/2, the
+    # approved mockup) Save is pinned in the bottom bar, always in the same
+    # place, and the key sits just above that bar, never under it.
+    check("Save is pinned in the bottom bar below the key, and the key clears the bar (Kerry 9/29 + 10/2)",
+          pp.locator("[data-act=save]").bounding_box()["y"] > pp.locator(".se-popkey").bounding_box()["y"]
+          and pp.locator(".se-bottom").evaluate("e => getComputedStyle(e).position") == "fixed"
+          and pp.locator(".se-popkey").bounding_box()["y"] + pp.locator(".se-popkey").bounding_box()["height"]
+              <= pp.locator(".se-bottom").bounding_box()["y"])
     play(pp, 9)
     pp.wait_for_selector("text=Check the card")
     pp.wait_for_timeout(800)

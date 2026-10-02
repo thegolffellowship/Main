@@ -368,7 +368,7 @@ header.shell-nav.shell-member.shell-slim .shell-brand { margin: 0 auto; pointer-
 header.shell-nav.shell-member.shell-slim .shell-brand img { width: 64px; height: 64px; -webkit-touch-callout: none; }
 header.shell-nav.shell-member.shell-slim .shell-wordmark { display: none; }
 
-/* SCORING | LEADERBOARD toggle (MOCKUP v3, Kerry 2026-10-02): under the mark
+/* SCORING | LEADERBOARD toggle (v2.523.0, Kerry 2026-10-02): under the mark
    on the scorer's two pages. Active = dark (the house segmented control, as
    on the leaderboard); amber marks holes saved on the phone but not sent. */
 .se-toggle { display: flex; max-width: 480px; margin: 10px auto 0; padding: 0 16px; gap: 0; }

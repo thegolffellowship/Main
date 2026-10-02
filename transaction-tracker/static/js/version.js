@@ -1,5 +1,17 @@
-window.TGF_VERSION = "2.522.62";
+window.TGF_VERSION = "2.523.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.523.0",
+    date: "2026-10-02",
+    title: "Scorer navigation: SCORING | LEADERBOARD toggle, the scorer's own event board",
+    changes: [
+      "Under the TGF mark on the score-entry page sits a SCORING | LEADERBOARD toggle (Kerry 2026-10-02: \"We originally had a toggle up at the top to go between scoring and leaderboard. I would prefer that.\"). It appears only on pages opened with a group link, so a member reading the leaderboard never sees it. Approved from a real-code mockup rendered at phone size (mailbox #1155, #1157, #1158).",
+      "LEADERBOARD opens /member/score/board, the scorer's own event only: one event bar (name, IN PLAY), then straight into the game tabs, the two checkboxes, the tee key and the board. No season tabs, no other events, no way off the round. SCORING returns to the exact hole; the Scoring segment reads \"Hole N\", and turns amber with \"N to sync\" while holes are saved on the phone but not yet sent.",
+      "The hole screen's previous / Save & Go / next buttons sit in a bar pinned above the home indicator (\"I do like the bottom aligned buttons\"). Nothing else on the hole screen moves, and the card still fits one screen.",
+      "The events-leaderboard API also answers to a live scorer's group link, for his event only; sessions keep the manager tier until the member release.",
+      "On the shared EVENTS board: the seven game tabs wrap into two rows on a phone instead of running off the right edge; every name sits on one row with its tee dot pinned at the cell's right edge; and the Won column is hidden on every view, proxies included, until every score is in (\"hide the WON column on any view until all scores are in\").",
+    ],
+  },
   {
     version: "2.522.62",
     date: "2026-10-02",

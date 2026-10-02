@@ -15324,7 +15324,7 @@ def get_event_leaderboard(event_name: str,
                        exc_info=True)
 
     return {
-        "event": {"name": ev["item_name"], "date": ev["event_date"],
+        "event": {"id": ev["id"], "name": ev["item_name"], "date": ev["event_date"],
                   "course": ev["course"], "chapter": ev["chapter"],
                   "holes": ev["holes"]},
         "team_allowance": team_allowance,

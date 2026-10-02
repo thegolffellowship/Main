@@ -11148,20 +11148,31 @@ def api_season_contest_removals():
 # Admin view, but add Manager view too"); members still wait (rule 3b) —
 # the payloads are PII-free by design, so the member flip is changing
 # these two role strings to "member".
+# v2.523.0: a live scorer's group link (?t=) also reads, his own event only
+# (_board_read_ok); the manager tier is unchanged for everyone else.
 @app.route("/api/events-leaderboard")
-@require_role("manager")
 def api_events_leaderboard():
     from email_parser.database import get_events_leaderboard
-    return jsonify(get_events_leaderboard(
+    ok, only_ev = _board_read_ok()
+    if not ok:
+        return jsonify({"error": "Manager access required."}), 403 if session.get("role") else 401
+    d = get_events_leaderboard(
         chapter=request.args.get("chapter") or None,
-        year=request.args.get("year") or None))
+        year=request.args.get("year") or None)
+    if only_ev:
+        d["events"] = [e for e in d.get("events", []) if e.get("id") == only_ev]
+    return jsonify(d)
 
 
 @app.route("/api/events-leaderboard/event")
-@require_role("manager")
 def api_events_leaderboard_event():
     from email_parser.database import get_event_leaderboard
+    ok, only_ev = _board_read_ok()
+    if not ok:
+        return jsonify({"error": "Manager access required."}), 403 if session.get("role") else 401
     d = get_event_leaderboard(request.args.get("name", ""))
+    if d and only_ev and (d.get("event") or {}).get("id") != only_ev:
+        return jsonify({"error": "this link reads its own event only"}), 403
     return (jsonify(d), 200) if d else (jsonify({"error": "event not found"}), 404)
 
 
@@ -11518,20 +11529,38 @@ def score_entry_page():
 
 @app.route("/member/score/board")
 def score_entry_board_page():
-    """MOCKUP (Kerry 2026-10-02): the scorer's leaderboard is JUST his
-    event. His group link names the event; the page is the EVENTS board
-    narrowed to that one event, opened, with the pinned Back-to-scoring bar
-    (the bar comes from the shell and never shows on /member/score itself)."""
+    """THE SCORER'S BOARD (v2.523.0, Kerry 2026-10-02: "The leaderboard that
+    they would go to would be JUST for that event"). His group link names
+    the event; the page is the EVENTS board narrowed to that one event,
+    opened, under the SCORING | LEADERBOARD toggle. A bad or closed link
+    falls back to the score page, which explains itself."""
     from email_parser.score_entry import verify_group_token, event_of
-    gid = verify_group_token(request.args.get("t") or "")
-    if not gid:
+    tok = request.args.get("t") or ""
+    gid = verify_group_token(tok) if _score_entry_live() else None
+    if not gid or _se_event_gate("group", gid):
         return render_template("score_entry.html", member_mode=True)
     ev_id = event_of("group", gid)
     with get_connection() as conn:
         row = conn.execute("SELECT item_name FROM events WHERE id = ?", (ev_id,)).fetchone()
     return render_template("contests.html", member_mode=True,
                            MATCHPLAY_V2=_matchplay_v2_flag(),
-                           SOLO_EVENT=(row["item_name"] if row else ""))
+                           SOLO_EVENT=(row["item_name"] if row else ""), SOLO_T=tok)
+
+
+def _board_read_ok():
+    """Who may read the EVENTS board API: a manager+ session (as before), or
+    a live scorer's group link (?t=) for HIS OWN event only (v2.523.0).
+    Returns (ok, event_id) — event_id set when a link, not a role, let him in,
+    and the caller narrows the payload to that event."""
+    if _ROLE_RANK.get(session.get("role"), 0) >= _ROLE_RANK["manager"]:
+        return True, None
+    tok = request.args.get("t") or ""
+    if tok and _score_entry_live():
+        from email_parser.score_entry import verify_group_token, event_of
+        gid = verify_group_token(tok)
+        if gid and not _se_event_gate("group", gid):
+            return True, event_of("group", gid)
+    return False, None
 
 
 @app.route("/api/score-entry/card")

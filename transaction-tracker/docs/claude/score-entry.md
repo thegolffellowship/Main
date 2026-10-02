@@ -762,6 +762,54 @@ Other /member pages keep their nav.
 
 The mark is 50 px (v2.522.26, Kerry: "Make the logger bigger. Like 2.5 times"); under 700 px of screen height the hole page shrinks it to 24 px so the card still fits.
 
+### Scorer navigation: SCORING | LEADERBOARD (v2.523.0, Kerry 2026-10-02)
+
+Approved from a real-code mockup rendered at 390×844 (branch
+`claude/scorer-nav-mockup`, mailbox #1155 → #1157 → #1158; Kerry: "All looks
+good except…", then "go ahead and push this build"). His rulings, verbatim:
+"No reason to show BACK TO SCORING if you're already on scoring." / "The
+leaderboard that they would go to would be JUST for that event." / "We
+originally had a toggle up at the top to go between scoring and leaderboard.
+I would prefer that." / "not all toggles for the leaderboard views: OVERALL |
+TEAM | NET etc fit on the mobile screen." / "It should just have the event
+showing on a top bar and then go straight into the leaderboard toggles,
+checkboxes for viewing and leaderboards themselves." / "hide the WON column on
+any view until all scores are in. I'd like the names column with the tee color
+dots all fit on one row without wrapping."
+
+- **The toggle** (`_shell_nav.html`, `shell.css .se-toggle`): under the mark
+  on any page opened with a group link (`?t=`): SCORING | LEADERBOARD, the
+  house dark segmented control. Scoring active on `/member/score`; on the
+  board page Leaderboard is active and the Scoring segment reads "Hole N"
+  from `localStorage.se_live` (written by `render()`, cleared on submit),
+  amber with "· N to sync" while holes are saved on the phone but not sent.
+  No other member page renders it. The CoS's pinned "Back to scoring" bar
+  (#1148) was mocked, shown, and replaced by this on Kerry's word.
+- **The hole screen's bottom bar**: previous / Save & Go / next sit in
+  `.se-bottom`, fixed above the home indicator (#1152: "I do like the bottom
+  aligned buttons"). Placement only. The one-screen rule still holds with
+  the toggle (`test_scorer_nav.py` measures it).
+- **The scorer's board**, `GET /member/score/board?t=<group link>`
+  (`score_entry_board_page`): `contests.html` rendered with `SOLO_EVENT` (the
+  event's name) and `SOLO_T`; `SHELL_SLIM`; the CTA row, the top tabs and the
+  chapter chips carry `hidden`; `#tab=events` is synthesized; `evlbLoad`
+  drops every other event, opens his, and fills the event bar
+  (`.evlb-solo-bar`: name + IN PLAY / date · final). A bad or closed link
+  renders the score page, which explains itself.
+- **Reading the board with the link**: `/api/events-leaderboard` and
+  `/event` keep the manager tier for sessions and additionally accept a live
+  group link (`_board_read_ok`): the list is narrowed to that event and
+  another event's board is 403. `get_event_leaderboard` now publishes
+  `event.id`. When Tracker Build's member flip (#1149) lands, the role path
+  simply widens; the link path stays for scorers who never signed in.
+- **Shared-board fixes that ride along** (member Events tab too): the seven
+  game tabs wrap to two rows under 560px; `td.nm` is `nowrap` with the tee
+  dot absolutely pinned to the cell's right edge (one row per name); while
+  `money_visible` is false `evlbBlankMoney` sets `_moneyHeld` and every
+  `table.evlb-holes` and the proxies table get `no-won`, which hides the Won
+  / $ column until every score is in.
+- Guard: `test_scorer_nav.py` (API tier + the screen sequence at 390×844).
+
 ### Hole yardage comes from the Men <50 tee (v2.522.27, Kerry 2026-09-29)
 
 "For the yardage under each hole number, use the <50 back tee yardages. 314
