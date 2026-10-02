@@ -251,6 +251,9 @@
            toggles are CONNECTED segments (Kerry: "Connect the toggles
            like in other places we do that. It will save on space") */
         .evlb-chips { display: flex; align-items: center; gap: 8px; margin: 1rem 0 0.5rem; flex-wrap: wrap; }
+        .evlb-chips[hidden], .top-tabs-wrap[hidden], .contest-cta-row[hidden] { display: none; }
+        .evlb-solo-h { margin: 14px 0 4px; }
+        .se-eyebrow-lb { font-family: 'Bitter', Georgia, serif; font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--primary, #E87C3E); }
         .evlb-seg { display: inline-flex; border: 1px solid var(--border, #E5E7EB);
             border-radius: 99px; overflow: hidden; background: #fff; }
         .evlb-seg button { appearance: none; border: 0; border-left: 1px solid var(--border, #E5E7EB);
@@ -1853,6 +1856,9 @@
     {# The mobile bar follows the nav label (Kerry 2026-09-14) — tapping
        "Leaderboard" must not land on a page headed "Season Contests". #}
     {% set SHELL_TITLE = 'Leaderboard' %}{% set SHELL_ACTIVE = 'contests' %}
+    {# MOCKUP (Kerry 2026-10-02): a scorer's event-only board keeps the slim
+       shell of the scoring page — the mark, no tabs, no way off the round. #}
+    {% if SOLO_EVENT %}{% set SHELL_SLIM = True %}{% endif %}
     {% include '_shell_nav.html' %}
     {% else %}
     <header>
@@ -1878,7 +1884,7 @@
          two-button chooser sheet (This Week's Events / Season Contests);
          sheet markup lives in _shell_nav.html's member branch. href stays
          as a no-JS fallback — shell.js preventDefaults it. -->
-    <div class="contest-cta-row">
+    <div class="contest-cta-row"{% if SOLO_EVENT %} hidden{% endif %}>
         {% if member_mode %}
         <a class="contest-cta shell-cta-open" href="https://thegolffellowship.com/shop/ols/products/season-contests"
            target="_blank" rel="noopener">ENTER EVENTS &amp; CONTESTS &rarr;</a>
@@ -1912,7 +1918,7 @@
         <!-- Top-level tabs. The wrap exists so tab-anchored dropdowns have an
              un-clipped positioning parent — .top-tabs itself is overflow-x:auto,
              which clips absolutely-positioned children (v2.57.6 iOS fix) -->
-        <div class="top-tabs-wrap">
+        <div class="top-tabs-wrap"{% if SOLO_EVENT %} hidden{% endif %}>
             <div class="top-tabs">
                 {# EVENTS leaderboard (Kerry 2026-09-11) — ADMIN-ONLY pilot
                    until he approves member exposure; applyRole reveals it,
@@ -2119,7 +2125,10 @@
              ratified Team · Net · Gross · Proxies IA, full-field board +
              money game combined, buyers highlighted, winners badged) ═══ -->
         <div id="section-events" class="section-hidden">
-            <div class="evlb-chips">
+            {% if SOLO_EVENT %}
+            <div class="evlb-solo-h"><span class="se-eyebrow-lb">Live leaderboard &middot; your event</span></div>
+            {% endif %}
+            <div class="evlb-chips"{% if SOLO_EVENT %} hidden{% endif %}>
                 <div class="evlb-seg" id="evlb-chips">
                     <button class="evlb-chip active" data-ch="">All</button>
                     <button class="evlb-chip" data-ch="Austin">Austin</button>
@@ -2430,6 +2439,7 @@
     <script>window.MATCHPLAY_V2 = {% if MATCHPLAY_V2 %}true{% else %}false{% endif %};</script>
     {% if lsc_landing %}<script>window.LSC_LANDING = true;</script>{% endif %}
     {% if mp_landing %}<script>window.MP_LANDING = {{ mp_landing|tojson }};</script>{% endif %}
+    {% if SOLO_EVENT %}<script>window.SOLO_EVENT = {{ SOLO_EVENT|tojson }};</script>{% endif %}
     {% if member_mode %}<script>window.MEMBER_MODE = true;</script><script src="/static/js/member-nudges.js" defer></script>
     <style>
         /* Member view: manager/admin controls can NEVER show, including
@@ -2967,6 +2977,17 @@
                     evlbPinToTop(el);
                 });
             });
+            // MOCKUP (Kerry 2026-10-02): a scorer's board is JUST his event —
+            // the other events leave the page and his opens by itself.
+            if (window.SOLO_EVENT) {
+                const want = String(window.SOLO_EVENT).toLowerCase();
+                box.querySelectorAll("details.evlb-ev").forEach(el => {
+                    if ((el.dataset.ev || "").toLowerCase() !== want) el.remove();
+                });
+                const mine = box.querySelector("details.evlb-ev");
+                if (mine) { mine.open = true; }
+                else box.innerHTML = '<p style="color:var(--text-muted);margin-top:1rem;">No scores posted for this event yet.</p>';
+            }
         } catch (err) {
             evlbLoaded = false;
             box.innerHTML = `<p style="color:var(--text-muted);margin-top:1rem;">Couldn't load events (${escapeHtml(err.message || String(err))}).</p>`;
@@ -9492,6 +9513,9 @@
         // trick as the LSC link, plus a ch= hash the block below reads.
         if (window.MP_LANDING && !hash)
             hash = "#tab=mp&ch=" + (/anto/i.test(window.MP_LANDING) ? "sa" : "austin");
+        // MOCKUP (Kerry 2026-10-02): /member/score/board lands on the
+        // events board, which the solo filter above narrows to his event.
+        if (window.SOLO_EVENT) hash = "#tab=events";
         const raceMatch = hash.match(/race=([a-z_]+)/);
         const wantRace = raceMatch && document.querySelector(`.sub-tab[data-pr="${raceMatch[1]}"]`)
             ? raceMatch[1] : null;
@@ -9505,14 +9529,16 @@
             if (chip) chip.style.display =
                 (wantRace === "monthly" || wantRace.startsWith("fall")) ? "none" : "inline-flex";
         }
-        if (hash.includes("tab=mp") || hash.includes("tab=enr") || hash.includes("tab=lsc")) {
+        if (hash.includes("tab=mp") || hash.includes("tab=enr") || hash.includes("tab=lsc") || hash.includes("tab=events")) {
             const top = hash.includes("tab=mp") ? "match-play"
-                : (hash.includes("tab=lsc") ? "lone-star-cup" : "enrollment");
+                : (hash.includes("tab=lsc") ? "lone-star-cup"
+                : (hash.includes("tab=events") ? "events" : "enrollment"));
             $$(".top-tab").forEach(b => b.classList.toggle("active", b.dataset.top === top));
-            ["match-play", "points-race", "enrollment", "lone-star-cup"].forEach(k =>
+            ["events", "match-play", "points-race", "enrollment", "lone-star-cup"].forEach(k =>
                 $("section-" + k).classList.toggle("section-hidden", k !== top));
             if (top === "enrollment") enrAutoLoad();
             if (top === "lone-star-cup") lscLoad();
+            if (top === "events") evlbLoad();
             // Match Play sub-panel deep link (Kerry 2026-07-21):
             // #tab=mp&mp=knockout|payouts lands directly on that panel.
             const mpSub = hash.match(/mp=(pools|knockout|payouts|setup)/);

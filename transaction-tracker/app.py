@@ -11516,6 +11516,24 @@ def score_entry_page():
     return render_template("score_entry.html", member_mode=True)
 
 
+@app.route("/member/score/board")
+def score_entry_board_page():
+    """MOCKUP (Kerry 2026-10-02): the scorer's leaderboard is JUST his
+    event. His group link names the event; the page is the EVENTS board
+    narrowed to that one event, opened, with the pinned Back-to-scoring bar
+    (the bar comes from the shell and never shows on /member/score itself)."""
+    from email_parser.score_entry import verify_group_token, event_of
+    gid = verify_group_token(request.args.get("t") or "")
+    if not gid:
+        return render_template("score_entry.html", member_mode=True)
+    ev_id = event_of("group", gid)
+    with get_connection() as conn:
+        row = conn.execute("SELECT item_name FROM events WHERE id = ?", (ev_id,)).fetchone()
+    return render_template("contests.html", member_mode=True,
+                           MATCHPLAY_V2=_matchplay_v2_flag(),
+                           SOLO_EVENT=(row["item_name"] if row else ""))
+
+
 @app.route("/api/score-entry/card")
 @perf.timed_route("se_card")
 def api_se_card():

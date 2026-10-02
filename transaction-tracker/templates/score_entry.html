@@ -792,7 +792,7 @@
                   <div class="se-nav"><button type="button" data-act="prev" aria-label="Previous hole" ${i <= 0 ? "disabled" : ""}>${ICON.back}</button></div>
                   <button type="button" class="se-pill go" data-act="save">${cta}</button>
                   <div class="se-nav"><button type="button" data-act="next" aria-label="Next hole" ${i >= order.length - 1 ? "disabled" : ""}>${ICON.fwd}</button></div>
-                </div><a class="se-lbl-link" href="/member/contests#tab=events" data-act="leaderboard">Live leaderboard ${ICON.fwd}</a></div></div>`;
+                </div><a class="se-lbl-link" href="/member/score/board?t=${encodeURIComponent(new URLSearchParams(location.search).get("t") || "")}" data-act="leaderboard">Event leaderboard ${ICON.fwd}</a></div></div>`;
         }
 
         function stripCells(order, current) {

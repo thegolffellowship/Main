@@ -24,6 +24,9 @@
 <script>
 (function () {
     try {
+        // Never on the scoring page itself (Kerry 2026-10-02: "No reason to
+        // show BACK TO SCORING if you're already on scoring.")
+        if (location.pathname.replace(/\/+$/, "") === "/member/score") return;
         var s = JSON.parse(localStorage.getItem("se_live") || "null");
         if (!s || !s.t || Date.now() - (s.at || 0) > 8 * 3600 * 1000) return;
         var a = document.getElementById("se-backbar");
