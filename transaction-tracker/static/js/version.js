@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.522.61";
+window.TGF_VERSION = "2.522.62";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.522.62",
+    date: "2026-10-02",
+    title: "Lone Star Cup deposits read without rebuilding the whole cup",
+    changes: [
+      "scoring-lsc-deposits (the staff deposit ledger) took 10.6 s on 10/1 and 14.4 s on 9/27. It built the full Lone Star Cup projection only to read the deposits out of it. It now calls lsc_deposit_scan, the deposit scan the projection itself uses, so the answer is the same and comes back in a fraction of the time. Read-only; nothing else changes (Tracker Health, digest #1138).",
+    ],
+  },
   {
     version: "2.522.61",
     date: "2026-10-01",

@@ -5201,8 +5201,9 @@ def _scoring_dispatch_inner(url: str, extract: str):
             # "$150 to lock their spots") — the same staff-only
             # `deposits` payload the roster badges render, with names
             # resolved for readability. READ-ONLY.
-            d = db.get_lone_star_cup_projection(alternates_cap=60)
-            deps = d.get("deposits") or {}
+            # The deposit scan alone: the full cup projection it used to
+            # build first cost 10-14 s a call (Tracker Health, digest #1138).
+            deps = {str(k): v for k, v in db.lsc_deposit_scan().items()}
             out = []
             with db._connect() as conn:
                 for cid, info in deps.items():
