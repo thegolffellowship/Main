@@ -1918,7 +1918,7 @@
                    until he approves member exposure; applyRole reveals it,
                    the member-page CSS backstop keeps it off /member #}
                 {# Kerry 2026-09-23: admin + manager, still BETA; never on /member #}
-                {% if not member_mode %}<button class="top-tab manager-only" data-top="events" style="display:none;">Events <span class="evlb-beta">BETA</span></button>{% endif %}
+                {# MOCKUP branch only: the Events tab as members will see it after Tracker Build's #1149 release #}<button class="top-tab" data-top="events">Events <span class="evlb-beta">BETA</span></button>
                 <button class="top-tab active" data-top="points-race">Points Races</button>
                 {# Lone Star Cup sits LEFT of Match Play (Kerry 2026-09-12) #}
                 <button class="top-tab" data-top="lone-star-cup">Lone Star Cup</button>
