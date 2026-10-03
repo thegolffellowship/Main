@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.523.2";
+window.TGF_VERSION = "2.523.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.523.3",
+    date: "2026-10-03",
+    title: "The health digest measures the GG archive file's replication; the handicap cache backs off on a locked database",
+    changes: [
+      "The first replication report (v2.523.2) measured only the main database; the GG archive file (about 400 MB, written rarely) was configured to replicate but its state wasn't read. The replication status now also reports the archive file's generations and lag, the digest's REPLICATION line shows it, and a MEDIUM finding is raised if the archive has no replica generation yet (expected for a while after the first upload) or is more than an hour behind. Read-only; nothing about replication itself changes. Guard: test_replication.py (real Litestream, both files).",
+      "The handicap cache's signature read now backs off 50 / 200 / 500 ms on a transient \"database is locked\" instead of retrying once at 50 ms. One miss means an uncached ~11 s handicap computation, and test_perf.py had been failing on it about one run in seven. Guard: test_perf.py (two locked errors in a row still return a real signature).",
+    ],
+  },
   {
     version: "2.523.2",
     date: "2026-10-02",
