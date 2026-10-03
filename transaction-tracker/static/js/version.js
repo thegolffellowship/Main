@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.523.3";
+window.TGF_VERSION = "2.523.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.523.4",
+    date: "2026-10-03",
+    title: "The EVENTS leaderboard and event results are open to members (BETA, labelled Unofficial)",
+    changes: [
+      "Kerry 2026-10-02 (CoS #1146-1): \"I would like you to release the leaderboard events results pages to members today\"; his \"Go\" in the Tracker Build session 10/3. The Events tab (still marked BETA) now shows on the member Leaderboard page (/member/contests) for both chapters, and /member/results is a shareable link that lands on it. The board API (`_board_read_ok`) reads at the public member tier: a manager session sees every event as before, and a scorer's group link still narrows the read to his own event (Track A's v2.523.0). The payloads are PII-free: names, scores and money as computed; no email, phone or payment handle. Visible, not announced: nothing was sent to members.",
+      "Every board carries the line \"Unofficial \u2014 Golf Genius is the official scorer. Money shown as computed, not as paid.\" while GG is the official record. Setting `gg_official_through` (e.g. \"Oct 6\") adds \"through <date>\"; empty drops the date, never the line. The events_leaderboard_only pilot note no longer shows on the member page. Guards: test_events_leaderboard_all.py (member tier, label, setting, /member/results) and test_scorer_nav.py (anonymous and member sessions read every event; the scorer link still narrows).",
+    ],
+  },
   {
     version: "2.523.3",
     date: "2026-10-03",

@@ -14291,8 +14291,16 @@ def get_events_leaderboard(chapter: str | None = None,
                     pass
             if not r["money_visible"]:
                 r["pot"] = 0
+    # While Golf Genius is the official scorer every board says so (Kerry
+    # 2026-10-02, CoS #1146-1). `gg_official_through` (e.g. "Oct 6") adds
+    # the date to the line; empty drops the date, never the line.
+    try:
+        _through = (get_app_setting("gg_official_through", db_path=db_path) or "").strip()
+    except Exception:
+        _through = ""
     return {"events": rows, "years": years,
-            "pilot": bool(codes), "pilot_codes": codes}
+            "pilot": bool(codes), "pilot_codes": codes,
+            "gg_official_through": _through or None}
 
 
 def _placed_flight_index(row: dict, bounds: list, index_ladder: bool,

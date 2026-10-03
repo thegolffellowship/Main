@@ -2,7 +2,8 @@
 mockup, mailbox #1155/#1157/#1158 + his words in the Track A session).
 
 API (Flask test client, no browser):
-- /api/events-leaderboard and /event: anonymous 401, member session 403,
+- /api/events-leaderboard and /event: member tier since v2.523.4 (anonymous
+  and member sessions read every event),
   manager 200 (unchanged); a live scorer's group link (?t=) reads 200 and
   gets HIS event only (the list narrowed, another event's board 403).
 - /member/score/board with a bad link falls back to the score page.
@@ -98,7 +99,7 @@ TOK = se.make_group_token(gid)
 print("API tier")
 with appmod.app.test_client() as tc:
     r = tc.get("/api/events-leaderboard")
-    check("anonymous: 401", r.status_code == 401, str(r.status_code))
+    check("anonymous: 200, every event (member tier since v2.523.4, #1146-1)", r.status_code == 200 and len(r.get_json()["events"]) == 2, str(r.status_code))
     r = tc.get(f"/api/events-leaderboard?t={TOK}")
     check("scorer's link: 200 and his event only", r.status_code == 200 and [e["id"] for e in r.get_json()["events"]] == [900], (r.status_code, r.get_data()[:120]))
     r = tc.get(f"/api/events-leaderboard/event?name=s9.26%20Olympia%20Hills&t={TOK}")
@@ -107,14 +108,14 @@ with appmod.app.test_client() as tc:
     r = tc.get(f"/api/events-leaderboard/event?name=s9.25%20Canyon%20Springs&t={TOK}")
     check("scorer's link: another event's board 403", r.status_code == 403, str(r.status_code))
     r = tc.get("/api/events-leaderboard/event?name=s9.25%20Canyon%20Springs&t=not-a-link")
-    check("bad link: 401", r.status_code == 401, str(r.status_code))
+    check("bad link: read as the public member tier (200), never narrowed", r.status_code == 200, str(r.status_code))
     r = tc.get(f"/member/score/board?t={TOK}")
     check("board page renders for the link (SOLO_EVENT + SOLO_T)", r.status_code == 200 and b"window.SOLO_EVENT" in r.data and b"se-toggle" in r.data and b"evlb-solo-bar" in r.data, str(r.status_code))
     check("board page shows no tabs, no CTA, no chips", b'top-tabs-wrap" hidden' in r.data and b'contest-cta-row" hidden' in r.data)
     r = tc.get("/member/score/board?t=bad")
     check("bad link: the score page (explains itself), not a 500", r.status_code == 200 and b"se-app" in r.data, str(r.status_code))
     r = tc.get("/member/contests")
-    check("the member Leaderboard page renders no Events tab button (Tracker Build's flip, not this one)", r.status_code == 200 and b'<button class="top-tab manager-only" data-top="events"' not in r.data)
+    check("the member Leaderboard page renders the Events tab, open to members (v2.523.4)", r.status_code == 200 and b'<button class="top-tab" data-top="events">' in r.data and b'evlb-official' in r.data)
     tc.post("/api/auth/login", json={"pin": "5151"})
     r = tc.get("/api/events-leaderboard")
     check("manager: 200, every event", r.status_code == 200 and len(r.get_json()["events"]) == 2, str(r.status_code))
@@ -122,7 +123,7 @@ with appmod.app.test_client() as tc:
     with tc.session_transaction() as s:
         s["role"] = "member"
     r = tc.get("/api/events-leaderboard")
-    check("member session without a link: 403 (unchanged)", r.status_code == 403, str(r.status_code))
+    check("member session without a link: 200, every event (v2.523.4)", r.status_code == 200 and len(r.get_json()["events"]) == 2, str(r.status_code))
 
 try:
     from playwright.sync_api import sync_playwright

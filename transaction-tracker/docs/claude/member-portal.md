@@ -1005,3 +1005,22 @@ schema addition awaiting Kerry's rule-3b ratification. Until then the
 board stays GG-official-ranked. Blind-draw slots now render on teams
 (parsed from the GG team string's "Bl[...]", card duplicated from the
 drawn player's round — GG's own mechanism).
+
+
+## EVENTS leaderboard released to members (v2.523.4, Kerry 2026-10-02, CoS #1146-1)
+
+Kerry: "I would like you to release the leaderboard events results pages to
+members today." His "Go" was given in the Tracker Build session on 10/3.
+
+- The Events tab (BETA) renders on the member Leaderboard page
+  (`/member/contests`) for both chapters; `/member/results` lands on it
+  (`evlb_landing` → `#tab=events`).
+- `/api/events-leaderboard[/event]` read at the public member tier through
+  `_board_read_ok` (app.py): manager sessions see everything, a scorer's
+  group link narrows to his own event, everyone else reads every event.
+  Payloads are PII-free (names, scores, computed money).
+- While Golf Genius is the official scorer every board shows "Unofficial —
+  Golf Genius is the official scorer[ through <date>]. Money shown as
+  computed, not as paid." The date is the `gg_official_through` setting.
+- Visible, not announced: no member email, text or Insider without Kerry's
+  separate OK.

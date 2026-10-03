@@ -274,6 +274,7 @@
         .evlb-year { margin-left: auto; font: 700 11px/1 'Bitter', serif; color: #9CA3AF;
             letter-spacing: 1px; border: 1px dashed var(--border, #E5E7EB); border-radius: 99px; padding: 6px 12px; }
         .evlb-pilot { font-size: 11px; color: #9CA3AF; flex-basis: 100%; }
+        .evlb-official { font-size: 11px; color: #6B7280; margin: 0 0 8px; }
         .evlb-beta { font: 700 9px/1 'Helvetica Neue', Arial, sans-serif; letter-spacing: .06em;
                      background: #FEF3C7; color: #92400E; border-radius: 99px; padding: 2px 6px;
                      vertical-align: 2px; margin-left: 4px; }
@@ -1953,8 +1954,10 @@
                 {# EVENTS leaderboard (Kerry 2026-09-11) — ADMIN-ONLY pilot
                    until he approves member exposure; applyRole reveals it,
                    the member-page CSS backstop keeps it off /member #}
-                {# Kerry 2026-09-23: admin + manager, still BETA; never on /member #}
-                {% if not member_mode %}<button class="top-tab manager-only" data-top="events" style="display:none;">Events <span class="evlb-beta">BETA</span></button>{% endif %}
+                {# Kerry 2026-09-23: admin + manager, still BETA. Kerry 2026-10-02
+                   (CoS #1146-1, "Go" 10/3): released to members, both chapters;
+                   visible, not announced; still BETA and labelled Unofficial. #}
+                {% if member_mode %}<button class="top-tab" data-top="events">Events <span class="evlb-beta">BETA</span></button>{% else %}<button class="top-tab manager-only" data-top="events" style="display:none;">Events <span class="evlb-beta">BETA</span></button>{% endif %}
                 <button class="top-tab active" data-top="points-race">Points Races</button>
                 {# Lone Star Cup sits LEFT of Match Play (Kerry 2026-09-12) #}
                 <button class="top-tab" data-top="lone-star-cup">Lone Star Cup</button>
@@ -2170,6 +2173,10 @@
                 <span class="evlb-year" id="evlb-year" title="Year selector arrives with historical records">2026</span>
                 <span class="evlb-pilot" id="evlb-pilot"></span>
             </div>
+            {# While Golf Genius is the official scorer every board says so
+               (Kerry 2026-10-02, CoS #1146-1). The date comes from the
+               gg_official_through setting through the list API. #}
+            <p class="evlb-official" id="evlb-official">Unofficial &mdash; Golf Genius is the official scorer<span id="evlb-official-through"></span>. Money shown as computed, not as paid.</p>
             <div id="evlb-list"><p style="color:var(--text-muted);margin-top:1rem;">Loading events&hellip;</p></div>
         </div>
 
@@ -2471,6 +2478,7 @@
 
     <script>window.MATCHPLAY_V2 = {% if MATCHPLAY_V2 %}true{% else %}false{% endif %};</script>
     {% if lsc_landing %}<script>window.LSC_LANDING = true;</script>{% endif %}
+    {% if evlb_landing %}<script>window.EVLB_LANDING = true;</script>{% endif %}
     {% if mp_landing %}<script>window.MP_LANDING = {{ mp_landing|tojson }};</script>{% endif %}
     {% if SOLO_EVENT %}<script>window.SOLO_EVENT = {{ SOLO_EVENT|tojson }}; window.SOLO_T = {{ (SOLO_T or "")|tojson }};</script>{% endif %}
     {% if member_mode %}<script>window.MEMBER_MODE = true;</script><script src="/static/js/member-nudges.js" defer></script>
@@ -2986,7 +2994,9 @@
                 (window.SOLO_T ? "t=" + encodeURIComponent(window.SOLO_T) : ""));
             const d = await res.json();
             if (!res.ok || d.error) throw new Error(d.error || res.statusText);
-            $("evlb-pilot").textContent = d.pilot
+            const thr = $("evlb-official-through");
+            if (thr) thr.textContent = d.gg_official_through ? " through " + d.gg_official_through : "";
+            $("evlb-pilot").textContent = (d.pilot && !window.MEMBER_MODE)
                 ? "Narrowed to " + (d.pilot_codes || []).join(", ") + " (events_leaderboard_only dial — clear it to show every event)" : "";
             if (!(d.events || []).length) {
                 box.innerHTML = '<p style="color:var(--text-muted);margin-top:1rem;">No played events here yet.</p>';
@@ -9552,6 +9562,8 @@
         // existing deep-link logic below does the rest. An explicit hash
         // in the URL still wins (e.g. someone edits it to #race=net).
         if (window.LSC_LANDING && !hash) hash = "#tab=lsc";
+        // /member/results (Kerry 2026-10-02, CoS #1146-1) lands on Events.
+        if (window.EVLB_LANDING && !hash) hash = "#tab=events";
         // /member/matchplay/<chapter> (Kerry 2026-08-21): chapter-
         // specific shareable Match Play links — same synthesized-hash
         // trick as the LSC link, plus a ch= hash the block below reads.

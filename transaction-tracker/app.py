@@ -11144,12 +11144,11 @@ def api_season_contest_removals():
 
 
 # ── EVENTS LEADERBOARD (Kerry 2026-09-11, improvements lane) ──
-# BETA for admin + manager (Kerry 2026-09-23: "Still keep it in BETA for
-# Admin view, but add Manager view too"); members still wait (rule 3b) —
-# the payloads are PII-free by design, so the member flip is changing
-# these two role strings to "member".
-# v2.523.0: a live scorer's group link (?t=) also reads, his own event only
-# (_board_read_ok); the manager tier is unchanged for everyone else.
+# BETA. Admin + manager from 2026-09-23; MEMBER tier from v2.523.4 (Kerry
+# 2026-10-02, CoS #1146-1: "release the leaderboard events results pages to
+# members today"). Visible, not announced; labelled Unofficial while Golf
+# Genius is the official scorer. v2.523.0: a live scorer's group link (?t=)
+# narrows the read to his own event (_board_read_ok).
 @app.route("/api/events-leaderboard")
 def api_events_leaderboard():
     from email_parser.database import get_events_leaderboard
@@ -11551,7 +11550,13 @@ def _board_read_ok():
     """Who may read the EVENTS board API: a manager+ session (as before), or
     a live scorer's group link (?t=) for HIS OWN event only (v2.523.0).
     Returns (ok, event_id) — event_id set when a link, not a role, let him in,
-    and the caller narrows the payload to that event."""
+    and the caller narrows the payload to that event.
+
+    MEMBER TIER since v2.523.4 (Kerry 2026-10-02, CoS #1146-1, his "Go" in
+    the Tracker Build session 10/3): everyone reads the board, the public
+    member tier included. A valid scorer link still narrows the payload to
+    his own event (the scorer's solo board); a manager session still sees
+    everything. The payloads are PII-free (names, scores, computed money)."""
     if _ROLE_RANK.get(session.get("role"), 0) >= _ROLE_RANK["manager"]:
         return True, None
     tok = request.args.get("t") or ""
@@ -11560,7 +11565,7 @@ def _board_read_ok():
         gid = verify_group_token(tok)
         if gid and not _se_event_gate("group", gid):
             return True, event_of("group", gid)
-    return False, None
+    return True, None
 
 
 @app.route("/api/score-entry/card")
@@ -12637,6 +12642,16 @@ def member_matchplay(chapter_slug):
     return render_template("contests.html", member_mode=True,
                            MATCHPLAY_V2=_matchplay_v2_flag(),
                            mp_landing=chapter)
+
+
+@app.route("/member/results")
+def member_results():
+    """Event results, member view (Kerry 2026-10-02, CoS #1146-1): a
+    distinct shareable URL that lands on the Events tab of the member
+    Leaderboard page; rendered in place like /member/lonestarcup."""
+    return render_template("contests.html", member_mode=True,
+                           MATCHPLAY_V2=_matchplay_v2_flag(),
+                           evlb_landing=True)
 
 
 @app.route("/member/handicaps")

@@ -1,5 +1,5 @@
-"""LEADERBOARD | EVENTS shows EVERY event with scorecards, admin + manager,
-BETA (Kerry 2026-09-23). Run: python3 test_events_leaderboard_all.py"""
+"""LEADERBOARD | EVENTS shows EVERY event with scorecards; admin + manager
+from 2026-09-23, members from v2.523.4 (Kerry 2026-10-02, #1146-1). BETA. Run: python3 test_events_leaderboard_all.py"""
 import os, sys, sqlite3, tempfile, contextlib, io, logging, json
 tmp = os.path.join(tempfile.mkdtemp(prefix="tgf-evlb-"), "t.db")
 os.environ["DATABASE_PATH"] = tmp
@@ -37,7 +37,7 @@ d = db.get_events_leaderboard(db_path=tmp)
 check("the new dial still narrows it for a test", [e["item_name"] for e in d["events"]] == ["a9.24 Teravista"] and d["pilot"] is True)
 db.set_app_setting("events_leaderboard_only", "[]", db_path=tmp)
 tc = A.app.test_client()
-for role, want in (("admin", 200), ("manager", 200), ("member", 403)):
+for role, want in (("admin", 200), ("manager", 200), ("member", 200)):
     with tc.session_transaction() as s:
         s.clear(); s["role"] = role; s["authenticated"] = True; s["logged_in"] = True
     r1 = tc.get("/api/events-leaderboard"); r2 = tc.get("/api/events-leaderboard/event?name=a9.24%20Teravista")
@@ -46,8 +46,17 @@ for role, want in (("admin", 200), ("manager", 200), ("member", 403)):
     ok = (r1.status_code == 200 and r2.status_code not in (401, 403)) if want == 200 else (r1.status_code in (401, 403) and r2.status_code in (401, 403))
     check(f"{role}: list + event routes {'open' if want == 200 else 'refused'}", ok, f"{r1.status_code} {r2.status_code}")
 html = open("templates/contests.html", encoding="utf-8").read()
-check("the EVENTS tab is manager-only (admin + manager), marked BETA, and never rendered on /member",
-      '{% if not member_mode %}<button class="top-tab manager-only" data-top="events"' in html and 'class="evlb-beta">BETA' in html)
+check("the EVENTS tab: manager-only on the staff page, a plain tab on /member (v2.523.4, #1146-1), marked BETA",
+      '{% if member_mode %}<button class="top-tab" data-top="events">' in html
+      and '<button class="top-tab manager-only" data-top="events"' in html and 'class="evlb-beta">BETA' in html)
+check("every board carries the Unofficial / GG-official line, money as computed",
+      'Golf Genius is the official scorer' in html and 'Money shown as computed, not as paid.' in html)
+d = db.get_events_leaderboard(db_path=tmp)
+check("the list API carries gg_official_through (None until set)", "gg_official_through" in d and d["gg_official_through"] is None)
+db.set_app_setting("gg_official_through", "Oct 6", db_path=tmp)
+check("…and the date once set", db.get_events_leaderboard(db_path=tmp)["gg_official_through"] == "Oct 6")
+r = tc.get("/member/results")
+check("/member/results renders the member page and lands on Events", r.status_code == 200 and b"window.EVLB_LANDING = true" in r.data and b'data-top="events"' in r.data)
 print()
 if F: print(f"{len(F)} FAILED"); sys.exit(1)
 print("\n== non-buyers are placed by INDEX against an index ladder (Kerry 9/29: Vest / McCormick) ==")
