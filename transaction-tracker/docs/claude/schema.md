@@ -643,3 +643,23 @@ id, writes the history row, and mirrors the name into `customers.chapter`.
 That text column is **read-only by rule** until its ~40 readers move to
 `home_chapter_id` (reader: `home_chapter_id_of`); then it's dropped in its
 own migration. The org_units rename waits for the Postgres move.
+
+
+## The TGF Library: `library_documents` (migration 0008; Kerry "Ok yes" #1117, db-claude #1124)
+
+Governing documents (standards, specs, strategy, decisions, lane context,
+audits) as append-only rows. Spec: librarian-claude #1114; module
+`email_parser/library.py`.
+- `library_sections (code PK, name, folder)`: the taxonomy as a lookup
+  (#1087), seeded with six sections and their OneDrive IA v1.0 folders (#1118).
+- `library_documents`: one row per document VERSION, `UNIQUE (doc_id,
+  version_major, version_minor)` with both version columns NOT NULL;
+  `status` CHECK draft / proposed / ratified / living / superseded;
+  `body` + `body_sha256`; `supersedes_id` / `superseded_by_id` self-FKs;
+  `filed_by`, `filed_at`, `exported_commit` (the Librarian's daily export).
+- `library_document_reads (document_id, reader)`: who must read it.
+- **Never deleted, never edited in place.** A supersede inserts the new row
+  and sets the old row's `status='superseded'` + `superseded_by_id`, the only
+  UPDATE. Foreign keys are declarations (production `foreign_keys = 0`), so
+  `library_put` checks section, supersedes target and readers in code.
+- `lane`, `owner`, `filed_by` are TEXT until a `lanes` lookup exists (#1124-g).

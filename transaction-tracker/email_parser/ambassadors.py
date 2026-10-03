@@ -134,7 +134,12 @@ def set_ambassador(customer_id, chapter, on: bool, kerry_ok_post, note: str = ""
         before = bool(prev[0]) if prev is not None else (None if chip is None else bool(chip))
         out = {"customer_id": cust, "name": name, "chapter_id": chap_id, "chapter": chap_name,
                "before": before, "after": on, "authority": why, "note": note or None,
-               "dry_run": not apply, "changed": before != on}
+               "dry_run": not apply,
+               # A write happens when the flag moves, when the chip disagrees,
+               # or when an Ambassador has no row yet (the #1116-4 backfill
+               # showed "changed: false" for 13 rows it then inserted).
+               "changed": (before != on or (chip is not None and bool(chip) != on)
+                           or (prev is None and on))}
         out["chip_before"] = None if chip is None else bool(chip)
         if before == on and (chip is None or bool(chip) == on) and (prev is not None or not on):
             out["changed"] = False

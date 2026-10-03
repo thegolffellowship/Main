@@ -113,3 +113,11 @@ def test_vendor_rows_are_not_people():
     assert 394 in [x["customer_id"] for x in query_customers(include_vendors=True, db_path=tmp)["customers"]]
     r = set_customer_field([394, 4], "gender", "M", "t", post, db_path=tmp)
     assert r["skipped_vendors"] == [394] and r["changes"] == 1
+    # Clearing a vendor's gender to NULL is allowed (CFO #1083-2, #1134):
+    # it puts back the vendor profiles set to M before the filter.
+    with db._connect(tmp) as _c:
+        _c.execute("UPDATE customers SET gender = 'M' WHERE customer_id = 394"); _c.commit()
+    r = set_customer_field([394], "gender", None, "vendor: no gender", post, apply=True, db_path=tmp)
+    assert r["skipped_vendors"] == [] and r["changes"] == 1 and r.get("applied"), r
+    with db._connect(tmp) as _c:
+        assert _c.execute("SELECT gender FROM customers WHERE customer_id = 394").fetchone()[0] is None

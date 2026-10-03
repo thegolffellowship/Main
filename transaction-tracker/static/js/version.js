@@ -1,5 +1,16 @@
-window.TGF_VERSION = "2.523.4";
+window.TGF_VERSION = "2.524.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.524.0",
+    date: "2026-10-03",
+    title: "The TGF Library, push 1: library_documents (migration 0008), library_put and library_get, with bridges",
+    changes: [
+      "Kerry 2026-09-30 (#1099): \"There needs to be a full TGF Library created that is organized extremely well\"; storage as an append-only table, Kerry \"Ok yes\" (#1117). Migration 0008 (db-claude #1124, conditions a-h) adds `library_sections` (the six sections as a lookup, with their OneDrive folders), `library_documents` (one row per version, never deleted or edited in place) and `library_document_reads`.",
+      "`library_put` (MCP tool and bridge `scoring-library-put:<json>`) files one version: dry run unless apply; refuses missing front-matter, a filename that doesn't match the version, archive/ writes, an empty or over-1 MB body and anything that looks like a credential; never overwrites (the same version again is refused and says whether the body matches); a new version needs supersedes='<doc_id>@<live version>' and marks the old row superseded, the only UPDATE. `standards/` needs a cited mailbox post carrying Kerry's word: a first filing of a ratified standard may cite #1099, a supersede may not. Section, supersedes target and readers are checked in code because production doesn't enforce foreign keys. Every apply is action-logged.",
+      "`library_get` (MCP tool and bridge `scoring-library-get:<name>[|<version>][|<heading words>]`) returns the latest live version by doc_id, filename or path, case-insensitive, or a named version (superseded included), or one heading's section; `drift: true` when the exported repo copy differs from the table. The module is portable to the Horizon Tracker: everything site-specific comes in through LibraryConfig. Guard: test_library.py (51 checks).",
+      "Riding along: clearing a vendor profile's gender to NULL is now allowed through set_customer_field (it skipped vendors entirely), so the five vendor profiles set to M before the vendor filter can be put back (CFO #1083-2, #1134). And the Ambassador dry run now reports changed: true when it would insert a missing row (the #1116-4 backfill showed false for all 13). Guards: test_missing_handicaps.py, test_ambassadors.py.",
+    ],
+  },
   {
     version: "2.523.4",
     date: "2026-10-03",

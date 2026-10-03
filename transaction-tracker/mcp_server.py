@@ -1790,6 +1790,8 @@ def _scoring_dispatch_inner(url: str, extract: str):
       scoring-se-card:<event_id>|g<group> | <event_id>|c<customer_id>  one group's / player's LIVE entered card (read-only)
       scoring-pair-history:c<customer_id>[|<year>] | e<event_id>  partners, rode-with, solo carts (read-only)
       scoring-standard:[<name>[|<section words>]]  a standard of record by name, whole or one section
+      scoring-library-put:<json>  WRITE one Library document {"path","content","meta","supersedes","author","kerry_ok_post","apply"}: append-only, never overwrites, standards/ needs a Kerry-OK post, dry run unless apply
+      scoring-library-get:<name>[|<version>][|<heading words>]  READ one Library document: latest live, or a version, or one section
       scoring-mailbox-read:<id> | since=<id>|limit=<n>|topic=<t>|max=<chars>  read ONE post, or a catch-up window OLDEST-first with more/next_since_id
       scoring-mailbox-search:text=<words>|topic=<t>|author=<a>|since=<YYYY-MM-DD>|limit=<n>|max=<chars>  precedent search, newest first, bodies trimmed
       scoring-set-customer-field:<json>  WRITE gender only (M/F/NULL) for customer_ids, refused without "kerry_ok_post" (a mailbox post id carrying Kerry's word), dry run unless "apply": true; before/after in agent_action_log
@@ -6327,6 +6329,26 @@ def _scoring_dispatch_inner(url: str, extract: str):
             from email_parser.ambassadors import list_ambassadors as _la
             return json.dumps(_la(_p[0] or None, include_removed=("all" in _p[1:])),
                               indent=2, default=str)
+        if cmd == "scoring-library-put":
+            # THE TGF LIBRARY (spec #1114, table 0008): JSON {"path", "content",
+            # "meta", "supersedes", "author", "kerry_ok_post", "apply"}. Dry
+            # run unless apply; standards/ needs a cited Kerry-OK post;
+            # append-only, never overwrites; action-logged.
+            try:
+                _p = json.loads(arg)
+            except ValueError as _e:
+                return json.dumps({"error": f"bad JSON: {_e}"})
+            from email_parser.library import library_put as _lp
+            return json.dumps(_lp(_p.get("path", ""), _p.get("content", ""), _p.get("meta") or {},
+                                  supersedes=_p.get("supersedes") or "", author=_p.get("author") or "",
+                                  kerry_ok_post=_p.get("kerry_ok_post") or 0,
+                                  apply=bool(_p.get("apply"))), indent=2, default=str)
+        if cmd == "scoring-library-get":
+            # <name>[|<version>][|<heading words>]
+            _p = arg.split("|")
+            from email_parser.library import library_get as _lg
+            return json.dumps(_lg(_p[0], _p[1] if len(_p) > 1 else "",
+                                  _p[2] if len(_p) > 2 else ""), indent=2, default=str)
         if cmd == "scoring-ambassador-set":
             # JSON {"customer_id": 23, "chapter": "SA", "on": true,
             #  "kerry_ok_post": 1234, "note": "...", "apply": false} — the
@@ -8043,6 +8065,34 @@ def get_standard(name: str = "", section: str = "") -> str:
     heading containing those words. Read-only."""
     from email_parser.cos_reads import get_standard as _gs
     return json.dumps(_gs(name, section), indent=2)
+
+
+@mcp.tool()
+def library_put(path: str, content: str, meta: dict, author: str, supersedes: str = "",
+                kerry_ok_post: int = 0, apply: bool = False) -> str:
+    """File one document in the TGF Library (Kerry #1099/#1117; spec #1114).
+    path: <section>/<Name>_v<maj>_<min>.md or context/<lane>/<file>.
+    meta: doc_id, title, version, status, owner, onedrive_path,
+    project_files, reads (+ ratified_by/ratified_date when ratified).
+    Append-only: never overwrites; a new version needs
+    supersedes='<doc_id>@<live version>'. standards/ needs kerry_ok_post
+    (Kerry's own post or platform-claude/front-desk quoting him; a first
+    filing may cite #1099, a supersede may not). Dry run unless apply."""
+    from email_parser.library import library_put as _lp
+    res = _lp(path, content, meta, supersedes=supersedes, author=author,
+              kerry_ok_post=kerry_ok_post, apply=apply)
+    _audit("library_put_tool", f"{path} apply={apply} -> {'refused' if 'refused' in res else 'ok'}")
+    return json.dumps(res, indent=2, default=str)
+
+
+@mcp.tool()
+def library_get(name: str, version: str = "", section: str = "") -> str:
+    """Read one TGF Library document by doc_id, filename or path
+    (case-insensitive): the latest live version, or `version` ("1.0" /
+    "v1_0", superseded ones included). `section` returns only the part
+    under the first heading containing those words. Read-only."""
+    from email_parser.library import library_get as _lg
+    return json.dumps(_lg(name, version, section), indent=2, default=str)
 
 
 @mcp.tool()

@@ -131,8 +131,10 @@ def set_customer_field(customer_ids, field: str, value, reason: str, kerry_ok_po
         rows = {r["customer_id"]: r["gender"] for r in conn.execute(
             f"SELECT customer_id, gender FROM customers WHERE customer_id IN ({ph})", ids).fetchall()}
         missing = [i for i in ids if i not in rows]
-        # A vendor profile is not a person: no gender (#1075-3).
-        vendors = db.vendor_customer_ids(conn)
+        # A vendor profile is not a person: no gender (#1075-3). Clearing a
+        # vendor's gender to NULL is the one write allowed on a vendor: it
+        # puts back the five set to M before the filter (CFO #1083-2, #1134).
+        vendors = db.vendor_customer_ids(conn) if value is not None else set()
         skipped_vendors = [i for i in ids if i in rows and i in vendors]
         changes = [{"customer_id": i, "before": rows[i], "after": value}
                    for i in ids if i in rows and i not in vendors and (rows[i] or None) != value]

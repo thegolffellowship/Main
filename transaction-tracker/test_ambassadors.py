@@ -85,6 +85,28 @@ check("bridge scoring-ambassadors reads", out.get("count") == 1, out)
 out = json.loads(mcp_server._scoring_dispatch("", "scoring-ambassador-set:" + json.dumps(
     {"customer_id": 9001, "chapter": "SA", "on": True, "kerry_ok_post": kerry})))
 check("bridge scoring-ambassador-set is a dry run unless apply", out.get("dry_run") is True, out)
+# #1116-4 backfill: an eligible Ambassador with the chip on and NO row,
+# flagged ON again, inserts a row; the dry run must say so ("changed" was
+# False for all 13). Mary (9001) is gate-eligible; take her row away.
+_saved_row = c.execute("SELECT ambassador, set_by, set_at, note FROM customer_ambassadors WHERE customer_id = 9001").fetchone()
+_saved_chip = c.execute("SELECT ambassador FROM customers WHERE customer_id = 9001").fetchone()[0]
+c.execute("DELETE FROM customer_ambassadors WHERE customer_id = 9001")
+c.execute("UPDATE customers SET ambassador = 1 WHERE customer_id = 9001")
+c.commit()
+r = amb.set_ambassador(9001, "SA", True, kerry, note="backfill", db_path=DB)
+check("#1116-4: chip on, no row, flag on: the dry run reports a change (it inserts a row)",
+      r.get("changed") is True and r.get("dry_run") is True and "refused" not in r, r)
+r = amb.set_ambassador(9001, "SA", True, kerry, note="backfill", apply=True, db_path=DB)
+check("#1116-4: applied, the row exists; a repeat is then no change",
+      c.execute("SELECT ambassador FROM customer_ambassadors WHERE customer_id = 9001").fetchone()[0] == 1
+      and amb.set_ambassador(9001, "SA", True, kerry, db_path=DB).get("changed") is False, r)
+# put Mary back exactly as the earlier checks left her
+c.execute("DELETE FROM customer_ambassadors WHERE customer_id = 9001")
+if _saved_row is not None:
+    c.execute("INSERT INTO customer_ambassadors (customer_id, chapter_id, ambassador, set_by, set_at, note) "
+              "VALUES (9001, ?, ?, ?, ?, ?)", (sa, *_saved_row))
+c.execute("UPDATE customers SET ambassador = ? WHERE customer_id = 9001", (_saved_chip,))
+c.commit()
 # #1110 (Rolando): a 9/15-seeded Ambassador carries the CHIP
 # (customers.ambassador = 1) and no customer_ambassadors row. Rescinding must
 # clear the chip AND leave a kept row (ambassador = 0), not "nothing to remove".
