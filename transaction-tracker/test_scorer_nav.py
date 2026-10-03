@@ -198,6 +198,17 @@ if sync_playwright and CHROME:
         if done_el:
             done_el.click(); pg.wait_for_timeout(2500)
         check("a complete event's board shows the Won column", pg.evaluate("""(() => { const t = document.querySelector('details.evlb-ev[data-ev="s9.25 Canyon Springs"] table.evlb-holes'); return !!t && !t.classList.contains('no-won') && getComputedStyle(t.querySelector('th.won')).display !== 'none'; })()"""))
+        # MEMBER RELEASE (v2.523.4, Kerry #1146-1): /member/results lands on
+        # the Events tab with the Unofficial line, every event listed.
+        mp = ctx.new_page()
+        mp.goto(f"{B}/member/results"); mp.wait_for_timeout(2500)
+        landed = mp.evaluate("""[!document.getElementById('section-events').classList.contains('section-hidden'),
+            (document.querySelector('.top-tab.active') || {}).dataset?.top,
+            document.querySelectorAll('#evlb-list details.evlb-ev').length,
+            (document.getElementById('evlb-official') || {}).innerText || '']""")
+        check("/member/results lands on Events, every event listed, Unofficial line shown",
+              landed[0] and landed[1] == "events" and landed[2] == 2 and "official scorer" in landed[3], str(landed))
+        mp.screenshot(path=os.path.join(tempfile.gettempdir(), "member-results-390.png"))
         b.close()
 else:
     print("SKIP screen checks: no Chromium")
