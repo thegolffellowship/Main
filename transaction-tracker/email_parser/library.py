@@ -302,3 +302,79 @@ def library_get(name: str, version: str = "", section: str = "",
     out["body"] = body
     out["chars"] = len(body)
     return out
+
+
+def library_list(section: str = "", status: str = "", include_archive: bool = False,
+                 cfg: LibraryConfig | None = None) -> dict:
+    """The INDEX rows (spec #1114 §3): every live version, newest filing
+    first within a section. include_archive adds the superseded ones."""
+    cfg = cfg or tgf_config()
+    q = """SELECT id, doc_id, section, lane, filename, version_major, version_minor, title, status,
+                  owner, ratified_by, ratified_date, onedrive_path, project_files, supersedes_id,
+                  superseded_by_id, filed_by, filed_at
+           FROM library_documents WHERE 1 = 1"""
+    args = []
+    if section:
+        q += " AND lower(section) = lower(?)"
+        args.append(section.strip())
+    if status:
+        q += " AND lower(status) = lower(?)"
+        args.append(status.strip())
+    elif not include_archive:
+        q += " AND status <> 'superseded'"
+    q += " ORDER BY section, lower(doc_id), version_major DESC, version_minor DESC"
+    with cfg.connect() as conn:
+        rows = [_row_dict(r) for r in conn.execute(q, args).fetchall()]
+        reads = {}
+        for r in conn.execute("SELECT document_id, reader FROM library_document_reads ORDER BY reader"):
+            reads.setdefault(r[0], []).append(r[1])
+        sup = {r[0]: f"{r[1]}@{r[2]}.{r[3]}" for r in conn.execute(
+            "SELECT id, doc_id, version_major, version_minor FROM library_documents")}
+    for r in rows:
+        r["version"] = f"{r.pop('version_major')}.{r.pop('version_minor')}"
+        r["reads"] = reads.get(r["id"], [])
+        r["supersedes"] = sup.get(r.pop("supersedes_id"))
+        r["project_files"] = bool(r["project_files"])
+    counts = {}
+    for r in rows:
+        counts[r["section"]] = counts.get(r["section"], 0) + 1
+    return {"count": len(rows), "by_section": counts, "documents": rows,
+            "include_archive": bool(include_archive or status == "superseded")}
+
+
+def library_search(text: str, section: str = "", include_archive: bool = False,
+                   limit: int = 20, max_chars: int = 600, cfg: LibraryConfig | None = None) -> dict:
+    """Every word of `text` must appear in the title or body (lower() both
+    sides), newest filing first, with a snippet around the first hit
+    (spec #1114 §4; the same all-words rule as search_platform_dialogue)."""
+    cfg = cfg or tgf_config()
+    words = [w for w in re.split(r"\s+", (text or "").strip()) if w]
+    if not words:
+        return {"error": "text is required"}
+    limit = max(1, min(int(limit or 20), 100))
+    max_chars = max(80, min(int(max_chars or 600), 5000))
+    q = "SELECT * FROM library_documents WHERE 1 = 1"
+    args = []
+    for w in words:
+        q += " AND instr(lower(title || ' ' || body), lower(?)) > 0"
+        args.append(w)
+    if section:
+        q += " AND lower(section) = lower(?)"
+        args.append(section.strip())
+    if not include_archive:
+        q += " AND status <> 'superseded'"
+    q += " ORDER BY filed_at DESC, id DESC LIMIT ?"
+    args.append(limit)
+    with cfg.connect() as conn:
+        rows = conn.execute(q, args).fetchall()
+    hits = []
+    for r in rows:
+        body = r["body"]
+        at = body.lower().find(words[0].lower())
+        start = max(0, at - max_chars // 3) if at >= 0 else 0
+        snip = body[start:start + max_chars]
+        hits.append({"doc_id": r["doc_id"], "version": f"{r['version_major']}.{r['version_minor']}",
+                     "section": r["section"], "title": r["title"], "status": r["status"],
+                     "filed_at": r["filed_at"],
+                     "snippet": ("…" if start else "") + snip + ("…" if start + max_chars < len(body) else "")})
+    return {"text": text, "count": len(hits), "results": hits}

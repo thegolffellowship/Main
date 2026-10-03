@@ -19637,6 +19637,30 @@ def read_platform_dialogue_entries(limit: int = 20, topic: str = "",
     return [dict(r) for r in rows]
 
 
+def fk_check_summary(top: int = 5, db_path=None) -> dict:
+    """READ-ONLY foreign-key health (db-claude #1125, CoS #1129-1):
+    PRAGMA foreign_key_check on the live file, grouped by (table, parent),
+    worst first. Production runs with foreign_keys = 0, so declared FKs are
+    not enforced and orphans are only found by this read. Writes nothing."""
+    import time as _t
+    t0 = _t.time()
+    with _connect(db_path) as conn:
+        groups = {}
+        total = 0
+        for r in conn.execute("PRAGMA foreign_key_check"):
+            total += 1
+            k = (r[0], r[2])
+            groups[k] = groups.get(k, 0) + 1
+        enforced = conn.execute("PRAGMA foreign_keys").fetchone()[0]
+    ranked = sorted(groups.items(), key=lambda kv: (-kv[1], kv[0]))
+    top = max(1, int(top or 5))
+    return {"violations": total, "tables": len({k[0] for k in groups}), "groups": len(groups),
+            "foreign_keys_enforced": bool(enforced),
+            "worst": [{"table": t, "parent": p, "rows": n} for (t, p), n in ranked[:top]],
+            "all_groups": [{"table": t, "parent": p, "rows": n} for (t, p), n in ranked],
+            "ms": int((_t.time() - t0) * 1000)}
+
+
 def read_platform_dialogue_v2(limit: int = 20, topic: str = "", since_id: int = 0,
                               post_id: int = 0, max_chars: int = 0, text: str = "",
                               author: str = "", since: str = "",

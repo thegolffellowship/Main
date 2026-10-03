@@ -1792,6 +1792,9 @@ def _scoring_dispatch_inner(url: str, extract: str):
       scoring-standard:[<name>[|<section words>]]  a standard of record by name, whole or one section
       scoring-library-put:<json>  WRITE one Library document {"path","content","meta","supersedes","author","kerry_ok_post","apply"}: append-only, never overwrites, standards/ needs a Kerry-OK post, dry run unless apply
       scoring-library-get:<name>[|<version>][|<heading words>]  READ one Library document: latest live, or a version, or one section
+      scoring-library-list:[<section>][|<status>][|archive]  READ the Library INDEX rows (live; archive adds superseded)
+      scoring-library-search:text=..|section=..|limit=..|max=..|archive=1  READ Library documents containing every word, newest first, with a snippet
+      scoring-fk-check[:<top n>]  READ PRAGMA foreign_key_check on live, grouped by table and parent, worst first (db-claude #1125)
       scoring-mailbox-read:<id> | since=<id>|limit=<n>|topic=<t>|max=<chars>  read ONE post, or a catch-up window OLDEST-first with more/next_since_id
       scoring-mailbox-search:text=<words>|topic=<t>|author=<a>|since=<YYYY-MM-DD>|limit=<n>|max=<chars>  precedent search, newest first, bodies trimmed
       scoring-set-customer-field:<json>  WRITE gender only (M/F/NULL) for customer_ids, refused without "kerry_ok_post" (a mailbox post id carrying Kerry's word), dry run unless "apply": true; before/after in agent_action_log
@@ -6343,6 +6346,25 @@ def _scoring_dispatch_inner(url: str, extract: str):
                                   supersedes=_p.get("supersedes") or "", author=_p.get("author") or "",
                                   kerry_ok_post=_p.get("kerry_ok_post") or 0,
                                   apply=bool(_p.get("apply"))), indent=2, default=str)
+        if cmd == "scoring-library-list":
+            # [<section>][|<status>][|archive]
+            _p = arg.split("|")
+            from email_parser.library import library_list as _ll
+            return json.dumps(_ll(_p[0] if _p else "", _p[1] if len(_p) > 1 else "",
+                                  include_archive=("archive" in _p[2:])), indent=2, default=str)
+        if cmd == "scoring-library-search":
+            # text=..|section=..|limit=..|max=..|archive=1
+            _kv = dict(x.split("=", 1) for x in arg.split("|") if "=" in x)
+            from email_parser.library import library_search as _ls
+            return json.dumps(_ls(_kv.get("text", ""), _kv.get("section", ""),
+                                  include_archive=_kv.get("archive") in ("1", "true"),
+                                  limit=int(_kv.get("limit") or 20), max_chars=int(_kv.get("max") or 600)),
+                              indent=2, default=str)
+        if cmd == "scoring-fk-check":
+            # READ-ONLY (db-claude #1125, CoS #1129-1): PRAGMA foreign_key_check
+            # on live, grouped by table and parent, worst first. [<top n>]
+            from email_parser.database import fk_check_summary as _fk
+            return json.dumps(_fk(int(arg) if arg.strip().isdigit() else 5), indent=2, default=str)
         if cmd == "scoring-library-get":
             # <name>[|<version>][|<heading words>]
             _p = arg.split("|")
@@ -8093,6 +8115,26 @@ def library_get(name: str, version: str = "", section: str = "") -> str:
     under the first heading containing those words. Read-only."""
     from email_parser.library import library_get as _lg
     return json.dumps(_lg(name, version, section), indent=2, default=str)
+
+
+@mcp.tool()
+def library_list(section: str = "", status: str = "", include_archive: bool = False) -> str:
+    """The TGF Library INDEX: every live document version (doc_id, title,
+    version, status, supersedes, owner, ratified, onedrive_path,
+    project_files, reads, filed_at), optionally one section or status;
+    include_archive adds superseded versions. Read-only."""
+    from email_parser.library import library_list as _ll
+    return json.dumps(_ll(section, status, include_archive), indent=2, default=str)
+
+
+@mcp.tool()
+def library_search(text: str, section: str = "", include_archive: bool = False,
+                   limit: int = 20, max_chars: int = 600) -> str:
+    """Search the TGF Library: every word of `text` must appear in the title
+    or body; newest filing first, with a snippet around the first hit.
+    Read-only."""
+    from email_parser.library import library_search as _ls
+    return json.dumps(_ls(text, section, include_archive, limit, max_chars), indent=2, default=str)
 
 
 @mcp.tool()

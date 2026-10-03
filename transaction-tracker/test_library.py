@@ -175,6 +175,38 @@ r = json.loads(mcp_server._scoring_dispatch("", "scoring-library-put:" + json.du
 check("scoring-library-put is a dry run unless apply", r.get("dry_run") is True and count() == 3, str(r)[:200])
 check("scoring-library-put bad JSON", "error" in json.loads(mcp_server._scoring_dispatch("", "scoring-library-put:{nope")))
 
+print("== push 2: list / search ==")
+ls = L.library_list(cfg=cfg)
+check("list: live versions only, with version, readers and supersedes",
+      ls["count"] == 2 and {d["doc_id"] for d in ls["documents"]} == {"TGF_Handicap_Standard", "FD_Session_Summary"}
+      and [d for d in ls["documents"] if d["doc_id"] == "TGF_Handicap_Standard"][0]["supersedes"] == "TGF_Handicap_Standard@1.0",
+      str(ls)[:300])
+check("list: include_archive adds the superseded version", L.library_list(include_archive=True, cfg=cfg)["count"] == 3)
+check("list: one section", L.library_list(section="CONTEXT", cfg=cfg)["count"] == 1)
+check("list: status=superseded", [d["version"] for d in L.library_list(status="superseded", cfg=cfg)["documents"]] == ["1.0"])
+sr = L.library_search("intro index", cfg=cfg)
+check("search: every word must appear, live only", sr["count"] == 1 and sr["results"][0]["version"] == "1.1", str(sr)[:300])
+check("search: case-insensitive, snippet around the hit", L.library_search("INTRO", cfg=cfg)["results"][0]["snippet"].lower().find("intro") >= 0)
+check("search: archive on adds the old version", L.library_search("intro", include_archive=True, cfg=cfg)["count"] == 2)
+check("search: a word that isn't there finds nothing", L.library_search("intro zebra", cfg=cfg)["count"] == 0)
+check("search: no text is an error", "error" in L.library_search("  ", cfg=cfg))
+ls2 = json.loads(mcp_server._scoring_dispatch("", "scoring-library-list:standards||archive"))
+check("bridge scoring-library-list with archive", ls2["count"] == 2, str(ls2)[:200])
+ss = json.loads(mcp_server._scoring_dispatch("", "scoring-library-search:text=intro|section=standards|limit=5"))
+check("bridge scoring-library-search", ss["count"] == 1, str(ss)[:200])
+
+print("== scoring-fk-check (read-only) ==")
+fk = json.loads(mcp_server._scoring_dispatch("", "scoring-fk-check:3"))
+check("fk-check returns counts and a worst list, enforcement reported", "violations" in fk and "worst" in fk
+      and fk["foreign_keys_enforced"] is False and len(fk["worst"]) <= 3, str(fk)[:300])
+with db._connect(DB) as c:
+    c.execute("INSERT INTO library_document_reads (document_id, reader) VALUES (999999, 'tracker-claude')")
+    c.commit()
+fk2 = db.fk_check_summary(db_path=DB)
+check("an orphan row shows up grouped by table and parent",
+      any(g["table"] == "library_document_reads" and g["parent"] == "library_documents" and g["rows"] == 1
+          for g in fk2["all_groups"]), str(fk2["all_groups"])[:300])
+
 print()
 if F:
     print(f"{len(F)} FAILED")

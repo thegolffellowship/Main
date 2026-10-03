@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.524.0";
+window.TGF_VERSION = "2.524.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.524.1",
+    date: "2026-10-03",
+    title: "The TGF Library, push 2: library_list and library_search; read-only scoring-fk-check",
+    changes: [
+      "`library_list` (MCP tool and bridge `scoring-library-list:[<section>][|<status>][|archive]`) returns the INDEX rows: every live version with doc_id, title, version, status, supersedes, owner, ratified, onedrive_path, project_files, readers and filed_at; include_archive adds superseded versions. `library_search` (MCP tool and bridge `scoring-library-search:text=..|section=..|limit=..|max=..|archive=1`) finds documents whose title or body holds every word (lower() both sides), newest filing first, with a snippet around the first hit (spec #1114 §3-§4).",
+      "`scoring-fk-check[:<top n>]` (db-claude #1125; rides this push per CoS #1129-1 because it cost nothing): PRAGMA foreign_key_check on the live file, grouped by table and parent, worst first, plus whether enforcement is on. Read-only; production runs with foreign_keys = 0, so this read is how orphans are found. Reader `database.fk_check_summary`. Guard: test_library.py (now 65 checks).",
+    ],
+  },
   {
     version: "2.524.0",
     date: "2026-10-03",
