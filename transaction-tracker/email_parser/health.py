@@ -424,6 +424,18 @@ def find(report: dict) -> list[dict]:
         elif rep["lag_s"] > 300:
             out.append({"severity": "high", "key": "replication_lag",
                         "text": f"the replica is {int(rep['lag_s'])} s behind the live database (limit 300 s)"})
+        arc = rep.get("archive")
+        if arc is not None and not any(f["key"].startswith("replication") for f in out):
+            if arc.get("error"):
+                out.append({"severity": "medium", "key": "replication_archive_error",
+                            "text": f"could not read the GG archive replica's state: {arc['error']}"})
+            elif not arc.get("generations"):
+                out.append({"severity": "medium", "key": "replication_archive_missing",
+                            "text": "the GG archive file has no replica generation yet "
+                                    "(its first 400 MB upload can take a while; a finding only if it persists)"})
+            elif arc.get("lag_s") is not None and arc["lag_s"] > 3600:
+                out.append({"severity": "medium", "key": "replication_archive_lag",
+                            "text": f"the GG archive replica is {int(arc['lag_s'])} s behind (limit 3600 s)"})
 
     out.sort(key=lambda f: sev[f["severity"]])
     return out
@@ -500,8 +512,12 @@ def render_markdown(report: dict) -> str:
     rep = report.get("replication") or {}
     if rep.get("configured"):
         if rep.get("running") and rep.get("lag_s") is not None:
+            arc = rep.get("archive")
             L.append(f"**REPLICATION** streaming to R2: lag {rep['lag_s']:.1f} s, "
-                     f"{rep.get('generations')} generation(s), latest write {rep.get('latest_end')}")
+                     f"{rep.get('generations')} generation(s), latest write {rep.get('latest_end')}"
+                     + ("" if arc is None else
+                        f"; GG archive file: {arc['generations']} generation(s)"
+                        + (f", lag {arc['lag_s']:.0f} s" if arc.get("lag_s") is not None else ", NOT replicated yet")))
         else:
             L.append("**REPLICATION** configured but NOT healthy: "
                      + ("no litestream binary" if not rep.get("binary") else

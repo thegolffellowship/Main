@@ -40604,7 +40604,7 @@ _HCP_PLAYERS_TTL_S = 120.0
 _HCP_CACHE_STATS: dict = {"hits": 0, "misses": 0}
 
 
-def _hcp_players_signature(db_path, _retry: int = 1) -> tuple:
+def _hcp_players_signature(db_path, _retry: int = 3) -> tuple:
     try:
         with _connect(db_path) as conn:
             # Count + last id catch a posted round; the differential sum
@@ -40642,8 +40642,11 @@ def _hcp_players_signature(db_path, _retry: int = 1) -> tuple:
         # A transient "database is locked" (a writer committing at that
         # instant) is the usual cause — one short retry keeps the cache
         # instead of a "nosig" miss (seen once in test_perf.py, 2026-09-25).
+        # Backoff 50 / 200 / 500 ms (at most 0.75 s): one 50 ms retry was not
+        # always enough (test_perf.py "nosig" again 2026-10-03, ~1 run in 7),
+        # and a miss costs an uncached ~11 s handicap computation.
         if _retry > 0:
-            _time_mod.sleep(0.05)
+            _time_mod.sleep({3: 0.05, 2: 0.2, 1: 0.5}.get(_retry, 0.05))
             return _hcp_players_signature(db_path, _retry - 1)
         # A signature that cannot be read means NO caching, which is safe
         # but slow — say why in the log rather than hiding it (the v2.484.3

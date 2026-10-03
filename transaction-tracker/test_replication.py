@@ -105,6 +105,12 @@ check("healthy (running, lag 3 s): no finding", rep_finding({"configured": True,
 check("configured, binary missing: HIGH", rep_finding({"configured": True, "binary": False})[0]["severity"] == "high")
 check("configured, process not running: HIGH", rep_finding({"configured": True, "binary": True, "running": False})[0]["key"] == "replication_down")
 check("running but the replica has no generation yet: MEDIUM", rep_finding({"configured": True, "binary": True, "running": True, "generations": 0, "lag_s": None})[0]["severity"] == "medium")
+check("archive replica missing while main is healthy: MEDIUM, with the first-upload caveat",
+      rep_finding({"configured": True, "binary": True, "running": True, "generations": 1, "lag_s": 1.0,
+                   "archive": {"generations": 0, "lag_s": None, "error": None}})[0]["key"] == "replication_archive_missing")
+check("archive replica healthy: no finding",
+      rep_finding({"configured": True, "binary": True, "running": True, "generations": 1, "lag_s": 1.0,
+                   "archive": {"generations": 1, "lag_s": 4.0, "error": None}}) == [])
 check("lag over 300 s: HIGH", rep_finding({"configured": True, "binary": True, "running": True, "generations": 1, "lag_s": 301})[0]["key"] == "replication_lag")
 check("the REPLICATION line is in the digest text", "**REPLICATION** not configured" in health.render_markdown(health.build_health_report(1, db_path=live)) or True)
 
@@ -116,7 +122,10 @@ else:
     c = sqlite3.connect(live); c.execute("PRAGMA journal_mode=WAL"); c.commit(); c.close()
     rep_dir = os.path.join(root, "replica")
     cfgp = os.path.join(root, "f.yml")
-    open(cfgp, "w").write(f"dbs:\n  - path: {live}\n    replicas:\n      - type: file\n        path: {rep_dir}\n        sync-interval: 1s\n")
+    arc_db = os.path.join(root, "transactions_gg_archive.db")
+    open(cfgp, "w").write(f"dbs:\n  - path: {live}\n    replicas:\n      - type: file\n        path: {rep_dir}\n        sync-interval: 1s\n"
+                          f"  - path: {arc_db}\n    replicas:\n      - type: file\n        path: {rep_dir}-arc\n        sync-interval: 1s\n")
+    ac = sqlite3.connect(arc_db); ac.execute("PRAGMA journal_mode=WAL"); ac.execute("CREATE TABLE IF NOT EXISTS a (x)"); ac.commit(); ac.close()
     rp.config_path = lambda: __import__("pathlib").Path(cfgp)
     os.environ.update(VARS); os.environ["LITESTREAM_BIN"] = REAL
     rp._CACHE.update(at=0.0, val=None)
@@ -131,6 +140,8 @@ else:
         st = rp.status(live, cache_s=0)
         check("running and streaming: a generation exists and the lag is a few seconds at most",
               st["running"] is True and st["generations"] >= 1 and st["lag_s"] is not None and st["lag_s"] < 30, st)
+        check("the GG archive file is measured too: a generation and a small lag",
+              (st.get("archive") or {}).get("generations", 0) >= 1 and (st["archive"].get("lag_s") or 0) < 30, st.get("archive"))
         rr = rp.restore_to(os.path.join(root, "again.db"), live)
         check("restore_to brings the database back from the replica", rr["ok"] and os.path.getsize(os.path.join(root, "again.db")) > 0, rr)
         c = sqlite3.connect(os.path.join(root, "again.db"))

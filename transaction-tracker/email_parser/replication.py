@@ -103,30 +103,40 @@ def parse_generations(text: str) -> list:
     return rows
 
 
+def _generations(b: str, path: Path, timeout: float, db_path=None) -> dict:
+    """One database's replica state from `litestream generations`."""
+    r = subprocess.run([b, "generations", "-config", str(config_path()), str(path)],
+                       capture_output=True, text=True, timeout=timeout, env=_cmd_env(db_path))
+    if r.returncode != 0:
+        return {"generations": 0, "lag_s": None, "latest_end": None,
+                "error": (r.stderr or r.stdout or "generations failed").strip().splitlines()[-1][:200]}
+    rows = parse_generations(r.stdout)
+    if not rows:
+        return {"generations": 0, "lag_s": None, "latest_end": None, "error": None}
+    last = sorted(rows, key=lambda x: x["end"])[-1]
+    return {"generations": len(rows), "lag_s": last["lag_s"], "latest_end": last["end"], "error": None}
+
+
 def status(db_path=None, cache_s: float = 120.0, timeout: float = 25.0) -> dict:
-    """What the digest shows. Cached briefly: the lag read is a call to R2."""
+    """What the digest shows. Cached briefly: the lag read is a call to R2.
+    The top-level lag/generations are the MAIN database; ``archive`` is the
+    GG archive file (replicated too, but written rarely)."""
     now = time.time()
     if _CACHE["val"] is not None and now - _CACHE["at"] < cache_s:
         return _CACHE["val"]
     out = {"configured": configured(), "missing": missing_env(), "binary": None,
            "running": False, "lag_s": None, "generations": 0, "latest_end": None,
-           "error": None, "checked_at": datetime.utcnow().isoformat(timespec="seconds")}
+           "error": None, "archive": None,
+           "checked_at": datetime.utcnow().isoformat(timespec="seconds")}
     try:
         b = binary(db_path)
         out["binary"] = bool(b)
         out["running"] = running()
         if out["configured"] and b:
-            r = subprocess.run([b, "generations", "-config", str(config_path()), str(_live(db_path))],
-                               capture_output=True, text=True, timeout=timeout, env=_cmd_env(db_path))
-            if r.returncode != 0:
-                out["error"] = (r.stderr or r.stdout or "generations failed").strip().splitlines()[-1][:200]
-            else:
-                rows = parse_generations(r.stdout)
-                out["generations"] = len(rows)
-                if rows:
-                    last = sorted(rows, key=lambda x: x["end"])[-1]
-                    out["lag_s"] = last["lag_s"]
-                    out["latest_end"] = last["end"]
+            out.update(_generations(b, _live(db_path), timeout, db_path))
+            arc = _live(db_path).parent / "transactions_gg_archive.db"
+            if arc.is_file():
+                out["archive"] = _generations(b, arc, timeout, db_path)
     except subprocess.TimeoutExpired:
         out["error"] = f"generations timed out after {int(timeout)} s"
     except Exception as e:  # noqa: BLE001 — a status read must never raise
