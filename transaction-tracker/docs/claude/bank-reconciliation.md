@@ -204,3 +204,30 @@ shows the before/after fixes, rowcounts, backfill diagnostic, both auto-match re
 and the `create_entry` result, plus a collapsible raw-JSON view for audit. Renders
 `result["step_errors"]` in a red banner when any step failed, green banner when all
 succeeded.
+
+## Statement import log (CFO lane, bridge `scoring-statement-reconcile`)
+
+Each import runs as a dry run first (`create_missing:false`), then for real.
+**A dry run is not read-only.** It still writes a missing `account_id` (and
+category/event) onto every matched row. Matching uses the same amount ±$0.01,
+±7 days, nearest date first. It also matches rows that are `ignored`.
+
+**Card alerts catch the PRE-TIP amount.** For a restaurant or golf-shop F&B
+charge, the alert amount is lower than what posts on the statement. Creating
+the statement line as a new row would double-count it. Instead, mark the alert
+row `ignored` (that reverses its ledger row), with a note naming the statement
+row, and let the import create the posted amount.
+
+### Chase 7680 (Southwest business, account_id 1), statements 26-06 to 26-09: imported 10/4
+
+| Statement | Cycle | Lines | Matched | Created | Notes |
+|---|---|---|---|---|---|
+| 26-06 | May | 71 | 69 | 2 | 2722, 2723: Anthropic $21.36 on 5/13 and 5/16. +$0.01 residual: the 4/30 $21.37 row (509) paired with a 5/01 $21.38 line across the cycle boundary. |
+| 26-07 | June | 28 | 28 | 0 | Ties. |
+| 26-08 | July | 26 | 26 | 0 | Ties. The dry run wrote account_id onto 26 rows. |
+| 26-09 | Aug | 41 | 34 | 7 | 2715: MANUS credit −$21.32 on 8/15. 2716, 2717, 2720: NTTA $10 on 8/12, 8/20, 8/24. 2718, 2719, 2721: Silverhorn $16.20 and $33.93, Hofbrau $13.01, posted with tips. They replace alert rows 2419 ($13.50), 2420 ($28.93) and 2453 ($11.03), which are now `ignored`, with ledger rows 13654, 13655 and 13942 reversed. Net +$9.68. |
+
+Every printed statement total was tied before import: purchases, and
+payments plus credits. Still to import: **26-10** (9/03–10/02) once it is
+issued. Not yet in OneDrive: Frost 0341 September, Chase 6159 September,
+Venmo May–September.

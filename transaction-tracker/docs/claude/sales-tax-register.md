@@ -72,6 +72,23 @@ $280.50 filed, and February 2026 reserve $97.39 against $140.17 filed.
 - **Kerry, 9/30:** "We have record of all of those, but some are in another part of iCloud. I've made payment on all but August." So every month except 2026-08 is PAID. Where the confirmation is in iCloud, the amounts are left blank until a copy is saved to OneDrive. Copying them over is housekeeping and does not block anything.
 - **Paid with evidence, 2025:** $635.77 across 4 months.
 - **Paid with evidence, 2026 to date:** $428.01 across 2 months.
+- **The iCloud copy (CoS #1181, 10/3) adds no confirmations.** `TGF_iCloud_Files_2026-10-01/00 Seasons/2026/0 Financial/Sales Tax/` holds only 26-02 and 26-03, the same two already above (CFO read, 10/4). The 2025 and Jan/Apr–Jul 2026 confirmations are still not in OneDrive.
+
+### Bank evidence: Comptroller debits on Frost 0341 (CFO, 10/4)
+
+Read from the Frost 0341 statements in `TGF Financial/.../Statements/TGF LLC Checking-0341/`. It is evidence that money left. It is not a confirmation, and it names no period.
+
+| Debit date | Amount | Most likely period | Basis |
+|---|---|---|---|
+| 04/07/26 | 288.54 | 2026-03 | Ties to the penny to the 2026-03 confirmation (filed 4/4) |
+| 06/16/26 | 380.57 | 2026-04 or 2026-05 | Two debits the same day. No Comptroller debit on the May statement. |
+| 06/16/26 | 414.30 | 2026-04 or 2026-05 | (same) |
+| 08/20/26 | 336.48 | 2026-06 or 2026-07 | Two debits the same day |
+| 08/20/26 | 481.31 | 2026-06 or 2026-07 | (same) |
+
+- **Read:** if each pair is two returns paid together, then April (due 5/20) and June (due 7/20) were each paid about a month late. A late payment carries the $50 late-filing penalty plus 5% (see Late-filing terms), and that would be inside these amounts. **This is an inference.** It needs the confirmations, or Kerry's word, before any period is marked.
+- **No debit for 2026-01 (paid 2/20 per Kerry) or 2026-02 ($139.47 on 3/20) was checked on Frost this pass.** Those may have been paid from another account.
+- Frost September is not in OneDrive yet (Kerry to drop it). The August return (due 9/20, not filed) will show there when it is paid.
 
 ## August 2026 return: FINAL (Kerry 9/30: "Those markups are right (I believe), go ahead with August")
 
