@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.524.2";
+window.TGF_VERSION = "2.524.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.524.3",
+    date: "2026-10-04",
+    title: "Lone Star Cup paid badge on the phone (Kerry: \"It shouldn't only be shown as one paid\")",
+    changes: [
+      "The Events list's players/paid badge on the PHONE card now reads the one-off money picture, the same as the desktop table already did. The Cup's roster is RSVP placeholders paid by Venmo/Zelle, so the old count of active order rows read 1 (Chris Cannon, the one row entered as Paid Separately). Now it counts every player whose balance is settled: entry $250 plus the skins and Friday add-ons they're in for, with lodging money kept out.",
+      "On a team event (one whose oneoff_charges names a team_dial) the badge counts the TEAM only. Money from someone off the roster, like a declined player's unrefunded deposit or an unexplained payment, still shows in the money view but isn't counted as a paid player. Guard: test_oneoff_paid_badge.py.",
+    ],
+  },
   {
     version: "2.524.2",
     date: "2026-10-04",

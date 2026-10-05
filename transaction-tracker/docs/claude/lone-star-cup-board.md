@@ -269,3 +269,19 @@ the round's list.
   `_event_index_as_of` (the index in effect the morning the event starts).
 - **The cup feeds no points race** (not Fall NET, not Monthly). Nothing in
   `lsc_cup.py` writes to handicaps, points or standings.
+
+## Events-list paid badge — v2.524.3 (Kerry 2026-10-04)
+
+Kerry: "Can you mark the tracker accordingly in the badge? It shouldn't
+only be shown as one paid." The Cup's 28 roster rows are RSVP-only
+placeholders (all on event_id 3329); the money arrives by Venmo/Zelle
+into `expense_transactions`. The players/paid badge therefore reads
+`oneoff_paid` from `get_oneoff_roster_finance` (balance settled =
+entry $250 + the add-ons in `oneoff_addons`, lodging deducted), not the
+count of active order rows, on BOTH the desktop table and the phone card
+(the phone card read `registrations` and showed 1 until v2.524.3). On a
+team event the count is the frozen roster only; off-roster money (James
+Wilson Jr's $325, McCrary's unrefunded $150) stays in the money view and
+is not a paid player. Placeholder rows are left as they are: converting
+them to Paid Separately would book allocations on top of the held
+deposit ledger. Guard: `test_oneoff_paid_badge.py`.

@@ -29477,6 +29477,13 @@ def get_all_events(db_path: str | Path | None = None) -> list[dict]:
                     include_shirts=False)
                 if _fin:
                     _pl = _fin.get("players") or {}
+                    # A team event counts its TEAM only (Kerry 2026-10-04:
+                    # "It shouldn't only be shown as one paid") — money
+                    # from someone off the roster (a declined player's
+                    # unrefunded deposit) is not a paid player.
+                    if (_fin.get("config") or {}).get("team_dial"):
+                        _pl = {k: v for k, v in _pl.items()
+                               if v.get("team")}
                     _d["oneoff_paid"] = sum(
                         1 for p in _pl.values()
                         if p.get("expected") is not None
