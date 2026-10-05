@@ -285,3 +285,29 @@ Wilson Jr's $325, McCrary's unrefunded $150) stays in the money view and
 is not a paid player. Placeholder rows are left as they are: converting
 them to Paid Separately would book allocations on top of the held
 deposit ledger. Guard: `test_oneoff_paid_badge.py`.
+
+## Roster swap, payments and format prep — 2026-10-05 (CoS #1206–#1210, Track B #1215)
+
+- **Marques out, Walter Hogue in (Kerry).** Walter (cid 834, Jay's brother)
+  takes Marques's Austin seat "PLAYERS CUP · 2" on `lsc_roster_final`
+  (seat carries `replaced` and `age: 69`); Marques moves to Austin's
+  `declined` list (withdrew 10/5, paid $0, no refund). `lsc_accepted`
+  swaps 14 → 834. Walter: starting handicap 10.9 (#1207), 1st Timer, Red
+  tee (65+ bracket, `lsc_tees`), shirt = Marques's freed XL set (no 2XL
+  exists in the order; `oneoff_shirt_notes`). Do NOT re-freeze the roster
+  from standings: it would drop Walter.
+- **Payments (all linked to 3329 with `scoring-expense-event`):** Peterson
+  2726 $325 and Julius Jenkins 2729 $175 ("Mr Bozack", Kerry) → both
+  entry + skins, marked SKINS; Matt Jenkins 2730 $210 → balance + Friday,
+  marked FRI (practice roster row 3042). Kerry's own seat is comp:
+  `oneoff_charges` override `18 → 0` (Kerry 10/4, "Yes I should be paid").
+  Jay Hogue's $540 (2725) is unapplied pending Kerry: on totals he is
+  $160 over ($1,015 in vs $250 + $75 + $530 room).
+- **Format stays open** until both captains answer (Sat PM `chapman` or
+  `fourball` is one field on the `sat-pm` session). Kerry's flighted draw
+  is a proposal: pools sort PAIRS by session team handicap (3 low pairs =
+  matches 1–3, 4 high = 4–7); a match may carry a `pool` label, which the
+  engine ignores. No draw screen exists; a Zoom draw is entered into
+  `lsc_matches` by hand afterward (settings write, no push).
+- **Pars:** every Hideout tee is par 72 (37/35), so no relative-par
+  adjustment applies across Blue/White/Red/Teal.

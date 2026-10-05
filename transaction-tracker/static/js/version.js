@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.524.3";
+window.TGF_VERSION = "2.524.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.524.4",
+    date: "2026-10-05",
+    title: "Lone Star Cup notes: Walter Hogue replaces Mike Marques, tonight's payments, format prep (docs only)",
+    changes: [
+      "Docs only, no code change. The Lone Star Cup board notes record tonight's rulings: Walter Hogue takes Mike Marques's Austin seat (Red tee, starting handicap 10.9, Marques's XL shirts); Peterson, Julius Jenkins and Matt Jenkins's payments are linked to the Cup; Kerry's own seat counts as paid; and the Saturday PM format stays open until both captains answer.",
+    ],
+  },
   {
     version: "2.524.3",
     date: "2026-10-04",
