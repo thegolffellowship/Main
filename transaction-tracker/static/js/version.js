@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.525.7";
+window.TGF_VERSION = "2.525.8";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.525.8",
+    date: "2026-10-06",
+    title: "Credit from a received payment, with an optional split",
+    changes: [
+      "Kerry 10/6: \"What do you mean no tool records a payment into a credit? We do that with regular events. We need that tool now if we don't have it.\" Existing tools credit FROM a registration (credit_transaction, partial_credit_transaction); money received by Venmo or bank with no registration behind it (Justin McCrary's $150 for the Lone Star Cup) had no path into the credit pool. New MCP post_credit_from_receipt / bridge scoring-credit-from-receipt (email_parser/receipt_credits.py): from one received expense_transactions row it writes one credited row for the player (Manual Entry 'Credit from receipt', customer_id, a note naming the receipt and Kerry's post), claims the receipt so it can't be credited twice, and logs before/after.",
+      "A split: credit + rest parts must equal the receipt to the cent; a rest part is a named registration of that player or a labelled line (e.g. 'LSC lodging'), recorded on the receipt. Dry run by default; apply needs a mailbox post carrying Kerry's word (the set_customer_field guard). No new ledger row: the received payment stays the one ledger entry. undo_credit_from_receipt keeps the row (reversed, $0) and frees the receipt. No schema change. Guard test_receipt_credits.py."
+    ]
+  },
   {
     version: "2.525.7",
     date: "2026-10-06",

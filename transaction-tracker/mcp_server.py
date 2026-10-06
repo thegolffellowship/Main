@@ -1789,6 +1789,7 @@ def _scoring_dispatch_inner(url: str, extract: str):
       scoring-missing-hcp[:<event_id> | days=<n>]  players with no handicap on an event (or every upcoming event), with the fix per player
       scoring-se-card:<event_id>|g<group> | <event_id>|c<customer_id>  one group's / player's LIVE entered card (read-only)
       scoring-pair-history:c<customer_id>[|<year>] | e<event_id>  partners, rode-with, solo carts (read-only)
+      scoring-credit-from-receipt:<receipt_id>|<customer_id>|<amount>|<kerry_ok_post>[|<rest json>][|apply]  money RECEIVED -> a player credit, optional split (dry run default; Kerry-OK post)
       scoring-pairings-audit:<event_id>  the saved sheet against the pairing rules: per-player flags, per-group results, repeat depth, generator alternative (read-only)
       scoring-event-course-audit[:upcoming|all|<event_id>]  every event's course LINK against its course NAME: wrong / unlinked / unknown, with the fix (read-only; Kerry 2026-10-06 "audit all the courses")
       scoring-standard:[<name>[|<section words>]]  a standard of record by name, whole or one section
@@ -6274,6 +6275,22 @@ def _scoring_dispatch_inner(url: str, extract: str):
             _a = (arg or "scan").strip().lower()
             return json.dumps(_sa.chapter_dry_run() if _a == "chapter" else _sa.redundancy_scan(),
                               indent=2, default=str)
+        if cmd == "scoring-credit-from-receipt":
+            # <receipt_id>|<customer_id>|<amount>|<kerry_ok_post>[|<rest json>][|apply]
+            # Money received -> a player credit (Kerry 2026-10-06). Dry run default.
+            from email_parser.receipt_credits import post_credit_from_receipt as _pcr
+            _p = [x.strip() for x in (arg or "").split("|")]
+            _apply = bool(_p) and _p[-1].lower() == "apply"
+            if _apply:
+                _p = _p[:-1]
+            if len(_p) < 4 or not all(x.replace(".", "", 1).isdigit() for x in _p[:4]):
+                return json.dumps({"error": "usage: scoring-credit-from-receipt:<receipt_id>|<customer_id>|"
+                                            "<amount>|<kerry_ok_post>[|<rest json>][|apply]"})
+            _out = _pcr(int(_p[0]), int(_p[1]), float(_p[2]), int(_p[3]),
+                        rest=_p[4] if len(_p) > 4 else "", apply=_apply)
+            _audit("scoring-credit-from-receipt", f"{arg} -> {'applied' if _out.get('applied') else 'dry run' if _out.get('dry_run') else _out.get('refused')}",
+                   item_id=_out.get("credit_item_id"))
+            return json.dumps(_out, indent=2, default=str)
         if cmd == "scoring-pairings-audit":
             # Kerry 2026-10-06 via Front Desk. Read-only: the saved sheet is never changed.
             from email_parser.pairings_audit import event_pairing_audit
@@ -8112,6 +8129,41 @@ def get_event_pairing_audit(event_id: int) -> str:
     from email_parser.pairings_audit import event_pairing_audit
     _audit("get_event_pairing_audit", f"event={event_id}")
     return json.dumps(event_pairing_audit(int(event_id)), indent=2, default=str)
+
+
+@mcp.tool()
+def post_credit_from_receipt(receipt_id: int, customer_id: int, amount: float,
+                             kerry_ok_post: int, note: str = "", rest: str = "",
+                             apply: bool = False) -> str:
+    """Turn money RECEIVED (a Venmo / bank receipt in expense_transactions)
+    into a player credit, optionally splitting the payment (Kerry 2026-10-06:
+    "What do you mean no tool records a payment into a credit? ... We need
+    that tool now"). `rest`: JSON list for the remainder of the receipt,
+    e.g. [{"label": "LSC lodging", "amount": 300}] or [{"item_id": 123,
+    "amount": 300}]; credit + rest must equal the receipt to the cent.
+    Dry run by default; apply needs a mailbox post carrying Kerry's word
+    (kerry_ok_post). Writes one credited row, claims the receipt, logs
+    before/after. No new ledger row (the receipt is the ledger entry).
+    Moves money: Kerry confirms each one."""
+    from email_parser.receipt_credits import post_credit_from_receipt as _p
+    out = _p(receipt_id, customer_id, amount, kerry_ok_post, note=note, rest=rest, apply=apply)
+    _audit("post_credit_from_receipt",
+           f"receipt={receipt_id} cid={customer_id} amount={amount} rest={rest!r} apply={apply} "
+           f"-> {'applied' if out.get('applied') else 'dry run' if out.get('dry_run') else out.get('refused')}",
+           item_id=out.get("credit_item_id"))
+    return json.dumps(out, indent=2, default=str)
+
+
+@mcp.tool()
+def undo_credit_from_receipt(credit_item_id: int, kerry_ok_post: int, apply: bool = False) -> str:
+    """Reverse a credit made by post_credit_from_receipt: the row is kept,
+    marked reversed at $0, and the receipt is freed. Refused once any of the
+    credit has been used. Dry run by default; Kerry-OK post required."""
+    from email_parser.receipt_credits import undo_credit_from_receipt as _u
+    out = _u(credit_item_id, kerry_ok_post, apply=apply)
+    _audit("undo_credit_from_receipt", f"item={credit_item_id} apply={apply} -> {out}",
+           item_id=credit_item_id)
+    return json.dumps(out, indent=2, default=str)
 
 
 @mcp.tool()

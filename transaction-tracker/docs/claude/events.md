@@ -3036,3 +3036,28 @@ does, the member send refuses.**
 - **To approve**: Kerry reads a preview, then
   `scoring-setting-set:event_day_email_approved|<template_hash>`.
 - Test: `test_event_day_email.py` (Graph mocked).
+
+
+## Credit from a received payment (v2.525.8, Kerry 2026-10-06)
+
+Kerry: "What do you mean no tool records a payment into a credit? We do that
+with regular events. We need that tool now if we don't have it."
+
+- **With a registration:** `partial_credit_transaction` on the player's row
+  writes a credited child row (CFO #1290: the right tool for the Lone Star
+  Cup's Hamilton, Jeff Young and Jay Hogue, on their RSVP-only Cup rows).
+  Don't use `credit_transaction` on an unpriced row: it credits $0.
+- **With no registration** (a Venmo / bank payment only, e.g. McCrary):
+  `post_credit_from_receipt(receipt_id, customer_id, amount, kerry_ok_post,
+  note, rest, apply)` in `email_parser/receipt_credits.py`. It writes one
+  credited `items` row (merchant "Credit from receipt", `email_uid`
+  `receipt-credit-<id>`), sets the receipt's `matched_item_id` to it (so it
+  cannot be credited twice and leaves the unmatched queue), records any split
+  (`rest`: that player's registration ids and/or labelled lines; credit + rest
+  = the receipt to the cent) on the receipt's notes, and logs before/after.
+  No ledger row: the received payment is already the ledger entry.
+- `undo_credit_from_receipt` marks the row `reversed` with price $0.00 (the
+  amount stays in the note) and frees the receipt; refused once any of the
+  credit has been applied.
+- A split only RECORDS where the rest went; it does not re-categorise the
+  ledger row (that is the receipt-split bridge, after WINDOW CLOSED).
