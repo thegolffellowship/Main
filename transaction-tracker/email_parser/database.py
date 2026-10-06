@@ -67085,11 +67085,28 @@ def _pair_count(pair_counts: dict, a: str, b: str) -> int:
 def _pair_cost(pair_counts: dict, a: str, b: str) -> int:
     """Optimizer cost for putting two players together. Kerry's rule 3 is
     MAXIMIZE NEW PAIRINGS — a once-played pair and a thrice-played pair
-    are equally 'not new', so ANY repeat dominates repeat depth: primary
-    term = is-repeat (weight 1000), tiebreak = play count (prefer
-    re-pairing the 1s over the 3s when repeats are forced)."""
-    c = _pair_count(pair_counts, a, b)
-    return 0 if c == 0 else 1000 + c
+    are equally 'not new', so ANY repeat costs more than a new pair; and
+    since 2026-10-06 a DEEPER repeat costs more than any number of shallower
+    ones (`_repeat_cost`), which is Kerry's "repeats in sequence"."""
+    return _repeat_cost(_pair_count(pair_counts, a, b))
+
+
+#: REPEATS IN SEQUENCE (Kerry 2026-10-06, Olympia Hills, event 3308: "I
+#: don't play with X twice (unless other pairings rules dictate) until I've
+#: played with all others once" and "Repeats should be in sequence whenever
+#: possible"). The old cost was 1000 + count, so a 4th meeting cost two
+#: points more than a 2nd and Baker + Rideout went out together a 4th time
+#: while both had partners they had never played with. Each level now costs
+#: more than every level below it put together on any sheet the Tracker
+#: builds (a 64-player field has at most ~100 pairs), so the optimizer
+#: compares sheets deepest-repeat first, then how many pairs sit there.
+REPEAT_LEVEL_BASE = 1000
+
+
+def _repeat_cost(count: int) -> int:
+    """0 for a new pair; BASE**count - 1 for a pair already played
+    `count` times. Lexicographic by depth for any realistic sheet."""
+    return 0 if count <= 0 else REPEAT_LEVEL_BASE ** int(count) - 1
 
 
 def _group_score(players: list[str], pair_counts: dict) -> int:
@@ -68909,7 +68926,7 @@ def _pair_first_timers_with_ambassadors(groups: list[list[str]], ambassadors: se
                     base = _group_score(groups[gi], pair_counts) + _group_score(h, pair_counts)
                     cost = _group_score(g2, pair_counts) + _group_score(h2, pair_counts) - base
                     if _tee(x) and _tee(x) not in ft_tees:
-                        cost += 1001      # same tee "whenever possible"
+                        cost += _repeat_cost(1)   # same tee "whenever possible"
                     if best is None or cost < best[0]:
                         best = (cost, hj, g2, h2)
         if best is None:
@@ -69062,10 +69079,16 @@ def _partner_locked_names(players: list[str], partner_map: dict,
 
 
 def _swap_improve(groups: list[list[str]], pair_counts: dict,
-                  locked: set, max_rounds: int = 40) -> list[list[str]]:
+                  locked: set, max_rounds: int = 40,
+                  guard=None) -> list[list[str]]:
     """Pairwise-swap hill climb: exchange two unlocked players between
     groups whenever it lowers the repeat score. Group sizes (and partner
-    units) are preserved; converges quickly at league sizes."""
+    units) are preserved; converges quickly at league sizes.
+
+    `guard(old_gi, old_gj, new_gi, new_gj) -> bool`: when given, a swap is
+    kept only if it says yes. The second pass after the rule fixes (rules
+    7, 12, 14) passes one so it can lower repeats without undoing them
+    (Kerry 2026-10-06, Olympia Hills, event 3308)."""
     improved = True
     rounds = 0
     while improved and rounds < max_rounds:
@@ -69084,6 +69107,11 @@ def _swap_improve(groups: list[list[str]], pair_counts: dict,
                         groups[gi][i], groups[gj][j] = b, a
                         new = (_group_score(groups[gi], pair_counts)
                                + _group_score(groups[gj], pair_counts))
+                        if new < base and guard is not None:
+                            og, oh = list(groups[gi]), list(groups[gj])
+                            og[i], oh[j] = a, b
+                            if not guard(og, oh, groups[gi], groups[gj]):
+                                new = base
                         if new < base:
                             improved = True
                             a = groups[gi][i]
@@ -69100,6 +69128,7 @@ def _random_groups(
     fixed_units: list[list[str]] | None = None,
     host_units: list[list[str]] | None = None,
     max_group: int = 4,
+    rng=None,
 ) -> list[list[str]]:
     """Form groups using weighted random (history-aware) assignment.
 
@@ -69151,9 +69180,10 @@ def _random_groups(
                 used.add(requester)
                 used.add(partner)
 
-    # Remaining singles — shuffle for randomness
+    # Remaining singles — shuffle for randomness (the caller's seeded rng
+    # when it passes one, so one event's Generate is repeatable)
     singles = [p for p in players if p not in used]
-    _random.shuffle(singles)
+    (rng or _random).shuffle(singles)
     for s in singles:
         units.append([s])
 
