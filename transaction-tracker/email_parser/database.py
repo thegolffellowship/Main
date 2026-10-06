@@ -61360,9 +61360,22 @@ def set_event_blind(event_id: int, holes: str, group_num: int, cart_pos: int,
                  and b["cart_pos"] != cart_pos]
         if taken:
             return {"error": f"{pick['name']} is already a blind in this event"}
-        pairings = get_event_pairings(event_id, db_path=db_path)
-        grp = next((g for g in (pairings.get(holes) or [])
-                    if g["group_num"] == group_num), None)
+        # ONE GROUP, read directly (Kerry 2026-10-06: "slow to switch
+        # visually"). The full `get_event_pairings` rebuild (handicap map,
+        # tees, every group) was most of this write's time and none of it
+        # is needed to place one blind in one seat.
+        _rows = [dict(r) for r in conn.execute(
+            """SELECT ep.cart_pos, ep.customer_id, ep.slot_label,
+                      COALESCE(NULLIF(TRIM(COALESCE(c.first_name,'') || ' ' ||
+                                           COALESCE(c.last_name,'')), ''),
+                               ep.player_name) AS name
+                 FROM event_pairings ep
+                 LEFT JOIN customers c ON c.customer_id = ep.customer_id
+                WHERE ep.event_id = ? AND ep.holes = ? AND ep.group_num = ?""",
+            (event_id, str(holes), int(group_num)))]
+        grp = ({"players": _rows,
+                "slot_label": next((r["slot_label"] for r in _rows if r["slot_label"]), None)}
+               if _rows else None)
         # A SEAT WITH SOMEONE IN IT takes a blind only when that someone is
         # N/H (spec #1073): his card stays, his team's ball in that slot is
         # the blind's. A seat held by a player with a handicap has no blind.
@@ -61381,7 +61394,12 @@ def set_event_blind(event_id: int, holes: str, group_num: int, cart_pos: int,
             # team is the cart, so the other cart of the foursome is
             # exactly where the blind comes from; on Team Net the whole
             # group is the team.
-            unit = _event_blind_unit(pairings, db_path=db_path)
+            _n = conn.execute("SELECT COUNT(*) FROM event_pairings WHERE event_id = ?",
+                              (event_id,)).fetchone()[0]
+            _hk = "18" if conn.execute(
+                "SELECT 1 FROM event_pairings WHERE event_id = ? AND holes = '18' LIMIT 1",
+                (event_id,)).fetchone() else "9"
+            unit, _ = _event_team_unit(_n, _hk, db_path=db_path)
             same_cart = ((me.get("cart_pos") or 0) <= 2) == (int(cart_pos) <= 2)
             if unit != "cart" or same_cart:
                 return {"error": f"{pick['name']} is in that "

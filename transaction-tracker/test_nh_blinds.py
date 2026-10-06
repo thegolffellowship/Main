@@ -203,6 +203,17 @@ check("choosing a blind for the N/H seat records reason 'nh'", e.get("reason") =
 e = db.set_event_blind(EV, "9", 1, 4, 8, db_path=tmp)
 check("choosing the intro player is refused by the gate", "not eligible" in (e.get("error") or ""), e)
 
+import inspect as _insp
+_src = _insp.getsource(db.set_event_blind)
+check("the single-seat write no longer rebuilds the whole sheet (no get_event_pairings)",
+      "get_event_pairings(" not in _src)
+import time as _time
+_t0 = _time.time()
+db.set_event_blind(EV, "9", 1, 4, None, db_path=tmp)
+_e = db.set_event_blind(EV, "9", 1, 4, free, db_path=tmp)
+check("single-seat CHOOSE completes quickly (< 1.5 s on the fixture)", _time.time() - _t0 < 1.5 and _e.get("name"),
+      (_time.time() - _t0, _e))
+
 print("\n== Nat gets a starting handicap: the N/H blind is REPORTED stale, not removed ==")
 db.set_starting_handicap(9, 20.0, set_by="test", db_path=tmp)
 r = db.draw_event_blinds(EV, dry_run=True, team_unit="group", db_path=tmp)

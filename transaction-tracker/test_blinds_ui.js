@@ -28,6 +28,14 @@ check("what the popup showed is what OK writes: the apply carries the previewed 
 check("a fill-only draw keeps the existing cards on the sheet", /if \(redraw\) \{/.test(fn));
 check("…and the detail redraws immediately", /rerenderDetail\(container, ev\)/.test(fn));
 check("the single-seat path patches the same way (the standard both share)",
-      /async function blindSeat\(ctx, body\)/.test(html) && /grp\.blinds\.push\(\{cart_pos: ctx\.cartPos,/.test(html));
+      /async function blindSeat\(ctx, body\)/.test(html) && /grp\.blinds\.push\(Object\.assign\(\{cart_pos: ctx\.cartPos/.test(html));
+const bs = html.slice(html.indexOf("async function blindSeat("), html.indexOf("/** CHOOSE"));
+check("CHOOSE repaints the seat BEFORE the server answers (Kerry 2026-10-06: should happen immediately)",
+      bs.indexOf("rerenderDetail(ctx.container, ctx.ev)") > -1
+      && bs.indexOf("rerenderDetail(ctx.container, ctx.ev)") < bs.indexOf("await fetch("));
+check("…marked saving, and put back with the reason if the server refuses",
+      /pending: true/.test(bs) && /const restore = msg =>/.test(bs) && /restore\(d\.error/.test(bs));
+check("the chooser passes the picked name so the seat can show it at once",
+      /mode: 'choose', customer_id: p\.customer_id, name: p\.name/.test(html));
 console.log("\n" + (failures ? failures + " FAILURE(S)" : "ALL PASS"));
 process.exit(failures ? 1 : 0);

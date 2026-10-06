@@ -7819,7 +7819,7 @@
                             title="BLIND — ${escapeHtml(bl.name || '')}'s card plays for this team. Nobody is in the cart. Click to redraw, remove, or seat a real player here."
                             data-ev-id="${ev.id}" data-holes="${holes}" data-group-num="${grp.group_num}" data-cart-pos="${pos}">
                             <span class="pairing-cart-dot" style="background:#bbb;"></span>
-                            <span class="pairing-player-name">BLIND &middot; ${escapeHtml(bl.name || '')}</span></div>`;
+                            <span class="pairing-player-name">BLIND &middot; ${escapeHtml(bl.name || '')}${bl.pending ? ' <em style="color:var(--text-muted,#6B7280);font-size:0.85em;">saving\u2026</em>' : ''}</span></div>`;
                         continue;
                     }
                     html += `<div class="pairing-empty-slot" title="Open spot — click to pick a player from the roster or add a BLIND, or select a player/cart pair first and click here"
@@ -12119,32 +12119,48 @@
             document.addEventListener('click', closePairingPicker, {once: true});
         }, 0);
     }
-    /** Write one blind into one seat and reload the sheet. */
+    /** Write one blind into one seat and patch the sheet.
+     *  INSTANT (Kerry 2026-10-06: "it was slow to switch visually ... that
+     *  should happen immediately"): a CHOOSE or a clear repaints the seat
+     *  the moment it is tapped, marked "saving"; the server's answer then
+     *  confirms it, or puts the seat back as it was and says why. RANDOM
+     *  shows "drawing..." in the seat until the name comes back. */
     async function blindSeat(ctx, body) {
+        const st = getPairingsState(ctx.ev.id);
+        const grp = _findGroup(st, ctx.holes, ctx.groupNum);
+        const before = grp ? (grp.blinds || []).slice() : null;
+        const putSeat = b => {
+            if (!grp) return;
+            grp.blinds = (grp.blinds || []).filter(x => x.cart_pos !== ctx.cartPos);
+            if (b) grp.blinds.push(Object.assign({cart_pos: ctx.cartPos, source: 'app'}, b));
+        };
+        if (body.mode === 'clear') putSeat(null);
+        else putSeat({name: (body.mode === 'choose' && body.name) ? body.name : 'drawing\u2026',
+                      customer_id: body.customer_id || null, pending: true});
+        rerenderDetail(ctx.container, ctx.ev);
+        const restore = msg => {
+            if (grp && before) grp.blinds = before;
+            rerenderDetail(ctx.container, ctx.ev);
+            alert(msg);
+        };
         try {
+            const send = Object.assign({}, body); delete send.name;
             const res = await fetch(`/api/events/${ctx.ev.id}/pairings/blinds`, {
                 method: 'POST', headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify(Object.assign({
                     seat: {holes: ctx.holes, group_num: ctx.groupNum,
-                           cart_pos: ctx.cartPos}}, body)),
+                           cart_pos: ctx.cartPos}}, send)),
             });
             const d = await res.json();
-            if (!res.ok || d.error) { alert(d.error || res.statusText); return; }
-            // Patch the sheet in place. Re-reading the whole panel took
-            // long enough that the seat looked broken (Kerry 2026-09-16:
-            // "when selected, it doesn't show up for like 20 seconds").
-            const st = getPairingsState(ctx.ev.id);
+            if (!res.ok || d.error) { restore(d.error || res.statusText); return; }
             if (st.blindPool) st.blindPool = null;   // counts moved
-            const grp = _findGroup(st, ctx.holes, ctx.groupNum);
-            if (grp) {
-                grp.blinds = (grp.blinds || []).filter(
-                    b => b.cart_pos !== ctx.cartPos);
-                if (d.name) grp.blinds.push({cart_pos: ctx.cartPos,
-                    name: d.name, customer_id: d.customer_id, source: 'app'});
-            }
+            // Confirm the seat from the server's answer (no panel re-read:
+            // Kerry 2026-09-16, "it doesn't show up for like 20 seconds").
+            if (d.name) putSeat({name: d.name, customer_id: d.customer_id});
+            else putSeat(null);
             rerenderDetail(ctx.container, ctx.ev);
         } catch (err) {
-            alert('Blind failed: ' + (err.message || err));
+            restore('Blind failed: ' + (err.message || err));
         }
     }
 
@@ -12204,7 +12220,7 @@
                 e.stopPropagation();
                 const p = elig[Number(btn.dataset.bidx)];
                 closePairingPicker();
-                if (p) await blindSeat(ctx, {mode: 'choose', customer_id: p.customer_id});
+                if (p) await blindSeat(ctx, {mode: 'choose', customer_id: p.customer_id, name: p.name});
             });
         });
         setTimeout(() => {
