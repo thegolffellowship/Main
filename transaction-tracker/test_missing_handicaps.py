@@ -155,3 +155,23 @@ def test_date_of_birth_write():
     assert r["changes"] == 1
     with db._connect(tmp) as c:
         assert c.execute("SELECT date_of_birth FROM customers WHERE customer_id = 2").fetchone()[0] is None
+
+
+def test_front_desk_relay_signed_in_the_header_carries_kerrys_word():
+    # The Front Desk posts under author tracker-claude with "FROM: front-desk"
+    # on its header line; its verbatim Kerry quotes must pass the guard
+    # (v2.525.4). A lane's own post quoting Kerry still must not.
+    from email_parser.customer_query import set_customer_field
+    tmp = _fixture()
+    with db._connect(tmp) as c:
+        c.execute("INSERT INTO platform_dialogue (author, topic, body) VALUES ('tracker-claude', 'front-desk', "
+                  "'TO: platform-claude (CA), kerry\nFROM: front-desk, Tue 10/6 11:35 AM CDT\n\n"
+                  "Kerry: \"Yes apply the correct hole data now.\"')")
+        c.execute("INSERT INTO platform_dialogue (author, topic, body) VALUES ('tracker-claude', 'scoring-tees', "
+                  "'TO: kerry\nFROM: tracker-claude (Track A)\n\nKerry said \"go\" in my session.')")
+        c.commit()
+        relay, lane = [r[0] for r in c.execute("SELECT id FROM platform_dialogue ORDER BY id DESC LIMIT 2").fetchall()][::-1]
+    r = set_customer_field([1], "gender", "M", "t", relay, db_path=tmp)
+    assert "refused" not in r and "front-desk, quoting Kerry" in r["authority"], r
+    r = set_customer_field([1], "gender", "M", "t", lane, db_path=tmp)
+    assert "refused" in r, r

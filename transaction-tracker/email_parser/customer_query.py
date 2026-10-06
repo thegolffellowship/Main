@@ -103,6 +103,18 @@ RELAYS = ("platform-claude", "front-desk")
 _KERRY_QUOTE = re.compile(r"\bkerry\b[^\n\"\u201c]{0,60}[\"\u201c]\s*\S", re.IGNORECASE)
 
 
+_FROM_LINE = re.compile(r"^\s*FROM:\s*([a-z-]+)", re.IGNORECASE | re.MULTILINE)
+
+
+def _relay_from_header(body: str):
+    """The relay a post's header names: the 'FROM: front-desk, ...' line
+    within the first four lines, when it names one of RELAYS. None else."""
+    head = "\n".join((body or "").splitlines()[:4])
+    m = _FROM_LINE.search(head)
+    name = (m.group(1).lower() if m else "")
+    return name if name in RELAYS else None
+
+
 def _kerry_ok(conn, post_id) -> tuple[bool, str]:
     try:
         r = conn.execute("SELECT id, author, body FROM platform_dialogue WHERE id = ?",
@@ -112,10 +124,17 @@ def _kerry_ok(conn, post_id) -> tuple[bool, str]:
     if not r:
         return False, f"mailbox post #{post_id} not found"
     author = (r["author"] or "").strip().lower()
+    body = r["body"] or ""
     if author == "kerry":
         return True, f"#{r['id']} (kerry)"
-    if author in RELAYS and _KERRY_QUOTE.search(r["body"] or ""):
-        return True, f"#{r['id']} ({author}, quoting Kerry)"
+    # The Front Desk and the CoS post under the shared tracker-claude author
+    # and sign the header line ("TO: ...\nFROM: front-desk, ..."), so the
+    # author column alone never showed their relays (v2.525.4, found when
+    # Kerry's DOB approval #1259 was refused on 2026-10-06). The header's
+    # FROM line is the relay's signature; a lane's own post still is not.
+    relay = author if author in RELAYS else _relay_from_header(body)
+    if relay and _KERRY_QUOTE.search(body):
+        return True, f"#{r['id']} ({relay}, quoting Kerry)"
     return False, (f"mailbox post #{post_id} ({author}) does not carry Kerry's word: it must be "
                    f"Kerry's own post, or {' / '.join(RELAYS)} quoting him verbatim")
 

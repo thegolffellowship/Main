@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.525.3";
+window.TGF_VERSION = "2.525.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.525.4",
+    date: "2026-10-06",
+    title: "The Kerry-OK guard recognises the Front Desk's signed relays",
+    changes: [
+      "set_customer_field refused Kerry's date-of-birth approval (#1259) because the Front Desk posts under the shared tracker-claude author and signs its header line 'FROM: front-desk, ...'; the guard read only the author column, so no Front Desk relay of Kerry's words ever passed. A post whose header FROM line names front-desk or platform-claude now counts as that relay (its verbatim Kerry quote is still required); a lane's own post quoting Kerry is still refused. Kerry 10/6 in Track A's session: \"I approve the DOB entry\". test_missing_handicaps.py."
+    ]
+  },
   {
     version: "2.525.3",
     date: "2026-10-06",
