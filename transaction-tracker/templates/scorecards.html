@@ -99,8 +99,12 @@
     .card.h18 tr.hd th.lead .gc { font-size: 1.4em; letter-spacing: 0.03em; }
     tr.tee td { height: 1.6em; font-size: 0.82em; }
     tr.tee td.lead { text-align: left; }
-    tr.tee td.lead .age { float: right; opacity: 0.8; }
+    tr.tee td.lead .age, tr.si-extra td.lead .age { float: right; opacity: 0.8; }
     tr.par td, tr.hcp td { height: 1.6em; font-size: 0.82em; }
+    /* A card with a second SI row (Kerry 2026-10-06) keeps its height: its
+       tee / par / SI rows give up the room (7 short rows in the space of 6). */
+    .card.si2 tr.tee td, .card.si2 tr.par td, .card.si2 tr.hcp td { height: 1.37em; }
+    .card.si2 tr.hcp:not(:last-of-type) td { border-bottom-width: 1px; }
     tr.par td { font-weight: 700; }
     tr.hcp td { color: #4B5563; }
     tr.par td.lead, tr.hcp td.lead { text-align: left; }
@@ -301,7 +305,7 @@
   {% for c in sheet %}
   {% set grid = sc.grids[c.holes] %}
   {% set is18 = c.holes == '18' %}
-  <div class="card{{ ' h18' if is18 else '' }}">
+  <div class="card{{ ' h18' if is18 else '' }}{{ ' si2' if c.si_extra else '' }}">
     <div class="head">
       <div class="brand">
         <img src="/static/tgf-logo-r.svg" alt="TGF">
@@ -355,10 +359,17 @@
         {% for h in front %}<td class="{{ 'hl' if c.hl_hole == h else '' }} {{ 'thick' if loop.last else '' }}">{{ grid.par.get(h, '') }}</td>{% endfor %}
         {% if is18 %}<td>{{ grid.par_out }}</td>{% else %}<td class="thick">{{ grid.par_total }}</td><td></td><td></td>{% endif %}
       </tr>
-      <tr class="hcp"><td class="lead thick">Stroke Index</td>
+      <tr class="hcp"><td class="lead thick">{% if c.si_main_label %}SI · {{ c.si_main_label }}{% else %}Stroke Index{% endif %}</td>
         {% for h in front %}<td class="{{ 'hl' if c.hl_hole == h else '' }} {{ 'thick' if loop.last else '' }}">{{ grid.si.get(h, '') }}</td>{% endfor %}
         {% if is18 %}<td></td>{% else %}<td class="thick"></td><td></td><td></td>{% endif %}
       </tr>
+      {# The players' own tees' stroke index where it differs (Kerry 10/6). #}
+      {% for x in c.si_extra or [] %}
+      <tr class="hcp si-extra"><td class="lead thick">SI · {{ x.label }}{% if x.band_text %} <span class="age">{{ x.band_text }}</span>{% endif %}</td>
+        {% for h in front %}<td class="{{ 'hl' if c.hl_hole == h else '' }} {{ 'thick' if loop.last else '' }}">{{ x.si.get(h, '') }}</td>{% endfor %}
+        {% if is18 %}<td></td>{% else %}<td class="thick"></td><td></td><td></td>{% endif %}
+      </tr>
+      {% endfor %}
       {% for r in c.rows %}
       <tr class="pl {{ 'rider' if r.rider else '' }} {{ 'split' if c.split_after is not none and loop.index0 == c.split_after else '' }}">
         <td class="lead thick"><div class="ln"><span class="nm" style="font-size:{{ r.name_em_18 if is18 else r.name_em }}em">{{ r.name }}</span><span class="tc" title="{{ r.tee_code }}" style="{% if r.chip_ladies %}background:#fff;border:2px solid {{ r.chip }};{% elif (r.chip or '')|lower in ['#ffffff', '#fff'] %}background:#fff;border:1.5px solid #1B1B1B;{% else %}background:{{ r.chip or '#fff' }};border:1px solid {{ r.chip or '#1B1B1B' }};{% endif %}"></span></div></td>
@@ -399,6 +410,12 @@
         {% for h in back %}<td class="{{ 'hl' if c.hl_hole == h else '' }} {{ 'thick' if loop.last else '' }}">{{ grid.si.get(h, '') }}</td>{% endfor %}
         <td class="thick"></td><td class="thick"></td><td></td><td></td>
       </tr>
+      {% for x in c.si_extra or [] %}
+      <tr class="hcp si-extra"><td class="lead thick">SI</td>
+        {% for h in back %}<td class="{{ 'hl' if c.hl_hole == h else '' }} {{ 'thick' if loop.last else '' }}">{{ x.si.get(h, '') }}</td>{% endfor %}
+        <td class="thick"></td><td class="thick"></td><td></td><td></td>
+      </tr>
+      {% endfor %}
       {% for r in c.rows %}
       <tr class="pl {{ 'rider' if r.rider else '' }} {{ 'split' if c.split_after is not none and loop.index0 == c.split_after else '' }}">
         <td class="lead thick" style="text-align:center">{{ r.initials }}</td>

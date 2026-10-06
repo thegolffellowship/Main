@@ -11536,6 +11536,19 @@ def _se_group_from_request(body=None):
     return gid, None
 
 
+@app.route("/Q/<code>")
+@app.route("/q/<code>")
+def score_entry_short(code):
+    """The printed QR's short link (Kerry 2026-10-06: less dense codes):
+    /Q/<group>.<version>.<sig12> -> the group's full signed scorer link."""
+    from email_parser.score_entry import resolve_short_code
+    tok = resolve_short_code(code)
+    if not tok:
+        return ("This scoring link is no longer active. Ask the event manager "
+                "for your group's link."), 404
+    return redirect(f"/member/score?t={tok}")
+
+
 @app.route("/member/score")
 def score_entry_page():
     # The page carries no data; its JS presents the link to /api/score-entry/*.

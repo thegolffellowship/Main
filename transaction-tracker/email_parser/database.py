@@ -26102,6 +26102,7 @@ def event_engine_state(event_name: str, db_path=None) -> dict:
                      "SELECT group_num, player_name FROM event_pairings "
                      "WHERE event_id = ?", (ev["id"],)).fetchall()}
         players = []
+        _own_si_cache: dict = {}
         for r in rounds:
             cid = r["customer_id"]
             scores, received = {}, {}
@@ -26119,6 +26120,16 @@ def event_engine_state(event_name: str, db_path=None) -> dict:
                     scores[int(h["hole_number"])] = h["strokes"]
                 if h["strokes_received"] is not None and not entered:
                     received[int(h["hole_number"])] = h["strokes_received"]
+            # Each player's strokes fall on HIS tee's stroke index (USGA;
+            # Kerry 2026-10-06): a women's tee carries its own.
+            own_si = {}
+            if r.get("tee_id") and r["tee_id"] != tee_id:
+                if r["tee_id"] not in _own_si_cache:
+                    _own_si_cache[r["tee_id"]] = {
+                        int(x["hole_number"]): x["stroke_index"]
+                        for x in _ls_tee_holes(conn, r["tee_id"])
+                        if x["stroke_index"] is not None}
+                own_si = _own_si_cache[r["tee_id"]]
             players.append({
                 "key": str(r["id"]), "customer_id": cid,
                 "name": r["player_name"],
@@ -26128,7 +26139,8 @@ def event_engine_state(event_name: str, db_path=None) -> dict:
                 "buys_net": bool(cid and cid in net_buyers),
                 "buys_gross": bool(cid and cid in gross_buyers),
                 "is_member": True, "scores": scores,
-                "strokes_received": received})
+                "strokes_received": received,
+                "stroke_index_by_hole": own_si})
     if not holes:
         # No tee on the cards -> no par / stroke index. Guessing a tee would
         # score every hole against the wrong card; a board of empty holes

@@ -427,6 +427,12 @@ def build_cards(state: dict, formulas: dict, derive_hole=None) -> list[dict]:
         scores = {int(k): v for k, v in (p.get("scores") or {}).items()
                   if v is not None}
         ph = p.get("playing_handicap")
+        # The player's OWN tee's stroke index (USGA; Kerry 2026-10-06: "Dots
+        # ALWAYS use the SI's from that set of tees!!!"), when the state
+        # carries one covering every hole; else the round's card.
+        own = {int(k): v for k, v in (p.get("stroke_index_by_hole") or {}).items()
+               if v is not None}
+        si_p = own if own and all(h in own for h in si_by_hole) else si_by_hole
         given = {int(k): v for k, v in (p.get("strokes_received") or {}).items()}
         if given:
             received = given
@@ -436,8 +442,8 @@ def build_cards(state: dict, formulas: dict, derive_hole=None) -> list[dict]:
             allocation_source = "none"
         else:
             received = allocate_strokes(
-                int(ph), si_by_hole,
-                mode=ruled_allocation_mode(allocation_mode, si_by_hole))
+                int(ph), si_p,
+                mode=ruled_allocation_mode(allocation_mode, si_p))
             allocation_source = "derived"
 
         holes_out, totals = [], {
@@ -461,7 +467,8 @@ def build_cards(state: dict, formulas: dict, derive_hole=None) -> list[dict]:
                                  formulas) if sr < 0 else d
             row = {"hole": hole, "par": meta.get("par"),
                    "yardage": meta.get("yardage"),
-                   "stroke_index": meta.get("stroke_index"),
+                   "stroke_index": (si_p.get(hole) if si_p is not si_by_hole
+                                    else meta.get("stroke_index")),
                    "strokes": strokes, "strokes_received": sr, **d,
                    # POINTS only — the hole's stroke-play net keeps the
                    # real allocation, which Net and Team Net play off.
@@ -1076,6 +1083,14 @@ def select_variant(game_cfg: dict, holes_key: str, buyers: int) -> dict:
     return out
 
 
+def _card_si(card: dict, si_by_hole: dict) -> dict:
+    """The stroke index a card's OWN holes carry (a women's tee has its own,
+    USGA; Kerry 2026-10-06), when it covers every hole; else the shared one."""
+    own = {h["hole"]: h["stroke_index"] for h in card.get("holes") or []
+           if h.get("stroke_index") is not None}
+    return own if own and all(h in own for h in si_by_hole) else si_by_hole
+
+
 def game_handicaps(cards: list[dict], handicap_cfg: dict | None,
                    si_by_hole: dict) -> dict:
     """The GAME's own stroke allocation — not the card's.
@@ -1161,8 +1176,8 @@ def game_handicaps(cards: list[dict], handicap_cfg: dict | None,
             "strokes": strokes,
             "precision_loss": lossy[c["key"]],
             "by_hole": (allocate_strokes(
-                strokes, si_by_hole,
-                mode=ruled_allocation_mode(alloc_mode, si_by_hole))
+                strokes, _card_si(c, si_by_hole),
+                mode=ruled_allocation_mode(alloc_mode, _card_si(c, si_by_hole)))
                         if si_by_hole else {}),
         }
     return out

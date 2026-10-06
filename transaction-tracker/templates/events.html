@@ -2417,6 +2417,7 @@
     let financialOpenForEvent = {};  // keyed by event id → true if financial panel is open
     let payoutsOpenForEvent = {};  // keyed by event id → true if payouts panel is open
     let flightsOpenForEvent = {};  // keyed by event id → true if the DIVISIONS/FLIGHTS panel is open
+    let scoringOpenForEvent = {};  // keyed by event id → true if the SCORE ENTRY tab is open (Kerry 2026-10-06)
     let reportsOpenForEvent = {};  // keyed by event id → true if the REPORTS panel is open (Kerry 2026-09-29)
     let tgfPayoutData = { customers: [], events: [], winnings: {} };  // TGF payout data from /api/tgf
     let mvpUnlinks = new Set();  // event names unlinked from same-day TGF MVP combining
@@ -3624,7 +3625,8 @@
                 const mobilePayoutsView = payoutsOpenForEvent[ev.id];
                 const mobileFlightsView = flightsOpenForEvent[ev.id];
                 const mobileReportsView = reportsOpenForEvent[ev.id];
-                badgesHtml += `<span class="game-stat-badge ${!mobileGamesView && !mobilePairingsView && !mobileFinancialView && !mobilePayoutsView && !mobileFlightsView && !mobileReportsView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="0">ROSTER <strong>${stats.players}</strong></span>`;
+                const mobileScoringView = scoringOpenForEvent[ev.id];
+                badgesHtml += `<span class="game-stat-badge ${!mobileGamesView && !mobilePairingsView && !mobileFinancialView && !mobilePayoutsView && !mobileFlightsView && !mobileReportsView && !mobileScoringView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="0">ROSTER <strong>${stats.players}</strong></span>`;
                 badgesHtml += `<span class="game-stat-badge ${mobilePairingsView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="2">PAIRINGS</span>`;
                 if (mobileHolesType) {
                     badgesHtml += `<span class="game-stat-badge games-badge ${mobileGamesView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="1">GAMES</span>`;
@@ -3633,12 +3635,13 @@
                     badgesHtml += `<span class="game-stat-badge ${mobileFlightsView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="5" title="Divisions &amp; Flights — the ratified flighting and payout rules, dry run">FLIGHTS</span>`;
                 }
                 badgesHtml += `<span class="game-stat-badge ${mobileReportsView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="6" title="Print reports">REPORTS</span>`;
+                if (currentRole === "admin" && seEventOn(ev.id)) badgesHtml += `<span class="game-stat-badge ${mobileScoringView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="7" title="Live score entry: each group's link and QR, holes in, signatures">SCORING</span>`;
                 if (currentRole === 'admin') {
                     badgesHtml += `<span class="game-stat-badge ${mobilePayoutsView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="4">PAYOUTS</span>`;
                     badgesHtml += `<span class="game-stat-badge fin-badge-admin ${mobileFinancialView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="3">FINANCIAL</span>`;
                 }
                 badgesHtml += '</span>';
-                if (!mobileGamesView && !mobilePairingsView && !mobileFinancialView && !mobilePayoutsView && !mobileFlightsView && !mobileReportsView) {
+                if (!mobileGamesView && !mobilePairingsView && !mobileFinancialView && !mobilePayoutsView && !mobileFlightsView && !mobileReportsView && !mobileScoringView) {
                     // Hole tabs — one per hole count this event actually sold
                     badgesHtml += holesTabsHtml(ev, registrants);
 
@@ -3669,6 +3672,8 @@
                     detailHtml = badgesHtml + renderFlightsPanel(ev);
                 } else if (mobileReportsView) {
                     detailHtml = badgesHtml + renderReportsPanel(ev);
+                } else if (mobileScoringView) {
+                    detailHtml = badgesHtml + renderScoreEntryTab(ev);
                 } else if (mobileFinancialView) {
                     detailHtml = badgesHtml + renderFinancialPanel(ev, registrants);
                 } else if (mobileGamesView) {
@@ -4377,7 +4382,7 @@
     //    Frustrating when it refreshes to closed state each time."
     //    sessionStorage, not local: this is where you are right now, not
     //    a preference, so a new tab starts clean.
-    const DETAIL_VIEWS = {"1": "games", "2": "pairings", "3": "financial", "4": "payouts", "5": "flights", "6": "reports"};
+    const DETAIL_VIEWS = {"1": "games", "2": "pairings", "3": "financial", "4": "payouts", "5": "flights", "6": "reports", "7": "scoring"};
 
     function applyDetailView(evId, val) {
         gamesOpenForEvent[evId] = val === "1";
@@ -4386,6 +4391,7 @@
         payoutsOpenForEvent[evId] = val === "4";
         flightsOpenForEvent[evId] = val === "5";
         reportsOpenForEvent[evId] = val === "6";
+        scoringOpenForEvent[evId] = val === "7";
     }
 
     function currentDetailView(evId) {
@@ -4395,6 +4401,7 @@
         if (payoutsOpenForEvent[evId]) return "4";
         if (flightsOpenForEvent[evId]) return "5";
         if (reportsOpenForEvent[evId]) return "6";
+        if (scoringOpenForEvent[evId]) return "7";
         return "0";
     }
 
@@ -7103,6 +7110,29 @@
     }
     window.sendPrintPack = sendPrintPack;
 
+    // ═══════════ SCORE ENTRY TAB (Kerry 2026-10-06) ═══════════════════
+    // "Move the SCORE ENTRY section to it's own toggle after REPORTS and
+    // before PAYOUTS. Too much going on on that PAIRINGS view." The same
+    // panel (seFillPanel / seRenderPanel), now on its own tab.
+    function renderScoreEntryTab(ev) {
+        const st = (typeof getPairingsState === "function") ? getPairingsState(ev.id) : null;
+        let h9, h18;
+        if (st && st.loaded) {
+            h9 = !!st.groups_9.length; h18 = !!st.groups_18.length;
+        } else {
+            const f = String(ev.format || "");
+            h18 = /18|27/.test(f); h9 = !h18 || /combo|9\s*(&|\/|and)\s*18/i.test(f);
+        }
+        let h = '<div class="score-entry-tab" style="padding:0.5rem 0.25rem;">';
+        if (st && st.isDirty) {
+            h += '<div style="background:#FEF3C7;border:1px solid #FDE68A;border-radius:6px;padding:0.4rem 0.6rem;margin-bottom:0.5rem;font-size:0.8rem;color:#92400E;">PAIRINGS has unsaved changes. Score entry follows the saved pairings; save on PAIRINGS first.</div>';
+        }
+        h += `<div class="se-pp-slot" data-se-ev="${ev.id}" data-se-h9="${h9 ? 1 : 0}" data-se-h18="${h18 ? 1 : 0}">${SE_PP_CACHE[ev.id] || ''}</div>`;
+        h += '</div>';
+        setTimeout(() => seFillPanel(ev.id), 0);
+        return h;
+    }
+
     // ── SCORE ENTRY panel on PAIRINGS (CA #782) ──────────────────────────
     // Reuses the Live Scoring read (/api/score-entry/events/<id>/admin),
     // the seed route (Build from PAIRINGS), and admin close / QR routes.
@@ -7385,7 +7415,6 @@
                 // the Tracker so I can see the preview?"): each group's
                 // scoring link and where every card stands. Admin only in
                 // the dry run.
-                if (currentRole === "admin" && seEventOn(ev.id)) html += `<button class="pairings-action-btn" onclick="window.open('/events/${ev.id}/live-scoring','_blank')" title="Live score entry: every group's link, holes in, signatures, card checks">&#x26F3; Live Scoring</button>`;
                 html += `<button class="pairings-action-btn pairings-blinds-btn" title="Draw BLINDs for the open seats — members in the field with an established handicap, spread evenly over the year">&#x1F3B2; Blinds</button>`;
             }
         }
@@ -7397,10 +7426,7 @@
         // status, Close. Admin only; the member switches stay where they
         // are. Filled after render by seFillPanel (cached, so re-renders
         // don't flicker).
-        if (currentRole === "admin" && seEventOn(ev.id) && !state.isDirty && (state.groups_9.length || state.groups_18.length)) {
-            html += `<div class="se-pp-slot" data-se-ev="${ev.id}" data-se-h9="${state.groups_9.length ? 1 : 0}" data-se-h18="${state.groups_18.length ? 1 : 0}">${SE_PP_CACHE[ev.id] || ''}</div>`;
-            setTimeout(() => seFillPanel(ev.id), 0);
-        }
+        // Moved to its own SCORE ENTRY tab (Kerry 2026-10-06): renderScoreEntryTab.
 
         // ── Match Play confirm panel (rule 8: "Match Play is king") ──────────
         // Shown before the first generate when the season state implies
@@ -9019,6 +9045,7 @@
         const payoutsView = payoutsOpenForEvent[ev.id];
         const flightsView = flightsOpenForEvent[ev.id];
         const reportsView = reportsOpenForEvent[ev.id];
+        const scoringView = scoringOpenForEvent[ev.id];
         let html = '';
 
         // Status banner for cancelled/postponed events
@@ -9037,7 +9064,7 @@
 
         html += '<div class="event-game-stats">';
         html += '<span class="view-toggle-group">';
-        html += `<span class="game-stat-badge ${!gamesView && !pairingsView && !financialView && !payoutsView && !flightsView && !reportsView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="0">ROSTER <strong>${stats.players}</strong></span>`;
+        html += `<span class="game-stat-badge ${!gamesView && !pairingsView && !financialView && !payoutsView && !flightsView && !reportsView && !scoringView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="0">ROSTER <strong>${stats.players}</strong></span>`;
         html += `<span class="game-stat-badge ${pairingsView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="2">PAIRINGS</span>`;
         if (holesType) {
             html += `<span class="game-stat-badge games-badge ${gamesView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="1">GAMES</span>`;
@@ -9051,6 +9078,12 @@
         // REPORTS (Kerry 2026-09-29: "move the print reports stuff to it's
         // own tab on the toggle bar. After Flights").
         html += `<span class="game-stat-badge ${reportsView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="6" title="Print reports: Starter Sheet, Cart Signs, Scorecards, Divisions &amp; Flights, Proximity, Send Pack">REPORTS</span>`;
+        // SCORE ENTRY (Kerry 2026-10-06: "Move the SCORE ENTRY section to
+        // it's own toggle after REPORTS and before PAYOUTS. Too much going on
+        // on that PAIRINGS view"). Same audience as the old panel.
+        if (currentRole === "admin" && seEventOn(ev.id)) {
+            html += `<span class="game-stat-badge ${scoringView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="7" title="Live score entry: each group's link and QR, holes in, signatures">SCORING</span>`;
+        }
         if (currentRole === 'admin') {
             html += `<span class="game-stat-badge ${payoutsView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="4">PAYOUTS</span>`;
             // FINANCIAL is admin-only (Kerry 2026-08-05) — persistent TGF
@@ -9060,7 +9093,7 @@
         html += '</span>';
 
         // Sub-filter badges (only in PLAYERS view)
-        if (!gamesView && !pairingsView && !financialView && !payoutsView && !flightsView && !reportsView) {
+        if (!gamesView && !pairingsView && !financialView && !payoutsView && !flightsView && !reportsView && !scoringView) {
             // Hole tabs — one per hole count this event actually sold
             html += holesTabsHtml(ev, registrants);
 
@@ -9123,6 +9156,10 @@
         }
         if (reportsView) {
             html += renderReportsPanel(ev);
+            return html;
+        }
+        if (scoringView) {
+            html += renderScoreEntryTab(ev);
             return html;
         }
 

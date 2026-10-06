@@ -419,6 +419,9 @@ def build_scorecards(event_id: int, layout: str = "3up", grouping: str = "team",
                 "net_dots": {h: max(0, int(v or 0)) for h, v in net_dots.items()},
                 "net_ghost": {h: int(v) for h, v in net_ghost.items()},
                 "rider": (p.get("cart_pos") or 0) >= 3,
+                # His OWN tee's stroke index, which his dots follow; the
+                # card's second SI row reads it (Kerry 2026-10-06).
+                "band": band, "si_by_hole": si_own,
             }
             rows.append(row)
             dump.append({"group_num": g["group_num"], "slot_label": g["slot_label"],
@@ -450,6 +453,38 @@ def build_scorecards(event_id: int, layout: str = "3up", grouping: str = "team",
             split = next((i for i, r in enumerate(rows) if r["rider"]), None)
             cards.append({**base, "cart": None, "rows": rows,
                           "split_after": split if split not in (None, 0) else None})
+
+    # A SECOND STROKE INDEX ROW (Kerry 2026-10-06: "When those forward (or
+    # ladies rating tees) are used in a foursome, then an additional row
+    # should show for SI's for those tees...so two SI row's (properly
+    # labeled) would show on that group's card...if they're different from
+    # each other. If they're the same, then two rows don't need to show.").
+    # Dots already follow each player's OWN tee (si_own above, USGA). A card
+    # whose players' tees carry a stroke index other than the printed one
+    # gets one extra row per such tee, labelled with the tee; the printed row
+    # is then labelled with the tees it belongs to.
+    for c in cards:
+        main = (grids.get(c["holes"]) or {}).get("si") or {}
+        extra, seen = [], set()
+        for r in c["rows"]:
+            own = r.get("si_by_hole") or {}
+            if not own or all(own.get(h) == v for h, v in main.items()):
+                continue
+            key = tuple(sorted(own.items()))
+            if key in seen:
+                continue
+            seen.add(key)
+            t = by_band.get(r.get("band")) or {}
+            extra.append({"label": t.get("master") or r.get("band") or "Own tee",
+                          "band_text": t.get("band_text") or "", "si": own})
+        c["si_extra"] = extra
+        if extra:
+            same = [t["master"] for t in tees
+                    if t.get("holes") and all(((t["holes"].get(h) or {}).get("stroke_index")) == v
+                                              for h, v in main.items())]
+            c["si_main_label"] = " · ".join(dict.fromkeys(same)) or (par_tee or {}).get("master")
+        else:
+            c["si_main_label"] = None
 
     lay = LAYOUTS[layout]
     # NAME SIZE (Kerry 2026-09-29: bigger "to maximize legibility"): each

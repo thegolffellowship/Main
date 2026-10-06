@@ -1516,11 +1516,60 @@ def _qr_dial(event_id: int, db_path=None):
     return dial.get(str(event_id))
 
 
+#: THE SHORT QR LINK (Kerry 2026-10-06: "Are there by chance less dense QR
+#: codes that could be created as a standard? ... I'm concerned that they may
+#: not be readable in some cases based on the course printing them"). The
+#: printed code carries HTTPS://<HOST>/Q/<group>.<version>.<12 hex of the
+#: signature>, all upper case so the QR stores it in its compact alphanumeric
+#: mode: 29x29 modules instead of 41x41, each one twice the area at the same
+#: printed size. /Q/ redirects to the full signed link; a revoked or closed
+#: link fails there exactly as the long one does.
+SHORT_SIG_HEX = 12
+
+
+def short_score_url(url: str) -> str:
+    """The compact QR form of a /member/score?t=<token> link; any other URL
+    comes back unchanged."""
+    m = re.search(r"^(https?://[^/]+)/member/score\?t=([^&#]+)", url or "")
+    if not m:
+        return url
+    try:
+        body, sig = m.group(2).rsplit(".", 1)
+        p = json.loads(base64.urlsafe_b64decode(body + "=" * (-len(body) % 4)))
+        gid, ver = int(p["g"]), int(p["v"])
+    except Exception:  # noqa: BLE001 — never break a print over the short form
+        return url
+    return f"{m.group(1)}/Q/{gid}.{ver}.{sig[:SHORT_SIG_HEX]}".upper()
+
+
+def resolve_short_code(code: str, db_path=None) -> str | None:
+    """The full group token for a /Q/<group>.<version>.<sig12> code, or None
+    when it does not match the group's CURRENT signed link."""
+    try:
+        gid, ver, sig = (code or "").strip().split(".")
+        gid, ver = int(gid), int(ver)
+    except ValueError:
+        return None
+    tok = make_group_token(gid, db_path=db_path)
+    if not tok:
+        return None
+    body, full = tok.rsplit(".", 1)
+    try:
+        cur = int(json.loads(base64.urlsafe_b64decode(body + "=" * (-len(body) % 4)))["v"])
+    except Exception:  # noqa: BLE001
+        return None
+    if cur != ver or len(sig) != SHORT_SIG_HEX or not hmac.compare_digest(
+            full[:SHORT_SIG_HEX].lower(), sig.lower()):
+        return None
+    return tok if verify_group_token(tok, db_path=db_path) else None
+
+
 def qr_svg(url: str) -> str | None:
     try:
         import segno
     except ImportError:
         return None
+    url = short_score_url(url)
     # omitsize: a viewBox instead of fixed width/height, so the code SCALES
     # to its box. With width="172" a smaller box (the scorecard's 4.6em, the
     # cart sign's 0.9in) cropped the code's right and bottom edges (Kerry
@@ -1538,6 +1587,7 @@ def qr_svg_file(url: str) -> bytes | None:
     except ImportError:
         return None
     buf = io.BytesIO()
+    url = short_score_url(url)
     segno.make(url, error="m").save(buf, kind="svg", scale=4, border=1, dark="#111111")
     return buf.getvalue()
 

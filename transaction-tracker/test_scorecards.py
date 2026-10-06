@@ -380,6 +380,18 @@ check("qr=on with live scoring on: every card carries its group's code (round se
       _q_on["cards"] and all(c.get("qr") and c["qr"].get("url") for c in _q_on["cards"]),
       [bool(c.get("qr")) for c in _q_on["cards"]])
 _h_on = env.get_template("scorecards.html").render(sc=_q_on)
+_long = _q_on["cards"][0]["qr"]["url"]
+_short = _se.short_score_url(_long)
+check("the printed QR carries the SHORT upper-case link (Kerry 10/6: less dense codes)",
+      "/Q/" in _short and _short == _short.upper() and len(_short) < len(_long) / 1.5, _short)
+import segno as _segno
+check("the short link encodes as a 29x29 code (version 3), not 41x41",
+      _segno.make(_short, error="m").version <= 3, _segno.make(_short, error="m").version)
+_code = _short.rsplit("/", 1)[1]
+_tok = _long.split("t=", 1)[1]
+check("/Q/<code> resolves to the group's full signed link", _se.resolve_short_code(_code, db_path=DB) == _tok)
+_bad = _code[:-1] + ("0" if _code[-1] != "0" else "1")
+check("a tampered or stale short code is refused", _se.resolve_short_code(_bad, db_path=DB) is None)
 _svg = _q_on["cards"][0]["qr"]["svg"]
 check("the QR svg scales to its box (viewBox, no fixed width) so it is never cropped",
       "viewBox=" in _svg and 'width="' not in _svg.split(">")[0], _svg[:80])
@@ -418,6 +430,45 @@ _c.commit(); _c.close()
 db._event_tee_rows = _rows_was
 sm = scm.build_scorecards(3304, "3up", "team", qr="off", db_path=DB)
 check("different yardage on the same colour keeps two rows", len(sm["tees"]) == 4)
+
+print("a second SI row when a player's tee carries its own stroke index (Kerry 2026-10-06)")
+_c = sqlite3.connect(DB)
+for _h in range(1, 19):        # the women's tee: its own stroke index on every hole
+    _c.execute("UPDATE course_tee_holes SET stroke_index = ? WHERE tee_id = ? AND hole_number = ?",
+               (19 - _h, tee_ids["Forward"], _h))
+_c.commit(); _c.close()
+_sx2 = scm.build_scorecards(3304, "3up", "team", qr="off", db_path=DB)
+_with = [c for c in _sx2["cards"] if any(r.get("band") == "Forward" for r in c["rows"])]
+_without = [c for c in _sx2["cards"] if not any(r.get("band") == "Forward" for r in c["rows"])]
+check("a card with a Forward player carries one extra SI row, labelled with her tee",
+      _with and all(len(c["si_extra"]) == 1 and c["si_extra"][0]["label"] for c in _with),
+      [c.get("si_extra") for c in _with])
+check("her dots follow HER tee's stroke index (USGA)",
+      all(r["si_by_hole"] == c["si_extra"][0]["si"] for c in _with for r in c["rows"]
+          if r.get("band") == "Forward"))
+check("a card without one keeps a single SI row", all(not c["si_extra"] for c in _without))
+_hx = env.get_template("scorecards.html").render(sc=_sx2)
+check("the page prints the extra row, labelled", 'class="hcp si-extra"' in _hx and "SI · " in _hx)
+if exe and os.getenv("SKIP_PDF") != "1":
+    with sync_playwright() as pw:
+        b = pw.chromium.launch(executable_path=exe, headless=False, args=["--headless=new", "--no-sandbox", "--disable-gpu"])
+        pg = b.new_page()
+        for lay in ("3up", "2up", "2land"):
+            for hk in ("9", "18"):
+                s_ = scm.build_scorecards(3304, lay, "team", qr="off", holes_override=hk, db_path=DB)
+                pg.set_content(env.get_template("scorecards.html").render(sc=s_).replace(
+                    'src="/static/', f'src="file://{static}/'), wait_until="load")
+                over = pg.evaluate("""() => [...document.querySelectorAll('.card')].filter(
+                    c => c.scrollHeight > c.clientHeight + 1).length""")
+                pages = len(PdfReader(io.BytesIO(pg.pdf(prefer_css_page_size=True, print_background=True))).pages)
+                check(f"with the extra SI row, {lay}/{hk}: one page per sheet, no card overflows",
+                      pages == len(s_["sheets"]) and over == 0, f"pages {pages}, over {over}")
+        b.close()
+_c = sqlite3.connect(DB)
+for _h in range(1, 19):
+    _c.execute("UPDATE course_tee_holes SET stroke_index = ? WHERE tee_id = ? AND hole_number = ?",
+               ((2 * _h - 1) if _h <= 9 else 2 * (_h - 9), tee_ids["Forward"], _h))
+_c.commit(); _c.close()
 
 print(f"\n{len(FAILURES)} failure(s)")
 sys.exit(1 if FAILURES else 0)
