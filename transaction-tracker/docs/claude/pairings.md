@@ -2100,3 +2100,36 @@ more variety built in."*
   It recomputes from the seats, so it follows every swap and drag. A requested
   partner is exempt: riding together is the request.
 - Guard: `test_pairings_cart_variety.py`.
+
+## The pairings audit, read-only (v2.524.5, Kerry 2026-10-06 via Front Desk)
+
+Kerry: "you mentioned some things you couldn't see. Create tools for you to
+see them". `email_parser/pairings_audit.py` `event_pairing_audit(event_id)`,
+MCP `get_event_pairing_audit`, bridge `scoring-pairings-audit:<event_id>`.
+It reads the SAVED sheet and writes nothing (guard `test_pairings_audit.py`).
+
+- **Per player:** partner request; the guest's inviter (`_host_of_map`, the
+  note or the shared order); Ambassador in the event's chapter
+  (`chapter_ambassadors`, falling back to the customer chip); captain;
+  `solo_back_ok`; gender; is_new / is_first_timer; distinct round dates
+  before tonight in every chapter, and whether that is under three; blind
+  gate (`customer_blind_gate`); index and its source (posted vs
+  starting/intro); solo-cart record and the streak before tonight.
+- **Per group / cart, hard or soft:** rule 5 (a requested partner in the
+  SAME cart: Kerry 10/6, "Pairings Requests definitely dictate in most cases
+  so Bourquin and Saldana would ride together"); rule 4 (guest with inviter in
+  the same cart, or the same group when the host brought more than one);
+  R-A (a 1st Timer's group has an Ambassador); R-F (same-gender Ambassador);
+  R-D (a lone `<50`, with the `solo_back_ok` note); R-C, R-B, R-E as the
+  Front Desk read them (#1249), marked `reading`; R-G (a repeat cart pair
+  without a request).
+- **Repeat depth:** every non-requested pair already played this season,
+  with each player's lowest-count partners in tonight's field. Out of
+  sequence when a lower count exists (Kerry 10/6: "Repeats should be in
+  sequence whenever possible").
+- **Also:** blinds and where each one plays; the net game (`_event_blind_unit`:
+  Cart Net or Team Net) and the blind rule that goes with it; provenance
+  (`event_pairings` first/last save and the action-log trail; the table does
+  not record generator vs manual); the generator's own alternative
+  (`generate_event_pairings`, which never saves) and its pair score beside
+  the sheet's.

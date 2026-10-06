@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.524.4";
+window.TGF_VERSION = "2.524.5";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.524.5",
+    date: "2026-10-06",
+    title: "Pairings audit: a read-only check of a saved sheet against the pairing rules",
+    changes: [
+      "New read-only MCP tool get_event_pairing_audit and bridge scoring-pairings-audit:<event_id> (Kerry 10/6 via Front Desk: \"you mentioned some things you couldn't see. Create tools for you to see them\"). For one event it returns every player's flags (partner request, the guest's inviter, Ambassador in this chapter, captain, solo_back_ok, gender, 1st Timer / new, events played before tonight, blind gate, index source, solo-cart history), each group's and cart's rule results marked hard or soft, the blinds and the net game, sheet provenance, and the generator's alternative with its pair score.",
+      "Kerry's 10/6 rulings are encoded: a REQUESTED partner rides in the SAME cart (the opposite-cart rule is only for repeat pairs without a request), and a repeat pair is flagged out of sequence while either player has a lower-count partner in the field; the repeat-depth table lists those alternatives.",
+      "R-B, R-C and R-E are evaluated as the Front Desk read them (#1249) and marked 'reading' until the CoS confirms the Spec v1.2 wording. The audit writes nothing and never changes a saved sheet; test_pairings_audit.py checks that."
+    ]
+  },
   {
     version: "2.524.4",
     date: "2026-10-05",

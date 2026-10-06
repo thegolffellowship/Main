@@ -1789,6 +1789,7 @@ def _scoring_dispatch_inner(url: str, extract: str):
       scoring-missing-hcp[:<event_id> | days=<n>]  players with no handicap on an event (or every upcoming event), with the fix per player
       scoring-se-card:<event_id>|g<group> | <event_id>|c<customer_id>  one group's / player's LIVE entered card (read-only)
       scoring-pair-history:c<customer_id>[|<year>] | e<event_id>  partners, rode-with, solo carts (read-only)
+      scoring-pairings-audit:<event_id>  the saved sheet against the pairing rules: per-player flags, per-group results, repeat depth, generator alternative (read-only)
       scoring-standard:[<name>[|<section words>]]  a standard of record by name, whole or one section
       scoring-library-put:<json>  WRITE one Library document {"path","content","meta","supersedes","author","kerry_ok_post","apply"}: append-only, never overwrites, standards/ needs a Kerry-OK post, dry run unless apply
       scoring-library-get:<name>[|<version>][|<heading words>]  READ one Library document: latest live, or a version, or one section
@@ -6272,6 +6273,13 @@ def _scoring_dispatch_inner(url: str, extract: str):
             _a = (arg or "scan").strip().lower()
             return json.dumps(_sa.chapter_dry_run() if _a == "chapter" else _sa.redundancy_scan(),
                               indent=2, default=str)
+        if cmd == "scoring-pairings-audit":
+            # Kerry 2026-10-06 via Front Desk. Read-only: the saved sheet is never changed.
+            from email_parser.pairings_audit import event_pairing_audit
+            _a = (arg or "").strip()
+            if not _a.isdigit():
+                return json.dumps({"error": "give scoring-pairings-audit:<event_id>"})
+            return json.dumps(event_pairing_audit(int(_a)), indent=2, default=str)
         if cmd == "scoring-missing-hcp":
             # "<event_id>" for one event, or "days=<n>" / empty for every
             # upcoming event (the Front Desk brief's read). Read-only.
@@ -8076,6 +8084,23 @@ def get_pairing_history(customer_id: int = 0, event_id: int = 0, year: int = 0) 
     from email_parser.cos_reads import pairing_history_view
     _audit("get_pairing_history", f"customer={customer_id} event={event_id} year={year}")
     return json.dumps(pairing_history_view(customer_id, event_id, year), indent=2, default=str)
+
+
+@mcp.tool()
+def get_event_pairing_audit(event_id: int) -> str:
+    """Audit an event's SAVED pairing sheet against the pairing rules
+    (Kerry 2026-10-06 via Front Desk). Per player: partner request, guest's
+    inviter, Ambassador (this chapter), captain, solo_back_ok, gender, 1st
+    Timer / new, events played before tonight, blind gate, index source,
+    solo-cart history. Per group and cart: rule 5 (a requested partner rides
+    in the SAME cart), rule 4, R-A, R-C, R-D, R-B, R-E, R-F, R-G, with hard
+    or soft marked. A repeat-depth table with each repeat's lower-count
+    alternatives ("repeats should be in sequence"), blinds, the net game,
+    sheet provenance and the generator's alternative with its pair score.
+    Read-only: it never changes the saved sheet."""
+    from email_parser.pairings_audit import event_pairing_audit
+    _audit("get_event_pairing_audit", f"event={event_id}")
+    return json.dumps(event_pairing_audit(int(event_id)), indent=2, default=str)
 
 
 @mcp.tool()
