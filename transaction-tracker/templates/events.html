@@ -10308,7 +10308,7 @@
         // refetch the finance payload — capacity and per-unit "left"
         // counts change with every assignment, so the server recount
         // is the truth, not a local patch.
-        container.querySelectorAll(".oo-lodging-select").forEach(sel => {
+        root.querySelectorAll(".oo-lodging-select").forEach(sel => {
             sel.addEventListener("click", (e) => e.stopPropagation());
             sel.addEventListener("change", async (e) => {
                 e.stopPropagation();

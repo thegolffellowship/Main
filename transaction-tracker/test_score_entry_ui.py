@@ -422,6 +422,35 @@ with sync_playwright() as p:
           se.get_group_card(gidm)["marks"].get("c:101") == {"2": "holed"}, se.get_group_card(gidm)["marks"])
     se.set_round_matches(ridm, None)
 
+    print("match play: the answer survives a slow card reload (Kerry 10/6, #1295)")
+    # The phone drops a saved op from its queue when the server accepts it,
+    # but the card reload lands later. A "Triple in a match" answer tapped in
+    # that gap used to go out with gross null, the server refused it, and the
+    # mark was lost. Hold every card reload for 3 s so the gap is wide open.
+    ridg, gidg, tokg = make(9, 1, "match-gap")
+    se.set_round_matches(ridg, [{"id": "M1", "format": "singles", "sides": [[101], [102]]}])
+    pg = open_as_kerry(tokg)
+    pg.evaluate("""() => { const f = window.fetch;
+        window.fetch = (u, o) => String(u).includes('/api/score-entry/card')
+            ? new Promise((r) => setTimeout(() => r(f(u, o)), 3000)) : f(u, o); }""")
+    for _ in range(4):
+        pg.locator(".se-row").nth(1).locator(".se-plus").click()
+    pg.click("[data-act=save]")
+    pg.wait_for_selector("text=Triple in a match", timeout=5000)
+    for _ in range(50):     # the 7 is on the server; the reload is still held
+        if (se.get_group_card(gidg)["scores"].get("c:102") or {}).get("1") == 7:
+            break
+        pg.wait_for_timeout(100)
+    pg.click("[data-act=pu][data-m=holed]")
+    pg.click("[data-act=pudone]")
+    for _ in range(60):
+        if se.get_group_card(gidg)["marks"].get("c:102"):
+            break
+        pg.wait_for_timeout(100)
+    check("Ball in hole tapped while the card reload is still on its way is stored",
+          se.get_group_card(gidg)["marks"].get("c:102") == {"1": "holed"}, se.get_group_card(gidg)["marks"])
+    se.set_round_matches(ridg, None)
+
     print("Lone Star Cup: X past the triple, the banner in the leading team's colour")
     ridc, gidc, tokc = make(9, 1, "cup")
     db.set_app_setting("lsc_matches", _json.dumps({"event_id": 900, "sessions": [

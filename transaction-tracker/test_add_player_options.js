@@ -21,7 +21,7 @@ check("a stale response for a modal that moved on is ignored", /seq !== apOption
 check("a package's hole count is added to the list rather than dropped", /apEnsureOption\("add-player-holes", String\(holes\)/.test(html));
 check("the person's last tee prefills an empty tee field, only if the course offers that band",
     /function apPrefillFromPerson\(\)/.test(html) && /some\(o => o\.value === last\)/.test(html));
-check("…on the typed name and on the manager pick", /apPrefillFromPerson\(\);\s*\}\s*renderApNameSuggest/.test(html)
+check("…on the typed name and on the manager pick", /apPrefillFromPerson\(\);\s*\}\s*(?:apCreditHint\([^;]*\);\s*)?renderApNameSuggest/.test(html)
     && html.includes('getElementById("add-player-manager").addEventListener("change", apPrefillFromPerson)'));
 check("history prefills an empty Side Games field with the person's MOST FREQUENT choice, only when the event offers it",
     /function apNormSideGames\(v\)/.test(html) && /const typical = Object\.entries\(tally\)\.sort\(\(a, b\) => b\[1\] - a\[1\]\)\[0\];/.test(html)

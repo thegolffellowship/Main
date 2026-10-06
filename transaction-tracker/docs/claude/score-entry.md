@@ -276,6 +276,15 @@ is Triple".
   up** for him before moving on (help behind the ?). The answer rides the
   normal write as `op.mark` (`holed` | `picked_up`), so it queues offline
   and is idempotent on op_id. The card still records the triple.
+- **The reload gap (v2.525.9, Kerry 10/6 #1295).** `flush()` drops an
+  accepted op from the queue at once, but the card reload lands later. In
+  between, `value()` read the hole blank, so an answer tapped in that gap
+  went out with `gross: null`, the server refused it ("a pickup mark goes
+  only on a triple") and the mark was lost. `flush()` now writes every
+  `ok` op's gross (and mark) into the local card before dropping it.
+  Intermittent since the start; v2.525.6's slower card read widened the
+  gap until `test_score_entry_ui.py` failed on it. Guard: the
+  "slow card reload" case there holds every card read for 3 s.
 - **Storage.** `se_hole_marks` (one per round + subject + hole, with
   customer_id or team_id). A mark only goes on the triple (`invalid`
   otherwise); a write without `mark` keeps it; moving the gross off the

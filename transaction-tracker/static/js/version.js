@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.525.8";
+window.TGF_VERSION = "2.525.9";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.525.9",
+    date: "2026-10-06",
+    title: "Match play: a Ball in hole / Picked up answer is no longer lost",
+    changes: [
+      "Kerry 10/6 (#1295, OK via Front Desk): \"Yes, ship the Ball in hole fix after tonight - Only needed for players in matches.\" On the phone, a triple for a match player asks Ball in hole or Picked up. The phone sends that answer with the score it currently shows. A saved score leaves the phone's queue the moment the server accepts it, but the card reload arrives a moment later; an answer tapped in between went out with no score, the server refused it, and the mark was lost (a lost Ball in hole counts as a non-holed ball). The phone now writes each accepted score and mark into its own card straight away, so nothing reads blank while the reload is on its way.",
+      "Not a stroke-index problem: v2.525.6's per-tee stroke index made the card read a little slower, which widened the gap until test_score_entry_ui failed on it. New guard: the same flow with every card reload held for 3 s. Stroke play is unchanged (the score was already saved; only the phone's own copy is updated sooner).",
+      "Housekeeping, no behaviour change: test_add_player_options.js allows the credit hint line v2.487.1 put between the pre-fill and the name list; the one-off lodging pickers are wired under the redrawn part of the event card like every other handler (test_flights_custom_ui.js)."
+    ]
+  },
   {
     version: "2.525.8",
     date: "2026-10-06",
