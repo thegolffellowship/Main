@@ -363,5 +363,35 @@ check("ONE TGF Orange: every orange mark reads --tgf-orange (#E87C3E), no other 
 
 check("the × in the hole cells is drawn with one-print-pixel arms", ".do i.g::before, .do i.g::after { height: 1px;" in _tpl)
 
+
+print("one line per shared tee (Kerry 10/6, Avery Ranch)")
+# 65+ Red and Forward Red (L) on the SAME markers: identical yardage on the
+# played holes -> one row reading "65+ & Forward"; a different women's
+# rating prints beside the men's.
+_c = sqlite3.connect(DB)
+_c.execute("UPDATE course_tee_holes SET yardage = (SELECT m.yardage FROM course_tee_holes m "
+           "WHERE m.tee_id = ? AND m.hole_number = course_tee_holes.hole_number) WHERE tee_id = ?",
+           (tee_ids["65+"], tee_ids["Forward"]))
+_c.commit(); _c.close()
+_rows_was = db._event_tee_rows
+db._event_tee_rows = lambda conn, ev, legend: (
+    {t["band"]: {"rating": (36.0 if t["band"] == "Forward" else 35.1), "slope": 125, "par": 36,
+                 "tee_name": t["tee_name"]} for t in legend}, "front nine card", "")
+sm = scm.build_scorecards(3304, "3up", "team", qr="off", db_path=DB)
+check("three tee rows print, not four", len(sm["tees"]) == 3, [t["band_text"] for t in sm["tees"]])
+check("the shared row reads '65+ & Forward' and carries both bands",
+      sm["tees"][-1]["band_text"] == "65+ & Forward" and sm["tees"][-1]["bands"] == ["65+", "Forward"],
+      sm["tees"][-1])
+check("the folded band's own rating prints beside the host's",
+      sm["tees"][-1]["rating"] == 35.1 and sm["tees"][-1].get("rating_extra") == "36.0/125", sm["tees"][-1])
+check("the Forward player still prints with her own chip and dots",
+      any(r["tee_code"] == "R-L" for c in sm["cards"] for r in c["rows"]) and sm["gaps"] == [], sm["gaps"])
+_c = sqlite3.connect(DB)
+_c.execute("UPDATE course_tee_holes SET yardage = 300 + hole_number * 2 WHERE tee_id = ?", (tee_ids["Forward"],))
+_c.commit(); _c.close()
+db._event_tee_rows = _rows_was
+sm = scm.build_scorecards(3304, "3up", "team", qr="off", db_path=DB)
+check("different yardage on the same colour keeps two rows", len(sm["tees"]) == 4)
+
 print(f"\n{len(FAILURES)} failure(s)")
 sys.exit(1 if FAILURES else 0)

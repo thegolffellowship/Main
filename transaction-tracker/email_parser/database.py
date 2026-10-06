@@ -63481,7 +63481,7 @@ def _event_tee_rows(conn, ev: dict, legend: list) -> tuple[dict, str, str]:
     try:
         label_course_tee_nines(conn, cid)      # cheap, idempotent, self-healing
         rows = [dict(r) for r in conn.execute(
-            "SELECT tee_id, tee_name, gg_alias, slope, rating, nine FROM course_tees "
+            "SELECT tee_id, tee_name, gg_alias, gender, slope, rating, nine FROM course_tees "
             "WHERE course_id = ?", (cid,)).fetchall()]
     except sqlite3.OperationalError:
         return {}, "", "No course card on file, so no playing handicap could be computed."
@@ -63528,8 +63528,23 @@ def _event_tee_rows(conn, ev: dict, legend: list) -> tuple[dict, str, str]:
                                      or _label(r.get("gg_alias")) == _want)
                  and r["slope"] and r["rating"] is not None
                  and ((r["rating"] >= 50) == is18)]
-        if is18 and _want_id and any(r["tee_id"] == _want_id for r in cands):
+        # THE LEGEND'S OWN ROW FIRST, THEN ITS GENDER (v2.525.1, Kerry
+        # 2026-10-06 on Avery Ranch: "That's a huge decrease for Yolanda.
+        # Can that be accurate?"). A course names the men's and the
+        # women's markers alike ("Green" / "Green (L)"), so a name match
+        # alone put the Forward band on the men's Green row (32.3/109) and
+        # printed PH 11 instead of 15 off Green (L) (34.5/117). The
+        # designated row is the one to use when it is a candidate; when
+        # the legend points at the 18-hole set and the nine's rows are
+        # the candidates, a women's band takes a women's row and a men's
+        # band a men's row.
+        if _want_id and any(r["tee_id"] == _want_id for r in cands):
             cands = [r for r in cands if r["tee_id"] == _want_id]
+        else:
+            _want_f = bool(entry.get("ladies"))
+            _same = [r for r in cands if ((r.get("gender") or "M").upper() == "F") == _want_f]
+            if _same:
+                cands = _same
         if not cands:
             continue
         pick = None

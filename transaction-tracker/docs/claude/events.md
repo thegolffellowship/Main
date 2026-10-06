@@ -2694,6 +2694,20 @@ purses beside ours. G2a grades it per player, to the cent
 `/events/<id>/scorecards[.pdf]?layout=3up|2up|2land&grouping=team|cart&qr=auto|off|preview&holes=9|18`;
 bridge `scoring-scorecards:<id>[|key=value…][|dump|html|pdf[|all][|send]]`.
 
+- **One line per shared tee (v2.525.1, Kerry 2026-10-06):** two designated
+  bands that play the same markers (same tee name, identical yardage on
+  every hole played) print as ONE tee row whose age cell reads both bands
+  ("65+ & Forward"); a women's rating that differs from the men's on the
+  same markers prints beside it ("Green (32.3/109 · 34.5/117)"). Players,
+  chips, dots and the yardage grid keep reading each band
+  (`merge_shared_tees`). Tees with different yardage keep their own rows.
+- **A women's band reads the women's row (v2.525.1):** `_event_tee_rows`
+  (the playing-handicap tee resolver) takes the legend's own designated
+  row when it is a candidate, else the row whose gender matches the band.
+  Before this, "Green" and "Green (L)" matched by name and the Forward
+  band computed off the men's rating (Avery Ranch, Yolanda Williams PH 11
+  instead of 15). Guard: `test_event_course_link.py`.
+
 - **Every value comes from a Tracker reader, never the print layer (#897):**
   groups / slot / cart seats / index / PH / net-game value, allowance and
   off-the-lowest from `get_event_print_pack` (the Starter Sheet's reader);

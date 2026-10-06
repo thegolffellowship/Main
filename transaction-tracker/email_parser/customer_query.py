@@ -64,11 +64,35 @@ def query_customers(gender: str = "", chapter: str = "", status: str = "",
 
 # ---------------------------------------------------------------------------
 # set_customer_field — the ONE write the Chief of Staff gets (#1048/#1060):
-# gender and the ambassador flag only, refused unless it cites a mailbox post
-# that carries Kerry's OK (rule 3b), dry run by default, every change logged
-# with its before and after.
+# gender, date_of_birth (Kerry 2026-10-06: "Date of Birth should be a field
+# in customer database. Which you should have a write tool for.") and the
+# ambassador flag only, refused unless it cites a mailbox post that carries
+# Kerry's OK (rule 3b), dry run by default, every change logged with its
+# before and after.
 # ---------------------------------------------------------------------------
-SETTABLE = ("gender", "ambassador")
+SETTABLE = ("gender", "date_of_birth", "ambassador")
+# Columns this function may name in SQL (never the caller's string).
+_COLUMNS = {"gender": "gender", "date_of_birth": "date_of_birth"}
+
+
+def _parse_dob(value):
+    """A date of birth as the parser stores it (YYYY-MM-DD). Accepts
+    YYYY-MM-DD or M/D/YYYY; None / "" / "NULL" clears. Returns (ok, value)."""
+    from datetime import date, datetime
+    if value in (None, "") or str(value).strip().upper() in ("NULL", "NONE"):
+        return True, None
+    s = str(value).strip()
+    for fmt in ("%Y-%m-%d", "%m/%d/%Y", "%m/%d/%y"):
+        try:
+            d = datetime.strptime(s, fmt).date()
+            break
+        except ValueError:
+            d = None
+    if d is None:
+        return False, "date_of_birth must be YYYY-MM-DD or M/D/YYYY"
+    if not (date(1900, 1, 1) <= d <= date.today()):
+        return False, "date_of_birth must be between 1900 and today"
+    return True, d.isoformat()
 
 
 # Who may carry Kerry's word into a write (rule 3b). Kerry himself, or the
@@ -116,6 +140,12 @@ def set_customer_field(customer_ids, field: str, value, reason: str, kerry_ok_po
         if v not in ("M", "F", "NULL"):
             return {"refused": "gender must be M, F or NULL"}
         value = None if v == "NULL" else v
+    if field == "date_of_birth":
+        ok, parsed = _parse_dob(value)
+        if not ok:
+            return {"refused": parsed}
+        value = parsed
+    col = _COLUMNS.get(field, field)
     with db._connect(db_path) as conn:
         ok, why = _kerry_ok(conn, kerry_ok_post)
         if not ok:
@@ -128,12 +158,16 @@ def set_customer_field(customer_ids, field: str, value, reason: str, kerry_ok_po
             return {"refused": "ambassador writes go through scoring-ambassador-set "
                                "(email_parser/ambassadors.py: per chapter, keeps rows)"}
         ph = ",".join("?" * len(ids))
-        rows = {r["customer_id"]: r["gender"] for r in conn.execute(
-            f"SELECT customer_id, gender FROM customers WHERE customer_id IN ({ph})", ids).fetchall()}
+        try:
+            rows = {r["customer_id"]: r[col] for r in conn.execute(
+                f"SELECT customer_id, {col} FROM customers WHERE customer_id IN ({ph})", ids).fetchall()}
+        except Exception as e:  # a database without the column (never production)
+            return {"refused": f"customers has no {col} column here: {e}"}
         missing = [i for i in ids if i not in rows]
-        # A vendor profile is not a person: no gender (#1075-3). Clearing a
-        # vendor's gender to NULL is the one write allowed on a vendor: it
-        # puts back the five set to M before the filter (CFO #1083-2, #1134).
+        # A vendor profile is not a person: no gender, no birthday (#1075-3).
+        # Clearing a vendor's value to NULL is the one write allowed on a
+        # vendor: it puts back the five set to M before the filter (CFO
+        # #1083-2, #1134).
         vendors = db.vendor_customer_ids(conn) if value is not None else set()
         skipped_vendors = [i for i in ids if i in rows and i in vendors]
         changes = [{"customer_id": i, "before": rows[i], "after": value}
@@ -145,12 +179,12 @@ def set_customer_field(customer_ids, field: str, value, reason: str, kerry_ok_po
         if not apply or not changes:
             return out
         for ch in changes:
-            conn.execute("UPDATE customers SET gender = ? WHERE customer_id = ?",
+            conn.execute(f"UPDATE customers SET {col} = ? WHERE customer_id = ?",
                          (value, ch["customer_id"]))
         conn.commit()
     for ch in changes:
         db.log_agent_action(set_by, "set_customer_field",
-                            f"customer {ch['customer_id']} gender {ch['before']!r} -> {ch['after']!r}; "
+                            f"customer {ch['customer_id']} {field} {ch['before']!r} -> {ch['after']!r}; "
                             f"{reason}; authority {why}")
     out["applied"] = True
     return out
