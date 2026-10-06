@@ -2736,6 +2736,16 @@ bridge `scoring-scorecards:<id>[|key=value…][|dump|html|pdf[|all][|send]]`.
   saved pairings if needed); the bound print pack uses `on` too. Unchecked =
   `off`. With live scoring off the cards carry no code and the log says so.
   The cart signs still follow the `score_entry_qr` dial.
+  The code carries the SHORT link (v2.525.7, `score_entry.short_score_url`).
+- **Second SI row (v2.525.7, Kerry 2026-10-06: "two SI row's (properly
+  labeled) would show on that group's card...if they're different"):** dots
+  always follow each player's own tee's stroke index (USGA). A card whose
+  rows include a tee with a different index gets `si_extra` rows
+  ("SI · <tee> <band>") and the main row is labelled with its tees; the
+  card's tee/par/SI rows shrink (`.card.si2`) so it keeps one sheet.
+- **SCORING tab (v2.525.7):** the score-entry panel moved off PAIRINGS to
+  its own tab between REPORTS and PAYOUTS (admin, live scoring on;
+  `renderScoreEntryTab`, view "7").
   Older modes: `auto` follows the score-entry dials; `off` collapses it;
   `preview` fills every group's real scorer link via the read-only
   `score_entry.event_group_links` (never seeds a round) — for Kerry's look

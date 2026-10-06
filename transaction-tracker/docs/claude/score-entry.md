@@ -844,3 +844,23 @@ on that hole ("100% Handicap Stroke", "X% Team|Cart Stroke" from
 hole has none; it sits below Save & Go. The check card calls `popKey()` with
 no hole and keys the whole round. `_basis_pct` reads the allowance out of the
 se_game_handicaps basis text.
+
+
+## Short QR links and own-tee strokes in the engine (v2.525.7, Kerry 2026-10-06)
+
+- **Short QR link.** Kerry: "Are there by chance less dense QR codes that
+  could be created as a standard?" Every printed code (scorecards, cart
+  signs, the PAIRINGS QR button) carries `short_score_url(url)`:
+  `HTTPS://<HOST>/Q/<group>.<version>.<first 12 hex of the signature>`, upper
+  case so the QR uses alphanumeric mode (version 3, 29x29, instead of version
+  6, 41x41). `GET /Q/<code>` (and `/q/`) -> `resolve_short_code` rebuilds the
+  group's CURRENT signed token, compares the 12 hex and the version, runs
+  `verify_group_token`, and redirects to `/member/score?t=<token>`; a revoked,
+  closed or altered code gets a 404 line. Copy-link URLs stay long.
+- **Engine.** `live_scoring.build_cards` honours a player's
+  `stroke_index_by_hole` (complete for the round's holes) and writes it on
+  his hole rows; `game_handicaps` ranks each card over its own holes
+  (`_card_si`), so skins and every per-game allowance follow the player's
+  tee. `database.event_engine_state` fills it from each scorecard's `tee_id`
+  when it differs from the field's. The phone card's own-tee pops are Track
+  A's v2.525.6 (`_si_by_band`).

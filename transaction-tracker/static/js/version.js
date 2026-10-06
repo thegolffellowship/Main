@@ -1,5 +1,16 @@
-window.TGF_VERSION = "2.525.6";
+window.TGF_VERSION = "2.525.7";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.525.7",
+    date: "2026-10-06",
+    title: "Own-tee stroke index everywhere, a second SI row on the card, the SCORING tab, smaller QR codes",
+    changes: [
+      "Kerry 10/6: \"Dots ALWAYS use the SI's from that set of tees!!! Standard USGA ruling.\" The game engine now gives each player strokes on his own tee's stroke index too: build_cards reads a player's stroke_index_by_hole, game_handicaps ranks each card over its own holes (skins and every per-game allowance), and the event engine fills it from each scorecard's tee_id. The phone card already did this (v2.525.6, Track A).",
+      "\"Two SI rows (properly labeled) would show on that group's card...if they're different from each other.\" A scorecard whose players include a tee with its own stroke index (a women's / Forward tee) prints a second row, 'SI · <tee>' with the band, and labels the first with the tees it belongs to. Cards where every tee shares one index keep a single row. The card keeps its height: its tee, par and SI rows give up the room, checked to one Letter page per sheet in every layout.",
+      "\"Move the SCORE ENTRY section to it's own toggle after REPORTS and before PAYOUTS\" and \"Make the SCORE ENTRY tab name SCORING\": the event's tab bar now has SCORING (admin, events with live scoring on) between REPORTS and PAYOUTS, carrying the whole panel; PAIRINGS no longer shows it or the Live Scoring button.",
+      "\"Are there by chance less dense QR codes that could be created as a standard?\" Printed codes now carry a short upper-case link, HTTPS://<host>/Q/<group>.<version>.<12 hex of the signature>, which the QR stores in its compact alphanumeric mode: 29x29 squares instead of 41x41, each about twice the area at the same printed size. /Q/ redirects to the group's full signed link and refuses a stale or altered code. The copyable links are unchanged."
+    ]
+  },
   {
     version: "2.525.6",
     date: "2026-10-06",
