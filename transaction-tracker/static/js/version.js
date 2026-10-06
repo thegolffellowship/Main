@@ -1,5 +1,16 @@
-window.TGF_VERSION = "2.524.5";
+window.TGF_VERSION = "2.524.6";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.524.6",
+    date: "2026-10-06",
+    title: "The course link follows the course name; an audit of every event's course link",
+    changes: [
+      "Why: a9.26 Avery Ranch (event 3316) was named Avery Ranch but linked to ShadowGlen, so tonight's scorer card showed ShadowGlen's holes (par 4,4,5,4,4,3,5,3,4 and 2474 yards instead of Avery Ranch's back nine), ShadowGlen's tee legend, and playing handicaps off ShadowGlen's ratings. Editing an event's course name never re-pointed its course link, and the boot backfill only fills links that are empty.",
+      "update_event now re-resolves events.course_id whenever the course name is set: the course row with that name, else the row an alias points at, lower() on both sides, a live row beating an archived '(OLD)' twin. A name no course carries clears the link rather than leaving a wrong one. An update that does not touch the course leaves the link alone.",
+      "A re-seed of a score-entry round refreshes the round's own course link to the event's (score_entry.sync_round_course), so a corrected event does not leave its round reading the old course.",
+      "New read-only bridge scoring-event-course-audit[:upcoming|all|<event_id>] (database.event_course_audit): every event's link against its name, reported as wrong / unlinked / unknown with the fix, after Kerry's 'audit all the courses then, and make sure we don't have any other situations like that'. Guard: test_event_course_link.py. No schema change; nothing on a saved sheet or an entered score is touched."
+    ]
+  },
   {
     version: "2.524.5",
     date: "2026-10-06",

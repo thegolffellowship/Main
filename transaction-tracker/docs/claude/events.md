@@ -382,6 +382,25 @@ cards remain inline buttons.
 
 ## Pairings printables — Starter Sheet + Cart Signs (B5, v2.116.0)
 
+**THE COURSE LINK FOLLOWS THE COURSE NAME (v2.524.6, Kerry 2026-10-06).**
+Everything course-shaped on an event (the tee legend, the scorer card's
+par / stroke index / yardage, the ratings behind every playing handicap)
+reads `events.course_id`, never the name. On 10/6 a9.26 Avery Ranch
+(3316) was NAMED Avery Ranch but LINKED to ShadowGlen (22365): the scorer
+card carried ShadowGlen's Green (L) back nine and the sheet's playing
+handicaps came off ShadowGlen's ratings. Cause: `update_event` accepted a
+new `course` name and left `course_id` as it was, and the boot backfill
+only fills NULL links. Now `update_event` re-resolves the link from the
+name whenever `course` is set (`course_id_for_name`: the row's own name,
+else an alias, lower() both sides, a live row beats an archived "(OLD)"
+twin; a name no course carries CLEARS the link), and a re-seed refreshes
+the round's own link (`score_entry.sync_round_course`). Audit every
+event's link against its name with `scoring-event-course-audit[:upcoming|all|<event_id>]`
+(`event_course_audit`, read-only: wrong / unlinked / unknown, with the fix).
+Fix a wrong one by setting the course name again through
+`update_existing_event(id, {"course": "<name>"})`, then re-seed any open
+round. Guard: `test_event_course_link.py`.
+
 **Tee legend = the DESIGNATED sets (v2.467.0, Kerry 2026-09-20).** The
 band legend on the starter sheet (and the tee circles + PH on the
 leaderboard) prints the sets the course record designates in
