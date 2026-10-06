@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.525.2";
+window.TGF_VERSION = "2.525.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.525.3",
+    date: "2026-10-06",
+    title: "QR codes scale to fit on scorecards and cart signs",
+    changes: [
+      "Kerry 10/6: \"I don't think the qr codes are scaling to fit completely.\" The code was drawn at a fixed 172 px with no viewBox, so the scorecard's 4.6em box and the cart sign's 0.9 in box cropped its right and bottom edges, which can stop a phone reading it. score_entry.qr_svg now emits a viewBox (segno omitsize), so the whole code scales into its box on both. Guard in test_scorecards.py."
+    ]
+  },
   {
     version: "2.525.2",
     date: "2026-10-06",

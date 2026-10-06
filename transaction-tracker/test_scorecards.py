@@ -380,6 +380,9 @@ check("qr=on with live scoring on: every card carries its group's code (round se
       _q_on["cards"] and all(c.get("qr") and c["qr"].get("url") for c in _q_on["cards"]),
       [bool(c.get("qr")) for c in _q_on["cards"]])
 _h_on = env.get_template("scorecards.html").render(sc=_q_on)
+_svg = _q_on["cards"][0]["qr"]["svg"]
+check("the QR svg scales to its box (viewBox, no fixed width) so it is never cropped",
+      "viewBox=" in _svg and 'width="' not in _svg.split(">")[0], _svg[:80])
 check("the page shows the QR checkbox, checked", 'id="qrToggle" checked' in _h_on)
 _q_none = scm.build_scorecards(3304, "3up", "team", qr="off", db_path=DB)
 check("qr=off: no codes, checkbox unchecked",

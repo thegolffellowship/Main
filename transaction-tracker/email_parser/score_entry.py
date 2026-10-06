@@ -1521,7 +1521,12 @@ def qr_svg(url: str) -> str | None:
         import segno
     except ImportError:
         return None
-    return segno.make(url, error="m").svg_inline(scale=4, border=1, dark="#111111")
+    # omitsize: a viewBox instead of fixed width/height, so the code SCALES
+    # to its box. With width="172" a smaller box (the scorecard's 4.6em, the
+    # cart sign's 0.9in) cropped the code's right and bottom edges (Kerry
+    # 2026-10-06: "the qr codes are [not] scaling to fit completely").
+    return segno.make(url, error="m").svg_inline(scale=4, border=1, dark="#111111",
+                                                 omitsize=True)
 
 
 def qr_svg_file(url: str) -> bytes | None:
