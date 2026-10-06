@@ -363,5 +363,29 @@ check("ONE TGF Orange: every orange mark reads --tgf-orange (#E87C3E), no other 
 
 check("the × in the hole cells is drawn with one-print-pixel arms", ".do i.g::before, .do i.g::after { height: 1px;" in _tpl)
 
+
+print("QR codes on the cards: a checkbox, checked by default (Kerry 2026-10-06)")
+import inspect as _insp
+check("build_scorecards defaults to qr='on'",
+      _insp.signature(scm.build_scorecards).parameters["qr"].default == "on")
+_q_off_event = scm.build_scorecards(3304, "3up", "team", db_path=DB)
+check("qr=on with live scoring off: no codes, and the log says why",
+      not any(c.get("qr") for c in _q_off_event["cards"])
+      and any("live scoring is off" in l for l in _q_off_event.get("log") or []), _q_off_event.get("log"))
+from email_parser import score_entry as _se
+from email_parser.database import set_app_setting as _sas
+_sas(_se.EVENTS_SETTING, "[3304]", db_path=DB)
+_q_on = scm.build_scorecards(3304, "3up", "team", db_path=DB)
+check("qr=on with live scoring on: every card carries its group's code (round seeded from PAIRINGS)",
+      _q_on["cards"] and all(c.get("qr") and c["qr"].get("url") for c in _q_on["cards"]),
+      [bool(c.get("qr")) for c in _q_on["cards"]])
+_h_on = env.get_template("scorecards.html").render(sc=_q_on)
+check("the page shows the QR checkbox, checked", 'id="qrToggle" checked' in _h_on)
+_q_none = scm.build_scorecards(3304, "3up", "team", qr="off", db_path=DB)
+check("qr=off: no codes, checkbox unchecked",
+      not any(c.get("qr") for c in _q_none["cards"])
+      and 'id="qrToggle" checked' not in env.get_template("scorecards.html").render(sc=_q_none))
+_sas(_se.EVENTS_SETTING, "", db_path=DB)
+
 print(f"\n{len(FAILURES)} failure(s)")
 sys.exit(1 if FAILURES else 0)

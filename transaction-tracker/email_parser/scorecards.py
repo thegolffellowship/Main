@@ -147,13 +147,16 @@ def _team_no_par3_pops() -> bool:
 
 
 def build_scorecards(event_id: int, layout: str = "3up", grouping: str = "team",
-                     qr: str = "auto", holes_override: str | None = None,
+                     qr: str = "on", holes_override: str | None = None,
                      allow_gaps: bool = False, db_path=None) -> dict | None:
     """Everything the scorecard template prints, or `gaps` saying why not.
 
     layout: 3up | 2up | 2land.  grouping: team (one card per group) | cart
-    (one card per cart). qr: auto (the score-entry dials) | off | preview
-    (every group's real scorer link, for Kerry's look only).
+    (one card per cart). qr: on (the default: every group's scorer link when
+    live scoring is on for the event — Kerry 2026-10-06, "There needs to be
+    [a button]. It should now be checked by default.") | off | auto (only the
+    groups the `score_entry_qr` dial names) | preview (every group's real
+    link for a look, even with live scoring off).
 
     allow_gaps (CA #915): a player-level gap — one player with no PH — no
     longer blocks the other cards; that card prints with PH and net BLANK,
@@ -293,13 +296,19 @@ def build_scorecards(event_id: int, layout: str = "3up", grouping: str = "team",
     # ---- QR -----------------------------------------------------------
     links: dict = {}
     qr_on = False
-    if qr in ("auto", "preview"):
+    if qr in ("on", "auto", "preview"):
         try:
             from email_parser import score_entry as se
-            if qr == "preview" or (se.event_enabled(int(event_id), db_path)
-                                   and se._qr_dial(int(event_id), db_path)):
+            enabled = se.event_enabled(int(event_id), db_path)
+            if qr == "on" and not enabled:
+                log.append("QR codes: live scoring is off for this event, so the cards carry no code.")
+            if qr == "preview" or (enabled and (qr == "on" or se._qr_dial(int(event_id), db_path))):
                 qr_on = True
                 for hk in hole_keys:
+                    if qr == "on":
+                        # A code needs a round: seed it from the SAVED pairings
+                        # (idempotent; the cart signs do the same on print).
+                        se.seed_round_from_pairings(int(event_id), hk, db_path=db_path)
                     links[hk] = se.event_group_links(int(event_id), hk, db_path=db_path)
                 if qr == "auto":
                     want = se._qr_dial(int(event_id), db_path)
@@ -402,7 +411,7 @@ def build_scorecards(event_id: int, layout: str = "3up", grouping: str = "team",
         if url:
             from email_parser.score_entry import qr_svg
             base["qr"] = {"url": url, "svg": qr_svg(url)}
-        elif qr == "preview":
+        elif qr in ("preview", "on") and qr_on:
             log.append(f"Group {g['group_num']}: no scorer link (no open round) — QR slot empty.")
         if grouping == "cart":
             a = [r for r in rows if (r["cart_pos"] or 0) <= 2]
@@ -487,7 +496,7 @@ def build_scorecards_pdf(render, event_id: int, static_dir: str, sets: list[dict
     stub = None
     for s in sets:
         sc = build_scorecards(event_id, s.get("layout", "3up"), s.get("grouping", "team"),
-                              qr=s.get("qr", "auto"), holes_override=s.get("holes"),
+                              qr=s.get("qr", "on"), holes_override=s.get("holes"),
                               allow_gaps=bool(s.get("allow_gaps")), db_path=db_path)
         if not sc:
             return {"error": "event not found"}

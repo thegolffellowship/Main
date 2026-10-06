@@ -117,7 +117,7 @@ def build_event_print_pack(render, event_id: int, static_dir: str,
             from email_parser.scorecards import build_scorecards
             unit = (sheet_pack or {}).get("team_unit")
             sc = build_scorecards(int(event_id), "3up", "cart" if unit == "cart" else "team",
-                                  qr="auto", allow_gaps=allow_gaps, db_path=db_path)
+                                  qr="on", allow_gaps=allow_gaps, db_path=db_path)
             if sc:
                 at = next((i + 1 for i, (sl, _) in enumerate(htmls) if sl == "cart-signs"),
                           len(htmls))

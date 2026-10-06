@@ -238,6 +238,23 @@
   }
 </script>
 {{ sc_bar() }}
+{# QR codes on the cards (Kerry 2026-10-06: "Is there a button that I can
+   select to include those? If not, there needs to be. It should now be
+   checked by default."). Unchecked reloads with qr=off. #}
+<div class="ggid-form noprint" style="margin-top:12px">
+  <label style="display:flex;gap:8px;align-items:center;font-weight:700;cursor:pointer">
+    <input type="checkbox" id="qrToggle" {{ 'checked' if sc.qr != 'off' else '' }} onchange="scQr(this.checked)" style="width:18px;height:18px">
+    Print QR codes (each group's live-scoring link) on the cards
+  </label>
+  {% set qr_count = sc.cards | selectattr('qr') | list | length %}
+  <div style="color:#4B5563;margin-top:4px">{% if sc.qr == 'off' %}Off for this print.{% elif qr_count %}{{ qr_count }} card{{ 's' if qr_count != 1 }} carry a code.{% else %}No card carries a code: live scoring is off for this event or no group has a link yet.{% endif %}</div>
+</div>
+<script>
+  function scQr(on) {
+    var u = new URL(location.href); u.searchParams.set('qr', on ? 'on' : 'off');
+    location.href = u;
+  }
+</script>
 <form class="ggid-form noprint" id="ggidForm" onsubmit="return saveGgid(event)">
   <h2>GGID codes</h2>
   <div style="color:#4B5563;margin-bottom:6px">Type each group's Golf Genius code, then Save. It prints on the scorecard header, the Starter Sheet group box and the cart signs. Leave a box blank for no code.</div>

@@ -5509,12 +5509,13 @@ def starter_sheet_page(event_id):
 @require_role("manager")
 def scorecards_page(event_id):
     """THE PRINTED SCORECARD (design-claude #890-#897, CA #898): ?layout=
-    3up|2up|2land, ?grouping=team|cart, ?qr=auto|off|preview, ?holes=9|18.
+    3up|2up|2land, ?grouping=team|cart, ?qr=on|off|auto|preview (on by
+    default, Kerry 2026-10-06), ?holes=9|18.
     A missing value shows the gaps instead of a card (#897-G)."""
     from email_parser.scorecards import build_scorecards
     sc = build_scorecards(event_id, request.args.get("layout", "3up"),
                           request.args.get("grouping", "team"),
-                          qr=request.args.get("qr", "auto"),
+                          qr=request.args.get("qr", "on"),
                           holes_override=request.args.get("holes") or None,
                           allow_gaps=request.args.get("allow_gaps") == "1")
     if not sc:
@@ -5551,7 +5552,7 @@ def scorecards_pdf(event_id):
     built = build_scorecards_pdf(_print_pack_render, event_id, app.static_folder, [{
         "layout": request.args.get("layout", "3up"),
         "grouping": request.args.get("grouping", "team"),
-        "qr": request.args.get("qr", "auto"),
+        "qr": request.args.get("qr", "on"),
         "holes": request.args.get("holes") or None,
         "allow_gaps": request.args.get("allow_gaps") == "1"}])
     if built.get("error"):
