@@ -1,5 +1,22 @@
-window.TGF_VERSION = "2.525.4";
+window.TGF_VERSION = "2.525.6";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.525.6",
+    date: "2026-10-06",
+    title: "Live score entry: a player's strokes fall on his own tee's stroke index",
+    changes: [
+      "The phone card ranked every player's PH pops and Team / Cart Net pops over the round's one stroke-index column (the <50 tee's), while the printed scorecard already used each player's own tee (Tracker Build #1277, Olympia Hills: Michele McCormick's Red (L) order differs from White's on 8 of 9 holes, so her strokes landed on the wrong holes). Kerry 10/6: \"go now\". _si_by_band reads each designated tee's own card through the event's tee legend; a player whose band has a complete index is ranked over it, a band without one keeps the round's column, nothing is guessed. Totals do not change, only which holes carry the strokes. test_strokes_own_tee.py."
+    ]
+  },
+  {
+    version: "2.525.5",
+    date: "2026-10-06",
+    title: "Choosing a blind shows on the seat instantly",
+    changes: [
+      "Kerry 10/6, entering Jesse Saldana as the 2A blind at Olympia Hills: \"it was slow to switch visually ... that should happen immediately.\" The seat now shows the chosen name the moment it is tapped, marked \"saving...\", and the server's answer confirms it. If the server refuses (for example, that player is already a blind), the seat goes back as it was and the reason is shown. RANDOM shows \"drawing...\" until the name comes back, and Remove clears at once.",
+      "The single-seat write is lighter: it reads only that group's seats instead of rebuilding the whole pairings sheet (handicap map, tees, every group) to place one blind. The eligibility rules are unchanged. Guards: test_blinds_ui.js, test_nh_blinds.py.",
+    ],
+  },
   {
     version: "2.525.4",
     date: "2026-10-06",
