@@ -1799,7 +1799,7 @@ def _scoring_dispatch_inner(url: str, extract: str):
       scoring-fk-check[:<top n>]  READ PRAGMA foreign_key_check on live, grouped by table and parent, worst first (db-claude #1125)
       scoring-mailbox-read:<id> | since=<id>|limit=<n>|topic=<t>|max=<chars>  read ONE post, or a catch-up window OLDEST-first with more/next_since_id
       scoring-mailbox-search:text=<words>|topic=<t>|author=<a>|since=<YYYY-MM-DD>|limit=<n>|max=<chars>  precedent search, newest first, bodies trimmed
-      scoring-set-customer-field:<json>  WRITE gender only (M/F/NULL) for customer_ids, refused without "kerry_ok_post" (a mailbox post id carrying Kerry's word), dry run unless "apply": true; before/after in agent_action_log
+      scoring-set-customer-field:<json>  WRITE gender (M/F/NULL) or date_of_birth (YYYY-MM-DD, M/D/YYYY, NULL) for customer_ids, refused without "kerry_ok_post" (a mailbox post id carrying Kerry's word), dry run unless "apply": true; before/after in agent_action_log
       scoring-ambassadors:[<chapter>][|all]  READ the Ambassador flags (customer_ambassadors), current or with removed rows
       scoring-ambassador-set:<json>  WRITE one Ambassador flag {"customer_id","chapter","on","kerry_ok_post","note","apply"}: refused without a mailbox post carrying Kerry's word, dry run unless apply, action-logged, unflag keeps the row
       scoring-query-customers:<gender F|M|NULL>|<chapter>|<status>|<played_since>|<limit>  READ-ONLY field read of customers: id, name, chapter, status, gender, rounds since (default 2026-01-01); active members first
@@ -7942,8 +7942,9 @@ def query_customers(gender: str = "", chapter: str = "", status: str = "",
 @mcp.tool()
 def set_customer_field(customer_ids: list, field: str, value: str, reason: str,
                        kerry_ok_post: int, apply: bool = False) -> str:
-    """WRITE one customer field (Chief of Staff #1048/#1060). GENDER ONLY
-    today (M, F or NULL); ambassador goes through Side Games' table.
+    """WRITE one customer field (Chief of Staff #1048/#1060): gender (M, F
+    or NULL) or date_of_birth (YYYY-MM-DD or M/D/YYYY, NULL clears; Kerry
+    2026-10-06); ambassador goes through Side Games' table.
     Refused unless `kerry_ok_post` is a mailbox post by Kerry himself, or by
     platform-claude / front-desk QUOTING him verbatim (KERRY: "…"); a
     lane's own post that mentions Kerry is not his OK (rule 3b). Dry run unless apply=True. Every change is logged with

@@ -118,6 +118,41 @@ with db._connect(DB) as conn:
     r = conn.execute("SELECT course_id FROM se_rounds WHERE id = ?", (rid,)).fetchone()[0]
 check("round now reads the event's course", r == AVERY)
 
+
+print("a women's band reads the women's row when the markers share a name (Kerry 10/6, Yolanda)")
+# Avery Ranch's back nine: men's Green 32.3/109 and women's Green (L) 34.5/117
+# on the same markers. The Forward legend entry must land on the (L) row.
+with db._connect(DB) as conn:
+    conn.execute("INSERT INTO courses (course_id, name, status) VALUES (920001, 'Shared Markers GC', 'active')")
+    rows = [(920101, "Green", "M", 32.3, 109, "65+"), (920102, "Green (L)", "F", 34.5, 117, "Forward"),
+            (920103, "Blue", "M", 35.0, 123, "<50")]
+    for tid, nm, g, rt, sl, band in rows:
+        conn.execute("INSERT INTO course_tees (tee_id, course_id, tee_name, gender, holes, rating, slope, "
+                     "tgf_bands, nine, source) VALUES (?,?,?,?,9,?,?,?,'back','import')",
+                     (tid, 920001, nm, g, rt, sl, band))
+        for h in range(10, 19):
+            conn.execute("INSERT INTO course_tee_holes (tee_id, hole_number, par, yardage, stroke_index) "
+                         "VALUES (?,?,4,300,?)", (tid, h, h - 9))
+    conn.execute("INSERT INTO events (id, item_name, event_date, chapter, status, format, course, course_id, "
+                 "nine_side) VALUES (9411, 'a9.99 Shared TEST', '2099-10-06', 'Austin', 'active', '9 Holes', "
+                 "'Shared Markers GC', 920001, 'Back')")
+    conn.commit()
+    ev = dict(conn.execute("SELECT * FROM events WHERE id = 9411").fetchone())
+    legend = [{"band": "<50", "tee_name": "Blue", "tee_id": 920103, "ladies": False},
+              {"band": "65+", "tee_name": "Green", "tee_id": 920101, "ladies": False},
+              {"band": "Forward", "tee_name": "Green (L)", "tee_id": 920102, "ladies": True}]
+    tr, _b, _n = db._event_tee_rows(conn, ev, legend)
+    check("Forward reads the (L) row's rating", tr.get("Forward", {}).get("rating") == 34.5
+          and tr["Forward"]["slope"] == 117, tr.get("Forward"))
+    check("65+ still reads the men's row", tr.get("65+", {}).get("rating") == 32.3, tr.get("65+"))
+    # A legend that points at an 18-hole set (the designated path) still
+    # lands the nine's women's row for the women's band.
+    legend18 = [{"band": "65+", "tee_name": "Green", "tee_id": 777001, "ladies": False},
+                {"band": "Forward", "tee_name": "Green (L)", "tee_id": 777002, "ladies": True}]
+    tr, _b, _n = db._event_tee_rows(conn, ev, legend18)
+    check("by gender when the legend's own row is not a nine", tr.get("Forward", {}).get("rating") == 34.5
+          and tr.get("65+", {}).get("rating") == 32.3, tr)
+
 print()
 print("FAILURES:", F or "none")
 sys.exit(1 if F else 0)

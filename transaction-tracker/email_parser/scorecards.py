@@ -62,6 +62,32 @@ def _master(name: str) -> str:
     return _gg_tee_parts(name or "")["master"]
 
 
+def merge_shared_tees(tees: list, grids: dict) -> list:
+    """ONE LINE PER TEE (Kerry 2026-10-06, Avery Ranch card: "In the case
+    where two tee groups share a tee, just have one and put 65+ & Forward
+    so that we don't take up two lines"). Two designated bands SHARE a tee
+    when they print the same tee name and the same yardage on every hole
+    played; the later band folds into the earlier row and the age cell
+    reads both ("65+ & Forward"). A tee with a rating of its own for the
+    folded band (a women's rating on the same markers) prints both
+    ratings. The input rows are untouched: the yardage grid, chips and
+    per-player lookups keep reading every band."""
+    out = []
+    for t in tees:
+        host = next((o for o in out if (o["master"] or "").lower() == (t["master"] or "").lower()
+                     and all(grids[hk]["yards"].get(o["band"], {}) == grids[hk]["yards"].get(t["band"], {})
+                             for hk in grids)), None)
+        if host is None:
+            out.append({**t, "bands": [t["band"]], "merged_bands": [], "rating_extra": None})
+            continue
+        host["bands"].append(t["band"])
+        host["merged_bands"].append(t["band"])
+        host["band_text"] = " & ".join(_band_text(b) for b in host["bands"])
+        if t.get("rating") and (t.get("rating"), t.get("slope")) != (host.get("rating"), host.get("slope")):
+            host["rating_extra"] = f"{t['rating']}/{t['slope']}"
+    return out
+
+
 def _tee_colour(master: str):
     m = (master or "").strip().lower()
     m = re.sub(r"\s*\((?:l|lady|ladies)\)\s*", "", m).strip()
@@ -455,7 +481,7 @@ def build_scorecards(event_id: int, layout: str = "3up", grouping: str = "team",
                   "event_date": ev.get("event_date"), "shotgun": shotgun,
                   "file_stub": pack["event"].get("file_stub")},
         "layout": layout, "layout_meta": lay, "grouping": grouping, "qr": qr,
-        "tees": tees, "grids": grids, "cards": cards, "sheets": sheets,
+        "tees": merge_shared_tees(tees, grids), "grids": grids, "cards": cards, "sheets": sheets,
         "net": {"word": net_word, "short": net_short, "name": net_name,
                 "pct": allow_pct, "pct_note": pct_note, "unit": unit,
                 "basis": pack.get("team_basis"), "low": off_low.get("low"),

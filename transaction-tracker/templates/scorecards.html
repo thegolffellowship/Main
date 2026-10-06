@@ -345,7 +345,7 @@
       </tr>
       {% for t in sc.tees %}
       <tr class="tee">
-        <td class="lead thick" style="background:{{ t.bg }};color:{{ t.fg }}">{{ t.master }} ({{ t.rating }}/{{ t.slope }})<span class="age">{{ t.band_text }}</span></td>
+        <td class="lead thick" style="background:{{ t.bg }};color:{{ t.fg }}">{{ t.master }} ({{ t.rating }}/{{ t.slope }}{% if t.rating_extra %} · {{ t.rating_extra }}{% endif %})<span class="age">{{ t.band_text }}</span></td>
         {% for h in front %}<td class="{{ 'thick' if loop.last else '' }}" style="background:{{ t.bg }};color:{{ t.fg }}">{{ grid.yards.get(t.band, {}).get(h) or '' }}</td>{% endfor %}
         {% if is18 %}<td style="background:{{ t.bg }};color:{{ t.fg }}">{{ t.totals[c.holes].out }}</td>
         {% else %}<td class="thick" style="background:{{ t.bg }};color:{{ t.fg }}">{{ t.totals[c.holes].total }}</td><td></td><td></td>{% endif %}

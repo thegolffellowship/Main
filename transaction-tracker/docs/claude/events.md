@@ -2694,6 +2694,20 @@ purses beside ours. G2a grades it per player, to the cent
 `/events/<id>/scorecards[.pdf]?layout=3up|2up|2land&grouping=team|cart&qr=auto|off|preview&holes=9|18`;
 bridge `scoring-scorecards:<id>[|key=value…][|dump|html|pdf[|all][|send]]`.
 
+- **One line per shared tee (v2.525.1, Kerry 2026-10-06):** two designated
+  bands that play the same markers (same tee name, identical yardage on
+  every hole played) print as ONE tee row whose age cell reads both bands
+  ("65+ & Forward"); a women's rating that differs from the men's on the
+  same markers prints beside it ("Green (32.3/109 · 34.5/117)"). Players,
+  chips, dots and the yardage grid keep reading each band
+  (`merge_shared_tees`). Tees with different yardage keep their own rows.
+- **A women's band reads the women's row (v2.525.1):** `_event_tee_rows`
+  (the playing-handicap tee resolver) takes the legend's own designated
+  row when it is a candidate, else the row whose gender matches the band.
+  Before this, "Green" and "Green (L)" matched by name and the Forward
+  band computed off the men's rating (Avery Ranch, Yolanda Williams PH 11
+  instead of 15). Guard: `test_event_course_link.py`.
+
 - **Every value comes from a Tracker reader, never the print layer (#897):**
   groups / slot / cart seats / index / PH / net-game value, allowance and
   off-the-lowest from `get_event_print_pack` (the Starter Sheet's reader);
@@ -2715,7 +2729,14 @@ bridge `scoring-scorecards:<id>[|key=value…][|dump|html|pdf[|all][|send]]`.
 - **Threesomes are 3 rows** (CA #898-4); Cart Net = one card per cart
   (2 + 1 for a threesome), unshaded. Tee colours are a token map by master
   name (CA #898-6); an unknown name prints black on white and is logged.
-- **QR:** `auto` follows the score-entry dials; `off` collapses it;
+- **QR (v2.525.2, Kerry 2026-10-06: "there needs to be [a button]. It
+  should now be checked by default."):** the page's "Print QR codes"
+  checkbox, checked by default, is `qr=on`: every group's live-scoring link
+  whenever live scoring is on for the event (the round is seeded from the
+  saved pairings if needed); the bound print pack uses `on` too. Unchecked =
+  `off`. With live scoring off the cards carry no code and the log says so.
+  The cart signs still follow the `score_entry_qr` dial.
+  Older modes: `auto` follows the score-entry dials; `off` collapses it;
   `preview` fills every group's real scorer link via the read-only
   `score_entry.event_group_links` (never seeds a round) — for Kerry's look
   only. **GGID** collapses until the PAIRINGS field (#900) exists.

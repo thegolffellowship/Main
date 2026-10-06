@@ -121,3 +121,37 @@ def test_vendor_rows_are_not_people():
     assert r["skipped_vendors"] == [] and r["changes"] == 1 and r.get("applied"), r
     with db._connect(tmp) as _c:
         assert _c.execute("SELECT gender FROM customers WHERE customer_id = 394").fetchone()[0] is None
+
+
+def test_date_of_birth_write():
+    # Kerry 2026-10-06: "Date of Birth should be a field in customer database.
+    # Which you should have a write tool for." Same guard as gender.
+    from email_parser.customer_query import set_customer_field
+    tmp = _fixture()
+    with db._connect(tmp) as c:
+        c.execute("INSERT INTO platform_dialogue (author, topic, body) VALUES ('kerry', 'x', 'set it')")
+        c.commit()
+        post = c.execute("SELECT MAX(id) FROM platform_dialogue").fetchone()[0]
+    # Production carries customers.date_of_birth (the GG roster enrich added
+    # it); a bare fixture does not, and the write must say so, not crash.
+    assert "no date_of_birth column" in set_customer_field([2], "date_of_birth", "1/25/1971", "x", post,
+                                                           db_path=tmp).get("refused", "")
+    with db._connect(tmp) as c:
+        c.execute("ALTER TABLE customers ADD COLUMN date_of_birth TEXT"); c.commit()
+    r = set_customer_field([2], "date_of_birth", "1/25/1971", "Bartz DOB", post, db_path=tmp)
+    assert r["dry_run"] and r["changes"] == 1 and r["value"] == "1971-01-25", r
+    with db._connect(tmp) as c:
+        assert c.execute("SELECT date_of_birth FROM customers WHERE customer_id = 2").fetchone()[0] is None
+    r = set_customer_field([2], "date_of_birth", "1971-01-25", "Bartz DOB", post, apply=True, db_path=tmp)
+    assert r.get("applied") and r["changes"] == 1, r
+    with db._connect(tmp) as c:
+        assert c.execute("SELECT date_of_birth FROM customers WHERE customer_id = 2").fetchone()[0] == "1971-01-25"
+    r = set_customer_field([2], "date_of_birth", "1971-01-25", "again", post, apply=True, db_path=tmp)
+    assert r["changes"] == 0 and r["unchanged"] == 1, r
+    assert "refused" in set_customer_field([2], "date_of_birth", "Jan 25 1971", "bad", post, db_path=tmp)
+    assert "refused" in set_customer_field([2], "date_of_birth", "2099-01-01", "future", post, db_path=tmp)
+    assert "refused" in set_customer_field([2], "shirt_size", "L", "nope", post, db_path=tmp)
+    r = set_customer_field([2], "date_of_birth", None, "clear", post, apply=True, db_path=tmp)
+    assert r["changes"] == 1
+    with db._connect(tmp) as c:
+        assert c.execute("SELECT date_of_birth FROM customers WHERE customer_id = 2").fetchone()[0] is None

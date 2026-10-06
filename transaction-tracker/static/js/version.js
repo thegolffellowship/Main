@@ -1,5 +1,24 @@
-window.TGF_VERSION = "2.525.0";
+window.TGF_VERSION = "2.525.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.525.2",
+    date: "2026-10-06",
+    title: "Scorecards: a QR codes checkbox, checked by default",
+    changes: [
+      "Kerry 10/6: \"How do we activate the QR codes to be on the scorecards? Is there a button that I can select to include those? If not, there needs to be. It should now be checked by default.\" The scorecards page has a 'Print QR codes' checkbox under the Print bar, checked by default; unchecking reloads the cards without codes (qr=off).",
+      "Checked (qr=on, now the default for the page and the bound print pack) prints every group's live-scoring link as a QR code whenever live scoring is on for the event, seeding the round from the saved pairings if needed. Before, codes printed only for events named in the hidden score_entry_qr setting, which no screen could set. With live scoring off the cards carry no code and the page says why. The cart signs still follow the score_entry_qr setting."
+    ]
+  },
+  {
+    version: "2.525.1",
+    date: "2026-10-06",
+    title: "A women's band reads the women's tee row; one scorecard line per shared tee; date of birth is writable",
+    changes: [
+      "Playing handicap: when a course names the men's and the women's markers alike ('Green' / 'Green (L)'), the Forward band was matched by name to the men's row and computed off its rating (Avery Ranch, event 3316: Yolanda Williams printed PH 11 off Green 32.3/109 instead of 15 off Green (L) 34.5/117; Kerry 10/6: \"That's a huge decrease for Yolanda. Can that be accurate?\"). _event_tee_rows now takes the legend's own designated row when it is a candidate, else the row whose gender matches the band (a women's band takes a women's row). Guard in test_event_course_link.py.",
+      "Printed scorecard: when two designated bands play the same markers (same tee name, identical yardage on every hole played), they print as ONE tee row whose age cell reads both bands, e.g. '65+ & Forward' (Kerry 10/6 on the Avery Ranch card: \"In the case where two tee groups share a tee, just have one and put 65+ & Forward so that we don't take up two lines\"). A women's rating that differs from the men's on the same markers prints beside it. Players, chips, dots and the yardage grid still read each band; tees with different yardage keep their own rows (scorecards.merge_shared_tees; test_scorecards.py).",
+      "set_customer_field (MCP) and scoring-set-customer-field now write date_of_birth as well as gender: YYYY-MM-DD or M/D/YYYY, 1900 to today, NULL clears; same Kerry-OK post guard, dry run by default, before/after in the action log (Kerry 10/6: \"Date of Birth should be a field in customer database. Which you should have a write tool for. If not, you definitely need one\"). test_missing_handicaps.py."
+    ]
+  },
   {
     version: "2.525.0",
     date: "2026-10-06",
