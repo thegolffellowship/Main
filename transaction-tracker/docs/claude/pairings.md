@@ -2133,3 +2133,36 @@ It reads the SAVED sheet and writes nothing (guard `test_pairings_audit.py`).
   not record generator vs manual); the generator's own alternative
   (`generate_event_pairings`, which never saves) and its pair score beside
   the sheet's.
+
+## Repeats in sequence, rule fixes inside the search, no third solo cart (v2.525.0, Kerry 2026-10-06)
+
+The 10/5 5 PM auto-generate for Olympia Hills (event 3308) put Adam Baker and
+Jeff Rideout together a 4th time while both had partners they had never
+played with. Root cause (mailbox #1256): `_pair_cost` was 1000 + count, so
+depth was a 2-point tiebreak; the rule fixes (7, 12, 14) ran once after the
+search and never re-optimised; and the search was unseeded.
+
+- **Cost** — `_repeat_cost(count) = REPEAT_LEVEL_BASE ** count - 1` (base
+  1000): one deeper repeat outweighs any number of shallower ones on any
+  sheet we build. Kerry: "I don't play with X twice (unless other pairings
+  rules dictate) until I've played with all others once."
+- **Search (random mode)** — `PAIRINGS_RESTARTS` (60) restarts, each:
+  `_random_groups` (seeded `random.Random(f"{PAIRINGS_SEED}:{event}:{holes}")`)
+  → `_swap_improve` → `_rules_fix` (rules 12, 7, 14, then a second
+  `_swap_improve` with `guard=_keeps_rules`, which refuses any swap that
+  makes a lone back tee, a leaderless group or a 1st Timer without an
+  Ambassador more frequent). Candidates are scored on rule misses first,
+  then repeats. ABCD and standings modes run the rule fixes without the
+  extra swap pass, so their order is kept.
+- **R-C** — `_solo_streaks_from_conn` (Golf Genius tee-sheet rows, played
+  dates) feeds `_arrange_group_seats(solo_streak=)`: seat 3 of a threesome
+  costs 500 for a player with two solo carts in a row, 2 for one.
+- **Audit** (`pairings_audit.py`) — R-D uses the generator's exemption for
+  solo_back_ok; R-C is hard only from the third solo in a row;
+  `skips_a_level` and `deepest_repeat` in the summary.
+- **Guard** — `test_pairings_generator_sequence.py`: the Olympia Hills
+  (event 3308) field, 2026 pair counts and Murphy's solo carts; over 200
+  seeds Baker + Rideout are never grouped, no non-requested pair passes
+  depth 1, Bourquin + Saldana share a group and a cart, Murphy is never
+  seated alone, the same seed gives the same sheet, and the audit on the
+  generator's sheet shows zero hard flags.

@@ -1,5 +1,17 @@
-window.TGF_VERSION = "2.524.6";
+window.TGF_VERSION = "2.525.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.525.0",
+    date: "2026-10-06",
+    title: "Pairings generator: repeats in sequence, rule fixes inside the search, no third solo cart",
+    changes: [
+      "Repeats are now scored lowest-count-first (Kerry 10/6: \"I don't play with X twice (unless other pairings rules dictate) until I've played with all others once\" and \"Repeats should be in sequence whenever possible\"). A pair's cost grows a thousandfold per prior meeting, so one pair meeting a 4th time always costs more than any number of pairs meeting a 2nd time. The old cost (1000 + count) made a 4th meeting only 2 points dearer than a 2nd, which is how Adam Baker and Jeff Rideout went out together a 4th time at Olympia Hills (event 3308).",
+      "The leader spread (rule 7), the lone back-tee fix (rule 12, solo_back_ok exempt) and the 1st Timer / Ambassador fix (rule 14) now run inside every restart, followed by a second swap pass that may lower repeats but never undo those rules. Before, they ran once after the search and never re-optimised.",
+      "Generate is repeatable: the shuffle is seeded per event, so the same roster gives the same sheet. 60 restarts instead of 30; the swap pass memoises pair costs, so a 64-player field still generates in about 5 seconds.",
+      "R-C in the seater: in a threesome nobody takes the solo cart a third time in a row (Michael Murphy rode alone on 9/22 and 9/29), and someone who rode alone last time is avoided when another choice exists. A requested partner still rides in the SAME cart; the opposite-cart rule stays for repeat pairs without a request.",
+      "The pairings audit now uses the generator's lone back-tee test (a solo_back_ok player such as Luke Mazanec is allowed, not flagged), treats R-C as hard only from the third solo cart in a row, and reports skips_a_level and deepest_repeat. New test test_pairings_generator_sequence.py runs the Olympia Hills (event 3308) field under 200 seeds."
+    ]
+  },
   {
     version: "2.524.6",
     date: "2026-10-06",

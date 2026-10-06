@@ -65718,6 +65718,40 @@ def _rode_counts_from_conn(conn, exclude_event_id: int | None = None) -> dict:
     return out
 
 
+def _solo_streaks_from_conn(conn, exclude_event_id: int | None = None) -> dict:
+    """R-C (Kerry 2026-10-06, Olympia Hills, event 3308: Michael Murphy rode
+    alone 9/22 and 9/29 and was seated alone again). {name key: how many of
+    the player's most recent played rounds in a row he rode ALONE}. Same
+    record as `cos_reads.pairing_history_view`'s cart_record: Golf Genius
+    tee-sheet rows on played dates; a round with pair rows but no `rode`
+    partner is a solo cart."""
+    _ensure_pairing_tables(conn)
+    rows = conn.execute(
+        """SELECT player_a, player_b, event_id, event_date, COALESCE(rode, 0) AS rode
+             FROM pairing_history
+            WHERE lower(COALESCE(source, '')) = 'gg_teesheet'
+              AND event_date < ?
+              AND (? IS NULL OR event_id IS NULL OR event_id <> ?)""",
+        (today_central_str(), exclude_event_id, exclude_event_id)).fetchall()
+    rounds: dict = {}            # key -> {(date, event_id): rode_any}
+    for r in rows:
+        for nm in (r["player_a"], r["player_b"]):
+            k = _pair_key_name(nm)
+            ek = (str(r["event_date"] or ""), r["event_id"])
+            d = rounds.setdefault(k, {})
+            d[ek] = d.get(ek, False) or bool(r["rode"])
+    out: dict = {}
+    for k, d in rounds.items():
+        n = 0
+        for ek in sorted(d, reverse=True):
+            if d[ek]:
+                break
+            n += 1
+        if n:
+            out[k] = n
+    return out
+
+
 def roster_rode_counts(conn, event_id: int, names) -> dict:
     """`{"a|b": n}` shared-cart counts between the people on one roster,
     non-zero only — the page's "repeat cart" mark (R-G) recomputes from it
@@ -67943,6 +67977,13 @@ def detect_match_play_pairings(event_id: int, db_path=None,
         return out
 
 
+#: Random restarts per Generate (was 30). Each restart now also runs the
+#: rule fixes and a guarded swap pass (2026-10-06).
+PAIRINGS_RESTARTS = 60
+#: Seed prefix: one event's Generate gives the same sheet every time. Tests
+#: vary it to run the generator many independent ways.
+PAIRINGS_SEED = "tgf-pairings"
+
 PAIRINGS_AUTO_WEEKDAYS_KEY = "pairings_auto_weekdays"
 #: "<event weekday>[:<days ahead>]" per entry. Tuesday nights pair the
 #: evening before (Monday 5 PM); Saturday 18s pair two days ahead
@@ -68251,6 +68292,13 @@ def generate_event_pairings(
     except Exception:
         logger.exception("R-G rode history failed for event %s (non-fatal)", event_id)
         rode_before = set()
+    # R-C: consecutive solo carts before tonight (2026-10-06).
+    try:
+        with _connect(db_path) as _rc:
+            solo_streak = _solo_streaks_from_conn(_rc, event_id)
+    except Exception:
+        logger.exception("R-C solo history failed for event %s (non-fatal)", event_id)
+        solo_streak = {}
 
     # ── Confirmed Match Play pairs: roster + holes validation ────────
     # (rule 8 amendment — opponents must share a holes bucket to share
@@ -68469,8 +68517,60 @@ def generate_event_pairings(
             host_units=bound_units if protect_partner_requests else None)
         locked_names |= mp_names
 
+        # Rules 12 + 7 + 14 (Kerry-ratified 2026-09-15) run AFTER the groups
+        # are formed and BELOW everything in locked_names: no lone <50 unless
+        # flagged, captains/ambassadors spread so every group has a leader,
+        # a 1st Timer's group gets an Ambassador. Each is a cheapest-history
+        # swap; unresolvable cases become notes the PAIRINGS tab shows.
+        solo_ok = {p["customer"] for p in player_items
+                   if p.get("customer") and p.get("solo_back_ok")}
+        captains = {p["customer"] for p in player_items
+                    if p.get("customer") and p.get("group_captain")}
+        leaders = captains | {p["customer"] for p in player_items
+                              if p.get("customer") and p.get("ambassador")}
+        newbies = {p["customer"] for p in player_items
+                   if p.get("customer") and p.get("is_new")}
+        experience = {_pair_key_name(p["customer"]): int(p.get("experience") or 0)
+                      for p in player_items if p.get("customer")}
+        ambassadors = {p["customer"] for p in player_items
+                       if p.get("customer") and p.get("ambassador")}
+        first_timers = {p["customer"] for p in player_items
+                        if p.get("customer") and p.get("is_first_timer")}
+        _sok = {_pair_key_name(n) for n in solo_ok}
+        _lead = {_pair_key_name(n) for n in leaders}
+        _amb = {_pair_key_name(n) for n in ambassadors}
+        _ft = {_pair_key_name(n) for n in first_timers}
+
+        def _rule_misses(g) -> tuple:
+            """(lone back, no leader, 1st Timer without Ambassador) for one group."""
+            ks = [_pair_key_name(n) for n in g]
+            return (1 if _lone_back_offender(g, tee_map, _sok) else 0,
+                    1 if len(g) >= 2 and not any(k in _lead for k in ks) else 0,
+                    1 if any(k in _ft for k in ks) and not any(k in _amb for k in ks) else 0)
+
+        def _keeps_rules(og, oh, ng, nh) -> bool:
+            """A history swap after the rule fixes may not make any of them
+            worse (Kerry 2026-10-06, Olympia Hills, event 3308)."""
+            o = [x + y for x, y in zip(_rule_misses(og), _rule_misses(oh))]
+            n = [x + y for x, y in zip(_rule_misses(ng), _rule_misses(nh))]
+            return all(nv <= ov for nv, ov in zip(n, o))
+
+        def _rules_fix(gp, improve: bool):
+            gp, n1 = _repair_lone_back_tee(gp, tee_map, solo_ok, locked_names, pair_counts)
+            gp, n2 = _spread_leaders(gp, leaders, locked_names, pair_counts, tee_map, solo_ok)
+            gp, n3 = _pair_first_timers_with_ambassadors(
+                gp, ambassadors, first_timers, tee_map, locked_names, pair_counts, solo_ok)
+            if improve:
+                # The fixes swap by cheapest history but never re-optimise;
+                # on 10/5 that left Baker + Rideout together a 4th time. A
+                # second, guarded pass lowers repeats without undoing them.
+                gp = _swap_improve(gp, pair_counts, locked_names, guard=_keeps_rules)
+            return gp, n1 + n2 + n3
+
         if mode == "abcd":
             groups_players = _abcd_groups(free_players, hcp_map, max_group)
+            groups_players, _rnotes2 = _rules_fix(groups_players, improve=False)
+            mp_notes.extend(_rnotes2)
         elif mode == "standings":
             _rank_map, _race_used, _rnotes, _meta = _standings_rank_map(
                 ev_chapter, race_key, event_name=ev.get("item_name"),
@@ -68492,6 +68592,8 @@ def generate_event_pairings(
                 # silently producing an order that looks intentional.
                 groups_players = _abcd_groups(free_players, hcp_map, max_group)
                 mp_notes.append("Standings unavailable — used ABCD instead.")
+            groups_players, _rnotes2 = _rules_fix(groups_players, improve=False)
+            mp_notes.extend(_rnotes2)
         else:
             # Best-of-K restarts + swap hill-climb. The greedy alone has a
             # structural attractor: it fills groups in order, so the most-
@@ -68499,52 +68601,32 @@ def generate_event_pairings(
             # the LAST group (Kerry's live s9.18 case — his max-repeat trio
             # recurred across runs). Random restarts don't escape it;
             # pairwise swaps between groups do.
+            #
+            # SEEDED PER EVENT and the rule fixes run INSIDE every restart
+            # (Kerry 2026-10-06, Olympia Hills, event 3308): the same roster
+            # gives the same sheet, and each candidate is scored as it will
+            # actually be saved, not before rules 7/12/14 move people.
+            rng = _random.Random(f"{PAIRINGS_SEED}:{int(event_id)}:{holes}")
             best_groups: list | None = None
             best_score: int | None = None
-            for _ in range(30):
+            best_notes: list = []
+            for _ in range(PAIRINGS_RESTARTS):
                 cand = _random_groups(
                     free_players, partner_map, pair_counts,
                     protect_partner_requests, fixed_units=mp_units,
                     host_units=bound_units if protect_partner_requests else None,
-                    max_group=max_group
+                    max_group=max_group, rng=rng
                 )
                 cand = _swap_improve(cand, pair_counts, locked_names)
-                score = sum(_group_score(g, pair_counts) for g in cand)
+                cand, cand_notes = _rules_fix(cand, improve=True)
+                score = (sum(sum(_rule_misses(g)) for g in cand) * _repeat_cost(1)
+                         + sum(_group_score(g, pair_counts) for g in cand))
                 if best_score is None or score < best_score:
-                    best_groups, best_score = cand, score
+                    best_groups, best_score, best_notes = cand, score, cand_notes
                 if best_score == 0:
                     break
             groups_players = best_groups or []
-
-        # Rules 12 + 7 (Kerry-ratified 2026-09-15), AFTER the groups are
-        # formed and BELOW everything in locked_names: no lone <50 unless
-        # flagged, then spread captains/ambassadors so every group has a
-        # leader to seat. Both are cheapest-history swaps; unresolvable
-        # cases become notes the PAIRINGS tab shows.
-        solo_ok = {p["customer"] for p in player_items
-                   if p.get("customer") and p.get("solo_back_ok")}
-        captains = {p["customer"] for p in player_items
-                    if p.get("customer") and p.get("group_captain")}
-        leaders = captains | {p["customer"] for p in player_items
-                              if p.get("customer") and p.get("ambassador")}
-        newbies = {p["customer"] for p in player_items
-                   if p.get("customer") and p.get("is_new")}
-        experience = {_pair_key_name(p["customer"]): int(p.get("experience") or 0)
-                      for p in player_items if p.get("customer")}
-        groups_players, _lb_notes = _repair_lone_back_tee(
-            groups_players, tee_map, solo_ok, locked_names, pair_counts)
-        mp_notes.extend(_lb_notes)
-        groups_players, _sp_notes = _spread_leaders(
-            groups_players, leaders, locked_names, pair_counts, tee_map, solo_ok)
-        mp_notes.extend(_sp_notes)
-        ambassadors = {p["customer"] for p in player_items
-                       if p.get("customer") and p.get("ambassador")}
-        first_timers = {p["customer"] for p in player_items
-                        if p.get("customer") and p.get("is_first_timer")}
-        groups_players, _ft_notes = _pair_first_timers_with_ambassadors(
-            groups_players, ambassadors, first_timers, tee_map,
-            locked_names, pair_counts, solo_ok)
-        mp_notes.extend(_ft_notes)
+            mp_notes.extend(best_notes)
 
         # Seat order within a settled group (foursomes already decided —
         # this only decides who RIDES with whom): every group runs the
@@ -68562,7 +68644,8 @@ def generate_event_pairings(
                                         experience=experience,
                                         ambassadors=ambassadors,
                                         first_timers=first_timers,
-                                        rode_before=rode_before)
+                                        rode_before=rode_before,
+                                        solo_streak=solo_streak)
 
         is_shotgun = (ev.get("start_type" if holes == "9" else "start_type_18") == "Shotgun")
 
@@ -69037,7 +69120,8 @@ def _arrange_group_seats(names: list[str], mp_opponents: set,
                          experience: dict | None = None,
                          ambassadors: set | None = None,
                          first_timers: set | None = None,
-                         rode_before: set | None = None) -> list[str]:
+                         rode_before: set | None = None,
+                         solo_streak: dict | None = None) -> list[str]:
     """Seat order for a settled group — foursomes are already decided;
     this only decides who RIDES with whom. Carts are seats 1&2 and 3&4
     (Kerry's cart-pair ruling).
@@ -69062,10 +69146,16 @@ def _arrange_group_seats(names: list[str], mp_opponents: set,
       term here, below the tee match, so it only ever breaks a tie; two
       repeats (0.8) still cost less than one tee mismatch.
 
+    - R-C solo carts (Kerry 2026-10-06, Olympia Hills, event 3308): in a
+      threesome seat 3 rides alone. Nobody takes it a third time in a row
+      (weight 500: above a request, below Match Play); someone who rode
+      alone last time is avoided when another choice exists (weight 2).
+
     Groups are ≤ 4 players (24 permutations), so brute force is exact.
     """
     from itertools import permutations
     rode_before = rode_before or set()
+    solo_streak = solo_streak or {}
 
     captains = {_pair_key_name(n) for n in (captains or set())}
     newbies = {_pair_key_name(n) for n in (newbies or set())}
@@ -69104,6 +69194,12 @@ def _arrange_group_seats(names: list[str], mp_opponents: set,
                     cost += 1
                 if frozenset((keys[perm[i]], keys[perm[j]])) in rode_before:
                     cost += 0.4
+        if len(perm) == 3:
+            streak = solo_streak.get(keys[perm[2]], 0)
+            if streak >= 2:
+                cost += 500
+            elif streak == 1:
+                cost += 2
         if newest is not None:
             ni = perm.index(newest)
             if not any(_cart(k) == _cart(ni) and keys[perm[k]] in captains
@@ -69179,6 +69275,22 @@ def _swap_improve(groups: list[list[str]], pair_counts: dict,
     kept only if it says yes. The second pass after the rule fixes (rules
     7, 12, 14) passes one so it can lower repeats without undoing them
     (Kerry 2026-10-06, Olympia Hills, event 3308)."""
+    # Pair costs memoised per call: the hill climb scores the same pairs
+    # millions of times on a big field, and name normalisation dominated
+    # (64 players: 95 s profiled before, 2026-10-06).
+    _pc: dict = {}
+
+    def _gs(g):
+        total = 0
+        for x in range(len(g)):
+            for y in range(x + 1, len(g)):
+                key = (g[x], g[y])
+                c = _pc.get(key)
+                if c is None:
+                    c = _pc[key] = _pc[(g[y], g[x])] = _pair_cost(pair_counts, g[x], g[y])
+                total += c
+        return total
+
     improved = True
     rounds = 0
     while improved and rounds < max_rounds:
@@ -69192,11 +69304,9 @@ def _swap_improve(groups: list[list[str]], pair_counts: dict,
                     for j, b in enumerate(groups[gj]):
                         if b in locked:
                             continue
-                        base = (_group_score(groups[gi], pair_counts)
-                                + _group_score(groups[gj], pair_counts))
+                        base = _gs(groups[gi]) + _gs(groups[gj])
                         groups[gi][i], groups[gj][j] = b, a
-                        new = (_group_score(groups[gi], pair_counts)
-                               + _group_score(groups[gj], pair_counts))
+                        new = _gs(groups[gi]) + _gs(groups[gj])
                         if new < base and guard is not None:
                             og, oh = list(groups[gi]), list(groups[gj])
                             og[i], oh[j] = a, b

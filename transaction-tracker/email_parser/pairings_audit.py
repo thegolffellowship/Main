@@ -242,20 +242,24 @@ def event_pairing_audit(event_id: int, db_path=None) -> dict:
                         same = [a for a in ambs if a.get("gender") == p["gender"]]
                         hit("R-F same-gender Ambassador", "soft", bool(same),
                             f"{p['name']} ({p['gender']}): " + (", ".join(a["name"] for a in same) or "none"))
-            # R-D (back tees only): a lone <50 player in a group
+            # R-D (back tees only): a lone <50 player in a group. Same test as
+            # the generator (rule 12, `_lone_back_offender`): a player on the
+            # solo_back_ok list is exempt (Kerry 2026-10-06, Mazanec).
             backs = [p for p in ps if p["tee"] == BACK_BAND]
             if len(backs) == 1 and len(ps) > 1:
                 b = backs[0]
-                hit("R-D lone back-tee", "hard", False,
+                hit("R-D lone back-tee", "hard", bool(b["solo_back_ok"]),
                     f"{b['name']} is the only {BACK_BAND} in the group" +
-                    (" (on the solo_back_ok list; Spec v1.2 states no exception: Kerry's reading)" if b["solo_back_ok"] else ""))
+                    (" (solo_back_ok: allowed)" if b["solo_back_ok"] else ""))
             # R-C: solo cart tonight
             for c in carts:
                 if len(c) == 1 and len(ps) > 1:
                     p = c[0]
                     sh = p.get("solo_history") or {}
                     streak = sh.get("solo_streak_before_tonight") or 0
-                    hard = streak >= 2 or bool(p.get("first_three"))
+                    # Hard from the 3rd solo cart in a row, the generator's rule
+                    # (Kerry 2026-10-06); a first-three player alone is soft.
+                    hard = streak >= 2
                     hit("R-C solo cart (reading)", "hard" if hard else "soft", not hard and not sh.get("solo_carts"),
                         f"{p['name']} rides alone; prior solo carts on record {sh.get('solo_carts')}, "
                         f"{streak} in a row before tonight" + ("; in first three events" if p.get("first_three") else ""))
@@ -302,9 +306,11 @@ def event_pairing_audit(event_id: int, db_path=None) -> dict:
                 alts[who] = {"lowest_available": lo,
                              "partners_at_lowest": [o for n, o in cand if n == lo][:8]}
             viol = any(a["lowest_available"] < p["prior"] for a in alts.values())
+            # a 3rd meeting while either has never played someone here, etc.
+            skips = any(a["lowest_available"] + 2 <= p["prior"] for a in alts.values())
             repeats.append({"group": g["slot_label"], "a": p["a"], "b": p["b"],
                             "season_count": p["prior"], "tonight_makes": p["prior"] + 1,
-                            "out_of_sequence": viol, "alternatives": alts})
+                            "out_of_sequence": viol, "skips_a_level": skips, "alternatives": alts})
             if viol:
                 flags.append({"group": g["slot_label"], "rule": "new pairings / repeats in sequence",
                               "kind": "soft", "detail": f"{p['a']} + {p['b']} at {p['prior']} while lower-count partners exist"})
@@ -370,7 +376,9 @@ def event_pairing_audit(event_id: int, db_path=None) -> dict:
                     "hard_flags": sum(1 for f in flags if f["kind"] == "hard"),
                     "soft_flags": sum(1 for f in flags if f["kind"] == "soft"),
                     "repeat_pairs": len(repeats),
-                    "out_of_sequence": sum(1 for r in repeats if r["out_of_sequence"])},
+                    "out_of_sequence": sum(1 for r in repeats if r["out_of_sequence"]),
+                    "skips_a_level": sum(1 for r in repeats if r["skips_a_level"]),
+                    "deepest_repeat": max((r["season_count"] for r in repeats), default=0)},
         "generator_alternative": alt,
         "reading_note": ("R-B, R-C and R-E are evaluated as read by the Front Desk (#1249); the exact Spec v1.2 "
                          "wording is not in this lane. Rule 4 reads the guest's 'Purchased by' order note."),
