@@ -813,6 +813,21 @@ def _upsert_hole(conn, round_id, h: dict):
         (round_id, int(h["hole"]), h.get("par"), h.get("stroke_index"), h.get("yardage")))
 
 
+def sync_round_course(round_id: int, course_id, db_path=None) -> bool:
+    """Point a round at the event's course row when it differs. Holes,
+    groups, players, scores and links are untouched. Returns True when the
+    link changed."""
+    if not course_id:
+        return False
+    with _closing(_conn(db_path)) as conn:
+        cur = conn.execute(
+            "UPDATE se_rounds SET course_id = ? WHERE id = ? "
+            "AND (course_id IS NULL OR course_id != ?)",
+            (int(course_id), int(round_id), int(course_id)))
+        conn.commit()
+        return cur.rowcount > 0
+
+
 def set_course_holes(round_id: int, holes: list[dict], db_path=None) -> dict:
     with _closing(_conn(db_path)) as conn:
         ev = conn.execute("SELECT event_id FROM se_rounds WHERE id = ?",
@@ -967,6 +982,10 @@ def seed_round_from_pairings(event_id: int, holes: str = "9", *, round_date=None
         rid = r[0]
         if course_holes:
             set_course_holes(rid, course_holes, db_path=db_path)
+        # The round's course link follows the event's (v2.524.6): a re-seed
+        # after the event was re-pointed to the right course must not leave
+        # the round reading the old one (a9.26 Avery Ranch, 2026-10-06).
+        sync_round_course(rid, evrow.get("course_id"), db_path=db_path)
     else:
         rid = create_round(
             event_id, n_holes,

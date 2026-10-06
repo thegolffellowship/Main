@@ -29494,6 +29494,85 @@ def get_all_events(db_path: str | Path | None = None) -> list[dict]:
         return results
 
 
+def course_id_for_name(conn, name) -> int | None:
+    """The course row a course NAME means: the row whose name matches, else
+    the row an alias points at; lower() on both sides (CA #682). A live row
+    beats an archived "(OLD)" twin when both match. None when nothing does."""
+    key = " ".join(str(name or "").split()).lower()
+    if not key:
+        return None
+    try:
+        rows = [dict(r) for r in conn.execute(
+            "SELECT c.course_id, c.name, c.status, 0 AS via_alias FROM courses c "
+            "WHERE lower(trim(c.name)) = ? "
+            "UNION ALL "
+            "SELECT c.course_id, c.name, c.status, 1 AS via_alias FROM course_aliases a "
+            "JOIN courses c ON c.course_id = a.course_id WHERE lower(trim(a.alias_name)) = ?",
+            (key, key)).fetchall()]
+    except sqlite3.OperationalError:
+        return None
+    if not rows:
+        return None
+
+    def _rank(r):
+        nm = (r.get("name") or "").lower()
+        archived = "(old)" in nm or "archived" in nm or (r.get("status") or "active") != "active"
+        return (r["via_alias"], 1 if archived else 0, r["course_id"])
+    return sorted(rows, key=_rank)[0]["course_id"]
+
+
+def event_course_audit(scope: str = "upcoming", event_id: int | None = None,
+                       db_path: str | Path | None = None) -> dict:
+    """EVERY event's course LINK against its course NAME (Kerry 2026-10-06:
+    "audit all the courses then, and make sure we don't have any other
+    situations like that"). Read-only. An event is WRONG when the row its
+    `course_id` points at is not the row its `course` name means; UNLINKED
+    when the name resolves and the link is NULL; UNKNOWN when the name
+    resolves to no course row at all. scope: upcoming | all | one event."""
+    with _connect(db_path) as conn:
+        where, params = "", []
+        if event_id:
+            where, params = "WHERE e.id = ?", [int(event_id)]
+        elif scope != "all":
+            where, params = "WHERE e.event_date >= ?", [today_central_str()]
+        rows = [dict(r) for r in conn.execute(
+            f"SELECT e.id, e.item_name, e.event_date, e.chapter, e.course, e.course_id, "
+            f"c.name AS linked_name FROM events e LEFT JOIN courses c ON c.course_id = e.course_id "
+            f"{where} ORDER BY e.event_date, e.id", params).fetchall()]
+        out, counts = [], {"ok": 0, "wrong": 0, "unlinked": 0, "unknown": 0, "no_name": 0}
+        for r in rows:
+            want = course_id_for_name(conn, r["course"])
+            have = r["course_id"]
+            if not (r["course"] or "").strip():
+                state = "no_name"
+            elif want is None:
+                state = "unknown"
+            elif have is None:
+                state = "unlinked"
+            elif int(have) != int(want):
+                state = "wrong"
+            else:
+                state = "ok"
+            counts[state] += 1
+            if state != "ok" or event_id:
+                want_name = None
+                if want is not None:
+                    w = conn.execute("SELECT name FROM courses WHERE course_id = ?", (want,)).fetchone()
+                    want_name = w[0] if w else None
+                out.append({"event_id": r["id"], "event": r["item_name"], "event_date": r["event_date"],
+                            "chapter": r["chapter"], "course_name": r["course"], "state": state,
+                            "linked_course_id": have, "linked_course": r["linked_name"],
+                            "should_be_course_id": want, "should_be_course": want_name,
+                            "fix": (None if state in ("ok", "no_name") else
+                                    "update_existing_event(event_id, {\"course\": \"<name>\"}) re-resolves the link"
+                                    if state != "unknown" else
+                                    "no course row has this name or alias; add the course or an alias first")})
+    return {"scope": "event" if event_id else scope, "events": len(rows), "counts": counts,
+            "rule": "the course link follows the course name: update_event re-resolves course_id whenever "
+                    "the name is set (v2.524.6); an event whose link disagrees with its name is WRONG",
+            "problems": out}
+
+
 def update_event(event_id: int, fields: dict, db_path: str | Path | None = None) -> bool:
     """Update specific fields on an event row.
 
@@ -29501,6 +29580,14 @@ def update_event(event_id: int, fields: dict, db_path: str | Path | None = None)
     keep their original item_name but still link to this event.
     RSVPs and overrides are updated to the new canonical name.
     Items are NEVER rewritten — they are linked via the alias table.
+
+    THE COURSE LINK FOLLOWS THE COURSE NAME (v2.524.6, Kerry 2026-10-06):
+    setting "course" re-resolves `course_id` from the courses table and its
+    aliases, so an event renamed from one course to another never keeps the
+    old link. Before this, a9.26 Avery Ranch (3316) kept ShadowGlen's link
+    and the scorer card showed ShadowGlen's holes, tees and ratings. A name
+    no course row carries clears the link (no link beats a wrong one) and
+    event_course_audit reports it.
     """
     allowed = {"item_name", "event_date", "course", "chapter", "format", "start_type", "start_time",
                 "tee_time_count", "tee_time_interval", "start_time_18", "start_type_18",
@@ -29548,6 +29635,9 @@ def update_event(event_id: int, fields: dict, db_path: str | Path | None = None)
                                  (new_name, old_name))
                     logger.info("Renamed event '%s' → '%s': old name stored as alias, RSVPs/overrides updated",
                                 old_name, new_name)
+
+        if "course" in safe:
+            safe["course_id"] = course_id_for_name(conn, safe["course"])
 
         _validate_column_names(list(safe))
         set_clause = ", ".join(f"{col} = ?" for col in safe)

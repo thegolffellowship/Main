@@ -1790,6 +1790,7 @@ def _scoring_dispatch_inner(url: str, extract: str):
       scoring-se-card:<event_id>|g<group> | <event_id>|c<customer_id>  one group's / player's LIVE entered card (read-only)
       scoring-pair-history:c<customer_id>[|<year>] | e<event_id>  partners, rode-with, solo carts (read-only)
       scoring-pairings-audit:<event_id>  the saved sheet against the pairing rules: per-player flags, per-group results, repeat depth, generator alternative (read-only)
+      scoring-event-course-audit[:upcoming|all|<event_id>]  every event's course LINK against its course NAME: wrong / unlinked / unknown, with the fix (read-only; Kerry 2026-10-06 "audit all the courses")
       scoring-standard:[<name>[|<section words>]]  a standard of record by name, whole or one section
       scoring-library-put:<json>  WRITE one Library document {"path","content","meta","supersedes","author","kerry_ok_post","apply"}: append-only, never overwrites, standards/ needs a Kerry-OK post, dry run unless apply
       scoring-library-get:<name>[|<version>][|<heading words>]  READ one Library document: latest live, or a version, or one section
@@ -6280,6 +6281,15 @@ def _scoring_dispatch_inner(url: str, extract: str):
             if not _a.isdigit():
                 return json.dumps({"error": "give scoring-pairings-audit:<event_id>"})
             return json.dumps(event_pairing_audit(int(_a)), indent=2, default=str)
+        if cmd == "scoring-event-course-audit":
+            # Kerry 2026-10-06: "audit all the courses then, and make sure we
+            # don't have any other situations like that." Read-only.
+            from email_parser.database import event_course_audit
+            _a = (arg or "").strip().lower()
+            if _a.isdigit():
+                return json.dumps(event_course_audit(event_id=int(_a)), indent=2, default=str)
+            return json.dumps(event_course_audit("all" if _a == "all" else "upcoming"),
+                              indent=2, default=str)
         if cmd == "scoring-missing-hcp":
             # "<event_id>" for one event, or "days=<n>" / empty for every
             # upcoming event (the Front Desk brief's read). Read-only.
