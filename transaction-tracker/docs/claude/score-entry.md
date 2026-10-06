@@ -419,6 +419,17 @@ on the hole by hole scoring. Don't want it in text necessarily."
   `team_handicap`, `team_unit` and `team_basis`; `create_preview_round` computes PH
   and the team number with `_preview_handicaps` from the same helpers, the preview
   group as the field. `set_game_handicaps` upserts with ON CONFLICT.
+- **A player's strokes fall on HIS tee's stroke index (v2.525.6, Kerry
+  2026-10-06 "go now", Tracker Build #1277).** The round's `se_round_holes`
+  column is the <50 tee's; `_si_by_band` reads each designated tee's own
+  card through `event_tee_legend` + `_ls_tee_holes`, and `_strokes_by_player`
+  / `_team_strokes` rank a player whose band has a complete index over that
+  (the printed scorecard's `si_own` rule). A band without a complete index
+  keeps the round's column; nothing is guessed. Totals never change, only
+  which holes carry the strokes (Olympia Hills: Red (L) differs from White on
+  8 of 9 holes). Guard: `test_strokes_own_tee.py`. The Side Games engine
+  (`live_scoring.game_handicaps`) still allocates over one course index;
+  that is its own lane.
 
 ## Won-match shimmer and cup standings (v2.498.5)
 

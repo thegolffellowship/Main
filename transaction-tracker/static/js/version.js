@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.525.5";
+window.TGF_VERSION = "2.525.6";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.525.6",
+    date: "2026-10-06",
+    title: "Live score entry: a player's strokes fall on his own tee's stroke index",
+    changes: [
+      "The phone card ranked every player's PH pops and Team / Cart Net pops over the round's one stroke-index column (the <50 tee's), while the printed scorecard already used each player's own tee (Tracker Build #1277, Olympia Hills: Michele McCormick's Red (L) order differs from White's on 8 of 9 holes, so her strokes landed on the wrong holes). Kerry 10/6: \"go now\". _si_by_band reads each designated tee's own card through the event's tee legend; a player whose band has a complete index is ranked over it, a band without one keeps the round's column, nothing is guessed. Totals do not change, only which holes carry the strokes. test_strokes_own_tee.py."
+    ]
+  },
   {
     version: "2.525.5",
     date: "2026-10-06",

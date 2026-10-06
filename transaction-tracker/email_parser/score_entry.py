@@ -2489,14 +2489,45 @@ def verify_hio(hio_id: int, verified_by: str, approve: bool = True, db_path=None
     return {"ok": True}
 
 
-def _strokes_by_player(players, course) -> dict:
+def _si_by_band(conn, event_id: int, holes_played) -> dict:
+    """{band: {hole: stroke_index}} from each designated tee's OWN card
+    (Kerry 2026-10-06 "go now", Tracker Build #1277): a player's strokes
+    fall on HIS tee's stroke index, the same rule the printed scorecard
+    uses (scorecards.py si_own). A band whose tee lacks a stroke index on
+    any hole played is left out and keeps the round's own column (the
+    <50 tee's), so nothing is ever guessed. Never raises."""
+    try:
+        from email_parser import database as db
+        ev = conn.execute("SELECT * FROM events WHERE id = ?", (int(event_id),)).fetchone()
+        if not ev:
+            return {}
+        played = [int(h) for h in holes_played]
+        out = {}
+        for t in db.event_tee_legend(conn, int(event_id), dict(ev)):
+            if not t.get("band") or not t.get("tee_id"):
+                continue
+            si = {int(h["hole_number"]): int(h["stroke_index"])
+                  for h in db._ls_tee_holes(conn, t["tee_id"]) if h.get("stroke_index")}
+            if played and all(h in si for h in played):
+                out[t["band"]] = {h: si[h] for h in played}
+        return out
+    except Exception:
+        logger.exception("score entry: per-tee stroke index failed for event %s", event_id)
+        return {}
+
+
+def _strokes_by_player(players, course, si_by_band=None) -> dict:
     """Handicap strokes per hole off the LOCKED playing handicap, ranked over
     the round's OWN holes. Kerry ruled CA Queue #10/#11 (CA #771, 2026-09-27):
     "9 hole events collapse to 1-9 si. So it gets the full 3." A nine's stroke
     indexes are re-ranked 1-9, so a 9-hole PH of 3 gets all 3 dots; an 18
     ranks the full 1-18 card, which is the same thing there. The match engine
     (lsc_cup.strokes_received) is handed the same round holes, so the match
-    strokes follow the same rule."""
+    strokes follow the same rule.
+
+    v2.525.5: a player whose band is in ``si_by_band`` (his tee's own
+    stroke index, _si_by_band) is ranked over THAT; everyone else over the
+    round's column, as before."""
     try:
         from email_parser.handicap_calc import allocate_strokes
     except Exception:
@@ -2509,8 +2540,9 @@ def _strokes_by_player(players, course) -> dict:
         ph = p.get("playing_handicap")
         if ph is None:
             continue
+        own = (si_by_band or {}).get((p.get("tee") or "").strip()) or si
         try:
-            alloc = allocate_strokes(int(round(ph)), si, mode="subset")
+            alloc = allocate_strokes(int(round(ph)), own, mode="subset")
         except Exception:
             # Never guess: report a handicap the card can't allocate.
             out.setdefault("_unresolved", []).append(p["customer_id"])
@@ -2519,15 +2551,17 @@ def _strokes_by_player(players, course) -> dict:
     return out
 
 
-def _team_strokes(conn, round_id: int, course) -> dict:
+def _team_strokes(conn, round_id: int, course, tees=None, si_by_band=None) -> dict:
     """Team/Cart Net pops per hole off the snapshotted team handicap, the
-    same allocation as the PH pops (full card, by stroke index)."""
+    same allocation as the PH pops (full card, by stroke index; the
+    player's own tee's since v2.525.5, ``tees`` = {customer_id: band})."""
     rows = conn.execute("SELECT customer_id, handicap, unit, basis FROM se_game_handicaps "
                         "WHERE round_id = ? AND game = 'team_net'", (round_id,)).fetchall()
     if not rows:
         return {"team_strokes": {}, "team_par3_ghost": {}, "team_game": None}
-    alloc = _strokes_by_player([{"customer_id": r[0], "playing_handicap": r[1]} for r in rows],
-                               course)
+    alloc = _strokes_by_player([{"customer_id": r[0], "playing_handicap": r[1],
+                                 "tee": (tees or {}).get(r[0])} for r in rows],
+                               course, si_by_band)
     alloc.pop("_unresolved", None)
     ghost: dict = {}
     # Team / Cart Net take NO pops on a par 3 (Kerry 9/28, CA #912-2: "remove
@@ -2631,10 +2665,15 @@ def _card_extras(conn, g, group_id: int) -> dict:
         "scorekeeper_customer_id, witness_customer_id FROM se_hio_claims "
         "WHERE group_id = ? AND status NOT IN ('withdrawn') ORDER BY id", (group_id,))]
     players = [dict(p) for p in conn.execute(
-        "SELECT customer_id, playing_handicap FROM se_players WHERE group_id = ?", (group_id,))]
+        "SELECT customer_id, playing_handicap, tee FROM se_players WHERE group_id = ?", (group_id,))]
     course = [dict(h) for h in conn.execute(
         "SELECT hole_number AS hole, stroke_index FROM se_round_holes WHERE round_id = ?",
         (g["round_id"],))]
+    # Each player's strokes on HIS tee's stroke index (v2.525.5, Kerry
+    # 2026-10-06 "go now"): the printed card already did this; the phone
+    # put everyone on the <50 tee's column.
+    si_by_band = _si_by_band(conn, g["event_id"], [h["hole"] for h in course])
+    tees = {p["customer_id"]: p.get("tee") for p in players}
     checks = [dict(r) for r in conn.execute(
         "SELECT id, scorekeeper_customer_id, print_scorer_customer_id, print_scorer_name, "
         "signed_for_group, photo_path IS NOT NULL AS has_photo, at FROM se_card_checks "
@@ -2643,8 +2682,8 @@ def _card_extras(conn, g, group_id: int) -> dict:
             "card_check": checks[0] if checks else None,
             "keeper_signs": keeper_signs(g["event_id"]),
             "tees": _tee_legend(conn, g["event_id"]),
-            "strokes": _strokes_by_player(players, course),
-            **_team_strokes(conn, g["round_id"], course),
+            "strokes": _strokes_by_player(players, course, si_by_band),
+            **_team_strokes(conn, g["round_id"], course, tees, si_by_band),
             "strokes_note": None}
 
 
