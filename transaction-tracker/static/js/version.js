@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.525.8";
+window.TGF_VERSION = "2.525.9";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.525.9",
+    date: "2026-10-06",
+    title: "Events leaderboard: Team Net plays the drawn blinds; seats match cards by customer_id",
+    changes: [
+      "Kerry 10/6, Olympia Hills (event 3308) in play: \"The team totals are screwed up and aren't considering the blinds.\" The EVENTS leaderboard built each team from the saved pairing sheet and added a blind only when Golf Genius's recorded team string carried a Bl[LAST, First] slot. An event scored on the phones has no Golf Genius result, so the three short teams (2A, Hole 3, Hole 4) played without Saldana, Lewis and Miller. The board now reads blind_draws, the draw of record, and seats each blind on its team with the drawn player's own card (the mechanism the live-scoring engine and Golf Genius both use): open seat = the card joins; N/H = that seat's own card leaves the best ball and the blind's plays it; missed holes = the blind counts on those holes only. The team handicap ladder includes the blind. Once Golf Genius results arrive, the recorded Bl[...] slot is recognised as already seated, never doubled.",
+      "A seat is matched to its card by customer_id first, name second (guiding principle 6). The sheet said \"Michael Murphy\", the card says \"MURPHY, Mike\", and the name match left him off Hole 4's team with no scores. Guard test_events_board_blinds.py (19 players, one threesome, one blind, one sheet name that matches only by id)."
+    ]
+  },
   {
     version: "2.525.8",
     date: "2026-10-06",

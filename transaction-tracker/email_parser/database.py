@@ -14548,22 +14548,26 @@ def get_event_leaderboard(event_name: str,
         # groups that actually played). scoring_rounds carries no team
         # column — the spotlight's team-partners lookup was querying one
         # that never existed and failing into its except (#452 shape).
+        # Each seat carries its customer_id (guiding principle 6): the
+        # sheet says "Michael Murphy", the card says "MURPHY, Mike", and
+        # a name match left him off his team (Olympia Hills 2026-10-06).
         pairing_groups: dict = {}
         try:
             prows = conn.execute(
-                """SELECT group_num, cart_pos, player_name FROM event_pairings
-                   WHERE event_id = ? AND holes = ?
-                   ORDER BY group_num, cart_pos""",
+                """SELECT group_num, cart_pos, player_name, customer_id
+                     FROM event_pairings
+                    WHERE event_id = ? AND holes = ?
+                    ORDER BY group_num, cart_pos""",
                 (ev["id"], str(ev["holes"] or 18))).fetchall()
             if not prows:
                 prows = conn.execute(
-                    """SELECT group_num, cart_pos, player_name
-                       FROM event_pairings
-                       WHERE event_id = ? ORDER BY group_num, cart_pos""",
+                    """SELECT group_num, cart_pos, player_name, customer_id
+                         FROM event_pairings
+                        WHERE event_id = ? ORDER BY group_num, cart_pos""",
                     (ev["id"],)).fetchall()
             for prw in prows:
                 pairing_groups.setdefault(prw["group_num"], []).append(
-                    (prw["cart_pos"], prw["player_name"]))
+                    (prw["cart_pos"], prw["player_name"], prw["customer_id"]))
         except sqlite3.OperationalError:
             pairing_groups = {}
 
@@ -15139,27 +15143,80 @@ def get_event_leaderboard(event_name: str,
         pass
     _cart_mode = "cart" in _team_type.lower() or (
         not _team_type and _n_players < 16)
+    by_cid = {int(p["customer_id"]): p for p in plist
+              if p["customer_id"] is not None}
+
+    def _team_key(tn, cp):
+        return ((tn, "a" if (cp or 1) <= 2 else "b") if _cart_mode else tn)
+
+    # THE DRAWN BLINDS PLAY ON THEIR TEAMS (Kerry 2026-10-06, Olympia
+    # Hills in play: "The team totals are screwed up and aren't
+    # considering the blinds"). Until now a blind reached this board
+    # only through Golf Genius's recorded team string ("Bl[LAST,
+    # First]"), so an event scored on the phones — no GG result yet —
+    # showed every short team without its blind. `blind_draws` is the
+    # draw of record (pairings.md rule 15); the blind's card is the
+    # drawn player's own round, the same mechanism the live-scoring
+    # engine (`_team_blind_members`) and Golf Genius use. open_seat:
+    # the card joins the team. nh: the N/H player's card leaves the
+    # best ball and the blind's plays his seat. missed_hole: the
+    # blind's card counts on the listed holes only.
+    _nh_seats: set = set()
+    _blind_slots: list = []
+    try:
+        _bl_all = get_event_blinds(ev["id"], db_path=db_path) or {}
+        _bl = (_bl_all.get(str(ev["holes"] or 18))
+               or (next(iter(_bl_all.values())) if _bl_all else {}))
+        for _gnum, _seats in (_bl or {}).items():
+            for _b in _seats:
+                _bcid = _b.get("customer_id")
+                _p = ((by_cid.get(int(_bcid)) if _bcid is not None else None)
+                      or by_norm.get(_normalize_player_name(
+                          _b.get("name") or "").lower()))
+                if not _p:
+                    continue          # the blind has no card yet
+                _reason = _b.get("reason") or "open_seat"
+                if _reason == "nh":
+                    _nh_seats.add((_gnum, _b.get("cart_pos")))
+                _blind_slots.append((
+                    _team_key(_gnum, _b.get("cart_pos")),
+                    (f"Bl[{_p['player_name']}]", _p["customer_id"],
+                     {"reason": _reason,
+                      "holes": ({int(h) for h in _b["missed_holes"]}
+                                if _b.get("missed_holes") else None)})))
+    except Exception:
+        logger.exception("Non-fatal: blinds unavailable for event %s", ev["id"])
     _groups: dict = {}
     for tn, slots in pairing_groups.items():
-        if _cart_mode:
-            for cp, nm in slots:
-                _groups.setdefault((tn, "a" if (cp or 1) <= 2 else "b"),
-                                   []).append(nm)
-        else:
-            _groups[tn] = [nm for _, nm in slots]
+        for cp, nm, cid in slots:
+            _groups.setdefault(_team_key(tn, cp), []).append(
+                (nm, cid, {"reason": "nh_out"} if (tn, cp) in _nh_seats else None))
+    for _key, _slot in _blind_slots:
+        _groups.setdefault(_key, []).append(_slot)
     teams = []
     for tn, names in sorted(_groups.items(), key=lambda kv: str(kv[0])):
         members, matched = [], 0
-        for nm in names:
-            p = by_norm.get(_normalize_player_name(nm).lower())
+        for nm, cid, blind in names:
+            p = None
+            if cid is not None:
+                p = by_cid.get(int(cid))
+            if p is None and not blind:
+                p = by_norm.get(_normalize_player_name(nm).lower())
             if p:
                 matched += 1
-                members.append({"player_name": p["player_name"],
-                                "customer_id": (int(p["customer_id"])
-                                                if p["customer_id"] is not None
-                                                else None),
-                                "scoring_round_id": p["scoring_round_id"],
-                                "hcp": p["hcp"]})
+                m = {"player_name": nm if blind else p["player_name"],
+                     "customer_id": (int(p["customer_id"])
+                                     if p["customer_id"] is not None
+                                     else None),
+                     "scoring_round_id": p["scoring_round_id"],
+                     "hcp": p["hcp"]}
+                if blind and blind.get("reason") == "nh_out":
+                    m["nh"] = True       # his own scores stand elsewhere
+                elif blind:
+                    m["blind"] = True
+                    if blind.get("holes"):
+                        m["blind_holes"] = sorted(blind["holes"])
+                members.append(m)
             else:
                 # on the sheet but no card (no-show / blind-draw slot)
                 members.append({"player_name": nm, "customer_id": None,
@@ -15170,7 +15227,9 @@ def get_event_leaderboard(event_name: str,
         for hn in hole_cols:
             nets = []
             for m in members:
-                if not m["scoring_round_id"]:
+                if not m["scoring_round_id"] or m.get("nh"):
+                    continue
+                if m.get("blind_holes") and hn not in m["blind_holes"]:
                     continue
                 v = _player_holes(m["scoring_round_id"]).get(hn)
                 if v and v[0] is not None:

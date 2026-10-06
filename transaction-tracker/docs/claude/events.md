@@ -2347,6 +2347,29 @@ manual (`import_gg_scorecards` / the `scoring-import` bridge). Nothing
 polls GG on a timer, so "how often does the leaderboard update" is "when
 someone runs the import".
 
+## The board's teams: seats by customer_id, blinds from blind_draws (v2.525.9)
+
+Kerry 2026-10-06, Olympia Hills (event 3308) in play: "The team totals
+are screwed up and aren't considering the blinds." `get_event_leaderboard`
+builds each team from the saved pairing sheet (`event_pairings`). Two
+rules since v2.525.9:
+
+- **A seat finds its card by `customer_id` first, name second.** The
+  sheet said "Michael Murphy", the card said "MURPHY, Mike", and the
+  name match left him off his team with no scores.
+- **The drawn blinds play.** `blind_draws` (pairings.md rule 15) is the
+  draw of record; each blind is seated on its team as `Bl[<card name>]`
+  with the drawn player's own round, the mechanism `live_scoring.
+  _team_blind_members` and Golf Genius both use. open_seat: the card
+  joins the best ball. nh: the N/H seat's own card leaves the best ball
+  (`nh: true` on the member) and the blind's plays it. missed_hole: the
+  blind counts on `blind_holes` only. The team-handicap ladder (allowance,
+  off the lowest) includes the blind. Before this a blind reached the
+  board only through Golf Genius's recorded team string, so an event
+  scored on the phones showed every short team without its blind. When
+  the GG result arrives its `Bl[LAST, First]` slot is recognised as
+  already seated, never doubled. Guard: `test_events_board_blinds.py`.
+
 ## Event Setup: GAMES OFFERED (v2.475.0, Kerry ratified 2026-09-21)
 
 Kerry: "Yes, add a Games Offered setting to Event Setup. I guess we've
