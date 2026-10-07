@@ -233,7 +233,34 @@
            button are always in the same place"; one line at 390 px when it fits. */
         .se-hole .se-popkey { margin-top: 14px; font-size: 11.5px; gap: 12px; }
         .se-hole .se-cell { height: 34px; }
-        .se-hole .se-pill { height: 50px; margin-top: 10px; }
+        .se-hole .se-pill { height: 50px; margin-top: 0; }
+        /* v2.523.0 (Kerry 2026-10-02, #1152: "I do like the bottom aligned
+           buttons"): the hole screen's existing primary actions (previous /
+           Save & Go / next) sit in a bar pinned to the bottom of the screen,
+           above the home indicator. Placement only; the buttons are unchanged. */
+        .se-hole .se-bottom { position: fixed; left: 0; right: 0; bottom: 0; z-index: 50;
+                              padding: 8px 16px calc(10px + env(safe-area-inset-bottom, 0px));
+                              background: rgba(255,255,255,.96); border-top: 1px solid #E5E7EB; }
+        .se-hole .se-bottom .se-row-act { max-width: 480px; margin: 0 auto; display: flex; gap: 8px; align-items: center; }
+        .se-hole .se-bottom .se-pill { flex: 1; min-width: 0; }
+        .se-hole .se-bottom .se-nav { padding: 0; }
+        .se-hole .se-bottom .se-nav button { width: 50px; height: 50px; border-radius: 25px; }
+        /* room for the pinned bar (its own padding + the 50 px button + the home
+           indicator), so the key never hides under it */
+        body.se-focus .se-hole { padding-bottom: calc(70px + env(safe-area-inset-bottom, 0px)); }
+        /* ONE SCREEN, NO SCROLLING (Kerry 2026-09-26) still holds with the toggle:
+           when the card would overflow, the mark shrinks (above), the toggle and
+           the bottom bar tighten, and the rows close up a little. */
+        body.se-tight .se-toggle { padding-top: 1px; padding-bottom: 2px; }
+        body.se-tight .se-toggle a { min-height: 28px; font-size: 11px; }
+        body.se-tight .se-hole .se-bottom { padding-top: 4px; padding-bottom: calc(6px + env(safe-area-inset-bottom, 0px)); }
+        body.se-tight .se-hole .se-bottom .se-pill, body.se-tight .se-hole .se-bottom .se-nav button { height: 44px; }
+        body.se-tight .se-hole .se-bottom .se-nav button { width: 44px; }
+        body.se-tight.se-focus .se-hole { padding-bottom: calc(56px + env(safe-area-inset-bottom, 0px)); }
+        body.se-tight .se-hole .se-row { padding: 5px 10px; }
+        body.se-tight .se-hole .se-stack { gap: 4px; }
+        body.se-tight .se-hole .se-h1.big { font-size: 26px; }
+        body.se-tight .se-hole .se-strip { margin-top: 4px !important; }
         .se-popkey { display: flex; gap: 14px; align-items: center; font-size: 12px; color: #4B5563; margin-top: 8px; }
         .se-popkey span { display: inline-flex; align-items: center; gap: 5px; }
         /* Kerry 2026-09-29: "I don't love how the legend renders wrapping like it
@@ -672,6 +699,16 @@
             }
             app.innerHTML = banner + body;
             const focus = !!app.querySelector(".se-hole, .se-chk");
+            // The SCORING | LEADERBOARD toggle on the scorer's board page
+            // reads this (v2.523.0): the hole he is on and how many holes
+            // are waiting to sync (amber there). Cleared on submit.
+            try {
+                if (card && who && keeping() && hole !== "done" && !card.card_check) {
+                    const cur = typeof hole === "number" ? hole : (holeOrder().find((n) => !holeDone(n)) ?? holeOrder()[0]);
+                    localStorage.setItem("se_live", JSON.stringify({t: new URLSearchParams(location.search).get("t"), hole: cur, group: card.group_num,
+                        queued: new Set(queue.map((o) => o.hole)).size, at: Date.now()}));
+                } else if (hole === "done" || (card && card.card_check)) localStorage.removeItem("se_live");
+            } catch (e) { /* storage off */ }
             document.body.classList.toggle("se-focus", focus);
             // Full logo unless this card would not fit the screen (then the
             // header gives up its height so Save stays on screen, no scrolling).
@@ -754,10 +791,7 @@
             return `<div class="se-hole"><div class="se-top"><div style="min-width:0">
                     <div class="se-eyebrow">${esc(eyebrow())}</div>
                     <h1 class="se-h1 big">Hole ${hole}</h1><div class="se-sub">${esc(meta)}</div></div>
-                  <div class="se-nav">
-                    <button type="button" data-act="prev" aria-label="Previous hole" ${i <= 0 ? "disabled" : ""}>${ICON.back}</button>
-                    <button type="button" data-act="next" aria-label="Next hole" ${i >= order.length - 1 ? "disabled" : ""}>${ICON.fwd}</button>
-                  </div></div>
+                  </div>
                 ${matchStrip()}
                 ${hio}
                 ${maxNote ? `<div class="se-warn">${ICON.warn}<span>${esc(maxNote)}</span></div>` : ""}
@@ -765,8 +799,12 @@
                 <div class="se-lblrow"><span class="se-lbl">Group card</span><span class="se-keepnote">${ICON.pen}<span>You're keeping score</span></span></div>
                 <div class="se-strip" style="margin-top:6px;grid-template-columns:repeat(${Math.min(order.length, 9)}, minmax(0, 1fr))">${cells}</div>
                 ${queue.length ? statusLine() : ""}
-                <button type="button" class="se-pill go" data-act="save">${cta}</button>
-                ${popKey(hole)}</div>`;
+                ${popKey(hole)}
+                <div class="se-bottom"><div class="se-row-act">
+                  <div class="se-nav"><button type="button" data-act="prev" aria-label="Previous hole" ${i <= 0 ? "disabled" : ""}>${ICON.back}</button></div>
+                  <button type="button" class="se-pill go" data-act="save">${cta}</button>
+                  <div class="se-nav"><button type="button" data-act="next" aria-label="Next hole" ${i >= order.length - 1 ? "disabled" : ""}>${ICON.fwd}</button></div>
+                </div></div></div>`;
         }
 
         function stripCells(order, current) {
@@ -1284,6 +1322,22 @@
                 if (status !== 200 || !j.results) return;
                 const done = new Set(j.results.map((r) => r.op_id));    // ok, dup, invalid, refused all leave
                 const refused = j.results.filter((r) => r.result === "refused_lock").map((r) => r.op_id);
+                // An accepted op leaves the queue NOW, but the card reload
+                // lands later: write it into the card first, or value() reads
+                // the hole blank in between and a "Triple in a match" answer
+                // tapped in that gap goes out with no score and is refused
+                // (Kerry 10/6, #1295: Ball in hole lost).
+                const okIds = new Set(j.results.filter((r) => r.result === "ok").map((r) => r.op_id));
+                for (const o of batch) {
+                    if (!okIds.has(o.op_id) || !card || !card.scores) continue;
+                    const key = o.customer_id ? "c:" + o.customer_id : "t:" + o.team_id;
+                    (card.scores[key] = card.scores[key] || {})[String(o.hole)] = o.gross;
+                    if ("mark" in o) {
+                        card.marks = card.marks || {};
+                        const m = card.marks[key] = card.marks[key] || {};
+                        if (o.mark) m[String(o.hole)] = o.mark; else delete m[String(o.hole)];
+                    }
+                }
                 queue = queue.filter((o) => !done.has(o.op_id));
                 store.set(K.q, queue);
                 if (refused.length) {

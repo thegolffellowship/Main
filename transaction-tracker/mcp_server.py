@@ -1779,6 +1779,32 @@ def _scoring_dispatch_inner(url: str, extract: str):
       scoring-verify:<round_id>    verify one round vs GG's numbers
       scoring-card:<round_id>      full scorecard with derivations
       scoring-courses              course/tee database listing
+      scoring-sales-tax-filing:<json row>[|apply]  record one month's Texas sales-tax filing (dry run by default; evidence 'confirmation' needs webfile_ref or confirmation_path); scoring-sales-tax-filings lists the record; scoring-sales-tax-backfill[:apply] loads the CFO register (6 confirmed months + Kerry's-word months)
+      scoring-db-version  read-only: sqlite_version(), page size/count, journal (WAL) mode, file sizes, migrations applied (db-claude's digest)
+      scoring-role-flags  the live AMB / CAPT / BACK chips with home chapter, vs the 9/15 seed (read-only)
+      scoring-starting-handicap:<cid>|<18-hole value|NULL>|<kerry_ok_post>[|apply]  set a starting handicap on Kerry's cited word (dry run default)
+      scoring-home-chapter-backfill[:apply]  the approved home-chapter backfill (#1084): dry run, then apply; blank list for Kerry/Robert
+      scoring-player-archive:<full name> | c<customer_id>  a player's GG history archive rounds + scoring rounds (read-only)
+      scoring-schema-audit:chapter|scan  read-only: the home-chapter migration dry run, or the redundant/denormalized-data scan
+      scoring-missing-hcp[:<event_id> | days=<n>]  players with no handicap on an event (or every upcoming event), with the fix per player
+      scoring-se-card:<event_id>|g<group> | <event_id>|c<customer_id>  one group's / player's LIVE entered card (read-only)
+      scoring-pair-history:c<customer_id>[|<year>] | e<event_id>  partners, rode-with, solo carts (read-only)
+      scoring-credit-from-receipt:<receipt_id>|<customer_id>|<amount>|<kerry_ok_post>[|<rest json>][|apply]  money RECEIVED -> a player credit, optional split (dry run default; Kerry-OK post)
+      scoring-pairings-audit:<event_id>  the saved sheet against the pairing rules: per-player flags, per-group results, repeat depth, generator alternative (read-only)
+      scoring-event-course-audit[:upcoming|all|<event_id>]  every event's course LINK against its course NAME: wrong / unlinked / unknown, with the fix (read-only; Kerry 2026-10-06 "audit all the courses")
+      scoring-standard:[<name>[|<section words>]]  a standard of record by name, whole or one section
+      scoring-library-put:<json>  WRITE one Library document {"path","content","meta","supersedes","author","kerry_ok_post","apply"}: append-only, never overwrites, standards/ needs a Kerry-OK post, dry run unless apply
+      scoring-library-get:<name>[|<version>][|<heading words>]  READ one Library document: latest live, or a version, or one section
+      scoring-library-list:[<section>][|<status>][|archive]  READ the Library INDEX rows (live; archive adds superseded)
+      scoring-library-search:text=..|section=..|limit=..|max=..|archive=1  READ Library documents containing every word, newest first, with a snippet
+      scoring-fk-check[:<top n>]  READ PRAGMA foreign_key_check on live, grouped by table and parent, worst first (db-claude #1125)
+      scoring-mailbox-read:<id> | since=<id>|limit=<n>|topic=<t>|max=<chars>  read ONE post, or a catch-up window OLDEST-first with more/next_since_id
+      scoring-mailbox-search:text=<words>|topic=<t>|author=<a>|since=<YYYY-MM-DD>|limit=<n>|max=<chars>  precedent search, newest first, bodies trimmed
+      scoring-set-customer-field:<json>  WRITE gender (M/F/NULL) or date_of_birth (YYYY-MM-DD, M/D/YYYY, NULL) for customer_ids, refused without "kerry_ok_post" (a mailbox post id carrying Kerry's word), dry run unless "apply": true; before/after in agent_action_log
+      scoring-ambassadors:[<chapter>][|all]  READ the Ambassador flags (customer_ambassadors), current or with removed rows
+      scoring-ambassador-set:<json>  WRITE one Ambassador flag {"customer_id","chapter","on","kerry_ok_post","note","apply"}: refused without a mailbox post carrying Kerry's word, dry run unless apply, action-logged, unflag keeps the row
+      scoring-query-customers:<gender F|M|NULL>|<chapter>|<status>|<played_since>|<limit>  READ-ONLY field read of customers: id, name, chapter, status, gender, rounds since (default 2026-01-01); active members first
+      scoring-mail-kerry:<subject>|<html>  DRY RUN: render a mail to KERRY (hard-wired, the only recipient); scoring-mail-kerry-send:<subject>|<html> sends it through the Tracker's Graph mailer, logged (Kerry 2026-09-30 #1050: "Go with the Tracker mailer")
       scoring-se-preview:<event_id>|<cid,...>[|apply][|18][|match]  labelled PREVIEW score-entry round + link (admin-only open); 18 = an 18-hole preview, match = a demo singles match per pair (1v2, 3v4)
       scoring-se-seed:<event_id>[|9|18][|apply]  seed score entry from the saved PAIRINGS (dry run by default; re-seed keeps scores)
       scoring-se-yardage:<round_id>[|apply]  re-read a seeded round's hole yardages from the Men <50 tee (yardage only; dry run by default)
@@ -3520,7 +3546,7 @@ def _scoring_dispatch_inner(url: str, extract: str):
             _audit("scoring-health-ack", f"closed {_res['closed']} — {_note.strip()[:120]}")
             return json.dumps(_res, indent=2)
         if cmd == "scoring-rehearsal":
-            # scoring-rehearsal[:status|restore] — the dress rehearsal
+            # scoring-rehearsal[:status|restore[|replica]] — the dress rehearsal
             # scratch copy + restore drill (CA #800/#801). restore reads the
             # newest OneDrive backup into <volume>/rehearsal/ and scrubs it.
             # The copy never leaves the production volume.
@@ -3545,8 +3571,11 @@ def _scoring_dispatch_inner(url: str, extract: str):
             if _step == "job":
                 return json.dumps(_rh.job_status(_lane.strip()), indent=2, default=str)
             if _step == "restore":
-                _res = _rh.restore()
-                _audit("scoring-rehearsal", f"restore drill: ok={_res.get('ok')} "
+                # restore            -> from the newest OneDrive backup
+                # restore|replica    -> from the continuous Litestream replica (gate (a))
+                _src = "replica" if _lane.strip().lower() == "replica" else "onedrive"
+                _res = _rh.restore(source=_src)
+                _audit("scoring-rehearsal", f"restore drill ({_src}): ok={_res.get('ok')} "
                        f"{_res.get('backup')} {_res.get('time_to_restore_ms')} ms")
                 return json.dumps(_res, indent=2, default=str)
             return json.dumps({"error": "usage: scoring-rehearsal[:status|restore|run|tool|<tool>|<flags>|run|bridge|<scoring-…>|job|<id>]"})
@@ -5183,8 +5212,9 @@ def _scoring_dispatch_inner(url: str, extract: str):
             # "$150 to lock their spots") — the same staff-only
             # `deposits` payload the roster badges render, with names
             # resolved for readability. READ-ONLY.
-            d = db.get_lone_star_cup_projection(alternates_cap=60)
-            deps = d.get("deposits") or {}
+            # The deposit scan alone: the full cup projection it used to
+            # build first cost 10-14 s a call (Tracker Health, digest #1138).
+            deps = {str(k): v for k, v in db.lsc_deposit_scan().items()}
             out = []
             with db._connect() as conn:
                 for cid, info in deps.items():
@@ -6148,6 +6178,265 @@ def _scoring_dispatch_inner(url: str, extract: str):
             _ev = _a[: -len("|apply")].strip() if _apply else _a
             from email_parser.closeout_checks import pairing_history_from_entry
             return json.dumps(pairing_history_from_entry(_ev, apply=_apply), indent=2, default=str)
+        if cmd in ("scoring-sales-tax-filing", "scoring-sales-tax-filings", "scoring-sales-tax-backfill"):
+            # filing: "<json row>[|apply]" record one month (Kerry 9/30 #1047)
+            # filings: list the record; backfill: "[apply]" the CFO register.
+            from email_parser import sales_tax as _st
+            if cmd == "scoring-sales-tax-filings":
+                with db.get_connection() as _c:
+                    return json.dumps(_st.filings(_c), indent=2, default=str)
+            if cmd == "scoring-sales-tax-backfill":
+                return json.dumps(_st.backfill(apply=arg.strip().lower() == "apply"), indent=2, default=str)
+            _j, _, _flag = arg.rpartition("|") if arg.rstrip().endswith("|apply") else (arg, "", "")
+            try:
+                _row = json.loads(_j)
+            except ValueError as _e:
+                return json.dumps({"error": f"bad JSON: {_e}"})
+            return json.dumps(_st.record_filing(_row, apply=_flag.strip().lower() == "apply"), indent=2, default=str)
+        if cmd == "scoring-db-version":
+            # Read-only engine facts for db-claude's daily digest (CoS
+            # #1100-2): SQLite version, page size, journal mode, size, and
+            # the migrations applied. No writes, no schema change.
+            import os as _os
+            _out = {}
+            with db._connect() as _c:
+                _out["sqlite_version"] = _c.execute("SELECT sqlite_version()").fetchone()[0]
+                for _pr in ("page_size", "page_count", "freelist_count", "journal_mode",
+                            "wal_autocheckpoint", "synchronous", "foreign_keys", "user_version"):
+                    try:
+                        _out[_pr] = _c.execute(f"PRAGMA {_pr}").fetchone()[0]
+                    except Exception as _e:
+                        _out[_pr] = f"error: {_e}"
+                _path = next((r[2] for r in _c.execute("PRAGMA database_list") if r[1] == "main"), None)
+                try:
+                    _out["migrations"] = [dict(r) for r in _c.execute(
+                        "SELECT name, applied_at FROM schema_migrations ORDER BY name")]
+                except Exception:
+                    _out["migrations"] = []
+            _out["db_path"] = _path
+            for _suffix in ("", "-wal", "-shm"):
+                try:
+                    _out["file_bytes" + (_suffix.replace("-", "_") or "")] = _os.path.getsize(_path + _suffix)
+                except Exception:
+                    pass
+            if isinstance(_out.get("page_size"), int) and isinstance(_out.get("page_count"), int):
+                _out["pages_bytes"] = _out["page_size"] * _out["page_count"]
+            return json.dumps(_out, indent=2, default=str)
+        if cmd == "scoring-role-flags":
+            # The live AMB / CAPT / BACK chips (#1090-3). Read-only.
+            from email_parser.cos_reads import role_flags as _rf
+            return json.dumps(_rf(), indent=2, default=str)
+        if cmd == "scoring-starting-handicap":
+            # "<customer_id>|<18-hole value or NULL>|<kerry_ok_post>[|apply]"
+            # Sets a starting (placeholder) handicap on Kerry's cited word
+            # (e.g. Wetz 9.0, #1091). Refused without a post by Kerry or a
+            # verbatim relay of him; dry run unless apply; action-logged.
+            from email_parser.customer_query import _kerry_ok
+            _p = [x.strip() for x in (arg or "").split("|")]
+            if len(_p) < 3:
+                return json.dumps({"error": "customer_id|value|kerry_ok_post[|apply]"})
+            _cid, _val, _post = int(_p[0]), _p[1], _p[2]
+            _val = None if _val.upper() in ("", "NULL", "NONE") else float(_val)
+            with db._connect() as _c:
+                _ok, _why = _kerry_ok(_c, _post)
+                _cur = _c.execute("SELECT first_name, last_name, starting_handicap_18 FROM customers "
+                                  "WHERE customer_id = ?", (_cid,)).fetchone()
+            if not _ok:
+                return json.dumps({"refused": f"rule 3b: {_why}"})
+            if not _cur:
+                return json.dumps({"error": f"customer {_cid} not found"})
+            _plan = {"customer_id": _cid, "name": f"{_cur['first_name']} {_cur['last_name']}",
+                     "before": _cur["starting_handicap_18"], "after": _val, "authority": _why}
+            if len(_p) < 4 or _p[3].lower() != "apply":
+                return json.dumps({**_plan, "dry_run": True})
+            res = db.set_starting_handicap(_cid, _val, set_by=f"mcp-claude ({_why})",
+                                           note=f"Kerry's word, {_why}")
+            db.log_agent_action("mcp-claude", "starting_handicap_set",
+                                f"customer {_cid}: starting handicap {_plan['before']!r} -> {_val!r} (18-hole); {_why}",
+                                outcome="error: " + res["error"] if "error" in res else "ok")
+            return json.dumps({**_plan, "result": res}, indent=2, default=str)
+        if cmd == "scoring-home-chapter-backfill":
+            # "" = dry run; "apply" = write (Kerry APPROVED the migration,
+            # CoS #1084). Copies customers.chapter -> home_chapter_id and one
+            # history row; blanks listed, never derived from play.
+            from email_parser.home_chapter import backfill_home_chapters as _bh
+            return json.dumps(_bh(apply=(arg or "").strip().lower() == "apply"), indent=2, default=str)
+        if cmd == "scoring-player-archive":
+            # "<full name>" or "c<customer_id>": the player's GG history
+            # archive rounds and scoring_rounds. Read-only (#1078-4).
+            from email_parser.cos_reads import player_archive as _pa
+            _a = (arg or "").strip()
+            return json.dumps(_pa(customer_id=int(_a[1:])) if _a[:1] == "c" and _a[1:].isdigit()
+                              else _pa(name=_a), indent=2, default=str)
+        if cmd == "scoring-schema-audit":
+            # "chapter" = the home-chapter migration dry run (#1064-2);
+            # "scan" = the redundancy scan (#1067-2). Read-only: no writes.
+            from email_parser import schema_audit as _sa
+            _a = (arg or "scan").strip().lower()
+            return json.dumps(_sa.chapter_dry_run() if _a == "chapter" else _sa.redundancy_scan(),
+                              indent=2, default=str)
+        if cmd == "scoring-credit-from-receipt":
+            # <receipt_id>|<customer_id>|<amount>|<kerry_ok_post>[|<rest json>][|apply]
+            # Money received -> a player credit (Kerry 2026-10-06). Dry run default.
+            from email_parser.receipt_credits import post_credit_from_receipt as _pcr
+            _p = [x.strip() for x in (arg or "").split("|")]
+            _apply = bool(_p) and _p[-1].lower() == "apply"
+            if _apply:
+                _p = _p[:-1]
+            if len(_p) < 4 or not all(x.replace(".", "", 1).isdigit() for x in _p[:4]):
+                return json.dumps({"error": "usage: scoring-credit-from-receipt:<receipt_id>|<customer_id>|"
+                                            "<amount>|<kerry_ok_post>[|<rest json>][|apply]"})
+            _out = _pcr(int(_p[0]), int(_p[1]), float(_p[2]), int(_p[3]),
+                        rest=_p[4] if len(_p) > 4 else "", apply=_apply)
+            _audit("scoring-credit-from-receipt", f"{arg} -> {'applied' if _out.get('applied') else 'dry run' if _out.get('dry_run') else _out.get('refused')}",
+                   item_id=_out.get("credit_item_id"))
+            return json.dumps(_out, indent=2, default=str)
+        if cmd == "scoring-pairings-audit":
+            # Kerry 2026-10-06 via Front Desk. Read-only: the saved sheet is never changed.
+            from email_parser.pairings_audit import event_pairing_audit
+            _a = (arg or "").strip()
+            if not _a.isdigit():
+                return json.dumps({"error": "give scoring-pairings-audit:<event_id>"})
+            return json.dumps(event_pairing_audit(int(_a)), indent=2, default=str)
+        if cmd == "scoring-event-course-audit":
+            # Kerry 2026-10-06: "audit all the courses then, and make sure we
+            # don't have any other situations like that." Read-only.
+            from email_parser.database import event_course_audit
+            _a = (arg or "").strip().lower()
+            if _a.isdigit():
+                return json.dumps(event_course_audit(event_id=int(_a)), indent=2, default=str)
+            return json.dumps(event_course_audit("all" if _a == "all" else "upcoming"),
+                              indent=2, default=str)
+        if cmd == "scoring-missing-hcp":
+            # "<event_id>" for one event, or "days=<n>" / empty for every
+            # upcoming event (the Front Desk brief's read). Read-only.
+            from email_parser import handicap_warnings as _hw
+            _a = (arg or "").strip()
+            if _a.isdigit():
+                return json.dumps(_hw.missing_handicaps(int(_a)), indent=2, default=str)
+            _d = int(_a.split("=", 1)[1]) if _a.startswith("days=") else 14
+            return json.dumps(_hw.upcoming_missing_handicaps(_d), indent=2, default=str)
+        if cmd in ("scoring-se-card", "scoring-pair-history", "scoring-standard"):
+            # se-card:      <event_id>|g<group> or <event_id>|c<customer_id>
+            # pair-history: c<customer_id>[|<year>] or e<event_id>
+            # standard:     [<name>[|<section words>]]
+            from email_parser import cos_reads as _cr
+            _p = [x.strip() for x in (arg or "").split("|")]
+            if cmd == "scoring-standard":
+                return json.dumps(_cr.get_standard(_p[0] if _p else "", _p[1] if len(_p) > 1 else ""), indent=2)
+            if cmd == "scoring-se-card":
+                _sel = _p[1] if len(_p) > 1 else ""
+                return json.dumps(_cr.score_entry_card(
+                    int(_p[0]), int(_sel[1:]) if _sel[:1] == "g" else None,
+                    int(_sel[1:]) if _sel[:1] == "c" else None), indent=2, default=str)
+            _who = _p[0] if _p else ""
+            return json.dumps(_cr.pairing_history_view(
+                int(_who[1:]) if _who[:1] == "c" else 0, int(_who[1:]) if _who[:1] == "e" else 0,
+                int(_p[1]) if len(_p) > 1 and _p[1] else 0), indent=2, default=str)
+        if cmd in ("scoring-mailbox-read", "scoring-mailbox-search"):
+            # read:   "<id>" or "since=<id>|limit=<n>|topic=<t>|max=<chars>"
+            # search: "text=<words>|topic=<t>|author=<a>|since=<date>|limit=<n>|max=<chars>"
+            from email_parser.database import read_platform_dialogue_v2 as _rd
+            _a = (arg or "").strip()
+            if cmd == "scoring-mailbox-read" and _a.isdigit():
+                return json.dumps(_rd(1, post_id=int(_a)), indent=2)
+            _kw = {k.strip(): v.strip() for k, _, v in (x.partition("=") for x in _a.split("|") if "=" in x)}
+            return json.dumps(_rd(int(_kw.get("limit") or 20), _kw.get("topic", ""),
+                                  int(_kw.get("since") or 0) if cmd == "scoring-mailbox-read" else 0,
+                                  max_chars=int(_kw.get("max") or (600 if cmd == "scoring-mailbox-search" else 0)),
+                                  text=_kw.get("text", ""), author=_kw.get("author", ""),
+                                  since=_kw.get("since", "") if cmd == "scoring-mailbox-search" else ""),
+                              indent=2)
+        if cmd == "scoring-set-customer-field":
+            # JSON {"customer_ids": [..], "field": "gender", "value": "M",
+            #  "reason": "...", "kerry_ok_post": 1234, "apply": false}
+            # — gender only (ambassador via Side Games), refused without a
+            # cited Kerry-OK post (rule 3b), dry run by default (CoS #1060).
+            try:
+                _p = json.loads(arg)
+            except ValueError as _e:
+                return json.dumps({"error": f"bad JSON: {_e}"})
+            from email_parser.customer_query import set_customer_field as _scf
+            return json.dumps(_scf(_p.get("customer_ids"), _p.get("field"), _p.get("value"),
+                                   _p.get("reason"), _p.get("kerry_ok_post"),
+                                   apply=bool(_p.get("apply"))), indent=2, default=str)
+        if cmd == "scoring-ambassadors":
+            # "[<chapter>][|all]" — READ the Ambassador flags (Pairings v1.2
+            # #1036-4); "all" includes removed (ambassador = 0) rows.
+            _p = [x.strip() for x in (arg or "").split("|")]
+            from email_parser.ambassadors import list_ambassadors as _la
+            return json.dumps(_la(_p[0] or None, include_removed=("all" in _p[1:])),
+                              indent=2, default=str)
+        if cmd == "scoring-library-put":
+            # THE TGF LIBRARY (spec #1114, table 0008): JSON {"path", "content",
+            # "meta", "supersedes", "author", "kerry_ok_post", "apply"}. Dry
+            # run unless apply; standards/ needs a cited Kerry-OK post;
+            # append-only, never overwrites; action-logged.
+            try:
+                _p = json.loads(arg)
+            except ValueError as _e:
+                return json.dumps({"error": f"bad JSON: {_e}"})
+            from email_parser.library import library_put as _lp
+            return json.dumps(_lp(_p.get("path", ""), _p.get("content", ""), _p.get("meta") or {},
+                                  supersedes=_p.get("supersedes") or "", author=_p.get("author") or "",
+                                  kerry_ok_post=_p.get("kerry_ok_post") or 0,
+                                  apply=bool(_p.get("apply"))), indent=2, default=str)
+        if cmd == "scoring-library-list":
+            # [<section>][|<status>][|archive]
+            _p = arg.split("|")
+            from email_parser.library import library_list as _ll
+            return json.dumps(_ll(_p[0] if _p else "", _p[1] if len(_p) > 1 else "",
+                                  include_archive=("archive" in _p[2:])), indent=2, default=str)
+        if cmd == "scoring-library-search":
+            # text=..|section=..|limit=..|max=..|archive=1
+            _kv = dict(x.split("=", 1) for x in arg.split("|") if "=" in x)
+            from email_parser.library import library_search as _ls
+            return json.dumps(_ls(_kv.get("text", ""), _kv.get("section", ""),
+                                  include_archive=_kv.get("archive") in ("1", "true"),
+                                  limit=int(_kv.get("limit") or 20), max_chars=int(_kv.get("max") or 600)),
+                              indent=2, default=str)
+        if cmd == "scoring-fk-check":
+            # READ-ONLY (db-claude #1125, CoS #1129-1): PRAGMA foreign_key_check
+            # on live, grouped by table and parent, worst first. [<top n>]
+            from email_parser.database import fk_check_summary as _fk
+            return json.dumps(_fk(int(arg) if arg.strip().isdigit() else 5), indent=2, default=str)
+        if cmd == "scoring-library-get":
+            # <name>[|<version>][|<heading words>]
+            _p = arg.split("|")
+            from email_parser.library import library_get as _lg
+            return json.dumps(_lg(_p[0], _p[1] if len(_p) > 1 else "",
+                                  _p[2] if len(_p) > 2 else ""), indent=2, default=str)
+        if cmd == "scoring-ambassador-set":
+            # JSON {"customer_id": 23, "chapter": "SA", "on": true,
+            #  "kerry_ok_post": 1234, "note": "...", "apply": false} — the
+            # ONE write for the flag: refused without a cited Kerry-OK post
+            # (rule 3b), dry run by default, action-logged; unflagging keeps
+            # the row (ambassador = 0) per #1055-3.
+            try:
+                _p = json.loads(arg)
+            except ValueError as _e:
+                return json.dumps({"error": f"bad JSON: {_e}"})
+            from email_parser.ambassadors import set_ambassador as _sa
+            _res = _sa(_p.get("customer_id"), _p.get("chapter"), _p.get("on", True),
+                       _p.get("kerry_ok_post"), note=_p.get("note") or "",
+                       apply=bool(_p.get("apply")))
+            return json.dumps(_res, indent=2, default=str)
+        if cmd == "scoring-query-customers":
+            # "<gender>|<chapter>|<status>|<played_since>|<limit>" (any part
+            # blank) — READ-ONLY field read of customers (CoS #1048).
+            _p = (arg.split("|") + [""] * 5)[:5]
+            from email_parser.customer_query import query_customers as _qc
+            return json.dumps(_qc(_p[0], _p[1], _p[2], _p[3], int(_p[4] or 500)), indent=2, default=str)
+        if cmd in ("scoring-mail-kerry", "scoring-mail-kerry-send"):
+            # "<subject>|<html>" — mail KERRY ONLY through the Tracker's Graph
+            # mailer (Kerry 2026-09-30, #1050). The recipient is hard-wired.
+            # scoring-mail-kerry renders only (dry run); -send sends.
+            _subj, _, _html = (arg or "").partition("|")
+            from email_parser.mail_kerry import mail_kerry
+            _res = mail_kerry(_subj, _html, send=(cmd == "scoring-mail-kerry-send"))
+            if cmd == "scoring-mail-kerry" and "html" in _res:
+                _res["html"] = _res["html"][:4000]
+            return json.dumps(_res, indent=2, default=str)
         if cmd == "scoring-recap-draft-email":
             # "<file>|<SECTION>[|to=a,b][|cc=a,b][|docx=<file>][|force][|apply]"
             # — mail one chapter's recap DRAFT to its sender (Kerry
@@ -7650,6 +7939,39 @@ def get_hio_pot() -> str:
 
 
 @mcp.tool()
+def query_customers(gender: str = "", chapter: str = "", status: str = "",
+                    played_since: str = "", limit: int = 500) -> str:
+    """READ-ONLY field-level read of customers (Chief of Staff #1048).
+
+    Args:
+        gender: "F", "M" or "NULL" (unknown); blank = any
+        chapter: e.g. "San Antonio" / "Austin"; blank = any
+        status: active_member | expired_member | active_guest | inactive | first_timer
+        played_since: YYYY-MM-DD for the rounds count (default 2026-01-01)
+        limit: max rows (default 500, cap 2000)
+    Returns customer_id, name, chapter, status, gender, rounds_since;
+    active members first, then this year's players, then name."""
+    from email_parser.customer_query import query_customers as _qc
+    _audit("read_query_customers", f"gender={gender} chapter={chapter} status={status}")
+    return json.dumps(_qc(gender, chapter, status, played_since, limit), indent=2, default=str)
+
+
+@mcp.tool()
+def set_customer_field(customer_ids: list, field: str, value: str, reason: str,
+                       kerry_ok_post: int, apply: bool = False) -> str:
+    """WRITE one customer field (Chief of Staff #1048/#1060): gender (M, F
+    or NULL) or date_of_birth (YYYY-MM-DD or M/D/YYYY, NULL clears; Kerry
+    2026-10-06); ambassador goes through Side Games' table.
+    Refused unless `kerry_ok_post` is a mailbox post by Kerry himself, or by
+    platform-claude / front-desk QUOTING him verbatim (KERRY: "…"); a
+    lane's own post that mentions Kerry is not his OK (rule 3b). Dry run unless apply=True. Every change is logged with
+    its before and after."""
+    from email_parser.customer_query import set_customer_field as _scf
+    return json.dumps(_scf(customer_ids, field, value, reason, kerry_ok_post, apply=apply),
+                      indent=2, default=str)
+
+
+@mcp.tool()
 def get_side_games_matrix(holes: int = 0) -> str:
     """Return the LIVE side-games prize matrix (both hole counts).
 
@@ -7724,8 +8046,9 @@ def get_current_time() -> str:
 
 
 @mcp.tool()
-def read_platform_dialogue(limit: int = 20, topic: str = "", since_id: int = 0) -> str:
-    """Read the tracker-claude <-> platform-claude planning mailbox (newest first).
+def read_platform_dialogue(limit: int = 20, topic: str = "", since_id: int = 0,
+                           id: int = 0, max_chars: int = 0) -> str:
+    """Read the tracker-claude <-> platform-claude planning mailbox.
 
     The durable two-way channel between the Claude building the Tracker
     codebase ('tracker-claude') and the claude.ai Golf Fellowship Project
@@ -7736,16 +8059,184 @@ def read_platform_dialogue(limit: int = 20, topic: str = "", since_id: int = 0) 
     Args:
         limit: Max entries to return (default 20, cap 200)
         topic: Filter by topic substring (e.g. 'live-scoring')
-        since_id: Only entries with id greater than this (catch-up reads)
+        since_id: Only entries with id greater than this, OLDEST FIRST
+            (catch-up reads). `more: true` means the window was cut off;
+            read again from `next_since_id`. Without since_id: the newest
+            `limit` posts, newest first.
+        id: Read ONE post by its id.
+        max_chars: Trim each body to this many characters (0 = whole).
     """
-    from email_parser.database import read_platform_dialogue_entries
+    from email_parser.database import read_platform_dialogue_v2
     clock = _central_clock()
+    res = read_platform_dialogue_v2(limit, topic, since_id, post_id=id, max_chars=max_chars)
     return json.dumps({
         "server_time_local": clock["friendly"],
         "server_time_utc": clock["utc"],
         "note": "post created_at fields are UTC — current local time is server_time_local (post #81)",
-        "posts": read_platform_dialogue_entries(limit, topic, since_id),
+        **res,
     }, indent=2)
+
+
+@mcp.tool()
+def get_missing_handicaps(event_id: int = 0, days: int = 14) -> str:
+    """Players with NO handicap (no TGF index, no starting handicap) on an
+    event's roster, with which case applies and the fix per player (Kerry
+    2026-09-30, CoS #1064-1). With event_id: that event. Without: every
+    event from today through `days` ahead that has any — the Front Desk
+    brief's read. Read-only."""
+    from email_parser import handicap_warnings as hw
+    _audit("get_missing_handicaps", f"event={event_id} days={days}")
+    res = hw.missing_handicaps(event_id) if event_id else hw.upcoming_missing_handicaps(days)
+    return json.dumps(res, indent=2, default=str)
+
+
+@mcp.tool()
+def get_score_entry_card(event_id: int, group: int = 0, customer_id: int = 0) -> str:
+    """One group's (or one player's) LIVE entered card: hole-by-hole gross,
+    thru, marks (ball in hole / picked up), signatures, the card check and
+    photo flag, CTP and HIO claims (Front Desk #1051). Give the group number
+    from the sheet or a customer_id. Live entries, not the money record.
+    Read-only."""
+    from email_parser.cos_reads import score_entry_card
+    _audit("get_score_entry_card", f"event={event_id} group={group} customer={customer_id}")
+    return json.dumps(score_entry_card(event_id, group or None, customer_id or None), indent=2, default=str)
+
+
+@mcp.tool()
+def get_pairing_history(customer_id: int = 0, event_id: int = 0, year: int = 0) -> str:
+    """Who played with whom (CoS #1048). With customer_id: every partner
+    with played-with and rode-with counts, and the cart record per round
+    including solo carts. With event_id: every pair on the event and the
+    rode pairs. Counts what the pairings engine counts (Golf Genius rows,
+    played dates); the rule is in the answer. Read-only."""
+    from email_parser.cos_reads import pairing_history_view
+    _audit("get_pairing_history", f"customer={customer_id} event={event_id} year={year}")
+    return json.dumps(pairing_history_view(customer_id, event_id, year), indent=2, default=str)
+
+
+@mcp.tool()
+def get_event_pairing_audit(event_id: int) -> str:
+    """Audit an event's SAVED pairing sheet against the pairing rules
+    (Kerry 2026-10-06 via Front Desk). Per player: partner request, guest's
+    inviter, Ambassador (this chapter), captain, solo_back_ok, gender, 1st
+    Timer / new, events played before tonight, blind gate, index source,
+    solo-cart history. Per group and cart: rule 5 (a requested partner rides
+    in the SAME cart), rule 4, R-A, R-C, R-D, R-B, R-E, R-F, R-G, with hard
+    or soft marked. A repeat-depth table with each repeat's lower-count
+    alternatives ("repeats should be in sequence"), blinds, the net game,
+    sheet provenance and the generator's alternative with its pair score.
+    Read-only: it never changes the saved sheet."""
+    from email_parser.pairings_audit import event_pairing_audit
+    _audit("get_event_pairing_audit", f"event={event_id}")
+    return json.dumps(event_pairing_audit(int(event_id)), indent=2, default=str)
+
+
+@mcp.tool()
+def post_credit_from_receipt(receipt_id: int, customer_id: int, amount: float,
+                             kerry_ok_post: int, note: str = "", rest: str = "",
+                             apply: bool = False) -> str:
+    """Turn money RECEIVED (a Venmo / bank receipt in expense_transactions)
+    into a player credit, optionally splitting the payment (Kerry 2026-10-06:
+    "What do you mean no tool records a payment into a credit? ... We need
+    that tool now"). `rest`: JSON list for the remainder of the receipt,
+    e.g. [{"label": "LSC lodging", "amount": 300}] or [{"item_id": 123,
+    "amount": 300}]; credit + rest must equal the receipt to the cent.
+    Dry run by default; apply needs a mailbox post carrying Kerry's word
+    (kerry_ok_post). Writes one credited row, claims the receipt, logs
+    before/after. No new ledger row (the receipt is the ledger entry).
+    Moves money: Kerry confirms each one."""
+    from email_parser.receipt_credits import post_credit_from_receipt as _p
+    out = _p(receipt_id, customer_id, amount, kerry_ok_post, note=note, rest=rest, apply=apply)
+    _audit("post_credit_from_receipt",
+           f"receipt={receipt_id} cid={customer_id} amount={amount} rest={rest!r} apply={apply} "
+           f"-> {'applied' if out.get('applied') else 'dry run' if out.get('dry_run') else out.get('refused')}",
+           item_id=out.get("credit_item_id"))
+    return json.dumps(out, indent=2, default=str)
+
+
+@mcp.tool()
+def undo_credit_from_receipt(credit_item_id: int, kerry_ok_post: int, apply: bool = False) -> str:
+    """Reverse a credit made by post_credit_from_receipt: the row is kept,
+    marked reversed at $0, and the receipt is freed. Refused once any of the
+    credit has been used. Dry run by default; Kerry-OK post required."""
+    from email_parser.receipt_credits import undo_credit_from_receipt as _u
+    out = _u(credit_item_id, kerry_ok_post, apply=apply)
+    _audit("undo_credit_from_receipt", f"item={credit_item_id} apply={apply} -> {out}",
+           item_id=credit_item_id)
+    return json.dumps(out, indent=2, default=str)
+
+
+@mcp.tool()
+def get_standard(name: str = "", section: str = "") -> str:
+    """Serve a standard of record by name (CoS #1048): side-games, pairings,
+    event-recaps, handicap, financial-model, score-entry, facebook-events,
+    insider-voice, plus anything a crew commits under docs/standards/.
+    No name lists them. `section` returns only the part under the first
+    heading containing those words. Read-only."""
+    from email_parser.cos_reads import get_standard as _gs
+    return json.dumps(_gs(name, section), indent=2)
+
+
+@mcp.tool()
+def library_put(path: str, content: str, meta: dict, author: str, supersedes: str = "",
+                kerry_ok_post: int = 0, apply: bool = False) -> str:
+    """File one document in the TGF Library (Kerry #1099/#1117; spec #1114).
+    path: <section>/<Name>_v<maj>_<min>.md or context/<lane>/<file>.
+    meta: doc_id, title, version, status, owner, onedrive_path,
+    project_files, reads (+ ratified_by/ratified_date when ratified).
+    Append-only: never overwrites; a new version needs
+    supersedes='<doc_id>@<live version>'. standards/ needs kerry_ok_post
+    (Kerry's own post or platform-claude/front-desk quoting him; a first
+    filing may cite #1099, a supersede may not). Dry run unless apply."""
+    from email_parser.library import library_put as _lp
+    res = _lp(path, content, meta, supersedes=supersedes, author=author,
+              kerry_ok_post=kerry_ok_post, apply=apply)
+    _audit("library_put_tool", f"{path} apply={apply} -> {'refused' if 'refused' in res else 'ok'}")
+    return json.dumps(res, indent=2, default=str)
+
+
+@mcp.tool()
+def library_get(name: str, version: str = "", section: str = "") -> str:
+    """Read one TGF Library document by doc_id, filename or path
+    (case-insensitive): the latest live version, or `version` ("1.0" /
+    "v1_0", superseded ones included). `section` returns only the part
+    under the first heading containing those words. Read-only."""
+    from email_parser.library import library_get as _lg
+    return json.dumps(_lg(name, version, section), indent=2, default=str)
+
+
+@mcp.tool()
+def library_list(section: str = "", status: str = "", include_archive: bool = False) -> str:
+    """The TGF Library INDEX: every live document version (doc_id, title,
+    version, status, supersedes, owner, ratified, onedrive_path,
+    project_files, reads, filed_at), optionally one section or status;
+    include_archive adds superseded versions. Read-only."""
+    from email_parser.library import library_list as _ll
+    return json.dumps(_ll(section, status, include_archive), indent=2, default=str)
+
+
+@mcp.tool()
+def library_search(text: str, section: str = "", include_archive: bool = False,
+                   limit: int = 20, max_chars: int = 600) -> str:
+    """Search the TGF Library: every word of `text` must appear in the title
+    or body; newest filing first, with a snippet around the first hit.
+    Read-only."""
+    from email_parser.library import library_search as _ls
+    return json.dumps(_ls(text, section, include_archive, limit, max_chars), indent=2, default=str)
+
+
+@mcp.tool()
+def search_platform_dialogue(text: str = "", topic: str = "", author: str = "",
+                             since: str = "", limit: int = 20, max_chars: int = 600) -> str:
+    """Search the mailbox for precedent (Chief of Staff #1048). Every word
+    of `text` must appear in the body; `topic` is a substring; `author` is
+    exact (tracker-claude, platform-claude, design-claude, kerry); `since`
+    is a UTC date (YYYY-MM-DD). Newest first; bodies trimmed to max_chars
+    (read a whole post with read_platform_dialogue(id=...)). Read-only."""
+    from email_parser.database import read_platform_dialogue_v2
+    _audit("search_platform_dialogue", f"text={text!r} topic={topic!r} author={author!r} since={since!r}")
+    return json.dumps(read_platform_dialogue_v2(limit, topic, 0, text=text, author=author,
+                                                since=since, max_chars=max_chars), indent=2)
 
 
 @mcp.tool()

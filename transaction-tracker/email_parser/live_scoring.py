@@ -427,6 +427,12 @@ def build_cards(state: dict, formulas: dict, derive_hole=None) -> list[dict]:
         scores = {int(k): v for k, v in (p.get("scores") or {}).items()
                   if v is not None}
         ph = p.get("playing_handicap")
+        # The player's OWN tee's stroke index (USGA; Kerry 2026-10-06: "Dots
+        # ALWAYS use the SI's from that set of tees!!!"), when the state
+        # carries one covering every hole; else the round's card.
+        own = {int(k): v for k, v in (p.get("stroke_index_by_hole") or {}).items()
+               if v is not None}
+        si_p = own if own and all(h in own for h in si_by_hole) else si_by_hole
         given = {int(k): v for k, v in (p.get("strokes_received") or {}).items()}
         if given:
             received = given
@@ -436,8 +442,8 @@ def build_cards(state: dict, formulas: dict, derive_hole=None) -> list[dict]:
             allocation_source = "none"
         else:
             received = allocate_strokes(
-                int(ph), si_by_hole,
-                mode=ruled_allocation_mode(allocation_mode, si_by_hole))
+                int(ph), si_p,
+                mode=ruled_allocation_mode(allocation_mode, si_p))
             allocation_source = "derived"
 
         holes_out, totals = [], {
@@ -461,7 +467,8 @@ def build_cards(state: dict, formulas: dict, derive_hole=None) -> list[dict]:
                                  formulas) if sr < 0 else d
             row = {"hole": hole, "par": meta.get("par"),
                    "yardage": meta.get("yardage"),
-                   "stroke_index": meta.get("stroke_index"),
+                   "stroke_index": (si_p.get(hole) if si_p is not si_by_hole
+                                    else meta.get("stroke_index")),
                    "strokes": strokes, "strokes_received": sr, **d,
                    # POINTS only — the hole's stroke-play net keeps the
                    # real allocation, which Net and Team Net play off.
@@ -889,8 +896,50 @@ def game_individual(cards: list[dict], cfg: dict, holes_key: str,
     return out
 
 
-def game_team_net(cards: list[dict], cfg: dict) -> dict:
-    """Team Net — foursomes, one best NET ball per hole vs par."""
+def _team_blind_members(cards: list[dict], teams: dict, blinds: list,
+                        warnings: list) -> dict:
+    """Fold the drawn blinds into the teams (spec #1073 sections 3-5).
+
+    `blinds`: [{"team", "customer_id", "name", "reason", "replaces_key",
+    "holes"}] where reason is open_seat | nh | missed_hole and `holes` is
+    None (every hole) or the hole numbers the blind covers.
+
+    - open_seat : the blind's card is added to the short team.
+    - nh        : the N/H player's card leaves his team's best ball (his
+                  scores still count everywhere else); the blind's card
+                  plays in his slot (Kerry: "the blind would win the money
+                  and not the customer").
+    - missed_hole: the absent player keeps the holes he played; the blind's
+                  card plays only the listed holes.
+    The blind plays at HIS OWN strokes (his card's `strokes_received`), the
+    same allowance and no-par-3-pops rule as any member. His slot shows as
+    "Bl[Name]"."""
+    by_cid = {c.get("customer_id"): c for c in cards if c.get("customer_id")}
+    out = {t: list(m) for t, m in teams.items()}
+    for b in blinds or []:
+        t = b.get("team")
+        if t is None:
+            continue
+        card = by_cid.get(b.get("customer_id"))
+        if card is None:
+            warnings.append(
+                f"Team {t}: the blind {b.get('name') or b.get('customer_id')} "
+                f"has no card in this round, so the slot plays empty.")
+            continue
+        members = out.setdefault(t, [])
+        if b.get("reason") == "nh" and b.get("replaces_key") is not None:
+            members[:] = [m for m in members if m.get("key") != b["replaces_key"]]
+        holes = b.get("holes")
+        members.append({**card, "name": f"Bl[{b.get('name') or card['name']}]",
+                        "blind": True, "blind_reason": b.get("reason") or "open_seat",
+                        "blind_holes": set(int(h) for h in holes) if holes else None})
+    return out
+
+
+def game_team_net(cards: list[dict], cfg: dict,
+                  blinds: list | None = None) -> dict:
+    """Team Net — foursomes, one best NET ball per hole vs par. `blinds`
+    (from `blind_draws`) complete short teams and stand in for N/H seats."""
     gc = cfg["games"]["team_net"]
     out = {"game": "team_net", "label": gc["label"], "teams": [],
            "warnings": []}
@@ -899,6 +948,8 @@ def game_team_net(cards: list[dict], cfg: dict) -> dict:
         if c.get("team") is None:
             continue
         teams.setdefault(c["team"], []).append(c)
+    if blinds:
+        teams = _team_blind_members(cards, teams, blinds, out["warnings"])
     if not teams:
         out["warnings"].append(
             "No team assignments — Team Net needs players grouped into "
@@ -910,15 +961,17 @@ def game_team_net(cards: list[dict], cfg: dict) -> dict:
         members = teams[team_num]
         if len(members) < size:
             out["warnings"].append(
-                f"Team {team_num} has {len(members)} of {size} players — the "
-                f"ratified rule fills short teams with a blind draw "
-                f"(\"Bl[Name]\"), which this engine does not yet generate.")
+                f"Team {team_num} has {len(members)} of {size} players and no "
+                f"blind drawn for the empty slot — draw one on PAIRINGS "
+                f"(BLINDS), and the \"Bl[Name]\" card plays here.")
         hole_rows, total, thru = [], 0, 0
         hole_numbers = sorted({h["hole"] for c in members for h in c["holes"]})
         for hole in hole_numbers:
             best, best_by = None, None
             par = None
             for c in members:
+                if c.get("blind_holes") is not None and hole not in c["blind_holes"]:
+                    continue
                 h = next((x for x in c["holes"] if x["hole"] == hole), None)
                 if not h or h["strokes"] is None:
                     continue
@@ -943,6 +996,10 @@ def game_team_net(cards: list[dict], cfg: dict) -> dict:
         out["teams"].append({
             "team": team_num,
             "members": [c["name"] for c in members],
+            "blinds": [{"name": c["name"], "customer_id": c.get("customer_id"),
+                        "reason": c.get("blind_reason"),
+                        "holes": sorted(c["blind_holes"]) if c.get("blind_holes") else None}
+                       for c in members if c.get("blind")],
             "vs_par": total, "thru": thru,
             "complete": thru == len(hole_numbers) and bool(hole_numbers),
             "holes": hole_rows})
@@ -1024,6 +1081,14 @@ def select_variant(game_cfg: dict, holes_key: str, buyers: int) -> dict:
         "unmatched": True,
     }
     return out
+
+
+def _card_si(card: dict, si_by_hole: dict) -> dict:
+    """The stroke index a card's OWN holes carry (a women's tee has its own,
+    USGA; Kerry 2026-10-06), when it covers every hole; else the shared one."""
+    own = {h["hole"]: h["stroke_index"] for h in card.get("holes") or []
+           if h.get("stroke_index") is not None}
+    return own if own and all(h in own for h in si_by_hole) else si_by_hole
 
 
 def game_handicaps(cards: list[dict], handicap_cfg: dict | None,
@@ -1111,8 +1176,8 @@ def game_handicaps(cards: list[dict], handicap_cfg: dict | None,
             "strokes": strokes,
             "precision_loss": lossy[c["key"]],
             "by_hole": (allocate_strokes(
-                strokes, si_by_hole,
-                mode=ruled_allocation_mode(alloc_mode, si_by_hole))
+                strokes, _card_si(c, si_by_hole),
+                mode=ruled_allocation_mode(alloc_mode, _card_si(c, si_by_hole)))
                         if si_by_hole else {}),
         }
     return out
@@ -1395,7 +1460,7 @@ def compute_leaderboard(state: dict, formulas: dict,
             "individual_gross": game_individual(
                 cards, cfg, holes_key, "gross",
                 pins=pins.get("individual_gross")),
-            "team_net": game_team_net(cards, cfg),
+            "team_net": game_team_net(cards, cfg, blinds=state.get("blinds")),
             "skins": game_skins(cards, cfg, holes_key,
                                 pins=pins.get("skins"),
                                 variant_name=(state.get("variant_pins")

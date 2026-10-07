@@ -367,3 +367,25 @@ header.shell-nav.shell-member.shell-slim .shell-brand { margin: 0 auto; pointer-
 /* Kerry 2026-09-29, 3:28 PM: "Make the logger bigger. Like 2.5 times" (it was 20 px on the hole screen). */
 header.shell-nav.shell-member.shell-slim .shell-brand img { width: 64px; height: 64px; -webkit-touch-callout: none; }
 header.shell-nav.shell-member.shell-slim .shell-wordmark { display: none; }
+
+/* SCORING | LEADERBOARD toggle (v2.523.0, Kerry 2026-10-02): under the mark
+   on the scorer's two pages. Active = dark (the house segmented control, as
+   on the leaderboard); amber marks holes saved on the phone but not sent. */
+/* PINNED (Kerry 2026-10-02: "needs to pin to the top as a bar under the
+   header and allow scrolling underneath it. I want it to always be
+   visible."): sticky under the sticky header; its `top` is the header's
+   measured height (set by the shell script, re-measured when the header
+   shrinks on a tight card). Opaque, so the page scrolls under it. */
+.se-toggle { position: sticky; top: 77px; z-index: 90; display: flex; justify-content: center; margin: 0;
+             padding: 8px 16px; background: #fff; border-bottom: 1px solid #EEF0F2; }
+.se-toggle[hidden] { display: none; }
+.se-toggle .se-tg-in { display: flex; flex: 1; max-width: 448px; }
+.se-toggle a { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 40px;
+               border: 1px solid #E5E7EB; background: #fff; color: #6B7280; text-decoration: none;
+               font: 700 12px/1 Bitter, Georgia, serif; letter-spacing: .06em; text-transform: uppercase; }
+.se-toggle a:first-child { border-radius: 99px 0 0 99px; }
+.se-toggle a:last-child { border-radius: 0 99px 99px 0; border-left: 0; }
+.se-toggle a.active { background: #1B1B1B; border-color: #1B1B1B; color: #fff; }
+.se-toggle a.amber { background: #FFFBEB; border-color: #D97706; color: #92400E; }
+.se-toggle .se-tg-s { font: 600 10.5px/1 'Helvetica Neue', Helvetica, Arial, sans-serif; letter-spacing: .02em; text-transform: none; margin-top: 3px; }
+.se-toggle .se-tg-s:empty { display: none; }

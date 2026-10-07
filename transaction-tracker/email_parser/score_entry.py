@@ -813,6 +813,21 @@ def _upsert_hole(conn, round_id, h: dict):
         (round_id, int(h["hole"]), h.get("par"), h.get("stroke_index"), h.get("yardage")))
 
 
+def sync_round_course(round_id: int, course_id, db_path=None) -> bool:
+    """Point a round at the event's course row when it differs. Holes,
+    groups, players, scores and links are untouched. Returns True when the
+    link changed."""
+    if not course_id:
+        return False
+    with _closing(_conn(db_path)) as conn:
+        cur = conn.execute(
+            "UPDATE se_rounds SET course_id = ? WHERE id = ? "
+            "AND (course_id IS NULL OR course_id != ?)",
+            (int(course_id), int(round_id), int(course_id)))
+        conn.commit()
+        return cur.rowcount > 0
+
+
 def set_course_holes(round_id: int, holes: list[dict], db_path=None) -> dict:
     with _closing(_conn(db_path)) as conn:
         ev = conn.execute("SELECT event_id FROM se_rounds WHERE id = ?",
@@ -967,6 +982,10 @@ def seed_round_from_pairings(event_id: int, holes: str = "9", *, round_date=None
         rid = r[0]
         if course_holes:
             set_course_holes(rid, course_holes, db_path=db_path)
+        # The round's course link follows the event's (v2.524.6): a re-seed
+        # after the event was re-pointed to the right course must not leave
+        # the round reading the old one (a9.26 Avery Ranch, 2026-10-06).
+        sync_round_course(rid, evrow.get("course_id"), db_path=db_path)
     else:
         rid = create_round(
             event_id, n_holes,
@@ -1497,12 +1516,66 @@ def _qr_dial(event_id: int, db_path=None):
     return dial.get(str(event_id))
 
 
+#: THE SHORT QR LINK (Kerry 2026-10-06: "Are there by chance less dense QR
+#: codes that could be created as a standard? ... I'm concerned that they may
+#: not be readable in some cases based on the course printing them"). The
+#: printed code carries HTTPS://<HOST>/Q/<group>.<version>.<12 hex of the
+#: signature>, all upper case so the QR stores it in its compact alphanumeric
+#: mode: 29x29 modules instead of 41x41, each one twice the area at the same
+#: printed size. /Q/ redirects to the full signed link; a revoked or closed
+#: link fails there exactly as the long one does.
+SHORT_SIG_HEX = 12
+
+
+def short_score_url(url: str) -> str:
+    """The compact QR form of a /member/score?t=<token> link; any other URL
+    comes back unchanged."""
+    m = re.search(r"^(https?://[^/]+)/member/score\?t=([^&#]+)", url or "")
+    if not m:
+        return url
+    try:
+        body, sig = m.group(2).rsplit(".", 1)
+        p = json.loads(base64.urlsafe_b64decode(body + "=" * (-len(body) % 4)))
+        gid, ver = int(p["g"]), int(p["v"])
+    except Exception:  # noqa: BLE001 — never break a print over the short form
+        return url
+    return f"{m.group(1)}/Q/{gid}.{ver}.{sig[:SHORT_SIG_HEX]}".upper()
+
+
+def resolve_short_code(code: str, db_path=None) -> str | None:
+    """The full group token for a /Q/<group>.<version>.<sig12> code, or None
+    when it does not match the group's CURRENT signed link."""
+    try:
+        gid, ver, sig = (code or "").strip().split(".")
+        gid, ver = int(gid), int(ver)
+    except ValueError:
+        return None
+    tok = make_group_token(gid, db_path=db_path)
+    if not tok:
+        return None
+    body, full = tok.rsplit(".", 1)
+    try:
+        cur = int(json.loads(base64.urlsafe_b64decode(body + "=" * (-len(body) % 4)))["v"])
+    except Exception:  # noqa: BLE001
+        return None
+    if cur != ver or len(sig) != SHORT_SIG_HEX or not hmac.compare_digest(
+            full[:SHORT_SIG_HEX].lower(), sig.lower()):
+        return None
+    return tok if verify_group_token(tok, db_path=db_path) else None
+
+
 def qr_svg(url: str) -> str | None:
     try:
         import segno
     except ImportError:
         return None
-    return segno.make(url, error="m").svg_inline(scale=4, border=1, dark="#111111")
+    url = short_score_url(url)
+    # omitsize: a viewBox instead of fixed width/height, so the code SCALES
+    # to its box. With width="172" a smaller box (the scorecard's 4.6em, the
+    # cart sign's 0.9in) cropped the code's right and bottom edges (Kerry
+    # 2026-10-06: "the qr codes are [not] scaling to fit completely").
+    return segno.make(url, error="m").svg_inline(scale=4, border=1, dark="#111111",
+                                                 omitsize=True)
 
 
 def qr_svg_file(url: str) -> bytes | None:
@@ -1514,6 +1587,7 @@ def qr_svg_file(url: str) -> bytes | None:
     except ImportError:
         return None
     buf = io.BytesIO()
+    url = short_score_url(url)
     segno.make(url, error="m").save(buf, kind="svg", scale=4, border=1, dark="#111111")
     return buf.getvalue()
 
@@ -2465,14 +2539,45 @@ def verify_hio(hio_id: int, verified_by: str, approve: bool = True, db_path=None
     return {"ok": True}
 
 
-def _strokes_by_player(players, course) -> dict:
+def _si_by_band(conn, event_id: int, holes_played) -> dict:
+    """{band: {hole: stroke_index}} from each designated tee's OWN card
+    (Kerry 2026-10-06 "go now", Tracker Build #1277): a player's strokes
+    fall on HIS tee's stroke index, the same rule the printed scorecard
+    uses (scorecards.py si_own). A band whose tee lacks a stroke index on
+    any hole played is left out and keeps the round's own column (the
+    <50 tee's), so nothing is ever guessed. Never raises."""
+    try:
+        from email_parser import database as db
+        ev = conn.execute("SELECT * FROM events WHERE id = ?", (int(event_id),)).fetchone()
+        if not ev:
+            return {}
+        played = [int(h) for h in holes_played]
+        out = {}
+        for t in db.event_tee_legend(conn, int(event_id), dict(ev)):
+            if not t.get("band") or not t.get("tee_id"):
+                continue
+            si = {int(h["hole_number"]): int(h["stroke_index"])
+                  for h in db._ls_tee_holes(conn, t["tee_id"]) if h.get("stroke_index")}
+            if played and all(h in si for h in played):
+                out[t["band"]] = {h: si[h] for h in played}
+        return out
+    except Exception:
+        logger.exception("score entry: per-tee stroke index failed for event %s", event_id)
+        return {}
+
+
+def _strokes_by_player(players, course, si_by_band=None) -> dict:
     """Handicap strokes per hole off the LOCKED playing handicap, ranked over
     the round's OWN holes. Kerry ruled CA Queue #10/#11 (CA #771, 2026-09-27):
     "9 hole events collapse to 1-9 si. So it gets the full 3." A nine's stroke
     indexes are re-ranked 1-9, so a 9-hole PH of 3 gets all 3 dots; an 18
     ranks the full 1-18 card, which is the same thing there. The match engine
     (lsc_cup.strokes_received) is handed the same round holes, so the match
-    strokes follow the same rule."""
+    strokes follow the same rule.
+
+    v2.525.5: a player whose band is in ``si_by_band`` (his tee's own
+    stroke index, _si_by_band) is ranked over THAT; everyone else over the
+    round's column, as before."""
     try:
         from email_parser.handicap_calc import allocate_strokes
     except Exception:
@@ -2485,8 +2590,9 @@ def _strokes_by_player(players, course) -> dict:
         ph = p.get("playing_handicap")
         if ph is None:
             continue
+        own = (si_by_band or {}).get((p.get("tee") or "").strip()) or si
         try:
-            alloc = allocate_strokes(int(round(ph)), si, mode="subset")
+            alloc = allocate_strokes(int(round(ph)), own, mode="subset")
         except Exception:
             # Never guess: report a handicap the card can't allocate.
             out.setdefault("_unresolved", []).append(p["customer_id"])
@@ -2495,15 +2601,17 @@ def _strokes_by_player(players, course) -> dict:
     return out
 
 
-def _team_strokes(conn, round_id: int, course) -> dict:
+def _team_strokes(conn, round_id: int, course, tees=None, si_by_band=None) -> dict:
     """Team/Cart Net pops per hole off the snapshotted team handicap, the
-    same allocation as the PH pops (full card, by stroke index)."""
+    same allocation as the PH pops (full card, by stroke index; the
+    player's own tee's since v2.525.5, ``tees`` = {customer_id: band})."""
     rows = conn.execute("SELECT customer_id, handicap, unit, basis FROM se_game_handicaps "
                         "WHERE round_id = ? AND game = 'team_net'", (round_id,)).fetchall()
     if not rows:
         return {"team_strokes": {}, "team_par3_ghost": {}, "team_game": None}
-    alloc = _strokes_by_player([{"customer_id": r[0], "playing_handicap": r[1]} for r in rows],
-                               course)
+    alloc = _strokes_by_player([{"customer_id": r[0], "playing_handicap": r[1],
+                                 "tee": (tees or {}).get(r[0])} for r in rows],
+                               course, si_by_band)
     alloc.pop("_unresolved", None)
     ghost: dict = {}
     # Team / Cart Net take NO pops on a par 3 (Kerry 9/28, CA #912-2: "remove
@@ -2607,10 +2715,15 @@ def _card_extras(conn, g, group_id: int) -> dict:
         "scorekeeper_customer_id, witness_customer_id FROM se_hio_claims "
         "WHERE group_id = ? AND status NOT IN ('withdrawn') ORDER BY id", (group_id,))]
     players = [dict(p) for p in conn.execute(
-        "SELECT customer_id, playing_handicap FROM se_players WHERE group_id = ?", (group_id,))]
+        "SELECT customer_id, playing_handicap, tee FROM se_players WHERE group_id = ?", (group_id,))]
     course = [dict(h) for h in conn.execute(
         "SELECT hole_number AS hole, stroke_index FROM se_round_holes WHERE round_id = ?",
         (g["round_id"],))]
+    # Each player's strokes on HIS tee's stroke index (v2.525.5, Kerry
+    # 2026-10-06 "go now"): the printed card already did this; the phone
+    # put everyone on the <50 tee's column.
+    si_by_band = _si_by_band(conn, g["event_id"], [h["hole"] for h in course])
+    tees = {p["customer_id"]: p.get("tee") for p in players}
     checks = [dict(r) for r in conn.execute(
         "SELECT id, scorekeeper_customer_id, print_scorer_customer_id, print_scorer_name, "
         "signed_for_group, photo_path IS NOT NULL AS has_photo, at FROM se_card_checks "
@@ -2619,8 +2732,8 @@ def _card_extras(conn, g, group_id: int) -> dict:
             "card_check": checks[0] if checks else None,
             "keeper_signs": keeper_signs(g["event_id"]),
             "tees": _tee_legend(conn, g["event_id"]),
-            "strokes": _strokes_by_player(players, course),
-            **_team_strokes(conn, g["round_id"], course),
+            "strokes": _strokes_by_player(players, course, si_by_band),
+            **_team_strokes(conn, g["round_id"], course, tees, si_by_band),
             "strokes_note": None}
 
 

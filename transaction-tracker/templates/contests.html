@@ -251,6 +251,17 @@
            toggles are CONNECTED segments (Kerry: "Connect the toggles
            like in other places we do that. It will save on space") */
         .evlb-chips { display: flex; align-items: center; gap: 8px; margin: 1rem 0 0.5rem; flex-wrap: wrap; }
+        .evlb-chips[hidden], .top-tabs-wrap[hidden], .contest-cta-row[hidden] { display: none; }
+        /* The scorer's board page (v2.523.0): one event bar, then the tabs. */
+        .evlb-solo-bar { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin: 10px 0 8px;
+            padding: 0 0 8px; border-bottom: 1px solid var(--border, #E5E7EB); }
+        .evlb-solo-bar .nm { font: 700 17px/1.2 'Bitter', serif; color: #1B1B1B; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .evlb-solo-bar .st { font: 700 10.5px/1 'Bitter', serif; letter-spacing: .06em; text-transform: uppercase; color: #92400E; white-space: nowrap; }
+        .evlb-solo-bar .st.posted { color: #1B7F4B; }
+        body.evlb-solo main { padding-top: 0; }
+        body.evlb-solo details.evlb-ev { border: 0; border-radius: 0; margin-top: 0; background: transparent; }
+        body.evlb-solo details.evlb-ev > summary { display: none; }
+        body.evlb-solo .evlb-body { border-top: 0; padding: 0; }
         .evlb-seg { display: inline-flex; border: 1px solid var(--border, #E5E7EB);
             border-radius: 99px; overflow: hidden; background: #fff; }
         .evlb-seg button { appearance: none; border: 0; border-left: 1px solid var(--border, #E5E7EB);
@@ -263,6 +274,7 @@
         .evlb-year { margin-left: auto; font: 700 11px/1 'Bitter', serif; color: #9CA3AF;
             letter-spacing: 1px; border: 1px dashed var(--border, #E5E7EB); border-radius: 99px; padding: 6px 12px; }
         .evlb-pilot { font-size: 11px; color: #9CA3AF; flex-basis: 100%; }
+        .evlb-official { font-size: 11px; color: #6B7280; margin: 0 0 8px; }
         .evlb-beta { font: 700 9px/1 'Helvetica Neue', Arial, sans-serif; letter-spacing: .06em;
                      background: #FEF3C7; color: #92400E; border-radius: 99px; padding: 2px 6px;
                      vertical-align: 2px; margin-left: 4px; }
@@ -285,6 +297,15 @@
             color: #9CA3AF; letter-spacing: 0.5px; }
         .evlb-body { border-top: 1px solid #F0EEE9; padding: 10px 14px 14px; }
         .evlb-subtabs { margin-bottom: 10px; }
+        /* Kerry 2026-10-02: "not all toggles for the leaderboard views:
+           OVERALL | TEAM | NET etc fit on the mobile screen". On a
+           phone the seven game tabs wrap into two rows of equal-width cells
+           instead of running off the right edge. */
+        @media (max-width: 560px) {
+            .evlb-seg-sub { display: flex; flex-wrap: wrap; border-radius: 12px; }
+            .evlb-seg-sub button { flex: 1 1 25%; padding: 9px 4px; font-size: 10.5px; letter-spacing: .3px; border-top: 1px solid var(--border, #E5E7EB); margin-top: -1px; }
+            .evlb-seg-sub button:nth-child(5) { border-left: 0; }
+        }
         .evlb-scroll { overflow-x: auto; }
         /* tables compress LEFT instead of filling the width (Kerry) */
         table.evlb-tbl { width: auto; border-collapse: collapse; }
@@ -363,9 +384,14 @@
             border-radius: 50%; margin-left: 7px; vertical-align: middle; }
         /* In a board's name cell the swatch is right-justified (Kerry
            2026-09-15); everywhere else it sits beside the name. */
-        .evlb-tee-dot.right { float: right; margin-top: 4px; }
+        /* ONE ROW per name (Kerry 2026-10-02: "I'd like the names column with
+           the tee color dots all fit on one row without wrapping"): the dot
+           is pinned to the cell's right edge instead of floated, so it can
+           never drop under a long name, and the cell reserves its room. */
+        .evlb-tee-dot.right { float: none; position: absolute; right: 8px; top: 50%; margin: -4px 0 0; }
         .evlb-holes td.nm, .evlb-holes th.nm { text-align: left; min-width: 110px;
-            font-weight: 600; color: #475569; }
+            font-weight: 600; color: #475569; white-space: nowrap; }
+        .evlb-holes td.nm { position: relative; padding-right: 24px; }
         .evlb-holes th.nm { color: #fff; }
         .evlb-holes tr.mute td { color: #9CA3AF; }
         .evlb-holes tr.teamrow td { background: #F3F1EC; font-weight: 700;
@@ -473,6 +499,12 @@
            a right-aligned column of figures. */
         .evlb-holes td.won, .evlb-holes th.won { text-align: center; font-weight: 700;
             color: var(--money-green, #15803D); font-variant-numeric: tabular-nums; min-width: 58px; }
+        /* NO WON COLUMN UNTIL EVERY SCORE IS IN (Kerry 2026-10-02: "hide the
+           WON column on any view until all scores are in"). While the money
+           is held the column leaves every board, the proxies' $ included;
+           it returns with the money. */
+        .evlb-holes.no-won td.won, .evlb-holes.no-won th.won { display: none; }
+        .evlb-prox.no-won th:nth-child(4), .evlb-prox.no-won td:nth-child(4) { display: none; }
         /* OVERALL sortable headers (Kerry 2026-09-11: no arrow glyphs —
            they widened every numeric column; the ACTIVE sort column is
            simply its header cell in TGF orange) */
@@ -1848,11 +1880,16 @@
         @keyframes tgfChampShine { 0% { left: -60%; } 55% { left: 135%; } 100% { left: 135%; } }
     </style>
 </head>
-<body>
+<body{% if SOLO_EVENT %} class="evlb-solo"{% endif %}>
     {% if shell_v2 %}
     {# The mobile bar follows the nav label (Kerry 2026-09-14) — tapping
        "Leaderboard" must not land on a page headed "Season Contests". #}
     {% set SHELL_TITLE = 'Leaderboard' %}{% set SHELL_ACTIVE = 'contests' %}
+    {# THE SCORER'S BOARD (v2.523.0, Kerry 2026-10-02): /member/score/board
+       renders this page for ONE event with the slim shell of the scoring page
+       (the mark, the SCORING | LEADERBOARD toggle, no tabs, no way off the
+       round). See docs/claude/score-entry.md "Scorer navigation". #}
+    {% if SOLO_EVENT %}{% set SHELL_SLIM = True %}{% endif %}
     {% include '_shell_nav.html' %}
     {% else %}
     <header>
@@ -1878,7 +1915,7 @@
          two-button chooser sheet (This Week's Events / Season Contests);
          sheet markup lives in _shell_nav.html's member branch. href stays
          as a no-JS fallback — shell.js preventDefaults it. -->
-    <div class="contest-cta-row">
+    <div class="contest-cta-row"{% if SOLO_EVENT %} hidden{% endif %}>
         {% if member_mode %}
         <a class="contest-cta shell-cta-open" href="https://thegolffellowship.com/shop/ols/products/season-contests"
            target="_blank" rel="noopener">ENTER EVENTS &amp; CONTESTS &rarr;</a>
@@ -1912,13 +1949,15 @@
         <!-- Top-level tabs. The wrap exists so tab-anchored dropdowns have an
              un-clipped positioning parent — .top-tabs itself is overflow-x:auto,
              which clips absolutely-positioned children (v2.57.6 iOS fix) -->
-        <div class="top-tabs-wrap">
+        <div class="top-tabs-wrap"{% if SOLO_EVENT %} hidden{% endif %}>
             <div class="top-tabs">
                 {# EVENTS leaderboard (Kerry 2026-09-11) — ADMIN-ONLY pilot
                    until he approves member exposure; applyRole reveals it,
                    the member-page CSS backstop keeps it off /member #}
-                {# Kerry 2026-09-23: admin + manager, still BETA; never on /member #}
-                {% if not member_mode %}<button class="top-tab manager-only" data-top="events" style="display:none;">Events <span class="evlb-beta">BETA</span></button>{% endif %}
+                {# Kerry 2026-09-23: admin + manager, still BETA. Kerry 2026-10-02
+                   (CoS #1146-1, "Go" 10/3): released to members, both chapters;
+                   visible, not announced; still BETA and labelled Unofficial. #}
+                {% if member_mode %}<button class="top-tab" data-top="events">Events <span class="evlb-beta">BETA</span></button>{% else %}<button class="top-tab manager-only" data-top="events" style="display:none;">Events <span class="evlb-beta">BETA</span></button>{% endif %}
                 <button class="top-tab active" data-top="points-race">Points Races</button>
                 {# Lone Star Cup sits LEFT of Match Play (Kerry 2026-09-12) #}
                 <button class="top-tab" data-top="lone-star-cup">Lone Star Cup</button>
@@ -2119,7 +2158,13 @@
              ratified Team · Net · Gross · Proxies IA, full-field board +
              money game combined, buyers highlighted, winners badged) ═══ -->
         <div id="section-events" class="section-hidden">
-            <div class="evlb-chips">
+            {% if SOLO_EVENT %}
+            {# Kerry 2026-10-02: "It should just have the event showing on a top
+               bar and then go straight into the leaderboard toggles, checkboxes
+               for viewing and leaderboards themselves." #}
+            <div class="evlb-solo-bar"><span class="nm">{{ SOLO_EVENT }}</span><span class="st" id="evlb-solo-st"></span></div>
+            {% endif %}
+            <div class="evlb-chips"{% if SOLO_EVENT %} hidden{% endif %}>
                 <div class="evlb-seg" id="evlb-chips">
                     <button class="evlb-chip active" data-ch="">All</button>
                     <button class="evlb-chip" data-ch="Austin">Austin</button>
@@ -2128,6 +2173,10 @@
                 <span class="evlb-year" id="evlb-year" title="Year selector arrives with historical records">2026</span>
                 <span class="evlb-pilot" id="evlb-pilot"></span>
             </div>
+            {# While Golf Genius is the official scorer every board says so
+               (Kerry 2026-10-02, CoS #1146-1). The date comes from the
+               gg_official_through setting through the list API. #}
+            <p class="evlb-official" id="evlb-official">Unofficial &mdash; Golf Genius is the official scorer<span id="evlb-official-through"></span>. Money shown as computed, not as paid.</p>
             <div id="evlb-list"><p style="color:var(--text-muted);margin-top:1rem;">Loading events&hellip;</p></div>
         </div>
 
@@ -2429,7 +2478,9 @@
 
     <script>window.MATCHPLAY_V2 = {% if MATCHPLAY_V2 %}true{% else %}false{% endif %};</script>
     {% if lsc_landing %}<script>window.LSC_LANDING = true;</script>{% endif %}
+    {% if evlb_landing %}<script>window.EVLB_LANDING = true;</script>{% endif %}
     {% if mp_landing %}<script>window.MP_LANDING = {{ mp_landing|tojson }};</script>{% endif %}
+    {% if SOLO_EVENT %}<script>window.SOLO_EVENT = {{ SOLO_EVENT|tojson }}; window.SOLO_T = {{ (SOLO_T or "")|tojson }};</script>{% endif %}
     {% if member_mode %}<script>window.MEMBER_MODE = true;</script><script src="/static/js/member-nudges.js" defer></script>
     <style>
         /* Member view: manager/admin controls can NEVER show, including
@@ -2936,11 +2987,16 @@
         evlbLoaded = true;
         box.innerHTML = '<p style="color:var(--text-muted);margin-top:1rem;">Loading events&hellip;</p>';
         try {
-            const res = await fetch("/api/events-leaderboard" +
-                (evlbChapter ? "?chapter=" + encodeURIComponent(evlbChapter) : ""));
+            // The scorer's board page reads with his group link (SOLO_T),
+            // which the API accepts for his own event only.
+            const res = await fetch("/api/events-leaderboard?" +
+                (evlbChapter ? "chapter=" + encodeURIComponent(evlbChapter) + "&" : "") +
+                (window.SOLO_T ? "t=" + encodeURIComponent(window.SOLO_T) : ""));
             const d = await res.json();
             if (!res.ok || d.error) throw new Error(d.error || res.statusText);
-            $("evlb-pilot").textContent = d.pilot
+            const thr = $("evlb-official-through");
+            if (thr) thr.textContent = d.gg_official_through ? " through " + d.gg_official_through : "";
+            $("evlb-pilot").textContent = (d.pilot && !window.MEMBER_MODE)
                 ? "Narrowed to " + (d.pilot_codes || []).join(", ") + " (events_leaderboard_only dial — clear it to show every event)" : "";
             if (!(d.events || []).length) {
                 box.innerHTML = '<p style="color:var(--text-muted);margin-top:1rem;">No played events here yet.</p>';
@@ -2967,6 +3023,24 @@
                     evlbPinToTop(el);
                 });
             });
+            // THE SCORER'S BOARD (Kerry 2026-10-02: "The leaderboard that they
+            // would go to would be JUST for that event"): the other events
+            // leave the page and his opens by itself.
+            if (window.SOLO_EVENT) {
+                const want = String(window.SOLO_EVENT).toLowerCase();
+                box.querySelectorAll("details.evlb-ev").forEach(el => {
+                    if ((el.dataset.ev || "").toLowerCase() !== want) el.remove();
+                });
+                const mine = box.querySelector("details.evlb-ev");
+                const st = $("evlb-solo-st");
+                const ev = (d.events || []).find(e => (e.item_name || "").toLowerCase() === want);
+                if (st && ev) {
+                    st.textContent = ev.money_visible === false ? "In play" : evlbDate(ev.event_date) + " · final";
+                    st.classList.toggle("posted", ev.money_visible !== false);
+                }
+                if (mine) { mine.open = true; }
+                else box.innerHTML = '<p style="color:var(--text-muted);margin-top:1rem;">No scores posted for this event yet.</p>';
+            }
         } catch (err) {
             evlbLoaded = false;
             box.innerHTML = `<p style="color:var(--text-muted);margin-top:1rem;">Couldn't load events (${escapeHtml(err.message || String(err))}).</p>`;
@@ -3083,7 +3157,8 @@
         if (EVLB_LOADED_EVENTS[name]) return;
         EVLB_LOADED_EVENTS[name] = true;
         try {
-            const res = await fetch("/api/events-leaderboard/event?name=" + encodeURIComponent(name));
+            const res = await fetch("/api/events-leaderboard/event?name=" + encodeURIComponent(name)
+                + (window.SOLO_T ? "&t=" + encodeURIComponent(window.SOLO_T) : ""));
             const d = await res.json();
             if (!res.ok || d.error) throw new Error(d.error || res.statusText);
             // MONEY WAITS FOR THE FIELD (Kerry 2026-09-15: "Winnings
@@ -3278,18 +3353,33 @@
         if (!n) return "";
         return `<span class="evlb-pops">${(sr > 0 ? "\u25CF" : "\u25CB").repeat(n)}</span>`;
     }
-    function evlbNetOf(d, rid, n) {
+    // ── TEAM NET pops are the GAME's own (Kerry 2026-10-06: "Our team
+    //    scores are not using team Net rules for handicaps, Off lowest or
+    //    no pops on par 3s"): the server puts each member's `team_pops`
+    //    ({hole: n} — allowance, off the lowest, own tee's index, none on
+    //    a par 3) on the team. A member without them (no complete stroke
+    //    index for his tee) falls back to his card's own pops, as before.
+    function evlbTeamPopsOf(t, rid, n) {
+        const p = ((t && t.players) || []).find(x => String(x.scoring_round_id) === String(rid));
+        if (!p || !p.team_pops) return null;
+        return p.team_pops[String(n)] || 0;
+    }
+    function evlbNetOf(d, rid, n, t) {
         const h = ((d.cards || {})[String(rid)] || []).find(x => x[0] === n);
-        return (h && h[1] != null) ? h[1] - (h[2] || 0) : null;
+        if (!h || h[1] == null) return null;
+        const tp = evlbTeamPopsOf(t, rid, n);
+        return h[1] - (tp != null ? tp : (h[2] || 0));
     }
     function evlbTeamMins(d, t) {
         const mins = {};
         (d.hole_cols || []).forEach(n => {
             const vals = (t.players || [])
-                .map(p => evlbNetOf(d, p.scoring_round_id, n))
+                .map(p => evlbNetOf(d, p.scoring_round_id, n, t))
                 .filter(v => v != null);
             mins[n] = vals.length ? Math.min(...vals) : null;
         });
+        // the team rides along so the player rows can draw THEIR team pops
+        Object.defineProperty(mins, "_team", { value: t, enumerable: false });
         return mins;
     }
     // ── MVP badges under the player's name on OVERALL (Kerry
@@ -3342,15 +3432,18 @@
         // best ball — which is the number on the TEAM NET row below.
         const holeCells = (d.hole_cols || []).map(n => {
             const hh = hs[n];
-            const pops = evlbPops(hh ? hh[2] : 0);
             if (netMins) {
                 if (!hh || hh[1] == null) return '<td class="h"></td>';
-                const net = hh[1] - (hh[2] || 0);
+                // the TEAM NET game's pops, not the card's (v2.525.10)
+                const tp = evlbTeamPopsOf(netMins._team, r.scoring_round_id, n);
+                const sr = tp != null ? tp : (hh[2] || 0);
+                const net = hh[1] - sr;
                 const ct = net === netMins[n];
                 return `<td class="h${ct ? " count" : ""}" title="${
-                    hh[1]}${(hh[2] || 0) ? " \u2212 " + (hh[2]) + " = net " + net : " (no stroke)"
-                }${ct ? " \u2014 the ball that counted for the team" : ""}">${pops}${hh[1]}</td>`;
+                    hh[1]}${sr ? " \u2212 " + sr + " = net " + net : " (no stroke)"
+                }${ct ? " \u2014 the ball that counted for the team" : ""}">${evlbPops(sr)}${hh[1]}</td>`;
             }
+            const pops = evlbPops(hh ? hh[2] : 0);
             if (!hh || hh[1] == null) return '<td class="h"></td>';
             return `<td class="h">${pops}${skinHoles.includes(n)
                 ? `<span class="evlb-circ" style="border-color:${skC};color:${skC};" title="${d.field_complete === false ? "skin so far" : "skin"} — flight ${r.skins_flight || 1}${d.field_complete === false ? " (provisional until every card is in)" : ""}">${hh[1]}</span>`
@@ -3449,16 +3542,15 @@
         const cols = d.hole_cols || [];
         const recon = cols.reduce((s2, n) => s2 + (mins[n] ?? 0), 0);
         // GG's posted total is the score of record (v2.381.0). Our
-        // per-hole reconstruction uses each player's OWN-card net
-        // (individual allowance) while the official game plays 75%
-        // off-lowest, so the holes need not sum to it — show GG's
-        // number and say where ours landed rather than letting the two
-        // disagree silently.
+        // per-hole reconstruction plays the Team Net rules (allowance,
+        // off the lowest, own tee's index, no pop on a par 3); show GG's
+        // number when there is one and say where ours landed rather than
+        // letting the two disagree silently.
         const off = t.gg_total != null && t.gg_total !== recon;
         const shown = t.gg_total != null ? t.gg_total : recon;
         const ttl = t.gg_total != null
-            ? `GG posted team total${off ? " — best ball of the players' own-card nets sums to " + recon : ""}`
-            : "best ball of the players' own-card nets";
+            ? `GG posted team total${off ? " — best ball under the Team Net pops sums to " + recon : ""}`
+            : "best ball per hole under the Team Net pops (allowance, off the lowest, no pop on a par 3)";
         // par over the holes the team actually played
         const par = Math.max(0, ...(t.players || []).map(p => {
             const b = (d.overall_board || []).find(
@@ -3653,7 +3745,7 @@
                 ? `<label class="evlb-holetog"><input type="checkbox" data-ovr-all${evlbShowAll ? " checked" : ""}> Show All Players</label>`
                 : "") +
             `</div>` + evlbTeeLegend(d) + `</div>` +
-            `<div class="evlb-scroll"><table class="evlb-holes evlb-ovr${showHoles ? "" : " no-holes"}${evlbShowHcp ? "" : " no-hcp"}" data-board="${id}"><thead>` +
+            `<div class="evlb-scroll"><table class="evlb-holes evlb-ovr${showHoles ? "" : " no-holes"}${evlbShowHcp ? "" : " no-hcp"}${d._moneyHeld ? " no-won" : ""}" data-board="${id}"><thead>` +
             `<tr><th data-k="${board.netCol === false ? "gross" : "net"}" class="sortable">#</th>` +
             `<th data-k="player" class="nm sortable">Player</th>` +
             // Won sits right of the name (Kerry 2026-09-13) — the money
@@ -3931,7 +4023,7 @@
                 `<td class="r">${p.purse != null ? "$" + Number(p.purse).toFixed(2) : ""}</td></tr>`;
         };
         const proxHtml = ((d.proxies || []).length || (d.hio || []).length)
-            ? `<div class="evlb-scroll"><table class="evlb-tbl evlb-prox"><thead><tr><th>Contest</th><th>Winner</th><th>Detail</th><th style="text-align:right;">$</th></tr></thead><tbody>` +
+            ? `<div class="evlb-scroll"><table class="evlb-tbl evlb-prox${d._moneyHeld ? " no-won" : ""}"><thead><tr><th>Contest</th><th>Winner</th><th>Detail</th><th style="text-align:right;">$</th></tr></thead><tbody>` +
               (d.proxies || []).map(p => proxRow(p.label || "", p)).join("") +
               (d.hio || []).map(p => proxRow("Hole-in-One", p)).join("") +
               `</tbody></table></div>`
@@ -3975,7 +4067,7 @@
         const cols = d.hole_cols || [];
         if (!cols.length) return '<p style="color:var(--text-muted);">No hole data.</p>';
         const nineLbl = cols.length > 9 ? "TOT" : (cols[0] >= 10 ? "IN" : "OUT");
-        const netOf = (rid, n) => evlbNetOf(d, rid, n);
+        const netOf = (rid, n) => evlbNetOf(d, rid, n, t);
         const mins = evlbTeamMins(d, t);
         const rows = t.players.map(p =>
             `<tr class="evlb-plr" data-rid="${p.scoring_round_id || ""}"><td class="nm">${escapeHtml(p.player_name)}${evlbTeeDot(d, p, "right")}</td>` +
@@ -3988,12 +4080,11 @@
         const teamRow = `<tr class="teamrow"><td class="nm">TEAM (best ball)</td>` +
             cols.map(n => `<td class="h">${mins[n] ?? ""}</td>`).join("") +
             `<td class="sc">${teamTotal}</td></tr>`;
-        // The card's per-hole nets come from each player's OWN card
-        // (individual allowance), so its sum can differ from GG's
-        // recorded team total (75% off-lowest) — say so rather than
+        // The card's per-hole nets play the Team Net pops (v2.525.10);
+        // when GG's recorded total still differs, say so rather than
         // letting the two numbers silently disagree.
         const ggNote = (t.gg_total != null && t.gg_total !== teamTotal)
-            ? ` &middot; GG recorded team total: <b>${t.gg_total}</b> (official 75% off-lowest allowance; this card shows each player's own-card net)`
+            ? ` &middot; GG recorded team total: <b>${t.gg_total}</b> (this card sums the best ball under the Team Net pops)`
             : "";
         // the same PAR reference the boards carry, in the card's own
         // column shape (Kerry 2026-09-13) — tapping a team must not
@@ -9487,11 +9578,16 @@
         // existing deep-link logic below does the rest. An explicit hash
         // in the URL still wins (e.g. someone edits it to #race=net).
         if (window.LSC_LANDING && !hash) hash = "#tab=lsc";
+        // /member/results (Kerry 2026-10-02, CoS #1146-1) lands on Events.
+        if (window.EVLB_LANDING && !hash) hash = "#tab=events";
         // /member/matchplay/<chapter> (Kerry 2026-08-21): chapter-
         // specific shareable Match Play links — same synthesized-hash
         // trick as the LSC link, plus a ch= hash the block below reads.
         if (window.MP_LANDING && !hash)
             hash = "#tab=mp&ch=" + (/anto/i.test(window.MP_LANDING) ? "sa" : "austin");
+        // /member/score/board lands on the events board, which the solo
+        // filter above narrows to the scorer's event.
+        if (window.SOLO_EVENT) hash = "#tab=events";
         const raceMatch = hash.match(/race=([a-z_]+)/);
         const wantRace = raceMatch && document.querySelector(`.sub-tab[data-pr="${raceMatch[1]}"]`)
             ? raceMatch[1] : null;
@@ -9505,14 +9601,21 @@
             if (chip) chip.style.display =
                 (wantRace === "monthly" || wantRace.startsWith("fall")) ? "none" : "inline-flex";
         }
-        if (hash.includes("tab=mp") || hash.includes("tab=enr") || hash.includes("tab=lsc")) {
+        // #tab=events opens the EVENTS board on load — for the scorer's board
+        // page and for a manager; a member page without the tab ignores it
+        // (the member flip is Tracker Build's #1149).
+        const wantEvents = hash.includes("tab=events")
+            && !!(window.SOLO_EVENT || document.querySelector('.top-tab[data-top="events"]'));
+        if (hash.includes("tab=mp") || hash.includes("tab=enr") || hash.includes("tab=lsc") || wantEvents) {
             const top = hash.includes("tab=mp") ? "match-play"
-                : (hash.includes("tab=lsc") ? "lone-star-cup" : "enrollment");
+                : (hash.includes("tab=lsc") ? "lone-star-cup"
+                : (wantEvents ? "events" : "enrollment"));
             $$(".top-tab").forEach(b => b.classList.toggle("active", b.dataset.top === top));
-            ["match-play", "points-race", "enrollment", "lone-star-cup"].forEach(k =>
+            ["events", "match-play", "points-race", "enrollment", "lone-star-cup"].forEach(k =>
                 $("section-" + k).classList.toggle("section-hidden", k !== top));
             if (top === "enrollment") enrAutoLoad();
             if (top === "lone-star-cup") lscLoad();
+            if (top === "events") evlbLoad();
             // Match Play sub-panel deep link (Kerry 2026-07-21):
             // #tab=mp&mp=knockout|payouts lands directly on that panel.
             const mpSub = hash.match(/mp=(pools|knockout|payouts|setup)/);

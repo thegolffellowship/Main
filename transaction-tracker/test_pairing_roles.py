@@ -98,6 +98,16 @@ adjc = {frozenset((db._pair_key_name("Gus"), db._pair_key_name("Rob")))}
 seats3 = db._arrange_group_seats(["Will", "Mike", "Rob", "Gus"], set(), adjc, {},
                                  captains={"Gus"}, newbies={"Will"}, experience=exp)
 check("a partnered captain sits in seat 1 with their request in seat 2", seats3[:2] == ["Gus", "Rob"], str(seats3))
+# Kerry 10/6 (Olympia Hills, event 3308, Lewis rides with Skinner): "Yeah"
+# -- same tees ride together; captain-with-newest only breaks a tie now.
+tees4 = {"Gus": "50-64", "Mike": "50-64", "Will": "<50", "Rob": "<50"}
+seats4 = db._arrange_group_seats(["Will", "Mike", "Rob", "Gus"], set(), set(), tees4,
+                                 captains={"Gus"}, newbies={"Will"}, experience=exp)
+def cart4(n): return 0 if seats4.index(n) < 2 else 1
+check("a tee match outranks captain-with-newest (Gus rides with Mike, Will with Rob)",
+      cart4("Gus") == cart4("Mike") and cart4("Will") == cart4("Rob"), str(seats4))
+check("…and with matching tees the captain still rides with the newest",
+      cart_of("Gus") == cart_of("Will"), str(seats))
 check("…and the new player still does not drive", seats3.index("Will") == 3, str(seats3))
 check("no captains/newbies passed -> old behaviour unchanged",
       db._arrange_group_seats(["A", "B", "C", "D"], set(), set(), {}) == ["A", "B", "C", "D"])

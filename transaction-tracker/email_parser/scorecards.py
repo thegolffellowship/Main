@@ -62,6 +62,32 @@ def _master(name: str) -> str:
     return _gg_tee_parts(name or "")["master"]
 
 
+def merge_shared_tees(tees: list, grids: dict) -> list:
+    """ONE LINE PER TEE (Kerry 2026-10-06, Avery Ranch card: "In the case
+    where two tee groups share a tee, just have one and put 65+ & Forward
+    so that we don't take up two lines"). Two designated bands SHARE a tee
+    when they print the same tee name and the same yardage on every hole
+    played; the later band folds into the earlier row and the age cell
+    reads both ("65+ & Forward"). A tee with a rating of its own for the
+    folded band (a women's rating on the same markers) prints both
+    ratings. The input rows are untouched: the yardage grid, chips and
+    per-player lookups keep reading every band."""
+    out = []
+    for t in tees:
+        host = next((o for o in out if (o["master"] or "").lower() == (t["master"] or "").lower()
+                     and all(grids[hk]["yards"].get(o["band"], {}) == grids[hk]["yards"].get(t["band"], {})
+                             for hk in grids)), None)
+        if host is None:
+            out.append({**t, "bands": [t["band"]], "merged_bands": [], "rating_extra": None})
+            continue
+        host["bands"].append(t["band"])
+        host["merged_bands"].append(t["band"])
+        host["band_text"] = " & ".join(_band_text(b) for b in host["bands"])
+        if t.get("rating") and (t.get("rating"), t.get("slope")) != (host.get("rating"), host.get("slope")):
+            host["rating_extra"] = f"{t['rating']}/{t['slope']}"
+    return out
+
+
 def _tee_colour(master: str):
     m = (master or "").strip().lower()
     m = re.sub(r"\s*\((?:l|lady|ladies)\)\s*", "", m).strip()
@@ -147,13 +173,16 @@ def _team_no_par3_pops() -> bool:
 
 
 def build_scorecards(event_id: int, layout: str = "3up", grouping: str = "team",
-                     qr: str = "auto", holes_override: str | None = None,
+                     qr: str = "on", holes_override: str | None = None,
                      allow_gaps: bool = False, db_path=None) -> dict | None:
     """Everything the scorecard template prints, or `gaps` saying why not.
 
     layout: 3up | 2up | 2land.  grouping: team (one card per group) | cart
-    (one card per cart). qr: auto (the score-entry dials) | off | preview
-    (every group's real scorer link, for Kerry's look only).
+    (one card per cart). qr: on (the default: every group's scorer link when
+    live scoring is on for the event — Kerry 2026-10-06, "There needs to be
+    [a button]. It should now be checked by default.") | off | auto (only the
+    groups the `score_entry_qr` dial names) | preview (every group's real
+    link for a look, even with live scoring off).
 
     allow_gaps (CA #915): a player-level gap — one player with no PH — no
     longer blocks the other cards; that card prints with PH and net BLANK,
@@ -293,13 +322,19 @@ def build_scorecards(event_id: int, layout: str = "3up", grouping: str = "team",
     # ---- QR -----------------------------------------------------------
     links: dict = {}
     qr_on = False
-    if qr in ("auto", "preview"):
+    if qr in ("on", "auto", "preview"):
         try:
             from email_parser import score_entry as se
-            if qr == "preview" or (se.event_enabled(int(event_id), db_path)
-                                   and se._qr_dial(int(event_id), db_path)):
+            enabled = se.event_enabled(int(event_id), db_path)
+            if qr == "on" and not enabled:
+                log.append("QR codes: live scoring is off for this event, so the cards carry no code.")
+            if qr == "preview" or (enabled and (qr == "on" or se._qr_dial(int(event_id), db_path))):
                 qr_on = True
                 for hk in hole_keys:
+                    if qr == "on":
+                        # A code needs a round: seed it from the SAVED pairings
+                        # (idempotent; the cart signs do the same on print).
+                        se.seed_round_from_pairings(int(event_id), hk, db_path=db_path)
                     links[hk] = se.event_group_links(int(event_id), hk, db_path=db_path)
                 if qr == "auto":
                     want = se._qr_dial(int(event_id), db_path)
@@ -384,6 +419,9 @@ def build_scorecards(event_id: int, layout: str = "3up", grouping: str = "team",
                 "net_dots": {h: max(0, int(v or 0)) for h, v in net_dots.items()},
                 "net_ghost": {h: int(v) for h, v in net_ghost.items()},
                 "rider": (p.get("cart_pos") or 0) >= 3,
+                # His OWN tee's stroke index, which his dots follow; the
+                # card's second SI row reads it (Kerry 2026-10-06).
+                "band": band, "si_by_hole": si_own,
             }
             rows.append(row)
             dump.append({"group_num": g["group_num"], "slot_label": g["slot_label"],
@@ -402,7 +440,7 @@ def build_scorecards(event_id: int, layout: str = "3up", grouping: str = "team",
         if url:
             from email_parser.score_entry import qr_svg
             base["qr"] = {"url": url, "svg": qr_svg(url)}
-        elif qr == "preview":
+        elif qr in ("preview", "on") and qr_on:
             log.append(f"Group {g['group_num']}: no scorer link (no open round) — QR slot empty.")
         if grouping == "cart":
             a = [r for r in rows if (r["cart_pos"] or 0) <= 2]
@@ -415,6 +453,38 @@ def build_scorecards(event_id: int, layout: str = "3up", grouping: str = "team",
             split = next((i for i, r in enumerate(rows) if r["rider"]), None)
             cards.append({**base, "cart": None, "rows": rows,
                           "split_after": split if split not in (None, 0) else None})
+
+    # A SECOND STROKE INDEX ROW (Kerry 2026-10-06: "When those forward (or
+    # ladies rating tees) are used in a foursome, then an additional row
+    # should show for SI's for those tees...so two SI row's (properly
+    # labeled) would show on that group's card...if they're different from
+    # each other. If they're the same, then two rows don't need to show.").
+    # Dots already follow each player's OWN tee (si_own above, USGA). A card
+    # whose players' tees carry a stroke index other than the printed one
+    # gets one extra row per such tee, labelled with the tee; the printed row
+    # is then labelled with the tees it belongs to.
+    for c in cards:
+        main = (grids.get(c["holes"]) or {}).get("si") or {}
+        extra, seen = [], set()
+        for r in c["rows"]:
+            own = r.get("si_by_hole") or {}
+            if not own or all(own.get(h) == v for h, v in main.items()):
+                continue
+            key = tuple(sorted(own.items()))
+            if key in seen:
+                continue
+            seen.add(key)
+            t = by_band.get(r.get("band")) or {}
+            extra.append({"label": t.get("master") or r.get("band") or "Own tee",
+                          "band_text": t.get("band_text") or "", "si": own})
+        c["si_extra"] = extra
+        if extra:
+            same = [t["master"] for t in tees
+                    if t.get("holes") and all(((t["holes"].get(h) or {}).get("stroke_index")) == v
+                                              for h, v in main.items())]
+            c["si_main_label"] = " · ".join(dict.fromkeys(same)) or (par_tee or {}).get("master")
+        else:
+            c["si_main_label"] = None
 
     lay = LAYOUTS[layout]
     # NAME SIZE (Kerry 2026-09-29: bigger "to maximize legibility"): each
@@ -446,7 +516,7 @@ def build_scorecards(event_id: int, layout: str = "3up", grouping: str = "team",
                   "event_date": ev.get("event_date"), "shotgun": shotgun,
                   "file_stub": pack["event"].get("file_stub")},
         "layout": layout, "layout_meta": lay, "grouping": grouping, "qr": qr,
-        "tees": tees, "grids": grids, "cards": cards, "sheets": sheets,
+        "tees": merge_shared_tees(tees, grids), "grids": grids, "cards": cards, "sheets": sheets,
         "net": {"word": net_word, "short": net_short, "name": net_name,
                 "pct": allow_pct, "pct_note": pct_note, "unit": unit,
                 "basis": pack.get("team_basis"), "low": off_low.get("low"),
@@ -487,7 +557,7 @@ def build_scorecards_pdf(render, event_id: int, static_dir: str, sets: list[dict
     stub = None
     for s in sets:
         sc = build_scorecards(event_id, s.get("layout", "3up"), s.get("grouping", "team"),
-                              qr=s.get("qr", "auto"), holes_override=s.get("holes"),
+                              qr=s.get("qr", "on"), holes_override=s.get("holes"),
                               allow_gaps=bool(s.get("allow_gaps")), db_path=db_path)
         if not sc:
             return {"error": "event not found"}

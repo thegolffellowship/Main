@@ -566,3 +566,100 @@ approved wording it went out under), `status` (`sending` / `sent` /
 `failed`), `sent_at`; UNIQUE (`event_id`, `customer_id`). The claim is
 `INSERT … ON CONFLICT DO UPDATE … WHERE status = 'failed' RETURNING id`,
 before the Graph call. See events.md "The EVENT-DAY EMAIL".
+
+## `customer_ambassadors` — the Ambassador flag (Pairings Spec v1.2 #1036-4, v2.522.50)
+
+Kerry: "I will currently determine the Ambassador role. Definitely not
+something to be derived right now." So the flag is SET, never computed, by
+Kerry (or Robert for Austin on Kerry's say-so). Approved CoS #1046; shape
+confirmed by Tracker Build #1055. Created by `migrations/0002_customer_ambassadors.sql`.
+
+| column | |
+|---|---|
+| `customer_id` | FK → customers; part of the key |
+| `chapter_id` | FK → chapters; part of the key (a member can be an Ambassador per chapter) |
+| `ambassador` | 1 / 0. Unflagging sets 0; a row is **never deleted**, so "was an ambassador on 10/6" stays answerable (#1055-3) |
+| `set_by`, `set_at`, `note` | who / when / why of the last change |
+
+- **Code:** `email_parser/ambassadors.py`. The ONE reader for pairings is
+  `chapter_ambassadors(conn, chapter_id) -> set[int]` (#1055-2); R-A / R-F read
+  only that. `list_ambassadors`, `set_ambassador` (refused unless the cited
+  mailbox post carries Kerry's word, the `set_customer_field` guard; dry run
+  unless applied; every change in `agent_action_log` as `set_ambassador`).
+- **Bridges:** `scoring-ambassadors:[<chapter>][|all]` (read),
+  `scoring-ambassador-set:<json>` (write, dry run by default).
+- **Guard:** `test_ambassadors.py` fails if any other module queries the table
+  directly.
+
+## `event_nh_flags` — the N/H flag (Kerry "Good on both", CoS #1078, v2.522.53)
+
+`(event_id → events.id, customer_id → customers, nh 0|1, set_by, set_at, note)`,
+PRIMARY KEY (event_id, customer_id), `migrations/0003_event_nh_flags.sql`.
+A manager marks a player with no handicap as N/H for one event; Side Games'
+engine plays them at zero with a blind for the money. Clearing sets nh = 0
+and keeps the row. Read ONLY through `nh_flags.event_nh_players(conn,
+event_id)`; written only by `nh_flags.set_nh` (logged). See handicaps.md.
+
+## `blind_draws.reason` (0004) and `blind_draw_holes` (0006 / 0007; Kerry OK #1078, CoS #1090-2, db-claude #1108 / #1124)
+
+`blind_draws.reason` records why a blind was drawn. It is a closed enum:
+
+- `open_seat`: an empty seat. Existing rows were backfilled to this.
+- `nh`: the seat's player has no handicap at all; the blind plays his slot.
+- `missed_hole`: a player marked absent.
+
+`blind_draw_holes (blind_draw_id → blind_draws.id, hole 1–18)` lists the
+holes a missed-hole blind covers, one row per hole. No rows means every
+hole. It replaced the JSON column `blind_draws.missed_holes` that 0004
+added and nothing ever wrote (Kerry's #1087 rule: facts are rows); 0007
+drops that column (production SQLite 3.46.1, #1107). `blind_draws.holes` is a different fact: the
+9/18 sheet. `get_event_blinds` returns the list as `missed_holes`, and the
+engine takes it as `holes`. The missed-hole WRITER ships with Track A's
+#1021 wave. `_write_blind_row` upserts on `(event_id, slot_key)` (ON
+CONFLICT DO UPDATE; #682, CoS #1100-2), so a redraw keeps the row's id and
+its hole rows; an INSERT OR REPLACE would have re-keyed the row.
+Rule: pairings.md 15i.
+
+## Home chapter by id: `customers.home_chapter_id` + `customer_chapter_history` (Kerry APPROVED, CoS #1084, v2.522.56)
+
+`migrations/0005_home_chapter.sql`:
+- `customers.home_chapter_id → chapters`. There is ONE home chapter per member.
+- `customer_chapter_history (customer_id, chapter_id, from_date, to_date,
+  set_by, reason)`. A move closes the open row and opens a new one; it never
+  overwrites.
+- New `chapters` fields: `city`, `state`, `manager_customer_id`,
+  `sender_email`, `launched_on`. `gg_portal_ids` (JSON) and
+  `default_tee_band` were dropped under Kerry's standing rule (#1087: every
+  fact typed; JSON needs his OK). Portals become a `chapter_portals` table;
+  the tee band waits on the A-6 decision.
+
+**Backfill:** `home_chapter.backfill_home_chapters` (bridge
+`scoring-home-chapter-backfill[:apply]`) copies from `customers.chapter`, the
+ruled source (CA #784), never from where someone plays. Blanks stay NULL and
+are listed for Kerry/Robert. Vendor profiles are skipped.
+
+**Writing it:** `home_chapter.set_home_chapter` is the ONLY writer. It sets the
+id, writes the history row, and mirrors the name into `customers.chapter`.
+That text column is **read-only by rule** until its ~40 readers move to
+`home_chapter_id` (reader: `home_chapter_id_of`); then it's dropped in its
+own migration. The org_units rename waits for the Postgres move.
+
+
+## The TGF Library: `library_documents` (migration 0008; Kerry "Ok yes" #1117, db-claude #1124)
+
+Governing documents (standards, specs, strategy, decisions, lane context,
+audits) as append-only rows. Spec: librarian-claude #1114; module
+`email_parser/library.py`.
+- `library_sections (code PK, name, folder)`: the taxonomy as a lookup
+  (#1087), seeded with six sections and their OneDrive IA v1.0 folders (#1118).
+- `library_documents`: one row per document VERSION, `UNIQUE (doc_id,
+  version_major, version_minor)` with both version columns NOT NULL;
+  `status` CHECK draft / proposed / ratified / living / superseded;
+  `body` + `body_sha256`; `supersedes_id` / `superseded_by_id` self-FKs;
+  `filed_by`, `filed_at`, `exported_commit` (the Librarian's daily export).
+- `library_document_reads (document_id, reader)`: who must read it.
+- **Never deleted, never edited in place.** A supersede inserts the new row
+  and sets the old row's `status='superseded'` + `superseded_by_id`, the only
+  UPDATE. Foreign keys are declarations (production `foreign_keys = 0`), so
+  `library_put` checks section, supersedes target and readers in code.
+- `lane`, `owner`, `filed_by` are TEXT until a `lanes` lookup exists (#1124-g).

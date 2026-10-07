@@ -161,7 +161,7 @@ check("clicking EVEN re-cuts from scratch and clears the moves (moves_cleared re
       and next(x for x in _ev["games"] if x["game"] == "skins")["selection"]["mode"] == "equal_size", str(_ev.get("flight_modes")))
 db.set_event_flight_mode(EV, "skins", None, by="test", db_path=tmp)
 check("a move to a flight not on the board is refused", db.move_event_flight_player(EV, "skins", _low["customer_id"], 5, db_path=tmp).get("ok") is False)
-check("a player not flighted in that game is refused", "not flighted" in db.move_event_flight_player(EV, "skins", 999999, 1, db_path=tmp).get("error", ""))
+check("a player not in that game (no buyer) is refused", "is not in skins" in db.move_event_flight_player(EV, "skins", 999999, 1, db_path=tmp).get("error", ""))
 check("the moves left nothing behind: every game is back on its default cut", db.event_flight_modes(EV, db_path=tmp) == {}, str(db.event_flight_modes(EV, db_path=tmp)))
 db.set_event_flight_mode(EV, "skins", None, db_path=tmp)
 check("...amounts from the matrix columns (netLow / netHigh)",

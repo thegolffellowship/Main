@@ -382,6 +382,25 @@ cards remain inline buttons.
 
 ## Pairings printables — Starter Sheet + Cart Signs (B5, v2.116.0)
 
+**THE COURSE LINK FOLLOWS THE COURSE NAME (v2.524.6, Kerry 2026-10-06).**
+Everything course-shaped on an event (the tee legend, the scorer card's
+par / stroke index / yardage, the ratings behind every playing handicap)
+reads `events.course_id`, never the name. On 10/6 a9.26 Avery Ranch
+(3316) was NAMED Avery Ranch but LINKED to ShadowGlen (22365): the scorer
+card carried ShadowGlen's Green (L) back nine and the sheet's playing
+handicaps came off ShadowGlen's ratings. Cause: `update_event` accepted a
+new `course` name and left `course_id` as it was, and the boot backfill
+only fills NULL links. Now `update_event` re-resolves the link from the
+name whenever `course` is set (`course_id_for_name`: the row's own name,
+else an alias, lower() both sides, a live row beats an archived "(OLD)"
+twin; a name no course carries CLEARS the link), and a re-seed refreshes
+the round's own link (`score_entry.sync_round_course`). Audit every
+event's link against its name with `scoring-event-course-audit[:upcoming|all|<event_id>]`
+(`event_course_audit`, read-only: wrong / unlinked / unknown, with the fix).
+Fix a wrong one by setting the course name again through
+`update_existing_event(id, {"course": "<name>"})`, then re-seed any open
+round. Guard: `test_event_course_link.py`.
+
 **Tee legend = the DESIGNATED sets (v2.467.0, Kerry 2026-09-20).** The
 band legend on the starter sheet (and the tee circles + PH on the
 leaderboard) prints the sets the course record designates in
@@ -2328,6 +2347,50 @@ manual (`import_gg_scorecards` / the `scoring-import` bridge). Nothing
 polls GG on a timer, so "how often does the leaderboard update" is "when
 someone runs the import".
 
+## The board's teams: seats by customer_id, blinds from blind_draws (v2.525.9)
+
+Kerry 2026-10-06, Olympia Hills (event 3308) in play: "The team totals
+are screwed up and aren't considering the blinds." `get_event_leaderboard`
+builds each team from the saved pairing sheet (`event_pairings`). Two
+rules since v2.525.9:
+
+- **A seat finds its card by `customer_id` first, name second.** The
+  sheet said "Michael Murphy", the card said "MURPHY, Mike", and the
+  name match left him off his team with no scores.
+- **The drawn blinds play.** `blind_draws` (pairings.md rule 15) is the
+  draw of record; each blind is seated on its team as `Bl[<card name>]`
+  with the drawn player's own round, the mechanism `live_scoring.
+  _team_blind_members` and Golf Genius both use. open_seat: the card
+  joins the best ball. nh: the N/H seat's own card leaves the best ball
+  (`nh: true` on the member) and the blind's plays it. missed_hole: the
+  blind counts on `blind_holes` only. The team-handicap ladder (allowance,
+  off the lowest) includes the blind. Before this a blind reached the
+  board only through Golf Genius's recorded team string, so an event
+  scored on the phones showed every short team without its blind. When
+  the GG result arrives its `Bl[LAST, First]` slot is recognised as
+  already seated, never doubled. Guard: `test_events_board_blinds.py`.
+- **TEAM NET plays the Team Net pops (v2.525.10).** Kerry, 7:04 PM the
+  same night: "Our team scores are not using team Net rules for
+  handicaps, Off lowest or no pops on par 3s." The best ball had read
+  each card's stored `strokes_received` (the 100% individual pops). Now
+  every member carries `team_pops` ({hole: n}) off his `team_hcp`,
+  **which is the Starter Sheet's own number (v2.525.11)**: `get_event_print_pack`
+  → `team_handicaps_for_groups`, allowance on the unrounded course
+  handicap, rounded once, **off the lowest in the WHOLE FIELD** (Kerry
+  2026-09-18, and again 2026-10-06 7:14 PM: "Not off lowest on the team
+  it's off lowest for the whole field"), the same number the phone card
+  snapshots in `se_game_handicaps`. A player the sheet does not carry
+  falls back to PH x allowance off the field's lowest of those values
+  (`team_hcp_src` = `sheet` | `field`). Never off the team. The pops are
+  placed by `handicap_calc.ruled_dots` on the player's
+  own tee's stroke index (`score_entry._si_by_band`, falling back to the
+  round's tee), and no pop on a par 3, removed not moved (engine dial
+  `team_net.no_pops_on_par3`). The server's total, the TEAM NET row, the
+  dots on the TEAM tab's rows and the team card all read `team_pops`
+  (`evlbTeamPopsOf`). A member whose tee lacks a complete index for the
+  holes keeps his card's pops, marked `team_pops_src = "card"`. Same rule
+  as the phone card, the printed scorecard and `live_scoring.game_team_net`.
+
 ## Event Setup: GAMES OFFERED (v2.475.0, Kerry ratified 2026-09-21)
 
 Kerry: "Yes, add a Games Offered setting to Event Setup. I guess we've
@@ -2476,6 +2539,14 @@ FLIGHTING lane (spun off "TGF Tracker Improvements 2"; plan #584).
   Clicking EVEN or HCP re-cuts from scratch and clears the moves
   (`moves_cleared` in the response; a toast says so). A frozen board
   refuses both. Bridge `scoring-flights-move:<id>|<game>|<cid>|<flight>`.
+  **A move can also PLACE a no-index buyer (v2.522.40, Kerry 2026-09-30
+  "Update our Flights on the tracker" to match GG on 3317):** a buyer
+  with no handicap index sits in `unflighted`; a move naming him places
+  him in that flight (`flighting._place_unindexed`, `from_flight: None`,
+  note "(no index) placed in Flight N"). Flight labels read the indexed
+  members only. There is no "back to unflighted" drop; clear the game
+  with EVEN / HCP to start over. The automatic PH-implied placement of a
+  no-index late add (#843 e) is separate and not built yet.
   **Auto-save:** on FLIGHTS every toggle/drop is the save (one POST, the
   response is the board). On PAIRINGS `rerenderDetail` arms
   `schedulePairingsAutosave` whenever the sheet is dirty: 1.2 s after the
@@ -2667,6 +2738,20 @@ purses beside ours. G2a grades it per player, to the cent
 `/events/<id>/scorecards[.pdf]?layout=3up|2up|2land&grouping=team|cart&qr=auto|off|preview&holes=9|18`;
 bridge `scoring-scorecards:<id>[|key=value…][|dump|html|pdf[|all][|send]]`.
 
+- **One line per shared tee (v2.525.1, Kerry 2026-10-06):** two designated
+  bands that play the same markers (same tee name, identical yardage on
+  every hole played) print as ONE tee row whose age cell reads both bands
+  ("65+ & Forward"); a women's rating that differs from the men's on the
+  same markers prints beside it ("Green (32.3/109 · 34.5/117)"). Players,
+  chips, dots and the yardage grid keep reading each band
+  (`merge_shared_tees`). Tees with different yardage keep their own rows.
+- **A women's band reads the women's row (v2.525.1):** `_event_tee_rows`
+  (the playing-handicap tee resolver) takes the legend's own designated
+  row when it is a candidate, else the row whose gender matches the band.
+  Before this, "Green" and "Green (L)" matched by name and the Forward
+  band computed off the men's rating (Avery Ranch, Yolanda Williams PH 11
+  instead of 15). Guard: `test_event_course_link.py`.
+
 - **Every value comes from a Tracker reader, never the print layer (#897):**
   groups / slot / cart seats / index / PH / net-game value, allowance and
   off-the-lowest from `get_event_print_pack` (the Starter Sheet's reader);
@@ -2688,7 +2773,24 @@ bridge `scoring-scorecards:<id>[|key=value…][|dump|html|pdf[|all][|send]]`.
 - **Threesomes are 3 rows** (CA #898-4); Cart Net = one card per cart
   (2 + 1 for a threesome), unshaded. Tee colours are a token map by master
   name (CA #898-6); an unknown name prints black on white and is logged.
-- **QR:** `auto` follows the score-entry dials; `off` collapses it;
+- **QR (v2.525.2, Kerry 2026-10-06: "there needs to be [a button]. It
+  should now be checked by default."):** the page's "Print QR codes"
+  checkbox, checked by default, is `qr=on`: every group's live-scoring link
+  whenever live scoring is on for the event (the round is seeded from the
+  saved pairings if needed); the bound print pack uses `on` too. Unchecked =
+  `off`. With live scoring off the cards carry no code and the log says so.
+  The cart signs still follow the `score_entry_qr` dial.
+  The code carries the SHORT link (v2.525.7, `score_entry.short_score_url`).
+- **Second SI row (v2.525.7, Kerry 2026-10-06: "two SI row's (properly
+  labeled) would show on that group's card...if they're different"):** dots
+  always follow each player's own tee's stroke index (USGA). A card whose
+  rows include a tee with a different index gets `si_extra` rows
+  ("SI · <tee> <band>") and the main row is labelled with its tees; the
+  card's tee/par/SI rows shrink (`.card.si2`) so it keeps one sheet.
+- **SCORING tab (v2.525.7):** the score-entry panel moved off PAIRINGS to
+  its own tab between REPORTS and PAYOUTS (admin, live scoring on;
+  `renderScoreEntryTab`, view "7").
+  Older modes: `auto` follows the score-entry dials; `off` collapses it;
   `preview` fills every group's real scorer link via the read-only
   `score_entry.event_group_links` (never seeds a round) — for Kerry's look
   only. **GGID** collapses until the PAIRINGS field (#900) exists.
@@ -2776,13 +2878,58 @@ bridge `scoring-scorecards:<id>[|key=value…][|dump|html|pdf[|all][|send]]`.
   Live Scoring, Blinds and the Score Entry panel. Every report's Back goes
   to `/events?event=<id>&view=reports`. Guard `test_mobile_manager_parity.js`.
 
+## The GAMES & PAYOUTS sheet (v2.524.2, design-claude #967 + Kerry's 9/29 amendments)
+
+One Letter page for the players: every game's pot, places and write-in
+lines, the Net Stableford values the MVP is scored on, and the
+Hole-in-One pot. `/events/<id>/games-payouts` (manager+), the REPORTS
+tab, and the print pack (after the scorecards). Builder
+`email_parser/games_sheet.py`, template `templates/games_payouts.html`,
+guard `test_games_sheet.py`.
+
+- **Every figure is the GAMES tab's (the #897 rule).** `build_games_sheet`
+  reads the tab through `page_probe.event_games_tab` (the Events page's
+  own `renderGamesPanel`, headless, the same reader as `get_event_games`)
+  and parses its rows (`parse_games_tab`). Nothing recomputes a pot. The
+  probe also returns `mvp_link` (the page's `getMvpLinkedEvents`, with
+  each linked event's chapter) for the TGF MVP line.
+- **Other sources, each the one the tab itself leans on:** CTP hole
+  numbers from `event_proximity_report` ("Hole n"; "Putt · n" for a
+  Longest Putt; a blank "Hole ___" + a warning when the course has no hole
+  card, never "CTP #1"); Stableford from `get_scoring_formulas()`
+  (championship table on championship events); the HIO band from
+  `get_hio_pot()` (the running pot through the day, and each city's add
+  today); the Individual Gross minimum from the live matrix; the Team/Cart
+  Net allowance, off-the-low and par-3 rule from the same dials the
+  scorecards' legend reads.
+- **Entry fee in the strips** ("17 entrants @ $13") = section total ÷
+  entrants; the net section first takes out the OTHER city's TGF MVP share,
+  which sits in the tab's net subtotal but was not paid by these entrants.
+- **Rule text** lives in `GAME_RULES`, Kerry's words: "Ties: winners split
+  pot" on Team Net, Proxies ("Ball must be on the green."), Individual Net;
+  "Winners split pot by skins won." on Skins; Event MVP "Most net
+  Stableford points. Tiebreakers: 1st = Total Net | 2nd = Total Gross |
+  3rd = Split winnings."
+- **Pot check:** Team + CTP + Net + Gross must equal the tab's TOTAL. A
+  mismatch prints red in the footer and warns on screen and in the print
+  pack's `games_sheet` result; it is never silent. A bucket-account event
+  prints no sheet and says why.
+- **One page, type never shrinks:** if the left column (Included + Gross)
+  runs long, the Gross games carry over one block at a time into "Gross
+  Games (cont.)" under the Stableford box; if that isn't enough the sheet
+  goes `.tight` (less padding and row height, same type sizes, proxies two
+  across). Still too long → an on-screen warning (`data-fits="0"`).
+- **No green anywhere** (CD #967 §8): money is ink, section totals orange
+  on black. The test fails on any green hex.
+
 ## The event PRINT PACK — one bound PDF, mailed the evening before (v2.465.0)
 
 Kerry 2026-09-18: "a bound PDF with all of them in one that I could
 print, rather than each separately" / "Build the PDF routine and have it
 emailed to me."
 
-- **What:** Starter Sheet, Cart Signs, Divisions & Flights, Proximity
+- **What:** Starter Sheet, Cart Signs, (Scorecards), Games & Payouts
+  (v2.524.2), Divisions & Flights, Proximity
   Markers — the same templates the browser prints — rendered server-side
   by **headless Chromium** (Playwright, `email_parser/print_pack.py`),
   WeasyPrint as the fallback engine, and bound in that order (pypdf).
@@ -2933,3 +3080,28 @@ does, the member send refuses.**
 - **To approve**: Kerry reads a preview, then
   `scoring-setting-set:event_day_email_approved|<template_hash>`.
 - Test: `test_event_day_email.py` (Graph mocked).
+
+
+## Credit from a received payment (v2.525.8, Kerry 2026-10-06)
+
+Kerry: "What do you mean no tool records a payment into a credit? We do that
+with regular events. We need that tool now if we don't have it."
+
+- **With a registration:** `partial_credit_transaction` on the player's row
+  writes a credited child row (CFO #1290: the right tool for the Lone Star
+  Cup's Hamilton, Jeff Young and Jay Hogue, on their RSVP-only Cup rows).
+  Don't use `credit_transaction` on an unpriced row: it credits $0.
+- **With no registration** (a Venmo / bank payment only, e.g. McCrary):
+  `post_credit_from_receipt(receipt_id, customer_id, amount, kerry_ok_post,
+  note, rest, apply)` in `email_parser/receipt_credits.py`. It writes one
+  credited `items` row (merchant "Credit from receipt", `email_uid`
+  `receipt-credit-<id>`), sets the receipt's `matched_item_id` to it (so it
+  cannot be credited twice and leaves the unmatched queue), records any split
+  (`rest`: that player's registration ids and/or labelled lines; credit + rest
+  = the receipt to the cent) on the receipt's notes, and logs before/after.
+  No ledger row: the received payment is already the ledger entry.
+- `undo_credit_from_receipt` marks the row `reversed` with price $0.00 (the
+  amount stays in the note) and frees the receipt; refused once any of the
+  credit has been applied.
+- A split only RECORDS where the rest went; it does not re-categorise the
+  ledger row (that is the receipt-split bridge, after WINDOW CLOSED).

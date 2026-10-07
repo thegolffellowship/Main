@@ -111,9 +111,12 @@ matters too, not just the foursome.
 13. **Driver's seat (Kerry-ratified 2026-09-15, v2.416.0; v2.417.0).**
     Seats 1 and 3 drive — no wheel mark, it is implied. The
     `group_captain` takes SEAT 1 with their partner request in seat 2 if
-    partnered, else the NEWEST player beside them (weights 100 / 10 in
-    `_arrange_group_seats`: below Match Play, above a tee match; the
-    captain's cart is rotated to seats 1-2 after the permutation). A
+    partnered, else the NEWEST player beside them (weights 100 / 0.5 in
+    `_arrange_group_seats`: the request below Match Play; the newest
+    BELOW a tee match since 2026-10-06 (was 10, above it). Kerry, Olympia
+    Hills (event 3308), on Lewis riding with Skinner: "Yeah" — same tees
+    ride together, captain-with-newest breaks ties. The captain's cart is
+    rotated to seats 1-2 after the permutation). A
     first-year member (`is_new`) never drives; otherwise the more
     experienced player (`experience` = order rows on file) takes the
     wheel. `is_new` = joined as a NEW MEMBER this year (earliest
@@ -132,7 +135,10 @@ matters too, not just the foursome.
     two, cheapest history, never breaking rule 12).
 
 14. **First-timers ride with an ambassador (Kerry-ratified 2026-09-15,
-    v2.420.0).** "1st Timers also need to be paired up (carted) with an
+    v2.420.0).** *(Who IS an Ambassador is now a flag Kerry sets, per
+    chapter, in `customer_ambassadors` (v2.522.50, schema.md). The pairings
+    engine reads it only through `ambassadors.chapter_ambassadors(conn,
+    chapter_id)`; R-A / R-F of Spec v1.2 build on that reader.)* "1st Timers also need to be paired up (carted) with an
     Ambassador of the same tees whenever possible." `is_first_timer` =
     order label `1ST TIMER`, profile status `first_timer`, **or the
     player's first event ever** (v2.421.0 — see "1st timer means FIRST
@@ -1856,6 +1862,68 @@ the button asks first — keep them and fill only the open seats (no
 now previews without deleting). Guards: `test_blind_draws.py`,
 `test_blinds_ui.js`.
 
+### 15i — N/H players, and who serves vs who receives a blind (v2.522.55)
+
+The same rule as 15h, extended to a player with no handicap. Kerry,
+verbatim:
+
+- *"if a customer doesn't enter a handicap, then their team deserves a
+  blind from the field (team) or the other cart (cart net)… the blind would
+  win the money and not the customer"* (#1064);
+- *"A player cannot fill in as their own cart partner blind...their score
+  would be the same. Our standard is that in a threesome (or a situation
+  like the one we're discussing with someone without a handicap) if one of
+  the carts has a single player, then someone (who meets the requirements)
+  from the other cart in their group becomes their blind partner."* (#1067-1);
+- *"When I say meets the requirements, I mean meets our blind eligibility
+  requirements that we've recently discussed that have to do with them
+  being a member with an actual TGF Handicap established, NOT an intro
+  handicap and not a guest or alumni."* (#1068);
+- *"if they ARE missing someone and they have an actual intro handicap,
+  then they definitely deserve a blind as well, because buying into any
+  regular event means you're automatically entered into the team game."*
+  (#1078-2).
+
+**Two tests, kept apart in code:**
+
+- **ELIGIBLE (who may SERVE as a blind):** `blind_gate(customer_id,
+  status, established_index)`. The member must be active_member or
+  member_plus, with an established TGF index (≥ `min_rounds` posted
+  differentials in the lookback). This excludes intro / 75% / starting
+  handicaps, guests, 1st Timers, alumni and anyone with no customer
+  record. Every door asks it: the whole-sheet draw, the single-seat
+  RANDOM, CHOOSE, the Cart Net other-cart pick, the N/H seat, the
+  missed-hole blind (#1021), and the Ambassador flag (#1080-1). A test
+  fails if any other code tests the member statuses.
+- **ENTITLED (who RECEIVES a blind):** any buyer in a regular event whose
+  cart or team is short, including intro handicaps. There's no gate: every
+  open seat is filled.
+
+**N/H** means on the roster with NO index of record AND NO starting
+handicap, whether or not a manager has pressed "Play N/H" (Tracker
+Build's `event_nh_flags`, #1085). `event_nh_seat_set` reads the banner's
+own computation (`handicap_warnings.missing_handicaps`: `players` plus the
+flagged `nh_players`), so the banner and the draw can't disagree. A flag
+left on a player who has since been given a handicap does not make him
+N/H. An intro player is not N/H:
+he plays his handicap and counts for his team.
+
+- He plays at 0, and his gross is entered like anyone's. He can win
+  Individual Net / Gross and Skins.
+- His team's ball in HIS slot is a blind's. `draw_event_blinds` treats
+  his seat like an open one: Team Net draws from the field outside the
+  group; Cart Net draws from the other cart, then the field (flagged).
+- The row is keyed to his seat with `reason = 'nh'`.
+- If he later gets a handicap, the draw reports the blind in `stale_nh`.
+  It doesn't remove it; clearing is the manager's click.
+- CHOOSE on a seat held by a player WITH a handicap is refused.
+
+**Money:** the Team / Cart Net slot pays the blind, not the N/H player. The
+engine (`live_scoring.game_team_net(..., blinds=)`) drops his card from
+the best ball and plays the blind's card, labelled `Bl[Name]`, at the
+blind's own strokes. GG stays the payer of record until the entry-record
+cutover (#846). Guards: `test_nh_blinds.py`.
+
 ### Surfaces
 
 * `POST /api/events/<id>/pairings/blinds` — `{apply, redraw, clear}`
@@ -2008,3 +2076,97 @@ it writes only when the event has no GG pair rows (`gg_teamnet`,
 plans and its own earlier write. Before that it runs in SHADOW and returns
 `parity` (pairs only entered, pairs only GG). Guard: test_closeout_checks.py.
 
+
+## R-G — cart variety (v2.522.48, Spec v1.2 §11, #1038)
+
+Kerry 2026-09-30, verbatim: *"A player plays one event in the same cart as
+another, then the next time they're paired, they're in different carts. Just
+more variety built in."*
+
+- **Where it acts:** only the seater, `_arrange_group_seats(..., rode_before=)`.
+  Group composition is untouched. A cart pair (seats 1&2, 3&4) that has shared
+  a cart before costs 0.4. That is the lowest term, below the same-tee cart
+  term (1), so R-G only ever breaks a tie: two repeats (0.8) still cost less
+  than one tee mismatch. Match Play opponents (1000), partner requests (100),
+  and 1st Timer with Ambassador (10) all outrank it; captain-with-newest (0.5,
+  since 2026-10-06) outranks one repeat cart but not two.
+- **History:** `_rode_counts_from_conn` counts `pairing_history.rode = 1` rows
+  by the same rules as the pair counts (played dates only; `app` rows are plans
+  and never count), across ALL years: a shared cart is a shared cart whenever
+  it was. `rode` is the GG tee-sheet seat order (1&2 / 3&4), and the entered
+  groups' seat order for `entry` rows from the entry-record cutover
+  (`entry_record_from`, default 2026-10-10). Before the cutover the entered
+  groups are diffed, not written, and the GG tee sheet stays the record.
+- **The view marks it, never breaks it:** the generator tags both players
+  `repeat_cart`; the PAIRINGS GET ships `rode_counts` for the roster
+  (`roster_rode_counts`), and the History line under a name shows an italic
+  grey "repeat cart" when the cart-mate has shared a cart with them before.
+  It recomputes from the seats, so it follows every swap and drag. A requested
+  partner is exempt: riding together is the request.
+- Guard: `test_pairings_cart_variety.py`.
+
+## The pairings audit, read-only (v2.524.5, Kerry 2026-10-06 via Front Desk)
+
+Kerry: "you mentioned some things you couldn't see. Create tools for you to
+see them". `email_parser/pairings_audit.py` `event_pairing_audit(event_id)`,
+MCP `get_event_pairing_audit`, bridge `scoring-pairings-audit:<event_id>`.
+It reads the SAVED sheet and writes nothing (guard `test_pairings_audit.py`).
+
+- **Per player:** partner request; the guest's inviter (`_host_of_map`, the
+  note or the shared order); Ambassador in the event's chapter
+  (`chapter_ambassadors`, falling back to the customer chip); captain;
+  `solo_back_ok`; gender; is_new / is_first_timer; distinct round dates
+  before tonight in every chapter, and whether that is under three; blind
+  gate (`customer_blind_gate`); index and its source (posted vs
+  starting/intro); solo-cart record and the streak before tonight.
+- **Per group / cart, hard or soft:** rule 5 (a requested partner in the
+  SAME cart: Kerry 10/6, "Pairings Requests definitely dictate in most cases
+  so Bourquin and Saldana would ride together"); rule 4 (guest with inviter in
+  the same cart, or the same group when the host brought more than one);
+  R-A (a 1st Timer's group has an Ambassador); R-F (same-gender Ambassador);
+  R-D (a lone `<50`, with the `solo_back_ok` note); R-C, R-B, R-E as the
+  Front Desk read them (#1249), marked `reading`; R-G (a repeat cart pair
+  without a request).
+- **Repeat depth:** every non-requested pair already played this season,
+  with each player's lowest-count partners in tonight's field. Out of
+  sequence when a lower count exists (Kerry 10/6: "Repeats should be in
+  sequence whenever possible").
+- **Also:** blinds and where each one plays; the net game (`_event_blind_unit`:
+  Cart Net or Team Net) and the blind rule that goes with it; provenance
+  (`event_pairings` first/last save and the action-log trail; the table does
+  not record generator vs manual); the generator's own alternative
+  (`generate_event_pairings`, which never saves) and its pair score beside
+  the sheet's.
+
+## Repeats in sequence, rule fixes inside the search, no third solo cart (v2.525.0, Kerry 2026-10-06)
+
+The 10/5 5 PM auto-generate for Olympia Hills (event 3308) put Adam Baker and
+Jeff Rideout together a 4th time while both had partners they had never
+played with. Root cause (mailbox #1256): `_pair_cost` was 1000 + count, so
+depth was a 2-point tiebreak; the rule fixes (7, 12, 14) ran once after the
+search and never re-optimised; and the search was unseeded.
+
+- **Cost** — `_repeat_cost(count) = REPEAT_LEVEL_BASE ** count - 1` (base
+  1000): one deeper repeat outweighs any number of shallower ones on any
+  sheet we build. Kerry: "I don't play with X twice (unless other pairings
+  rules dictate) until I've played with all others once."
+- **Search (random mode)** — `PAIRINGS_RESTARTS` (60) restarts, each:
+  `_random_groups` (seeded `random.Random(f"{PAIRINGS_SEED}:{event}:{holes}")`)
+  → `_swap_improve` → `_rules_fix` (rules 12, 7, 14, then a second
+  `_swap_improve` with `guard=_keeps_rules`, which refuses any swap that
+  makes a lone back tee, a leaderless group or a 1st Timer without an
+  Ambassador more frequent). Candidates are scored on rule misses first,
+  then repeats. ABCD and standings modes run the rule fixes without the
+  extra swap pass, so their order is kept.
+- **R-C** — `_solo_streaks_from_conn` (Golf Genius tee-sheet rows, played
+  dates) feeds `_arrange_group_seats(solo_streak=)`: seat 3 of a threesome
+  costs 500 for a player with two solo carts in a row, 2 for one.
+- **Audit** (`pairings_audit.py`) — R-D uses the generator's exemption for
+  solo_back_ok; R-C is hard only from the third solo in a row;
+  `skips_a_level` and `deepest_repeat` in the summary.
+- **Guard** — `test_pairings_generator_sequence.py`: the Olympia Hills
+  (event 3308) field, 2026 pair counts and Murphy's solo carts; over 200
+  seeds Baker + Rideout are never grouped, no non-requested pair passes
+  depth 1, Bourquin + Saldana share a group and a cart, Murphy is never
+  seated alone, the same seed gives the same sheet, and the audit on the
+  generator's sheet shows zero hard flags.

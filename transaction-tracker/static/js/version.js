@@ -1,5 +1,488 @@
-window.TGF_VERSION = "2.522.37";
+window.TGF_VERSION = "2.525.14";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.525.14",
+    date: "2026-10-07",
+    title: "Pairings: same tees ride together; captain-with-newest breaks ties",
+    changes: [
+      "Kerry 10/6, Olympia Hills (event 3308), after hand-switching Lewis to ride with Skinner in cart B: \"Yeah\" to tee band over rule 13. In the cart seating (_arrange_group_seats) the captain-with-newest term drops from 10 (above a same-tee cart, 1) to 0.5 (below it), so the generator no longer splits two players on the same tees to seat the captain beside the newest player. With matching tees the captain still rides with the newest. Partner requests (100), Match Play (1000), solo-cart streaks (500 / 2) and 1st Timer with Ambassador (10) are unchanged; one repeat cart (0.4) still yields to it. Guard test_pairing_roles.py (fails on the old weight); pairings.md rule 13."
+    ]
+  },
+  {
+    version: "2.525.13",
+    date: "2026-10-07",
+    title: "Health: a cold Player Spotlight build is no longer flagged as slow",
+    changes: [
+      "The staff scoring-spotlight bridge builds the whole Player Spotlight when its saved result is stale (13 s on 10/5, one of 30 calls; the rest took about 0.2 s). That is by design after more than 24 h idle, so its slow line is now 20 s instead of the 10 s bridge default. Monitoring only; no member-facing change."
+    ]
+  },
+  {
+    version: "2.525.12",
+    date: "2026-10-06",
+    title: "Match play: a Ball in hole / Picked up answer is no longer lost",
+    changes: [
+      "Kerry 10/6 (#1295, OK via Front Desk): \"Yes, ship the Ball in hole fix after tonight - Only needed for players in matches.\" On the phone, a triple for a match player asks Ball in hole or Picked up. The phone sends that answer with the score it currently shows. A saved score leaves the phone's queue the moment the server accepts it, but the card reload arrives a moment later; an answer tapped in between went out with no score, the server refused it, and the mark was lost (a lost Ball in hole counts as a non-holed ball). The phone now writes each accepted score and mark into its own card straight away, so nothing reads blank while the reload is on its way.",
+      "Not a stroke-index problem: v2.525.6's per-tee stroke index made the card read a little slower, which widened the gap until test_score_entry_ui failed on it. New guard: the same flow with every card reload held for 3 s. Stroke play is unchanged (the score was already saved; only the phone's own copy is updated sooner).",
+      "Housekeeping, no behaviour change: test_add_player_options.js allows the credit hint line v2.487.1 put between the pre-fill and the name list; the one-off lodging pickers are wired under the redrawn part of the event card like every other handler (test_flights_custom_ui.js)."
+    ]
+  },
+  {
+    version: "2.525.11",
+    date: "2026-10-06",
+    title: "Events leaderboard: the team handicap is the sheet's, off the lowest in the WHOLE FIELD",
+    changes: [
+      "Kerry 10/6 7:14 PM, Olympia Hills (event 3308) in play, on v2.525.10's board: \"Not off lowest on the team it's off lowest for the whole field.\" The rule was already ratified on 9/18 (\"OFF Lowest is not per cart. OFF Lowest is lowest in the whole field... Team Net is field too\") and already built into the Starter Sheet (team_handicaps_for_groups: allowance on the unrounded course handicap, rounded once, off the field's lowest), the phone card (se_game_handicaps snapshots the sheet's number) and the engine. The board was taking the lowest WITHIN EACH TEAM and rounding a second time off the playing handicap. It now reads each member's team_handicap from the sheet (get_event_print_pack), blinds included, and only a player the sheet does not carry falls back to PH x allowance off the lowest of those values across the field (team_hcp_src = sheet | field). Tonight: Pat Youngs at 75% is -2, so every team handicap in the field is two more than its 75% figure, exactly as the printed sheet says.",
+      "Guard test_events_board_blinds.py: a team whose own lowest is 3 plays off the field's 2, so its players carry 1, not 0, and the 6-handicap blind carries 3, not 2."
+    ]
+  },
+  {
+    version: "2.525.10",
+    date: "2026-10-06",
+    title: "Events leaderboard: TEAM NET plays the Team Net pops (allowance, off the lowest, none on a par 3)",
+    changes: [
+      "Kerry 10/6 7:04 PM, Olympia Hills (event 3308) in play: \"Our team scores are not using team Net rules for handicaps, Off lowest or no pops on par 3s.\" The board's TEAM NET row and team card took each player's best ball off his card's stored pops, i.e. his 100% individual allocation. Team Net plays its own: PH x the event's allowance (75% for one ball, the ladder in event_team_net_dial), WHS-rounded, OFF THE LOWEST in the team, placed on the player's own tee's stroke index by the ruled allocation (a nine collapses to 1-9), and NO pop on a par 3, removed not moved (engine dial team_net.no_pops_on_par3). The phone card (score_entry._team_strokes), the printed scorecard and the engine (live_scoring.game_team_net) already played this rule; the board was the odd one out.",
+      "get_event_leaderboard now computes team_pops ({hole: n}) for every team member, blinds included, and the best ball, the TEAM NET row, the dots on the TEAM tab's player rows and the expandable team card all read them (evlbTeamPopsOf / evlbNetOf(d, rid, n, team)). A member whose tee has no complete stroke index for the holes keeps his card's pops and is marked team_pops_src = 'card'; nothing is guessed. Guard test_events_board_blinds.py: a 6-handicap blind among 2s gets team hcp 3, pops on stroke index 1 and 3 only because the index-5 hole is a par 3, and the team total moves off the card's dots."
+    ]
+  },
+  {
+    version: "2.525.9",
+    date: "2026-10-06",
+    title: "Events leaderboard: Team Net plays the drawn blinds; seats match cards by customer_id",
+    changes: [
+      "Kerry 10/6, Olympia Hills (event 3308) in play: \"The team totals are screwed up and aren't considering the blinds.\" The EVENTS leaderboard built each team from the saved pairing sheet and added a blind only when Golf Genius's recorded team string carried a Bl[LAST, First] slot. An event scored on the phones has no Golf Genius result, so the three short teams (2A, Hole 3, Hole 4) played without Saldana, Lewis and Miller. The board now reads blind_draws, the draw of record, and seats each blind on its team with the drawn player's own card (the mechanism the live-scoring engine and Golf Genius both use): open seat = the card joins; N/H = that seat's own card leaves the best ball and the blind's plays it; missed holes = the blind counts on those holes only. The team handicap ladder includes the blind. Once Golf Genius results arrive, the recorded Bl[...] slot is recognised as already seated, never doubled.",
+      "A seat is matched to its card by customer_id first, name second (guiding principle 6). The sheet said \"Michael Murphy\", the card says \"MURPHY, Mike\", and the name match left him off Hole 4's team with no scores. Guard test_events_board_blinds.py (19 players, one threesome, one blind, one sheet name that matches only by id)."
+    ]
+  },
+  {
+    version: "2.525.8",
+    date: "2026-10-06",
+    title: "Credit from a received payment, with an optional split",
+    changes: [
+      "Kerry 10/6: \"What do you mean no tool records a payment into a credit? We do that with regular events. We need that tool now if we don't have it.\" Existing tools credit FROM a registration (credit_transaction, partial_credit_transaction); money received by Venmo or bank with no registration behind it (Justin McCrary's $150 for the Lone Star Cup) had no path into the credit pool. New MCP post_credit_from_receipt / bridge scoring-credit-from-receipt (email_parser/receipt_credits.py): from one received expense_transactions row it writes one credited row for the player (Manual Entry 'Credit from receipt', customer_id, a note naming the receipt and Kerry's post), claims the receipt so it can't be credited twice, and logs before/after.",
+      "A split: credit + rest parts must equal the receipt to the cent; a rest part is a named registration of that player or a labelled line (e.g. 'LSC lodging'), recorded on the receipt. Dry run by default; apply needs a mailbox post carrying Kerry's word (the set_customer_field guard). No new ledger row: the received payment stays the one ledger entry. undo_credit_from_receipt keeps the row (reversed, $0) and frees the receipt. No schema change. Guard test_receipt_credits.py."
+    ]
+  },
+  {
+    version: "2.525.7",
+    date: "2026-10-06",
+    title: "Own-tee stroke index everywhere, a second SI row on the card, the SCORING tab, smaller QR codes",
+    changes: [
+      "Kerry 10/6: \"Dots ALWAYS use the SI's from that set of tees!!! Standard USGA ruling.\" The game engine now gives each player strokes on his own tee's stroke index too: build_cards reads a player's stroke_index_by_hole, game_handicaps ranks each card over its own holes (skins and every per-game allowance), and the event engine fills it from each scorecard's tee_id. The phone card already did this (v2.525.6, Track A).",
+      "\"Two SI rows (properly labeled) would show on that group's card...if they're different from each other.\" A scorecard whose players include a tee with its own stroke index (a women's / Forward tee) prints a second row, 'SI · <tee>' with the band, and labels the first with the tees it belongs to. Cards where every tee shares one index keep a single row. The card keeps its height: its tee, par and SI rows give up the room, checked to one Letter page per sheet in every layout.",
+      "\"Move the SCORE ENTRY section to it's own toggle after REPORTS and before PAYOUTS\" and \"Make the SCORE ENTRY tab name SCORING\": the event's tab bar now has SCORING (admin, events with live scoring on) between REPORTS and PAYOUTS, carrying the whole panel; PAIRINGS no longer shows it or the Live Scoring button.",
+      "\"Are there by chance less dense QR codes that could be created as a standard?\" Printed codes now carry a short upper-case link, HTTPS://<host>/Q/<group>.<version>.<12 hex of the signature>, which the QR stores in its compact alphanumeric mode: 29x29 squares instead of 41x41, each about twice the area at the same printed size. /Q/ redirects to the group's full signed link and refuses a stale or altered code. The copyable links are unchanged."
+    ]
+  },
+  {
+    version: "2.525.6",
+    date: "2026-10-06",
+    title: "Live score entry: a player's strokes fall on his own tee's stroke index",
+    changes: [
+      "The phone card ranked every player's PH pops and Team / Cart Net pops over the round's one stroke-index column (the <50 tee's), while the printed scorecard already used each player's own tee (Tracker Build #1277, Olympia Hills: Michele McCormick's Red (L) order differs from White's on 8 of 9 holes, so her strokes landed on the wrong holes). Kerry 10/6: \"go now\". _si_by_band reads each designated tee's own card through the event's tee legend; a player whose band has a complete index is ranked over it, a band without one keeps the round's column, nothing is guessed. Totals do not change, only which holes carry the strokes. test_strokes_own_tee.py."
+    ]
+  },
+  {
+    version: "2.525.5",
+    date: "2026-10-06",
+    title: "Choosing a blind shows on the seat instantly",
+    changes: [
+      "Kerry 10/6, entering Jesse Saldana as the 2A blind at Olympia Hills: \"it was slow to switch visually ... that should happen immediately.\" The seat now shows the chosen name the moment it is tapped, marked \"saving...\", and the server's answer confirms it. If the server refuses (for example, that player is already a blind), the seat goes back as it was and the reason is shown. RANDOM shows \"drawing...\" until the name comes back, and Remove clears at once.",
+      "The single-seat write is lighter: it reads only that group's seats instead of rebuilding the whole pairings sheet (handicap map, tees, every group) to place one blind. The eligibility rules are unchanged. Guards: test_blinds_ui.js, test_nh_blinds.py.",
+    ],
+  },
+  {
+    version: "2.525.4",
+    date: "2026-10-06",
+    title: "The Kerry-OK guard recognises the Front Desk's signed relays",
+    changes: [
+      "set_customer_field refused Kerry's date-of-birth approval (#1259) because the Front Desk posts under the shared tracker-claude author and signs its header line 'FROM: front-desk, ...'; the guard read only the author column, so no Front Desk relay of Kerry's words ever passed. A post whose header FROM line names front-desk or platform-claude now counts as that relay (its verbatim Kerry quote is still required); a lane's own post quoting Kerry is still refused. Kerry 10/6 in Track A's session: \"I approve the DOB entry\". test_missing_handicaps.py."
+    ]
+  },
+  {
+    version: "2.525.3",
+    date: "2026-10-06",
+    title: "QR codes scale to fit on scorecards and cart signs",
+    changes: [
+      "Kerry 10/6: \"I don't think the qr codes are scaling to fit completely.\" The code was drawn at a fixed 172 px with no viewBox, so the scorecard's 4.6em box and the cart sign's 0.9 in box cropped its right and bottom edges, which can stop a phone reading it. score_entry.qr_svg now emits a viewBox (segno omitsize), so the whole code scales into its box on both. Guard in test_scorecards.py."
+    ]
+  },
+  {
+    version: "2.525.2",
+    date: "2026-10-06",
+    title: "Scorecards: a QR codes checkbox, checked by default",
+    changes: [
+      "Kerry 10/6: \"How do we activate the QR codes to be on the scorecards? Is there a button that I can select to include those? If not, there needs to be. It should now be checked by default.\" The scorecards page has a 'Print QR codes' checkbox under the Print bar, checked by default; unchecking reloads the cards without codes (qr=off).",
+      "Checked (qr=on, now the default for the page and the bound print pack) prints every group's live-scoring link as a QR code whenever live scoring is on for the event, seeding the round from the saved pairings if needed. Before, codes printed only for events named in the hidden score_entry_qr setting, which no screen could set. With live scoring off the cards carry no code and the page says why. The cart signs still follow the score_entry_qr setting."
+    ]
+  },
+  {
+    version: "2.525.1",
+    date: "2026-10-06",
+    title: "A women's band reads the women's tee row; one scorecard line per shared tee; date of birth is writable",
+    changes: [
+      "Playing handicap: when a course names the men's and the women's markers alike ('Green' / 'Green (L)'), the Forward band was matched by name to the men's row and computed off its rating (Avery Ranch, event 3316: Yolanda Williams printed PH 11 off Green 32.3/109 instead of 15 off Green (L) 34.5/117; Kerry 10/6: \"That's a huge decrease for Yolanda. Can that be accurate?\"). _event_tee_rows now takes the legend's own designated row when it is a candidate, else the row whose gender matches the band (a women's band takes a women's row). Guard in test_event_course_link.py.",
+      "Printed scorecard: when two designated bands play the same markers (same tee name, identical yardage on every hole played), they print as ONE tee row whose age cell reads both bands, e.g. '65+ & Forward' (Kerry 10/6 on the Avery Ranch card: \"In the case where two tee groups share a tee, just have one and put 65+ & Forward so that we don't take up two lines\"). A women's rating that differs from the men's on the same markers prints beside it. Players, chips, dots and the yardage grid still read each band; tees with different yardage keep their own rows (scorecards.merge_shared_tees; test_scorecards.py).",
+      "set_customer_field (MCP) and scoring-set-customer-field now write date_of_birth as well as gender: YYYY-MM-DD or M/D/YYYY, 1900 to today, NULL clears; same Kerry-OK post guard, dry run by default, before/after in the action log (Kerry 10/6: \"Date of Birth should be a field in customer database. Which you should have a write tool for. If not, you definitely need one\"). test_missing_handicaps.py."
+    ]
+  },
+  {
+    version: "2.525.0",
+    date: "2026-10-06",
+    title: "Pairings generator: repeats in sequence, rule fixes inside the search, no third solo cart",
+    changes: [
+      "Repeats are now scored lowest-count-first (Kerry 10/6: \"I don't play with X twice (unless other pairings rules dictate) until I've played with all others once\" and \"Repeats should be in sequence whenever possible\"). A pair's cost grows a thousandfold per prior meeting, so one pair meeting a 4th time always costs more than any number of pairs meeting a 2nd time. The old cost (1000 + count) made a 4th meeting only 2 points dearer than a 2nd, which is how Adam Baker and Jeff Rideout went out together a 4th time at Olympia Hills (event 3308).",
+      "The leader spread (rule 7), the lone back-tee fix (rule 12, solo_back_ok exempt) and the 1st Timer / Ambassador fix (rule 14) now run inside every restart, followed by a second swap pass that may lower repeats but never undo those rules. Before, they ran once after the search and never re-optimised.",
+      "Generate is repeatable: the shuffle is seeded per event, so the same roster gives the same sheet. 60 restarts instead of 30; the swap pass memoises pair costs, so a 64-player field still generates in about 5 seconds.",
+      "R-C in the seater: in a threesome nobody takes the solo cart a third time in a row (Michael Murphy rode alone on 9/22 and 9/29), and someone who rode alone last time is avoided when another choice exists. A requested partner still rides in the SAME cart; the opposite-cart rule stays for repeat pairs without a request.",
+      "The pairings audit now uses the generator's lone back-tee test (a solo_back_ok player such as Luke Mazanec is allowed, not flagged), treats R-C as hard only from the third solo cart in a row, and reports skips_a_level and deepest_repeat. New test test_pairings_generator_sequence.py runs the Olympia Hills (event 3308) field under 200 seeds."
+    ]
+  },
+  {
+    version: "2.524.6",
+    date: "2026-10-06",
+    title: "The course link follows the course name; an audit of every event's course link",
+    changes: [
+      "Why: a9.26 Avery Ranch (event 3316) was named Avery Ranch but linked to ShadowGlen, so tonight's scorer card showed ShadowGlen's holes (par 4,4,5,4,4,3,5,3,4 and 2474 yards instead of Avery Ranch's back nine), ShadowGlen's tee legend, and playing handicaps off ShadowGlen's ratings. Editing an event's course name never re-pointed its course link, and the boot backfill only fills links that are empty.",
+      "update_event now re-resolves events.course_id whenever the course name is set: the course row with that name, else the row an alias points at, lower() on both sides, a live row beating an archived '(OLD)' twin. A name no course carries clears the link rather than leaving a wrong one. An update that does not touch the course leaves the link alone.",
+      "A re-seed of a score-entry round refreshes the round's own course link to the event's (score_entry.sync_round_course), so a corrected event does not leave its round reading the old course.",
+      "New read-only bridge scoring-event-course-audit[:upcoming|all|<event_id>] (database.event_course_audit): every event's link against its name, reported as wrong / unlinked / unknown with the fix, after Kerry's 'audit all the courses then, and make sure we don't have any other situations like that'. Guard: test_event_course_link.py. No schema change; nothing on a saved sheet or an entered score is touched."
+    ]
+  },
+  {
+    version: "2.524.5",
+    date: "2026-10-06",
+    title: "Pairings audit: a read-only check of a saved sheet against the pairing rules",
+    changes: [
+      "New read-only MCP tool get_event_pairing_audit and bridge scoring-pairings-audit:<event_id> (Kerry 10/6 via Front Desk: \"you mentioned some things you couldn't see. Create tools for you to see them\"). For one event it returns every player's flags (partner request, the guest's inviter, Ambassador in this chapter, captain, solo_back_ok, gender, 1st Timer / new, events played before tonight, blind gate, index source, solo-cart history), each group's and cart's rule results marked hard or soft, the blinds and the net game, sheet provenance, and the generator's alternative with its pair score.",
+      "Kerry's 10/6 rulings are encoded: a REQUESTED partner rides in the SAME cart (the opposite-cart rule is only for repeat pairs without a request), and a repeat pair is flagged out of sequence while either player has a lower-count partner in the field; the repeat-depth table lists those alternatives.",
+      "R-B, R-C and R-E are evaluated as the Front Desk read them (#1249) and marked 'reading' until the CoS confirms the Spec v1.2 wording. The audit writes nothing and never changes a saved sheet; test_pairings_audit.py checks that."
+    ]
+  },
+  {
+    version: "2.524.4",
+    date: "2026-10-05",
+    title: "Lone Star Cup notes: Walter Hogue replaces Mike Marques, tonight's payments, format prep (docs only)",
+    changes: [
+      "Docs only, no code change. The Lone Star Cup board notes record tonight's rulings: Walter Hogue takes Mike Marques's Austin seat (Red tee, starting handicap 10.9, Marques's XL shirts); Peterson, Julius Jenkins and Matt Jenkins's payments are linked to the Cup; Kerry's own seat counts as paid; and the Saturday PM format stays open until both captains answer.",
+    ],
+  },
+  {
+    version: "2.524.3",
+    date: "2026-10-04",
+    title: "Lone Star Cup paid badge on the phone (Kerry: \"It shouldn't only be shown as one paid\")",
+    changes: [
+      "The Events list's players/paid badge on the PHONE card now reads the one-off money picture, the same as the desktop table already did. The Cup's roster is RSVP placeholders paid by Venmo/Zelle, so the old count of active order rows read 1 (Chris Cannon, the one row entered as Paid Separately). Now it counts every player whose balance is settled: entry $250 plus the skins and Friday add-ons they're in for, with lodging money kept out.",
+      "On a team event (one whose oneoff_charges names a team_dial) the badge counts the TEAM only. Money from someone off the roster, like a declined player's unrefunded deposit or an unexplained payment, still shows in the money view but isn't counted as a paid player. Guard: test_oneoff_paid_badge.py.",
+    ],
+  },
+  {
+    version: "2.524.2",
+    date: "2026-10-04",
+    title: "Games & Payouts sheet (Kerry: \"good for now\", 10/3): one Letter page on the REPORTS tab and in the print pack",
+    changes: [
+      "The Games & Payouts sheet design-claude specified in #967 and Kerry approved on 9/29, with all five of his amendments: FIELD on two lines, Individual Gross from 16 gross entrants on a nine, the Event MVP \"Tiebreakers: 1st = Total Net | 2nd = Total Gross | 3rd = Split winnings.\" line, a Net Stableford Points box under the MVPs, and \"Ties: winners split pot\" on the other games. At /events/<id>/games-payouts (manager+), on the REPORTS tab, and in the print pack after the scorecards.",
+      "Every figure is the GAMES tab's own: email_parser/games_sheet.py reads the Events page's renderGamesPanel through the same headless probe as get_event_games, so the sheet and the tab can't disagree. The probe now also returns the same-day TGF MVP link (other city, event and share). CTP lines say \"Hole n\" from the Proximity report's par-3s; the Stableford values come from get_scoring_formulas (the championship table on championship events); the Hole-in-One band comes from the HIO ledger (the running pot through the day plus each city's add today). Rule text lives in one place, GAME_RULES.",
+      "The pot check adds the four buckets and must equal the tab's TOTAL. A mismatch is a warning on screen and in the print pack's result, never a silent print. A course with no hole card prints a blank hole number and says so. A bucket-account event prints no sheet and says why.",
+      "One page, type never shrunk: when a long 18-hole field overflows, the Gross games carry over under the Stableford box, then the sheet tightens its spacing (not its type), and the proxies go two across. If it still can't fit, the screen says so. Guard: test_games_sheet.py (40 checks on two real GAMES-tab reads, s9.25 Canyon Springs and s18.4 Landa Park); test_readonly_tools.py parses a live probe read.",
+    ],
+  },
+  {
+    version: "2.524.1",
+    date: "2026-10-03",
+    title: "The TGF Library, push 2: library_list and library_search; read-only scoring-fk-check",
+    changes: [
+      "`library_list` (MCP tool and bridge `scoring-library-list:[<section>][|<status>][|archive]`) returns the INDEX rows: every live version with doc_id, title, version, status, supersedes, owner, ratified, onedrive_path, project_files, readers and filed_at; include_archive adds superseded versions. `library_search` (MCP tool and bridge `scoring-library-search:text=..|section=..|limit=..|max=..|archive=1`) finds documents whose title or body holds every word (lower() both sides), newest filing first, with a snippet around the first hit (spec #1114 §3-§4).",
+      "`scoring-fk-check[:<top n>]` (db-claude #1125; rides this push per CoS #1129-1 because it cost nothing): PRAGMA foreign_key_check on the live file, grouped by table and parent, worst first, plus whether enforcement is on. Read-only; production runs with foreign_keys = 0, so this read is how orphans are found. Reader `database.fk_check_summary`. Guard: test_library.py (now 65 checks).",
+    ],
+  },
+  {
+    version: "2.524.0",
+    date: "2026-10-03",
+    title: "The TGF Library, push 1: library_documents (migration 0008), library_put and library_get, with bridges",
+    changes: [
+      "Kerry 2026-09-30 (#1099): \"There needs to be a full TGF Library created that is organized extremely well\"; storage as an append-only table, Kerry \"Ok yes\" (#1117). Migration 0008 (db-claude #1124, conditions a-h) adds `library_sections` (the six sections as a lookup, with their OneDrive folders), `library_documents` (one row per version, never deleted or edited in place) and `library_document_reads`.",
+      "`library_put` (MCP tool and bridge `scoring-library-put:<json>`) files one version: dry run unless apply; refuses missing front-matter, a filename that doesn't match the version, archive/ writes, an empty or over-1 MB body and anything that looks like a credential; never overwrites (the same version again is refused and says whether the body matches); a new version needs supersedes='<doc_id>@<live version>' and marks the old row superseded, the only UPDATE. `standards/` needs a cited mailbox post carrying Kerry's word: a first filing of a ratified standard may cite #1099, a supersede may not. Section, supersedes target and readers are checked in code because production doesn't enforce foreign keys. Every apply is action-logged.",
+      "`library_get` (MCP tool and bridge `scoring-library-get:<name>[|<version>][|<heading words>]`) returns the latest live version by doc_id, filename or path, case-insensitive, or a named version (superseded included), or one heading's section; `drift: true` when the exported repo copy differs from the table. The module is portable to the Horizon Tracker: everything site-specific comes in through LibraryConfig. Guard: test_library.py (51 checks).",
+      "Riding along: clearing a vendor profile's gender to NULL is now allowed through set_customer_field (it skipped vendors entirely), so the five vendor profiles set to M before the vendor filter can be put back (CFO #1083-2, #1134). And the Ambassador dry run now reports changed: true when it would insert a missing row (the #1116-4 backfill showed false for all 13). Guards: test_missing_handicaps.py, test_ambassadors.py.",
+    ],
+  },
+  {
+    version: "2.523.4",
+    date: "2026-10-03",
+    title: "The EVENTS leaderboard and event results are open to members (BETA, labelled Unofficial)",
+    changes: [
+      "Kerry 2026-10-02 (CoS #1146-1): \"I would like you to release the leaderboard events results pages to members today\"; his \"Go\" in the Tracker Build session 10/3. The Events tab (still marked BETA) now shows on the member Leaderboard page (/member/contests) for both chapters, and /member/results is a shareable link that lands on it. The board API (`_board_read_ok`) reads at the public member tier: a manager session sees every event as before, and a scorer's group link still narrows the read to his own event (Track A's v2.523.0). The payloads are PII-free: names, scores and money as computed; no email, phone or payment handle. Visible, not announced: nothing was sent to members.",
+      "Every board carries the line \"Unofficial \u2014 Golf Genius is the official scorer. Money shown as computed, not as paid.\" while GG is the official record. Setting `gg_official_through` (e.g. \"Oct 6\") adds \"through <date>\"; empty drops the date, never the line. The events_leaderboard_only pilot note no longer shows on the member page. Guards: test_events_leaderboard_all.py (member tier, label, setting, /member/results) and test_scorer_nav.py (anonymous and member sessions read every event; the scorer link still narrows).",
+    ],
+  },
+  {
+    version: "2.523.3",
+    date: "2026-10-03",
+    title: "The health digest measures the GG archive file's replication; the handicap cache backs off on a locked database",
+    changes: [
+      "The first replication report (v2.523.2) measured only the main database; the GG archive file (about 400 MB, written rarely) was configured to replicate but its state wasn't read. The replication status now also reports the archive file's generations and lag, the digest's REPLICATION line shows it, and a MEDIUM finding is raised if the archive has no replica generation yet (expected for a while after the first upload) or is more than an hour behind. Read-only; nothing about replication itself changes. Guard: test_replication.py (real Litestream, both files).",
+      "The handicap cache's signature read now backs off 50 / 200 / 500 ms on a transient \"database is locked\" instead of retrying once at 50 ms. One miss means an uncached ~11 s handicap computation, and test_perf.py had been failing on it about one run in seven. Guard: test_perf.py (two locked errors in a row still return a real signature).",
+    ],
+  },
+  {
+    version: "2.523.2",
+    date: "2026-10-02",
+    title: "Off-site replication: Litestream streams both databases to Cloudflare R2 every 10 seconds",
+    changes: [
+      "Hard gate (a) of #731. The app now starts through scripts/start.sh, which runs `litestream replicate` BESIDE gunicorn and then starts gunicorn exactly as before. Replication cannot stop the app: a missing binary, a bad config or an unreachable bucket only stops replication, and the health digest says so. With any of the four LITESTREAM_* Railway variables missing, startup is identical to the old command. This push restarts the app once, on purpose, outside every event window.",
+      "Both SQLite files (transactions.db and transactions_gg_archive.db) replicate every 10 s into the bucket Kerry created, with a week of point-in-time restore. The config (litestream.yml) holds no secret; the key and secret come from the environment. The Litestream binary is pinned (v0.3.13, sha256-checked) and fetched once in the background into the volume, so the build is unchanged.",
+      "The health digest gets a REPLICATION line (streaming, lag, generations) and findings: not configured is info; no binary, no running process or lag over 300 s is HIGH. New restore drill `scoring-rehearsal:restore|replica` restores the database from the replica into the rehearsal folder (never the live file), checks integrity and counts, scrubs it, and records the result as the replica drill; gate (a) passes only when that drill passes. Guard: test_replication.py (real Litestream against a local replica, the start script's fallbacks, the digest findings, and the drill end to end).",
+    ],
+  },
+  {
+    version: "2.523.1",
+    date: "2026-10-02",
+    title: "The SCORING | LEADERBOARD toggle is pinned under the header",
+    changes: [
+      "Kerry 2026-10-02: \"The SCORING | LEADERBOARD toggle needs to pin to the top as a bar under the header and allow scrolling underneath it. I want it to always be visible.\" The toggle is now a sticky, opaque bar directly under the (also sticky) TGF header on the scoring page and the scorer's board page; the board scrolls underneath it. Its offset is the header's measured height, re-measured when the header shrinks on a tight card, so the two never overlap or gap.",
+    ],
+  },
+  {
+    version: "2.523.0",
+    date: "2026-10-02",
+    title: "Scorer navigation: SCORING | LEADERBOARD toggle, the scorer's own event board",
+    changes: [
+      "Under the TGF mark on the score-entry page sits a SCORING | LEADERBOARD toggle (Kerry 2026-10-02: \"We originally had a toggle up at the top to go between scoring and leaderboard. I would prefer that.\"). It appears only on pages opened with a group link, so a member reading the leaderboard never sees it. Approved from a real-code mockup rendered at phone size (mailbox #1155, #1157, #1158).",
+      "LEADERBOARD opens /member/score/board, the scorer's own event only: one event bar (name, IN PLAY), then straight into the game tabs, the two checkboxes, the tee key and the board. No season tabs, no other events, no way off the round. SCORING returns to the exact hole; the Scoring segment reads \"Hole N\", and turns amber with \"N to sync\" while holes are saved on the phone but not yet sent.",
+      "The hole screen's previous / Save & Go / next buttons sit in a bar pinned above the home indicator (\"I do like the bottom aligned buttons\"). Nothing else on the hole screen moves, and the card still fits one screen.",
+      "The events-leaderboard API also answers to a live scorer's group link, for his event only; sessions keep the manager tier until the member release.",
+      "On the shared EVENTS board: the seven game tabs wrap into two rows on a phone instead of running off the right edge; every name sits on one row with its tee dot pinned at the cell's right edge; and the Won column is hidden on every view, proxies included, until every score is in (\"hide the WON column on any view until all scores are in\").",
+    ],
+  },
+  {
+    version: "2.522.62",
+    date: "2026-10-02",
+    title: "Lone Star Cup deposits read without rebuilding the whole cup",
+    changes: [
+      "scoring-lsc-deposits (the staff deposit ledger) took 10.6 s on 10/1 and 14.4 s on 9/27. It built the full Lone Star Cup projection only to read the deposits out of it. It now calls lsc_deposit_scan, the deposit scan the projection itself uses, so the answer is the same and comes back in a fraction of the time. Read-only; nothing else changes (Tracker Health, digest #1138).",
+    ],
+  },
+  {
+    version: "2.522.61",
+    date: "2026-10-01",
+    title: "Drop the unused JSON hole list from blind draws",
+    changes: [
+      "Migration 0007 (Database lane PASS #1124) drops blind_draws.missed_holes, the JSON column that 0004 added and nothing ever wrote. The holes a missed-hole blind covers live as rows in blind_draw_holes (0006), under Kerry's #1087 rule that facts are rows. Nothing about the draw or the money changes.",
+    ],
+  },
+  {
+    version: "2.522.60",
+    date: "2026-10-01",
+    title: "Ambassador set/rescind writes the chip and the kept row together",
+    changes: [
+      "A rescind for a 9/15-seeded Ambassador (Rolando Campos, Kerry #1110) read \"not an ambassador; nothing to remove\" and changed nothing: the seed lives on customers.ambassador (the AMB chip, the list of record per #1103, and what the pairings engine reads), and customer_ambassadors had no row for him. set_ambassador now reads the chip as the before-state when there is no row, and every applied change writes BOTH: the kept customer_ambassadors row (with who, when and the note) and the chip. This holds until the roles table replaces both (#1090-1). Guard test_ambassadors.py."
+    ]
+  },
+  {
+    version: "2.522.59",
+    date: "2026-09-30",
+    title: "A missed-hole blind's holes are rows, not a JSON list",
+    changes: [
+      "Kerry's 9/30 rule (#1087: every fact is a typed column or a row, no JSON by default) applied to the blind draw: new table blind_draw_holes (blind, hole 1-18), migration 0006, passed by the Database lane (#1108). It replaces blind_draws.missed_holes, which nothing ever wrote; that column is dropped in its own migration next. No rows for a blind means every hole, which is every blind drawn today.",
+      "The blind writer now upserts on the seat instead of INSERT OR REPLACE (#682), so a redraw keeps the row and its hole rows. Nothing about who is drawn, or the money, changes.",
+    ],
+  },
+  {
+    version: "2.522.58",
+    date: "2026-09-30",
+    title: "Read-only database engine facts for the Database lane",
+    changes: [
+      "scoring-db-version returns sqlite_version(), page size and count, free pages, journal mode (WAL), synchronous and foreign-key settings, the database, WAL and SHM file sizes, and the migrations applied with their times. db-claude's daily digest reads it for its Backups section (CoS #1100-2). Read-only; no schema change."
+    ]
+  },
+  {
+    version: "2.522.57",
+    date: "2026-09-30",
+    title: "Live role-chip read, and a Kerry-guarded starting-handicap bridge",
+    changes: [
+      "scoring-role-flags lists who carries the AMB / CAPT / BACK chips right now, with home chapter and status, and what changed since Kerry's 9/15 seed, so he confirms the live lists (#1090-3). Read-only.",
+      "scoring-starting-handicap:<cid>|<value>|<kerry post>[|apply] sets a starting handicap only on a cited post by Kerry or a verbatim relay of him (the same guard as set_customer_field). Dry run by default, action-logged. First use: David Wetz 9.0 for the Lone Star Cup (Kerry, #1091)."
+    ]
+  },
+  {
+    version: "2.522.56",
+    date: "2026-09-30",
+    title: "Home chapter by id: migration, backfill and the one setter",
+    changes: [
+      "Kerry approved it (#1084): every member carries ONE home chapter by chapter_id. Migration 0005 adds customers.home_chapter_id, a customer_chapter_history table (a move closes the open row and opens a new one, never an overwrite), and chapter fields: city, state, manager_customer_id, sender_email, launched_on. Two proposed fields were dropped under Kerry's standing rule that every fact is typed data (#1087): gg_portal_ids (a JSON list; it becomes a chapter_portals table) and default_tee_band (waits on the tee-band decision).",
+      "The backfill (scoring-home-chapter-backfill, dry run then apply) copies from customers.chapter, the ruled source (CA #784), never from where someone plays. Blanks stay NULL and are listed for Kerry and Robert. set_home_chapter is the only writer: it sets the id, writes history and mirrors the name into customers.chapter, which is read-only by rule until its readers move. Guard test_home_chapter_migration.py."
+    ]
+  },
+  {
+    version: "2.522.55",
+    date: "2026-09-30",
+    title: "N/H players get a blind; one rule for who can be a blind",
+    changes: [
+      "Kerry: \"if a customer doesn't enter a handicap, then their team deserves a blind from the field (team) or the other cart (cart net)… the blind would win the money and not the customer\" (spec #1073, approved #1075, Kerry OK #1078). A player with no TGF index AND no starting handicap is N/H: he plays at 0 and his scores count everywhere, but his seat on the sheet gets a blind, drawn by the same rule as an empty seat (Team Net from the field, Cart Net from the other cart first).",
+      "ONE eligibility test for every blind (blind_gate): an active member with an established TGF handicap. Intro / 75% handicaps, guests, 1st Timers and alumni cannot SERVE as a blind. Who RECEIVES one is separate (#1078-2): any short cart or team, intro players included. The Ambassador flag now uses the same test (#1080-1).",
+      "The draw reads N/H as the banner does: every player with no index and no starting handicap, including anyone a manager marked with Tracker Build's Play N/H button (v2.522.53). blind_draws records why a blind was drawn (open seat, N/H, missed hole; migration 0004). The Tracker's Team Net leaderboard drops the N/H card and plays the blind's as Bl[Name]. The pairings card lists the N/H blind. Payouts are unchanged: GG stays the payer until the entry-record cutover (#846).",
+    ],
+  },
+  {
+    version: "2.522.54",
+    date: "2026-09-30",
+    title: "Read a player's Golf Genius archive",
+    changes: [
+      "scoring-player-archive:<full name> or c<customer_id> returns a player's rounds from the Golf Genius history archive (portal, season, course, GG's playing handicap, gross, net) and any scoring rounds. Built to propose a starting handicap for an alumnus with no TGF handicap today (David Wetz, DFW, #1078-4). Read-only; guard test_cos_reads.py."
+    ]
+  },
+  {
+    version: "2.522.53",
+    date: "2026-09-30",
+    title: "The N/H flag, and vendor profiles out of people lists",
+    changes: [
+      "Kerry approved an explicit N/H flag (\"Good on both\", #1078). In the missing-handicap banner, a manager can now tap Play N/H beside a player with no handicap: the warning clears for that player, the roster's HCP cell reads N/H (desktop and phone), and Side Games' engine sees the player as N/H through one reader, event_nh_players. Their scores are still entered; a blind stands in for their money. Undo N/H clears it and keeps the history. It is refused for a player who has a handicap or isn't on the roster, and every change is logged. New table event_nh_flags (migration 0003).",
+      "Vendor profiles (Anthropic, Brevo, Arcis Golf, Alamo City Golf Trail and the rest of the role=vendor set) stay in customers so vendor spend links to them, but they no longer appear in people lists: the pairings roster, the missing-handicap warning, query_customers (unless include_vendors) and gender writes (reported as skipped_vendors). One test, database.vendor_customer_ids (CFO's proposal, approved #1075-3)."
+    ]
+  },
+  {
+    version: "2.522.52",
+    date: "2026-09-30",
+    title: "Schema audit report and the home-chapter migration proposal (docs only)",
+    changes: [
+      "docs/claude/schema-audit-2026-09-30.md: Kerry's 9/30 directive to find every place like the chapters text field (#1067-2), with production counts from scoring-schema-audit:scan: 158 tables, 161 flags, compared with the April Alignment Audit / Schema v3.0 (chapter, credits, side games and TEXT dollars are all still open), and a fix order by blast radius. The home-chapter migration shape and dry run (#1064-2) is in the same doc: 590 of 768 customers resolve, 178 blank, 0 fail. Nothing was changed; Kerry rules each fix."
+    ]
+  },
+  {
+    version: "2.522.51",
+    date: "2026-09-30",
+    title: "Schema audit reads: home-chapter dry run and the redundant-data scan",
+    changes: [
+      "Read-only, nothing written. scoring-schema-audit:chapter is the dry run for Kerry's home-chapter direction (#1064-2): the chapters table, every customers.chapter value and whether it resolves to a chapter_id, the rows that would not, and the proposed migration text (customers.home_chapter_id, customer_chapter_history, chapter fields). It is NOT applied; Kerry rules (rule 3b).",
+      "scoring-schema-audit:scan sweeps every table for Kerry's 9/30 directive (#1067-2): text columns naming an entity that has its own table (chapter, course, event, customer, tee, game, account), a text column sitting beside its own id (the same fact twice), money-named columns holding TEXT, and status/type/category columns with no CHECK, with row counts and the names that match nothing. Module email_parser/schema_audit.py; guard test_schema_audit.py."
+    ]
+  },
+  {
+    version: "2.522.50",
+    date: "2026-09-30",
+    title: "Ambassadors: a flag Kerry sets, per chapter, with one reader for pairings",
+    changes: [
+      "Pairings Spec v1.2 (#1036-4, Kerry: \"I will currently determine the Ambassador role. Definitely not something to be derived right now.\") needs to know who the Ambassadors are, and the Tracker had no record of it. New table customer_ambassadors (migration 0002, approved by the Chief of Staff in #1046, shape confirmed by Tracker Build in #1055): one row per customer per chapter, with who set it, when and why.",
+      "Setting the flag is refused unless the call cites a mailbox post carrying Kerry's word, the same rule-3b guard as set_customer_field. It is a dry run unless applied, and every change is action-logged. Removing an Ambassador sets the flag to 0 and keeps the row, so the pairings history stays explainable.",
+      "The pairings rules (R-A, 1st Timer with an Ambassador; R-F, same-gender preference) read ONLY ambassadors.chapter_ambassadors(conn, chapter_id). test_ambassadors.py fails if any other module queries the table. Bridges scoring-ambassadors (read) and scoring-ambassador-set (write). No Ambassadors are set yet; Kerry names them.",
+    ],
+  },
+  {
+    version: "2.522.49",
+    date: "2026-09-30",
+    title: "Missing-handicap warning for managers",
+    changes: [
+      "Kerry 2026-09-30 (#1064): \"There needs to be a warning to the manager that either a handicap index needs to be entered.\" An upcoming event whose roster has players with no TGF index and no starting handicap now shows an orange banner above every tab (roster, PAIRINGS, GAMES), on desktop and phone: \"N players have no handicap: [names]\". It is managers and admins only.",
+      "Each player's fix names the case: no rounds on file (ask for their index, enter 75% of it as the starting handicap, the Handicap Standard's intro rule), some rounds but not enough for an index yet (same fix), or a Golf Genius RSVP that matches no customer (link or add them first). With no handicap they play N/H; the blind that stands in for their money is Side Games' build. Setting a starting handicap from the roster's orange dash clears the player at once.",
+      "One computation (email_parser/handicap_warnings.py, the same index map the ROSTER and PAIRINGS read) serves the page, the MCP tool get_missing_handicaps and the bridge scoring-missing-hcp, which the Front Desk brief reads for every event in the next N days. Read-only. Guard test_missing_handicaps.py; handicaps.md."
+    ]
+  },
+  {
+    version: "2.522.48",
+    date: "2026-09-30",
+    title: "Pairings R-G: cart variety",
+    changes: [
+      "Kerry 2026-09-30 (#1038): \"A player plays one event in the same cart as another, then the next time they're paired, they're in different carts.\" When two players who have shared a cart before land in the same group again, the seater now puts them in different carts. It is the lowest seat term (0.4, below a same-tee cart match), so it only breaks ties: Match Play opponents, partner requests, captain-with-newest, 1st Timer with Ambassador and same-tee carts all outrank it. Group composition is unchanged.",
+      "Shared-cart history is pairing_history.rode = 1, counted by the same rules as the pair counts (played dates only, never the app's saved sheets), across all years. The PAIRINGS History line shows an italic grey 'repeat cart' beside a cart-mate who has ridden with that player before; it recomputes as seats move, and a requested partner is exempt. A mark, never a break. Guard test_pairings_cart_variety.py; pairings.md 'R-G'."
+    ]
+  },
+  {
+    version: "2.522.47",
+    date: "2026-09-30",
+    title: "Chief of Staff tools 7-9, and a stricter Kerry-OK guard on set_customer_field",
+    changes: [
+      "set_customer_field now accepts only a post by Kerry himself, or by platform-claude / front-desk quoting him verbatim (KERRY: \"…\"). The first guard took any post that mentioned Kerry, and a production dry run accepted #1057, a tracker-claude post. Nothing was written: it was a dry run. Guarded in test_query_customers.py.",
+      "get_score_entry_card(event_id, group | customer_id): one group's or one player's live entered card (hole-by-hole gross, marks, signatures, card check, CTP and HIO claims). It filters score_entry.get_entered_scores, so se_* is still read only by score_entry.py.",
+      "get_pairing_history(customer_id | event_id, year): partners with played-with and rode-with counts, the cart record per round including solo carts, or every pair on one event. It counts what the pairings engine counts (Golf Genius rows, played dates) and states that rule in the answer.",
+      "get_standard(name, section): the standards of record by name (side-games, pairings, event-recaps, handicap, financial-model, score-entry, facebook-events, insider-voice, and anything under docs/standards/), whole or one section, so lanes stop re-posting whole documents. Bridges scoring-se-card, scoring-pair-history and scoring-standard. Module email_parser/cos_reads.py; guard test_cos_reads.py."
+    ]
+  },
+  {
+    version: "2.522.46",
+    date: "2026-09-30",
+    title: "Chief of Staff tools 2-4: set_customer_field, and reading and searching the mailbox",
+    changes: [
+      "set_customer_field (MCP tool + scoring-set-customer-field bridge) writes customers.gender for a list of customer_ids. It is refused unless it cites a mailbox post that exists and carries Kerry's OK (rule 3b, CoS #1060-3). It is a dry run unless apply is passed, and every change is logged to agent_action_log with before and after. The ambassador flag is refused here: it belongs to Side Games' customer_ambassadors table.",
+      "read_platform_dialogue takes id= to read one post and max_chars to trim bodies. With since_id it now returns the OLDEST posts after that id first, and says more:true with next_since_id when the window was cut off. Before, it returned the newest N, which hid the earliest new posts on a catch-up read (CoS #1048). Without since_id it is unchanged: newest first.",
+      "search_platform_dialogue(text, topic, author, since): precedent search, newest first, bodies trimmed, every word of text must appear, case-insensitive with lower() on both sides (#682). Bridges scoring-mailbox-read and scoring-mailbox-search reach both from sessions that opened before the tools existed. Guard test_mailbox_read_v2.py."
+    ]
+  },
+  {
+    version: "2.522.45",
+    date: "2026-09-30",
+    title: "Pre-sold event deposits are held liabilities (Lone Star Cup first), as a dry run",
+    changes: [
+      "Kerry 9/30 (#1050): \"Lone Star Cup is liabilities right now, for sure.\" The $8,140 of Venmo and Zelle deposits for the Cup were booked as event income, so its P&L showed $7,945 profit before a shot was hit.",
+      "An event listed in app setting deposit_events ({event_id: release date}; the code default is the Lone Star Cup, released 10/12) now holds everything received for it, less deposit refunds paid back through Venmo, Zelle, PayPal or cash, until its release date. scoring-liabilities lists it as held_deposits, and names any income row with no category so the CFO can check it.",
+      "The event P&L carries a deposits block with before and after figures, showing no revenue on deposits before the release date. It moves the headline only when app setting event_pnl_deposits is on (a DRY RUN until then). Any future pre-sold event joins by adding its id to deposit_events. Guard: test_held_deposits.py.",
+    ],
+  },
+  {
+    version: "2.522.44",
+    date: "2026-09-30",
+    title: "Sales tax: a filing record; a month is FILED only when recorded",
+    changes: [
+      "Kerry 9/30 (#1047): \"I approve the sales_tax_filings table.\" The liabilities read (scoring-liabilities) marked every past-due month \"filed\" by the calendar alone, which is how August 2026 read filed while it never was. The new sales_tax_filings table records each month: due date, filed date, Total Texas Sales, taxable sales, tax, discount, penalty, interest, amount paid, WebFile and payment refs, confirmation path, evidence (WebFile confirmation or Kerry's word) and who entered it.",
+      "A month now reads FILED only when a row exists; otherwise LATE once past the 20th, else OPEN. Bridges: scoring-sales-tax-filing:<json>[|apply] records one month (dry run by default), scoring-sales-tax-filings lists the record, and scoring-sales-tax-backfill[:apply] loads the CFO's verified register. Every applied write is action-logged.",
+      "First plain-SQL migration file (CA #682): migrations/0001_sales_tax_filings.sql, applied once per database by email_parser/migrations.py and recorded in schema_migrations. Guard: test_sales_tax_filings.py.",
+    ],
+  },
+  {
+    version: "2.522.43",
+    date: "2026-09-30",
+    title: "query_customers: a read-only field read of customers for the lanes",
+    changes: [
+      "The Chief of Staff could not list customers by gender without asking a crew (#1048). New MCP tool query_customers and bridge scoring-query-customers:<gender>|<chapter>|<status>|<played_since>|<limit> filter customers by gender (F / M / NULL = unknown), chapter and membership status. Each row returns customer_id, name, chapter, status, gender and rounds played since a date (default 2026-01-01), active members first. Read-only and audit-logged. Guard: test_query_customers.py.",
+    ],
+  },
+  {
+    version: "2.522.42",
+    date: "2026-09-30",
+    title: "Events FINANCIAL panel shows the same bottom line as the P&L (HIO, TGF MVP share, fellowship meals)",
+    changes: [
+      "Kerry asked (#1048) whether each event's FINANCIAL page reads the same math as get_event_financial_summary. It read the server's revenue, but re-added expenses itself (course + prize fund + processing), so after the v1.1 pots went on (Kerry: \"Go on the pots\") 3304 would have shown $200.07 instead of $150.89.",
+      "When the event has recorded payouts, the panel now takes the server's total expenses and bottom line and lists the Hole-In-One Pot contribution, Fellowship Meals and the TGF MVP share line. With no payouts recorded it still falls back to the GAMES-matrix sum, as before. The same panel serves desktop and phone. Guard: test_financial_panel_parity.js.",
+    ],
+  },
+  {
+    version: "2.522.41",
+    date: "2026-09-30",
+    title: "Mail to Kerry through the Tracker mailer: scoring-mail-kerry",
+    changes: [
+      "Kerry 9/30 (#1050): \"Go with the Tracker mailer. I believe that's standard now for our other emails, and should be standard when I request that moving forward.\" The Microsoft 365 connector is read-only, so the sales-tax obligation routine (1st and 15th, 7:52 AM) and the monthly snapshot had no way to email him.",
+      "New bridge scoring-mail-kerry:<subject>|<html> renders only (a dry run); scoring-mail-kerry-send:<subject>|<html> sends through the same Graph path the recap drafts use. The recipient is hard-wired to Kerry, so no argument or setting can point it anywhere else. A leftover {tag} or [BLANK] holds the message. Every send is written to message_log and agent_action_log. email_parser/mail_kerry.py; guard test_mail_kerry.py.",
+    ],
+  },
+  {
+    version: "2.522.40",
+    date: "2026-09-30",
+    title: "G2a: one-cent Golf Genius rounding is EXPLAINED; FLIGHTS can place a no-index player",
+    changes: [
+      "The first live G2a run (#1001) failed both 9/29 events on cents. On 3304 Golf Genius paid six skins $14.08 each ($84.48 on an $84.50 pot), where we pay two of them $14.09 so the flight sums to the pot. On 3317 it paid $21.13 for a $21.125 share, where we pay $21.12. Golf Genius rounds each winner's share half up on its own and never reconciles, so its flights land a cent or two under or over the pot. Kerry's 7/12 ruling (MONEY OUT = MONEY IN) keeps our money exact to the pot, and it stands (CA #1034 withdrew #1029 item 2). This release changes no payout.",
+      "The grader's A2(ii) class, approved by CA in #1034 as proposed in #1033: a player's difference is EXPLAINED, and named, only when all four hold. It is at most one cent. The player's rows sit in one shared-pot group, a tied place or a skins flight (before, only tied places qualified, which is why the skins read FAIL). Golf Genius's figure equals the half-up rounding of the exact share. And our rows in that group sum exactly to the pot. A one-cent gap that is NOT Golf Genius's rounding, anything over a cent, and a group that doesn't sum to its pot all stay mismatches.",
+      "FLIGHTS: a CUSTOM move can now PLACE a buyer who has no handicap index (Kerry 9/30: \"Update our Flights on the tracker\" to match what Golf Genius flighted on a9.25 Star Ranch, where Geoff Hightower and Zac Hammond had no TGF index and our board could only list them as unflighted). The move names the flight by customer_id like any other; the board says \"(no index) placed in Flight N\", and flight labels read the indexed members only. Frozen and settled boards still refuse, so the board must be unfrozen first. Guard: test_flighting.py.",
+      "To grade this, the engine's payout rows now carry share_group, group_pot and exact_share_cents; the amounts are unchanged. Golf Genius's rounding rule and its evidence are recorded in side-games.md under the 7/12 ruling, as \"why GG differs\". Guard: test_g2a_parity.py (8 new checks, including the 3304 and 3317 figures).",
+    ],
+  },
+  {
+    version: "2.522.39",
+    date: "2026-09-30",
+    title: "Event P&L v1.1: keyed to the standard's 9/5 cutover; HIO, TGF MVP share and fellowship meals as a dry run",
+    changes: [
+      "The v1.1 revenue fixes now start at the Margin & Fee Standard's own cutover, 9/5 (#1034 §2: filed months are frozen), through app setting event_pnl_v11_from, instead of the margin_model_cutover setting (8/27 on production). s18.10 Landa Park (8/29) returns to its old figures.",
+      "New in the standard_v11 block, as a DRY RUN: the event's HIO contribution from the HIO ledger (§8.4, deducted from margin, not the prize fund); its own TGF MVP share as a prize-fund line on a two-city day ($2 x net buyers on a nine, $4 on 18, less any TGF MVP payout recorded on it, so the winner's event gives back the other city's half; §8.7); and fellowship meals from the meal and fellowship expense rows tagged to the event (§8.8). The headline takes them only when a second setting, event_pnl_v11_pots, is on. Guard: test_event_pnl_v11.py.",
+    ],
+  },
+  {
+    version: "2.522.38",
+    date: "2026-09-30",
+    title: "Event P&L: Margin & Fee Standard v1.1 revenue, as a dry run beside the current figures",
+    changes: [
+      "The CFO found four revenue bugs in the event P&L (#1024/#1027), and the Chief of Staff ruled them under the Margin & Fee Standard v1.1 (#1029). First, a credited no-show stayed in event revenue while its money also sat in credits owed; on 3304 that was $156. Second, coupons were never subtracted, and a coupon's split repeats on every item of its order. Third, the order-level 3.5% fee was counted once per item on multi-event orders ($637.90 across 54 events). Fourth, fees on credited items fell out of revenue although Kerry never refunds them.",
+      "get_event_financial_summary now carries a standard_v11 block with BEFORE and AFTER figures. In AFTER, credited items are out of registration revenue but keep their fees, each coupon is counted once per order and apportioned by item price, and the fee comes from the prorated transaction_fee splits. Events before the margin-model cutover (9/5) are frozen and never take it.",
+      "DRY RUN: the headline does not move until the event_pnl_v11 app setting is on; the block shows what would change and by how much. Guard: test_event_pnl_v11.py.",
+    ],
+  },
     {
         version: "2.522.37",
         date: "2026-09-30",

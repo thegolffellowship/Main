@@ -515,6 +515,7 @@
         /* A requested pair is a decision, not a repeat (Kerry 2026-09-15). */
         .pairing-hist-row .ph-req { color: var(--muted); font-weight: 400; }
         .pairing-hist-row .ph-hot { color: #b91c1c; font-weight: 700; }
+        .pairing-hist-row .ph-cart { color: #6B7280; font-style: italic; }
         .pairing-repeat-chip {
             float: right; margin-right: 0.5rem; font-weight: 700;
             color: #7f1d1d; background: #fecaca; border-radius: 999px;
@@ -2416,6 +2417,7 @@
     let financialOpenForEvent = {};  // keyed by event id → true if financial panel is open
     let payoutsOpenForEvent = {};  // keyed by event id → true if payouts panel is open
     let flightsOpenForEvent = {};  // keyed by event id → true if the DIVISIONS/FLIGHTS panel is open
+    let scoringOpenForEvent = {};  // keyed by event id → true if the SCORE ENTRY tab is open (Kerry 2026-10-06)
     let reportsOpenForEvent = {};  // keyed by event id → true if the REPORTS panel is open (Kerry 2026-09-29)
     let tgfPayoutData = { customers: [], events: [], winnings: {} };  // TGF payout data from /api/tgf
     let mvpUnlinks = new Set();  // event names unlinked from same-day TGF MVP combining
@@ -3059,6 +3061,79 @@
     // read in place of the live map wherever an `ev` is known. A site
     // with no event in hand reads the live map, as before.
     const hcpAsOfMaps = {};
+    // MISSING-HANDICAP WARNING (Kerry 2026-09-30, CoS #1064-1): players on
+    // the roster with no TGF index and no starting handicap. The server
+    // read (/api/events/<id>/missing-handicaps, email_parser/
+    // handicap_warnings.py) is the ONE computation; the MCP tool and the
+    // Front Desk brief read the same module. The banner sits above every
+    // tab (roster, PAIRINGS, GAMES) and renders in the phone card too,
+    // because both layouts draw through renderDetailContent.
+    const missingHcp = {};
+    async function fetchMissingHcp(ev) {
+        if (!ev || !ev.id) return;
+        try {
+            const res = await fetch(`/api/events/${ev.id}/missing-handicaps`, {cache: "no-store"});
+            if (res.ok) missingHcp[ev.id] = await res.json();
+        } catch (err) {
+            console.error("fetchMissingHcp:", err);
+        }
+    }
+    // N/H FLAG (Kerry, "Good on both", CoS #1078): a manager marks a player
+    // with no handicap as N/H for this event. The server keeps the flag
+    // (event_nh_flags); the page reads it from the same payload.
+    function isNhFlagged(ev, cid) {
+        const m = ev && missingHcp[ev.id];
+        return !!(m && cid && (m.nh_players || []).some(p => String(p.customer_id) === String(cid)));
+    }
+    const _nhBtn = (ev, p, on) => p.customer_id
+        ? ` <button class="btn-nh-set" data-event-id="${ev.id}" data-customer-id="${p.customer_id}" data-nh="${on ? 1 : 0}"
+             style="margin-left:6px;border:1px solid #c2410c;background:#fff;color:#c2410c;border-radius:999px;
+                    padding:2px 10px;font-size:0.8rem;font-weight:700;cursor:pointer;min-height:28px;"
+             title="${on ? 'Play this player N/H: scores still entered, a blind stands in for the money' : 'Clear N/H'}"
+             >${on ? 'Play N/H' : 'Undo N/H'}</button>` : '';
+    async function setNhFlag(evId, cid, on) {
+        try {
+            const res = await fetch(`/api/events/${evId}/nh`, {method: "POST",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({customer_id: cid, nh: !!on})});
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) { alert(data.refused || data.error || "Could not save N/H."); return; }
+            const ev = allEvents.find(e => e.id === evId);
+            if (!ev) return;
+            await fetchMissingHcp(ev);
+            rerenderDetail(detailContainerFor(ev.id), ev);
+        } catch (err) { console.error("setNhFlag:", err); alert("Could not save N/H."); }
+    }
+    document.addEventListener("click", e => {
+        const b = e.target.closest && e.target.closest(".btn-nh-set");
+        if (!b) return;
+        e.preventDefault(); e.stopPropagation();
+        setNhFlag(parseInt(b.dataset.eventId), parseInt(b.dataset.customerId), b.dataset.nh === "1");
+    });
+    function missingHcpBannerHtml(ev) {
+        const m = ev && missingHcp[ev.id];
+        if (!m || !m.upcoming) return '';
+        const nhList = (m.nh_players || []);
+        if (!m.count && !nhList.length) return '';
+        const nhRow = nhList.length
+            ? `<div style="margin-top:0.3rem;color:#374151;">Playing N/H: ${nhList.map(p =>
+                  `${escapeHtml(p.name)}${_nhBtn(ev, p, false)}`).join(', ')}</div>` : '';
+        if (!m.count) {
+            return `<div class="hcp-missing-warn hcp-nh-only" style="white-space:normal;background:#F8F8F8;border:1px solid #E5E7EB;
+                border-radius:8px;padding:0.45rem 0.75rem;margin:0 0 0.6rem;font-size:0.85rem;">${nhRow}</div>`;
+        }
+        const rows = (m.players || []).map(p =>
+            `<li><b>${escapeHtml(p.name)}</b>${p.status ? ` <span style="color:#6B7280;">(${escapeHtml(String(p.status).replace(/_/g, ' '))})</span>` : ''}: ${escapeHtml(p.fix)}${_nhBtn(ev, p, true)}</li>`).join('');
+        return `<div class="hcp-missing-warn" role="alert"
+            style="white-space:normal;background:#fff7ed;border:1px solid #fb923c;border-left:4px solid #E87C3E;
+                   border-radius:8px;padding:0.55rem 0.75rem;margin:0 0 0.6rem;font-size:0.85rem;color:#1B1B1B;">
+            <div style="font-weight:700;">&#9888; ${escapeHtml(m.message)}</div>
+            <details style="margin-top:0.25rem;"><summary style="cursor:pointer;color:#c2410c;">How to fix</summary>
+              <ul style="margin:0.35rem 0 0.25rem 1.1rem;padding:0;">${rows}</ul>
+              <div style="color:#6B7280;">Set it from the roster: tap the orange dash in the HCP column. Or tap Play N/H: their scores are still entered and a blind stands in for their money.</div>
+            </details>${nhRow}</div>`;
+    }
+
     async function ensureHcpAsOf(ev) {
         const d = ev && ev.handicap_as_of;
         if (!d || hcpAsOfMaps[d]) return;
@@ -3086,7 +3161,7 @@
             >${label}</button>`});
         if (lh === undefined) {
             if (r.handicap) return r.handicap;
-            return r.customer_id ? btn("\u2014 Set", "", "") : "\u2014";
+            return r.customer_id ? btn(isNhFlagged(ev, r.customer_id) ? "N/H" : "\u2014 Set", "", "") : "\u2014";
         }
         const shown = showHcp18Only ? lh.index_18.toFixed(1) : (lh.index_9.toFixed(1) + 'N');
         if (lh.source === "starting" && r.customer_id) {
@@ -3550,7 +3625,8 @@
                 const mobilePayoutsView = payoutsOpenForEvent[ev.id];
                 const mobileFlightsView = flightsOpenForEvent[ev.id];
                 const mobileReportsView = reportsOpenForEvent[ev.id];
-                badgesHtml += `<span class="game-stat-badge ${!mobileGamesView && !mobilePairingsView && !mobileFinancialView && !mobilePayoutsView && !mobileFlightsView && !mobileReportsView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="0">ROSTER <strong>${stats.players}</strong></span>`;
+                const mobileScoringView = scoringOpenForEvent[ev.id];
+                badgesHtml += `<span class="game-stat-badge ${!mobileGamesView && !mobilePairingsView && !mobileFinancialView && !mobilePayoutsView && !mobileFlightsView && !mobileReportsView && !mobileScoringView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="0">ROSTER <strong>${stats.players}</strong></span>`;
                 badgesHtml += `<span class="game-stat-badge ${mobilePairingsView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="2">PAIRINGS</span>`;
                 if (mobileHolesType) {
                     badgesHtml += `<span class="game-stat-badge games-badge ${mobileGamesView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="1">GAMES</span>`;
@@ -3559,12 +3635,13 @@
                     badgesHtml += `<span class="game-stat-badge ${mobileFlightsView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="5" title="Divisions &amp; Flights — the ratified flighting and payout rules, dry run">FLIGHTS</span>`;
                 }
                 badgesHtml += `<span class="game-stat-badge ${mobileReportsView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="6" title="Print reports">REPORTS</span>`;
+                if (currentRole === "admin" && seEventOn(ev.id)) badgesHtml += `<span class="game-stat-badge ${mobileScoringView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="7" title="Live score entry: each group's link and QR, holes in, signatures">SCORING</span>`;
                 if (currentRole === 'admin') {
                     badgesHtml += `<span class="game-stat-badge ${mobilePayoutsView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="4">PAYOUTS</span>`;
                     badgesHtml += `<span class="game-stat-badge fin-badge-admin ${mobileFinancialView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="3">FINANCIAL</span>`;
                 }
                 badgesHtml += '</span>';
-                if (!mobileGamesView && !mobilePairingsView && !mobileFinancialView && !mobilePayoutsView && !mobileFlightsView && !mobileReportsView) {
+                if (!mobileGamesView && !mobilePairingsView && !mobileFinancialView && !mobilePayoutsView && !mobileFlightsView && !mobileReportsView && !mobileScoringView) {
                     // Hole tabs — one per hole count this event actually sold
                     badgesHtml += holesTabsHtml(ev, registrants);
 
@@ -3595,6 +3672,8 @@
                     detailHtml = badgesHtml + renderFlightsPanel(ev);
                 } else if (mobileReportsView) {
                     detailHtml = badgesHtml + renderReportsPanel(ev);
+                } else if (mobileScoringView) {
+                    detailHtml = badgesHtml + renderScoreEntryTab(ev);
                 } else if (mobileFinancialView) {
                     detailHtml = badgesHtml + renderFinancialPanel(ev, registrants);
                 } else if (mobileGamesView) {
@@ -3700,7 +3779,7 @@
                 <div class="mobile-card-top ev-mobile-top" data-id="${ev.id}">
                     <div class="mc-primary">
                         <span class="mc-customer">${escapeHtml(ev.item_name)}</span>
-                        <span class="reg-count" style="font-size:0.78rem; min-width:auto; height:24px; border-radius:12px; margin-left:0.35rem; vertical-align:middle; padding:0 0.4rem;">${stats.players}/${ev.registrations || 0}</span>
+                        <span class="reg-count" style="font-size:0.78rem; min-width:auto; height:24px; border-radius:12px; margin-left:0.35rem; vertical-align:middle; padding:0 0.4rem;" title="players / paid">${stats.players}/${ev.oneoff_paid != null ? ev.oneoff_paid : (ev.registrations || 0)}</span>
                         ${(ev.status === 'cancelled') ? `<span style="margin-left:0.35rem; font-size:0.62rem; font-weight:700; background:#fee2e2; color:#dc2626; border:1px solid #fecaca; border-radius:4px; padding:1px 5px; vertical-align:middle; text-transform:uppercase;">${escapeHtml(ev.status_badge || 'Cancelled')}</span>` : ''}
                         ${(ev.status === 'postponed') ? `<span style="margin-left:0.35rem; font-size:0.62rem; font-weight:700; background:#fef3c7; color:#d97706; border:1px solid #fde68a; border-radius:4px; padding:1px 5px; vertical-align:middle; text-transform:uppercase;">${escapeHtml(ev.status_badge || 'Postponed')}</span>` : ''}
                         <br><span class="mc-event" style="font-size:0.85rem;">${escapeHtml(ev.event_date || "\u2014")} &bull; ${escapeHtml(ev.course || ev.chapter || "\u2014")}</span>
@@ -4303,7 +4382,7 @@
     //    Frustrating when it refreshes to closed state each time."
     //    sessionStorage, not local: this is where you are right now, not
     //    a preference, so a new tab starts clean.
-    const DETAIL_VIEWS = {"1": "games", "2": "pairings", "3": "financial", "4": "payouts", "5": "flights", "6": "reports"};
+    const DETAIL_VIEWS = {"1": "games", "2": "pairings", "3": "financial", "4": "payouts", "5": "flights", "6": "reports", "7": "scoring"};
 
     function applyDetailView(evId, val) {
         gamesOpenForEvent[evId] = val === "1";
@@ -4312,6 +4391,7 @@
         payoutsOpenForEvent[evId] = val === "4";
         flightsOpenForEvent[evId] = val === "5";
         reportsOpenForEvent[evId] = val === "6";
+        scoringOpenForEvent[evId] = val === "7";
     }
 
     function currentDetailView(evId) {
@@ -4321,6 +4401,7 @@
         if (payoutsOpenForEvent[evId]) return "4";
         if (flightsOpenForEvent[evId]) return "5";
         if (reportsOpenForEvent[evId]) return "6";
+        if (scoringOpenForEvent[evId]) return "7";
         return "0";
     }
 
@@ -5309,9 +5390,17 @@
         const totalPrizeFund = gamePots.hio + gamePots.included + gamePots.net + gamePots.gross;
         // Use server prize fund if available, otherwise fallback to client
         const prizeFund = exp.prize_fund > 0 ? exp.prize_fund : totalPrizeFund;
-        // Recalc total expenses and profit with potentially better prize fund
-        const totalExpenses = exp.course_fees + prizeFund + exp.processing_fees;
-        const adjProfit = netRev - totalExpenses;
+        // Recalc total expenses and profit with potentially better prize fund.
+        // When the server has the recorded prize fund, its own total is the
+        // record (Margin Standard v1.1 #1048: the page and get_event_
+        // financial_summary must agree, HIO / TGF MVP share / fellowship
+        // meals included); the client sum is only the no-payouts fallback.
+        const serverTotals = exp.prize_fund > 0 && typeof exp.total === "number";
+        const totalExpenses = serverTotals ? exp.total
+            : exp.course_fees + prizeFund + exp.processing_fees;
+        const adjProfit = serverTotals ? profit : netRev - totalExpenses;
+        const _pots = (data.standard_v11 && data.standard_v11.pots && data.standard_v11.pots.live)
+            ? data.standard_v11.pots : null;
         const adjProfitColor = adjProfit >= 0 ? "#166534" : "#dc2626";
 
         const badge = `<span style="display:inline-block; font-size:0.65rem; padding:0.1rem 0.4rem; border-radius:4px; background:#dcfce7; color:#166534; font-weight:600; margin-left:0.5rem; vertical-align:middle;">VERIFIED (${coveragePct}%)</span>`;
@@ -5380,7 +5469,10 @@
         html += `<span style="padding-left:1rem; color:var(--text-muted); font-size:0.75rem;">Included Games</span><span style="text-align:right; color:var(--text-muted); font-size:0.75rem;">$${gamePots.included.toFixed(2)}</span>`;
         if (gamePots.net > 0) html += `<span style="padding-left:1rem; color:var(--text-muted); font-size:0.75rem;">Net Games</span><span style="text-align:right; color:var(--text-muted); font-size:0.75rem;">$${gamePots.net.toFixed(2)}</span>`;
         if (gamePots.gross > 0) html += `<span style="padding-left:1rem; color:var(--text-muted); font-size:0.75rem;">Gross Games</span><span style="text-align:right; color:var(--text-muted); font-size:0.75rem;">$${gamePots.gross.toFixed(2)}</span>`;
+        if (_pots && _pots.tgf_mvp_adjust) html += `<span style="padding-left:1rem; color:var(--text-muted); font-size:0.75rem;">TGF MVP share (this event's own; in Prize Fund)</span><span style="text-align:right; color:var(--text-muted); font-size:0.75rem;">${_pots.tgf_mvp_adjust < 0 ? "-" : "+"}$${Math.abs(_pots.tgf_mvp_adjust).toFixed(2)}</span>`;
         html += `<span>Processing Fees</span><span style="text-align:right;">$${exp.processing_fees.toFixed(2)}</span>`;
+        if (exp.hio_contribution > 0) html += `<span>Hole-In-One Pot contribution</span><span style="text-align:right;">$${exp.hio_contribution.toFixed(2)}</span>`;
+        if (exp.fellowship_meals > 0) html += `<span>Fellowship Meals</span><span style="text-align:right;">$${exp.fellowship_meals.toFixed(2)}</span>`;
         html += `<span style="font-weight:700; border-top:1px solid var(--border); padding-top:0.2rem;">Total Expenses</span><span style="font-weight:700; text-align:right; border-top:1px solid var(--border); padding-top:0.2rem;">$${totalExpenses.toFixed(2)}</span>`;
         html += `</div></div>`;
         html += `</div>`;
@@ -5982,11 +6074,12 @@
         h += open("starter-sheet", "Starter Sheet", "Print starter sheet");
         h += open("cart-signs", "Cart Signs", "Print cart signs");
         h += open("scorecards", "Scorecards", "Print scorecards (GGID codes, layouts, Team/Cart Net)");
+        h += open("games-payouts", "Games &amp; Payouts", "Print the Games &amp; Payouts sheet — every pot, place and write-in line, from this GAMES tab");
         h += open("divisions-flights", "Divisions &amp; Flights", "Print Divisions &amp; Flights — NET, Skins and Gross on one page");
         h += open("proximity-markers", "Proximity", "Print Closest-to-the-Pin markers for the par 3s");
         // Kerry 2026-09-21: "there should be a button to SEND PACK" — the
         // bound PDF mailed now, on demand.
-        h += `<button class="pairings-action-btn send-pack-btn" onclick="sendPrintPack(${ev.id}, this)" title="Email the bound print pack (starter sheet, cart signs, scorecards, divisions & flights, proximity markers) now">&#x2709; Send Pack</button>`;
+        h += `<button class="pairings-action-btn send-pack-btn" onclick="sendPrintPack(${ev.id}, this)" title="Email the bound print pack (starter sheet, cart signs, scorecards, games & payouts, divisions & flights, proximity markers) now">&#x2709; Send Pack</button>`;
         h += '</div>';
         h += '<div style="font-size:0.75rem;color:var(--text-muted);margin-top:0.5rem;">Each report opens in a new tab with its own Print and Download PDF buttons.</div>';
         h += '</div>';
@@ -6622,6 +6715,7 @@
                 // added at render time by pairPlayedTotal.
                 showHistoryRow: pairingsHistoryPref(),
                 pairCounts: {},
+                rodeCounts: {},   // R-G: prior SHARED-CART counts (#1038)
                 // Undo/redo of GROUP edits (Kerry 2026-07-31). Snapshots of
                 // {groups_9, groups_18} with a cursor; `hist[histIdx]` is
                 // always what is on screen.
@@ -7016,6 +7110,29 @@
     }
     window.sendPrintPack = sendPrintPack;
 
+    // ═══════════ SCORE ENTRY TAB (Kerry 2026-10-06) ═══════════════════
+    // "Move the SCORE ENTRY section to it's own toggle after REPORTS and
+    // before PAYOUTS. Too much going on on that PAIRINGS view." The same
+    // panel (seFillPanel / seRenderPanel), now on its own tab.
+    function renderScoreEntryTab(ev) {
+        const st = (typeof getPairingsState === "function") ? getPairingsState(ev.id) : null;
+        let h9, h18;
+        if (st && st.loaded) {
+            h9 = !!st.groups_9.length; h18 = !!st.groups_18.length;
+        } else {
+            const f = String(ev.format || "");
+            h18 = /18|27/.test(f); h9 = !h18 || /combo|9\s*(&|\/|and)\s*18/i.test(f);
+        }
+        let h = '<div class="score-entry-tab" style="padding:0.5rem 0.25rem;">';
+        if (st && st.isDirty) {
+            h += '<div style="background:#FEF3C7;border:1px solid #FDE68A;border-radius:6px;padding:0.4rem 0.6rem;margin-bottom:0.5rem;font-size:0.8rem;color:#92400E;">PAIRINGS has unsaved changes. Score entry follows the saved pairings; save on PAIRINGS first.</div>';
+        }
+        h += `<div class="se-pp-slot" data-se-ev="${ev.id}" data-se-h9="${h9 ? 1 : 0}" data-se-h18="${h18 ? 1 : 0}">${SE_PP_CACHE[ev.id] || ''}</div>`;
+        h += '</div>';
+        setTimeout(() => seFillPanel(ev.id), 0);
+        return h;
+    }
+
     // ── SCORE ENTRY panel on PAIRINGS (CA #782) ──────────────────────────
     // Reuses the Live Scoring read (/api/score-entry/events/<id>/admin),
     // the seed route (Build from PAIRINGS), and admin close / QR routes.
@@ -7298,7 +7415,6 @@
                 // the Tracker so I can see the preview?"): each group's
                 // scoring link and where every card stands. Admin only in
                 // the dry run.
-                if (currentRole === "admin" && seEventOn(ev.id)) html += `<button class="pairings-action-btn" onclick="window.open('/events/${ev.id}/live-scoring','_blank')" title="Live score entry: every group's link, holes in, signatures, card checks">&#x26F3; Live Scoring</button>`;
                 html += `<button class="pairings-action-btn pairings-blinds-btn" title="Draw BLINDs for the open seats — members in the field with an established handicap, spread evenly over the year">&#x1F3B2; Blinds</button>`;
             }
         }
@@ -7310,10 +7426,7 @@
         // status, Close. Admin only; the member switches stay where they
         // are. Filled after render by seFillPanel (cached, so re-renders
         // don't flicker).
-        if (currentRole === "admin" && seEventOn(ev.id) && !state.isDirty && (state.groups_9.length || state.groups_18.length)) {
-            html += `<div class="se-pp-slot" data-se-ev="${ev.id}" data-se-h9="${state.groups_9.length ? 1 : 0}" data-se-h18="${state.groups_18.length ? 1 : 0}">${SE_PP_CACHE[ev.id] || ''}</div>`;
-            setTimeout(() => seFillPanel(ev.id), 0);
-        }
+        // Moved to its own SCORE ENTRY tab (Kerry 2026-10-06): renderScoreEntryTab.
 
         // ── Match Play confirm panel (rule 8: "Match Play is king") ──────────
         // Shown before the first generate when the season state implies
@@ -7732,7 +7845,7 @@
                             title="BLIND — ${escapeHtml(bl.name || '')}'s card plays for this team. Nobody is in the cart. Click to redraw, remove, or seat a real player here."
                             data-ev-id="${ev.id}" data-holes="${holes}" data-group-num="${grp.group_num}" data-cart-pos="${pos}">
                             <span class="pairing-cart-dot" style="background:#bbb;"></span>
-                            <span class="pairing-player-name">BLIND &middot; ${escapeHtml(bl.name || '')}</span></div>`;
+                            <span class="pairing-player-name">BLIND &middot; ${escapeHtml(bl.name || '')}${bl.pending ? ' <em style="color:var(--text-muted,#6B7280);font-size:0.85em;">saving\u2026</em>' : ''}</span></div>`;
                         continue;
                     }
                     html += `<div class="pairing-empty-slot" title="Open spot — click to pick a player from the roster or add a BLIND, or select a player/cart pair first and click here"
@@ -7881,6 +7994,17 @@
 
             // A blind past the seat count (a sheet edited after the draw)
             // still has to be visible rather than silently dropped.
+            // An N/H player's blind (spec #1073) sits on a seat that is
+            // NOT empty — he keeps his card, the blind plays his slot — so
+            // the empty-seat lookup above never shows it. Listed here.
+            (grp.blinds || []).filter(b => b.reason === 'nh' && (b.cart_pos || 0) <= seatCount)
+                .forEach(b => {
+                    const who = (byPos[b.cart_pos] || {}).name || '';
+                    html += `<div class="pairing-player-row pairing-blind-row" data-blind-seat="${holes}:${grp.group_num}:${b.cart_pos}" data-ev-id="${ev.id}" title="BLIND for N/H — ${escapeHtml(b.name || '')}'s card plays ${escapeHtml(who)}'s slot for this team; ${escapeHtml(who)} has no handicap.">`
+                        + '<span class="pairing-cart-dot" style="background:#bbb;"></span>'
+                        + `<span class="pairing-player-name">BLIND for N/H ${escapeHtml(who)} &middot; ${escapeHtml(b.name || '')}</span>`
+                        + '</div>';
+                });
             (grp.blinds || []).filter(b => (b.cart_pos || 0) > seatCount)
                 .forEach(b => {
                     html += `<div class="pairing-player-row pairing-blind-row" data-blind-seat="${holes}:${grp.group_num}:${b.cart_pos}" data-ev-id="${ev.id}" title="BLIND — ${escapeHtml(b.name || '')}'s card plays for this team.">`
@@ -8024,6 +8148,7 @@
             state.standingsPoints = data.standings_points || {};
             state.standingsEnrolled = data.standings_enrolled || {};
             state.pairCounts = data.pair_counts || {};
+            state.rodeCounts = data.rode_counts || {};
             state.blindPool = data.blind_pool || null;
             return state.event_players.length;
         } catch (e) {
@@ -8063,6 +8188,7 @@
             state.standingsPoints = data.standings_points || {};
             state.standingsEnrolled = data.standings_enrolled || {};
             state.pairCounts = data.pair_counts || {};
+            state.rodeCounts = data.rode_counts || {};
             state.blindPool = data.blind_pool || null;
             state.isDirty = false;
             state.loaded = true;
@@ -8783,7 +8909,7 @@
     // is wrapped in [data-ev-body] so an in-panel change can swap the body
     // alone — the header and its handlers stay put.
     function renderDetailContent(ev) {
-        const html = renderDetailContentInner(ev);
+        const html = missingHcpBannerHtml(ev) + renderDetailContentInner(ev);
         return html.indexOf('data-ev-body="') >= 0 ? html + "</div>" : html;
     }
     function renderDetailContentInner(ev) {
@@ -8919,6 +9045,7 @@
         const payoutsView = payoutsOpenForEvent[ev.id];
         const flightsView = flightsOpenForEvent[ev.id];
         const reportsView = reportsOpenForEvent[ev.id];
+        const scoringView = scoringOpenForEvent[ev.id];
         let html = '';
 
         // Status banner for cancelled/postponed events
@@ -8937,7 +9064,7 @@
 
         html += '<div class="event-game-stats">';
         html += '<span class="view-toggle-group">';
-        html += `<span class="game-stat-badge ${!gamesView && !pairingsView && !financialView && !payoutsView && !flightsView && !reportsView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="0">ROSTER <strong>${stats.players}</strong></span>`;
+        html += `<span class="game-stat-badge ${!gamesView && !pairingsView && !financialView && !payoutsView && !flightsView && !reportsView && !scoringView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="0">ROSTER <strong>${stats.players}</strong></span>`;
         html += `<span class="game-stat-badge ${pairingsView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="2">PAIRINGS</span>`;
         if (holesType) {
             html += `<span class="game-stat-badge games-badge ${gamesView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="1">GAMES</span>`;
@@ -8951,6 +9078,12 @@
         // REPORTS (Kerry 2026-09-29: "move the print reports stuff to it's
         // own tab on the toggle bar. After Flights").
         html += `<span class="game-stat-badge ${reportsView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="6" title="Print reports: Starter Sheet, Cart Signs, Scorecards, Divisions &amp; Flights, Proximity, Send Pack">REPORTS</span>`;
+        // SCORE ENTRY (Kerry 2026-10-06: "Move the SCORE ENTRY section to
+        // it's own toggle after REPORTS and before PAYOUTS. Too much going on
+        // on that PAIRINGS view"). Same audience as the old panel.
+        if (currentRole === "admin" && seEventOn(ev.id)) {
+            html += `<span class="game-stat-badge ${scoringView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="7" title="Live score entry: each group's link and QR, holes in, signatures">SCORING</span>`;
+        }
         if (currentRole === 'admin') {
             html += `<span class="game-stat-badge ${payoutsView ? 'active' : ''}" data-event-id="${ev.id}" data-toggle-games="4">PAYOUTS</span>`;
             // FINANCIAL is admin-only (Kerry 2026-08-05) — persistent TGF
@@ -8960,7 +9093,7 @@
         html += '</span>';
 
         // Sub-filter badges (only in PLAYERS view)
-        if (!gamesView && !pairingsView && !financialView && !payoutsView && !flightsView && !reportsView) {
+        if (!gamesView && !pairingsView && !financialView && !payoutsView && !flightsView && !reportsView && !scoringView) {
             // Hole tabs — one per hole count this event actually sold
             html += holesTabsHtml(ev, registrants);
 
@@ -9023,6 +9156,10 @@
         }
         if (reportsView) {
             html += renderReportsPanel(ev);
+            return html;
+        }
+        if (scoringView) {
+            html += renderScoreEntryTab(ev);
             return html;
         }
 
@@ -9442,11 +9579,11 @@
                             ? `<td style="${style}"><button class="btn-set-hcp"
                                  data-customer-id="${r.customer_id}"
                                  data-player="${escapeHtml(r.customer || '')}"
-                                 title="No handicap on record — click to set a starting handicap"
+                                 title="${isNhFlagged(ev, r.customer_id) ? 'Playing N/H this event — click to set a starting handicap instead' : 'No handicap on record — click to set a starting handicap'}"
                                  style="background:#fff7ed;border:1px dashed #fb923c;color:#c2410c;
                                         border-radius:6px;padding:1px 9px;font-size:0.78rem;
                                         font-weight:700;cursor:pointer;line-height:1.5;"
-                                 >&mdash;</button></td>`
+                                 >${isNhFlagged(ev, r.customer_id) ? 'N/H' : '&mdash;'}</button></td>`
                             : `<td style="${style}" title="No handicap, and this registration is not linked to a customer record">\u2014</td>`;
                     }
                 } else if (c.key === "holes") {
@@ -9844,6 +9981,7 @@
             fetchRsvpCreditMap(ev.item_name),
             fetchBalanceDueSendMap(ev.item_name),
             ensureHcpAsOf(ev),
+            fetchMissingHcp(ev),
         ]);
 
         // Desktop: render detail into table row
@@ -10170,7 +10308,7 @@
         // refetch the finance payload — capacity and per-unit "left"
         // counts change with every assignment, so the server recount
         // is the truth, not a local patch.
-        container.querySelectorAll(".oo-lodging-select").forEach(sel => {
+        root.querySelectorAll(".oo-lodging-select").forEach(sel => {
             sel.addEventListener("click", (e) => e.stopPropagation());
             sel.addEventListener("change", async (e) => {
                 e.stopPropagation();
@@ -10661,7 +10799,16 @@
                     // FIRST, so the number lands the moment it is saved and
                     // does not wait on three round-trips (or get lost if one
                     // of them fails).
+                    // The warning drops this player now; the re-read below
+                    // confirms it from the server.
+                    if (missingHcp[ev.id] && missingHcp[ev.id].players) {
+                        const _m = missingHcp[ev.id];
+                        _m.players = _m.players.filter(p => String(p.customer_id || '') !== String(cid));
+                        _m.count = _m.players.length;
+                        _m.message = _m.count ? `${_m.count} player${_m.count === 1 ? '' : 's'} ha${_m.count === 1 ? 's' : 've'} no handicap: ${_m.players.map(p => p.name).join(', ')}` : '';
+                    }
                     rerenderDetail(container, ev);
+                    fetchMissingHcp(ev).then(() => rerenderDetail(detailContainerFor(ev.id), ev));
                     await fetchHandicapIndexMap();
                     await fetchItems();
                     // fetchEvents() -> renderEvents() rebuilds the table and
@@ -10967,6 +11114,7 @@
             if (data.standings_points) state.standingsPoints = data.standings_points;
             if (data.standings_enrolled) state.standingsEnrolled = data.standings_enrolled;
             if (data.pair_counts) state.pairCounts = data.pair_counts;
+            if (data.rode_counts) state.rodeCounts = data.rode_counts;
             if (data.blind_pool) state.blindPool = data.blind_pool;
             state.isDirty = true;
             state.swapMode = null; state.selection = null;
@@ -12008,32 +12156,48 @@
             document.addEventListener('click', closePairingPicker, {once: true});
         }, 0);
     }
-    /** Write one blind into one seat and reload the sheet. */
+    /** Write one blind into one seat and patch the sheet.
+     *  INSTANT (Kerry 2026-10-06: "it was slow to switch visually ... that
+     *  should happen immediately"): a CHOOSE or a clear repaints the seat
+     *  the moment it is tapped, marked "saving"; the server's answer then
+     *  confirms it, or puts the seat back as it was and says why. RANDOM
+     *  shows "drawing..." in the seat until the name comes back. */
     async function blindSeat(ctx, body) {
+        const st = getPairingsState(ctx.ev.id);
+        const grp = _findGroup(st, ctx.holes, ctx.groupNum);
+        const before = grp ? (grp.blinds || []).slice() : null;
+        const putSeat = b => {
+            if (!grp) return;
+            grp.blinds = (grp.blinds || []).filter(x => x.cart_pos !== ctx.cartPos);
+            if (b) grp.blinds.push(Object.assign({cart_pos: ctx.cartPos, source: 'app'}, b));
+        };
+        if (body.mode === 'clear') putSeat(null);
+        else putSeat({name: (body.mode === 'choose' && body.name) ? body.name : 'drawing\u2026',
+                      customer_id: body.customer_id || null, pending: true});
+        rerenderDetail(ctx.container, ctx.ev);
+        const restore = msg => {
+            if (grp && before) grp.blinds = before;
+            rerenderDetail(ctx.container, ctx.ev);
+            alert(msg);
+        };
         try {
+            const send = Object.assign({}, body); delete send.name;
             const res = await fetch(`/api/events/${ctx.ev.id}/pairings/blinds`, {
                 method: 'POST', headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify(Object.assign({
                     seat: {holes: ctx.holes, group_num: ctx.groupNum,
-                           cart_pos: ctx.cartPos}}, body)),
+                           cart_pos: ctx.cartPos}}, send)),
             });
             const d = await res.json();
-            if (!res.ok || d.error) { alert(d.error || res.statusText); return; }
-            // Patch the sheet in place. Re-reading the whole panel took
-            // long enough that the seat looked broken (Kerry 2026-09-16:
-            // "when selected, it doesn't show up for like 20 seconds").
-            const st = getPairingsState(ctx.ev.id);
+            if (!res.ok || d.error) { restore(d.error || res.statusText); return; }
             if (st.blindPool) st.blindPool = null;   // counts moved
-            const grp = _findGroup(st, ctx.holes, ctx.groupNum);
-            if (grp) {
-                grp.blinds = (grp.blinds || []).filter(
-                    b => b.cart_pos !== ctx.cartPos);
-                if (d.name) grp.blinds.push({cart_pos: ctx.cartPos,
-                    name: d.name, customer_id: d.customer_id, source: 'app'});
-            }
+            // Confirm the seat from the server's answer (no panel re-read:
+            // Kerry 2026-09-16, "it doesn't show up for like 20 seconds").
+            if (d.name) putSeat({name: d.name, customer_id: d.customer_id});
+            else putSeat(null);
             rerenderDetail(ctx.container, ctx.ev);
         } catch (err) {
-            alert('Blind failed: ' + (err.message || err));
+            restore('Blind failed: ' + (err.message || err));
         }
     }
 
@@ -12093,7 +12257,7 @@
                 e.stopPropagation();
                 const p = elig[Number(btn.dataset.bidx)];
                 closePairingPicker();
-                if (p) await blindSeat(ctx, {mode: 'choose', customer_id: p.customer_id});
+                if (p) await blindSeat(ctx, {mode: 'choose', customer_id: p.customer_id, name: p.name});
             });
         });
         setTimeout(() => {
@@ -12229,7 +12393,22 @@
             return `<span class="ph-item${cls}" title="${escapeHtml(t)}">${
                 escapeHtml(pairShortName(m.name))} ${n}${req ? '&#x2691;' : ''}</span>`;
         }).join('');
-        return `<div class="pairing-hist-row">${bits}</div>`;
+        // R-G cart variety (Kerry 2026-09-30, #1038): a cart-mate this player
+        // has shared a cart with before is marked "repeat cart" — a mark,
+        // never a break. A requested partner is exempt (riding together
+        // is the request). Recomputed from seats, so it follows every swap.
+        const myCart = (player.cart_pos || 0) <= 2 ? 0 : 1;
+        const mate = mates.find(m => ((m.cart_pos || 0) <= 2 ? 0 : 1) === myCart);
+        let repeat = '';
+        if (mate && !pairIsRequested(state, player.name, mate.name)) {
+            const ka = pairCountKey(player.name), kb = pairCountKey(mate.name);
+            const rode = Number((state.rodeCounts || {})[ka < kb ? `${ka}|${kb}` : `${kb}|${ka}`]) || 0;
+            if (rode > 0) {
+                repeat = `<span class="ph-item ph-cart" title="${escapeHtml(
+                    `Repeat cart: has shared a cart with ${mate.name} ${rode} time${rode === 1 ? '' : 's'} before`)}">repeat cart</span>`;
+            }
+        }
+        return `<div class="pairing-hist-row">${bits}${repeat}</div>`;
     }
 
     // Worst repeat in a group, for the header chip. 1 = nobody in this

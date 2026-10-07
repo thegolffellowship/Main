@@ -276,6 +276,15 @@ is Triple".
   up** for him before moving on (help behind the ?). The answer rides the
   normal write as `op.mark` (`holed` | `picked_up`), so it queues offline
   and is idempotent on op_id. The card still records the triple.
+- **The reload gap (v2.525.12, Kerry 10/6 #1295).** `flush()` drops an
+  accepted op from the queue at once, but the card reload lands later. In
+  between, `value()` read the hole blank, so an answer tapped in that gap
+  went out with `gross: null`, the server refused it ("a pickup mark goes
+  only on a triple") and the mark was lost. `flush()` now writes every
+  `ok` op's gross (and mark) into the local card before dropping it.
+  Intermittent since the start; v2.525.6's slower card read widened the
+  gap until `test_score_entry_ui.py` failed on it. Guard: the
+  "slow card reload" case there holds every card read for 3 s.
 - **Storage.** `se_hole_marks` (one per round + subject + hole, with
   customer_id or team_id). A mark only goes on the triple (`invalid`
   otherwise); a write without `mark` keeps it; moving the gross off the
@@ -419,6 +428,17 @@ on the hole by hole scoring. Don't want it in text necessarily."
   `team_handicap`, `team_unit` and `team_basis`; `create_preview_round` computes PH
   and the team number with `_preview_handicaps` from the same helpers, the preview
   group as the field. `set_game_handicaps` upserts with ON CONFLICT.
+- **A player's strokes fall on HIS tee's stroke index (v2.525.6, Kerry
+  2026-10-06 "go now", Tracker Build #1277).** The round's `se_round_holes`
+  column is the <50 tee's; `_si_by_band` reads each designated tee's own
+  card through `event_tee_legend` + `_ls_tee_holes`, and `_strokes_by_player`
+  / `_team_strokes` rank a player whose band has a complete index over that
+  (the printed scorecard's `si_own` rule). A band without a complete index
+  keeps the round's column; nothing is guessed. Totals never change, only
+  which holes carry the strokes (Olympia Hills: Red (L) differs from White on
+  8 of 9 holes). Guard: `test_strokes_own_tee.py`. The Side Games engine
+  (`live_scoring.game_handicaps`) still allocates over one course index;
+  that is its own lane.
 
 ## Won-match shimmer and cup standings (v2.498.5)
 
@@ -762,6 +782,59 @@ Other /member pages keep their nav.
 
 The mark is 50 px (v2.522.26, Kerry: "Make the logger bigger. Like 2.5 times"); under 700 px of screen height the hole page shrinks it to 24 px so the card still fits.
 
+### Scorer navigation: SCORING | LEADERBOARD (v2.523.0, Kerry 2026-10-02)
+
+Approved from a real-code mockup rendered at 390×844 (branch
+`claude/scorer-nav-mockup`, mailbox #1155 → #1157 → #1158; Kerry: "All looks
+good except…", then "go ahead and push this build"). His rulings, verbatim:
+"No reason to show BACK TO SCORING if you're already on scoring." / "The
+leaderboard that they would go to would be JUST for that event." / "We
+originally had a toggle up at the top to go between scoring and leaderboard.
+I would prefer that." / "not all toggles for the leaderboard views: OVERALL |
+TEAM | NET etc fit on the mobile screen." / "It should just have the event
+showing on a top bar and then go straight into the leaderboard toggles,
+checkboxes for viewing and leaderboards themselves." / "hide the WON column on
+any view until all scores are in. I'd like the names column with the tee color
+dots all fit on one row without wrapping."
+
+- **The toggle** (`_shell_nav.html`, `shell.css .se-toggle`): under the mark
+  on any page opened with a group link (`?t=`): SCORING | LEADERBOARD, the
+  house dark segmented control. Scoring active on `/member/score`; on the
+  board page Leaderboard is active and the Scoring segment reads "Hole N"
+  from `localStorage.se_live` (written by `render()`, cleared on submit),
+  amber with "· N to sync" while holes are saved on the phone but not sent.
+  No other member page renders it. The CoS's pinned "Back to scoring" bar
+  (#1148) was mocked, shown, and replaced by this on Kerry's word.
+  **Pinned (v2.523.1)**: Kerry, "pin to the top as a bar under the header
+  and allow scrolling underneath it. I want it to always be visible." The
+  nav is `position: sticky`, opaque, with `top` set by the shell script to
+  the sticky header's measured height (ResizeObserver, so the tight-card
+  shrink is followed).
+- **The hole screen's bottom bar**: previous / Save & Go / next sit in
+  `.se-bottom`, fixed above the home indicator (#1152: "I do like the bottom
+  aligned buttons"). Placement only. The one-screen rule still holds with
+  the toggle (`test_scorer_nav.py` measures it).
+- **The scorer's board**, `GET /member/score/board?t=<group link>`
+  (`score_entry_board_page`): `contests.html` rendered with `SOLO_EVENT` (the
+  event's name) and `SOLO_T`; `SHELL_SLIM`; the CTA row, the top tabs and the
+  chapter chips carry `hidden`; `#tab=events` is synthesized; `evlbLoad`
+  drops every other event, opens his, and fills the event bar
+  (`.evlb-solo-bar`: name + IN PLAY / date · final). A bad or closed link
+  renders the score page, which explains itself.
+- **Reading the board with the link**: `/api/events-leaderboard` and
+  `/event` keep the manager tier for sessions and additionally accept a live
+  group link (`_board_read_ok`): the list is narrowed to that event and
+  another event's board is 403. `get_event_leaderboard` now publishes
+  `event.id`. When Tracker Build's member flip (#1149) lands, the role path
+  simply widens; the link path stays for scorers who never signed in.
+- **Shared-board fixes that ride along** (member Events tab too): the seven
+  game tabs wrap to two rows under 560px; `td.nm` is `nowrap` with the tee
+  dot absolutely pinned to the cell's right edge (one row per name); while
+  `money_visible` is false `evlbBlankMoney` sets `_moneyHeld` and every
+  `table.evlb-holes` and the proxies table get `no-won`, which hides the Won
+  / $ column until every score is in.
+- Guard: `test_scorer_nav.py` (API tier + the screen sequence at 390×844).
+
 ### Hole yardage comes from the Men <50 tee (v2.522.27, Kerry 2026-09-29)
 
 "For the yardage under each hole number, use the <50 back tee yardages. 314
@@ -780,3 +853,23 @@ on that hole ("100% Handicap Stroke", "X% Team|Cart Stroke" from
 hole has none; it sits below Save & Go. The check card calls `popKey()` with
 no hole and keys the whole round. `_basis_pct` reads the allowance out of the
 se_game_handicaps basis text.
+
+
+## Short QR links and own-tee strokes in the engine (v2.525.7, Kerry 2026-10-06)
+
+- **Short QR link.** Kerry: "Are there by chance less dense QR codes that
+  could be created as a standard?" Every printed code (scorecards, cart
+  signs, the PAIRINGS QR button) carries `short_score_url(url)`:
+  `HTTPS://<HOST>/Q/<group>.<version>.<first 12 hex of the signature>`, upper
+  case so the QR uses alphanumeric mode (version 3, 29x29, instead of version
+  6, 41x41). `GET /Q/<code>` (and `/q/`) -> `resolve_short_code` rebuilds the
+  group's CURRENT signed token, compares the 12 hex and the version, runs
+  `verify_group_token`, and redirects to `/member/score?t=<token>`; a revoked,
+  closed or altered code gets a 404 line. Copy-link URLs stay long.
+- **Engine.** `live_scoring.build_cards` honours a player's
+  `stroke_index_by_hole` (complete for the round's holes) and writes it on
+  his hole rows; `game_handicaps` ranks each card over its own holes
+  (`_card_si`), so skins and every per-game allowance follow the player's
+  tee. `database.event_engine_state` fills it from each scorecard's `tee_id`
+  when it differs from the field's. The phone card's own-tee pops are Track
+  A's v2.525.6 (`_si_by_band`).

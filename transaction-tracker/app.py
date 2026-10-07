@@ -5509,12 +5509,13 @@ def starter_sheet_page(event_id):
 @require_role("manager")
 def scorecards_page(event_id):
     """THE PRINTED SCORECARD (design-claude #890-#897, CA #898): ?layout=
-    3up|2up|2land, ?grouping=team|cart, ?qr=auto|off|preview, ?holes=9|18.
+    3up|2up|2land, ?grouping=team|cart, ?qr=on|off|auto|preview (on by
+    default, Kerry 2026-10-06), ?holes=9|18.
     A missing value shows the gaps instead of a card (#897-G)."""
     from email_parser.scorecards import build_scorecards
     sc = build_scorecards(event_id, request.args.get("layout", "3up"),
                           request.args.get("grouping", "team"),
-                          qr=request.args.get("qr", "auto"),
+                          qr=request.args.get("qr", "on"),
                           holes_override=request.args.get("holes") or None,
                           allow_gaps=request.args.get("allow_gaps") == "1")
     if not sc:
@@ -5551,7 +5552,7 @@ def scorecards_pdf(event_id):
     built = build_scorecards_pdf(_print_pack_render, event_id, app.static_folder, [{
         "layout": request.args.get("layout", "3up"),
         "grouping": request.args.get("grouping", "team"),
-        "qr": request.args.get("qr", "auto"),
+        "qr": request.args.get("qr", "on"),
         "holes": request.args.get("holes") or None,
         "allow_gaps": request.args.get("allow_gaps") == "1"}])
     if built.get("error"):
@@ -5630,6 +5631,21 @@ def api_send_print_pack(event_id):
     res = send_event_print_pack(built, to_address=(data.get("to") or "").strip() or None)
     res.update(parts=built["parts"], engine=built.get("engine"))
     return jsonify(res), (200 if res.get("sent") else 502)
+
+
+@app.route("/events/<int:event_id>/games-payouts")
+@require_role("manager")
+def games_payouts_page(event_id):
+    """Print-optimized GAMES & PAYOUTS sheet (CD #967 + Kerry's 9/29
+    amendments): every pot, place, entrant count and total read from the
+    event's own GAMES tab (run headless by page_probe), CTP holes from the
+    Proximity report, Stableford values from the scoring formulas, the HIO
+    pot from its ledger. One Letter page."""
+    from email_parser.games_sheet import build_games_sheet
+    gs = build_games_sheet(event_id)
+    if not gs:
+        return "Event not found", 404
+    return render_template("games_payouts.html", gs=gs)
 
 
 @app.route("/events/<int:event_id>/divisions-flights")
@@ -5843,11 +5859,15 @@ def api_get_pairings(event_id):
         # underneath each name in a foursome").
         _lap("standings")
         pair_counts = {}
+        rode_counts = {}
         try:
             from email_parser.database import roster_pair_counts
             _hconn = get_connection()
             try:
                 pair_counts = roster_pair_counts(
+                    _hconn, event_id, [d.get("name") for d in event_players])
+                from email_parser.database import roster_rode_counts
+                rode_counts = roster_rode_counts(
                     _hconn, event_id, [d.get("name") for d in event_players])
             finally:
                 _hconn.close()
@@ -5879,6 +5899,7 @@ def api_get_pairings(event_id):
             "slots_18": slots_18,
             "event_players": event_players,
             "pair_counts": pair_counts,
+            "rode_counts": rode_counts,
             "mp_matches": mp_matches,
             "partner_requests": partner_requests,
             "standings_points": standings_points,
@@ -8395,6 +8416,37 @@ def api_reverse_credit(item_id):
     if reverse_credit(item_id):
         return jsonify({"status": "ok"})
     return jsonify({"error": "Item not found or not in credited/transferred state."}), 400
+
+
+@app.route("/api/events/<int:event_id>/missing-handicaps")
+@require_role("manager")
+def api_event_missing_handicaps(event_id):
+    """Players on this event's roster with no index and no starting
+    handicap, with the fix per player (Kerry 2026-09-30, CoS #1064-1).
+    Read-only; the events page shows it above every tab."""
+    from email_parser.handicap_warnings import missing_handicaps
+    res = missing_handicaps(event_id)
+    return jsonify(res), (404 if res.get("error") else 200)
+
+
+@app.route("/api/events/<int:event_id>/nh", methods=["POST"])
+@require_role("manager")
+def api_event_set_nh(event_id):
+    """Mark (or clear) a player as N/H for this event (Kerry, "Good on both",
+    CoS #1078). Body: customer_id, nh (bool), optional note. Refused for a
+    player not on the roster or one who has a handicap. Logged."""
+    from email_parser.nh_flags import set_nh
+    body = request.get_json(silent=True) or {}
+    who = session.get("role") or "unknown"
+    if session.get("chapter"):
+        who += f" ({session.get('chapter')})"
+    try:
+        cid = int(body.get("customer_id"))
+    except (TypeError, ValueError):
+        return jsonify({"error": "customer_id is required"}), 400
+    res = set_nh(event_id, cid, bool(body.get("nh")), set_by=f"manager:{who}",
+                 note=(body.get("note") or "").strip())
+    return jsonify(res), (409 if res.get("refused") else 200)
 
 
 @app.route("/api/events/<int:event_id>/flights-board")
@@ -11108,24 +11160,34 @@ def api_season_contest_removals():
 
 
 # ── EVENTS LEADERBOARD (Kerry 2026-09-11, improvements lane) ──
-# BETA for admin + manager (Kerry 2026-09-23: "Still keep it in BETA for
-# Admin view, but add Manager view too"); members still wait (rule 3b) —
-# the payloads are PII-free by design, so the member flip is changing
-# these two role strings to "member".
+# BETA. Admin + manager from 2026-09-23; MEMBER tier from v2.523.4 (Kerry
+# 2026-10-02, CoS #1146-1: "release the leaderboard events results pages to
+# members today"). Visible, not announced; labelled Unofficial while Golf
+# Genius is the official scorer. v2.523.0: a live scorer's group link (?t=)
+# narrows the read to his own event (_board_read_ok).
 @app.route("/api/events-leaderboard")
-@require_role("manager")
 def api_events_leaderboard():
     from email_parser.database import get_events_leaderboard
-    return jsonify(get_events_leaderboard(
+    ok, only_ev = _board_read_ok()
+    if not ok:
+        return jsonify({"error": "Manager access required."}), 403 if session.get("role") else 401
+    d = get_events_leaderboard(
         chapter=request.args.get("chapter") or None,
-        year=request.args.get("year") or None))
+        year=request.args.get("year") or None)
+    if only_ev:
+        d["events"] = [e for e in d.get("events", []) if e.get("id") == only_ev]
+    return jsonify(d)
 
 
 @app.route("/api/events-leaderboard/event")
-@require_role("manager")
 def api_events_leaderboard_event():
     from email_parser.database import get_event_leaderboard
+    ok, only_ev = _board_read_ok()
+    if not ok:
+        return jsonify({"error": "Manager access required."}), 403 if session.get("role") else 401
     d = get_event_leaderboard(request.args.get("name", ""))
+    if d and only_ev and (d.get("event") or {}).get("id") != only_ev:
+        return jsonify({"error": "this link reads its own event only"}), 403
     return (jsonify(d), 200) if d else (jsonify({"error": "event not found"}), 404)
 
 
@@ -11474,10 +11536,65 @@ def _se_group_from_request(body=None):
     return gid, None
 
 
+@app.route("/Q/<code>")
+@app.route("/q/<code>")
+def score_entry_short(code):
+    """The printed QR's short link (Kerry 2026-10-06: less dense codes):
+    /Q/<group>.<version>.<sig12> -> the group's full signed scorer link."""
+    from email_parser.score_entry import resolve_short_code
+    tok = resolve_short_code(code)
+    if not tok:
+        return ("This scoring link is no longer active. Ask the event manager "
+                "for your group's link."), 404
+    return redirect(f"/member/score?t={tok}")
+
+
 @app.route("/member/score")
 def score_entry_page():
     # The page carries no data; its JS presents the link to /api/score-entry/*.
     return render_template("score_entry.html", member_mode=True)
+
+
+@app.route("/member/score/board")
+def score_entry_board_page():
+    """THE SCORER'S BOARD (v2.523.0, Kerry 2026-10-02: "The leaderboard that
+    they would go to would be JUST for that event"). His group link names
+    the event; the page is the EVENTS board narrowed to that one event,
+    opened, under the SCORING | LEADERBOARD toggle. A bad or closed link
+    falls back to the score page, which explains itself."""
+    from email_parser.score_entry import verify_group_token, event_of
+    tok = request.args.get("t") or ""
+    gid = verify_group_token(tok) if _score_entry_live() else None
+    if not gid or _se_event_gate("group", gid):
+        return render_template("score_entry.html", member_mode=True)
+    ev_id = event_of("group", gid)
+    with get_connection() as conn:
+        row = conn.execute("SELECT item_name FROM events WHERE id = ?", (ev_id,)).fetchone()
+    return render_template("contests.html", member_mode=True,
+                           MATCHPLAY_V2=_matchplay_v2_flag(),
+                           SOLO_EVENT=(row["item_name"] if row else ""), SOLO_T=tok)
+
+
+def _board_read_ok():
+    """Who may read the EVENTS board API: a manager+ session (as before), or
+    a live scorer's group link (?t=) for HIS OWN event only (v2.523.0).
+    Returns (ok, event_id) — event_id set when a link, not a role, let him in,
+    and the caller narrows the payload to that event.
+
+    MEMBER TIER since v2.523.4 (Kerry 2026-10-02, CoS #1146-1, his "Go" in
+    the Tracker Build session 10/3): everyone reads the board, the public
+    member tier included. A valid scorer link still narrows the payload to
+    his own event (the scorer's solo board); a manager session still sees
+    everything. The payloads are PII-free (names, scores, computed money)."""
+    if _ROLE_RANK.get(session.get("role"), 0) >= _ROLE_RANK["manager"]:
+        return True, None
+    tok = request.args.get("t") or ""
+    if tok and _score_entry_live():
+        from email_parser.score_entry import verify_group_token, event_of
+        gid = verify_group_token(tok)
+        if gid and not _se_event_gate("group", gid):
+            return True, event_of("group", gid)
+    return True, None
 
 
 @app.route("/api/score-entry/card")
@@ -12554,6 +12671,16 @@ def member_matchplay(chapter_slug):
     return render_template("contests.html", member_mode=True,
                            MATCHPLAY_V2=_matchplay_v2_flag(),
                            mp_landing=chapter)
+
+
+@app.route("/member/results")
+def member_results():
+    """Event results, member view (Kerry 2026-10-02, CoS #1146-1): a
+    distinct shareable URL that lands on the Events tab of the member
+    Leaderboard page; rendered in place like /member/lonestarcup."""
+    return render_template("contests.html", member_mode=True,
+                           MATCHPLAY_V2=_matchplay_v2_flag(),
+                           evlb_landing=True)
 
 
 @app.route("/member/handicaps")

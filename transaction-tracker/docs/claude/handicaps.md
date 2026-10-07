@@ -974,3 +974,58 @@ same as Comanche Trace's 27 holes."
   adjusted score. All players on the date (rule 3d). `;` separates
   because GG course names carry `|`. Dry run by default.
 - Guard: `test_nine_numbering.py`.
+
+## Missing-handicap warning (v2.522.49, Kerry 2026-09-30, CoS #1064-1 / #1067-3)
+
+Kerry: "There needs to be a warning to the manager that either a handicap
+index needs to be entered ... Robert just added them into GG without adding
+them to the Tracker and that's why there was a discrepancy."
+
+- **Rule:** a player on an event's roster (`_event_roster_rows`) with no entry
+  in `_roster_handicap_index_map` (the ONE index map, starting handicaps
+  included, locked to the event's as-of date) is missing.
+- **Cases and fixes** (`email_parser/handicap_warnings.py`):
+  - `new`: no rounds on file. Ask for their current index and enter 75% of
+    it as the starting handicap (the Handicap Standard's intro rule).
+  - `few_rounds`: rounds on file, not enough for a TGF index yet. Same fix.
+  - `no_identity`: a GG RSVP matching no customer. Link or add the player first.
+  With none they play N/H. The blind that stands in for an N/H player's money
+  is Side Games' build (#1064, #1067, #1068), and the warning says so.
+- **Surfaces:** an orange banner at the top of the open event on the events
+  page, above every tab (roster, PAIRINGS, GAMES), in the phone card too
+  (both layouts render through `renderDetailContent`). It shows for upcoming
+  events only, and for manager+ (`GET /api/events/<id>/missing-handicaps`).
+  Setting a starting handicap from the roster's orange dash drops the player
+  at once and re-reads the server.
+- **Reads:** MCP `get_missing_handicaps(event_id | days)` and bridge
+  `scoring-missing-hcp[:<event_id> | days=<n>]`. Without an event, every event
+  from today through N days ahead that has any: the Front Desk brief's read.
+- Guard: `test_missing_handicaps.py`. Read-only; nothing is written.
+
+### The N/H flag (v2.522.53, Kerry "Good on both", CoS #1078 / #1079)
+
+- **What:** a manager marks a player with no handicap as N/H for one event.
+  Their scores are still entered like anyone's; Side Games' engine plays them
+  at zero and a blind stands in for their money (#1073).
+- **Where:** a "Play N/H" button beside each name in the missing-handicap
+  banner; "Undo N/H" on the banner's "Playing N/H" line. The roster's HCP cell
+  reads "N/H" instead of the orange dash, on desktop and phone. Tapping it
+  still sets a starting handicap instead.
+- **Rules** (`email_parser/nh_flags.py`):
+  - it is refused for a player not on the roster, or for one who has a
+    handicap (N/H is for the missing case only);
+  - clearing it keeps the row (nh = 0, who and when);
+  - every change is logged to agent_action_log (`set_nh_flag`).
+- **Data:** table `event_nh_flags (event_id, customer_id, nh, set_by, set_at,
+  note)`, `migrations/0003`. **Side Games' engine reads only
+  `event_nh_players(conn, event_id)`.**
+- **Route:** `POST /api/events/<id>/nh` (manager+). The missing-handicap read
+  returns flagged players as `nh_players`, out of the warning count.
+
+### Vendor profiles are not people (v2.522.53, CoS #1075-3)
+
+`database.vendor_customer_ids(conn)` (a `customer_roles` 'vendor' row, or
+acquisition_source 'vendor') is the one test. The pairings roster
+(`_event_roster_rows`, so the missing-handicap warning too), `query_customers`
+(unless `include_vendors`) and `set_customer_field` (reported as
+`skipped_vendors`) leave them out.

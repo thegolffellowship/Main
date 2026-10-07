@@ -363,5 +363,112 @@ check("ONE TGF Orange: every orange mark reads --tgf-orange (#E87C3E), no other 
 
 check("the × in the hole cells is drawn with one-print-pixel arms", ".do i.g::before, .do i.g::after { height: 1px;" in _tpl)
 
+
+print("QR codes on the cards: a checkbox, checked by default (Kerry 2026-10-06)")
+import inspect as _insp
+check("build_scorecards defaults to qr='on'",
+      _insp.signature(scm.build_scorecards).parameters["qr"].default == "on")
+_q_off_event = scm.build_scorecards(3304, "3up", "team", db_path=DB)
+check("qr=on with live scoring off: no codes, and the log says why",
+      not any(c.get("qr") for c in _q_off_event["cards"])
+      and any("live scoring is off" in l for l in _q_off_event.get("log") or []), _q_off_event.get("log"))
+from email_parser import score_entry as _se
+from email_parser.database import set_app_setting as _sas
+_sas(_se.EVENTS_SETTING, "[3304]", db_path=DB)
+_q_on = scm.build_scorecards(3304, "3up", "team", db_path=DB)
+check("qr=on with live scoring on: every card carries its group's code (round seeded from PAIRINGS)",
+      _q_on["cards"] and all(c.get("qr") and c["qr"].get("url") for c in _q_on["cards"]),
+      [bool(c.get("qr")) for c in _q_on["cards"]])
+_h_on = env.get_template("scorecards.html").render(sc=_q_on)
+_long = _q_on["cards"][0]["qr"]["url"]
+_short = _se.short_score_url(_long)
+check("the printed QR carries the SHORT upper-case link (Kerry 10/6: less dense codes)",
+      "/Q/" in _short and _short == _short.upper() and len(_short) < len(_long) / 1.5, _short)
+import segno as _segno
+check("the short link encodes as a 29x29 code (version 3), not 41x41",
+      _segno.make(_short, error="m").version <= 3, _segno.make(_short, error="m").version)
+_code = _short.rsplit("/", 1)[1]
+_tok = _long.split("t=", 1)[1]
+check("/Q/<code> resolves to the group's full signed link", _se.resolve_short_code(_code, db_path=DB) == _tok)
+_bad = _code[:-1] + ("0" if _code[-1] != "0" else "1")
+check("a tampered or stale short code is refused", _se.resolve_short_code(_bad, db_path=DB) is None)
+_svg = _q_on["cards"][0]["qr"]["svg"]
+check("the QR svg scales to its box (viewBox, no fixed width) so it is never cropped",
+      "viewBox=" in _svg and 'width="' not in _svg.split(">")[0], _svg[:80])
+check("the page shows the QR checkbox, checked", 'id="qrToggle" checked' in _h_on)
+_q_none = scm.build_scorecards(3304, "3up", "team", qr="off", db_path=DB)
+check("qr=off: no codes, checkbox unchecked",
+      not any(c.get("qr") for c in _q_none["cards"])
+      and 'id="qrToggle" checked' not in env.get_template("scorecards.html").render(sc=_q_none))
+_sas(_se.EVENTS_SETTING, "", db_path=DB)
+
+print("one line per shared tee (Kerry 10/6, Avery Ranch)")
+# 65+ Red and Forward Red (L) on the SAME markers: identical yardage on the
+# played holes -> one row reading "65+ & Forward"; a different women's
+# rating prints beside the men's.
+_c = sqlite3.connect(DB)
+_c.execute("UPDATE course_tee_holes SET yardage = (SELECT m.yardage FROM course_tee_holes m "
+           "WHERE m.tee_id = ? AND m.hole_number = course_tee_holes.hole_number) WHERE tee_id = ?",
+           (tee_ids["65+"], tee_ids["Forward"]))
+_c.commit(); _c.close()
+_rows_was = db._event_tee_rows
+db._event_tee_rows = lambda conn, ev, legend: (
+    {t["band"]: {"rating": (36.0 if t["band"] == "Forward" else 35.1), "slope": 125, "par": 36,
+                 "tee_name": t["tee_name"]} for t in legend}, "front nine card", "")
+sm = scm.build_scorecards(3304, "3up", "team", qr="off", db_path=DB)
+check("three tee rows print, not four", len(sm["tees"]) == 3, [t["band_text"] for t in sm["tees"]])
+check("the shared row reads '65+ & Forward' and carries both bands",
+      sm["tees"][-1]["band_text"] == "65+ & Forward" and sm["tees"][-1]["bands"] == ["65+", "Forward"],
+      sm["tees"][-1])
+check("the folded band's own rating prints beside the host's",
+      sm["tees"][-1]["rating"] == 35.1 and sm["tees"][-1].get("rating_extra") == "36.0/125", sm["tees"][-1])
+check("the Forward player still prints with her own chip and dots",
+      any(r["tee_code"] == "R-L" for c in sm["cards"] for r in c["rows"]) and sm["gaps"] == [], sm["gaps"])
+_c = sqlite3.connect(DB)
+_c.execute("UPDATE course_tee_holes SET yardage = 300 + hole_number * 2 WHERE tee_id = ?", (tee_ids["Forward"],))
+_c.commit(); _c.close()
+db._event_tee_rows = _rows_was
+sm = scm.build_scorecards(3304, "3up", "team", qr="off", db_path=DB)
+check("different yardage on the same colour keeps two rows", len(sm["tees"]) == 4)
+
+print("a second SI row when a player's tee carries its own stroke index (Kerry 2026-10-06)")
+_c = sqlite3.connect(DB)
+for _h in range(1, 19):        # the women's tee: its own stroke index on every hole
+    _c.execute("UPDATE course_tee_holes SET stroke_index = ? WHERE tee_id = ? AND hole_number = ?",
+               (19 - _h, tee_ids["Forward"], _h))
+_c.commit(); _c.close()
+_sx2 = scm.build_scorecards(3304, "3up", "team", qr="off", db_path=DB)
+_with = [c for c in _sx2["cards"] if any(r.get("band") == "Forward" for r in c["rows"])]
+_without = [c for c in _sx2["cards"] if not any(r.get("band") == "Forward" for r in c["rows"])]
+check("a card with a Forward player carries one extra SI row, labelled with her tee",
+      _with and all(len(c["si_extra"]) == 1 and c["si_extra"][0]["label"] for c in _with),
+      [c.get("si_extra") for c in _with])
+check("her dots follow HER tee's stroke index (USGA)",
+      all(r["si_by_hole"] == c["si_extra"][0]["si"] for c in _with for r in c["rows"]
+          if r.get("band") == "Forward"))
+check("a card without one keeps a single SI row", all(not c["si_extra"] for c in _without))
+_hx = env.get_template("scorecards.html").render(sc=_sx2)
+check("the page prints the extra row, labelled", 'class="hcp si-extra"' in _hx and "SI · " in _hx)
+if exe and os.getenv("SKIP_PDF") != "1":
+    with sync_playwright() as pw:
+        b = pw.chromium.launch(executable_path=exe, headless=False, args=["--headless=new", "--no-sandbox", "--disable-gpu"])
+        pg = b.new_page()
+        for lay in ("3up", "2up", "2land"):
+            for hk in ("9", "18"):
+                s_ = scm.build_scorecards(3304, lay, "team", qr="off", holes_override=hk, db_path=DB)
+                pg.set_content(env.get_template("scorecards.html").render(sc=s_).replace(
+                    'src="/static/', f'src="file://{static}/'), wait_until="load")
+                over = pg.evaluate("""() => [...document.querySelectorAll('.card')].filter(
+                    c => c.scrollHeight > c.clientHeight + 1).length""")
+                pages = len(PdfReader(io.BytesIO(pg.pdf(prefer_css_page_size=True, print_background=True))).pages)
+                check(f"with the extra SI row, {lay}/{hk}: one page per sheet, no card overflows",
+                      pages == len(s_["sheets"]) and over == 0, f"pages {pages}, over {over}")
+        b.close()
+_c = sqlite3.connect(DB)
+for _h in range(1, 19):
+    _c.execute("UPDATE course_tee_holes SET stroke_index = ? WHERE tee_id = ? AND hole_number = ?",
+               ((2 * _h - 1) if _h <= 9 else 2 * (_h - 9), tee_ids["Forward"], _h))
+_c.commit(); _c.close()
+
 print(f"\n{len(FAILURES)} failure(s)")
 sys.exit(1 if FAILURES else 0)

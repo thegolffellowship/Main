@@ -172,6 +172,19 @@ for pos, (cid, f, l, _) in enumerate(players[:4]):
     c.execute("INSERT INTO event_pairings (event_id, holes, group_num, slot_label, player_name, cart_pos, customer_id) VALUES (?, '9', 1, '1A', ?, ?, ?)", (EV, f"{f} {l}", pos + 1, cid))
 c.commit()
 
+# A burst of "database is locked" (a writer committing) must not cost the
+# cache: the read backs off and tries again instead of returning "nosig".
+_real_connect, _fails = db._connect, {"n": 0}
+def _flaky_connect(path=None):
+    if _fails["n"] < 2:
+        _fails["n"] += 1
+        raise sqlite3.OperationalError("database is locked")
+    return _real_connect(path)
+db._connect = _flaky_connect
+_sig_after_lock = db._hcp_players_signature(tmp)
+db._connect = _real_connect
+check("a signature read that hits two 'database is locked' errors in a row still returns a real signature, not 'nosig'",
+      _fails["n"] == 2 and _sig_after_lock and _sig_after_lock[0] != "nosig", str(_sig_after_lock)[:120])
 sig1, sig2 = db._hcp_players_signature(tmp), db._hcp_players_signature(tmp)
 check("the handicap cache signature is STABLE between two reads (v2.484.3's never was — hcp_exclude is on scoring_rounds)",
       sig1 == sig2 and sig1[0] != "nosig", str(sig1))

@@ -227,6 +227,23 @@ s = fl.select_game("individual_net", "Individual Net", "NET", net14 + [P(200, "X
 check("a player with no index is listed apart, never dropped into a flight",
       [u["name"] for u in s["unflighted"]] == ["X"] and any("no handicap index" in n for n in s["notes"]))
 
+print("\n== CUSTOM placement of a no-index player (Kerry 2026-09-30, 3317 to match GG) ==")
+spec = {"mode": "custom", "base": "equal_size", "moves": {"200": 1}}
+s = fl.select_game("individual_net", "Individual Net", "NET", net14 + [P(200, "X", None)], "9", M9[14],
+                   cfg["individual_net"], mode=spec)
+check("a move PLACES a no-index player in the named flight; he leaves the unflighted list",
+      not s["unflighted"] and any(m["customer_id"] == 200 for m in s["flights"][0]["members"])
+      and not any("no handicap index" in n for n in s["notes"]), str(s["unflighted"]))
+check("...the board says so in words, and the game is CUSTOM",
+      s["mode"] == "custom" and "X (no index) placed in Flight 1" in s["custom_note"], s["custom_note"])
+check("...and the flight's label is read off the indexed members only (no 99.0)",
+      "99" not in s["flights"][0]["label"], s["flights"][0]["label"])
+spec = {"mode": "custom", "base": "equal_size", "moves": {"200": 9}}
+s = fl.select_game("individual_net", "Individual Net", "NET", net14 + [P(200, "X", None)], "9", M9[14],
+                   cfg["individual_net"], mode=spec)
+check("a placement naming a flight that isn't on the board places nobody",
+      [u["name"] for u in s["unflighted"]] == ["X"])
+
 print("\n== CUSTOM flights: a name dragged to another flight (Kerry 2026-09-22 #599) ==")
 # Brackenridge Skins, 14 gross buyers → 2 flights at 12.0 by HCP: 4 / 10.
 # Kerry: "I'm thinking for instance, of moving Scott Marroquin at 12.4 to

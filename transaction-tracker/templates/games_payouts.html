@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ gs.event.file_stub }}-GamesPayouts</title>
+  <link href="https://fonts.googleapis.com/css2?family=Bitter:wght@700;800&display=swap" rel="stylesheet">
+  {#- GAMES & PAYOUTS (CD #967 + Kerry's 9/29 amendments). Every figure comes
+      from email_parser/games_sheet.py, which reads the GAMES tab itself; the
+      template only lays it out. One Letter sheet: 816x1056 at 96 dpi. -#}
+  <style>
+    :root { --ink:#1B1B1B; --black:#111; --orange:#E87C3E; --orange-dk:#C05B21; --orange-tx:#9A5B2E;
+      --orange-bg:#FBEFE4; --warm:#F6F4F1; --g4:#4B5563; --g5:#6B7280; --g3:#9CA3AF; --g2:#D1D5DB;
+      --g1:#E5E7EB; --navy:#002868; --disp:"Bitter", Georgia, serif; --body:"Helvetica Neue", Arial, sans-serif; }
+    * { box-sizing: border-box; }
+    @page { size: letter portrait; margin: 0; }
+    html, body, .sheet * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    body { margin: 0; background: #EFEFEC; color: var(--ink); font-family: var(--body); }
+    .sheet { width: 816px; height: 1056px; margin: 0 auto 24px; background: #fff; border: 1px solid #C9C9C4;
+      box-shadow: 0 2px 10px rgba(0,0,0,.08); padding: 44px 48px 36px; display: flex; flex-direction: column;
+      overflow: hidden; font-variant-numeric: tabular-nums; }
+    @media print { body { background: #fff; } .sheet { margin: 0; border: 0; box-shadow: none; } }
+    @media (max-width: 560px) { .wrap { overflow-x: auto; } }
+
+    .hd { display: flex; align-items: center; gap: 16px; padding-bottom: 10px; border-bottom: 2.5px solid var(--orange); }
+    .seal { display: flex; flex-direction: column; align-items: center; gap: 3px; padding-right: 16px;
+      border-right: 2px solid var(--black); }
+    .seal img { height: 58px; width: auto; display: block; }
+    .seal span { font-family: var(--disp); font-weight: 700; font-size: 12px; letter-spacing: 1.5px;
+      text-transform: uppercase; white-space: nowrap; }
+    .mid { flex: 1; min-width: 0; }
+    .eyebrow { font-family: var(--disp); font-weight: 700; font-size: 13px; letter-spacing: 2px; color: var(--orange); }
+    .course { font-family: var(--disp); font-weight: 800; font-size: 31px; line-height: 1.05; margin: 2px 0;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .meta { font-size: 13px; color: var(--g4); }
+    .rt { text-align: right; }
+    .rt .lbl { font-size: 11px; font-weight: 700; letter-spacing: 1.5px; color: var(--g5); }
+    .rt .t { font-family: var(--disp); font-weight: 700; font-size: 29px; line-height: 1.1; white-space: nowrap; }
+
+    .cards { display: grid; grid-template-columns: 1.25fr 1fr 1fr; gap: 8px; margin-top: 12px; }
+    .card { padding: 8px 12px; border-top: 3px solid var(--ink); background: var(--warm); }
+    .card .l { font-size: 11px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; color: var(--g5); }
+    .card .v { font-family: var(--disp); font-weight: 800; font-size: 29px; line-height: 1.15; }
+    .card .c { font-size: 12px; color: var(--g5); }
+    .card.fund { background: var(--orange-bg); border-top-color: var(--orange); }
+    .card.fund .l, .card.fund .c { color: var(--orange-tx); }
+    .card.fund .v { font-size: 34px; color: var(--orange-dk); }
+    .f1 b { font-family: var(--disp); font-weight: 800; font-size: 29px; line-height: 1.15; }
+    .f2 { display: flex; align-items: baseline; gap: 12px; }
+    .f2 i { font-family: var(--disp); font-weight: 700; font-size: 20px; font-style: normal; }
+    .f1 u, .f2 u { text-decoration: none; font-size: 12px; color: var(--g5); margin-left: 3px; }
+
+    .bar { display: flex; height: 22px; margin-top: 8px; }
+    .bar span { display: flex; align-items: center; padding-left: 6px; font-size: 11.5px; font-weight: 700;
+      letter-spacing: .3px; white-space: nowrap; overflow: hidden; color: #fff; }
+    .bar .team { background: #E87C3E; } .bar .ctp { background: #F3B98F; color: #7A3E14; }
+    .bar .net { background: #1B1B1B; } .bar .gross { background: #6B7280; }
+
+    .grid { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: minmax(0, 1fr); gap: 14px; margin-top: 14px; flex: 1; min-height: 0; }
+    .col { display: flex; flex-direction: column; gap: 12px; min-width: 0; min-height: 0; overflow: hidden; }
+    .sec { border: 1px solid var(--g1); }
+    .sh { background: var(--black); padding: 5px 10px; display: flex; justify-content: space-between; align-items: baseline; }
+    .sh span { font-family: var(--disp); font-weight: 700; font-size: 13px; letter-spacing: 1.5px; color: #fff; text-transform: uppercase; }
+    .sh b { font-family: var(--disp); font-weight: 700; font-size: 16px; color: var(--orange); }
+    .ss { background: var(--warm); padding: 4px 10px; font-size: 12px; color: var(--g5); }
+    .g { padding: 8px 10px; border-bottom: 1px solid var(--g1); }
+    .g:last-child { border-bottom: 0; }
+    .r1 { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+    .nm { font-family: var(--disp); font-weight: 700; font-size: 16px; }
+    .pot { font-size: 15px; font-weight: 700; white-space: nowrap; }
+    .pot small { font-size: 12px; color: var(--g5); font-weight: 400; }
+    .rule { font-size: 12px; color: var(--g4); margin: 2px 0 6px; line-height: 1.35; }
+    .pl { display: grid; grid-template-columns: 74px 1fr 72px; gap: 8px; align-items: end; height: 24px; font-size: 13px; }
+    .pl .a { font-weight: 700; color: var(--g4); white-space: nowrap; }
+    .pl .w { height: 18px; border-bottom: 1px solid var(--g3); font-size: 11px; color: var(--g3);
+      display: flex; align-items: flex-end; padding-bottom: 1px; }
+    .pl .m { font-weight: 700; text-align: right; white-space: nowrap; }
+    .pl.nf { margin-top: 4px; }
+    .g.off, .g.off .nm, .g.off .rule { color: var(--g3); }
+    .g.off .nm { font-size: 15px; }
+    .g.off .rule { margin-bottom: 0; }
+    .tag { border: 1px solid var(--g2); font-size: 11px; font-weight: 700; letter-spacing: 1px; padding: 2px 7px; color: var(--g3); }
+    .sft { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .sft td { padding: 2px 10px; border-bottom: 1px solid var(--g1); white-space: normal; }
+    .sft td:last-child { text-align: right; font-weight: 700; width: 40px; }
+    .sft tr:last-child td { border-bottom: 0; }
+    .sft .hio1 td { background: var(--orange-bg); font-weight: 700; }
+
+    .hio { margin-top: 12px; background: var(--navy); border-top: 3px solid var(--orange); padding: 9px 14px;
+      display: flex; align-items: center; gap: 14px; color: #fff; }
+    .hio .hl { font-size: 11px; font-weight: 700; letter-spacing: 1.5px; color: #9DB4D6; white-space: nowrap; }
+    .hio .hv { font-family: var(--disp); font-weight: 800; font-size: 29px; line-height: 1.1; }
+    .hio .hd2 { flex: 1; font-size: 13px; color: #C9D6EA; line-height: 1.5; border-left: 1px solid #33517F; padding-left: 14px; }
+    .ft { margin-top: 12px; border-top: 1px solid var(--g1); padding-top: 6px; display: flex;
+      justify-content: space-between; gap: 12px; font-size: 10.5px; white-space: nowrap; color: var(--g5); }
+    .ft b { color: var(--g4); } .ft strong { color: var(--ink); }
+    .ft .bad strong { color: #B91C1C; }
+    /* TIGHT (a long 18-hole field): less air, never smaller type. */
+    .sheet.tight .col { gap: 8px; }
+    .sheet.tight .g { padding: 5px 10px; }
+    .sheet.tight .rule { margin: 1px 0 3px; }
+    .sheet.tight .pl { height: 20px; }
+    .sheet.tight .pl .w { height: 15px; }
+    .sheet.tight .pl.nf { margin-top: 2px; }
+    .sheet.tight .ln2 { display: grid; grid-template-columns: 1fr 1fr; column-gap: 14px; }
+    .sheet.tight .ln2 .pl { grid-template-columns: 58px 1fr 44px; gap: 6px; }
+    .tag2 { margin-top: 3px; font-size: 10px; color: var(--g3); }
+    .warn { width: 816px; max-width: 100%; margin: 0 auto 10px; padding: 8px 12px; background: #FEF3C7;
+      border: 1px solid #F59E0B; font: 13px var(--body); color: #78350F; }
+    #overflowWarn { display: none; } #overflowWarn.on { display: block; }
+    @media print { .warn, #overflowWarn.on { display: none; } }
+  </style>
+</head>
+<body>
+{% with rb_event_id=gs.event.id, rb_file=(gs.event.file_stub or "") ~ "-GamesPayouts", rb_width="816px" %}{% include "_report_bar.html" %}{% endwith %}
+{% if gs.error %}
+  <div class="warn">Games &amp; Payouts can't print for this event: {{ gs.error }}</div>
+{% else %}
+{% if gs.warnings %}<div class="warn noprint">{% for w in gs.warnings %}{{ w }}{% if not loop.last %}<br>{% endif %}{% endfor %}</div>{% endif %}
+
+{%- macro game_block(g) -%}
+  {% if g.off %}
+  <div class="g off">
+    <div class="r1"><span class="nm">{{ g.name }}</span><span class="tag">NO GAME</span></div>
+    <div class="rule">{{ g.rule }}</div>
+  </div>
+  {% else %}
+  <div class="g">
+    <div class="r1"><span class="nm">{{ g.name }}</span><span class="pot">{{ g.pot }}{% if g.per_flight %}<small> / flight</small>{% endif %}</span></div>
+    <div class="rule">{{ g.rule }}</div>
+    <div class="lines{{ ' ln2' if g.two_up else '' }}">
+    {% for l in g.lines %}
+    <div class="pl{{ ' nf' if l.new_flight else '' }}"><span class="a">{{ l.label }}</span><span class="w">{{ l.hint or '' }}</span><span class="m">{{ l.amount }}</span></div>
+    {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+{%- endmacro -%}
+
+{%- macro section(s) -%}
+  {% if s %}
+  <section class="sec">
+    <div class="sh"><span>{{ s.title }}</span><b>{{ s.total }}</b></div>
+    <div class="ss">{{ s.strip }}</div>
+    {% for g in s.games %}{{ game_block(g) }}{% endfor %}
+  </section>
+  {% endif %}
+{%- endmacro -%}
+
+<div class="wrap"><main class="sheet">
+  <header class="hd">
+    <div class="seal"><img src="/static/tgf-logo-r.svg" alt="The Golf Fellowship"><span>{{ gs.event.chapter }}</span></div>
+    <div class="mid">
+      <div class="eyebrow">GAMES &amp; PAYOUTS</div>
+      <div class="course">{{ gs.event.course }}</div>
+      <div class="meta">{{ gs.event.meta }}</div>
+    </div>
+    <div class="rt"><div class="lbl">{{ gs.event.start_type }}</div><div class="t">{{ gs.event.start_time }}</div></div>
+  </header>
+
+  <section class="cards">
+    <div class="card fund"><div class="l">Total prize fund</div><div class="v">{{ gs.fund }}</div><div class="c">Every dollar goes back to players</div></div>
+    <div class="card"><div class="l">Field</div>
+      <div class="f1"><b>{{ gs.field.players }}</b><u>players</u></div>
+      <div class="f2"><span><i>{{ gs.field.net }}</i><u>net</u></span><span><i>{{ gs.field.gross }}</i><u>gross</u></span></div>
+    </div>
+    <div class="card"><div class="l">One player could win</div><div class="v">{{ gs.mwp }}</div><div class="c">Max if you're in every game</div></div>
+  </section>
+
+  <div class="bar" role="img" aria-label="{% for b in gs.bar %}{{ b.label }}{% if not loop.last %}, {% endif %}{% endfor %}">
+    {% for b in gs.bar %}<span class="{{ b.key }}" style="width:{{ b.pct }}%">{{ b.label }}</span>{% endfor %}
+  </div>
+
+  <div class="grid">
+    <div class="col" id="colL">
+      {{ section(gs.sections.included) }}
+      <div id="grossSec">{{ section(gs.sections.gross) }}</div>
+    </div>
+    <div class="col" id="colR">
+      {{ section(gs.sections.net) }}
+      <section class="sec">
+        <div class="sh"><span>Net Stableford Points</span></div>
+        <div class="ss">How MVP is scored, per hole, on your net score.{% if gs.stableford.championship %} Championship table.{% endif %}</div>
+        <table class="sft">
+          {% for r in gs.stableford.rows %}<tr><td>{{ r.label }}</td><td>{{ r.pts|string|replace('-', '−') }}</td></tr>{% endfor %}
+          {% if gs.stableford.hio is not none %}<tr class="hio1"><td>Hole-in-one (actual ace)</td><td>{{ gs.stableford.hio }}</td></tr>{% endif %}
+        </table>
+      </section>
+    </div>
+  </div>
+  <div class="warn noprint" id="overflowWarn"></div>
+
+  {% if gs.hio and gs.hio.pot is not none %}
+  <section class="hio">
+    <svg width="30" height="30" viewBox="0 0 32 32" aria-hidden="true"><path d="M9 5h14v6a7 7 0 0 1-14 0z" fill="none" stroke="#E87C3E" stroke-width="2.2" stroke-linejoin="round"/><path d="M9 7H5v2a4 4 0 0 0 4 4M23 7h4v2a4 4 0 0 1-4 4" fill="none" stroke="#E87C3E" stroke-width="2"/><path d="M16 18v5M11 27h10M13 23h6v4h-6z" fill="none" stroke="#E87C3E" stroke-width="2.2" stroke-linejoin="round"/><path d="M16 6.8l1.1 2.3 2.5.3-1.8 1.7.5 2.5-2.3-1.2-2.3 1.2.5-2.5-1.8-1.7 2.5-.3z" fill="#E87C3E"/></svg>
+    <div><div class="hl">HOLE-IN-ONE POT · MEMBERS</div><div class="hv">${{ '{:,.0f}'.format(gs.hio.pot) }}</div></div>
+    <div class="hd2">{% if gs.hio.today %}+${{ '{:,.0f}'.format(gs.hio.today) }} added today{% if gs.hio.parts|length > 1 %} ({% for p in gs.hio.parts %}{{ p.chapter }} ${{ '{:,.0f}'.format(p.amount) }}{% if not loop.last %} + {% endif %}{% endfor %}){% endif %}. {% endif %}One pot shared across all TGF cities. Every TGF member is eligible.</div>
+  </section>
+  {% endif %}
+
+  <footer>
+    <div class="ft"><span class="{{ '' if gs.pot_check.ok else 'bad' }}"><b>Pot check</b> {% for p in gs.pot_check.parts %}{{ p[0] }} {{ p[1] }}{% if not loop.last %} + {% endif %}{% endfor %} = <strong>{{ gs.pot_check.total }}</strong></span><span>Payouts final when FINAL RESULTS email goes out · Paid by Venmo Wednesday</span></div>
+    <div class="tag2">The Golf Fellowship · Connect. Compete. Celebrate.</div>
+  </footer>
+</main></div>
+<script>
+  // COLUMNS FLOW, TYPE NEVER SHRINKS (CD #967 §5). Left = Included + Gross,
+  // right = Net + Stableford. When the left runs past the sheet (an 18-hole
+  // field with four CTPs and three gross flights), Gross moves under the
+  // Stableford box. Still too long: say so on screen, never print clipped.
+  (function () {
+    function fits(c) { return c.scrollHeight <= c.clientHeight + 1; }
+    var laid = false;
+    function attempt(tight) {
+      var S = document.querySelector(".sheet"), L = document.getElementById("colL"),
+          R = document.getElementById("colR"), G = document.getElementById("grossSec");
+      S.classList.toggle("tight", tight);
+      // reset: Gross back whole under Included, no continuation section
+      var old = document.getElementById("grossCont");
+      var sec = G.querySelector(".sec");
+      if (old) { old.querySelectorAll(".g").forEach(function (g) { sec.appendChild(g); }); old.remove(); }
+      if (G.parentNode !== L) L.appendChild(G);
+      if (!fits(L) && sec) {
+        // Carry the Gross games over one block at a time, last first, into a
+        // continuation section under the Stableford box.
+        var cont = sec.cloneNode(false); cont.id = "grossCont";
+        var head = sec.querySelector(".sh").cloneNode(true);
+        head.querySelector("span").textContent += " (cont.)";
+        cont.appendChild(head); R.appendChild(cont);
+        var games = sec.querySelectorAll(".g");
+        for (var k = games.length - 1; k >= 0 && !fits(L); k--) cont.insertBefore(games[k], head.nextSibling);
+        if (!cont.querySelector(".g")) cont.remove();
+      }
+      return fits(L) && fits(R);
+    }
+    function lay() {
+      if (laid || !document.getElementById("colL")) return;
+      laid = true;
+      var ok = attempt(false) || attempt(true);
+      document.body.setAttribute("data-fits", ok ? "1" : "0");
+      if (!ok) { var W = document.getElementById("overflowWarn"); W.classList.add("on");
+        W.textContent = "This sheet runs longer than one page; a section is cut off. Tell Tracker Build before printing."; }
+    }
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(lay); else lay();
+    window.addEventListener("load", lay);
+  })();
+</script>
+{% endif %}
+</body>
+</html>

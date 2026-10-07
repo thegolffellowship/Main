@@ -42,6 +42,23 @@ db.save_event_pairings(9202, {"9": [{"group_num": 1, "slot_label": "5:00 PM", "p
     {"name": "P9 Test9202", "cart_pos": 1, "customer_id": 800009, "tee_choice": "<50", "handicap_index": None},
     {"name": "P10 Test9202", "cart_pos": 2, "customer_id": 800010, "tee_choice": "<50", "handicap_index": None}]}]})
 
+# The two seated players carry a starting handicap: with NO handicap at all
+# they would be N/H and their own seats would take blinds too (pairings.md
+# 15i, v2.522.53). This check is about the OPEN seats.
+import sqlite3 as _sq3, time as _tm
+for _ in range(40):                # starting_handicap_18 is added lazily; its
+    with _sq3.connect(DB, timeout=30) as _cc:   # ALTER can lose to a boot writer
+        if "starting_handicap_18" in {r[1] for r in _cc.execute("PRAGMA table_info(customers)")}:
+            break
+        try:
+            for _col, _ddl in (("starting_handicap_18", "REAL"), ("starting_handicap_set_at", "TEXT"),
+                               ("starting_handicap_set_by", "TEXT"), ("starting_handicap_note", "TEXT")):
+                if _col not in {r[1] for r in _cc.execute("PRAGMA table_info(customers)")}:
+                    _cc.execute(f"ALTER TABLE customers ADD COLUMN {_col} {_ddl}")
+        except _sq3.OperationalError:
+            _tm.sleep(0.5)
+for _cid in (800009, 800010):
+    db.set_starting_handicap(_cid, 15.0, set_by="test", db_path=DB)
 # One Teravista player on the roster but NOT seated, with an established
 # TGF handicap: the only card the routine may draw as a blind.
 with db._connect(DB) as conn:

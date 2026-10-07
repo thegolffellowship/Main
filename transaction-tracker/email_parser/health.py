@@ -70,6 +70,16 @@ RULES = {
 
 
 # ── the report ──────────────────────────────────────────────────────────
+def _replication_status(db_path) -> dict:
+    """Litestream -> R2 state for the digest (email_parser/replication.py);
+    a status read must never break the report."""
+    try:
+        from . import replication
+        return replication.status(db_path)
+    except Exception as e:  # noqa: BLE001
+        return {"configured": False, "error": f"{type(e).__name__}: {e}"[:200]}
+
+
 def _archive_status(db_path) -> dict:
     """The GG raw archive's own file (gg_archive.py) — mode, bytes, rows."""
     try:
@@ -252,6 +262,7 @@ def build_health_report(days: float = 1, db_path=None, record_size: bool = False
         "cpus": os.cpu_count(),
         "hcp_cache": _hcp_cache_stats(),
         "provider_alerts": _provider_alerts(db_path),
+        "replication": _replication_status(db_path),
         "expense_unpromoted": _expense_unpromoted(db_path),
         "sample_count": sum(r["count"] for k in summary for r in summary[k]),
     }
@@ -391,6 +402,41 @@ def find(report: dict) -> list[dict]:
         out.append({"severity": "medium", "key": "log_errors",
                     "text": f"{n_err} error/slow rows in the agent action log: {top}"})
     sev = {"high": 0, "medium": 1, "info": 2}
+    rep = report.get("replication") or {}
+    if rep:
+        if not rep.get("configured"):
+            out.append({"severity": "info", "key": "replication_off", "file": False,
+                        "text": "off-site replication is not configured"
+                                + (f" (missing {', '.join(rep['missing'])})" if rep.get("missing") else "")
+                                + " — hard gate (a) of #731 stays open"})
+        elif not rep.get("binary"):
+            out.append({"severity": "high", "key": "replication_no_binary",
+                        "text": "replication is configured but there is no litestream binary on the server"})
+        elif not rep.get("running"):
+            out.append({"severity": "high", "key": "replication_down",
+                        "text": "replication is configured but no litestream process is running"})
+        elif rep.get("error"):
+            out.append({"severity": "medium", "key": "replication_error",
+                        "text": f"could not read the replica's state: {rep['error']}"})
+        elif not rep.get("generations") or rep.get("lag_s") is None:
+            out.append({"severity": "medium", "key": "replication_no_generation",
+                        "text": "litestream is running but the replica holds no generation yet"})
+        elif rep["lag_s"] > 300:
+            out.append({"severity": "high", "key": "replication_lag",
+                        "text": f"the replica is {int(rep['lag_s'])} s behind the live database (limit 300 s)"})
+        arc = rep.get("archive")
+        if arc is not None and not any(f["key"].startswith("replication") for f in out):
+            if arc.get("error"):
+                out.append({"severity": "medium", "key": "replication_archive_error",
+                            "text": f"could not read the GG archive replica's state: {arc['error']}"})
+            elif not arc.get("generations"):
+                out.append({"severity": "medium", "key": "replication_archive_missing",
+                            "text": "the GG archive file has no replica generation yet "
+                                    "(its first 400 MB upload can take a while; a finding only if it persists)"})
+            elif arc.get("lag_s") is not None and arc["lag_s"] > 3600:
+                out.append({"severity": "medium", "key": "replication_archive_lag",
+                            "text": f"the GG archive replica is {int(arc['lag_s'])} s behind (limit 3600 s)"})
+
     out.sort(key=lambda f: sev[f["severity"]])
     return out
 
@@ -463,6 +509,22 @@ def render_markdown(report: dict) -> str:
     pr = report["probe"]
     L.append(f"**PROBE now:** connect {pr['connect_ms']} ms · pragma {pr['pragma_ms']} ms · "
              f"read {pr['read_ms']} ms · load1 {report.get('load1')} on {report.get('cpus')} cpu(s)")
+    rep = report.get("replication") or {}
+    if rep.get("configured"):
+        if rep.get("running") and rep.get("lag_s") is not None:
+            arc = rep.get("archive")
+            L.append(f"**REPLICATION** streaming to R2: lag {rep['lag_s']:.1f} s, "
+                     f"{rep.get('generations')} generation(s), latest write {rep.get('latest_end')}"
+                     + ("" if arc is None else
+                        f"; GG archive file: {arc['generations']} generation(s)"
+                        + (f", lag {arc['lag_s']:.0f} s" if arc.get("lag_s") is not None else ", NOT replicated yet")))
+        else:
+            L.append("**REPLICATION** configured but NOT healthy: "
+                     + ("no litestream binary" if not rep.get("binary") else
+                        "litestream not running" if not rep.get("running") else
+                        (rep.get("error") or "no generation in the replica yet")))
+    else:
+        L.append("**REPLICATION** not configured")
     hc = report["hcp_cache"]
     L.append(f"**HANDICAP CACHE** since boot: {hc['hits']} hits / {hc['misses']} misses"
              + (f" ({hc['hit_rate']*100:.0f}%)" if hc.get("hit_rate") is not None else ""))

@@ -210,6 +210,9 @@ def derived_label(members: list[dict]) -> str:
     """P2-6: the label is the flight's ACTUAL membership ('8.1–14.3'),
     never a typed band. A solo flight prints its one index; an empty band
     prints nothing rather than a range it does not hold."""
+    # A player placed by hand with no index (CUSTOM, below) carries no
+    # number, so the range is read off the indexed members only.
+    members = [m for m in members if m.get("index") is not None]
     if not members:
         return "—"
     lo, hi = _idx(members[0]), _idx(members[-1])
@@ -453,12 +456,37 @@ def _apply_moves(groups: list[list[dict]], moves: dict) -> list[dict]:
     return applied
 
 
+def _place_unindexed(groups: list[list[dict]], unknown: list[dict],
+                     moves: dict) -> list[dict]:
+    """A CUSTOM move may also PLACE a player the cut could not flight
+    because he has no handicap index (Kerry 2026-09-30: "Update our Flights
+    on the tracker" to match what Golf Genius actually flighted). The move
+    names the flight by customer_id like any other; the player leaves the
+    unflighted list. Returns the placements, from_flight None."""
+    placed: list[dict] = []
+    if not moves or not groups:
+        return placed
+    for p in list(unknown):
+        cid = p.get("customer_id")
+        if cid is None or int(cid) not in moves:
+            continue
+        to = moves[int(cid)]
+        if not 1 <= to <= len(groups):
+            continue
+        unknown.remove(p)
+        groups[to - 1].append(p)
+        placed.append({**_member(p), "from_flight": None, "to_flight": to})
+    return placed
+
+
 def custom_note(applied: list[dict]) -> str:
     """The words the board and the printed page say for a CUSTOM cut."""
     if not applied:
         return ""
-    parts = [f"{m['name']} ({m['index_text']}) moved from Flight {m['from_flight']} "
-             f"to Flight {m['to_flight']}" for m in applied]
+    parts = [(f"{m['name']} (no index) placed in Flight {m['to_flight']}"
+              if m.get("from_flight") is None else
+              f"{m['name']} ({m['index_text']}) moved from Flight {m['from_flight']} "
+              f"to Flight {m['to_flight']}") for m in applied]
     return (f"Custom flights — {len(applied)} move{'s' if len(applied) != 1 else ''} by hand "
             f"on top of the base cut: " + "; ".join(parts) + ".")
 
@@ -545,10 +573,6 @@ def select_game(game: str, label: str, kind: str, field: list[dict],
     sel["flight_count"], sel["count_source"] = count, src
     known = [p for p in field if p.get("index") is not None]
     unknown = [p for p in field if p.get("index") is None]
-    if unknown:
-        sel["notes"].append(
-            f"{len(unknown)} player(s) have no handicap index and cannot be "
-            f"flighted: {', '.join(sorted(p.get('name') or '' for p in unknown))}.")
     if use_mode == "equal_size":
         groups, edges, notes = _net_plan(known, count, r, game=game)
         sel["edges"], sel["edges_source"] = edges, "even split (field cut down the middle; edge = next flight's lowest index)"
@@ -566,6 +590,11 @@ def select_game(game: str, label: str, kind: str, field: list[dict],
         groups = cut_by_edges(known, edges)
     # CUSTOM (#599): the base cut placed everyone; now the moves by hand.
     applied = _apply_moves(groups, moves)
+    applied += _place_unindexed(groups, unknown, moves)
+    if unknown:
+        sel["notes"].insert(0,
+            f"{len(unknown)} player(s) have no handicap index and cannot be "
+            f"flighted: {', '.join(sorted(p.get('name') or '' for p in unknown))}.")
     touched: set = set()
     if applied:
         sel["mode"] = CUSTOM_MODE
@@ -573,7 +602,8 @@ def select_game(game: str, label: str, kind: str, field: list[dict],
         sel["moves"] = applied
         sel["custom_note"] = custom_note(applied)
         sel["notes"].append(sel["custom_note"])
-        touched = {m["from_flight"] for m in applied} | {m["to_flight"] for m in applied}
+        touched = ({m["from_flight"] for m in applied if m["from_flight"]}
+                   | {m["to_flight"] for m in applied})
     for i, g in enumerate(groups):
         g = sorted(g, key=lambda p: (_idx(p), p.get("name") or ""))
         band = (band_text(i, sel["edges"]) if sel["edges"]
@@ -851,6 +881,13 @@ def payouts_from_results(entry: dict, result: dict | None) -> dict:
             for w in won.values():
                 w["detail"] = (f"Skins F{no} ×{len(w['holes'])} holes "
                                + ", ".join(str(h) for h in w["holes"]))
+                # The unrounded share, as an exact fraction of cents, and
+                # the pot it was cut from — for the G2a grader only
+                # (CA #1034); the money above is unchanged.
+                w.update(share_group=f"skins F{no}",
+                         group_pot=float(af["pot"]),
+                         exact_share_cents=[_cents(af["pot"]) * len(w["holes"]),
+                                            len(skins)])
                 out["rows"].append(w)
             continue
         places = [float(p["amount"]) for p in af.get("places") or []]
@@ -863,6 +900,7 @@ def payouts_from_results(entry: dict, result: dict | None) -> dict:
                 break
             tied = by_place[place]
             shares = tie_split(places, place, len(tied))
+            pool = round(sum(places[place - 1:place - 1 + len(tied)]), 2)
             for r, amt in zip(sorted(tied, key=lambda r: r["name"] or ""), shares):
                 if amt <= 0:
                     continue
@@ -870,7 +908,10 @@ def payouts_from_results(entry: dict, result: dict | None) -> dict:
                 out["rows"].append({
                     "customer_id": r.get("customer_id"), "name": r["name"],
                     "flight_no": no, "amount": amt, "place": place,
-                    "detail": f"F{no} place {place}{t}"})
+                    "detail": f"F{no} place {place}{t}",
+                    "share_group": f"F{no} place {place}",
+                    "group_pot": pool,
+                    "exact_share_cents": [_cents(pool), len(tied)]})
     if game == "individual_gross" and (amounts.get("bonus") or 0) > 0:
         pot_total += float(amounts["bonus"])
         field = [r for f in result.get("flights") or [] for r in f["rows"]

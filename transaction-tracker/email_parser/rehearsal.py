@@ -255,12 +255,19 @@ def install_scratch(src, final) -> None:
     os.replace(str(src), str(final))
 
 
-def restore(db_path=None) -> dict:
-    """THE RESTORE DRILL into the rehearsal folder: newest OneDrive backup →
-    gunzip → integrity → counts vs live → scrub → gzip. Times each step."""
+SETTING_DRILL_REPLICA = "rehearsal_drill_replica"
+
+
+def restore(db_path=None, source: str = "onedrive") -> dict:
+    """THE RESTORE DRILL into the rehearsal folder: newest OneDrive backup
+    (``source="onedrive"``) or the continuous Litestream replica in R2
+    (``source="replica"``, hard gate (a) of #731) → integrity → counts vs
+    live → scrub → gzip. Times each step. Either way the copy stays on the
+    volume."""
     import requests
     from . import backups
     from .database import DB_PATH, _connect, set_app_setting
+    replica = (source == "replica")
     live = Path(str(db_path or DB_PATH))
     rdir = rehearsal_dir(live)
     rdir.mkdir(parents=True, exist_ok=True)
@@ -274,32 +281,44 @@ def restore(db_path=None) -> dict:
         return {"ok": False, "error": f"held: {held}. Nothing restored."}
     t = {}
     t0 = time.perf_counter()
-    creds = backups._graph_creds()
-    if not creds:
-        return {"ok": False, "error": "Graph credentials missing"}
-    token = backups._token(creds)
-    if not token:
-        return {"ok": False, "error": "could not acquire a Graph token"}
-    folder = backups._folder(live)
-    files = backups.list_remote_backups(token, creds["user"], folder)
-    if not files:
-        return {"ok": False, "error": f"no backups in OneDrive /{folder}"}
-    newest = sorted(files, key=lambda f: f["name"])[-1]
+    if replica:
+        newest = {"name": "replica", "size": None, "lastModifiedDateTime": None}
+    else:
+        creds = backups._graph_creds()
+        if not creds:
+            return {"ok": False, "error": "Graph credentials missing"}
+        token = backups._token(creds)
+        if not token:
+            return {"ok": False, "error": "could not acquire a Graph token"}
+        folder = backups._folder(live)
+        files = backups.list_remote_backups(token, creds["user"], folder)
+        if not files:
+            return {"ok": False, "error": f"no backups in OneDrive /{folder}"}
+        newest = sorted(files, key=lambda f: f["name"])[-1]
     tmpdir = Path(tempfile.mkdtemp(prefix="tgf-rehearsal-", dir=str(rdir)))
     try:
-        r = requests.get(
-            f"{backups.GRAPH_BASE}/users/{creds['user']}/drive/root:/{folder}/"
-            f"{newest['name']}:/content",
-            headers={"Authorization": f"Bearer {token}"}, timeout=600)
-        r.raise_for_status()
-        gz = tmpdir / newest["name"]
-        gz.write_bytes(r.content)
-        t["download_ms"] = int((time.perf_counter() - t0) * 1000)
-        t1 = time.perf_counter()
         restored = tmpdir / "restored.db"
-        with gzip.open(gz, "rb") as f_in, open(restored, "wb") as f_out:
-            shutil.copyfileobj(f_in, f_out)
-        t["gunzip_ms"] = int((time.perf_counter() - t1) * 1000)
+        if replica:
+            from . import replication
+            rr = replication.restore_to(restored, db_path=live)
+            if not rr.get("ok"):
+                return {"ok": False, "stage": "replica", "source": "replica", **rr}
+            newest["name"] = f"replica generation {rr.get('generation') or '?'}"
+            t["download_ms"] = rr["ms"]
+            t["gunzip_ms"] = 0
+        else:
+            r = requests.get(
+                f"{backups.GRAPH_BASE}/users/{creds['user']}/drive/root:/{folder}/"
+                f"{newest['name']}:/content",
+                headers={"Authorization": f"Bearer {token}"}, timeout=600)
+            r.raise_for_status()
+            gz = tmpdir / newest["name"]
+            gz.write_bytes(r.content)
+            t["download_ms"] = int((time.perf_counter() - t0) * 1000)
+            t1 = time.perf_counter()
+            with gzip.open(gz, "rb") as f_in, open(restored, "wb") as f_out:
+                shutil.copyfileobj(f_in, f_out)
+            t["gunzip_ms"] = int((time.perf_counter() - t1) * 1000)
         t2 = time.perf_counter()
         c = sqlite3.connect(str(restored))
         try:
@@ -324,7 +343,7 @@ def restore(db_path=None) -> dict:
                  "foreign_key_violations": len(fk), "tables": len(restored_counts),
                  "counts_vs_live": {k: {"restored": restored_counts.get(k), "live": v}
                                     for k, v in live_counts.items()},
-                 "unexpected_drift": drift or None}
+                 "unexpected_drift": drift or None, "source": source}
         t3 = time.perf_counter()
         try:
             sc = scrub(restored)
@@ -352,6 +371,7 @@ def restore(db_path=None) -> dict:
         t["gzip_ms"] = int((time.perf_counter() - t4) * 1000)
         out = {
             "ok": integrity == "ok" and integrity_after == "ok" and not drift and not leaked,
+            "source": source,
             "backup": newest["name"], "backup_bytes": newest.get("size"),
             "taken_at": newest.get("lastModifiedDateTime"),
             "time_to_restore_ms": restore_ms, "timings_ms": t,
@@ -369,8 +389,10 @@ def restore(db_path=None) -> dict:
             "restored_at": datetime.utcnow().isoformat(timespec="seconds"),
         }
         try:
-            set_app_setting(SETTING_DRILL, json.dumps({k: v for k, v in out.items()
-                                                       if k != "counts_vs_live"}), db_path=live)
+            rec = json.dumps({k: v for k, v in out.items() if k != "counts_vs_live"})
+            set_app_setting(SETTING_DRILL, rec, db_path=live)
+            if replica:
+                set_app_setting(SETTING_DRILL_REPLICA, rec, db_path=live)
         except Exception:
             logger.warning("could not record the drill", exc_info=True)
         return out
@@ -388,8 +410,12 @@ def status(db_path=None) -> dict:
         drill = json.loads(get_app_setting(SETTING_DRILL, db_path=db_path) or "null")
     except Exception:
         drill = None
+    try:
+        replica_drill = json.loads(get_app_setting(SETTING_DRILL_REPLICA, db_path=db_path) or "null")
+    except Exception:
+        replica_drill = None
     gz = rdir / SCRUBBED_GZ
-    return {"last_drill": drill, "scratch_ready": gz.exists(),
+    return {"last_drill": drill, "last_replica_drill": replica_drill, "scratch_ready": gz.exists(),
             "download_bytes": gz.stat().st_size if gz.exists() else None,
             "scratch_path": str(rdir / SCRUBBED)}
 

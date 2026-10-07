@@ -31,8 +31,10 @@ THE GRADING CONTRACT, from #571 A1–A3:
       neither match nor fail:
         (i)  derived-dots mode, PH exactly +1, where GG skipped the WHS
              net-double-bogey cap;
-        (ii) tied-group payout $0.01–$0.02 under GG because ours sums to
-             the pot.
+        (ii) shared-pot payout within $0.01 of GG — a TIED place group or
+             a SKINS flight — where GG's figure is the half-up rounding of
+             the exact share and our group sums exactly to the pot (Kerry
+             7/12 MONEY OUT = MONEY IN; CA #1034 approved this test).
       NOTHING ELSE IS EVER "EXPLAINED". An unrecognised residual is a FAIL,
       and this module will not invent a third class to make a board green.
   A3  Team Net and Skins ½ Net are REPORTED, not graded.
@@ -55,7 +57,7 @@ import re
 
 # The two residual classes A2 allows. Anything else is a FAIL.
 RESIDUAL_DERIVED_DOTS_PLUS1 = "derived_dots_ph_plus1_no_ndb_cap"
-RESIDUAL_TIED_PAYOUT_ROUNDING = "tied_group_payout_1_2_cents_under_gg"
+RESIDUAL_TIED_PAYOUT_ROUNDING = "shared_pot_gg_half_up_1c"
 A2_CLASSES = (RESIDUAL_DERIVED_DOTS_PLUS1, RESIDUAL_TIED_PAYOUT_ROUNDING)
 
 # ── DRAFT purse mapping — NOT RATIFIED, NOT USED TO GRADE ──────────────
@@ -120,10 +122,11 @@ DRAFT_PURSE_MAP_AMBIGUOUS = {
     "_team_row_shape": "team_net is ONE GG row per team but N rows our side "
                        "(per-member split), so row counts differ by "
                        "construction; only the team TOTAL is comparable.",
-    "_tie_cents": "A2(ii) allows our tied-group split to land $0.01-$0.02 "
-                  "under GG because ours sums to the pot. Any cent-level "
-                  "purse grading must apply that tolerance per tied GROUP, "
-                  "not per row.",
+    "_tie_cents": "A2(ii) allows a shared-pot share (tied place group or "
+                  "skins flight) to differ from GG by $0.01 when GG's "
+                  "figure is the half-up rounding of the exact share and "
+                  "ours sums to the pot. Any cent-level purse grading must "
+                  "apply that test per GROUP, not per row.",
 }
 
 # Flipped only by ratification (CA review + Kerry, rule 3b). While False the
@@ -546,9 +549,17 @@ def _grade_engine_purses(gg: dict, eng: dict) -> dict:
     pinned from the frozen selection) vs GG's posted purses, per player per
     game, to the cent. Unlike the matrix-assembly totals above this is an
     independent computation — nothing on our side is copied from GG — so a
-    match here is a real result. A2(ii) applies: a TIED row may land
-    $0.01-$0.02 under GG because ours sums to the pot; that is EXPLAINED,
-    anything else is a mismatch."""
+    match here is a real result.
+
+    A2(ii) (CA #1034, approved as proposed in #1033): GG rounds each
+    winner's share half-up on its own and never reconciles, so its flight
+    can pay a cent over or under the pot; ours apportions to the cent so the
+    group sums to the pot (Kerry 7/12). A player's difference is EXPLAINED
+    only when ALL of: it is at most $0.01; the player's rows sit in one
+    shared-pot group (a tied place or a skins flight); GG's figure equals
+    the half-up rounding of the player's exact share; and our rows in that
+    group sum exactly to the group's pot. Each explained row is named.
+    Anything else is a mismatch."""
     if eng.get("error"):
         return {"status": "error", "error": eng["error"]}
     games = {}
@@ -567,20 +578,25 @@ def _grade_engine_purses(gg: dict, eng: dict) -> dict:
             k = r.get("customer_id") or _norm_name(r.get("player_name"))
             gg_by[k] = round(gg_by.get(k, 0.0) + float(r["purse"]), 2)
             gg_name[k] = r.get("player_name")
-        our_by, our_name, tied = {}, {}, set()
+        our_by, our_name, our_rows = {}, {}, {}
+        group_cents, group_pot = {}, {}
         for r in ours.get("rows") or []:
             k = r.get("customer_id") or _norm_name(r.get("name"))
             our_by[k] = round(our_by.get(k, 0.0) + float(r["amount"]), 2)
             our_name[k] = r.get("name")
-            if "(T)" in (r.get("detail") or ""):
-                tied.add(k)
+            our_rows.setdefault(k, []).append(r)
+            g = r.get("share_group")
+            if g:
+                group_cents[g] = group_cents.get(g, 0) + _to_cents(r["amount"])
+                group_pot[g] = _to_cents(r.get("group_pot") or 0)
         diffs, explained = [], []
         for k in sorted(set(gg_by) | set(our_by), key=str):
             a, b = our_by.get(k, 0.0), gg_by.get(k, 0.0)
             if abs(a - b) < 0.005:
                 continue
             who = our_name.get(k) or gg_name.get(k) or k
-            if k in tied and 0 < round(b - a, 2) <= 0.02:
+            if _half_up_explained(our_rows.get(k) or [], b,
+                                  group_cents, group_pot):
                 explained.append(f"{who}: ours ${a:.2f}, GG ${b:.2f} "
                                  f"({RESIDUAL_TIED_PAYOUT_ROUNDING})")
             else:
@@ -598,6 +614,35 @@ def _grade_engine_purses(gg: dict, eng: dict) -> dict:
             "note": ("Engine payouts: the flight board's AMOUNTS applied to "
                      "our engine's results with the frozen flights pinned. "
                      "Independent of GG, so this grades.")}
+
+
+def _to_cents(x) -> int:
+    from decimal import Decimal, ROUND_HALF_UP
+    return int((Decimal(str(x)) * 100).quantize(Decimal(1), ROUND_HALF_UP))
+
+
+def _half_up_explained(rows: list, gg_amount: float, group_cents: dict,
+                       group_pot: dict) -> bool:
+    """A2(ii), the approved test (CA #1034). See `_grade_engine_purses`."""
+    from fractions import Fraction
+    groups = {r.get("share_group") for r in rows}
+    if len(groups) != 1 or None in groups:
+        return False
+    g = groups.pop()
+    if group_cents.get(g) != group_pot.get(g):
+        return False                     # ours must sum exactly to the pot
+    ours_c = sum(_to_cents(r["amount"]) for r in rows)
+    gg_c = _to_cents(gg_amount)
+    if abs(ours_c - gg_c) != 1:
+        return False
+    exact = Fraction(0)
+    for r in rows:
+        num, den = (r.get("exact_share_cents") or [None, None])
+        if not den:
+            return False
+        exact += Fraction(num, den)
+    half_up = int(exact + Fraction(1, 2))   # half-up to the cent (exact > 0)
+    return gg_c == half_up
 
 
 def _verdict(out: dict) -> dict:

@@ -111,6 +111,9 @@ this change and is treated as ended. `_settle` writes "lost" into the job
 file the first time it's seen. Before this, the ghost of
 …171400-tool-se-replay (pid 17) blocked every job.
 
+The drill can also restore from the continuous replica instead of the OneDrive
+nightly: `scoring-rehearsal:restore|replica` (see `replication.md`).
+
 ### Jobs stay out of live events (Front Desk #851, 2026-09-28)
 
 The runner shares the production host. A job is REFUSED ("held: …",

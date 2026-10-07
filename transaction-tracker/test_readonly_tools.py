@@ -105,6 +105,16 @@ else:
     check("Net subtotal equals the live matrix's netTotalPot for 3 net buyers",
           float((_net.get("subtotal") or {}).get("pot", "0").replace("$", "").replace(",", ""))
           == float(_row.get("netTotalPot") or -1), (_net.get("subtotal"), _row and _row.get("netTotalPot")))
+    check("the same-day TGF MVP link comes back structured (None: no other event that day)",
+          "mvp_link" in gm and gm["mvp_link"] is None, gm.get("mvp_link"))
+    from email_parser.games_sheet import parse_games_tab
+    try:
+        _p = parse_games_tab(gm); _perr = None
+    except ValueError as _e:
+        _p, _perr = None, str(_e)
+    check("the Games & Payouts sheet parses a live probe read (net subtotal = the tab's)",
+          _p is not None and _p["net_total"] == float((_net.get("subtotal") or {}).get("pot", "0")
+                                                      .replace("$", "").replace(",", "")), _perr or _p)
 
 print("\n== read-only, and logged ==")
 check("no event / item / customer / pairing row changed", counts() == before, (before, counts()))

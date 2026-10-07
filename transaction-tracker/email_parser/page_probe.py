@@ -80,6 +80,19 @@ _EXTRACT_JS = r"""
     if (s.notPlaying) buyers.not_playing.push(who);
   });
   out.buyers = buyers;
+  // THE SAME-DAY TGF MVP LINK, structured (the Games & Payouts sheet
+  // names the other city and its share): the page's own getMvpLinkedEvents,
+  // with each linked event's chapter looked up the same way.
+  let link = null;
+  try { link = getMvpLinkedEvents(ev); } catch (e) { link = null; }
+  if (link) {
+    const chap = n => { const o = allEvents.find(e => e.item_name === n); return o ? (o.chapter || null) : null; };
+    out.mvp_link = {combined_pot: link.combinedPot, this_event_tgf_mvp: link.thisEventTgfMVP,
+                    this_chapter: ev.chapter || null,
+                    linked: link.linked.map(l => ({event_name: l.event_name, course: l.course,
+                                                   tgf_mvp: l.tgfMVP, chapter: chap(l.event_name)}))};
+  } else { out.mvp_link = null; }
+  try { out.team_type = ((holes => (holes === 9 ? window.GAMES_MATRIX_9 : window.GAMES_MATRIX_18))(out.holes) || {})[String(stats.players)]?.teamType || null; } catch (e) { out.team_type = null; }
   out.buyer_lists_match_counts = buyers.players.length === stats.players
     && buyers.net.length === stats.net && buyers.gross.length === stats.gross;
   return out;
