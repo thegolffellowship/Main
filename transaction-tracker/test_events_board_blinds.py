@@ -1,5 +1,5 @@
 """The EVENTS leaderboard's Team Net plays the drawn blinds (v2.525.9) and
-the Team Net pops (v2.525.10).
+the Team Net pops (v2.525.10), off the lowest in the FIELD (v2.525.11).
 
 Kerry 2026-10-06, Olympia Hills (event 3308) in play: "The team totals
 are screwed up and aren't considering the blinds." The board read a blind
@@ -12,7 +12,9 @@ so a sheet that says "Michael Murphy" finds the card "MURPHY, Mike".
 v2.525.10, Kerry 7:04 PM the same night: "Our team scores are not using
 team Net rules for handicaps, Off lowest or no pops on par 3s." The best
 ball read each card's own 100% pops. It now plays the game's: PH x the
-allowance (75% for one ball), WHS-rounded, off the lowest in the team, on
+allowance (75% for one ball), WHS-rounded, off the lowest in the WHOLE
+FIELD (Kerry 7:14 PM: "Not off lowest on the team it's off lowest for the
+whole field"; the sheet's number when the sheet carries the player), on
 the player's own tee's stroke index, and no pop on a par 3.
 
 Run: python3 test_events_board_blinds.py
@@ -82,7 +84,9 @@ with db._connect(tmp) as conn:
         fn, ln = sheet.split(" ", 1)
         conn.execute("INSERT INTO customers (customer_id, first_name, last_name) "
                      "VALUES (?,?,?)", (c, fn, ln))
-        ph = 6 if c == 101 else 2
+        # group 5's own three play 4 (allowed 3): off the FIELD's lowest
+        # (allowed 2) they get 1, and Miller still gets 3, not 2
+        ph = 6 if c == 101 else (4 if g == 5 else 2)
         conn.execute("INSERT INTO scoring_rounds (id, customer_id, player_name, event_id, "
                      "round_date, course_id, tee_id, holes_played, playing_handicap, gross, "
                      "net, source) VALUES (?,?,?,?, '2026-10-06', ?, ?, 9, ?, ?, ?, 'entry')",
@@ -119,8 +123,10 @@ check("the blind carries Miller's team hcp 3 (75% of 6 = 5, off the lowest 2)",
       bl is not None and bl.get("team_hcp") == 3, str(bl))
 check("the blind's team pops are holes 2 and 4 only (hole 1 is a par 3, pop removed)",
       bl is not None and bl.get("team_pops") == {"2": 1, "4": 1}, str(bl and bl.get("team_pops")))
-check("a 2-handicap team-mate off the lowest gets no team pop",
-      mm is not None and mm.get("team_hcp") == 0 and mm.get("team_pops") == {}, str(mm))
+check("Murphy (PH 4, allowed 3) plays off the FIELD's lowest (2), not his team's: team hcp 1, one pop on SI 1",
+      mm is not None and mm.get("team_hcp") == 1 and mm.get("team_pops") == {"4": 1}, str(mm))
+check("the blind's team hcp is off the field's lowest too (3), not his team's lowest (2)",
+      bl is not None and bl.get("team_hcp") == 3, str(bl))
 check("the team pops are the game's, not the card's", bl is not None and bl.get("team_pops_src") == "team_net")
 check("team 5's total is Miller's best ball under the team pops: par less two (33)",
       t4.get("total_net") == sum(PAR) - 2, str(t4.get("total_net")))

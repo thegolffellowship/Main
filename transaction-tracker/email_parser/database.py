@@ -14554,17 +14554,21 @@ def get_event_leaderboard(event_name: str,
         pairing_groups: dict = {}
         band_by_cid: dict = {}      # the sheet's tee band per seat (v2.525.10)
         try:
+            # a pairings table built before tee_choice (a partial fixture)
+            # still yields its seats; the band is then simply unknown
+            _pcols = {r[1] for r in conn.execute("PRAGMA table_info(event_pairings)")}
+            _tc = "tee_choice" if "tee_choice" in _pcols else "NULL AS tee_choice"
             prows = conn.execute(
-                """SELECT group_num, cart_pos, player_name, customer_id, tee_choice
-                     FROM event_pairings
-                    WHERE event_id = ? AND holes = ?
-                    ORDER BY group_num, cart_pos""",
+                f"""SELECT group_num, cart_pos, player_name, customer_id, {_tc}
+                      FROM event_pairings
+                     WHERE event_id = ? AND holes = ?
+                     ORDER BY group_num, cart_pos""",
                 (ev["id"], str(ev["holes"] or 18))).fetchall()
             if not prows:
                 prows = conn.execute(
-                    """SELECT group_num, cart_pos, player_name, customer_id, tee_choice
-                         FROM event_pairings
-                        WHERE event_id = ? ORDER BY group_num, cart_pos""",
+                    f"""SELECT group_num, cart_pos, player_name, customer_id, {_tc}
+                          FROM event_pairings
+                         WHERE event_id = ? ORDER BY group_num, cart_pos""",
                     (ev["id"],)).fetchall()
             for prw in prows:
                 pairing_groups.setdefault(prw["group_num"], []).append(
@@ -15267,6 +15271,36 @@ def get_event_leaderboard(event_name: str,
             out[int(h)] = int(n)
         return out
 
+    # THE TEAM HANDICAP IS THE SHEET'S, OFF THE LOWEST IN THE WHOLE FIELD
+    # (Kerry 2026-09-18: "OFF Lowest is not per cart. OFF Lowest is lowest
+    # in the whole field. For 1/2 Net Skins it is field too. Team Net is
+    # field too."; again 2026-10-06 7:14 PM on this board: "Not off lowest
+    # on the team it's off lowest for the whole field"). The Starter Sheet
+    # computes it once (`team_handicaps_for_groups`: allowance on the
+    # unrounded course handicap, rounded once, off the field's lowest) and
+    # the phone card snapshots that same number (se_game_handicaps), so
+    # this board reads the sheet rather than rounding a second time.
+    # A player the sheet does not carry falls back to PH x allowance,
+    # WHS-rounded, off the lowest of those same values across the field.
+    _sheet_team_hcp: dict = {}
+    _sheet_low = None
+    try:
+        _pack = get_event_print_pack(ev["id"], db_path=db_path) or {}
+        for _g in _pack.get("groups") or []:
+            for _p in _g.get("players") or []:
+                if _p.get("customer_id") is not None and _p.get("team_handicap") is not None:
+                    _sheet_team_hcp[int(_p["customer_id"])] = int(_p["team_handicap"])
+        _sheet_low = (_pack.get("team_off_lowest") or {}).get("low")
+    except Exception:
+        logger.exception("Non-fatal: sheet team handicaps unavailable for event %s", ev["id"])
+    _field_low = None
+    try:
+        from email_parser.handicap_calc import whs_round as _wr
+        _allowed = [_wr(p["hcp"] * team_allowance) for p in plist if p.get("hcp") is not None]
+        _field_low = min(_allowed) if _allowed else None
+    except Exception:
+        _wr = None
+
     teams = []
     for tn, names in sorted(_groups.items(), key=lambda kv: str(kv[0])):
         members, matched = [], 0
@@ -15297,19 +15331,16 @@ def get_event_leaderboard(event_name: str,
                                 "scoring_round_id": None, "hcp": None})
         if not matched:
             continue
-        # TEAM handicap: each player's PH at the event's team allowance,
-        # then off the LOWEST in the team — the ratified shape, the same
-        # one the starter sheet prints.
-        try:
-            from email_parser.handicap_calc import whs_round as _wr
-            _raw = [(m, _wr((m["hcp"] or 0) * team_allowance))
-                    for m in members if m.get("hcp") is not None]
-            if _raw:
-                _low = min(v for _m, v in _raw)
-                for _m, v in _raw:
-                    _m["team_hcp"] = v - _low
-        except Exception:
-            logger.exception("Non-fatal: team handicaps unavailable")
+        # TEAM handicap: the sheet's number (off the lowest in the FIELD),
+        # else PH x allowance off the field's lowest. Never off the team.
+        for m in members:
+            _cid = m.get("customer_id")
+            if _cid is not None and _cid in _sheet_team_hcp:
+                m["team_hcp"] = _sheet_team_hcp[_cid]
+                m["team_hcp_src"] = "sheet"
+            elif m.get("hcp") is not None and _wr is not None and _field_low is not None:
+                m["team_hcp"] = _wr(m["hcp"] * team_allowance) - _field_low
+                m["team_hcp_src"] = "field"
         # …and the team pops those handicaps place (the rule above)
         _pops_by_rid: dict = {}
         for m in members:

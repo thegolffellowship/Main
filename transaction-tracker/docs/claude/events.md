@@ -2373,9 +2373,16 @@ rules since v2.525.9:
   same night: "Our team scores are not using team Net rules for
   handicaps, Off lowest or no pops on par 3s." The best ball had read
   each card's stored `strokes_received` (the 100% individual pops). Now
-  every member carries `team_pops` ({hole: n}): PH x the event's
-  allowance (`event_team_net_dial`), WHS-rounded, off the lowest in the
-  team (`team_hcp`), placed by `handicap_calc.ruled_dots` on the player's
+  every member carries `team_pops` ({hole: n}) off his `team_hcp`,
+  **which is the Starter Sheet's own number (v2.525.11)**: `get_event_print_pack`
+  → `team_handicaps_for_groups`, allowance on the unrounded course
+  handicap, rounded once, **off the lowest in the WHOLE FIELD** (Kerry
+  2026-09-18, and again 2026-10-06 7:14 PM: "Not off lowest on the team
+  it's off lowest for the whole field"), the same number the phone card
+  snapshots in `se_game_handicaps`. A player the sheet does not carry
+  falls back to PH x allowance off the field's lowest of those values
+  (`team_hcp_src` = `sheet` | `field`). Never off the team. The pops are
+  placed by `handicap_calc.ruled_dots` on the player's
   own tee's stroke index (`score_entry._si_by_band`, falling back to the
   round's tee), and no pop on a par 3, removed not moved (engine dial
   `team_net.no_pops_on_par3`). The server's total, the TEAM NET row, the

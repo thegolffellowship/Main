@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.525.10";
+window.TGF_VERSION = "2.525.11";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.525.11",
+    date: "2026-10-06",
+    title: "Events leaderboard: the team handicap is the sheet's, off the lowest in the WHOLE FIELD",
+    changes: [
+      "Kerry 10/6 7:14 PM, Olympia Hills (event 3308) in play, on v2.525.10's board: \"Not off lowest on the team it's off lowest for the whole field.\" The rule was already ratified on 9/18 (\"OFF Lowest is not per cart. OFF Lowest is lowest in the whole field... Team Net is field too\") and already built into the Starter Sheet (team_handicaps_for_groups: allowance on the unrounded course handicap, rounded once, off the field's lowest), the phone card (se_game_handicaps snapshots the sheet's number) and the engine. The board was taking the lowest WITHIN EACH TEAM and rounding a second time off the playing handicap. It now reads each member's team_handicap from the sheet (get_event_print_pack), blinds included, and only a player the sheet does not carry falls back to PH x allowance off the lowest of those values across the field (team_hcp_src = sheet | field). Tonight: Pat Youngs at 75% is -2, so every team handicap in the field is two more than its 75% figure, exactly as the printed sheet says.",
+      "Guard test_events_board_blinds.py: a team whose own lowest is 3 plays off the field's 2, so its players carry 1, not 0, and the 6-handicap blind carries 3, not 2."
+    ]
+  },
   {
     version: "2.525.10",
     date: "2026-10-06",
