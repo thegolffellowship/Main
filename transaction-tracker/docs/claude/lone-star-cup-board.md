@@ -311,3 +311,11 @@ deposit ledger. Guard: `test_oneoff_paid_badge.py`.
   `lsc_matches` by hand afterward (settings write, no push).
 - **Pars:** every Hideout tee is par 72 (37/35), so no relative-par
   adjustment applies across Blue/White/Red/Teal.
+
+## FOLLOW THE CUP from a scorer link — v2.525.18 (Kerry 2026-10-07, #1357-6)
+
+A scanned scoring link lands on SCORE THIS GROUP / FOLLOW THE CUP (score-entry.md).
+FOLLOW opens `/member/lonestarcup?match=<dial match id>`: `lscBoardRender` stamps
+`data-lsc-match` on every card, opens that one once (`mpCardToggle`) and scrolls to
+it, and re-opens whatever cards were open before each 20 s live refresh. The per-group
+QR signs for the Cup's rounds print from `/events/<id>/cup-signs`.

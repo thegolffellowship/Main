@@ -2918,6 +2918,9 @@
                     metaL: `Match ${i + 1}${fmtLbl ? " · " + fmtLbl : ""}`,
                     status, live,
                     hasResult: m.state !== "upcoming",
+                    // the match's dial id, so a scorer link's FOLLOW THE CUP
+                    // (?match=<id>) can open this card (Kerry 2026-10-07, #1357-6)
+                    dataAttrs: m.id ? ` data-lsc-match="${escapeHtml(String(m.id))}"` : "",
                 });
             }).join("");
             // Skins (Kerry, CA #717): scored apart from the match, so
@@ -2956,7 +2959,23 @@
                     ${anyPts ? `<span class="sc"><span class="au">${lscFmtPts(au)}</span> &mdash; <span class="sa">${lscFmtPts(sa)}</span></span>` : ""}
                 </div>${cards}${skinsHtml}</div>`;
         }).join("");
+        // Cards the reader had open stay open across the 20 s live refresh,
+        // and ?match=<dial id> (a scorer link's FOLLOW THE CUP) opens that
+        // match's card the first time and scrolls to it.
+        const wasOpen = new Set(Array.from(box.querySelectorAll(".mp-match-card[data-lsc-match] .mp-card-head.open"))
+            .map((h) => h.closest(".mp-match-card").dataset.lscMatch));
+        const want = new URLSearchParams(location.search).get("match");
+        if (want && !box.dataset.lscMatchOpened) wasOpen.add(want);
         box.innerHTML = head + sessions;
+        wasOpen.forEach((id) => {
+            const el = Array.from(box.querySelectorAll(".mp-match-card[data-lsc-match]")).find((c) => c.dataset.lscMatch === id);
+            const hd = el && el.querySelector(".mp-card-head");
+            if (hd && el.querySelector(".mp-scorecard") && !hd.classList.contains("open")) mpCardToggle(hd);
+            if (el && want === id && !box.dataset.lscMatchOpened) {
+                box.dataset.lscMatchOpened = "1";
+                try { el.scrollIntoView({block: "start", behavior: "smooth"}); } catch (e) { /* older browsers */ }
+            }
+        });
         // Tap-to-open scorecards need no wiring here: the Match Play
         // tab's document-level delegated listener (mpCardToggle) matches
         // by class and covers these cards too.

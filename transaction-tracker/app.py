@@ -5523,6 +5523,23 @@ def scorecards_page(event_id):
     return render_template("scorecards.html", sc=sc)
 
 
+@app.route("/events/<int:event_id>/cup-signs")
+@require_role("manager")
+def cup_signs_page(event_id):
+    """Lone Star Cup QR signs, one per group per session (Kerry 2026-10-07,
+    #1357-6 / #1358-2): group, match, tee time, the players and the scorer
+    QR. Printed by Kerry; the QR lands on SCORE THIS GROUP / FOLLOW THE CUP.
+    ?round_id= narrows to one session's round."""
+    from email_parser.score_entry import cup_sign_sheets
+    sheets = cup_sign_sheets(event_id)
+    if sheets.get("error"):
+        return sheets["error"], 404
+    rid = request.args.get("round_id")
+    if rid:
+        sheets["rounds"] = [r for r in sheets["rounds"] if str(r["round_id"]) == str(rid)]
+    return render_template("cup_signs.html", sheets=sheets)
+
+
 @app.route("/api/events/<int:event_id>/group-codes", methods=["GET", "POST"])
 @require_role("manager")
 def api_event_group_codes(event_id):
