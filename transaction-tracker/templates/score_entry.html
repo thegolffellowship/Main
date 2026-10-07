@@ -36,6 +36,15 @@
         .se-pill { height: 56px; border-radius: 48px; font-size: 17px; font-weight: 600; font-family: inherit;
                    width: 100%; cursor: pointer; }
         .se-pill.go { border: none; background: #0d7556; color: #FFFFFF; font-weight: 700; }
+        .se-teamball { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 10px 0 2px; }
+        .se-teamball .se-tb-lbl { grid-column: 1 / -1; font-size: 11.5px; font-weight: 700; letter-spacing: .08em;
+                                  text-transform: uppercase; color: #6B7280; }
+        .se-tb-side { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 10px;
+                      border-radius: 10px; background: #F8F8F8; border-left: 4px solid #BF5700; font-size: 14px; }
+        .se-tb-side.sa { border-left-color: #4B6274; }
+        .se-tb-side b { font-size: 20px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+        .se-tb-who { font-size: 11px; font-weight: 400; color: #6B7280; margin-left: 4px; }
+        .se-tb-nm { color: #374151; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .se-pill.dark { border: none; background: #1B1B1B; color: #FFFFFF; }
         .se-pill.line { border: 1px solid #1B1B1B; background: transparent; color: #1B1B1B; }
         .se-pill:disabled { opacity: .45; }
@@ -832,6 +841,7 @@
                 ${hio}
                 ${maxNote ? `<div class="se-warn">${ICON.warn}<span>${esc(maxNote)}</span></div>` : ""}
                 <div class="se-stack">${rows}</div>
+                ${teamBallLine(hole)}
                 <div class="se-lblrow"><span class="se-lbl">Group card</span><span class="se-keepnote">${ICON.pen}<span>You're keeping score</span></span></div>
                 <div class="se-strip" style="margin-top:6px;grid-template-columns:repeat(${Math.min(order.length, 9)}, minmax(0, 1fr))">${cells}</div>
                 ${queue.length ? statusLine() : ""}
@@ -841,6 +851,34 @@
                   <button type="button" class="se-pill go" data-act="save">${cta}</button>
                   <div class="se-nav"><button type="button" data-act="next" aria-label="Next hole" ${i >= order.length - 1 ? "disabled" : ""}>${ICON.fwd}</button></div>
                 </div></div></div>`;
+        }
+
+        // FOUR-BALL: what each side's team ball would be on this hole, from
+        // the two gross scores as they go in (Kerry 2026-10-07, #1351 D2:
+        // "slots for both players to enter raw gross scores, or X's if
+        // player B picked up, but then the visual of what their team score
+        // would be"). Net = gross less the player's own match strokes on the
+        // hole, from the match engine's allocation the card carries
+        // (match_status[].strokes); an X never counts; the lower net is the
+        // ball. Nothing is guessed: a partner with no score yet shows as such.
+        function teamBallLine(n) {
+            const fb = (card.match_status || []).filter((m) => m.format === "fourball" && m.sides.some((sd) => sd.length === 2));
+            if (!fb.length) return "";
+            const sides = fb.map((m) => m.sides.map((sd, k) => {
+                const balls = sd.map((cid) => {
+                    const key = "c:" + cid, cur = key in draft ? {v: draft[key]} : value(key, n);
+                    const x = key in draftX ? draftX[key] : isX(key, n, [cid]);
+                    const st = ((m.strokes || {})[String(cid)] || {})[String(n)] || 0;
+                    return {cid, v: cur.v, x, net: cur.v == null || x ? null : cur.v - st, st};
+                });
+                const live = balls.filter((b_) => b_.net != null);
+                const best = live.length ? live.reduce((a, b_) => (b_.net < a.net ? b_ : a)) : null;
+                const names = sd.map((cid) => first(byId(cid).display_name) || "#" + cid).join(" & ");
+                const txt = best ? `${best.net}${best.st ? " net" : ""} <span class="se-tb-who">${esc(first(byId(best.cid).display_name) || "")}</span>`
+                          : balls.every((b_) => b_.x) ? "X" : "–";
+                return `<div class="se-tb-side ${k === 0 ? "au" : "sa"}"><span class="se-tb-nm">${esc(names)}</span><b>${txt}</b></div>`;
+            }).join(""));
+            return `<div class="se-teamball"><span class="se-tb-lbl">Team ball · hole ${n}</span>${sides.join("")}</div>`;
         }
 
         function stripCells(order, current) {

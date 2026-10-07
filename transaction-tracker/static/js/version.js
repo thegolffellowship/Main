@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.525.19";
+window.TGF_VERSION = "2.525.20";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.525.20",
+    date: "2026-10-07",
+    title: "Four-ball hole screen shows the team ball live; FOLLOW THE CUP opens the right card",
+    changes: [
+      "Kerry 10/7 (#1351 D2): four-ball needs \"slots for both players to enter raw gross scores, or X's if player B picked up, but then the visual of what their team score would be.\" The hole screen now carries a TEAM BALL line under the four rows: each side's best net ball on this hole from the two gross scores as they go in, net = gross less that player's own match strokes on the hole (the engine's allocation, now on the card as match_status[].strokes), an X never counts, a partner with no score yet shows as such. Austin and San Antonio sides in their colours.",
+      "FOLLOW THE CUP (v2.525.19) did not expand the match: the Cup board's matches carry match_id, not id. Fixed; the card opens and scrolls into view, and stays open across the 20 s refresh. Phone UI test 123 checks, test_score_entry, test_cup_signs pass."
+    ]
+  },
   {
     version: "2.525.19",
     date: "2026-10-07",

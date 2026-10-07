@@ -387,6 +387,10 @@ def _match_status(conn, g) -> list:
                     # and pickups for the tap-open card.
                     "full_names": [[full.get(c) or "#%s" % c for c in sd] for sd in sides],
                     "closed_at": d.get("closed_at_order"),
+                    # every player's match strokes by hole (Kerry #1351 D2: the
+                    # four-ball hole screen shows what the team ball would be
+                    # as both partners' gross go in)
+                    "strokes": d.get("strokes") or {},
                     "card": [{"hole": h["hole"], "order": h.get("order"), "w": h["winner"],
                               "g": [h.get("p1_gross"), h.get("p2_gross")],
                               "s": [h.get("p1_strokes") or 0, h.get("p2_strokes") or 0],

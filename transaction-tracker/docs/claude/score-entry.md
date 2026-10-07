@@ -279,6 +279,13 @@ picking a name CLAIMED the group, so a spectator's scan made him the scorer.
   sessions' codes, which is why this reads the rounds directly.
 - Guards: `test_cup_signs.py`; `test_score_entry_ui.py` clicks the gate
   before every name and checks the held note and the follow target.
+- **Four-ball TEAM BALL line (v2.525.20, Kerry #1351 D2):** under the four
+  rows on a four-ball hole, `teamBallLine(hole)` shows each side's best net
+  ball on this hole from the gross scores as they go in (draft or saved);
+  net = gross less that player's own match strokes on the hole, read from
+  `match_status[].strokes` (the engine's `detail["strokes"]`, now on the
+  card); an X never counts. The Cup board's cards carry `match_id`, which
+  is what `?match=` matches on.
 
 ## Match play: Ball in hole or Picked up (v2.496.0)
 

@@ -2920,7 +2920,7 @@
                     hasResult: m.state !== "upcoming",
                     // the match's dial id, so a scorer link's FOLLOW THE CUP
                     // (?match=<id>) can open this card (Kerry 2026-10-07, #1357-6)
-                    dataAttrs: m.id ? ` data-lsc-match="${escapeHtml(String(m.id))}"` : "",
+                    dataAttrs: (m.match_id || m.id) ? ` data-lsc-match="${escapeHtml(String(m.match_id || m.id))}"` : "",
                 });
             }).join("");
             // Skins (Kerry, CA #717): scored apart from the match, so
