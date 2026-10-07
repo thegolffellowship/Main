@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.525.12";
+window.TGF_VERSION = "2.525.13";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.525.13",
+    date: "2026-10-07",
+    title: "Health: a cold Player Spotlight build is no longer flagged as slow",
+    changes: [
+      "The staff scoring-spotlight bridge builds the whole Player Spotlight when its saved result is stale (13 s on 10/5, one of 30 calls; the rest took about 0.2 s). That is by design after more than 24 h idle, so its slow line is now 20 s instead of the 10 s bridge default. Monitoring only; no member-facing change."
+    ]
+  },
   {
     version: "2.525.12",
     date: "2026-10-06",

@@ -73,6 +73,7 @@ SLOW_MS = {
     "scoring-hcp-cards": 60_000,     # a card email per player who played (9/23: 18.7 s for 23)
     "scoring-print-pack-pdf": 60_000,
     "scoring-scorecards": 60_000,    # |pdf|all binds 24 layout combos in Chromium (21-26 s on 9/29)
+    "scoring-spotlight": 20_000,     # staff bridge; a cold Player Spotlight build took 13 s on 10/5, by design after >24 h idle
     "scoring-recap-draft-email": 30_000,
     "auto_gg_results_sync": 600_000,
     # Live score entry: a phone waits on these. One save is ~40 ms of write

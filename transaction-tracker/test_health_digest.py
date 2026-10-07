@@ -59,13 +59,16 @@ check("FINDING medium: job errors older than the recent window with the last run
       k2.get("job_error:lead_poll", {}).get("severity") == "medium" and "RECOVERED" in k2["job_error:lead_poll"]["text"], str(k2.get("job_error:lead_poll")))
 check("...while a job whose LAST run failed stays HIGH", k2.get("job_error:db_backup", {}).get("severity") == "high")
 # an open provider alert in the action queue is named until closed
+# (dated relative to today: the finding only covers alerts inside provider_alert_days)
+from datetime import datetime as _dt, timedelta as _td, timezone as _tz
+RECENT_ALERT = (_dt.now(_tz.utc) - _td(days=2)).strftime("%Y-%m-%d")
 db.save_action_item({"subject": "Alert: Main volume is 95% full in production", "from_name": "Railway Support",
                      "from_email": "support@railway.app", "summary": "x", "urgency": "high", "category": "other",
-                     "email_date": "2026-09-19", "confidence": 45}, db_path=tmp)
+                     "email_date": RECENT_ALERT, "confidence": 45}, db_path=tmp)
 rep3 = health.build_health_report(1, db_path=tmp)
 pa = [f for f in rep3["findings"] if f["key"].startswith("provider_alert:")]
 check("FINDING high: an OPEN hosting-provider alert (Railway 95% full) is named with its id and date",
-      len(pa) == 1 and pa[0]["severity"] == "high" and "95% full" in pa[0]["text"] and "2026-09-19" in pa[0]["text"], str(pa))
+      len(pa) == 1 and pa[0]["severity"] == "high" and "95% full" in pa[0]["text"] and RECENT_ALERT in pa[0]["text"], str(pa))
 check("...and the markdown carries a PROVIDER ALERTS line", "**PROVIDER ALERTS OPEN:**" in health.render_markdown(rep3))
 check("...a provider-alert finding files NO second action item (it IS one already)", pa[0].get("file") is False
       and not [i for i in db.get_action_items(status="open", db_path=tmp) if i["subject"].startswith("HEALTH: provider_alert:")]
