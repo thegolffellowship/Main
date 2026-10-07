@@ -1322,6 +1322,22 @@
                 if (status !== 200 || !j.results) return;
                 const done = new Set(j.results.map((r) => r.op_id));    // ok, dup, invalid, refused all leave
                 const refused = j.results.filter((r) => r.result === "refused_lock").map((r) => r.op_id);
+                // An accepted op leaves the queue NOW, but the card reload
+                // lands later: write it into the card first, or value() reads
+                // the hole blank in between and a "Triple in a match" answer
+                // tapped in that gap goes out with no score and is refused
+                // (Kerry 10/6, #1295: Ball in hole lost).
+                const okIds = new Set(j.results.filter((r) => r.result === "ok").map((r) => r.op_id));
+                for (const o of batch) {
+                    if (!okIds.has(o.op_id) || !card || !card.scores) continue;
+                    const key = o.customer_id ? "c:" + o.customer_id : "t:" + o.team_id;
+                    (card.scores[key] = card.scores[key] || {})[String(o.hole)] = o.gross;
+                    if ("mark" in o) {
+                        card.marks = card.marks || {};
+                        const m = card.marks[key] = card.marks[key] || {};
+                        if (o.mark) m[String(o.hole)] = o.mark; else delete m[String(o.hole)];
+                    }
+                }
                 queue = queue.filter((o) => !done.has(o.op_id));
                 store.set(K.q, queue);
                 if (refused.length) {
