@@ -88,3 +88,41 @@ def test_off_roster_money_is_not_a_paid_player(cup_db):
 def test_phone_card_reads_the_same_paid_field():
     html = (Path(__file__).parent / "templates" / "events.html").read_text()
     assert html.count("ev.oneoff_paid != null ? ev.oneoff_paid") >= 2
+
+
+def _pay(p, cid, amt, ttype, notes="", category=None, matched=None):
+    c = sqlite3.connect(p)
+    c.execute("INSERT INTO expense_transactions (source_type, merchant, amount,"
+              " transaction_date, transaction_type, customer_id, event_id,"
+              " review_status, notes, category, matched_item_id) VALUES"
+              " ('venmo', 'x', ?, '2026-10-06', ?, ?, 3329, 'approved', ?, ?, ?)",
+              (amt, ttype, cid, notes, category, matched))
+    c.commit()
+    c.close()
+
+
+def test_a_refunded_overpayment_leaves_the_balance(cup_db):
+    """CoS #1339-3 (10/7): Jeff Young read CR $150 after Kerry paid his
+    credit out by Venmo. A refund paid to a roster player on the event
+    comes off his paid; winnings on the same event do not."""
+    _pay(cup_db, 1, 150, "received")                    # overpaid: 400 vs 250
+    fin = db.get_oneoff_roster_finance(3329, db_path=cup_db)["players"]["1"]
+    assert fin["balance"] == -150                       # CR $150 before
+    c = sqlite3.connect(cup_db)
+    cr = c.execute("INSERT INTO items (email_uid, item_index, customer, item_name,"
+                   " order_date, transaction_status, merchant, customer_id,"
+                   " event_id, item_price) VALUES ('manual-refund-1', 0, 'c1', ?,"
+                   " '2026-10-06', 'refunded', 'Partial Credit', 1, 3329, '$150.00')"
+                   " RETURNING id", (EV,)).fetchone()[0]
+    c.commit()
+    c.close()
+    _pay(cup_db, 1, 150, "payout", "Credit from LONE STAR CUP", matched=cr)
+    fin = db.get_oneoff_roster_finance(3329, db_path=cup_db)["players"]["1"]
+    assert fin["paid"] == 250 and fin["balance"] == 0 and fin["refunded"] == 150
+    assert any(x["amount"] == -150 for x in fin["payments"])
+    # Winnings paid on the Cup are not a refund of entry money.
+    _pay(cup_db, 1, 40, "payout", "Paid Full - Winnings for LONE STAR CUP")
+    assert db.get_oneoff_roster_finance(3329, db_path=cup_db)["players"]["1"]["balance"] == 0
+    # A declined payer refunded in full nets to $0 paid.
+    _pay(cup_db, 9, 325, "payout", "Refund for Lone Star Cup", category="refund")
+    assert db.get_oneoff_roster_finance(3329, db_path=cup_db)["players"]["9"]["paid"] == 0

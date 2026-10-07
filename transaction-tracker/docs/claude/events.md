@@ -2200,6 +2200,14 @@ Unconfigured events keep the standard columns untouched.
 - **Credit display**: a negative balance renders `CR $X` (green) in
   Balance Due instead of a bare PAID ✓ — Kerry holds overpayments as
   credits (Jeff Young's $150, 2026-09-22).
+  **A refund paid out comes off (v2.525.17, CoS #1339-3):** a `payout`
+  on the event to a roster player that settles a refunded credit row
+  (`matched_item_id` → status `refunded`), or is categorised / noted as a
+  refund, reduces his paid and shows as a negative payment ("Refunded:").
+  Winnings paid on the event (memo "Winnings for …") never count. So a
+  credit Kerry paid out by Venmo stops showing as `CR $X`. The Apply
+  Credit list already ignores refunded rows (`get_player_credits` takes
+  `credited` and `wd` only).
 - **Addon → linked-event roster sync** (Kerry 2026-09-22: "if they're
   marked YES for the FRIDAY practice round, they also need to show on
   the LSC PRACTICE ROUND event"): an addon catalog entry may carry

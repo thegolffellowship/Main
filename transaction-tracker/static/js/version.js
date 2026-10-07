@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.525.16";
+window.TGF_VERSION = "2.525.17";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.525.17",
+    date: "2026-10-07",
+    title: "Lone Star Cup roster: a credit refunded by Venmo no longer shows as CR",
+    changes: [
+      "CoS #1339-3 (10/7): Jay Hogue still showed CR $50.00 and Jeff Young CR $150.00 on the Lone Star Cup (event 3329) roster after Kerry paid both credits out by Venmo (rows 2738, 2739; Kerry: \"I refunded the credits because there were no fees associated with them originally because they're from Venmo\"). The one-off roster money picture (get_oneoff_roster_finance) counted money received but not refunds paid out. It now subtracts a payout on the event to a roster player when it settles a refunded credit row, or is categorised or noted as a refund; the refund shows in the PAID tooltip as a negative line. Winnings paid on the event never count, so Cup skins payouts can't lower anyone's paid. Display only: no money row changes. The Apply Credit list already left out refunded rows. Guard test_oneoff_paid_badge.py; events.md."
+    ]
+  },
   {
     version: "2.525.16",
     date: "2026-10-07",

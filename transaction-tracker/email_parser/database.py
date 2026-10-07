@@ -11920,6 +11920,39 @@ def get_oneoff_roster_finance(event_id: int,
                 "id": r["id"], "date": r["transaction_date"],
                 "amount": amt, "memo": r["notes"] or "",
             })
+        # Money REFUNDED to a roster player on this event comes off his
+        # paid (CoS #1339-3, 10/7: Jay Hogue showed CR $50 and Jeff Young
+        # CR $150 after Kerry paid both credits out by Venmo). Only
+        # refunds: a payout that settles a refunded credit row, or one
+        # categorised / noted as a refund. Winnings paid on the same
+        # event (Cup skins) are not a refund of entry money.
+        try:
+            refund_rows = conn.execute(
+                """SELECT x.id, x.customer_id, x.amount, x.transaction_date,
+                          x.notes
+                   FROM expense_transactions x
+                   LEFT JOIN items i ON i.id = x.matched_item_id
+                   WHERE x.event_id = ? AND x.transaction_type = 'payout'
+                     AND COALESCE(x.review_status, '') != 'ignored'
+                     AND lower(COALESCE(x.notes, '')) NOT LIKE '%winnings%'
+                     AND (i.transaction_status = 'refunded'
+                          OR lower(COALESCE(x.category, '')) = 'refund'
+                          OR lower(COALESCE(x.notes, '')) LIKE '%refund%')""",
+                (event_id,)).fetchall()
+        except sqlite3.OperationalError:
+            refund_rows = []  # pre-migration schema (tests, fresh checkouts)
+        for r in refund_rows:
+            cid = r["customer_id"]
+            if not cid or int(cid) not in players:
+                continue
+            p = players[int(cid)]
+            amt = float(r["amount"] or 0)
+            p["paid"] = round(p["paid"] - amt, 2)
+            p["refunded"] = round(p.get("refunded", 0.0) + amt, 2)
+            p["payments"].append({
+                "id": r["id"], "date": r["transaction_date"],
+                "amount": -amt, "memo": "Refunded: " + (r["notes"] or ""),
+            })
     for p in players.values():
         # Lodging money stays in the LODGING column, not PAID (golf):
         # everything arrives through the same Venmo, sometimes combined
