@@ -32,6 +32,25 @@ def chapter_ambassadors(conn, chapter_id) -> set[int]:
     return {int(r[0]) for r in rows}
 
 
+def ambassador_rows(conn, customer_ids) -> dict[int, list[dict]]:
+    """{customer_id: [{chapter_id, on}]} for these players, every chapter,
+    flags that are OFF included (the pairings audit reports both). The one
+    reader for anything outside the pairings rules; {} when the table does
+    not exist yet."""
+    cids = [int(c) for c in customer_ids if c]
+    if not cids:
+        return {}
+    ph = ",".join("?" * len(cids))
+    out: dict[int, list[dict]] = {}
+    try:
+        for r in conn.execute(f"SELECT customer_id, chapter_id, ambassador FROM customer_ambassadors "
+                              f"WHERE customer_id IN ({ph})", cids):
+            out.setdefault(int(r[0]), []).append({"chapter_id": r[1], "on": bool(r[2])})
+    except Exception:  # noqa: BLE001 — no table yet
+        return {}
+    return out
+
+
 def _resolve_chapter(conn, chapter) -> tuple[int | None, str | None]:
     """chapter_id from an id, a name ("San Antonio") or a short code ("SA")."""
     s = str(chapter or "").strip()

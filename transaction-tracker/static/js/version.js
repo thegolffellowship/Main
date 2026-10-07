@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.525.14";
+window.TGF_VERSION = "2.525.15";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.525.15",
+    date: "2026-10-07",
+    title: "Blind eligibility: three events on file in 12 months",
+    changes: [
+      "Kerry's 10/6 ruling (#1255): a member may serve as a blind once they have at least 3 EVENTS on file in the last 12 months (the handicap records' range). blind_gate's 'established' test used to count posted differentials, so a round imported twice or an 18 posted as two nines counted twice; it now counts distinct round dates. The threshold is BLIND_MIN_EVENTS in database.py, and the reason a manager sees now names the rule.",
+      "The pairings audit read the Ambassador table directly, which the Ambassador guard forbids (one reader per table). It now reads through ambassadors.ambassador_rows. No behaviour change.",
+    ],
+  },
   {
     version: "2.525.14",
     date: "2026-10-07",

@@ -98,14 +98,8 @@ def event_pairing_audit(event_id: int, db_path=None) -> dict:
                           AND substr(COALESCE(round_date, ''), 1, 10) < ?
                         GROUP BY customer_id""", (*cids, ev_date)):
                 played[int(r["customer_id"])] = int(r["n"])
-            try:
-                for r in conn.execute(
-                        f"SELECT customer_id, chapter_id, ambassador FROM customer_ambassadors "
-                        f"WHERE customer_id IN ({ph})", cids):
-                    amb_rows.setdefault(int(r["customer_id"]), []).append(
-                        {"chapter_id": r["chapter_id"], "on": bool(r["ambassador"])})
-            except Exception:
-                pass
+            from email_parser.ambassadors import ambassador_rows
+            amb_rows.update(ambassador_rows(conn, cids))
             for c in cids:
                 try:
                     gates[c] = db.customer_blind_gate(conn, c, db_path=db_path)

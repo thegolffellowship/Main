@@ -1718,7 +1718,7 @@ exclusion rather than silently dropping it:
 |---|---|
 | in the field | on this event's roster — a borrowed card has to exist |
 | member | `current_player_status` in `active_member` / `member_plus` |
-| established | has a TGF handicap index, which our own computation only issues at `min_rounds` (3) rounds or more |
+| established | at least 3 EVENTS on file in the last 12 months (`BLIND_MIN_EVENTS`; distinct round dates, so a duplicated import or two nines on one day is one event; Kerry 2026-10-06 #1255, v2.525.15). Was 3 posted differentials |
 
 `draw_event_blinds(event_id)` fills every seat a full team would have and
 this group does not (`_blind_team_size`, dial `blind_team_size`, default
@@ -1888,8 +1888,9 @@ verbatim:
 
 - **ELIGIBLE (who may SERVE as a blind):** `blind_gate(customer_id,
   status, established_index)`. The member must be active_member or
-  member_plus, with an established TGF index (≥ `min_rounds` posted
-  differentials in the lookback). This excludes intro / 75% / starting
+  member_plus, with at least 3 EVENTS on file in the last 12 months
+  (`BLIND_MIN_EVENTS`, distinct round dates; Kerry 2026-10-06 #1255,
+  v2.525.15; it counted posted differentials before). This excludes intro / 75% / starting
   handicaps, guests, 1st Timers, alumni and anyone with no customer
   record. Every door asks it: the whole-sheet draw, the single-seat
   RANDOM, CHOOSE, the Cart Net other-cart pick, the N/H seat, the

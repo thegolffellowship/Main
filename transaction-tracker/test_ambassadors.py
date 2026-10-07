@@ -30,7 +30,8 @@ c.execute("INSERT INTO customers (customer_id, first_name, last_name, current_pl
           "VALUES (9003, 'Ian', 'Intro', 'active_member')")
 c.execute("INSERT INTO customers (customer_id, first_name, last_name, current_player_status) "
           "VALUES (9004, 'Al', 'Alumni', 'expired_member')")
-# Established: 3 posted differentials inside the lookback (Mary, Al); Ian has one.
+# Established: 3 EVENTS (distinct dates) inside the lookback (Mary, Al); Ian has one
+# (Kerry #1255: three events on file in 12 months).
 import datetime as _dt
 _d = (_dt.date.today() - _dt.timedelta(days=10)).isoformat()
 for _nm, _cid, _n in (("Mary Wade", 9001, 3), ("Al Alumni", 9004, 3), ("Ian Intro", 9003, 1)):
@@ -38,7 +39,7 @@ for _nm, _cid, _n in (("Mary Wade", 9001, 3), ("Al Alumni", 9004, 3), ("Ian Intr
     for _i in range(_n):
         c.execute("INSERT INTO handicap_rounds (player_name, round_date, adjusted_score, rating, slope, differential) "
                   "VALUES (?, ?, 90, 72.0, 113, ?)",
-                  (_nm, _d, 10.0 + _i))
+                  (_nm, (_dt.date.today() - _dt.timedelta(days=10 + 7 * _i)).isoformat(), 10.0 + _i))
 kerry = c.execute("INSERT INTO platform_dialogue (author, topic, body) VALUES "
                   "('platform-claude', 'pairings', 'Kerry: \"Mary Wade is an Ambassador.\"') "
                   "RETURNING id").fetchone()[0]

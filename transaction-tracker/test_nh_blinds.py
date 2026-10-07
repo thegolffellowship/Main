@@ -71,7 +71,8 @@ for cid, fn, ln, st, n in FIELD:
     for i in range(n):
         c.execute("INSERT INTO handicap_rounds (player_name, round_date, differential, adjusted_score, "
                   "rating, slope, customer_id) VALUES (?,?,?,?,?,?,?)",
-                  (f"{fn} {ln}", RDATE, 10.0 + cid, 45, 35.0, 120, cid))
+                  (f"{fn} {ln}", (datetime.now() - timedelta(days=20 + 7 * i)).strftime("%Y-%m-%d"),
+                   10.0 + cid, 45, 35.0, 120, cid))
 c.commit()
 _ensure_starting_hcp_col(tmp)
 db.set_starting_handicap(8, 12.0, set_by="test", db_path=tmp)
@@ -119,6 +120,29 @@ check("gate: intro fails on ESTABLISHED", "established" in (db.blind_gate(8, "ac
 check("gate: alumni fails on status", "not a member" in (db.blind_gate(10, "expired_member", 20.0) or ""))
 check("gate: guest fails on status", "not a member" in (db.blind_gate(11, "active_guest", 20.0) or ""))
 check("gate: 1st Timer fails on status", "not a member" in (db.blind_gate(12, "first_timer", None) or ""))
+print("\n== THREE EVENTS on file in 12 months, not three differentials (Kerry #1255) ==")
+def _rounds_for(cid, name, dates):
+    c.execute("DELETE FROM handicap_rounds WHERE player_name = ?", (name,))
+    c.execute("DELETE FROM handicap_player_links WHERE customer_id = ?", (cid,))
+    c.execute("INSERT INTO handicap_player_links (player_name, customer_id, customer_name) "
+              "VALUES (?,?,?)", (name, cid, name))
+    for d in dates:
+        c.execute("INSERT INTO handicap_rounds (player_name, round_date, differential, adjusted_score, "
+                  "rating, slope, customer_id) VALUES (?,?,?,?,?,?,?)", (name, d, 12.0, 45, 35.0, 120, cid))
+    c.commit()
+_d = lambda days: (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
+_rounds_for(901, "Dup Dan", [_d(10), _d(10), _d(30)])          # 3 rows, 2 events
+_rounds_for(902, "Old Otto", [_d(10), _d(30), _d(400)])        # 3 events, 1 outside 12 months
+_rounds_for(903, "Tri Tom", [_d(10), _d(30), _d(300)])         # 3 events inside 12 months
+est = db._established_index_by_customer(tmp)
+check("3 rows on 2 dates is 2 events: not eligible", 901 not in est, est.get(901))
+check("an event older than 12 months does not count", 902 not in est, est.get(902))
+check("3 distinct events inside 12 months: eligible", 903 in est, est.get(903))
+check("the reason names the rule", "3 events" in (db.blind_gate(901, "active_member", None) or ""))
+for _cid in (901, 902, 903):
+    c.execute("DELETE FROM handicap_player_links WHERE customer_id = ?", (_cid,))
+c.commit()
+
 pool = db.event_blind_pool(c, EV, db_path=tmp)
 elig = {e["customer_id"] for e in pool["eligible"]}
 check("pool: the seven established members, nobody else", elig == {1, 2, 3, 4, 5, 6, 7}, elig)

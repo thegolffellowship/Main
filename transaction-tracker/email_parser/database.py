@@ -61077,6 +61077,11 @@ def _cmp_person_key_str(name: str) -> str:
     return "|".join(str(x) for x in k)
 
 
+# Kerry 2026-10-06 (#1255): a blind must have at least this many EVENTS on
+# file inside the handicap lookback (lookback_months, 12).
+BLIND_MIN_EVENTS = 3
+
+
 def _established_index_by_customer(db_path=None) -> dict:
     """{customer_id: index} for players with an ESTABLISHED TGF handicap.
 
@@ -61096,16 +61101,23 @@ def _established_index_by_customer(db_path=None) -> dict:
     # sixteen people. ESTABLISHED is exactly: at least `min_rounds`
     # posted differentials inside the lookback window. A starting
     # handicap has no rounds at all, so it fails this on its own.
+    #
+    # EVENTS, NOT DIFFERENTIALS (Kerry 2026-10-06, #1255: "make the minimum
+    # for blind being 3 events on file within last 12 months (same range as
+    # handicap records)"). Rows are counted per distinct round DATE, so a
+    # round imported twice (the duplicate class, e.g. two identical 3/15
+    # Cedar Creek rows) or an 18 posted as two nines is one event, not two.
     out = {}
     try:
         cfg = get_handicap_settings(db_path)
-        min_rounds = int(cfg.get("min_rounds", 3))
+        min_events = BLIND_MIN_EVENTS
         months = int(cfg.get("lookback_months", 12))
         cutoff = (datetime.now() - timedelta(days=months * 30.44)
                   ).strftime("%Y-%m-%d")
         with _connect(db_path) as conn:
             for r in conn.execute(
-                    """SELECT l.customer_id AS cid, COUNT(*) AS n,
+                    """SELECT l.customer_id AS cid,
+                              COUNT(DISTINCT r.round_date) AS n,
                               AVG(r.differential) AS idx
                          FROM handicap_rounds r
                          JOIN handicap_player_links l
@@ -61114,7 +61126,7 @@ def _established_index_by_customer(db_path=None) -> dict:
                           AND r.differential IS NOT NULL
                           AND r.round_date >= ?
                         GROUP BY l.customer_id""", (cutoff,)):
-                if (r["n"] or 0) >= min_rounds:
+                if (r["n"] or 0) >= min_events:
                     out[int(r["cid"])] = round((r["idx"] or 0) * 2, 1)
     except sqlite3.Error:
         return out          # no handicap tables yet (fresh db, tests)
@@ -61197,7 +61209,8 @@ def blind_gate(customer_id, status, established_index) -> str | None:
     if st not in BLIND_MEMBER_STATUSES:
         return f"not a member ({st or 'unknown'})"
     if established_index is None:
-        return "no established TGF handicap yet"
+        return (f"no established TGF handicap yet (fewer than {BLIND_MIN_EVENTS} "
+                f"events on file in the last 12 months)")
     return None
 
 
