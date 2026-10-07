@@ -246,6 +246,21 @@
         }
         .top-tab:hover { color: var(--text); }
         .top-tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+        /* LONE STAR CUP tab: a navy pill, white text (Kerry 2026-10-07,
+           CoS #1353: "Make the LONE STAR CUP on the Nav bar with that navy
+           blue background with white text."). Same navy as the Cup event
+           card (.lsc-event); selected adds the orange ring the card's top
+           border carries, unselected text sits at 90%. */
+        .top-tab[data-top="lone-star-cup"] {
+            background: #002868; color: rgba(255,255,255,0.9);
+            border: 2px solid #002868; border-radius: 9999px;
+            margin: 0.3rem 0.35rem; padding-top: 0.4rem; padding-bottom: 0.4rem;
+            align-self: center;
+        }
+        .top-tab[data-top="lone-star-cup"]:hover { color: #fff; }
+        .top-tab[data-top="lone-star-cup"].active {
+            color: #fff; border-color: #E87C3E; box-shadow: 0 0 0 1px #E87C3E;
+        }
 
         /* ── EVENTS leaderboard (ADMIN pilot, Kerry 2026-09-11) ──
            toggles are CONNECTED segments (Kerry: "Connect the toggles
