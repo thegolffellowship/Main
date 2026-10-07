@@ -12630,17 +12630,35 @@ def matchplay_v2_preview():
 # ── Member view (v2.53.0, Kerry): pinless read-only pages members can
 # reach from a plain shared URL. Season Contests + Handicaps only; the
 # APIs they call are the @require_role("member") public read tier.
+def _lsc_member_landing() -> bool:
+    """The Lone Star Cup is the member landing through Sunday evening
+    (Kerry 2026-10-07, CoS #1351 D1: "LONE STAR CUP needs to be the current
+    landing for members in the tracker thru Sunday evening, then can switch
+    over to EVENTS"). Dial `lsc_member_landing_until` = 'YYYY-MM-DD HH:MM'
+    Central (default Sunday 10/11 9:00 PM); blank or past -> off."""
+    from email_parser.database import get_app_setting
+    from email_parser.timezone_utils import now_central
+    try:
+        until = (get_app_setting("lsc_member_landing_until") or "2026-10-11 21:00").strip()
+        return bool(until) and now_central().strftime("%Y-%m-%d %H:%M") < until[:16]
+    except Exception:
+        return False
+
+
 @app.route("/member")
 def member_home():
     # Spotlight is the member landing (Kerry 2026-07-14: make /member about
-    # the individual player first).
+    # the individual player first) — except during the Lone Star Cup.
+    if _lsc_member_landing():
+        return redirect("/member/lonestarcup")
     return redirect("/member/spotlight")
 
 
 @app.route("/member/contests")
 def member_contests():
     return render_template("contests.html", member_mode=True,
-                           MATCHPLAY_V2=_matchplay_v2_flag())
+                           MATCHPLAY_V2=_matchplay_v2_flag(),
+                           lsc_landing=_lsc_member_landing())
 
 
 @app.route("/member/lonestarcup")
