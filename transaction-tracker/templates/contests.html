@@ -245,6 +245,17 @@
             white-space: nowrap; flex: 0 0 auto;
         }
         .top-tab:hover { color: var(--text); }
+        /* Cup board session / view toggles (Kerry 2026-10-07, CoS #1351 D3) */
+        .lsc-bd-seg { display: flex; gap: 4px; margin: 12px 0 8px; padding: 4px;
+                      background: #EEF1F6; border-radius: 9999px; }
+        .lsc-bd-seg button { flex: 1 1 0; min-height: 40px; border: none; border-radius: 9999px;
+                             background: transparent; color: #374151; cursor: pointer;
+                             font: 700 13px/1 'Bitter', serif; letter-spacing: .04em; text-transform: uppercase; }
+        .lsc-bd-seg button.on { background: #002868; color: #fff; }
+        .lsc-bd-seg.sm button { min-height: 34px; font-size: 12px; }
+        .lsc-bd-seg.sm button.on { background: #1B1B1B; }
+        .lsc-bd-seg .lv { font-style: normal; font-size: 10px; color: #E87C3E; margin-left: 4px; }
+        .lsc-bd-seg button.on .lv { color: #FFD7BC; }
         .top-tab.active { color: var(--primary); border-bottom-color: var(--primary); }
         /* LONE STAR CUP tab: a navy pill, white text (Kerry 2026-10-07,
            CoS #1353: "Make the LONE STAR CUP on the Nav bar with that navy
@@ -2933,6 +2944,7 @@
                     metaL: `Match ${i + 1}${fmtLbl ? " · " + fmtLbl : ""}`,
                     status, live,
                     hasResult: m.state !== "upcoming",
+                    dataAttrs: ` data-mid="${escapeHtml(String(m.match_id ?? m.id))}"`,
                 });
             }).join("");
             // Skins (Kerry, CA #717): scored apart from the match, so
@@ -2965,13 +2977,56 @@
                     ? `<div class="lsc-bd-skins"><span class="h">Skins · gross · ${sk.buyers_in_round} bought in · pot ${$c(sk.pot_cents)} (staff only)</span></div>` : "";
                 skinsHtml = rows || flags ? head + rows + flags : "";
             }
-            return `<div class="lsc-bd-sess">
-                <div class="lsc-bd-sess-h"><b>${escapeHtml(sess.label || sess.id || "")}</b>
-                    ${sess.date ? `<span class="dt">${escapeHtml(sess.date)}</span>` : ""}
-                    ${anyPts ? `<span class="sc"><span class="au">${lscFmtPts(au)}</span> &mdash; <span class="sa">${lscFmtPts(sa)}</span></span>` : ""}
-                </div>${cards}${skinsHtml}</div>`;
-        }).join("");
-        box.innerHTML = head + sessions;
+            return { id: sess.id, format: sess.format, au, sa, anyPts, cards, skinsHtml,
+                     label: sess.label || sess.id || "", date: sess.date || "",
+                     live: (sess.matches || []).some(m => m.state === "live"),
+                     upcoming: (sess.matches || []).some(m => m.state === "upcoming"),
+                     matchIds: (sess.matches || []).map(m => String(m.match_id ?? m.id)) };
+        });
+        // D3 (Kerry 2026-10-07, CoS #1351): one session at a time behind a
+        // FOURBALL | FOURSOMES | SINGLES toggle, its own team score above
+        // MATCHES | SKINS. ?m=<match id> (the QR "Follow the Cup" link)
+        // opens on that match's session, the match first and open.
+        const FMT_TAB = { fourball: "Fourball", chapman: "Foursomes", foursomes: "Foursomes",
+                          alternate_shot: "Foursomes", singles: "Singles" };
+        const wantM = new URLSearchParams(location.search).get("m");
+        if (window.lscSel == null || !sessions.some(x => x.id === window.lscSel)) {
+            const byM = wantM && sessions.find(x => x.matchIds.includes(wantM));
+            const pick = byM || sessions.find(x => x.live) || sessions.find(x => x.upcoming)
+                         || sessions[sessions.length - 1];
+            window.lscSel = pick ? pick.id : null;
+        }
+        window.lscView = window.lscView || "matches";
+        const cur = sessions.find(x => x.id === window.lscSel) || sessions[0];
+        const segS = sessions.length > 1 ? `<div class="lsc-bd-seg" role="tablist">${sessions.map(x =>
+            `<button type="button" role="tab" aria-selected="${x.id === (cur || {}).id}" class="${x.id === (cur || {}).id ? "on" : ""}" data-lscsess="${escapeHtml(x.id)}">${escapeHtml(FMT_TAB[x.format] || x.label)}${x.live ? ' <i class="lv">LIVE</i>' : ""}</button>`).join("")}</div>` : "";
+        let body = "";
+        if (cur) {
+            const segV = `<div class="lsc-bd-seg sm" role="tablist">${["matches", "skins"].map(v =>
+                `<button type="button" role="tab" aria-selected="${window.lscView === v}" class="${window.lscView === v ? "on" : ""}" data-lscview="${v}">${v === "matches" ? "Matches" : "Skins"}</button>`).join("")}</div>`;
+            const sessScore = `<div class="lsc-bd-sess-h"><b>${escapeHtml(cur.label)}</b>
+                    ${cur.date ? `<span class="dt">${escapeHtml(cur.date)}</span>` : ""}
+                    <span class="sc"><span class="au">${lscFmtPts(cur.au)}</span> &mdash; <span class="sa">${lscFmtPts(cur.sa)}</span></span>
+                </div>`;
+            const inner = window.lscView === "skins"
+                ? (cur.skinsHtml || '<div class="lsc-bd-proj">No skins yet this session.</div>')
+                : cur.cards;
+            body = `<div class="lsc-bd-sess">${sessScore}${segV}${inner}</div>`;
+        }
+        box.innerHTML = head + segS + body;
+        box.querySelectorAll("[data-lscsess]").forEach(b => b.addEventListener("click", () => {
+            window.lscSel = b.dataset.lscsess; lscBoardRender(box, d); }));
+        box.querySelectorAll("[data-lscview]").forEach(b => b.addEventListener("click", () => {
+            window.lscView = b.dataset.lscview; lscBoardRender(box, d); }));
+        if (wantM && !window.lscOpenedM && window.lscView === "matches") {
+            const el = box.querySelector(`.mp-match-card[data-mid="${CSS.escape(wantM)}"]`);
+            if (el) {
+                el.parentNode.insertBefore(el, el.parentNode.querySelector(".mp-match-card"));
+                const hd = el.querySelector(".mp-card-head.mp-clickable");
+                if (hd) mpCardToggle(hd);
+                window.lscOpenedM = true;
+            }
+        }
         // Tap-to-open scorecards need no wiring here: the Match Play
         // tab's document-level delegated listener (mpCardToggle) matches
         // by class and covers these cards too.

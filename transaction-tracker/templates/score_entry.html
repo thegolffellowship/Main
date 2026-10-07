@@ -726,7 +726,10 @@
         }
         function followHref() {
             const t = encodeURIComponent(new URLSearchParams(location.search).get("t") || "");
-            return isCupCard() ? "/member/lonestarcup" : "/member/score/board?t=" + t;
+            // The Cup board opens on this group's match, first and open (#1357-6).
+            const m = (card.match_status || []).find((x) => x.cup);
+            return isCupCard() ? "/member/lonestarcup" + (m ? "?m=" + encodeURIComponent(m.match_id) : "")
+                               : "/member/score/board?t=" + t;
         }
         function landingScreen() {
             const cup = isCupCard();
