@@ -59,19 +59,25 @@ $280.50 filed, and February 2026 reserve $97.39 against $140.17 filed.
 | 2025-10 | 11/20/25 | PAID (Kerry, 9/30; confirmation in iCloud, not yet in OneDrive) | | | | | | | |
 | 2025-11 | 12/20/25 | PAID (Kerry, 9/30; confirmation in iCloud, not yet in OneDrive) | | | | | | | |
 | 2025-12 | 1/20/26 | PAID (Kerry, 9/30; confirmation in iCloud, not yet in OneDrive) | | | | | | | |
-| 2026-01 | 2/20/26 | PAID (Kerry, 9/30; confirmation in iCloud, not yet in OneDrive) | | | | | | | |
+| 2026-01 | 2/20/26 | **UNVERIFIED** (Kerry's word 9/30; no confirmation on file anywhere, CoS #1302) | | | | | | | |
 | 2026-02 | 3/20/26 | PAID | 3/20/26 | 7,810 | 1,699 | 140.17 | −0.70 | **139.47** | 7926255547 |
 | 2026-03 | 4/20/26 | PAID | 4/4/26 | 22,057 | 3,515 | 289.99 | −1.45 | **288.54** | 9426022559 |
-| 2026-04 | 5/20/26 | PAID (Kerry, 9/30; confirmation in iCloud, not yet in OneDrive) | | | | | | | |
-| 2026-05 | 6/20/26 | PAID (Kerry, 9/30; confirmation in iCloud, not yet in OneDrive) | | | | | | | |
-| 2026-06 | 7/20/26 | PAID (Kerry, 9/30; confirmation in iCloud, not yet in OneDrive) | | | | | | | |
-| 2026-07 | 8/20/26 | PAID (Kerry, 9/30; confirmation in iCloud, not yet in OneDrive) | | | | | | | |
-| **2026-08** | **9/20/26** | **NOT FILED — LATE** (Kerry, 9/30). FINAL figures 9/30, see below. | | 19,152 | 2,075 | 171.19 | none (late) | | |
-| 2026-09 | 10/20/26 | OPEN. Computed 10/1, see below; emailed to Kerry 10/1. | | 18,577 | 2,964 | 244.53 | −1.22 (if filed by 10/20) | | |
+| 2026-04 | 5/20/26 | PAID **LATE**; penalty $65.75 ($50 + $15.75) | 6/15/26 | 21,850 | 3,816 | 314.82 | none | **380.57** | 16626146585 (pmt 16626147038) |
+| 2026-05 | 6/20/26 | PAID | 6/15/26 | 32,683 | 5,047 | 416.38 | −2.08 | **414.30** | 16626147465 (pmt 16626147643) |
+| 2026-06 | 7/20/26 | PAID **LATE**; penalty $70.54 ($50 + $20.54) | 8/19/26 | 31,466 | 4,979 | 410.77 | none | **481.31** | 23126134775 (pmt 23126135233) |
+| 2026-07 | 8/20/26 | PAID | 8/19/26 | ?1,262 (see note) | 4,099 | 338.17 | −1.69 | **336.48** | 23126135678 (pmt 23126135880) |
+| 2026-08 | 9/20/26 | PAID **LATE**; penalty $58.56 ($50 + $8.56) | 10/6/26 | 19,152 | 2,075 | 171.19 | none | **229.75** | 27926104778 (pmt 27926105381) |
+| 2026-09 | 10/20/26 | PAID | 10/6/26 | 18,577 | 2,964 | 244.53 | −1.23 | **243.30** | 27926105769 (pmt 27926105881) |
 
 - **Kerry, 9/30:** "We have record of all of those, but some are in another part of iCloud. I've made payment on all but August." So every month except 2026-08 is PAID. Where the confirmation is in iCloud, the amounts are left blank until a copy is saved to OneDrive. Copying them over is housekeeping and does not block anything.
 - **Paid with evidence, 2025:** $635.77 across 4 months.
 - **Paid with evidence, 2026 to date:** $428.01 across 2 months.
+- **Update 10/7 (CFO, from the WebFile PDFs; CoS #1301/#1302):** 2026-02 through 2026-09 are all filed and paid, with the confirmations in `OneDrive: TGF_iCloud_Files_2026-10-01/00 Seasons/2026/0 Financial/Sales Tax/`. Every row is also in `sales_tax_filings` (evidence `confirmation`). 2026-01 stays **UNVERIFIED**.
+  - **Paid with evidence, 2026: $2,513.72 across 8 months.** Of that, **$194.85 is late-filing penalties** (April $65.75, June $70.54, August $58.56). Book penalties as an expense, never as tax, and not deductible.
+  - The 10/4 bank-evidence inference below is **confirmed**: April and June were each paid late, together with the next month.
+  - **How the figures were read:** April and May are plain text. June–September are glyph-encoded; the figures were decoded and each one ties (state + local = total tax; tax + penalty + discount = paid).
+  - **July's Total Texas Sales** decodes as ?1,262: the first digit's glyph appears nowhere else in that PDF, so it is 3 or 7. The field is left blank in the database. Read it by eye.
+  - **September's discount was $1.23,** not the $1.22 estimated on 10/1. WebFile is the record.
 - **The iCloud copy (CoS #1181, 10/3) adds no confirmations.** `TGF_iCloud_Files_2026-10-01/00 Seasons/2026/0 Financial/Sales Tax/` holds only 26-02 and 26-03, the same two already above (CFO read, 10/4). The 2025 and Jan/Apr–Jul 2026 confirmations are still not in OneDrive.
 
 ### Bank evidence: Comptroller debits on Frost 0341 (CFO, 10/4)
