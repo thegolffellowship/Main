@@ -493,6 +493,7 @@ def build_cards(state: dict, formulas: dict, derive_hole=None) -> list[dict]:
             totals["stableford_net"] += pts_adjust
 
         thru = sum(1 for h in holes_out if h["strokes"] is not None)
+        nines = points_by_nine(holes_out, pts_adjust)
         cards.append({
             "key": p.get("key"),
             "customer_id": p.get("customer_id"),
@@ -507,11 +508,48 @@ def build_cards(state: dict, formulas: dict, derive_hole=None) -> list[dict]:
             "holes": holes_out,
             "thru": thru,
             "points_plus_adjust": pts_adjust or None,
+            "points_by_nine": nines,
             "complete": thru == len(hole_meta) and len(hole_meta) > 0,
             "allocation_source": allocation_source,
             **totals,
         })
     return cards
+
+
+def points_by_nine(holes_out: list[dict], plus_adjust: int = 0) -> list[dict] | None:
+    """An 18-hole card's points as TWO nine-hole entries (Kerry 2026-10-06,
+    via CoS #1338-5, which governs):
+
+      - the 18-hole index sets where the pops fall for the whole 18: ONE
+        allocation on the full 1-18 card, already done upstream; this
+        never re-allocates a nine on its own (that is Golf Genius's way,
+        withdrawn as the model);
+      - points are totalled per nine from where those pops fall;
+      - D26 stands only for the COUNT: an 18 makes two entries in a
+        points race.
+
+    Front = the card's first nine holes in hole order, back = the rest.
+    Returns None for a card that is not 18 holes (a nine is one entry).
+
+    A PLUS player's round deduction (taken off the round, never off a hole)
+    has no ruled home on one nine or the other. It is NOT put on either
+    nine; each entry carries `plus_unassigned` so the race shows the open
+    question instead of a guessed number."""
+    if len(holes_out) != 18:
+        return None
+    ordered = sorted(holes_out, key=lambda h: h["hole"])
+    out = []
+    for label, part in (("front", ordered[:9]), ("back", ordered[9:])):
+        played = [h for h in part if h.get("strokes") is not None]
+        out.append({
+            "nine": label,
+            "holes": [h["hole"] for h in part],
+            "points": sum((h.get("stableford_net") or 0) for h in played),
+            "thru": len(played),
+            "complete": len(played) == 9,
+            "plus_unassigned": plus_adjust or None,
+        })
+    return out
 
 
 # ---------------------------------------------------------------------------

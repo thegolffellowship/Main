@@ -1359,3 +1359,21 @@ the two-ball Cart Net row had no such agreement.
 number.** Nothing may fall back to a default for them — a game that needs
 one must report, not assume. This is money.
 
+
+## 18-hole rounds in points races (Kerry 2026-10-06, CoS #1338-5; v2.525.16)
+
+Kerry's words govern, and "Mirror Golf Genius" is withdrawn:
+- The 18-hole handicap index sets where the pops fall for the WHOLE 18: one
+  allocation on the full 1–18 card (`build_cards`, `ruled_allocation_mode`).
+  A nine is never re-allocated on its own; Golf Genius's two nine-hole
+  points games do that and are the outlier.
+- Points are totalled per nine from where those pops fall:
+  `live_scoring.points_by_nine` puts `points_by_nine` on every 18-hole card
+  (front = the first nine holes in hole order, back = the rest; points, thru,
+  complete). A nine-hole card carries `None`: it is one entry.
+- D26 stands only for the COUNT: an 18 makes two entries in a points race.
+- Differentials are per nine-hole score on that nine's own tee ratings
+  (`derive_18hole_rounds_as_two_nines`).
+- OPEN: a PLUS player's round deduction has no ruled nine. It is not put on
+  either nine; each entry carries `plus_unassigned` so the race shows the
+  question, not a guess. Guard: `test_points_by_nine.py`.

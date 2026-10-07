@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.525.15";
+window.TGF_VERSION = "2.525.16";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.525.16",
+    date: "2026-10-07",
+    title: "18-hole points: one allocation, two nine-hole entries",
+    changes: [
+      "Kerry's 10/6 rule for 18-hole rounds in points races (CoS #1338-5): the 18-hole index sets the pops for the whole 18 in one allocation, and points are totalled per nine from where those pops fall, so an 18 makes two race entries. The engine already allocated once on the full card; every 18-hole card now also carries points_by_nine (front and back: points, holes played, complete). Golf Genius re-allocates each nine separately, and that is no longer the model.",
+      "A plus player's round deduction has no ruled nine, so it is not put on either one. Both entries flag it (plus_unassigned) for a ruling instead of guessing.",
+    ],
+  },
   {
     version: "2.525.15",
     date: "2026-10-07",
