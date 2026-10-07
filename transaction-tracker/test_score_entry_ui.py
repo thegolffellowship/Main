@@ -119,7 +119,7 @@ with sync_playwright() as p:
         ctx = b.new_context(viewport={"width": 390, "height": 844})
         pg = ctx.new_page()
         pg.goto(f"http://127.0.0.1:{PORT}/member/score?t={tok}")
-        pg.click("[data-act=gate-score]")        # the two-button landing (v2.525.18)
+        pg.click("[data-act=gate-score]")        # the two-button landing (v2.525.19)
         pg.click("text=Kerry Niester")
         pg.wait_for_selector("text=You're keeping score")
         return pg

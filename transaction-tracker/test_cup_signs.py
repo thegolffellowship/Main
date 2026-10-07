@@ -1,4 +1,4 @@
-"""Lone Star Cup QR signs (v2.525.18, Kerry 2026-10-07 #1357-6 / #1358-2):
+"""Lone Star Cup QR signs (v2.525.19, Kerry 2026-10-07 #1357-6 / #1358-2):
 one sign per group per session, from the Cup's own score-entry rounds
 (pairings_holes 'lsc:<session>'), each with the group's scorer QR and the
 match it carries. Read-only: never seeds a round.

@@ -2928,8 +2928,9 @@
             // dial names a basis (net/gross); until then the server
             // sends skins: null and nothing shows.
             const sk = sess.skins;
-            // Skins (Kerry, CA #725/#726): gross, no carryover, one pot per
-            // 18. The server sends pot/payout/flags to STAFF only
+            // Skins (Kerry, CA #725/#726): no carryover, one pot per 18;
+            // Saturday team skins NET, Sunday singles gross (#1357-1), and
+            // the header shows the basis the server sends. The server sends pot/payout/flags to STAFF only
             // (strip_money), so members see skins counts and never a
             // dollar; staff also see who is left out and why.
             const $c = (c) => "$" + (c / 100).toFixed(2);
@@ -2950,7 +2951,7 @@
                 const flags = staff && (sk.flags || []).length
                     ? `<div class="lsc-bd-skflags">${sk.flags.map(f => `<div>${escapeHtml(f)}</div>`).join("")}</div>` : "";
                 const head = staff
-                    ? `<div class="lsc-bd-skins"><span class="h">Skins · gross · ${sk.buyers_in_round} bought in · pot ${$c(sk.pot_cents)} (staff only)</span></div>` : "";
+                    ? `<div class="lsc-bd-skins"><span class="h">Skins · ${escapeHtml(sk.basis || "gross")} · ${sk.buyers_in_round} bought in · pot ${$c(sk.pot_cents)} (staff only)</span></div>` : "";
                 skinsHtml = rows || flags ? head + rows + flags : "";
             }
             return `<div class="lsc-bd-sess">

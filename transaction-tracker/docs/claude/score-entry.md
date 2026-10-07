@@ -251,7 +251,7 @@ rounds only.
 perhaps a little smaller." Top-right corner of each sign, 0.9 in, one line
 "Scan to keep score" under it.
 
-## The link lands on two buttons: SCORE THIS GROUP / FOLLOW (v2.525.18)
+## The link lands on two buttons: SCORE THIS GROUP / FOLLOW (v2.525.19)
 
 Kerry 2026-10-07 (CoS #1357-6): the scoring links go on the scorecards and
 cart signs as QR codes, "Each group can determine the scorer", and anyone
