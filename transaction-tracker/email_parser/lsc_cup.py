@@ -475,7 +475,8 @@ def cup_status(points: dict, total: float,
 def compute_skins(session: dict, course: list[dict], phs: dict,
                   scores: dict, marks: dict | None = None,
                   names: dict | None = None, basis: str = "net",
-                  carryover: bool = False) -> dict:
+                  carryover: bool = False, si_by_player: dict | None = None,
+                  tee_gender: dict | None = None) -> dict:
     """Skins for one session, a calculation SEPARATE from the match
     (Kerry, CA #717). It reads raw scores only, never the match state, so
     holes played after a match is decided count here and nothing here
@@ -543,13 +544,18 @@ def compute_skins(session: dict, course: list[dict], phs: dict,
             return {c: {} for c in e["cids"]}
         # The session's ratified allowance (CA #721), taken off ZERO:
         # skins are a field game, not a head-to-head off the low man.
+        # Pops fall on each player's OWN tee's stroke index (Kerry
+        # 2026-10-06: "Dots ALWAYS use the SI's from that set of tees"); a
+        # Chapman pair plays the table the match engine gives it.
         if fmt == "chapman":
             th = chapman_team_handicap([phs.get(c) if phs.get(c) is not None
                                         else phs.get(str(c)) for c in e["cids"]])
-            smap = strokes_received(th, 0, course, n_holes)
+            tcourse = _chapman_course(course, si_by_player, tee_gender, e["cids"])
+            smap = strokes_received(th, 0, tcourse, n_holes)
             return {c: smap for c in e["cids"]}
         hc = session_handicaps(fmt, [e["cids"]], phs)
-        return {c: strokes_received(hc[c], 0, course, n_holes)
+        return {c: strokes_received(hc[c], 0, _course_for(course, si_by_player, c),
+                                    n_holes)
                 for c in e["cids"]}
 
     strokes = {e["key"]: _strokes_for(e) for e in entries}
@@ -605,7 +611,15 @@ def compute_skins(session: dict, course: list[dict], phs: dict,
 
 
 # Kerry's ratified skins rules (CA #725/#726, 2026-09-26, rule 3b).
-SKINS_BASIS = "gross"                 # gross only, never net
+# SATURDAY TEAM SKINS ARE NET (Kerry 2026-10-07, CoS #1357-1: "Definitely
+# want Team Skins to be full session allowance, not by Off Lowest within
+# match."): four-ball = each player's PH at the session's 90%, best net
+# ball per side; Chapman = the 60/40 team handicap on the one ball. Both
+# taken off ZERO (a field game), never off the lowest in the match.
+# Sunday singles stay individual GROSS in two flights (#1351-C).
+SKINS_TEAM_BASIS = "net"
+SKINS_SINGLES_BASIS = "gross"
+SKINS_BASIS = SKINS_SINGLES_BASIS     # kept for old readers: the singles basis
 SKINS_CARRYOVER = False               # a tied low score = no skin, nothing carries
 SKINS_PER_ROUND_CENTS = 2500          # $75 weekend = $25 per player per round
 SINGLES_FLIGHT_BREAK = 12.0           # Flight 1 <= 11.9, Flight 2 >= 12.0 (TGF 18-hole index)
@@ -617,19 +631,25 @@ def compute_skins_payout(session: dict, course: list[dict], phs: dict,
                          scores: dict, marks: dict | None = None,
                          names: dict | None = None,
                          buyers: set | None = None,
-                         index: dict | None = None) -> dict:
+                         index: dict | None = None,
+                         si_by_player: dict | None = None,
+                         tee_gender: dict | None = None) -> dict:
     """One round's skins pot and payout (Kerry, CA #725/#726). Staff
     only: the member payload strips every amount (strip_money).
 
     - Each 18 is its own pot: $25 x the players IN THIS SESSION who
       bought the weekend skins (buyers = the SKINS add-on on the cup
       roster). Pots are never pooled across rounds.
-    - Saturday team sessions: team gross skins (four-ball best gross
-      ball, Chapman one gross score), each team skin split evenly
+    - Saturday team sessions: team NET skins (Kerry 2026-10-07, #1357-1)
+      at the full session allowance off zero, never off the lowest in
+      the match: four-ball best net ball at 90% of each PH, Chapman one
+      net score off the 60/40 team handicap; pops on each player's own
+      tee's stroke index. One flight. Each team skin is split evenly
       between the partners. A MIXED team (one partner bought, one
       didn't) still plays, and the buyer is paid the FULL team skin
       (Kerry, CA #759): nothing is left over, nothing redistributed. A
-      team where neither bought is out. An odd player's singles matches
+      team where neither bought is out of the hole entirely: its score
+      can neither win a skin nor tie one out (#1357-2). An odd player's singles matches
       inside a team session count him ONCE, and the pair he faces is one
       team entry (skins_team_sides, Kerry 2026-09-28).
     - Sunday singles: individual gross skins flighted on the TGF
@@ -649,6 +669,7 @@ def compute_skins_payout(session: dict, course: list[dict], phs: dict,
     index = index or {}
     fmt = normalize_format(session.get("format"))
     team_game = fmt in ("fourball", "chapman")
+    basis = SKINS_TEAM_BASIS if team_game else SKINS_SINGLES_BASIS
 
     def _bought(c):
         return buyers is None or c in buyers
@@ -735,8 +756,9 @@ def compute_skins_payout(session: dict, course: list[dict], phs: dict,
     out_groups = []
     for (flight, lbl, _pct, matches), gpot in zip(groups, shares):
         sk = compute_skins({**session, "matches": matches}, course, phs,
-                           scores, marks, names, basis=SKINS_BASIS,
-                           carryover=SKINS_CARRYOVER)
+                           scores, marks, names, basis=basis,
+                           carryover=SKINS_CARRYOVER,
+                           si_by_player=si_by_player, tee_gender=tee_gender)
         entrants = len(sk["totals"])
         complete = entrants > 0 and all(h["status"] != "pending"
                                         for h in sk["holes"])
@@ -780,7 +802,7 @@ def compute_skins_payout(session: dict, course: list[dict], phs: dict,
                            "totals": sk["totals"], "payouts": payouts,
                            "unpaid_cents": unpaid})
     return {"kind": "team" if team_game else "individual",
-            "basis": SKINS_BASIS, "carryover": SKINS_CARRYOVER,
+            "basis": basis, "carryover": SKINS_CARRYOVER,
             "buyers_in_round": len(in_round), "pot_cents": pot_cents,
             "groups": out_groups, "excluded": excluded, "mixed": mixed,
             "flags": flags}
@@ -947,7 +969,8 @@ def compute_board(dial: dict, session_data: dict,
                                      "state": state, "points": pts})
         s_out["skins"] = compute_skins_payout(
             sess, course, phs, scores, marks, names,
-            buyers=skins_ctx.get("buyers"), index=skins_ctx.get("index"))
+            buyers=skins_ctx.get("buyers"), index=skins_ctx.get("index"),
+            si_by_player=si_by_player, tee_gender=tee_gender)
         board["sessions"].append(s_out)
     for t in board["teams"].values():
         t["points"] = round(t["points"], 2)

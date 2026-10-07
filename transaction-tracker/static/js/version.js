@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.525.17";
+window.TGF_VERSION = "2.525.18";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.525.18",
+    date: "2026-10-07",
+    title: "Lone Star Cup: Saturday team skins are net",
+    changes: [
+      "Kerry 10/7 (#1357-1): Saturday team skins are NET at the full session allowance, taken off zero and never off the lowest in the match. Four-ball uses 90% of each player's handicap and the best net ball per side; foursomes (Chapman) uses the 60/40 team handicap on the one ball. Pops fall on each player's own tee's stroke index. Sunday singles skins stay gross in two flights. The staff skins header now shows the basis instead of always saying gross.",
+      "A pair where neither partner bought in is out of the hole entirely, so its score can't win or tie out a skin (#1357-2). A pair with one buyer still pays that buyer the full team skin. Five new tests.",
+    ],
+  },
   {
     version: "2.525.17",
     date: "2026-10-07",
