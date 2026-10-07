@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.525.13";
+window.TGF_VERSION = "2.525.14";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.525.14",
+    date: "2026-10-07",
+    title: "Pairings: same tees ride together; captain-with-newest breaks ties",
+    changes: [
+      "Kerry 10/6, Olympia Hills (event 3308), after hand-switching Lewis to ride with Skinner in cart B: \"Yeah\" to tee band over rule 13. In the cart seating (_arrange_group_seats) the captain-with-newest term drops from 10 (above a same-tee cart, 1) to 0.5 (below it), so the generator no longer splits two players on the same tees to seat the captain beside the newest player. With matching tees the captain still rides with the newest. Partner requests (100), Match Play (1000), solo-cart streaks (500 / 2) and 1st Timer with Ambassador (10) are unchanged; one repeat cart (0.4) still yields to it. Guard test_pairing_roles.py (fails on the old weight); pairings.md rule 13."
+    ]
+  },
   {
     version: "2.525.13",
     date: "2026-10-07",

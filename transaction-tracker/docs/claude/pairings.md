@@ -111,9 +111,12 @@ matters too, not just the foursome.
 13. **Driver's seat (Kerry-ratified 2026-09-15, v2.416.0; v2.417.0).**
     Seats 1 and 3 drive — no wheel mark, it is implied. The
     `group_captain` takes SEAT 1 with their partner request in seat 2 if
-    partnered, else the NEWEST player beside them (weights 100 / 10 in
-    `_arrange_group_seats`: below Match Play, above a tee match; the
-    captain's cart is rotated to seats 1-2 after the permutation). A
+    partnered, else the NEWEST player beside them (weights 100 / 0.5 in
+    `_arrange_group_seats`: the request below Match Play; the newest
+    BELOW a tee match since 2026-10-06 (was 10, above it). Kerry, Olympia
+    Hills (event 3308), on Lewis riding with Skinner: "Yeah" — same tees
+    ride together, captain-with-newest breaks ties. The captain's cart is
+    rotated to seats 1-2 after the permutation). A
     first-year member (`is_new`) never drives; otherwise the more
     experienced player (`experience` = order rows on file) takes the
     wheel. `is_new` = joined as a NEW MEMBER this year (earliest
@@ -2085,7 +2088,8 @@ more variety built in."*
   a cart before costs 0.4. That is the lowest term, below the same-tee cart
   term (1), so R-G only ever breaks a tie: two repeats (0.8) still cost less
   than one tee mismatch. Match Play opponents (1000), partner requests (100),
-  captain-with-newest and 1st Timer with Ambassador (10) all outrank it.
+  and 1st Timer with Ambassador (10) all outrank it; captain-with-newest (0.5,
+  since 2026-10-06) outranks one repeat cart but not two.
 - **History:** `_rode_counts_from_conn` counts `pairing_history.rode = 1` rows
   by the same rules as the pair counts (played dates only; `app` rows are plans
   and never count), across ALL years: a shared cart is a shared cart whenever

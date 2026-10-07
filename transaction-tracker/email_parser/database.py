@@ -69357,8 +69357,10 @@ def _arrange_group_seats(names: list[str], mp_opponents: set,
       insensitive so label drift can't split a tee pair.
 
     - Rule 13 (Kerry-ratified 2026-09-15): a group captain rides with the
-      NEWEST player in the group (weight 10 — below a request, above a
-      tee match), and within each cart the DRIVER (seats 1 and 3) is the
+      NEWEST player in the group (weight 0.5 since 2026-10-06 — below a
+      tee match: Kerry, Olympia Hills, event 3308, "Yeah" to Lewis riding
+      with Skinner on the same tees; it was 10, above the tee match), and
+      within each cart the DRIVER (seats 1 and 3) is the
       captain, else the most experienced non-new player; a first-season
       player never drives.
 
@@ -69426,11 +69428,13 @@ def _arrange_group_seats(names: list[str], mp_opponents: set,
             ni = perm.index(newest)
             if not any(_cart(k) == _cart(ni) and keys[perm[k]] in captains
                        for k in range(len(perm)) if k != ni):
-                cost += 10
+                # 0.5, below the tee match (Kerry 10/6, Olympia Hills,
+                # event 3308, Lewis rides with Skinner: "Yeah" — same
+                # tees ride together; captain-with-newest breaks ties).
+                cost += 0.5
         # Rule 14 seating half: a first-timer shares a cart with an
-        # ambassador when the group has one (weight 10, same as the
-        # captain-with-newest tie; the tee term below prefers a same-tee
-        # ambassador among equals).
+        # ambassador when the group has one (weight 10; the tee term
+        # below prefers a same-tee ambassador among equals).
         for i in range(len(perm)):
             if keys[perm[i]] in first_timers and keys[perm[i]] not in ambassadors:
                 if any(keys[perm[k]] in ambassadors for k in range(len(perm)) if k != i) and \
