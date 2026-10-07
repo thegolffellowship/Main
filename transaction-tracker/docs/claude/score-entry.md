@@ -873,3 +873,30 @@ se_game_handicaps basis text.
   tee. `database.event_engine_state` fills it from each scorecard's `tee_id`
   when it differs from the field's. The phone card's own-tee pops are Track
   A's v2.525.6 (`_si_by_band`).
+
+## Finding 0: entry mode, the board reads entered scores only (CoS #1333, 2026-10-07)
+
+Kerry (#1313): "audit actual tracker entered scores ... without any importing
+from GG. That should have been off." Side Games' true audit (#1315) found the
+Events board on Olympia Hills (event 3308) had read Golf Genius imports.
+
+- **Entry mode** (`entry_publish.entry_mode`): score entry is on for the
+  event (`score_entry_events`) AND it has a non-PREVIEW score-entry round
+  dated TODAY (Central). The live day only: the next day the board reads the
+  record again (GG until it retires, published entries after the cutover), so
+  a closed event's board never changes after the fact.
+- **The board** (`get_event_leaderboard`, so the Events tab, the member
+  results and the scorer's LEADERBOARD toggle): in entry mode
+  `_entry_mode_overlay` creates TEMP tables `scoring_rounds` /
+  `scoring_holes` on the board's connection holding only the live entered
+  cards (`entry_publish.live_board_rows`: every entered player, part-played
+  cards included, tee resolved and pops allocated by the publisher's own
+  rules, over the round's full hole list then cut to the holes played).
+  SQLite resolves the unqualified names to TEMP first, so every read in the
+  board sees entries and none of the GG import. Nothing is written; the GG
+  rows stay stored for parity. Synthetic ids are negative; the team-pops
+  helper's second connection reads their tee by tee_id.
+- `event.score_source` on the board payload: `entry` or `record`.
+- Not affected: the Lone Star Cup board (`lsc_cup`) already reads entries
+  (`get_entered_scores` → `merge_entry_feed`).
+- Guard: `test_board_entry_mode.py`.
