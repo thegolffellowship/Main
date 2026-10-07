@@ -485,6 +485,10 @@
         // Match play pickup prompt + the max-triple notice (Kerry 2026-09-25).
         let draftX = {}, closedGate = false, pinMsg = "";
         let pickupHole = null, pickupKeys = [], pickupAns = {}, maxNote = "";
+        // QR LANDING (Kerry 2026-10-07, CoS #1357-6): a scanned group link
+        // first asks SCORE THIS GROUP or FOLLOW; following never claims and
+        // never sees the take-over prompt.
+        let chooseScore = false;
         const checkChanged = new Set();
         let photo = store.get(K.photo, null);        // {op_id, data, submitted, sent}
 
@@ -686,7 +690,8 @@
             const banner = (lostMsg ? `<div class="se-bad">${esc(lostMsg)}</div>` : "")
                          + (errMsg ? `<div class="se-bad">${esc(errMsg)}</div>` : "");
             let body;
-            if (!who) body = joinScreen();
+            if (!who && !chooseScore) body = landingScreen();
+            else if (!who) body = joinScreen();
             else if (card.lock.state === "held" && !following) body = heldScreen();
             else if (keeping() && pickupHole != null) body = pickupScreen(pickupHole);
             else if (keeping() && ctpHole != null) body = ctpScreen(ctpHole);
@@ -714,6 +719,31 @@
             // header gives up its height so Save stays on screen, no scrolling).
             document.body.classList.remove("se-tight");
             if (focus && document.documentElement.scrollHeight > window.innerHeight + 1) document.body.classList.add("se-tight");
+        }
+
+        function isCupCard() {
+            return !!card.cup_standings || (card.match_status || []).some((m) => m.cup);
+        }
+        function followHref() {
+            const t = encodeURIComponent(new URLSearchParams(location.search).get("t") || "");
+            return isCupCard() ? "/member/lonestarcup" : "/member/score/board?t=" + t;
+        }
+        function landingScreen() {
+            const cup = isCupCard();
+            const when = [card.group_num != null ? "Group " + card.group_num : null, card.label,
+                          card.tee_time || null].filter(Boolean).join(" · ");
+            const held = card.lock && card.lock.state === "held";
+            const keeper = held ? `<div class="se-note">${esc(first(card.lock.holder_name || "Someone"))} is keeping score for this group.</div>` : "";
+            return `<div class="se-eyebrow">${esc([card.round_label, card.round_date].filter(Boolean).join(" · "))}</div>
+                <h1 class="se-h1">${cup ? "Lone Star Cup" : "Live scoring"}</h1><div class="se-sub">${esc(when)}</div>
+                <div class="se-gap"></div>
+                <div class="se-stack">
+                  <button type="button" class="se-pill go" data-act="choosescore">Score this group</button>
+                  <a class="se-pill line" href="${followHref()}" style="display:flex;align-items:center;justify-content:center;text-decoration:none">${cup ? "Follow the Cup" : "Follow the leaderboard"}</a>
+                </div>
+                ${keeper}
+                <div class="se-gap"></div>
+                <div class="se-copy">One person per group keeps score. Everyone else can follow every match live.</div>`;
         }
 
         function joinScreen() {
@@ -1422,12 +1452,13 @@
                     .then((r) => r.json().then((j) => ({ok: r.ok, j})))
                     .then(({ok, j}) => {
                         if (!ok || j.role !== "admin") { pinMsg = ok ? "That PIN isn't an admin PIN." : (j.error || "That PIN didn't work."); render(); return; }
-                        pinMsg = ""; closedGate = false; errMsg = ""; load();
+                        pinMsg = ""; closedGate = false; errMsg = ""; chooseScore = true; load();
                     }).catch(() => { pinMsg = "No connection. Try again."; render(); });
                 return;
             }
             if (act === "pick") { who = Number(b.dataset.cid); store.set(K.who, who); claim(false); return; }
             if (act === "follow") { following = true; store.set(K.follow, true); render(); return; }
+            if (act === "choosescore") { chooseScore = true; render(); return; }
             if (act === "takeover") { claim(true); return; }
             if (act === "keep") { claim(false); return; }
             if (act === "step") {
