@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.525.9";
+window.TGF_VERSION = "2.525.10";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.525.10",
+    date: "2026-10-06",
+    title: "Events leaderboard: TEAM NET plays the Team Net pops (allowance, off the lowest, none on a par 3)",
+    changes: [
+      "Kerry 10/6 7:04 PM, Olympia Hills (event 3308) in play: \"Our team scores are not using team Net rules for handicaps, Off lowest or no pops on par 3s.\" The board's TEAM NET row and team card took each player's best ball off his card's stored pops, i.e. his 100% individual allocation. Team Net plays its own: PH x the event's allowance (75% for one ball, the ladder in event_team_net_dial), WHS-rounded, OFF THE LOWEST in the team, placed on the player's own tee's stroke index by the ruled allocation (a nine collapses to 1-9), and NO pop on a par 3, removed not moved (engine dial team_net.no_pops_on_par3). The phone card (score_entry._team_strokes), the printed scorecard and the engine (live_scoring.game_team_net) already played this rule; the board was the odd one out.",
+      "get_event_leaderboard now computes team_pops ({hole: n}) for every team member, blinds included, and the best ball, the TEAM NET row, the dots on the TEAM tab's player rows and the expandable team card all read them (evlbTeamPopsOf / evlbNetOf(d, rid, n, team)). A member whose tee has no complete stroke index for the holes keeps his card's pops and is marked team_pops_src = 'card'; nothing is guessed. Guard test_events_board_blinds.py: a 6-handicap blind among 2s gets team hcp 3, pops on stroke index 1 and 3 only because the index-5 hole is a par 3, and the team total moves off the card's dots."
+    ]
+  },
   {
     version: "2.525.9",
     date: "2026-10-06",

@@ -3353,18 +3353,33 @@
         if (!n) return "";
         return `<span class="evlb-pops">${(sr > 0 ? "\u25CF" : "\u25CB").repeat(n)}</span>`;
     }
-    function evlbNetOf(d, rid, n) {
+    // ── TEAM NET pops are the GAME's own (Kerry 2026-10-06: "Our team
+    //    scores are not using team Net rules for handicaps, Off lowest or
+    //    no pops on par 3s"): the server puts each member's `team_pops`
+    //    ({hole: n} — allowance, off the lowest, own tee's index, none on
+    //    a par 3) on the team. A member without them (no complete stroke
+    //    index for his tee) falls back to his card's own pops, as before.
+    function evlbTeamPopsOf(t, rid, n) {
+        const p = ((t && t.players) || []).find(x => String(x.scoring_round_id) === String(rid));
+        if (!p || !p.team_pops) return null;
+        return p.team_pops[String(n)] || 0;
+    }
+    function evlbNetOf(d, rid, n, t) {
         const h = ((d.cards || {})[String(rid)] || []).find(x => x[0] === n);
-        return (h && h[1] != null) ? h[1] - (h[2] || 0) : null;
+        if (!h || h[1] == null) return null;
+        const tp = evlbTeamPopsOf(t, rid, n);
+        return h[1] - (tp != null ? tp : (h[2] || 0));
     }
     function evlbTeamMins(d, t) {
         const mins = {};
         (d.hole_cols || []).forEach(n => {
             const vals = (t.players || [])
-                .map(p => evlbNetOf(d, p.scoring_round_id, n))
+                .map(p => evlbNetOf(d, p.scoring_round_id, n, t))
                 .filter(v => v != null);
             mins[n] = vals.length ? Math.min(...vals) : null;
         });
+        // the team rides along so the player rows can draw THEIR team pops
+        Object.defineProperty(mins, "_team", { value: t, enumerable: false });
         return mins;
     }
     // ── MVP badges under the player's name on OVERALL (Kerry
@@ -3417,15 +3432,18 @@
         // best ball — which is the number on the TEAM NET row below.
         const holeCells = (d.hole_cols || []).map(n => {
             const hh = hs[n];
-            const pops = evlbPops(hh ? hh[2] : 0);
             if (netMins) {
                 if (!hh || hh[1] == null) return '<td class="h"></td>';
-                const net = hh[1] - (hh[2] || 0);
+                // the TEAM NET game's pops, not the card's (v2.525.10)
+                const tp = evlbTeamPopsOf(netMins._team, r.scoring_round_id, n);
+                const sr = tp != null ? tp : (hh[2] || 0);
+                const net = hh[1] - sr;
                 const ct = net === netMins[n];
                 return `<td class="h${ct ? " count" : ""}" title="${
-                    hh[1]}${(hh[2] || 0) ? " \u2212 " + (hh[2]) + " = net " + net : " (no stroke)"
-                }${ct ? " \u2014 the ball that counted for the team" : ""}">${pops}${hh[1]}</td>`;
+                    hh[1]}${sr ? " \u2212 " + sr + " = net " + net : " (no stroke)"
+                }${ct ? " \u2014 the ball that counted for the team" : ""}">${evlbPops(sr)}${hh[1]}</td>`;
             }
+            const pops = evlbPops(hh ? hh[2] : 0);
             if (!hh || hh[1] == null) return '<td class="h"></td>';
             return `<td class="h">${pops}${skinHoles.includes(n)
                 ? `<span class="evlb-circ" style="border-color:${skC};color:${skC};" title="${d.field_complete === false ? "skin so far" : "skin"} — flight ${r.skins_flight || 1}${d.field_complete === false ? " (provisional until every card is in)" : ""}">${hh[1]}</span>`
@@ -3524,16 +3542,15 @@
         const cols = d.hole_cols || [];
         const recon = cols.reduce((s2, n) => s2 + (mins[n] ?? 0), 0);
         // GG's posted total is the score of record (v2.381.0). Our
-        // per-hole reconstruction uses each player's OWN-card net
-        // (individual allowance) while the official game plays 75%
-        // off-lowest, so the holes need not sum to it — show GG's
-        // number and say where ours landed rather than letting the two
-        // disagree silently.
+        // per-hole reconstruction plays the Team Net rules (allowance,
+        // off the lowest, own tee's index, no pop on a par 3); show GG's
+        // number when there is one and say where ours landed rather than
+        // letting the two disagree silently.
         const off = t.gg_total != null && t.gg_total !== recon;
         const shown = t.gg_total != null ? t.gg_total : recon;
         const ttl = t.gg_total != null
-            ? `GG posted team total${off ? " — best ball of the players' own-card nets sums to " + recon : ""}`
-            : "best ball of the players' own-card nets";
+            ? `GG posted team total${off ? " — best ball under the Team Net pops sums to " + recon : ""}`
+            : "best ball per hole under the Team Net pops (allowance, off the lowest, no pop on a par 3)";
         // par over the holes the team actually played
         const par = Math.max(0, ...(t.players || []).map(p => {
             const b = (d.overall_board || []).find(
@@ -4050,7 +4067,7 @@
         const cols = d.hole_cols || [];
         if (!cols.length) return '<p style="color:var(--text-muted);">No hole data.</p>';
         const nineLbl = cols.length > 9 ? "TOT" : (cols[0] >= 10 ? "IN" : "OUT");
-        const netOf = (rid, n) => evlbNetOf(d, rid, n);
+        const netOf = (rid, n) => evlbNetOf(d, rid, n, t);
         const mins = evlbTeamMins(d, t);
         const rows = t.players.map(p =>
             `<tr class="evlb-plr" data-rid="${p.scoring_round_id || ""}"><td class="nm">${escapeHtml(p.player_name)}${evlbTeeDot(d, p, "right")}</td>` +
@@ -4063,12 +4080,11 @@
         const teamRow = `<tr class="teamrow"><td class="nm">TEAM (best ball)</td>` +
             cols.map(n => `<td class="h">${mins[n] ?? ""}</td>`).join("") +
             `<td class="sc">${teamTotal}</td></tr>`;
-        // The card's per-hole nets come from each player's OWN card
-        // (individual allowance), so its sum can differ from GG's
-        // recorded team total (75% off-lowest) — say so rather than
+        // The card's per-hole nets play the Team Net pops (v2.525.10);
+        // when GG's recorded total still differs, say so rather than
         // letting the two numbers silently disagree.
         const ggNote = (t.gg_total != null && t.gg_total !== teamTotal)
-            ? ` &middot; GG recorded team total: <b>${t.gg_total}</b> (official 75% off-lowest allowance; this card shows each player's own-card net)`
+            ? ` &middot; GG recorded team total: <b>${t.gg_total}</b> (this card sums the best ball under the Team Net pops)`
             : "";
         // the same PAR reference the boards carry, in the card's own
         // column shape (Kerry 2026-09-13) — tapping a team must not

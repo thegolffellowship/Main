@@ -2369,6 +2369,20 @@ rules since v2.525.9:
   scored on the phones showed every short team without its blind. When
   the GG result arrives its `Bl[LAST, First]` slot is recognised as
   already seated, never doubled. Guard: `test_events_board_blinds.py`.
+- **TEAM NET plays the Team Net pops (v2.525.10).** Kerry, 7:04 PM the
+  same night: "Our team scores are not using team Net rules for
+  handicaps, Off lowest or no pops on par 3s." The best ball had read
+  each card's stored `strokes_received` (the 100% individual pops). Now
+  every member carries `team_pops` ({hole: n}): PH x the event's
+  allowance (`event_team_net_dial`), WHS-rounded, off the lowest in the
+  team (`team_hcp`), placed by `handicap_calc.ruled_dots` on the player's
+  own tee's stroke index (`score_entry._si_by_band`, falling back to the
+  round's tee), and no pop on a par 3, removed not moved (engine dial
+  `team_net.no_pops_on_par3`). The server's total, the TEAM NET row, the
+  dots on the TEAM tab's rows and the team card all read `team_pops`
+  (`evlbTeamPopsOf`). A member whose tee lacks a complete index for the
+  holes keeps his card's pops, marked `team_pops_src = "card"`. Same rule
+  as the phone card, the printed scorecard and `live_scoring.game_team_net`.
 
 ## Event Setup: GAMES OFFERED (v2.475.0, Kerry ratified 2026-09-21)
 

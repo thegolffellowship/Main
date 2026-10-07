@@ -14552,22 +14552,25 @@ def get_event_leaderboard(event_name: str,
         # sheet says "Michael Murphy", the card says "MURPHY, Mike", and
         # a name match left him off his team (Olympia Hills 2026-10-06).
         pairing_groups: dict = {}
+        band_by_cid: dict = {}      # the sheet's tee band per seat (v2.525.10)
         try:
             prows = conn.execute(
-                """SELECT group_num, cart_pos, player_name, customer_id
+                """SELECT group_num, cart_pos, player_name, customer_id, tee_choice
                      FROM event_pairings
                     WHERE event_id = ? AND holes = ?
                     ORDER BY group_num, cart_pos""",
                 (ev["id"], str(ev["holes"] or 18))).fetchall()
             if not prows:
                 prows = conn.execute(
-                    """SELECT group_num, cart_pos, player_name, customer_id
+                    """SELECT group_num, cart_pos, player_name, customer_id, tee_choice
                          FROM event_pairings
                         WHERE event_id = ? ORDER BY group_num, cart_pos""",
                     (ev["id"],)).fetchall()
             for prw in prows:
                 pairing_groups.setdefault(prw["group_num"], []).append(
                     (prw["cart_pos"], prw["player_name"], prw["customer_id"]))
+                if prw["customer_id"] is not None and prw["tee_choice"]:
+                    band_by_cid[int(prw["customer_id"])] = str(prw["tee_choice"]).strip()
         except sqlite3.OperationalError:
             pairing_groups = {}
 
@@ -15193,6 +15196,77 @@ def get_event_leaderboard(event_name: str,
                 (nm, cid, {"reason": "nh_out"} if (tn, cp) in _nh_seats else None))
     for _key, _slot in _blind_slots:
         _groups.setdefault(_key, []).append(_slot)
+    # TEAM NET POPS ARE THE GAME'S OWN (Kerry 2026-10-06 7:04 PM, Olympia
+    # Hills in play: "Our team scores are not using team Net rules for
+    # handicaps, Off lowest or no pops on par 3s"). The best ball below
+    # used each card's stored strokes_received, i.e. the player's 100%
+    # individual pops. Team Net plays: PH x the event's allowance (the
+    # ladder in event_team_net_dial), WHS-rounded, OFF THE LOWEST in the
+    # team, placed on the player's OWN tee's stroke index (the ruled
+    # allocation, handicap_calc.ruled_dots: a nine collapses to 1-9), and
+    # NO pop on a par 3, removed not moved (engine dial
+    # team_net.no_pops_on_par3). The same rule the phone card
+    # (score_entry._team_strokes) and the engine (live_scoring.
+    # game_team_net) already apply; this board was the odd one out. A
+    # member whose tee has no complete stroke index keeps his card's pops
+    # and says so (team_pops_src = "card"); nothing is guessed.
+    _tn_si_by_band: dict = {}
+    _tn_si_by_rid: dict = {}
+    _tn_par_by_rid: dict = {}
+    _tn_no_par3 = True
+    try:
+        from email_parser.live_scoring import SEED_LIVE_SCORING_CONFIG as _slc
+        _tn_no_par3 = bool((_slc["games"].get("team_net") or {}).get("no_pops_on_par3"))
+    except Exception:
+        pass
+    try:
+        from email_parser import score_entry as _se
+        from email_parser.handicap_calc import ruled_dots as _ruled_dots
+        _tn_rids = sorted({p["scoring_round_id"] for p in plist if p["scoring_round_id"]})
+        with _connect(db_path) as _c2:
+            _tn_si_by_band = _se._si_by_band(_c2, ev["id"], hole_cols) or {}
+            if _tn_rids:
+                _tn_ph = ",".join("?" for _ in _tn_rids)
+                for _r in _c2.execute(
+                        f"""SELECT sr.id AS rid, cth.hole_number AS hn, cth.par AS par,
+                                   cth.stroke_index AS si
+                              FROM scoring_rounds sr
+                              JOIN course_tee_holes cth ON cth.tee_id = sr.tee_id
+                             WHERE sr.id IN ({_tn_ph})""", _tn_rids):
+                    if _r["si"] is not None:
+                        _tn_si_by_rid.setdefault(_r["rid"], {})[int(_r["hn"])] = int(_r["si"])
+                    if _r["par"] is not None:
+                        _tn_par_by_rid.setdefault(_r["rid"], {})[int(_r["hn"])] = int(_r["par"])
+    except Exception:
+        _ruled_dots = None
+        logger.exception("Non-fatal: team pops inputs unavailable for event %s", ev["id"])
+
+    def _team_pops_for(m) -> dict | None:
+        """{hole: pops} for one team member under the Team Net rules, or
+        None when his tee's stroke index is incomplete for the holes."""
+        rid, th = m.get("scoring_round_id"), m.get("team_hcp")
+        if not rid or th is None or _ruled_dots is None:
+            return None
+        band = band_by_cid.get(m.get("customer_id"))
+        si = (_tn_si_by_band.get(band) if band else None) or _tn_si_by_rid.get(rid) or {}
+        si = {h: v for h, v in si.items() if h in hole_cols}
+        if len(si) != len(hole_cols):
+            return None
+        try:
+            dots = _ruled_dots(th, si)
+        except Exception:
+            return None
+        pars = _tn_par_by_rid.get(rid) or {}
+        out = {}
+        for h, n in dots.items():
+            if not n or n < 0:
+                continue
+            par = pars.get(h, hole_par.get(h, hole_par.get(str(h))))
+            if _tn_no_par3 and par == 3:
+                continue
+            out[int(h)] = int(n)
+        return out
+
     teams = []
     for tn, names in sorted(_groups.items(), key=lambda kv: str(kv[0])):
         members, matched = [], 0
@@ -15223,20 +15297,6 @@ def get_event_leaderboard(event_name: str,
                                 "scoring_round_id": None, "hcp": None})
         if not matched:
             continue
-        total, any_hole = 0, False
-        for hn in hole_cols:
-            nets = []
-            for m in members:
-                if not m["scoring_round_id"] or m.get("nh"):
-                    continue
-                if m.get("blind_holes") and hn not in m["blind_holes"]:
-                    continue
-                v = _player_holes(m["scoring_round_id"]).get(hn)
-                if v and v[0] is not None:
-                    nets.append(v[0] - (v[1] or 0))
-            if nets:
-                total += min(nets)
-                any_hole = True
         # TEAM handicap: each player's PH at the event's team allowance,
         # then off the LOWEST in the team — the ratified shape, the same
         # one the starter sheet prints.
@@ -15250,6 +15310,33 @@ def get_event_leaderboard(event_name: str,
                     _m["team_hcp"] = v - _low
         except Exception:
             logger.exception("Non-fatal: team handicaps unavailable")
+        # …and the team pops those handicaps place (the rule above)
+        _pops_by_rid: dict = {}
+        for m in members:
+            if not m.get("scoring_round_id"):
+                continue
+            tp = _team_pops_for(m)
+            if tp is None:
+                m["team_pops_src"] = "card"
+                continue
+            _pops_by_rid[m["scoring_round_id"]] = tp
+            m["team_pops"] = {str(h): n for h, n in sorted(tp.items())}
+            m["team_pops_src"] = "team_net"
+        total, any_hole = 0, False
+        for hn in hole_cols:
+            nets = []
+            for m in members:
+                if not m["scoring_round_id"] or m.get("nh"):
+                    continue
+                if m.get("blind_holes") and hn not in m["blind_holes"]:
+                    continue
+                v = _player_holes(m["scoring_round_id"]).get(hn)
+                if v and v[0] is not None:
+                    tp = _pops_by_rid.get(m["scoring_round_id"])
+                    nets.append(v[0] - (tp.get(hn, 0) if tp is not None else (v[1] or 0)))
+            if nets:
+                total += min(nets)
+                any_hole = True
         teams.append({
             "team_num": (f"{tn[0]}{tn[1]}" if isinstance(tn, tuple)
                          else tn),

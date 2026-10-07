@@ -1,4 +1,5 @@
-"""The EVENTS leaderboard's Team Net plays the drawn blinds (v2.525.9).
+"""The EVENTS leaderboard's Team Net plays the drawn blinds (v2.525.9) and
+the Team Net pops (v2.525.10).
 
 Kerry 2026-10-06, Olympia Hills (event 3308) in play: "The team totals
 are screwed up and aren't considering the blinds." The board read a blind
@@ -7,6 +8,12 @@ scored event has no GG result, so every short team played without its
 blind. `blind_draws` is the draw of record; the blind plays the drawn
 player's own card. Also: a seat is matched to its card by customer_id,
 so a sheet that says "Michael Murphy" finds the card "MURPHY, Mike".
+
+v2.525.10, Kerry 7:04 PM the same night: "Our team scores are not using
+team Net rules for handicaps, Off lowest or no pops on par 3s." The best
+ball read each card's own 100% pops. It now plays the game's: PH x the
+allowance (75% for one ball), WHS-rounded, off the lowest in the team, on
+the player's own tee's stroke index, and no pop on a par 3.
 
 Run: python3 test_events_board_blinds.py
 """
@@ -24,7 +31,7 @@ def check(l, c, d=""):
         F.append(l)
 
 
-PAR = [4, 4, 3, 4, 5, 4, 4, 3, 4]
+PAR = [3, 4, 3, 4, 5, 4, 4, 3, 4]      # hole 1 is a par 3 on purpose
 SI = [5, 3, 9, 1, 11, 7, 13, 17, 15]
 tmp = os.path.join(tempfile.mkdtemp(prefix="tgf-blinds-"), "t.db")
 with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
@@ -47,7 +54,10 @@ for g in range(1, 6):
             card, sheet = "MILLER, Daniel", "Daniel Miller"
         if g == 5 and cp == 2:
             card, sheet = "MURPHY, Mike", "Michael Murphy"
-        # group 5 shoots bogeys; Miller shoots par; everyone else par+2
+        # group 5 shoots bogeys; Miller shoots par; everyone else par+2.
+        # PH: Miller 6, everyone else 2 -> team hcp 5 vs 2, off the lowest
+        # Miller gets 3 team pops: SI 1, 3, 5 = holes 4, 2, 1; hole 1 is a
+        # par 3 so that pop is removed -> pops on 4 and 2 only.
         gross = ([p + 1 for p in PAR] if g == 5 else
                  (PAR if cid == 101 else [p + 2 for p in PAR]))
         CARDS[cid] = (card, sheet, g, cp, gross)
@@ -72,10 +82,11 @@ with db._connect(tmp) as conn:
         fn, ln = sheet.split(" ", 1)
         conn.execute("INSERT INTO customers (customer_id, first_name, last_name) "
                      "VALUES (?,?,?)", (c, fn, ln))
+        ph = 6 if c == 101 else 2
         conn.execute("INSERT INTO scoring_rounds (id, customer_id, player_name, event_id, "
                      "round_date, course_id, tee_id, holes_played, playing_handicap, gross, "
-                     "net, source) VALUES (?,?,?,?, '2026-10-06', ?, ?, 9, 2, ?, ?, 'entry')",
-                     (rid, c, card, EV, COURSE, TEE, sum(gross), sum(gross) - 2))
+                     "net, source) VALUES (?,?,?,?, '2026-10-06', ?, ?, 9, ?, ?, ?, 'entry')",
+                     (rid, c, card, EV, COURSE, TEE, ph, sum(gross), sum(gross) - ph))
         for h in range(1, 10):
             conn.execute("INSERT INTO scoring_holes (scoring_round_id, hole_number, "
                          "strokes, strokes_received) VALUES (?,?,?,?)",
@@ -102,17 +113,26 @@ mm = next((p for p in t4["players"] if p["player_name"] == "MURPHY, Mike"), None
 check("'Michael Murphy' on the sheet is matched to the card 'MURPHY, Mike' by customer_id",
       bool(mm) and mm["scoring_round_id"] is not None, str([p for p in t4["players"]]))
 check("no unmatched 'Michael Murphy' row remains", "Michael Murphy" not in names, str(names))
-# best ball: Miller's par beats the threesome's bogeys on every hole;
-# his pop on the SI-1 hole makes it a net birdie.
-check("team 5's total is the blind's best ball (par less one pop = 34)",
-      t4.get("total_net") == sum(PAR) - 1, str(t4.get("total_net")))
-check("team 5's team handicaps include the blind", bl is not None and "team_hcp" in bl, str(bl))
+# Team Net pops: Miller's team hcp is 3 (5 off the lowest 2); his pops land
+# on SI 1, 3, 5 = holes 4, 2, 1 and the par-3 pop on hole 1 is removed.
+check("the blind carries Miller's team hcp 3 (75% of 6 = 5, off the lowest 2)",
+      bl is not None and bl.get("team_hcp") == 3, str(bl))
+check("the blind's team pops are holes 2 and 4 only (hole 1 is a par 3, pop removed)",
+      bl is not None and bl.get("team_pops") == {"2": 1, "4": 1}, str(bl and bl.get("team_pops")))
+check("a 2-handicap team-mate off the lowest gets no team pop",
+      mm is not None and mm.get("team_hcp") == 0 and mm.get("team_pops") == {}, str(mm))
+check("the team pops are the game's, not the card's", bl is not None and bl.get("team_pops_src") == "team_net")
+check("team 5's total is Miller's best ball under the team pops: par less two (33)",
+      t4.get("total_net") == sum(PAR) - 2, str(t4.get("total_net")))
 t1 = teams.get("1") or {"players": []}
 check("Miller still plays on his own team 1 as himself",
       any(p["player_name"] == "MILLER, Daniel" and not p.get("blind") for p in t1["players"]),
       str([p["player_name"] for p in t1["players"]]))
-check("team 1's total is Miller's best ball too (34)", t1.get("total_net") == sum(PAR) - 1,
+check("team 1's total is the same best ball (33)", t1.get("total_net") == sum(PAR) - 2,
       str(t1.get("total_net")))
+# the card's own pops (SI 1 and 2 at 100%) would have given 34 on team 1
+# and counted a par-3 pop on no hole here; the point is the number moved
+# off the card's dots and onto the game's.
 
 print("\n" + ("ALL PASS" if not F else f"{len(F)} FAILURE(S): " + "; ".join(F)))
 sys.exit(1 if F else 0)
