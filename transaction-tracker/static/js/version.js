@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.525.19";
+window.TGF_VERSION = "2.525.20";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.525.20",
+    date: "2026-10-07",
+    title: "A starting handicap reaches the by-customer index map when old rounds sit under the name unlinked",
+    changes: [
+      "David Wetz (672) for the Lone Star Cup: Kerry's temporary 7.7 (#1342) was stored, but his old DFW rounds (2022 to March 2025, outside the lookback) sit in handicap_rounds under his name with no handicap link. The starting-handicap merge found him by NAME and put 7.7 on that row without its customer_id, and skipped the placeholder row that would have carried it. So every reader keyed on customer_id (_handicap_index_18_by_customer: score-entry playing handicaps and the Cup seed, the Sunday skins flights) had no index for him: his matches would have seeded with no playing handicap and his Sunday skins would have held him out as unflighted.",
+      "Now a player matched to a starting handicap by name carries that customer_id. Name-keyed surfaces (rosters, the missing-handicap banner) already read him and are unchanged. Guard: test_starting_handicap_by_customer.py.",
+    ],
+  },
   {
     version: "2.525.19",
     date: "2026-10-07",

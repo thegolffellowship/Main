@@ -663,7 +663,14 @@ to a key the other screen never reads, and the value looks gone.
   carries `customer_id`.
 - `get_all_handicap_players` stamps `customer_id` on EVERY player (it was
   resolved only to merge starting handicaps in, so computed players
-  arrived with none).
+  arrived with none). **v2.525.20:** that includes a player the merge
+  finds by the starting row's NAME — a `handicap_rounds` name with no
+  `handicap_player_links` row (David Wetz 672: old DFW rounds outside the
+  lookback, Kerry's starting 7.7). The merge used to leave that row's
+  `customer_id` empty and skip the placeholder append, so
+  `_handicap_index_18_by_customer` (score-entry PH, the Cup seed, the Cup
+  skins flights) had no index for him. Guard
+  `test_starting_handicap_by_customer.py`.
 - `templates/events.html` `hcpEntryFor(name, customerId)` is the one
   accessor both the roster cell and the pairing card use — id first, name
   as fallback. `patchLocalHandicapIndex` writes the id key too.
