@@ -23,6 +23,7 @@ window.TGF_CHANGELOG = [
     date: "2026-10-08",
     title: "Lone Star Cup splash on a fresh scan",
     changes: [
+      "Pair names read with an ampersand, never a slash (Kerry 10/8, CoS #1449: \"Make the teams have an &, not / between the names.\"): the FOURSOMES pair row (\"Kerry & Michael\") and the match card's surname line (\"Youngs & Cannon\") on the phone. A stored team label with a slash is shown with & too.",
       "Kerry 10/8 (FD #1440, flow ruled #1442): a fresh scan of a Lone Star Cup scoring link opens on a splash: the Cup logo on the logo's navy, one shimmer, about two seconds (tap to skip), then the SCORE THIS GROUP / FOLLOW THE CUP gate and Who are you?. Cup links only (Cup and staff-preview rounds), once per link per browser tab; reduced motion shortens it, and a missing logo shows the words instead. Built by Track A (8304d918)."
     ]
   },
