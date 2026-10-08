@@ -63,7 +63,7 @@
     {% for p in d.problems %}<span class="warn">{{ p }}</span>{% endfor %}
   </div>
   {% if not d.pages %}
-  <div class="empty">No Cup rounds are seeded yet, so there are no cart signs. They print after the draw and the Cup seed.</div>
+  <div class="empty">{{ d.get('empty_note') or 'No Cup rounds are seeded yet, so there are no cart signs. They print after the draw and the Cup seed.' }}</div>
   {% endif %}
   {% for page in d.pages %}
   <div class="sheet">

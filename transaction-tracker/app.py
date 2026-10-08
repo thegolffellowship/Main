@@ -5889,9 +5889,18 @@ def cart_signs_page(event_id):
     The Lone Star Cup prints its own design 3e signs from its draw (#1463),
     so the REPORTS tab's Cart Signs button lands there (Kerry 10/8)."""
     from email_parser.database import get_event_print_pack, report_brand
-    if report_brand(event_id).get("lsc") == "cup":
+    _lsc = report_brand(event_id).get("lsc")
+    if _lsc == "cup":
         qs = request.query_string.decode()
         return redirect(f"/events/{event_id}/cup-cart-signs" + (f"?{qs}" if qs else ""))
+    if _lsc == "practice":
+        # The Friday practice round prints the Cup's design 3e too (Kerry
+        # 10/8: "This isn't like what we designed at all").
+        from email_parser.lsc_cup import practice_cart_signs
+        d = practice_cart_signs(event_id)
+        if d.get("error"):
+            return d["error"], 404
+        return render_template("cup_cart_signs.html", d=d)
     pack = get_event_print_pack(event_id)
     if not pack:
         return "Event not found", 404

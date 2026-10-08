@@ -1643,3 +1643,84 @@ def lsc_card_math(fmt: str, rows: list[dict]) -> list[dict]:
         return out
     low = min(h.values())
     return [{"hcp": h[r["cid"]], "off": max(0, h[r["cid"]] - low)} for r in rows]
+
+
+def practice_cart_signs(event_id: int, db_path=None) -> dict:
+    """The Friday PRACTICE ROUND's cart signs in the Cup's design 3e
+    (design-claude #1463, templates/cup_cart_signs.html). Kerry 10/8, on
+    the TGF-layout sign with the Cup logo swapped in: "This isn't like what
+    we designed at all". Read from the SAVED pairings (the practice round
+    has no draw): one sign per cart, seats 1-2 = cart A, 3-4 = cart B, the
+    team band from each rider's Cup team (`lsc_handicap_lock`), names from
+    customers by customer_id. A cart whose riders are on different teams,
+    or a rider with no Cup team, is named in `problems` and doesn't print:
+    the band would be wrong. QR as the regular sign: only when the event is
+    in score entry and the QR dial names the group.
+    Returns the shape `cup_cart_signs.html` reads."""
+    import re as _re
+    from email_parser.database import (get_app_setting, get_connection,
+                                       get_event_print_pack)
+    pack = get_event_print_pack(int(event_id), db_path=db_path)
+    if not pack:
+        return {"error": "Event not found"}
+    ctx = lsc_report_context(int(event_id), db_path=db_path) or {}
+    cup = ctx.get("cup_event_id")
+    try:
+        lock = (json.loads(get_app_setting("lsc_handicap_lock", db_path=db_path) or "{}")
+                .get(str(cup)) or {}).get("players") or {}
+    except Exception:
+        lock = {}
+    qr_on = False
+    try:
+        from email_parser.score_entry import attach_cart_sign_qr, event_enabled, _qr_dial
+        qr_on = bool(event_enabled(int(event_id), db_path) and _qr_dial(int(event_id), db_path))
+        attach_cart_sign_qr(pack, db_path=db_path)
+    except Exception:
+        qr_on = False
+    cids = {int(p["customer_id"]) for g in pack["groups"] for p in g["players"] if p.get("customer_id")}
+    names: dict = {}
+    if cids:
+        conn = get_connection(db_path) if db_path else get_connection()
+        try:
+            q = ",".join("?" * len(cids))
+            for r in conn.execute(f"SELECT customer_id, first_name, last_name FROM customers "
+                                  f"WHERE customer_id IN ({q})", tuple(cids)):
+                names[r[0]] = ((r[1] or "").strip(), (r[2] or "").strip())
+        finally:
+            conn.close()
+    shotgun = str((pack.get("event") or {}).get("start_type") or "").lower().startswith("shotgun")
+    signs, problems = [], []
+    for g in pack["groups"]:
+        slot = _re.sub(r"^HOLE\s+", "", g.get("slot_label") or "", flags=_re.I)
+        tee_time = (pack["event"].get("start_clock") or "") if shotgun else slot
+        hole = slot if shotgun else "1"
+        qr = (g.get("score_qr") or {}).get("svg")
+        players = sorted(g["players"], key=lambda p: p.get("cart_pos") or 0)
+        for lo, hi in ((1, 2), (3, 4)):
+            riders = [p for p in players if lo <= (p.get("cart_pos") or 0) <= hi]
+            if not riders:
+                continue
+            teams = {(lock.get(str(p.get("customer_id"))) or {}).get("team") for p in riders}
+            label = f"group {g.get('group_num')} cart {'A' if lo == 1 else 'B'}"
+            if None in teams or len(teams) != 1:
+                problems.append(f"{label}: riders' Cup teams are {sorted(t or 'none' for t in teams)}; "
+                                "the team band would be wrong, so this sign doesn't print.")
+                continue
+            side = teams.pop()
+            color = LSC_TEAM_COLORS.get(side)
+            if not color:
+                problems.append(f"{label}: no team colour for {side}.")
+                continue
+            rows = []
+            for p in riders:
+                f, l = names.get(int(p["customer_id"]), ("", "")) if p.get("customer_id") else ("", "")
+                if not (f or l):
+                    parts = (p.get("name") or "").split()
+                    f, l = (" ".join(parts[:-1]), parts[-1]) if len(parts) > 1 else ("", p.get("name") or "")
+                rows.append({"first": f, "last": l.upper()})
+            signs.append({"team": "AUSTIN" if side == "austin" else "SAN ANTONIO", "color": color,
+                          "riders": rows, "tee_time": tee_time, "hole": hole, "qr_svg": qr,
+                          "session": "practice", "match": "PRACTICE ROUND"})
+    return {"event": pack["event"], "pages": [signs[i:i + 2] for i in range(0, len(signs), 2)],
+            "count": len(signs), "preview": False, "qr_on": qr_on, "problems": problems,
+            "empty_note": "No saved pairings yet, so there are no cart signs. Save PAIRINGS first."}

@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.526.1";
+window.TGF_VERSION = "2.526.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.526.2",
+    date: "2026-10-08",
+    title: "Practice-round cart signs print the Cup's design 3e",
+    changes: [
+      "Kerry 10/8, on the Friday cart sign that still used the TGF layout with only the Cup logo swapped in: \"This isn't like what we designed at all\". The practice round's Cart Signs (the REPORTS button and the bound pack) now print the Kerry-approved design 3e (templates/cup_cart_signs.html): navy band, Cup logo, tee time and hole, the TEAM band and the big names. lsc_cup.practice_cart_signs reads the SAVED pairings (one sign per cart, seats 1-2 / 3-4), the team from lsc_handicap_lock, and names by customer_id. A cart whose riders are on different Cup teams is named and doesn't print, because the band would be wrong. Guard: test_lsc_print_pack_tees.py."
+    ]
+  },
   {
     version: "2.526.1",
     date: "2026-10-08",

@@ -64,3 +64,31 @@ def test_the_practice_round_fills_a_blank_tee_from_the_cup_table(pdb):
 
 def test_a_regular_event_is_untouched(pdb):
     assert not _tees(db.get_event_print_pack(3304, db_path=pdb))[672]
+
+
+# --- the practice round's cart signs are the Cup's design 3e (Kerry 10/8:
+# "This isn't like what we designed at all") --------------------------------
+
+def test_practice_cart_signs_are_design_3e_with_team_bands(pdb):
+    from email_parser import lsc_cup
+    db.set_app_setting("lsc_handicap_lock", json.dumps({"3329": {"players": {
+        "7": {"team": "austin"}, "672": {"team": "austin"}}}}), db_path=pdb)
+    d = lsc_cup.practice_cart_signs(3330, db_path=pdb)
+    assert d["count"] == 1 and not d["problems"]
+    s = d["pages"][0][0]
+    assert s["team"] == "AUSTIN" and s["color"] == "#BF5700"
+    assert s["riders"] == [{"first": "Matt", "last": "JENKINS"}, {"first": "David", "last": "WETZ"}]
+    assert s["tee_time"] == "1:30 PM" and s["hole"] == "1"
+    from jinja2 import Environment, FileSystemLoader
+    import os
+    html = Environment(loader=FileSystemLoader(os.path.join(os.path.dirname(__file__), "templates"))) \
+        .get_template("cup_cart_signs.html").render(d=d)
+    assert "lsc-logo-dark.png" in html and "TEAM AUSTIN" in html and "WETZ" in html
+
+
+def test_a_mixed_team_cart_does_not_print(pdb):
+    from email_parser import lsc_cup
+    db.set_app_setting("lsc_handicap_lock", json.dumps({"3329": {"players": {
+        "7": {"team": "austin"}, "672": {"team": "sa"}}}}), db_path=pdb)
+    d = lsc_cup.practice_cart_signs(3330, db_path=pdb)
+    assert d["count"] == 0 and "doesn't print" in d["problems"][0]

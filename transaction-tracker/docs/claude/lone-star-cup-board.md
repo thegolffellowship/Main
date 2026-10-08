@@ -572,6 +572,12 @@ the Starter Sheet logo and Proxy logos too."
   `static/lsc-logo.png` on both LSC events.
 - **The Cup's Cart Signs:** `/events/3329/cart-signs` redirects to
   `/events/3329/cup-cart-signs` (design 3e).
+- **The practice round's Cart Signs (v2.526.2):** these print design 3e too,
+  rendered by `templates/cup_cart_signs.html` with data from
+  `lsc_cup.practice_cart_signs`. They read the saved pairings, one sign per
+  cart. The team band comes from the lock. A cart with riders from both teams
+  doesn't print, and the page names it. The bound pack does the same. Kerry
+  10/8, on the TGF-layout sign: "This isn't like what we designed at all".
 - **Open:** the course record reads "The Hideout Golf Club". CD wants "THE
   HIDEOUT GOLF CLUB & RESORT" from the record, not typed in. The rename is
   Kerry's call: courses are also matched by name.

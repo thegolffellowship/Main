@@ -97,6 +97,16 @@ def build_event_print_pack(render, event_id: int, static_dir: str,
         if slug == "starter-sheet":
             sheet_pack = ctx
         if slug == "cart-signs":
+            # The Lone Star Cup's practice round prints the Cup's design 3e
+            # sign (Kerry 10/8), not the TGF one.
+            if (ctx.get("brand") or {}).get("lsc") == "practice":
+                try:
+                    from email_parser.lsc_cup import practice_cart_signs
+                    htmls.append((slug, render("cup_cart_signs.html",
+                                               d=practice_cart_signs(int(event_id), db_path=db_path))))
+                except Exception:
+                    logger.exception("print pack: LSC cart signs failed for event %s", event_id)
+                continue
             # Score-entry QR for the groups the `score_entry_qr` dial enables.
             from email_parser.score_entry import attach_cart_sign_qr
             attach_cart_sign_qr(ctx, db_path=db_path)
