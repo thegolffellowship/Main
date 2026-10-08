@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.525.23";
+window.TGF_VERSION = "2.525.24";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.525.24",
+    date: "2026-10-08",
+    title: "Health: the health report's own slow line is 30 s",
+    changes: [
+      "Reading the health report is itself timed, and it was filing its own HEALTH item every morning: the first read after a restart or a quiet quarter hour makes two calls to the off-site backup bucket (about 12 s on a host running load 60 on 48 CPUs) and took 16-20 s; repeat reads are cached and quick (v2.525.23). The staff bridge scoring-health now has a 30 s slow line instead of the 10 s default. Monitoring only."
+    ]
+  },
   {
     version: "2.525.23",
     date: "2026-10-08",
