@@ -1,39 +1,86 @@
-window.TGF_VERSION = "2.525.23";
+window.TGF_VERSION = "2.525.28";
 window.TGF_CHANGELOG = [
   {
-    version: "2.525.23",
-    date: "2026-10-07",
-    title: "Lone Star Cup breakouts sort on the raw index, not the course handicap",
+    version: "2.525.28",
+    date: "2026-10-08",
+    title: "Lone Star Cup board reads: YOUR MATCH first, locked CH before play, raw-index breakouts",
     changes: [
-      "Kerry 10/7: \"Handicap breakouts start with raw indexes not course handicaps.\" The Sunday Low 7 | High 7 order (build_preview_dial, which seeds the staff preview's demo Singles) now ranks each team by the locked raw index, with course handicap only breaking an exact index tie. For Austin this moves John Wade (8.6) into the Low 7 and Jay Hogue (12.2) into the High 7; San Antonio's Low 7 is unchanged. Guard: test_lsc_handicap_lock.py.",
+      "for_viewer(board, customer_id) puts the viewer's own match first in every session with yours: true and lists your_matches, for the YOUR MATCH card (CoS #1398); a spectator gets the board unchanged. Each session also carries title FOURBALL, FOURSOMES or SINGLES.",
+      "Before a ball is struck every match player shows his locked course handicap from lsc_handicap_lock (Kerry 10/7, #1389), and the match strokes follow from it; a playing handicap the score-entry feed carries is never replaced. preview_board_payload can also compute from a supplied dial.",
+      "build_preview_dial makes demo matches from the real pairs, pools, tee sheet and locked handicaps, and ranks the Sunday Low 7 | High 7 by the locked RAW INDEX (Kerry 10/7: \"Handicap breakouts start with raw indexes not course handicaps\"), course handicap only breaking an exact tie. Guards: test_lsc_handicap_lock.py, tests/test_lsc_cup.py.",
     ],
+  },
+  {
+    version: "2.525.27",
+    date: "2026-10-08",
+    title: "Cup staff preview: a re-seed re-opens its demo rounds",
+    changes: [
+      "Re-seeding the staff preview after a teardown (to pick up Track B's raw-index pools, #1416) landed on the same PREVIEW rounds, which the teardown had closed, so their scoring links stopped opening and FOURSOMES had no scores. The seed now re-opens its own PREVIEW rounds first (score_entry.reopen_preview_round, PREVIEW rounds only). New checks in test_lsc_preview.py."
+    ]
+  },
+  {
+    version: "2.525.26",
+    date: "2026-10-08",
+    title: "Lone Star Cup Event Info: TEAMS reads the live pairs",
+    changes: [
+      "The live Cup dial's pairs block carries notes (rule, source) beside the two team lists, and 2.525.25 read those notes as teams, so TEAMS came up empty on the live site. It now reads only the Austin and San Antonio lists. The test fixture carries the same notes."
+    ]
+  },
+  {
+    version: "2.525.25",
+    date: "2026-10-08",
+    title: "Lone Star Cup Event Info page; slimmer staff preview header",
+    changes: [
+      "Kerry 10/8 (CoS #1428): \"I definitely want to see that info page quickly.\" /member/lonestarcup/info shows SCHEDULE | TEAMS | FORMATS from the Event Info mockup (EventInfo.dc.html, raw-index wording), one tab at a time, with anchors #schedule #teams #formats #fourball #foursomes #singles #skins. Track A's HOW IT WORKS pill on the hole screens already links there. TEAMS is read from the live Cup pairs, low pool then high pool, so Track B's raw-index cut shows as soon as it is on the dial. Share link and Download PDF (print) at the top. No dollars on the page.",
+      "Kerry 10/8: \"the preview header is really in the way.\" The staff preview's band and jump bar are now one slim line above the phone frame, never over it or the page's own header, and fold to a small PREVIEW tab after the first jump (tap it to open the bar again). Event Info is the first stop.",
+      "The Lone Star Cup logo is now in the app (static/lsc-logo.png, the original Kerry sent, checked against the Chief of Staff's manifest) for the Event Info header and the cart signs."
+    ]
+  },
+  {
+    version: "2.525.24",
+    date: "2026-10-08",
+    title: "Health: the health report's own slow line is 30 s",
+    changes: [
+      "Reading the health report is itself timed, and it was filing its own HEALTH item every morning: the first read after a restart or a quiet quarter hour makes two calls to the off-site backup bucket (about 12 s on a host running load 60 on 48 CPUs) and took 16-20 s; repeat reads are cached and quick (v2.525.23). The staff bridge scoring-health now has a 30 s slow line instead of the 10 s default. Monitoring only."
+    ]
+  },
+  {
+    version: "2.525.23",
+    date: "2026-10-08",
+    title: "Health: the replication check no longer makes the health report take 12-16 s",
+    changes: [
+      "The health report (bridge scoring-health and /admin/health) read the off-site backup's state with two Litestream listings of the R2 bucket, one after the other, on every call: 11.6 s on 10/7 and 16.4 s on 10/8, and growing as the replica's history grows. The two listings now run side by side, and only the scheduled 5:00 digest forces a fresh read; every other reader takes that value for up to 15 minutes (whether the replicator is running is still checked live each time). Monitoring only; replication itself is untouched, and the lag finding still comes from a fresh read every morning."
+    ]
   },
   {
     version: "2.525.22",
-    date: "2026-10-07",
-    title: "Lone Star Cup board reads for the new Cup screens: preview board, YOUR MATCH, session titles, locked CH",
+    date: "2026-10-08",
+    title: "Lone Star Cup staff preview: every Cup screen on demo rounds",
     changes: [
-      "For the 13 Cup screens Kerry issued for implementation (CoS #1398), the engine side Track B owns. preview_board_payload computes the full board from a SUPPLIED dial, by default the staff setting lsc_preview_matches (DEMO matches bound to demo rounds), never the live lsc_matches dial, the frozen results or the mock dial: same engine, same handicap lock, same skins read. build_preview_dial makes those demo matches from the real pairs, pools, tee sheet and locked handicaps (Fourball pair N v pair N within each pool, Foursomes rotated, Singles 1 v 1 to 14 v 14 by locked CH then index), and says it is not the draw.",
-      "for_viewer(board, customer_id) puts the viewer's own match first in every session with yours: true and lists your_matches, for the YOUR MATCH card; a spectator gets the board unchanged. Each session now carries title FOURBALL, FOURSOMES or SINGLES (Kerry 10/7, CoS #1397-1: Chapman is the kind of Foursomes, not a title). Before a ball is struck, every match player shows his locked course handicap from lsc_handicap_lock; a playing handicap the score-entry feed carries is never replaced. Guards: test_lsc_handicap_lock.py, tests/test_lsc_cup.py.",
-    ],
+      "Kerry 10/7 (CoS #1398): /events/3329/cup-preview, admin only. A jump bar (Landing, Scoring FOURBALL / FOURSOMES / SINGLES, QR gate, Who are you, Held, Board, Board open; Skins, Event Info and Cart signs follow) shows each screen in a phone frame under a red PREVIEW · demo scores band. The scoring screens run live against the demo rounds.",
+      "The demo is its own dial (lsc_preview_matches) and its own PREVIEW rounds, so publish refuses them, entry mode ignores them, and the live dial, the live round and the member board never see them. Seed state per #1398: FOURBALL all 7 final with full cards (a picked-up ball and a hole where every ball was picked up), FOURSOMES live thru 9 to 13 with match 1 closed out 2&1, SINGLES not started. Seed and tear down with the scoring-lsc-preview bridge; teardown runs before the live round opens Saturday.",
+      "Board match cards now read FOURBALL / FOURSOMES / SINGLES (was Four-Ball / Chapman), and HOW IT WORKS says AM Fourball · PM Foursomes (#1397-1). A ?match= link now scrolls to its card after the board is shown; before, it scrolled while the board was still hidden and stayed at the top.",
+      "Also in this push (the cup-thu batch, Kerry \"Push it now\" 10/7): the navy LONE STAR CUP tab (#1353); the Cup as the member landing through Sunday evening (#1351 D1); the board's FOURBALL | FOURSOMES | SINGLES and MATCHES | SKINS toggles (D3); Finding 0, the Events board reads entered scores only in entry mode (#1333); receipts auto-apply an exact open-balance payment to a one-off roster with \"auto · CFO to confirm\" (Kerry \"Ok. Build it.\"); a promoted receipt now carries its event; a credit refunded by Venmo leaves the Cup roster; the handicap lock read by the cup seed and Sunday skins (#1389); Wetz's starting handicap carries his customer_id; the mockup sources in docs/claude/lsc-mockups."
+    ]
   },
   {
     version: "2.525.21",
-    date: "2026-10-07",
-    title: "Lone Star Cup handicap lock: the seed and the Sunday skins read the locked numbers",
+    date: "2026-10-08",
+    title: "Cup hole screens: name + tee + PH rows, session Team Score box, HOW IT WORKS pill",
     changes: [
-      "Kerry 10/7 (CoS #1389): \"Handicaps should lock now. They won't change.\" The staff setting lsc_handicap_lock holds each Cup player's index, tee and course handicap of record. The Cup seed (score_entry.cup_seed) uses the locked course handicap as every session's playing handicap, and the Sunday skins flights (lsc_cup._skins_ctx) use the locked index, both over the live index, which keeps moving as rounds post. On 10/7 three players had already drifted: James Wilson Jr's computed 10.8 would have been CH 6 and Sunday Flight 1 against his locked 12.4 (CH 8, Flight 2), and Daniel South's 10.0 would have been CH 9 against his locked 8.",
-      "The seed's dry run reports the lock (players locked, and any whose live PH differs), and a locked player is never a no-playing-handicap gap. A malformed setting never breaks the skins read. Guards: test_score_entry.py (cup seed) and test_lsc_handicap_lock.py.",
-    ],
+      "Kerry 10/7 (CoS #1398-C, the rules of the page): no redundancy on a scoring screen. Player rows now carry name + tee + PH only; the \"vs Name\" line and the pair row's \"Team · one ball\" prose are gone (\"It's already obvious who I'm playing because of the above matches\"). A TEAM SCORE box under the rows carries the label and the two numbers, this SESSION's points (Austin, San Antonio), read from the Cup board's own per-match rollup (cup_standings.session_*), so the phone and the board cannot disagree; the strip above keeps the overall. Session titles in Kerry's words: FOURBALL · FOURSOMES · SINGLES (#1397-1), \"Chapman\" only ever describes the format.",
+      "The scanned-link screens follow the mockups QRLanding / WhoAreYou / Held (CoS #1398-A, Tracker Build's #1406 table: 'QR / Who / Held restyle, Track A's screens'): the landing adds a THIS GROUP box (San Antonio left, Austin right in the Cup; one list on a plain event), 'Group 1 · Match 1 · 18 holes' and the date as Oct 10, 2026; Who are you? carries the rule as its sub-line, the handicap/take-over copy under the names and a Back pill to the two buttons (data-act gate-back clears K.gate); Held says how far the card is ('The group's card is through hole 7.'), promises no timeout, and shows SAVED SO FAR as read-only cells. Screenshots docs/claude/screenshots/lsc-preview/00-landing-held, 01-who, 02-held.",
+      "HOW IT WORKS stays one tap from the scoring screen (#1398-C2): the orange pill under the group card opens Event Info's section for this session's format (/member/lonestarcup/info#fourball|foursomes|singles). Cup rounds only. Guards: test_cup_signs.py (template contract), test_score_entry_ui.py (123 checks; the old 'vs' expectation is replaced by the rule). Screenshots: docs/claude/screenshots/lsc-preview/."
+    ]
   },
   {
     version: "2.525.20",
     date: "2026-10-07",
-    title: "A starting handicap reaches the by-customer index map when old rounds sit under the name unlinked",
+    title: "Four-ball hole screen shows the team ball live; FOLLOW THE CUP opens the right card",
     changes: [
-      "David Wetz (672) for the Lone Star Cup: Kerry's temporary 7.7 (#1342) was stored, but his old DFW rounds (2022 to March 2025, outside the lookback) sit in handicap_rounds under his name with no handicap link. The starting-handicap merge found him by NAME and put 7.7 on that row without its customer_id, and skipped the placeholder row that would have carried it. So every reader keyed on customer_id (_handicap_index_18_by_customer: score-entry playing handicaps and the Cup seed, the Sunday skins flights) had no index for him: his matches would have seeded with no playing handicap and his Sunday skins would have held him out as unflighted.",
-      "Now a player matched to a starting handicap by name carries that customer_id. Name-keyed surfaces (rosters, the missing-handicap banner) already read him and are unchanged. Guard: test_starting_handicap_by_customer.py.",
-    ],
+      "Kerry 10/7 (#1351 D2): four-ball needs \"slots for both players to enter raw gross scores, or X's if player B picked up, but then the visual of what their team score would be.\" The hole screen now carries a TEAM BALL line under the four rows: each side's best net ball on this hole from the two gross scores as they go in, net = gross less that player's own match strokes on the hole (the engine's allocation, now on the card as match_status[].strokes), an X never counts, a partner with no score yet shows as such. Austin and San Antonio sides in their colours.",
+      "FOLLOW THE CUP (v2.525.19) did not expand the match: the Cup board's matches carry match_id, not id. Fixed; the card opens and scrolls into view, and stays open across the 20 s refresh. Phone UI test 123 checks, test_score_entry, test_cup_signs pass."
+    ]
   },
   {
     version: "2.525.19",

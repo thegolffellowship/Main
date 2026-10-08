@@ -277,8 +277,42 @@ picking a name CLAIMED the group, so a spectator's scan made him the scorer.
   `/events/<id>/cup-signs` (`templates/cup_signs.html`, two per Letter page,
   `?round_id=` narrows). The pairings-based print pack cannot carry three
   sessions' codes, which is why this reads the rounds directly.
-- Guards: `test_cup_signs.py`; `test_score_entry_ui.py` clicks the gate
-  before every name and checks the held note and the follow target.
+- **To the mockups (v2.525.21, `docs/claude/lsc-mockups/` QRLanding /
+  WhoAreYou / Held, CoS #1398-A):** the landing carries a THIS GROUP box
+  (`.se-this`/`.se-grp`: San Antonio left, Austin right by `card.matches[cid]
+  .side`; one list on a plain event), "Group N · Match M · 18 holes" and the
+  date as "Oct 10, 2026". **Who are you?** reads "The first person to start
+  keeps score for the group." as its sub-line, the handicap / take-over copy
+  under the names, and a **Back** pill (`data-act="gate-back"` clears
+  `K.gate`). **Held** says how far the holder's card is ("The group's card is
+  through hole 7." / "No holes saved yet."), the no-timeout promise, and a
+  SAVED SO FAR strip of read-only `.se-cell` divs (the holder's phone owns
+  the card; nothing here navigates).
+- Guards: `test_cup_signs.py` (template contract incl. the three screens);
+  `test_score_entry_ui.py` clicks the gate before every name and checks the
+  held note and the follow target.
+- **Four-ball TEAM BALL line (v2.525.20, Kerry #1351 D2):** under the four
+  rows on a four-ball hole, `teamBallLine(hole)` shows each side's best net
+  ball on this hole from the gross scores as they go in (draft or saved);
+  net = gross less that player's own match strokes on the hole, read from
+  `match_status[].strokes` (the engine's `detail["strokes"]`, now on the
+  card); an X never counts. The Cup board's cards carry `match_id`, which
+  is what `?match=` matches on.
+
+## The rules of the page on the Cup hole screens (v2.525.21, Kerry #1398-C)
+
+- **No redundancy:** player rows carry name + tee + PH only; no "vs Name",
+  no format prose ("Team · one ball" is gone from a pair's row).
+- **TEAM SCORE box** (`teamScoreBox()`) under the rows: the label and the two
+  numbers, this session's points. `_cup_standings` adds `session_id`,
+  `session_label`, `session_format`, `session_austin` / `session_sa` (and
+  `_projected`) summed from the board's own per-match points for the
+  session bound to this round. The `.se-cup` strip keeps the overall.
+- **HOW IT WORKS** (`hiwPill()`): the orange `.pr-hiw-link` pill under the
+  group card, `/member/lonestarcup/info#<fourball|foursomes|singles>`, Cup
+  rounds only. Session titles FOURBALL · FOURSOMES · SINGLES (#1397-1).
+- Picked-up holes: no new mechanic; v2.496.0 below governs (the mockup's X
+  is that mark rendered; the + stepper stops at triple).
 
 ## Match play: Ball in hole or Picked up (v2.496.0)
 
@@ -902,3 +936,30 @@ se_game_handicaps basis text.
   tee. `database.event_engine_state` fills it from each scorecard's `tee_id`
   when it differs from the field's. The phone card's own-tee pops are Track
   A's v2.525.6 (`_si_by_band`).
+
+## Finding 0: entry mode, the board reads entered scores only (CoS #1333, 2026-10-07)
+
+Kerry (#1313): "audit actual tracker entered scores ... without any importing
+from GG. That should have been off." Side Games' true audit (#1315) found the
+Events board on Olympia Hills (event 3308) had read Golf Genius imports.
+
+- **Entry mode** (`entry_publish.entry_mode`): score entry is on for the
+  event (`score_entry_events`) AND it has a non-PREVIEW score-entry round
+  dated TODAY (Central). The live day only: the next day the board reads the
+  record again (GG until it retires, published entries after the cutover), so
+  a closed event's board never changes after the fact.
+- **The board** (`get_event_leaderboard`, so the Events tab, the member
+  results and the scorer's LEADERBOARD toggle): in entry mode
+  `_entry_mode_overlay` creates TEMP tables `scoring_rounds` /
+  `scoring_holes` on the board's connection holding only the live entered
+  cards (`entry_publish.live_board_rows`: every entered player, part-played
+  cards included, tee resolved and pops allocated by the publisher's own
+  rules, over the round's full hole list then cut to the holes played).
+  SQLite resolves the unqualified names to TEMP first, so every read in the
+  board sees entries and none of the GG import. Nothing is written; the GG
+  rows stay stored for parity. Synthetic ids are negative; the team-pops
+  helper's second connection reads their tee by tee_id.
+- `event.score_source` on the board payload: `entry` or `record`.
+- Not affected: the Lone Star Cup board (`lsc_cup`) already reads entries
+  (`get_entered_scores` → `merge_entry_feed`).
+- Guard: `test_board_entry_mode.py`.

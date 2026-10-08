@@ -81,7 +81,7 @@ def test_preview_board_reads_the_supplied_dial_and_the_locked_ch(cup_db):
         "672": {"index": 7.7, "tee": "Blue", "ch": 8}}}}), cup_db)
     # the LIVE dial says something else entirely; the preview never reads it
     db.set_app_setting("lsc_matches", json.dumps({"event_id": 3329, "sessions": []}), cup_db)
-    b = lsc_cup.preview_board_payload(_dial(), cup_db)
+    b = lsc_cup.preview_board_payload(cup_db, dial=_dial())
     assert b["source"] == "preview"
     s = b["sessions"][0]
     assert s["title"] == "SINGLES"

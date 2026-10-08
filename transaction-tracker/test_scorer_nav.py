@@ -142,7 +142,7 @@ if sync_playwright and CHROME:
         ctx = b.new_context(viewport={"width": 390, "height": 844}, device_scale_factor=2, is_mobile=True, has_touch=True)
         pg = ctx.new_page()
         pg.goto(f"{B}/member/score?t={TOK}"); pg.wait_for_timeout(900)
-        pg.click("text=Kerry Niester"); pg.wait_for_timeout(900)
+        pg.click("[data-act=gate-score]"); pg.click("text=Kerry Niester"); pg.wait_for_timeout(900)
         dev = pg.evaluate("JSON.parse(localStorage.getItem('se_device'))")
         se.write_scores(gid, dev, 9101, [{"op_id": f"t{cid}-{h}", "customer_id": cid, "hole": h, "gross": PARS[h - 1]} for h in (3, 4) for cid, *_ in GROUP])
         pg.evaluate("localStorage.removeItem('se_hole_' + new URLSearchParams(location.search).get('t').slice(0,24))")

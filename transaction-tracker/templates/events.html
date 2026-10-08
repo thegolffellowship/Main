@@ -9775,7 +9775,14 @@
                 html += '</div></td></tr>';
             }
             // Render child payment sub-rows for this parent
-            const children = childPayments.filter(c => String(c.parent_item_id) === String(r.id));
+            // A credit paid back out by Venmo is closed: on a one-off event
+            // roster (the Lone Star Cup) its "-PAY Partial credit" row leaves
+            // with it (CoS #1339-3 / #1376-4, Kerry 10/7). The refund itself
+            // stays on the Payments / Refunds pages.
+            const _oo = (oneoffFinance[ev.id] || {}).oneoff;
+            const children = childPayments.filter(c => String(c.parent_item_id) === String(r.id)
+                && !(_oo && c.transaction_status === "refunded"
+                     && (c.email_uid || "").startsWith("manual-refund")));
             children.forEach(child => {
                 const childSt = child.transaction_status || "active";
                 const isRefundRow = (child.email_uid || "").startsWith("manual-refund") || (child.item_price || "").startsWith("-");

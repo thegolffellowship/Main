@@ -14365,6 +14365,49 @@ def _placed_flight_index(row: dict, bounds: list, index_ladder: bool,
     return idx
 
 
+def _entry_mode_overlay(conn, event_id: int, db_path=None) -> dict | None:
+    """For an event in entry mode (entry_publish.entry_mode), shadow
+    scoring_rounds / scoring_holes on `conn` with TEMP tables holding only
+    the event's live entered cards (entry_publish.live_board_rows). Returns
+    {scoring_round_id: tee_id} for the synthetic rows (negative ids, so they
+    can never meet a real row), or None when the event is not in entry mode
+    (the real tables are read as before)."""
+    try:
+        from email_parser import entry_publish as _ep
+        from email_parser import score_entry as _se
+        if not _se.event_enabled(event_id, db_path):
+            return None              # the common case: no read, no cost
+        read = _se.get_entered_scores(int(event_id), db_path=db_path)
+        if not _ep.entry_mode(event_id, db_path=db_path, _read=read):
+            return None
+        rows = _ep.live_board_rows(conn, event_id, db_path=db_path, _read=read)
+    except Exception:
+        logger.exception("entry-mode overlay failed for event %s; board reads the record", event_id)
+        return None
+    conn.execute("DROP TABLE IF EXISTS temp.scoring_rounds")
+    conn.execute("DROP TABLE IF EXISTS temp.scoring_holes")
+    conn.execute("CREATE TEMP TABLE scoring_rounds AS SELECT * FROM main.scoring_rounds WHERE 0")
+    conn.execute("CREATE TEMP TABLE scoring_holes AS SELECT * FROM main.scoring_holes WHERE 0")
+    tee_by_rid: dict = {}
+    for i, r in enumerate(rows, start=1):
+        rid = -i
+        tee_by_rid[rid] = r["tee_id"]
+        conn.execute(
+            "INSERT INTO temp.scoring_rounds (id, customer_id, player_name, event_id, "
+            "gg_aggregate_id, round_date, course_id, tee_id, holes_played, playing_handicap, "
+            "gross, net, source, imported_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (rid, r["customer_id"], r["player_name"], r["event_id"],
+             f"live:{r.get('se_round_id')}", r["round_date"], r["course_id"], r["tee_id"],
+             r["holes_played"], r["playing_handicap"], r["gross"], r["net"], "entry",
+             r["imported_at"]))
+        for h, g in r["holes"].items():
+            conn.execute(
+                "INSERT INTO temp.scoring_holes (scoring_round_id, hole_number, strokes, "
+                "strokes_received) VALUES (?,?,?,?)",
+                (rid, int(h), int(g), int(r["strokes_received"].get(h, 0) or 0)))
+    return tee_by_rid
+
+
 def get_event_leaderboard(event_name: str,
                           db_path: str | Path = DB_PATH) -> dict | None:
     """One event's combined boards for the EVENTS leaderboard tab."""
@@ -14379,6 +14422,15 @@ def get_event_leaderboard(event_name: str,
             return None
         ev = dict(ev)
         ev["holes"] = _event_holes_type(ev["item_name"], ev["format"])
+        # FINDING 0 (CoS #1333, 2026-10-07): an event in ENTRY MODE reads
+        # its ENTERED scores only. TEMP tables named scoring_rounds /
+        # scoring_holes shadow the real ones on this connection (SQLite
+        # resolves unqualified names to temp first), so every read below
+        # sees the live entered cards and none of the Golf Genius import,
+        # which stays stored for parity. Nothing is written to the real
+        # tables; the temp tables die with the connection.
+        live_overlay = _entry_mode_overlay(conn, ev["id"], db_path)
+        ev["score_source"] = "entry" if live_overlay is not None else "record"
 
         # MONEY WAITS FOR THE FIELD (Kerry 2026-09-15: "Winnings should
         # not show until 10 minutes after last score is posted"). Half a
@@ -15274,6 +15326,19 @@ def get_event_leaderboard(event_name: str,
                         _tn_si_by_rid.setdefault(_r["rid"], {})[int(_r["hn"])] = int(_r["si"])
                     if _r["par"] is not None:
                         _tn_par_by_rid.setdefault(_r["rid"], {})[int(_r["hn"])] = int(_r["par"])
+            # Entry mode: the live rows exist only on the first connection's
+            # TEMP tables (Finding 0), so read their tee's holes by tee_id.
+            for _rid in [r for r in _tn_rids if r < 0 and live_overlay]:
+                _tid = live_overlay.get(_rid)
+                if not _tid:
+                    continue
+                for _r in _c2.execute(
+                        "SELECT hole_number AS hn, par, stroke_index AS si "
+                        "FROM course_tee_holes WHERE tee_id = ?", (_tid,)):
+                    if _r["si"] is not None:
+                        _tn_si_by_rid.setdefault(_rid, {})[int(_r["hn"])] = int(_r["si"])
+                    if _r["par"] is not None:
+                        _tn_par_by_rid.setdefault(_rid, {})[int(_r["hn"])] = int(_r["par"])
     except Exception:
         _ruled_dots = None
         logger.exception("Non-fatal: team pops inputs unavailable for event %s", ev["id"])
@@ -15544,7 +15609,10 @@ def get_event_leaderboard(event_name: str,
     return {
         "event": {"id": ev["id"], "name": ev["item_name"], "date": ev["event_date"],
                   "course": ev["course"], "chapter": ev["chapter"],
-                  "holes": ev["holes"]},
+                  "holes": ev["holes"],
+                  # "entry" = the board is the phone-entered scores (entry
+                  # mode, Finding 0); "record" = scoring_rounds as stored.
+                  "score_source": ev.get("score_source") or "record"},
         "team_allowance": team_allowance,
         "team_basis": team_basis,
         "tee_by_player": tee_by_player,
@@ -60002,7 +60070,10 @@ def promote_expense_to_ledger(expense_id: int, category_name: str | None,
             (txn_id, entity_id, category_id, amount, event_id),
         )
 
-        # Mark expense as promoted
+        # Mark expense as promoted. The receipt's own event_id is set too
+        # (Track B #1380, 10/7: Mesa's 2766 got its ledger row and event
+        # name but kept event_id NULL, and the one-off roster reads
+        # event_id, so it never showed PAID).
         conn.execute(
             """UPDATE expense_transactions
                SET review_status = 'approved', acct_transaction_id = ?,
@@ -60010,6 +60081,10 @@ def promote_expense_to_ledger(expense_id: int, category_name: str | None,
                WHERE id = ?""",
             (txn_id, expense_id),
         )
+        if event_id and "event_id" in exp:
+            conn.execute(
+                "UPDATE expense_transactions SET event_id = COALESCE(event_id, ?) WHERE id = ?",
+                (event_id, expense_id))
 
         # Learn a keyword rule for future auto-categorization
         if category_id and merchant:

@@ -1249,7 +1249,8 @@ def for_viewer(board: dict, customer_id) -> dict:
     return b
 
 
-PREVIEW_KEY = "lsc_preview_matches"
+PREVIEW_DIAL = "lsc_preview_matches"
+PREVIEW_KEY = PREVIEW_DIAL
 
 
 def build_preview_dial(dial: dict, lock: dict) -> dict:
@@ -1314,26 +1315,29 @@ def build_preview_dial(dial: dict, lock: dict) -> dict:
     return out
 
 
-def preview_board_payload(dial: dict | None = None, db_path=None) -> dict:
-    """A board computed from a SUPPLIED dial (Kerry's staff preview,
-    CoS #1398-B), by default the staff setting `lsc_preview_matches`:
-    demo matches bound by se_round to demo rounds, never the live
-    lsc_matches dial, never the frozen results, never the mock dial.
-    Same engine, same lock, same skins read as the live board."""
-    from email_parser.database import _connect
-    with _connect(db_path) as conn:
-        if dial is None:
-            dial = _setting_json(conn, PREVIEW_KEY) or {}
+def preview_board_payload(db_path=None, dial: dict | None = None) -> dict:
+    """The STAFF PREVIEW board (Kerry 10/7, CoS #1398-B): the same engine on
+    the demo dial and its PREVIEW rounds. Never the live dial, never the
+    frozen results, never the mock scores; served to staff only. `dial`
+    computes from a supplied dial instead of the stored one."""
+    if dial is not None:
+        from email_parser.database import _connect
         if not dial.get("sessions"):
             return {"configured": False}
-        return _board_from_dial(conn, dial, db_path, use_mock=False,
-                                source_label="preview")
+        with _connect(db_path) as conn:
+            b = _board_from_dial(conn, dial, db_path, use_mock=False,
+                                 source_label="preview")
+    else:
+        b = _board_payload(db_path, use_frozen=False, dial_key=PREVIEW_DIAL)
+    if b.get("configured"):
+        b["preview"] = True
+    return b
 
 
-def _board_payload(db_path=None, use_frozen: bool = True) -> dict:
+def _board_payload(db_path=None, use_frozen: bool = True, dial_key: str = "lsc_matches") -> dict:
     from email_parser.database import _connect
     with _connect(db_path) as conn:
-        dial = _setting_json(conn, "lsc_matches")
+        dial = _setting_json(conn, dial_key)
         if not dial:
             return {"configured": False}
         if use_frozen:
@@ -1349,7 +1353,8 @@ def _board_payload(db_path=None, use_frozen: bool = True) -> dict:
                                        "forced": res.get("forced", False)}
                 b["board_live"] = bool(dial.get("board_live"))
                 return b
-        return _board_from_dial(conn, dial, db_path)
+        return _board_from_dial(conn, dial, db_path,
+                                use_mock=(dial_key == "lsc_matches"))
 
 
 def _board_from_dial(conn, dial: dict, db_path=None, use_mock: bool = True,

@@ -318,7 +318,6 @@ deposit ledger. Guard: `test_oneoff_paid_badge.py`.
   `lsc_matches` by hand afterward (settings write, no push).
 - **Pars:** every Hideout tee is par 72 (37/35), so no relative-par
   adjustment applies across Blue/White/Red/Teal.
-
 ## FOLLOW THE CUP from a scorer link — v2.525.19 (Kerry 2026-10-07, #1357-6)
 
 A scanned scoring link lands on SCORE THIS GROUP / FOLLOW THE CUP (score-entry.md).
@@ -390,3 +389,53 @@ either way). CH = whs_round(index × slope/113 + (rating − 72)).
 - Score entry's `_cup_standings` / `round_matches` read the LIVE dial, so a demo
   round shows no Cup strip until whoever builds the preview points them at
   `lsc_preview_matches` for preview rounds.
+- Sunday Low 7 | High 7: SA has four at CH 8 (Baker, Mazanec, South, Wilson);
+  by index Wilson is 8th, so High.
+
+## STAFF PREVIEW — /events/3329/cup-preview (Kerry 10/7, CoS #1398)
+
+Every Cup screen on demo rounds behind one jump bar, in a phone frame, with a
+red "PREVIEW · demo scores" band. Admin only, never linked from a member page.
+
+- **Engine:** `email_parser/lsc_preview.py` (`build_dial` / `seed` / `teardown`).
+  The demo lives on its OWN dial `lsc_preview_matches` (`se.PREVIEW_DIAL`) and
+  on score-entry rounds keyed `lscprev:<session>` and labelled
+  `se.PREVIEW_LABEL · FOURBALL|FOURSOMES|SINGLES`, so `entry_publish` refuses
+  them and `entry_mode` (Finding 0) ignores them. The live `lsc_matches` dial,
+  the live rounds and the member board are never touched.
+- **Seed state (#1398):** FOURBALL all 7 matches final with full cards, one
+  picked-up ball and one hole where every ball was picked up (the round stays
+  OPEN so its scoring links still open the finished card; a closed round
+  revokes every link). FOURSOMES live thru 9–13, match 1 closed out 2&1
+  (written net of the board's own pops, so it holds whatever the handicaps).
+  SINGLES not started. The seeder's scorer seat is released on every group
+  except FOURSOMES group 2, which is the HELD screen
+  (`se.release_preview_seed_locks`, PREVIEW rounds only).
+- **Board:** `/api/lsc/board?preview=1` returns `lsc_cup.preview_board_payload()`
+  for an admin/manager session only; anyone else gets the live board. The
+  contests page passes `?preview=1` through and shows the red band.
+  `round_matches` reads both dials; `_cup_standings` uses the preview payload
+  for a preview-bound round.
+- **Bridge:** `scoring-lsc-preview:seed` (dry run) · `seed|apply` · `teardown`.
+- **Screenshots:** `docs/claude/screenshots/lsc-preview/`.
+- **Teardown** before the live round opens Saturday (closes the PREVIEW
+  rounds, clears the dial).
+
+## EVENT INFO — /member/lonestarcup/info (Kerry 10/8, CoS #1428) — v2.525.25
+
+`templates/lsc_info.html`, route `member_lonestarcup_info` in app.py. Public
+like the member Cup page; no dollars. SCHEDULE | TEAMS | FORMATS from
+`docs/claude/lsc-mockups/EventInfo.dc.html` (byte-exact, raw-index wording),
+one tab at a time; anchors `#schedule #teams #formats #fourball #foursomes
+#singles #skins` (Track A's HOW IT WORKS pill links to the format anchors and
+highlights that row). TEAMS reads `lsc_matches.pairs` (low pool, then high
+pool, by combined index when the dial carries it, else combined CH); a last
+name shared on the roster shows the first name too. Captains are the
+mockup's (`LSC_CAPTAINS`). "Match draws" reads "posted after Thursday's
+draw" until every session has its 7+ matches. Share link / Download PDF
+(print CSS shows all three sections). Guard `test_lsc_info.py`.
+
+The staff preview header is one slim line that folds to a "PREVIEW ▾" tab
+after the first jump (Kerry 10/8: "the preview header is really in the
+way"); Event Info is its first stop. Logo: `static/lsc-logo.png` (sha256
+8d771633…, CoS MANIFEST #1416).

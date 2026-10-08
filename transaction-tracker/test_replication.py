@@ -162,4 +162,29 @@ else:
     bad = rp.restore_to(os.path.join(root, "x.db"), live)
     check("restore_to refuses plainly when replication is not configured", bad["ok"] is False and "not configured" in bad["error"], bad)
 
+# ── the status read: main + archive listings run side by side, and are cached ──
+import tempfile, time as _t, pathlib as _pl
+_d = _pl.Path(tempfile.mkdtemp()); (_d / "transactions.db").write_text("x"); (_d / "transactions_gg_archive.db").write_text("x")
+_save = (rp.configured, rp.missing_env, rp.binary, rp.running, rp._live, rp._generations)
+_calls = []
+def _slow_gen(b, path, timeout, db_path=None):
+    _calls.append(path.name); _t.sleep(0.6)
+    return {"generations": 1, "lag_s": 0.0, "latest_end": "z", "error": None}
+try:
+    rp.configured = lambda: True; rp.missing_env = lambda: []; rp.binary = lambda p=None: "/x/litestream"
+    rp.running = lambda: True; rp._live = lambda p=None: _d / "transactions.db"; rp._generations = _slow_gen
+    rp._CACHE.update(at=0.0, val=None)
+    t0 = _t.time(); st = rp.status(_d / "transactions.db"); cold = _t.time() - t0
+    check("status: the main and archive listings run side by side (v2.525.23: one wait, not two)",
+          cold < 1.1 and sorted(_calls) == ["transactions.db", "transactions_gg_archive.db"] and st["archive"]["generations"] == 1, f"{cold:.2f}s {_calls}")
+    t0 = _t.time(); rp.status(_d / "transactions.db"); warm = _t.time() - t0
+    check("...a second read inside the cache window makes no R2 call", warm < 0.2 and len(_calls) == 2, f"{warm:.2f}s {_calls}")
+    rp.status(_d / "transactions.db", fresh=True)
+    check("...and the scheduled digest's fresh=True always re-reads", len(_calls) == 4, _calls)
+    rp.running = lambda: False
+    check("...a cached read still re-checks that the process is running", rp.status(_d / "transactions.db")["running"] is False)
+finally:
+    (rp.configured, rp.missing_env, rp.binary, rp.running, rp._live, rp._generations) = _save
+    rp._CACHE.update(at=0.0, val=None)
+
 print(); print("ALL PASS" if not F else f"FAILED ({len(F)}): {F}"); sys.exit(1 if F else 0)

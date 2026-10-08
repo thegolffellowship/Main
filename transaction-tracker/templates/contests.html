@@ -245,7 +245,34 @@
             white-space: nowrap; flex: 0 0 auto;
         }
         .top-tab:hover { color: var(--text); }
+        /* Cup board session / view toggles (Kerry 2026-10-07, CoS #1351 D3) */
+        .lsc-preview-band { background:#B91C1C; color:#fff; font:700 12px/1 'Bitter',serif; letter-spacing:.12em; text-align:center; padding:8px; border-radius:8px; margin:0 0 10px; }
+        .lsc-bd-seg { display: flex; gap: 4px; margin: 12px 0 8px; padding: 4px;
+                      background: #EEF1F6; border-radius: 9999px; }
+        .lsc-bd-seg button { flex: 1 1 0; min-height: 40px; border: none; border-radius: 9999px;
+                             background: transparent; color: #374151; cursor: pointer;
+                             font: 700 13px/1 'Bitter', serif; letter-spacing: .04em; text-transform: uppercase; }
+        .lsc-bd-seg button.on { background: #002868; color: #fff; }
+        .lsc-bd-seg.sm button { min-height: 34px; font-size: 12px; }
+        .lsc-bd-seg.sm button.on { background: #1B1B1B; }
+        .lsc-bd-seg .lv { font-style: normal; font-size: 10px; color: #E87C3E; margin-left: 4px; }
+        .lsc-bd-seg button.on .lv { color: #FFD7BC; }
         .top-tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+        /* LONE STAR CUP tab: a navy pill, white text (Kerry 2026-10-07,
+           CoS #1353: "Make the LONE STAR CUP on the Nav bar with that navy
+           blue background with white text."). Same navy as the Cup event
+           card (.lsc-event); selected adds the orange ring the card's top
+           border carries, unselected text sits at 90%. */
+        .top-tab[data-top="lone-star-cup"] {
+            background: #002868; color: rgba(255,255,255,0.9);
+            border: 2px solid #002868; border-radius: 9999px;
+            margin: 0.3rem 0.35rem; padding-top: 0.4rem; padding-bottom: 0.4rem;
+            align-self: center;
+        }
+        .top-tab[data-top="lone-star-cup"]:hover { color: #fff; }
+        .top-tab[data-top="lone-star-cup"].active {
+            color: #fff; border-color: #E87C3E; box-shadow: 0 0 0 1px #E87C3E;
+        }
 
         /* ── EVENTS leaderboard (ADMIN pilot, Kerry 2026-09-11) ──
            toggles are CONNECTED segments (Kerry: "Connect the toggles
@@ -2315,7 +2342,7 @@
                             <div class="pr-hiw-sec-h">The Weekend</div>
                             <div class="lsc-sched">
                                 <div class="d"><span class="dt">Friday, October 9</span><span class="fmt">Practice Round</span></div>
-                                <div class="d"><span class="dt">Saturday, October 10</span><span class="fmt">AM Fourball &middot; PM Chapman</span></div>
+                                <div class="d"><span class="dt">Saturday, October 10</span><span class="fmt">AM Fourball &middot; PM Foursomes</span></div>
                                 <div class="d"><span class="dt">Sunday, October 11</span><span class="fmt">Singles</span></div>
                             </div>
                         </div>
@@ -2833,10 +2860,20 @@
         if (!box) return;
         let d;
         try {
-            const res = await fetch("/api/lsc/board");
+            // ?preview=1 (staff only, server-gated): the Cup STAFF PREVIEW's
+            // demo board (CoS #1398-B); a member gets the live board.
+            const pv = new URLSearchParams(location.search).get("preview") === "1";
+            const res = await fetch(pv ? "/api/lsc/board?preview=1" : "/api/lsc/board");
             d = await res.json();
         } catch (e) { return; }                    // quiet: board is optional
         if (!d || !d.configured) { box.style.display = "none"; return; }
+        if (d.preview && !$("lsc-preview-band")) {
+            const band = document.createElement("div");
+            band.id = "lsc-preview-band";
+            band.className = "lsc-preview-band";
+            band.textContent = "PREVIEW · demo scores";
+            box.parentNode.insertBefore(band, box);
+        }
         lscBoardRender(box, d);
         box.style.display = "";
         // Live poll: refetch every 20s while a match is live and the tab
@@ -2906,9 +2943,10 @@
                     eventName: null, gg: m,
                 };
                 if (live) o.liveLead = mpLiveLead(m, aName, bName);
-                const fmtLbl = { singles: "Singles", fourball: "Four-Ball",
-                                 chapman: "Chapman", foursomes: "Chapman",
-                                 alternate_shot: "Chapman" }[sess.format] || "";
+                // Session titles are FOURBALL · FOURSOMES · SINGLES everywhere (#1397-1).
+                const fmtLbl = { singles: "Singles", fourball: "Fourball",
+                                 chapman: "Foursomes", foursomes: "Foursomes",
+                                 alternate_shot: "Foursomes" }[sess.format] || "";
                 const status = m.state === "final" ? "FINAL"
                     : live ? ((o.liveLead && o.liveLead.thru > 0)
                               ? `LIVE · thru ${o.liveLead.thru}`
@@ -2920,7 +2958,7 @@
                     hasResult: m.state !== "upcoming",
                     // the match's dial id, so a scorer link's FOLLOW THE CUP
                     // (?match=<id>) can open this card (Kerry 2026-10-07, #1357-6)
-                    dataAttrs: m.id ? ` data-lsc-match="${escapeHtml(String(m.id))}"` : "",
+                    dataAttrs: (m.match_id ?? m.id) ? ` data-lsc-match="${escapeHtml(String(m.match_id ?? m.id))}"` : "",
                 });
             }).join("");
             // Skins (Kerry, CA #717): scored apart from the match, so
@@ -2954,27 +2992,63 @@
                     ? `<div class="lsc-bd-skins"><span class="h">Skins · ${escapeHtml(sk.basis || "gross")} · ${sk.buyers_in_round} bought in · pot ${$c(sk.pot_cents)} (staff only)</span></div>` : "";
                 skinsHtml = rows || flags ? head + rows + flags : "";
             }
-            return `<div class="lsc-bd-sess">
-                <div class="lsc-bd-sess-h"><b>${escapeHtml(sess.label || sess.id || "")}</b>
-                    ${sess.date ? `<span class="dt">${escapeHtml(sess.date)}</span>` : ""}
-                    ${anyPts ? `<span class="sc"><span class="au">${lscFmtPts(au)}</span> &mdash; <span class="sa">${lscFmtPts(sa)}</span></span>` : ""}
-                </div>${cards}${skinsHtml}</div>`;
-        }).join("");
+            return { id: sess.id, format: sess.format, au, sa, anyPts, cards, skinsHtml,
+                     label: sess.label || sess.id || "", date: sess.date || "",
+                     live: (sess.matches || []).some(m => m.state === "live"),
+                     upcoming: (sess.matches || []).some(m => m.state === "upcoming"),
+                     matchIds: (sess.matches || []).map(m => String(m.match_id ?? m.id)) };
+        });
+        // D3 (Kerry 2026-10-07, CoS #1351): one session at a time behind a
+        // FOURBALL | FOURSOMES | SINGLES toggle, its own team score above
+        // MATCHES | SKINS. ?match=<dial id> (a scorer link's FOLLOW THE CUP,
+        // Track A #1357-6) opens on that match's session, card open.
+        const FMT_TAB = { fourball: "Fourball", chapman: "Foursomes", foursomes: "Foursomes",
+                          alternate_shot: "Foursomes", singles: "Singles" };
+        const wantM = new URLSearchParams(location.search).get("match");
+        if (window.lscSel == null || !sessions.some(x => x.id === window.lscSel)) {
+            const byM = wantM && sessions.find(x => x.matchIds.includes(wantM));
+            const pick = byM || sessions.find(x => x.live) || sessions.find(x => x.upcoming)
+                         || sessions[sessions.length - 1];
+            window.lscSel = pick ? pick.id : null;
+        }
+        window.lscView = window.lscView || "matches";
+        const cur = sessions.find(x => x.id === window.lscSel) || sessions[0];
+        const segS = sessions.length > 1 ? `<div class="lsc-bd-seg" role="tablist">${sessions.map(x =>
+            `<button type="button" role="tab" aria-selected="${x.id === (cur || {}).id}" class="${x.id === (cur || {}).id ? "on" : ""}" data-lscsess="${escapeHtml(x.id)}">${escapeHtml(FMT_TAB[x.format] || x.label)}${x.live ? ' <i class="lv">LIVE</i>' : ""}</button>`).join("")}</div>` : "";
+        let body = "";
+        if (cur) {
+            const segV = `<div class="lsc-bd-seg sm" role="tablist">${["matches", "skins"].map(v =>
+                `<button type="button" role="tab" aria-selected="${window.lscView === v}" class="${window.lscView === v ? "on" : ""}" data-lscview="${v}">${v === "matches" ? "Matches" : "Skins"}</button>`).join("")}</div>`;
+            const sessScore = `<div class="lsc-bd-sess-h"><b>${escapeHtml(cur.label)}</b>
+                    ${cur.date ? `<span class="dt">${escapeHtml(cur.date)}</span>` : ""}
+                    <span class="sc"><span class="au">${lscFmtPts(cur.au)}</span> &mdash; <span class="sa">${lscFmtPts(cur.sa)}</span></span>
+                </div>`;
+            const inner = window.lscView === "skins"
+                ? (cur.skinsHtml || '<div class="lsc-bd-proj">No skins yet this session.</div>')
+                : cur.cards;
+            body = `<div class="lsc-bd-sess">${sessScore}${segV}${inner}</div>`;
+        }
         // Cards the reader had open stay open across the 20 s live refresh,
-        // and ?match=<dial id> (a scorer link's FOLLOW THE CUP) opens that
-        // match's card the first time and scrolls to it.
+        // and ?match=<dial id> opens that match's card the first time and
+        // scrolls to it (Track A, #1357-6).
         const wasOpen = new Set(Array.from(box.querySelectorAll(".mp-match-card[data-lsc-match] .mp-card-head.open"))
             .map((h) => h.closest(".mp-match-card").dataset.lscMatch));
-        const want = new URLSearchParams(location.search).get("match");
-        if (want && !box.dataset.lscMatchOpened) wasOpen.add(want);
-        box.innerHTML = head + sessions;
+        if (wantM && !box.dataset.lscMatchOpened) wasOpen.add(wantM);
+        box.innerHTML = head + segS + body;
+        box.querySelectorAll("[data-lscsess]").forEach(b => b.addEventListener("click", () => {
+            window.lscSel = b.dataset.lscsess; lscBoardRender(box, d); }));
+        box.querySelectorAll("[data-lscview]").forEach(b => b.addEventListener("click", () => {
+            window.lscView = b.dataset.lscview; lscBoardRender(box, d); }));
         wasOpen.forEach((id) => {
             const el = Array.from(box.querySelectorAll(".mp-match-card[data-lsc-match]")).find((c) => c.dataset.lscMatch === id);
             const hd = el && el.querySelector(".mp-card-head");
             if (hd && el.querySelector(".mp-scorecard") && !hd.classList.contains("open")) mpCardToggle(hd);
-            if (el && want === id && !box.dataset.lscMatchOpened) {
+            if (el && wantM === id && !box.dataset.lscMatchOpened) {
                 box.dataset.lscMatchOpened = "1";
-                try { el.scrollIntoView({block: "start", behavior: "smooth"}); } catch (e) { /* older browsers */ }
+                el.parentNode.insertBefore(el, el.parentNode.querySelector(".mp-match-card"));
+                // After this render returns: the caller un-hides the box
+                // only then, and a hidden box does not scroll.
+                setTimeout(() => { try { el.scrollIntoView({block: "start", behavior: "smooth"}); } catch (e) { /* older browsers */ } }, 50);
             }
         });
         // Tap-to-open scorecards need no wiring here: the Match Play
