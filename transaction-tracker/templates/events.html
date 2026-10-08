@@ -6076,20 +6076,32 @@
         if (ev.report_rounds && ev.report_rounds.length) {
             h += '<div class="report-rounds" style="display:flex;flex-direction:column;gap:0.35rem;margin-bottom:0.6rem;">';
             ev.report_rounds.forEach(r => {
-                const drawn = r.drawn ? `${r.drawn}${r.of ? ' of ' + r.of : ''} matches drawn` : 'not drawn yet';
+                // A round that is its own event (the practice round) prints
+                // from that event's saved pairings.
+                const at = (path, label, title) => r.event_id
+                    ? `<button class="pairings-action-btn report-btn" onclick="window.open('/events/${r.event_id}/${path.split('?')[0]}','_blank')" title="${title}">&#x1F5A8; ${label}</button>`
+                    : open(path, label, title);
+                const drawn = r.event_id ? 'its own pairings'
+                    : (r.drawn ? `${r.drawn}${r.of ? ' of ' + r.of : ''} matches drawn` : 'not drawn yet');
+                const q = `session=${encodeURIComponent(r.id)}`;
+                const nm = escapeHtml(r.title || r.id);
                 h += `<div style="display:flex;flex-wrap:wrap;align-items:center;gap:0.4rem;padding:0.35rem 0.5rem;border:1px solid var(--border);border-radius:8px;">`
-                    + `<strong style="min-width:8.5rem;font-family:Bitter,Georgia,serif;color:#002855;">${escapeHtml(r.title || r.id)}</strong>`
+                    + `<strong style="min-width:8.5rem;font-family:Bitter,Georgia,serif;color:#002855;">${nm}</strong>`
                     + `<span style="font-size:0.75rem;color:var(--text-muted);min-width:9rem;">${escapeHtml(r.date || '')} &middot; ${drawn}</span>`
-                    + open(`scorecards?session=${encodeURIComponent(r.id)}`, "Scorecards", `Print the ${escapeHtml(r.title || r.id)} scorecards`)
-                    + open(`cup-cart-signs?session=${encodeURIComponent(r.id)}`, "Cart Signs", `Print the ${escapeHtml(r.title || r.id)} cart signs`)
+                    + at(`starter-sheet?${q}`, "Starter Sheet", `Print the ${nm} starter sheet`)
+                    + at(r.event_id ? `cart-signs` : `cup-cart-signs?${q}`, "Cart Signs", `Print the ${nm} cart signs`)
+                    + at(`scorecards?${q}`, "Scorecards", `Print the ${nm} scorecards`)
                     + `</div>`;
             });
-            h += '</div><div style="font-size:0.75rem;font-weight:700;color:var(--text-muted);margin:0.2rem 0 0.35rem;">WHOLE EVENT</div>';
+            h += `</div><div style="font-size:0.75rem;color:var(--text-muted);margin:0 0 0.35rem;">Each round's groups and tee times fill in from <a href="/events/${ev.id}/cup-draw" target="_blank">THE DRAW</a>; every report above reads them.</div>`;
         }
+        const perRound = !!(ev.report_rounds && ev.report_rounds.length);
         h += '<div class="reports-actions" style="display:flex;flex-wrap:wrap;gap:0.4rem;">';
-        h += open("starter-sheet", "Starter Sheet", "Print starter sheet");
-        h += open("cart-signs", "Cart Signs", "Print cart signs");
-        h += open("scorecards", "Scorecards", "Print scorecards (GGID codes, layouts, Team/Cart Net)");
+        if (!perRound) {
+            h += open("starter-sheet", "Starter Sheet", "Print starter sheet");
+            h += open("cart-signs", "Cart Signs", "Print cart signs");
+            h += open("scorecards", "Scorecards", "Print scorecards (GGID codes, layouts, Team/Cart Net)");
+        }
         // No games at this event: no game reports to print (Kerry 10/8).
         if (!eventGamesOff(ev)) {
             h += open("games-payouts", "Games &amp; Payouts", "Print the Games &amp; Payouts sheet — every pot, place and write-in line, from this GAMES tab");
@@ -6098,7 +6110,7 @@
         }
         // Kerry 2026-09-21: "there should be a button to SEND PACK" — the
         // bound PDF mailed now, on demand.
-        h += `<button class="pairings-action-btn send-pack-btn" onclick="sendPrintPack(${ev.id}, this)" title="Email the bound print pack (starter sheet, cart signs, scorecards, games & payouts, divisions & flights, proximity markers) now">&#x2709; Send Pack</button>`;
+        if (!perRound) h += `<button class="pairings-action-btn send-pack-btn" onclick="sendPrintPack(${ev.id}, this)" title="Email the bound print pack (starter sheet, cart signs, scorecards, games & payouts, divisions & flights, proximity markers) now">&#x2709; Send Pack</button>`;
         h += '</div>';
         h += '<div style="font-size:0.75rem;color:var(--text-muted);margin-top:0.5rem;">Each report opens in a new tab with its own Print and Download PDF buttons.</div>';
         h += '</div>';

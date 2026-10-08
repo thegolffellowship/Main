@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.526.5";
+window.TGF_VERSION = "2.526.6";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.526.6",
+    date: "2026-10-08",
+    title: "Every Cup round has all its reports, filled from THE DRAW",
+    changes: [
+      "Kerry 10/8: \"rounds with perhaps all buttons under each round. Because we'll have different pairings for each round on different tee times ... determined tonight at THE DRAW and autopopulate, but it needs to have a place to autopopulate that then feeds into all the reports.\" and \"Practice Round could move down into it too.\" The place is each round's session in lsc_matches, which the draw page writes. Every Cup report now reads it.",
+      "Each round's row on the Cup's REPORTS tab has Starter Sheet, Cart Signs and Scorecards. The Starter Sheet is new per round (lsc_cup.cup_round_pack): one group per card, the draw's tee times, seats in the card's order, the team colour on each player, the band, and the LOCKED index and course handicap. Cart Signs fill straight from the draw until the Cup seed opens the round; the scorer QR joins then. An undrawn round says so.",
+      "PRACTICE ROUND is the first row and prints from its own event (3330) and saved pairings. The Cup's whole-event Starter Sheet, Cart Signs, Scorecards and Send Pack buttons are gone, because every round carries its own. Guards: test_lsc_scorecards.py, test_cup_report_rounds.py."
+    ]
+  },
   {
     version: "2.526.5",
     date: "2026-10-08",

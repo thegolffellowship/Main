@@ -29754,11 +29754,25 @@ def get_all_events(db_path: str | Path | None = None) -> list[dict]:
             _lm = json.loads(get_app_setting("lsc_matches", db_path=db_path) or "{}")
             if isinstance(_lm, dict) and _lm.get("event_id"):
                 from email_parser.lsc_cup import session_title as _st
-                _rounds_by_event[int(_lm["event_id"])] = [
+                _cup = int(_lm["event_id"])
+                _rounds_by_event[_cup] = [
                     {"id": s.get("id"), "title": _st(s.get("format")) if s.get("format") else s.get("id"),
                      "date": s.get("date"), "drawn": len(s.get("matches") or []),
                      "of": s.get("n_matches")}
                     for s in (_lm.get("sessions") or []) if s.get("id")]
+                # The Friday PRACTICE ROUND is the first round (Kerry 10/8:
+                # "Practice Round could move down into it too"): its own
+                # event (the Cup's friday add-on), its own saved pairings.
+                _oo = (json.loads(get_app_setting("oneoff_charges", db_path=db_path) or "{}")
+                       .get(str(_cup)) or {})
+                _fri = next((a for a in (_oo.get("addons") or [])
+                             if isinstance(a, dict) and a.get("key") == "friday" and a.get("event_id")), None)
+                if _fri:
+                    _fd = conn.execute("SELECT event_date FROM events WHERE id = ?",
+                                       (int(_fri["event_id"]),)).fetchone()
+                    _rounds_by_event[_cup].insert(0, {
+                        "id": "practice", "title": "PRACTICE ROUND", "event_id": int(_fri["event_id"]),
+                        "date": _fd[0] if _fd else None, "drawn": None, "of": None})
         except Exception:
             logger.exception("Non-fatal: Cup rounds unavailable for the events list")
         for r in rows:

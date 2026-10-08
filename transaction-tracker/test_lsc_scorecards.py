@@ -99,7 +99,11 @@ def make_pack(eid, groups):
             "tee_legend": [{"band": b, "tee_name": n, "tee_id": tee_ids[b], "ladies": g == "F"}
                            for n, b, g in TEES],
             "team_unit": "cart", "team_allowance": 0.85,
-            "team_off_lowest": {"low": 0, "applied": False}, "team_basis": "test"}
+            "team_off_lowest": {"low": 0, "applied": False}, "team_basis": "test",
+            # the real pack's display fields the Starter Sheet reads
+            "tee_swatches": {b: "#2F5FA6" for _, b, _ in TEES}, "tee_ladies": {"forward": True},
+            "tee_colors": {}, "alpha": [], "player_count": 0, "ph_basis": "", "ph_note": "",
+            "brand": {"lsc": "cup", "logo": "/static/lsc-logo.png", "alt": "Lone Star Cup"}}
 
 
 def P(cid_, pos, band, ph, net=None):
@@ -218,6 +222,7 @@ check("no LSC block, GGID kept, net game kept",
 print("renders")
 from jinja2 import Environment, FileSystemLoader  # noqa: E402
 env = Environment(loader=FileSystemLoader(os.path.join(HERE, "templates")))
+env.globals["print_stamp"] = lambda: "test"   # a Flask global in the app
 for eid, kw in ((3329, {}), (3330, {}), (3304, {})):
     for lay in ("3up", "2up", "2land"):
         for holes in ("9", "18"):
@@ -246,6 +251,25 @@ for tpl, var in (("proximity_markers.html", "rep"), ("cart_signs.html", "pack"))
 for tpl in ("starter_sheet.html", "divisions_flights.html", "games_payouts.html"):
     src = open(os.path.join(HERE, "templates", tpl)).read()
     check(f"{tpl} reads the brand's logo", "brand.get('logo')" in src)
+
+print("each round's Starter Sheet and cart signs fill from THE DRAW (Kerry 10/8)")
+rp = lsc_cup.cup_round_pack(3329, "sat-am", db_path=DB)
+check("FOURBALL starter sheet: one group per match, tee time, seats, locked PH, team colour",
+      rp["event"]["item_name"] == "LONE STAR CUP · FOURBALL" and len(rp["groups"]) == 1
+      and rp["groups"][0]["slot_label"] == "8:30"
+      and [p["playing_handicap"] for p in rp["groups"][0]["players"]] == [1, 2, 1, 4]
+      and rp["groups"][0]["players"][2]["team_color"] == "#44596B" and rp["games_off"]
+      and len(rp["alpha"]) == 4, rp["groups"])
+html = env.get_template("starter_sheet.html").render(pack=rp)
+check("the starter sheet renders the round, no Cart/Team column", "LONE STAR CUP · FOURBALL" in html
+      and 'class="atn"' not in html and "8:30" in html)
+sg = lsc_cup.cup_round_cart_signs(3329, "sun", db_path=DB)
+check("SINGLES cart signs from the draw: one per side per card",
+      [s_["team"] for s_ in sg] == ["AUSTIN", "SAN ANTONIO", "AUSTIN", "SAN ANTONIO"]
+      and len(sg[0]["riders"]) == 2, [s_["team"] for s_ in sg])
+check("an undrawn round says so on its starter sheet",
+      "isn't drawn yet" in env.get_template("starter_sheet.html").render(
+          pack={**rp, "groups": [], "alpha": [], "lsc_round": {**rp["lsc_round"], "gaps": []}}))
 
 print("ALL PASS" if not FAILURES else f"{len(FAILURES)} FAILED: {FAILURES}")
 sys.exit(1 if FAILURES else 0)

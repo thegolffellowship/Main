@@ -5520,7 +5520,19 @@ def api_delete_event_alias_from_event(event_id):
 def starter_sheet_page(event_id):
     """Print-optimized Starter Sheet for an event (B5) — tee times / groups /
     players / cart split, rendered from the saved pairings."""
-    from email_parser.database import get_event_print_pack
+    from email_parser.database import get_event_print_pack, report_brand
+    if report_brand(event_id).get("lsc") == "cup":
+        # The Lone Star Cup prints PER ROUND, filled from THE DRAW (Kerry
+        # 10/8). ?session=sat-am|sat-pm|sun; none = the first drawn round.
+        from email_parser.lsc_cup import cup_round_pack, cup_print_groups
+        sid = request.args.get("session")
+        if not sid:
+            ss = cup_print_groups(event_id)["sessions"]
+            sid = next((s["id"] for s in ss if s["matches"]), ss[0]["id"] if ss else None)
+        pack = cup_round_pack(event_id, sid, preview=request.args.get("preview") == "1") if sid else None
+        if not pack:
+            return "Event not found", 404
+        return render_template("starter_sheet.html", pack=pack)
     pack = get_event_print_pack(event_id)
     if not pack:
         return "Event not found", 404
@@ -5864,9 +5876,18 @@ def cup_cart_signs_data(event_id: int, preview: bool = False, session_id: str | 
                               "tee_time": g.get("tee_time") or "", "hole": str(g.get("start_hole") or 1),
                               "qr_svg": qr, "url": g.get("url"), "session": sid,
                               "match": _CUP_SESSION_TITLE.get(sid, "")})
+    if not signs and not preview:
+        # Not seeded yet: the signs fill straight from THE DRAW (Kerry 10/8:
+        # "autopopulate ... that then feeds into all the reports"). The
+        # scorer QR joins once the Cup seed opens the round.
+        from email_parser.lsc_cup import cup_round_cart_signs
+        signs = cup_round_cart_signs(event_id, session_id)
+        if signs:
+            problems.append("From the draw: the scorer QR prints once the Cup seed opens this round.")
     pages = [signs[i:i + 2] for i in range(0, len(signs), 2)]
     return {"event": sheets["event"], "pages": pages, "count": len(signs), "preview": preview,
-            "qr_on": qr_on, "problems": problems}
+            "qr_on": qr_on, "problems": problems,
+            "empty_note": "This round isn't drawn yet. Its cart signs fill in from THE DRAW."}
 
 
 @app.route("/events/<int:event_id>/cup-cart-signs")

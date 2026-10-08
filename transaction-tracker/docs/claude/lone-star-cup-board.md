@@ -599,4 +599,12 @@ like the reports."
 - **The REPORTS tab:** one row per round, carrying its Scorecards
   (`?session=`) and its Cart Signs (`/cup-cart-signs?session=`). The
   whole-event reports sit below.
-- **Not built:** a per-round Starter Sheet read from the draw.
+- **v2.526.6: every round has every report, filled from THE DRAW.**
+  - Each round's row carries Starter Sheet (`/starter-sheet?session=`,
+    `lsc_cup.cup_round_pack`), Cart Signs and Scorecards.
+  - Cart Signs fall back to the draw (`cup_round_cart_signs`, no QR) until
+    the Cup seed opens the round.
+  - PRACTICE ROUND is the first row, pointing at its own event (the Cup's
+    `friday` add-on).
+  - The Cup's whole-event Starter Sheet, Cart Signs, Scorecards and Send Pack
+    buttons are hidden.

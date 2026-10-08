@@ -29,14 +29,18 @@ def test_the_cup_row_carries_its_rounds(tmp_path):
         {"id": "sat-pm", "format": "chapman", "date": "2026-10-10", "n_matches": 7, "matches": []},
         {"id": "sun", "format": "singles", "date": "2026-10-11", "n_matches": 14, "matches": []}]}),
         db_path=p)
+    db.set_app_setting("oneoff_charges", json.dumps({"3329": {"addons": [
+        {"key": "friday", "event_id": 3330}]}}), db_path=p)
     evs = {e["id"]: e for e in db.get_all_events(db_path=p)}
     assert [(r["id"], r["title"], r["drawn"], r["of"]) for r in evs[3329]["report_rounds"]] == [
+        ("practice", "PRACTICE ROUND", None, None),
         ("sat-am", "FOURBALL", 1, 7), ("sat-pm", "FOURSOMES", 0, 7), ("sun", "SINGLES", 0, 14)]
+    assert evs[3329]["report_rounds"][0]["event_id"] == 3330
     assert "report_rounds" not in evs[3304]
 
 
 def test_reports_prints_each_round():
     src = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates", "events.html")).read()
     assert "ev.report_rounds && ev.report_rounds.length" in src
-    assert "scorecards?session=${encodeURIComponent(r.id)}" in src
-    assert "cup-cart-signs?session=${encodeURIComponent(r.id)}" in src
+    assert "const q = `session=${encodeURIComponent(r.id)}`" in src
+    assert "cup-cart-signs?${q}" in src and "starter-sheet?${q}" in src

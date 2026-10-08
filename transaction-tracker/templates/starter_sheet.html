@@ -249,7 +249,7 @@
   </div>
 
   {% if not pack.groups %}
-    <div class="empty">No pairings saved for this event yet. Generate &amp; save pairings first.</div>
+    <div class="empty">{% if pack.get('lsc_round') %}{{ pack.lsc_round.title }} isn't drawn yet. Its groups and tee times fill in from THE DRAW.{% for g in pack.lsc_round.gaps %}<br>{{ g }}{% endfor %}{% else %}No pairings saved for this event yet. Generate &amp; save pairings first.{% endif %}</div>
   {% else %}
   {% if pack.tee_legend %}
   <div class="tee-legend">
@@ -287,7 +287,7 @@
           <span class="grp">{{ g.group_num }}{% if g.holes == '18' %} · 18{% endif %}</span>
         </div>
         {% for p in g.players %}
-          <div class="prow{% if (p.cart_pos or 0) not in [1,2] %} is-b{% endif %}">
+          <div class="prow{% if (p.cart_pos or 0) not in [1,2] %} is-b{% endif %}"{% if p.get('team_color') %} style="border-left:4px solid {{ p.team_color }};padding-left:4px;"{% endif %}>
             <span class="pname">{{ p.name }}</span>
             <span class="tee">{{ tee_dot(p.tee_choice) }}</span>
             <span class="idx">{% if p.handicap_index_display is not none %}{{ "%.1f"|format(p.handicap_index_display) }}{% elif p.handicap_index is not none %}{{ "%.1f"|format(p.handicap_index) }}{% else %}—{% endif %}</span>

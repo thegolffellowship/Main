@@ -1724,3 +1724,79 @@ def practice_cart_signs(event_id: int, db_path=None) -> dict:
     return {"event": pack["event"], "pages": [signs[i:i + 2] for i in range(0, len(signs), 2)],
             "count": len(signs), "preview": False, "qr_on": qr_on, "problems": problems,
             "empty_note": "No saved pairings yet, so there are no cart signs. Save PAIRINGS first."}
+
+
+def cup_round_pack(event_id: int, session_id: str, preview: bool = False, db_path=None) -> dict | None:
+    """ONE ROUND'S STARTER SHEET, filled from THE DRAW (Kerry 10/8: "we'll
+    have different pairings for each round on different tee times. Of course
+    those will be determined tonight at THE DRAW and autopopulate, but it
+    needs to have a place to autopopulate that then feeds into all the
+    reports."). The place is the round's session in `lsc_matches` (the draw
+    page writes it); this shapes it as the Starter Sheet's pack: one group
+    per card (the scorecard's grouping), tee time, seats in the
+    load-bearing order, team colour, band, the locked index and course
+    handicap. The tee legend and logo come from the event's own pack."""
+    from email_parser.database import get_event_print_pack
+    base = get_event_print_pack(int(event_id), db_path=db_path)
+    if not base:
+        return None
+    cg = cup_print_groups(int(event_id), session_id=session_id, preview=preview, db_path=db_path)
+    bands = {str(t.get("band")).lower(): t.get("band") for t in base.get("tee_legend") or []}
+    sess = next((s for s in cg["sessions"] if s["id"] == session_id), None)
+    title = (sess or {}).get("title") or session_id
+    groups, alpha = [], []
+    for g in cg["groups"]:
+        players = []
+        for p in g["players"]:
+            band = bands.get(str(p.get("tee_choice") or "").lower(), p.get("tee_choice"))
+            last = (p["name"].split() or [""])[-1]
+            first = " ".join(p["name"].split()[:-1])
+            row = {"name": p["name"], "customer_id": p["customer_id"], "cart_pos": p["cart_pos"],
+                   "tee_choice": band, "handicap_index": p.get("handicap_index_display"),
+                   "handicap_index_display": p.get("handicap_index_display"),
+                   "playing_handicap": p.get("playing_handicap"), "team_handicap": None,
+                   "team_allowed": None, "course_handicap_raw": None,
+                   "is_new": False, "is_first_timer": False,
+                   "team": p.get("team"), "team_color": LSC_TEAM_COLORS.get(p.get("team") or "")}
+            players.append(row)
+            alpha.append({**row, "sort_name": f"{last}, {first}".strip().strip(","),
+                          "slot_label": g["slot_label"], "slot_short": g["slot_label"],
+                          "group_num": g["group_num"], "holes": g["holes"],
+                          "cart": "A" if (p["cart_pos"] or 0) <= 2 else "B"})
+        groups.append({"group_num": g["group_num"], "holes": g["holes"], "slot_label": g["slot_label"],
+                       "start_line": f"{g['slot_label']} · {' + '.join(m for m in g['match_ids'] if m)}",
+                       "players": players, "ggid": None, "blinds": []})
+    alpha.sort(key=lambda r: r["sort_name"].lower())
+    ev = dict(base["event"])
+    ev.update({"item_name": f"LONE STAR CUP · {title}", "event_date": (sess and next(
+        (g["date"] for g in cg["groups"] if g.get("date")), None)) or ev.get("event_date"),
+        "format": "18 Holes", "start_type": "Tee Times",
+        "start_label": f"First tee {groups[0]['slot_label']}" if groups else None,
+        "start_label_18": None})
+    return {**base, "event": ev, "groups": groups, "group_count": len(groups), "alpha": alpha,
+            "player_count": len(alpha), "games_off": True, "ph_note": "",
+            "ph_basis": "the Cup's LOCKED course handicap (lsc_handicap_lock)",
+            "lsc_round": {"id": session_id, "title": title, "gaps": cg["gaps"], "log": cg["log"],
+                          "preview": bool(preview)}}
+
+
+def cup_round_cart_signs(event_id: int, session_id: str | None, db_path=None) -> list:
+    """Cart signs straight from THE DRAW, for a round the Cup seed hasn't
+    reached yet (no scorer QR until it has). Same sign shape as
+    `cup_cart_signs_data`: one per side per card."""
+    cg = cup_print_groups(int(event_id), session_id=session_id, db_path=db_path)
+    labels = {"austin": "AUSTIN", "sa": "SAN ANTONIO"}
+    signs = []
+    for g in cg["groups"]:
+        for side in TEAM_KEYS:
+            riders = [p for p in g["players"] if p.get("team") == side]
+            if not riders:
+                continue
+            rows = []
+            for p in riders:
+                parts = (p.get("name") or "").split()
+                rows.append({"first": " ".join(parts[:-1]), "last": (parts[-1] if parts else "").upper()})
+            signs.append({"team": labels[side], "color": LSC_TEAM_COLORS[side], "riders": rows,
+                          "tee_time": g["slot_label"], "hole": "1", "qr_svg": None,
+                          "session": g.get("session"), "match": g.get("lsc_title")})
+    return signs
