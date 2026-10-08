@@ -594,7 +594,7 @@
             for (const t of card.teams || []) {
                 inTeam.add(t.customer_id_a); inTeam.add(t.customer_id_b);
                 rows.push({key: "t:" + t.team_id, team: t,
-                           name: t.label || first(byId(t.customer_id_a).display_name) + " / " + first(byId(t.customer_id_b).display_name),
+                           name: (t.label || "").replace(/\s+\/\s+/g, " & ") || first(byId(t.customer_id_a).display_name) + " & " + first(byId(t.customer_id_b).display_name),
                            meta: "Team · one ball", cids: [t.customer_id_a, t.customer_id_b]});
             }
             for (const p of card.players) {
@@ -1092,7 +1092,8 @@
                 + (side.length === 1 ? (String(side[0]).trim().split(/\s+/).slice(-1)[0] || "")[0] || "" : "");
             const nm = (side, right) => {
                 const f = side.map((n) => String(n).trim().split(/\s+/)[0]).join(" & ");
-                const l = side.map((n) => String(n).trim().split(/\s+/).slice(1).join(" ")).join(" / ");
+                // Pairs read "Youngs & Cannon", never a slash (Kerry 10/8, CoS #1449).
+                const l = side.map((n) => String(n).trim().split(/\s+/).slice(1).join(" ")).join(" & ");
                 return `<span class="se-mc-name${right ? " r" : ""}"><em>${esc(f)}</em><b>${esc(l)}</b></span>`;
             };
             let bar, sub = "";
