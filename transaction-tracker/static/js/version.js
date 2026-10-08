@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.525.37";
+window.TGF_VERSION = "2.525.38";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.525.38",
+    date: "2026-10-08",
+    title: "Cup splash: the shimmer sweeps the whole screen",
+    changes: [
+      "Kerry 10/8: \"I want that shimmer on the landing page to go across the entire page, not just the block around the logo.\" The splash's one shimmer is now a full-height band of light that sweeps across the whole screen, behind nothing and over everything, instead of a sweep inside the logo's box. Same timing (about two seconds, tap to skip); reduced motion still turns it off."
+    ]
+  },
   {
     version: "2.525.37",
     date: "2026-10-08",
