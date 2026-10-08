@@ -13,19 +13,23 @@
     * { box-sizing: border-box; }
     body { margin: 0; background: #F4F1EA; color: #1B1B1B;
            font-family: "Helvetica Neue", Arial, system-ui, sans-serif; }
-    .band { background: #B91C1C; color: #fff; text-align: center; padding: 8px 16px;
-            font: 700 13px/1.2 Bitter, Georgia, serif; letter-spacing: .14em; }
-    header { background: #002868; color: #fff; padding: 14px 16px; }
-    header h1 { margin: 0; font: 700 20px/1.2 Bitter, Georgia, serif; letter-spacing: .04em; }
-    header .sub { font-size: 13px; opacity: .85; margin-top: 4px; }
-    .jump { position: sticky; top: 0; z-index: 5; background: #fff; border-bottom: 1px solid #E5E7EB;
-            display: flex; gap: 6px; padding: 10px 16px; overflow-x: auto; }
-    .jump a { flex: none; text-decoration: none; font: 700 12px/1 Bitter, Georgia, serif;
-              letter-spacing: .06em; text-transform: uppercase; color: #002868;
-              border: 2px solid #002868; border-radius: 999px; padding: 8px 12px; }
+    /* Kerry 10/8 (#1428): "the preview header is really in the way". ONE
+       slim line, in the flow (never over the phone frame or the page's own
+       header); after the first jump it folds to a small PREVIEW tab. */
+    .strip { display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: #fff;
+             border-bottom: 1px solid #E5E7EB; }
+    .strip .tag { flex: none; background: #B91C1C; color: #fff; border: 0; border-radius: 99px; padding: 5px 10px;
+                  font: 700 11px/1 Bitter, Georgia, serif; letter-spacing: .1em; cursor: pointer; }
+    .jump { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; }
+    .jump::-webkit-scrollbar { display: none; }
+    .jump a { flex: none; text-decoration: none; font: 700 11px/1 Bitter, Georgia, serif;
+              letter-spacing: .05em; text-transform: uppercase; color: #002868;
+              border: 1.5px solid #002868; border-radius: 999px; padding: 6px 10px; }
     .jump a.on { background: #002868; color: #fff; }
     .jump a.off { color: #9CA3AF; border-color: #E5E7EB; pointer-events: none; }
-    main { display: grid; grid-template-columns: 390px 1fr; gap: 24px; padding: 20px 16px; max-width: 1080px; margin: 0 auto; }
+    .strip.folded { border-bottom: 0; padding: 4px 10px; }
+    .strip.folded .jump { display: none; }
+    main { display: grid; grid-template-columns: 390px 1fr; gap: 24px; padding: 10px 16px; max-width: 1080px; margin: 0 auto; }
     .phone { width: 390px; height: 844px; border: 10px solid #1B1B1B; border-radius: 36px; overflow: hidden; background: #fff; }
     .phone iframe { width: 100%; height: 100%; border: 0; }
     .notes h2 { font: 700 15px/1.2 Bitter, Georgia, serif; margin: 0 0 8px; }
@@ -39,15 +43,11 @@
   </style>
 </head>
 <body>
-  <div class="band">PREVIEW · demo scores</div>
-  <header>
-    <h1>LONE STAR CUP · STAFF PREVIEW</h1>
-    <div class="sub">FOURBALL · FOURSOMES · SINGLES on demo rounds. Nothing here touches the live round.</div>
-  </header>
   {% if not seeded %}
   <div class="empty">No demo round is seeded. Run the <code>scoring-lsc-preview:seed|apply</code> bridge, then reload.</div>
   {% else %}
   {% set screens = [
+    ("info", "Event Info", "/member/lonestarcup/info?preview=1", "SCHEDULE | TEAMS | FORMATS, from EventInfo.dc.html. Teams are read from the live Cup pairs."),
     ("landing", "Landing", "/member/lonestarcup?preview=1", "The member landing with the Cup board on demo scores."),
     ("fb", "Scoring FB", links.get("FOURBALL"), "A FOURBALL group: final, full cards, a picked-up hole and a halved hole where both picked up."),
     ("fs", "Scoring FS", links.get("FOURSOMES"), "A FOURSOMES group: live, team score per hole."),
@@ -58,19 +58,19 @@
     ("board", "Board", "/member/lonestarcup?preview=1", "The Cup board: FOURBALL | FOURSOMES | SINGLES, then MATCHES | SKINS."),
     ("open", "Board open", links.get("BOARD_OPEN"), "A match card opened from the board."),
     ("skins", "Skins", None, "Next in the build order."),
-    ("info", "Event Info", None, "Next in the build order."),
     ("signs", "Cart signs", None, "Next in the build order (PDF)."),
   ] %}
+  <div class="strip" id="strip"><button type="button" class="tag" id="tag" aria-expanded="true">PREVIEW · demo scores</button>
   <nav class="jump" id="jump">
     {% for key, label, url, note in screens %}
     <a href="{{ url or '#' }}" data-key="{{ key }}" data-note="{{ note }}" class="{{ '' if url else 'off' }}">{{ label }}</a>
     {% endfor %}
-  </nav>
+  </nav></div>
   <main>
-    <div class="phone"><iframe id="frame" title="Cup screen" src="/member/lonestarcup?preview=1"></iframe></div>
+    <div class="phone"><iframe id="frame" title="Cup screen" src="/member/lonestarcup/info?preview=1"></iframe></div>
     <div class="notes">
-      <h2 id="note-title">Landing</h2>
-      <p id="note-body">The member landing with the Cup board on demo scores.</p>
+      <h2 id="note-title">Event Info</h2>
+      <p id="note-body">SCHEDULE | TEAMS | FORMATS, from EventInfo.dc.html. Teams are read from the live Cup pairs.</p>
       <h2>Demo rounds</h2>
       <ul>
         {% for label, rid in rounds.items() %}<li>{{ label }}: round <code>{{ rid }}</code></li>{% endfor %}
@@ -88,7 +88,15 @@
         frame.src = a.getAttribute("href");
         document.getElementById("note-title").textContent = a.textContent;
         document.getElementById("note-body").textContent = a.dataset.note || "";
+        fold(true);
       });
+      const strip = document.getElementById("strip"), tag = document.getElementById("tag");
+      function fold(on) {
+        strip.classList.toggle("folded", on);
+        tag.textContent = on ? "PREVIEW ▾" : "PREVIEW · demo scores";
+        tag.setAttribute("aria-expanded", on ? "false" : "true");
+      }
+      tag.addEventListener("click", () => fold(!strip.classList.contains("folded")));
       const first = document.querySelector("#jump a:not(.off)");
       if (first) first.classList.add("on");
     })();

@@ -390,3 +390,22 @@ red "PREVIEW · demo scores" band. Admin only, never linked from a member page.
 - **Screenshots:** `docs/claude/screenshots/lsc-preview/`.
 - **Teardown** before the live round opens Saturday (closes the PREVIEW
   rounds, clears the dial).
+
+## EVENT INFO — /member/lonestarcup/info (Kerry 10/8, CoS #1428) — v2.525.25
+
+`templates/lsc_info.html`, route `member_lonestarcup_info` in app.py. Public
+like the member Cup page; no dollars. SCHEDULE | TEAMS | FORMATS from
+`docs/claude/lsc-mockups/EventInfo.dc.html` (byte-exact, raw-index wording),
+one tab at a time; anchors `#schedule #teams #formats #fourball #foursomes
+#singles #skins` (Track A's HOW IT WORKS pill links to the format anchors and
+highlights that row). TEAMS reads `lsc_matches.pairs` (low pool, then high
+pool, by combined index when the dial carries it, else combined CH); a last
+name shared on the roster shows the first name too. Captains are the
+mockup's (`LSC_CAPTAINS`). "Match draws" reads "posted after Thursday's
+draw" until every session has its 7+ matches. Share link / Download PDF
+(print CSS shows all three sections). Guard `test_lsc_info.py`.
+
+The staff preview header is one slim line that folds to a "PREVIEW ▾" tab
+after the first jump (Kerry 10/8: "the preview header is really in the
+way"); Event Info is its first stop. Logo: `static/lsc-logo.png` (sha256
+8d771633…, CoS MANIFEST #1416).

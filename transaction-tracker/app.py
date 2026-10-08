@@ -12736,6 +12736,71 @@ def member_lonestarcup():
                            lsc_landing=True)
 
 
+# Captains as named on the Event Info mockup (CoS #1398, EventInfo.dc.html).
+LSC_CAPTAINS = {"austin": "Matt Jenkins", "sa": "Rob Callaway"}
+
+
+def _lsc_info_teams() -> list:
+    """TEAMS for the Cup Event Info page: each team's Saturday pairs from the
+    live Cup dial (lsc_matches.pairs), low pool then high pool, by combined
+    index as Track B cut them. Names are last names; a last name shared on
+    the roster gets the first name too. Empty when the dial has no pairs."""
+    from email_parser.score_entry import _json_setting
+    dial = _json_setting("lsc_matches")
+    pairs = dial.get("pairs") or {}
+    cids = {int(c) for t in pairs.values() for p in t for c in (p.get("cids") or [])}
+    names = {}
+    if cids:
+        conn = get_connection()
+        try:
+            q = ",".join("?" * len(cids))
+            for r in conn.execute(f"SELECT customer_id, first_name, last_name FROM customers "
+                                  f"WHERE customer_id IN ({q})", tuple(cids)):
+                names[r[0]] = ((r[1] or "").strip(), (r[2] or "").strip())
+        finally:
+            conn.close()
+    lasts = [n[1].lower() for n in names.values()]
+
+    def nm(c):
+        f, l = names.get(int(c), ("", f"#{c}"))
+        return f"{f} {l}".strip() if lasts.count(l.lower()) > 1 else l
+
+    out = []
+    for key, label in (("austin", "Austin"), ("sa", "San Antonio")):
+        team = pairs.get(key) or []
+        pools = []
+        for pool, plabel in (("low", "Low pool"), ("high", "High pool")):
+            ps = sorted([p for p in team if p.get("pool") == pool],
+                        key=lambda p: (p.get("combined_index") if p.get("combined_index") is not None
+                                       else p.get("combined_ch") or 0))
+            pools.append({"label": plabel, "pairs": [" / ".join(nm(c) for c in p.get("cids") or []) for p in ps]})
+        rest = [p for p in team if p.get("pool") not in ("low", "high")]
+        if rest:
+            pools.append({"label": "", "pairs": [" / ".join(nm(c) for c in p.get("cids") or []) for p in rest]})
+        out.append({"key": "aus" if key == "austin" else "sa", "name": label,
+                    "captain": LSC_CAPTAINS.get(key), "pools": pools})
+    return out
+
+
+@app.route("/member/lonestarcup/info")
+def member_lonestarcup_info():
+    """LONE STAR CUP EVENT INFO (Kerry 10/8 via CoS #1428: "I definitely want
+    to see that info page quickly"; mockup EventInfo.dc.html): SCHEDULE |
+    TEAMS | FORMATS with anchors #schedule #teams #formats #fourball
+    #foursomes #singles #skins. Public like the rest of the member Cup page;
+    no dollars. Track A's HOW IT WORKS pill on the hole screens links here."""
+    try:
+        teams = _lsc_info_teams()
+    except Exception:
+        app.logger.exception("lsc info teams")
+        teams = []
+    from email_parser.score_entry import _json_setting
+    drawn = any(len(s.get("matches") or []) >= 7 for s in (_json_setting("lsc_matches").get("sessions") or []))
+    return render_template("lsc_info.html", teams=teams,
+                           preview=request.args.get("preview") == "1",
+                           draw_note="on the board" if drawn else "posted after Thursday's draw")
+
+
 @app.route("/member/matchplay/<chapter_slug>")
 def member_matchplay(chapter_slug):
     """Chapter-specific shareable Match Play links (Kerry 2026-08-21:

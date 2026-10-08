@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.525.24";
+window.TGF_VERSION = "2.525.25";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.525.25",
+    date: "2026-10-08",
+    title: "Lone Star Cup Event Info page; slimmer staff preview header",
+    changes: [
+      "Kerry 10/8 (CoS #1428): \"I definitely want to see that info page quickly.\" /member/lonestarcup/info shows SCHEDULE | TEAMS | FORMATS from the Event Info mockup (EventInfo.dc.html, raw-index wording), one tab at a time, with anchors #schedule #teams #formats #fourball #foursomes #singles #skins. Track A's HOW IT WORKS pill on the hole screens already links there. TEAMS is read from the live Cup pairs, low pool then high pool, so Track B's raw-index cut shows as soon as it is on the dial. Share link and Download PDF (print) at the top. No dollars on the page.",
+      "Kerry 10/8: \"the preview header is really in the way.\" The staff preview's band and jump bar are now one slim line above the phone frame, never over it or the page's own header, and fold to a small PREVIEW tab after the first jump (tap it to open the bar again). Event Info is the first stop.",
+      "The Lone Star Cup logo is now in the app (static/lsc-logo.png, the original Kerry sent, checked against the Chief of Staff's manifest) for the Event Info header and the cart signs."
+    ]
+  },
   {
     version: "2.525.24",
     date: "2026-10-08",
