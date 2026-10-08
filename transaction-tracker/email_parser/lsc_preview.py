@@ -167,6 +167,10 @@ def seed(event_id: int = EVENT_ID, apply: bool = False, db_path=None) -> dict:
     for s in dial["sessions"]:
         rid = s["se_round"]
         out_rounds[s["label"]] = rid
+        if rid:
+            # A re-seed after a teardown lands on the same PREVIEW round
+            # (same key), which the teardown closed: open it again.
+            se.reopen_preview_round(rid, db_path=db_path)
         if s["id"] == "sun" or not rid:
             continue                                  # SINGLES: not started
         card = se.get_entered_scores(event_id, rid, db_path=db_path)["rounds"][0]

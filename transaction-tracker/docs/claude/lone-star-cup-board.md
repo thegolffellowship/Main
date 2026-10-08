@@ -397,3 +397,56 @@ red "PREVIEW · demo scores" band. Admin only, never linked from a member page.
 - **Screenshots:** `docs/claude/screenshots/lsc-preview/`.
 - **Teardown** before the live round opens Saturday (closes the PREVIEW
   rounds, clears the dial).
+
+## EVENT INFO — /member/lonestarcup/info (Kerry 10/8, CoS #1428) — v2.525.25
+
+`templates/lsc_info.html`, route `member_lonestarcup_info` in app.py. Public
+like the member Cup page; no dollars. SCHEDULE | TEAMS | FORMATS from
+`docs/claude/lsc-mockups/EventInfo.dc.html` (byte-exact, raw-index wording),
+one tab at a time; anchors `#schedule #teams #formats #fourball #foursomes
+#singles #skins` (Track A's HOW IT WORKS pill links to the format anchors and
+highlights that row). TEAMS reads `lsc_matches.pairs` (low pool, then high
+pool, by combined index when the dial carries it, else combined CH); a last
+name shared on the roster shows the first name too. Captains are the
+mockup's (`LSC_CAPTAINS`). "Match draws" reads "posted after Thursday's
+draw" until every session has its 7+ matches. Share link / Download PDF
+(print CSS shows all three sections). Guard `test_lsc_info.py`.
+
+The staff preview header is one slim line that folds to a "PREVIEW ▾" tab
+after the first jump (Kerry 10/8: "the preview header is really in the
+way"); Event Info is its first stop. Logo: `static/lsc-logo.png` (sha256
+8d771633…, CoS MANIFEST #1416).
+
+## THE DRAW — /events/3329/cup-draw (Kerry 10/8, CoS #1432) — v2.525.29
+
+The Chief of Staff's draw board (`cup_draw.template.html`), ported as is to
+`templates/cup_draw.html`, admin only, screen-shared on the draw Zoom. Data
+and the one write path: `email_parser/lsc_draw.py`.
+- **Entrants:** Saturday = `lsc_matches.pairs` (low/high pool by combined
+  raw index; labels from the lock); Sunday = `lsc_handicap_lock.players`
+  per team by locked index, Low 7 / High 7.
+- **Each landed match** is written into its session of `lsc_matches` via
+  `POST /api/events/<id>/cup-draw/land` {session fb|fs|sg, pool, a, s}. The
+  server re-checks: entrant in pool and undrawn; FOURSOMES only after its
+  FOURBALL pool is full; no FOURBALL repeat; the rest of the pool still
+  completable (canComplete). Match = `{id SAT-AM-n|SAT-PM-n|SUN-n,
+  tee_time, austin, sa, draw: {pool, a, s, n}}`; n = tee order (Saturday 1-3
+  low, 4-7 high; Sunday 1-7 low, 8-14 high), tee = session start + 10 min per
+  match, two per tee on Sunday. The first drawn match in a session drops the
+  session's STAGED (no `draw`) matches. se_round and board_live untouched.
+- **Clear** (`/clear` {session}) removes drawn matches; FOURBALL takes
+  FOURSOMES with it. Every land/clear writes agent_action_log (`cup-draw`).
+- **After the draw** the Cup seed (`scoring-se-cup-seed:3329|apply`, Track B)
+  still makes the session rounds and scoring links.
+- Guard `test_lsc_draw.py` (production-shaped dial and lock).
+
+## CART SIGNS — /events/3329/cup-cart-signs (CoS #1397-2) — v2.525.30
+
+`templates/cup_cart_signs.html` from `docs/claude/lsc-mockups/CartSign.dc.html`
+(cart_signs.html shape, team band, Cup logo `static/lsc-logo.png`), data from
+`app.cup_cart_signs_data` over `score_entry.cup_sign_sheets` (now carries each
+player's `side` and `match_id`, and takes `round_key_prefix`). One sign per
+cart pair = a group's Austin players, then its SA players; QR = the group's
+scoring link. `?session=sat-am|sat-pm|sun`; `?preview=1` reads the demo
+(`lscprev:`) rounds. Empty until the Cup seed after the draw. Guard: the
+cart-sign checks in `test_lsc_preview.py`.

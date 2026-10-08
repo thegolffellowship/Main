@@ -5549,6 +5549,53 @@ def cup_signs_page(event_id):
     return render_template("cup_signs.html", sheets=sheets)
 
 
+def _cup_draw_payload(event_id):
+    from email_parser import lsc_draw
+    return {"pools": lsc_draw.pools(event_id), "state": lsc_draw.state(event_id)}
+
+
+@app.route("/events/<int:event_id>/cup-draw")
+@require_role("admin")
+def cup_draw_page(event_id):
+    """THE LONE STAR CUP DRAW (Kerry 10/8 via CoS #1432: "Being able to push
+    live immediately would be much cooler"). The Chief of Staff's draw board,
+    ported as is; entrants from the live pairs and the handicap lock, every
+    landed match written into lsc_matches (email_parser/lsc_draw.py). Admin
+    only; screen-shared on the draw Zoom."""
+    return render_template("cup_draw.html", event_id=event_id, data=_cup_draw_payload(event_id))
+
+
+@app.route("/api/events/<int:event_id>/cup-draw")
+@require_role("admin")
+def api_cup_draw(event_id):
+    return jsonify(_cup_draw_payload(event_id))
+
+
+@app.route("/api/events/<int:event_id>/cup-draw/land", methods=["POST"])
+@require_role("admin")
+def api_cup_draw_land(event_id):
+    from email_parser import lsc_draw
+    d = request.get_json(silent=True) or {}
+    res = lsc_draw.land(event_id, str(d.get("session") or ""), str(d.get("pool") or ""),
+                        str(d.get("a") or ""), str(d.get("s") or ""), actor="cup-draw (admin)")
+    if res.get("error"):
+        return jsonify(res), 409
+    res["state"] = lsc_draw.state(event_id)
+    return jsonify(res)
+
+
+@app.route("/api/events/<int:event_id>/cup-draw/clear", methods=["POST"])
+@require_role("admin")
+def api_cup_draw_clear(event_id):
+    from email_parser import lsc_draw
+    d = request.get_json(silent=True) or {}
+    res = lsc_draw.clear(event_id, str(d.get("session") or ""), actor="cup-draw (admin)")
+    if res.get("error"):
+        return jsonify(res), 409
+    res["state"] = lsc_draw.state(event_id)
+    return jsonify(res)
+
+
 @app.route("/events/<int:event_id>/cup-preview")
 @require_role("admin")
 def cup_preview_page(event_id):
@@ -5734,6 +5781,68 @@ def proximity_markers_page(event_id):
     if not rep:
         return "Event not found", 404
     return render_template("proximity_markers.html", rep=rep)
+
+
+_CUP_SESSION_TITLE = {"sat-am": "Sat AM Fourball", "sat-pm": "Sat PM Foursomes", "sun": "Sun Singles"}
+
+
+def cup_cart_signs_data(event_id: int, preview: bool = False, session_id: str | None = None) -> dict:
+    """The Lone Star Cup CART SIGNS (CoS #1397-2, mockup CartSign.dc.html):
+    templates/cart_signs.html's shape, team-themed, one sign per cart pair
+    (a group's Austin players, then its San Antonio players), each with the
+    Cup logo, the start, the match and its opponents, and the group's
+    scoring QR (the same link as the QR sign). Read from the seeded Cup
+    rounds (cup_sign_sheets); ``preview`` reads the staff preview's demo
+    rounds instead. Two signs to a Letter page."""
+    from datetime import datetime as _dt
+    from email_parser.score_entry import cup_sign_sheets
+    sheets = cup_sign_sheets(event_id, round_key_prefix="lscprev:" if preview else "lsc:")
+    if sheets.get("error"):
+        return sheets
+    signs = []
+    for r in sheets["rounds"]:
+        sid = r.get("session") or ""
+        if session_id and sid != session_id:
+            continue
+        try:
+            day = _dt.strptime(str(r.get("date") or "")[:10], "%Y-%m-%d").strftime("%a, %b %-d")
+        except ValueError:
+            day = ""
+        for g in r["groups"]:
+            for side, other, cls, team in (("austin", "sa", "aus", "Austin"), ("sa", "austin", "sa", "San Antonio")):
+                mine = [p for p in g["players"] if p.get("side") == side]
+                theirs = [p for p in g["players"] if p.get("side") == other]
+                if not mine:
+                    continue
+                nums = sorted({int(str(p["match_id"]).rsplit("-", 1)[-1]) for p in mine
+                               if p.get("match_id") and str(p["match_id"]).rsplit("-", 1)[-1].isdigit()})
+                mtxt = ("Matches " + " & ".join(map(str, nums))) if len(nums) > 1 else (f"Match {nums[0]}" if nums else "")
+                last = lambda ps: " / ".join((p["name"] or "").split()[-1] for p in ps)
+                if sid == "sun":
+                    # singles: each player's own opponent (same match id)
+                    vs = " · ".join(f"v {last([q for q in theirs if q.get('match_id') == p.get('match_id')])}"
+                                    for p in mine if any(q.get("match_id") == p.get("match_id") for q in theirs))
+                else:
+                    vs = f"v {last(theirs)}"
+                signs.append({"cls": cls, "team": team, "names": [p["name"] for p in mine],
+                              "start": f"{g.get('tee_time') or ''} · Hole 1".strip(" ·"),
+                              "match": " · ".join(x for x in (_CUP_SESSION_TITLE.get(sid, r.get("label") or ""), mtxt, vs) if x),
+                              "foot": " · ".join(x for x in ("Lone Star Cup 2026", sheets["event"].get("course") or "The Hideout Golf Club", day) if x),
+                              "qr_svg": g.get("qr_svg"), "url": g.get("url")})
+    pages = [signs[i:i + 2] for i in range(0, len(signs), 2)]
+    return {"event": sheets["event"], "pages": pages, "count": len(signs), "preview": preview}
+
+
+@app.route("/events/<int:event_id>/cup-cart-signs")
+@require_role("manager")
+def cup_cart_signs_page(event_id):
+    """Lone Star Cup cart signs, one per cart pair; ?session=sat-am|sat-pm|sun
+    narrows to one session, ?preview=1 prints from the demo rounds."""
+    data = cup_cart_signs_data(event_id, preview=request.args.get("preview") == "1",
+                               session_id=request.args.get("session") or None)
+    if data.get("error"):
+        return data["error"], 404
+    return render_template("cup_cart_signs.html", d=data)
 
 
 @app.route("/events/<int:event_id>/cart-signs")
@@ -11614,7 +11723,18 @@ def score_entry_short(code):
 @app.route("/member/score")
 def score_entry_page():
     # The page carries no data; its JS presents the link to /api/score-entry/*.
-    return render_template("score_entry.html", member_mode=True)
+    # One flag only: a Lone Star Cup link opens on the SPLASH (Kerry
+    # 2026-10-08: logo on navy, a shimmer, about two seconds, then on). The
+    # JS shows it on a fresh scan only; the route just says whether the
+    # link is a Cup round, so a Tuesday nine never sees the Cup logo.
+    from email_parser.score_entry import verify_group_token, group_is_cup
+    cup = False
+    try:
+        gid = verify_group_token(request.args.get("t") or "")
+        cup = bool(gid) and group_is_cup(gid)
+    except Exception:
+        cup = False
+    return render_template("score_entry.html", member_mode=True, cup_splash=cup)
 
 
 @app.route("/member/score/board")
@@ -12734,6 +12854,75 @@ def member_lonestarcup():
     return render_template("contests.html", member_mode=True,
                            MATCHPLAY_V2=_matchplay_v2_flag(),
                            lsc_landing=True)
+
+
+# Captains as named on the Event Info mockup (CoS #1398, EventInfo.dc.html).
+LSC_CAPTAINS = {"austin": "Matt Jenkins", "sa": "Rob Callaway"}
+
+
+def _lsc_info_teams() -> list:
+    """TEAMS for the Cup Event Info page: each team's Saturday pairs from the
+    live Cup dial (lsc_matches.pairs), low pool then high pool, by combined
+    index as Track B cut them. Names are last names; a last name shared on
+    the roster gets the first name too. Empty when the dial has no pairs."""
+    from email_parser.score_entry import _json_setting
+    dial = _json_setting("lsc_matches")
+    raw = dial.get("pairs") or {}
+    # The block also carries notes ("rule", "source"); only the two team
+    # lists are pairs.
+    pairs = {k: [p for p in raw.get(k) or [] if isinstance(p, dict)]
+             for k in ("austin", "sa") if isinstance(raw.get(k), list)}
+    cids = {int(c) for t in pairs.values() for p in t for c in (p.get("cids") or [])}
+    names = {}
+    if cids:
+        conn = get_connection()
+        try:
+            q = ",".join("?" * len(cids))
+            for r in conn.execute(f"SELECT customer_id, first_name, last_name FROM customers "
+                                  f"WHERE customer_id IN ({q})", tuple(cids)):
+                names[r[0]] = ((r[1] or "").strip(), (r[2] or "").strip())
+        finally:
+            conn.close()
+    lasts = [n[1].lower() for n in names.values()]
+
+    def nm(c):
+        f, l = names.get(int(c), ("", f"#{c}"))
+        return f"{f} {l}".strip() if lasts.count(l.lower()) > 1 else l
+
+    out = []
+    for key, label in (("austin", "Austin"), ("sa", "San Antonio")):
+        team = pairs.get(key) or []
+        pools = []
+        for pool, plabel in (("low", "Low pool"), ("high", "High pool")):
+            ps = sorted([p for p in team if p.get("pool") == pool],
+                        key=lambda p: (p.get("combined_index") if p.get("combined_index") is not None
+                                       else p.get("combined_ch") or 0))
+            pools.append({"label": plabel, "pairs": [" / ".join(nm(c) for c in p.get("cids") or []) for p in ps]})
+        rest = [p for p in team if p.get("pool") not in ("low", "high")]
+        if rest:
+            pools.append({"label": "", "pairs": [" / ".join(nm(c) for c in p.get("cids") or []) for p in rest]})
+        out.append({"key": "aus" if key == "austin" else "sa", "name": label,
+                    "captain": LSC_CAPTAINS.get(key), "pools": pools})
+    return out
+
+
+@app.route("/member/lonestarcup/info")
+def member_lonestarcup_info():
+    """LONE STAR CUP EVENT INFO (Kerry 10/8 via CoS #1428: "I definitely want
+    to see that info page quickly"; mockup EventInfo.dc.html): SCHEDULE |
+    TEAMS | FORMATS with anchors #schedule #teams #formats #fourball
+    #foursomes #singles #skins. Public like the rest of the member Cup page;
+    no dollars. Track A's HOW IT WORKS pill on the hole screens links here."""
+    try:
+        teams = _lsc_info_teams()
+    except Exception:
+        app.logger.exception("lsc info teams")
+        teams = []
+    from email_parser.score_entry import _json_setting
+    drawn = any(len(s.get("matches") or []) >= 7 for s in (_json_setting("lsc_matches").get("sessions") or []))
+    return render_template("lsc_info.html", teams=teams,
+                           preview=request.args.get("preview") == "1",
+                           draw_note="on the board" if drawn else "posted after Thursday's draw")
 
 
 @app.route("/member/matchplay/<chapter_slug>")

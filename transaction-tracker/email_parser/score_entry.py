@@ -1581,7 +1581,8 @@ def round_links(round_id: int, base_url: str | None = None, db_path=None) -> lis
             for r in rows]
 
 
-def cup_sign_sheets(event_id: int, base_url: str | None = None, db_path=None) -> dict:
+def cup_sign_sheets(event_id: int, base_url: str | None = None, db_path=None,
+                    round_key_prefix: str = "lsc:") -> dict:
     """The Lone Star Cup's per-group QR signs (Kerry 2026-10-07, #1357-6: "put
     them on the scorecards and cart signs as QR Codes this time. Each group
     can determine the scorer."; #1358-2: the QR goes on the scorecard and the
@@ -1599,8 +1600,8 @@ def cup_sign_sheets(event_id: int, base_url: str | None = None, db_path=None) ->
             return {"error": f"no event {event_id}"}
         rounds = conn.execute(
             "SELECT id, label, round_date, pairings_holes, status, holes FROM se_rounds "
-            "WHERE event_id = ? AND lower(COALESCE(pairings_holes, '')) LIKE 'lsc:%' "
-            "ORDER BY round_date, id", (int(event_id),)).fetchall()
+            "WHERE event_id = ? AND lower(COALESCE(pairings_holes, '')) LIKE ? "
+            "ORDER BY round_date, id", (int(event_id), round_key_prefix.lower() + "%")).fetchall()
         out = {"event": {"id": ev[0], "name": ev[1], "date": ev[2], "course": ev[3]}, "rounds": []}
         for r in rounds:
             rm = round_matches(r[0], db_path=db_path)
@@ -1616,9 +1617,11 @@ def cup_sign_sheets(event_id: int, base_url: str | None = None, db_path=None) ->
                         mids.append(mid)
                 url = f"{base}/member/score?t={make_group_token(g[0], db_path=db_path)}"
                 groups.append({"group_id": g[0], "group_num": g[1], "label": g[2], "tee_time": g[3],
-                               "players": [{"customer_id": p[0], "name": p[1]} for p in ps],
+                               "players": [{"customer_id": p[0], "name": p[1],
+                                            "side": (rm.get(p[0]) or {}).get("side"),
+                                            "match_id": (rm.get(p[0]) or {}).get("match_id")} for p in ps],
                                "matches": mids, "url": url, "qr_svg": qr_svg(url)})
-            out["rounds"].append({"round_id": r[0], "session": (r[3] or "")[4:], "label": r[1],
+            out["rounds"].append({"round_id": r[0], "session": (r[3] or "")[len(round_key_prefix):], "label": r[1],
                                   "date": r[2], "status": r[4], "holes": r[5], "groups": groups})
     return out
 
@@ -1777,6 +1780,21 @@ def attach_cart_sign_qr(pack: dict, base_url: str | None = None, db_path=None) -
 # ---------------------------------------------------------------------------
 # The scorer: open a group, claim / take over, write
 # ---------------------------------------------------------------------------
+
+def group_is_cup(group_id: int, db_path=None) -> bool:
+    """True when the group's round is a Lone Star Cup session round (live
+    'lsc:<session>' or the staff preview's 'lscprev:<session>'). The phone
+    page's route reads it to decide whether a fresh scan opens on the Cup
+    SPLASH (Kerry 2026-10-08, FD #1440/#1442). Never raises."""
+    try:
+        with _closing(_conn(db_path)) as conn:
+            row = conn.execute(
+                "SELECT lower(COALESCE(r.pairings_holes, '')) AS pk FROM se_groups g "
+                "JOIN se_rounds r ON r.id = g.round_id WHERE g.id = ?", (int(group_id),)).fetchone()
+        return bool(row) and (row["pk"].startswith("lsc:") or row["pk"].startswith("lscprev:"))
+    except Exception:
+        return False
+
 
 def _group_ctx(conn, group_id: int):
     return conn.execute(
@@ -1960,6 +1978,21 @@ def claim_group(group_id: int, device_id: str, customer_id: int | None,
             _bump(conn, g["event_id"])
         conn.commit()
     return {"granted": True, "kind": kind}
+
+
+def reopen_preview_round(round_id: int, db_path=None) -> bool:
+    """Re-open a PREVIEW round that a teardown closed, so a re-seed (Cup
+    staff preview, CoS #1398) can write into it and its links open again.
+    Refuses anything that is not a PREVIEW round. True when it re-opened."""
+    with _closing(_conn(db_path)) as conn:
+        r = conn.execute("SELECT label, status, event_id FROM se_rounds WHERE id = ?",
+                         (round_id,)).fetchone()
+        if not r or not str(r["label"] or "").startswith(PREVIEW_LABEL) or r["status"] == "open":
+            return False
+        conn.execute("UPDATE se_rounds SET status = 'open' WHERE id = ?", (round_id,))
+        _bump(conn, r["event_id"])
+        conn.commit()
+    return True
 
 
 def release_preview_seed_locks(round_id: int, device_id: str, keep_group_ids=(),

@@ -1,13 +1,75 @@
-window.TGF_VERSION = "2.525.25";
+window.TGF_VERSION = "2.525.32";
 window.TGF_CHANGELOG = [
   {
-    version: "2.525.25",
+    version: "2.525.32",
     date: "2026-10-08",
     title: "Lone Star Cup: the Skins pane",
     changes: [
       "The Cup board's SKINS view is built to the mockup (docs/claude/lsc-mockups/Skins.dc.html, CoS #1398). It shows every session, the selected one first. Saturday team skins (net, one flight) get a row per hole won, with the team and the count, then the tied holes on one line and the holes still open with how many groups are on the course. Sunday singles show both flights (under 12.0 / 12.0 and up) with how many players and who runs lowest to highest index, then each flight's won holes once play starts.",
       "Members see counts only. Staff also see the pot, each winner's amount and any flags. The member view now carries the per-hole results and the flight members, which hold no money; the pot, payouts and flags still stay staff only. The 'How skins work' link comes with the Event Info page so it never 404s. Guards: tests/test_lsc_cup.py (+2) and test_lsc_skins_pane.js.",
     ],
+  },
+  {
+    version: "2.525.31",
+    date: "2026-10-08",
+    title: "Lone Star Cup splash on a fresh scan",
+    changes: [
+      "Kerry 10/8 (FD #1440, flow ruled #1442): a fresh scan of a Lone Star Cup scoring link opens on a splash: the Cup logo on the logo's navy, one shimmer, about two seconds (tap to skip), then the SCORE THIS GROUP / FOLLOW THE CUP gate and Who are you?. Cup links only (Cup and staff-preview rounds), once per link per browser tab; reduced motion shortens it, and a missing logo shows the words instead. Built by Track A (8304d918)."
+    ]
+  },
+  {
+    version: "2.525.30",
+    date: "2026-10-08",
+    title: "Lone Star Cup cart signs",
+    changes: [
+      "CoS #1397-2: /events/3329/cup-cart-signs prints the Cup cart signs from the mockup (CartSign.dc.html): the regular cart-sign shape, two to a Letter page with a cut line, the Cup logo, an Austin or San Antonio team band, the two names large, the start time and hole, the session and match with the opponents, and the group's scoring QR in the corner (the same link as the Cup QR signs). One sign per cart pair: each group's Austin players, then its San Antonio players. ?session=sat-am|sat-pm|sun prints one session. Staff only.",
+      "The sheet reads the seeded Cup rounds, so it fills in after tonight's draw and the Cup seed. ?preview=1 prints from the staff preview's demo rounds, and the preview's Cart signs button opens it."
+    ]
+  },
+  {
+    version: "2.525.29",
+    date: "2026-10-08",
+    title: "Lone Star Cup draw page: each match goes live as it is drawn",
+    changes: [
+      "Kerry 10/8 (CoS #1432): \"Can't you set up the draw to automatically go to the matches for this weekend on the tracker rather than copying here? Being able to push live immediately would be much cooler.\" /events/3329/cup-draw (admin only) is the Chief of Staff's draw board ported as is: FOURBALL, FOURSOMES and SINGLES tabs, Austin left and San Antonio right with each entrant's locked index, the spin, and the same rules: FOURSOMES opens only after FOURBALL's pool is drawn, never repeats a FOURBALL pairing, and looks ahead so the last match can't be forced into a repeat.",
+      "Entrants come from the Tracker, not a list in the page: the Saturday pairs and their low/high pools from the Cup dial (combined raw index), Sunday's Low 7 / High 7 per team from the handicap lock. Each match that lands is written straight into the Cup dial (email_parser/lsc_draw.py), which re-checks every rule first: match number in tee order (Saturday 1-3 low, 4-7 high; Sunday 1-7 low, 8-14 high), tee time from the session start plus 10 minutes (two per tee on Sunday). The first drawn match in a session replaces that session's staged demo matches. Clear this session takes the drawn matches off (clearing FOURBALL clears FOURSOMES too). Every draw and clear is in the agent action log. Copy the full draw stays as the paper fallback."
+    ]
+  },
+  {
+    version: "2.525.28",
+    date: "2026-10-08",
+    title: "FOLLOW THE CUP on a PREVIEW demo round opens the staff preview board",
+    changes: [
+      "A demo round's matches live on the staff preview board (/api/lsc/board?preview=1, Tracker Build v2.525.22), not the member board, so FOLLOW THE CUP from a PREVIEW round went to a board that had no such match and nothing expanded (found preparing Kerry's 10/8 dry-run links, #1434). The scanned-link landing now adds preview=1 to the FOLLOW target when the card's cup standings are flagged preview; live rounds are unchanged. Guard: test_cup_signs template contract.",
+      "The per-event opt-in door now shows the admin sign-in too. An event not yet listed in score_entry_events answers the card read with 404 'score entry is not open for this event' (app._se_event_gate, Kerry 9/28), but the phone only recognised the scoring-off door ('not open yet'), so a staff phone without a Tracker session saw a bare error and no way in (found preparing the 10/8 dry run: 3329 is not opted in yet). Both doors now show 'Tracker admin? Sign in to preview'.",
+      "THE CUP SPLASH (Kerry 10/8, verbatim: \"a Lonestar cup logo on a like a navy background to match the navy in the logo, but have a shimmer too, maybe two second wait before it goes to the pick your name page\"; FD #1442 ruled splash -> the two-button gate -> Who are you?, so spectators keep FOLLOW THE CUP). A fresh scan of a Lone Star Cup scoring link opens on the logo centred on the logo's own navy (#021A34, sampled from static/lsc-logo.png) with one diagonal shimmer sweep, holds about two seconds, then fades to the gate. Tap anywhere skips; prefers-reduced-motion gets no shimmer and a 0.7 s hold; if the logo fails to load the plate reads LONE STAR CUP 2026. Fresh scan only: a scorer reopening his link, a follower coming back, or a reload in the same tab lands where it did before (sessionStorage se_splash_<link>). The route sets the one flag (score_entry.group_is_cup: the round is lsc:<session> or lscprev:<session>), so a Tuesday nine never sees the Cup logo. The CSS is inline and the logo is the only extra request. Until Kerry's transparent-background logo replaces the square file, a round CSS mask hides its white corners."
+    ]
+  },
+  {
+    version: "2.525.27",
+    date: "2026-10-08",
+    title: "Cup staff preview: a re-seed re-opens its demo rounds",
+    changes: [
+      "Re-seeding the staff preview after a teardown (to pick up Track B's raw-index pools, #1416) landed on the same PREVIEW rounds, which the teardown had closed, so their scoring links stopped opening and FOURSOMES had no scores. The seed now re-opens its own PREVIEW rounds first (score_entry.reopen_preview_round, PREVIEW rounds only). New checks in test_lsc_preview.py."
+    ]
+  },
+  {
+    version: "2.525.26",
+    date: "2026-10-08",
+    title: "Lone Star Cup Event Info: TEAMS reads the live pairs",
+    changes: [
+      "The live Cup dial's pairs block carries notes (rule, source) beside the two team lists, and 2.525.25 read those notes as teams, so TEAMS came up empty on the live site. It now reads only the Austin and San Antonio lists. The test fixture carries the same notes."
+    ]
+  },
+  {
+    version: "2.525.25",
+    date: "2026-10-08",
+    title: "Lone Star Cup Event Info page; slimmer staff preview header",
+    changes: [
+      "Kerry 10/8 (CoS #1428): \"I definitely want to see that info page quickly.\" /member/lonestarcup/info shows SCHEDULE | TEAMS | FORMATS from the Event Info mockup (EventInfo.dc.html, raw-index wording), one tab at a time, with anchors #schedule #teams #formats #fourball #foursomes #singles #skins. Track A's HOW IT WORKS pill on the hole screens already links there. TEAMS is read from the live Cup pairs, low pool then high pool, so Track B's raw-index cut shows as soon as it is on the dial. Share link and Download PDF (print) at the top. No dollars on the page.",
+      "Kerry 10/8: \"the preview header is really in the way.\" The staff preview's band and jump bar are now one slim line above the phone frame, never over it or the page's own header, and fold to a small PREVIEW tab after the first jump (tap it to open the bar again). Event Info is the first stop.",
+      "The Lone Star Cup logo is now in the app (static/lsc-logo.png, the original Kerry sent, checked against the Chief of Staff's manifest) for the Event Info header and the cart signs."
+    ]
   },
   {
     version: "2.525.24",
