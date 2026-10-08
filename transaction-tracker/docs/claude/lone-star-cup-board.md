@@ -521,3 +521,7 @@ by the background, never by the page.
 (the Standard logo with THE HIDEOUT, sha256 7ef90b32dd125bcf…), 270x210, and ends
 on the start line; the match line and footer are no longer printed (the data
 still carries them).
+
+**Logo, v2.525.40:** `static/lsc-logo-dark.png` is now the white-border logo
+WITH THE HIDEOUT (Kerry 10/8; sha256 423d375070d37b4f…) on the splash, the
+Event Info banner and the draw page. Cart signs: `lsc-logo-hideout.png`.

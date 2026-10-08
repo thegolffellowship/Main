@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.525.39";
+window.TGF_VERSION = "2.525.40";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.525.40",
+    date: "2026-10-08",
+    title: "Cup logo on dark backgrounds now carries THE HIDEOUT",
+    changes: [
+      "Kerry 10/8 sent the white-border logo with THE HIDEOUT in the navy base. It replaces static/lsc-logo-dark.png (sha256 423d3750...) on the navy surfaces: the scoring splash, the Event Info banner and the draw page. The white cart signs keep the Standard Hideout logo (2.525.39)."
+    ]
+  },
   {
     version: "2.525.39",
     date: "2026-10-08",
