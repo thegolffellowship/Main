@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.525.38";
+window.TGF_VERSION = "2.525.39";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.525.39",
+    date: "2026-10-08",
+    title: "Cup cart signs: The Hideout logo, bigger; time and hole are the last line",
+    changes: [
+      "Kerry 10/8: \"Here's an option with the location. This goes on the cart signs. Also, the cart sign logos need to be bigger. None of the small text below the time and hole need to be on there.\" The cart signs print the Lone Star Cup logo with THE HIDEOUT under it (static/lsc-logo-hideout.png, sha256 7ef90b32...), 40% larger than before, and end on the time and hole: the session and match line and the event footer are gone. Each sign still fits half a Letter page above the cut line."
+    ]
+  },
   {
     version: "2.525.38",
     date: "2026-10-08",

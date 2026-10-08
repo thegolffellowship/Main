@@ -516,3 +516,8 @@ Standard version for WHITE backgrounds (cart signs; sha256 0bd6011f84b1de5c…);
 backgrounds (splash, Event Info banner, draw page; sha256 a2a5b21453387b0a…).
 Both 2000x1651, transparent, navy #002855, with the TGF mark in the star. Pick
 by the background, never by the page.
+
+**Cart signs, v2.525.39 (Kerry 10/8):** the sign uses `static/lsc-logo-hideout.png`
+(the Standard logo with THE HIDEOUT, sha256 7ef90b32dd125bcf…), 270x210, and ends
+on the start line; the match line and footer are no longer printed (the data
+still carries them).
