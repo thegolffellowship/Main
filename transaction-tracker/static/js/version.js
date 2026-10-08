@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.525.22";
+window.TGF_VERSION = "2.525.23";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.525.23",
+    date: "2026-10-08",
+    title: "Health: the replication check no longer makes the health report take 12-16 s",
+    changes: [
+      "The health report (bridge scoring-health and /admin/health) read the off-site backup's state with two Litestream listings of the R2 bucket, one after the other, on every call: 11.6 s on 10/7 and 16.4 s on 10/8, and growing as the replica's history grows. The two listings now run side by side, and only the scheduled 5:00 digest forces a fresh read; every other reader takes that value for up to 15 minutes (whether the replicator is running is still checked live each time). Monitoring only; replication itself is untouched, and the lag finding still comes from a fresh read every morning."
+    ]
+  },
   {
     version: "2.525.22",
     date: "2026-10-08",

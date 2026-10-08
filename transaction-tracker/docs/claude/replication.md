@@ -47,3 +47,7 @@ with the four variables and `DATABASE_PATH` / `GG_ARCHIVE_PATH` set; add
 Guard: `test_replication.py` (real litestream binary + file replica when
 `LITESTREAM_BIN` is set; the start script's fallbacks, the digest findings
 and the drill end to end). R2 itself can only be proven on production.
+
+
+## Status read cost (v2.525.23)
+`replication.status()` runs `litestream generations` for the main file and the GG archive file; each lists the R2 bucket, so the cost grows with the replica's history (11.6 s then 16.4 s through the health bridge on 10/7-10/8). The two run in parallel, the result is cached for 900 s, and only the scheduled digest (`build_health_report(record_size=True)`) passes `fresh=True`. `running` is re-checked on every call. If the listing ever passes ~10 s even in parallel, shorten the retention in `litestream.yml` rather than raising the timeout.

@@ -70,12 +70,12 @@ RULES = {
 
 
 # ── the report ──────────────────────────────────────────────────────────
-def _replication_status(db_path) -> dict:
+def _replication_status(db_path, fresh: bool = False) -> dict:
     """Litestream -> R2 state for the digest (email_parser/replication.py);
     a status read must never break the report."""
     try:
         from . import replication
-        return replication.status(db_path)
+        return replication.status(db_path, fresh=fresh)
     except Exception as e:  # noqa: BLE001
         return {"configured": False, "error": f"{type(e).__name__}: {e}"[:200]}
 
@@ -262,7 +262,7 @@ def build_health_report(days: float = 1, db_path=None, record_size: bool = False
         "cpus": os.cpu_count(),
         "hcp_cache": _hcp_cache_stats(),
         "provider_alerts": _provider_alerts(db_path),
-        "replication": _replication_status(db_path),
+        "replication": _replication_status(db_path, fresh=record_size),
         "expense_unpromoted": _expense_unpromoted(db_path),
         "sample_count": sum(r["count"] for k in summary for r in summary[k]),
     }
