@@ -86,7 +86,7 @@ def test_fourball_best_ball_and_pickup():
     h1 = d["holes"][0]
     assert h1["winner"] == 1 and h1["p1_gross"] == 3 and h1["p2_gross"] == 4
     # names joined per team line
-    assert "/" in d["players"][0]["name"]
+    assert " & " in d["players"][0]["name"]   # Kerry #1449: & between partners
 
 
 def test_chapman_team_handicap_is_60_40_not_50_combined():
@@ -1003,3 +1003,12 @@ def test_member_view_keeps_holes_and_members_but_no_money():
     flat = repr(m)
     for k in ("pot_cents", "payouts", "cents", "unpaid_cents", "flags", "excluded", "mixed"):
         assert k not in flat, k
+
+
+def test_pair_labels_use_an_ampersand():
+    # Kerry 2026-10-08 (#1449): "Make the teams have an &, not / between the names."
+    from email_parser.lsc_cup import compute_skins_payout
+    out = compute_skins_payout(_fb_session(), _flat_course(2), {}, _all_fours(range(1, 9)),
+                               names={1: "Luke Youngs", 2: "Chris Cannon"}, buyers=set(range(1, 9)))
+    labels = {t["key"]: t["label"] for t in out["groups"][0]["totals"]}
+    assert labels["M1:austin"] == "Luke Youngs & Chris Cannon"

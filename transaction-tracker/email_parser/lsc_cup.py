@@ -373,7 +373,7 @@ def compute_match_detail(match: dict, session: dict, course: list[dict],
                           "winner": winner})
 
     def _line_name(cids):
-        return " / ".join(names.get(c) or names.get(str(c)) or f"#{c}"
+        return " & ".join(names.get(c) or names.get(str(c)) or f"#{c}"
                           for c in cids)
 
     # "handicap" is what the side PLAYS OFF after the session allowance;
@@ -527,7 +527,7 @@ def compute_skins(session: dict, course: list[dict], phs: dict,
                     entries.append({"key": f"{m.get('id')}:{side}:{c}",
                                     "team": side, "cids": [c]})
     for e in entries:
-        e["label"] = " / ".join(names.get(c) or names.get(str(c)) or f"#{c}"
+        e["label"] = " & ".join(names.get(c) or names.get(str(c)) or f"#{c}"
                                 for c in e["cids"])
 
     sc = {}
@@ -675,7 +675,7 @@ def compute_skins_payout(session: dict, course: list[dict], phs: dict,
         return buyers is None or c in buyers
 
     def _label(cids):
-        return " / ".join(names.get(c) or names.get(str(c)) or f"#{c}"
+        return " & ".join(names.get(c) or names.get(str(c)) or f"#{c}"
                           for c in cids)
 
     flags, excluded, mixed = [], [], []

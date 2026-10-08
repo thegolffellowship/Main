@@ -18,8 +18,8 @@ eval(cut("lscHolesTxt") + "\n" + cut("lscSkinsGroupRows") + "\n" + cut("lscSkins
 let fails = 0;
 const check = (l, c, d) => { console.log((c ? "  PASS  " : "  FAIL  ") + l + (c ? "" : "  " + (d || ""))); if (!c) fails++; };
 
-const totals = [{ key: "M1:austin", label: "Youngs / Cloer", team: "austin", skins: 2 },
-                { key: "M2:sa", label: "Youngs / Young", team: "sa", skins: 1 }];
+const totals = [{ key: "M1:austin", label: "Youngs & Cloer", team: "austin", skins: 2 },
+                { key: "M2:sa", label: "Youngs & Young", team: "sa", skins: 1 }];
 const holes = [{ hole: 1, status: "tied" }, { hole: 2, status: "won", winner: "M1:austin", value: 1 },
                { hole: 3, status: "tied" }, { hole: 4, status: "won", winner: "M2:sa", value: 1 },
                { hole: 5, status: "won", winner: "M1:austin", value: 1 },
@@ -30,8 +30,8 @@ const fsMember = { format: "chapman", label: "FOURSOMES",
 const h = pane(fsMember);
 check("title + basis line", h.includes("Foursomes team skins") && h.includes("net · one flight · live"), h);
 check("a row per won hole with the team and count",
-      h.includes("Hole 2</span><span class=\"sk au\">Youngs / Cloer <b>1</b>")
-      && h.includes("Hole 4</span><span class=\"sk sa\">Youngs / Young <b>1</b>"), h);
+      h.includes("Hole 2</span><span class=\"sk au\">Youngs &amp; Cloer <b>1</b>")
+      && h.includes("Hole 4</span><span class=\"sk sa\">Youngs &amp; Young <b>1</b>"), h);
 check("tied holes on one line", h.includes("Hole 1 · 3</span><span class=\"lsc-sk-mute\">Tied · no skin"), h);
 check("open holes on one line with groups on the course", h.includes("Holes 6–8") && h.includes("2 groups still on the course"), h);
 check("member view shows no dollars", !h.includes("$"), h);
@@ -56,5 +56,7 @@ check("flight 2 count and range", hn.includes("Flight 2 · 12.0 and up") && hn.i
 check("holes text", holesTxt([12, 13, 14]) === "Holes 12–14" && holesTxt([1, 3]) === "Hole 1 · 3" && holesTxt([9]) === "Hole 9");
 check("no skins data -> nothing", pane({ skins: null }) === "");
 
+check("the board offers How skins work -> Event Info #skins",
+      src.includes('href="/member/lonestarcup/info#skins">How skins work'));
 console.log(fails ? `\nFAILED (${fails})` : "\nALL PASS");
 process.exit(fails ? 1 : 0);

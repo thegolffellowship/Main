@@ -6,6 +6,7 @@ window.TGF_CHANGELOG = [
     title: "Cup pairs read with &; How skins work pill",
     changes: [
       "Kerry 10/8 (CoS #1449): \"Make the teams have an &, not / between the names.\" The draw page, the Event Info TEAMS list and the cart signs now write a pair as \"Luke Youngs & Chris Cannon\" (or \"Youngs & Cannon\"), never with a slash. The Cup board's match cards, the scoring screens and the skins pane take the same change in Track B's, Track A's and Side Games' commits.",
+      "Side Games (f9d7cbcd): the Skins pane writes a pair with & between partners too.",
       "CoS #1450 (SIGNED: Skins): the Skins pane (2.525.32) gets its \"How skins work\" pill under the skins, linking to the Skins section of Event Info (/member/lonestarcup/info#skins)."
     ]
   },

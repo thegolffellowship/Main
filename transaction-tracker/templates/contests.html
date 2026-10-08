@@ -1750,6 +1750,7 @@
         .lsc-sk-sub { margin: 8px 2px 4px; font-size: 11px; font-weight: 700; letter-spacing: 1px;
             color: #6B7280; text-transform: uppercase; }
         .lsc-sk-note { margin-top: 6px; font-size: 11px; color: #6B7280; text-align: center; }
+        .lsc-sk-hiw { text-align: center; margin-top: 10px; }
         .lsc-bd-skflags { margin: 4px 2px 0; padding: 6px 10px; font-size: 12px; line-height: 1.45;
             color: #92400E; background: #FEF3C7; border: 1px solid #FDE68A; border-radius: 8px; }
         .lsc-bd-sess-h { display: flex; align-items: baseline; gap: 10px;
@@ -3115,10 +3116,10 @@
                 .map((x, i) => (x.skinsHtml || "").replace(i === 0 ? /^$/ : /<div class="lsc-sk-note" data-note>[^<]*<\/div>/, ""))
                 .filter(Boolean).join("");
             const inner = window.lscView === "skins"
-                // The mockup's "How skins work" pill links to Event Info
-                // (#skins), live since v2.525.25 (CoS #1450).
-                ? (skinsAll || '<div class="lsc-bd-proj">No skins yet.</div>')
-                  + `<div class="lsc-sk-hiw" style="text-align:center;margin-top:6px"><a class="pr-hiw-link" href="/member/lonestarcup/info${new URLSearchParams(location.search).get("preview") === "1" ? "?preview=1" : ""}#skins">How skins work</a></div>`
+                // The mockup's "How skins work" pill opens Event Info's
+                // Skins section (CoS #1450: the #skins anchor exists).
+                ? ((skinsAll ? skinsAll + '<div class="lsc-sk-hiw"><a class="pr-hiw-link" href="/member/lonestarcup/info' + (new URLSearchParams(location.search).get("preview") === "1" ? "?preview=1" : "") + '#skins">How skins work</a></div>' : "")
+                   || '<div class="lsc-bd-proj">No skins yet.</div>')
                 : cur.cards;
             body = `<div class="lsc-bd-sess">${sessScore}${segV}${inner}</div>`;
         }
