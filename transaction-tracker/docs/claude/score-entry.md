@@ -277,8 +277,20 @@ picking a name CLAIMED the group, so a spectator's scan made him the scorer.
   `/events/<id>/cup-signs` (`templates/cup_signs.html`, two per Letter page,
   `?round_id=` narrows). The pairings-based print pack cannot carry three
   sessions' codes, which is why this reads the rounds directly.
-- Guards: `test_cup_signs.py`; `test_score_entry_ui.py` clicks the gate
-  before every name and checks the held note and the follow target.
+- **To the mockups (v2.525.21, `docs/claude/lsc-mockups/` QRLanding /
+  WhoAreYou / Held, CoS #1398-A):** the landing carries a THIS GROUP box
+  (`.se-this`/`.se-grp`: San Antonio left, Austin right by `card.matches[cid]
+  .side`; one list on a plain event), "Group N · Match M · 18 holes" and the
+  date as "Oct 10, 2026". **Who are you?** reads "The first person to start
+  keeps score for the group." as its sub-line, the handicap / take-over copy
+  under the names, and a **Back** pill (`data-act="gate-back"` clears
+  `K.gate`). **Held** says how far the holder's card is ("The group's card is
+  through hole 7." / "No holes saved yet."), the no-timeout promise, and a
+  SAVED SO FAR strip of read-only `.se-cell` divs (the holder's phone owns
+  the card; nothing here navigates).
+- Guards: `test_cup_signs.py` (template contract incl. the three screens);
+  `test_score_entry_ui.py` clicks the gate before every name and checks the
+  held note and the follow target.
 - **Four-ball TEAM BALL line (v2.525.20, Kerry #1351 D2):** under the four
   rows on a four-ball hole, `teamBallLine(hole)` shows each side's best net
   ball on this hole from the gross scores as they go in (draft or saved);
