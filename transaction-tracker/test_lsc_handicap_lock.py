@@ -149,3 +149,18 @@ def test_preview_dial_is_built_from_real_pairs_and_the_lock():
     assert sun["matches"][1]["austin"] == [2] and sun["matches"][2]["austin"] == [3]
     assert [m["tee_time"] for m in sun["matches"][:4]] == ["8:30", "8:30", "8:40", "8:40"]
     assert sun["matches"][6]["pool"] == "low" and sun["matches"][7]["pool"] == "high"
+
+
+def test_a_partly_drawn_cup_still_counts_28_points_and_pairs_read_with_and():
+    # Kerry 10/8 (CoS #1432/#1449): the draw lands matches one at a time into
+    # the live dial, and a pair reads "A & B", never a slash.
+    dial = {"event_id": 3329, "defending_champion": "sa", "sessions": [
+        {"id": "sat-am", "format": "fourball", "n_matches": 7, "matches": [
+            {"id": "SAT-AM-1", "austin": [1, 2], "sa": [3, 4]}]},
+        {"id": "sat-pm", "format": "chapman", "n_matches": 7, "matches": []},
+        {"id": "sun", "format": "singles", "n_matches": 14, "matches": []}]}
+    names = {1: "Luke Youngs", 2: "Chris Cannon", 3: "Pat Youngs", 4: "Jeff Young"}
+    b = lsc_cup.compute_board(dial, {}, names)
+    assert b["cup"]["total"] == 28.0
+    assert [p["name"] for p in b["sessions"][0]["matches"][0]["players"]] == [
+        "Luke Youngs & Chris Cannon", "Pat Youngs & Jeff Young"]

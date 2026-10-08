@@ -385,7 +385,7 @@ def compute_match_detail(match: dict, session: dict, course: list[dict],
                           "winner": winner})
 
     def _line_name(cids):
-        return " / ".join(names.get(c) or names.get(str(c)) or f"#{c}"
+        return " & ".join(names.get(c) or names.get(str(c)) or f"#{c}"
                           for c in cids)
 
     # "handicap" is what the side PLAYS OFF after the session allowance;
@@ -539,7 +539,7 @@ def compute_skins(session: dict, course: list[dict], phs: dict,
                     entries.append({"key": f"{m.get('id')}:{side}:{c}",
                                     "team": side, "cids": [c]})
     for e in entries:
-        e["label"] = " / ".join(names.get(c) or names.get(str(c)) or f"#{c}"
+        e["label"] = " & ".join(names.get(c) or names.get(str(c)) or f"#{c}"
                                 for c in e["cids"])
 
     sc = {}
@@ -687,7 +687,7 @@ def compute_skins_payout(session: dict, course: list[dict], phs: dict,
         return buyers is None or c in buyers
 
     def _label(cids):
-        return " / ".join(names.get(c) or names.get(str(c)) or f"#{c}"
+        return " & ".join(names.get(c) or names.get(str(c)) or f"#{c}"
                           for c in cids)
 
     flags, excluded, mixed = [], [], []
@@ -985,7 +985,7 @@ def compute_board(dial: dict, session_data: dict,
             buyers=skins_ctx.get("buyers"), index=skins_ctx.get("index"),
             si_by_player=si_by_player, tee_gender=tee_gender)
         # a session still being drawn counts its full match count toward
-        # the points on the board (n_matches, written by the draw), so the
+        # the points on the board (the dial's n_matches: 7 / 7 / 14), so the
         # Cup reads "14½ to win" from the first landed match
         total += win * max(0, int(sess.get("n_matches") or 0)
                            - len(sess.get("matches") or []))
@@ -1400,271 +1400,6 @@ def _board_from_dial(conn, dial: dict, db_path=None, use_mock: bool = True,
     board["board_live"] = bool(dial.get("board_live"))
     board["dial_warnings"] = validate_matches(dial)
     return board
-
-
-# ---------------------------------------------------------------------------
-# THE DRAW (Kerry 10/8, CoS #1432: "Can't you set up the draw to automatically
-# go to the matches for this weekend on the tracker rather than copying here?
-# Being able to push live immediately would be much cooler.")
-#
-# The staff-only draw page lands one match at a time; each landed match is
-# written straight into the LIVE lsc_matches dial. Pools are the raw-index
-# breakouts (Kerry 10/7): Saturday's fixed pairs by dial `pairs[team].pool`,
-# Sunday's Low 7 | High 7 by the locked index. Match numbers are fixed by
-# pool, low first (Sat 1-3 low, 4-7 high; Sun 1-7 low, 8-14 high), and the
-# tee time follows the number (Sat start + 10 min each; Sun two per time).
-# ---------------------------------------------------------------------------
-
-DRAW_POOLS = {"sat-am": (3, 4), "sat-pm": (3, 4), "sun": (7, 7)}
-DRAW_PREFIX = {"sat-am": "SAT-AM", "sat-pm": "SAT-PM", "sun": "SUN"}
-
-
-class DrawError(ValueError):
-    """A draw the rules refuse; the message is the plain sentence to show."""
-
-
-def _pair_key(cids) -> tuple:
-    return tuple(sorted(int(c) for c in cids or []))
-
-
-def draw_pools(dial: dict, lock: dict) -> dict:
-    """{session_id: {"low"|"high": {"austin"|"sa": [entrant]}}}; an entrant
-    is {"cids", "name", "index"} (Saturday: a fixed pair and its combined
-    raw index; Sunday: one player and his locked index)."""
-    players = (lock or {}).get("players") or {}
-    pairs = dial.get("pairs") or {}
-    sat = {"low": {}, "high": {}}
-    for team in TEAM_KEYS:
-        for name in ("low", "high"):
-            sat[name][team] = [
-                {"id": p.get("id"), "cids": [int(c) for c in p.get("cids") or []],
-                 "name": p.get("names"),
-                 "index": p.get("combined_index")}
-                for p in pairs.get(team) or [] if p.get("pool") == name]
-    sun = {"low": {}, "high": {}}
-    n_low = DRAW_POOLS["sun"][0]
-    for team in TEAM_KEYS:
-        ranked = sorted((int(c) for c, v in players.items() if v.get("team") == team),
-                        key=lambda c: (players[str(c)].get("index", 99),
-                                       players[str(c)].get("ch", 99)))
-        ents = [{"id": str(c), "cids": [c], "name": players[str(c)].get("name"),
-                 "index": players[str(c)].get("index")} for c in ranked]
-        sun["low"][team], sun["high"][team] = ents[:n_low], ents[n_low:]
-    return {"sat-am": sat, "sat-pm": sat, "sun": sun}
-
-
-def _draw_tee_time(dial: dict, sid: str, n: int):
-    sheet = (dial.get("tee_sheet") or {}).get(sid) or []
-    i = (n - 1) // 2 if sid == "sun" else n - 1
-    return sheet[i] if 0 <= i < len(sheet) else None
-
-
-def _session(dial: dict, sid: str) -> dict:
-    for s in dial.get("sessions") or []:
-        if s.get("id") == sid:
-            return s
-    raise DrawError(f"No session {sid!r} on the Cup dial.")
-
-
-def _match_no(m: dict) -> int:
-    try:
-        return int(str(m.get("id") or "").rsplit("-", 1)[1])
-    except (IndexError, ValueError):
-        return 0
-
-
-def draw_state(db_path=None) -> dict:
-    """What the draw page renders: per session the pools (entrants with
-    their index and whether they are drawn), the matches landed so far,
-    whether the session is open to draw, and the Saturday AM pairings a
-    PM draw may not repeat."""
-    from email_parser.database import _connect
-    with _connect(db_path) as conn:
-        dial = _setting_json(conn, "lsc_matches") or {}
-        lock = ((_setting_json(conn, "lsc_handicap_lock") or {})
-                .get(str(dial.get("event_id"))) or {})
-    pools = draw_pools(dial, lock)
-    started = dial.get("draw_state") or {}
-    out = {"event_id": dial.get("event_id"), "board_live": bool(dial.get("board_live")),
-           "sessions": []}
-    am_done, am_pairings = False, []
-    for sid in ("sat-am", "sat-pm", "sun"):
-        try:
-            sess = _session(dial, sid)
-        except DrawError:
-            continue
-        matches = sess.get("matches") if sid in started else []
-        drawn = {_pair_key(m.get(t)) for m in matches or [] for t in TEAM_KEYS}
-        lo, hi = DRAW_POOLS[sid]
-        view = {"id": sid, "title": session_title(sess.get("format")),
-                "of": lo + hi, "drawn": len(matches or []),
-                "complete": len(matches or []) == lo + hi,
-                "se_round": sess.get("se_round"),
-                "matches": sorted(matches or [], key=_match_no), "pools": {}}
-        for name in ("low", "high"):
-            view["pools"][name] = {t: [{**e, "drawn": _pair_key(e["cids"]) in drawn}
-                                       for e in pools[sid][name][t]] for t in TEAM_KEYS}
-        if sid == "sat-am":
-            am_done = view["complete"]
-            am_pairings = [[_pair_key(m.get("austin")), _pair_key(m.get("sa"))]
-                           for m in matches or []]
-        if sid == "sat-pm":
-            view["open"] = am_done
-            view["not_again"] = am_pairings if am_done else []
-        else:
-            view["open"] = True
-        out["sessions"].append(view)
-    return out
-
-
-def draw_match(session_id: str, pool: str, austin: list, sa: list,
-               db_path=None, actor: str = "") -> dict:
-    """Land ONE drawn match in the live dial. The first draw into a session
-    replaces that session's staged demo matches; the first draw anywhere
-    also clears the lsc_mock_scores dial (demo scores must never land on
-    real matches). Refuses, with the sentence to show: an entrant not in
-    that pool, one already drawn, a Saturday PM draw before the AM is
-    complete, a PM pairing that repeats an AM pairing, a full pool. When
-    the session's last match lands its scoring round is seeded (Track A's
-    cup_seed) and bound (se_round), so the group links work."""
-    if session_id not in DRAW_POOLS:
-        raise DrawError(f"Unknown session {session_id!r}.")
-    if pool not in ("low", "high"):
-        raise DrawError("The pool is low or high.")
-    from email_parser.database import _connect
-    from datetime import datetime
-    with _connect(db_path) as conn:
-        conn.execute("BEGIN IMMEDIATE")
-        dial = _setting_json(conn, "lsc_matches") or {}
-        lock = ((_setting_json(conn, "lsc_handicap_lock") or {})
-                .get(str(dial.get("event_id"))) or {})
-        sess = _session(dial, session_id)
-        started = dial.setdefault("draw_state", {})
-        first_anywhere = not started
-        if first_anywhere:
-            # the real draw begins: every session's staged demo matches go,
-            # and each session counts its full match total from now on
-            now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            for s_ in dial.get("sessions") or []:
-                if s_.get("id") in DRAW_POOLS:
-                    s_["matches"], s_["se_round"] = [], None
-                    s_["n_matches"] = sum(DRAW_POOLS[s_["id"]])
-                    started[s_["id"]] = {"started_at": now, "drawn": 0,
-                                         "of": s_["n_matches"], "complete": False}
-        lo, hi = DRAW_POOLS[session_id]
-        matches = sess["matches"]
-        ents = draw_pools(dial, lock)[session_id][pool]
-        a_key, s_key = _pair_key(austin), _pair_key(sa)
-        a_ent = next((e for e in ents["austin"] if _pair_key(e["cids"]) == a_key), None)
-        s_ent = next((e for e in ents["sa"] if _pair_key(e["cids"]) == s_key), None)
-        if a_ent is None:
-            raise DrawError(f"Austin entrant {list(a_key)} is not in the {pool} pool.")
-        if s_ent is None:
-            raise DrawError(f"San Antonio entrant {list(s_key)} is not in the {pool} pool.")
-        drawn = {_pair_key(m.get(t)) for m in matches for t in TEAM_KEYS}
-        for k, who in ((a_key, "Austin"), (s_key, "San Antonio")):
-            if k in drawn:
-                raise DrawError(f"{who} entrant {list(k)} is already drawn in this session.")
-        if session_id == "sat-pm":
-            am = _session(dial, "sat-am")
-            am_matches = am.get("matches") if "sat-am" in started else []
-            if len(am_matches or []) < sum(DRAW_POOLS["sat-am"]):
-                raise DrawError("FOURSOMES opens once FOURBALL is fully drawn.")
-            if (a_key, s_key) in {(_pair_key(m.get("austin")), _pair_key(m.get("sa")))
-                                  for m in am_matches}:
-                raise DrawError("That pairing already meets in FOURBALL.")
-        nums = range(1, lo + 1) if pool == "low" else range(lo + 1, lo + hi + 1)
-        taken = {_match_no(m) for m in matches}
-        free = [n for n in nums if n not in taken]
-        if not free:
-            raise DrawError(f"The {pool} pool is fully drawn.")
-        n = free[0]
-        m = {"id": f"{DRAW_PREFIX[session_id]}-{n}", "tee_time": _draw_tee_time(dial, session_id, n),
-             "pool": pool, "austin": list(a_ent["cids"]), "sa": list(s_ent["cids"])}
-        matches.append(m)
-        matches.sort(key=_match_no)
-        complete = len(matches) == lo + hi
-        started[session_id].update({"drawn": len(matches), "of": lo + hi,
-                                    "complete": complete, "by": actor or None})
-        conn.execute("INSERT INTO app_settings (key, value, updated_at) VALUES (?, ?, datetime('now')) "
-                     "ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')",
-                     ("lsc_matches", json.dumps(dial)))
-        if first_anywhere:
-            conn.execute("UPDATE app_settings SET value = '', updated_at = datetime('now') "
-                         "WHERE key = 'lsc_mock_scores'")
-        conn.commit()
-    out = {"match": m, "session": session_id, "drawn": len(matches), "of": lo + hi,
-           "complete": complete}
-    if complete:
-        out["seed"] = _seed_and_bind(session_id, db_path)
-    return out
-
-
-def _seed_and_bind(session_id: str, db_path=None) -> dict:
-    """Seed the Cup scoring rounds (score_entry.cup_seed, idempotent: it
-    reuses each session's round and overwrites its groups) and bind this
-    session's se_round, so its group links and the board's entered-score
-    read are live."""
-    from email_parser.database import _connect
-    try:
-        from email_parser import score_entry
-        with _connect(db_path) as conn:
-            dial = _setting_json(conn, "lsc_matches") or {}
-        res = score_entry.cup_seed(int(dial["event_id"]), apply=True, db_path=db_path)
-        rid = next((v.get("round_id") for v in res.get("sessions") or []
-                    if v.get("session") == session_id), None)
-        if rid is None:
-            return {"bound": False, "error": res.get("error") or "no round",
-                    "gaps": res.get("gaps")}
-        with _connect(db_path) as conn:
-            conn.execute("BEGIN IMMEDIATE")
-            dial = _setting_json(conn, "lsc_matches") or {}
-            _session(dial, session_id)["se_round"] = rid
-            conn.execute("UPDATE app_settings SET value = ?, updated_at = datetime('now') "
-                         "WHERE key = 'lsc_matches'", (json.dumps(dial),))
-            conn.commit()
-        return {"bound": True, "round_id": rid, "gaps": res.get("gaps") or {}}
-    except Exception as e:                       # the draw stands; staff re-run the seed
-        logger.exception("lsc_cup: seed after the draw failed")
-        return {"bound": False, "error": str(e)}
-
-
-def clear_draw_session(session_id: str, db_path=None) -> dict:
-    """"Clear this session": its drawn matches come off the live dial and
-    its se_round is unbound (the seeded round stays and is reused, groups
-    overwritten, when the session is drawn again). Refuses to clear
-    FOURBALL while FOURSOMES has matches (the PM draw depends on it), and
-    any session whose round already holds an entered score."""
-    if session_id not in DRAW_POOLS:
-        raise DrawError(f"Unknown session {session_id!r}.")
-    from email_parser.database import _connect
-    with _connect(db_path) as conn:
-        conn.execute("BEGIN IMMEDIATE")
-        dial = _setting_json(conn, "lsc_matches") or {}
-        sess = _session(dial, session_id)
-        started = dial.setdefault("draw_state", {})
-        if session_id == "sat-am" and "sat-pm" in started and _session(dial, "sat-pm").get("matches"):
-            raise DrawError("Clear FOURSOMES first: its draw depends on FOURBALL.")
-        rid = sess.get("se_round")
-        if rid is not None:
-            from email_parser.score_entry import get_entered_scores
-            feed = get_entered_scores(int(dial["event_id"]), rid, db_path=db_path)
-            n = sum(len(p.get("scores") or {}) for r in feed.get("rounds") or []
-                    for p in r.get("players") or []) + sum(
-                len(t.get("scores") or {}) for r in feed.get("rounds") or []
-                for t in r.get("teams") or [])
-            if n:
-                raise DrawError(f"{session_title(sess.get('format'))} already has "
-                                f"{n} scores entered; it can't be cleared.")
-        removed = len(sess.get("matches") or [])
-        sess["matches"], sess["se_round"] = [], None
-        sess["n_matches"] = sum(DRAW_POOLS[session_id])
-        started[session_id] = {"drawn": 0, "of": sess["n_matches"], "complete": False,
-                               "cleared": True}
-        conn.execute("UPDATE app_settings SET value = ?, updated_at = datetime('now') "
-                     "WHERE key = 'lsc_matches'", (json.dumps(dial),))
-        conn.commit()
-    return {"session": session_id, "cleared": removed}
 
 
 def results_blockers(board: dict) -> list[str]:
