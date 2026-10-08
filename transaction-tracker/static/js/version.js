@@ -1,5 +1,16 @@
-window.TGF_VERSION = "2.525.40";
+window.TGF_VERSION = "2.525.41";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.525.41",
+    date: "2026-10-08",
+    title: "Lone Star Cup cart signs rebuilt to Kerry's approved design 3e, saved as the template",
+    changes: [
+      "The Cup cart sign is now design 3e, which Kerry approved (design-claude #1463). The navy #002855 band carries the white-border Hideout logo, a dotted divider, the TEE TIME and HOLE column, and a navy QR tile. Under it is a full-bleed team band, then 64px names: first name 600 and LAST NAME 800. A long name steps down 2px at a time to 48px, then the first name ellipses; names never wrap. There is no GGID and no course line. It is for the LSC only; regular events keep the #893 sign.",
+      "The QR prints only when the event is switched on for score entry with the QR dial on. Otherwise the time column takes the space, and the screen toolbar says the QR is off. Names come from customers by customer_id.",
+      "Two signs per Letter sheet with no blank last page. The screen gap between sheets was leaking into print; the print rule now comes after it. The demo prints 14 signs on 7 pages and 28 signs on 14.",
+      "Saved as the template of record: docs/standards/lsc-cart-signs.md (served by get_standard) holds the spec, the data bindings and the acceptance results; templates/cup_cart_signs.html is the production template."
+    ]
+  },
   {
     version: "2.525.40",
     date: "2026-10-08",

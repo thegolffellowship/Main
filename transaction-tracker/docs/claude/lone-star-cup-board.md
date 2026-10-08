@@ -525,3 +525,18 @@ still carries them).
 **Logo, v2.525.40:** `static/lsc-logo-dark.png` is now the white-border logo
 WITH THE HIDEOUT (Kerry 10/8; sha256 423d375070d37b4f…) on the splash, the
 Event Info banner and the draw page. Cart signs: `lsc-logo-hideout.png`.
+
+**Cart signs, v2.525.41: design 3e, the TEMPLATE OF RECORD (Kerry-approved, CD #1463).**
+Kerry's 10/8 instruction: "Review tracker for full direction on Cart Signs, just for the LONE STAR CUP. Save them as a template".
+- The full spec, data bindings and acceptance results are in **`docs/standards/lsc-cart-signs.md`**, which `get_standard("lsc-cart-signs")` serves.
+- What 3e replaces from v2.525.39:
+  - a navy #002855 band carrying the white-border Hideout logo (`lsc-logo-dark.png`);
+  - a dotted divider;
+  - the TEE TIME / HOLE column;
+  - a navy QR tile;
+  - a full-bleed team band (Austin #BF5700, SA #44596B per CD);
+  - 64px names with the 752px / 48px fit rule;
+  - no GGID and no course line.
+- The QR prints only when 3329 is in score_entry_events with the QR dial on. A toolbar warns when it is off.
+- Two signs per sheet and no spill-over page: sat-am is 7 pages and sun is 14.
+- `lsc-logo-hideout.png` is no longer used by the sign; it stays in static/ for now.

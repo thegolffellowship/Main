@@ -72,13 +72,16 @@ with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.St
     import app as appmod
 cs = appmod.cup_cart_signs_data(3329, preview=True, session_id="sat-am")
 signs = [x for pg in cs["pages"] for x in pg]
-check("cart signs: one per cart pair, two to a page, team-themed with the group's QR",
-      cs["count"] == 14 and all(len(pg) <= 2 for pg in cs["pages"]) and {x["cls"] for x in signs} == {"aus", "sa"}
-      and all(len(x["names"]) == 2 and x["qr_svg"] and "/member/score?t=" in x["url"] for x in signs), cs["count"])
-check("cart sign start and match line", signs[0]["start"].endswith("Hole 1") and signs[0]["match"].startswith("Sat AM Fourball · Match 1 · v "),
-      signs[0])
+check("cart signs (design 3e): one per cart, two to a sheet, team band color, navy QR from the group link",
+      cs["count"] == 14 and all(len(pg) <= 2 for pg in cs["pages"])
+      and {(x["team"], x["color"]) for x in signs} == {("AUSTIN", "#BF5700"), ("SAN ANTONIO", "#44596B")}
+      and all(len(x["riders"]) == 2 and x["qr_svg"] and "#002855" in x["qr_svg"] and "/member/score?t=" in x["url"] for x in signs),
+      cs["count"])
+check("cart sign tee time, hole and names (first + LAST, from customers)",
+      signs[0]["tee_time"] and signs[0]["hole"] == "1"
+      and all(r["last"] == r["last"].upper() and r["last"] for x in signs for r in x["riders"]), signs[0])
 sun = [x for pg in appmod.cup_cart_signs_data(3329, preview=True, session_id="sun")["pages"] for x in pg]
-check("Sunday signs name each player's own opponent", sun and all(" · v " in x["match"] for x in sun), sun[:1])
+check("Sunday singles signs print one cart per team per group", sun and all(1 <= len(x["riders"]) <= 2 for x in sun), sun[:1])
 check("the live sign sheet never reads the demo rounds", appmod.cup_cart_signs_data(3329)["count"] == 0)
 held = [g for r in read["rounds"] for g in r.get("groups") or [] if g.get("lock_state") == "held"]
 check("exactly one demo group stays held (the HELD screen)", len(held) == 1, len(held))

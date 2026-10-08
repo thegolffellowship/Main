@@ -1606,8 +1606,8 @@ def cup_sign_sheets(event_id: int, base_url: str | None = None, db_path=None,
         for r in rounds:
             rm = round_matches(r[0], db_path=db_path)
             groups = []
-            for g in conn.execute("SELECT id, group_num, label, tee_time FROM se_groups WHERE round_id = ? "
-                                  "ORDER BY group_num", (r[0],)).fetchall():
+            for g in conn.execute("SELECT id, group_num, label, tee_time, start_hole FROM se_groups "
+                                  "WHERE round_id = ? ORDER BY group_num", (r[0],)).fetchall():
                 ps = conn.execute("SELECT customer_id, display_name FROM se_players WHERE group_id = ? "
                                   "ORDER BY COALESCE(seat, 99), id", (g[0],)).fetchall()
                 mids = []
@@ -1617,6 +1617,7 @@ def cup_sign_sheets(event_id: int, base_url: str | None = None, db_path=None,
                         mids.append(mid)
                 url = f"{base}/member/score?t={make_group_token(g[0], db_path=db_path)}"
                 groups.append({"group_id": g[0], "group_num": g[1], "label": g[2], "tee_time": g[3],
+                               "start_hole": g[4],
                                "players": [{"customer_id": p[0], "name": p[1],
                                             "side": (rm.get(p[0]) or {}).get("side"),
                                             "match_id": (rm.get(p[0]) or {}).get("match_id")} for p in ps],
@@ -1708,7 +1709,7 @@ def resolve_short_code(code: str, db_path=None) -> str | None:
     return tok if verify_group_token(tok, db_path=db_path) else None
 
 
-def qr_svg(url: str) -> str | None:
+def qr_svg(url: str, dark: str = "#111111") -> str | None:
     try:
         import segno
     except ImportError:
@@ -1718,7 +1719,7 @@ def qr_svg(url: str) -> str | None:
     # to its box. With width="172" a smaller box (the scorecard's 4.6em, the
     # cart sign's 0.9in) cropped the code's right and bottom edges (Kerry
     # 2026-10-06: "the qr codes are [not] scaling to fit completely").
-    return segno.make(url, error="m").svg_inline(scale=4, border=1, dark="#111111",
+    return segno.make(url, error="m").svg_inline(scale=4, border=1, dark=dark,
                                                  omitsize=True)
 
 

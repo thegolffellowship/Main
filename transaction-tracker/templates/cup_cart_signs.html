@@ -1,71 +1,119 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
+<meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>{{ d.event.name }} - Cup Cart Signs</title>
-<link href="https://fonts.googleapis.com/css2?family=Bitter:wght@600;700&display=swap" rel="stylesheet">
+<title>Lone Star Cup — Cart Signs</title>
+<link href="https://fonts.googleapis.com/css2?family=Bitter:wght@600;700;800&display=swap" rel="stylesheet">
 <style>
-    /* Standard Cup navy (Kerry 10/8 via CoS #1456: "let's make the 002855 the standard Cup navy"): PMS 281 C, RGB 0/40/85. Cup surfaces only. */
-    :root { --lsc-navy: #002855; }
-/* Lone Star Cup cart signs (CoS #1397-2; mockup CartSign.dc.html, byte-exact
-   in docs/claude/lsc-mockups): templates/cart_signs.html, unchanged in shape:
-   letter portrait, two signs to a sheet, hairline where the paper is cut,
-   two enormous Bitter names over one start line, score QR in the top-right
-   corner, event footer. The Cup changes only the mark (the Cup logo for the
-   TGF mark) and adds a team band. Print margin lives in the page padding,
-   never @page margins (the print-sheet contract). */
-*{box-sizing:border-box}
-@page{size:letter portrait;margin:0}
-html,body,.page{-webkit-print-color-adjust:exact;print-color-adjust:exact}
-body{margin:0;background:#EFEFEC;color:#111;font-family:"Helvetica Neue",Arial,system-ui,sans-serif;padding:20px}
-.toolbar{margin:0 auto 14px;max-width:816px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
-.toolbar button{font:inherit;padding:8px 16px;border:0;border-radius:999px;background:#E87C3E;color:#fff;font-weight:600;cursor:pointer}
-.toolbar .note{font-size:13px;color:#4B5563}
-.page{width:816px;height:1056px;padding:.4in;background:#fff;display:grid;grid-template-rows:1fr 1fr;gap:.5in;position:relative;margin:0 auto 24px;
-      border:1px solid #C9C9C4;box-shadow:0 2px 10px rgba(0,0,0,.08);break-after:page}
-.page::after{content:"";position:absolute;top:50%;left:.3in;right:.3in;border-top:1px solid #9CA3AF}
-.sign{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:6px 10px;position:relative}
-.sign-logo{width:270px;height:210px;display:block;margin:0 auto 4px;object-fit:contain}
-.team{font-family:Bitter,Georgia,serif;font-weight:700;font-size:15px;letter-spacing:4px;text-transform:uppercase;color:#fff;padding:6px 22px;border-radius:999px;margin:0 0 8px}
-.aus .team{background:#BF5700}
-.sa .team{background:#4B6274}
-.names{width:100%}
-.nm{font-family:Bitter,Georgia,serif;font-weight:700;font-size:62px;line-height:1.04;white-space:nowrap;overflow:hidden}
-.start{font-family:Bitter,Georgia,serif;font-weight:700;font-size:41px;margin-top:10px;padding-top:8px;border-top:2px solid #111;width:78%;font-variant-numeric:tabular-nums}
-.aus .start{border-top-color:#BF5700}
-.sa .start{border-top-color:#4B6274}
-.match{font-family:Bitter,Georgia,serif;font-weight:600;font-size:17px;color:#444;margin-top:8px}
-.sign-foot{font-family:Bitter,Georgia,serif;font-weight:600;font-size:15px;color:#444;margin-top:11px}
-.qr{position:absolute;top:4px;right:4px;width:.9in;text-align:center}
-.qr svg{width:.9in;height:.9in;display:block;background:#fff}
-.qr-copy{font-family:Bitter,Georgia,serif;font-weight:700;font-size:10px;line-height:1.2;margin-top:3px;letter-spacing:.3px}
-.empty{padding:30px;background:#fff;border:1px solid #C9C9C4;max-width:816px;margin:0 auto}
-@media print{body{padding:0;background:#fff}.toolbar,.empty{display:none}.page{margin:0;border:0;box-shadow:none}}
+  /* LONE STAR CUP CART SIGN, the template of record: Kerry-approved design 3e
+     (design-claude #1463), production HTML bound to the Tracker's data. Spec:
+     docs/standards/lsc-cart-signs.md. LSC only; regular TGF events keep the
+     #893 cart sign (templates/cart_signs.html). Each sign is exactly half a
+     Letter sheet (816 x 528 px); the dashed cut line sits at 5.5in. */
+  :root { --lsc-navy: #002855; }
+  @page { size: letter; margin: 0; }
+  html, body { margin: 0; padding: 0; background: #8C8F94; }
+  * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .toolbar { max-width: 8.5in; margin: 16px auto; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+             font: 14px "Helvetica Neue", Arial, sans-serif; color: #fff; }
+  .toolbar button { font: inherit; padding: 8px 16px; border: 0; border-radius: 999px; background: #E87C3E; color: #fff;
+                    font-weight: 600; cursor: pointer; }
+  .toolbar .warn { color: #FDE68A; }
+  .sheet { width: 8.5in; height: 11in; background: #fff; position: relative; overflow: hidden; display: flex;
+           flex-direction: column; margin: 0 auto 24px; break-after: page;
+           font-family: 'Helvetica Neue', Arial, sans-serif; color: #1B1B1B; }
+  .sheet:last-of-type { break-after: auto; }
+  .cut { position: absolute; left: 0; right: 0; top: 5.5in; border-top: 1px dashed #D1D5DB; z-index: 1; }
+  .sign { height: 5.5in; box-sizing: border-box; display: flex; flex-direction: column; }
+  .band { background: var(--lsc-navy); height: 250px; flex: none; box-sizing: border-box;
+          padding: 20px 44px 20px 40px; display: flex; align-items: center; }
+  .logo { flex: none; align-self: stretch; display: flex; align-items: center; margin-right: 40px; }
+  .logo img { height: 240px; display: block; margin: -15px -14px; }
+  .div { flex: none; align-self: stretch; border-left: 4px dotted #9DB4D6; margin: 6px 0; }
+  .when { flex: 1; align-self: stretch; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  .lab { font-family: Bitter, Georgia, serif; font-weight: 700; font-size: 14px; letter-spacing: 3px; color: #9DB4D6; }
+  .time { font-family: Bitter, Georgia, serif; font-weight: 800; font-size: 54px; line-height: 1.05; color: #FFFFFF; }
+  .rule { width: 60%; height: 3px; background: #E87C3E; margin: 12px 0; }
+  .hole { font-family: Bitter, Georgia, serif; font-weight: 800; font-size: 54px; line-height: 1.05; color: #E87C3E; }
+  .qr { flex: none; display: flex; flex-direction: column; align-items: center; gap: 6px; margin-left: 8px; }
+  .qr .tile { width: 116px; height: 116px; background: #FFFFFF; padding: 8px; box-sizing: border-box; border-radius: 8px; }
+  .qr .tile svg { width: 100px; height: 100px; display: block; }
+  .qr .cap { font-size: 9px; font-weight: 700; letter-spacing: 1px; color: #9DB4D6; }
+  .team { height: 58px; flex: none; display: flex; align-items: center; justify-content: center; gap: 14px; }
+  .team .r { width: 48px; height: 3px; background: #FFFFFF; }
+  .team .t { font-family: Bitter, Georgia, serif; font-weight: 800; font-size: 26px; letter-spacing: 4px; color: #FFFFFF; }
+  .namesbox { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+              padding: 0 32px; min-width: 0; }
+  .names { font-family: Bitter, Georgia, serif; font-size: 64px; line-height: 1.04; text-align: center; white-space: nowrap;
+           max-width: 752px; }
+  .names .f { font-weight: 600; }
+  .names .l { font-weight: 800; }
+  .names.clip .f { display: inline-block; max-width: 40%; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; }
+  /* After .sheet so the print margin wins (the screen 24px gap spilled a blank last page). */
+  @media print { html, body { background: #fff; } .toolbar { display: none; } .sheet { margin: 0; } }
+  .empty { max-width: 8.5in; margin: 0 auto; padding: 24px; background: #fff; font: 15px "Helvetica Neue", Arial, sans-serif; }
 </style>
 </head>
 <body>
   <div class="toolbar">
     <button type="button" onclick="window.print()">Print</button>
-    <span class="note">{{ d.count }} cart sign{{ '' if d.count == 1 else 's' }}, two to a Letter page.{% if d.preview %} PREVIEW: demo rounds.{% endif %}</span>
+    <span>{{ d.count }} cart sign{{ '' if d.count == 1 else 's' }}, two to a Letter sheet.{% if d.preview %} PREVIEW: demo rounds.{% endif %}</span>
+    {% if not d.qr_on %}<span class="warn">QR is off: switch the event on in Live Scoring (score entry + QR) to print the codes.</span>{% endif %}
+    {% for p in d.problems %}<span class="warn">{{ p }}</span>{% endfor %}
   </div>
   {% if not d.pages %}
   <div class="empty">No Cup rounds are seeded yet, so there are no cart signs. They print after the draw and the Cup seed.</div>
   {% endif %}
   {% for page in d.pages %}
-  <div class="page">
+  <div class="sheet">
+    <div class="cut"></div>
     {% for s in page %}
-    <div class="sign {{ s.cls }}">
-      <img class="sign-logo" src="/static/lsc-logo-hideout.png" alt="Lone Star Cup 2026 · The Hideout">
-      <div class="team">{{ s.team }}</div>
-      <div class="names">{% for n in s.names %}<div class="nm">{{ n }}</div>{% endfor %}</div>
-      <div class="start">{{ s.start }}</div>
-      {% if s.qr_svg %}
-      <div class="qr">{{ s.qr_svg|safe }}<div class="qr-copy">Scan to keep score</div></div>
-      {% endif %}
+    <div class="sign">
+      <div class="band">
+        <div class="logo"><img src="/static/lsc-logo-dark.png" alt="Lone Star Cup · The Hideout"></div>
+        <div class="div"></div>
+        <div class="when">
+          <div class="lab">TEE TIME</div>
+          <div class="time">{{ s.tee_time }}</div>
+          <div class="rule"></div>
+          <div class="lab">HOLE</div>
+          <div class="hole">{{ s.hole }}</div>
+        </div>
+        {% if s.qr_svg %}
+        <div class="qr">
+          <div class="tile">{{ s.qr_svg|safe }}</div>
+          <div class="cap">SCAN TO KEEP SCORE</div>
+        </div>
+        {% endif %}
+      </div>
+      <div class="team" style="background: {{ s.color }};">
+        <span class="r"></span><span class="t">TEAM {{ s.team }}</span><span class="r"></span>
+      </div>
+      <div class="namesbox">
+        <div class="names">
+          {% for r in s.riders %}<div><span class="f">{{ r.first }}</span> <span class="l">{{ r.last }}</span></div>{% endfor %}
+        </div>
+      </div>
     </div>
     {% endfor %}
   </div>
   {% endfor %}
+  <script>
+    // Fit rule (#1463 §4): a name line wider than 752px steps the sign's names
+    // down 2px at a time to a 48px minimum; below that the first name ellipses.
+    // Never wraps.
+    function fitNames() {
+      document.querySelectorAll(".names").forEach(function (n) {
+        var size = 64;
+        n.style.fontSize = size + "px"; n.classList.remove("clip");
+        var wide = function () { return Array.prototype.some.call(n.children, function (c) { return c.scrollWidth > 752; }); };
+        while (wide() && size > 48) { size -= 2; n.style.fontSize = size + "px"; }
+        if (wide()) n.classList.add("clip");
+      });
+    }
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(fitNames); else fitNames();
+    window.addEventListener("beforeprint", fitNames);
+  </script>
 </body>
 </html>

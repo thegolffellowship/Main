@@ -5784,53 +5784,71 @@ def proximity_markers_page(event_id):
 
 
 _CUP_SESSION_TITLE = {"sat-am": "Sat AM Fourball", "sat-pm": "Sat PM Foursomes", "sun": "Sun Singles"}
+# Team band colors for the Lone Star Cup cart sign (design-claude #1463 §3,
+# Kerry-approved option 3e). A chapter with no color here does not print:
+# never fall back to grey silently.
+LSC_TEAM_COLORS = {"austin": ("Austin", "#BF5700"), "sa": ("San Antonio", "#44596B")}
 
 
 def cup_cart_signs_data(event_id: int, preview: bool = False, session_id: str | None = None) -> dict:
-    """The Lone Star Cup CART SIGNS (CoS #1397-2, mockup CartSign.dc.html):
-    templates/cart_signs.html's shape, team-themed, one sign per cart pair
-    (a group's Austin players, then its San Antonio players), each with the
-    Cup logo, the start, the match and its opponents, and the group's
-    scoring QR (the same link as the QR sign). Read from the seeded Cup
-    rounds (cup_sign_sheets); ``preview`` reads the staff preview's demo
-    rounds instead. Two signs to a Letter page."""
-    from datetime import datetime as _dt
-    from email_parser.score_entry import cup_sign_sheets
+    """The Lone Star Cup CART SIGNS, Kerry-approved design 3e (design-claude
+    #1463; template templates/cup_cart_signs.html, spec
+    docs/standards/lsc-cart-signs.md). One sign per cart: each group's Austin
+    riders (cart A), then its San Antonio riders (cart B), two to a Letter
+    sheet. Riders' names come from customers by customer_id. The navy QR is
+    the group's scoring link and shows only when the event is in
+    score_entry_events and the score_entry_qr dial is on (the staff preview
+    always shows it). Read from the seeded Cup rounds (cup_sign_sheets);
+    ``preview`` reads the staff preview's demo rounds instead."""
+    from email_parser.score_entry import cup_sign_sheets, event_enabled, _qr_dial, qr_svg
     sheets = cup_sign_sheets(event_id, round_key_prefix="lscprev:" if preview else "lsc:")
     if sheets.get("error"):
         return sheets
-    signs = []
+    try:
+        qr_on = preview or (event_enabled(event_id) and bool(_qr_dial(event_id)))
+    except Exception:
+        qr_on = preview
+    cids = {int(p["customer_id"]) for r in sheets["rounds"] for g in r["groups"] for p in g["players"]
+            if p.get("customer_id")}
+    names = {}
+    if cids:
+        conn = get_connection()
+        try:
+            q = ",".join("?" * len(cids))
+            for row in conn.execute(f"SELECT customer_id, first_name, last_name FROM customers "
+                                    f"WHERE customer_id IN ({q})", tuple(cids)):
+                names[row[0]] = ((row[1] or "").strip(), (row[2] or "").strip())
+        finally:
+            conn.close()
+    signs, problems = [], []
     for r in sheets["rounds"]:
         sid = r.get("session") or ""
         if session_id and sid != session_id:
             continue
-        try:
-            day = _dt.strptime(str(r.get("date") or "")[:10], "%Y-%m-%d").strftime("%a, %b %-d")
-        except ValueError:
-            day = ""
         for g in r["groups"]:
-            for side, other, cls, team in (("austin", "sa", "aus", "Austin"), ("sa", "austin", "sa", "San Antonio")):
-                mine = [p for p in g["players"] if p.get("side") == side]
-                theirs = [p for p in g["players"] if p.get("side") == other]
-                if not mine:
+            qr = qr_svg(g["url"], dark="#002855") if (qr_on and g.get("url")) else None
+            for side in ("austin", "sa"):
+                riders = [p for p in g["players"] if p.get("side") == side]
+                if not riders:
                     continue
-                nums = sorted({int(str(p["match_id"]).rsplit("-", 1)[-1]) for p in mine
-                               if p.get("match_id") and str(p["match_id"]).rsplit("-", 1)[-1].isdigit()})
-                mtxt = ("Matches " + " & ".join(map(str, nums))) if len(nums) > 1 else (f"Match {nums[0]}" if nums else "")
-                last = lambda ps: " & ".join((p["name"] or "").split()[-1] for p in ps)
-                if sid == "sun":
-                    # singles: each player's own opponent (same match id)
-                    vs = " · ".join(f"v {last([q for q in theirs if q.get('match_id') == p.get('match_id')])}"
-                                    for p in mine if any(q.get("match_id") == p.get("match_id") for q in theirs))
-                else:
-                    vs = f"v {last(theirs)}"
-                signs.append({"cls": cls, "team": team, "names": [p["name"] for p in mine],
-                              "start": f"{g.get('tee_time') or ''} · Hole 1".strip(" ·"),
-                              "match": " · ".join(x for x in (_CUP_SESSION_TITLE.get(sid, r.get("label") or ""), mtxt, vs) if x),
-                              "foot": " · ".join(x for x in ("Lone Star Cup 2026", sheets["event"].get("course") or "The Hideout Golf Club", day) if x),
-                              "qr_svg": g.get("qr_svg"), "url": g.get("url")})
+                team = LSC_TEAM_COLORS.get(side)
+                if not team:
+                    problems.append(f"group {g.get('group_num')}: no team color for {side}")
+                    continue
+                rows = []
+                for p in riders:
+                    f, l = names.get(int(p["customer_id"]), ("", "")) if p.get("customer_id") else ("", "")
+                    if not (f or l):
+                        parts = (p.get("name") or "").split()
+                        f, l = (" ".join(parts[:-1]), parts[-1]) if len(parts) > 1 else ("", p.get("name") or "")
+                    rows.append({"first": f, "last": l.upper()})
+                signs.append({"team": team[0].upper(), "color": team[1], "riders": rows,
+                              "tee_time": g.get("tee_time") or "", "hole": str(g.get("start_hole") or 1),
+                              "qr_svg": qr, "url": g.get("url"), "session": sid,
+                              "match": _CUP_SESSION_TITLE.get(sid, "")})
     pages = [signs[i:i + 2] for i in range(0, len(signs), 2)]
-    return {"event": sheets["event"], "pages": pages, "count": len(signs), "preview": preview}
+    return {"event": sheets["event"], "pages": pages, "count": len(signs), "preview": preview,
+            "qr_on": qr_on, "problems": problems}
 
 
 @app.route("/events/<int:event_id>/cup-cart-signs")
