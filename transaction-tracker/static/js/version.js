@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.525.27";
+window.TGF_VERSION = "2.525.28";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.525.28",
+    date: "2026-10-08",
+    title: "FOLLOW THE CUP on a PREVIEW demo round opens the staff preview board",
+    changes: [
+      "A demo round's matches live on the staff preview board (/api/lsc/board?preview=1, Tracker Build v2.525.22), not the member board, so FOLLOW THE CUP from a PREVIEW round went to a board that had no such match and nothing expanded (found preparing Kerry's 10/8 dry-run links, #1434). The scanned-link landing now adds preview=1 to the FOLLOW target when the card's cup standings are flagged preview; live rounds are unchanged. Guard: test_cup_signs template contract."
+    ]
+  },
   {
     version: "2.525.27",
     date: "2026-10-08",

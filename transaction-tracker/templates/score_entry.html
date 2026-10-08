@@ -756,7 +756,11 @@
                 if (m && m.session != null && m.match_id && !cupIds.includes(m.match_id)) cupIds.push(m.match_id);
             });
             const cup = cupIds.length > 0;
-            const follow = cup ? "/member/lonestarcup?match=" + encodeURIComponent(cupIds[0])
+            // A PREVIEW demo round's matches live on the staff preview board
+            // (/api/lsc/board?preview=1), not the member board: FOLLOW carries
+            // preview=1 so the card can open there. Live rounds are unchanged.
+            const pv = !!(card.cup_standings && card.cup_standings.preview);
+            const follow = cup ? "/member/lonestarcup?" + (pv ? "preview=1&" : "") + "match=" + encodeURIComponent(cupIds[0])
                                : "/member/score/board?t=" + encodeURIComponent(T);
             // Mockup QRLanding: "Group 2 · Match 2 · 18 holes", then a THIS
             // GROUP box, San Antonio left and Austin right in the Cup, one

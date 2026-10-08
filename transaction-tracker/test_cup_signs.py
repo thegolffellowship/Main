@@ -110,7 +110,7 @@ check("the phone page lands on the two buttons before Who are you?",
       and tpl.index("function gateScreen()") < tpl.index("function joinScreen()")
       and 'if (!who && !store.get(K.gate, false)) body = gateScreen();' in tpl)
 check("FOLLOW THE CUP opens the Cup board with the match expanded; a plain event opens the one-event board",
-      '/member/lonestarcup?match=' in tpl and '/member/score/board?t=' in tpl)
+      '"/member/lonestarcup?" + (pv ? "preview=1&" : "") + "match="' in tpl and '/member/score/board?t=' in tpl)
 check("the hole screen carries the Team score · hole box (label + two numbers) and the HOW IT WORKS pill (#1398-C1/C2)",
       "function teamScoreBox(n)" in tpl and 'class="se-box se-tscore"' in tpl and "pr-hiw-link" in tpl
       and "/member/lonestarcup/info#" in tpl and "Team PH " in tpl)
