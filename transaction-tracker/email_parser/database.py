@@ -60063,7 +60063,10 @@ def promote_expense_to_ledger(expense_id: int, category_name: str | None,
             (txn_id, entity_id, category_id, amount, event_id),
         )
 
-        # Mark expense as promoted
+        # Mark expense as promoted. The receipt's own event_id is set too
+        # (Track B #1380, 10/7: Mesa's 2766 got its ledger row and event
+        # name but kept event_id NULL, and the one-off roster reads
+        # event_id, so it never showed PAID).
         conn.execute(
             """UPDATE expense_transactions
                SET review_status = 'approved', acct_transaction_id = ?,
@@ -60071,6 +60074,10 @@ def promote_expense_to_ledger(expense_id: int, category_name: str | None,
                WHERE id = ?""",
             (txn_id, expense_id),
         )
+        if event_id and "event_id" in exp:
+            conn.execute(
+                "UPDATE expense_transactions SET event_id = COALESCE(event_id, ?) WHERE id = ?",
+                (event_id, expense_id))
 
         # Learn a keyword rule for future auto-categorization
         if category_id and merchant:

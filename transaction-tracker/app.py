@@ -926,6 +926,15 @@ def check_expense_inbox(force=False, days_back=None):
                         except Exception:
                             logger.warning("inbound add-on auto-match failed for exp %s",
                                            saved.get("id"), exc_info=True)
+                        # One-off event roster (Kerry 2026-10-07, CoS #1377-1:
+                        # "Ok. Build it."): an exact open-balance match links
+                        # the receipt to the event, flagged for the CFO.
+                        try:
+                            from email_parser.receipt_autoapply import auto_apply_receipt
+                            auto_apply_receipt(saved["id"])
+                        except Exception:
+                            logger.warning("receipt auto-apply failed for exp %s",
+                                           saved.get("id"), exc_info=True)
                         # Overpayment returns ride the same inbound receipt —
                         # "Overpaid winnings for <code>" memos close the open
                         # tgf_overpayments row the REQUEST button created
