@@ -366,6 +366,36 @@ either way). CH = whs_round(index × slope/113 + (rating − 72)).
 - Pools in `lsc_matches.pairs` are summed from the lock. No re-derivation on
   10/10. Why it matters: by 10/7 Wilson's live index was 10.8 (CH 6, Flight 1)
   and South's 10.0 (CH 9).
+- Sunday Low 7 | High 7 is cut on the RAW INDEX (Kerry 10/7: "Handicap
+  breakouts start with raw indexes not course handicaps"), so no CH tie arises.
+  SA Low 7: Pat Youngs, Mesa, Niester, J. Young, Baker, Mazanec, South. Austin
+  Low 7: L. Youngs, M. Jenkins, Cloer, Cannon, Wetz, J. Wade, W. Hogue (Jay Hogue
+  12.2 is High).
+- Saturday pair pools are cut on the COMBINED RAW INDEX too (Kerry 10/7, asked
+  whether the rule covers Saturday: "Yes"). `lsc_matches.pairs` carries
+  `combined_index` (the sort key) beside `combined_ch` (reference only), sorted
+  by index. Austin low: L. Youngs/Cannon 7.8, Cloer/J. Wade 12.8, Matt/Mike
+  Jenkins 18.2; Jay/Walter Hogue (23.1) went high. SA unchanged. Course
+  handicap still sets every match's strokes.
+
+## Board reads for the Cup screens — v2.525.22 (CoS #1398, Track B)
+
+- `preview_board_payload(dial=None)`: the board from a supplied dial, default the
+  staff setting `lsc_preview_matches` (written 10/7: DEMO matches, 7 Fourball,
+  7 Foursomes, 14 Singles, all `se_round: null`). Never reads `lsc_matches`,
+  `lsc_results` or `lsc_mock_scores`; `source: "preview"`. The preview seeding
+  binds each session's `se_round` to its demo round id in `lsc_preview_matches`.
+- `build_preview_dial(live_dial, lock)`: those demo matches from the real pairs,
+  pools, tee sheet and `lsc_handicap_lock`. Not the draw.
+- `for_viewer(board, cid)`: own match first in each session, `yours: true`,
+  `your_matches`. Apply it AFTER `strip_money` for a member.
+- Every session carries `title` FOURBALL | FOURSOMES | SINGLES; the live dial's
+  labels are the same three words since 10/7.
+- `_apply_handicap_lock`: a match player with no PH in the feed shows the locked
+  CH (board shows CH and strokes before a ball is struck); a feed PH wins.
+- Score entry's `_cup_standings` / `round_matches` read the LIVE dial, so a demo
+  round shows no Cup strip until whoever builds the preview points them at
+  `lsc_preview_matches` for preview rounds.
 - Sunday Low 7 | High 7: SA has four at CH 8 (Baker, Mazanec, South, Wilson);
   by index Wilson is 8th, so High.
 
@@ -416,6 +446,18 @@ The staff preview header is one slim line that folds to a "PREVIEW ▾" tab
 after the first jump (Kerry 10/8: "the preview header is really in the
 way"); Event Info is its first stop. Logo: `static/lsc-logo.png` (sha256
 8d771633…, CoS MANIFEST #1416).
+
+## THE DRAW into the live dial (Kerry 10/8, CoS #1432) — Track B notes
+
+The writer is Tracker Build's `email_parser/lsc_draw.py` (page
+`/events/3329/cup-draw`, v2.525.29; CoS accepted it in #1450). Track B's own
+draft writer was withdrawn so the dial has one writer. Track B's part:
+- before the draw (10/8): the staged demo matches were taken off all three
+  sessions, `lsc_mock_scores` was emptied (demo scores must never land on real
+  players), and each session carries `n_matches` 7 / 7 / 14, which
+  `compute_board` counts so a partly drawn Cup still totals 28 points (v2.525.32);
+- after the draw: `scoring-se-cup-seed:3329|apply`, then each session's
+  `se_round` bound to its round id (the page touches neither).
 
 ## THE DRAW — /events/3329/cup-draw (Kerry 10/8, CoS #1432) — v2.525.29
 

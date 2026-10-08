@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.525.33";
+window.TGF_VERSION = "2.525.34";
 window.TGF_CHANGELOG = [
+  {
+    "version": "2.525.34",
+    "date": "2026-10-08",
+    "title": "Lone Star Cup board: pair names with &, YOUR MATCH first, locked CH before play, 28 points through a partial draw",
+    "changes": [
+      "Kerry 10/8 (CoS #1449): \"Make the teams have an &, not / between the names.\" The Cup engine's match-card names and skins labels read \"Luke Youngs & Chris Cannon\".",
+      "for_viewer(board, customer_id) puts the viewer's own match first in every session with yours: true and lists your_matches, for the YOUR MATCH card (CoS #1398). Before a ball is struck every match player shows his locked course handicap from lsc_handicap_lock (#1389) and the match strokes follow from it; a playing handicap the score-entry feed carries is never replaced. preview_board_payload can compute from a supplied dial, and build_preview_dial ranks the Sunday Low 7 | High 7 by locked RAW INDEX (Kerry 10/7: \"Handicap breakouts start with raw indexes not course handicaps\").",
+      "While the draw page (2.525.29) lands matches one at a time, the board counts each session's full match total (the dial's n_matches, 7 / 7 / 14), so the Cup reads 28 points and 14 1/2 to win from the first landed match. Guards: test_lsc_handicap_lock.py, tests/test_lsc_cup.py."
+    ]
+  },
   {
     version: "2.525.33",
     date: "2026-10-08",

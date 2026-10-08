@@ -85,8 +85,8 @@ def test_fourball_best_ball_and_pickup():
     d = compute_match_detail(match, session, COURSE, phs, scores)
     h1 = d["holes"][0]
     assert h1["winner"] == 1 and h1["p1_gross"] == 3 and h1["p2_gross"] == 4
-    # names joined per team line
-    assert " & " in d["players"][0]["name"]   # Kerry #1449: & between partners
+    # names joined per team line with "&" (Kerry 10/8, CoS #1449)
+    assert d["players"][0]["name"] == "#1 & #2"
 
 
 def test_chapman_team_handicap_is_60_40_not_50_combined():

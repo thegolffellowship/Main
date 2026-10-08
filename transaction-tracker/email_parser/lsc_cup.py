@@ -77,6 +77,18 @@ ONE_BALL_FORMATS = {"chapman", "foursomes", "alternate_shot", "alternate-shot",
                     "alternate shot", "pinehurst"}
 
 
+# Session TITLES (Kerry 2026-10-07, CoS #1397-1, binding everywhere):
+# "FOURBALL, FOURSOMES, SINGLES, not FOUR-BALL or CHAPMAN - Chapman is
+# just the type of FOURSOMES we're playing."
+SESSION_TITLES = {"fourball": "FOURBALL", "chapman": "FOURSOMES",
+                  "singles": "SINGLES"}
+
+
+def session_title(fmt: str | None) -> str:
+    f = normalize_format(fmt)
+    return SESSION_TITLES.get(f, f.upper())
+
+
 def normalize_format(fmt: str | None) -> str:
     f = (fmt or "singles").strip().lower()
     if f in ONE_BALL_FORMATS:
@@ -946,6 +958,7 @@ def compute_board(dial: dict, session_data: dict,
                         for k, v in (data.get("si_by_player") or {}).items()}
         tee_gender = {int(k): v for k, v in (data.get("tee_gender") or {}).items()}
         s_out = {"id": sess.get("id"), "label": sess.get("label"),
+                 "title": session_title(sess.get("format")),
                  "date": sess.get("date"), "format": sess.get("format"),
                  "points_per_match": win, "matches": [], "skins": None}
         for m in sess.get("matches") or []:
@@ -988,6 +1001,11 @@ def compute_board(dial: dict, session_data: dict,
             sess, course, phs, scores, marks, names,
             buyers=skins_ctx.get("buyers"), index=skins_ctx.get("index"),
             si_by_player=si_by_player, tee_gender=tee_gender)
+        # a session still being drawn counts its full match count toward
+        # the points on the board (the dial's n_matches: 7 / 7 / 14), so the
+        # Cup reads "14½ to win" from the first landed match
+        total += win * max(0, int(sess.get("n_matches") or 0)
+                           - len(sess.get("matches") or []))
         board["sessions"].append(s_out)
     for t in board["teams"].values():
         t["points"] = round(t["points"], 2)
@@ -1201,14 +1219,138 @@ def lsc_board_payload(db_path=None) -> dict:
 RESULTS_KEY = "lsc_results"
 
 
+def _apply_handicap_lock(conn, dial: dict, session_data: dict) -> dict:
+    """Fill each match player's course handicap from `lsc_handicap_lock`
+    (Kerry 2026-10-07, CoS #1389) where the session's feed has none, so
+    the board shows the locked CH and the match strokes before a ball is
+    struck. A PH the score-entry feed carries is never replaced (it was
+    seeded FROM the lock). Returns a new session_data."""
+    lock = ((_setting_json(conn, "lsc_handicap_lock") or {})
+            .get(str(dial.get("event_id"))) or {}).get("players") or {}
+    if not lock:
+        return session_data
+    out = dict(session_data or {})
+    for sess in dial.get("sessions") or []:
+        sid = sess.get("id")
+        data = dict(out.get(sid) or {})
+        phs = {int(k): v for k, v in (data.get("phs") or {}).items()}
+        for m in sess.get("matches") or []:
+            for side in TEAM_KEYS:
+                for c in m.get(side) or []:
+                    v = lock.get(str(c)) or {}
+                    if phs.get(int(c)) is None and v.get("ch") is not None:
+                        phs[int(c)] = int(v["ch"])
+        if phs:
+            data["phs"] = phs
+            out[sid] = data
+    return out
+
+
+def for_viewer(board: dict, customer_id) -> dict:
+    """The board as one player sees it (Kerry 10/7, CoS #1398): in every
+    session his own match comes first and carries `yours: True`, and
+    `your_matches` lists {session, match_id}. Anyone not in a match (a
+    spectator) gets the board unchanged."""
+    import copy
+    b = copy.deepcopy(board)
+    try:
+        cid = int(customer_id)
+    except (TypeError, ValueError):
+        return b
+    mine = []
+    for sess in b.get("sessions") or []:
+        ms = sess.get("matches") or []
+        hit = [m for m in ms
+               if any(cid in [int(x) for x in (p.get("customer_ids") or [])]
+                      for p in m.get("players") or [])]
+        for m in hit:
+            m["yours"] = True
+            mine.append({"session": sess.get("id"), "match_id": m.get("match_id")})
+        sess["matches"] = hit + [m for m in ms if m not in hit]
+    b["your_matches"] = mine
+    return b
+
+
 PREVIEW_DIAL = "lsc_preview_matches"
+PREVIEW_KEY = PREVIEW_DIAL
 
 
-def preview_board_payload(db_path=None) -> dict:
+def build_preview_dial(dial: dict, lock: dict) -> dict:
+    """DEMO matches for Kerry's staff preview (CoS #1398-B) from the REAL
+    pairs, pools, tee sheet and locked handicaps, never the real draw
+    (that is Thursday's Zoom). Saturday: pair N of a pool v pair N of the
+    other team's same pool, both sessions (Foursomes rotates the SA pairs
+    one place inside each pool so the matchups differ). Sunday: each
+    team's 14 by locked raw INDEX (ties by CH), 1 v 1 ... 14 v 14, two
+    matches per tee time. Every session starts unbound (se_round None);
+    the preview seeding binds its demo rounds."""
+    pairs = dial.get("pairs") or {}
+    tees = dial.get("tee_sheet") or {}
+    players = (lock or {}).get("players") or {}
+
+    def pool(team, name):
+        return [p for p in pairs.get(team) or [] if p.get("pool") == name]
+
+    def rotate(xs):
+        return xs[1:] + xs[:1] if len(xs) > 1 else xs
+
+    def sat(sid, rot):
+        out, n = [], 0
+        for name in ("low", "high"):
+            a, s_ = pool("austin", name), pool("sa", name)
+            if rot:
+                s_ = rotate(s_)
+            for pa, ps in zip(a, s_):
+                n += 1
+                tl = tees.get(sid) or []
+                tt = tl[n - 1] if n <= len(tl) else None
+                out.append({"id": f"{sid.upper()}-{n}", "tee_time": tt, "pool": name,
+                            "austin": list(pa["cids"]), "sa": list(ps["cids"])})
+        return out
+
+    # Breakouts sort on the RAW index, never the course handicap (Kerry
+    # 2026-10-07: "Handicap breakouts start with raw indexes not course
+    # handicaps"); CH only breaks an exact index tie.
+    def ranked(team):
+        cids = [int(c) for c, v in players.items() if v.get("team") == team]
+        return sorted(cids, key=lambda c: (players[str(c)].get("index", 99),
+                                           players[str(c)].get("ch", 99)))
+
+    sun, aus, sa = [], ranked("austin"), ranked("sa")
+    st = tees.get("sun") or []
+    for i, (a, s_) in enumerate(zip(aus, sa)):
+        sun.append({"id": f"SUN-{i + 1}", "tee_time": st[i // 2] if i // 2 < len(st) else None,
+                    "pool": "low" if i < 7 else "high", "austin": [a], "sa": [s_]})
+    sess = {s.get("id"): s for s in dial.get("sessions") or []}
+    out = {k: v for k, v in dial.items() if k != "sessions"}
+    out["_note"] = ("DEMO matches for Kerry's staff preview only (CoS #1398-B), "
+                    "built from the real pairs and locked handicaps. NOT the draw.")
+    out["board_live"] = False
+    out["sessions"] = []
+    for sid, matches in (("sat-am", sat("sat-am", False)), ("sat-pm", sat("sat-pm", True)),
+                         ("sun", sun)):
+        base = sess.get(sid) or {}
+        fmt = base.get("format") or {"sat-am": "fourball", "sat-pm": "chapman"}.get(sid, "singles")
+        out["sessions"].append({"id": sid, "label": session_title(fmt), "format": fmt,
+                                "date": base.get("date"), "points_per_match": 1,
+                                "n_holes": 18, "se_round": None, "matches": matches})
+    return out
+
+
+def preview_board_payload(db_path=None, dial: dict | None = None) -> dict:
     """The STAFF PREVIEW board (Kerry 10/7, CoS #1398-B): the same engine on
     the demo dial and its PREVIEW rounds. Never the live dial, never the
-    frozen results, never the mock scores; served to staff only."""
-    b = _board_payload(db_path, use_frozen=False, dial_key=PREVIEW_DIAL)
+    frozen results, never the mock scores; served to staff only. `dial`
+    computes from a supplied dial instead of the stored one."""
+    if dial is not None:
+        from email_parser.database import _connect
+        if not dial.get("sessions"):
+            return {"configured": False}
+        with _connect(db_path) as conn:
+            b = _board_from_dial(conn, dial, db_path, use_mock=False,
+                                 source_label="preview")
+    else:
+        b = _board_payload(db_path, use_frozen=False, dial_key=PREVIEW_DIAL)
     if b.get("configured"):
         b["preview"] = True
     return b
@@ -1233,40 +1375,48 @@ def _board_payload(db_path=None, use_frozen: bool = True, dial_key: str = "lsc_m
                                        "forced": res.get("forced", False)}
                 b["board_live"] = bool(dial.get("board_live"))
                 return b
-        names = roster_names(conn)
-        session_data = (_setting_json(conn, "lsc_mock_scores") or {}) if dial_key == "lsc_matches" else {}
-        # Real entered scores (Track A, live on main v2.493.0) take
-        # precedence per session: any session bound via se_round reads
-        # the rounds-plural event feed; unbound sessions keep the mock
-        # dial (staging) or stay empty (upcoming).
-        entry_used = False
-        bound = any(s.get("se_round") is not None
-                    for s in dial.get("sessions") or [])
-        if bound and dial.get("event_id"):
-            try:
-                from email_parser.score_entry import get_entered_scores
-                feed = get_entered_scores(int(dial["event_id"]),
-                                          db_path=db_path)
-                overrides = merge_entry_feed(dial, feed)
-                if overrides:
-                    session_data = {**session_data, **overrides}
-                    entry_used = True
-            except Exception:
-                logger.exception("lsc_cup: entered-scores feed read "
-                                 "failed — board falls back to the "
-                                 "mock dial")
-        _attach_player_stroke_index(conn, session_data)
-        skins_ctx = _skins_ctx(conn, dial, db_path)
-        board = compute_board(dial, session_data, names, skins_ctx)
-        board["configured"] = True
-        board["source"] = ("entry" if entry_used
-                           else "mock" if session_data else "none")
-        # Rule 3b: the member page shows the board only once Kerry flips
-        # board_live in the dial (after his phone OK). Admin/manager
-        # sessions preview it regardless — the route enforces this.
-        board["board_live"] = bool(dial.get("board_live"))
-        board["dial_warnings"] = validate_matches(dial)
-        return board
+        return _board_from_dial(conn, dial, db_path,
+                                use_mock=(dial_key == "lsc_matches"))
+
+
+def _board_from_dial(conn, dial: dict, db_path=None, use_mock: bool = True,
+                     source_label: str | None = None) -> dict:
+    names = roster_names(conn)
+    session_data = (_setting_json(conn, "lsc_mock_scores") or {}) if use_mock else {}
+    # Real entered scores (Track A, live on main v2.493.0) take
+    # precedence per session: any session bound via se_round reads
+    # the rounds-plural event feed; unbound sessions keep the mock
+    # dial (staging) or stay empty (upcoming).
+    entry_used = False
+    bound = any(s.get("se_round") is not None
+                for s in dial.get("sessions") or [])
+    if bound and dial.get("event_id"):
+        try:
+            from email_parser.score_entry import get_entered_scores
+            feed = get_entered_scores(int(dial["event_id"]),
+                                      db_path=db_path)
+            overrides = merge_entry_feed(dial, feed)
+            if overrides:
+                session_data = {**session_data, **overrides}
+                entry_used = True
+        except Exception:
+            logger.exception("lsc_cup: entered-scores feed read "
+                             "failed — board falls back to the "
+                             "mock dial")
+    has_scores = bool(session_data)
+    session_data = _apply_handicap_lock(conn, dial, session_data)
+    _attach_player_stroke_index(conn, session_data)
+    skins_ctx = _skins_ctx(conn, dial, db_path)
+    board = compute_board(dial, session_data, names, skins_ctx)
+    board["configured"] = True
+    board["source"] = source_label or ("entry" if entry_used
+                                       else "mock" if has_scores else "none")
+    # Rule 3b: the member page shows the board only once Kerry flips
+    # board_live in the dial (after his phone OK). Admin/manager
+    # sessions preview it regardless — the route enforces this.
+    board["board_live"] = bool(dial.get("board_live"))
+    board["dial_warnings"] = validate_matches(dial)
+    return board
 
 
 def results_blockers(board: dict) -> list[str]:
