@@ -58,7 +58,7 @@
     ("board", "Board", "/member/lonestarcup?preview=1", "The Cup board: FOURBALL | FOURSOMES | SINGLES, then MATCHES | SKINS."),
     ("open", "Board open", links.get("BOARD_OPEN"), "A match card opened from the board."),
     ("skins", "Skins", None, "Next in the build order."),
-    ("signs", "Cart signs", None, "Next in the build order (PDF)."),
+    ("signs", "Cart signs", "/events/" ~ event_id ~ "/cup-cart-signs?preview=1&session=sat-am", "Cart signs from CartSign.dc.html, one per cart pair, two to a page, with the group's scoring QR. Printed from the demo FOURBALL round here; the live sheet is /events/" ~ event_id ~ "/cup-cart-signs after the Cup seed. Print or Save as PDF from the page."),
   ] %}
   <div class="strip" id="strip"><button type="button" class="tag" id="tag" aria-expanded="true">PREVIEW · demo scores</button>
   <nav class="jump" id="jump">

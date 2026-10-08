@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.525.29";
+window.TGF_VERSION = "2.525.30";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.525.30",
+    date: "2026-10-08",
+    title: "Lone Star Cup cart signs",
+    changes: [
+      "CoS #1397-2: /events/3329/cup-cart-signs prints the Cup cart signs from the mockup (CartSign.dc.html): the regular cart-sign shape, two to a Letter page with a cut line, the Cup logo, an Austin or San Antonio team band, the two names large, the start time and hole, the session and match with the opponents, and the group's scoring QR in the corner (the same link as the Cup QR signs). One sign per cart pair: each group's Austin players, then its San Antonio players. ?session=sat-am|sat-pm|sun prints one session. Staff only.",
+      "The sheet reads the seeded Cup rounds, so it fills in after tonight's draw and the Cup seed. ?preview=1 prints from the staff preview's demo rounds, and the preview's Cart signs button opens it."
+    ]
+  },
   {
     version: "2.525.29",
     date: "2026-10-08",

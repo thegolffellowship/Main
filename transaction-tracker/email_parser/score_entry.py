@@ -1581,7 +1581,8 @@ def round_links(round_id: int, base_url: str | None = None, db_path=None) -> lis
             for r in rows]
 
 
-def cup_sign_sheets(event_id: int, base_url: str | None = None, db_path=None) -> dict:
+def cup_sign_sheets(event_id: int, base_url: str | None = None, db_path=None,
+                    round_key_prefix: str = "lsc:") -> dict:
     """The Lone Star Cup's per-group QR signs (Kerry 2026-10-07, #1357-6: "put
     them on the scorecards and cart signs as QR Codes this time. Each group
     can determine the scorer."; #1358-2: the QR goes on the scorecard and the
@@ -1599,8 +1600,8 @@ def cup_sign_sheets(event_id: int, base_url: str | None = None, db_path=None) ->
             return {"error": f"no event {event_id}"}
         rounds = conn.execute(
             "SELECT id, label, round_date, pairings_holes, status, holes FROM se_rounds "
-            "WHERE event_id = ? AND lower(COALESCE(pairings_holes, '')) LIKE 'lsc:%' "
-            "ORDER BY round_date, id", (int(event_id),)).fetchall()
+            "WHERE event_id = ? AND lower(COALESCE(pairings_holes, '')) LIKE ? "
+            "ORDER BY round_date, id", (int(event_id), round_key_prefix.lower() + "%")).fetchall()
         out = {"event": {"id": ev[0], "name": ev[1], "date": ev[2], "course": ev[3]}, "rounds": []}
         for r in rounds:
             rm = round_matches(r[0], db_path=db_path)
@@ -1616,9 +1617,11 @@ def cup_sign_sheets(event_id: int, base_url: str | None = None, db_path=None) ->
                         mids.append(mid)
                 url = f"{base}/member/score?t={make_group_token(g[0], db_path=db_path)}"
                 groups.append({"group_id": g[0], "group_num": g[1], "label": g[2], "tee_time": g[3],
-                               "players": [{"customer_id": p[0], "name": p[1]} for p in ps],
+                               "players": [{"customer_id": p[0], "name": p[1],
+                                            "side": (rm.get(p[0]) or {}).get("side"),
+                                            "match_id": (rm.get(p[0]) or {}).get("match_id")} for p in ps],
                                "matches": mids, "url": url, "qr_svg": qr_svg(url)})
-            out["rounds"].append({"round_id": r[0], "session": (r[3] or "")[4:], "label": r[1],
+            out["rounds"].append({"round_id": r[0], "session": (r[3] or "")[len(round_key_prefix):], "label": r[1],
                                   "date": r[2], "status": r[4], "holes": r[5], "groups": groups})
     return out
 

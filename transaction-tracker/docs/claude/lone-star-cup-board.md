@@ -432,3 +432,14 @@ and the one write path: `email_parser/lsc_draw.py`.
 - **After the draw** the Cup seed (`scoring-se-cup-seed:3329|apply`, Track B)
   still makes the session rounds and scoring links.
 - Guard `test_lsc_draw.py` (production-shaped dial and lock).
+
+## CART SIGNS — /events/3329/cup-cart-signs (CoS #1397-2) — v2.525.30
+
+`templates/cup_cart_signs.html` from `docs/claude/lsc-mockups/CartSign.dc.html`
+(cart_signs.html shape, team band, Cup logo `static/lsc-logo.png`), data from
+`app.cup_cart_signs_data` over `score_entry.cup_sign_sheets` (now carries each
+player's `side` and `match_id`, and takes `round_key_prefix`). One sign per
+cart pair = a group's Austin players, then its SA players; QR = the group's
+scoring link. `?session=sat-am|sat-pm|sun`; `?preview=1` reads the demo
+(`lscprev:`) rounds. Empty until the Cup seed after the draw. Guard: the
+cart-sign checks in `test_lsc_preview.py`.
