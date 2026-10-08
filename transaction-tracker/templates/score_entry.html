@@ -46,6 +46,35 @@
         .pr-hiw-link:hover { background: #D06B2E; }
         .se-pill.dark { border: none; background: #1B1B1B; color: #FFFFFF; }
         .se-pill.back { height: 50px; font-size: 15px; }
+        /* THE CUP SPLASH: the plate is the logo's own navy (sampled #021A34
+           from static/lsc-logo.png, Kerry: "match the navy in the logo"), so
+           a transparent logo melts into it. The round mask hides the white
+           corners of the current square file until the transparent one lands.
+           The shimmer is one diagonal sweep of light across the logo. */
+        #se-splash { position: fixed; inset: 0; z-index: 1000; background: #021A34; display: flex;
+                     align-items: center; justify-content: center; cursor: pointer;
+                     transition: opacity .25s ease; -webkit-tap-highlight-color: transparent; }
+        #se-splash[hidden] { display: none; }
+        #se-splash.out { opacity: 0; pointer-events: none; }
+        #se-splash .sp-logo { position: relative; width: min(70vw, 300px); aspect-ratio: 1 / 1;
+                              border-radius: 50%; overflow: hidden; background: #021A34; }
+        #se-splash .sp-logo img { width: 100%; height: 100%; display: block; }
+        #se-splash .sp-word { display: none; position: absolute; inset: 0; align-items: center; justify-content: center;
+                              flex-direction: column; color: #FFFFFF; text-align: center;
+                              font: 700 30px/1.15 Bitter, Georgia, serif; letter-spacing: 2px; }
+        #se-splash .sp-word span { display: block; font-size: 22px; letter-spacing: 6px; margin-top: 6px; color: #C9D3E3; }
+        #se-splash .sp-logo.nologo { border-radius: 0; }
+        #se-splash .sp-logo.nologo img { display: none; }
+        #se-splash .sp-logo.nologo .sp-word { display: flex; }
+        #se-splash .sp-logo::after { content: ""; position: absolute; top: -30%; bottom: -30%; left: -60%; width: 60%;
+                                     background: linear-gradient(105deg, rgba(255,255,255,0) 0%, rgba(255,255,255,.55) 50%, rgba(255,255,255,0) 100%);
+                                     transform: translateX(0) skewX(-8deg);
+                                     animation: se-shimmer 1.5s ease-in-out .35s 1 both; }
+        @keyframes se-shimmer { to { transform: translateX(330%) skewX(-8deg); } }
+        @media (prefers-reduced-motion: reduce) {
+            #se-splash { transition: none; }
+            #se-splash .sp-logo::after { animation: none; display: none; }
+        }
         /* THIS GROUP on the scanned-link landing (mockup QRLanding): San
            Antonio slate left, Austin burnt orange right. */
         .se-this { background: #FFFFFF; }
@@ -472,6 +501,18 @@
 <body>
     {% set SHELL_TITLE = 'Scorecard' %}{% set SHELL_ACTIVE = '' %}{% set SHELL_SLIM = True %}
     {% include '_shell_nav.html' %}
+    {% if cup_splash %}
+    {# THE CUP SPLASH (Kerry 2026-10-08, verbatim: "a Lonestar cup logo on a
+       like a navy background to match the navy in the logo, but have a
+       shimmer too, maybe two second wait before it goes to the pick your name
+       page"; FD #1442 ruled splash -> the two-button gate -> Who are you?).
+       Inline, one request (the logo), shown by the script on a FRESH scan
+       only; tap skips; reduced motion = no shimmer, shorter hold; a logo that
+       fails to load leaves the navy plate with the words. #}
+    <div id="se-splash" hidden role="presentation">
+      <div class="sp-logo"><img src="/static/lsc-logo.png" alt="" onerror="this.parentNode.classList.add('nologo')"><div class="sp-word">LONE STAR CUP<span>2026</span></div></div>
+    </div>
+    {% endif %}
     <main class="se-wrap" id="se-app" aria-live="polite"></main>
 
     <script src="/static/js/version.js"></script>
@@ -496,6 +537,33 @@
                    photo: "se_photo_" + tk, gate: "se_gate_" + tk};
         let card = null, queue = store.get(K.q, []), who = store.get(K.who, null);
         let following = store.get(K.follow, false), hole = null, draft = {}, flushing = false;
+        // THE CUP SPLASH, on a FRESH scan only (Kerry 2026-10-08; FD #1442):
+        // no name picked and no gate choice on this phone for this link, and
+        // not already shown in this tab. A scorer reopening his link, or a
+        // follower coming back, lands where he was. Tap skips; reduced motion
+        // holds 0.7 s with no shimmer; otherwise about two seconds.
+        (function splash() {
+            const el = document.getElementById("se-splash");
+            if (!el) return;
+            const key = "se_splash_" + tk;
+            let seen = false;
+            try { seen = sessionStorage.getItem(key) === "1"; } catch (e) { /* storage off */ }
+            const fresh = !!T && !who && !store.get(K.gate, false) && !following;
+            if (!fresh || seen) { el.remove(); return; }
+            try { sessionStorage.setItem(key, "1"); } catch (e) { /* storage off */ }
+            el.hidden = false;
+            const reduced = !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+            let gone = false;
+            const done = () => {
+                if (gone) return;
+                gone = true;
+                el.classList.add("out");
+                setTimeout(() => { if (el.parentNode) el.parentNode.removeChild(el); }, reduced ? 0 : 300);
+            };
+            el.addEventListener("click", done);
+            el.addEventListener("touchstart", done, {passive: true});
+            setTimeout(done, reduced ? 700 : 2000);
+        })();
         let ctpHole = null, turnNext = null, lostMsg = "", errMsg = "", flagging = false, flagPick = null, busy = false;
         // Card check + photo (Kerry 2026-09-25).
         let checkNine = 0, checkPick = null, help = {}, noPhoto = false, psCid = null, psName = "", psOther = false;

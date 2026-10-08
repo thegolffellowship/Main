@@ -1781,6 +1781,21 @@ def attach_cart_sign_qr(pack: dict, base_url: str | None = None, db_path=None) -
 # The scorer: open a group, claim / take over, write
 # ---------------------------------------------------------------------------
 
+def group_is_cup(group_id: int, db_path=None) -> bool:
+    """True when the group's round is a Lone Star Cup session round (live
+    'lsc:<session>' or the staff preview's 'lscprev:<session>'). The phone
+    page's route reads it to decide whether a fresh scan opens on the Cup
+    SPLASH (Kerry 2026-10-08, FD #1440/#1442). Never raises."""
+    try:
+        with _closing(_conn(db_path)) as conn:
+            row = conn.execute(
+                "SELECT lower(COALESCE(r.pairings_holes, '')) AS pk FROM se_groups g "
+                "JOIN se_rounds r ON r.id = g.round_id WHERE g.id = ?", (int(group_id),)).fetchone()
+        return bool(row) and (row["pk"].startswith("lsc:") or row["pk"].startswith("lscprev:"))
+    except Exception:
+        return False
+
+
 def _group_ctx(conn, group_id: int):
     return conn.execute(
         "SELECT g.*, r.event_id, r.holes, r.status, r.label AS round_label, "

@@ -11723,7 +11723,18 @@ def score_entry_short(code):
 @app.route("/member/score")
 def score_entry_page():
     # The page carries no data; its JS presents the link to /api/score-entry/*.
-    return render_template("score_entry.html", member_mode=True)
+    # One flag only: a Lone Star Cup link opens on the SPLASH (Kerry
+    # 2026-10-08: logo on navy, a shimmer, about two seconds, then on). The
+    # JS shows it on a fresh scan only; the route just says whether the
+    # link is a Cup round, so a Tuesday nine never sees the Cup logo.
+    from email_parser.score_entry import verify_group_token, group_is_cup
+    cup = False
+    try:
+        gid = verify_group_token(request.args.get("t") or "")
+        cup = bool(gid) and group_is_cup(gid)
+    except Exception:
+        cup = False
+    return render_template("score_entry.html", member_mode=True, cup_splash=cup)
 
 
 @app.route("/member/score/board")

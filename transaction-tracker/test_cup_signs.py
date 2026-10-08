@@ -100,6 +100,15 @@ check("it carries the session, the match, the tee time and the QR",
       "Saturday AM" in body and "SAT-AM-1" in body and "8:30" in body and "<svg" in body)
 check("SCORE THIS GROUP / FOLLOW THE CUP is what the sign promises", "score this group or follow the Cup" in body)
 check("?round_id= narrows to one session", tc.get(f"/events/{EV}/cup-signs?round_id=999999").get_data(as_text=True).count("<svg") == 0)
+# the phone page: a Cup link carries the splash markup, a plain event's link does not
+g_plain = se.upsert_group(se.create_round(EV, 18, label="plain", course_holes=course, pairings_holes="18", db_path=tmp)["round_id"],
+                          1, players=[{"customer_id": 7, "display_name": "Matthew Jenkins", "seat": 1}], db_path=tmp)["group_id"]
+pc = A.app.test_client()
+check("a Cup scoring link opens on the SPLASH markup (route reads the round, not the card)",
+      'id="se-splash"' in pc.get(f"/member/score?t={se.make_group_token(g1)}").get_data(as_text=True))
+check("a plain event's link carries no Cup splash", 'id="se-splash"' not in pc.get(f"/member/score?t={se.make_group_token(g_plain)}").get_data(as_text=True))
+check("a bad link carries no splash and still renders", 'id="se-splash"' not in pc.get("/member/score?t=nope").get_data(as_text=True))
+check("group_is_cup never raises", se.group_is_cup(999999, db_path=tmp) is False and se.group_is_cup(g1, db_path=tmp) is True)
 anon = A.app.test_client().get(f"/events/{EV}/cup-signs")
 check("the page is staff-only", anon.status_code in (302, 401, 403), anon.status_code)
 
@@ -122,6 +131,10 @@ check("the landing carries THIS GROUP by side, Who are you? carries Back, Held c
       and "Tap your name to keep the card." in tpl)
 check("an event not yet opted in (404 'not open for this event') shows the admin sign-in, like scoring-off does",
       '/not open (yet|for this event)/' in tpl)
+check("the Cup SPLASH (Kerry 10/8, FD #1442): inline markup, the logo's navy, a shimmer, reduced-motion fallback, tap to skip, words if the logo fails",
+      'id="se-splash"' in tpl and "#021A34" in tpl and "@keyframes se-shimmer" in tpl and "prefers-reduced-motion" in tpl
+      and 'el.addEventListener("click", done)' in tpl and "LONE STAR CUP<span>2026</span>" in tpl
+      and '"se_splash_" + tk' in tpl and "!who && !store.get(K.gate, false) && !following" in tpl)
 check("session titles are FOURBALL / FOURSOMES / SINGLES (#1397-1)",
       '"FOURBALL"' in tpl and '"FOURSOMES"' in tpl and '"SINGLES"' in tpl)
 cts = open("templates/contests.html", encoding="utf-8").read()
