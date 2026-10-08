@@ -291,10 +291,15 @@ picking a name CLAIMED the group, so a spectator's scan made him the scorer.
 - **The Cup SPLASH (Kerry 2026-10-08, FD #1440/#1442):** a fresh scan of a
   Lone Star Cup link opens on `#se-splash` (inline markup, only when the
   route's `cup_splash` is true: `score_entry.group_is_cup(gid)`, the round's
-  `pairings_holes` is `lsc:` or `lscprev:`): the logo centred on the logo's
-  own navy `#021A34`, one shimmer sweep (`@keyframes se-shimmer`), ~2 s,
-  then a fade to the two-button gate. Tap skips; reduced motion = no shimmer,
-  0.7 s; logo load failure = the words LONE STAR CUP 2026 on the plate.
+  `pairings_holes` is `lsc:` or `lscprev:`): the white-border Cup logo
+  (`static/lsc-logo-dark.png`, the version for dark backgrounds, Kerry
+  10/8 #1460) centred on the standard Cup navy `var(--lsc-navy)` = `#002855`
+  (Kerry 10/8, CoS #1456: one token for every Cup surface), one shimmer
+  band sweeping the WHOLE screen (`#se-splash::after`, `@keyframes
+  se-shimmer`; Kerry: "across the entire page, not just the block around
+  the logo", v2.525.38), ~2 s, then a fade to the two-button gate. Tap
+  skips; reduced motion = no shimmer, 0.7 s; logo load failure = the words
+  LONE STAR CUP 2026 on the plate.
   Fresh scan only: `!who && !K.gate && !following` and not yet shown in this
   tab (`sessionStorage se_splash_<link>`). Ruled flow: splash → gate → Who
   are you?; spectators keep FOLLOW THE CUP.
