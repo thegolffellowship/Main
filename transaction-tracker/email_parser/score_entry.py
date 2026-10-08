@@ -298,11 +298,43 @@ def _cup_standings(round_id: int) -> dict | None:
     if not b.get("configured"):
         return None
     t = b.get("teams") or {}
-    return {"austin": (t.get("austin") or {}).get("points", 0.0),
-            "sa": (t.get("sa") or {}).get("points", 0.0),
-            "austin_projected": (t.get("austin") or {}).get("projected", 0.0),
-            "sa_projected": (t.get("sa") or {}).get("projected", 0.0),
-            "points_to_win": b.get("points_to_win")}
+    out = {"austin": (t.get("austin") or {}).get("points", 0.0),
+           "sa": (t.get("sa") or {}).get("points", 0.0),
+           "austin_projected": (t.get("austin") or {}).get("projected", 0.0),
+           "sa_projected": (t.get("sa") or {}).get("projected", 0.0),
+           "points_to_win": b.get("points_to_win")}
+    # THIS SESSION's points (Kerry 2026-10-07, #1398-C1 / #1394: the Team
+    # Score box under the rows carries the label and the two numbers; the
+    # strip keeps the overall). Summed from the board's own per-match
+    # points for the session bound to this round, so the phone and the
+    # board cannot disagree. Projected adds the live leaders.
+    sid = next((v.get("session") for v in rm.values() if v.get("session") is not None), None)
+    for sess in b.get("sessions") or []:
+        if sess.get("id") != sid:
+            continue
+        pts = {"austin": 0.0, "sa": 0.0}
+        proj = {"austin": 0.0, "sa": 0.0}
+        for m in sess.get("matches") or []:
+            mp = m.get("points") or {}
+            for k in pts:
+                pts[k] += float(mp.get(k) or 0)
+                proj[k] += float(mp.get(k) or 0)
+            if m.get("state") == "live":
+                w = m.get("gg_winner_idx")
+                if w == 1:
+                    proj["austin"] += float(b.get("points_win") or 1.0)
+                elif w == 2:
+                    proj["sa"] += float(b.get("points_win") or 1.0)
+                else:
+                    proj["austin"] += float(b.get("points_halve") or 0.5)
+                    proj["sa"] += float(b.get("points_halve") or 0.5)
+        out.update({"session_id": sid, "session_label": sess.get("label"),
+                    "session_format": sess.get("format"),
+                    "session_austin": round(pts["austin"], 2), "session_sa": round(pts["sa"], 2),
+                    "session_austin_projected": round(proj["austin"], 2),
+                    "session_sa_projected": round(proj["sa"], 2),
+                    "session_matches": len(sess.get("matches") or [])})
+    return out
 
 
 def _genders(conn, cids: list) -> dict:

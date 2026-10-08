@@ -36,6 +36,18 @@
         .se-pill { height: 56px; border-radius: 48px; font-size: 17px; font-weight: 600; font-family: inherit;
                    width: 100%; cursor: pointer; }
         .se-pill.go { border: none; background: #0d7556; color: #FFFFFF; font-weight: 700; }
+        .se-teamscore { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 10px; margin: 10px 0 2px; padding: 12px 14px; }
+        .se-teamscore .lbl { grid-column: 1 / -1; font-size: 11.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #6B7280; }
+        .se-teamscore .tm { display: flex; align-items: center; gap: 8px; font-size: 15px; color: #374151; }
+        .se-teamscore .tm b { font-family: Bitter, Georgia, serif; font-size: 26px; line-height: 1; font-variant-numeric: tabular-nums; }
+        .se-teamscore .tm.au b { color: #BF5700; }
+        .se-teamscore .tm.sa { justify-content: flex-end; }
+        .se-teamscore .tm.sa b { color: #4B6274; }
+        .se-hiw { margin: 12px 0 2px; text-align: center; }
+        .pr-hiw-link { display: inline-flex; align-items: center; height: 30px; padding: 0 14px; background: #E87C3E; border: none;
+                       border-radius: 9999px; cursor: pointer; color: #fff; text-decoration: none;
+                       font: 700 11px/1 Bitter, Georgia, serif; letter-spacing: 1px; text-transform: uppercase; }
+        .pr-hiw-link:hover { background: #D06B2E; }
         .se-teamball { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 10px 0 2px; }
         .se-teamball .se-tb-lbl { grid-column: 1 / -1; font-size: 11.5px; font-weight: 700; letter-spacing: .08em;
                                   text-transform: uppercase; color: #6B7280; }
@@ -816,10 +828,12 @@
                 const d = cur.v == null || !h.par ? null : cur.v - h.par;
                 const xx = cupOf(s.cids) && (s.key in draftX ? draftX[s.key] : isX(s.key, hole, s.cids));
                 const rel = xx ? "Picked up" : d == null ? "" : (WORDS[String(d)] || (d > 0 ? "+" + d : String(d)));
-                // One line: "Blue · PH 1 · vs Brian" (the tee colour bar is beside it).
-                const meta2 = [s.team ? s.meta : null, s.team ? null : (teeOf(s.cid).name || "").replace(/\s*Tees?$/i, "") || null,
-                               !s.team && s.ph != null ? "PH " + s.ph : null,
-                               (vsText(s.cids) || "").replace(/^Match vs/, "vs") || null].filter(Boolean).join(" · ");
+                // One line: name + tee + PH only (Kerry 2026-10-07, #1398-C1: "It's
+                // already obvious who I'm playing because of the above matches,
+                // so vs [Name] doesn't need to be there"; no format prose on a
+                // scoring screen, so a pair's row carries no "Team · one ball").
+                const meta2 = [s.team ? null : (teeOf(s.cid).name || "").replace(/\s*Tees?$/i, "") || null,
+                               !s.team && s.ph != null ? "PH " + s.ph : null].filter(Boolean).join(" · ");
                 return `<div class="se-row" data-key="${s.key}">${teeBar(s.cids)}
                     <div class="se-who"><div class="se-name"><span class="nm">${esc(s.name)}</span>${mtag(s.cids)}</div><div class="se-meta">${esc(meta2)}</div></div>
                     <button type="button" class="se-minus" data-act="step" data-d="-1" aria-label="One less for ${esc(s.name)}">&minus;</button>
@@ -842,8 +856,10 @@
                 ${maxNote ? `<div class="se-warn">${ICON.warn}<span>${esc(maxNote)}</span></div>` : ""}
                 <div class="se-stack">${rows}</div>
                 ${teamBallLine(hole)}
+                ${teamScoreBox()}
                 <div class="se-lblrow"><span class="se-lbl">Group card</span><span class="se-keepnote">${ICON.pen}<span>You're keeping score</span></span></div>
                 <div class="se-strip" style="margin-top:6px;grid-template-columns:repeat(${Math.min(order.length, 9)}, minmax(0, 1fr))">${cells}</div>
+                ${hiwPill()}
                 ${queue.length ? statusLine() : ""}
                 ${popKey(hole)}
                 <div class="se-bottom"><div class="se-row-act">
@@ -879,6 +895,36 @@
                 return `<div class="se-tb-side ${k === 0 ? "au" : "sa"}"><span class="se-tb-nm">${esc(names)}</span><b>${txt}</b></div>`;
             }).join(""));
             return `<div class="se-teamball"><span class="se-tb-lbl">Team ball · hole ${n}</span>${sides.join("")}</div>`;
+        }
+
+        // The Cup session this round is bound to, in Kerry's words (#1397-1:
+        // FOURBALL, FOURSOMES, SINGLES; "Chapman" only describes the format).
+        function cupSession() {
+            const cs = card.cup_standings;
+            if (!cs || !cs.session_id) return null;
+            const f = String(cs.session_format || "").toLowerCase();
+            const title = f === "fourball" ? "FOURBALL" : (f === "singles" ? "SINGLES" : "FOURSOMES");
+            return {title, anchor: title.toLowerCase(), cs};
+        }
+        // TEAM SCORE box under the rows: the label and the two numbers, this
+        // session's points (Kerry 2026-10-07, #1398-C1; the strip above keeps
+        // the overall). Nothing else goes in it.
+        function teamScoreBox() {
+            const sx = cupSession();
+            if (!sx) return "";
+            const half = (x) => { const w = Math.floor(x), f = x - w; return (w || f === 0 ? String(w) : "") + (f >= 0.5 ? "½" : ""); };
+            return `<div class="se-box se-teamscore"><span class="lbl">Team score · ${sx.title}</span>
+                <span class="tm au"><span>Austin</span><b>${half(sx.cs.session_austin || 0)}</b></span>
+                <span class="tm sa"><b>${half(sx.cs.session_sa || 0)}</b><span>San Antonio</span></span></div>`;
+        }
+        // HOW IT WORKS, one tap from the scoring screen (Kerry 2026-10-07,
+        // #1398-C2: "I do like the HOW IT WORKS buttons being immediately
+        // available from the scoring screen"), opening Event Info's section
+        // for this session's format. Cup rounds only.
+        function hiwPill() {
+            const sx = cupSession();
+            if (!sx) return "";
+            return `<div class="se-hiw"><a class="pr-hiw-link" href="/member/lonestarcup/info#${sx.anchor}">How It Works</a></div>`;
         }
 
         function stripCells(order, current) {

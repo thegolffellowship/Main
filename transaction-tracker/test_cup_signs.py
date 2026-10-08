@@ -93,6 +93,13 @@ check("the phone page lands on the two buttons before Who are you?",
       and 'if (!who && !store.get(K.gate, false)) body = gateScreen();' in tpl)
 check("FOLLOW THE CUP opens the Cup board with the match expanded; a plain event opens the one-event board",
       '/member/lonestarcup?match=' in tpl and '/member/score/board?t=' in tpl)
+check("the hole screen carries the Team Score box (label + two numbers) and the HOW IT WORKS pill (#1398-C1/C2)",
+      "function teamScoreBox()" in tpl and 'class="se-box se-teamscore"' in tpl and "pr-hiw-link" in tpl
+      and "/member/lonestarcup/info#" in tpl)
+check("player rows carry name + tee + PH only: no 'vs' and no 'Team · one ball' on the hole screen",
+      'replace(/^Match vs/, "vs")' not in tpl and "s.team ? s.meta : null" not in tpl)
+check("session titles are FOURBALL / FOURSOMES / SINGLES (#1397-1)",
+      '"FOURBALL"' in tpl and '"FOURSOMES"' in tpl and '"SINGLES"' in tpl)
 cts = open("templates/contests.html", encoding="utf-8").read()
 check("the Cup board opens ?match=<id> and keeps open cards open across its refresh",
       'data-lsc-match=' in cts and 'get("match")' in cts and "lscMatchOpened" in cts)

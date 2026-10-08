@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.525.20";
+window.TGF_VERSION = "2.525.21";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.525.21",
+    date: "2026-10-08",
+    title: "Cup hole screens: name + tee + PH rows, session Team Score box, HOW IT WORKS pill",
+    changes: [
+      "Kerry 10/7 (CoS #1398-C, the rules of the page): no redundancy on a scoring screen. Player rows now carry name + tee + PH only; the \"vs Name\" line and the pair row's \"Team · one ball\" prose are gone (\"It's already obvious who I'm playing because of the above matches\"). A TEAM SCORE box under the rows carries the label and the two numbers, this SESSION's points (Austin, San Antonio), read from the Cup board's own per-match rollup (cup_standings.session_*), so the phone and the board cannot disagree; the strip above keeps the overall. Session titles in Kerry's words: FOURBALL · FOURSOMES · SINGLES (#1397-1), \"Chapman\" only ever describes the format.",
+      "HOW IT WORKS stays one tap from the scoring screen (#1398-C2): the orange pill under the group card opens Event Info's section for this session's format (/member/lonestarcup/info#fourball|foursomes|singles). Cup rounds only. Guards: test_cup_signs.py (template contract), test_score_entry_ui.py (123 checks; the old 'vs' expectation is replaced by the rule). Screenshots: docs/claude/screenshots/lsc-preview/."
+    ]
+  },
   {
     version: "2.525.20",
     date: "2026-10-07",

@@ -287,6 +287,21 @@ picking a name CLAIMED the group, so a spectator's scan made him the scorer.
   card); an X never counts. The Cup board's cards carry `match_id`, which
   is what `?match=` matches on.
 
+## The rules of the page on the Cup hole screens (v2.525.21, Kerry #1398-C)
+
+- **No redundancy:** player rows carry name + tee + PH only; no "vs Name",
+  no format prose ("Team · one ball" is gone from a pair's row).
+- **TEAM SCORE box** (`teamScoreBox()`) under the rows: the label and the two
+  numbers, this session's points. `_cup_standings` adds `session_id`,
+  `session_label`, `session_format`, `session_austin` / `session_sa` (and
+  `_projected`) summed from the board's own per-match points for the
+  session bound to this round. The `.se-cup` strip keeps the overall.
+- **HOW IT WORKS** (`hiwPill()`): the orange `.pr-hiw-link` pill under the
+  group card, `/member/lonestarcup/info#<fourball|foursomes|singles>`, Cup
+  rounds only. Session titles FOURBALL · FOURSOMES · SINGLES (#1397-1).
+- Picked-up holes: no new mechanic; v2.496.0 below governs (the mockup's X
+  is that mark rendered; the + stepper stops at triple).
+
 ## Match play: Ball in hole or Picked up (v2.496.0)
 
 Kerry, 2026-09-25 (via the Front Desk), verbatim: "The only possible
