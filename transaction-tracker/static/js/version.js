@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.525.36";
+window.TGF_VERSION = "2.525.37";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.525.37",
+    date: "2026-10-08",
+    title: "Lone Star Cup logo: standard and white-border versions",
+    changes: [
+      "Kerry 10/8: \"Two updates. One (Standard) for any white backgrounds. Then the white border for the dark backgrounds.\" Both carry the TGF mark in the star. static/lsc-logo.png is now the Standard version (navy lettering, sha256 0bd6011f...) and prints on the white cart signs; the new static/lsc-logo-dark.png is the white-border version (sha256 a2a5b214...) on the navy splash, the navy Event Info banner and the dark draw page."
+    ]
+  },
   {
     version: "2.525.36",
     date: "2026-10-08",

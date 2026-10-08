@@ -41,5 +41,5 @@ check("a shared last name gets the first name", "Matt Jenkins &amp; Mike Jenkins
 check("captains", "Matt Jenkins (C)" in h and "Rob Callaway (C)" in h)
 check("before the draw it says so", "posted after Thursday" in h)
 check("no dollars", "$" not in h)
-check("the Cup logo", "/static/lsc-logo.png" in h and os.path.exists(os.path.join(os.path.dirname(os.path.abspath(__file__)), "static", "lsc-logo.png")))
+check("the Cup logo, white-border version on the navy banner", "/static/lsc-logo-dark.png" in h and os.path.exists(os.path.join(os.path.dirname(os.path.abspath(__file__)), "static", "lsc-logo-dark.png")))
 print("ALL PASS" if not F else f"{len(F)} FAILED: {F}"); sys.exit(1 if F else 0)

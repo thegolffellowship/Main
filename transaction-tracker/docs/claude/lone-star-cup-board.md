@@ -509,3 +509,10 @@ constant in database.py, and the frozen R6 chase email (chase_email.py).
 87d44d864335b83d8897ca7737e5923099cb6a34d6c2f39b0d91d147697d2cfe), replacing the
 round badge (8d771633…). Every `<img>` of it uses `object-fit: contain`; the
 splash plate is no longer a round mask.
+
+**Logo, v2.525.37 (Kerry 10/8, two versions):** `static/lsc-logo.png` = the
+Standard version for WHITE backgrounds (cart signs; sha256 0bd6011f84b1de5c…);
+`static/lsc-logo-dark.png` = the white-border version for NAVY / DARK
+backgrounds (splash, Event Info banner, draw page; sha256 a2a5b21453387b0a…).
+Both 2000x1651, transparent, navy #002855, with the TGF mark in the star. Pick
+by the background, never by the page.
