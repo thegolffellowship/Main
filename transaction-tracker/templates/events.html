@@ -6074,9 +6074,12 @@
         h += open("starter-sheet", "Starter Sheet", "Print starter sheet");
         h += open("cart-signs", "Cart Signs", "Print cart signs");
         h += open("scorecards", "Scorecards", "Print scorecards (GGID codes, layouts, Team/Cart Net)");
-        h += open("games-payouts", "Games &amp; Payouts", "Print the Games &amp; Payouts sheet — every pot, place and write-in line, from this GAMES tab");
-        h += open("divisions-flights", "Divisions &amp; Flights", "Print Divisions &amp; Flights — NET, Skins and Gross on one page");
-        h += open("proximity-markers", "Proximity", "Print Closest-to-the-Pin markers for the par 3s");
+        // No games at this event: no game reports to print (Kerry 10/8).
+        if (!eventGamesOff(ev)) {
+            h += open("games-payouts", "Games &amp; Payouts", "Print the Games &amp; Payouts sheet — every pot, place and write-in line, from this GAMES tab");
+            h += open("divisions-flights", "Divisions &amp; Flights", "Print Divisions &amp; Flights — NET, Skins and Gross on one page");
+            h += open("proximity-markers", "Proximity", "Print Closest-to-the-Pin markers for the par 3s");
+        }
         // Kerry 2026-09-21: "there should be a button to SEND PACK" — the
         // bound PDF mailed now, on demand.
         h += `<button class="pairings-action-btn send-pack-btn" onclick="sendPrintPack(${ev.id}, this)" title="Email the bound print pack (starter sheet, cart signs, scorecards, games & payouts, divisions & flights, proximity markers) now">&#x2709; Send Pack</button>`;
@@ -8566,6 +8569,17 @@
         }).finally(() => { _hioFetching = false; });
     }
 
+    // NO GAMES AT THIS EVENT (Kerry 2026-10-08, LSC practice round: "No
+    // games this event, so anything related to them like Cart Net should
+    // hide or turn off"). The event's own price says so: its INCLUDED
+    // GAMES component (side_game_fee, or the _9/_18 halves) is SET and $0.
+    // Unset is not "off". Twin of database.event_games_off.
+    function eventGamesOff(ev) {
+        const vals = [ev.side_game_fee, ev.side_game_fee_9, ev.side_game_fee_18]
+            .filter(v => v !== null && v !== undefined && String(v).trim() !== "");
+        return vals.length > 0 && vals.every(v => Number(v) === 0);
+    }
+
     function renderGamesPanel(ev) {
         // Bucket-account events: the regular 9/18 matrix does NOT apply —
         // render the derived bucket purses instead of matrix pots so the
@@ -8609,6 +8623,10 @@
             bh += `<div style="font-size:0.78rem;color:var(--text-muted);">Pots are field-based &mdash; they scale with side-games bundle buyers and recompute as the roster changes. Payouts are recorded under each bucket account on the PAYOUTS tab.</div>`;
             bh += '</div>';
             return bh;
+        }
+        if (eventGamesOff(ev)) {
+            return '<div class="games-panel"><div class="games-panel-header">NO GAMES AT THIS EVENT</div>'
+                + '<div class="games-panel-empty" style="padding:0.75rem 0;">This event\'s price carries $0 for games, so there is no Team/Cart Net, CTP or Hole-in-One here, and nothing is added to the Hole-in-One pot. Set a games fee on Edit Event to turn games back on.</div></div>';
         }
         const holes = extractHolesType(ev.item_name, ev.format);
         if (!holes) return '<p style="color:var(--text-muted);">Cannot determine 9/18 hole type from event name.</p>';

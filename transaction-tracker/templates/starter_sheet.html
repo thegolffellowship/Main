@@ -316,11 +316,11 @@
       <span class="atee">TEE</span>
       <span class="aidx">IDX</span>
       <span class="aph">PH</span>
-      <span class="atn">{% if pack.team_unit == 'cart' %}CART{% else %}TEAM{% endif %}</span>
+      {% if not pack.get('games_off') %}<span class="atn">{% if pack.team_unit == 'cart' %}CART{% else %}TEAM{% endif %}</span>{% endif %}
       <span class="as">HOLE</span>
   {% endset %}
   {% set _mid = (pack.alpha|length + 1) // 2 %}
-  <div class="alpha{% if pack.team_off_lowest and pack.team_off_lowest.applied %} offlow{% endif %}">
+  <div class="alpha{% if pack.team_off_lowest and pack.team_off_lowest.applied and not pack.get('games_off') %} offlow{% endif %}">
     <div class="arow ahead">{{ _ahead }}</div>
     {% for a in pack.alpha %}
       {# The list reads DOWN then across, so the second column needs its
@@ -334,7 +334,7 @@
         <span class="atee">{{ tee_dot(a.tee_choice) }}</span>
         <span class="aidx">{% if a.handicap_index_display is not none %}{{ "%.1f"|format(a.handicap_index_display) }}{% elif a.handicap_index is not none %}{{ "%.1f"|format(a.handicap_index) }}{% else %}—{% endif %}</span>
         <span class="aph">{% if a.playing_handicap is not none %}{{ a.playing_handicap }}{% else %}&mdash;{% endif %}</span>
-        <span class="atn">{% if a.team_handicap is not none %}{% if pack.team_off_lowest and pack.team_off_lowest.applied %}{{ a.team_allowed }} / <span class="tadj">{{ a.team_handicap }}</span>{% else %}{{ a.team_handicap }}{% endif %}{% else %}&mdash;{% endif %}</span>
+        {% if not pack.get('games_off') %}<span class="atn">{% if a.team_handicap is not none %}{% if pack.team_off_lowest and pack.team_off_lowest.applied %}{{ a.team_allowed }} / <span class="tadj">{{ a.team_handicap }}</span>{% else %}{{ a.team_handicap }}{% endif %}{% else %}&mdash;{% endif %}</span>{% endif %}
         <span class="as">{{ a.slot_short }}</span>
       </div>
     {% endfor %}
@@ -347,8 +347,12 @@
     <div class="fnote"><span class="abadge ft">1T</span> &mdash; first TGF event ever. <span class="abadge nw">NEW</span> &mdash; new member, playing their first event as a member; a first-timer who is already a member wears both. The tee circle matches the TEES key above.</div>
     <div class="fnote"><strong>IDX</strong> &mdash; TGF handicap index ({{ pack.holes_key }}-hole).</div>
     <div class="fnote"><strong>PH</strong> &mdash; playing handicap at 100%, from that index and the tee played{% if pack.ph_basis %} ({{ pack.ph_basis }}){% endif %}.</div>
+    {% if pack.get('games_off') %}
+    <div class="fnote">No games at this event, so there is no Cart/Team Net handicap.</div>
+    {% else %}
     <div class="fnote"><strong>{% if pack.team_unit == 'cart' %}CART{% else %}TEAM{% endif %}</strong> &mdash; {% if pack.team_unit == 'cart' %}Cart{% else %}Team{% endif %} Net handicap{% if pack.team_basis %}: {{ pack.team_basis }}{% endif %}.</div>
-    {% if pack.team_off_lowest and pack.team_off_lowest.applied %}
+    {% endif %}
+    {% if pack.team_off_lowest and pack.team_off_lowest.applied and not pack.get('games_off') %}
     {% set _lo = pack.team_off_lowest.low %}{% set _n = _lo if _lo > 0 else -_lo %}
     <div class="fnote offlow">{% if pack.team_unit == 'cart' %}CART{% else %}TEAM{% endif %} prints as {{ (pack.team_allowance * 100)|round|int }}% / <span class="tadj">OFF THE LOWEST</span> &mdash; the number in red is the one you play: {{ _n }} stroke{{ "" if _n == 1 else "s" }} {% if _lo > 0 %}less{% else %}more{% endif %} than the {{ (pack.team_allowance * 100)|round|int }}% figure, because the field's lowest ({{ pack.team_off_lowest.lowest|join(", ") }}{% if _lo < 0 %}, a plus {{ _n }}{% endif %}) plays at 0 and everyone else plays off them.</div>
     {% endif %}

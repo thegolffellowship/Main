@@ -230,6 +230,10 @@ def build_games_sheet(event_id: int, games: dict | None = None, db_path=None) ->
     if not r:
         return None
     ev = dict(r)
+    if db.event_games_off(ev):
+        # Kerry 10/8 (LSC practice round): "No games this event".
+        return {"error": "No games at this event: its price carries $0 for the included games.",
+                "event": ev}
     if games is None:
         from email_parser.page_probe import event_games_tab
         games = event_games_tab(int(event_id))

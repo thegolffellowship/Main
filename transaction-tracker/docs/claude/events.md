@@ -3115,3 +3115,27 @@ with regular events. We need that tool now if we don't have it."
   credit has been applied.
 - A split only RECORDS where the rest went; it does not re-categorise the
   ledger row (that is the receipt-split bridge, after WINDOW CLOSED).
+
+
+## No games at an event (v2.526.4, Kerry 2026-10-08)
+
+Kerry, on the LSC practice round: "No games this event, so anything related to
+them like Cart Net should hide or turn off."
+
+- **The switch is the event's price.** `database.event_games_off(ev)` (JS twin
+  `eventGamesOff` in events.html) is true when the INCLUDED GAMES fee is set
+  and $0. That fee is `side_game_fee`, or the `_9`/`_18` halves on a combo.
+  NULL is not off.
+- **On such an event:**
+  - the GAMES tab shows "NO GAMES AT THIS EVENT";
+  - `get_hio_pot` takes no slice (the 36/27-hole pattern rules still win);
+  - `event_proximity_report` has no CTP slots, so score entry's `ctp_contests`
+    asks none;
+  - the Starter Sheet drops its Cart/Team column;
+  - `build_games_sheet` returns "No games";
+  - the EVENTS leaderboard has no team board;
+  - REPORTS hides Games & Payouts, Divisions & Flights and Proximity.
+- **Left alone on purpose:** the non-LSC scorecard keeps its PH/net split
+  cell. No non-LSC event carries a $0 fee today, and the LSC theme already
+  prints a single PH on the practice round.
+- Guard: `test_event_games_off.py`.

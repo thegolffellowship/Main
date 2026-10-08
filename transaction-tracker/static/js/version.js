@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.526.3";
+window.TGF_VERSION = "2.526.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.526.4",
+    date: "2026-10-08",
+    title: "No games at an event: Cart Net, CTP and the Hole-in-One slice turn off",
+    changes: [
+      "Kerry 10/8, on the LSC practice round's GAMES tab (Cart Net $180, CTPs, a $30 Hole-in-One slice): \"No games this event, so anything related to them like Cart Net should hide or turn off.\" The event's own price is now the switch (database.event_games_off, with its JS twin eventGamesOff). When the INCLUDED GAMES fee (side_game_fee, or its _9/_18 halves) is set and $0, the event has no included games. Unset is not off. Today that is the practice round (3330) and the Lone Star Cup (3329).",
+      "On such an event: the GAMES tab says NO GAMES AT THIS EVENT. The Hole-in-One pot takes no slice from it (the running pot drops 3330's $30). Proximity prints no CTP, so score entry asks no CTP. The Starter Sheet drops its Cart/Team column. The Games & Payouts sheet says there are no games. The EVENTS leaderboard shows no team board. REPORTS hides Games & Payouts, Divisions & Flights and Proximity. The 36-hole championship keeps its own HIO rule. Guard: test_event_games_off.py.",
+      "Same day, on Kerry's word (\"Turn on Live Scoring for the Cup too\"): the Lone Star Cup (3329) is in score_entry_events with the QR on (score_entry_qr), beside the practice round (3330)."
+    ]
+  },
   {
     version: "2.526.3",
     date: "2026-10-08",

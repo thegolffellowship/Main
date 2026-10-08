@@ -15581,6 +15581,14 @@ def get_event_leaderboard(event_name: str,
     # matrix (Kerry 2026-09-11: denote immediately, per the 9/18
     # standard, and say the pot rolled into skins) ──
     games_off = []
+    # No included games at all (Kerry 10/8, LSC practice round): no team
+    # board, no team cards; the board says why.
+    _no_games = event_games_off(dict(_evc) if _evc else None)
+    if _no_games:
+        teams, team_rows = [], []
+        games_off.append({"game": "included", "label": "Included games",
+                          "note": "No games at this event: its price carries $0 for the "
+                                  "included games (Team/Cart Net, CTP, Hole-in-One)."})
     try:
         m9, m18 = _load_games_matrix(db_path=db_path)
         mat = m9 if (ev["holes"] or 18) == 9 else m18
@@ -15652,6 +15660,7 @@ def get_event_leaderboard(event_name: str,
         "hole_pts": {str(k): {str(h): v for h, v in hs.items()}
                      for k, hs in hole_pts.items()},
         "games_off": games_off,
+        "no_games": _no_games,
         "n_net_buyers": len(net_buyers),
         "n_gross_buyers": len(gross_buyers),
     }
@@ -58199,6 +58208,28 @@ def label_event_rainout(event_name: str, badge: str = "RAINED OUT",
     return out
 
 
+def event_games_off(ev: dict | None) -> bool:
+    """NO GAMES AT THIS EVENT (Kerry 2026-10-08, LSC practice round: "No
+    games this event, so anything related to them like Cart Net should
+    hide or turn off"). Read from the event's own price: the INCLUDED
+    GAMES component (`side_game_fee`, or its _9/_18 halves on a combo) is
+    what funds Team/Cart Net, the CTPs and the Hole-in-One slice. When it
+    is SET and $0 everywhere, the event has no included games. Unset (NULL)
+    is not "off": older events priced before the column carried values.
+    Read by the GAMES tab (its JS twin `eventGamesOff`), the HIO pot, the
+    Proximity / CTP report (and so score entry's CTP asks), the Starter
+    Sheet's Cart/Team column, the Games & Payouts sheet and the EVENTS
+    leaderboard's team board."""
+    if not ev:
+        return False
+    vals = [ev.get(k) for k in ("side_game_fee", "side_game_fee_9", "side_game_fee_18")]
+    vals = [v for v in vals if v is not None and str(v).strip() != ""]
+    try:
+        return bool(vals) and all(float(v) == 0 for v in vals)
+    except (TypeError, ValueError):
+        return False
+
+
 def get_hio_pot(db_path=None) -> dict:
     """Running Hole-In-One pot (Kerry 2026-07-20: 'I need a running
     Hole-In-One pot amount. Can you add up from all events?').
@@ -58230,7 +58261,8 @@ def get_hio_pot(db_path=None) -> dict:
     with _connect(db_path) as conn:
         rows = [dict(r) for r in conn.execute(
             """SELECT id, item_name, event_date,
-                      COALESCE(status,'active') AS status
+                      COALESCE(status,'active') AS status,
+                      side_game_fee, side_game_fee_9, side_game_fee_18
                  FROM events
                 WHERE event_date IS NOT NULL
                 ORDER BY event_date""").fetchall()]
@@ -58295,6 +58327,10 @@ def get_hio_pot(db_path=None) -> dict:
                 hio = float(players or 0) * 4.0
             elif any(p in name_u for p in pats_27h):
                 hio = float(players or 0) * 3.0
+            elif event_games_off(ev):
+                # No included games, no HIO slice (Kerry 10/8: the LSC
+                # practice round "No games this event").
+                hio = 0.0
             else:
                 holes = _event_holes_type(ev["item_name"], None)
                 matrix = m9 if holes == 9 else m18
@@ -62816,6 +62852,11 @@ def event_proximity_report(event_id: int, db_path=None) -> dict | None:
     else:
         notes.append(f"No games-matrix row for {players} entries — the "
                      f"{slots}-slot rule is applied without a purse.")
+    if event_games_off(ev):
+        # No included games, so no CTP (Kerry 10/8, LSC practice round).
+        slots = 0
+        notes = ["No games at this event: its price carries $0 for the included "
+                 "games (Team/Cart Net, CTP, Hole-in-One), so there is no CTP."]
     if twin:
         notes.append(f"Par-3s read from the course's twin record "
                      f"\"{twin['name']}\" ({twin['course_id']}) — this "
@@ -65025,6 +65066,8 @@ def get_event_print_pack(event_id: int, db_path=None) -> dict | None:
         "alpha": alpha,
         "player_count": len(alpha),
         "brand": report_brand(event_id, db_path=db_path),
+        # No included games: the Starter Sheet drops its Cart/Team column
+        "games_off": event_games_off(ev),
     }
 
 
