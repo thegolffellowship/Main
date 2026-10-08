@@ -1,23 +1,50 @@
-window.TGF_VERSION = "2.525.29";
+window.TGF_VERSION = "2.525.32";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.525.32",
+    date: "2026-10-08",
+    title: "Lone Star Cup board: pair names with &, YOUR MATCH first, locked CH before play, 28 points through a partial draw",
+    changes: [
+      "Kerry 10/8 (CoS #1449): \"Make the teams have an &, not / between the names.\" The Cup engine's match-card names and skins labels read \"Luke Youngs & Chris Cannon\".",
+      "for_viewer(board, customer_id) puts the viewer's own match first in every session with yours: true and lists your_matches, for the YOUR MATCH card (CoS #1398). Before a ball is struck every match player shows his locked course handicap from lsc_handicap_lock (#1389) and the match strokes follow from it; a playing handicap the score-entry feed carries is never replaced. preview_board_payload can compute from a supplied dial, and build_preview_dial ranks the Sunday Low 7 | High 7 by locked RAW INDEX (Kerry 10/7: \"Handicap breakouts start with raw indexes not course handicaps\").",
+      "While the draw page (2.525.29) lands matches one at a time, the board counts each session's full match total (the dial's n_matches, 7 / 7 / 14), so the Cup reads 28 points and 14 1/2 to win from the first landed match. Guards: test_lsc_handicap_lock.py, tests/test_lsc_cup.py.",
+    ],
+  },
+  {
+    version: "2.525.31",
+    date: "2026-10-08",
+    title: "Lone Star Cup splash on a fresh scan",
+    changes: [
+      "Kerry 10/8 (FD #1440, flow ruled #1442): a fresh scan of a Lone Star Cup scoring link opens on a splash: the Cup logo on the logo's navy, one shimmer, about two seconds (tap to skip), then the SCORE THIS GROUP / FOLLOW THE CUP gate and Who are you?. Cup links only (Cup and staff-preview rounds), once per link per browser tab; reduced motion shortens it, and a missing logo shows the words instead. Built by Track A (8304d918)."
+    ]
+  },
+  {
+    version: "2.525.30",
+    date: "2026-10-08",
+    title: "Lone Star Cup cart signs",
+    changes: [
+      "CoS #1397-2: /events/3329/cup-cart-signs prints the Cup cart signs from the mockup (CartSign.dc.html): the regular cart-sign shape, two to a Letter page with a cut line, the Cup logo, an Austin or San Antonio team band, the two names large, the start time and hole, the session and match with the opponents, and the group's scoring QR in the corner (the same link as the Cup QR signs). One sign per cart pair: each group's Austin players, then its San Antonio players. ?session=sat-am|sat-pm|sun prints one session. Staff only.",
+      "The sheet reads the seeded Cup rounds, so it fills in after tonight's draw and the Cup seed. ?preview=1 prints from the staff preview's demo rounds, and the preview's Cart signs button opens it."
+    ]
+  },
   {
     version: "2.525.29",
     date: "2026-10-08",
-    title: "Lone Star Cup draw writes straight into the live Cup dial",
+    title: "Lone Star Cup draw page: each match goes live as it is drawn",
     changes: [
-      "Kerry 10/8 (CoS #1432): \"Can't you set up the draw to automatically go to the matches for this weekend on the tracker rather than copying here? Being able to push live immediately would be much cooler.\" lsc_cup.draw_match lands one drawn match in the live lsc_matches dial: the first draw clears every session's staged demo matches and the demo scores dial, match numbers and tee times follow the pool (Saturday 1-3 low, 4-7 high, start + 10 min each; Sunday 1-7 low, 8-14 high, two matches per tee time), and it refuses an entrant outside its raw-index pool, a second draw of the same entrant, FOURSOMES before FOURBALL is complete, and a FOURSOMES pairing that repeats a FOURBALL one.",
-      "When a session's last match lands, its scoring round is seeded (score_entry.cup_seed) and bound (se_round), so the group links are live. clear_draw_session reverses one session (FOURBALL only after FOURSOMES is cleared, never once a score is entered). draw_state is what the staff draw page renders. A partially drawn Cup still counts all 28 points. Bridge scoring-lsc-draw (state, land, clear). Guard: test_lsc_draw.py.",
-    ],
+      "Kerry 10/8 (CoS #1432): \"Can't you set up the draw to automatically go to the matches for this weekend on the tracker rather than copying here? Being able to push live immediately would be much cooler.\" /events/3329/cup-draw (admin only) is the Chief of Staff's draw board ported as is: FOURBALL, FOURSOMES and SINGLES tabs, Austin left and San Antonio right with each entrant's locked index, the spin, and the same rules: FOURSOMES opens only after FOURBALL's pool is drawn, never repeats a FOURBALL pairing, and looks ahead so the last match can't be forced into a repeat.",
+      "Entrants come from the Tracker, not a list in the page: the Saturday pairs and their low/high pools from the Cup dial (combined raw index), Sunday's Low 7 / High 7 per team from the handicap lock. Each match that lands is written straight into the Cup dial (email_parser/lsc_draw.py), which re-checks every rule first: match number in tee order (Saturday 1-3 low, 4-7 high; Sunday 1-7 low, 8-14 high), tee time from the session start plus 10 minutes (two per tee on Sunday). The first drawn match in a session replaces that session's staged demo matches. Clear this session takes the drawn matches off (clearing FOURBALL clears FOURSOMES too). Every draw and clear is in the agent action log. Copy the full draw stays as the paper fallback."
+    ]
   },
   {
     version: "2.525.28",
     date: "2026-10-08",
-    title: "Lone Star Cup board reads: YOUR MATCH first, locked CH before play, raw-index breakouts",
+    title: "FOLLOW THE CUP on a PREVIEW demo round opens the staff preview board",
     changes: [
-      "for_viewer(board, customer_id) puts the viewer's own match first in every session with yours: true and lists your_matches, for the YOUR MATCH card (CoS #1398); a spectator gets the board unchanged. Each session also carries title FOURBALL, FOURSOMES or SINGLES.",
-      "Before a ball is struck every match player shows his locked course handicap from lsc_handicap_lock (Kerry 10/7, #1389), and the match strokes follow from it; a playing handicap the score-entry feed carries is never replaced. preview_board_payload can also compute from a supplied dial.",
-      "build_preview_dial makes demo matches from the real pairs, pools, tee sheet and locked handicaps, and ranks the Sunday Low 7 | High 7 by the locked RAW INDEX (Kerry 10/7: \"Handicap breakouts start with raw indexes not course handicaps\"), course handicap only breaking an exact tie. Guards: test_lsc_handicap_lock.py, tests/test_lsc_cup.py.",
-    ],
+      "A demo round's matches live on the staff preview board (/api/lsc/board?preview=1, Tracker Build v2.525.22), not the member board, so FOLLOW THE CUP from a PREVIEW round went to a board that had no such match and nothing expanded (found preparing Kerry's 10/8 dry-run links, #1434). The scanned-link landing now adds preview=1 to the FOLLOW target when the card's cup standings are flagged preview; live rounds are unchanged. Guard: test_cup_signs template contract.",
+      "The per-event opt-in door now shows the admin sign-in too. An event not yet listed in score_entry_events answers the card read with 404 'score entry is not open for this event' (app._se_event_gate, Kerry 9/28), but the phone only recognised the scoring-off door ('not open yet'), so a staff phone without a Tracker session saw a bare error and no way in (found preparing the 10/8 dry run: 3329 is not opted in yet). Both doors now show 'Tracker admin? Sign in to preview'.",
+      "THE CUP SPLASH (Kerry 10/8, verbatim: \"a Lonestar cup logo on a like a navy background to match the navy in the logo, but have a shimmer too, maybe two second wait before it goes to the pick your name page\"; FD #1442 ruled splash -> the two-button gate -> Who are you?, so spectators keep FOLLOW THE CUP). A fresh scan of a Lone Star Cup scoring link opens on the logo centred on the logo's own navy (#021A34, sampled from static/lsc-logo.png) with one diagonal shimmer sweep, holds about two seconds, then fades to the gate. Tap anywhere skips; prefers-reduced-motion gets no shimmer and a 0.7 s hold; if the logo fails to load the plate reads LONE STAR CUP 2026. Fresh scan only: a scorer reopening his link, a follower coming back, or a reload in the same tab lands where it did before (sessionStorage se_splash_<link>). The route sets the one flag (score_entry.group_is_cup: the round is lsc:<session> or lscprev:<session>), so a Tuesday nine never sees the Cup logo. The CSS is inline and the logo is the only extra request. Until Kerry's transparent-background logo replaces the square file, a round CSS mask hides its white corners."
+    ]
   },
   {
     version: "2.525.27",

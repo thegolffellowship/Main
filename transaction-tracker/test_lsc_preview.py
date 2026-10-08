@@ -67,6 +67,19 @@ check("the member board never reads the demo", mb.get("source") != "entry" and n
 check("a picked-up mark was written", any(p.get("marks") for r in read["rounds"] for p in r["players"]))
 check("publish refuses PREVIEW rounds", all(not r.get("written") and not r.get("would_write")
       for r in ep.publish_event(3329, db_path=DB).get("rounds") or []))
+with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+    os.environ.setdefault("SECRET_KEY", "test-only"); os.environ["TGF_REHEARSAL"] = "1"
+    import app as appmod
+cs = appmod.cup_cart_signs_data(3329, preview=True, session_id="sat-am")
+signs = [x for pg in cs["pages"] for x in pg]
+check("cart signs: one per cart pair, two to a page, team-themed with the group's QR",
+      cs["count"] == 14 and all(len(pg) <= 2 for pg in cs["pages"]) and {x["cls"] for x in signs} == {"aus", "sa"}
+      and all(len(x["names"]) == 2 and x["qr_svg"] and "/member/score?t=" in x["url"] for x in signs), cs["count"])
+check("cart sign start and match line", signs[0]["start"].endswith("Hole 1") and signs[0]["match"].startswith("Sat AM Fourball · Match 1 · v "),
+      signs[0])
+sun = [x for pg in appmod.cup_cart_signs_data(3329, preview=True, session_id="sun")["pages"] for x in pg]
+check("Sunday signs name each player's own opponent", sun and all(" · v " in x["match"] for x in sun), sun[:1])
+check("the live sign sheet never reads the demo rounds", appmod.cup_cart_signs_data(3329)["count"] == 0)
 held = [g for r in read["rounds"] for g in r.get("groups") or [] if g.get("lock_state") == "held"]
 check("exactly one demo group stays held (the HELD screen)", len(held) == 1, len(held))
 td = lsc_preview.teardown(db_path=DB)

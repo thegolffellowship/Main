@@ -288,7 +288,18 @@ picking a name CLAIMED the group, so a spectator's scan made him the scorer.
   through hole 7." / "No holes saved yet."), the no-timeout promise, and a
   SAVED SO FAR strip of read-only `.se-cell` divs (the holder's phone owns
   the card; nothing here navigates).
-- Guards: `test_cup_signs.py` (template contract incl. the three screens);
+- **The Cup SPLASH (Kerry 2026-10-08, FD #1440/#1442):** a fresh scan of a
+  Lone Star Cup link opens on `#se-splash` (inline markup, only when the
+  route's `cup_splash` is true: `score_entry.group_is_cup(gid)`, the round's
+  `pairings_holes` is `lsc:` or `lscprev:`): the logo centred on the logo's
+  own navy `#021A34`, one shimmer sweep (`@keyframes se-shimmer`), ~2 s,
+  then a fade to the two-button gate. Tap skips; reduced motion = no shimmer,
+  0.7 s; logo load failure = the words LONE STAR CUP 2026 on the plate.
+  Fresh scan only: `!who && !K.gate && !following` and not yet shown in this
+  tab (`sessionStorage se_splash_<link>`). Ruled flow: splash → gate → Who
+  are you?; spectators keep FOLLOW THE CUP.
+- Guards: `test_cup_signs.py` (template contract incl. the three screens and
+  the splash; the route sets the splash on a Cup link, never on a plain one);
   `test_score_entry_ui.py` clicks the gate before every name and checks the
   held note and the follow target.
 - **Four-ball TEAM BALL line (v2.525.20, Kerry #1351 D2):** under the four

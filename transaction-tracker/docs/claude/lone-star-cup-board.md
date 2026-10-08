@@ -440,27 +440,48 @@ after the first jump (Kerry 10/8: "the preview header is really in the
 way"); Event Info is its first stop. Logo: `static/lsc-logo.png` (sha256
 8d771633…, CoS MANIFEST #1416).
 
-## THE DRAW into the live dial — v2.525.29 (Kerry 10/8, CoS #1432, Track B)
+## THE DRAW into the live dial (Kerry 10/8, CoS #1432) — Track B notes
 
-Track B owns the dial write; Tracker Build owns `/events/3329/cup-draw`.
-- `draw_state()` → per session: `pools.low|high.austin|sa` entrants
-  (`cids`, `name`, `index` = combined raw index for a pair / locked index for a
-  player, `drawn`), `matches` so far, `drawn`/`of`/`complete`, `open`
-  (FOURSOMES only once FOURBALL is complete), `not_again` (FOURBALL pairings,
-  for the page's `canComplete` look-ahead), `se_round`.
-- `draw_match(session, pool, austin_cids, sa_cids)` lands one match in
-  `lsc_matches`. First draw anywhere: every session's staged demo matches go,
-  `lsc_mock_scores` is emptied, `draw_state` and each session's `n_matches`
-  (7/7/14) are written. Numbers/tee times by pool: Sat 1–3 low, 4–7 high,
-  `tee_sheet[n-1]`; Sun 1–7 low, 8–14 high, `tee_sheet[(n-1)//2]`. Refusals
-  raise `DrawError` with the sentence to show; a refusal writes nothing.
-- The session's last match → `score_entry.cup_seed(apply)` + `se_round` bound;
-  the result rides back as `seed`. A partial session has no round bound yet.
-- `clear_draw_session(session)`: matches off, `se_round` unbound (the round is
-  reused and its groups overwritten on the redraw). Refuses FOURBALL while
-  FOURSOMES has matches, and any session with an entered score.
-- Board with 1 of 7 drawn: the drawn match shows (upcoming, tee time), the
-  rest of the session is simply absent, and the Cup still totals 28 points.
-  Members see none of it until Kerry turns on `board_live`.
-- Bridge `scoring-lsc-draw:state | <session>|<pool>|<a cids>|<sa cids> |
-  clear|<session>` (the manual fallback). Guard `test_lsc_draw.py`.
+The writer is Tracker Build's `email_parser/lsc_draw.py` (page
+`/events/3329/cup-draw`, v2.525.29; CoS accepted it in #1450). Track B's own
+draft writer was withdrawn so the dial has one writer. Track B's part:
+- before the draw (10/8): the staged demo matches were taken off all three
+  sessions, `lsc_mock_scores` was emptied (demo scores must never land on real
+  players), and each session carries `n_matches` 7 / 7 / 14, which
+  `compute_board` counts so a partly drawn Cup still totals 28 points (v2.525.32);
+- after the draw: `scoring-se-cup-seed:3329|apply`, then each session's
+  `se_round` bound to its round id (the page touches neither).
+
+## THE DRAW — /events/3329/cup-draw (Kerry 10/8, CoS #1432) — v2.525.29
+
+The Chief of Staff's draw board (`cup_draw.template.html`), ported as is to
+`templates/cup_draw.html`, admin only, screen-shared on the draw Zoom. Data
+and the one write path: `email_parser/lsc_draw.py`.
+- **Entrants:** Saturday = `lsc_matches.pairs` (low/high pool by combined
+  raw index; labels from the lock); Sunday = `lsc_handicap_lock.players`
+  per team by locked index, Low 7 / High 7.
+- **Each landed match** is written into its session of `lsc_matches` via
+  `POST /api/events/<id>/cup-draw/land` {session fb|fs|sg, pool, a, s}. The
+  server re-checks: entrant in pool and undrawn; FOURSOMES only after its
+  FOURBALL pool is full; no FOURBALL repeat; the rest of the pool still
+  completable (canComplete). Match = `{id SAT-AM-n|SAT-PM-n|SUN-n,
+  tee_time, austin, sa, draw: {pool, a, s, n}}`; n = tee order (Saturday 1-3
+  low, 4-7 high; Sunday 1-7 low, 8-14 high), tee = session start + 10 min per
+  match, two per tee on Sunday. The first drawn match in a session drops the
+  session's STAGED (no `draw`) matches. se_round and board_live untouched.
+- **Clear** (`/clear` {session}) removes drawn matches; FOURBALL takes
+  FOURSOMES with it. Every land/clear writes agent_action_log (`cup-draw`).
+- **After the draw** the Cup seed (`scoring-se-cup-seed:3329|apply`, Track B)
+  still makes the session rounds and scoring links.
+- Guard `test_lsc_draw.py` (production-shaped dial and lock).
+
+## CART SIGNS — /events/3329/cup-cart-signs (CoS #1397-2) — v2.525.30
+
+`templates/cup_cart_signs.html` from `docs/claude/lsc-mockups/CartSign.dc.html`
+(cart_signs.html shape, team band, Cup logo `static/lsc-logo.png`), data from
+`app.cup_cart_signs_data` over `score_entry.cup_sign_sheets` (now carries each
+player's `side` and `match_id`, and takes `round_key_prefix`). One sign per
+cart pair = a group's Austin players, then its SA players; QR = the group's
+scoring link. `?session=sat-am|sat-pm|sun`; `?preview=1` reads the demo
+(`lscprev:`) rounds. Empty until the Cup seed after the draw. Guard: the
+cart-sign checks in `test_lsc_preview.py`.
