@@ -57,6 +57,7 @@ check("holes text", holesTxt([12, 13, 14]) === "Holes 12–14" && holesTxt([1, 3
 check("no skins data -> nothing", pane({ skins: null }) === "");
 
 check("the board offers How skins work -> Event Info #skins",
-      src.includes('href="/member/lonestarcup/info#skins">How skins work'));
+      // the staff preview board carries ?preview=1 into the link (Tracker Build)
+      /href="\/member\/lonestarcup\/info[^"]*#skins">How skins work/.test(src.replace(/' \+ \(new URLSearchParams[^)]*\)\.get\("preview"\) === "1" \? "\?preview=1" : ""\) \+ '/g, "")));
 console.log(fails ? `\nFAILED (${fails})` : "\nALL PASS");
 process.exit(fails ? 1 : 0);
