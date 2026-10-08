@@ -39,7 +39,7 @@
        centred column, not a row — the sign is read from across a tee
        box, so nothing competes with the mark. */
     .mk-head { text-align: center; border-bottom: 2px solid #111; padding-bottom: 10px; }
-    .mk-logo { width: 100px; height: 100px; display: block; margin: 0 auto 8px; }
+    .mk-logo { width: 100px; height: 100px; display: block; margin: 0 auto 8px; object-fit: contain; }
     .mk-course { font-family: "Bitter", Georgia, serif; font-weight: 700; font-size: 15px;
                  line-height: 1.15; text-transform: uppercase; }
     /* The eyebrow under the mark — Bitter, per the ratified type rule
@@ -104,7 +104,8 @@
   {% for c in pair %}
   <div class="mk">
     <div class="mk-head">
-      <img class="mk-logo" src="/static/tgf-logo-r.svg" alt="The Golf Fellowship">
+      {% set brand = rep.get('brand') or {} %}
+      <img class="mk-logo" src="{{ brand.get('logo') or '/static/tgf-logo-r.svg' }}" alt="{{ brand.get('alt') or 'The Golf Fellowship' }}">
       <div class="mk-course">{{ rep.course_name }}</div>
       <div class="mk-event">{{ rep.event_name }}{% if rep.event_date %} &middot; {{ rep.event_date }}{% endif %}</div>
     </div>

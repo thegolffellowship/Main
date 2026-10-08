@@ -1,5 +1,16 @@
-window.TGF_VERSION = "2.525.42";
+window.TGF_VERSION = "2.526.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.526.0",
+    date: "2026-10-08",
+    title: "Lone Star Cup reports: the Cup scorecards (CD #1467) and the Cup logo on every report",
+    changes: [
+      "Kerry 10/8: \"Reports aren't showing with the updated Lone Star Cup formatting. See CD's direction on scorecards for LSC too. Plus you need to consider updates for the Starter Sheet logo and Proxy logos too.\" The REPORTS tab now prints the Cup theme on the Lone Star Cup (3329) and its Friday practice round (3330). Which events are Cup rounds is read from the dials (the Cup = lsc_matches.event_id; the practice round = the Cup's friday add-on event in oneoff_charges), never from the day.",
+      "Scorecards, per design-claude #1467: the standard Cup logo (no chapter wordmark), the round's FORMAT as the title (PRACTICE ROUND, FOURBALL, FOURSOMES, SINGLES), the course and date on one line, navy start time and hole badge, no GGID. The Cup's cards are its drawn matches: one card per Fourball/Foursomes match (Austin rows 1-2, San Antonio rows 3-4) and two Singles matches per card (M1, M2). Each player's PH is his LOCKED course handicap. ?session=sat-am|sat-pm|sun prints one session; ?preview=1 prints the staff demo matches. A round with no format, or a match whose seats break the pattern, does not print and says why.",
+      "The handicap cell and pops follow each format, using the Cup engine's own allowance math (lsc_cup.session_handicaps), so the card and the board can't disagree. Fourball HCP = 90% of PH and OFF = off the lowest of the four. Foursomes TEAM = 60% low + 40% high, one merged write-in box per team per hole, OFF = off the lower team. Singles HCP = PH, OFF within each match. Only orange OFF pops on the match formats (D24, no par-3 rule); only black PH pops on the practice round. Austin #BF5700 and San Antonio #44596B team bars on the name cells. CD's spot-checks pass (test_lsc_scorecards.py).",
+      "The Starter Sheet, Proximity markers, Cart Signs, Divisions & Flights and Games & Payouts print the Cup logo on the Cup and the practice round (database.report_brand, one answer for the pages and the bound pack). On the Cup, the Cart Signs button opens the design 3e Cup signs. Every card's initials column also drops its reserved padding so two-letter initials print whole (CD #1467 §3). Regular TGF reports are otherwise unchanged."
+    ]
+  },
   {
     version: "2.525.42",
     date: "2026-10-08",

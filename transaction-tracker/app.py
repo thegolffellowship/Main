@@ -363,6 +363,19 @@ def _check_login_rate_limit() -> bool:
 
 
 app = Flask(__name__)
+
+
+def _jinja_report_brand(event_id):
+    """Report logo for any print template (Kerry 10/8, LSC reports): the
+    Cup logo on the Lone Star Cup + its practice round, else TGF's."""
+    from email_parser.database import report_brand
+    try:
+        return report_brand(int(event_id))
+    except Exception:
+        return {}
+
+
+app.jinja_env.globals["report_brand"] = _jinja_report_brand
 # Gzip-compress text responses (HTML/CSS/JS/JSON) so large API payloads
 # like /api/handicaps/rounds for high-volume players shrink from ~80 KB
 # to ~10 KB on the wire. flask-compress only compresses responses with
@@ -5526,7 +5539,10 @@ def scorecards_page(event_id):
                           request.args.get("grouping", "team"),
                           qr=request.args.get("qr", "on"),
                           holes_override=request.args.get("holes") or None,
-                          allow_gaps=request.args.get("allow_gaps") == "1")
+                          allow_gaps=request.args.get("allow_gaps") == "1",
+                          # the Lone Star Cup (#1467): one session, or the staff preview
+                          session=request.args.get("session") or None,
+                          preview=request.args.get("preview") == "1")
     if not sc:
         return "Event not found", 404
     return render_template("scorecards.html", sc=sc)
@@ -5663,7 +5679,9 @@ def scorecards_pdf(event_id):
         "grouping": request.args.get("grouping", "team"),
         "qr": request.args.get("qr", "on"),
         "holes": request.args.get("holes") or None,
-        "allow_gaps": request.args.get("allow_gaps") == "1"}])
+        "allow_gaps": request.args.get("allow_gaps") == "1",
+        "session": request.args.get("session") or None,
+        "preview": request.args.get("preview") == "1"}])
     if built.get("error"):
         if built.get("gaps"):
             return scorecards_page(event_id)
@@ -5867,8 +5885,13 @@ def cup_cart_signs_page(event_id):
 @require_role("manager")
 def cart_signs_page(event_id):
     """Print-optimized Cart Signs for an event (B5) — one card per cart
-    (seats 1&2 = Cart A, 3&4 = Cart B), rendered from the saved pairings."""
-    from email_parser.database import get_event_print_pack
+    (seats 1&2 = Cart A, 3&4 = Cart B), rendered from the saved pairings.
+    The Lone Star Cup prints its own design 3e signs from its draw (#1463),
+    so the REPORTS tab's Cart Signs button lands there (Kerry 10/8)."""
+    from email_parser.database import get_event_print_pack, report_brand
+    if report_brand(event_id).get("lsc") == "cup":
+        qs = request.query_string.decode()
+        return redirect(f"/events/{event_id}/cup-cart-signs" + (f"?{qs}" if qs else ""))
     pack = get_event_print_pack(event_id)
     if not pack:
         return "Event not found", 404

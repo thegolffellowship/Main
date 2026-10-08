@@ -62764,7 +62764,26 @@ def event_proximity_report(event_id: int, db_path=None) -> dict | None:
                               (course_row["name"] if course_row else None)),
         "contests": contests, "notes": notes,
         "file_stub": print_file_stub(ev),
+        "brand": report_brand(event_id, db_path=db_path),
     }
+
+
+def report_brand(event_id: int, db_path=None) -> dict:
+    """WHOSE LOGO A PRINTED REPORT CARRIES (Kerry 10/8: "you need to consider
+    updates for the Starter Sheet logo and Proxy logos too"). The Lone Star
+    Cup and its Friday practice round (`lsc_cup.lsc_report_context`, read
+    from the dials, never the day) print the standard Cup logo; every other
+    event the TGF round logo. One answer for the Starter Sheet, Proximity
+    and Cart Signs pages and the bound print pack alike."""
+    lsc = None
+    try:
+        from email_parser.lsc_cup import lsc_report_context
+        lsc = lsc_report_context(int(event_id), db_path=db_path)
+    except Exception:
+        logger.exception("Non-fatal: LSC context unavailable for %s", event_id)
+    if lsc:
+        return {"lsc": lsc["kind"], "logo": "/static/lsc-logo.png", "alt": "Lone Star Cup"}
+    return {"lsc": None, "logo": "/static/tgf-logo-r.svg", "alt": "The Golf Fellowship"}
 
 
 # Downloaded print files are named the way Kerry already names the Golf
@@ -64864,6 +64883,7 @@ def get_event_print_pack(event_id: int, db_path=None) -> dict | None:
             ev.get("item_name"), ev.get("format")) == 18 else "9",
         "alpha": alpha,
         "player_count": len(alpha),
+        "brand": report_brand(event_id, db_path=db_path),
     }
 
 

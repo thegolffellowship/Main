@@ -26,7 +26,7 @@
       border-bottom: 3px solid #111; padding-bottom: 8px; margin-bottom: 12px;
     }
     .sheet-brand { display: flex; align-items: center; gap: 14px; }
-    .sheet-logo { width: 68px; height: 68px; flex-shrink: 0; display: block; }
+    .sheet-logo { width: 68px; height: 68px; flex-shrink: 0; display: block; object-fit: contain; }
     .sheet-head h1 { font-family: "Bitter", Georgia, serif; font-weight: 700; font-size: 22px; margin: 0; }
     /* Eyebrow and event name in Bitter; every roster row below stays
        system sans with tabular figures (ratified type rule, mailbox #44
@@ -78,7 +78,8 @@
 <div class="sheet">
   <div class="sheet-head">
     <div class="sheet-brand">
-      <img class="sheet-logo" src="/static/tgf-logo-r.svg" alt="The Golf Fellowship">
+      {% set brand = (report_brand((rep.event or {}).get("id")) if report_brand is defined and (rep.event or {}).get("id") else {}) or {} %}
+      <img class="sheet-logo" src="{{ brand.get('logo') or '/static/tgf-logo-r.svg' }}" alt="{{ brand.get('alt') or 'The Golf Fellowship' }}">
       <div>
         <h1>Divisions / Flights</h1>
         <div class="sub">TGF {{ rep.chapter }} {{ rep.year }}</div>

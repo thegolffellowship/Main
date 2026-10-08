@@ -2742,6 +2742,8 @@ purses beside ours. G2a grades it per player, to the cent
 
 ## The PRINTED SCORECARD (v2.519.0, design-claude #890-#897, CA #898/#900)
 
+**Lone Star Cup theme (v2.526.0, design-claude #1467):** on the Cup and its practice round the card prints the Cup header, the round FORMAT and the format's handicap cell / orange OFF pops; the Cup's cards come from its draw. Details: `docs/claude/lone-star-cup-board.md` → "THE CUP'S PRINTED REPORTS". Every report's logo comes from `database.report_brand`.
+
 `email_parser/scorecards.py` + `templates/scorecards.html`; routes
 `/events/<id>/scorecards[.pdf]?layout=3up|2up|2land&grouping=team|cart&qr=auto|off|preview&holes=9|18`;
 bridge `scoring-scorecards:<id>[|key=value…][|dump|html|pdf[|all][|send]]`.

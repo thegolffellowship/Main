@@ -174,7 +174,8 @@ def _team_no_par3_pops() -> bool:
 
 def build_scorecards(event_id: int, layout: str = "3up", grouping: str = "team",
                      qr: str = "on", holes_override: str | None = None,
-                     allow_gaps: bool = False, db_path=None) -> dict | None:
+                     allow_gaps: bool = False, db_path=None,
+                     session: str | None = None, preview: bool = False) -> dict | None:
     """Everything the scorecard template prints, or `gaps` saying why not.
 
     layout: 3up | 2up | 2land.  grouping: team (one card per group) | cart
@@ -187,7 +188,16 @@ def build_scorecards(event_id: int, layout: str = "3up", grouping: str = "team",
     allow_gaps (CA #915): a player-level gap — one player with no PH — no
     longer blocks the other cards; that card prints with PH and net BLANK,
     no dots, and the print log names him. Every event-level gap (course,
-    tees, pairings, par/SI) still stops the print."""
+    tees, pairings, par/SI) still stops the print.
+
+    THE LONE STAR CUP THEME (design-claude #1467, Kerry-approved): on the
+    Cup and its Friday practice round (`lsc_cup.lsc_report_context`) the
+    card carries the Cup header and the round's FORMAT. The Cup's groups
+    are its drawn matches (`lsc_cup.cup_print_groups`; ``session`` narrows
+    to sat-am / sat-pm / sun, ``preview`` reads the staff demo dial), each
+    player's PH the LOCKED course handicap; the handicap cell and the
+    orange pops follow the format (`lsc_cup.lsc_card_math`). Regular TGF
+    events are unchanged."""
     from email_parser import database as db
     layout = layout if layout in LAYOUTS else "3up"
     grouping = grouping if grouping in GROUPINGS else "team"
@@ -197,6 +207,29 @@ def build_scorecards(event_id: int, layout: str = "3up", grouping: str = "team",
     gaps: list[str] = []
     log: list[str] = []
     flagged: list[str] = []
+    lsc = None
+    try:
+        from email_parser import lsc_cup as _lc
+        lsc = _lc.lsc_report_context(int(event_id), db_path=db_path)
+    except Exception:  # noqa: BLE001
+        lsc = None
+    lsc_sessions = []
+    if lsc:
+        grouping = "team"   # one card per group in every LSC format (#1467 §4)
+    if lsc and lsc["kind"] == "cup":
+        cg = _lc.cup_print_groups(int(event_id), session_id=session, preview=preview,
+                                  db_path=db_path)
+        pack = {**pack, "groups": cg["groups"]}
+        gaps += cg["gaps"]
+        log += cg["log"]
+        lsc_sessions = cg["sessions"]
+        qr = "off"   # the Cup's scorer QR is on its cart signs
+        if not cg["groups"] and not cg["gaps"]:
+            gaps.append("The Cup has no drawn matches" + (f" for {session}" if session else "")
+                        + " yet. Draw them on the Cup Draw page, or print the staff preview.")
+    elif lsc and lsc["kind"] == "practice":
+        for g in pack["groups"]:
+            g["lsc_format"], g["lsc_title"] = "practice", "PRACTICE ROUND"
     with db._connect(db_path) as conn:
         ev = dict(conn.execute("SELECT * FROM events WHERE id = ?", (int(event_id),)).fetchone())
         course_name = None
@@ -226,7 +259,7 @@ def build_scorecards(event_id: int, layout: str = "3up", grouping: str = "team",
 
     if not course_name:
         gaps.append("No course on this event — set the course before printing cards.")
-    if not pack["groups"]:
+    if not pack["groups"] and not (lsc and lsc["kind"] == "cup"):
         gaps.append("No saved pairings — save PAIRINGS before printing cards.")
     if not legend:
         gaps.append(f"No designated tees for {course_name or 'this course'} — designate the "
@@ -315,7 +348,7 @@ def build_scorecards(event_id: int, layout: str = "3up", grouping: str = "team",
     allow_pct = round((pack.get("team_allowance") or 0) * 100)
     off_low = pack.get("team_off_lowest") or {}
     suppress_par3 = _team_no_par3_pops()
-    if not suppress_par3:
+    if not suppress_par3 and not lsc:
         log.append("Net-game dots include par 3s: the engine's Team Net rule has "
                    "no_pops_on_par3 off (CA #898-1 / Tracker Build #902-A open).")
 
@@ -365,6 +398,10 @@ def build_scorecards(event_id: int, layout: str = "3up", grouping: str = "team",
         for p in sorted(g["players"], key=lambda x: x.get("cart_pos") or 0):
             band = (p.get("tee_choice") or "").strip()
             tee = by_band.get(band)
+            if tee is None and band:
+                # the Cup's lsc_tees writes "Forward"; the legend may key "forward"
+                band = next((k for k in by_band if k.lower() == band.lower()), band)
+                tee = by_band.get(band)
             nm = f"{p['_last'].upper()}, {p['_first']}".strip().strip(",")
             if not tee:
                 gaps.append(f"{p.get('name')} (group {g['group_num']}): tee '{band or 'none'}' "
@@ -374,11 +411,13 @@ def build_scorecards(event_id: int, layout: str = "3up", grouping: str = "team",
             if ph is None:
                 (flagged if allow_gaps else gaps).append(
                     f"{p.get('name')} (group {g['group_num']}): no playing handicap — "
-                    + ("no TGF index yet; set a starting handicap on his profile and reprint."
+                    + ("not in the Cup's handicap lock (lsc_handicap_lock)."
+                       if (lsc and lsc["kind"] == "cup") else
+                       "no TGF index yet; set a starting handicap on his profile and reprint."
                        if p.get("handicap_index_display") is None and tee else
                        "his tee has no rating/slope for this event — fix the course card.")
                     + " The Starter Sheet shows the same gap.")
-            if net is None and ph is not None:
+            if net is None and ph is not None and not lsc:
                 gaps.append(f"{p.get('name')} (group {g['group_num']}): no {net_name} handicap.")
             si_own = {}
             if tee and grid:
@@ -422,6 +461,7 @@ def build_scorecards(event_id: int, layout: str = "3up", grouping: str = "team",
                 # His OWN tee's stroke index, which his dots follow; the
                 # card's second SI row reads it (Kerry 2026-10-06).
                 "band": band, "si_by_hole": si_own,
+                "team": p.get("team"), "ph_raw": ph,
             }
             rows.append(row)
             dump.append({"group_num": g["group_num"], "slot_label": g["slot_label"],
@@ -433,9 +473,13 @@ def build_scorecards(event_id: int, layout: str = "3up", grouping: str = "team",
                          "ph": ph, "net_allowed": p.get("team_allowed"), "net": net,
                          "si_by_hole": si_own, "ph_dots": row["ph_dots"],
                          "net_dots": row["net_dots"]})
+        fmt = g.get("lsc_format")
+        if lsc and fmt:
+            _lsc_rows(fmt, rows, g, gaps)
         base = {"group_num": g["group_num"], "holes": hk, "slot_label": g["slot_label"],
                 "start_time": start_time, "start_hole": start_hole, "hl_hole": hl_hole,
-                "qr": None, "ggid": g.get("ggid")}
+                "qr": None, "ggid": None if lsc else g.get("ggid"),
+                "lsc": _lsc_card(fmt, g, ev, hk == "18") if (lsc and fmt) else None}
         url = (links.get(g["holes"]) or {}).get(g["group_num"]) if qr_on else None
         if url:
             from email_parser.score_entry import qr_svg
@@ -451,6 +495,10 @@ def build_scorecards(event_id: int, layout: str = "3up", grouping: str = "team",
                                   "rows": [{**r, "rider": False} for r in part], "split_after": None})
         else:
             split = next((i for i, r in enumerate(rows) if r["rider"]), None)
+            if base["lsc"] and base["lsc"]["format"] != "practice":
+                for i, r in enumerate(rows):
+                    r["rider"] = i >= 2
+                split = 2 if len(rows) > 2 else None
             cards.append({**base, "cart": None, "rows": rows,
                           "split_after": split if split not in (None, 0) else None})
 
@@ -499,8 +547,10 @@ def build_scorecards(event_id: int, layout: str = "3up", grouping: str = "team",
         return round(max(0.7, min(1.35, avail / (0.62 * _base * max(len(name), 1)))), 2)
     for c in cards:
         for r in c["rows"]:
-            r["name_em"] = _name_em(r["name"], 0.24 * _w)
-            r["name_em_18"] = _name_em(r["name"], 0.372 * (_w - 6) / 2)
+            # the singles "M1  " prefix takes ~4 characters of the cell
+            fit = r["name"] + ("    " if r.get("mprefix") else "")
+            r["name_em"] = _name_em(fit, 0.24 * _w)
+            r["name_em_18"] = _name_em(fit, 0.372 * (_w - 6) / 2)
     if layout == "3up" and len(tees) >= 5:
         gaps.append("This event has 5+ tees; the 3-per-sheet card cannot hold them. "
                     "Use a 2-per-sheet layout.")
@@ -516,6 +566,9 @@ def build_scorecards(event_id: int, layout: str = "3up", grouping: str = "team",
                   "event_date": ev.get("event_date"), "shotgun": shotgun,
                   "file_stub": pack["event"].get("file_stub")},
         "layout": layout, "layout_meta": lay, "grouping": grouping, "qr": qr,
+        "lsc": ({**lsc, "navy": _lc.LSC_NAVY, "sessions": lsc_sessions, "session": session,
+                 "preview": bool(preview), "course": (course_name or "").upper()}
+                if lsc else None),
         "tees": merge_shared_tees(tees, grids), "grids": grids, "cards": cards, "sheets": sheets,
         "net": {"word": net_word, "short": net_short, "name": net_name,
                 "pct": allow_pct, "pct_note": pct_note, "unit": unit,
@@ -539,6 +592,75 @@ def build_scorecards(event_id: int, layout: str = "3up", grouping: str = "team",
 
 
 # ---------------------------------------------------------------------------
+# THE LONE STAR CUP THEME (design-claude #1467, Kerry-approved). Design
+# constants only; every number comes from the engine (lsc_cup).
+# ---------------------------------------------------------------------------
+
+LSC_LEAD = {"practice": "PRACTICE · INDIVIDUAL",
+            "fourball": "2 v 2 · AUSTIN v SAN ANTONIO",
+            "chapman": "FOURSOMES · 1 BALL PER TEAM",
+            "singles": "SINGLES · 2 MATCHES · 1 v 1"}
+
+
+def _lsc_card(fmt: str, g: dict, ev: dict, is18: bool) -> dict:
+    """Header, lead cell, handicap-cell labels and key for one LSC card."""
+    ul, lr = ("TEAM", "OFF") if fmt == "chapman" else ("HCP", "OFF")
+    if is18:
+        ul, lr = ul[:1], lr[:1]
+    if fmt == "practice":
+        key = [("lk", "PH — Playing Handicap (100%)")]
+    elif fmt == "fourball":
+        key = [(None, f"{ul} — Fourball handicap (90% of PH)"),
+               ("lo", f"{lr} — strokes off the lowest player in the match (pops shown)")]
+    elif fmt == "chapman":
+        key = [(None, f"{ul} — Foursomes team handicap (60% low PH + 40% high PH)"),
+               ("lo", f"{lr} — strokes off the lowest team in the match (pops shown)")]
+    else:
+        key = [(None, f"{ul} — Singles handicap (100% of PH)"),
+               ("lo", f"{lr} — strokes off the lowest player in the match (pops shown)")]
+    return {"format": fmt, "title": g.get("lsc_title") or "", "lead": LSC_LEAD.get(fmt, ""),
+            "date": _fmt_date(g.get("date") or ev.get("event_date")),
+            "single": fmt == "practice", "ul": ul, "lr": lr, "key": key}
+
+
+def _lsc_rows(fmt: str, rows: list[dict], g: dict, gaps: list) -> None:
+    """Rewrite one card's handicap cells and dots for its LSC format.
+    PRACTICE: PH alone, black PH dots, no net game. FOURBALL / FOURSOMES /
+    SINGLES: the format's HCP (or TEAM) upper-left, OFF lower-right, ORANGE
+    dots from OFF only (D24, no par-3 rule: match strokes fall where the
+    stroke index says), the team bar, M1/M2 on singles, and the two
+    partners' score cells merged on foursomes."""
+    from email_parser.handicap_calc import ruled_dots
+    from email_parser.lsc_cup import LSC_TEAM_COLORS, lsc_card_math
+    if fmt == "practice":
+        for r in rows:
+            r["net"], r["net_dots"], r["net_ghost"] = "", {}, {}
+        return
+    for r in rows:
+        r["team_bar"] = LSC_TEAM_COLORS.get(r.get("team") or "")
+        r["ph_dots"], r["net_ghost"] = {}, {}
+    math = lsc_card_math(fmt, [{"cid": r.get("customer_id"), "ph": r.get("ph_raw"),
+                                "team": r.get("team")} for r in rows])
+    first_of_team: dict = {}
+    for i, (r, m) in enumerate(zip(rows, math)):
+        if fmt == "singles":
+            r["mprefix"] = "M1" if i < 2 else "M2"
+        si = r.get("si_by_hole") or {}
+        if fmt == "chapman":
+            lead = first_of_team.setdefault(r.get("team"), r)
+            if lead is not r:
+                r["fs_skip"] = True
+                lead["fs_span"] = 2
+            si = lead.get("si_by_hole") or si
+        if m["hcp"] is None:
+            r["ph"], r["net"], r["net_dots"] = "", "", {}
+            continue
+        r["ph"], r["net"] = _hcp_text(m["hcp"]), _hcp_text(m["off"])
+        dots = ruled_dots(m["off"], si) if (m["off"] and si) else {}
+        r["net_dots"] = {h: max(0, int(v or 0)) for h, v in dots.items()}
+
+
+# ---------------------------------------------------------------------------
 # PDF + the staff-only send ("approve a template")
 # ---------------------------------------------------------------------------
 
@@ -558,7 +680,8 @@ def build_scorecards_pdf(render, event_id: int, static_dir: str, sets: list[dict
     for s in sets:
         sc = build_scorecards(event_id, s.get("layout", "3up"), s.get("grouping", "team"),
                               qr=s.get("qr", "on"), holes_override=s.get("holes"),
-                              allow_gaps=bool(s.get("allow_gaps")), db_path=db_path)
+                              allow_gaps=bool(s.get("allow_gaps")), db_path=db_path,
+                              session=s.get("session"), preview=bool(s.get("preview")))
         if not sc:
             return {"error": "event not found"}
         ev_name = sc["event"]["item_name"]

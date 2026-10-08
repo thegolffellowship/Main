@@ -1486,3 +1486,160 @@ def cup_results_status(db_path=None) -> dict:
             "live_cup": live.get("cup"),
             "live_blockers": results_blockers(live) if live.get("configured") else None,
             "dial_warnings": live.get("dial_warnings")}
+
+
+# ---------------------------------------------------------------------------
+# THE CUP'S PRINTED REPORTS (Kerry 10/8: "Reports aren't showing with the
+# updated Lone Star Cup formatting"; design-claude #1467)
+# ---------------------------------------------------------------------------
+
+LSC_NAVY = "#002855"          # the logo's own navy (#1467 §2), not #002868
+LSC_TEAM_COLORS = {"austin": "#BF5700", "sa": "#44596B"}   # as the cart signs (#1463)
+
+
+def lsc_report_context(event_id: int, db_path=None) -> dict | None:
+    """Is this event a Lone Star Cup round, and which? Read from data,
+    never from the day (#1467 §1):
+      * the Cup  = the event `lsc_matches.event_id` names;
+      * PRACTICE = the event the Cup's `friday` add-on points at
+        (`oneoff_charges[<cup>].addons[key=friday].event_id`).
+    Returns {"kind": "cup"|"practice", "cup_event_id"} or None."""
+    from email_parser.database import get_app_setting
+    try:
+        dial = json.loads(get_app_setting("lsc_matches", db_path=db_path) or "{}")
+    except Exception:
+        dial = {}
+    cup = dial.get("event_id") if isinstance(dial, dict) else None
+    if not cup:
+        return None
+    if int(cup) == int(event_id):
+        return {"kind": "cup", "cup_event_id": int(cup)}
+    try:
+        cfg = json.loads(get_app_setting("oneoff_charges", db_path=db_path) or "{}").get(str(cup)) or {}
+    except Exception:
+        cfg = {}
+    for a in cfg.get("addons") or []:
+        if isinstance(a, dict) and a.get("key") == "friday" and a.get("event_id") \
+                and int(a["event_id"]) == int(event_id):
+            return {"kind": "practice", "cup_event_id": int(cup)}
+    return None
+
+
+def cup_print_groups(event_id: int, session_id: str | None = None, preview: bool = False,
+                     db_path=None) -> dict:
+    """The Cup's drawn matches as printable GROUPS, in the seat order the
+    scorecard reads (#1467 §5, load-bearing):
+      FOURBALL / FOURSOMES: one card per match, seats 1-2 Austin, 3-4 SA;
+      SINGLES: two matches per card (the two that share a tee time),
+               seats 1 & 2 = match 1, 3 & 4 = match 2, Austin first.
+    Each player carries the LOCKED course handicap as PH (the same value
+    the cup seed gives score entry) and his band from `lsc_tees`.
+    ``preview`` reads the staff preview's demo dial instead of the live one.
+    Returns {"groups", "gaps", "log", "sessions"}."""
+    from email_parser.database import get_app_setting
+    key = "lsc_preview_matches" if preview else "lsc_matches"
+    gaps, log = [], []
+    try:
+        dial = json.loads(get_app_setting(key, db_path=db_path) or "{}")
+        lock = (json.loads(get_app_setting("lsc_handicap_lock", db_path=db_path) or "{}")
+                .get(str(event_id)) or {}).get("players") or {}
+        tees = json.loads(get_app_setting("lsc_tees", db_path=db_path) or "{}").get(str(event_id)) or {}
+    except Exception as e:  # noqa: BLE001
+        return {"groups": [], "gaps": [f"The Cup dials don't read: {str(e)[:120]}"],
+                "log": [], "sessions": []}
+    band_of_tee = {str(v).lower(): k for k, v in (tees.get("bands") or {}).items()}
+    tee_players = tees.get("players") or {}
+
+    def _player(cid, side, seat):
+        c = str(cid)
+        lk = lock.get(c) or {}
+        band = (tee_players.get(c) or {}).get("band") or band_of_tee.get(str(lk.get("tee") or "").lower())
+        return {"customer_id": int(cid), "name": lk.get("name") or f"#{cid}", "team": side,
+                "tee_choice": band or "", "playing_handicap": lk.get("ch"),
+                "handicap_index_display": lk.get("index"), "cart_pos": seat}
+
+    groups, sessions = [], []
+    n = 0
+    for s in dial.get("sessions") or []:
+        sid = s.get("id")
+        if session_id and sid != session_id:
+            continue
+        raw_fmt = (s.get("format") or "").strip()
+        title = session_title(raw_fmt) if raw_fmt else None
+        sessions.append({"id": sid, "title": title or sid, "matches": len(s.get("matches") or [])})
+        if not s.get("matches"):
+            log.append(f"{title or sid}: no matches drawn yet.")
+            continue
+        if not raw_fmt:
+            gaps.append(f"LSC round has no format ({sid}).")
+            continue
+        fmt = normalize_format(raw_fmt)
+        per_side = 1 if fmt == "singles" else 2
+        bad = [m.get("id") for m in s["matches"]
+               if len(m.get("austin") or []) != per_side or len(m.get("sa") or []) != per_side]
+        if bad:
+            gaps.append(f"{title}: match{'es' if len(bad) > 1 else ''} {', '.join(map(str, bad))} "
+                        f"don't seat {per_side} Austin + {per_side} San Antonio; the card's seat "
+                        "order would be wrong, so nothing prints.")
+            continue
+        if fmt == "singles":
+            by_time: dict = {}
+            for m in s["matches"]:
+                by_time.setdefault(m.get("tee_time") or "", []).append(m)
+            cards = []
+            for tt, ms in by_time.items():
+                for i in range(0, len(ms), 2):
+                    cards.append((tt, ms[i:i + 2]))
+        else:
+            cards = [(m.get("tee_time") or "", [m]) for m in s["matches"]]
+        for tt, ms in cards:
+            n += 1
+            players = []
+            for mi, m in enumerate(ms):
+                if fmt == "singles":
+                    players += [_player(m["austin"][0], "austin", 2 * mi + 1),
+                                _player(m["sa"][0], "sa", 2 * mi + 2)]
+                else:
+                    players += [_player(c, "austin", i + 1) for i, c in enumerate(m["austin"])]
+                    players += [_player(c, "sa", i + 3) for i, c in enumerate(m["sa"])]
+            groups.append({"group_num": n, "holes": str(s.get("n_holes") or 18),
+                           "slot_label": tt, "players": players, "ggid": None,
+                           "lsc_format": fmt, "lsc_title": title, "session": sid,
+                           "date": s.get("date"), "match_ids": [m.get("id") for m in ms]})
+    return {"groups": groups, "gaps": gaps, "log": log, "sessions": sessions}
+
+
+def lsc_card_math(fmt: str, rows: list[dict]) -> list[dict]:
+    """The handicap cell for one Cup card (#1467 §4/§5), from the engine's
+    own allowance math (`session_handicaps`, so the card and the board
+    cannot disagree). rows: [{"cid", "ph", "team", "seat"}] in seat order.
+    Returns, per row, {"hcp", "off"} where hcp is the upper-left value
+    (fourball 90% of PH, singles PH, foursomes the TEAM value on the
+    team's first row) and off is strokes off the lowest in the match
+    (never below 0). Singles is two matches: OFF within each pair."""
+    fmt = normalize_format(fmt)
+    out = [{"hcp": None, "off": None} for _ in rows]
+    phs = {r["cid"]: r["ph"] for r in rows}
+    if any(r["ph"] is None for r in rows):
+        return out
+    if fmt == "singles":
+        for i in range(0, len(rows), 2):
+            pair = rows[i:i + 2]
+            h = session_handicaps("singles", [[r["cid"]] for r in pair], phs)
+            low = min(h.values())
+            for j, r in enumerate(pair):
+                out[i + j] = {"hcp": h[r["cid"]], "off": max(0, h[r["cid"]] - low)}
+        return out
+    teams = [[r["cid"] for r in rows if r["team"] == t] for t in TEAM_KEYS]
+    teams = [t for t in teams if t]
+    h = session_handicaps(fmt, teams, phs)
+    if fmt == "chapman":
+        vals = {i: h[f"team:{i}"] for i in range(len(teams))}
+        low = min(vals.values())
+        for i, t in enumerate(teams):
+            for c in t:
+                k = next(j for j, r in enumerate(rows) if r["cid"] == c)
+                out[k] = {"hcp": vals[i], "off": max(0, vals[i] - low)}
+        return out
+    low = min(h.values())
+    return [{"hcp": h[r["cid"]], "off": max(0, h[r["cid"]] - low)} for r in rows]

@@ -540,3 +540,41 @@ Kerry's 10/8 instruction: "Review tracker for full direction on Cart Signs, just
 - The QR prints only when 3329 is in score_entry_events with the QR dial on. A toolbar warns when it is off.
 - Two signs per sheet and no spill-over page: sat-am is 7 pages and sun is 14.
 - `lsc-logo-hideout.png` is no longer used by the sign; it stays in static/ for now.
+
+## THE CUP'S PRINTED REPORTS (Kerry 10/8; design-claude #1467) — v2.526.0
+
+Kerry: "Reports aren't showing with the updated Lone Star Cup formatting. See
+CD's direction on scorecards for LSC too. Plus you need to consider updates for
+the Starter Sheet logo and Proxy logos too."
+
+- **Which events:** `lsc_cup.lsc_report_context(event_id)`. The Cup is
+  `lsc_matches.event_id` (3329). The practice round is the Cup's `friday`
+  add-on event, `oneoff_charges["3329"].addons[key=friday].event_id` (3330).
+  Read from data, never from the day (#1467 §1).
+- **Scorecards** (`email_parser/scorecards.py`, `templates/scorecards.html`):
+  - The Cup's cards come from its DRAW (`lsc_cup.cup_print_groups`): one card
+    per Fourball/Foursomes match (seats 1-2 Austin, 3-4 SA), and two Singles
+    matches per card, paired by shared tee time (M1 = rows 1-2, M2 = rows 3-4,
+    Austin first).
+  - PH = `lsc_handicap_lock` ch. The band comes from `lsc_tees` (else the
+    lock's tee).
+  - `?session=sat-am|sat-pm|sun` prints one session. `?preview=1` prints from
+    `lsc_preview_matches`.
+  - The cell math is `lsc_cup.lsc_card_math` over the engine's
+    `session_handicaps`. Pops are D24 from OFF with no par-3 rule.
+  - These stop the print, with a named reason: a missing format ("LSC round
+    has no format"), a broken seat pattern, or an undrawn Cup.
+  - The practice round keeps its saved pairings, a single PH and black dots.
+  - No GGID on any LSC card; no QR on the Cup's cards (it's on the cart signs).
+- **Logos:** `database.report_brand(event_id)` covers `pack.brand`,
+  `rep.brand` and the Jinja global `report_brand()`. The Starter Sheet,
+  Proximity, Cart Signs, Divisions & Flights and Games & Payouts print
+  `static/lsc-logo.png` on both LSC events.
+- **The Cup's Cart Signs:** `/events/3329/cart-signs` redirects to
+  `/events/3329/cup-cart-signs` (design 3e).
+- **Open:** the course record reads "The Hideout Golf Club". CD wants "THE
+  HIDEOUT GOLF CLUB & RESORT" from the record, not typed in. The rename is
+  Kerry's call: courses are also matched by name.
+- **Open:** the Cup's Starter Sheet still reads saved pairings. The Cup has
+  none, so it prints empty; its groups would come from the draw.
+- Guard: `test_lsc_scorecards.py`.

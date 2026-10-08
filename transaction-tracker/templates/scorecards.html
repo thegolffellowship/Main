@@ -210,6 +210,32 @@
       border-left: 6px solid #C0392B; font-size: 14px; }
     .gaps h1 { font-family: "Bitter", Georgia, serif; margin: 0 0 8px; font-size: 20px; }
     .plog { max-width: 8.5in; margin: 0 auto 24px; color: #fff; font-size: 11px; }
+    /* Initials column (#1467 §3, every card): no reserved padding, clip,
+       so two-letter initials print whole at 3-up 18-hole. */
+    td.init { padding-left: 0; padding-right: 0; text-overflow: clip; }
+    /* THE LONE STAR CUP THEME (design-claude #1467, Kerry-approved). The
+       Cup's navy is the logo's own (#002855). */
+    :root { --lsc-navy: #002855; }
+    .card.lsc .brand { flex: none; border-right-color: var(--lsc-navy); }
+    .card.lsc .brand img { height: 6.6em; margin: -0.95em -0.4em; }
+    .card.lsc .mid .course { color: var(--lsc-navy); letter-spacing: 1.5px; }
+    .card.lsc .lsc-sub { font-size: 1.3em; white-space: nowrap; overflow: hidden; }
+    .card.lsc .lsc-sub b { font-family: "Bitter", Georgia, serif; font-weight: 700; color: var(--lsc-navy); }
+    .card.lsc .lsc-sub .sep { color: #9CA3AF; }
+    .card.lsc .lsc-sub .d { font-family: "Bitter", Georgia, serif; color: #4B5563; }
+    .card.lsc .start .t { color: var(--lsc-navy); }
+    .card.lsc .badge { background: var(--lsc-navy); }
+    tr.hd th.lead .fl { font-size: 0.72em; letter-spacing: 1px; white-space: nowrap; }
+    .card.h18 tr.hd th.lead .fl { font-family: "Helvetica Neue", Arial, sans-serif; font-size: 0.6em;
+      letter-spacing: 0.3px; }
+    .card.lsc tr.pl td.lead .mp { font-family: "Bitter", Georgia, serif; font-weight: 800;
+      font-size: 0.72em; color: var(--lsc-navy); }
+    .card.lsc tr.pl td.fs-a { border-bottom: 1px dashed #C7CBD1; }
+    .card.lsc tr.pl td.fs-b { border-top: 1px dashed #C7CBD1; }
+    .lsc-pick { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+    .lsc-pick a { font-weight: 700; padding: 4px 12px; border-radius: 999px; border: 1.5px solid #002855;
+      color: #002855; text-decoration: none; }
+    .lsc-pick a.on { background: #002855; color: #fff; }
     @media print {
       body { background: #fff; }
       .sheet { margin: 0; break-after: page; page-break-after: always; }
@@ -245,6 +271,19 @@
 {# QR codes on the cards (Kerry 2026-10-06: "Is there a button that I can
    select to include those? If not, there needs to be. It should now be
    checked by default."). Unchecked reloads with qr=off. #}
+{% if sc.lsc and sc.lsc.kind == 'cup' %}
+{# The Cup prints from its draw, one session or all (#1467). #}
+<div class="ggid-form noprint lsc-pick" style="margin-top:12px">
+  <b style="margin-right:4px">Session</b>
+  {% set base = '?preview=1&' if sc.lsc.preview else '?' %}
+  <a href="{{ base }}" class="{{ 'on' if not sc.lsc.session else '' }}">All</a>
+  {% for x in sc.lsc.sessions %}<a href="{{ base }}session={{ x.id }}" class="{{ 'on' if sc.lsc.session == x.id else '' }}">{{ x.title }}{% if not x.matches %} (not drawn){% endif %}</a>{% endfor %}
+  <span style="flex:1"></span>
+  {% if sc.lsc.preview %}<a href="?{{ 'session=' ~ sc.lsc.session if sc.lsc.session else '' }}">Live draw</a><span style="color:#B45309;font-weight:700">STAFF PREVIEW: demo matches, not the draw</span>
+  {% else %}<a href="?preview=1{{ '&session=' ~ sc.lsc.session if sc.lsc.session else '' }}">Staff preview</a>{% endif %}
+</div>
+{% endif %}
+{% if not (sc.lsc and sc.lsc.kind == 'cup') %}
 <div class="ggid-form noprint" style="margin-top:12px">
   <label style="display:flex;gap:8px;align-items:center;font-weight:700;cursor:pointer">
     <input type="checkbox" id="qrToggle" {{ 'checked' if sc.qr != 'off' else '' }} onchange="scQr(this.checked)" style="width:18px;height:18px">
@@ -259,6 +298,8 @@
     location.href = u;
   }
 </script>
+{% endif %}
+{% if not sc.lsc %}
 <form class="ggid-form noprint" id="ggidForm" onsubmit="return saveGgid(event)">
   <h2>GGID codes</h2>
   <div style="color:#4B5563;margin-bottom:6px">Type each group's Golf Genius code, then Save. It prints on the scorecard header, the Starter Sheet group box and the cart signs. Leave a box blank for no code.</div>
@@ -272,6 +313,7 @@
   </table>
   <div style="margin-top:8px"><button type="submit">Save GGID codes</button><span class="msg" id="ggidMsg"></span></div>
 </form>
+{% endif %}
 <script>
   function saveGgid(e) {
     e.preventDefault();
@@ -305,8 +347,16 @@
   {% for c in sheet %}
   {% set grid = sc.grids[c.holes] %}
   {% set is18 = c.holes == '18' %}
-  <div class="card{{ ' h18' if is18 else '' }}{{ ' si2' if c.si_extra else '' }}">
+  {% set L = c.lsc %}
+  <div class="card{{ ' h18' if is18 else '' }}{{ ' si2' if c.si_extra else '' }}{{ ' lsc' if L else '' }}">
     <div class="head">
+      {% if L %}
+      <div class="brand"><img src="/static/lsc-logo.png" alt="Lone Star Cup"></div>
+      <div class="mid">
+        <div class="course">{{ L.title }}</div>
+        <div class="lsc-sub"><b>{{ sc.lsc.course }}</b><span class="sep"> &middot; </span><span class="d">{{ L.date }}</span></div>
+      </div>
+      {% else %}
       <div class="brand">
         <img src="/static/tgf-logo-r.svg" alt="TGF">
         <div class="wm">{{ sc.event.chapter }}</div>
@@ -315,13 +365,14 @@
         <div class="course">{{ sc.event.course }}</div>
         <div class="date">{{ sc.event.date }}</div>
       </div>
+      {% endif %}
       {% if c.qr and c.qr.svg %}
       <div class="qr"><div class="code">{{ c.qr.svg | safe }}</div>
         <div class="cap">SCAN TO KEEP SCORE</div></div>
       {% endif %}
       <div class="start"><div class="cap">START</div><div class="t">{{ c.start_time }}</div></div>
       <div class="badge-wrap"><div class="badge">{{ hcell(c.start_hole) }}</div>
-        <div class="game">{{ sc.net.name }}</div></div>
+        {% if not L %}<div class="game">{{ sc.net.name }}</div>{% endif %}</div>
     </div>
 
     {% set front = grid.holes[:9] %}
@@ -340,11 +391,12 @@
         {% endif %}
       </colgroup>
       <tr class="hd">
-        <th class="lead thick">{% if c.ggid %}<span class="gl">GGID</span><span class="gc">{{ c.ggid }}</span>{% endif %}</th>
+        <th class="lead thick">{% if L %}<span class="fl">{{ L.lead }}</span>{% elif c.ggid %}<span class="gl">GGID</span><span class="gc">{{ c.ggid }}</span>{% endif %}</th>
         {% for h in front %}<th class="{{ 'hl' if c.hl_hole == h else '' }} {{ 'thick' if loop.last else '' }}">{{ h }}</th>{% endfor %}
         {% if is18 %}<th>OUT</th>{% else %}
           <th class="thick">TOTAL</th>
-          <th class="split-c"><svg class="diag" viewBox="0 0 100 100" preserveAspectRatio="none"><line x1="0" y1="100" x2="100" y2="0" vector-effect="non-scaling-stroke"/></svg><span class="ul">PH</span><span class="lr">{{ sc.net.word }}</span></th>
+          {% if L and L.single %}<th>PH</th>{% else %}
+          <th class="split-c"><svg class="diag" viewBox="0 0 100 100" preserveAspectRatio="none"><line x1="0" y1="100" x2="100" y2="0" vector-effect="non-scaling-stroke"/></svg><span class="ul">{{ L.ul if L else 'PH' }}</span><span class="lr">{{ L.lr if L else sc.net.word }}</span></th>{% endif %}
           <th>NET</th>{% endif %}
       </tr>
       {% for t in sc.tees %}
@@ -371,13 +423,17 @@
       </tr>
       {% endfor %}
       {% for r in c.rows %}
+      {% set rs = ' rowspan="2"' if r.get("fs_span") == 2 else '' %}
       <tr class="pl {{ 'rider' if r.rider else '' }} {{ 'split' if c.split_after is not none and loop.index0 == c.split_after else '' }}">
-        <td class="lead thick"><div class="ln"><span class="nm" style="font-size:{{ r.name_em_18 if is18 else r.name_em }}em">{{ r.name }}</span><span class="tc" title="{{ r.tee_code }}" style="{% if r.chip_ladies %}background:#fff;border:2px solid {{ r.chip }};{% elif (r.chip or '')|lower in ['#ffffff', '#fff'] %}background:#fff;border:1.5px solid #1B1B1B;{% else %}background:{{ r.chip or '#fff' }};border:1px solid {{ r.chip or '#1B1B1B' }};{% endif %}"></span></div></td>
-        {% for h in front %}<td class="{{ 'hl' if c.hl_hole == h else '' }} {{ 'thick' if loop.last else '' }}"><span class="dk">{{ dots(r.ph_dots.get(h)) }}</span><span class="do">{{ dots(r.net_dots.get(h)) }}{{ ghosts((r.net_ghost or {}).get(h)) }}</span></td>{% endfor %}
-        {% if is18 %}<td></td>{% else %}
-          <td class="thick"></td>
-          <td class="split-c"><svg class="diag" viewBox="0 0 100 100" preserveAspectRatio="none"><line x1="0" y1="100" x2="100" y2="0" vector-effect="non-scaling-stroke"/></svg><span class="ul">{{ r.ph }}</span><span class="lr">{{ r.net }}</span></td>
-          <td></td>{% endif %}
+        <td class="lead thick{{ ' fs-a' if r.get("fs_span") == 2 else '' }}{{ ' fs-b' if r.get("fs_skip") else '' }}"{% if r.get("team_bar") %} style="border-left:0.45em solid {{ r.get("team_bar") }}"{% endif %}><div class="ln"><span class="nm" style="font-size:{{ r.name_em_18 if is18 else r.name_em }}em">{% if r.get("mprefix") %}<span class="mp">{{ r.get("mprefix") }}</span>&nbsp;&nbsp;{% endif %}{{ r.name }}</span><span class="tc" title="{{ r.tee_code }}" style="{% if r.chip_ladies %}background:#fff;border:2px solid {{ r.chip }};{% elif (r.chip or '')|lower in ['#ffffff', '#fff'] %}background:#fff;border:1.5px solid #1B1B1B;{% else %}background:{{ r.chip or '#fff' }};border:1px solid {{ r.chip or '#1B1B1B' }};{% endif %}"></span></div></td>
+        {% if not r.get("fs_skip") %}
+        {% for h in front %}<td{{ rs|safe }} class="{{ 'hl' if c.hl_hole == h else '' }} {{ 'thick' if loop.last else '' }}"><span class="dk">{{ dots(r.ph_dots.get(h)) }}</span><span class="do">{{ dots(r.net_dots.get(h)) }}{{ ghosts((r.net_ghost or {}).get(h)) }}</span></td>{% endfor %}
+        {% if is18 %}<td{{ rs|safe }}></td>{% else %}
+          <td{{ rs|safe }} class="thick"></td>
+          {% if L and L.single %}<td style="font-family:Bitter,Georgia,serif;font-weight:700">{{ r.ph }}</td>{% else %}
+          <td{{ rs|safe }} class="split-c"><svg class="diag" viewBox="0 0 100 100" preserveAspectRatio="none"><line x1="0" y1="100" x2="100" y2="0" vector-effect="non-scaling-stroke"/></svg><span class="ul">{{ r.ph }}</span><span class="lr">{{ r.net }}</span></td>{% endif %}
+          <td{{ rs|safe }}></td>{% endif %}
+        {% endif %}
       </tr>
       {% endfor %}
     </table>
@@ -392,7 +448,8 @@
         <th class="lead thick">Init</th>
         {% for h in back %}<th class="{{ 'hl' if c.hl_hole == h else '' }} {{ 'thick' if loop.last else '' }}">{{ h }}</th>{% endfor %}
         <th class="thick">IN</th><th class="thick">TOT</th>
-        <th class="split-c"><svg class="diag" viewBox="0 0 100 100" preserveAspectRatio="none"><line x1="0" y1="100" x2="100" y2="0" vector-effect="non-scaling-stroke"/></svg><span class="ul">PH</span><span class="lr">{{ sc.net.short }}</span></th><th>NET</th>
+        {% if L and L.single %}<th>PH</th>{% else %}
+        <th class="split-c"><svg class="diag" viewBox="0 0 100 100" preserveAspectRatio="none"><line x1="0" y1="100" x2="100" y2="0" vector-effect="non-scaling-stroke"/></svg><span class="ul">{{ L.ul if L else 'PH' }}</span><span class="lr">{{ L.lr if L else sc.net.short }}</span></th>{% endif %}<th>NET</th>
       </tr>
       {% for t in sc.tees %}
       <tr class="tee">
@@ -417,11 +474,15 @@
       </tr>
       {% endfor %}
       {% for r in c.rows %}
+      {% set rs = ' rowspan="2"' if r.get("fs_span") == 2 else '' %}
       <tr class="pl {{ 'rider' if r.rider else '' }} {{ 'split' if c.split_after is not none and loop.index0 == c.split_after else '' }}">
-        <td class="lead thick" style="text-align:center">{{ r.initials }}</td>
-        {% for h in back %}<td class="{{ 'hl' if c.hl_hole == h else '' }} {{ 'thick' if loop.last else '' }}"><span class="dk">{{ dots(r.ph_dots.get(h)) }}</span><span class="do">{{ dots(r.net_dots.get(h)) }}{{ ghosts((r.net_ghost or {}).get(h)) }}</span></td>{% endfor %}
-        <td class="thick"></td><td class="thick"></td>
-        <td class="split-c"><svg class="diag" viewBox="0 0 100 100" preserveAspectRatio="none"><line x1="0" y1="100" x2="100" y2="0" vector-effect="non-scaling-stroke"/></svg><span class="ul">{{ r.ph }}</span><span class="lr">{{ r.net }}</span></td><td></td>
+        <td class="lead thick init{{ ' fs-a' if r.get("fs_span") == 2 else '' }}{{ ' fs-b' if r.get("fs_skip") else '' }}" style="text-align:center">{{ r.initials }}</td>
+        {% if not r.get("fs_skip") %}
+        {% for h in back %}<td{{ rs|safe }} class="{{ 'hl' if c.hl_hole == h else '' }} {{ 'thick' if loop.last else '' }}"><span class="dk">{{ dots(r.ph_dots.get(h)) }}</span><span class="do">{{ dots(r.net_dots.get(h)) }}{{ ghosts((r.net_ghost or {}).get(h)) }}</span></td>{% endfor %}
+        <td{{ rs|safe }} class="thick"></td><td{{ rs|safe }} class="thick"></td>
+        {% if L and L.single %}<td style="font-family:Bitter,Georgia,serif;font-weight:700">{{ r.ph }}</td>{% else %}
+        <td{{ rs|safe }} class="split-c"><svg class="diag" viewBox="0 0 100 100" preserveAspectRatio="none"><line x1="0" y1="100" x2="100" y2="0" vector-effect="non-scaling-stroke"/></svg><span class="ul">{{ r.ph }}</span><span class="lr">{{ r.net }}</span></td>{% endif %}<td{{ rs|safe }}></td>
+        {% endif %}
       </tr>
       {% endfor %}
     </table>
@@ -430,7 +491,11 @@
     {# ONE line, the words Kerry chose (9/29: "we need to maintain terminology.
        Pops are strokes"): game name, % and basis come from the net-game
        rule, never typed. #}
+    {% if L %}
+    <div class="decode">{% for k in L.key %}<span class="li">{% if k[0] %}<i class="{{ k[0] }}"></i>{% endif %}{{ k[1] }}</span>{% endfor %}</div>
+    {% else %}
     <div class="decode"><span class="li"><i class="lk"></i>PH &ndash; Playing Handicap Stroke (&ldquo;Pops&rdquo;) at 100%</span><span class="li"><i class="lo"></i>{{ sc.net.name }} Stroke at {{ sc.net.pct }}%{% if sc.net.off_low %}, off the field&rsquo;s low{% endif %}</span>{% if sc.net.par3_suppressed %}<span class="li"><i class="lx"></i>No {{ sc.net.name }} Strokes on par 3s</span>{% endif %}</div>
+    {% endif %}
   </div>
   {% endfor %}
 </div>

@@ -149,7 +149,8 @@
 
 <div class="wrap"><main class="sheet">
   <header class="hd">
-    <div class="seal"><img src="/static/tgf-logo-r.svg" alt="The Golf Fellowship"><span>{{ gs.event.chapter }}</span></div>
+    {% set brand = (report_brand(gs.event.id) if report_brand is defined else {}) or {} %}
+    <div class="seal"><img src="{{ brand.get('logo') or '/static/tgf-logo-r.svg' }}" alt="{{ brand.get('alt') or 'The Golf Fellowship' }}">{% if not brand.get('lsc') %}<span>{{ gs.event.chapter }}</span>{% endif %}</div>
     <div class="mid">
       <div class="eyebrow">GAMES &amp; PAYOUTS</div>
       <div class="course">{{ gs.event.course }}</div>

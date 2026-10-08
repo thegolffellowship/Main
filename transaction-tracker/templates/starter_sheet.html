@@ -47,7 +47,7 @@
       border-bottom: 3px solid #111; padding-bottom: 8px; margin-bottom: 12px;
     }
     .sheet-brand { display: flex; align-items: center; gap: 14px; }
-    .sheet-logo { width: 68px; height: 68px; flex-shrink: 0; display: block; }
+    .sheet-logo { width: 68px; height: 68px; flex-shrink: 0; display: block; object-fit: contain; }
     .sheet-head h1 {
       font-family: "Bitter", Georgia, serif; font-weight: 700;
       font-size: 22px; margin: 0;
@@ -225,7 +225,9 @@
   <div class="sheet-head">
     <div class="sheet-brand">
       {# Full round logo left of the event + course (Kerry 2026-09-15) #}
-      <img class="sheet-logo" src="/static/tgf-logo-r.svg" alt="The Golf Fellowship">
+      {# The Lone Star Cup's own logo on the Cup + its practice round (Kerry 10/8) #}
+      {% set brand = pack.get('brand') or {} %}
+      <img class="sheet-logo" src="{{ brand.get('logo') or '/static/tgf-logo-r.svg' }}" alt="{{ brand.get('alt') or 'The Golf Fellowship' }}">
       <div>
       <h1>{{ pack.event.item_name }}</h1>
       <div class="sub">
