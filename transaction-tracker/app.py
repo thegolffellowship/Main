@@ -5817,7 +5817,7 @@ def cup_cart_signs_data(event_id: int, preview: bool = False, session_id: str | 
                 nums = sorted({int(str(p["match_id"]).rsplit("-", 1)[-1]) for p in mine
                                if p.get("match_id") and str(p["match_id"]).rsplit("-", 1)[-1].isdigit()})
                 mtxt = ("Matches " + " & ".join(map(str, nums))) if len(nums) > 1 else (f"Match {nums[0]}" if nums else "")
-                last = lambda ps: " / ".join((p["name"] or "").split()[-1] for p in ps)
+                last = lambda ps: " & ".join((p["name"] or "").split()[-1] for p in ps)
                 if sid == "sun":
                     # singles: each player's own opponent (same match id)
                     vs = " · ".join(f"v {last([q for q in theirs if q.get('match_id') == p.get('match_id')])}"
@@ -12897,10 +12897,10 @@ def _lsc_info_teams() -> list:
             ps = sorted([p for p in team if p.get("pool") == pool],
                         key=lambda p: (p.get("combined_index") if p.get("combined_index") is not None
                                        else p.get("combined_ch") or 0))
-            pools.append({"label": plabel, "pairs": [" / ".join(nm(c) for c in p.get("cids") or []) for p in ps]})
+            pools.append({"label": plabel, "pairs": [" & ".join(nm(c) for c in p.get("cids") or []) for p in ps]})
         rest = [p for p in team if p.get("pool") not in ("low", "high")]
         if rest:
-            pools.append({"label": "", "pairs": [" / ".join(nm(c) for c in p.get("cids") or []) for p in rest]})
+            pools.append({"label": "", "pairs": [" & ".join(nm(c) for c in p.get("cids") or []) for p in rest]})
         out.append({"key": "aus" if key == "austin" else "sa", "name": label,
                     "captain": LSC_CAPTAINS.get(key), "pools": pools})
     return out

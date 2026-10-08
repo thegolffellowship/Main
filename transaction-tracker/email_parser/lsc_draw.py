@@ -77,7 +77,7 @@ def pools(event_id: int, db_path=None) -> dict:
             idx = pr.get("combined_index")
             if idx is None:
                 idx = round(sum(float((lock.get(str(c)) or {}).get("index") or 0) for c in cids), 1)
-            sat[pool][team].append({"key": str(pr.get("id")), "label": " / ".join(nm(c) for c in cids),
+            sat[pool][team].append({"key": str(pr.get("id")), "label": " & ".join(nm(c) for c in cids),
                                     "idx": float(idx), "cids": cids})
         for pool in POOLS:
             sat[pool][team].sort(key=lambda e: (e["idx"], e["key"]))

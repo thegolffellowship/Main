@@ -54,7 +54,7 @@ def sess(sid): return next(s for s in dial_now()["sessions"] if s["id"] == sid)
 P = lsc_draw.pools(3329, db_path=DB)
 check("Saturday pools: 3 v 3 low, 4 v 4 high, from the dial's pairs",
       [len(P["fb"][p][t]) for p in ("low", "high") for t in ("austin", "sa")] == [3, 3, 4, 4])
-check("pair labels from the lock, index beside", P["fb"]["low"]["austin"][2]["label"] == "Matt Jenkins / Mike Jenkins"
+check("pair labels from the lock, index beside", P["fb"]["low"]["austin"][2]["label"] == "Matt Jenkins & Mike Jenkins"
       and P["fb"]["low"]["austin"][2]["idx"] == 18.2, P["fb"]["low"]["austin"])
 check("Sunday Low 7 Austin by locked raw index (Track B #1412)",
       [e["label"] for e in P["sg"]["low"]["austin"]] == ["Luke Youngs", "Matt Jenkins", "Neal Cloer", "Chris Cannon",
