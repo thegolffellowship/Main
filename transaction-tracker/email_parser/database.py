@@ -41264,6 +41264,13 @@ def _get_all_handicap_players_uncached(db_path: str | Path | None = None,
             if cid is None or cid not in starting:
                 continue
             seen_cids.add(cid)
+            # A player found by the starting row's NAME (no handicap link)
+            # must carry that customer_id too: the by-customer readers
+            # (score-entry PH, Cup skins flights) key on it, and seen_cids
+            # stops the placeholder append that would otherwise carry it
+            # (David Wetz 672, 10/7: old DFW rounds, no link, 7.7 dropped).
+            if p.get("customer_id") is None:
+                p["customer_id"] = cid
             p["starting_handicap_18"] = starting[cid]["index_18"]
             if p.get("handicap_index") is None:
                 p["handicap_index"] = starting[cid]["index_9"]

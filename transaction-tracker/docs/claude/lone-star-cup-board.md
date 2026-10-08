@@ -311,3 +311,21 @@ deposit ledger. Guard: `test_oneoff_paid_badge.py`.
   `lsc_matches` by hand afterward (settings write, no push).
 - **Pars:** every Hideout tee is par 72 (37/35), so no relative-par
   adjustment applies across Blue/White/Red/Teal.
+## Austin pairs + Wetz's index — 2026-10-07 (CoS #1382, Side Games #1383-2)
+
+- `lsc_matches.pairs.austin` (settings write, no push): AUS-P1 L. Youngs/Cannon 8,
+  P2 Cloer/J. Wade 12, P3 Jay/Walter Hogue 13 (low pool); P4 Wetz/Barstow 25,
+  P5 Franz/Sharp 40 (high). P6 McDonnell + one Jenkins and P7 the other two
+  Jenkins are `held` until Kerry says which Jenkins (Matt 7 / Mike 294 /
+  Julius 304) partners McDonnell. Every combination lands 15–38, above the low
+  cut of 13, so the split is settled; the closest is Matt+Julius 15. Re-derive
+  at the 10/10 lock.
+- **Wetz (672) had no index on the by-customer map** although his 7.7 starting
+  handicap was stored: old DFW rounds sit under his name with no handicap link,
+  and the starting merge left that row's `customer_id` empty. That map feeds the
+  Cup seed's playing handicaps (`score_entry.cup_seed` → `_preview_handicaps`)
+  and the Sunday skins flights, so his matches would have seeded with no PH. No
+  data-only fix exists (no link-writer bridge; `relink_all_unlinked_players`
+  only fills existing link rows). Code fix v2.525.20
+  (`get_all_handicap_players` stamps the cid), guard
+  `test_starting_handicap_by_customer.py`, rides Thursday's push.
