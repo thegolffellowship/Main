@@ -70,6 +70,24 @@ check("the QR is the group's signed scoring link", bool(gs) and gs[0]["url"].sta
 check("the QR renders as SVG", bool(gs) and (gs[0].get("qr_svg") or "").lstrip().startswith("<svg"))
 check("an unknown event says so, never raises", "error" in se.cup_sign_sheets(424242, db_path=tmp))
 
+# the PREVIEW dial (Track B #1405): a demo round bound in lsc_preview_matches
+# gets its matches flagged preview; the live dial is untouched
+rid_demo = se.create_round(EV, 18, round_date="2026-10-10", label="FOURBALL · PREVIEW", course_holes=course,
+                           pairings_holes="preview:sat-am", db_path=tmp)["round_id"]
+gd = se.upsert_group(rid_demo, 1, tee_time="8:30", players=[
+    {"customer_id": 7, "display_name": "Matthew Jenkins", "seat": 1},
+    {"customer_id": 35, "display_name": "Rob Callaway", "seat": 2}], db_path=tmp)["group_id"]
+db.set_app_setting("lsc_preview_matches", json.dumps({
+    "event_id": EV, "sessions": [{"id": "sat-am", "label": "FOURBALL", "format": "fourball", "se_round": rid_demo,
+                                  "n_holes": 18, "matches": [{"id": "DEMO-1", "austin": [7], "sa": [35]}]}]}), tmp)
+rmd = se.round_matches(rid_demo, db_path=tmp)
+check("a demo round bound in lsc_preview_matches carries its matches, flagged preview",
+      rmd.get(7, {}).get("match_id") == "DEMO-1" and rmd[7].get("preview") is True and rmd[7]["session"] == "sat-am", str(rmd))
+check("the live round's matches are not flagged preview", se.round_matches(rid, db_path=tmp)[7].get("preview") is False)
+check("round_is_preview tells the two apart", se.round_is_preview(rid_demo, db_path=tmp) and not se.round_is_preview(rid, db_path=tmp))
+check("the demo round's signs are not on the Cup sign page (only lsc:* rounds)",
+      [r["session"] for r in se.cup_sign_sheets(EV, db_path=tmp)["rounds"]] == ["sat-am"])
+
 # the staff print page
 import app as A                                                   # noqa: E402
 tc = A.app.test_client()

@@ -954,7 +954,7 @@
             if (!ms.length) return "";
             const half = (x) => { const w = Math.floor(x), f = x - w; return (w || f === 0 ? String(w) : "") + (f >= 0.5 ? "½" : ""); };
             const cs = card.cup_standings;
-            const cup = cs ? `<div class="se-cup"><span class="lbl">Lone Star Cup</span>
+            const cup = cs ? `${cs.preview ? '<div class="se-warn se-demo">PREVIEW · demo scores</div>' : ""}<div class="se-cup"><span class="lbl">Lone Star Cup</span>
                 <span class="tm aus"><span>Austin<span class="proj">live ${half(cs.austin_projected)}</span></span><b>${half(cs.austin)}</b></span>
                 <span class="tm sa"><span>San Antonio<span class="proj">live ${half(cs.sa_projected)}</span></span><b>${half(cs.sa)}</b></span></div>` : "";
             return `<div class="se-mstrip">${cup}${ms.map(matchCard).join("")}</div>`;

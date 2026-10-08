@@ -67,6 +67,11 @@ def round_matches(round_id: int, db_path=None) -> dict:
     except (ValueError, TypeError):
         return {}
     out: dict = {}
+    # The staff PREVIEW dial (Track B #1405, CoS #1398-B): demo matches bound
+    # by se_round to DEMO rounds, so Kerry's preview shows the strip and the
+    # Cup points on a round the live dial never names. A session in it binds
+    # only its own demo round; the live dial is untouched.
+    preview = _preview_dial(db_path)
     # A round-level match list (app setting score_entry_matches,
     # {"<round_id>": [{"id", "format", "sides": [[cid...], [cid...]]}]}):
     # matches that are not a Lone Star Cup session -- the preview's demo
@@ -84,23 +89,41 @@ def round_matches(round_id: int, db_path=None) -> dict:
                 out[c] = {"match_id": m.get("id"), "session": None,
                           "format": m.get("format") or "singles", "side": ("a", "b")[i],
                           "partners": [x for x in side if x != c], "opponents": sides[1 - i]}
-    for sess in dial.get("sessions") or []:
-        if sess.get("se_round") is None or int(sess["se_round"]) != int(round_id):
-            continue
-        for m in sess.get("matches") or []:
-            sides = [[int(c) for c in (m.get(k) or [])] for k in ("austin", "sa")]
-            for i, side in enumerate(sides):
-                for c in side:
-                    out[c] = {"match_id": m.get("id"), "session": sess.get("id"),
-                              "format": sess.get("format") or "singles",
-                              "n_holes": int(sess.get("n_holes") or 18),   # the cup engine's default
-                              "side": ("austin", "sa")[i],
-                              "partners": [x for x in side if x != c],
-                              "opponents": sides[1 - i]}
+    for is_preview, d in ((False, dial), (True, preview)):
+        for sess in d.get("sessions") or []:
+            if sess.get("se_round") is None or int(sess["se_round"]) != int(round_id):
+                continue
+            for m in sess.get("matches") or []:
+                sides = [[int(c) for c in (m.get(k) or [])] for k in ("austin", "sa")]
+                for i, side in enumerate(sides):
+                    for c in side:
+                        out[c] = {"match_id": m.get("id"), "session": sess.get("id"),
+                                  "format": sess.get("format") or "singles",
+                                  "n_holes": int(sess.get("n_holes") or 18),   # the cup engine's default
+                                  "side": ("austin", "sa")[i],
+                                  "partners": [x for x in side if x != c],
+                                  "opponents": sides[1 - i],
+                                  "preview": is_preview}
     return out
 
 
 ROUND_MATCHES_SETTING = "score_entry_matches"
+PREVIEW_DIAL_SETTING = "lsc_preview_matches"      # Track B's staff preview dial
+
+
+def _preview_dial(db_path=None) -> dict:
+    from email_parser.database import get_app_setting
+    try:
+        raw = get_app_setting(PREVIEW_DIAL_SETTING, db_path) or ""
+        return json.loads(raw) if raw.strip() else {}
+    except (ValueError, TypeError):
+        return {}
+
+
+def round_is_preview(round_id: int, db_path=None) -> bool:
+    """True when a Cup PREVIEW session (lsc_preview_matches) binds this
+    round: a demo round, flagged on every screen, never the live one."""
+    return any(v.get("preview") for v in round_matches(round_id, db_path=db_path).values())
 
 
 # ---------------------------------------------------------------------------
@@ -293,8 +316,18 @@ def _cup_standings(round_id: int) -> dict | None:
     rm = round_matches(round_id)
     if not any(v.get("session") is not None for v in rm.values()):
         return None
-    from email_parser.lsc_cup import lsc_board_payload
-    b = lsc_board_payload()
+    preview = any(v.get("preview") for v in rm.values())
+    if preview:
+        # the demo round reads the PREVIEW board (Track B #1405), never the
+        # live one; without Track B's reader the strip simply stays off
+        try:
+            from email_parser.lsc_cup import preview_board_payload
+        except ImportError:
+            return None
+        b = preview_board_payload()
+    else:
+        from email_parser.lsc_cup import lsc_board_payload
+        b = lsc_board_payload()
     if not b.get("configured"):
         return None
     t = b.get("teams") or {}
@@ -329,6 +362,7 @@ def _cup_standings(round_id: int) -> dict | None:
                     proj["austin"] += float(b.get("points_halve") or 0.5)
                     proj["sa"] += float(b.get("points_halve") or 0.5)
         out.update({"session_id": sid, "session_label": sess.get("label"),
+                    "preview": preview,
                     "session_format": sess.get("format"),
                     "session_austin": round(pts["austin"], 2), "session_sa": round(pts["sa"], 2),
                     "session_austin_projected": round(proj["austin"], 2),
