@@ -1105,6 +1105,18 @@ def cup_seed(event_id: int, *, apply: bool = False, db_path=None) -> dict:
     hc = _preview_handicaps(event_id, all_ids, {c: b for c, b in bands.items() if b}, 18,
                             db_path=db_path) if all_ids else {"ph": {}}
     phs = hc.get("ph") or {}
+    # The HANDICAP LOCK (Kerry 2026-10-07, CoS #1389: "Handicaps should lock
+    # now. They won't change."): a course handicap stored for this event in
+    # `lsc_handicap_lock` is the playing handicap of record and wins over the
+    # live index, which keeps moving as rounds post.
+    locked = (_json_setting("lsc_handicap_lock", db_path).get(str(event_id)) or {}).get("players") or {}
+    ph_locked = []
+    for c in all_ids:
+        v = locked.get(str(c)) or {}
+        if v.get("ch") is not None:
+            if phs.get(c) != int(v["ch"]):
+                ph_locked.append({"customer_id": c, "live": phs.get(c), "locked": int(v["ch"])})
+            phs[c] = int(v["ch"])
     gaps = {"no_tee": [f"{names.get(c, c)} ({c})" for c in all_ids if not bands.get(c)],
             "no_playing_handicap": [f"{names.get(c, c)} ({c})" for c in all_ids
                                     if bands.get(c) and phs.get(c) is None],
@@ -1114,6 +1126,9 @@ def cup_seed(event_id: int, *, apply: bool = False, db_path=None) -> dict:
            "gaps": {k: v for k, v in gaps.items() if v}, "sessions": []}
     if hc.get("error"):
         out["handicaps_error"] = hc["error"]
+    if locked:
+        out["handicap_lock"] = {"players_locked": sum(1 for c in all_ids if str(c) in locked),
+                                "differs_from_live": ph_locked}
     for so in sessions_out:
         view = {k: so[k] for k in ("session", "label", "date", "format", "existing_round")}
         view["groups"] = [{"label": g["label"], "tee_time": g["tee_time"],

@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.525.20";
+window.TGF_VERSION = "2.525.21";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.525.21",
+    date: "2026-10-07",
+    title: "Lone Star Cup handicap lock: the seed and the Sunday skins read the locked numbers",
+    changes: [
+      "Kerry 10/7 (CoS #1389): \"Handicaps should lock now. They won't change.\" The staff setting lsc_handicap_lock holds each Cup player's index, tee and course handicap of record. The Cup seed (score_entry.cup_seed) uses the locked course handicap as every session's playing handicap, and the Sunday skins flights (lsc_cup._skins_ctx) use the locked index, both over the live index, which keeps moving as rounds post. On 10/7 three players had already drifted: James Wilson Jr's computed 10.8 would have been CH 6 and Sunday Flight 1 against his locked 12.4 (CH 8, Flight 2), and Daniel South's 10.0 would have been CH 9 against his locked 8.",
+      "The seed's dry run reports the lock (players locked, and any whose live PH differs), and a locked player is never a no-playing-handicap gap. A malformed setting never breaks the skins read. Guards: test_score_entry.py (cup seed) and test_lsc_handicap_lock.py.",
+    ],
+  },
   {
     version: "2.525.20",
     date: "2026-10-07",
