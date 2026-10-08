@@ -364,9 +364,13 @@ either way). CH = whs_round(index × slope/113 + (rating − 72)).
   breakouts start with raw indexes not course handicaps"), so no CH tie arises.
   SA Low 7: Pat Youngs, Mesa, Niester, J. Young, Baker, Mazanec, South. Austin
   Low 7: L. Youngs, M. Jenkins, Cloer, Cannon, Wetz, J. Wade, W. Hogue (Jay Hogue
-  12.2 is High). Saturday's pair pools stay on combined CH until CoS/Kerry say
-  the rule covers them; by combined raw index Matt/Mike Jenkins (18.2) would be
-  low and Jay/Walter Hogue (23.1) high.
+  12.2 is High).
+- Saturday pair pools are cut on the COMBINED RAW INDEX too (Kerry 10/7, asked
+  whether the rule covers Saturday: "Yes"). `lsc_matches.pairs` carries
+  `combined_index` (the sort key) beside `combined_ch` (reference only), sorted
+  by index. Austin low: L. Youngs/Cannon 7.8, Cloer/J. Wade 12.8, Matt/Mike
+  Jenkins 18.2; Jay/Walter Hogue (23.1) went high. SA unchanged. Course
+  handicap still sets every match's strokes.
 
 ## Board reads for the Cup screens — v2.525.22 (CoS #1398, Track B)
 
