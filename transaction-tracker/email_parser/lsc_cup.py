@@ -679,6 +679,7 @@ def compute_skins_payout(session: dict, course: list[dict], phs: dict,
                           for c in cids)
 
     flags, excluded, mixed = [], [], []
+    flight_members: dict = {}
     paid_cids = {}      # team key -> the partners who are paid (the buyers)
     in_round = set()
     for m in session.get("matches") or []:
@@ -738,7 +739,7 @@ def compute_skins_payout(session: dict, course: list[dict], phs: dict,
                                      "record, so can't be flighted.")
                         continue
                     f = 1 if float(ix) < SINGLES_FLIGHT_BREAK else 2
-                    fl[f].append((m.get("id"), side, c))
+                    fl[f].append((m.get("id"), side, c, float(ix)))
         n1, n2 = len(fl[1]), len(fl[2])
         if min(n1, n2) == 0 or max(n1, n2) >= UNEVEN_FLIGHT_RATIO * min(n1, n2):
             flags.append(f"Flights are uneven ({n1} in Flight 1, {n2} in "
@@ -749,7 +750,12 @@ def compute_skins_payout(session: dict, course: list[dict], phs: dict,
             lbl = (f"Flight {f} (index "
                    + ("under 12.0" if f == 1 else "12.0 and up") + ")")
             groups.append((f, lbl, share,
-                           [{"id": mid, side: [c]} for mid, side, c in fl[f]]))
+                           [{"id": mid, side: [c]} for mid, side, c, _ix in fl[f]]))
+            # Who is in the flight, lowest index first: the Skins pane's
+            # "12 players · Pat Youngs to Wilson" (#1398). Names only, no
+            # money, so members get it too.
+            flight_members[f] = [{"customer_id": c, "name": _label([c])}
+                                 for _m, _s, c, _ix in sorted(fl[f], key=lambda t: (t[3], _label([t[2]])))]
 
     shares = allocate_cents(pot_cents, [g[2] for g in groups]) \
         if groups else []
@@ -796,6 +802,7 @@ def compute_skins_payout(session: dict, course: list[dict], phs: dict,
             flags.append(f"{lbl}: no skin was won, so ${gpot / 100:.2f} "
                          "is unallocated (no carryovers).")
         out_groups.append({"flight": flight, "label": lbl,
+                           "members": flight_members.get(flight),
                            "pot_cents": gpot, "entrants": entrants,
                            "complete": complete, "held": not complete,
                            "skins_won": won, "holes": sk["holes"],
@@ -823,10 +830,20 @@ def strip_money(board: dict) -> dict:
         sk = sess.get("skins")
         if not sk:
             continue
+        # The Skins pane (#1398) shows which hole each skin came from and
+        # who is in each Sunday flight: hole results, entrants and flight
+        # members carry no money, so members get them; pot, payouts,
+        # unpaid, excluded/mixed and flags stay staff only.
         sess["skins"] = {"kind": sk.get("kind"), "basis": sk.get("basis"),
                          "groups": [{"flight": g.get("flight"),
                                      "label": g.get("label"),
-                                     "totals": g.get("totals")}
+                                     "totals": g.get("totals"),
+                                     "holes": [{k: h.get(k) for k in
+                                                ("hole", "status", "winner", "value")}
+                                               for h in g.get("holes") or []],
+                                     "members": g.get("members"),
+                                     "entrants": g.get("entrants"),
+                                     "complete": g.get("complete")}
                                     for g in sk.get("groups") or []]}
     return b
 

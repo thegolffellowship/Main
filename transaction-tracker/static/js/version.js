@@ -1,5 +1,23 @@
-window.TGF_VERSION = "2.525.31";
+window.TGF_VERSION = "2.525.33";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.525.33",
+    date: "2026-10-08",
+    title: "Cup pairs read with &; How skins work pill",
+    changes: [
+      "Kerry 10/8 (CoS #1449): \"Make the teams have an &, not / between the names.\" The draw page, the Event Info TEAMS list and the cart signs now write a pair as \"Luke Youngs & Chris Cannon\" (or \"Youngs & Cannon\"), never with a slash. The Cup board's match cards, the scoring screens and the skins pane take the same change in Track B's, Track A's and Side Games' commits.",
+      "CoS #1450 (SIGNED: Skins): the Skins pane (2.525.32) gets its \"How skins work\" pill under the skins, linking to the Skins section of Event Info (/member/lonestarcup/info#skins)."
+    ]
+  },
+  {
+    "version": "2.525.32",
+    "date": "2026-10-08",
+    "title": "Lone Star Cup: the Skins pane",
+    "changes": [
+      "The Cup board's SKINS view is built to the mockup (docs/claude/lsc-mockups/Skins.dc.html, CoS #1398). It shows every session, the selected one first. Saturday team skins (net, one flight) get a row per hole won, with the team and the count, then the tied holes on one line and the holes still open with how many groups are on the course. Sunday singles show both flights (under 12.0 / 12.0 and up) with how many players and who runs lowest to highest index, then each flight's won holes once play starts.",
+      "Members see counts only. Staff also see the pot, each winner's amount and any flags. The member view now carries the per-hole results and the flight members, which hold no money; the pot, payouts and flags still stay staff only. The 'How skins work' link comes with the Event Info page so it never 404s. Guards: tests/test_lsc_cup.py (+2) and test_lsc_skins_pane.js."
+    ]
+  },
   {
     version: "2.525.31",
     date: "2026-10-08",

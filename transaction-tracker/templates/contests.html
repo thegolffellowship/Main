@@ -1731,6 +1731,25 @@
         .lsc-bd-skins .sk.au b { color: #BF5700; }
         .lsc-bd-skins .sk.sa b { color: #4B6274; }
         .lsc-bd-skins .sk i { font-style: normal; color: #15803D; font-weight: 700; }
+        /* Skins pane (#1398, mockup Skins.dc.html; lsc-* only) */
+        .lsc-sk-sess { margin-top: 10px; }
+        .lsc-sk-sess:first-child { margin-top: 0; }
+        .lsc-sk-h { padding-bottom: 6px; }
+        .lsc-sk-box { padding: 4px 12px; border-radius: 12px; border: 1px solid var(--border, #E5E7EB);
+            background: #FFFFFF; }
+        .lsc-sk-box .lsc-bd-skins { margin: 0; padding: 8px 0; border-top: 1px solid #F1F2F4; }
+        .lsc-sk-box .lsc-bd-skins.first { border-top: 0; }
+        .lsc-sk-mute { color: #6B7280; }
+        .lsc-sk-faint { color: #9CA3AF; }
+        .lsc-sk-staff .h { color: #15803D; }
+        .lsc-sk-flights { display: flex; gap: 12px; padding: 10px 12px; }
+        .lsc-sk-fl { flex: 1 1 0; min-width: 0; }
+        .lsc-sk-lbl { font-size: 11px; font-weight: 700; letter-spacing: 1px; color: #6B7280;
+            text-transform: uppercase; }
+        .lsc-sk-flp { font-size: 12.5px; color: #4B5563; margin-top: 3px; }
+        .lsc-sk-sub { margin: 8px 2px 4px; font-size: 11px; font-weight: 700; letter-spacing: 1px;
+            color: #6B7280; text-transform: uppercase; }
+        .lsc-sk-note { margin-top: 6px; font-size: 11px; color: #6B7280; text-align: center; }
         .lsc-bd-skflags { margin: 4px 2px 0; padding: 6px 10px; font-size: 12px; line-height: 1.45;
             color: #92400E; background: #FEF3C7; border: 1px solid #FDE68A; border-radius: 8px; }
         .lsc-bd-sess-h { display: flex; align-items: baseline; gap: 10px;
@@ -2887,6 +2906,97 @@
                 lscBoardLoad();
         }, 20000);
     }
+    // ── SKINS PANE (Side Games, #1398; mockup Skins.dc.html) ─────────
+    // One box per session: a row per hole a skin was won on (who, and the
+    // count), then the tied holes on one line and the holes still open on
+    // one line. Sunday singles show the two flights (players, lowest index
+    // to highest) and, once play starts, each flight's won holes. Members
+    // never see a dollar (strip_money on the server); staff see the pot,
+    // each winner's amount and the flags.
+    function lscHolesTxt(list) {
+        if (!list.length) return "";
+        const run = list.every((h, i) => i === 0 || h === list[i - 1] + 1);
+        if (list.length > 1 && run) return `Holes ${list[0]}–${list[list.length - 1]}`;
+        return "Hole " + list.join(" · ");          // mockup: "Hole 1 · 3 · 5"
+    }
+    function lscSkinsGroupRows(g, staff, liveGroups, upcoming, teeTime) {
+        const $c = (c) => "$" + (c / 100).toFixed(2);
+        const byKey = {};
+        (g.totals || []).forEach(t => { byKey[t.key] = t; });
+        const pay = {};
+        (g.payouts || []).forEach(p => { pay[p.key] = p.cents; });
+        const holes = g.holes || [];
+        const won = holes.filter(h => h.status === "won");
+        const tied = holes.filter(h => h.status === "tied").map(h => h.hole);
+        const open = holes.filter(h => h.status === "pending").map(h => h.hole);
+        let rows = won.map(h => {
+            const t = byKey[h.winner] || {};
+            const team = t.team === "austin" ? "au" : "sa";
+            return `<div class="lsc-bd-skins"><span class="h">Hole ${h.hole}</span><span class="sk ${team}">${escapeHtml(t.label || "")} <b>${h.value || 1}</b></span></div>`;
+        }).join("");
+        if (tied.length) rows += `<div class="lsc-bd-skins"><span class="h">${lscHolesTxt(tied)}</span><span class="lsc-sk-mute">Tied · no skin</span></div>`;
+        if (open.length && (won.length || tied.length)) {
+            const onCourse = liveGroups ? ` · ${liveGroups} group${liveGroups === 1 ? "" : "s"} still on the course` : "";
+            rows += `<div class="lsc-bd-skins"><span class="h">${lscHolesTxt(open)}</span><span class="lsc-sk-faint">Open${onCourse}</span></div>`;
+        } else if (open.length) {
+            rows += `<div class="lsc-bd-skins"><span class="h">${upcoming ? "Not started" : "On the course"}</span><span class="lsc-sk-faint">${upcoming && teeTime ? "First tee " + escapeHtml(teeTime) : "No hole decided yet"}</span></div>`;
+        }
+        if (staff) {
+            const paid = (g.payouts || []).map(p => {
+                const t = byKey[p.key] || {};
+                return `<span class="sk ${t.team === "austin" ? "au" : "sa"}">${escapeHtml(t.label || "")} <i>${$c(p.cents)}</i></span>`;
+            }).join("");
+            rows += `<div class="lsc-bd-skins lsc-sk-staff"><span class="h">Staff · pot ${$c(g.pot_cents || 0)}${g.held ? " · held until every card is in" : ""}</span>${paid}</div>`;
+        }
+        return rows.replace('class="lsc-bd-skins"', 'class="lsc-bd-skins first"');
+    }
+    function lscSkinsPane(sess) {
+        const sk = sess.skins;
+        if (!sk || !(sk.groups || []).length) return "";
+        const staff = sk.pot_cents != null;
+        const ms = sess.matches || [];
+        const live = ms.filter(m => m.state === "live").length;
+        const upcoming = ms.length > 0 && ms.every(m => m.state === "upcoming");
+        const allFinal = ms.length > 0 && ms.every(m => m.state === "final")
+            && (sk.groups || []).every(g => (g.holes || []).every(h => h.status !== "pending"));
+        const tee = (ms.find(m => m.tee_time) || {}).tee_time || "";
+        const FMT = { fourball: "Fourball", chapman: "Foursomes", foursomes: "Foursomes",
+                      alternate_shot: "Foursomes", singles: "Singles" };
+        const team = sk.kind === "team";
+        const title = `${FMT[sess.format] || escapeHtml(sess.label || "")} ${team ? "team skins" : "skins"}`;
+        const state = allFinal ? "final" : (live ? "live" : (tee ? escapeHtml(tee) : ""));
+        const dt = [sk.basis || (team ? "net" : "gross"), team ? "one flight" : "two flights", state]
+            .filter(Boolean).join(" · ");
+        let html = `<div class="lsc-bd-sess-h lsc-sk-h"><b>${title}</b><span class="dt">${dt}</span></div>`;
+        if (team) {
+            const g = sk.groups[0];
+            html += `<div class="lsc-sk-box">${lscSkinsGroupRows(g, staff, live, upcoming, tee)}</div>`;
+            const allow = sess.format === "fourball" ? "Team net, best ball at the Fourball 90% allowance."
+                : "Team net on the one ball at the Chapman 60/40 allowance.";
+            html += `<div class="lsc-sk-note" data-note>Skins show as counts; TGF settles after the round. ${allow}</div>`;
+        } else {
+            const cells = sk.groups.map(g => {
+                const mem = g.members || [];
+                const n = mem.length || g.entrants || 0;
+                const range = mem.length > 1 ? ` · ${escapeHtml(mem[0].name)} to ${escapeHtml(mem[mem.length - 1].name)}`
+                    : (mem.length === 1 ? ` · ${escapeHtml(mem[0].name)}` : "");
+                const lbl = g.flight === 1 ? "Flight 1 · under 12.0" : (g.flight === 2 ? "Flight 2 · 12.0 and up" : escapeHtml(g.label || ""));
+                return `<div class="lsc-sk-fl"><div class="lsc-sk-lbl">${lbl}</div><div class="lsc-sk-flp">${n} player${n === 1 ? "" : "s"}${range}</div></div>`;
+            }).join("");
+            html += `<div class="lsc-sk-box lsc-sk-flights">${cells}</div>`;
+            if (!upcoming) {
+                sk.groups.forEach(g => {
+                    const lbl = g.flight === 1 ? "Flight 1" : (g.flight === 2 ? "Flight 2" : escapeHtml(g.label || ""));
+                    html += `<div class="lsc-sk-sub">${lbl}</div><div class="lsc-sk-box">${lscSkinsGroupRows(g, staff, live, upcoming, tee)}</div>`;
+                });
+            } else if (staff) {
+                html += `<div class="lsc-sk-box">${sk.groups.map(g => lscSkinsGroupRows(g, staff, 0, true, tee)).join("")}</div>`;
+            }
+        }
+        if (staff && (sk.flags || []).length)
+            html += `<div class="lsc-bd-skflags">${sk.flags.map(f => `<div>${escapeHtml(f)}</div>`).join("")}</div>`;
+        return `<div class="lsc-sk-sess">${html}</div>`;
+    }
     function lscBoardRender(box, d) {
         const A = (d.teams || {}).austin || {}, S = (d.teams || {}).sa || {};
         // Cup status (Kerry, CA #717): 1 a win, ½ a halve; level points
@@ -2961,37 +3071,12 @@
                     dataAttrs: (m.match_id ?? m.id) ? ` data-lsc-match="${escapeHtml(String(m.match_id ?? m.id))}"` : "",
                 });
             }).join("");
-            // Skins (Kerry, CA #717): scored apart from the match, so
-            // holes after a close-out count here only. Rendered once the
-            // dial names a basis (net/gross); until then the server
-            // sends skins: null and nothing shows.
-            const sk = sess.skins;
-            // Skins (Kerry, CA #725/#726): no carryover, one pot per 18;
-            // Saturday team skins NET, Sunday singles gross (#1357-1), and
-            // the header shows the basis the server sends. The server sends pot/payout/flags to STAFF only
-            // (strip_money), so members see skins counts and never a
-            // dollar; staff also see who is left out and why.
-            const $c = (c) => "$" + (c / 100).toFixed(2);
-            let skinsHtml = "";
-            if (sk && (sk.groups || []).length) {
-                const staff = sk.pot_cents != null;
-                const rows = sk.groups.map(g => {
-                    const won = (g.totals || []).filter(t => t.skins > 0);
-                    const pay = {};
-                    (g.payouts || []).forEach(p => { pay[p.key] = p.cents; });
-                    const who = won.map(t =>
-                        `<span class="sk ${t.team === "austin" ? "au" : "sa"}">${escapeHtml(t.label)} <b>${t.skins}</b>${
-                            staff && pay[t.key] != null ? ` <i>${$c(pay[t.key])}</i>` : ""}</span>`).join("");
-                    const potTxt = staff ? ` · ${$c(g.pot_cents)}${g.held ? " · held until every card is in" : ""}` : "";
-                    if (!won.length && !staff) return "";
-                    return `<div class="lsc-bd-skins"><span class="h">${escapeHtml(g.label)}${potTxt}</span>${who || (staff ? '<span class="sk">no skins yet</span>' : "")}</div>`;
-                }).join("");
-                const flags = staff && (sk.flags || []).length
-                    ? `<div class="lsc-bd-skflags">${sk.flags.map(f => `<div>${escapeHtml(f)}</div>`).join("")}</div>` : "";
-                const head = staff
-                    ? `<div class="lsc-bd-skins"><span class="h">Skins · ${escapeHtml(sk.basis || "gross")} · ${sk.buyers_in_round} bought in · pot ${$c(sk.pot_cents)} (staff only)</span></div>` : "";
-                skinsHtml = rows || flags ? head + rows + flags : "";
-            }
+            // Skins (Kerry, CA #717): scored apart from the match, so holes
+            // after a close-out count here only. The SKINS pane is built by
+            // lscSkinsPane (above lscBoardRender) (mockup docs/claude/lsc-mockups/Skins.dc.html,
+            // #1398): Saturday team NET in one flight, Sunday individual gross
+            // in two flights; members see counts, staff also see the money.
+            const skinsHtml = lscSkinsPane(sess);
             return { id: sess.id, format: sess.format, au, sa, anyPts, cards, skinsHtml,
                      label: sess.label || sess.id || "", date: sess.date || "",
                      live: (sess.matches || []).some(m => m.state === "live"),
@@ -3023,8 +3108,17 @@
                     ${cur.date ? `<span class="dt">${escapeHtml(cur.date)}</span>` : ""}
                     <span class="sc"><span class="au">${lscFmtPts(cur.au)}</span> &mdash; <span class="sa">${lscFmtPts(cur.sa)}</span></span>
                 </div>`;
+            // SKINS shows every session's skins, the selected one first
+            // (mockup: Foursomes selected -> PM, then AM, then Sunday).
+            const skinsAll = [cur, ...sessions.filter(x => x !== cur)]
+                // the allowance note shows once, under the first session
+                .map((x, i) => (x.skinsHtml || "").replace(i === 0 ? /^$/ : /<div class="lsc-sk-note" data-note>[^<]*<\/div>/, ""))
+                .filter(Boolean).join("");
             const inner = window.lscView === "skins"
-                ? (cur.skinsHtml || '<div class="lsc-bd-proj">No skins yet this session.</div>')
+                // The mockup's "How skins work" pill links to Event Info
+                // (#skins), live since v2.525.25 (CoS #1450).
+                ? (skinsAll || '<div class="lsc-bd-proj">No skins yet.</div>')
+                  + `<div class="lsc-sk-hiw" style="text-align:center;margin-top:6px"><a class="pr-hiw-link" href="/member/lonestarcup/info${new URLSearchParams(location.search).get("preview") === "1" ? "?preview=1" : ""}#skins">How skins work</a></div>`
                 : cur.cards;
             body = `<div class="lsc-bd-sess">${sessScore}${segV}${inner}</div>`;
         }
