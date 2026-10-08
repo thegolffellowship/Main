@@ -119,23 +119,10 @@ with sync_playwright() as p:
         ctx = b.new_context(viewport={"width": 390, "height": 844})
         pg = ctx.new_page()
         pg.goto(f"http://127.0.0.1:{PORT}/member/score?t={tok}")
-        pg.click("[data-act=choosescore]"); pg.click("text=Kerry Niester")
+        pg.click("[data-act=gate-score]")        # the two-button landing (v2.525.19)
+        pg.click("text=Kerry Niester")
         pg.wait_for_selector("text=You're keeping score")
         return pg
-
-    print("QR landing: SCORE THIS GROUP or FOLLOW (Kerry 10/7, CoS #1357-6)")
-    rq, gq, tq = make(9, 1, "landing")
-    lp = b.new_context(viewport={"width": 390, "height": 844}).new_page()
-    lp.goto(f"http://127.0.0.1:{PORT}/member/score?t={tq}")
-    lp.wait_for_selector("[data-act=choosescore]")
-    check("a scanned link lands on two choices, no name list yet",
-          lp.locator("[data-act=choosescore]").count() == 1 and lp.locator("[data-act=pick]").count() == 0)
-    href = lp.locator("a.se-pill.line").get_attribute("href")
-    check("FOLLOW goes to this event's board with the link, and never claims",
-          href.startswith("/member/score/board?t=") and se.get_group_card(gq)["lock"]["state"] == "free", href)
-    lp.click("[data-act=choosescore]")
-    check("SCORE THIS GROUP opens the name list (claim flow as built)", lp.locator("[data-act=pick]").count() == 2)
-    lp.close()
 
     print("nine holes, start on 1")
     rid9, gid9, tok9 = make(9, 1, "nine")
@@ -327,7 +314,14 @@ with sync_playwright() as p:
     ctx2 = b.new_context(viewport={"width": 390, "height": 844})
     mk = ctx2.new_page()
     mk.goto(f"http://127.0.0.1:{PORT}/member/score?t={tok18}")
-    mk.click("[data-act=choosescore]"); mk.click("text=Mark Stich")
+    mk.wait_for_selector("[data-act=gate-score]", timeout=5000)
+    check("a fresh link lands on SCORE THIS GROUP / FOLLOW, and says who is keeping score",
+          mk.locator("[data-act=gate-score]").count() == 1 and mk.locator("[data-act=gate-follow]").count() == 1
+          and "is already keeping score" in mk.inner_text("body"), mk.inner_text("body")[:300])
+    check("a plain event's FOLLOW goes to the scorer's one-event board, not the Cup",
+          "/member/score/board?t=" in (mk.locator("[data-act=gate-follow]").get_attribute("data-href") or ""))
+    mk.click("[data-act=gate-score]")
+    mk.click("text=Mark Stich")
     mk.click("[data-act=follow]")
     mk.wait_for_selector("text=signed your card for the group", timeout=5000)
     check("Mark sees Kerry signed for him, and can still tap his own row",
@@ -366,7 +360,8 @@ with sync_playwright() as p:
         ctx = b.new_context(viewport={"width": 390, "height": 844})
         tp = ctx.new_page()
         tp.goto(f"http://127.0.0.1:{PORT}/member/score?t={se.make_group_token(gt)}")
-        tp.click("[data-act=choosescore]"); tp.click("text=Gus Vasquez")
+        tp.click("[data-act=gate-score]")
+        tp.click("text=Gus Vasquez")
         tp.wait_for_selector(".se-row .se-tee")
         cls = tp.locator(".se-row .se-tee").evaluate_all("els => els.map(e => e.className)")
         check("a man on the red tee is SOLID", "ring" not in cls[0], cls)
@@ -518,6 +513,7 @@ with sync_playwright() as p:
     gp_.fill("#se-pin", "1111"); gp_.click("[data-act=stafflogin]"); gp_.wait_for_timeout(800)
     check("a wrong PIN says so and stays closed", "Invalid PIN" in gp_.inner_text("body") and gp_.locator("#se-pin").count() == 1)
     gp_.fill("#se-pin", "4242"); gp_.click("[data-act=stafflogin]")
+    gp_.wait_for_selector("[data-act=gate-score]", timeout=5000); gp_.click("[data-act=gate-score]")
     gp_.wait_for_selector("text=Kerry Niester", timeout=5000)
     check("the admin PIN opens the card", gp_.locator("[data-act=pick]").count() == 2)
     db.set_app_setting("score_entry_live", "1")
@@ -531,7 +527,8 @@ with sync_playwright() as p:
     se.set_round_matches(rf, [{"id": "F", "format": "singles", "sides": [[101], [102]]}])
     fpg = b.new_context(viewport={"width": 390, "height": 660}, has_touch=True).new_page()
     fpg.goto(f"http://127.0.0.1:{PORT}/member/score?t={se.make_group_token(gf)}")
-    fpg.click("[data-act=choosescore]"); fpg.click("text=Kerry Niester"); fpg.wait_for_selector("text=You're keeping score")
+    fpg.click("[data-act=gate-score]")
+    fpg.click("text=Kerry Niester"); fpg.wait_for_selector("text=You're keeping score")
     fh = fpg.evaluate("document.documentElement.scrollHeight")
     check("the hole screen fits without scrolling", fh <= 660, fh)
     check("the PREVIEW label is not on the scoring screen", "PREVIEW" not in fpg.inner_text(".se-eyebrow").upper())

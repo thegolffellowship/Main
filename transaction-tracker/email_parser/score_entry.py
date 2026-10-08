@@ -1497,6 +1497,48 @@ def round_links(round_id: int, base_url: str | None = None, db_path=None) -> lis
             for r in rows]
 
 
+def cup_sign_sheets(event_id: int, base_url: str | None = None, db_path=None) -> dict:
+    """The Lone Star Cup's per-group QR signs (Kerry 2026-10-07, #1357-6: "put
+    them on the scorecards and cart signs as QR Codes this time. Each group
+    can determine the scorer."; #1358-2: the QR goes on the scorecard and the
+    cart sign). The Cup's rounds are seeded from the lsc_matches dial, one
+    round per session (pairings_holes 'lsc:<session>'), so the pairings-based
+    print pack cannot carry their codes: this reads those rounds directly.
+    {event, rounds: [{round_id, session, label, date, status, groups:
+    [{group_num, label, tee_time, players, matches, url, qr_svg}]}]}.
+    Read-only; never seeds or opens a round."""
+    base = _base_url(base_url)
+    with _closing(_conn(db_path)) as conn:
+        ev = conn.execute("SELECT id, item_name, event_date, course FROM events WHERE id = ?",
+                          (int(event_id),)).fetchone()
+        if not ev:
+            return {"error": f"no event {event_id}"}
+        rounds = conn.execute(
+            "SELECT id, label, round_date, pairings_holes, status, holes FROM se_rounds "
+            "WHERE event_id = ? AND lower(COALESCE(pairings_holes, '')) LIKE 'lsc:%' "
+            "ORDER BY round_date, id", (int(event_id),)).fetchall()
+        out = {"event": {"id": ev[0], "name": ev[1], "date": ev[2], "course": ev[3]}, "rounds": []}
+        for r in rounds:
+            rm = round_matches(r[0], db_path=db_path)
+            groups = []
+            for g in conn.execute("SELECT id, group_num, label, tee_time FROM se_groups WHERE round_id = ? "
+                                  "ORDER BY group_num", (r[0],)).fetchall():
+                ps = conn.execute("SELECT customer_id, display_name FROM se_players WHERE group_id = ? "
+                                  "ORDER BY COALESCE(seat, 99), id", (g[0],)).fetchall()
+                mids = []
+                for p in ps:
+                    mid = (rm.get(p[0]) or {}).get("match_id")
+                    if mid and mid not in mids:
+                        mids.append(mid)
+                url = f"{base}/member/score?t={make_group_token(g[0], db_path=db_path)}"
+                groups.append({"group_id": g[0], "group_num": g[1], "label": g[2], "tee_time": g[3],
+                               "players": [{"customer_id": p[0], "name": p[1]} for p in ps],
+                               "matches": mids, "url": url, "qr_svg": qr_svg(url)})
+            out["rounds"].append({"round_id": r[0], "session": (r[3] or "")[4:], "label": r[1],
+                                  "date": r[2], "status": r[4], "holes": r[5], "groups": groups})
+    return out
+
+
 def event_group_links(event_id: int, holes: str = "9", base_url: str | None = None,
                       db_path=None) -> dict:
     """{group_num: scorer URL} for the event's newest OPEN round of that

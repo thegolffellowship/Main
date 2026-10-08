@@ -458,7 +458,7 @@ def test_pot_is_25_per_buyer_in_the_round_and_team_skin_splits():
     scores[7][2] = 3                    # M2 SA best ball wins hole 2
     out = compute_skins_payout(_fb_session(), _flat_course(2), {}, scores,
                                buyers=set(range(1, 9)))
-    assert out["basis"] == "gross" and out["pot_cents"] == 8 * 2500
+    assert out["basis"] == "net" and out["pot_cents"] == 8 * 2500   # #1357-1
     g = out["groups"][0]
     assert g["complete"] and g["skins_won"] == 2
     pay = {p["key"]: p for p in g["payouts"]}
@@ -878,3 +878,95 @@ def test_chapman_mixed_pair_takes_strokes_on_the_mens_holes():
     assert two_women == [3, 4, 9, 11, 16]                # Teal SI 1-5
     unknown = _chapman_pops({}, {23: teal})
     assert unknown == [3, 4, 7, 14, 17]                  # round's list
+
+
+# ── Saturday team skins are NET at the full session allowance (Kerry
+#    2026-10-07, CoS #1357-1/-2) ────────────────────────────────────────
+
+def test_team_skins_are_net_at_90pct_off_zero_not_off_the_low():
+    # Four-ball: PH 10 -> 9 strokes (90%) off ZERO. Off the lowest in the
+    # match (PH 0 opponent) would be the same here, so make the low man
+    # PH 4: off-low would give the PH-10 player only 5 strokes.
+    from email_parser.lsc_cup import compute_skins_payout
+    sess = {"id": "am", "format": "fourball", "n_holes": 9,
+            "matches": [{"id": "M1", "austin": [1, 2], "sa": [3, 4]}]}
+    course = [{"hole": h, "par": 4, "stroke_index": h} for h in range(1, 10)]
+    scores = _all_fours([1, 2, 3, 4], 9)
+    scores[1][9] = 5       # PH 10 player: 5 on SI-9 hole, a stroke -> net 4 (90%: 9 pops)
+    scores[2][9] = 6       # partner PH 10 too
+    scores[3][9] = 4       # low man PH 4: 90% -> 4 pops on SI 1-4 only -> net 4 on 9
+    scores[4][9] = 4
+    for c in (3, 4):
+        for h in range(1, 9):
+            scores[c][h] = 5
+    phs = {1: 10, 2: 10, 3: 4, 4: 4}
+    out = compute_skins_payout(sess, course, phs, scores, buyers={1, 2, 3, 4})
+    assert out["basis"] == "net"
+    g = out["groups"][0]
+    holes = {h["hole"]: h for h in g["holes"]}
+    # hole 9: Austin best net = 5 - 1 = 4; SA best net = 4 - 0 = 4 -> tied
+    assert holes[9]["status"] == "tied"
+    # holes 5-8: Austin net 4-1 = 3 beats SA 5-0 = 5 (SA's 4 pops are on 1-4)
+    assert all(holes[h]["winner"] == "M1:austin" for h in (5, 6, 7, 8))
+    # holes 1-4: Austin 4-1 = 3, SA 5-1 = 4 -> Austin
+    assert all(holes[h]["winner"] == "M1:austin" for h in (1, 2, 3, 4))
+
+
+def test_chapman_team_skins_are_net_off_the_60_40_team_handicap():
+    from email_parser.lsc_cup import compute_skins_payout
+    sess = {"id": "pm", "format": "foursomes", "n_holes": 2,
+            "matches": [{"id": "C1", "austin": [1, 2], "sa": [3, 4]}]}
+    course = [{"hole": 1, "par": 4, "stroke_index": 1},
+              {"hole": 2, "par": 4, "stroke_index": 2}]
+    # team ball = the first partner's score (one ball per pair)
+    scores = {1: {1: 5, 2: 4}, 3: {1: 4, 2: 4}}
+    phs = {1: 0, 2: 5, 3: 0, 4: 0}        # Austin 60/40 = 0.6*0 + 0.4*5 = 2 strokes
+    out = compute_skins_payout(sess, course, phs, scores, buyers={1, 2, 3, 4})
+    g = out["groups"][0]
+    holes = {h["hole"]: h for h in g["holes"]}
+    assert out["basis"] == "net"
+    assert holes[1]["status"] == "tied"                 # 5-1 = 4 vs 4
+    assert holes[2]["winner"] == "C1:austin"            # 4-1 = 3 vs 4
+
+
+def test_no_buyer_pair_cannot_win_or_tie_out_a_skin():
+    # #1357-2: neither partner bought -> out of the hole entirely.
+    from email_parser.lsc_cup import compute_skins_payout
+    scores = _all_fours(range(1, 9))
+    scores[5][1] = 3          # M2 Austin (no buyers) low on hole 1
+    scores[1][1] = 3          # M1 Austin (buyers) ties it
+    out = compute_skins_payout(_fb_session(), _flat_course(2), {}, scores,
+                               buyers={1, 2, 3, 4, 7, 8})
+    g = out["groups"][0]
+    h1 = [h for h in g["holes"] if h["hole"] == 1][0]
+    assert h1["winner"] == "M1:austin", h1           # the no-buyer 3 doesn't tie it out
+    assert any(e["reason"] == "not bought in" for e in out["excluded"])
+
+
+def test_singles_skins_stay_gross():
+    from email_parser.lsc_cup import compute_skins_payout
+    sess = {"id": "sun", "format": "singles", "n_holes": 1,
+            "matches": [{"id": "S1", "austin": [1], "sa": [2]}]}
+    out = compute_skins_payout(sess, [{"hole": 1, "par": 4, "stroke_index": 1}],
+                               {1: 20, 2: 0}, {1: {1: 5}, 2: {1: 4}},
+                               buyers={1, 2}, index={1: 5.0, 2: 5.0})
+    assert out["basis"] == "gross"
+    h = out["groups"][0]["holes"][0]
+    assert h["winner"] == "S1:sa:2"                  # no pops: gross 4 beats 5
+
+
+def test_team_skins_pops_use_each_players_own_tee_si():
+    from email_parser.lsc_cup import compute_skins_payout
+    sess = {"id": "am", "format": "fourball", "n_holes": 2,
+            "matches": [{"id": "M1", "austin": [1], "sa": [3]}]}
+    course = [{"hole": 1, "par": 4, "stroke_index": 1},
+              {"hole": 2, "par": 4, "stroke_index": 2}]
+    # player 1 plays a tee where hole 2 is the hardest
+    si = {1: {1: 2, 2: 1}}
+    phs = {1: 1, 3: 0}                  # 90% of 1 -> 1 pop
+    scores = {1: {1: 4, 2: 5}, 3: {1: 4, 2: 4}}
+    out = compute_skins_payout(sess, course, phs, scores, buyers={1, 3},
+                               si_by_player=si)
+    holes = {h["hole"]: h for h in out["groups"][0]["holes"]}
+    assert holes[1]["status"] == "tied"          # no pop on hole 1 for player 1
+    assert holes[2]["status"] == "tied"          # his pop lands on hole 2: 5-1 = 4

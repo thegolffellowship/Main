@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ sheets.event.name }} - Cup QR Signs</title>
+  <link href="https://fonts.googleapis.com/css2?family=Bitter:wght@600;700&display=swap" rel="stylesheet">
+  <style>
+    /* Lone Star Cup QR signs (Kerry 2026-10-07, #1357-6 / #1358-2): one sign
+       per group per session, two to a Letter page, cut on the hairline. The
+       same print contract as the cart signs: margin in body padding, never
+       @page. The QR opens the group's scoring link, which lands on SCORE
+       THIS GROUP / FOLLOW THE CUP. */
+    * { box-sizing: border-box; }
+    @page { size: letter portrait; margin: 0; }
+    html, body, .sign { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    body { margin: 0; padding: 20px; background: #EFEFEC; color: #111;
+           font-family: "Helvetica Neue", Arial, system-ui, sans-serif; }
+    .toolbar { margin-bottom: 14px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+    .toolbar button { font: inherit; padding: 8px 16px; border: 0; border-radius: 999px;
+                      background: #E87C3E; color: #fff; font-weight: 600; cursor: pointer; }
+    .toolbar .note { font-size: 13px; color: #4B5563; }
+    .page { width: 8.5in; height: 11in; padding: 0.4in; margin: 0 auto 24px; background: #fff;
+            border: 1px solid #C9C9C4; box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+            display: grid; grid-template-rows: 1fr 1fr; gap: 0.5in; position: relative; }
+    .page::after { content: ""; position: absolute; top: 50%; left: 0.3in; right: 0.3in;
+                   border-top: 1px solid #9CA3AF; }
+    .sign { display: grid; grid-template-columns: 1fr 2.3in; gap: 0.3in; align-items: center; padding: 6px 10px; }
+    .eyebrow { font-family: Bitter, Georgia, serif; font-weight: 700; font-size: 13px; letter-spacing: .12em;
+               text-transform: uppercase; color: #BF5700; }
+    .session { font-family: Bitter, Georgia, serif; font-weight: 700; font-size: 22px; margin: 4px 0 2px; }
+    .meta { font-size: 15px; color: #374151; margin-bottom: 10px; }
+    .meta b { color: #111; }
+    .names { list-style: none; margin: 0; padding: 0; }
+    .names li { font-family: Bitter, Georgia, serif; font-weight: 700; font-size: 26px; line-height: 1.2; }
+    .match { font-size: 13px; color: #4B5563; margin-top: 10px; }
+    .qr { text-align: center; }
+    .qr svg { width: 2.1in; height: 2.1in; display: block; margin: 0 auto; }
+    .qr .cap { font-size: 11px; color: #4B5563; margin-top: 6px; line-height: 1.3; }
+    .empty { padding: 30px; background: #fff; border: 1px solid #C9C9C4; max-width: 8.5in; margin: 0 auto; }
+    @media print { body { padding: 0; background: #fff; } .toolbar, .empty-note { display: none; }
+                   .page { margin: 0; border: 0; box-shadow: none; page-break-after: always; } }
+  </style>
+</head>
+<body>
+  <div class="toolbar">
+    <button type="button" onclick="window.print()">Print</button>
+    <span class="note">{{ sheets.event.name }} · {{ sheets.event.course or "" }} · one sign per group, two per page. Each QR opens that group's scoring link (SCORE THIS GROUP or FOLLOW THE CUP).</span>
+  </div>
+  {% set signs = [] %}
+  {% for r in sheets.rounds %}{% for g in r.groups %}{% set _ = signs.append((r, g)) %}{% endfor %}{% endfor %}
+  {% if not signs %}
+    <div class="empty">No Cup rounds are seeded for this event yet. Seed them from the lsc_matches dial after the draw (scoring-se-cup-seed), then print.</div>
+  {% endif %}
+  {% for pair in signs|batch(2) %}
+  <div class="page">
+    {% for r, g in pair %}
+    <div class="sign">
+      <div>
+        <div class="eyebrow">Lone Star Cup · {{ sheets.event.date or "" }}</div>
+        <div class="session">{{ r.label or r.session }}</div>
+        <div class="meta">
+          {% if g.tee_time %}<b>{{ g.tee_time }}</b> · {% endif %}Group {{ g.group_num }}{% if g.label and g.label != g.group_num|string %} · {{ g.label }}{% endif %}
+          {% if r.status != "open" %} · <b>round {{ r.status }}</b>{% endif %}
+        </div>
+        <ul class="names">{% for p in g.players %}<li>{{ p.name }}</li>{% endfor %}</ul>
+        {% if g.matches %}<div class="match">Match {{ g.matches|join(" + ") }}</div>{% endif %}
+      </div>
+      <div class="qr">
+        {% if g.qr_svg %}{{ g.qr_svg|safe }}{% else %}<div class="cap">QR unavailable</div>{% endif %}
+        <div class="cap">Scan to score this group or follow the Cup.<br>One phone keeps score; everyone else follows.</div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endfor %}
+</body>
+</html>

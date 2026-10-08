@@ -2944,7 +2944,9 @@
                     metaL: `Match ${i + 1}${fmtLbl ? " · " + fmtLbl : ""}`,
                     status, live,
                     hasResult: m.state !== "upcoming",
-                    dataAttrs: ` data-mid="${escapeHtml(String(m.match_id ?? m.id))}"`,
+                    // the match's dial id, so a scorer link's FOLLOW THE CUP
+                    // (?match=<id>) can open this card (Kerry 2026-10-07, #1357-6)
+                    dataAttrs: (m.match_id ?? m.id) ? ` data-lsc-match="${escapeHtml(String(m.match_id ?? m.id))}"` : "",
                 });
             }).join("");
             // Skins (Kerry, CA #717): scored apart from the match, so
@@ -2952,8 +2954,9 @@
             // dial names a basis (net/gross); until then the server
             // sends skins: null and nothing shows.
             const sk = sess.skins;
-            // Skins (Kerry, CA #725/#726): gross, no carryover, one pot per
-            // 18. The server sends pot/payout/flags to STAFF only
+            // Skins (Kerry, CA #725/#726): no carryover, one pot per 18;
+            // Saturday team skins NET, Sunday singles gross (#1357-1), and
+            // the header shows the basis the server sends. The server sends pot/payout/flags to STAFF only
             // (strip_money), so members see skins counts and never a
             // dollar; staff also see who is left out and why.
             const $c = (c) => "$" + (c / 100).toFixed(2);
@@ -2974,7 +2977,7 @@
                 const flags = staff && (sk.flags || []).length
                     ? `<div class="lsc-bd-skflags">${sk.flags.map(f => `<div>${escapeHtml(f)}</div>`).join("")}</div>` : "";
                 const head = staff
-                    ? `<div class="lsc-bd-skins"><span class="h">Skins · gross · ${sk.buyers_in_round} bought in · pot ${$c(sk.pot_cents)} (staff only)</span></div>` : "";
+                    ? `<div class="lsc-bd-skins"><span class="h">Skins · ${escapeHtml(sk.basis || "gross")} · ${sk.buyers_in_round} bought in · pot ${$c(sk.pot_cents)} (staff only)</span></div>` : "";
                 skinsHtml = rows || flags ? head + rows + flags : "";
             }
             return { id: sess.id, format: sess.format, au, sa, anyPts, cards, skinsHtml,
@@ -2985,11 +2988,11 @@
         });
         // D3 (Kerry 2026-10-07, CoS #1351): one session at a time behind a
         // FOURBALL | FOURSOMES | SINGLES toggle, its own team score above
-        // MATCHES | SKINS. ?m=<match id> (the QR "Follow the Cup" link)
-        // opens on that match's session, the match first and open.
+        // MATCHES | SKINS. ?match=<dial id> (a scorer link's FOLLOW THE CUP,
+        // Track A #1357-6) opens on that match's session, card open.
         const FMT_TAB = { fourball: "Fourball", chapman: "Foursomes", foursomes: "Foursomes",
                           alternate_shot: "Foursomes", singles: "Singles" };
-        const wantM = new URLSearchParams(location.search).get("m");
+        const wantM = new URLSearchParams(location.search).get("match");
         if (window.lscSel == null || !sessions.some(x => x.id === window.lscSel)) {
             const byM = wantM && sessions.find(x => x.matchIds.includes(wantM));
             const pick = byM || sessions.find(x => x.live) || sessions.find(x => x.upcoming)
@@ -3013,20 +3016,27 @@
                 : cur.cards;
             body = `<div class="lsc-bd-sess">${sessScore}${segV}${inner}</div>`;
         }
+        // Cards the reader had open stay open across the 20 s live refresh,
+        // and ?match=<dial id> opens that match's card the first time and
+        // scrolls to it (Track A, #1357-6).
+        const wasOpen = new Set(Array.from(box.querySelectorAll(".mp-match-card[data-lsc-match] .mp-card-head.open"))
+            .map((h) => h.closest(".mp-match-card").dataset.lscMatch));
+        if (wantM && !box.dataset.lscMatchOpened) wasOpen.add(wantM);
         box.innerHTML = head + segS + body;
         box.querySelectorAll("[data-lscsess]").forEach(b => b.addEventListener("click", () => {
             window.lscSel = b.dataset.lscsess; lscBoardRender(box, d); }));
         box.querySelectorAll("[data-lscview]").forEach(b => b.addEventListener("click", () => {
             window.lscView = b.dataset.lscview; lscBoardRender(box, d); }));
-        if (wantM && !window.lscOpenedM && window.lscView === "matches") {
-            const el = box.querySelector(`.mp-match-card[data-mid="${CSS.escape(wantM)}"]`);
-            if (el) {
+        wasOpen.forEach((id) => {
+            const el = Array.from(box.querySelectorAll(".mp-match-card[data-lsc-match]")).find((c) => c.dataset.lscMatch === id);
+            const hd = el && el.querySelector(".mp-card-head");
+            if (hd && el.querySelector(".mp-scorecard") && !hd.classList.contains("open")) mpCardToggle(hd);
+            if (el && wantM === id && !box.dataset.lscMatchOpened) {
+                box.dataset.lscMatchOpened = "1";
                 el.parentNode.insertBefore(el, el.parentNode.querySelector(".mp-match-card"));
-                const hd = el.querySelector(".mp-card-head.mp-clickable");
-                if (hd) mpCardToggle(hd);
-                window.lscOpenedM = true;
+                try { el.scrollIntoView({block: "start", behavior: "smooth"}); } catch (e) { /* older browsers */ }
             }
-        }
+        });
         // Tap-to-open scorecards need no wiring here: the Match Play
         // tab's document-level delegated listener (mpCardToggle) matches
         // by class and covers these cards too.

@@ -1,5 +1,24 @@
-window.TGF_VERSION = "2.525.17";
+window.TGF_VERSION = "2.525.19";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.525.19",
+    date: "2026-10-07",
+    title: "Scoring link lands on SCORE THIS GROUP / FOLLOW THE CUP; Cup QR signs per group",
+    changes: [
+      "Kerry 10/7 (CoS #1357-6): \"put them on the scorecards and cart signs as QR Codes this time. Each group can determine the scorer\", and anyone else who scans must \"simply go to the leaderboard and follow along\" without the take-over prompt. Until now a scanned link opened Who are you?, and picking a name CLAIMED the group, so a spectator's scan made him the scorer. A fresh link now lands on two buttons: SCORE THIS GROUP (the claim flow exactly as built) and FOLLOW (no claim, no prompt). If someone already holds the group it says so on that screen. The choice is remembered per link on that phone, so a scorer who reopens his link goes straight to his card. Every round, not only the Cup (the class, not the instance).",
+      "FOLLOW on a Lone Star Cup round opens the Cup leaderboard with that group's match expanded and scrolled to (/member/lonestarcup?match=<dial id>; the board marks each card with its match id); on a plain event it opens the scorer's one-event board (/member/score/board?t=). The Cup board also keeps the cards a reader has open across its 20 s live refresh, which it used to collapse.",
+      "Cup QR signs (#1358-2: the QR goes on the scorecard and the cart sign): /events/<id>/cup-signs, staff only, one sign per group per session, two to a Letter page, with session, tee time, group, players, the match id and the scorer QR. Read straight from the Cup's own score-entry rounds (seeded from lsc_matches, pairings_holes lsc:<session>), because the pairings-based print pack cannot carry three sessions' codes. ?round_id= narrows to one session. Guards test_cup_signs.py and test_score_entry_ui (the landing screen, the held note, the follow target)."
+    ]
+  },
+  {
+    version: "2.525.18",
+    date: "2026-10-07",
+    title: "Lone Star Cup: Saturday team skins are net",
+    changes: [
+      "Kerry 10/7 (#1357-1): Saturday team skins are NET at the full session allowance, taken off zero and never off the lowest in the match. Four-ball uses 90% of each player's handicap and the best net ball per side; foursomes (Chapman) uses the 60/40 team handicap on the one ball. Pops fall on each player's own tee's stroke index. Sunday singles skins stay gross in two flights. The staff skins header now shows the basis instead of always saying gross.",
+      "A pair where neither partner bought in is out of the hole entirely, so its score can't win or tie out a skin (#1357-2). A pair with one buyer still pays that buyer the full team skin. Five new tests.",
+    ],
+  },
   {
     version: "2.525.17",
     date: "2026-10-07",

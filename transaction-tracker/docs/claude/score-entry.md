@@ -251,6 +251,35 @@ rounds only.
 perhaps a little smaller." Top-right corner of each sign, 0.9 in, one line
 "Scan to keep score" under it.
 
+## The link lands on two buttons: SCORE THIS GROUP / FOLLOW (v2.525.19)
+
+Kerry 2026-10-07 (CoS #1357-6): the scoring links go on the scorecards and
+cart signs as QR codes, "Each group can determine the scorer", and anyone
+else who scans must "simply go to the leaderboard and follow along" without
+the take-over prompt. Before this a scanned link opened **Who are you?** and
+picking a name CLAIMED the group, so a spectator's scan made him the scorer.
+
+- `gateScreen()` in `templates/score_entry.html` renders first for a fresh
+  link (`!who && !store.get(K.gate)`): **SCORE THIS GROUP** (sets `K.gate`,
+  then the claim flow as built) and **FOLLOW THE CUP** / **FOLLOW THE
+  LEADERBOARD** (`location.href`, no claim). A held lock is named on the
+  screen ("Fred is already keeping score for this group."). The choice is
+  per link per phone, so a scorer reopening his link lands on his card.
+- The follow target: a Cup round (any player in `card.matches` with a
+  `session`) → `/member/lonestarcup?match=<dial match id>`; the Cup board
+  (`lscBoardRender`, contests.html) stamps `data-lsc-match` on each card,
+  opens the wanted card once and scrolls to it, and keeps the cards a reader
+  has open across its 20 s refresh. A plain event → the scorer's one-event
+  board `/member/score/board?t=`.
+- **Cup QR signs:** `score_entry.cup_sign_sheets(event_id)` reads the Cup's
+  own rounds (`pairings_holes` `lsc:<session>`), one sign per group with
+  session, tee time, players, match id and the scorer QR; staff page
+  `/events/<id>/cup-signs` (`templates/cup_signs.html`, two per Letter page,
+  `?round_id=` narrows). The pairings-based print pack cannot carry three
+  sessions' codes, which is why this reads the rounds directly.
+- Guards: `test_cup_signs.py`; `test_score_entry_ui.py` clicks the gate
+  before every name and checks the held note and the follow target.
+
 ## Match play: Ball in hole or Picked up (v2.496.0)
 
 Kerry, 2026-09-25 (via the Front Desk), verbatim: "The only possible

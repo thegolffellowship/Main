@@ -56,14 +56,21 @@ tap-open hole-by-hole scorecards.
   the match; a picked-up ball never wins; a hole is decided only once
   every entry has posted it.
 - **Skins PAYOUT, ratified (CA #725/#726, v2.503.0), STAFF ONLY** —
-  `compute_skins_payout()`: GROSS, no carryover (a tie pays nothing).
+  `compute_skins_payout()`: no carryover (a tie pays nothing).
+  **Basis by session (Kerry 2026-10-07, #1357-1, v2.525.19):** Saturday
+  TEAM skins are NET at the full session allowance taken off zero, never
+  off the lowest in the match (four-ball 90% of each PH, best net ball;
+  Chapman the 60/40 team handicap, one net ball), with pops on each
+  player's own tee's stroke index; Sunday singles stay GROSS
+  (`SKINS_TEAM_BASIS` / `SKINS_SINGLES_BASIS`).
   Each 18 is its own pot: $25 × the players IN THAT ROUND who bought the
   weekend skins (the SKINS add-on in `oneoff_addons`). Saturday: team
-  skins (four-ball best gross ball, Chapman one gross), each team skin
+  skins (four-ball best net ball, Chapman one net ball), each team skin
   split evenly between partners. **Mixed pair (only one partner bought),
   RULED CA #759, BUILT v2.514.0:** the team plays for team skins and
   the partner who bought in is paid the FULL team skin; nothing is
-  left over or redistributed. A pair where neither bought stays out.
+  left over or redistributed. A pair where neither bought is out of the
+  hole entirely: its score neither wins nor ties out a skin (#1357-2).
   Staff see who is paid on a mixed team (`mixed`); members never do.
   Sunday:
   individual gross skins flighted on the TGF 18-hole index FROZEN at the
@@ -311,6 +318,14 @@ deposit ledger. Guard: `test_oneoff_paid_badge.py`.
   `lsc_matches` by hand afterward (settings write, no push).
 - **Pars:** every Hideout tee is par 72 (37/35), so no relative-par
   adjustment applies across Blue/White/Red/Teal.
+## FOLLOW THE CUP from a scorer link — v2.525.19 (Kerry 2026-10-07, #1357-6)
+
+A scanned scoring link lands on SCORE THIS GROUP / FOLLOW THE CUP (score-entry.md).
+FOLLOW opens `/member/lonestarcup?match=<dial match id>`: `lscBoardRender` stamps
+`data-lsc-match` on every card, opens that one once (`mpCardToggle`) and scrolls to
+it, and re-opens whatever cards were open before each 20 s live refresh. The per-group
+QR signs for the Cup's rounds print from `/events/<id>/cup-signs`.
+
 ## Austin pairs + Wetz's index — 2026-10-07 (CoS #1382, Side Games #1383-2)
 
 - `lsc_matches.pairs.austin` (settings write, no push): AUS-P1 L. Youngs/Cannon 8,
