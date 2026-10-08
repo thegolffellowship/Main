@@ -1136,6 +1136,17 @@ def _skins_ctx(conn, dial: dict, db_path=None) -> dict:
                                                          as_of=as_of) or {}
     except Exception:
         logger.exception("lsc_cup: frozen index read failed")
+    # The HANDICAP LOCK (Kerry 2026-10-07, CoS #1389): an index stored for
+    # this event in `lsc_handicap_lock` is the index of record for the
+    # Sunday flights and wins over the computed one.
+    try:
+        lock = ((_setting_json(conn, "lsc_handicap_lock") or {}).get(str(eid))
+                or {}).get("players") or {}
+        for c, v in lock.items():
+            if isinstance(v, dict) and v.get("index") is not None:
+                ctx["index"][int(c)] = float(v["index"])
+    except Exception:
+        logger.exception("lsc_cup: handicap lock read failed")
     return ctx
 
 

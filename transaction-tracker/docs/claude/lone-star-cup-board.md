@@ -329,3 +329,20 @@ deposit ledger. Guard: `test_oneoff_paid_badge.py`.
   only fills existing link rows). Code fix v2.525.20
   (`get_all_handicap_players` stamps the cid), guard
   `test_starting_handicap_by_customer.py`, rides Thursday's push.
+
+## HANDICAP LOCK — 2026-10-07 (Kerry via CoS #1389) — v2.525.21
+
+KERRY: "Handicaps should lock now. They won't change." Staff setting
+`lsc_handicap_lock` = `{"3329": {"players": {"<cid>": {name, team, tee, index,
+ch, sun_flight}}}}`, from the 10/5 list (#1215) with Wetz 7.7, Walter 10.9,
+Wilson 12.4 and Mesa 0.4 (his stored starting handicap; #1389 said 0.2, CH 0
+either way). CH = whs_round(index × slope/113 + (rating − 72)).
+- `score_entry.cup_seed` takes the locked CH as each player's playing
+  handicap in all three sessions (the dry run reports `handicap_lock`).
+- `lsc_cup._skins_ctx` takes the locked index for the Sunday flights
+  (Flight 1 < 12.0): 11 v 11 among the 22 buyers.
+- Pools in `lsc_matches.pairs` are summed from the lock. No re-derivation on
+  10/10. Why it matters: by 10/7 Wilson's live index was 10.8 (CH 6, Flight 1)
+  and South's 10.0 (CH 9).
+- Sunday Low 7 | High 7: SA has four at CH 8 (Baker, Mazanec, South, Wilson);
+  by index Wilson is 8th, so High.
