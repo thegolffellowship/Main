@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.525.41";
+window.TGF_VERSION = "2.525.42";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.525.42",
+    date: "2026-10-08",
+    title: "David Wetz's starting handicap shows on the roster",
+    changes: [
+      "Kerry 10/8: \"David Wetz handicap still not showing.\" His old DFW rounds sit under his name with no handicap link, so the starting-handicap merge put his 7.7 on a handicap row that had no customer name, and the roster's index map (keyed by customer name and id) skipped that row. The matched row now carries the customer's name as well as his id (v2.525.20 added the id), so the roster reads 3.9 (7.7 / 2) with the starting-handicap mark. Guard: test_starting_handicap_by_customer.py.",
+    ],
+  },
   {
     version: "2.525.41",
     date: "2026-10-08",

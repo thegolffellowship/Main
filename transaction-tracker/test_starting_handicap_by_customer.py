@@ -52,6 +52,9 @@ def test_unlinked_old_rounds_still_read_the_starting_index_by_customer(hdb):
     assert rows[0]["handicap_index_18"] == 7.7
     assert rows[0]["handicap_source"] == "starting"
     assert rows[0]["customer_id"] == 672
+    # the roster's index map keys on customer_name (Kerry 10/8: "David Wetz
+    # handicap still not showing")
+    assert rows[0]["customer_name"] == "David Wetz"
     assert db._handicap_index_18_by_customer(hdb).get(672) == 7.7
 
 

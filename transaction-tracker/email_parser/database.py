@@ -41271,6 +41271,11 @@ def _get_all_handicap_players_uncached(db_path: str | Path | None = None,
             # (David Wetz 672, 10/7: old DFW rounds, no link, 7.7 dropped).
             if p.get("customer_id") is None:
                 p["customer_id"] = cid
+            # ...and the customer's name: the roster's index map
+            # (api_handicap_index_map) keys on customer_name and skipped this
+            # row, so Wetz's 7.7 read "—" on the roster (Kerry 10/8).
+            if not p.get("customer_name"):
+                p["customer_name"] = starting[cid]["customer_name"]
             p["starting_handicap_18"] = starting[cid]["index_18"]
             if p.get("handicap_index") is None:
                 p["handicap_index"] = starting[cid]["index_9"]
