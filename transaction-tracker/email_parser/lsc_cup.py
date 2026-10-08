@@ -1258,7 +1258,7 @@ def build_preview_dial(dial: dict, lock: dict) -> dict:
     (that is Thursday's Zoom). Saturday: pair N of a pool v pair N of the
     other team's same pool, both sessions (Foursomes rotates the SA pairs
     one place inside each pool so the matchups differ). Sunday: each
-    team's 14 by locked CH (ties by index), 1 v 1 ... 14 v 14, two
+    team's 14 by locked raw INDEX (ties by CH), 1 v 1 ... 14 v 14, two
     matches per tee time. Every session starts unbound (se_round None);
     the preview seeding binds its demo rounds."""
     pairs = dial.get("pairs") or {}
@@ -1285,10 +1285,13 @@ def build_preview_dial(dial: dict, lock: dict) -> dict:
                             "austin": list(pa["cids"]), "sa": list(ps["cids"])})
         return out
 
+    # Breakouts sort on the RAW index, never the course handicap (Kerry
+    # 2026-10-07: "Handicap breakouts start with raw indexes not course
+    # handicaps"); CH only breaks an exact index tie.
     def ranked(team):
         cids = [int(c) for c, v in players.items() if v.get("team") == team]
-        return sorted(cids, key=lambda c: (players[str(c)].get("ch", 99),
-                                           players[str(c)].get("index", 99)))
+        return sorted(cids, key=lambda c: (players[str(c)].get("index", 99),
+                                           players[str(c)].get("ch", 99)))
 
     sun, aus, sa = [], ranked("austin"), ranked("sa")
     st = tees.get("sun") or []

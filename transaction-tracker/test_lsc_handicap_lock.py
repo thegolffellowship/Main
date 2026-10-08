@@ -122,9 +122,12 @@ def test_preview_dial_is_built_from_real_pairs_and_the_lock():
     for i in range(1, 15):
         players[str(i)] = {"team": "austin", "ch": i, "index": float(i)}
         players[str(500 + i)] = {"team": "sa", "ch": 15 - i, "index": float(15 - i)}
-    # a CH tie on SA breaks by index: 514 and 513 both CH 1, 514 lower
+    # Sunday ranks by raw INDEX, not CH (Kerry 10/7): 514 (CH 1, 0.5) then
+    # 513 (CH 1, 1.4); and an Austin player with a low CH but higher index
+    # ranks by his index
     players["513"] = {"team": "sa", "ch": 1, "index": 1.4}
     players["514"] = {"team": "sa", "ch": 1, "index": 0.5}
+    players["2"] = {"team": "austin", "ch": 0, "index": 2.5}
     d = lsc_cup.build_preview_dial(
         {"event_id": 3329, "pairs": pairs, "board_live": True,
          "tee_sheet": {"sat-am": [f"8:{i}0" for i in range(3, 10)], "sun": ["8:30", "8:40"]},
@@ -143,5 +146,6 @@ def test_preview_dial_is_built_from_real_pairs_and_the_lock():
     assert len(sun["matches"]) == 14
     assert sun["matches"][0]["austin"] == [1] and sun["matches"][0]["sa"] == [514]
     assert sun["matches"][1]["sa"] == [513]
+    assert sun["matches"][1]["austin"] == [2] and sun["matches"][2]["austin"] == [3]
     assert [m["tee_time"] for m in sun["matches"][:4]] == ["8:30", "8:30", "8:40", "8:40"]
     assert sun["matches"][6]["pool"] == "low" and sun["matches"][7]["pool"] == "high"

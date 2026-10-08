@@ -360,8 +360,13 @@ either way). CH = whs_round(index × slope/113 + (rating − 72)).
 - Pools in `lsc_matches.pairs` are summed from the lock. No re-derivation on
   10/10. Why it matters: by 10/7 Wilson's live index was 10.8 (CH 6, Flight 1)
   and South's 10.0 (CH 9).
-- Sunday Low 7 | High 7: SA has four at CH 8 (Baker, Mazanec, South, Wilson);
-  by index Wilson is 8th, so High.
+- Sunday Low 7 | High 7 is cut on the RAW INDEX (Kerry 10/7: "Handicap
+  breakouts start with raw indexes not course handicaps"), so no CH tie arises.
+  SA Low 7: Pat Youngs, Mesa, Niester, J. Young, Baker, Mazanec, South. Austin
+  Low 7: L. Youngs, M. Jenkins, Cloer, Cannon, Wetz, J. Wade, W. Hogue (Jay Hogue
+  12.2 is High). Saturday's pair pools stay on combined CH until CoS/Kerry say
+  the rule covers them; by combined raw index Matt/Mike Jenkins (18.2) would be
+  low and Jay/Walter Hogue (23.1) high.
 
 ## Board reads for the Cup screens — v2.525.22 (CoS #1398, Track B)
 

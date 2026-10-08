@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.525.22";
+window.TGF_VERSION = "2.525.23";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.525.23",
+    date: "2026-10-07",
+    title: "Lone Star Cup breakouts sort on the raw index, not the course handicap",
+    changes: [
+      "Kerry 10/7: \"Handicap breakouts start with raw indexes not course handicaps.\" The Sunday Low 7 | High 7 order (build_preview_dial, which seeds the staff preview's demo Singles) now ranks each team by the locked raw index, with course handicap only breaking an exact index tie. For Austin this moves John Wade (8.6) into the Low 7 and Jay Hogue (12.2) into the High 7; San Antonio's Low 7 is unchanged. Guard: test_lsc_handicap_lock.py.",
+    ],
+  },
   {
     version: "2.525.22",
     date: "2026-10-07",
