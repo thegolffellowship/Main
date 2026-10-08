@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.526.0";
+window.TGF_VERSION = "2.526.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.526.1",
+    date: "2026-10-08",
+    title: "Practice-round cards: a blank tee takes the Cup's tee table",
+    changes: [
+      "Live check of v2.526.0: the Friday practice round's scorecards stopped on one gap, David Wetz with no tee (he's new from DFW, so the pairings had no usual band for him). On the Lone Star Cup and its practice round, a player whose pairing carries no tee now takes his band from lsc_tees (Kerry 2026-09-28: each player plays the tee of his usual 2026 band; Wetz = Blue). Only a BLANK tee is filled, and only on LSC events. The Starter Sheet and the cards then print his PH. Guard: test_lsc_print_pack_tees.py."
+    ]
+  },
   {
     version: "2.526.0",
     date: "2026-10-08",

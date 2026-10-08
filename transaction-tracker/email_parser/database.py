@@ -64747,9 +64747,28 @@ def get_event_print_pack(event_id: int, db_path=None) -> dict | None:
     # tee nobody is playing tonight is not a missing handicap — a9.23's
     # Green tees were unresolved and unused, and the sheet still warned.
     _bands_short: set = set()
+    # THE CUP'S TEES (Kerry 2026-09-28, `lsc_tees`: "Each player plays the
+    # tee of his usual 2026 band"). On the Lone Star Cup and its practice
+    # round a player whose pairing carries no tee (David Wetz, DFW, has no
+    # usual band here) takes the band the Cup's tee table gives him, so the
+    # Starter Sheet and the cards print his PH instead of a gap.
+    _lsc_band: dict = {}
+    try:
+        from email_parser.lsc_cup import lsc_report_context as _lsc_ctx
+        _lc = _lsc_ctx(int(event_id), db_path=db_path)
+        if _lc:
+            _lt = (json.loads(get_app_setting("lsc_tees", db_path=db_path) or "{}")
+                   .get(str(_lc["cup_event_id"])) or {})
+            _lsc_band = {str(k): (v or {}).get("band") for k, v in (_lt.get("players") or {}).items()}
+            _bands_lower = {str(b).lower(): b for b in tee_rows}
+            _lsc_band = {k: _bands_lower.get(str(v or "").lower(), v) for k, v in _lsc_band.items() if v}
+    except Exception:
+        logger.exception("Non-fatal: LSC tee table unavailable for %s", event_id)
     for g in groups:
         for p in g["players"]:
             cid = p.get("customer_id")
+            if not (p.get("tee_choice") or "").strip() and cid and _lsc_band.get(str(cid)):
+                p["tee_choice"] = _lsc_band[str(cid)]
             _band = (p.get("tee_choice") or "").strip()
             tee = tee_rows.get(_band)
             if _band and not tee:
