@@ -12747,7 +12747,11 @@ def _lsc_info_teams() -> list:
     the roster gets the first name too. Empty when the dial has no pairs."""
     from email_parser.score_entry import _json_setting
     dial = _json_setting("lsc_matches")
-    pairs = dial.get("pairs") or {}
+    raw = dial.get("pairs") or {}
+    # The block also carries notes ("rule", "source"); only the two team
+    # lists are pairs.
+    pairs = {k: [p for p in raw.get(k) or [] if isinstance(p, dict)]
+             for k in ("austin", "sa") if isinstance(raw.get(k), list)}
     cids = {int(c) for t in pairs.values() for p in t for c in (p.get("cids") or [])}
     names = {}
     if cids:

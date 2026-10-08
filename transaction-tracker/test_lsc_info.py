@@ -23,6 +23,7 @@ for cid, f, l in [(9001, "Neal", "Cloer"), (9002, "John", "Wade"), (9003, "Matt"
     c.execute("INSERT INTO customers (customer_id, first_name, last_name) VALUES (?,?,?)", (cid, f, l))
 c.commit(); c.close()
 db.set_app_setting("lsc_matches", json.dumps({"event_id": 3329, "pairs": {
+    "rule": "Fixed two-person teams (a note, as on the live dial)", "source": "CoS #1343",
     "austin": [{"id": "A1", "cids": [9001, 9002], "pool": "low", "combined_ch": 13},
                {"id": "A2", "cids": [9003, 9004], "pool": "high", "combined_ch": 18}],
     "sa": [{"id": "S1", "cids": [9011, 9012], "pool": "low", "combined_ch": 2},

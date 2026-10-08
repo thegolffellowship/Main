@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.525.25";
+window.TGF_VERSION = "2.525.26";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.525.26",
+    date: "2026-10-08",
+    title: "Lone Star Cup Event Info: TEAMS reads the live pairs",
+    changes: [
+      "The live Cup dial's pairs block carries notes (rule, source) beside the two team lists, and 2.525.25 read those notes as teams, so TEAMS came up empty on the live site. It now reads only the Austin and San Antonio lists. The test fixture carries the same notes."
+    ]
+  },
   {
     version: "2.525.25",
     date: "2026-10-08",
