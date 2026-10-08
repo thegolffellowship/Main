@@ -5549,6 +5549,53 @@ def cup_signs_page(event_id):
     return render_template("cup_signs.html", sheets=sheets)
 
 
+def _cup_draw_payload(event_id):
+    from email_parser import lsc_draw
+    return {"pools": lsc_draw.pools(event_id), "state": lsc_draw.state(event_id)}
+
+
+@app.route("/events/<int:event_id>/cup-draw")
+@require_role("admin")
+def cup_draw_page(event_id):
+    """THE LONE STAR CUP DRAW (Kerry 10/8 via CoS #1432: "Being able to push
+    live immediately would be much cooler"). The Chief of Staff's draw board,
+    ported as is; entrants from the live pairs and the handicap lock, every
+    landed match written into lsc_matches (email_parser/lsc_draw.py). Admin
+    only; screen-shared on the draw Zoom."""
+    return render_template("cup_draw.html", event_id=event_id, data=_cup_draw_payload(event_id))
+
+
+@app.route("/api/events/<int:event_id>/cup-draw")
+@require_role("admin")
+def api_cup_draw(event_id):
+    return jsonify(_cup_draw_payload(event_id))
+
+
+@app.route("/api/events/<int:event_id>/cup-draw/land", methods=["POST"])
+@require_role("admin")
+def api_cup_draw_land(event_id):
+    from email_parser import lsc_draw
+    d = request.get_json(silent=True) or {}
+    res = lsc_draw.land(event_id, str(d.get("session") or ""), str(d.get("pool") or ""),
+                        str(d.get("a") or ""), str(d.get("s") or ""), actor="cup-draw (admin)")
+    if res.get("error"):
+        return jsonify(res), 409
+    res["state"] = lsc_draw.state(event_id)
+    return jsonify(res)
+
+
+@app.route("/api/events/<int:event_id>/cup-draw/clear", methods=["POST"])
+@require_role("admin")
+def api_cup_draw_clear(event_id):
+    from email_parser import lsc_draw
+    d = request.get_json(silent=True) or {}
+    res = lsc_draw.clear(event_id, str(d.get("session") or ""), actor="cup-draw (admin)")
+    if res.get("error"):
+        return jsonify(res), 409
+    res["state"] = lsc_draw.state(event_id)
+    return jsonify(res)
+
+
 @app.route("/events/<int:event_id>/cup-preview")
 @require_role("admin")
 def cup_preview_page(event_id):

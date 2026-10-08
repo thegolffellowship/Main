@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.525.28";
+window.TGF_VERSION = "2.525.29";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.525.29",
+    date: "2026-10-08",
+    title: "Lone Star Cup draw page: each match goes live as it is drawn",
+    changes: [
+      "Kerry 10/8 (CoS #1432): \"Can't you set up the draw to automatically go to the matches for this weekend on the tracker rather than copying here? Being able to push live immediately would be much cooler.\" /events/3329/cup-draw (admin only) is the Chief of Staff's draw board ported as is: FOURBALL, FOURSOMES and SINGLES tabs, Austin left and San Antonio right with each entrant's locked index, the spin, and the same rules: FOURSOMES opens only after FOURBALL's pool is drawn, never repeats a FOURBALL pairing, and looks ahead so the last match can't be forced into a repeat.",
+      "Entrants come from the Tracker, not a list in the page: the Saturday pairs and their low/high pools from the Cup dial (combined raw index), Sunday's Low 7 / High 7 per team from the handicap lock. Each match that lands is written straight into the Cup dial (email_parser/lsc_draw.py), which re-checks every rule first: match number in tee order (Saturday 1-3 low, 4-7 high; Sunday 1-7 low, 8-14 high), tee time from the session start plus 10 minutes (two per tee on Sunday). The first drawn match in a session replaces that session's staged demo matches. Clear this session takes the drawn matches off (clearing FOURBALL clears FOURSOMES too). Every draw and clear is in the agent action log. Copy the full draw stays as the paper fallback."
+    ]
+  },
   {
     version: "2.525.28",
     date: "2026-10-08",
