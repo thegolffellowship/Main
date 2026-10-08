@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.525.26";
+window.TGF_VERSION = "2.525.27";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.525.27",
+    date: "2026-10-08",
+    title: "Cup staff preview: a re-seed re-opens its demo rounds",
+    changes: [
+      "Re-seeding the staff preview after a teardown (to pick up Track B's raw-index pools, #1416) landed on the same PREVIEW rounds, which the teardown had closed, so their scoring links stopped opening and FOURSOMES had no scores. The seed now re-opens its own PREVIEW rounds first (score_entry.reopen_preview_round, PREVIEW rounds only). New checks in test_lsc_preview.py."
+    ]
+  },
   {
     version: "2.525.26",
     date: "2026-10-08",

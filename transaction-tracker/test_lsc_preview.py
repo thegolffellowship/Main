@@ -72,4 +72,13 @@ check("exactly one demo group stays held (the HELD screen)", len(held) == 1, len
 td = lsc_preview.teardown(db_path=DB)
 check("teardown closes the preview rounds and clears the dial", len(td["closed_rounds"]) == 3
       and not db.get_app_setting(se.PREVIEW_DIAL, db_path=DB), td)
+res2 = lsc_preview.seed(apply=True, db_path=DB)
+read2 = se.get_entered_scores(3329, db_path=DB)
+check("a re-seed after teardown re-opens the same PREVIEW rounds",
+      res2.get("seeded") and all(r.get("status") == "open" for r in read2["rounds"]), [r.get("status") for r in read2["rounds"]])
+b2 = {s["id"]: s for s in lsc_cup.preview_board_payload(db_path=DB).get("sessions") or []}
+check("after the re-seed FOURSOMES is in play again with match 1 closed 2&1",
+      b2["sat-pm"]["matches"][0]["state"] == "final" and "2&1" in json.dumps(b2["sat-pm"]["matches"][0])
+      and any(m["state"] == "live" for m in b2["sat-pm"]["matches"]), [m["state"] for m in b2["sat-pm"]["matches"]])
+lsc_preview.teardown(db_path=DB)
 print("ALL PASS" if not F else f"{len(F)} FAILED: {F}"); sys.exit(1 if F else 0)

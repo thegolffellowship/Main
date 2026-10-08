@@ -1962,6 +1962,21 @@ def claim_group(group_id: int, device_id: str, customer_id: int | None,
     return {"granted": True, "kind": kind}
 
 
+def reopen_preview_round(round_id: int, db_path=None) -> bool:
+    """Re-open a PREVIEW round that a teardown closed, so a re-seed (Cup
+    staff preview, CoS #1398) can write into it and its links open again.
+    Refuses anything that is not a PREVIEW round. True when it re-opened."""
+    with _closing(_conn(db_path)) as conn:
+        r = conn.execute("SELECT label, status, event_id FROM se_rounds WHERE id = ?",
+                         (round_id,)).fetchone()
+        if not r or not str(r["label"] or "").startswith(PREVIEW_LABEL) or r["status"] == "open":
+            return False
+        conn.execute("UPDATE se_rounds SET status = 'open' WHERE id = ?", (round_id,))
+        _bump(conn, r["event_id"])
+        conn.commit()
+    return True
+
+
 def release_preview_seed_locks(round_id: int, device_id: str, keep_group_ids=(),
                                db_path=None) -> int:
     """Drop the scorer's seat the PREVIEW seeder held on a demo round's
