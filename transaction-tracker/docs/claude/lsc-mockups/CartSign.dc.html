@@ -1,0 +1,54 @@
+<style>
+/* templates/cart_signs.html, unchanged in shape: letter portrait, two signs
+   to a sheet, hairline where the paper is cut, two enormous Bitter names
+   over one start line, score QR in the top-right corner, event footer.
+   Lone Star Cup changes only the mark (the Cup logo for the TGF mark) and
+   adds a team band so an Austin cart and a San Antonio cart read as such
+   from across the staging area. */
+*{box-sizing:border-box}
+body{margin:0;background:#FFFFFF;color:#111;font-family:"Helvetica Neue",Arial,system-ui,sans-serif}
+.page{width:816px;height:1056px;padding:.4in;background:#fff;display:grid;grid-template-rows:1fr 1fr;gap:.5in;position:relative}
+.page::after{content:"";position:absolute;top:50%;left:.3in;right:.3in;border-top:1px solid #9CA3AF}
+.sign{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:6px 10px;position:relative}
+.sign-logo{width:150px;height:150px;display:block;margin:0 auto 4px}
+.team{font-family:Bitter,Georgia,serif;font-weight:700;font-size:15px;letter-spacing:4px;text-transform:uppercase;color:#fff;padding:6px 22px;border-radius:999px;margin:0 0 12px}
+.aus .team{background:#BF5700}
+.sa .team{background:#4B6274}
+.names{width:100%}
+.nm{font-family:Bitter,Georgia,serif;font-weight:700;font-size:62px;line-height:1.12;white-space:nowrap;overflow:hidden}
+.start{font-family:Bitter,Georgia,serif;font-weight:700;font-size:41px;margin-top:16px;padding-top:13px;border-top:2px solid #111;width:78%;font-variant-numeric:tabular-nums}
+.aus .start{border-top-color:#BF5700}
+.sa .start{border-top-color:#4B6274}
+.match{font-family:Bitter,Georgia,serif;font-weight:600;font-size:17px;color:#444;margin-top:8px}
+.sign-foot{font-family:Bitter,Georgia,serif;font-weight:600;font-size:15px;color:#444;margin-top:11px}
+.qr{position:absolute;top:4px;right:4px;width:.9in;text-align:center}
+.qr svg{width:.9in;height:.9in;display:block;background:#fff}
+.qr-copy{font-family:Bitter,Georgia,serif;font-weight:700;font-size:10px;line-height:1.2;margin-top:3px;letter-spacing:.3px}
+</style>
+<div class="page">
+  <div class="sign aus">
+    <img class="sign-logo" src="./lsc-logo.png" alt="Lone Star Cup 2026">
+    <div class="team">Austin</div>
+    <div class="names"><div class="nm">Chris Cannon</div><div class="nm">Matt Jenkins</div></div>
+    <div class="start">8:40 AM · Hole 1</div>
+    <div class="match">Sat AM Fourball · Match 2 · v Niester / Mesa</div>
+    <div class="qr">
+      <!-- score QR svg (live: s.g.score_qr.svg) -->
+      <div class="qr-copy">Scan to keep score</div>
+    </div>
+    <div class="sign-foot">Lone Star Cup 2026 · The Hideout Golf Club · Sat, Oct 10</div>
+  </div>
+
+  <div class="sign sa">
+    <img class="sign-logo" src="./lsc-logo.png" alt="Lone Star Cup 2026">
+    <div class="team">San Antonio</div>
+    <div class="names"><div class="nm">Kerry Niester</div><div class="nm">Michael Mesa</div></div>
+    <div class="start">8:40 AM · Hole 1</div>
+    <div class="match">Sat AM Fourball · Match 2 · v Cannon / Jenkins</div>
+    <div class="qr">
+      <!-- score QR svg (live: s.g.score_qr.svg) -->
+      <div class="qr-copy">Scan to keep score</div>
+    </div>
+    <div class="sign-foot">Lone Star Cup 2026 · The Hideout Golf Club · Sat, Oct 10</div>
+  </div>
+</div>
