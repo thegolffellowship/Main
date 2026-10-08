@@ -61,11 +61,17 @@ def round_matches(round_id: int, db_path=None) -> dict:
     Star Cup dial (Track B's `lsc_matches`): a session bound to this round
     by se_round. Empty when no match is bound -- stroke play as usual."""
     from email_parser.database import get_app_setting
-    try:
-        raw = get_app_setting("lsc_matches", db_path) or ""
-        dial = json.loads(raw) if raw.strip() else {}
-    except (ValueError, TypeError):
-        return {}
+    # The live Cup dial, plus the staff preview's demo dial (CoS #1398-B):
+    # each binds sessions to its OWN rounds by se_round, so neither can
+    # reach the other's rounds.
+    dial = {"sessions": []}
+    for key in ("lsc_matches", PREVIEW_DIAL):
+        try:
+            raw = get_app_setting(key, db_path) or ""
+            d_ = json.loads(raw) if raw.strip() else {}
+        except (ValueError, TypeError):
+            d_ = {}
+        dial["sessions"] += list(d_.get("sessions") or [])
     out: dict = {}
     # A round-level match list (app setting score_entry_matches,
     # {"<round_id>": [{"id", "format", "sides": [[cid...], [cid...]]}]}):
@@ -285,6 +291,13 @@ def admin_overview(event_id: int, base_url: str | None = None, db_path=None) -> 
             "qr": _qr_dial(event_id, db_path)}
 
 
+def _is_preview_dial_round(round_id: int, db_path=None) -> bool:
+    """True when the staff preview's demo dial binds this round (CoS #1398-B)."""
+    d_ = _json_setting(PREVIEW_DIAL, db_path)
+    return any(sess.get("se_round") is not None and int(sess["se_round"]) == int(round_id)
+               for sess in d_.get("sessions") or [])
+
+
 def _cup_standings(round_id: int) -> dict | None:
     """The Lone Star Cup team standings when this round is bound to a cup
     session (Kerry 2026-09-26: "For Lone Star cup, It should also show an
@@ -293,8 +306,8 @@ def _cup_standings(round_id: int) -> dict | None:
     rm = round_matches(round_id)
     if not any(v.get("session") is not None for v in rm.values()):
         return None
-    from email_parser.lsc_cup import lsc_board_payload
-    b = lsc_board_payload()
+    from email_parser.lsc_cup import lsc_board_payload, preview_board_payload
+    b = preview_board_payload() if _is_preview_dial_round(round_id) else lsc_board_payload()
     if not b.get("configured"):
         return None
     t = b.get("teams") or {}
@@ -1057,10 +1070,19 @@ def _json_setting(key: str, db_path=None) -> dict:
         return {}
 
 
-def cup_seed(event_id: int, *, apply: bool = False, db_path=None) -> dict:
-    dial = _json_setting("lsc_matches", db_path)
+PREVIEW_DIAL = "lsc_preview_matches"
+
+
+def cup_seed(event_id: int, *, apply: bool = False, db_path=None,
+             dial_key: str = "lsc_matches", round_key_prefix: str = "lsc:",
+             label_prefix: str | None = None) -> dict:
+    """Seed one score-entry round per Cup session from a match dial. The
+    staff preview (Kerry 10/7, CoS #1398-B) seeds from PREVIEW_DIAL with
+    round_key_prefix 'lscprev:' and a PREVIEW label, so its demo rounds are
+    never the live session rounds and never publish."""
+    dial = _json_setting(dial_key, db_path)
     if int(dial.get("event_id") or 0) != int(event_id):
-        return {"error": f"lsc_matches is not set for event {event_id}"}
+        return {"error": f"{dial_key} is not set for event {event_id}"}
     tees_cfg = (_json_setting("lsc_tees", db_path).get(str(event_id)) or {})
     by_player = {int(k): v for k, v in (tees_cfg.get("players") or {}).items()}
     with _closing(_conn(db_path)) as conn:
@@ -1072,7 +1094,7 @@ def cup_seed(event_id: int, *, apply: bool = False, db_path=None) -> dict:
         course = _event_course_holes(conn, {**ev, "course_id": course_id}, 18)
         sessions_out = []
         for sess in dial.get("sessions") or []:
-            key = f"lsc:{sess.get('id')}"
+            key = f"{round_key_prefix}{sess.get('id')}"
             r = conn.execute("SELECT id, status FROM se_rounds WHERE event_id = ? AND pairings_holes = ? "
                              "ORDER BY id LIMIT 1", (event_id, key)).fetchone()
             groups, seat_of = [], {}
@@ -1139,9 +1161,11 @@ def cup_seed(event_id: int, *, apply: bool = False, db_path=None) -> dict:
                           for g in so["groups"]]
         if apply and not out["gaps"].get("not_a_customer"):
             rid = so["existing_round"]["round_id"] if so["existing_round"] else create_round(
-                event_id, 18, round_date=so["date"], label=f"{ev.get('item_name') or 'Lone Star Cup'}"
-                f" · {so['label']}", course_holes=course, course_id=course_id,
-                pairings_holes=f"lsc:{so['session']}", created_by="lsc_seed",
+                event_id, 18, round_date=so["date"],
+                label=(f"{label_prefix} · {so['label']}" if label_prefix else
+                       f"{ev.get('item_name') or 'Lone Star Cup'} · {so['label']}"),
+                course_holes=course, course_id=course_id,
+                pairings_holes=f"{round_key_prefix}{so['session']}", created_by="lsc_seed",
                 db_path=db_path)["round_id"]
             if so["existing_round"] and course:
                 set_course_holes(rid, course, db_path=db_path)
@@ -1876,6 +1900,30 @@ def claim_group(group_id: int, device_id: str, customer_id: int | None,
             _bump(conn, g["event_id"])
         conn.commit()
     return {"granted": True, "kind": kind}
+
+
+def release_preview_seed_locks(round_id: int, device_id: str, keep_group_ids=(),
+                               db_path=None) -> int:
+    """Drop the scorer's seat the PREVIEW seeder held on a demo round's
+    groups (Cup staff preview, CoS #1398), except `keep_group_ids` (the one
+    demo group shown as held). Refuses anything that is not a PREVIEW round,
+    and only releases locks held by `device_id`. Returns the count released."""
+    with _closing(_conn(db_path)) as conn:
+        r = conn.execute("SELECT label FROM se_rounds WHERE id = ?", (round_id,)).fetchone()
+        if not r or not str(r["label"] or "").startswith(PREVIEW_LABEL):
+            return 0
+        keep = {int(x) for x in keep_group_ids}
+        gids = [x[0] for x in conn.execute(
+            "SELECT id FROM se_groups WHERE round_id = ?", (round_id,)) if x[0] not in keep]
+        n = 0
+        for gid in gids:
+            n += conn.execute("DELETE FROM se_group_locks WHERE group_id = ? AND device_id = ?",
+                              (gid, device_id)).rowcount
+        if n:
+            ev = conn.execute("SELECT event_id FROM se_rounds WHERE id = ?", (round_id,)).fetchone()
+            _bump(conn, ev[0])
+        conn.commit()
+    return n
 
 
 def write_scores(group_id: int, device_id: str, entered_by: int | None,

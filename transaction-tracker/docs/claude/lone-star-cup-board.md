@@ -361,3 +361,32 @@ either way). CH = whs_round(index × slope/113 + (rating − 72)).
   and South's 10.0 (CH 9).
 - Sunday Low 7 | High 7: SA has four at CH 8 (Baker, Mazanec, South, Wilson);
   by index Wilson is 8th, so High.
+
+## STAFF PREVIEW — /events/3329/cup-preview (Kerry 10/7, CoS #1398)
+
+Every Cup screen on demo rounds behind one jump bar, in a phone frame, with a
+red "PREVIEW · demo scores" band. Admin only, never linked from a member page.
+
+- **Engine:** `email_parser/lsc_preview.py` (`build_dial` / `seed` / `teardown`).
+  The demo lives on its OWN dial `lsc_preview_matches` (`se.PREVIEW_DIAL`) and
+  on score-entry rounds keyed `lscprev:<session>` and labelled
+  `se.PREVIEW_LABEL · FOURBALL|FOURSOMES|SINGLES`, so `entry_publish` refuses
+  them and `entry_mode` (Finding 0) ignores them. The live `lsc_matches` dial,
+  the live rounds and the member board are never touched.
+- **Seed state (#1398):** FOURBALL all 7 matches final with full cards, one
+  picked-up ball and one hole where every ball was picked up (the round stays
+  OPEN so its scoring links still open the finished card; a closed round
+  revokes every link). FOURSOMES live thru 9–13, match 1 closed out 2&1
+  (written net of the board's own pops, so it holds whatever the handicaps).
+  SINGLES not started. The seeder's scorer seat is released on every group
+  except FOURSOMES group 2, which is the HELD screen
+  (`se.release_preview_seed_locks`, PREVIEW rounds only).
+- **Board:** `/api/lsc/board?preview=1` returns `lsc_cup.preview_board_payload()`
+  for an admin/manager session only; anyone else gets the live board. The
+  contests page passes `?preview=1` through and shows the red band.
+  `round_matches` reads both dials; `_cup_standings` uses the preview payload
+  for a preview-bound round.
+- **Bridge:** `scoring-lsc-preview:seed` (dry run) · `seed|apply` · `teardown`.
+- **Screenshots:** `docs/claude/screenshots/lsc-preview/`.
+- **Teardown** before the live round opens Saturday (closes the PREVIEW
+  rounds, clears the dial).

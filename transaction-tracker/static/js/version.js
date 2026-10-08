@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.525.19";
+window.TGF_VERSION = "2.525.20";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.525.20",
+    date: "2026-10-08",
+    title: "Lone Star Cup staff preview: every Cup screen on demo rounds",
+    changes: [
+      "Kerry 10/7 (CoS #1398): /events/3329/cup-preview, admin only. A jump bar (Landing, Scoring FOURBALL / FOURSOMES / SINGLES, QR gate, Who are you, Held, Board, Board open; Skins, Event Info and Cart signs follow) shows each screen in a phone frame under a red PREVIEW · demo scores band. The scoring screens run live against the demo rounds.",
+      "The demo is its own dial (lsc_preview_matches) and its own PREVIEW rounds, so publish refuses them, entry mode ignores them, and the live dial, the live round and the member board never see them. Seed state per #1398: FOURBALL all 7 final with full cards (a picked-up ball and a hole where every ball was picked up), FOURSOMES live thru 9 to 13 with match 1 closed out 2&1, SINGLES not started. Seed and tear down with the scoring-lsc-preview bridge; teardown runs before the live round opens Saturday.",
+      "Board match cards now read FOURBALL / FOURSOMES / SINGLES (was Four-Ball / Chapman), and HOW IT WORKS says AM Fourball · PM Foursomes (#1397-1). A ?match= link now scrolls to its card after the board is shown; before, it scrolled while the board was still hidden and stayed at the top."
+    ]
+  },
   {
     version: "2.525.19",
     date: "2026-10-07",

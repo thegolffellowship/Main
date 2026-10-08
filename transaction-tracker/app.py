@@ -5549,6 +5549,42 @@ def cup_signs_page(event_id):
     return render_template("cup_signs.html", sheets=sheets)
 
 
+@app.route("/events/<int:event_id>/cup-preview")
+@require_role("admin")
+def cup_preview_page(event_id):
+    """THE LONE STAR CUP STAFF PREVIEW (Kerry 10/7, CoS #1398-B): every Cup
+    screen on the demo round, behind a jump bar. Admin only; never linked
+    from a member page. The demo lives on its own dial and PREVIEW rounds
+    (email_parser/lsc_preview.py); seed / tear down with the
+    scoring-lsc-preview bridge."""
+    from email_parser.score_entry import (PREVIEW_DIAL, _json_setting,
+                                          get_entered_scores, make_group_token)
+    dial = _json_setting(PREVIEW_DIAL)
+    links, rounds = {}, {}
+    if int(dial.get("event_id") or 0) == int(event_id):
+        read = get_entered_scores(event_id)
+        by_id = {r["round_id"]: r for r in read.get("rounds") or []}
+        for s in dial.get("sessions") or []:
+            r = by_id.get(s.get("se_round"))
+            if not r:
+                continue
+            rounds[s["label"]] = r["round_id"]
+            gs = r.get("groups") or []
+            if gs:
+                links[s["label"]] = "/member/score?t=" + make_group_token(gs[0]["group_id"])
+            free = [g for g in gs if g.get("lock_state") == "free"]
+            held = [g for g in gs if g.get("lock_state") == "held"]
+            if s["format"] == "chapman" and held:
+                links["HELD"] = "/member/score?t=" + make_group_token(held[0]["group_id"])
+            if s["format"] == "singles" and len(free) > 1:     # not the Scoring S group
+                links["QR"] = "/member/score?t=" + make_group_token(free[-1]["group_id"])
+        pm = next((s for s in dial.get("sessions") or [] if s.get("id") == "sat-pm"), None)
+        if pm and pm.get("matches"):
+            links["BOARD_OPEN"] = "/member/lonestarcup?preview=1&match=" + pm["matches"][0]["id"]
+    return render_template("cup_preview.html", event_id=event_id, seeded=bool(rounds),
+                           rounds=rounds, links=links)
+
+
 @app.route("/api/events/<int:event_id>/group-codes", methods=["GET", "POST"])
 @require_role("manager")
 def api_event_group_codes(event_id):
@@ -12758,9 +12794,13 @@ def api_lsc_board():
     admin/manager sessions get the board (Kerry's preview); the pinless
     member tier sees {configured: false} until Kerry flips it after his
     phone OK."""
-    from email_parser.lsc_cup import lsc_board_payload, strip_money
-    payload = lsc_board_payload()
+    from email_parser.lsc_cup import lsc_board_payload, preview_board_payload, strip_money
     staff = session.get("role") in ("admin", "manager")
+    # ?preview=1: the STAFF PREVIEW's demo board (Kerry 10/7, CoS #1398-B).
+    # Staff only; a member asking for it gets the live board as before.
+    if staff and request.args.get("preview") == "1":
+        return jsonify(preview_board_payload())
+    payload = lsc_board_payload()
     if (payload.get("configured") and not payload.get("board_live")
             and not staff):
         return jsonify({"configured": False})

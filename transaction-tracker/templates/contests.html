@@ -246,6 +246,7 @@
         }
         .top-tab:hover { color: var(--text); }
         /* Cup board session / view toggles (Kerry 2026-10-07, CoS #1351 D3) */
+        .lsc-preview-band { background:#B91C1C; color:#fff; font:700 12px/1 'Bitter',serif; letter-spacing:.12em; text-align:center; padding:8px; border-radius:8px; margin:0 0 10px; }
         .lsc-bd-seg { display: flex; gap: 4px; margin: 12px 0 8px; padding: 4px;
                       background: #EEF1F6; border-radius: 9999px; }
         .lsc-bd-seg button { flex: 1 1 0; min-height: 40px; border: none; border-radius: 9999px;
@@ -2341,7 +2342,7 @@
                             <div class="pr-hiw-sec-h">The Weekend</div>
                             <div class="lsc-sched">
                                 <div class="d"><span class="dt">Friday, October 9</span><span class="fmt">Practice Round</span></div>
-                                <div class="d"><span class="dt">Saturday, October 10</span><span class="fmt">AM Fourball &middot; PM Chapman</span></div>
+                                <div class="d"><span class="dt">Saturday, October 10</span><span class="fmt">AM Fourball &middot; PM Foursomes</span></div>
                                 <div class="d"><span class="dt">Sunday, October 11</span><span class="fmt">Singles</span></div>
                             </div>
                         </div>
@@ -2859,10 +2860,20 @@
         if (!box) return;
         let d;
         try {
-            const res = await fetch("/api/lsc/board");
+            // ?preview=1 (staff only, server-gated): the Cup STAFF PREVIEW's
+            // demo board (CoS #1398-B); a member gets the live board.
+            const pv = new URLSearchParams(location.search).get("preview") === "1";
+            const res = await fetch(pv ? "/api/lsc/board?preview=1" : "/api/lsc/board");
             d = await res.json();
         } catch (e) { return; }                    // quiet: board is optional
         if (!d || !d.configured) { box.style.display = "none"; return; }
+        if (d.preview && !$("lsc-preview-band")) {
+            const band = document.createElement("div");
+            band.id = "lsc-preview-band";
+            band.className = "lsc-preview-band";
+            band.textContent = "PREVIEW · demo scores";
+            box.parentNode.insertBefore(band, box);
+        }
         lscBoardRender(box, d);
         box.style.display = "";
         // Live poll: refetch every 20s while a match is live and the tab
@@ -2932,9 +2943,10 @@
                     eventName: null, gg: m,
                 };
                 if (live) o.liveLead = mpLiveLead(m, aName, bName);
-                const fmtLbl = { singles: "Singles", fourball: "Four-Ball",
-                                 chapman: "Chapman", foursomes: "Chapman",
-                                 alternate_shot: "Chapman" }[sess.format] || "";
+                // Session titles are FOURBALL · FOURSOMES · SINGLES everywhere (#1397-1).
+                const fmtLbl = { singles: "Singles", fourball: "Fourball",
+                                 chapman: "Foursomes", foursomes: "Foursomes",
+                                 alternate_shot: "Foursomes" }[sess.format] || "";
                 const status = m.state === "final" ? "FINAL"
                     : live ? ((o.liveLead && o.liveLead.thru > 0)
                               ? `LIVE · thru ${o.liveLead.thru}`
@@ -3034,7 +3046,9 @@
             if (el && wantM === id && !box.dataset.lscMatchOpened) {
                 box.dataset.lscMatchOpened = "1";
                 el.parentNode.insertBefore(el, el.parentNode.querySelector(".mp-match-card"));
-                try { el.scrollIntoView({block: "start", behavior: "smooth"}); } catch (e) { /* older browsers */ }
+                // After this render returns: the caller un-hides the box
+                // only then, and a hidden box does not scroll.
+                setTimeout(() => { try { el.scrollIntoView({block: "start", behavior: "smooth"}); } catch (e) { /* older browsers */ } }, 50);
             }
         });
         // Tap-to-open scorecards need no wiring here: the Match Play

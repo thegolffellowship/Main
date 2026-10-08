@@ -1861,6 +1861,7 @@ def _scoring_dispatch_inner(url: str, extract: str):
       scoring-entry-parity:<event_id>  read-only: entered gross vs the GG cards on the event, per player (customer_id) and hole
       scoring-tgf-event-ensure:<id>[,<id>...][|apply]  every Tracker event gets its tgf_events row (the home payouts hang off), from the Tracker event, events_id stamped (CA #786 GO 2); dry run by default
       scoring-lsc-results[:freeze[|force]|:clear]  Lone Star Cup final-results snapshot (lsc_results): status, freeze (refused while anything is open unless force), clear
+      scoring-lsc-preview[:seed[|apply]|:teardown]  the Cup STAFF PREVIEW demo rounds (own dial, PREVIEW rounds; /events/3329/cup-preview)
       scoring-lsc-check  read-only check of the lsc_matches pairings (per session matches, points total, problems) before a change goes live
       scoring-course-card:<course_id>[|<card json>[|apply]]  read a course's card as held, or validate/plan/load one from the printed card (tees, bands, rating/slope incl. front/back nines, par/SI/yardage), source course_card (CA #786 GO 3)
       scoring-membership-price:<term_id>|<amount>[|apply]  set price_paid on one membership term (dry run by default, audited)
@@ -3756,6 +3757,23 @@ def _scoring_dispatch_inner(url: str, extract: str):
                     f"blockers={len(res.get('blockers') or [])}")
                 return json.dumps(res, indent=2, default=str)
             return json.dumps({"error": "use '', 'freeze', 'freeze|force' or 'clear'"})
+        if cmd == "scoring-lsc-preview":
+            # The Cup STAFF PREVIEW's demo rounds (Kerry 10/7, CoS #1398):
+            # "seed" = dry run, "seed|apply" writes the lsc_preview_matches
+            # dial + PREVIEW rounds, "teardown" closes them and clears the
+            # dial. Never touches lsc_matches or a live round.
+            from email_parser import lsc_preview as _lp
+            _a = [x.strip() for x in (arg or "seed").split("|")]
+            if _a[0] == "teardown":
+                res = _lp.teardown()
+            elif _a[0] == "seed":
+                res = _lp.seed(apply="apply" in _a[1:])
+            else:
+                return json.dumps({"error": "use 'seed', 'seed|apply' or 'teardown'"})
+            if _a[0] == "teardown" or "apply" in _a[1:]:
+                db.log_agent_action("mcp-claude", "scoring-lsc-preview",
+                                    f"{'|'.join(_a)} -> {json.dumps(res.get('rounds') or res, default=str)[:300]}")
+            return json.dumps(res, indent=2, default=str)
         if cmd == "scoring-lsc-check":
             # Read-only check of the lsc_matches pairings before they go
             # live (a withdrawal or the odd player changed at the course):
