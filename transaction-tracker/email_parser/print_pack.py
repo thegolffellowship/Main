@@ -90,7 +90,10 @@ def build_event_print_pack(render, event_id: int, static_dir: str,
         return None
     htmls: list[tuple[str, str]] = []
     sheet_pack = None
+    _no_games = db.event_games_off(ev)
     for slug, template, builder, key in PRINT_PACK_PARTS:
+        if _no_games and slug in ("divisions-flights", "proximity-markers"):
+            continue   # no games at this event: no game sheets (Kerry 10/8)
         ctx = getattr(db, builder)(int(event_id), db_path=db_path)
         if not ctx:
             continue

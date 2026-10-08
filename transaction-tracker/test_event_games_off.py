@@ -71,3 +71,20 @@ def test_the_page_and_reports_follow_the_same_switch():
     assert "if (!eventGamesOff(ev)) {" in ev          # REPORTS hides the game reports
     ss = open(os.path.join(here, "templates", "starter_sheet.html")).read()
     assert ss.count("pack.get('games_off')") >= 3
+
+
+def test_the_bound_pack_skips_the_game_sheets(gdb):
+    from email_parser import print_pack
+    seen = []
+    def render(tpl, **ctx):
+        seen.append(tpl)
+        return "<html></html>"
+    import email_parser.print_pack as pp
+    orig = pp._render_pdf_chromium
+    pp._render_pdf_chromium = lambda htmls, static_dir: (b"%PDF", [{"slug": s, "pages": 1} for s, _ in htmls], "stub")
+    try:
+        print_pack.build_event_print_pack(render, 3330, ".", db_path=gdb, allow_gaps=True)
+    finally:
+        pp._render_pdf_chromium = orig
+    assert "starter_sheet.html" in seen                     # the pack did render
+    assert "divisions_flights.html" not in seen and "proximity_markers.html" not in seen

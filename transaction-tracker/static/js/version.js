@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.526.8";
+window.TGF_VERSION = "2.526.9";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.526.9",
+    date: "2026-10-08",
+    title: "The bound print pack skips the game sheets on a no-games event",
+    changes: [
+      "Follow-up to v2.526.4 (Kerry 10/8: \"No games this event, so anything related to them like Cart Net should hide or turn off\"). The REPORTS tab already hid Divisions & Flights and Proximity on a no-games event, but the bound print pack still bound both as empty pages. The evening-before routine mails that pack. The pack now leaves them out when database.event_games_off is true, the same switch as everywhere else. Guard: test_event_games_off.py.",
+      "Data, same evening, on Kerry's word (\"Switch John Wade to 50-64 White tees for this whole weekend\"): John Wade (4) is on the White tees (50-64) for the practice round (his 3330 row) and the Cup (lsc_tees). His locked course handicap is now 7, recorded under 'changes' in lsc_handicap_lock (8.6 x 124/113 + (69.7 - 72) = 7.14). His index is unchanged, so the pools and the Sunday flight are unchanged."
+    ]
+  },
   {
     version: "2.526.8",
     date: "2026-10-08",
