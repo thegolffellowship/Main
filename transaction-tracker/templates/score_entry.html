@@ -36,13 +36,17 @@
         .se-pill { height: 56px; border-radius: 48px; font-size: 17px; font-weight: 600; font-family: inherit;
                    width: 100%; cursor: pointer; }
         .se-pill.go { border: none; background: #0d7556; color: #FFFFFF; font-weight: 700; }
-        .se-teamscore { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 10px; margin: 10px 0 2px; padding: 12px 14px; }
-        .se-teamscore .lbl { grid-column: 1 / -1; font-size: 11.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #6B7280; }
-        .se-teamscore .tm { display: flex; align-items: center; gap: 8px; font-size: 15px; color: #374151; }
-        .se-teamscore .tm b { font-family: Bitter, Georgia, serif; font-size: 26px; line-height: 1; font-variant-numeric: tabular-nums; }
-        .se-teamscore .tm.au b { color: #BF5700; }
-        .se-teamscore .tm.sa { justify-content: flex-end; }
-        .se-teamscore .tm.sa b { color: #4B6274; }
+        .se-tscore { display: flex; justify-content: space-between; align-items: center; padding: 8px 14px; margin: 8px 0 2px; }
+        .se-tscore .nums { display: flex; gap: 14px; align-items: baseline; font: 800 20px Bitter, Georgia, serif; }
+        .se-tscore .nums .au { color: #BF5700; } .se-tscore .nums .sa { color: #4B6274; }
+        .se-hiw { margin: 12px 0 2px; text-align: center; }
+        .pr-hiw-link { display: inline-flex; align-items: center; height: 30px; padding: 0 14px; background: #E87C3E; border: none;
+                       border-radius: 9999px; cursor: pointer; color: #fff; text-decoration: none;
+                       font: 700 11px/1 Bitter, Georgia, serif; letter-spacing: 1px; text-transform: uppercase; }
+        .pr-hiw-link:hover { background: #D06B2E; }
+        .se-tscore { display: flex; justify-content: space-between; align-items: center; padding: 8px 14px; margin: 8px 0 2px; }
+        .se-tscore .nums { display: flex; gap: 14px; align-items: baseline; font: 800 20px Bitter, Georgia, serif; }
+        .se-tscore .nums .au { color: #BF5700; } .se-tscore .nums .sa { color: #4B6274; }
         .se-hiw { margin: 12px 0 2px; text-align: center; }
         .pr-hiw-link { display: inline-flex; align-items: center; height: 30px; padding: 0 14px; background: #E87C3E; border: none;
                        border-radius: 9999px; cursor: pointer; color: #fff; text-decoration: none;
@@ -687,7 +691,11 @@
         const maxText = (n) => `Maximum allowed is triple bogey (${hiOf(n)}).`;
         // Kerry 2026-09-26: "Remove the preview text." A PREVIEW round's label
         // is left off the eyebrow (the admin page still marks it PREVIEW).
-        const eyebrow = () => [card.round_label, card.group_num != null ? "Group " + card.group_num : null].filter(Boolean).join(" · ");
+        const matchNos = () => {
+            const ids = (card.match_status || []).filter((m) => m.cup).map((m) => String(m.match_id || "").match(/(\d+)\s*$/)).filter(Boolean).map((x) => x[1]);
+            return ids.length ? (ids.length > 1 ? "Matches " + ids.join(" & ") : "Match " + ids[0]) : null;
+        };
+        const eyebrow = () => [card.round_label, card.group_num != null ? "Group " + card.group_num : null, matchNos()].filter(Boolean).join(" · ");
 
         // ── screens ─────────────────────────────────────────────────────
         function render() {
@@ -832,7 +840,7 @@
                 // already obvious who I'm playing because of the above matches,
                 // so vs [Name] doesn't need to be there"; no format prose on a
                 // scoring screen, so a pair's row carries no "Team · one ball").
-                const meta2 = [s.team ? null : (teeOf(s.cid).name || "").replace(/\s*Tees?$/i, "") || null,
+                const meta2 = [s.team ? teamPh(s.cids) : (teeOf(s.cid).name || "").replace(/\s*Tees?$/i, "") || null,
                                !s.team && s.ph != null ? "PH " + s.ph : null].filter(Boolean).join(" · ");
                 return `<div class="se-row" data-key="${s.key}">${teeBar(s.cids)}
                     <div class="se-who"><div class="se-name"><span class="nm">${esc(s.name)}</span>${mtag(s.cids)}</div><div class="se-meta">${esc(meta2)}</div></div>
@@ -855,8 +863,7 @@
                 ${hio}
                 ${maxNote ? `<div class="se-warn">${ICON.warn}<span>${esc(maxNote)}</span></div>` : ""}
                 <div class="se-stack">${rows}</div>
-                ${teamBallLine(hole)}
-                ${teamScoreBox()}
+                ${teamScoreBox(hole)}
                 <div class="se-lblrow"><span class="se-lbl">Group card</span><span class="se-keepnote">${ICON.pen}<span>You're keeping score</span></span></div>
                 <div class="se-strip" style="margin-top:6px;grid-template-columns:repeat(${Math.min(order.length, 9)}, minmax(0, 1fr))">${cells}</div>
                 ${hiwPill()}
@@ -869,34 +876,6 @@
                 </div></div></div>`;
         }
 
-        // FOUR-BALL: what each side's team ball would be on this hole, from
-        // the two gross scores as they go in (Kerry 2026-10-07, #1351 D2:
-        // "slots for both players to enter raw gross scores, or X's if
-        // player B picked up, but then the visual of what their team score
-        // would be"). Net = gross less the player's own match strokes on the
-        // hole, from the match engine's allocation the card carries
-        // (match_status[].strokes); an X never counts; the lower net is the
-        // ball. Nothing is guessed: a partner with no score yet shows as such.
-        function teamBallLine(n) {
-            const fb = (card.match_status || []).filter((m) => m.format === "fourball" && m.sides.some((sd) => sd.length === 2));
-            if (!fb.length) return "";
-            const sides = fb.map((m) => m.sides.map((sd, k) => {
-                const balls = sd.map((cid) => {
-                    const key = "c:" + cid, cur = key in draft ? {v: draft[key]} : value(key, n);
-                    const x = key in draftX ? draftX[key] : isX(key, n, [cid]);
-                    const st = ((m.strokes || {})[String(cid)] || {})[String(n)] || 0;
-                    return {cid, v: cur.v, x, net: cur.v == null || x ? null : cur.v - st, st};
-                });
-                const live = balls.filter((b_) => b_.net != null);
-                const best = live.length ? live.reduce((a, b_) => (b_.net < a.net ? b_ : a)) : null;
-                const names = sd.map((cid) => first(byId(cid).display_name) || "#" + cid).join(" & ");
-                const txt = best ? `${best.net}${best.st ? " net" : ""} <span class="se-tb-who">${esc(first(byId(best.cid).display_name) || "")}</span>`
-                          : balls.every((b_) => b_.x) ? "X" : "–";
-                return `<div class="se-tb-side ${k === 0 ? "au" : "sa"}"><span class="se-tb-nm">${esc(names)}</span><b>${txt}</b></div>`;
-            }).join(""));
-            return `<div class="se-teamball"><span class="se-tb-lbl">Team ball · hole ${n}</span>${sides.join("")}</div>`;
-        }
-
         // The Cup session this round is bound to, in Kerry's words (#1397-1:
         // FOURBALL, FOURSOMES, SINGLES; "Chapman" only describes the format).
         function cupSession() {
@@ -906,16 +885,43 @@
             const title = f === "fourball" ? "FOURBALL" : (f === "singles" ? "SINGLES" : "FOURSOMES");
             return {title, anchor: title.toLowerCase(), cs};
         }
-        // TEAM SCORE box under the rows: the label and the two numbers, this
-        // session's points (Kerry 2026-10-07, #1398-C1; the strip above keeps
-        // the overall). Nothing else goes in it.
-        function teamScoreBox() {
-            const sx = cupSession();
-            if (!sx) return "";
-            const half = (x) => { const w = Math.floor(x), f = x - w; return (w || f === 0 ? String(w) : "") + (f >= 0.5 ? "½" : ""); };
-            return `<div class="se-box se-teamscore"><span class="lbl">Team score · ${sx.title}</span>
-                <span class="tm au"><span>Austin</span><b>${half(sx.cs.session_austin || 0)}</b></span>
-                <span class="tm sa"><b>${half(sx.cs.session_sa || 0)}</b><span>San Antonio</span></span></div>`;
+        // TEAM SCORE · HOLE N (mockup Main / ScoringFoursomes; Kerry #1351 D2
+        // "the visual of what their team score would be", #1398-C1: the box
+        // carries the label and the two numbers, nothing else). FOURBALL: each
+        // side's best net ball on this hole from the gross scores as they go
+        // in, net = gross less that player's own match strokes on the hole
+        // (the engine's allocation, match_status[].strokes); an X never
+        // counts. FOURSOMES: each pair's one ball less the team's strokes.
+        // SINGLES: no box. A side with no score yet shows "–".
+        function teamScoreBox(n) {
+            const m = (card.match_status || []).find((x) => x.format === "fourball" || x.format === "chapman" || x.format === "foursomes");
+            if (!m) return "";
+            const subs = subjects();
+            const sideNet = (sd, k) => {
+                const balls = [];
+                if (m.format === "fourball") {
+                    sd.forEach((cid) => {
+                        const key = "c:" + cid, cur = key in draft ? {v: draft[key]} : value(key, n);
+                        const x = key in draftX ? draftX[key] : isX(key, n, [cid]);
+                        const st = ((m.strokes || {})[String(cid)] || {})[String(n)] || 0;
+                        balls.push({v: cur.v, x, net: cur.v == null || x ? null : cur.v - st});
+                    });
+                } else {
+                    const sub = subs.find((s_) => s_.cids.length === 2 && sd.every((c) => s_.cids.includes(c))) || subs.find((s_) => sd.includes(s_.cids[0]));
+                    if (sub) {
+                        const cur = sub.key in draft ? {v: draft[sub.key]} : value(sub.key, n);
+                        const x = sub.key in draftX ? draftX[sub.key] : isX(sub.key, n, sub.cids);
+                        const st = ((m.strokes || {})[String(sd[0])] || {})[String(n)] || 0;
+                        balls.push({v: cur.v, x, net: cur.v == null || x ? null : cur.v - st});
+                    }
+                }
+                const live = balls.filter((b_) => b_.net != null);
+                if (live.length) return String(Math.min(...live.map((b_) => b_.net)));
+                return balls.length && balls.every((b_) => b_.x) ? "X" : "–";
+            };
+            const aus = sideNet(m.sides[0], 0), sa = sideNet(m.sides[1], 1);
+            return `<div class="se-box se-tscore"><div class="se-lbl">Team score · hole ${n}</div>
+                <div class="nums"><span class="au">AUS ${aus}</span><span class="sa">SA ${sa}</span></div></div>`;
         }
         // HOW IT WORKS, one tap from the scoring screen (Kerry 2026-10-07,
         // #1398-C2: "I do like the HOW IT WORKS buttons being immediately
@@ -924,7 +930,18 @@
         function hiwPill() {
             const sx = cupSession();
             if (!sx) return "";
-            return `<div class="se-hiw"><a class="pr-hiw-link" href="/member/lonestarcup/info#${sx.anchor}">How It Works</a></div>`;
+            return `<div class="se-hiw"><a class="pr-hiw-link" href="/member/lonestarcup/info#${sx.anchor}">How it works · ${sx.title}</a></div>`;
+        }
+
+        // A pair's row carries the TEAM's handicap after the session allowance
+        // (mockup ScoringFoursomes "Team PH 9"), from the engine's side_hcp.
+        function teamPh(cids) {
+            const key = cids.slice().sort((a, b) => a - b).join(",");
+            for (const m of card.match_status || []) {
+                const k = m.sides.findIndex((sd) => sd.slice().sort((a, b) => a - b).join(",") === key);
+                if (k >= 0 && m.side_hcp && m.side_hcp[k] != null && !Array.isArray(m.side_hcp[k])) return "Team PH " + m.side_hcp[k];
+            }
+            return null;
         }
 
         function stripCells(order, current) {
@@ -954,9 +971,13 @@
             if (!ms.length) return "";
             const half = (x) => { const w = Math.floor(x), f = x - w; return (w || f === 0 ? String(w) : "") + (f >= 0.5 ? "½" : ""); };
             const cs = card.cup_standings;
+            // Under each team: THIS SESSION's points in Kerry's title (mockup
+            // Main: "Fourball 2"); the big number is the overall. No "live".
+            const sx = cupSession();
+            const sub = (k) => sx ? `${sx.title} ${half(cs["session_" + k] || 0)}` : `live ${half(cs[k + "_projected"])}`;
             const cup = cs ? `${cs.preview ? '<div class="se-warn se-demo">PREVIEW · demo scores</div>' : ""}<div class="se-cup"><span class="lbl">Lone Star Cup</span>
-                <span class="tm aus"><span>Austin<span class="proj">live ${half(cs.austin_projected)}</span></span><b>${half(cs.austin)}</b></span>
-                <span class="tm sa"><span>San Antonio<span class="proj">live ${half(cs.sa_projected)}</span></span><b>${half(cs.sa)}</b></span></div>` : "";
+                <span class="tm aus"><span>Austin<span class="proj">${sub("austin")}</span></span><b>${half(cs.austin)}</b></span>
+                <span class="tm sa"><span>San Antonio<span class="proj">${sub("sa")}</span></span><b>${half(cs.sa)}</b></span></div>` : "";
             return `<div class="se-mstrip">${cup}${ms.map(matchCard).join("")}</div>`;
         }
         // THE STANDARD MATCH VIEW (Kerry 2026-09-26: "like the other match play

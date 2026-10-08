@@ -457,6 +457,9 @@ def _match_status(conn, g) -> list:
                     # four-ball hole screen shows what the team ball would be
                     # as both partners' gross go in)
                     "strokes": d.get("strokes") or {},
+                    # what each side plays off after the session allowance
+                    # (a Chapman pair's one number; the mockup's "Team PH 9")
+                    "side_hcp": [pl.get("handicap") for pl in (d.get("players") or [])],
                     "card": [{"hole": h["hole"], "order": h.get("order"), "w": h["winner"],
                               "g": [h.get("p1_gross"), h.get("p2_gross")],
                               "s": [h.get("p1_strokes") or 0, h.get("p2_strokes") or 0],
