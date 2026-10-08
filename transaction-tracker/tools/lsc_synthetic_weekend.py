@@ -132,13 +132,20 @@ EXPECT_CUP = {"status": "retained", "winner": "sa", "total": 8.0}
 #   PM buyers playing 7,37,35,6,13,130  = 6 -> $150 (315 sits: $25 credit)
 #   SUN buyers playing 7,37,315,13,35,130,6 = 7 -> $175 (4 sits, no buy: nothing)
 EXPECT_POTS = {"am": 15000, "pm": 15000, "sun": 17500}
-# AM team skins (gross best ball), ALL four teams play (#759):
-#   hole 3 M2-SA (6/87 MIXED) 3 unique; hole 9 M2-Austin 3 unique. 2 skins,
-#   $75 each: 6 gets the WHOLE $75 (87 didn't buy); 37 $37.50, 315 $37.50.
-# PM: hole 1 SA-M2 5 (4,4,4 tie) none; 2,4 M1-SA; 7,8 M2-Austin (4/13 MIXED).
-#   4 skins $37.50: 35 $37.50, 6 $37.50, 13 the whole $75.00.
-EXPECT_TEAM_PAY = {"am": {6: 7500, 37: 3750, 315: 3750},
-                   "pm": {35: 3750, 6: 3750, 13: 7500}}
+# Saturday team skins are NET (Kerry 2026-10-07, #1357-1): the session
+# allowance off ZERO (never off the low in the match), one flight; a pair
+# with one buyer pays that buyer the whole skin (#759, #1357-2).
+# AM four-ball 90%: 7:9 (SI1-9) 4:13 (SI1-13) 35:7 130:11 37/315/6/87:5.
+#   Best net per side: holes 1-2, 4-11 tie (3s); hole 3 M2-SA 6 nets 2 (unique);
+#   holes 12-13 M1-Austin 4 nets 3 on his SI12/13 pops (130 picked up on 12)
+#   -> 3 skins, $150 / 3 = $50: 7 gets both M1-Austin skins whole ($100,
+#   4 didn't buy); 6 gets the M2-SA skin whole ($50, 87 didn't buy).
+# PM Chapman 60/40: M1-A 8 (SI1-8), M1-S 7, M2-A 13, M2-S 14.
+#   2, 4 M1-SA (net 2); 7, 8 M2-Austin (net 2); 14 M2-SA (3 v M2-A's 4,
+#   no pop on SI14 for 13); the rest tie -> 5 skins at $30: 35 $30, 6 $30,
+#   13 $60 (4 didn't buy), 130 $30 (87 didn't buy).
+EXPECT_TEAM_PAY = {"am": {7: 10000, 6: 5000},
+                   "pm": {35: 3000, 6: 3000, 13: 6000, 130: 3000}}
 EXPECT_CREDITS = {13: 2500, 315: 2500}          # sit-out wallet credits owed
 
 
