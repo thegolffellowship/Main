@@ -120,6 +120,8 @@ check("the landing carries THIS GROUP by side, Who are you? carries Back, Held c
       'class="se-box se-this"' in tpl and 'data-act="gate-back"' in tpl and "Saved so far" in tpl
       and "There's no timeout and nothing happens by itself." in tpl
       and "Tap your name to keep the card." in tpl)
+check("an event not yet opted in (404 'not open for this event') shows the admin sign-in, like scoring-off does",
+      '/not open (yet|for this event)/' in tpl)
 check("session titles are FOURBALL / FOURSOMES / SINGLES (#1397-1)",
       '"FOURBALL"' in tpl and '"FOURSOMES"' in tpl and '"SINGLES"' in tpl)
 cts = open("templates/contests.html", encoding="utf-8").read()

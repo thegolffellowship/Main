@@ -1413,7 +1413,10 @@
         function load() {
             return api("/api/score-entry/card?t=" + encodeURIComponent(T) + "&device_id=" + encodeURIComponent(DEVICE))
                 .then(({status, j}) => {
-                    closedGate = status === 404 && /not open yet/.test(j.error || "");
+                    // Both closed doors show the admin sign-in: scoring off for
+                    // members ("not open yet") and the per-event opt-in
+                    // ("not open for this event", app._se_event_gate).
+                    closedGate = status === 404 && /not open (yet|for this event)/.test(j.error || "");
                     if (status !== 200) { errMsg = j.error || "This scoring link isn't working."; card = null; render(); return; }
                     card = j; errMsg = "";
                     if (who && !card.players.some((p) => p.customer_id === who)) who = null;

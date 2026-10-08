@@ -5,7 +5,8 @@ window.TGF_CHANGELOG = [
     date: "2026-10-08",
     title: "FOLLOW THE CUP on a PREVIEW demo round opens the staff preview board",
     changes: [
-      "A demo round's matches live on the staff preview board (/api/lsc/board?preview=1, Tracker Build v2.525.22), not the member board, so FOLLOW THE CUP from a PREVIEW round went to a board that had no such match and nothing expanded (found preparing Kerry's 10/8 dry-run links, #1434). The scanned-link landing now adds preview=1 to the FOLLOW target when the card's cup standings are flagged preview; live rounds are unchanged. Guard: test_cup_signs template contract."
+      "A demo round's matches live on the staff preview board (/api/lsc/board?preview=1, Tracker Build v2.525.22), not the member board, so FOLLOW THE CUP from a PREVIEW round went to a board that had no such match and nothing expanded (found preparing Kerry's 10/8 dry-run links, #1434). The scanned-link landing now adds preview=1 to the FOLLOW target when the card's cup standings are flagged preview; live rounds are unchanged. Guard: test_cup_signs template contract.",
+      "The per-event opt-in door now shows the admin sign-in too. An event not yet listed in score_entry_events answers the card read with 404 'score entry is not open for this event' (app._se_event_gate, Kerry 9/28), but the phone only recognised the scoring-off door ('not open yet'), so a staff phone without a Tracker session saw a bare error and no way in (found preparing the 10/8 dry run: 3329 is not opted in yet). Both doors now show 'Tracker admin? Sign in to preview'."
     ]
   },
   {
