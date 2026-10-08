@@ -26660,6 +26660,59 @@ def update_course(course_id: int, fields: dict, db_path: str | Path = DB_PATH) -
         return dict(out)
 
 
+def link_handicap_history(player_name: str, customer_id: int, apply: bool = False,
+                          set_by: str = "", db_path=None) -> dict:
+    """LINK A PLAYER'S HANDICAP HISTORY TO HIS CUSTOMER BY ID (Kerry
+    2026-10-08: "David Wetz is not a 1st Timer. He's played several years
+    in our currently dormant DFW group. Remove that badge and fix his
+    customer profile accordingly."). His DFW rounds sit in handicap_rounds
+    under his name with no handicap_player_links row, so nothing proves he
+    has played: the roster's first-timer sweep (`_mark_first_timers`)
+    reads played history through that link. This writes the link WITH
+    customer_id (principle 6) and, when rounds exist, records the profile's
+    `first_timer_ever` = 0. Rounds are never touched. Dry run default."""
+    player_name = " ".join(str(player_name or "").split())
+    with _connect(db_path) as conn:
+        c = conn.execute("SELECT customer_id, first_name, last_name, first_timer_ever FROM customers "
+                         "WHERE customer_id = ?", (int(customer_id),)).fetchone()
+        if not c:
+            return {"error": f"customer {customer_id} not found"}
+        rs = conn.execute("SELECT COUNT(*) AS n, MIN(round_date) AS first, MAX(round_date) AS last "
+                          "FROM handicap_rounds WHERE lower(trim(player_name)) = lower(?)",
+                          (player_name,)).fetchone()
+        cur = conn.execute("SELECT player_name, customer_name, customer_id FROM handicap_player_links "
+                           "WHERE lower(trim(player_name)) = lower(?)", (player_name,)).fetchone()
+        if cur and cur["customer_id"] not in (None, int(customer_id)):
+            return {"error": f"'{player_name}' is already linked to customer {cur['customer_id']}"}
+        cname = f"{(c['first_name'] or '').strip()} {(c['last_name'] or '').strip()}".strip()
+        out = {"player_name": player_name, "customer_id": int(customer_id), "customer_name": cname,
+               "rounds": rs["n"], "first_round": rs["first"], "last_round": rs["last"],
+               "existing_link": dict(cur) if cur else None,
+               "first_timer_ever": {"was": c["first_timer_ever"], "now": 0 if rs["n"] else c["first_timer_ever"]},
+               "applied": bool(apply)}
+        if not rs["n"]:
+            out["error"] = f"no handicap rounds under '{player_name}'"
+            return out
+        if not apply:
+            return out
+        if cur:
+            conn.execute("UPDATE handicap_player_links SET customer_id = ?, customer_name = ? "
+                         "WHERE lower(trim(player_name)) = lower(?)", (int(customer_id), cname, player_name))
+        else:
+            conn.execute("INSERT INTO handicap_player_links (player_name, customer_name, customer_id) "
+                         "VALUES (?, ?, ?)", (player_name, cname, int(customer_id)))
+        conn.execute("UPDATE customers SET first_timer_ever = 0 WHERE customer_id = ?", (int(customer_id),))
+        conn.commit()
+    try:
+        log_agent_action(set_by or "mcp-claude", "handicap_history_link",
+                         f"'{player_name}' -> customer {customer_id} ({out['rounds']} rounds "
+                         f"{out['first_round']}..{out['last_round']}); first_timer_ever = 0",
+                         db_path=db_path)
+    except Exception:
+        logger.exception("handicap history link: action log failed (non-fatal)")
+    return out
+
+
 def rename_course(course_id: int, new_name: str, apply: bool = False, set_by: str = "",
                   db_path=None) -> dict:
     """THE ALIAS-AWARE COURSE RENAME (Kerry 2026-10-08: "Yes, rename it to

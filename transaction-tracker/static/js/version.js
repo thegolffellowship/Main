@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.526.7";
+window.TGF_VERSION = "2.526.8";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.526.8",
+    date: "2026-10-08",
+    title: "Link a player's handicap history to his customer by id (David Wetz is not a 1st Timer)",
+    changes: [
+      "Kerry 10/8: \"David Wetz is not a 1st Timer. He's played several years in our currently dormant DFW group. Remove that badge and fix his customer profile accordingly.\" His DFW rounds (2022 to March 2025) sit in handicap history under his name with no link to his customer row. The roster's first-timer check reads past play through that link, so he showed 1T. New database.link_handicap_history (bridge scoring-hcp-history-link:<player name>|<customer_id>[|apply], dry run default, action-logged) writes the link WITH customer_id and sets the profile's first_timer_ever to 0. Rounds are untouched. His old rounds are outside the lookback, so his index of record stays the starting 7.7, and the Cup lock is unchanged. Guard: test_starting_handicap_by_customer.py."
+    ]
+  },
   {
     version: "2.526.7",
     date: "2026-10-08",

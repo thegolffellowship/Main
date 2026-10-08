@@ -1036,3 +1036,19 @@ acquisition_source 'vendor') is the one test. The pairings roster
 (`_event_roster_rows`, so the missing-handicap warning too), `query_customers`
 (unless `include_vendors`) and `set_customer_field` (reported as
 `skipped_vendors`) leave them out.
+
+
+## Linking a player's handicap history by customer_id (v2.526.8, Kerry 2026-10-08)
+
+`database.link_handicap_history(player_name, customer_id, apply)`, with bridge
+`scoring-hcp-history-link:<player name>|<customer_id>[|apply]`. Dry run by
+default; every apply is action-logged.
+
+- **What it does:** writes the `handicap_player_links` row WITH
+  `customer_id`, and sets `customers.first_timer_ever = 0` when rounds exist.
+  Rounds are untouched.
+- **Why it was built:** David Wetz (672) wore a 1T badge because his DFW
+  rounds were never linked. `_mark_first_timers` reads past play through the
+  link.
+- **Effect on his index:** none. A link to rounds outside the lookback keeps
+  the starting index of record.

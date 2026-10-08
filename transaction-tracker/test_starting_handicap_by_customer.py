@@ -61,3 +61,30 @@ def test_unlinked_old_rounds_still_read_the_starting_index_by_customer(hdb):
 def test_as_of_lock_reads_it_too(hdb):
     # The Cup reads the index as of its own date once it has teed off.
     assert db._handicap_index_18_by_customer(hdb, as_of="2026-10-10").get(672) == 7.7
+
+
+def test_linking_his_dfw_history_ends_the_first_timer_badge_and_keeps_his_index(hdb):
+    # Kerry 10/8: "David Wetz is not a 1st Timer. He's played several years
+    # in our currently dormant DFW group. Remove that badge and fix his
+    # customer profile accordingly."
+    c = sqlite3.connect(hdb)
+    c.execute("INSERT INTO events (id, item_name, event_date) VALUES (3330, 'LSC PRACTICE', '2026-10-09')")
+    c.commit()
+    c.close()
+
+    def flagged():
+        rows = [{"customer_id": 672}]
+        with db._connect(hdb) as conn:
+            db._mark_first_timers(conn, 3330, rows)
+        return bool(rows[0].get("is_first_timer"))
+
+    assert flagged()                                   # the bug: no link, no history
+    dry = db.link_handicap_history("David Wetz", 672, db_path=hdb)
+    assert dry["rounds"] == 3 and not dry["applied"] and flagged()
+    db.link_handicap_history("David Wetz", 672, apply=True, db_path=hdb)
+    assert not flagged()
+    with db._connect(hdb) as conn:
+        assert conn.execute("SELECT first_timer_ever FROM customers WHERE customer_id = 672").fetchone()[0] == 0
+    # his old rounds are outside the lookback: the starting 7.7 still governs
+    assert db._handicap_index_18_by_customer(hdb).get(672) == 7.7
+    assert db._handicap_index_18_by_customer(hdb, as_of="2026-10-10").get(672) == 7.7
