@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.525.35";
+window.TGF_VERSION = "2.525.36";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.525.36",
+    date: "2026-10-08",
+    title: "Kerry's new flat Lone Star Cup logo",
+    changes: [
+      "Kerry's flat logo (10/8), transparent outside, in the standard Cup navy #002855, replaces static/lsc-logo.png (2000 x 1651, sha256 87d44d86...). It is a wide wordmark, not a round badge, so the splash plate no longer crops it to a circle, and the cart signs, Event Info header and draw page header fit it to its shape. The splash keeps the standard Cup navy plate behind it; a separate dark version for the splash can drop in when Kerry exports it."
+    ]
+  },
   {
     version: "2.525.35",
     date: "2026-10-08",

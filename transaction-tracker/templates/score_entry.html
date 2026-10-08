@@ -50,17 +50,17 @@
         .se-pill.back { height: 50px; font-size: 15px; }
         /* THE CUP SPLASH: the plate is the standard Cup navy (was the sampled #021A34
            from static/lsc-logo.png, Kerry: "match the navy in the logo"), so
-           a transparent logo melts into it. The round mask hides the white
-           corners of the current square file until the transparent one lands.
+           the transparent logo sits straight on it. The logo is Kerry's flat
+           wide wordmark (10/8), so the plate is no longer a round mask.
            The shimmer is one diagonal sweep of light across the logo. */
         #se-splash { position: fixed; inset: 0; z-index: 1000; background: var(--lsc-navy); display: flex;
                      align-items: center; justify-content: center; cursor: pointer;
                      transition: opacity .25s ease; -webkit-tap-highlight-color: transparent; }
         #se-splash[hidden] { display: none; }
         #se-splash.out { opacity: 0; pointer-events: none; }
-        #se-splash .sp-logo { position: relative; width: min(70vw, 300px); aspect-ratio: 1 / 1;
-                              border-radius: 50%; overflow: hidden; background: var(--lsc-navy); }
-        #se-splash .sp-logo img { width: 100%; height: 100%; display: block; }
+        #se-splash .sp-logo { position: relative; width: min(82vw, 360px); aspect-ratio: 2000 / 1651;
+                              overflow: hidden; background: var(--lsc-navy); }
+        #se-splash .sp-logo img { width: 100%; height: 100%; display: block; object-fit: contain; }
         #se-splash .sp-word { display: none; position: absolute; inset: 0; align-items: center; justify-content: center;
                               flex-direction: column; color: #FFFFFF; text-align: center;
                               font: 700 30px/1.15 Bitter, Georgia, serif; letter-spacing: 2px; }

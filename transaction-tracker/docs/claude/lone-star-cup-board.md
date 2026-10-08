@@ -503,3 +503,9 @@ red #CB102E and the team colors (Austin #BF5700, SA #4B6274) are unchanged;
 TGF surfaces keep their own colors. Left on the old #002868 on purpose (not
 Cup screens): games_payouts.html, snapshot_center.html, the snapshot email
 constant in database.py, and the frozen R6 chase email (chase_email.py).
+
+**Logo, v2.525.36:** `static/lsc-logo.png` is now Kerry's flat wide wordmark
+(10/8; 2000x1651, transparent, navy #002855; sha256
+87d44d864335b83d8897ca7737e5923099cb6a34d6c2f39b0d91d147697d2cfe), replacing the
+round badge (8d771633…). Every `<img>` of it uses `object-fit: contain`; the
+splash plate is no longer a round mask.
