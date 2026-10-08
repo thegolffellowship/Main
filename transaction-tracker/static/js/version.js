@@ -1,13 +1,32 @@
-window.TGF_VERSION = "2.525.20";
+window.TGF_VERSION = "2.525.22";
 window.TGF_CHANGELOG = [
   {
-    version: "2.525.20",
+    version: "2.525.22",
     date: "2026-10-08",
     title: "Lone Star Cup staff preview: every Cup screen on demo rounds",
     changes: [
       "Kerry 10/7 (CoS #1398): /events/3329/cup-preview, admin only. A jump bar (Landing, Scoring FOURBALL / FOURSOMES / SINGLES, QR gate, Who are you, Held, Board, Board open; Skins, Event Info and Cart signs follow) shows each screen in a phone frame under a red PREVIEW · demo scores band. The scoring screens run live against the demo rounds.",
       "The demo is its own dial (lsc_preview_matches) and its own PREVIEW rounds, so publish refuses them, entry mode ignores them, and the live dial, the live round and the member board never see them. Seed state per #1398: FOURBALL all 7 final with full cards (a picked-up ball and a hole where every ball was picked up), FOURSOMES live thru 9 to 13 with match 1 closed out 2&1, SINGLES not started. Seed and tear down with the scoring-lsc-preview bridge; teardown runs before the live round opens Saturday.",
       "Board match cards now read FOURBALL / FOURSOMES / SINGLES (was Four-Ball / Chapman), and HOW IT WORKS says AM Fourball · PM Foursomes (#1397-1). A ?match= link now scrolls to its card after the board is shown; before, it scrolled while the board was still hidden and stayed at the top."
+    ]
+  },
+  {
+    version: "2.525.21",
+    date: "2026-10-08",
+    title: "Cup hole screens: name + tee + PH rows, session Team Score box, HOW IT WORKS pill",
+    changes: [
+      "Kerry 10/7 (CoS #1398-C, the rules of the page): no redundancy on a scoring screen. Player rows now carry name + tee + PH only; the \"vs Name\" line and the pair row's \"Team · one ball\" prose are gone (\"It's already obvious who I'm playing because of the above matches\"). A TEAM SCORE box under the rows carries the label and the two numbers, this SESSION's points (Austin, San Antonio), read from the Cup board's own per-match rollup (cup_standings.session_*), so the phone and the board cannot disagree; the strip above keeps the overall. Session titles in Kerry's words: FOURBALL · FOURSOMES · SINGLES (#1397-1), \"Chapman\" only ever describes the format.",
+      "The scanned-link screens follow the mockups QRLanding / WhoAreYou / Held (CoS #1398-A, Tracker Build's #1406 table: 'QR / Who / Held restyle, Track A's screens'): the landing adds a THIS GROUP box (San Antonio left, Austin right in the Cup; one list on a plain event), 'Group 1 · Match 1 · 18 holes' and the date as Oct 10, 2026; Who are you? carries the rule as its sub-line, the handicap/take-over copy under the names and a Back pill to the two buttons (data-act gate-back clears K.gate); Held says how far the card is ('The group's card is through hole 7.'), promises no timeout, and shows SAVED SO FAR as read-only cells. Screenshots docs/claude/screenshots/lsc-preview/00-landing-held, 01-who, 02-held.",
+      "HOW IT WORKS stays one tap from the scoring screen (#1398-C2): the orange pill under the group card opens Event Info's section for this session's format (/member/lonestarcup/info#fourball|foursomes|singles). Cup rounds only. Guards: test_cup_signs.py (template contract), test_score_entry_ui.py (123 checks; the old 'vs' expectation is replaced by the rule). Screenshots: docs/claude/screenshots/lsc-preview/."
+    ]
+  },
+  {
+    version: "2.525.20",
+    date: "2026-10-07",
+    title: "Four-ball hole screen shows the team ball live; FOLLOW THE CUP opens the right card",
+    changes: [
+      "Kerry 10/7 (#1351 D2): four-ball needs \"slots for both players to enter raw gross scores, or X's if player B picked up, but then the visual of what their team score would be.\" The hole screen now carries a TEAM BALL line under the four rows: each side's best net ball on this hole from the two gross scores as they go in, net = gross less that player's own match strokes on the hole (the engine's allocation, now on the card as match_status[].strokes), an X never counts, a partner with no score yet shows as such. Austin and San Antonio sides in their colours.",
+      "FOLLOW THE CUP (v2.525.19) did not expand the match: the Cup board's matches carry match_id, not id. Fixed; the card opens and scrolls into view, and stays open across the 20 s refresh. Phone UI test 123 checks, test_score_entry, test_cup_signs pass."
     ]
   },
   {

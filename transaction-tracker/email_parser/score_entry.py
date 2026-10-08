@@ -61,18 +61,17 @@ def round_matches(round_id: int, db_path=None) -> dict:
     Star Cup dial (Track B's `lsc_matches`): a session bound to this round
     by se_round. Empty when no match is bound -- stroke play as usual."""
     from email_parser.database import get_app_setting
-    # The live Cup dial, plus the staff preview's demo dial (CoS #1398-B):
-    # each binds sessions to its OWN rounds by se_round, so neither can
-    # reach the other's rounds.
-    dial = {"sessions": []}
-    for key in ("lsc_matches", PREVIEW_DIAL):
-        try:
-            raw = get_app_setting(key, db_path) or ""
-            d_ = json.loads(raw) if raw.strip() else {}
-        except (ValueError, TypeError):
-            d_ = {}
-        dial["sessions"] += list(d_.get("sessions") or [])
+    try:
+        raw = get_app_setting("lsc_matches", db_path) or ""
+        dial = json.loads(raw) if raw.strip() else {}
+    except (ValueError, TypeError):
+        return {}
     out: dict = {}
+    # The staff PREVIEW dial (Track B #1405, CoS #1398-B): demo matches bound
+    # by se_round to DEMO rounds, so Kerry's preview shows the strip and the
+    # Cup points on a round the live dial never names. A session in it binds
+    # only its own demo round; the live dial is untouched.
+    preview = _preview_dial(db_path)
     # A round-level match list (app setting score_entry_matches,
     # {"<round_id>": [{"id", "format", "sides": [[cid...], [cid...]]}]}):
     # matches that are not a Lone Star Cup session -- the preview's demo
@@ -90,23 +89,41 @@ def round_matches(round_id: int, db_path=None) -> dict:
                 out[c] = {"match_id": m.get("id"), "session": None,
                           "format": m.get("format") or "singles", "side": ("a", "b")[i],
                           "partners": [x for x in side if x != c], "opponents": sides[1 - i]}
-    for sess in dial.get("sessions") or []:
-        if sess.get("se_round") is None or int(sess["se_round"]) != int(round_id):
-            continue
-        for m in sess.get("matches") or []:
-            sides = [[int(c) for c in (m.get(k) or [])] for k in ("austin", "sa")]
-            for i, side in enumerate(sides):
-                for c in side:
-                    out[c] = {"match_id": m.get("id"), "session": sess.get("id"),
-                              "format": sess.get("format") or "singles",
-                              "n_holes": int(sess.get("n_holes") or 18),   # the cup engine's default
-                              "side": ("austin", "sa")[i],
-                              "partners": [x for x in side if x != c],
-                              "opponents": sides[1 - i]}
+    for is_preview, d in ((False, dial), (True, preview)):
+        for sess in d.get("sessions") or []:
+            if sess.get("se_round") is None or int(sess["se_round"]) != int(round_id):
+                continue
+            for m in sess.get("matches") or []:
+                sides = [[int(c) for c in (m.get(k) or [])] for k in ("austin", "sa")]
+                for i, side in enumerate(sides):
+                    for c in side:
+                        out[c] = {"match_id": m.get("id"), "session": sess.get("id"),
+                                  "format": sess.get("format") or "singles",
+                                  "n_holes": int(sess.get("n_holes") or 18),   # the cup engine's default
+                                  "side": ("austin", "sa")[i],
+                                  "partners": [x for x in side if x != c],
+                                  "opponents": sides[1 - i],
+                                  "preview": is_preview}
     return out
 
 
 ROUND_MATCHES_SETTING = "score_entry_matches"
+PREVIEW_DIAL_SETTING = "lsc_preview_matches"      # Track B's staff preview dial
+
+
+def _preview_dial(db_path=None) -> dict:
+    from email_parser.database import get_app_setting
+    try:
+        raw = get_app_setting(PREVIEW_DIAL_SETTING, db_path) or ""
+        return json.loads(raw) if raw.strip() else {}
+    except (ValueError, TypeError):
+        return {}
+
+
+def round_is_preview(round_id: int, db_path=None) -> bool:
+    """True when a Cup PREVIEW session (lsc_preview_matches) binds this
+    round: a demo round, flagged on every screen, never the live one."""
+    return any(v.get("preview") for v in round_matches(round_id, db_path=db_path).values())
 
 
 # ---------------------------------------------------------------------------
@@ -291,13 +308,6 @@ def admin_overview(event_id: int, base_url: str | None = None, db_path=None) -> 
             "qr": _qr_dial(event_id, db_path)}
 
 
-def _is_preview_dial_round(round_id: int, db_path=None) -> bool:
-    """True when the staff preview's demo dial binds this round (CoS #1398-B)."""
-    d_ = _json_setting(PREVIEW_DIAL, db_path)
-    return any(sess.get("se_round") is not None and int(sess["se_round"]) == int(round_id)
-               for sess in d_.get("sessions") or [])
-
-
 def _cup_standings(round_id: int) -> dict | None:
     """The Lone Star Cup team standings when this round is bound to a cup
     session (Kerry 2026-09-26: "For Lone Star cup, It should also show an
@@ -306,16 +316,59 @@ def _cup_standings(round_id: int) -> dict | None:
     rm = round_matches(round_id)
     if not any(v.get("session") is not None for v in rm.values()):
         return None
-    from email_parser.lsc_cup import lsc_board_payload, preview_board_payload
-    b = preview_board_payload() if _is_preview_dial_round(round_id) else lsc_board_payload()
+    preview = any(v.get("preview") for v in rm.values())
+    if preview:
+        # the demo round reads the PREVIEW board (Track B #1405), never the
+        # live one; without Track B's reader the strip simply stays off
+        try:
+            from email_parser.lsc_cup import preview_board_payload
+        except ImportError:
+            return None
+        b = preview_board_payload()
+    else:
+        from email_parser.lsc_cup import lsc_board_payload
+        b = lsc_board_payload()
     if not b.get("configured"):
         return None
     t = b.get("teams") or {}
-    return {"austin": (t.get("austin") or {}).get("points", 0.0),
-            "sa": (t.get("sa") or {}).get("points", 0.0),
-            "austin_projected": (t.get("austin") or {}).get("projected", 0.0),
-            "sa_projected": (t.get("sa") or {}).get("projected", 0.0),
-            "points_to_win": b.get("points_to_win")}
+    out = {"austin": (t.get("austin") or {}).get("points", 0.0),
+           "sa": (t.get("sa") or {}).get("points", 0.0),
+           "austin_projected": (t.get("austin") or {}).get("projected", 0.0),
+           "sa_projected": (t.get("sa") or {}).get("projected", 0.0),
+           "points_to_win": b.get("points_to_win")}
+    # THIS SESSION's points (Kerry 2026-10-07, #1398-C1 / #1394: the Team
+    # Score box under the rows carries the label and the two numbers; the
+    # strip keeps the overall). Summed from the board's own per-match
+    # points for the session bound to this round, so the phone and the
+    # board cannot disagree. Projected adds the live leaders.
+    sid = next((v.get("session") for v in rm.values() if v.get("session") is not None), None)
+    for sess in b.get("sessions") or []:
+        if sess.get("id") != sid:
+            continue
+        pts = {"austin": 0.0, "sa": 0.0}
+        proj = {"austin": 0.0, "sa": 0.0}
+        for m in sess.get("matches") or []:
+            mp = m.get("points") or {}
+            for k in pts:
+                pts[k] += float(mp.get(k) or 0)
+                proj[k] += float(mp.get(k) or 0)
+            if m.get("state") == "live":
+                w = m.get("gg_winner_idx")
+                if w == 1:
+                    proj["austin"] += float(b.get("points_win") or 1.0)
+                elif w == 2:
+                    proj["sa"] += float(b.get("points_win") or 1.0)
+                else:
+                    proj["austin"] += float(b.get("points_halve") or 0.5)
+                    proj["sa"] += float(b.get("points_halve") or 0.5)
+        out.update({"session_id": sid, "session_label": sess.get("label"),
+                    "preview": preview,
+                    "session_format": sess.get("format"),
+                    "session_austin": round(pts["austin"], 2), "session_sa": round(pts["sa"], 2),
+                    "session_austin_projected": round(proj["austin"], 2),
+                    "session_sa_projected": round(proj["sa"], 2),
+                    "session_matches": len(sess.get("matches") or [])})
+    return out
 
 
 def _genders(conn, cids: list) -> dict:
@@ -400,6 +453,13 @@ def _match_status(conn, g) -> list:
                     # and pickups for the tap-open card.
                     "full_names": [[full.get(c) or "#%s" % c for c in sd] for sd in sides],
                     "closed_at": d.get("closed_at_order"),
+                    # every player's match strokes by hole (Kerry #1351 D2: the
+                    # four-ball hole screen shows what the team ball would be
+                    # as both partners' gross go in)
+                    "strokes": d.get("strokes") or {},
+                    # what each side plays off after the session allowance
+                    # (a Chapman pair's one number; the mockup's "Team PH 9")
+                    "side_hcp": [pl.get("handicap") for pl in (d.get("players") or [])],
                     "card": [{"hole": h["hole"], "order": h.get("order"), "w": h["winner"],
                               "g": [h.get("p1_gross"), h.get("p2_gross")],
                               "s": [h.get("p1_strokes") or 0, h.get("p2_strokes") or 0],
