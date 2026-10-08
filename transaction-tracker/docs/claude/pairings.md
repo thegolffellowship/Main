@@ -2171,3 +2171,24 @@ search and never re-optimised; and the search was unseeded.
   depth 1, Bourquin + Saldana share a group and a cart, Murphy is never
   seated alone, the same seed gives the same sheet, and the audit on the
   generator's sheet shows zero hard flags.
+
+
+## The saved sheet follows the event (v2.526.3, Kerry 2026-10-08)
+
+Kerry: "Needs to easily update if those things changes without hiding them."
+The case was LSC practice round 3330. The sheet was saved under the 9-hole
+set; an Edit Event made the round 18 holes with 1:30 tee times, and the
+PAIRINGS tab drew only the 18-hole set, so the groups looked deleted.
+
+- **WRITE: `update_event` → `_sheet_follows_event`.**
+  - When the format becomes a single 9 or 18, the seats, `blind_draws` and
+    `event_group_codes` move to that set.
+  - When the start time, interval, count or start type changes, each group
+    whose label was slot *i* of the OLD setup becomes slot *i* of the NEW one.
+    "Group N" placeholders count as slot N.
+  - Hand-typed labels are kept.
+- **READ: `get_event_pairings` → `_sheet_as_event_now`.** A sheet stranded
+  under the other set is served as the event's set, and "Group N" is served as
+  the Nth slot. Every reader agrees, and the next Save persists it.
+- **PAIRINGS tab:** a non-empty set always renders, whatever the format.
+- Guard: `test_sheet_follows_event.py`.

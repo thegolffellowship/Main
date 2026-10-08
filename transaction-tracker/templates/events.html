@@ -7678,10 +7678,14 @@
                     html += '</div>';
                 }
             }
-            if (isCombo || !is18Only) {
+            // A saved set is NEVER hidden by the event's format (Kerry
+            // 2026-10-08: "it deleted my pairings!" — the event became an
+            // 18 and the sheet sat under the 9-hole set; "Needs to easily
+            // update if those things changes without hiding them").
+            if (isCombo || !is18Only || state.groups_9.length) {
                 html += renderPairingGroups(ev, state, '9', state.groups_9);
             }
-            if (isCombo || is18Only) {
+            if (isCombo || is18Only || state.groups_18.length) {
                 html += renderPairingGroups(ev, state, '18', state.groups_18);
             }
             html += renderUnassignedPlayers(ev, state);

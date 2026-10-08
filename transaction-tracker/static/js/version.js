@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.526.2";
+window.TGF_VERSION = "2.526.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.526.3",
+    date: "2026-10-08",
+    title: "The saved pairings follow the event: an edit never hides them",
+    changes: [
+      "Kerry 10/8, on the LSC practice round: \"I went and fixed the event with tee times from 1:30 to 2:00p, but when I saved it, it deleted my pairings!\" and \"Needs to easily update if those things changes without hiding them.\" Nothing had been deleted. The sheet was saved under the 9-hole set while the event was a nine, the edit made it an 18, and the PAIRINGS tab drew only the 18-hole set. The groups were also labelled Group 1-4 from before the event had a start time.",
+      "Now an event edit carries the saved sheet with it (database._sheet_follows_event inside update_event). When the format becomes a single 9 or 18, the seats, blinds and GGID codes move to that set. When the start time, interval, count or start type changes, every group whose label was a computed slot of the old setup takes the same slot of the new one (Group 1-4 at 1:30 = 1:30, 1:40, 1:50, 2:00 PM; moving the start to 2:00 shifts them all). A label typed by hand is kept.",
+      "On read, get_event_pairings serves a sheet left stranded under the other set as the event's set, and serves a 'Group N' placeholder as the event's Nth slot. So the PAIRINGS tab, Starter Sheet, scorecards and cart signs all agree, and the next Save writes it that way. The PAIRINGS tab also never hides a non-empty set, whatever the format says. Guard: test_sheet_follows_event.py."
+    ]
+  },
   {
     version: "2.526.2",
     date: "2026-10-08",

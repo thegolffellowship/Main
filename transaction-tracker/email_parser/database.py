@@ -29929,10 +29929,26 @@ def update_event(event_id: int, fields: dict, db_path: str | Path | None = None)
         if "course" in safe:
             safe["course_id"] = course_id_for_name(conn, safe["course"])
 
+        _before = None
+        if any(k in safe for k in _SHEET_FIELDS):
+            _b = conn.execute("SELECT * FROM events WHERE id = ?", (event_id,)).fetchone()
+            _before = dict(_b) if _b else None
+
         _validate_column_names(list(safe))
         set_clause = ", ".join(f"{col} = ?" for col in safe)
         values = list(safe.values()) + [event_id]
         cursor = conn.execute(f"UPDATE events SET {set_clause} WHERE id = ?", values)
+        if _before is not None:
+            # The saved sheet follows the event (Kerry 10/8: "Needs to easily
+            # update if those things changes without hiding them").
+            try:
+                _after = dict(conn.execute("SELECT * FROM events WHERE id = ?",
+                                           (event_id,)).fetchone())
+                _res = _sheet_follows_event(conn, event_id, _before, _after)
+                if _res["moved"] or _res["relabelled"]:
+                    logger.info("Event %s edit: saved sheet followed (%s)", event_id, _res)
+            except Exception:
+                logger.exception("Non-fatal: saved sheet could not follow event %s", event_id)
         conn.commit()
         return cursor.rowcount > 0
 
@@ -60874,7 +60890,113 @@ def get_event_pairings(event_id: int, db_path=None, roster_rows=None,
     for h, grp_list in result.items():
         for grp in grp_list:
             grp["blinds"] = (blinds.get(h, {}).get(grp["group_num"]) or [])
+    if result:
+        try:
+            with _connect(db_path) as _ec:
+                _evr = _ec.execute("SELECT * FROM events WHERE id = ?", (event_id,)).fetchone()
+            if _evr:
+                result = _sheet_as_event_now(dict(_evr), result)
+        except Exception:
+            logger.exception("Non-fatal: sheet/event alignment failed for %s", event_id)
     return result
+
+
+# ---------------------------------------------------------------------------
+# THE SAVED SHEET FOLLOWS THE EVENT (Kerry 2026-10-08, LSC practice round:
+# "I went and fixed the event with tee times from 1:30 to 2:00p, but when I
+# saved it, it deleted my pairings!" … "Needs to easily update if those
+# things changes without hiding them."). Nothing was deleted: the sheet was
+# saved under the 9-hole set while the event was a nine, the edit made it an
+# 18, and the PAIRINGS tab drew only the 18-hole set. The sheet was also
+# labelled "Group 1".."Group 4" from before the event had a start time.
+# Two layers keep it so:
+#   * WRITE: `update_event` moves the sheet (seats, blinds, GGID codes) to
+#     the event's holes set when the format becomes a single 9 or 18, and
+#     re-labels every group whose label was a computed slot of the OLD
+#     setup to the same slot of the NEW one (a start time, interval or start
+#     type change). A label someone typed by hand is never touched.
+#   * READ: `get_event_pairings` serves a sheet stranded under the other set
+#     as the event's set, and a "Group N" placeholder as the event's Nth
+#     slot, so every reader (PAIRINGS, Starter Sheet, cards, signs) agrees
+#     even for a sheet saved before this rule; the next save makes it so.
+# ---------------------------------------------------------------------------
+
+def _event_single_holes(ev: dict) -> str | None:
+    fmt = (ev.get("format") or "").strip()
+    if fmt in ("18 Holes", "27 Holes"):
+        return "18"
+    if fmt == "9 Holes":
+        return "9"
+    return None
+
+
+_PLACEHOLDER_SLOT_RE = re.compile(r"^\s*Group\s+(\d+)\s*$", re.I)
+
+
+def _sheet_as_event_now(ev: dict, sheet: dict) -> dict:
+    key = _event_single_holes(ev)
+    if key:
+        other = "9" if key == "18" else "18"
+        if not sheet.get(key) and sheet.get(other):
+            sheet = {**{k: v for k, v in sheet.items() if k != other}, key: sheet[other]}
+    for h, groups in sheet.items():
+        if not groups:
+            continue
+        slots = _pairing_time_slots(ev, h, needed=len(groups))
+        for g in groups:
+            m = _PLACEHOLDER_SLOT_RE.match(g.get("slot_label") or "")
+            if not m:
+                continue
+            i = int(m.group(1)) - 1
+            if 0 <= i < len(slots) and not _PLACEHOLDER_SLOT_RE.match(slots[i]):
+                g["slot_label"] = slots[i]
+    return sheet
+
+
+_SHEET_FIELDS = ("format", "start_type", "start_time", "tee_time_count", "tee_time_interval",
+                 "start_type_18", "start_time_18", "tee_time_count_18")
+
+
+def _sheet_follows_event(conn, event_id: int, before: dict, after: dict) -> dict:
+    """WRITE layer (see above). Returns {"moved": "9->18"|None, "relabelled": n}."""
+    out = {"moved": None, "relabelled": 0}
+    _ensure_pairing_tables(conn)
+    have = {r[0] for r in conn.execute(
+        "SELECT DISTINCT holes FROM event_pairings WHERE event_id = ?", (event_id,))}
+    if not have:
+        return out
+    key = _event_single_holes(after)
+    keymap = {h: h for h in have}
+    if key:
+        other = "9" if key == "18" else "18"
+        if other in have and key not in have:
+            for tbl in ("event_pairings", "blind_draws", "event_group_codes"):
+                try:
+                    conn.execute(f"UPDATE {tbl} SET holes = ? WHERE event_id = ? AND holes = ?",
+                                 (key, event_id, other))
+                except sqlite3.DatabaseError:
+                    logger.exception("sheet move: %s not moved for event %s", tbl, event_id)
+            keymap[other] = key
+            out["moved"] = f"{other}->{key}"
+    for old_h, new_h in keymap.items():
+        groups = conn.execute(
+            "SELECT group_num, MAX(slot_label) FROM event_pairings WHERE event_id = ? AND holes = ? "
+            "GROUP BY group_num ORDER BY group_num", (event_id, new_h)).fetchall()
+        n = len(groups)
+        old_slots = _pairing_time_slots(before, old_h, needed=n)
+        new_slots = _pairing_time_slots(after, new_h, needed=n)
+        for gnum, label in groups:
+            label = label or ""
+            i = old_slots.index(label) if label in old_slots else None
+            if i is None:
+                m = _PLACEHOLDER_SLOT_RE.match(label)
+                i = int(m.group(1)) - 1 if m else None
+            if i is None or not (0 <= i < len(new_slots)) or new_slots[i] == label:
+                continue
+            conn.execute("UPDATE event_pairings SET slot_label = ? WHERE event_id = ? AND holes = ? "
+                         "AND group_num = ?", (new_slots[i], event_id, new_h, gnum))
+            out["relabelled"] += 1
+    return out
 
 
 def _reseat_group_after_removal(players: list) -> list:
