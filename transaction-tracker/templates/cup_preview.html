@@ -6,6 +6,8 @@
   <title>Lone Star Cup - Staff Preview</title>
   <link href="https://fonts.googleapis.com/css2?family=Bitter:wght@600;700&display=swap" rel="stylesheet">
   <style>
+    /* Standard Cup navy (Kerry 10/8 via CoS #1456: "let's make the 002855 the standard Cup navy"): PMS 281 C, RGB 0/40/85. Cup surfaces only. */
+    :root { --lsc-navy: #002855; }
     /* THE LONE STAR CUP STAFF PREVIEW (Kerry 10/7, CoS #1398-B): every Cup
        screen on the demo round behind one jump bar, shown in a phone-sized
        frame. Admin only. The demo is its own dial + PREVIEW rounds, so
@@ -23,9 +25,9 @@
     .jump { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; }
     .jump::-webkit-scrollbar { display: none; }
     .jump a { flex: none; text-decoration: none; font: 700 11px/1 Bitter, Georgia, serif;
-              letter-spacing: .05em; text-transform: uppercase; color: #002868;
-              border: 1.5px solid #002868; border-radius: 999px; padding: 6px 10px; }
-    .jump a.on { background: #002868; color: #fff; }
+              letter-spacing: .05em; text-transform: uppercase; color: var(--lsc-navy);
+              border: 1.5px solid var(--lsc-navy); border-radius: 999px; padding: 6px 10px; }
+    .jump a.on { background: var(--lsc-navy); color: #fff; }
     .jump a.off { color: #9CA3AF; border-color: #E5E7EB; pointer-events: none; }
     .strip.folded { border-bottom: 0; padding: 4px 10px; }
     .strip.folded .jump { display: none; }

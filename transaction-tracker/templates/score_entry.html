@@ -21,6 +21,8 @@
         on the phone with its own op id until the server confirms it. One
         breakpoint: 560px. #}
     <style>
+    /* Standard Cup navy (Kerry 10/8 via CoS #1456: "let's make the 002855 the standard Cup navy"): PMS 281 C, RGB 0/40/85. Cup surfaces only. */
+    :root { --lsc-navy: #002855; }
         body { background: #FFFFFF; }
         .se-wrap { max-width: 480px; margin: 0 auto; padding: 20px 20px 40px; color: #1B1B1B;
                    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; }
@@ -46,18 +48,18 @@
         .pr-hiw-link:hover { background: #D06B2E; }
         .se-pill.dark { border: none; background: #1B1B1B; color: #FFFFFF; }
         .se-pill.back { height: 50px; font-size: 15px; }
-        /* THE CUP SPLASH: the plate is the logo's own navy (sampled #021A34
+        /* THE CUP SPLASH: the plate is the standard Cup navy (was the sampled #021A34
            from static/lsc-logo.png, Kerry: "match the navy in the logo"), so
            a transparent logo melts into it. The round mask hides the white
            corners of the current square file until the transparent one lands.
            The shimmer is one diagonal sweep of light across the logo. */
-        #se-splash { position: fixed; inset: 0; z-index: 1000; background: #021A34; display: flex;
+        #se-splash { position: fixed; inset: 0; z-index: 1000; background: var(--lsc-navy); display: flex;
                      align-items: center; justify-content: center; cursor: pointer;
                      transition: opacity .25s ease; -webkit-tap-highlight-color: transparent; }
         #se-splash[hidden] { display: none; }
         #se-splash.out { opacity: 0; pointer-events: none; }
         #se-splash .sp-logo { position: relative; width: min(70vw, 300px); aspect-ratio: 1 / 1;
-                              border-radius: 50%; overflow: hidden; background: #021A34; }
+                              border-radius: 50%; overflow: hidden; background: var(--lsc-navy); }
         #se-splash .sp-logo img { width: 100%; height: 100%; display: block; }
         #se-splash .sp-word { display: none; position: absolute; inset: 0; align-items: center; justify-content: center;
                               flex-direction: column; color: #FFFFFF; text-align: center;
@@ -465,7 +467,7 @@
         /* LONE STAR CUP team standings beside the match */
         .se-cup { display: flex; align-items: stretch; border-radius: 10px; overflow: hidden; border: 1px solid #E5E7EB;
                   font-size: 13px; }
-        .se-cup .lbl { background: #002868; color: #FFFFFF; font: 700 11px/1.2 Bitter, Georgia, serif; letter-spacing: 1px;
+        .se-cup .lbl { background: var(--lsc-navy); color: #FFFFFF; font: 700 11px/1.2 Bitter, Georgia, serif; letter-spacing: 1px;
                        text-transform: uppercase; padding: 8px 10px; display: flex; align-items: center; }
         .se-cup .tm { flex: 1; display: flex; justify-content: space-between; align-items: center; padding: 6px 10px; gap: 6px; }
         .se-cup .tm b { font: 800 20px/1 Bitter, Georgia, serif; }

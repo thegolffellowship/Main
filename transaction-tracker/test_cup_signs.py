@@ -132,7 +132,7 @@ check("the landing carries THIS GROUP by side, Who are you? carries Back, Held c
 check("an event not yet opted in (404 'not open for this event') shows the admin sign-in, like scoring-off does",
       '/not open (yet|for this event)/' in tpl)
 check("the Cup SPLASH (Kerry 10/8, FD #1442): inline markup, the logo's navy, a shimmer, reduced-motion fallback, tap to skip, words if the logo fails",
-      'id="se-splash"' in tpl and "#021A34" in tpl and "@keyframes se-shimmer" in tpl and "prefers-reduced-motion" in tpl
+      'id="se-splash"' in tpl and "--lsc-navy: #002855" in tpl and "background: var(--lsc-navy)" in tpl and "@keyframes se-shimmer" in tpl and "prefers-reduced-motion" in tpl
       and 'el.addEventListener("click", done)' in tpl and "LONE STAR CUP<span>2026</span>" in tpl
       and '"se_splash_" + tk' in tpl and "!who && !store.get(K.gate, false) && !following" in tpl)
 check("session titles are FOURBALL / FOURSOMES / SINGLES (#1397-1)",

@@ -3,6 +3,8 @@
    ========================================================= */
 
 :root {
+    /* Standard Cup navy (Kerry 10/8 via CoS #1456: "let's make the 002855 the standard Cup navy"): PMS 281 C, RGB 0/40/85. Cup surfaces only. */
+    --lsc-navy: #002855;
     /* TGF standard palette (Kerry, 2026-07-08): TGF Orange accent on a
        monochrome foundation; chapter colors are a semantic layer. */
     --bg: #F8F8F8;               /* SURFACE LIGHT / BG2 */

@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.525.34";
+window.TGF_VERSION = "2.525.35";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.525.35",
+    date: "2026-10-08",
+    title: "Standard Cup navy #002855",
+    changes: [
+      "Kerry 10/8 (CoS #1456): \"Ok, let's make the 002855 the standard Cup navy.\" Every Lone Star Cup surface now reads one token, --lsc-navy: #002855 (PMS 281 C): the LONE STAR CUP tab pill (orange selected ring kept), the Cup card and event banner, the board's middle plate, the phone's Cup strip label, the splash plate (was #021A34), Event Info, the staff preview, the draw page and the Spotlight Lone Star Cup row. TGF colors, the Cup red #CB102E and the team colors (Austin #BF5700, San Antonio #4B6274) are unchanged.",
+      "Not Cup screens, so left as they were: the Games & Payouts sheet, the Snapshot Center send button, the snapshot email and the frozen R6 Championship Chase email."
+    ]
+  },
   {
     "version": "2.525.34",
     "date": "2026-10-08",

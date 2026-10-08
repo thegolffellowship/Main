@@ -492,3 +492,14 @@ cart pair = a group's Austin players, then its SA players; QR = the group's
 scoring link. `?session=sat-am|sat-pm|sun`; `?preview=1` reads the demo
 (`lscprev:`) rounds. Empty until the Cup seed after the draw. Guard: the
 cart-sign checks in `test_lsc_preview.py`.
+
+## STANDARD CUP NAVY — #002855 (Kerry 10/8, CoS #1456) — v2.525.35
+
+One token, `--lsc-navy: #002855` (PMS 281 C), defined in `static/css/dashboard.css`
+`:root` and in the `:root` of each standalone Cup page (score_entry.html,
+lsc_info.html, cup_preview.html, cup_cart_signs.html; cup_draw.html sets its
+`--navy`). Every Cup surface reads it; never hard-code a Cup navy again. Cup
+red #CB102E and the team colors (Austin #BF5700, SA #4B6274) are unchanged;
+TGF surfaces keep their own colors. Left on the old #002868 on purpose (not
+Cup screens): games_payouts.html, snapshot_center.html, the snapshot email
+constant in database.py, and the frozen R6 chase email (chase_email.py).
