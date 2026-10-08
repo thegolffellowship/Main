@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.525.28";
+window.TGF_VERSION = "2.525.29";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.525.29",
+    date: "2026-10-08",
+    title: "Lone Star Cup draw writes straight into the live Cup dial",
+    changes: [
+      "Kerry 10/8 (CoS #1432): \"Can't you set up the draw to automatically go to the matches for this weekend on the tracker rather than copying here? Being able to push live immediately would be much cooler.\" lsc_cup.draw_match lands one drawn match in the live lsc_matches dial: the first draw clears every session's staged demo matches and the demo scores dial, match numbers and tee times follow the pool (Saturday 1-3 low, 4-7 high, start + 10 min each; Sunday 1-7 low, 8-14 high, two matches per tee time), and it refuses an entrant outside its raw-index pool, a second draw of the same entrant, FOURSOMES before FOURBALL is complete, and a FOURSOMES pairing that repeats a FOURBALL one.",
+      "When a session's last match lands, its scoring round is seeded (score_entry.cup_seed) and bound (se_round), so the group links are live. clear_draw_session reverses one session (FOURBALL only after FOURSOMES is cleared, never once a score is entered). draw_state is what the staff draw page renders. A partially drawn Cup still counts all 28 points. Bridge scoring-lsc-draw (state, land, clear). Guard: test_lsc_draw.py.",
+    ],
+  },
   {
     version: "2.525.28",
     date: "2026-10-08",

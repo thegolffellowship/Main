@@ -1862,6 +1862,7 @@ def _scoring_dispatch_inner(url: str, extract: str):
       scoring-tgf-event-ensure:<id>[,<id>...][|apply]  every Tracker event gets its tgf_events row (the home payouts hang off), from the Tracker event, events_id stamped (CA #786 GO 2); dry run by default
       scoring-lsc-results[:freeze[|force]|:clear]  Lone Star Cup final-results snapshot (lsc_results): status, freeze (refused while anything is open unless force), clear
       scoring-lsc-preview[:seed[|apply]|:teardown]  the Cup STAFF PREVIEW demo rounds (own dial, PREVIEW rounds; /events/3329/cup-preview)
+      scoring-lsc-draw:state | <session>|<low|high>|<austin cids>|<sa cids> | clear|<session>  the Cup draw into the live dial (CoS #1432)
       scoring-lsc-check  read-only check of the lsc_matches pairings (per session matches, points total, problems) before a change goes live
       scoring-course-card:<course_id>[|<card json>[|apply]]  read a course's card as held, or validate/plan/load one from the printed card (tees, bands, rating/slope incl. front/back nines, par/SI/yardage), source course_card (CA #786 GO 3)
       scoring-membership-price:<term_id>|<amount>[|apply]  set price_paid on one membership term (dry run by default, audited)
@@ -3774,6 +3775,30 @@ def _scoring_dispatch_inner(url: str, extract: str):
                 db.log_agent_action("mcp-claude", "scoring-lsc-preview",
                                     f"{'|'.join(_a)} -> {json.dumps(res.get('rounds') or res, default=str)[:300]}")
             return json.dumps(res, indent=2, default=str)
+        if cmd == "scoring-lsc-draw":
+            # THE DRAW into the live Cup dial (Kerry 10/8, CoS #1432), the
+            # same calls the staff draw page makes. "state" (read-only);
+            # "<session>|<low|high>|<austin cids>|<sa cids>" lands one match
+            # (cids comma-separated: a Saturday pair, or one Sunday player);
+            # "clear|<session>" reverses that session. Staff writes, audited.
+            from email_parser import lsc_cup as _lc
+            _p = [x.strip() for x in (arg or "state").split("|")]
+            try:
+                if _p[0] in ("", "state"):
+                    return json.dumps(_lc.draw_state(), indent=2, default=str)
+                if _p[0] == "clear" and len(_p) == 2:
+                    _r = _lc.clear_draw_session(_p[1])
+                    _audit("scoring-lsc-draw", f"clear {_p[1]}: {_r}")
+                    return json.dumps(_r, indent=2, default=str)
+                if len(_p) == 4:
+                    _ids = lambda x: [int(c) for c in x.split(",") if c.strip()]
+                    _r = _lc.draw_match(_p[0], _p[1], _ids(_p[2]), _ids(_p[3]), actor="mcp")
+                    _audit("scoring-lsc-draw", f"{_p[0]} {_r['match']['id']}: {_r['match']}")
+                    return json.dumps(_r, indent=2, default=str)
+            except _lc.DrawError as e:
+                return json.dumps({"refused": str(e)})
+            return json.dumps({"error": "usage: scoring-lsc-draw:state | <session>|<low|high>|"
+                                        "<austin cids>|<sa cids> | clear|<session>"})
         if cmd == "scoring-lsc-check":
             # Read-only check of the lsc_matches pairings before they go
             # live (a withdrawal or the odd player changed at the course):

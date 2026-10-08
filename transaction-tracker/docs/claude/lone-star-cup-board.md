@@ -439,3 +439,28 @@ The staff preview header is one slim line that folds to a "PREVIEW ▾" tab
 after the first jump (Kerry 10/8: "the preview header is really in the
 way"); Event Info is its first stop. Logo: `static/lsc-logo.png` (sha256
 8d771633…, CoS MANIFEST #1416).
+
+## THE DRAW into the live dial — v2.525.29 (Kerry 10/8, CoS #1432, Track B)
+
+Track B owns the dial write; Tracker Build owns `/events/3329/cup-draw`.
+- `draw_state()` → per session: `pools.low|high.austin|sa` entrants
+  (`cids`, `name`, `index` = combined raw index for a pair / locked index for a
+  player, `drawn`), `matches` so far, `drawn`/`of`/`complete`, `open`
+  (FOURSOMES only once FOURBALL is complete), `not_again` (FOURBALL pairings,
+  for the page's `canComplete` look-ahead), `se_round`.
+- `draw_match(session, pool, austin_cids, sa_cids)` lands one match in
+  `lsc_matches`. First draw anywhere: every session's staged demo matches go,
+  `lsc_mock_scores` is emptied, `draw_state` and each session's `n_matches`
+  (7/7/14) are written. Numbers/tee times by pool: Sat 1–3 low, 4–7 high,
+  `tee_sheet[n-1]`; Sun 1–7 low, 8–14 high, `tee_sheet[(n-1)//2]`. Refusals
+  raise `DrawError` with the sentence to show; a refusal writes nothing.
+- The session's last match → `score_entry.cup_seed(apply)` + `se_round` bound;
+  the result rides back as `seed`. A partial session has no round bound yet.
+- `clear_draw_session(session)`: matches off, `se_round` unbound (the round is
+  reused and its groups overwritten on the redraw). Refuses FOURBALL while
+  FOURSOMES has matches, and any session with an entered score.
+- Board with 1 of 7 drawn: the drawn match shows (upcoming, tee time), the
+  rest of the session is simply absent, and the Cup still totals 28 points.
+  Members see none of it until Kerry turns on `board_live`.
+- Bridge `scoring-lsc-draw:state | <session>|<pool>|<a cids>|<sa cids> |
+  clear|<session>` (the manual fallback). Guard `test_lsc_draw.py`.
