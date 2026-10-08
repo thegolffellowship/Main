@@ -1159,6 +1159,17 @@ def _skins_ctx(conn, dial: dict, db_path=None) -> dict:
                                                          as_of=as_of) or {}
     except Exception:
         logger.exception("lsc_cup: frozen index read failed")
+    # The HANDICAP LOCK (Kerry 2026-10-07, CoS #1389): an index stored for
+    # this event in `lsc_handicap_lock` is the index of record for the
+    # Sunday flights and wins over the computed one.
+    try:
+        lock = ((_setting_json(conn, "lsc_handicap_lock") or {}).get(str(eid))
+                or {}).get("players") or {}
+        for c, v in lock.items():
+            if isinstance(v, dict) and v.get("index") is not None:
+                ctx["index"][int(c)] = float(v["index"])
+    except Exception:
+        logger.exception("lsc_cup: handicap lock read failed")
     return ctx
 
 
@@ -1173,10 +1184,23 @@ def lsc_board_payload(db_path=None) -> dict:
 RESULTS_KEY = "lsc_results"
 
 
-def _board_payload(db_path=None, use_frozen: bool = True) -> dict:
+PREVIEW_DIAL = "lsc_preview_matches"
+
+
+def preview_board_payload(db_path=None) -> dict:
+    """The STAFF PREVIEW board (Kerry 10/7, CoS #1398-B): the same engine on
+    the demo dial and its PREVIEW rounds. Never the live dial, never the
+    frozen results, never the mock scores; served to staff only."""
+    b = _board_payload(db_path, use_frozen=False, dial_key=PREVIEW_DIAL)
+    if b.get("configured"):
+        b["preview"] = True
+    return b
+
+
+def _board_payload(db_path=None, use_frozen: bool = True, dial_key: str = "lsc_matches") -> dict:
     from email_parser.database import _connect
     with _connect(db_path) as conn:
-        dial = _setting_json(conn, "lsc_matches")
+        dial = _setting_json(conn, dial_key)
         if not dial:
             return {"configured": False}
         if use_frozen:
@@ -1193,7 +1217,7 @@ def _board_payload(db_path=None, use_frozen: bool = True) -> dict:
                 b["board_live"] = bool(dial.get("board_live"))
                 return b
         names = roster_names(conn)
-        session_data = _setting_json(conn, "lsc_mock_scores") or {}
+        session_data = (_setting_json(conn, "lsc_mock_scores") or {}) if dial_key == "lsc_matches" else {}
         # Real entered scores (Track A, live on main v2.493.0) take
         # precedence per session: any session bound via se_round reads
         # the rounds-plural event feed; unbound sessions keep the mock

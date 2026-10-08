@@ -318,7 +318,6 @@ deposit ledger. Guard: `test_oneoff_paid_badge.py`.
   `lsc_matches` by hand afterward (settings write, no push).
 - **Pars:** every Hideout tee is par 72 (37/35), so no relative-par
   adjustment applies across Blue/White/Red/Teal.
-
 ## FOLLOW THE CUP from a scorer link — v2.525.19 (Kerry 2026-10-07, #1357-6)
 
 A scanned scoring link lands on SCORE THIS GROUP / FOLLOW THE CUP (score-entry.md).
@@ -326,3 +325,68 @@ FOLLOW opens `/member/lonestarcup?match=<dial match id>`: `lscBoardRender` stamp
 `data-lsc-match` on every card, opens that one once (`mpCardToggle`) and scrolls to
 it, and re-opens whatever cards were open before each 20 s live refresh. The per-group
 QR signs for the Cup's rounds print from `/events/<id>/cup-signs`.
+
+## Austin pairs + Wetz's index — 2026-10-07 (CoS #1382, Side Games #1383-2)
+
+- `lsc_matches.pairs.austin` (settings write, no push): AUS-P1 L. Youngs/Cannon 8,
+  P2 Cloer/J. Wade 12, P3 Jay/Walter Hogue 13 (low pool); P4 Wetz/Barstow 25,
+  P5 Franz/Sharp 40 (high). P6 McDonnell + one Jenkins and P7 the other two
+  Jenkins are `held` until Kerry says which Jenkins (Matt 7 / Mike 294 /
+  Julius 304) partners McDonnell. Every combination lands 15–38, above the low
+  cut of 13, so the split is settled; the closest is Matt+Julius 15. Re-derive
+  at the 10/10 lock.
+- **Wetz (672) had no index on the by-customer map** although his 7.7 starting
+  handicap was stored: old DFW rounds sit under his name with no handicap link,
+  and the starting merge left that row's `customer_id` empty. That map feeds the
+  Cup seed's playing handicaps (`score_entry.cup_seed` → `_preview_handicaps`)
+  and the Sunday skins flights, so his matches would have seeded with no PH. No
+  data-only fix exists (no link-writer bridge; `relink_all_unlinked_players`
+  only fills existing link rows). Code fix v2.525.20
+  (`get_all_handicap_players` stamps the cid), guard
+  `test_starting_handicap_by_customer.py`, rides Thursday's push.
+
+## HANDICAP LOCK — 2026-10-07 (Kerry via CoS #1389) — v2.525.21
+
+KERRY: "Handicaps should lock now. They won't change." Staff setting
+`lsc_handicap_lock` = `{"3329": {"players": {"<cid>": {name, team, tee, index,
+ch, sun_flight}}}}`, from the 10/5 list (#1215) with Wetz 7.7, Walter 10.9,
+Wilson 12.4 and Mesa 0.4 (his stored starting handicap; #1389 said 0.2, CH 0
+either way). CH = whs_round(index × slope/113 + (rating − 72)).
+- `score_entry.cup_seed` takes the locked CH as each player's playing
+  handicap in all three sessions (the dry run reports `handicap_lock`).
+- `lsc_cup._skins_ctx` takes the locked index for the Sunday flights
+  (Flight 1 < 12.0): 11 v 11 among the 22 buyers.
+- Pools in `lsc_matches.pairs` are summed from the lock. No re-derivation on
+  10/10. Why it matters: by 10/7 Wilson's live index was 10.8 (CH 6, Flight 1)
+  and South's 10.0 (CH 9).
+- Sunday Low 7 | High 7: SA has four at CH 8 (Baker, Mazanec, South, Wilson);
+  by index Wilson is 8th, so High.
+
+## STAFF PREVIEW — /events/3329/cup-preview (Kerry 10/7, CoS #1398)
+
+Every Cup screen on demo rounds behind one jump bar, in a phone frame, with a
+red "PREVIEW · demo scores" band. Admin only, never linked from a member page.
+
+- **Engine:** `email_parser/lsc_preview.py` (`build_dial` / `seed` / `teardown`).
+  The demo lives on its OWN dial `lsc_preview_matches` (`se.PREVIEW_DIAL`) and
+  on score-entry rounds keyed `lscprev:<session>` and labelled
+  `se.PREVIEW_LABEL · FOURBALL|FOURSOMES|SINGLES`, so `entry_publish` refuses
+  them and `entry_mode` (Finding 0) ignores them. The live `lsc_matches` dial,
+  the live rounds and the member board are never touched.
+- **Seed state (#1398):** FOURBALL all 7 matches final with full cards, one
+  picked-up ball and one hole where every ball was picked up (the round stays
+  OPEN so its scoring links still open the finished card; a closed round
+  revokes every link). FOURSOMES live thru 9–13, match 1 closed out 2&1
+  (written net of the board's own pops, so it holds whatever the handicaps).
+  SINGLES not started. The seeder's scorer seat is released on every group
+  except FOURSOMES group 2, which is the HELD screen
+  (`se.release_preview_seed_locks`, PREVIEW rounds only).
+- **Board:** `/api/lsc/board?preview=1` returns `lsc_cup.preview_board_payload()`
+  for an admin/manager session only; anyone else gets the live board. The
+  contests page passes `?preview=1` through and shows the red band.
+  `round_matches` reads both dials; `_cup_standings` uses the preview payload
+  for a preview-bound round.
+- **Bridge:** `scoring-lsc-preview:seed` (dry run) · `seed|apply` · `teardown`.
+- **Screenshots:** `docs/claude/screenshots/lsc-preview/`.
+- **Teardown** before the live round opens Saturday (closes the PREVIEW
+  rounds, clears the dial).

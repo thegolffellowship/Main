@@ -12,6 +12,7 @@ import os
 import re
 import shutil
 import subprocess
+from concurrent.futures import ThreadPoolExecutor
 import time
 from datetime import datetime
 from pathlib import Path
@@ -117,13 +118,17 @@ def _generations(b: str, path: Path, timeout: float, db_path=None) -> dict:
     return {"generations": len(rows), "lag_s": last["lag_s"], "latest_end": last["end"], "error": None}
 
 
-def status(db_path=None, cache_s: float = 120.0, timeout: float = 25.0) -> dict:
-    """What the digest shows. Cached briefly: the lag read is a call to R2.
-    The top-level lag/generations are the MAIN database; ``archive`` is the
-    GG archive file (replicated too, but written rarely)."""
+def status(db_path=None, cache_s: float = 900.0, timeout: float = 25.0, fresh: bool = False) -> dict:
+    """What the digest shows. Cached: the lag read is two calls to R2 whose
+    listing grows with the replica (the health bridge took 11.6 s on 10/7 and
+    16.4 s on 10/8). The scheduled 5:00 digest passes ``fresh=True``; every
+    other reader takes the digest's value up to ``cache_s`` old, with
+    ``running`` re-checked on each call (it is a local process scan). The
+    top-level lag/generations are the MAIN database; ``archive`` is the GG
+    archive file (replicated too, but written rarely)."""
     now = time.time()
-    if _CACHE["val"] is not None and now - _CACHE["at"] < cache_s:
-        return _CACHE["val"]
+    if not fresh and _CACHE["val"] is not None and now - _CACHE["at"] < cache_s:
+        return {**_CACHE["val"], "running": running()}
     out = {"configured": configured(), "missing": missing_env(), "binary": None,
            "running": False, "lag_s": None, "generations": 0, "latest_end": None,
            "error": None, "archive": None,
@@ -133,10 +138,14 @@ def status(db_path=None, cache_s: float = 120.0, timeout: float = 25.0) -> dict:
         out["binary"] = bool(b)
         out["running"] = running()
         if out["configured"] and b:
-            out.update(_generations(b, _live(db_path), timeout, db_path))
             arc = _live(db_path).parent / "transactions_gg_archive.db"
-            if arc.is_file():
-                out["archive"] = _generations(b, arc, timeout, db_path)
+            # The two listings are independent network reads: run them side by side.
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                main_f = pool.submit(_generations, b, _live(db_path), timeout, db_path)
+                arc_f = pool.submit(_generations, b, arc, timeout, db_path) if arc.is_file() else None
+                out.update(main_f.result())
+                if arc_f is not None:
+                    out["archive"] = arc_f.result()
     except subprocess.TimeoutExpired:
         out["error"] = f"generations timed out after {int(timeout)} s"
     except Exception as e:  # noqa: BLE001 — a status read must never raise

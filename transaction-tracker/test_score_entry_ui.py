@@ -379,8 +379,8 @@ with sync_playwright() as p:
     check("the hole screen shows the match standing",
           pg.locator(".se-mcard").count() == 1 and "NIESTER" in pg.inner_text(".se-mcard").upper()
           and "Kerry v Mark" in pg.locator(".se-mc-head").get_attribute("aria-label"))
-    check("no M tag; each match player reads 'vs' his opponent on the hole screen",
-          pg.locator(".se-mtag").count() == 0 and "vs Mark" in pg.inner_text("body"))
+    check("no M tag; and no 'vs' on the player row either (Kerry 2026-10-07, #1398-C1: name + tee + PH only)",
+          pg.locator(".se-mtag").count() == 0 and "vs Mark" not in pg.inner_text("body"))
     for _ in range(4):
         pg.locator(".se-row").nth(1).locator(".se-plus").click()
     body = pg.inner_text("body")

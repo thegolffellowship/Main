@@ -295,6 +295,20 @@ check("each cup player's tee is his lsc_tees band", _tees == {101: "<50", 102: "
 with contextlib.redirect_stdout(io.StringIO()):
     ca2 = se.cup_seed(900, apply=True)
 check("cup re-seed reuses the rounds", [x.get("round_id") for x in ca2["sessions"]] == _rids, ca2)
+# The handicap lock (Kerry 10/7, CoS #1389): a stored course handicap is the
+# playing handicap of record in every session, whatever the live index says.
+db.set_app_setting("lsc_handicap_lock", json.dumps({"900": {"players": {
+    "101": {"index": 7.7, "tee": "Blue", "ch": 8}, "103": {"index": 12.4, "tee": "Red", "ch": 8}}}}))
+with contextlib.redirect_stdout(io.StringIO()):
+    cl = se.cup_seed(900, apply=True)
+_ph = {(r[0], r[1]): r[2] for r in conn.execute(
+    "SELECT round_id, customer_id, playing_handicap FROM se_players WHERE round_id IN (?, ?)", _rids)}
+check("locked CH is the seeded PH in every session",
+      all(_ph.get((rid, 101)) == 8 and _ph.get((rid, 103)) == 8 for rid in _rids), _ph)
+check("a locked player is no playing-handicap gap",
+      not any("(101)" in x or "(103)" in x for x in cl["gaps"].get("no_playing_handicap", [])), cl["gaps"])
+check("the seed reports the lock", (cl.get("handicap_lock") or {}).get("players_locked") == 2, cl)
+db.set_app_setting("lsc_handicap_lock", "")
 check("cup seed refuses another event's dial", "error" in se.cup_seed(901))
 db.set_app_setting("lsc_matches", "")
 db.set_app_setting("lsc_tees", "")

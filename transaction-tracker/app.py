@@ -926,6 +926,15 @@ def check_expense_inbox(force=False, days_back=None):
                         except Exception:
                             logger.warning("inbound add-on auto-match failed for exp %s",
                                            saved.get("id"), exc_info=True)
+                        # One-off event roster (Kerry 2026-10-07, CoS #1377-1:
+                        # "Ok. Build it."): an exact open-balance match links
+                        # the receipt to the event, flagged for the CFO.
+                        try:
+                            from email_parser.receipt_autoapply import auto_apply_receipt
+                            auto_apply_receipt(saved["id"])
+                        except Exception:
+                            logger.warning("receipt auto-apply failed for exp %s",
+                                           saved.get("id"), exc_info=True)
                         # Overpayment returns ride the same inbound receipt —
                         # "Overpaid winnings for <code>" memos close the open
                         # tgf_overpayments row the REQUEST button created
@@ -5538,6 +5547,42 @@ def cup_signs_page(event_id):
     if rid:
         sheets["rounds"] = [r for r in sheets["rounds"] if str(r["round_id"]) == str(rid)]
     return render_template("cup_signs.html", sheets=sheets)
+
+
+@app.route("/events/<int:event_id>/cup-preview")
+@require_role("admin")
+def cup_preview_page(event_id):
+    """THE LONE STAR CUP STAFF PREVIEW (Kerry 10/7, CoS #1398-B): every Cup
+    screen on the demo round, behind a jump bar. Admin only; never linked
+    from a member page. The demo lives on its own dial and PREVIEW rounds
+    (email_parser/lsc_preview.py); seed / tear down with the
+    scoring-lsc-preview bridge."""
+    from email_parser.score_entry import (PREVIEW_DIAL, _json_setting,
+                                          get_entered_scores, make_group_token)
+    dial = _json_setting(PREVIEW_DIAL)
+    links, rounds = {}, {}
+    if int(dial.get("event_id") or 0) == int(event_id):
+        read = get_entered_scores(event_id)
+        by_id = {r["round_id"]: r for r in read.get("rounds") or []}
+        for s in dial.get("sessions") or []:
+            r = by_id.get(s.get("se_round"))
+            if not r:
+                continue
+            rounds[s["label"]] = r["round_id"]
+            gs = r.get("groups") or []
+            if gs:
+                links[s["label"]] = "/member/score?t=" + make_group_token(gs[0]["group_id"])
+            free = [g for g in gs if g.get("lock_state") == "free"]
+            held = [g for g in gs if g.get("lock_state") == "held"]
+            if s["format"] == "chapman" and held:
+                links["HELD"] = "/member/score?t=" + make_group_token(held[0]["group_id"])
+            if s["format"] == "singles" and len(free) > 1:     # not the Scoring S group
+                links["QR"] = "/member/score?t=" + make_group_token(free[-1]["group_id"])
+        pm = next((s for s in dial.get("sessions") or [] if s.get("id") == "sat-pm"), None)
+        if pm and pm.get("matches"):
+            links["BOARD_OPEN"] = "/member/lonestarcup?preview=1&match=" + pm["matches"][0]["id"]
+    return render_template("cup_preview.html", event_id=event_id, seeded=bool(rounds),
+                           rounds=rounds, links=links)
 
 
 @app.route("/api/events/<int:event_id>/group-codes", methods=["GET", "POST"])
@@ -12647,17 +12692,35 @@ def matchplay_v2_preview():
 # ── Member view (v2.53.0, Kerry): pinless read-only pages members can
 # reach from a plain shared URL. Season Contests + Handicaps only; the
 # APIs they call are the @require_role("member") public read tier.
+def _lsc_member_landing() -> bool:
+    """The Lone Star Cup is the member landing through Sunday evening
+    (Kerry 2026-10-07, CoS #1351 D1: "LONE STAR CUP needs to be the current
+    landing for members in the tracker thru Sunday evening, then can switch
+    over to EVENTS"). Dial `lsc_member_landing_until` = 'YYYY-MM-DD HH:MM'
+    Central (default Sunday 10/11 9:00 PM); blank or past -> off."""
+    from email_parser.database import get_app_setting
+    from email_parser.timezone_utils import now_central
+    try:
+        until = (get_app_setting("lsc_member_landing_until") or "2026-10-11 21:00").strip()
+        return bool(until) and now_central().strftime("%Y-%m-%d %H:%M") < until[:16]
+    except Exception:
+        return False
+
+
 @app.route("/member")
 def member_home():
     # Spotlight is the member landing (Kerry 2026-07-14: make /member about
-    # the individual player first).
+    # the individual player first) — except during the Lone Star Cup.
+    if _lsc_member_landing():
+        return redirect("/member/lonestarcup")
     return redirect("/member/spotlight")
 
 
 @app.route("/member/contests")
 def member_contests():
     return render_template("contests.html", member_mode=True,
-                           MATCHPLAY_V2=_matchplay_v2_flag())
+                           MATCHPLAY_V2=_matchplay_v2_flag(),
+                           lsc_landing=_lsc_member_landing())
 
 
 @app.route("/member/lonestarcup")
@@ -12731,9 +12794,13 @@ def api_lsc_board():
     admin/manager sessions get the board (Kerry's preview); the pinless
     member tier sees {configured: false} until Kerry flips it after his
     phone OK."""
-    from email_parser.lsc_cup import lsc_board_payload, strip_money
-    payload = lsc_board_payload()
+    from email_parser.lsc_cup import lsc_board_payload, preview_board_payload, strip_money
     staff = session.get("role") in ("admin", "manager")
+    # ?preview=1: the STAFF PREVIEW's demo board (Kerry 10/7, CoS #1398-B).
+    # Staff only; a member asking for it gets the live board as before.
+    if staff and request.args.get("preview") == "1":
+        return jsonify(preview_board_payload())
+    payload = lsc_board_payload()
     if (payload.get("configured") and not payload.get("board_live")
             and not staff):
         return jsonify({"configured": False})

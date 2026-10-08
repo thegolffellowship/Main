@@ -446,6 +446,81 @@ def _publish_round(conn, ev: dict, rnd: dict, mode: str, apply: bool, db_path=No
     return out
 
 
+def entry_mode(event_id: int, db_path=None, _read: dict | None = None) -> bool:
+    """FINDING 0 (CoS #1333, 2026-10-07; Kerry #1313: "audit actual tracker
+    entered scores ... without any importing from GG. That should have been
+    off."). An event is in ENTRY MODE when score entry is switched on for it
+    and it has a score-entry round that is not a PREVIEW and is dated TODAY
+    (Central): the live day. In entry mode every leaderboard reads entered
+    scores only; a Golf Genius import for the event stays stored (for
+    parity) and is never shown. The next day the board reads the record
+    again (Golf Genius until it retires, published entries after the
+    cutover), so a closed event's board never changes after the fact and a
+    past event whose beta testers entered a few cards is not rewritten."""
+    try:
+        if not se.event_enabled(event_id, db_path):
+            return False
+        from email_parser.timezone_utils import today_central_str
+        today = today_central_str()
+        read = _read if _read is not None else se.get_entered_scores(int(event_id), db_path=db_path)
+        return any(not _is_preview(r) and str(r.get("date") or "")[:10] == today
+                   for r in (read.get("rounds") or []))
+    except Exception:
+        logger.exception("entry_mode check failed for event %s", event_id)
+        return False
+
+
+def live_board_rows(conn, event_id: int, db_path=None, _read: dict | None = None) -> list[dict]:
+    """Every entered player's card AS IT STANDS (holes played so far), in
+    the scoring_rounds / scoring_holes shape, for the leaderboard to read in
+    entry mode. Writes nothing. Not the publish rule: an open, unsigned,
+    part-played card is on the board the way Golf Genius showed one mid-
+    round; the scoring record still waits for closed + signed (_publish).
+
+    Tee and pops: the same resolver and ruled allocation the publisher uses.
+    Pops are allocated over the round's FULL hole list, then cut to the
+    holes played, so where a stroke falls never moves as the card fills in.
+    Preview rounds and players with no gross yet are left out."""
+    ev = _event(conn, int(event_id))
+    if not ev:
+        return []
+    read = _read if _read is not None else se.get_entered_scores(int(event_id), db_path=db_path)
+    out = []
+    for rnd in read.get("rounds") or []:
+        if _is_preview(rnd):
+            continue
+        course_id = rnd.get("course_id") or ev.get("course_id")
+        is18 = int(rnd.get("holes") or 9) == 18
+        side = _played_side(rnd, ev)
+        round_date = str(rnd.get("date") or ev.get("event_date") or "")[:10] or None
+        holes = _round_holes(rnd)
+        names = _customer_names(conn, [p["customer_id"] for p in rnd.get("players") or []
+                                       if p.get("customer_id")])
+        for p in rnd.get("players") or []:
+            cid = p.get("customer_id")
+            scores = {int(h): int(v) for h, v in (p.get("scores") or {}).items() if v is not None}
+            if not cid or not scores:
+                continue
+            played = sorted(scores)
+            tee = _resolve_tee(conn, ev, course_id, p.get("tee"), is18, side)
+            ph = p.get("playing_handicap")
+            dots = _derived_dots(conn, rnd, tee["tee_id"], ph, holes or played)
+            gross = sum(scores.values())
+            out.append({
+                "customer_id": cid,
+                "player_name": names.get(cid) or (p.get("name") or "").strip() or f"customer {cid}",
+                "event_id": ev["id"], "round_date": round_date, "course_id": course_id,
+                "tee_id": tee["tee_id"], "holes_played": len(played),
+                "playing_handicap": ph, "gross": gross,
+                "net": (gross - ph) if ph is not None else None,
+                "imported_at": (str(p.get("last_write_at") or "").replace("T", " ")[:19] or _now_utc()),
+                "holes": {h: scores[h] for h in played},
+                "strokes_received": {h: int(dots.get(h, 0) or 0) for h in played},
+                "se_round_id": rnd.get("round_id"),
+            })
+    return out
+
+
 def publish_entered_round(round_id: int | None = None, event_id: int | None = None,
                           apply: bool = False, db_path=None) -> dict:
     """Publish one score-entry round (or, with only event_id, every round of

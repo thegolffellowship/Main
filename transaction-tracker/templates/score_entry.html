@@ -36,7 +36,24 @@
         .se-pill { height: 56px; border-radius: 48px; font-size: 17px; font-weight: 600; font-family: inherit;
                    width: 100%; cursor: pointer; }
         .se-pill.go { border: none; background: #0d7556; color: #FFFFFF; font-weight: 700; }
+        .se-tscore { display: flex; justify-content: space-between; align-items: center; padding: 8px 14px; margin: 8px 0 2px; }
+        .se-tscore .nums { display: flex; gap: 14px; align-items: baseline; font: 800 20px Bitter, Georgia, serif; }
+        .se-tscore .nums .au { color: #BF5700; } .se-tscore .nums .sa { color: #4B6274; }
+        .se-hiw { margin: 12px 0 2px; text-align: center; }
+        .pr-hiw-link { display: inline-flex; align-items: center; height: 30px; padding: 0 14px; background: #E87C3E; border: none;
+                       border-radius: 9999px; cursor: pointer; color: #fff; text-decoration: none;
+                       font: 700 11px/1 Bitter, Georgia, serif; letter-spacing: 1px; text-transform: uppercase; }
+        .pr-hiw-link:hover { background: #D06B2E; }
         .se-pill.dark { border: none; background: #1B1B1B; color: #FFFFFF; }
+        .se-pill.back { height: 50px; font-size: 15px; }
+        /* THIS GROUP on the scanned-link landing (mockup QRLanding): San
+           Antonio slate left, Austin burnt orange right. */
+        .se-this { background: #FFFFFF; }
+        .se-grp { display: flex; justify-content: space-between; gap: 10px; margin-top: 6px; }
+        .se-grp .r { text-align: right; }
+        .se-grp .t { font: 700 11px Bitter, Georgia, serif; text-transform: uppercase; letter-spacing: .5px; }
+        .se-grp .t.aus { color: #BF5700; } .se-grp .t.sa { color: #4B6274; }
+        .se-grp .nm { font: 600 16px Bitter, Georgia, serif; line-height: 1.3; }
         .se-pill.line { border: 1px solid #1B1B1B; background: transparent; color: #1B1B1B; }
         .se-pill:disabled { opacity: .45; }
         .se-name-btn { height: 60px; border-radius: 12px; border: 1px solid #E5E7EB; background: #F8F8F8;
@@ -666,7 +683,11 @@
         const maxText = (n) => `Maximum allowed is triple bogey (${hiOf(n)}).`;
         // Kerry 2026-09-26: "Remove the preview text." A PREVIEW round's label
         // is left off the eyebrow (the admin page still marks it PREVIEW).
-        const eyebrow = () => [card.round_label, card.group_num != null ? "Group " + card.group_num : null].filter(Boolean).join(" · ");
+        const matchNos = () => {
+            const ids = (card.match_status || []).filter((m) => m.cup).map((m) => String(m.match_id || "").match(/(\d+)\s*$/)).filter(Boolean).map((x) => x[1]);
+            return ids.length ? (ids.length > 1 ? "Matches " + ids.join(" & ") : "Match " + ids[0]) : null;
+        };
+        const eyebrow = () => [card.round_label, card.group_num != null ? "Group " + card.group_num : null, matchNos()].filter(Boolean).join(" · ");
 
         // ── screens ─────────────────────────────────────────────────────
         function render() {
@@ -737,45 +758,75 @@
             const cup = cupIds.length > 0;
             const follow = cup ? "/member/lonestarcup?match=" + encodeURIComponent(cupIds[0])
                                : "/member/score/board?t=" + encodeURIComponent(T);
-            const when = [card.group_num != null ? "Group " + card.group_num : null, card.label,
+            // Mockup QRLanding: "Group 2 · Match 2 · 18 holes", then a THIS
+            // GROUP box, San Antonio left and Austin right in the Cup, one
+            // list otherwise.
+            const when = [card.group_num != null ? "Group " + card.group_num : null, matchNos() || card.label,
                           card.holes === 9 ? "Nine holes" : "18 holes"].filter(Boolean).join(" · ");
             const held = card.lock.state === "held"
-                ? `<div class="se-status">${ICON.check}<span>${esc(first(card.lock.holder_name || "Someone"))} is already keeping score for this group.</span></div><div class="se-gap"></div>`
+                ? `<div class="se-status">${ICON.check}<span>${esc(first(card.lock.holder_name || "Someone"))} is already keeping score for this group.</span></div>`
                 : "";
-            return `<div class="se-eyebrow">${esc([card.round_label, card.round_date].filter(Boolean).join(" · "))}</div>
-                <h1 class="se-h1">${cup ? "Lone Star Cup" : "Live scoring"}</h1><div class="se-sub">${esc(when)}</div>
-                <div class="se-gap"></div>${held}
+            const names = (ps) => ps.map((p) => esc(p.display_name)).join("<br>");
+            const sideOf = (p) => ((card.matches || {})[String(p.customer_id)] || {}).side;
+            const sa = card.players.filter((p) => sideOf(p) === "sa"), aus = card.players.filter((p) => sideOf(p) === "austin");
+            const group = cup && (sa.length || aus.length)
+                ? `<div class="se-grp"><div><div class="t sa">San Antonio</div><div class="nm">${names(sa)}</div></div>
+                     <div class="r"><div class="t aus">Austin</div><div class="nm">${names(aus)}</div></div></div>`
+                : `<div class="se-grp"><div class="nm">${names(card.players)}</div></div>`;
+            // "Oct 10, 2026", not the ISO date (mockup QRLanding).
+            const dt = (d) => { const m = String(d || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+                return m ? new Date(+m[1], +m[2] - 1, +m[3]).toLocaleDateString("en-US", {month: "short", day: "numeric", year: "numeric"}) : d; };
+            return `<div class="se-eyebrow">${esc([card.round_label, dt(card.round_date)].filter(Boolean).join(" · "))}</div>
+                <h1 class="se-h1 big">${cup ? "Lone Star Cup" : "Live scoring"}</h1><div class="se-sub">${esc(when)}</div>
+                <div class="se-gap"></div>
+                <div class="se-box se-this"><div class="se-lbl">This group</div>${group}</div>
+                ${held}<div class="se-gap"></div>
                 <div class="se-stack">
                   <button type="button" class="se-pill dark" data-act="gate-score">SCORE THIS GROUP</button>
                   <button type="button" class="se-pill line" data-act="gate-follow" data-href="${esc(follow)}">${cup ? "FOLLOW THE CUP" : "FOLLOW THE LEADERBOARD"}</button>
                 </div><div class="se-gap"></div>
-                <div class="se-copy">One phone per group keeps the scores${card.lock.state === "held" ? " (take over only if " + esc(first(card.lock.holder_name || "the scorer")) + " can't keep going)" : ""}. Everyone else follows along${cup ? " on the Cup leaderboard, with this match open" : " on the leaderboard"}; following claims nothing.</div>`;
+                <div class="se-copy">One phone per group keeps the scores. Everyone else follows along${cup ? " on the Cup leaderboard, with this match open" : " on the leaderboard"}; following claims nothing.${card.lock.state === "held" ? " Take over only if " + esc(first(card.lock.holder_name || "the scorer")) + " can't keep going." : ""}</div>`;
         }
+        // Mockups WhoAreYou / Held: "Sat AM Fourball · Group 2".
+        const eyebrowGroup = () => [card.round_label, card.group_num != null ? "Group " + card.group_num : null].filter(Boolean).join(" · ");
 
         function joinScreen() {
             const btns = card.players.map((p) =>
                 `<button type="button" class="se-name-btn" data-act="pick" data-cid="${p.customer_id}">
                     <span>${esc(p.display_name)}</span><span class="m">${p.playing_handicap != null ? "PH " + p.playing_handicap : ""}</span>
                  </button>`).join("");
-            const when = [card.group_num != null ? "Group " + card.group_num : null, card.label,
-                          card.holes === 9 ? "Nine holes" : "18 holes"].filter(Boolean).join(" · ");
-            return `<div class="se-eyebrow">${esc([card.round_label, card.round_date].filter(Boolean).join(" · "))}</div>
-                <h1 class="se-h1">Who are you?</h1><div class="se-sub">${esc(when)}</div>
+            // Mockup WhoAreYou: the rule as the sub-line, the copy under the
+            // names, and Back to the two-button landing.
+            return `<div class="se-eyebrow">${esc(eyebrowGroup())}</div>
+                <h1 class="se-h1 big">Who are you?</h1><div class="se-sub">The first person to start keeps score for the group.</div>
                 <div class="se-gap"></div><div class="se-stack">${btns}</div><div class="se-gap"></div>
-                <div class="se-copy">The first person to start keeps score for the group. Everyone else follows along live and signs their card at the end.</div>`;
+                <div class="se-copy">Tap your name to keep the card. Your playing handicap is the locked one from the starter sheet. If someone already has the card you'll be asked before you take it over.</div>
+                <div class="se-gap"></div><button type="button" class="se-pill line back" data-act="gate-back">Back</button>`;
         }
 
         function heldScreen() {
+            // Mockup Held: how far the holder's card is, the two choices, the
+            // no-timeout promise, and SAVED SO FAR (read-only cells; the
+            // holder's phone owns the card).
             const nm = card.lock.holder_name || "Someone";
-            return `<div class="se-eyebrow">${esc(eyebrow())}</div>
-                <h1 class="se-h1">${esc(first(nm))} is keeping score.</h1>
-                <div class="se-sub">One phone enters the group's scores, so nothing is entered twice.</div>
+            const order = holeOrder();
+            const done = order.filter((n) => holeDone(n));
+            const thru = done.length ? done[done.length - 1] : null;
+            const cells = order.map((n) => holeDone(n)
+                ? `<div class="se-cell saved"><span class="n">${n}</span><span class="k">&#10003;</span></div>`
+                : `<div class="se-cell"><span class="n">${n}</span></div>`).join("");
+            return `<div class="se-eyebrow">${esc(eyebrowGroup())}</div>
+                <h1 class="se-h1 big">${esc(first(nm))} is keeping score.</h1>
+                <div class="se-sub">${thru != null ? "The group's card is through hole " + thru + "." : "No holes saved yet."}</div>
                 <div class="se-gap"></div>
                 <div class="se-stack">
                   <button type="button" class="se-pill line" data-act="follow">Follow along</button>
                   <button type="button" class="se-pill dark" data-act="takeover">Take over</button>
                 </div><div class="se-gap"></div>
-                <div class="se-copy">Take over only if ${esc(first(nm))} can't keep going. This phone becomes the scorecard and ${esc(first(nm))}'s phone switches to follow along.</div>`;
+                <div class="se-copy">Take over only if ${esc(first(nm))} can't keep going. The saved holes stay; you pick up from the next one. There's no timeout and nothing happens by itself.</div>
+                <div class="se-gap"></div>
+                <div class="se-box"><div class="se-lbl">Saved so far</div>
+                  <div class="se-strip" style="margin-top:8px;grid-template-columns:repeat(${Math.min(order.length, 9)}, minmax(0, 1fr))">${cells}</div></div>`;
         }
 
         function holeScreen() {
@@ -807,10 +858,12 @@
                 const d = cur.v == null || !h.par ? null : cur.v - h.par;
                 const xx = cupOf(s.cids) && (s.key in draftX ? draftX[s.key] : isX(s.key, hole, s.cids));
                 const rel = xx ? "Picked up" : d == null ? "" : (WORDS[String(d)] || (d > 0 ? "+" + d : String(d)));
-                // One line: "Blue · PH 1 · vs Brian" (the tee colour bar is beside it).
-                const meta2 = [s.team ? s.meta : null, s.team ? null : (teeOf(s.cid).name || "").replace(/\s*Tees?$/i, "") || null,
-                               !s.team && s.ph != null ? "PH " + s.ph : null,
-                               (vsText(s.cids) || "").replace(/^Match vs/, "vs") || null].filter(Boolean).join(" · ");
+                // One line: name + tee + PH only (Kerry 2026-10-07, #1398-C1: "It's
+                // already obvious who I'm playing because of the above matches,
+                // so vs [Name] doesn't need to be there"; no format prose on a
+                // scoring screen, so a pair's row carries no "Team · one ball").
+                const meta2 = [s.team ? teamPh(s.cids) : (teeOf(s.cid).name || "").replace(/\s*Tees?$/i, "") || null,
+                               !s.team && s.ph != null ? "PH " + s.ph : null].filter(Boolean).join(" · ");
                 return `<div class="se-row" data-key="${s.key}">${teeBar(s.cids)}
                     <div class="se-who"><div class="se-name"><span class="nm">${esc(s.name)}</span>${mtag(s.cids)}</div><div class="se-meta">${esc(meta2)}</div></div>
                     <button type="button" class="se-minus" data-act="step" data-d="-1" aria-label="One less for ${esc(s.name)}">&minus;</button>
@@ -832,8 +885,10 @@
                 ${hio}
                 ${maxNote ? `<div class="se-warn">${ICON.warn}<span>${esc(maxNote)}</span></div>` : ""}
                 <div class="se-stack">${rows}</div>
+                ${teamScoreBox(hole)}
                 <div class="se-lblrow"><span class="se-lbl">Group card</span><span class="se-keepnote">${ICON.pen}<span>You're keeping score</span></span></div>
                 <div class="se-strip" style="margin-top:6px;grid-template-columns:repeat(${Math.min(order.length, 9)}, minmax(0, 1fr))">${cells}</div>
+                ${hiwPill()}
                 ${queue.length ? statusLine() : ""}
                 ${popKey(hole)}
                 <div class="se-bottom"><div class="se-row-act">
@@ -841,6 +896,74 @@
                   <button type="button" class="se-pill go" data-act="save">${cta}</button>
                   <div class="se-nav"><button type="button" data-act="next" aria-label="Next hole" ${i >= order.length - 1 ? "disabled" : ""}>${ICON.fwd}</button></div>
                 </div></div></div>`;
+        }
+
+        // The Cup session this round is bound to, in Kerry's words (#1397-1:
+        // FOURBALL, FOURSOMES, SINGLES; "Chapman" only describes the format).
+        function cupSession() {
+            const cs = card.cup_standings;
+            if (!cs || !cs.session_id) return null;
+            const f = String(cs.session_format || "").toLowerCase();
+            const title = f === "fourball" ? "FOURBALL" : (f === "singles" ? "SINGLES" : "FOURSOMES");
+            return {title, anchor: title.toLowerCase(), cs};
+        }
+        // TEAM SCORE · HOLE N (mockup Main / ScoringFoursomes; Kerry #1351 D2
+        // "the visual of what their team score would be", #1398-C1: the box
+        // carries the label and the two numbers, nothing else). FOURBALL: each
+        // side's best net ball on this hole from the gross scores as they go
+        // in, net = gross less that player's own match strokes on the hole
+        // (the engine's allocation, match_status[].strokes); an X never
+        // counts. FOURSOMES: each pair's one ball less the team's strokes.
+        // SINGLES: no box. A side with no score yet shows "–".
+        function teamScoreBox(n) {
+            const m = (card.match_status || []).find((x) => x.format === "fourball" || x.format === "chapman" || x.format === "foursomes");
+            if (!m) return "";
+            const subs = subjects();
+            const sideNet = (sd, k) => {
+                const balls = [];
+                if (m.format === "fourball") {
+                    sd.forEach((cid) => {
+                        const key = "c:" + cid, cur = key in draft ? {v: draft[key]} : value(key, n);
+                        const x = key in draftX ? draftX[key] : isX(key, n, [cid]);
+                        const st = ((m.strokes || {})[String(cid)] || {})[String(n)] || 0;
+                        balls.push({v: cur.v, x, net: cur.v == null || x ? null : cur.v - st});
+                    });
+                } else {
+                    const sub = subs.find((s_) => s_.cids.length === 2 && sd.every((c) => s_.cids.includes(c))) || subs.find((s_) => sd.includes(s_.cids[0]));
+                    if (sub) {
+                        const cur = sub.key in draft ? {v: draft[sub.key]} : value(sub.key, n);
+                        const x = sub.key in draftX ? draftX[sub.key] : isX(sub.key, n, sub.cids);
+                        const st = ((m.strokes || {})[String(sd[0])] || {})[String(n)] || 0;
+                        balls.push({v: cur.v, x, net: cur.v == null || x ? null : cur.v - st});
+                    }
+                }
+                const live = balls.filter((b_) => b_.net != null);
+                if (live.length) return String(Math.min(...live.map((b_) => b_.net)));
+                return balls.length && balls.every((b_) => b_.x) ? "X" : "–";
+            };
+            const aus = sideNet(m.sides[0], 0), sa = sideNet(m.sides[1], 1);
+            return `<div class="se-box se-tscore"><div class="se-lbl">Team score · hole ${n}</div>
+                <div class="nums"><span class="au">AUS ${aus}</span><span class="sa">SA ${sa}</span></div></div>`;
+        }
+        // HOW IT WORKS, one tap from the scoring screen (Kerry 2026-10-07,
+        // #1398-C2: "I do like the HOW IT WORKS buttons being immediately
+        // available from the scoring screen"), opening Event Info's section
+        // for this session's format. Cup rounds only.
+        function hiwPill() {
+            const sx = cupSession();
+            if (!sx) return "";
+            return `<div class="se-hiw"><a class="pr-hiw-link" href="/member/lonestarcup/info#${sx.anchor}">How it works · ${sx.title}</a></div>`;
+        }
+
+        // A pair's row carries the TEAM's handicap after the session allowance
+        // (mockup ScoringFoursomes "Team PH 9"), from the engine's side_hcp.
+        function teamPh(cids) {
+            const key = cids.slice().sort((a, b) => a - b).join(",");
+            for (const m of card.match_status || []) {
+                const k = m.sides.findIndex((sd) => sd.slice().sort((a, b) => a - b).join(",") === key);
+                if (k >= 0 && m.side_hcp && m.side_hcp[k] != null && !Array.isArray(m.side_hcp[k])) return "Team PH " + m.side_hcp[k];
+            }
+            return null;
         }
 
         function stripCells(order, current) {
@@ -870,9 +993,13 @@
             if (!ms.length) return "";
             const half = (x) => { const w = Math.floor(x), f = x - w; return (w || f === 0 ? String(w) : "") + (f >= 0.5 ? "½" : ""); };
             const cs = card.cup_standings;
-            const cup = cs ? `<div class="se-cup"><span class="lbl">Lone Star Cup</span>
-                <span class="tm aus"><span>Austin<span class="proj">live ${half(cs.austin_projected)}</span></span><b>${half(cs.austin)}</b></span>
-                <span class="tm sa"><span>San Antonio<span class="proj">live ${half(cs.sa_projected)}</span></span><b>${half(cs.sa)}</b></span></div>` : "";
+            // Under each team: THIS SESSION's points in Kerry's title (mockup
+            // Main: "Fourball 2"); the big number is the overall. No "live".
+            const sx = cupSession();
+            const sub = (k) => sx ? `${sx.title} ${half(cs["session_" + k] || 0)}` : `live ${half(cs[k + "_projected"])}`;
+            const cup = cs ? `${cs.preview ? '<div class="se-warn se-demo">PREVIEW · demo scores</div>' : ""}<div class="se-cup"><span class="lbl">Lone Star Cup</span>
+                <span class="tm aus"><span>Austin<span class="proj">${sub("austin")}</span></span><b>${half(cs.austin)}</b></span>
+                <span class="tm sa"><span>San Antonio<span class="proj">${sub("sa")}</span></span><b>${half(cs.sa)}</b></span></div>` : "";
             return `<div class="se-mstrip">${cup}${ms.map(matchCard).join("")}</div>`;
         }
         // THE STANDARD MATCH VIEW (Kerry 2026-09-26: "like the other match play
@@ -1463,6 +1590,7 @@
                 return;
             }
             if (act === "gate-score") { store.set(K.gate, true); render(); return; }
+            if (act === "gate-back") { store.set(K.gate, false); render(); return; }
             if (act === "gate-follow") { location.href = b.dataset.href; return; }
             if (act === "pick") { who = Number(b.dataset.cid); store.set(K.who, who); claim(false); return; }
             if (act === "follow") { following = true; store.set(K.follow, true); render(); return; }
