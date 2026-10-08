@@ -362,3 +362,22 @@ either way). CH = whs_round(index × slope/113 + (rating − 72)).
   and South's 10.0 (CH 9).
 - Sunday Low 7 | High 7: SA has four at CH 8 (Baker, Mazanec, South, Wilson);
   by index Wilson is 8th, so High.
+
+## Board reads for the Cup screens — v2.525.22 (CoS #1398, Track B)
+
+- `preview_board_payload(dial=None)`: the board from a supplied dial, default the
+  staff setting `lsc_preview_matches` (written 10/7: DEMO matches, 7 Fourball,
+  7 Foursomes, 14 Singles, all `se_round: null`). Never reads `lsc_matches`,
+  `lsc_results` or `lsc_mock_scores`; `source: "preview"`. The preview seeding
+  binds each session's `se_round` to its demo round id in `lsc_preview_matches`.
+- `build_preview_dial(live_dial, lock)`: those demo matches from the real pairs,
+  pools, tee sheet and `lsc_handicap_lock`. Not the draw.
+- `for_viewer(board, cid)`: own match first in each session, `yours: true`,
+  `your_matches`. Apply it AFTER `strip_money` for a member.
+- Every session carries `title` FOURBALL | FOURSOMES | SINGLES; the live dial's
+  labels are the same three words since 10/7.
+- `_apply_handicap_lock`: a match player with no PH in the feed shows the locked
+  CH (board shows CH and strokes before a ball is struck); a feed PH wins.
+- Score entry's `_cup_standings` / `round_matches` read the LIVE dial, so a demo
+  round shows no Cup strip until whoever builds the preview points them at
+  `lsc_preview_matches` for preview rounds.

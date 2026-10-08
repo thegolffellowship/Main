@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.525.21";
+window.TGF_VERSION = "2.525.22";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.525.22",
+    date: "2026-10-07",
+    title: "Lone Star Cup board reads for the new Cup screens: preview board, YOUR MATCH, session titles, locked CH",
+    changes: [
+      "For the 13 Cup screens Kerry issued for implementation (CoS #1398), the engine side Track B owns. preview_board_payload computes the full board from a SUPPLIED dial, by default the staff setting lsc_preview_matches (DEMO matches bound to demo rounds), never the live lsc_matches dial, the frozen results or the mock dial: same engine, same handicap lock, same skins read. build_preview_dial makes those demo matches from the real pairs, pools, tee sheet and locked handicaps (Fourball pair N v pair N within each pool, Foursomes rotated, Singles 1 v 1 to 14 v 14 by locked CH then index), and says it is not the draw.",
+      "for_viewer(board, customer_id) puts the viewer's own match first in every session with yours: true and lists your_matches, for the YOUR MATCH card; a spectator gets the board unchanged. Each session now carries title FOURBALL, FOURSOMES or SINGLES (Kerry 10/7, CoS #1397-1: Chapman is the kind of Foursomes, not a title). Before a ball is struck, every match player shows his locked course handicap from lsc_handicap_lock; a playing handicap the score-entry feed carries is never replaced. Guards: test_lsc_handicap_lock.py, tests/test_lsc_cup.py.",
+    ],
+  },
   {
     version: "2.525.21",
     date: "2026-10-07",
