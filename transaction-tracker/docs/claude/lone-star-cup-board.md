@@ -72,6 +72,13 @@ tap-open hole-by-hole scorecards.
   left over or redistributed. A pair where neither bought is out of the
   hole entirely: its score neither wins nor ties out a skin (#1357-2).
   Staff see who is paid on a mixed team (`mixed`); members never do.
+  **SKINS PANE (v2.525.25, #1398, mockup `docs/claude/lsc-mockups/Skins.dc.html`):**
+  `lscSkinsPane` in contests.html, every session with the selected one first:
+  a row per won hole (team/player + count), tied holes on one line, open
+  holes on one line; Sunday shows each flight's size and lowest-to-highest
+  index range (`groups[].members` from `compute_skins_payout`). `strip_money`
+  keeps holes/members/entrants for members (no money); pot, payouts, flags
+  stay staff only. Guard `test_lsc_skins_pane.js`.
   Sunday:
   individual gross skins flighted on the TGF 18-hole index FROZEN at the
   event (`_event_index_as_of` → `_handicap_index_18_by_customer`):

@@ -970,3 +970,36 @@ def test_team_skins_pops_use_each_players_own_tee_si():
     holes = {h["hole"]: h for h in out["groups"][0]["holes"]}
     assert holes[1]["status"] == "tied"          # no pop on hole 1 for player 1
     assert holes[2]["status"] == "tied"          # his pop lands on hole 2: 5-1 = 4
+
+
+# ── Skins pane data (#1398): flight members in index order; the member
+#    view keeps hole results and members, never money ─────────────────
+
+def test_singles_flights_list_members_lowest_index_first():
+    from email_parser.lsc_cup import compute_skins_payout
+    sess = {"id": "sun", "format": "singles", "n_holes": 1,
+            "matches": [{"id": "S1", "austin": [1], "sa": [2]},
+                        {"id": "S2", "austin": [3], "sa": [4]}]}
+    out = compute_skins_payout(sess, [{"hole": 1, "par": 4, "stroke_index": 1}], {},
+                               {1: {1: 4}, 2: {1: 4}, 3: {1: 4}, 4: {1: 3}},
+                               names={1: "Ann", 2: "Bob", 3: "Cy", 4: "Di"},
+                               buyers={1, 2, 3, 4}, index={1: 9.0, 2: 1.0, 3: 15.0, 4: 12.0})
+    f1, f2 = out["groups"]
+    assert [m["name"] for m in f1["members"]] == ["Bob", "Ann"]
+    assert [m["name"] for m in f2["members"]] == ["Di", "Cy"]
+
+
+def test_member_view_keeps_holes_and_members_but_no_money():
+    from email_parser.lsc_cup import compute_skins_payout, strip_money
+    sess = {"id": "sun", "format": "singles", "n_holes": 1,
+            "matches": [{"id": "S1", "austin": [1], "sa": [2]}]}
+    sk = compute_skins_payout(sess, [{"hole": 1, "par": 4, "stroke_index": 1}], {},
+                              {1: {1: 3}, 2: {1: 4}}, names={1: "Ann", 2: "Bob"},
+                              buyers={1, 2}, index={1: 5.0, 2: 5.0})
+    board = {"sessions": [{"id": "sun", "skins": sk, "matches": []}]}
+    m = strip_money(board)["sessions"][0]["skins"]
+    g = m["groups"][0]
+    assert g["holes"][0]["status"] == "won" and g["members"][0]["name"] == "Ann"
+    flat = repr(m)
+    for k in ("pot_cents", "payouts", "cents", "unpaid_cents", "flags", "excluded", "mixed"):
+        assert k not in flat, k

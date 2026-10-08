@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.525.24";
+window.TGF_VERSION = "2.525.25";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.525.25",
+    date: "2026-10-08",
+    title: "Lone Star Cup: the Skins pane",
+    changes: [
+      "The Cup board's SKINS view is built to the mockup (docs/claude/lsc-mockups/Skins.dc.html, CoS #1398). It shows every session, the selected one first. Saturday team skins (net, one flight) get a row per hole won, with the team and the count, then the tied holes on one line and the holes still open with how many groups are on the course. Sunday singles show both flights (under 12.0 / 12.0 and up) with how many players and who runs lowest to highest index, then each flight's won holes once play starts.",
+      "Members see counts only. Staff also see the pot, each winner's amount and any flags. The member view now carries the per-hole results and the flight members, which hold no money; the pot, payouts and flags still stay staff only. The 'How skins work' link comes with the Event Info page so it never 404s. Guards: tests/test_lsc_cup.py (+2) and test_lsc_skins_pane.js.",
+    ],
+  },
   {
     version: "2.525.24",
     date: "2026-10-08",
