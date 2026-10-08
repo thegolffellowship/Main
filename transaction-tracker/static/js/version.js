@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.526.4";
+window.TGF_VERSION = "2.526.5";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.526.5",
+    date: "2026-10-08",
+    title: "The Lone Star Cup prints per ROUND from its one event",
+    changes: [
+      "Kerry 10/8: \"If we can streamline it into ROUNDS under one expanded event, that would be nice. Obviously ROSTER is overarching, but then other things are per round like the reports.\" The Cup stays ONE event (3329: roster, money, handicap lock, skins). Its rounds are the sessions in the lsc_matches dial, and each already has its own draw, Live Scoring round and board. The events list now carries them on the Cup's row (report_rounds), and the REPORTS tab shows one row per round: FOURBALL, FOURSOMES, SINGLES. Each row gives the date, how many matches are drawn, and that round's own Scorecards and Cart Signs. The whole-event reports sit underneath. Guard: test_cup_report_rounds.py."
+    ]
+  },
   {
     version: "2.526.4",
     date: "2026-10-08",

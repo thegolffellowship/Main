@@ -584,3 +584,19 @@ the Starter Sheet logo and Proxy logos too."
 - **Open:** the Cup's Starter Sheet still reads saved pairings. The Cup has
   none, so it prints empty; its groups would come from the draw.
 - Guard: `test_lsc_scorecards.py`.
+
+
+## ROUNDS under one event (Kerry 10/8) — v2.526.5
+
+Kerry: "If we can streamline it into ROUNDS under one expanded event, that would
+be nice. Obviously ROSTER is overarching, but then other things are per round
+like the reports."
+
+- **One event, 3329.** The roster, money, lock and skins belong to the event.
+- **The rounds are the `lsc_matches` sessions** (sat-am FOURBALL, sat-pm
+  FOURSOMES, sun SINGLES). Each has its own draw, se_round and board.
+- **The events list:** `get_all_events` puts `report_rounds` on the Cup's row.
+- **The REPORTS tab:** one row per round, carrying its Scorecards
+  (`?session=`) and its Cart Signs (`/cup-cart-signs?session=`). The
+  whole-event reports sit below.
+- **Not built:** a per-round Starter Sheet read from the draw.

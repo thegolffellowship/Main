@@ -29744,8 +29744,27 @@ def get_all_events(db_path: str | Path | None = None) -> list[dict]:
         from .event_links import link_state as _link_state
         _today = today_central()
         _offers = _event_bundle_offers_map(conn)
+        # THE CUP'S ROUNDS (Kerry 10/8: "If we can streamline it into ROUNDS
+        # under one expanded event, that would be nice. Obviously ROSTER is
+        # overarching, but then other things are per round like the
+        # reports."). One event, its sessions from the lsc_matches dial;
+        # the REPORTS tab prints per round.
+        _rounds_by_event: dict = {}
+        try:
+            _lm = json.loads(get_app_setting("lsc_matches", db_path=db_path) or "{}")
+            if isinstance(_lm, dict) and _lm.get("event_id"):
+                from email_parser.lsc_cup import session_title as _st
+                _rounds_by_event[int(_lm["event_id"])] = [
+                    {"id": s.get("id"), "title": _st(s.get("format")) if s.get("format") else s.get("id"),
+                     "date": s.get("date"), "drawn": len(s.get("matches") or []),
+                     "of": s.get("n_matches")}
+                    for s in (_lm.get("sessions") or []) if s.get("id")]
+        except Exception:
+            logger.exception("Non-fatal: Cup rounds unavailable for the events list")
         for r in rows:
             d = dict(r)
+            if d["id"] in _rounds_by_event:
+                d["report_rounds"] = _rounds_by_event[d["id"]]
             d["games_offered"] = _offers.get(d["id"], ["NET", "GROSS", "BOTH"] if _event_games_fee(d) > 0 else [])
             # THE HANDICAP LOCK DATE, published on every event (v2.462.0):
             # None until the event tees off, then its own date — the page
