@@ -92,3 +92,27 @@ def test_a_mixed_team_cart_does_not_print(pdb):
         "7": {"team": "austin"}, "672": {"team": "sa"}}}}), db_path=pdb)
     d = lsc_cup.practice_cart_signs(3330, db_path=pdb)
     assert d["count"] == 0 and "doesn't print" in d["problems"][0]
+
+
+# --- the alias-aware course rename (Kerry 10/8: "Yes, rename it to The
+# Hideout Golf Club & Resort") --------------------------------------------
+
+def test_the_rename_keeps_the_old_name_as_an_alias(pdb):
+    with db._connect(pdb) as c:
+        cid = c.execute("SELECT course_id FROM courses").fetchone()[0]
+        c.execute("UPDATE events SET course = 'The Hideout Golf Club' WHERE id IN (3329, 3330)")
+        c.commit()
+    dry = db.rename_course(cid, "The Hideout Golf Club & Resort", db_path=pdb)
+    assert not dry["applied"] and {e["id"] for e in dry["events_renamed"]} == {3329, 3330}
+    with db._connect(pdb) as c:
+        assert c.execute("SELECT name FROM courses WHERE course_id = ?", (cid,)).fetchone()[0] == "The Hideout Golf Club"
+    db.rename_course(cid, "The Hideout Golf Club & Resort", apply=True, db_path=pdb)
+    with db._connect(pdb) as c:
+        assert c.execute("SELECT name FROM courses WHERE course_id = ?", (cid,)).fetchone()[0] \
+            == "The Hideout Golf Club & Resort"
+        assert db.course_id_for_name(c, "The Hideout Golf Club") == cid      # the old name still finds it
+        assert db.course_id_for_name(c, "the hideout golf club & resort") == cid
+        assert c.execute("SELECT course FROM events WHERE id = 3330").fetchone()[0] \
+            == "The Hideout Golf Club & Resort"
+    assert db.report_heading({"id": 3330, "course_id": cid, "event_date": "2026-10-09"},
+                             db_path=pdb)["course"] == "THE HIDEOUT GOLF CLUB & RESORT"

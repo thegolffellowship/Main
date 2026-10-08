@@ -26660,6 +26660,55 @@ def update_course(course_id: int, fields: dict, db_path: str | Path = DB_PATH) -
         return dict(out)
 
 
+def rename_course(course_id: int, new_name: str, apply: bool = False, set_by: str = "",
+                  db_path=None) -> dict:
+    """THE ALIAS-AWARE COURSE RENAME (Kerry 2026-10-08: "Yes, rename it to
+    The Hideout Golf Club & Resort" — design-claude #1467: the Cup card
+    prints the course master name, so fix the record, never type it in).
+    `update_course` keeps `name` read-only because items/events and ingests
+    find courses BY NAME; this is the dedicated flow it points to:
+      1. the old name becomes a `course_aliases` row, so every name lookup
+         (`course_id_for_name`, ingests, Edit Event's course re-resolve)
+         still lands on this course;
+      2. `courses.name` takes the new name;
+      3. events linked to this course whose `course` text was the old name
+         take the new name (the Events list and every printed header).
+    Items are order snapshots and are never rewritten. Dry run default."""
+    new_name = " ".join(str(new_name or "").split())
+    if not new_name:
+        return {"error": "new name required"}
+    with _connect(db_path) as conn:
+        r = conn.execute("SELECT course_id, name FROM courses WHERE course_id = ?",
+                         (int(course_id),)).fetchone()
+        if not r:
+            return {"error": f"course {course_id} not found"}
+        old = r["name"]
+        clash = conn.execute("SELECT course_id FROM courses WHERE lower(trim(name)) = lower(?) "
+                             "AND course_id != ?", (new_name, int(course_id))).fetchone()
+        if clash:
+            return {"error": f"another course ({clash[0]}) already carries that name"}
+        evs = [dict(e) for e in conn.execute(
+            "SELECT id, item_name FROM events WHERE course_id = ? AND lower(trim(course)) = lower(?)",
+            (int(course_id), old))]
+        out = {"course_id": int(course_id), "old": old, "new": new_name,
+               "alias_kept": old, "events_renamed": evs, "applied": bool(apply)}
+        if not apply or old == new_name:
+            return out
+        conn.execute("INSERT OR IGNORE INTO course_aliases (course_id, alias_name) VALUES (?, ?)",
+                     (int(course_id), old))
+        conn.execute("UPDATE courses SET name = ? WHERE course_id = ?", (new_name, int(course_id)))
+        for e in evs:
+            conn.execute("UPDATE events SET course = ? WHERE id = ?", (new_name, e["id"]))
+        conn.commit()
+    try:
+        log_agent_action(set_by or "mcp-claude", "course_rename",
+                         f"course {course_id}: '{old}' -> '{new_name}' (alias kept); "
+                         f"events {[e['id'] for e in evs]}", db_path=db_path)
+    except Exception:
+        logger.exception("course rename: action log failed (non-fatal)")
+    return out
+
+
 # Kerry's ratified course short names (2026-07-10) — applied ONCE via the
 # scoring-course-short-pins bridge command, not at boot, so later manual
 # edits in the /courses UI are never overwritten. First matching pattern
@@ -62964,6 +63013,32 @@ def event_proximity_report(event_id: int, db_path=None) -> dict | None:
     }
 
 
+def report_heading(ev: dict, title: str | None = None, date: str | None = None,
+                   db_path=None) -> dict | None:
+    """THE REPORT HEADER of a Lone Star Cup round (Kerry 2026-10-08, on the
+    practice-round scorecard: "Each report should have this type of ROUND
+    NAME first row, then COURSE NAME then DATE on the second row"). The
+    scorecard's own header (design-claude #1467): the ROUND, then the
+    course MASTER name (the course record, never typed) and the date.
+    None for an event that is not a Cup round."""
+    try:
+        from email_parser.lsc_cup import lsc_report_context
+        lsc = lsc_report_context(int(ev["id"]), db_path=db_path)
+    except Exception:
+        lsc = None
+    if not lsc:
+        return None
+    course = ev.get("course") or ""
+    if ev.get("course_id"):
+        with _connect(db_path) as conn:
+            r = conn.execute("SELECT name FROM courses WHERE course_id = ?",
+                             (ev["course_id"],)).fetchone()
+            course = (r[0] if r else None) or course
+    from email_parser.scorecards import _fmt_date
+    return {"title": title or ("PRACTICE ROUND" if lsc["kind"] == "practice" else "LONE STAR CUP"),
+            "course": course.upper(), "date": _fmt_date(date or ev.get("event_date")) or ""}
+
+
 def report_brand(event_id: int, db_path=None) -> dict:
     """WHOSE LOGO A PRINTED REPORT CARRIES (Kerry 10/8: "you need to consider
     updates for the Starter Sheet logo and Proxy logos too"). The Lone Star
@@ -65101,6 +65176,7 @@ def get_event_print_pack(event_id: int, db_path=None) -> dict | None:
         "brand": report_brand(event_id, db_path=db_path),
         # No included games: the Starter Sheet drops its Cart/Team column
         "games_off": event_games_off(ev),
+        "heading": report_heading(ev, db_path=db_path),
     }
 
 

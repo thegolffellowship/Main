@@ -578,9 +578,11 @@ the Starter Sheet logo and Proxy logos too."
   cart. The team band comes from the lock. A cart with riders from both teams
   doesn't print, and the page names it. The bound pack does the same. Kerry
   10/8, on the TGF-layout sign: "This isn't like what we designed at all".
-- **Open:** the course record reads "The Hideout Golf Club". CD wants "THE
-  HIDEOUT GOLF CLUB & RESORT" from the record, not typed in. The rename is
-  Kerry's call: courses are also matched by name.
+- **The course record (v2.526.7):** renamed "The Hideout Golf Club & Resort"
+  on Kerry's word, through `database.rename_course`. The old name stays as a
+  course alias.
+- **Report header (v2.526.7):** every Cup round's Starter Sheet reads ROUND
+  NAME, then COURSE · DATE (`database.report_heading`, Kerry 10/8).
 - **Open:** the Cup's Starter Sheet still reads saved pairings. The Cup has
   none, so it prints empty; its groups would come from the draw.
 - Guard: `test_lsc_scorecards.py`.

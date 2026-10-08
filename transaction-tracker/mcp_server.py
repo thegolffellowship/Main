@@ -3908,6 +3908,18 @@ def _scoring_dispatch_inner(url: str, extract: str):
             db.log_agent_action("mcp-claude", "scoring-expense-promote",
                                 f"expense {_xid} -> {res}")
             return json.dumps(res, indent=2)
+        if cmd == "scoring-course-rename":
+            # scoring-course-rename:<course_id>|<new name>[|apply] — the
+            # alias-aware rename (database.rename_course). Dry run default.
+            _p = [x.strip() for x in arg.split("|")]
+            try:
+                _cid = int(_p[0])
+            except (ValueError, IndexError):
+                return json.dumps({"error": "usage: scoring-course-rename:<course_id>|<new name>[|apply]"})
+            _apply = len(_p) > 2 and _p[-1].lower() == "apply"
+            _nm = "|".join(_p[1:-1] if _apply else _p[1:])
+            return json.dumps(db.rename_course(_cid, _nm, apply=_apply, set_by="mcp-claude"),
+                              indent=2, default=str)
         if cmd == "scoring-setting-set":
             # "<key>|<value>" — write an app_settings dial ("stored as a
             # setting is our standard for everything" — Kerry).

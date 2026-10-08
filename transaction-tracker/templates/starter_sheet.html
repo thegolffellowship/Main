@@ -48,6 +48,12 @@
     }
     .sheet-brand { display: flex; align-items: center; gap: 14px; }
     .sheet-logo { width: 68px; height: 68px; flex-shrink: 0; display: block; object-fit: contain; }
+    /* The Lone Star Cup header (Kerry 10/8; the scorecard's, #1467). */
+    .sheet-head h1.lsc-h { color: #002855; letter-spacing: 1.5px; font-family: "Bitter", Georgia, serif; }
+    .sheet-head .lsc-sub { white-space: nowrap; }
+    .sheet-head .lsc-sub b { font-family: "Bitter", Georgia, serif; font-weight: 700; color: #002855; }
+    .sheet-head .lsc-sub .sep { color: #9CA3AF; }
+    .sheet-head .lsc-sub .d { font-family: "Bitter", Georgia, serif; }
     .sheet-head h1 {
       font-family: "Bitter", Georgia, serif; font-weight: 700;
       font-size: 22px; margin: 0;
@@ -229,10 +235,18 @@
       {% set brand = pack.get('brand') or {} %}
       <img class="sheet-logo" src="{{ brand.get('logo') or '/static/tgf-logo-r.svg' }}" alt="{{ brand.get('alt') or 'The Golf Fellowship' }}">
       <div>
+      {% set hd = pack.get('heading') %}
+      {% if hd %}
+      {# A Lone Star Cup round (Kerry 10/8): ROUND NAME, then COURSE · DATE,
+         the scorecard's own header (design-claude #1467). #}
+      <h1 class="lsc-h">{{ hd.title }}</h1>
+      <div class="sub lsc-sub"><b>{{ hd.course }}</b><span class="sep"> &middot; </span><span class="d">{{ hd.date }}</span></div>
+      {% else %}
       <h1>{{ pack.event.item_name }}</h1>
       <div class="sub">
         {{ pack.event.course or "" }}{% if pack.event.chapter %} · {{ pack.event.chapter }}{% endif %}
       </div>
+      {% endif %}
       </div>
     </div>
     <div class="meta">

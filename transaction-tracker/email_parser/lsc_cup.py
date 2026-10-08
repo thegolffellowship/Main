@@ -1773,7 +1773,12 @@ def cup_round_pack(event_id: int, session_id: str, preview: bool = False, db_pat
         "format": "18 Holes", "start_type": "Tee Times",
         "start_label": f"First tee {groups[0]['slot_label']}" if groups else None,
         "start_label_18": None})
+    from email_parser.database import _connect, report_heading
+    with _connect(db_path) as _c:
+        _evr = dict(_c.execute("SELECT * FROM events WHERE id = ?", (int(event_id),)).fetchone())
+    heading = report_heading(_evr, title=title, date=ev.get("event_date"), db_path=db_path)
     return {**base, "event": ev, "groups": groups, "group_count": len(groups), "alpha": alpha,
+            "heading": heading,
             "player_count": len(alpha), "games_off": True, "ph_note": "",
             "ph_basis": "the Cup's LOCKED course handicap (lsc_handicap_lock)",
             "lsc_round": {"id": session_id, "title": title, "gaps": cg["gaps"], "log": cg["log"],

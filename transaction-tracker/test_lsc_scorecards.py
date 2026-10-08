@@ -261,8 +261,13 @@ check("FOURBALL starter sheet: one group per match, tee time, seats, locked PH, 
       and rp["groups"][0]["players"][2]["team_color"] == "#44596B" and rp["games_off"]
       and len(rp["alpha"]) == 4, rp["groups"])
 html = env.get_template("starter_sheet.html").render(pack=rp)
-check("the starter sheet renders the round, no Cart/Team column", "LONE STAR CUP · FOURBALL" in html
-      and 'class="atn"' not in html and "8:30" in html)
+check("the starter sheet renders the round, no Cart/Team column", 'class="atn"' not in html and "8:30" in html)
+check("its header is ROUND NAME, then COURSE · DATE (Kerry 10/8)",
+      rp["heading"] == {"title": "FOURBALL", "course": "THE HIDEOUT GOLF CLUB", "date": "Sat, October 10, 2026"}
+      and '<h1 class="lsc-h">FOURBALL</h1>' in html and "<b>THE HIDEOUT GOLF CLUB</b>" in html, rp["heading"])
+check("the practice round's header", db.report_heading({"id": 3330, "event_date": "2026-10-09", "course": "x"},
+                                                        db_path=DB)["title"] == "PRACTICE ROUND")
+check("a regular TGF event has no Cup header", db.report_heading({"id": 3304}, db_path=DB) is None)
 sg = lsc_cup.cup_round_cart_signs(3329, "sun", db_path=DB)
 check("SINGLES cart signs from the draw: one per side per card",
       [s_["team"] for s_ in sg] == ["AUSTIN", "SAN ANTONIO", "AUSTIN", "SAN ANTONIO"]

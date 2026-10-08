@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.526.6";
+window.TGF_VERSION = "2.526.7";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.526.7",
+    date: "2026-10-08",
+    title: "Cup report headers read ROUND, then COURSE · DATE; the alias-aware course rename",
+    changes: [
+      "Kerry 10/8, on the practice-round scorecard: \"Each report should have this type of ROUND NAME first row, then COURSE NAME then DATE on the second row.\" The Starter Sheet of every Lone Star Cup round now carries the scorecard's header: PRACTICE ROUND / FOURBALL / FOURSOMES / SINGLES in navy Bitter, then the course master name and the round's date on one line (database.report_heading). The Cup's other reports already read this way (Scorecards) or are the approved 3e design (Cart Signs). The game reports are off on no-games events.",
+      "Kerry: \"Yes, rename it to The Hideout Golf Club & Resort.\" New database.rename_course (bridge scoring-course-rename:<id>|<name>[|apply], dry run default, action-logged), the alias-aware flow update_course has always pointed to. The old name becomes a course_aliases row, so every lookup by name still finds the course. The course record takes the new name, and events linked to it whose course text was the old name follow. Order rows are never rewritten. Guard: test_lsc_print_pack_tees.py."
+    ]
+  },
   {
     version: "2.526.6",
     date: "2026-10-08",
