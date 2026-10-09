@@ -2962,7 +2962,28 @@
                 d.overall_board.push(r);
                 return r;
             });
-            const n = (g.members || []).length || g.entrants || rows.length;
+            // SUNDAY: the players NOT in the skins (Kerry 10/9: "Green for
+            // those in the game but have button to show all players"). Only
+            // under Show All Players, in the flight their index puts them
+            // in, grey, gross holes, never circled, no # and no money.
+            if (!team) (g.others || []).forEach(o => {
+                const rid = "lsc:" + (sess.id || "") + ":x:" + o.customer_id;
+                const card = o.card || {};
+                const hs = cols.filter(n => card[n] != null).map(n => [n, card[n][0], 0]);
+                d.cards[rid] = hs;
+                d.skin_cells[rid] = [];
+                let gross = 0, parT = 0, parOk = hs.length > 0;
+                hs.forEach(h => { gross += h[1]; if (par[h[0]] == null) parOk = false; else parT += par[h[0]]; });
+                const r = { scoring_round_id: rid, player_name: o.name || "",
+                    index: o.index ?? null, hcp: "",
+                    gross: hs.length ? gross : null, net: null,
+                    to_par_gross: parOk ? gross - parT : null, to_par_net: null,
+                    skins_flight: g.flight || 1, won_by_cat: {}, won_total: 0,
+                    _buyer: false, _note: "not in the skins" };
+                d.overall_board.push(r);
+                rows.push(r);
+            });
+            const n = (g.members || []).length || g.entrants || rows.filter(r => r._buyer).length;
             const lbl = g.flight === 1 ? "Flight 1 · index under 12.0"
                 : (g.flight === 2 ? "Flight 2 · index 12.0 and up" : (g.label || ""));
             d.sections.push({ label: groups.length > 1 ? `${lbl} · ${n} player${n === 1 ? "" : "s"}` : null,
@@ -2980,8 +3001,15 @@
             grossCol: team ? false : undefined, netCol: team ? undefined : false,
             // the holes ARE the skins board, so it lands hole by hole
             holesOnLanding: true,
-            // nobody outside the skins is on it, so no Show All Players
-            noAllToggle: true };
+            // Team skins: every entry is a team in the game, so no Show All
+            // Players. SUNDAY singles (Kerry 10/9): green rows are the
+            // players in the skins, and the event board's Show All Players
+            // brings back the Sunday players who didn't buy in (grey).
+            noAllToggle: team,
+            // Singles skins are GROSS and flighted on the index (Kerry 10/9:
+            // "with singles it's gross so no handicaps because it's
+            // flighted"): no Handicaps box, no Idx / PH columns
+            noHcp: !team };
     }
     function lscSkinsPane(sess) {
         const sk = sess.skins;
@@ -3003,8 +3031,15 @@
         const d = lscSkinsEvlbData(sess);
         const $c = (c) => "$" + (c / 100).toFixed(2);
         const held = (sk.groups || []).some(g => g.entrants && !g.complete);
+        // a pot carried in from an earlier no-skin session (Kerry 10/9,
+        // ruling 5): "pot $1,150.00 ($575.00 + $575.00 carried from SAT AM)"
+        const from = (sk.carried_from || []).join(" + ");
+        const carry = staff && sk.carry_in_cents
+            ? ` (${$c(sk.own_pot_cents || 0)} + ${$c(sk.carry_in_cents)} carried from ${escapeHtml(from)})` : "";
+        const out = staff && sk.carries_to
+            ? ` · no skin won, the pot carries to ${escapeHtml(sk.carries_to)}` : "";
         const note = staff
-            ? `<div class="evlb-note lsc-sk-staff">Staff · pot ${$c(sk.pot_cents || 0)}`
+            ? `<div class="evlb-note lsc-sk-staff">Staff · pot ${$c(sk.pot_cents || 0)}${carry}${out}`
               + (held ? " · Won shows once every card is in" : "") + `</div>` : "";
         html += evlbStdBoard(d, Object.assign({ sections: d.sections }, lscSkinsBoard(sess)), note);
         // the event board's legend: a chip per flight once a skin is won
@@ -3015,7 +3050,11 @@
         const allow = !team ? "Individual gross, two flights on the frozen TGF index."
             : sess.format === "fourball" ? "Team net, best ball at the Fourball 90% allowance."
             : "Team net on the one ball at the Chapman 60/40 allowance.";
-        html += `<div class="lsc-sk-note" data-note>A circled score won a skin; # is skins won; no carryovers. ${allow}${staff ? "" : " TGF settles after the round."}</div>`;
+        // members: which session's pot carried in / out, no dollars
+        const carryTxt = (sk.carried_from || []).length
+            ? ` The ${escapeHtml(sk.carried_from.join(" + "))} pot carried into this session (no skin was won there).` : "";
+        const outTxt = sk.carries_to ? ` No skin was won, so this pot carries to ${escapeHtml(sk.carries_to)}.` : "";
+        html += `<div class="lsc-sk-note" data-note>A circled score won a skin; # is skins won. A session where no skin is won carries its pot to the next session.${carryTxt}${outTxt} ${allow}${staff ? "" : " TGF settles after the round."}</div>`;
         if (staff && (sk.flags || []).length)
             html += `<div class="lsc-bd-skflags">${sk.flags.map(f => `<div>${escapeHtml(f)}</div>`).join("")}</div>`;
         return `<div class="lsc-sk-sess">${html}</div>`;
@@ -4248,14 +4287,15 @@
             `<div class="evlb-togrow">` +
             `<div class="evlb-togs">` +
             `<label class="evlb-holetog"><input type="checkbox" data-ovr-holes${showHoles ? " checked" : ""}> Hole by hole</label>` +
-            `<label class="evlb-holetog"><input type="checkbox" data-ovr-hcp${evlbShowHcp ? " checked" : ""}> Handicaps</label>` +
+            (board.noHcp ? "" :
+                `<label class="evlb-holetog"><input type="checkbox" data-ovr-hcp${evlbShowHcp ? " checked" : ""}> Handicaps</label>`) +
             (EVLB_BUYIN_GAMES.includes(board.game || null) && !evlbNoGames(d) && !board.noAllToggle
                 ? `<label class="evlb-holetog"><input type="checkbox" data-ovr-all${evlbShowAll ? " checked" : ""}> Show All Players</label>`
                 : "") +
             `</div>` + evlbTeeLegend(d) + `</div>` +
             // no WON column on an event with no games (Kerry 10/9: "Won
             // column shouldn't show at all if there aren't any side games")
-            `<div class="evlb-scroll"><table class="evlb-holes evlb-ovr${showHoles ? "" : " no-holes"}${evlbShowHcp ? "" : " no-hcp"}${d._moneyHeld || evlbNoGames(d) ? " no-won" : ""}" data-board="${id}"><thead>` +
+            `<div class="evlb-scroll"><table class="evlb-holes evlb-ovr${showHoles ? "" : " no-holes"}${evlbShowHcp && !board.noHcp ? "" : " no-hcp"}${d._moneyHeld || evlbNoGames(d) ? " no-won" : ""}" data-board="${id}"${board.noHcp ? " data-nohcp" : ""}><thead>` +
             `<tr><th data-k="${board.netCol === false ? "gross" : "net"}" class="sortable">#</th>` +
             `<th data-k="player" class="nm sortable">Player</th>` +
             // Won sits right of the name (Kerry 2026-09-13) — the money
@@ -4736,7 +4776,9 @@
         body.querySelectorAll("input[data-ovr-hcp]").forEach(cb =>
             cb.addEventListener("change", () => {
                 evlbShowHcp = cb.checked;
-                document.querySelectorAll("table.evlb-ovr").forEach(t =>
+                // a board with no handicaps (the Cup's gross singles skins)
+                // keeps its Idx / PH hidden whatever the shared box says
+                document.querySelectorAll("table.evlb-ovr:not([data-nohcp])").forEach(t =>
                     t.classList.toggle("no-hcp", !evlbShowHcp));
                 document.querySelectorAll("input[data-ovr-hcp]").forEach(o =>
                     { o.checked = evlbShowHcp; });

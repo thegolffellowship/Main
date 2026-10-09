@@ -2104,6 +2104,31 @@ def start_scheduler():
         max_instances=1, coalesce=True,
     )
 
+    # ── Lone Star Cup SKINS payouts, automatic (Kerry 10/9: "Ok to write
+    #    payouts 15 minutes after all sessions are final" / "Yes when rounds
+    #    complete"). Every 5 minutes; acts only during the Cup's dates and
+    #    while app setting `lsc_skins_auto` is on (default ON; 0/off stops
+    #    it). Each session is written once it has been final for 15 minutes
+    #    (first seen final: `lsc_skins_final_seen`), through the SAFE apply
+    #    (never a PAID row; a re-run writes nothing new).
+    #    email_parser/lsc_skins_payouts.py; bridge scoring-lsc-skins-payouts.
+    def lsc_skins_payouts_auto_job():
+        from email_parser.lsc_skins_payouts import lsc_skins_auto_check
+        try:
+            res = lsc_skins_auto_check()
+            if res.get("status") == "applied":
+                logger.info("LSC skins payouts auto: %s", res)
+        except Exception:
+            logger.exception("LSC skins payouts auto failed (non-fatal)")
+    scheduler.add_job(
+        lsc_skins_payouts_auto_job,
+        "cron", minute="*/5",
+        timezone="US/Central",
+        id="lsc_skins_payouts_auto",
+        replace_existing=True,
+        max_instances=1, coalesce=True,
+    )
+
     scheduler.start()
     logger.info("Scheduler started — checking inbox every %d minutes", interval)
 

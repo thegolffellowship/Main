@@ -1864,7 +1864,7 @@ def _scoring_dispatch_inner(url: str, extract: str):
       scoring-lsc-results[:freeze[|force]|:clear]  Lone Star Cup final-results snapshot (lsc_results): status, freeze (refused while anything is open unless force), clear
       scoring-lsc-preview[:seed[|apply]|:teardown]  the Cup STAFF PREVIEW demo rounds (own dial, PREVIEW rounds; /events/3329/cup-preview)
       scoring-lsc-check  read-only check of the lsc_matches pairings (per session matches, points total, problems) before a change goes live
-      scoring-lsc-skins-payouts[:apply]  Cup skins winners -> PAYOUTS, PER SESSION (Kerry 10/9: "Session pots standalone"): one tgf_payouts row per winner per final session (category skins, "LSC SAT AM Skins — ...", "LSC SAT PM Skins — ...", "LSC SUN Skins — Flight 1 ..."), a session payable as soon as it is final; dry run by default; apply creates / updates UNPAID / removes UNPAID rows (incl. any old per-day "LSC SAT Skins" row), never a PAID one (Kerry ratifies before apply)
+      scoring-lsc-skins-payouts[:apply]  Cup skins winners -> PAYOUTS, PER SESSION: one tgf_payouts row per winner per final session (category skins, "LSC SAT AM Skins — ...", "LSC SAT PM Skins — ...", "LSC SUN Skins — Flight 1 ..."). CARRYOVER (Kerry 10/9 ruling 5): a final session where no skin was won carries its whole pot to the next (sat-am -> sat-pm -> sun; into Sunday split evenly between the flights); a session whose predecessor is not final is held. AUTOMATIC (Kerry 10/9: "Ok to write payouts 15 minutes after all sessions are final"): scheduler job lsc_skins_payouts_auto every 5 min writes each session once final 15+ min, Cup dates only, setting lsc_skins_auto (default on, 0/off stops it). Dry run by default and reports the auto state (setting, final_seen, payable_at per session); apply creates / updates UNPAID / removes UNPAID rows (incl. any old per-day "LSC SAT Skins" row), never a PAID one
       scoring-lsc-recap:<saturday|final>[|send[|force]]  Cup recap DRAFT from the board (Kerry 10/9): dry run = plain text + guard (refused until the sessions are final); send = DRAFT to Kerry only, once per kind (lsc_recap_sent); force re-runs. No dollars
       scoring-course-card:<course_id>[|<card json>[|apply]]  read a course's card as held, or validate/plan/load one from the printed card (tees, bands, rating/slope incl. front/back nines, par/SI/yardage), source course_card (CA #786 GO 3)
       scoring-membership-price:<term_id>|<amount>[|apply]  set price_paid on one membership term (dry run by default, audited)
@@ -3808,7 +3808,10 @@ def _scoring_dispatch_inner(url: str, extract: str):
                                "warnings": _lc.validate_matches(_dial)}, indent=2)
         if cmd == "scoring-lsc-skins-payouts":
             # Lone Star Cup skins winner amounts -> the PAYOUTS page, one
-            # row per winner per SESSION (Kerry 10/9: "Daily Winner Amounts
+            # row per winner per SESSION; a no-skin session's pot carries to
+            # the next (Kerry 10/9 ruling 5); the scheduler applies each
+            # session 15 min after it is final (lsc_skins_payouts_auto,
+            # setting lsc_skins_auto). (Kerry 10/9: "Daily Winner Amounts
             # should go to PAYOUTS so I can easily pay them per normal" and
             # "Session pots standalone"). "" = dry run (what each final
             # session would write against what is there); "apply" writes.
@@ -3820,6 +3823,12 @@ def _scoring_dispatch_inner(url: str, extract: str):
             if _a and _a != ["apply"]:
                 return json.dumps({"error": "use '' (dry run) or 'apply'"})
             res = _lsp.lsc_skins_payouts(apply=_a == ["apply"])
+            # the automatic writer's view (Kerry 10/9: "Ok to write payouts
+            # 15 minutes after all sessions are final"): read-only
+            try:
+                res["auto"] = _lsp.auto_state()
+            except Exception as _e:
+                res["auto"] = {"error": str(_e)}
             return json.dumps(res, indent=2, default=str)
         if cmd == "scoring-lsc-recap":
             # Lone Star Cup recap DRAFTS (Kerry 10/9: "Would be nice to

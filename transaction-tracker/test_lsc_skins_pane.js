@@ -22,7 +22,8 @@ if (a < 0 || b < 0) throw new Error("evlb renderer region not found");
 const escapeHtml = (s) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 eval(lines.slice(a, b).join("\n") + "\n" + cut("lscSkinsEvlbData") + "\n" + cut("lscSkinsBoard")
      + "\n" + cut("lscSkinsPane")
-     + "\nglobalThis.pane = lscSkinsPane; globalThis.data = lscSkinsEvlbData;");
+     + "\nglobalThis.pane = lscSkinsPane; globalThis.data = lscSkinsEvlbData;"
+     + "\nglobalThis.setAll = v => { evlbShowAll = v; }; globalThis.setHcp = v => { evlbShowHcp = v; };");
 let fails = 0;
 const check = (l, c, d) => { console.log((c ? "  PASS  " : "  FAIL  ") + l + (c ? "" : "  " + (d || "").slice(0, 600))); if (!c) fails++; };
 
@@ -53,7 +54,9 @@ check("# column beside Won, counts 2 and 1",
       h.includes('title="Skins won">#</th>') && h.includes('<td class="bl br gc" style="">2</td>') && h.includes('<td class="bl br gc" style="">1</td>'), h);
 check("team skins are NET: no gross column", !h.includes('title="Gross score"') && h.includes('title="Net score"'), h);
 check("member view: Won column hidden and no dollars", /evlb-ovr[^"]*no-won/.test(h) && !h.includes("$"), h);
-check("no Show All Players box (nobody outside the skins is on it)", !h.includes("data-ovr-all"), h);
+check("team skins: no Show All Players box (every entry is a team in the game)", !h.includes("data-ovr-all"), h);
+check("team skins keep the Handicaps box (net at the session allowance)", h.includes("data-ovr-hcp"), h);
+check("team rows are the green in-the-game rows", (h.match(/class="evlb-plr bought"/g) || []).length === 2, h);
 check("Chapman note", h.includes("Chapman 60/40 allowance"), h);
 const dd = data(fsMember);
 check("team net total = gross less pops over the holes played",
@@ -97,6 +100,63 @@ check("Sunday skins are GROSS: no net column", hn.includes('title="Gross score"'
 check("every flighted player listed before a ball is struck", ["Pat Youngs", "Mesa", "Walter Hogue", "Callaway", "Rideout"].every(n => hn.includes(n)), hn);
 check("the frozen index rides in Idx", hn.includes('<td class="bl hc">3.2</td>'), hn);
 check("no skins data -> nothing", pane({ skins: null }) === "");
+
+// SUNDAY SINGLES (Kerry 10/9: "singles skins board needs to show the
+// flights. Green for those in the game but have button to show all
+// players" / "with singles it's gross so no handicaps because it's flighted")
+const sunAll = JSON.parse(JSON.stringify(sun));
+sunAll.skins.groups[0].holes = [{ hole: 1, status: "won", winner: "S1:austin:1", value: 1 }];
+sunAll.skins.groups[0].cards = { "S1:austin:1": { 1: [3, 0] }, "S2:sa:2": { 1: [4, 0] }, "S3:austin:3": { 1: [4, 0] } };
+sunAll.skins.groups[0].totals[0].skins = 1;
+sunAll.skins.groups[0].others = [{ customer_id: 9, name: "Nobuy Nate", index: 6.1, card: { 1: [3] } }];
+sunAll.skins.groups[1].others = [{ customer_id: 10, name: "Grey Gary", index: 18.0, card: { 1: [5] } }];
+setAll(false);
+const ha = pane(sunAll);
+check("singles: the Show All Players box", ha.includes("data-ovr-all"), ha);
+check("singles: no Handicaps box and Idx/PH hidden for good (gross, flighted)",
+      !ha.includes("data-ovr-hcp") && /evlb-ovr[^"]*no-hcp/.test(ha) && ha.includes("data-nohcp"), ha);
+setHcp(true);
+check("singles: Idx/PH stay hidden even with Handicaps ticked elsewhere",
+      /evlb-ovr[^"]*no-hcp/.test(pane(sunAll)), "");
+setHcp(false);
+check("singles, default: only the players in the skins, all green",
+      !ha.includes("Nobuy Nate") && !ha.includes("Grey Gary")
+      && (ha.match(/class="evlb-plr bought"/g) || []).length === 5 && !ha.includes(" nobuy"), ha);
+check("singles: both flight bands kept with the game's player counts",
+      ha.includes("Flight 1 · index under 12.0 · 3 players") && ha.includes("Flight 2 · index 12.0 and up · 2 players"), ha);
+setAll(true);
+const hall = pane(sunAll);
+setAll(false);
+check("Show All Players on: the non-buyers appear, grey (nobuy), in their flight",
+      hall.includes("Nobuy Nate") && hall.includes("Grey Gary")
+      && (hall.match(/class="evlb-plr nobuy"/g) || []).length === 2, hall);
+const f1 = hall.indexOf("Flight 1 ·"), f2 = hall.indexOf("Flight 2 ·");
+check("each non-buyer sits in the flight his index puts him in",
+      f1 < hall.indexOf("Nobuy Nate") && hall.indexOf("Nobuy Nate") < f2 && hall.indexOf("Grey Gary") > f2, hall);
+check("a non-buyer's 3 on the won hole is shown but never circled (only Pat's skin is)",
+      (hall.match(/class="evlb-circ"/g) || []).length === 1, hall);
+const dAll = data(sunAll);
+const nate = dAll.overall_board.find(r => r.player_name === "Nobuy Nate");
+check("non-buyer rows: no skins, no money, gross only",
+      nate && nate._buyer === false && (dAll.skin_cells[nate.scoring_round_id] || []).length === 0
+      && !nate.won_total && nate.gross === 3 && nate.net == null, JSON.stringify(nate));
+
+// CARRYOVER (Kerry 10/9 ruling 5): the staff pot note shows the carry,
+// members see which session's pot came in, never a dollar
+const carS = JSON.parse(JSON.stringify(staff));
+Object.assign(carS.skins, { pot_cents: 115000, own_pot_cents: 57500, carry_in_cents: 57500, carried_from: ["SAT AM"] });
+const hc = pane(carS);
+check("staff pot note: pot $1150.00 ($575.00 + $575.00 carried from SAT AM)",
+      hc.includes("pot $1150.00 ($575.00 + $575.00 carried from SAT AM)"), hc);
+const carM = JSON.parse(JSON.stringify(fsMember));
+Object.assign(carM.skins, { carried_from: ["SAT AM"] });
+const hcm = pane(carM);
+check("member note names the carried session, no dollars",
+      hcm.includes("The SAT AM pot carried into this session") && !hcm.includes("$"), hcm);
+const outS = JSON.parse(JSON.stringify(staff));
+Object.assign(outS.skins, { carries_to: "SAT PM" });
+check("staff: a no-skin session says its pot carries on", pane(outS).includes("the pot carries to SAT PM"), "");
+check("the old 'no carryovers' line is gone", !hc.includes("no carryovers") && hc.includes("carries its pot to the next session"), hc);
 
 // Kerry 10/9: "Stack player names in team skins" — one partner per line,
 // first initial + LAST (the scoring page's match strip); Sunday unchanged

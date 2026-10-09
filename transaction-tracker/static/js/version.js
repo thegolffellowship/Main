@@ -1,5 +1,16 @@
-window.TGF_VERSION = "2.534.0";
+window.TGF_VERSION = "2.535.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.535.0",
+    date: "2026-10-09",
+    title: "Lone Star Cup skins: pot carries to the next session, payouts write themselves, Sunday Show All Players",
+    changes: [
+      "Kerry 10/9, ruling 5: \"If no skins are awarded in a session the pot moves to the next session. If foursomes moves to singles then it is evenly distributed to the flights.\" A FINAL session where no skin was won now carries its whole pot (anything carried into it included) to the next session, SAT AM -> SAT PM -> SUN; a carry into Sunday is split evenly between the two flights to the cent, on top of each flight's own half. It is computed once in lsc_cup.compute_board, so the board, the staff pot note (\"pot $1150.00 ($575.00 + $575.00 carried from SAT AM)\") and the payout writer agree. A session can't carry until it is final, and a later session is held from payout until every earlier one is settled. A Sunday flight that wins no skin stays unallocated and is flagged for Kerry (no rule given). Members see which session's pot carried in, never a dollar.",
+      "Kerry 10/9: \"1. Ok to write payouts 15 minutes after all sessions are final.\" / \"4. Yes when rounds complete.\" New scheduler job lsc_skins_payouts_auto (every 5 min, Central): during the Cup's dates and while app setting lsc_skins_auto is on (default ON, 0/off stops it), it stamps each session the first time it is final (lsc_skins_final_seen) and 15 minutes later writes that session's payouts through the same safe apply: never a PAID row, a re-run writes nothing new, a later score correction updates the UNPAID rows it owns. Each auto-apply is in the agent action log; the scoring-lsc-skins-payouts dry run now reports the auto state (setting, first-seen-final times, when each session becomes payable).",
+      "Kerry 10/9: \"2. ... one players buyin makes the whole team eligible for scoring skins but not the whole team eligible for payout\" and \"3. Yes definitely\" (Winnings). Pinned in tests: a mixed team plays (its non-buyer's ball can win the hole) and the buyer is paid the full team skin, the non-buyer nothing; a team with no buyer can neither win nor tie out a hole. The rows reach members' Spotlight Recent Winnings and Winnings by Game (Skins under GROSS Games) like any event's skins; apply now dates a dateless tgf_events row so the season view keeps them.",
+      "Kerry 10/9: \"Each sessions % allowance for skins, just not applying off lowest. Of course with singles it's gross so no handicaps because it's flighted. So singles skins board needs to show the flights. Green for those in the game but have button to show all players.\" The allowances are unchanged (ratified). The Sunday singles skins board keeps its two flight bands with players in the skins in green, gains the event board's own Show All Players box (the Sunday players who didn't buy skins appear grey in the flight their index puts them in, gross scores only, never circled, never counted, no money), and drops the Handicaps box and Idx/PH columns (gross, flighted).",
+    ]
+  },
   {
     version: "2.534.0",
     date: "2026-10-09",

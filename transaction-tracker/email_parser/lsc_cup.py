@@ -658,6 +658,13 @@ SKINS_TEAM_BASIS = "net"
 SKINS_SINGLES_BASIS = "gross"
 SKINS_BASIS = SKINS_SINGLES_BASIS     # kept for old readers: the singles basis
 SKINS_CARRYOVER = False               # a tied low score = no skin, nothing carries
+# BETWEEN sessions (Kerry 2026-10-09, ruling 5, verbatim: "If no skins are
+# awarded in a session the pot moves to the next session. If foursomes
+# moves to singles then it is evenly distributed to the flights."): a
+# FINAL session where no skin was won carries its whole pot (anything
+# carried into it included) to the next session, sat-am -> sat-pm -> sun.
+# Holes inside a session still never carry (SKINS_CARRYOVER above).
+SKINS_SESSION_CARRYOVER = True
 SKINS_PER_ROUND_CENTS = 2500          # $75 weekend = $25 per player per round
 SINGLES_FLIGHT_BREAK = 12.0           # Flight 1 <= 11.9, Flight 2 >= 12.0 (TGF 18-hole index)
 SINGLES_FLIGHT_SHARES = (50.0, 50.0)  # Sunday pot split in half by default
@@ -670,7 +677,11 @@ def compute_skins_payout(session: dict, course: list[dict], phs: dict,
                          buyers: set | None = None,
                          index: dict | None = None,
                          si_by_player: dict | None = None,
-                         tee_gender: dict | None = None) -> dict:
+                         tee_gender: dict | None = None,
+                         carry_in_cents: int = 0,
+                         carried_from: list | None = None,
+                         next_tag: str | None = None,
+                         upstream_pending: str | None = None) -> dict:
     """One round's skins pot and payout (Kerry, CA #725/#726). Staff
     only: the member payload strips every amount (strip_money).
 
@@ -694,8 +705,17 @@ def compute_skins_payout(session: dict, course: list[dict], phs: dict,
       at 12.0 and up, each playing for half the pot. A player with no
       index on record can't be flighted and is flagged. Badly uneven
       flights are flagged for Kerry BEFORE the round.
-    - No carryover: a hole with a tied low score pays nothing, and a
-      pot where nobody wins a skin stays unallocated (flagged).
+    - No carryover between HOLES: a hole with a tied low score pays
+      nothing. Between SESSIONS (Kerry 2026-10-09, ruling 5): a final
+      session where no skin was won carries its whole pot to the next
+      session (`next_tag`; compute_board threads it). `carry_in_cents`
+      is what an earlier no-skin session carried in: a one-flight
+      session adds it to its pot, a flighted session (Sunday) splits it
+      evenly between the flights (exact cents) on top of each flight's
+      own share. The LAST session has nowhere to carry: a flight there
+      that wins no skin stays unallocated and is flagged for Kerry (no
+      rule given). `upstream_pending` names an earlier session that
+      isn't final yet, so the carry into this one isn't known.
     - Money hold: no dollar is shown until every entry in the group
       has posted every hole; until then the group reads held.
     - Every split is exact to the cent (largest-remainder), so what is
@@ -717,6 +737,7 @@ def compute_skins_payout(session: dict, course: list[dict], phs: dict,
 
     flags, excluded, mixed = [], [], []
     flight_members: dict = {}
+    flight_others: dict = {}
     paid_cids = {}      # team key -> the partners who are paid (the buyers)
     in_round = set()
     for m in session.get("matches") or []:
@@ -724,7 +745,9 @@ def compute_skins_payout(session: dict, course: list[dict], phs: dict,
             for c in (m.get(side) or []):
                 if _bought(int(c)):
                     in_round.add(int(c))
-    pot_cents = SKINS_PER_ROUND_CENTS * len(in_round)
+    own_pot_cents = SKINS_PER_ROUND_CENTS * len(in_round)
+    carry_in_cents = max(0, int(carry_in_cents or 0))
+    pot_cents = own_pot_cents + carry_in_cents
 
     # entrants per group: [(group_key, label, pot_share_pct, matches)]
     if team_game:
@@ -753,6 +776,12 @@ def compute_skins_payout(session: dict, course: list[dict], phs: dict,
         groups = [(None, "Team skins", 100.0, matches)]
     else:
         fl = {1: [], 2: []}
+        # Sunday players who did NOT buy skins, for the board's "Show All
+        # Players" (Kerry 10/9: "Green for those in the game but have button
+        # to show all players"): DISPLAY ONLY, in the flight their frozen
+        # index would put them in, gross per hole. They are never an entry:
+        # no hole result, pot or payout reads them.
+        others: dict = {1: [], 2: []}
         placed = set()
         for m in session.get("matches") or []:
             for side in TEAM_KEYS:
@@ -764,6 +793,16 @@ def compute_skins_payout(session: dict, course: list[dict], phs: dict,
                     if not _bought(c):
                         excluded.append({"label": _label([c]), "team": side,
                                          "reason": "not bought in"})
+                        ox = index.get(c)
+                        if ox is None:
+                            ox = index.get(str(c))
+                        if ox is not None:
+                            raw = scores.get(c) or scores.get(str(c)) or {}
+                            card = {str(int(h)): [int(g), 0]
+                                    for h, g in raw.items() if g is not None}
+                            others[1 if float(ox) < SINGLES_FLIGHT_BREAK else 2].append(
+                                {"customer_id": c, "name": _label([c]),
+                                 "index": float(ox), "card": card})
                         continue
                     ix = index.get(c)
                     if ix is None:
@@ -793,10 +832,17 @@ def compute_skins_payout(session: dict, course: list[dict], phs: dict,
             # money, so members get it too.
             flight_members[f] = [{"customer_id": c, "name": _label([c])}
                                  for _m, _s, c, _ix in sorted(fl[f], key=lambda t: (t[3], _label([t[2]])))]
+            flight_others[f] = sorted(others[f], key=lambda o: (o["index"], o["name"]))
 
-    shares = allocate_cents(pot_cents, [g[2] for g in groups]) \
+    shares = allocate_cents(own_pot_cents, [g[2] for g in groups]) \
         if groups else []
+    if groups and carry_in_cents:
+        # a carry into a flighted session is split EVENLY between the
+        # flights, on top of each flight's own share (ruling 5)
+        extra = allocate_cents(carry_in_cents, [100.0 / len(groups)] * len(groups))
+        shares = [a + b for a, b in zip(shares, extra)]
     out_groups = []
+    no_win = []         # (label, cents) of complete groups where no skin was won
     for (flight, lbl, _pct, matches), gpot in zip(groups, shares):
         sk = compute_skins({**session, "matches": matches}, course, phs,
                            scores, marks, names, basis=basis,
@@ -836,8 +882,7 @@ def compute_skins_payout(session: dict, course: list[dict], phs: dict,
             flags.append(f"{lbl}: nobody is entered, so its "
                          f"${gpot / 100:.2f} can't be won.")
         elif complete and won == 0:
-            flags.append(f"{lbl}: no skin was won, so ${gpot / 100:.2f} "
-                         "is unallocated (no carryovers).")
+            no_win.append((lbl, gpot))
         # Per entry: the index and the handicap the skin was played off,
         # for the board's Idx / PH columns (no money, members get it).
         meta = {}
@@ -862,6 +907,8 @@ def compute_skins_payout(session: dict, course: list[dict], phs: dict,
                 meta[k] = {"index": ix, "ph": ph}
         out_groups.append({"flight": flight, "label": lbl,
                            "members": flight_members.get(flight),
+                           # non-buyers, display only (Show All Players)
+                           "others": flight_others.get(flight) or [],
                            "pot_cents": gpot, "entrants": entrants,
                            "complete": complete, "held": not complete,
                            "skins_won": won, "holes": sk["holes"],
@@ -870,11 +917,65 @@ def compute_skins_payout(session: dict, course: list[dict], phs: dict,
                            "cards": sk.get("cards") or {},
                            "par": sk.get("par") or {},
                            "entries": meta})
+    # Is the session FINAL for skins (every group with an entrant has every
+    # card in), and did it win nothing at all? Then its whole pot carries.
+    live_groups = [g for g in out_groups if g["entrants"]]
+    final = bool(live_groups) and all(g["complete"] for g in live_groups)
+    won_total = sum(g["skins_won"] for g in out_groups)
+    carry_out = 0
+    if (SKINS_SESSION_CARRYOVER and final and won_total == 0 and next_tag
+            and pot_cents > 0):
+        if upstream_pending:
+            flags.append(f"No skin was won in this session, so its pot carries "
+                         f"to {next_tag}, but how much isn't known until "
+                         f"{upstream_pending} is final.")
+        else:
+            carry_out = pot_cents
+            for g in out_groups:      # carried, not unallocated
+                if g["complete"] and g["unpaid_cents"]:
+                    g["carried_cents"] = g["unpaid_cents"]
+                    g["unpaid_cents"] = 0
+            flags.append(f"No skin was won in this session, so its whole "
+                         f"${pot_cents / 100:.2f} pot carries to {next_tag} "
+                         "(Kerry 10/9).")
+    else:
+        for lbl, gpot in no_win:
+            if next_tag is None:
+                flags.append(f"{lbl}: no skin was won, so ${gpot / 100:.2f} is "
+                             "unallocated. It is the last session, so there is "
+                             "nowhere to carry it, and there is no rule for "
+                             "this yet: Kerry decides.")
+            else:
+                flags.append(f"{lbl}: no skin was won, so ${gpot / 100:.2f} is "
+                             "unallocated (another flight won a skin, so the "
+                             "session doesn't carry): Kerry decides.")
+    if upstream_pending:
+        flags.append(f"{upstream_pending} isn't final yet, so whether its pot "
+                     "carries into this session isn't known; this session's "
+                     "skins wait for it before they are paid.")
     return {"kind": "team" if team_game else "individual",
             "basis": basis, "carryover": SKINS_CARRYOVER,
+            "session_carryover": SKINS_SESSION_CARRYOVER,
             "buyers_in_round": len(in_round), "pot_cents": pot_cents,
+            "own_pot_cents": own_pot_cents, "carry_in_cents": carry_in_cents,
+            "carried_from": list(carried_from or []),
+            "carry_out_cents": carry_out,
+            "carries_to": next_tag if carry_out else None,
+            "carry_pending_from": upstream_pending,
+            "final": final, "skins_won": won_total,
             "groups": out_groups, "excluded": excluded, "mixed": mixed,
             "flags": flags}
+
+
+def _session_tags(sessions: list) -> list:
+    """'SAT AM', 'SAT PM', 'SUN' per dial session (the payout writer's
+    tags, lsc_skins_payouts.session_tag), the session id when undated."""
+    from email_parser.lsc_skins_payouts import session_tag
+    per_day: dict = {}
+    for s in sessions:
+        per_day[s.get("date")] = per_day.get(s.get("date"), 0) + 1
+    return [session_tag(s, per_day.get(s.get("date"), 1))
+            or str(s.get("id") or "").upper() for s in sessions]
 
 
 def strip_money(board: dict) -> dict:
@@ -897,6 +998,10 @@ def strip_money(board: dict) -> dict:
         # members carry no money, so members get them; pot, payouts,
         # unpaid, excluded/mixed and flags stay staff only.
         sess["skins"] = {"kind": sk.get("kind"), "basis": sk.get("basis"),
+                         # which sessions' pots carried in / where this
+                         # one carries: session tags only, no money
+                         "carried_from": list(sk.get("carried_from") or []),
+                         "carries_to": sk.get("carries_to"),
                          "groups": [{"flight": g.get("flight"),
                                      "label": g.get("label"),
                                      "totals": g.get("totals"),
@@ -904,6 +1009,11 @@ def strip_money(board: dict) -> dict:
                                                 ("hole", "status", "winner", "value")}
                                                for h in g.get("holes") or []],
                                      "members": g.get("members"),
+                                     # Sunday non-buyers for Show All
+                                     # Players: names, index, gross only
+                                     "others": [{k: o.get(k) for k in
+                                                 ("customer_id", "name", "index", "card")}
+                                                for o in g.get("others") or []],
                                      "entrants": g.get("entrants"),
                                      "complete": g.get("complete"),
                                      # the Skins board's hole scores +
@@ -1003,7 +1113,12 @@ def compute_board(dial: dict, session_data: dict,
              "points_win": win, "points_halve": halve,
              "sessions": []}
     total = 0.0
-    for sess in dial.get("sessions") or []:
+    # Session-to-session skins carry (Kerry 10/9, ruling 5): the sessions in
+    # dial order (sat-am, sat-pm, sun). A session's carry is only known once
+    # it and every session before it is SETTLED (final for skins).
+    tags = _session_tags(dial.get("sessions") or [])
+    carry = {"cents": 0, "from": [], "from_ids": [], "pending": None}
+    for i_sess, sess in enumerate(dial.get("sessions") or []):
         data = (session_data or {}).get(sess.get("id")) or {}
         course = data.get("course") or []
         phs = {int(k): v for k, v in (data.get("phs") or {}).items()}
@@ -1056,10 +1171,33 @@ def compute_board(dial: dict, session_data: dict,
                     board["teams"]["sa"]["projected"] += halve
             s_out["matches"].append({**detail, "tee_time": m.get("tee_time"),
                                      "state": state, "points": pts})
-        s_out["skins"] = compute_skins_payout(
+        all_sess = dial.get("sessions") or []
+        next_tag = (tags[i_sess + 1] if i_sess + 1 < len(all_sess) else None)
+        sk = compute_skins_payout(
             sess, course, phs, scores, marks, names,
             buyers=skins_ctx.get("buyers"), index=skins_ctx.get("index"),
-            si_by_player=si_by_player, tee_gender=tee_gender)
+            si_by_player=si_by_player, tee_gender=tee_gender,
+            carry_in_cents=0 if carry["pending"] else carry["cents"],
+            carried_from=[] if carry["pending"] else carry["from"],
+            next_tag=next_tag, upstream_pending=carry["pending"])
+        sk["tag"] = tags[i_sess]
+        sk["carried_from_ids"] = [] if carry["pending"] else list(carry["from_ids"])
+        # settled = final for skins (or nothing to play for: drawn, no pot)
+        own_settled = sk["final"] or (bool(sess.get("matches"))
+                                      and not sk["pot_cents"])
+        sk["settled"] = bool(own_settled and not carry["pending"])
+        if sk["settled"]:
+            if sk["carry_out_cents"]:
+                carry = {"cents": sk["carry_out_cents"],
+                         "from": sk["carried_from"] + [tags[i_sess]],
+                         "from_ids": sk["carried_from_ids"] + [sess.get("id")],
+                         "pending": None}
+            else:
+                carry = {"cents": 0, "from": [], "from_ids": [], "pending": None}
+        elif not carry["pending"]:
+            carry = {"cents": 0, "from": [], "from_ids": [],
+                     "pending": tags[i_sess] or sess.get("id")}
+        s_out["skins"] = sk
         # a session still being drawn counts its full match count toward
         # the points on the board (the dial's n_matches: 7 / 7 / 14), so the
         # Cup reads "14½ to win" from the first landed match
