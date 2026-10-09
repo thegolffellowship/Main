@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.528.1";
+window.TGF_VERSION = "2.528.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.528.2",
+    date: "2026-10-08",
+    title: "THE DRAW: the matches column starts level with the entrants",
+    changes: [
+      "Kerry 10/8: \"That middle column could sit higher than it does, so it doesn't keep moving things down the screen.\" The AUSTIN / SAN ANTONIO pills and the handicap key now share one header row above each pool. The first match therefore lines up with the first entrant, and the match cards are a little more compact."
+    ]
+  },
   {
     version: "2.528.1",
     date: "2026-10-08",
