@@ -94,6 +94,7 @@ on the page — green means bought in.
   old phone) keeps **Fix it** / Clear the flag. Endpoints:
   `POST /api/score-entry/flag/decide` (group link + device) and
   `POST /api/score-entry/flags/<id>/decide` (manager).
+- **Reset a submitted TEST card (v2.531.4):** `scoring-se-clear-group:<gid>|apply|checks` also clears the card checks (kept in the `admin_clear` audit row); without `|checks` a submitted card is refused.
 - **Closest to the pin / Longest Putt (CA #829, v2.511.1).** Asked ONLY on
   the holes the games matrix plays. `ctp_contests(conn, round_id)` reads the
   one ratified rule the proximity markers print from

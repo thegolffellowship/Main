@@ -617,5 +617,8 @@ ck('blank Won rows sink (rank blank)', /<td><\/td>/.test(sorted));
 // Kerry 10/9: "Won column shouldn't show at all if there aren't any side games"
 ck('no WON column on a no-games event', /d\._moneyHeld \|\| evlbNoGames\(d\) \? " no-won"/.test(src));
 ck('no money notice on a no-games event', /function evlbMoneyNotice\(d\) \{\s*if \(!d \|\| !d\._moneyHeld \|\| evlbNoGames\(d\)\) return ""/.test(src));
+ck('team purses are blanked while a round is in play', /\(d\.teams \|\| \[\]\)\.forEach\(t => \{ if \(t && typeof t === "object"\) t\.purse = null; \}\)/.test(src));
+ck('no Purse column on the team board until every score is in', /\$\{d\._moneyHeld \? "" : '<th style="text-align:right;">Purse<\/th>'\}/.test(src));
+ck('no team winner tint mid-round', /const win = !d\._moneyHeld && /.test(src));
 console.log(fails ? `\n${fails} FAILURE(S)` : '\nALL PASS');
 process.exit(fails?1:0);

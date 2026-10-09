@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.531.3";
+window.TGF_VERSION = "2.531.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.531.4",
+    date: "2026-10-09",
+    title: "No money column anywhere until every score is in; reset a submitted test card",
+    changes: [
+      "Kerry 10/9: \"The whole win column should be hidden until all scores are in with a round that has side games, not just wait to populate it with money.\" The WON column already disappears while a round is in play (and since v2.531.1 a player still to tee off keeps it in play). The Team boards still showed their Purse column and the first-place tint: both now stay hidden until every score is in, and the purses are blanked with the rest of the money.",
+      "Kerry 10/9: \"Reset the scores on my card now\". scoring-se-clear-group refuses a card that was checked and submitted, because that is normally a record. A new |checks flag clears a submitted TEST card on purpose: its card checks go too, kept in the admin_clear audit row (photo files stay on the volume). Guard: test_se_clear_group.py."
+    ]
+  },
   {
     version: "2.531.3",
     date: "2026-10-09",

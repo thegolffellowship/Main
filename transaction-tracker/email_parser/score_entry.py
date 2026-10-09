@@ -1583,7 +1583,8 @@ def close_round(round_id: int, db_path=None) -> dict:
     return {"closed": round_id}
 
 
-def clear_group(group_id: int, *, apply: bool = False, db_path=None) -> dict:
+def clear_group(group_id: int, *, apply: bool = False, include_checks: bool = False,
+                db_path=None) -> dict:
     """START ONE GROUP'S CARD OVER (Kerry 2026-10-08: "Can you also clear
     scoring for my group tomorrow?" after testing the practice-round card).
     Takes the group back to an untouched card: its hole scores and marks
@@ -1625,11 +1626,16 @@ def clear_group(group_id: int, *, apply: bool = False, db_path=None) -> dict:
                "marks": marks, "signatures": signs, "ctp_answers": ctp, "hio_claims": hio,
                "open_flags": flags, "card_checks": checks,
                "scorer_lock": ({"holder_customer_id": lock["holder_customer_id"]} if lock else None)}
-        if checks:
+        if checks and not include_checks:
             # A checked card was submitted with a photo: that is a record,
-            # not a test. Say so instead of clearing it.
-            out["refused"] = "this card was checked and submitted; it is not cleared"
+            # not a test. Say so instead of clearing it, unless the caller
+            # names it a test card on purpose (|checks, Kerry 10/9: "Reset the
+            # scores on my card now" after he submitted his practice card).
+            out["refused"] = ("this card was checked and submitted; it is not cleared "
+                              "(add |checks to clear a submitted TEST card)")
             return out
+        check_rows = [dict(r) for r in conn.execute(
+            "SELECT * FROM se_card_checks WHERE group_id = ?", (group_id,))] if checks else []
         if not apply:
             return out
         now = _now()
@@ -1644,11 +1650,16 @@ def clear_group(group_id: int, *, apply: bool = False, db_path=None) -> dict:
         conn.execute("UPDATE se_card_flags SET resolved_at = ?, resolution = 'card cleared by admin' "
                      "WHERE group_id = ? AND resolved_at IS NULL", (now, group_id))
         conn.execute("DELETE FROM se_group_locks WHERE group_id = ?", (group_id,))
+        if check_rows:
+            # the card checks go too; their rows are kept in the audit row
+            # below and any photo file stays on the volume
+            conn.execute("DELETE FROM se_card_checks WHERE group_id = ?", (group_id,))
         conn.execute(
             "INSERT INTO se_audit (round_id, group_id, kind, device_id, result, detail, at) "
             "VALUES (?,?,?,?,?,?,?)",
             (g["round_id"], group_id, "admin_clear", lock["device_id"] if lock else None, "ok",
              json.dumps({"scores": scores, "lock_holder": lock["holder_customer_id"] if lock else None,
+                         "card_checks": check_rows,
                          **{k: out[k] for k in ("marks", "signatures", "ctp_answers", "hio_claims",
                                                 "open_flags")}}), now))
         _bump(conn, g["event_id"])

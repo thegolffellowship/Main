@@ -79,6 +79,24 @@ check("the old phone's queued op does not come back as a write",
       se.write_scores(g, "kerry-phone", 18, [{"op_id": "o18", "hole": 1, "gross": 4, "customer_id": 18}],
                       db_path=tmp)["results"][0]["result"] == "dup")
 
+print("── a SUBMITTED test card (Kerry 10/9: \"Reset the scores on my card now\") ──")
+se.write_scores(g, "new-phone", 703, [{"op_id": "s2", "hole": 2, "gross": 4, "customer_id": 18}], db_path=tmp)
+with db._connect(tmp) as conn:
+    conn.execute("INSERT INTO se_card_checks (round_id, group_id, scorekeeper_customer_id, at) "
+                 "VALUES (?, ?, 18, '2026-10-09T05:00:00Z')", (rid, g))
+    conn.commit()
+dr = se.clear_group(g, apply=True, db_path=tmp)
+check("a submitted card is refused without |checks", dr.get("refused") and not dr.get("cleared"), dr)
+ok = se.clear_group(g, apply=True, include_checks=True, db_path=tmp)
+check("with include_checks it clears", ok.get("cleared") and ok.get("card_checks") == 1, ok)
+with db._connect(tmp) as conn:
+    check("the scores and the card check are gone", conn.execute(
+        "SELECT COUNT(*) FROM se_hole_scores WHERE group_id = ?", (g,)).fetchone()[0] == 0
+        and conn.execute("SELECT COUNT(*) FROM se_card_checks WHERE group_id = ?", (g,)).fetchone()[0] == 0)
+    det = json.loads(conn.execute("SELECT detail FROM se_audit WHERE group_id = ? AND kind = 'admin_clear' "
+                                  "ORDER BY id DESC LIMIT 1", (g,)).fetchone()[0])
+    check("the cleared check is kept in the audit row", len(det.get("card_checks") or []) == 1, det)
+
 print("── refusals ──")
 check("unknown group", "error" in se.clear_group(999999, db_path=tmp))
 se.close_round(rid, db_path=tmp)
