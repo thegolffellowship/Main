@@ -1809,7 +1809,7 @@ def start_scheduler():
     # nothing had ever started them. Every 5 minutes, and only for an
     # event that is dated today, has started, and does not yet have every
     # hole for every player — a finished round stops being polled by
-    # itself. Disable with AUTO_LIVE_POLL=0; interval via
+    # itself. Off unless AUTO_LIVE_POLL=1 (Kerry 10/8); interval via
     # LIVE_POLL_MINUTES.
     def auto_live_poll_job():
         from email_parser.database import poll_live_events
@@ -1822,7 +1822,11 @@ def start_scheduler():
         except Exception:
             logger.exception("Live scoring poll failed (non-fatal)")
 
-    if os.getenv("AUTO_LIVE_POLL", "1") != "0":
+    # OFF BY DEFAULT (Kerry 10/8, on the Golf Genius live card re-import:
+    # "Definitely SWITCH OFF!!! And off as default moving forward."). The
+    # Tracker's own live scoring is the board; set AUTO_LIVE_POLL=1 only on
+    # Kerry's word (poll_live_events also refuses untethered events).
+    if os.getenv("AUTO_LIVE_POLL", "0") == "1":
         _lp_min = max(2, int(os.getenv("LIVE_POLL_MINUTES", "5") or 5))
         scheduler.add_job(
             auto_live_poll_job,
@@ -4508,8 +4512,13 @@ def events_page():
         se_events = sorted(_se_enabled())
     except Exception:
         se_events = []
+    try:
+        from email_parser.gg_untether import untether_from
+        gg_untether = untether_from()
+    except Exception:
+        gg_untether = "2026-10-07"
     return render_template("events.html", matrix9=matrix9, matrix18=matrix18,
-                           se_events=se_events)
+                           se_events=se_events, gg_untether_from=gg_untether)
 
 
 @app.route("/customers")

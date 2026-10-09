@@ -803,7 +803,9 @@ pulls from Golf Genius or lets it decide something for an event goes through
 `email_parser/gg_untether.py` (`gg_allowed(event_date)`, app setting
 `gg_untether_from`, default 2026-10-07): an event on/after that date gets no
 GG scorecards, results, flights, MVPs, tee sheets, RSVPs, auto payouts or
-monthly money. Events before it keep their GG walks (the 10/6 points). A NEW
+monthly money. GG RSVPs are the exception: still in use (Kerry 10/8), they
+stay on until app setting `gg_rsvps_off`=1. The 5-minute GG live poll is OFF
+unless `AUTO_LIVE_POLL=1`. Events before it keep their GG walks (the 10/6 points). A NEW
 Golf Genius path must call the same rule. Move the date only on Kerry's word.
 Guard `test_gg_untether.py`.
 

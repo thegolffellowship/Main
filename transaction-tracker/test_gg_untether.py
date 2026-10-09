@@ -66,7 +66,14 @@ pay = db.record_all_event_game_payouts(db_path=tmp, time_budget=20)
 skipped = {x.get("event") for x in pay["skipped"] if isinstance(x, dict) and "untethered" in (x.get("why") or "")}
 check("today's event is left to the Tracker", any("Today" in (n or "") for n in skipped), pay["skipped"])
 
-print("Golf Genius RSVPs")
+print("Golf Genius RSVPs: still ON (Kerry 10/8: \"Still using actively\")")
+check("by default an upcoming event keeps its GG RSVPs",
+      len(db.get_rsvps_for_event("s10.13 Next Tuesday", db_path=tmp)) == 1)
+conn = sqlite3.connect(tmp); conn.row_factory = sqlite3.Row
+check("...and they still join its roster", len(db._event_rsvp_only_players(conn, 502)) == 1)
+conn.close()
+db.set_app_setting("gg_rsvps_off", "1", db_path=tmp)
+print("Golf Genius RSVPs switched off (gg_rsvps_off = 1)")
 check("no GG RSVPs on an untethered event", db.get_rsvps_for_event("s10.13 Next Tuesday", db_path=tmp) == [])
 check("past event keeps its GG RSVPs", len(db.get_rsvps_for_event("s10.6 Past Tuesday", db_path=tmp)) == 1)
 bulk = db.get_all_rsvps_bulk(db_path=tmp)

@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.530.3";
+window.TGF_VERSION = "2.530.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.530.4",
+    date: "2026-10-08",
+    title: "Golf Genius RSVPs stay on; the live GG poll is off by default; no GG Sheet button on untethered events",
+    changes: [
+      "Kerry 10/8 on Golf Genius RSVPs: \"Still using actively. Would love to switch asap.\" 2.530.0 had hidden GG RSVPs on events from 10/7 on; they are back everywhere (Players tab, rosters, pairings, print pack, emails). They switch off only when the app setting gg_rsvps_off is set to 1 on Kerry's word, once the Tracker takes RSVPs itself.",
+      "Kerry 10/8 on the 5-minute Golf Genius live card re-import: \"Definitely SWITCH OFF!!! And off as default moving forward.\" The auto_live_poll job is no longer scheduled unless AUTO_LIVE_POLL=1 is set (it used to run unless set to 0).",
+      "Kerry 10/8: \"We define all of that now in our EVENTS setup with pairings, games, flights, everything.\" The PAIRINGS toolbar no longer offers the GG Sheet pull on an event dated on/after the untether date (the server already refuses it)."
+    ]
+  },
   {
     version: "2.530.3",
     date: "2026-10-08",

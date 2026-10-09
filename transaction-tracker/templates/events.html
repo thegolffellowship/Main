@@ -7240,6 +7240,11 @@
     // score_entry_events), server-rendered into SE_EVENTS.
     const SE_EVENTS = new Set(({{ (se_events or []) | tojson }}).map(Number));
     function seEventOn(evId) { return SE_EVENTS.has(Number(evId)); }
+    // UNTETHERED FROM GOLF GENIUS (Kerry 10/8): events on/after this date are
+    // paired, scored and paid by the Tracker; their GG Sheet pull is hidden
+    // (the server refuses it too).
+    const GG_UNTETHER_FROM = {{ (gg_untether_from or "2026-10-07") | tojson }};
+    function ggAllowed(ev) { const d = String((ev && ev.event_date) || "").slice(0, 10); return !!d && d < GG_UNTETHER_FROM; }
     const SE_PP_CACHE = {};
     const SE_PP_OPEN = {};
     const SE_PP_AT = {};
@@ -7500,6 +7505,7 @@
         html += `<button class="pairings-action-btn generate-btn" data-ev-id="${ev.id}" data-pairings-action="generate">&#x21BB; Generate</button>`;
         // Pull the sheet GG already has (Kerry 2026-07-31: the AUSTIN
         // CHAMPIONSHIP was paired in GG, not by us). Replaces this leg.
+        if (ggAllowed(ev))
         html += `<button class="pairings-action-btn" data-ev-id="${ev.id}" data-pairings-action="gg-import"`
             + ` title="Pull this event's pairings from the Golf Genius tee sheet (replaces the pairings shown here)">&#x2913; GG Sheet</button>`;
         if (state.groups_9.length || state.groups_18.length) {

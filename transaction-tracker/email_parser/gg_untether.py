@@ -59,3 +59,19 @@ REFUSAL = ("Golf Genius is untethered for this event (Kerry 10/8: \"Golf Genius 
 
 def refusal(db_path=None) -> str:
     return REFUSAL.format(d=untether_from(db_path))
+
+
+# GOLF GENIUS RSVPs are the one Golf Genius input still in active use (Kerry
+# 10/8, asked about switching them off: "Still using actively. Would love to
+# switch asap."). They stay ON until the Tracker takes RSVPs itself; set the
+# app setting gg_rsvps_off to "1" on Kerry's word and upcoming events (on or
+# after the untether date) stop showing them. Read-side only, nothing deleted.
+RSVP_SETTING = "gg_rsvps_off"
+
+
+def rsvps_untethered(db_path=None) -> bool:
+    try:
+        from email_parser.database import get_app_setting
+        return (get_app_setting(RSVP_SETTING, db_path=db_path) or "").strip() == "1"
+    except Exception:
+        return False

@@ -38668,7 +38668,9 @@ def _gg_untethered_event(conn, event_name: str, db_path=None) -> bool:
     Golf Genius RSVPs for such an event are left out on READ: nothing is
     deleted, so moving gg_untether_from brings them straight back."""
     try:
-        from email_parser.gg_untether import gg_allowed
+        from email_parser.gg_untether import gg_allowed, rsvps_untethered
+        if not rsvps_untethered(db_path):
+            return False     # GG RSVPs still in use (Kerry 10/8)
         r = conn.execute("SELECT event_date FROM events WHERE LOWER(item_name) = LOWER(?) "
                          "AND event_date IS NOT NULL ORDER BY event_date DESC LIMIT 1",
                          (str(event_name or "").strip(),)).fetchone()
@@ -38678,7 +38680,9 @@ def _gg_untethered_event(conn, event_name: str, db_path=None) -> bool:
 
 
 def _gg_untethered_event_names(conn, db_path=None) -> set:
-    from email_parser.gg_untether import untether_from
+    from email_parser.gg_untether import untether_from, rsvps_untethered
+    if not rsvps_untethered(db_path):
+        return set()         # GG RSVPs still in use (Kerry 10/8)
     cut = untether_from(db_path)
     return {(r[0] or "").strip().lower() for r in conn.execute(
         "SELECT item_name FROM events WHERE event_date IS NOT NULL "
@@ -68422,11 +68426,12 @@ def _event_rsvp_only_players(conn, event_id: int) -> list[dict]:
         return []
     if (ev["status"] or "active") != "active":
         return []
-    # UNTETHERED (Kerry 10/8): a Golf Genius RSVP never puts anyone on the
-    # roster of an event on/after gg_untether_from (pairings, print pack,
-    # event-day email and the live-scoring seed all read this roster).
-    from email_parser.gg_untether import gg_allowed
-    if ev["event_date"] and not gg_allowed(ev["event_date"]):
+    # Once GG RSVPs are switched off (gg_rsvps_off, Kerry's word) a Golf
+    # Genius RSVP never puts anyone on the roster of an event on/after
+    # gg_untether_from. Until then they count (Kerry 10/8: "Still using
+    # actively").
+    from email_parser.gg_untether import gg_allowed, rsvps_untethered
+    if ev["event_date"] and not gg_allowed(ev["event_date"]) and rsvps_untethered():
         return []
     event_name = ev["item_name"]
     ph = ",".join("?" * len(PAIRING_INACTIVE_STATUSES))
