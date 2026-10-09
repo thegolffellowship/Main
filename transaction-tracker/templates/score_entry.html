@@ -32,7 +32,11 @@
     body.lsc header.shell-nav { background: var(--lsc-navy); }
     body.lsc .se-toggle a.active { background: var(--lsc-navy); border-color: var(--lsc-navy); }
     body.lsc header.shell-nav.shell-member.shell-slim .shell-brand img { width: auto; height: 64px; }
-    body.lsc.se-tight header.shell-nav.shell-slim .shell-brand img { width: auto; height: 26px; }
+    /* The Cup header never shrinks (Kerry 10/8, on the practice-round card:
+       "Top shouldn't shrink like this"). On a tight card the rows, toggle and
+       bottom bar still close up; the header keeps its size and its logo. */
+    body.lsc.se-tight header.shell-nav.shell-member.shell-slim { min-height: 77px; padding-top: 5px; padding-bottom: 8px; }
+    body.lsc.se-tight header.shell-nav.shell-member.shell-slim .shell-brand img { width: auto; height: 64px; }
         body { background: #FFFFFF; }
         .se-wrap { max-width: 480px; margin: 0 auto; padding: 20px 20px 40px; color: var(--se-ink);
                    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; }

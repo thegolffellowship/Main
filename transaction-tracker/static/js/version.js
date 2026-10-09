@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.529.1";
+window.TGF_VERSION = "2.529.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.529.2",
+    date: "2026-10-08",
+    title: "Lone Star Cup scoring: the header and Cup logo keep their size",
+    changes: [
+      "Kerry 10/8, on his practice-round card: \"Top shouldn't shrink like this.\" The scoring page shrinks its header to a 26 px strip when it measures the card as not fitting the screen, and on an iPhone Safari's toolbar can trip that even with room to spare. On a Lone Star Cup card the header and its logo now always stay full size (77 px, 64 px logo); the player rows, toggle and bottom bar still close up when space is short. TGF cards are unchanged."
+    ]
+  },
   {
     version: "2.529.1",
     date: "2026-10-08",
