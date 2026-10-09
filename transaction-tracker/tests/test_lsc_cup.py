@@ -1012,3 +1012,78 @@ def test_pair_labels_use_an_ampersand():
                                names={1: "Luke Youngs", 2: "Chris Cannon"}, buyers=set(range(1, 9)))
     labels = {t["key"]: t["label"] for t in out["groups"][0]["totals"]}
     assert labels["M1:austin"] == "Luke Youngs & Chris Cannon"
+    # the partners one by one, so the board can stack them (Kerry 10/9:
+    # "Stack player names in team skins")
+    assert out["groups"][0]["entries"]["M1:austin"]["names"] == ["Luke Youngs", "Chris Cannon"]
+
+
+# ── Kerry 10/9 (verbatim): "So $575 available for each skins session.
+#    Session pots standalone. Team skins is Net based off of full team
+#    handicaps (not Off lowest) for that session. ... Singles is gross skins
+#    and divides Sunday pot evenly between high and low flights." ──────────
+
+def test_kerry_10_9_skins_rules_pinned():
+    from email_parser import lsc_cup as L
+    assert L.SKINS_PER_ROUND_CENTS == 2500             # $25 a buyer a session
+    assert L.SKINS_TEAM_BASIS == "net" and L.SKINS_SINGLES_BASIS == "gross"
+    assert L.SKINS_CARRYOVER is False
+    assert L.SINGLES_FLIGHT_SHARES == (50.0, 50.0)     # evenly, high and low
+    assert L.SINGLES_FLIGHT_BREAK == 12.0              # #1351-C, unchanged
+
+
+def test_kerry_10_9_each_session_pot_is_standalone_575_with_23_buyers():
+    cids = list(range(1, 29))                          # 28 players, 14 a side
+    buyers = set(range(1, 24))                         # 23 bought the skins
+    quads = [cids[i:i + 4] for i in range(0, 28, 4)]   # 7 team matches
+
+    def team(p, swap=None):
+        out = []
+        for i, q in enumerate(quads):
+            q = [swap.get(c, c) for c in q] if swap else q
+            out.append({"id": f"{p}{i + 1}", "austin": q[:2], "sa": q[2:]})
+        return out
+    dial = {"event_id": 3329, "sessions": [
+        {"id": "sat-am", "date": "2026-10-10", "format": "fourball", "n_holes": 1,
+         "matches": team("A")},
+        # buyer 23 sits out the PM for a non-buyer (99): the PM pot counts
+        # only the buyers in the PM, nothing carries over from the AM
+        {"id": "sat-pm", "date": "2026-10-10", "format": "chapman", "n_holes": 1,
+         "matches": team("P", {23: 99})},
+        {"id": "sun", "date": "2026-10-11", "format": "singles", "n_holes": 1,
+         "matches": [{"id": f"S{i + 1}", "austin": [cids[2 * i]], "sa": [cids[2 * i + 1]]}
+                     for i in range(14)]}]}
+    course = [{"hole": 1, "par": 4, "stroke_index": 1}]
+    index = {c: (5.0 if c % 2 else 15.0) for c in cids}
+    data = {sid: {"course": course, "phs": {}, "scores": {}}
+            for sid in ("sat-am", "sat-pm", "sun")}
+    b = compute_board(dial, data, {}, {"buyers": buyers, "index": index})
+    pots = {s["id"]: s["skins"]["pot_cents"] for s in b["sessions"]}
+    assert pots["sat-am"] == 57500                     # 23 x $25 = $575
+    assert pots["sat-pm"] == 55000                     # 22 in THIS session: standalone
+    assert pots["sun"] == 57500
+    sun = next(s for s in b["sessions"] if s["id"] == "sun")["skins"]
+    assert sun["basis"] == "gross"                     # gross, two flights, split evenly
+    assert [g["pot_cents"] for g in sun["groups"]] == [28750, 28750]
+    sat = next(s for s in b["sessions"] if s["id"] == "sat-am")["skins"]
+    assert sat["basis"] == "net" and len(sat["groups"]) == 1
+
+
+def test_kerry_10_9_fourball_team_net_is_full_allowance_off_zero():
+    # 90% of EACH player's PH taken off zero (a 20 gets 18 strokes) though
+    # his opponents are scratch: never off the lowest in the match
+    from email_parser.lsc_cup import compute_skins
+    course = [{"hole": h, "par": 4, "stroke_index": h} for h in range(1, 19)]
+    sess = {"id": "am", "format": "fourball", "n_holes": 18,
+            "matches": [{"id": "M1", "austin": [1, 2], "sa": [3, 4]}]}
+    phs = {1: 20, 2: 10, 3: 4, 4: 4}
+    scores = {c: {h: 4 for h in range(1, 19)} for c in (1, 2, 3, 4)}
+    out = compute_skins(sess, course, phs, scores, basis="net")
+    by = {h["hole"]: h for h in out["holes"]}
+    # off zero: player 1 gets 18 (a stroke a hole), SA's 4s get 4 (SI 1-4):
+    # holes 1-4 tie at net 3, Austin takes 5-18. Off the low man (4) would
+    # have given player 1 only 14 and tied 15-18 instead.
+    assert all(by[h]["status"] == "tied" for h in (1, 2, 3, 4))
+    assert all(by[h]["winner"] == "M1:austin" for h in range(5, 19))
+    # the board shows ONE ball per team per hole: the counting ball
+    card = out["cards"]["M1:austin"]
+    assert card["1"] == [4, 1] and len(card) == 18

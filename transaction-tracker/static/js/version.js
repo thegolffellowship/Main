@@ -1,5 +1,16 @@
-window.TGF_VERSION = "2.533.4";
+window.TGF_VERSION = "2.534.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.534.0",
+    date: "2026-10-09",
+    title: "Lone Star Cup skins: stacked team names, one team score, payouts per session",
+    changes: [
+      "Kerry 10/9: \"Stack player names in team skins\". The Fourball and Foursomes skins boards now show each team's partners one per line, first initial + LAST (\"L. YOUNGS\" over \"C. CANNON\"), the scoring page's match strip convention. The engine sends the partners' names with each team entry (compute_skins_payout `entries[key].names`, names only, members get it); the board opts in through a row field `_name_lines` that only the shared leaderboard row's name cell reads, so sorting, lookups and every other board keep the plain name. Sunday singles rows are unchanged.",
+      "Kerry 10/9: \"Both fourball and foursomes skins leaderboards should only show one team score. Not both player scores like fourball leaderboard and score entry.\" Verified end to end in headless Chromium on a fixture where a Fourball side's partners post different scores: every team row shows ONE score per hole, the ball that counted (best net ball in Fourball, the one Chapman ball in Foursomes) with its pops, and the N column is that ball's net total. The Cup's skins board has no tap-to-expand player drawer, so no view shows the partners' separate cards. Pinned in test_lsc_skins_pane.js and tests/test_lsc_cup.py.",
+      "Kerry 10/9: \"So $575 available for each skins session. Session pots standalone. Team skins is Net based off of full team handicaps (not Off lowest) for that session ... Singles is gross skins and divides Sunday pot evenly between high and low flights.\" The engine already played it that way; tests/test_lsc_cup.py now pins it: $25 x the buyers IN THAT SESSION (23 = $575, a session with 22 = $550, nothing shared across sessions), Fourball 90% of each player off zero and Chapman 60/40 team handicap, Sunday gross split 50/50 between the flights (index 12.0 break, #1351-C, unchanged).",
+      "PAYOUTS per SESSION, not per day: email_parser/lsc_skins_payouts.py (bridge scoring-lsc-skins-payouts[:apply]) now writes one tgf_payouts row per winner per final SESSION (\"LSC SAT AM Skins — Fourball ×1 (hole 1) $43.75\", \"LSC SAT PM Skins — ...\", \"LSC SUN Skins — Flight 1 ...\"), and a session is payable as soon as IT is final (the AM no longer waits for the PM). Safeties unchanged: dry run by default, a PAID row is never touched, apply only creates / updates / removes the UNPAID rows it owns. An old per-day \"LSC SAT Skins\" row (none was ever written in production) is removed when unpaid and holds its day for Kerry when paid. NOT applied: Kerry ratifies before any money row is written."
+    ]
+  },
   {
     version: "2.533.4",
     date: "2026-10-09",

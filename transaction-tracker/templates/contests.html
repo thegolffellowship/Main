@@ -486,6 +486,9 @@
         .evlb-holes td.nm, .evlb-holes th.nm { text-align: left; min-width: 110px;
             font-weight: 600; color: #475569; white-space: nowrap; }
         .evlb-holes td.nm { position: relative; padding-right: 24px; }
+        /* the Cup's team skins: partners stacked, one per line (Kerry 10/9) */
+        .evlb-nm-stack { display: flex; flex-direction: column; line-height: 1.2; }
+        .evlb-nm-stack > span { font-weight: 700; letter-spacing: .01em; }
         .evlb-holes th.nm { color: #fff; }
         .evlb-holes tr.mute td { color: #9CA3AF; }
         .evlb-holes tr.teamrow td { background: #F3F1EC; font-weight: 700;
@@ -2903,6 +2906,14 @@
         });
         const cols = [...holeSet].sort((a, b) => a - b);
         const TEAM = { austin: "Austin", sa: "San Antonio" };
+        const team = sk.kind === "team";
+        // "Lee Youngs" -> "L. YOUNGS" (score_entry.html matchCard nm()): one
+        // line of a stacked team name
+        const initialLast = (n) => {
+            const w = String(n || "").trim().split(/\s+/).filter(Boolean);
+            if (!w.length) return "";
+            return ((w.length > 1 ? w[0][0] + ". " : "") + w.slice(w.length > 1 ? 1 : 0).join(" ")).toUpperCase();
+        };
         const complete = groups.every(g => !g.entrants || g.complete);
         const d = { cards: {}, skin_cells: {}, hole_cols: cols, hole_par: par,
                     overall_board: [], sections: [],
@@ -2938,6 +2949,16 @@
                     won_by_cat: cents ? { skins: cents / 100 } : {}, won_total: cents / 100,
                     // every entry bought in: no buyer, no entry
                     _buyer: true, _note: TEAM[t.team] || "" };
+                // TEAM SKINS STACK THE PARTNERS (Kerry 10/9: "Stack player
+                // names in team skins"): one per line, first initial + LAST
+                // ("L. YOUNGS" over "C. CANNON"), the scoring page's match
+                // strip convention. player_name stays the plain label, so
+                // sorting and every other reader are unchanged.
+                if (team) {
+                    const ns = (meta.names && meta.names.length) ? meta.names
+                        : String(t.label || "").split(" & ");
+                    if (ns.length > 1) r._name_lines = ns.map(initialLast);
+                }
                 d.overall_board.push(r);
                 return r;
             });
@@ -3943,7 +3964,12 @@
             ? (r._buyer ? " bought" : " nobuy") : (i % 2 ? " alt" : "");
         return `<tr class="evlb-plr${bi}" data-rid="${r.scoring_round_id || ""}">` +
             `<td>${r._rank ?? ""}</td>` +
-            `<td class="nm">${escapeHtml(r.player_name)}${evlbTeeDot(d, r, "right")}` +
+            // a row may opt in to a stacked name (the Cup's team skins:
+            // `_name_lines`, one partner per line); player_name is still
+            // the row's name for sorting and lookups
+            `<td class="nm">${Array.isArray(r._name_lines) && r._name_lines.length
+                ? `<span class="evlb-nm-stack" title="${escapeHtml(r.player_name)}">${r._name_lines.map(x => `<span>${escapeHtml(x)}</span>`).join("")}</span>`
+                : escapeHtml(r.player_name)}${evlbTeeDot(d, r, "right")}` +
             (game ? "" : evlbMvpBadges(r)) +
             (r._note ? `<div style="font-size:10.5px;color:#9CA3AF;white-space:normal;">${escapeHtml(r._note)}</div>` : "") +
             `</td>` +
