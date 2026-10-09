@@ -1010,6 +1010,10 @@ def compute_board(dial: dict, session_data: dict,
         s_out = {"id": sess.get("id"), "label": sess.get("label"),
                  "title": session_title(sess.get("format")),
                  "date": sess.get("date"), "format": sess.get("format"),
+                 # the session's drawn size (7 / 7 / 14) so a reader can
+                 # tell a fully drawn session from a part-drawn one (the
+                 # recap's "is this session final" guard, lsc_recap.py)
+                 "n_matches": sess.get("n_matches"),
                  "points_per_match": win, "matches": [], "skins": None}
         for m in sess.get("matches") or []:
             total += win
