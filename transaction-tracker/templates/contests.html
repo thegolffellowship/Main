@@ -3715,8 +3715,11 @@
     // buy-in to be in or out of: every player is on the board, no green /
     // grey rows, no Show All Players box.
     const evlbNoGames = d => (d && d.games_off || []).some(g => g.game === "included");
-    const evlbHolesFor = board => evlbHolesTouched
-        ? evlbShowHoles : (board && board.game) == null;
+    // An event with no games opens hole by hole on every board (Kerry 10/8:
+    // "I want Net and gross to load automatically with all players and hole
+    // by hole scores for the practice round").
+    const evlbHolesFor = (board, d) => evlbHolesTouched
+        ? evlbShowHoles : ((board && board.game) == null || evlbNoGames(d));
     // handicap columns (Idx + PH) start HIDDEN (Kerry 2026-09-13:
     // "make the default not show them") — they are reference, not
     // result, and they cost two columns on a phone
@@ -4191,7 +4194,7 @@
             `<th data-k="gamecol" class="sortable bl br gc${active("gamecol")}"`
             + ` title="${escapeHtml((board.gameCol && board.gameCol.title) || gl)}"`
             + `>${escapeHtml(gl)}</th>`;
-        const showHoles = evlbHolesFor(board);
+        const showHoles = evlbHolesFor(board, d);
         return (note || "") +
             `<div class="evlb-togrow">` +
             `<div class="evlb-togs">` +

@@ -58,6 +58,8 @@ check("the long explanation lives behind a How to read this button (Kerry 10/8: 
       'data-evlb-hiw>How to read this</button>' in html and 'id="evlb-hiw-modal"' in html
       and 'function evlbReadGuide(d, game)' in html and 'non-buyers are placed in the flight their handicap' in html
       and html.index('id="evlb-hiw-modal"') > html.index('id="section-lone-star-cup"'))
+check("no games: every board opens hole by hole (Kerry 10/8, practice round)",
+      "((board && board.game) == null || evlbNoGames(d))" in html and "evlbHolesFor(board, d)" in html)
 check("no games, no buyers filter: every player shows, no Show All box, no green/grey rows (Kerry 10/8)",
       "!evlbShowAll && EVLB_BUYIN_GAMES.includes(game) && !evlbNoGames(d)" in html
       and "EVLB_BUYIN_GAMES.includes(board.game || null) && !evlbNoGames(d)" in html

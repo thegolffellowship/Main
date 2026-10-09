@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.529.5";
+window.TGF_VERSION = "2.529.6";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.529.6",
+    date: "2026-10-08",
+    title: "Practice-round boards open hole by hole; the scoring toggle sits exactly where the leaderboard's does",
+    changes: [
+      "Kerry 10/8: \"I want Net and gross to load automatically with all players and hole by hole scores for the practice round.\" An event with no games now opens every board with Hole by hole on (and, from 2.529.4, every player, no buy-in filter). Ticking the box off still sticks for the session.",
+      "Kerry 10/8: \"The scoring wants to reduce that white space between the toggle and the header after rendering.\" On a tight card the white strip around the SCORING | LEADERBOARD toggle no longer thins, so the toggle sits at the same place and size on both pages (measured: same top, 40 px buttons). The card still fits one screen: on a tight card the hole title, match strip and the Check-the-card rows close up a few pixels instead."
+    ]
+  },
   {
     version: "2.529.5",
     date: "2026-10-08",

@@ -318,8 +318,16 @@
         /* The SCORING | LEADERBOARD toggle keeps one size on every screen,
            tight or not, so it reads the same on both pages (Kerry 10/8:
            "Scoring toggle ... not rendering same as leaderboard needs to
-           maintain size"). Only the white strip around it thins on a tight card. */
-        body.se-tight .se-toggle { padding-top: 1px; padding-bottom: 2px; }
+           maintain size"; then "The scoring wants to reduce that white space
+           between the toggle and the header after rendering"): the strip
+           around it keeps its padding too. A tight card saves the room
+           inside the card instead (below). */
+        body.se-tight .se-hole .se-mstrip { margin: 5px 0 1px; }
+        body.se-tight .se-chk .se-check button.cell { min-height: 35px; }
+        body.se-tight .se-chk .se-seg { margin: 5px 0 4px; }
+        body.se-tight .se-chk .se-seg button { height: 30px; }
+        body.se-tight .se-chk .se-tots { margin-top: 5px; }
+        body.se-tight .se-chk .se-pill { margin-top: 6px; }
         body.se-tight .se-hole .se-bottom { padding-top: 4px; padding-bottom: calc(6px + env(safe-area-inset-bottom, 0px)); }
         body.se-tight .se-hole .se-bottom .se-pill, body.se-tight .se-hole .se-bottom .se-nav button { height: 44px; }
         body.se-tight .se-hole .se-bottom .se-nav button { width: 44px; }
@@ -329,7 +337,7 @@
         /* the toggle no longer gives up its height, so the card does */
         body.se-tight.se-focus .se-wrap { padding-top: 2px; }
         body.se-tight .se-hole .se-popkey { margin-top: 2px; }
-        body.se-tight .se-hole .se-h1.big { font-size: 26px; }
+        body.se-tight .se-hole .se-h1.big { font-size: 24px; }
         body.se-tight .se-hole .se-strip { margin-top: 4px !important; }
         .se-popkey { display: flex; gap: 14px; align-items: center; font-size: 12px; color: #4B5563; margin-top: 8px; }
         .se-popkey span { display: inline-flex; align-items: center; gap: 5px; }
