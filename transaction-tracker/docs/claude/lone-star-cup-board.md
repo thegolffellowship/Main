@@ -688,6 +688,9 @@ the Starter Sheet logo and Proxy logos too."
   `score_entry.html` sets `body.lsc`. That turns `--se-ink` (every former
   #1B1B1B) navy, makes the header navy, and passes
   `SHELL_LOGO=/static/lsc-logo-dark.png` to `_shell_nav.html`.
+  v2.529.2 (Kerry 10/8, "Top shouldn't shrink like this"): on a Cup card
+  `se-tight` no longer shrinks the header; it stays 77 px with the 64 px
+  logo, and only the rows, toggle and bottom bar close up.
 - **Phone splash (v2.528.0):** `score_entry.group_is_cup` is true for a
   round in any LSC event (the practice round too), plus the `lsc:` and
   `lscprev:` session rounds. It holds 3 s (Kerry 10/8).
