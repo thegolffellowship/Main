@@ -834,3 +834,6 @@ four-ball card shows both partners; Foursomes is one row per pair. The server
 detail carries `scores` and `picked_up` per player for it. On a phone an opened
 card is full-bleed (`margin: calc(50% - 50vw)`). The old `lscPopsGrid` is gone.
 Guard `test_lsc_cup_card.js`.
+- v2.531.3: the strip's initials squares follow the City card. A pair stacks
+  both partners' initials (`mpStripHtml` reads `o.aLines` / `o.bLines`, class
+  `two`); on a phone the margin bar is 62px and never wraps.

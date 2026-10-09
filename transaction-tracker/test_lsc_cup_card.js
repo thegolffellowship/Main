@@ -42,5 +42,13 @@ check("the Cup card is used for every match state (before and during play)",
       /cardHtml: lscCupGrid\(m, o\)/.test(src) && /const grid = opts\.cardHtml \|\| mpScorecardGridHtml\(gen, o\)/.test(src));
 check("an opened card runs screen wide on a phone",
       /@media \(max-width: 560px\) \{\s*#lsc-board \.mp-match-card:has\(> \.mp-card-head\.open\) \{\s*margin-left: calc\(50% - 50vw\); margin-right: calc\(50% - 50vw\);/.test(src));
+// the strip's initials square (City Match Play): a Cup pair stacks both
+// partners' initials, never one made-up pair of letters
+eval(grab("mpStripHtml"));
+const strip = mpStripHtml({ aName: "Pat Youngs & Jeff Young", bName: "Adam Baker",
+                            aLines: ["Pat YOUNGS", "Jeff YOUNG"], bLines: ["Adam BAKER"], margin: "" });
+check("a pair's square stacks both partners' initials; a single keeps his own",
+      /mp-strip-mono slate two">PY<br>JY</.test(strip) && /mp-strip-mono clay">AB</.test(strip), strip.slice(0, 200));
+check("the margin reads on one line on a phone", /#lsc-board \.mp-strip-bar \{[^}]*white-space: nowrap/.test(src));
 console.log(fails ? `\nFAILED (${fails})` : "\nALL PASS");
 process.exit(fails ? 1 : 0);

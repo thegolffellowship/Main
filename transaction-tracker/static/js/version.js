@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.531.2";
+window.TGF_VERSION = "2.531.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.531.3",
+    date: "2026-10-09",
+    title: "Lone Star Cup match strip: initials squares and a one-line margin, as on City Match Play",
+    changes: [
+      "Kerry 10/9, with a City Match Play card for reference: \"This is how we were displaying the expanded views of matches on City Match Play\". The Cup strip's end squares showed '##' (or one made-up pair of letters, e.g. 'PY' for Pat Youngs & Jeff Young) where the City card shows the player's initials. A Cup pair now stacks both partners' initials (PY over JY); a singles player shows his own, as on City Match Play. On a phone the margin bar is wider and reads on one line ('3 UP', '2&1') instead of wrapping. City Match Play cards are unchanged. Guard: test_lsc_cup_card.js."
+    ]
+  },
   {
     version: "2.531.2",
     date: "2026-10-09",

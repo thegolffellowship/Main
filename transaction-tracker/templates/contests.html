@@ -272,7 +272,10 @@
             /* the stacked names keep whole on a phone: smaller type, a
                narrower VS block, smaller chips */
             #lsc-board .mp-strip-name.lscn { padding-left: 0.45rem; padding-right: 0.45rem; }
-            #lsc-board .mp-strip-bar { flex: 0 0 44px; min-width: 44px; width: 44px; }
+            /* the margin reads on ONE line, as on the City Match Play card
+               ("3 UP", "2&1"), Kerry 10/9 */
+            #lsc-board .mp-strip-bar { flex: 0 0 62px; min-width: 62px; width: 62px; padding: 0 4px;
+                                       white-space: nowrap; font-size: 0.92rem; }
             #lsc-board .mp-strip-mono { width: 28px; }
         }
         .lsc-bd-seg.sm button.on { background: #1B1B1B; }
@@ -1790,6 +1793,7 @@
         /* the Cup's per-player card (lscCupGrid): a monochip carries two
            initials, or both partners' in Foursomes */
         #lsc-board .mp-sc-monochip { width: auto; min-width: 22px; padding: 0 4px; }
+        #lsc-board .mp-strip-mono.two { line-height: 1.25; font-size: 0.78em; }
         #lsc-board table.mp-sc .mp-sc-rowlabel { width: 2.6rem; }
         /* SCREEN WIDE ON A PHONE (Kerry 10/9: "These scorecards on match
            expansion really need to be screen wide for mobile"): an opened
@@ -5640,8 +5644,14 @@
     // ── Slate & Clay match strip (shared by pool expands + knockout) ──
     function mpStripHtml(o) {
         const A = mpFirstLast(o.aName), B = mpFirstLast(o.bName);
-        const aMono = o.aName ? `<span class="mp-strip-mono slate">${escapeHtml(mpMono(o.aName))}</span>` : '<span class="mp-strip-mono stone"></span>';
-        const bMono = o.bName ? `<span class="mp-strip-mono clay">${escapeHtml(mpMono(o.bName))}</span>` : '<span class="mp-strip-mono stone"></span>';
+        // A Cup PAIR stacks each partner's initials (Kerry 10/9, the City
+        // Match Play card's initials square): "Pat Youngs & Jeff Young" is
+        // PY over JY, never one made-up "PY" for the pair.
+        const monoOf = (nm, lines) => (lines && lines.length > 1)
+            ? lines.map(n => escapeHtml(mpMono(n))).join('<br>') : escapeHtml(mpMono(lines && lines[0] || nm));
+        const two = (lines) => (lines && lines.length > 1) ? ' two' : '';
+        const aMono = o.aName ? `<span class="mp-strip-mono slate${two(o.aLines)}">${monoOf(o.aName, o.aLines)}</span>` : '<span class="mp-strip-mono stone"></span>';
+        const bMono = o.bName ? `<span class="mp-strip-mono clay${two(o.bLines)}">${monoOf(o.bName, o.bLines)}</span>` : '<span class="mp-strip-mono stone"></span>';
         let barCls, barTxt;
         if (o.live) {
             // Live, not-yet-decided match: colour the bar for the CURRENT leader
