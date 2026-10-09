@@ -2884,7 +2884,7 @@ bridge `scoring-scorecards:<id>[|key=value…][|dump|html|pdf[|all][|send]]`.
   (`reportsOpenForEvent`, `renderReportsPanel`), ROSTER · PAIRINGS · GAMES ·
   FLIGHTS · REPORTS · PAYOUTS · FINANCIAL on desktop and phone. Starter
   Sheet, Cart Signs, Scorecards, Divisions & Flights, Proximity, Send Pack
-  live there; PAIRINGS keeps Undo/Redo, Generate, GG Sheet, Clear, Save,
+  live there; PAIRINGS keeps Undo/Redo, Generate, Clear, Save, (GG Sheet removed 10/9, v2.530.6)
   Live Scoring, Blinds and the Score Entry panel. Every report's Back goes
   to `/events?event=<id>&view=reports`. Guard `test_mobile_manager_parity.js`.
 

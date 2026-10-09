@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.530.5";
+window.TGF_VERSION = "2.530.6";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.530.6",
+    date: "2026-10-09",
+    title: "No Enter Events & Contests on the Lone Star Cup tab; GG Sheet removed from PAIRINGS",
+    changes: [
+      "Kerry 10/9: \"For the lone Star cup let's remove the enter contests bar altogether. Not needed for this event and view.\" On LEADERBOARD > Lone Star Cup (and /member/lonestarcup) the orange Enter Events & Contests bar is gone on a phone, and the same button is gone from the members' desktop header. Every other tab keeps it. prPinBars decides it from the active tab, so a tap, the #tab=lsc link and the Cup landing page all agree, and the pinned Cup header moves up into the space.",
+      "Kerry 10/9: \"I never used that GG Sheet thing anyway. That can be removed.\" The GG Sheet button is gone from the PAIRINGS toolbar on every event, with its page handler. Events are paired in the Tracker. The server-side import stays for past events and still refuses an untethered one. Guard: test_mobile_manager_parity.js.",
+      "test_scorer_nav.py answers the CTP question its fixture now raises (the v2.530.5 rule: an unanswered CTP hole is asked until answered)."
+    ]
+  },
   {
     version: "2.530.5",
     date: "2026-10-09",

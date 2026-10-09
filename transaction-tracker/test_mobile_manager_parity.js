@@ -28,7 +28,10 @@ check("REPORTS badge sits right after FLIGHTS on desktop and phone",
 check("the phone renders the REPORTS panel", /mobileReportsView\) \{\s*detailHtml = badgesHtml \+ renderReportsPanel\(ev\)/.test(s));
 check("print buttons are gone from the PAIRINGS row (pairing tools stay)",
       !/renderPairingsPanel[\s\S]*starter-sheet','_blank'/.test(s.slice(s.indexOf("function renderPairingsPanel"), s.indexOf("// ── SCORE ENTRY panel")))
-      && /data-pairings-action="gg-import"/.test(s) && /pairings-blinds-btn/.test(s));
+      && /data-pairings-action="generate"/.test(s) && /pairings-blinds-btn/.test(s));
+// GG Sheet is gone (Kerry 10/9: "I never used that GG Sheet thing anyway.
+// That can be removed."); events are paired in the Tracker.
+check("no GG Sheet pull on PAIRINGS", !/gg-import|GG Sheet/.test(s));
 check("?view=reports opens the REPORTS tab", /params\.get\("view"\) === "reports"[\s\S]{0,120}applyDetailView\(byId\.id, "6"\)/.test(s));
 // Back from a print view (?event=<id>&view=pairings) must LOAD the pairings,
 // not just open the tab (Kerry 2026-09-29: "stuck loading").

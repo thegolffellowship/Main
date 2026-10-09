@@ -772,3 +772,21 @@ incorporate now."
   is present.
 - **Open, for Kerry:** confirm the footer URL `thegolffellowship.com` (CD asked).
 - Guard: `test_lsc_starter.py`.
+
+## No Enter Events & Contests on the Cup tab — v2.530.6 (Kerry 10/9)
+
+Kerry: "For the lone Star cup let's remove the enter contests bar altogether.
+Not needed for this event and view." While the Lone Star Cup top tab is
+active, `prPinBars` (contests.html) sets `.contest-cta-row[hidden]` and the
+body class `lsc-no-cta`, which also hides the members' desktop header pill
+(`.shell-cta-pill`). Every tab switch ends in `prPinBars`, so a tap, `#tab=lsc`
+and `/member/lonestarcup` (server-rendered hidden, no flash) agree; any other
+tab brings the CTA back. The pinned Cup header and the toggles move up into the
+space because the pin maths count the CTA only when it shows.
+
+**CTP provenance, 10/6 Olympia Hills (checked 10/9).** The Tracker did capture
+the CTPs live: group 5's phone (Dan Stich scoring) claimed Luke Mazanec on
+holes 5 and 7 (`by_manager` false), and the other groups answered. The money
+row (`auto: CTP Closest to Pin #5/#7`, recorded 10:13 PM) came from Golf
+Genius's game results, which named the same winner. Tracker CTP claims do not
+feed payouts yet (task: Tracker-only payouts before the 10/13 closeouts).

@@ -7240,11 +7240,6 @@
     // score_entry_events), server-rendered into SE_EVENTS.
     const SE_EVENTS = new Set(({{ (se_events or []) | tojson }}).map(Number));
     function seEventOn(evId) { return SE_EVENTS.has(Number(evId)); }
-    // UNTETHERED FROM GOLF GENIUS (Kerry 10/8): events on/after this date are
-    // paired, scored and paid by the Tracker; their GG Sheet pull is hidden
-    // (the server refuses it too).
-    const GG_UNTETHER_FROM = {{ (gg_untether_from or "2026-10-07") | tojson }};
-    function ggAllowed(ev) { const d = String((ev && ev.event_date) || "").slice(0, 10); return !!d && d < GG_UNTETHER_FROM; }
     const SE_PP_CACHE = {};
     const SE_PP_OPEN = {};
     const SE_PP_AT = {};
@@ -7503,11 +7498,6 @@
                 + `${rOK ? '' : ' style="opacity:0.4;cursor:default;"'}>&#x21B7; Redo</button>`;
         }
         html += `<button class="pairings-action-btn generate-btn" data-ev-id="${ev.id}" data-pairings-action="generate">&#x21BB; Generate</button>`;
-        // Pull the sheet GG already has (Kerry 2026-07-31: the AUSTIN
-        // CHAMPIONSHIP was paired in GG, not by us). Replaces this leg.
-        if (ggAllowed(ev))
-        html += `<button class="pairings-action-btn" data-ev-id="${ev.id}" data-pairings-action="gg-import"`
-            + ` title="Pull this event's pairings from the Golf Genius tee sheet (replaces the pairings shown here)">&#x2913; GG Sheet</button>`;
         if (state.groups_9.length || state.groups_18.length) {
             html += `<button class="pairings-action-btn clear-btn" data-ev-id="${ev.id}" data-pairings-action="clear" style="color:var(--red);">&#x2715; Clear</button>`;
             html += `<span class="pair-save-stamp${state.autosaveError ? ' is-error' : ''}" data-ev-id="${ev.id}" title="Changes auto-save in the background about a second after your last move; Save is the manual flush">${escapeHtml(pairSaveStampText(state))}</span>`;
@@ -11257,107 +11247,6 @@
         rerenderDetail(container, ev);
     }
 
-    // Pull the pairings Golf Genius already holds for this event (Kerry
-    // 2026-07-31). Unlike Generate, this WRITES straight to the saved
-    // pairings — it is an import, not a proposal — so the panel reloads
-    // from the server afterwards and comes back clean.
-    async function doImportGgPairings(container, ev, state, btn) {
-        const label0 = btn ? btn.innerHTML : '';
-        const restore = () => { if (btn) { btn.innerHTML = label0; btn.disabled = false; } };
-        if (btn) { btn.textContent = 'Checking GG…'; btn.disabled = true; }
-
-        // Which leg the sheet covers. Only a combo event is ambiguous.
-        const has9 = (state.slots_9 || []).length > 0;
-        const has18 = (state.slots_18 || []).length > 0;
-        let holes = null;
-        if (has9 && has18) {
-            holes = confirm('This event has both legs.\n\n'
-                + 'OK = the GG sheet is the 18-hole leg\n'
-                + 'Cancel = it is the 9-hole leg') ? '18' : '9';
-        } else if (has18) {
-            holes = '18';
-        } else if (has9) {
-            holes = '9';
-        }
-
-        let opts;
-        try {
-            const res = await fetch(`/api/events/${ev.id}/pairings/gg-rounds`);
-            opts = await res.json().catch(() => ({}));
-            if (!res.ok) {
-                alert(opts.error || 'Could not reach the Golf Genius tee sheet.');
-                restore(); return;
-            }
-        } catch (err) {
-            alert('Could not reach the Golf Genius tee sheet.');
-            restore(); return;
-        }
-
-        const rounds = opts.rounds || [];
-        if (!rounds.length) {
-            alert('The Golf Genius tee sheet listed no rounds for this chapter.');
-            restore(); return;
-        }
-        let roundId = opts.best_round_id;
-        let picked = rounds.find(r => r.round_id === roundId);
-        if (!picked) {
-            // No confident match — never guess a sheet onto an event.
-            const menu = rounds.slice(0, 25)
-                .map((r, i) => `${i + 1}. ${r.label}`).join('\n');
-            const ans = prompt(
-                'Could not tell which Golf Genius round is this event.\n\n'
-                + 'Enter the number of the round to pull:\n\n' + menu);
-            if (ans === null || !ans.trim()) { restore(); return; }
-            picked = rounds[parseInt(ans.trim(), 10) - 1];
-            if (!picked) { alert('That is not one of the listed rounds.'); restore(); return; }
-            roundId = picked.round_id;
-        } else if (!confirm(
-                `Pull pairings from Golf Genius?\n\n`
-                + `GG round: ${picked.label}\n\n`
-                + `This REPLACES the ${holes ? holes + '-hole ' : ''}pairings `
-                + `for this event.`)) {
-            restore(); return;
-        }
-
-        if (btn) btn.textContent = 'Pulling…';
-        let data;
-        try {
-            const res = await fetch(`/api/events/${ev.id}/pairings/import-gg`, {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({round_id: roundId, holes: holes, apply: true}),
-            });
-            data = await res.json().catch(() => ({}));
-            if (!res.ok) {
-                alert(data.error || 'The Golf Genius pull failed.');
-                restore(); return;
-            }
-        } catch (err) {
-            alert('The Golf Genius pull failed.');
-            restore(); return;
-        }
-
-        await loadPairings(ev.id);
-        state.swapMode = null; state.selection = null;
-        rerenderDetail(container, ev);
-
-        // Say plainly what did NOT line up — that is the whole value of
-        // importing someone else's sheet.
-        const notes = [];
-        notes.push(`Pulled ${data.group_sizes ? data.group_sizes.length : 0} groups `
-                   + `from "${data.matched_label || picked.label}".`);
-        const unres = data.unresolved_names || [];
-        if (unres.length) {
-            notes.push('\nGG names with no matching customer profile '
-                       + '(placed by name only):\n  • ' + unres.join('\n  • '));
-        }
-        const missing = data.registered_not_on_sheet || [];
-        if (missing.length) {
-            notes.push('\nRegistered here but NOT on the GG sheet:\n  • '
-                       + missing.join('\n  • '));
-        }
-        alert(notes.join('\n'));
-    }
 
     // ── Pairings interaction handlers ─────────────────────────────────────────
     // Ctrl/Cmd+Z and Ctrl/Cmd+Shift+Z on the OPEN pairings panel. Bound
@@ -11614,11 +11503,6 @@
                 if (action === 'mp-close') {
                     state.mpPanelOpen = false;
                     rerenderDetailBody(container, ev);
-                    return;
-                }
-
-                if (action === 'gg-import') {
-                    await doImportGgPairings(container, ev, state, btn);
                     return;
                 }
 

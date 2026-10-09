@@ -4512,13 +4512,8 @@ def events_page():
         se_events = sorted(_se_enabled())
     except Exception:
         se_events = []
-    try:
-        from email_parser.gg_untether import untether_from
-        gg_untether = untether_from()
-    except Exception:
-        gg_untether = "2026-10-07"
     return render_template("events.html", matrix9=matrix9, matrix18=matrix18,
-                           se_events=se_events, gg_untether_from=gg_untether)
+                           se_events=se_events)
 
 
 @app.route("/customers")

@@ -300,6 +300,7 @@
            like in other places we do that. It will save on space") */
         .evlb-chips { display: flex; align-items: center; gap: 8px; margin: 1rem 0 0.5rem; flex-wrap: wrap; }
         .evlb-chips[hidden], .top-tabs-wrap[hidden], .contest-cta-row[hidden] { display: none; }
+        body.lsc-no-cta .shell-cta-pill { display: none !important; }
         /* The scorer's board page (v2.523.0): one event bar, then the tabs. */
         .evlb-solo-bar { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin: 10px 0 8px;
             padding: 0 0 8px; border-bottom: 1px solid var(--border, #E5E7EB); }
@@ -2032,7 +2033,7 @@
         @keyframes tgfChampShine { 0% { left: -60%; } 55% { left: 135%; } 100% { left: 135%; } }
     </style>
 </head>
-<body{% if SOLO_EVENT %} class="evlb-solo{{ ' lsc-solo' if SOLO_LSC else '' }}"{% endif %}>
+<body{% if SOLO_EVENT %} class="evlb-solo{{ ' lsc-solo' if SOLO_LSC else '' }}"{% elif lsc_landing %} class="lsc-no-cta"{% endif %}>
     {% if shell_v2 %}
     {# The mobile bar follows the nav label (Kerry 2026-09-14) — tapping
        "Leaderboard" must not land on a page headed "Season Contests". #}
@@ -2068,7 +2069,7 @@
          two-button chooser sheet (This Week's Events / Season Contests);
          sheet markup lives in _shell_nav.html's member branch. href stays
          as a no-JS fallback — shell.js preventDefaults it. -->
-    <div class="contest-cta-row"{% if SOLO_EVENT %} hidden{% endif %}>
+    <div class="contest-cta-row"{% if SOLO_EVENT or lsc_landing %} hidden{% endif %}>
         {% if member_mode %}
         <a class="contest-cta shell-cta-open" href="https://thegolffellowship.com/shop/ols/products/season-contests"
            target="_blank" rel="noopener">ENTER EVENTS &amp; CONTESTS &rarr;</a>
@@ -2686,6 +2687,16 @@
         // page instead of pinning (Kerry 10/8: "allow the enter events and
         // contests bar to hide"); the tabs then pin straight under the header.
         const phone = window.matchMedia("(max-width: 560px)").matches;
+        // No CTA at all on the Lone Star Cup tab (Kerry 10/9: "remove the
+        // enter contests bar altogether. Not needed for this event and
+        // view."). Every tab switch ends in this call, so one rule here
+        // covers the click, the #tab=lsc hash and /member/lonestarcup.
+        if (cta && !window.SOLO_EVENT) {
+            const onLsc = !!document.querySelector('.top-tab.active[data-top="lone-star-cup"]');
+            cta.hidden = onLsc;
+            // the desktop member header carries the same CTA as a pill
+            document.body.classList.toggle("lsc-no-cta", onLsc);
+        }
         if (cta) {
             cta.style.position = phone ? "relative" : "sticky";
             cta.style.top = phone ? "" : h + "px";
@@ -4850,6 +4861,7 @@
             if (top === "enrollment") enrAutoLoad();
             if (top === "lone-star-cup") lscLoad();
             if (top === "events") evlbLoad();
+            prPinBars();
             try {
                 if (top === "match-play") {
                     // Keep the active Match Play sub-panel in the link
@@ -10121,6 +10133,7 @@
             if (top === "enrollment") enrAutoLoad();
             if (top === "lone-star-cup") lscLoad();
             if (top === "events") evlbLoad();
+            if (window.prPinBars) window.prPinBars();
             // Match Play sub-panel deep link (Kerry 2026-07-21):
             // #tab=mp&mp=knockout|payouts lands directly on that panel.
             const mpSub = hash.match(/mp=(pools|knockout|payouts|setup)/);

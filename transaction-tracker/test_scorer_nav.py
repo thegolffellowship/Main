@@ -147,6 +147,11 @@ if sync_playwright and CHROME:
         se.write_scores(gid, dev, 9101, [{"op_id": f"t{cid}-{h}", "customer_id": cid, "hole": h, "gross": PARS[h - 1]} for h in (3, 4) for cid, *_ in GROUP])
         pg.evaluate("localStorage.removeItem('se_hole_' + new URLSearchParams(location.search).get('t').slice(0,24))")
         pg.reload(); pg.wait_for_timeout(1200)
+        # holes 3-4 were scored behind the page's back: an unanswered CTP hole
+        # among them is asked first (Kerry 10/8: it can't be skipped)
+        asked = 0
+        while pg.locator("button[data-act=ctp][data-cid='']").count() and asked < 4:
+            asked += 1; pg.click("button[data-act=ctp][data-cid='']"); pg.wait_for_timeout(700)
         tg = lambda: pg.evaluate("[...document.querySelectorAll('#se-toggle a')].map(a => a.className + '|' + a.innerText.replace(/\\n/g, ' '))")
         check("hole screen opens on Hole 5 with the toggle, Scoring active", pg.inner_text(".se-h1") == "Hole 5" and tg() == ["active|SCORING", "|LEADERBOARD"], str(tg()))
         hdr = pg.evaluate("document.querySelector('header.shell-nav').getBoundingClientRect().bottom")
