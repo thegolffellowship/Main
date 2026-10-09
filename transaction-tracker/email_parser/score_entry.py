@@ -1895,6 +1895,23 @@ def attach_cart_sign_qr(pack: dict, base_url: str | None = None, db_path=None) -
 # The scorer: open a group, claim / take over, write
 # ---------------------------------------------------------------------------
 
+def cup_session_of_group(group_id: int, db_path=None) -> str | None:
+    """The Lone Star Cup SESSION a group's round plays ('sat-am', 'sat-pm',
+    'sun'), from the round key 'lsc:<session>'; None for any other round (the
+    practice round, a staff preview, a regular event). The scorer's
+    LEADERBOARD reads it (Kerry 10/9: "Leaderboard view on Lone Star Cup
+    weekend should not be showing standard leaderboards"). Never raises."""
+    try:
+        with _closing(_conn(db_path)) as conn:
+            row = conn.execute(
+                "SELECT lower(COALESCE(r.pairings_holes, '')) AS pk FROM se_groups g "
+                "JOIN se_rounds r ON r.id = g.round_id WHERE g.id = ?", (int(group_id),)).fetchone()
+        pk = row["pk"] if row else ""
+        return pk[4:] or None if pk.startswith("lsc:") else None
+    except Exception:
+        return None
+
+
 def group_is_cup(group_id: int, db_path=None) -> bool:
     """True when the group's round is a Lone Star Cup session round (live
     'lsc:<session>' or the staff preview's 'lscprev:<session>'). The phone

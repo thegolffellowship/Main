@@ -147,5 +147,14 @@ cts = open("templates/contests.html", encoding="utf-8").read()
 check("the Cup board opens ?match=<id> and keeps open cards open across its refresh",
       'data-lsc-match=' in cts and 'get("match")' in cts and "lscMatchOpened" in cts)
 
+# Kerry 10/9: "Leaderboard view on Lone Star Cup weekend should not be showing
+# standard leaderboards. It be showing the list of matches just like the member view"
+check("a Cup round's group knows its session; the practice round and a plain event do not",
+      se.cup_session_of_group(g1, db_path=tmp) == "sat-am" and se.cup_session_of_group(g_prac, db_path=tmp) is None
+      and se.cup_session_of_group(g_plain, db_path=tmp) is None and se.cup_session_of_group(999999, db_path=tmp) is None)
+check("the scorer's board page wires a Cup session to the Cup tab, on his session",
+      'window.SOLO_CUP = {{ SOLO_CUP|tojson }}; window.lscSel = window.SOLO_CUP;' in cts
+      and 'hash = window.SOLO_CUP ? "#tab=lsc" : "#tab=events"' in cts)
+
 print("\n" + ("ALL PASS" if not F else f"{len(F)} FAILURE(S): " + "; ".join(F)))
 sys.exit(1 if F else 0)

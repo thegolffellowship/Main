@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.531.9";
+window.TGF_VERSION = "2.532.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.532.0",
+    date: "2026-10-09",
+    title: "Cup scorers' LEADERBOARD is the Cup's match list, on their session",
+    changes: [
+      "Kerry 10/9: \"Leaderboard view on Lone Star Cup weekend should not be showing standard leaderboards. It be showing the list of matches just like the member view on LEADERBOARD / LONE STAR CUP.\" A scorer on a Cup round (Saturday AM/PM, Sunday) who taps LEADERBOARD now gets the Cup board members see: the team score, FOURBALL | FOURSOMES | SINGLES, MATCHES | SKINS | EVENT INFO, every match card. It opens on that scorer's own session (from the round key lsc:<session>, score_entry.cup_session_of_group), under the same pinned SCORING | LEADERBOARD bar. The Friday practice round keeps its Net / Gross board.",
+      "Kerry 10/9: \"the LSC page should land on matches for the current session being played\". It does: MATCHES, on the session with a match in play, else the next session still to play (Saturday AM until it is underway, then PM, then Sunday). The pinned Cup header now also counts the scorer's toggle bar, so nothing slides under it. Guard: test_cup_signs.py."
+    ]
+  },
   {
     version: "2.531.9",
     date: "2026-10-09",

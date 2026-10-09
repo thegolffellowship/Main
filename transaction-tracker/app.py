@@ -11920,11 +11920,17 @@ def score_entry_board_page():
     # the Cup look carries over from the scorecard (Kerry 10/8: "When I click
     # leaderboard on the live scoring, it loses the branding and colors from
     # the Lone Star Cup. It needs to maintain that.")
-    from email_parser.score_entry import group_is_cup
+    from email_parser.score_entry import group_is_cup, cup_session_of_group
+    # A CUP ROUND's leaderboard is the Cup's match list, as members see it on
+    # LEADERBOARD > LONE STAR CUP, opened on this group's session (Kerry
+    # 10/9: "Leaderboard view on Lone Star Cup weekend should not be showing
+    # standard leaderboards. It be showing the list of matches just like the
+    # member view"). The practice round keeps its Net / Gross board.
     return render_template("contests.html", member_mode=True,
                            MATCHPLAY_V2=_matchplay_v2_flag(),
                            SOLO_EVENT=(row["item_name"] if row else ""), SOLO_T=tok,
-                           SOLO_LSC=group_is_cup(gid))
+                           SOLO_LSC=group_is_cup(gid),
+                           SOLO_CUP=cup_session_of_group(gid))
 
 
 def _board_read_ok():

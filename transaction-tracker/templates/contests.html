@@ -2642,7 +2642,7 @@
     {% if lsc_landing %}<script>window.LSC_LANDING = true;</script>{% endif %}
     {% if evlb_landing %}<script>window.EVLB_LANDING = true;</script>{% endif %}
     {% if mp_landing %}<script>window.MP_LANDING = {{ mp_landing|tojson }};</script>{% endif %}
-    {% if SOLO_EVENT %}<script>window.SOLO_EVENT = {{ SOLO_EVENT|tojson }}; window.SOLO_T = {{ (SOLO_T or "")|tojson }};</script>{% endif %}
+    {% if SOLO_EVENT %}<script>window.SOLO_EVENT = {{ SOLO_EVENT|tojson }}; window.SOLO_T = {{ (SOLO_T or "")|tojson }};{% if SOLO_CUP %} window.SOLO_CUP = {{ SOLO_CUP|tojson }}; window.lscSel = window.SOLO_CUP;{% endif %}</script>{% endif %}
     {% if member_mode %}<script>window.MEMBER_MODE = true;</script><script src="/static/js/member-nudges.js" defer></script>
     <style>
         /* Member view: manager/admin controls can NEVER show, including
@@ -2681,7 +2681,9 @@
     function prPinBars() {
         const hdr = document.querySelector("header");
         if (!hdr) return;
-        const h = hdr.offsetHeight;
+        // the scorer's SCORING | LEADERBOARD bar pins under the header too
+        const tgl = document.getElementById("se-toggle");
+        const h = hdr.offsetHeight + (tgl && !tgl.hidden ? tgl.offsetHeight : 0);
         const cta = document.querySelector(".contest-cta-row");
         // On a phone the ENTER EVENTS & CONTESTS bar scrolls away with the
         // page instead of pinning (Kerry 10/8: "allow the enter events and
@@ -10216,7 +10218,8 @@
             hash = "#tab=mp&ch=" + (/anto/i.test(window.MP_LANDING) ? "sa" : "austin");
         // /member/score/board lands on the events board, which the solo
         // filter above narrows to the scorer's event.
-        if (window.SOLO_EVENT) hash = "#tab=events";
+        // a Cup round's scorer reads the Cup's matches, on his session (Kerry 10/9)
+        if (window.SOLO_EVENT) hash = window.SOLO_CUP ? "#tab=lsc" : "#tab=events";
         const raceMatch = hash.match(/race=([a-z_]+)/);
         const wantRace = raceMatch && document.querySelector(`.sub-tab[data-pr="${raceMatch[1]}"]`)
             ? raceMatch[1] : null;

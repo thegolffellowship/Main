@@ -837,3 +837,15 @@ Guard `test_lsc_cup_card.js`.
 - v2.531.3: the strip's initials squares follow the City card. A pair stacks
   both partners' initials (`mpStripHtml` reads `o.aLines` / `o.bLines`, class
   `two`); on a phone the margin bar is 62px and never wraps.
+
+## The scorer's LEADERBOARD on a Cup round — v2.532.0 (Kerry 10/9)
+
+Kerry: "Leaderboard view on Lone Star Cup weekend should not be showing
+standard leaderboards. It be showing the list of matches just like the member
+view on LEADERBOARD / LONE STAR CUP." `/member/score/board?t=` reads
+`score_entry.cup_session_of_group(gid)` (the round key `lsc:<session>`; None for
+the practice round, a staff preview or a regular event) and passes `SOLO_CUP`:
+contests.html then opens `#tab=lsc` with `window.lscSel` on that session instead
+of the EVENTS board. The practice round keeps its Net / Gross board. The Cup page
+lands on MATCHES, on the live session, else the next one still to play.
+`prPinBars` counts the scorer's pinned `#se-toggle`. Guard `test_cup_signs.py`.
