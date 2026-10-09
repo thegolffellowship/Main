@@ -602,6 +602,8 @@ def build_scorecards(event_id: int, layout: str = "3up", grouping: str = "team",
                   "file_stub": pack["event"].get("file_stub")},
         "layout": layout, "layout_meta": lay, "grouping": grouping, "qr": qr,
         "cols18": cols_18(),
+        # the Cup legend's team squares (Kerry 10/8)
+        "lsc_teams": _lsc_teams() if lsc else None,
         "lsc": ({**lsc, "navy": _lc.LSC_NAVY, "sessions": lsc_sessions, "session": session,
                  "preview": bool(preview), "course": (course_name or "").upper()}
                 if lsc else None),
@@ -636,6 +638,12 @@ LSC_LEAD = {"practice": "PRACTICE · INDIVIDUAL",
             "fourball": "2 v 2 · AUSTIN v SAN ANTONIO",
             "chapman": "FOURSOMES · 1 BALL PER TEAM",
             "singles": "SINGLES · 2 MATCHES · 1 v 1"}
+
+
+def _lsc_teams() -> list[dict]:
+    from email_parser.lsc_cup import LSC_TEAM_COLORS
+    return [{"name": "Austin", "color": LSC_TEAM_COLORS["austin"]},
+            {"name": "San Antonio", "color": LSC_TEAM_COLORS["sa"]}]
 
 
 def _lsc_card(fmt: str, g: dict, ev: dict, is18: bool) -> dict:

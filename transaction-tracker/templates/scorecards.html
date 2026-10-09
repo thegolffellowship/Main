@@ -40,6 +40,7 @@
       font-size: 10px; color: #374151; white-space: nowrap; }
     .decode .li { display: inline-flex; align-items: center; gap: 0.4em; }
     .decode i { display: inline-block; width: 7px; height: 7px; border-radius: 50%; flex: none; position: relative; }
+    .decode i.sq { border-radius: 1px; width: 9px; height: 9px; }
     .decode i.lk { background: #111; } .decode i.lo { background: var(--tgf-orange); }
 
     /* Header (#891-B) */
@@ -231,7 +232,9 @@
     :root { --lsc-navy: #002855; }
     .card.lsc .brand { flex: none; border-right-color: var(--lsc-navy); }
     /* a little bigger (Kerry 10/8); margins scale with it */
-    .card.lsc .brand img { height: 7.6em; margin: -1.1em -0.46em; }
+    .card.lsc .brand img { height: 8.4em; margin: -1.2em -0.5em; }
+    /* Kerry 10/8: "Dotted divider line" beside the logo */
+    .card.lsc .brand { border-right-style: dotted; }
     .card.lsc .mid .course { color: var(--lsc-navy); letter-spacing: 1.5px; }
     .card.lsc .lsc-sub { font-size: 1.3em; white-space: nowrap; overflow: hidden; }
     .card.lsc .lsc-sub b { font-family: "Bitter", Georgia, serif; font-weight: 700; color: var(--lsc-navy); }
@@ -269,7 +272,8 @@
     /* Kerry 10/8: the PH / NET cells above the players "Not needed" (navy
        fill); "Center the INIT cell contents"; "Turn the PAR & STROKE INDEX
        cells (4 of them) to navy with white text". */
-    .card.lsc tr td.nn { background: var(--lsc-navy); border-color: var(--lsc-navy); }
+    /* the faded cell lines still show (Kerry 10/8) */
+    .card.lsc tr td.nn { background: var(--lsc-navy); border-color: #3A5781; }
     .card.lsc tr td.lead.ic { text-align: center; padding-left: 0; padding-right: 0; }
     .card.lsc tr.par td.lbl, .card.lsc tr.hcp td.lbl { background: var(--lsc-navy); color: #fff;
       border-color: #4A6285; }
@@ -543,7 +547,7 @@
        Pops are strokes"): game name, % and basis come from the net-game
        rule, never typed. #}
     {% if L %}
-    <div class="decode">{% for k in L.key %}<span class="li">{% if k[0] %}<i class="{{ k[0] }}"></i>{% endif %}{{ k[1] }}</span>{% endfor %}</div>
+    <div class="decode">{% for k in L.key %}<span class="li">{% if k[0] %}<i class="{{ k[0] }}"></i>{% endif %}{{ k[1] }}</span>{% endfor %}{% for t in sc.get('lsc_teams') or [] %}<span class="li"><i class="sq" style="background:{{ t.color }}"></i>{{ t.name }}</span>{% endfor %}</div>
     {% else %}
     <div class="decode"><span class="li"><i class="lk"></i>PH &ndash; Playing Handicap Stroke (&ldquo;Pops&rdquo;) at 100%</span><span class="li"><i class="lo"></i>{{ sc.net.name }} Stroke at {{ sc.net.pct }}%{% if sc.net.off_low %}, off the field&rsquo;s low{% endif %}</span>{% if sc.net.par3_suppressed %}<span class="li"><i class="lx"></i>No {{ sc.net.name }} Strokes on par 3s</span>{% endif %}</div>
     {% endif %}

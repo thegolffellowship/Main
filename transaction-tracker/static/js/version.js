@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.527.7";
+window.TGF_VERSION = "2.527.8";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.527.8",
+    date: "2026-10-08",
+    title: "Cup scorecards: logo 10% bigger, dotted divider, faded PH / NET lines, team squares in the legend",
+    changes: [
+      "Kerry 10/8, on the practice-round card: \"Bigger logo. Dotted divider line. Still show the faded cell border lines in PH/NET even though they're not used\"; \"10% bigger on the logo. Just looks dinky\"; \"Also add color squares in legend for the team chapters at bottom of the card\". On Cup cards the logo is 10% larger (8.4em). The line between the logo and the title is dotted. The navy PH / NET cells above the players keep faded cell lines. The legend at the foot of the card adds an Austin and a San Antonio colour square."
+    ]
+  },
   {
     version: "2.527.7",
     date: "2026-10-08",

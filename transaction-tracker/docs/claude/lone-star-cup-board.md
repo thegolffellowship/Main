@@ -574,7 +574,10 @@ the Starter Sheet logo and Proxy logos too."
     numbers without Kerry's say-so. The 2-up header row drops to 0.8em so OUT
     fits. OUT / IN / Init / TOT / NET carry a light shade (`td.sh` #ECEFF3);
     the tee rows keep their tee colours.
-  - The Cup logo on the card header is 7.6em. The practice round's player
+  - The Cup logo on the card header is 8.4em (v2.527.8, "10% bigger"), with
+    a dotted divider. The navy PH / NET cells keep faded lines (#3A5781), and
+    the legend carries Austin / San Antonio squares (`sc.lsc_teams`).
+  - Earlier: the logo was 7.6em. The practice round's player
     rows carry the team bar from the lock, as the Cup's do.
   - **Cup card theme (v2.527.3, Kerry 10/8):** `.card.lsc` prints in the Cup
     navy: QR (`qr_svg(dark="#002855")`), text, header row, heavy lines and
