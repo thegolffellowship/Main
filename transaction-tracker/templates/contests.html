@@ -354,6 +354,10 @@
         .evlb-body { border-top: 1px solid #F0EEE9; padding: 10px 14px 14px; }
         .evlb-subtabs { margin-bottom: 10px; }
         .evlb-hiw-row { display: flex; justify-content: flex-end; margin-top: 8px; }
+        /* players still to tee off: name + tee time across the hole columns */
+        tr.evlb-wait td { color: #6B7280; }
+        tr.evlb-wait td.nm { color: inherit; opacity: .8; }
+        tr.evlb-wait td.tt { text-align: left; padding-left: 12px; font: 600 13px/1.2 'Helvetica Neue', Helvetica, Arial, sans-serif; white-space: nowrap; }
         .evlb-hiw-btn { height: 26px !important; padding: 0 12px !important; font-size: 10px !important; }
         body.lsc-solo .evlb-hiw-btn { background: var(--lsc-navy, #002855); }
         body.lsc-solo .pr-hiw-title .hiw-name { color: var(--lsc-navy, #002855); }
@@ -4146,6 +4150,19 @@
                                              board.grossCol, board.netCol,
                                              board.gameColAfterWon);
         });
+        // STILL TO TEE OFF (Kerry 10/8: "Show all players even though they
+        // haven't teed off. You could list their tee time in their row,
+        // kind of like they do for PGA Tour"): the live day's players with
+        // no score yet sit under the field with their tee time.
+        if (game !== "team" && (d.waiting || []).length) {
+            d.waiting.forEach(w => {
+                const tt = [w.tee_time ? escapeHtml(String(w.tee_time)) : "",
+                            w.start_hole && w.start_hole !== 1 ? "Hole " + w.start_hole : ""].filter(Boolean).join(" &middot; ");
+                html += `<tr class="evlb-plr evlb-wait"><td></td>` +
+                    `<td class="nm">${escapeHtml(w.player_name)}${evlbTeeDot(d, w, "right")}</td>` +
+                    `<td class="tt" colspan="${Math.max(1, ncols - 2)}">${tt || "Not started"}</td></tr>`;
+            });
+        }
         return html;
     }
     // ── PAR row (Kerry 2026-09-13: "Add a par row below the hole

@@ -14478,6 +14478,14 @@ def get_event_leaderboard(event_name: str,
         # tables; the temp tables die with the connection.
         live_overlay = _entry_mode_overlay(conn, ev["id"], db_path)
         ev["score_source"] = "entry" if live_overlay is not None else "record"
+        # still to tee off, with their tee times (Kerry 10/8, PGA Tour style)
+        waiting = []
+        if live_overlay is not None:
+            try:
+                from email_parser import entry_publish as _ep_w
+                waiting = _ep_w.live_waiting(conn, ev["id"], db_path=db_path)
+            except Exception:
+                logger.exception("Non-fatal: waiting list unavailable for %s", ev["id"])
 
         # MONEY WAITS FOR THE FIELD (Kerry 2026-09-15: "Winnings should
         # not show until 10 minutes after last score is posted"). Half a
@@ -15683,6 +15691,7 @@ def get_event_leaderboard(event_name: str,
         # board should say WHO and how far along they are.
         "scores_pending": field_state["pending"][:12],
         "scores_pending_total": len(field_state["pending"]),
+        "waiting": waiting,
         "last_score_at": last_score_at,
         "field": len(plist),
         "pot": round(sum(w["cents"] for ws in won.values()

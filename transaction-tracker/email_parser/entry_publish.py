@@ -527,6 +527,47 @@ def live_board_rows(conn, event_id: int, db_path=None, _read: dict | None = None
     return out
 
 
+def live_waiting(conn, event_id: int, db_path=None, _read: dict | None = None) -> list[dict]:
+    """Who is still to TEE OFF on the live day, PGA Tour style (Kerry 10/8:
+    "Show all players even though they haven't teed off. You could list
+    their tee time in their row"). Every player in the day's non-preview
+    score-entry groups (the earliest round date on or after today) with no
+    score yet, by himself or through his Foursomes team, once each, with
+    his group's tee time. Writes nothing."""
+    from email_parser.timezone_utils import today_central_str
+    read = _read if _read is not None else se.get_entered_scores(int(event_id), db_path=db_path)
+    rounds = [r for r in read.get("rounds") or [] if not _is_preview(r)]
+    today = today_central_str()
+    days = sorted({str(r.get("date") or "")[:10] for r in rounds if str(r.get("date") or "")[:10] >= today})
+    if not days:
+        return []
+    started = set()
+    for r in rounds:
+        for p in r.get("players") or []:
+            if p.get("scores"):
+                started.add(p.get("customer_id"))
+        for t in r.get("teams") or []:
+            if t.get("scores"):
+                started.update(t.get("customer_ids") or [])
+    out, seen = [], set()
+    for r in [r for r in rounds if str(r.get("date") or "")[:10] == days[0]]:
+        groups = {g["group_id"]: g for g in r.get("groups") or []}
+        for p in r.get("players") or []:
+            cid = p.get("customer_id")
+            if not cid or cid in started or cid in seen:
+                continue
+            seen.add(cid)
+            g = groups.get(p.get("group_id")) or {}
+            out.append({"customer_id": cid, "player_name": (p.get("name") or "").strip(),
+                        "tee_time": g.get("tee_time"), "start_hole": g.get("start_hole"),
+                        "group_num": g.get("group_num"), "_order": (r.get("round_id") or 0, g.get("group_num") or 0)})
+    names = _customer_names(conn, [w["customer_id"] for w in out])
+    for w in out:
+        w["player_name"] = names.get(w["customer_id"]) or w["player_name"] or f"customer {w['customer_id']}"
+    out.sort(key=lambda w: w.pop("_order"))
+    return out
+
+
 def publish_entered_round(round_id: int | None = None, event_id: int | None = None,
                           apply: bool = False, db_path=None) -> dict:
     """Publish one score-entry round (or, with only event_id, every round of

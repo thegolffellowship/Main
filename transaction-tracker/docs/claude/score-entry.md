@@ -990,6 +990,12 @@ Events board on Olympia Hills (event 3308) had read Golf Genius imports.
   "in play" measured on the overlay, temp tables dropped after each event).
   Before this an event Golf Genius never scored (the practice round) never
   reached the scorer's board at all.
+- **Still to tee off (v2.529.x→2.530.1, Kerry 10/8, "kind of like they do for PGA
+  Tour"):** `entry_publish.live_waiting` lists the live day's players with no
+  score yet (earliest non-preview round date on/after today; a Foursomes team
+  score counts for both), with their group's tee time; `get_event_leaderboard`
+  returns it as `waiting` and every board but Team appends them with the tee
+  time across the hole columns.
 - **No games, no team pops (v2.529.8, Kerry 10/8):** `_team_strokes`
   returns nothing when the round's event is `database.event_games_off`
   (included-games price $0), and the pairings seed and preview skip

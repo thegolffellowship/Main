@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.530.0";
+window.TGF_VERSION = "2.530.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.530.1",
+    date: "2026-10-08",
+    title: "Live leaderboard lists the whole field, with tee times for those still to tee off",
+    changes: [
+      "Kerry 10/8: \"Show all players even though they haven't teed off. You could list their tee time in their row perhaps, kind of like they do for PGA Tour.\" On a live-scoring event the board now ends with every player in the day's groups who has no score yet (by himself or through his Foursomes team), one row each, with his group's tee time (and start hole when it isn't 1) across the hole columns. As soon as his group posts a hole he moves up into the field. entry_publish.live_waiting builds the list; the board payload carries it as waiting. Guard: test_board_entry_mode.py."
+    ]
+  },
   {
     version: "2.530.0",
     date: "2026-10-08",

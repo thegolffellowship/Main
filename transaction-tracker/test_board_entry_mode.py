@@ -207,6 +207,15 @@ check("the list leaves no temp tables behind (the record reads normally after)",
       lst().get(EV, {}).get("field") is not None)
 before3 = counts()
 check("listing wrote nothing to the record", before3 == counts())
+# PGA Tour style (Kerry 10/8): the field still to tee off is on the board
+g3b = se.upsert_group(r3, 2, tee_time="1:50 PM", players=[
+    {"customer_id": 302, "display_name": "Adam B", "tee": "50-64", "playing_handicap": 3}], db_path=DB)["group_id"]
+d3w = db.get_event_leaderboard(NAME3, db_path=DB) or {}
+w = d3w.get("waiting") or []
+check("players with no score yet are listed with their tee time",
+      [(x["customer_id"], x["tee_time"]) for x in w] == [(302, "1:50 PM")], w)
+check("a player who has posted is not waiting", all(x["customer_id"] not in (301, 303) for x in w))
+check("the name is the customer's own", w and w[0]["player_name"] == "Adam Baker", w)
 check("a Tracker-only event is not marked Golf Genius scored", L.get(EV3, {}).get("gg_scored") is False, L.get(EV3))
 check("an event with GG cards is", lst().get(EV, {}).get("gg_scored") is True, lst().get(EV))
 
