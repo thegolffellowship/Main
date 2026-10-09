@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.533.0";
+window.TGF_VERSION = "2.533.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.533.1",
+    date: "2026-10-09",
+    title: "Practice round leaderboard: one Overall board (Gross + Net), all players, shows before any score",
+    changes: [
+      "Kerry 10/9: \"Still want the blank leaderboard to show. And actually, I only want to show an Overall leaderboard that would have both Gross and Net ... land with all players, but hole scores and handicaps off.\" An event with no games (the Cup's practice round) now shows ONE board, Overall, with Gross and Net side by side and no tab bar; it lands on the totals with Hole by hole and Handicaps unticked, ranked on net to par while cards are out. Every player is listed with their tee time until they post.",
+      "The scorer's LEADERBOARD now opens even before the first score is posted (it used to say \"No scores posted for this event yet\"), and the \"Golf Genius is the official scorer\" line no longer shows on it."
+    ]
+  },
   {
     version: "2.533.0",
     date: "2026-10-09",

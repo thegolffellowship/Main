@@ -3376,7 +3376,7 @@
             if (thr) thr.textContent = d.gg_official_through ? " through " + d.gg_official_through : "";
             $("evlb-pilot").textContent = (d.pilot && !window.MEMBER_MODE)
                 ? "Narrowed to " + (d.pilot_codes || []).join(", ") + " (events_leaderboard_only dial — clear it to show every event)" : "";
-            if (!(d.events || []).length) {
+            if (!(d.events || []).length && !window.SOLO_EVENT) {
                 box.innerHTML = '<p style="color:var(--text-muted);margin-top:1rem;">No played events here yet.</p>';
                 return;
             }
@@ -3415,13 +3415,24 @@
                 // an event Golf Genius never scores (the practice round)
                 // has no official scorer to point at
                 const off = $("evlb-official");
-                if (off && ev) off.hidden = !!ev.live_entry || ev.gg_scored === false;
+                if (off) off.hidden = !ev || !!ev.live_entry || ev.gg_scored === false;
                 if (st && ev) {
                     st.textContent = ev.money_visible === false ? "In play" : evlbDate(ev.event_date) + " · final";
                     st.classList.toggle("posted", ev.money_visible !== false);
                 }
                 if (mine) { mine.open = true; }
-                else box.innerHTML = '<p style="color:var(--text-muted);margin-top:1rem;">No scores posted for this event yet.</p>';
+                else {
+                    // NO SCORE POSTED YET (Kerry 10/9: "Still want the blank
+                    // leaderboard to show"): his event's board opens anyway,
+                    // every player listed with a tee time until they post.
+                    box.innerHTML = `<details class="evlb-ev" data-ev="${escapeHtml(window.SOLO_EVENT)}">` +
+                        `<summary><span class="chev tgf-exp">&#9654;</span><div><div class="nm">${escapeHtml(window.SOLO_EVENT)}</div></div></summary>` +
+                        `<div class="evlb-body"><p style="color:var(--text-muted);">Loading&hellip;</p></div></details>`;
+                    const el = box.querySelector("details.evlb-ev");
+                    el.addEventListener("toggle", () => { if (el.open) evlbLoadEvent(el); });
+                    el.open = true;
+                    if (st) { st.textContent = "In play"; st.classList.remove("posted"); }
+                }
             }
         } catch (err) {
             evlbLoaded = false;
@@ -3707,9 +3718,11 @@
     // by hole scores for the practice round").
     // A board may ask to land hole by hole too (the Cup's Skins board, Kerry
     // 10/9: its circled holes ARE the board).
+    // Kerry 10/9 reversed that for the practice round: "hole scores and
+    // handicaps off" on landing, so a no-games event opens on its totals.
     const evlbHolesFor = (board, d) => evlbHolesTouched
-        ? evlbShowHoles : (((board && board.game) == null || evlbNoGames(d))
-                           || !!(board && board.holesOnLanding));
+        ? evlbShowHoles : (board && board.holesOnLanding ? true
+                           : (evlbNoGames(d) ? false : (board && board.game) == null));
     // handicap columns (Idx + PH) start HIDDEN (Kerry 2026-09-13:
     // "make the default not show them") — they are reference, not
     // result, and they cost two columns on a phone
@@ -4179,7 +4192,10 @@
             `</tr>`;
     }
     function evlbStdBoard(d, board, note) {
-        if (!board.sections.length || !board.sections.some(s => s.rows.length))
+        // players still to tee off keep the board up (Kerry 10/9: "Still want
+        // the blank leaderboard to show"), listed with their tee times
+        const waiting = board.game !== "team" && (d.waiting || []).length;
+        if ((!board.sections.length || !board.sections.some(s => s.rows.length)) && !waiting)
             return '<p style="color:var(--text-muted);">No scores yet.</p>';
         const id = "evb" + (++EVLB_BOARD_SEQ);
         const dflt = board.sort || "net";
@@ -4234,7 +4250,10 @@
         // No games at the event (Kerry 10/8, the LSC practice round: "Just
         // show NET & GROSS leaderboards per our standards"): Net and Gross only.
         const noGames = evlbNoGames(d);
-        const tabs = noGames ? [["net", "Net"], ["gross", "Gross"]]
+        // ...and since Kerry 10/9 (the practice round's scorer board): "I only
+        // want to show an Overall leaderboard that would have both Gross and
+        // Net ... land with all players, but hole scores and handicaps off".
+        const tabs = noGames ? [["overall", "Overall"]]
             : [["overall", "Overall"], ["team", "Team"], ["net", "Net"],
                ["gross", "Gross"], ["skins", "Skins"],
                ["points", "MVP/Points"], ["prox", "Proxies"]];
@@ -4332,7 +4351,12 @@
         // The Pts column is the MVP game's result, so it only appears on
         // OVERALL and POINTS; Skins owns its own count column.
         const boards = {
-            overall: { sections: [{ label: null, rows: ovRows }], sort: evlbOverallSort(d) },
+            overall: noGames
+                // no games: Gross and Net side by side, no Pts column, ranked
+                // on net to par while cards are out (as the Net tab was)
+                ? { sections: [{ label: null, rows: ovRows }], gameCol: false,
+                    sort: d.field_complete === false ? "tpn" : "net" }
+                : { sections: [{ label: null, rows: ovRows }], sort: evlbOverallSort(d) },
             // MID-ROUND THE TOTAL IS MEANINGLESS (Kerry 2026-09-15:
             // "Order Net and Gross by associated +/- column during
             // event"). Three holes in, 13 strokes leads a board over
@@ -4504,7 +4528,8 @@
             points: evlbStdBoard(d, boards.points) + evlbLegendFor("points"),
             prox: proxHtml,
         };
-        return `<div class="evlb-subtabs"><div class="evlb-seg evlb-seg-sub">` +
+        // one board, no tab bar to choose from (the no-games Overall)
+        return `<div class="evlb-subtabs"><div class="evlb-seg evlb-seg-sub"${tabs.length === 1 ? " hidden" : ""}>` +
             tabs.map(([k, l]) =>
                 `<button class="evlb-subtab${k === first ? " active" : ""}" data-sub="${k}">${l}</button>`).join("") +
             `</div><div class="evlb-hiw-row"><button type="button" class="pr-hiw-link evlb-hiw-btn" data-evlb-hiw>How to read this</button></div></div>` +

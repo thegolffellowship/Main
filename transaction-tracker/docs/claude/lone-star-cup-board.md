@@ -949,3 +949,12 @@ On `/member/score/board?t=` for a Cup round (`window.SOLO_CUP`):
 - EVENT INFO has a SCORING tab that renders the same `SCORER_NOTES`.
 - Guard: `test_lsc_weekend_email.py`.
 
+**Practice round board: Overall only (v2.533.1, Kerry 10/9).** Kerry: "Still want the blank leaderboard to show ... I only want to show an Overall leaderboard that would have both Gross and Net ... land with all players, but hole scores and handicaps off".
+
+This applies to any event with no games (`evlbNoGames`):
+- `evlbEventHtml` builds one Overall board: `gameCol: false`, sorted by net to par (`tpn`) while cards are out. The tab bar is hidden.
+- `evlbHolesFor` lands it on the totals.
+- `evlbStdBoard` keeps the table when players are still waiting (`d.waiting`), listed with their tee times.
+- On the scorer's board (`SOLO_EVENT`), an event that isn't in the list yet (no score posted) gets its own details element, loaded directly.
+- The GG "official scorer" line is hidden there.
+
