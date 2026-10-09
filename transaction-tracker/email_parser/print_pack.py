@@ -99,6 +99,15 @@ def build_event_print_pack(render, event_id: int, static_dir: str,
             continue
         if slug == "starter-sheet":
             sheet_pack = ctx
+            if (ctx.get("brand") or {}).get("lsc") == "practice":
+                # The practice round prints the Cup's starter sheet (#1481)
+                try:
+                    from email_parser import lsc_starter
+                    htmls.append((slug, render("lsc_starter_sheet.html",
+                                               s=lsc_starter.build(int(event_id), db_path=db_path))))
+                except Exception:
+                    logger.exception("print pack: LSC starter sheet failed for event %s", event_id)
+                continue
         if slug == "cart-signs":
             # The Lone Star Cup's practice round prints the Cup's design 3e
             # sign (Kerry 10/8), not the TGF one.

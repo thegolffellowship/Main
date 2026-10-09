@@ -5521,18 +5521,25 @@ def starter_sheet_page(event_id):
     """Print-optimized Starter Sheet for an event (B5) — tee times / groups /
     players / cart split, rendered from the saved pairings."""
     from email_parser.database import get_event_print_pack, report_brand
-    if report_brand(event_id).get("lsc") == "cup":
-        # The Lone Star Cup prints PER ROUND, filled from THE DRAW (Kerry
-        # 10/8). ?session=sat-am|sat-pm|sun; none = the first drawn round.
-        from email_parser.lsc_cup import cup_round_pack, cup_print_groups
-        sid = request.args.get("session")
-        if not sid:
-            ss = cup_print_groups(event_id)["sessions"]
-            sid = next((s["id"] for s in ss if s["matches"]), ss[0]["id"] if ss else None)
-        pack = cup_round_pack(event_id, sid, preview=request.args.get("preview") == "1") if sid else None
-        if not pack:
+    _lsc = report_brand(event_id).get("lsc")
+    if _lsc:
+        # THE LONE STAR CUP STARTER SHEET (design-claude #1481, Kerry 10/8:
+        # "Check mail directive for LSC Starter Sheets from Claude Design and
+        # incorporate now"). The Cup prints PER ROUND from THE DRAW
+        # (?session=sat-am|sat-pm|sun; none = the first drawn round); the
+        # practice round from its saved pairings.
+        from email_parser import lsc_starter
+        sid = None
+        if _lsc == "cup":
+            from email_parser.lsc_cup import cup_print_groups
+            sid = request.args.get("session")
+            if not sid:
+                ss = cup_print_groups(event_id)["sessions"]
+                sid = next((x["id"] for x in ss if x["matches"]), ss[0]["id"] if ss else None)
+        s = lsc_starter.build(event_id, session_id=sid, preview=request.args.get("preview") == "1")
+        if not s:
             return "Event not found", 404
-        return render_template("starter_sheet.html", pack=pack)
+        return render_template("lsc_starter_sheet.html", s=s)
     pack = get_event_print_pack(event_id)
     if not pack:
         return "Event not found", 404

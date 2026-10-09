@@ -610,3 +610,29 @@ like the reports."
     `friday` add-on).
   - The Cup's whole-event Starter Sheet, Cart Signs, Scorecards and Send Pack
     buttons are hidden.
+
+
+## THE CUP STARTER SHEET (design-claude #1481, Kerry 10/8) — v2.527.0
+
+Kerry: "Check mail directive for LSC Starter Sheets from Claude Design and
+incorporate now."
+
+- **Where it lives:** `email_parser/lsc_starter.py` (`build(event_id,
+  session_id, preview)`) feeds `templates/lsc_starter_sheet.html`.
+- **Which sheets use it:** `/events/<id>/starter-sheet` on any LSC event.
+  - The Cup prints per round (`?session=`) from THE DRAW.
+  - The practice round prints from its saved pairings, and from the bound
+    pack too.
+- **Math:** the engine's, as in #1467: `lsc_card_math` and
+  `chapman_team_handicap`. In Chapman, A (the lower PH) is listed first.
+- **Match numbers:** cumulative across the dial's sessions (1–7 / 8–14 /
+  15–28).
+- **Page split:** a field over 20 players (`SPLIT_OVER_PLAYERS`) prints as
+  TEE SHEET + ALPHABETICAL pages.
+- **Last-name caps:** members and alumni print an UPPERCASE last name, read
+  through `derive_member_financial_status_bulk`.
+- **§9 on every starter sheet** (`database._sheet_tee_key`): only the tees in
+  use, the solid new teal #0E8A9A, and badge key lines only when the badge
+  is present.
+- **Open, for Kerry:** confirm the footer URL `thegolffellowship.com` (CD asked).
+- Guard: `test_lsc_starter.py`.

@@ -65230,7 +65230,32 @@ def get_event_print_pack(event_id: int, db_path=None) -> dict | None:
         # No included games: the Starter Sheet drops its Cart/Team column
         "games_off": event_games_off(ev),
         "heading": report_heading(ev, db_path=db_path),
+        **_sheet_tee_key(tee_legend, groups),
     }
+
+
+def _sheet_tee_key(tee_legend: list, groups: list) -> dict:
+    """design-claude #1481 §9 (Kerry-approved, every starter sheet):
+    1. the TEES key lists only the tees someone on the sheet is playing;
+    2. the women's tee prints SOLID in the new teal #0E8A9A unless women
+       share the Men 65+ tee's colour (then the outline still tells them
+       apart). Read by the Starter Sheet only; the swatch map every other
+       surface reads is untouched."""
+    used = {str(p.get("tee_choice") or "").strip().lower()
+            for g in groups for p in g.get("players") or []}
+    men65 = next((t for t in tee_legend if str(t.get("band")) == "65+"), None)
+    legend, sw, ring = [], {}, {}
+    for t in tee_legend:
+        color = t.get("color") or ""
+        r = bool(t.get("ring"))
+        if t.get("ladies"):
+            r = bool(men65 and (men65.get("color") or "").lower() == color.lower())
+            if color.lower() == "#0f766e":
+                color = "#0E8A9A"
+        sw[t["band"]], ring[t["band"]] = color, r
+        if str(t.get("band") or "").lower() in used:
+            legend.append({**t, "color": color, "ring": r})
+    return {"tee_legend_sheet": legend, "tee_swatches_sheet": sw, "tee_ring_sheet": ring}
 
 
 def _app_history_writes_on(conn: sqlite3.Connection) -> bool:

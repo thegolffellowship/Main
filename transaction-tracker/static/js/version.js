@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.526.9";
+window.TGF_VERSION = "2.527.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.527.0",
+    date: "2026-10-08",
+    title: "The Lone Star Cup Starter Sheet (design-claude #1481)",
+    changes: [
+      "Kerry 10/8: \"Check mail directive for LSC Starter Sheets from Claude Design and incorporate now.\" The Cup's rounds and its Friday practice round print the Kerry-approved Cup Starter Sheet (templates/lsc_starter_sheet.html, data email_parser/lsc_starter.py). It has a navy header band with the white-border Hideout logo, the FORMAT, the course and full date, and the first tee; a 50/50 Austin / San Antonio band; the TEES key (only tees on the sheet); a TEE SHEET of 3-across cards with 8px team bars, shrink-to-fit names, 22px number columns and the column header row; the ALPHABETICAL list; a two-column key per page; and the navy footer. Everything that was black is the Cup's navy.",
+      "Per format: PRACTICE ROUND uses TEE / IDX / PH with cart shading. FOURBALL uses TEE / IDX / HCP / OFF, HCP 90% of PH. FOURSOMES (Chapman) lists A first, the lower PH, with 60/40 shares to one decimal, the unrounded sum over the rounded TEAM, and OFF off the lower team. SINGLES has two matches per card with OFF within each match. Match bars number through the weekend: 1-7 / 8-14 / 15-28, counted from the rounds in the dial. A field over 20 splits into a TEE SHEET page and an ALPHABETICAL page, each with header and footer. The Cup rounds fill from THE DRAW; the practice round from its saved pairings (also in the bound pack). CD's §7 spot-checks pass (test_lsc_starter.py).",
+      "#1481 §9, every Starter Sheet: the TEES key lists only tees someone on the sheet is playing; the women's tee prints solid in the new teal #0E8A9A unless women share the Men 65+ tee colour; and the 1T / NEW key lines show only when that badge is on the sheet."
+    ]
+  },
   {
     version: "2.526.9",
     date: "2026-10-08",

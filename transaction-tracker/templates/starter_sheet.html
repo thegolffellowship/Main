@@ -265,10 +265,11 @@
   {% if not pack.groups %}
     <div class="empty">{% if pack.get('lsc_round') %}{{ pack.lsc_round.title }} isn't drawn yet. Its groups and tee times fill in from THE DRAW.{% for g in pack.lsc_round.gaps %}<br>{{ g }}{% endfor %}{% else %}No pairings saved for this event yet. Generate &amp; save pairings first.{% endif %}</div>
   {% else %}
-  {% if pack.tee_legend %}
+  {% set _legend = pack.get('tee_legend_sheet', pack.tee_legend) %}
+  {% if _legend %}
   <div class="tee-legend">
     <span class="tl-lab">TEES</span>
-    {% for t in pack.tee_legend %}
+    {% for t in _legend %}
       <span class="tl">
         {# A WHITE tee prints as a black outline round white (Kerry
            2026-09-15) — a white square on white paper is nothing — and
@@ -286,8 +287,8 @@
    tee prints as an OUTLINE in its own colour; a white tee as a black
    outline round white, or it prints as nothing at all. #}
 {% macro tee_dot(band) -%}
-  {%- set sw = pack.tee_swatches.get(band) -%}
-  {%- set lad = pack.tee_ladies.get(band) -%}
+  {%- set sw = pack.get('tee_swatches_sheet', pack.tee_swatches).get(band) -%}
+  {%- set lad = pack.get('tee_ring_sheet', pack.tee_ladies).get(band) -%}
   {%- if sw -%}
     <span class="tdot" style="{% if lad %}background:#fff;border:2px solid {{ sw }};{% elif sw|lower in ['#ffffff', '#fff'] %}background:#fff;border:1.5px solid #1B1B1B;{% else %}background:{{ sw }};{% endif %}" title="{{ band }}"></span>
   {%- else -%}<span class="tdash">&mdash;</span>{%- endif -%}
@@ -358,7 +359,10 @@
   <div class="foot">
     {# One note per ROW (Kerry 2026-09-15) — a run-on paragraph that
        wraps where the column happens to end is not a key. #}
-    <div class="fnote"><span class="abadge ft">1T</span> &mdash; first TGF event ever. <span class="abadge nw">NEW</span> &mdash; new member, playing their first event as a member; a first-timer who is already a member wears both. The tee circle matches the TEES key above.</div>
+    {# #1481 §9: a badge line only when that badge is on the sheet #}
+    {% set _ft = pack.alpha | selectattr('is_first_timer') | list | length %}
+    {% set _nw = pack.alpha | selectattr('is_new') | list | length %}
+    <div class="fnote">{% if _ft %}<span class="abadge ft">1T</span> &mdash; first TGF event ever. {% endif %}{% if _nw %}<span class="abadge nw">NEW</span> &mdash; new member, playing their first event as a member{% if _ft %}; a first-timer who is already a member wears both{% endif %}. {% endif %}The tee circle matches the TEES key above.</div>
     <div class="fnote"><strong>IDX</strong> &mdash; TGF handicap index ({{ pack.holes_key }}-hole).</div>
     <div class="fnote"><strong>PH</strong> &mdash; playing handicap at 100%, from that index and the tee played{% if pack.ph_basis %} ({{ pack.ph_basis }}){% endif %}.</div>
     {% if pack.get('games_off') %}

@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{ s.file_stub }}</title>
+<link href="https://fonts.googleapis.com/css2?family=Bitter:ital,wght@0,400;0,600;0,700;0,800;1,700&display=swap" rel="stylesheet">
+<style>
+  /* THE LONE STAR CUP STARTER SHEET — design-claude #1481, Kerry-approved.
+     A theme on the production Starter Sheet: everything black there is the
+     Cup's navy here. Data from email_parser/lsc_starter.py; design
+     constants only. */
+  :root { --navy: #002855; --pale: #9DB4D6; --orange: #E87C3E; --off: #C05B21;
+          --aus: #BF5700; --sa: #44596B; --grey: #6B7280; }
+  * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  @page { size: letter; margin: 0; }
+  html, body { margin: 0; background: #8C8F94; color: var(--navy);
+               font-family: "Bitter", Georgia, serif; }
+  .page { width: 8.5in; min-height: 11in; height: 11in; margin: 0 auto 24px; background: #fff;
+          display: flex; flex-direction: column; overflow: hidden; break-after: page; }
+  .page:last-of-type { break-after: auto; }
+  /* §3 HEADER */
+  .band { background: var(--navy); height: 170px; padding: 34px 48px 14px; display: flex;
+          align-items: center; flex: none; }
+  .band .logo { height: 126px; margin: -8px -8px; display: block; flex: none; }
+  .band .dv { align-self: stretch; border-left: 4px dotted var(--pale); margin: 12px 28px; flex: none; }
+  .band .ts { flex: 1; min-width: 0; }
+  .band .k { font-weight: 700; font-size: 12px; letter-spacing: 3px; color: var(--pale); }
+  .band .fmt { font-weight: 800; font-size: 36px; letter-spacing: 1.5px; color: #fff; white-space: nowrap; line-height: 1.1; }
+  .band .or { width: 72px; height: 3px; background: var(--orange); margin: 8px 0 7px; }
+  .band .crs { font-weight: 700; font-size: 12.5px; letter-spacing: 1px; color: #fff; white-space: nowrap; }
+  .band .dt { font-weight: 600; font-size: 12.5px; color: var(--pale); white-space: nowrap; }
+  .band .rt { text-align: right; margin-left: 20px; flex: none; }
+  .band .rt .tm { font-weight: 800; font-size: 30px; color: #fff; line-height: 1.15; white-space: nowrap; }
+  .band .rt .hl { font-weight: 700; font-size: 11px; letter-spacing: 1.5px; color: var(--pale); white-space: nowrap; }
+  .teams { display: flex; height: 30px; flex: none; }
+  .teams div { flex: 1; display: flex; align-items: center; justify-content: center;
+               font-weight: 800; font-size: 13px; letter-spacing: 4px; color: #fff; }
+  .body { padding: 14px 40px 0; flex: none; }
+  /* §5A TEES */
+  .tees { display: flex; gap: 16px; align-items: center; white-space: nowrap; border: 1px solid #D5DCE6;
+          border-radius: 6px; padding: 5px 12px; font-family: "Helvetica Neue", Arial, sans-serif;
+          font-size: 11px; color: #4B5563; margin-bottom: 10px; }
+  .tees .lab { font-family: "Bitter", Georgia, serif; font-weight: 800; font-size: 10px;
+               letter-spacing: 2px; color: var(--navy); }
+  .tees b { font-weight: 700; }
+  .dot { display: inline-block; width: 11px; height: 11px; border-radius: 50%; vertical-align: -1px; }
+  /* §5B headings */
+  .sh { display: flex; justify-content: space-between; align-items: baseline; border-bottom: 2.5px solid var(--navy);
+        padding-bottom: 3px; margin: 6px 0 8px; }
+  .sh .h { font-weight: 800; font-size: 15px; color: var(--navy); }
+  .sh .c { font-weight: 700; font-size: 10.5px; letter-spacing: 1.5px; color: var(--sa); }
+  /* cards */
+  .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .card { border: 1.5px solid var(--navy); border-radius: 5px; overflow: hidden; break-inside: avoid; }
+  .chead { background: var(--navy); color: #fff; display: flex; justify-content: space-between;
+           align-items: baseline; padding: 3px 8px; font-weight: 800; font-size: 13px; }
+  .chead .gn { font-weight: 700; font-size: 9px; color: var(--pale); }
+  table.ct { width: 100%; border-collapse: collapse; table-layout: fixed; }
+  table.ct td { padding: 0; height: 21px; font-size: 11px; vertical-align: middle; }
+  table.ct tr.pr td { border-top: 1px solid #E3E8EF; }
+  table.ct td.n { text-align: center; font-weight: 400; font-variant-numeric: tabular-nums;
+                  letter-spacing: -0.2px; white-space: nowrap; }
+  table.ct td.n.off { font-weight: 700; color: var(--off); }
+  table.ct td.tc { text-align: center; }
+  table.ct td.nm { padding: 0 3px 0 13px; white-space: nowrap; overflow: hidden; }
+  table.ct tr.pr td:last-child { padding-right: 5px; }
+  .fit { font-size: 14px; white-space: nowrap; }
+  .fit .f { font-weight: 600; } .fit .l { font-weight: 800; }
+  tr.colh td { background: #E8EDF5; font-weight: 700; font-size: 8px; letter-spacing: 0.5px;
+               color: var(--sa); height: 15px !important; text-align: center; }
+  tr.colh td.lbl { text-align: left; padding-left: 8px; white-space: nowrap; overflow: visible; }
+  tr.mbar td { background: var(--navy); color: #fff; font-weight: 800; font-size: 9.5px; letter-spacing: 2px;
+               padding: 2px 8px 2px 12px !important; height: auto !important; border-top: 1px solid #fff; }
+  tr.rider td { background: #F3F5F8; }
+  tr.rule-cart td { border-top: 2.5px solid #9CA3AF !important; }
+  tr.rule-team td { border-top: 2px solid var(--navy) !important; }
+  tr.rule-dash td.nm, tr.rule-dash td.tc, tr.rule-dash td.n.sh2 { border-top: 1px dashed #C7CBD1 !important; }
+  td.team { text-align: center; line-height: 1; }
+  td.team .sum { font-weight: 400; font-size: 9px; color: var(--grey); }
+  td.team .t { font-weight: 800; font-size: 14px; }
+  /* alphabetical */
+  .alpha { column-count: 2; column-gap: 24px; }
+  .ar { display: flex; align-items: center; height: 20px; border-bottom: 1px dotted #C9D1DC; break-inside: avoid; }
+  .ar .an { flex: 1; min-width: 0; padding-left: 13px; white-space: nowrap; overflow: hidden; height: 100%;
+            display: flex; align-items: center; }
+  .ar .an .fit .l { font-weight: 800; } .ar .an .fit .f { font-weight: 600; }
+  .ar .c22 { width: 22px; flex: none; text-align: center; font-size: 11px; font-variant-numeric: tabular-nums;
+             letter-spacing: -0.2px; margin-left: 1px; }
+  .ar .ab { font-weight: 800; color: var(--navy); }
+  .ar .hole { width: 58px; flex: none; text-align: right; font-weight: 700; font-size: 11px; white-space: nowrap; }
+  .ar.ahead { border-bottom: 1.5px solid var(--navy); height: 16px; font-weight: 700; font-size: 8.5px;
+              letter-spacing: 0.06em; color: #44596B; }
+  .ar.ahead .an { padding-left: 13px; }
+  .ar.ahead.colbreak { break-before: column; }
+  .bdg { display: inline-block; margin-left: 4px; padding: 0 3px; border-radius: 3px; font-size: 7.5px;
+         font-weight: 700; color: #fff; vertical-align: 1px; font-family: "Helvetica Neue", Arial, sans-serif; }
+  .bdg.ft { background: var(--off); } .bdg.nw { background: #15803D; }
+  /* §5I key */
+  .notes { column-count: 2; column-gap: 28px; font-family: "Helvetica Neue", Arial, sans-serif;
+           font-size: 9.5px; color: var(--grey); margin-top: 10px; }
+  .notes div { break-inside: avoid; margin-bottom: 2px; }
+  .spacer { flex: 1; }
+  /* §4 FOOTER */
+  .frule { height: 3px; background: var(--orange); flex: none; }
+  .foot { background: var(--navy); height: 64px; padding: 0 48px 20px; display: flex; align-items: center;
+          justify-content: space-between; flex: none; }
+  .foot .l { display: flex; align-items: center; gap: 10px; color: #fff; font-weight: 700; font-size: 13px;
+             letter-spacing: 1.5px; }
+  .foot .l img { height: 22px; }
+  .foot .r { color: var(--pale); font-weight: 700; font-style: italic; font-size: 13px; letter-spacing: 1px; }
+  .gaps { max-width: 7.5in; margin: 40px auto; background: #fff; padding: 24px 28px; border-left: 6px solid #C0392B;
+          font: 14px "Helvetica Neue", Arial, sans-serif; color: #1B1B1B; }
+  @media print { html, body { background: #fff; } .page { margin: 0; } .noprint { display: none !important; } }
+</style>
+</head>
+<body>
+{% with rb_event_id=s.event_id, rb_width='8.5in', rb_file=s.file_stub %}{% include "_report_bar.html" %}{% endwith %}
+{% macro dot(t) -%}
+  {%- if t -%}<span class="dot" style="{% if t.ring %}background:#fff;border:2px solid {{ t.color }};{% elif t.white %}background:#fff;border:1.5px solid #002855;{% else %}background:{{ t.color }};{% endif %}"></span>{%- endif -%}
+{%- endmacro %}
+{% macro header(part) %}
+  <div class="band">
+    <img class="logo" src="/static/lsc-logo-dark.png" alt="Lone Star Cup · The Hideout">
+    <div class="dv"></div>
+    <div class="ts">
+      <div class="k">STARTER SHEET{% if part %} · {{ part }}{% endif %}</div>
+      <div class="fmt">{{ s.title }}</div>
+      <div class="or"></div>
+      <div class="crs">{{ s.course }}</div>
+      <div class="dt">{{ s.date }}</div>
+    </div>
+    <div class="rt">
+      <div class="k">FIRST TEE</div>
+      <div class="tm">{{ s.first_tee }}</div>
+      <div class="hl">{{ s.holes_label }}</div>
+    </div>
+  </div>
+  <div class="teams"><div style="background:#BF5700">AUSTIN</div><div style="background:#44596B">SAN ANTONIO</div></div>
+{% endmacro %}
+{% macro footer() %}
+  <div class="spacer"></div>
+  <div class="frule"></div>
+  <div class="foot">
+    <div class="l"><img src="/static/tgf-icon-white.svg" alt="">thegolffellowship.com</div>
+    <div class="r">Connect. Compete. Celebrate.</div>
+  </div>
+{% endmacro %}
+{% macro name(r) -%}
+  <span class="fit"><span class="f">{{ r.first }}</span> <span class="l">{{ r.last }}</span></span>
+{%- endmacro %}
+{% macro note_lines(lines) %}
+  {% for n in lines %}
+    {% if n == 'TEAMBAR' %}<div>Team bar — the color stripe left of each name: <b style="color:#BF5700">Austin</b> · <b style="color:#44596B">San Antonio</b></div>
+    {% else %}<div>{{ n }}</div>{% endif %}
+  {% endfor %}
+{% endmacro %}
+{% macro tee_sheet() %}
+  <div class="tees"><span class="lab">TEES</span>
+    {% for t in s.tees %}<span>{{ dot(t) }} <b>{{ t.label }}</b> {{ t.name }}</span>{% endfor %}
+  </div>
+  <div class="sh"><span class="h">TEE SHEET</span><span class="c">{{ s.players }} PLAYERS</span></div>
+  <div class="cards">
+    {% for c in s.cards %}
+    {% set ncol = c.cols|length %}
+    <div class="card">
+      <div class="chead"><span>{{ c.time }} | Hole 1</span><span class="gn">{{ c.group_num }} · 18</span></div>
+      <table class="ct">
+        <colgroup><col>{% for col in c.cols %}<col style="width:{{ '28px' if col == 'TEAM' else '22px' }}">{% endfor %}</colgroup>
+        {% if c.col_label %}<tr class="colh"><td class="lbl">{{ c.col_label }}</td>{% for col in c.cols %}<td>{{ col }}</td>{% endfor %}</tr>{% endif %}
+        {% for b in c.blocks %}
+          {% if b.bar %}<tr class="mbar"><td colspan="{{ ncol + 1 }}">{{ b.bar }}</td></tr>{% endif %}
+          {% for r in b.rows %}
+          {% set bg = '#F3F5F8' if r.rider else '#FFFFFF' %}
+          <tr class="pr{{ ' rider' if r.rider }}{{ ' rule-' ~ r.rule if r.rule }}">
+            <td class="nm" style="background:linear-gradient(to right, {{ r.team_color or bg }} 8px, {{ bg }} 8px)">{{ name(r) }}</td>
+            <td class="tc">{{ dot(r.tee) }}</td>
+            {% for v in r.vals %}<td class="n{{ ' sh2' if c.fmt == 'chapman' }}">{{ v }}</td>{% endfor %}
+            {% if c.fmt in ['fourball', 'singles'] %}<td class="n off">{{ r.off }}</td>{% endif %}
+            {% if c.fmt == 'chapman' and r.merge %}
+              <td class="team" rowspan="2"><div class="sum">{{ r.merge.sum }}</div><div class="t">{{ r.merge.team }}</div></td>
+              <td class="n off" rowspan="2">{{ r.merge.off }}</td>
+            {% endif %}
+          </tr>
+          {% endfor %}
+        {% endfor %}
+      </table>
+    </div>
+    {% endfor %}
+  </div>
+{% endmacro %}
+{% macro alpha_block() %}
+  <div class="sh"><span class="h">ALPHABETICAL</span><span class="c">{{ s.players }} PLAYERS</span></div>
+  {% set _mid = (s.alpha|length + 1) // 2 %}
+  <div class="alpha">
+    <div class="ar ahead"><span class="an">PLAYER</span>{% for col in s.alpha_cols %}<span class="c22">{{ col }}</span>{% endfor %}<span class="hole">HOLE</span></div>
+    {% for r in s.alpha %}
+      {% if loop.index0 == _mid %}<div class="ar ahead colbreak"><span class="an">PLAYER</span>{% for col in s.alpha_cols %}<span class="c22">{{ col }}</span>{% endfor %}<span class="hole">HOLE</span></div>{% endif %}
+      <div class="ar">
+        <span class="an" style="background:linear-gradient(to right, {{ r.team_color or '#FFFFFF' }} 8px, #FFFFFF 8px)"><span class="fit"><span class="l">{{ r.last }}</span><span class="f">{% if r.first %}, {{ r.first }}{% endif %}</span>{% if r.is_first_timer %}<span class="bdg ft">1T</span>{% endif %}{% if r.is_new %}<span class="bdg nw">NEW</span>{% endif %}</span></span>
+        <span class="c22">{{ dot(r.tee) }}</span>
+        {% for v in r.vals %}<span class="c22{{ ' ab' if s.fmt == 'chapman' and loop.index0 == 1 }}">{{ v }}</span>{% endfor %}
+        <span class="hole">{{ r.time }}</span>
+      </div>
+    {% endfor %}
+  </div>
+{% endmacro %}
+
+{% if s.gaps %}
+  <div class="gaps"><b>This starter sheet can't print yet.</b><ul>{% for g in s.gaps %}<li>{{ g }}</li>{% endfor %}</ul></div>
+{% elif s.split %}
+  <div class="page">
+    {{ header('1 / 2') }}
+    <div class="body">{{ tee_sheet() }}
+      <div class="notes">{{ note_lines(s.notes.always + s.notes.tee) }}</div></div>
+    {{ footer() }}
+  </div>
+  <div class="page">
+    {{ header('2 / 2') }}
+    <div class="body">{{ alpha_block() }}
+      <div class="notes">{{ note_lines(s.notes.always + s.notes.alpha + s.notes.badges) }}</div></div>
+    {{ footer() }}
+  </div>
+{% else %}
+  <div class="page">
+    {{ header(None) }}
+    <div class="body">{{ tee_sheet() }}
+      <div style="height:10px"></div>
+      {{ alpha_block() }}
+      <div class="notes">{{ note_lines(s.notes.always + s.notes.tee + s.notes.alpha + s.notes.badges) }}</div></div>
+    {{ footer() }}
+  </div>
+{% endif %}
+<script>
+  // §5D shrink-to-fit: a name that doesn't fit drops 0.5px at a time to
+  // 10px. Never ellipsis, never wrap; only that name shrinks.
+  function lscFit() {
+    document.querySelectorAll('td.nm, .ar .an').forEach(function (cell) {
+      var f = cell.querySelector('.fit'); if (!f) return;
+      var size = 14; f.style.fontSize = size + 'px';
+      var room = cell.clientWidth - 16;
+      while (f.scrollWidth > room && size > 10) { size -= 0.5; f.style.fontSize = size + 'px'; }
+    });
+  }
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(lscFit); else lscFit();
+  window.addEventListener('beforeprint', lscFit);
+</script>
+</body>
+</html>
