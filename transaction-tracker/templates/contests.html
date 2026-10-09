@@ -317,6 +317,26 @@
         body.lsc-solo header.shell-nav { background: var(--lsc-navy, #002855); }
         body.lsc-solo header.shell-nav.shell-member.shell-slim .shell-brand img { width: auto; height: 64px; }
         body.lsc-solo .se-toggle a.active { background: var(--lsc-navy, #002855); border-color: var(--lsc-navy, #002855); }
+        /* THE SCORER'S LEADERBOARD TOP = THE SCORING TOP (Kerry 10/9: "I want
+           to match LEADERBOARD top to SCORING top. Pin the team scoring to top
+           banner and then have the toggles. Then remove the 2nd LSC Banner on
+           leaderboard. The how it works button can go in the top banner to the
+           right. Not moving the logo from the center."): the board's team
+           score moves into the pinned toggle bar above SCORING | LEADERBOARD
+           (lscSoloPinHead), the Cup banner under it goes, and HOW IT WORKS
+           sits at the right of the logo header. */
+        body.lsc-solo #section-lone-star-cup .lsc-event { display: none; }
+        body.lsc-solo #se-toggle { flex-wrap: wrap; }
+        body.lsc-solo #se-cupbar { flex: 0 0 100%; display: flex; justify-content: center; margin-bottom: 8px; }
+        body.lsc-solo #se-cupbar .lsc-bd-head { width: 100%; max-width: 448px; border: 0; border-radius: 10px; }
+        body.lsc-solo #se-cupbar .lsc-bd-head .t { padding: 8px 14px; }
+        body.lsc-solo .lsc-hdr-hiw { position: absolute; right: 14px; top: 50%; transform: translateY(-50%);
+            margin: 0; z-index: 1; }
+        @media (max-width: 560px) {
+            body.lsc-solo #se-cupbar { margin: -8px -16px 8px; flex-basis: calc(100% + 32px); }
+            body.lsc-solo #se-cupbar .lsc-bd-head { max-width: none; border-radius: 0; }
+            body.lsc-solo .lsc-hdr-hiw { right: 10px; height: 28px; padding: 0 10px; font-size: 10px; white-space: nowrap; }
+        }
         body.lsc-solo .evlb-solo-bar .nm { color: var(--lsc-navy, #002855); }
         body.lsc-solo .mpv2 .mp-match-meta { background: var(--lsc-navy, #002855); }
         body.evlb-solo details.evlb-ev { border: 0; border-radius: 0; margin-top: 0; background: transparent; }
@@ -3278,6 +3298,18 @@
         return `${strokeBar}<div class="mp-sc-nines">${nines}</div><div class="mp-sc-resultwrap">${result}</div>`;
     }
 
+    // On the scorer's Cup LEADERBOARD the team score rides in the pinned
+    // SCORING | LEADERBOARD bar, above the toggles, as on the scoring page
+    // (Kerry 10/9). Moved after every render, since a render rebuilds it.
+    function lscSoloPinHead(box) {
+        if (!window.SOLO_CUP) return;
+        const tgl = document.getElementById("se-toggle"), head = box.querySelector(".lsc-bd-head");
+        if (!tgl || tgl.hidden || !head) return;
+        let slot = document.getElementById("se-cupbar");
+        if (!slot) { slot = document.createElement("div"); slot.id = "se-cupbar"; tgl.insertBefore(slot, tgl.firstChild); }
+        slot.replaceChildren(head);
+    }
+
     function lscBoardRender(box, d) {
         const A = (d.teams || {}).austin || {}, S = (d.teams || {}).sa || {};
         // Cup status (Kerry, CA #717): 1 a win, ½ a halve; level points
@@ -3443,6 +3475,7 @@
         // (Kerry 10/8: "Pin the team score and session toggles too, so
         // everything else scrolls under it"); prPinBars sets the offsets
         box.innerHTML = `<div class="lsc-bd-pin">${head}${segS}</div>` + body;
+        lscSoloPinHead(box);
         requestAnimationFrame(() => { if (window.prPinBars) window.prPinBars(); });
         box.querySelectorAll("[data-lscsess]").forEach(b => b.addEventListener("click", () => {
             window.lscSel = b.dataset.lscsess; lscBoardRender(box, d); }));
@@ -5043,6 +5076,16 @@
             document.body.style.overflow = open ? "hidden" : "";
         };
         btn.addEventListener("click", () => setOpen(true));
+        // the scorer's Cup leaderboard: HOW IT WORKS at the right of the logo
+        // header, the Cup banner it lived in is hidden (Kerry 10/9)
+        const hdr = document.querySelector("header.shell-nav");
+        if (window.SOLO_CUP && hdr && !$("lsc-hdr-hiw")) {
+            const b = document.createElement("button");
+            b.type = "button"; b.id = "lsc-hdr-hiw"; b.className = "pr-hiw-link lsc-hdr-hiw";
+            b.textContent = "How It Works";
+            b.addEventListener("click", () => setOpen(true));
+            hdr.appendChild(b);
+        }
         scrim.addEventListener("click", () => setOpen(false));
         close.addEventListener("click", () => setOpen(false));
         if (gotit) gotit.addEventListener("click", () => setOpen(false));

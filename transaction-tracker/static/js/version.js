@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.532.7";
+window.TGF_VERSION = "2.532.8";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.532.8",
+    date: "2026-10-09",
+    title: "Cup scorer's leaderboard: same top as scoring (team score above the toggles, one banner)",
+    changes: [
+      "Kerry 10/9: \"I want to match LEADERBOARD top to SCORING top. Pin the team scoring to top banner and then have the toggles. Then remove the 2nd LSC Banner on leaderboard. The how it works button can go in the top banner to the right. Not moving the logo from the center.\" On a Cup round's scorer LEADERBOARD, the team score (AUSTIN | points | SAN ANTONIO) now sits pinned right under the logo header, edge to edge on a phone, with SCORING | LEADERBOARD under it, the same order as the scoring page. The second Lone Star Cup banner (logo, dates, venue) is gone, and HOW IT WORKS sits at the right of the top banner with the logo still centered. The member Cup tab is unchanged."
+    ]
+  },
   {
     version: "2.532.7",
     date: "2026-10-09",

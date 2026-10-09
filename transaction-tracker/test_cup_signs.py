@@ -180,5 +180,14 @@ check("the hole details sit on the hole number's line",
       '<div class="se-hl"><h1 class="se-h1 big">Hole ${hole}</h1><div class="se-sub">' in sep
       and ".se-hole .se-hl { display: flex; align-items: baseline;" in sep)
 
+# Kerry 10/9: the scorer's LEADERBOARD top matches SCORING: team score above
+# the toggles, no second Cup banner, HOW IT WORKS at the right of the logo
+check("the scorer's Cup board pins the team score in the toggle bar, above the toggles",
+      "function lscSoloPinHead(box)" in cts and "lscSoloPinHead(box);" in cts
+      and 'tgl.insertBefore(slot, tgl.firstChild)' in cts)
+check("the second Cup banner is hidden and HOW IT WORKS sits in the logo header",
+      "body.lsc-solo #section-lone-star-cup .lsc-event { display: none; }" in cts
+      and 'b.id = "lsc-hdr-hiw"' in cts and "hdr.appendChild(b)" in cts)
+
 print("\n" + ("ALL PASS" if not F else f"{len(F)} FAILURE(S): " + "; ".join(F)))
 sys.exit(1 if F else 0)

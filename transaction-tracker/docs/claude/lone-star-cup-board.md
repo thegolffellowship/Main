@@ -859,3 +859,13 @@ lands on MATCHES, on the live session, else the next one still to play.
 - Cause: the page scrolls inside a box whose padding is the safe-area inset, and a sticky `top` counts from inside that padding, so the old header-height-plus-header-top sum came out 47px too low.
 - Fix: `_shell_nav.html` now sets the bar's `top` from the header's rendered bottom, then takes out any difference between where the bar lands and that bottom. Scroll is captured from any scroller.
 - It publishes `window.SE_TOGGLE_BOTTOM` and fires `se-toggle-placed`. `prPinBars` in contests.html pins the Cup header under that bottom.
+
+**The scorer's LEADERBOARD top = the SCORING top (v2.532.8, Kerry 10/9).** Kerry: "I want to match LEADERBOARD top to SCORING top. Pin the team scoring to top banner and then have the toggles. Then remove the 2nd LSC Banner on leaderboard. The how it works button can go in the top banner to the right. Not moving the logo from the center."
+
+On `/member/score/board?t=` for a Cup round (`window.SOLO_CUP`):
+- `lscSoloPinHead` moves the board's team score (`.lsc-bd-head`) into `#se-cupbar`, the first child of the pinned `#se-toggle`. It sits above SCORING | LEADERBOARD and runs edge to edge on a phone.
+- The move runs after every render, because a render rebuilds the head.
+- The Cup banner (`.lsc-event`) is hidden.
+- HOW IT WORKS is an absolutely positioned `#lsc-hdr-hiw` at the right of the logo header; the logo stays centered. It opens the same popup.
+- The member Cup tab is unchanged.
+
