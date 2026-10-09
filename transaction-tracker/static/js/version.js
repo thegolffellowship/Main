@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.531.5";
+window.TGF_VERSION = "2.531.6";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.531.6",
+    date: "2026-10-09",
+    title: "Cup Foursomes card: the pair's initials fit their column",
+    changes: [
+      "Kerry 10/9: \"Show me a foursomes card too because that's a little different\". Checked a live Foursomes card end to end (one ball per pair, the 60/40 team strokes on the lowest stroke-index holes, the circled hole wins, the running margin). One fix: the pair's initials chip (e.g. KN·MM) overran its label column, so a Foursomes card now gives that column more room."
+    ]
+  },
   {
     version: "2.531.5",
     date: "2026-10-09",
