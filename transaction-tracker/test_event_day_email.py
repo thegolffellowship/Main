@@ -175,6 +175,19 @@ check("preview bridge refuses a non-staff address", "error" in out and not SENT,
 out = json.loads(mcp_server._scoring_dispatch("", f"scoring-event-day-email:{EV}|send"))
 check("there is no member-send bridge", "error" in out and not SENT, out)
 
+# EMAIL PLAYERS (Kerry 2026-10-08): the scoring link and the admin routes
+check("the template carries each player's scoring link ({scoring_block})",
+      "{scoring_block}" in (tpl or {}).get("html_body", ""))
+check("no Live Scoring on the event: no scoring line, nothing held for it",
+      all("Keep score on your phone" not in m["text"] for m in b["messages"]))
+os.environ.setdefault("SECRET_KEY", "test-secret")
+os.environ.setdefault("ADMIN_PIN", "4242")
+import app as _app
+_cl = _app.app.test_client()
+check("the Email Players preview is admin only", _cl.get("/api/events/1/event-day-email").status_code in (401, 302, 403))
+check("the Email Players send is admin only",
+      _cl.post("/api/events/1/event-day-email/send", json={}).status_code in (401, 302, 403))
+
 try: os.unlink(DB)
 except OSError: pass
 print("ALL PASS" if not F else f"{len(F)} FAILED: {F}")

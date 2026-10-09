@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.528.7";
+window.TGF_VERSION = "2.528.8";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.528.8",
+    date: "2026-10-08",
+    title: "Email Players: each player's pairing and scoring link, approved and sent from REPORTS",
+    changes: [
+      "Kerry 10/8: \"I need to be able to have a way to send all of tomorrow's info for the practice round to those players playing.\" New admin button ✉ Email Players on the REPORTS tab, on the practice-round row and on every single-round event. It opens a preview of the event-day email: how many players are ready, who is held and why, and a full sample message. \"Approve & email N players\" sends each player his own email. The admin's click is the approval of the wording (rule 3b; app setting event_day_email_approved). Each player is emailed once per event; held players get nothing. Routes GET /api/events/<id>/event-day-email and POST …/send, both admin only.",
+      "The email (system template \"Event Day — Your Pairing\") now also carries the player's own group scoring link when the event is in Live Scoring ({scoring_block}, the same short link as the cart-sign QR). The shipped wording is revised in place: it had never been approved or sent.",
+      "Data: the chapter_managers setting gains \"TGF\" (Kerry, (210) 838-3948), so a TGF-national event like the practice round has someone named in \"text … at …\". Before this, every practice-round message was held for a blank manager name and phone. Guard: test_event_day_email.py."
+    ]
+  },
   {
     version: "2.528.7",
     date: "2026-10-08",

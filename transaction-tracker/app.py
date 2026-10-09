@@ -5784,6 +5784,65 @@ def auto_generate_pairings_job():
         logger.exception("pairings auto-generate failed")
 
 
+@app.route("/api/events/<int:event_id>/event-day-email")
+@require_role("admin")
+def api_event_day_email_preview(event_id):
+    """EMAIL PLAYERS, the preview (Kerry 2026-10-08: "I need to be able to
+    have a way to send all of tomorrow's info for the practice round to
+    those players playing"). The event-day email as it would leave, built
+    per player from the SAVED pairings (start, group, cart partner, the
+    player's own scoring link): counts, the held list with reasons, two
+    full samples, and whether the wording is approved. Sends nothing."""
+    from email_parser.event_day_email import build_event_day_emails
+    built = build_event_day_emails(event_id)
+    if built.get("error"):
+        return jsonify(built), 404
+    return jsonify({
+        "event": built["event"], "template_hash": built["template_hash"],
+        "approved": built["approved"], "counts": built["counts"],
+        "held": built["held"], "games_note": built.get("games_note"),
+        "samples": [{k: m.get(k) for k in ("name", "email", "subject", "html")}
+                    for m in built["messages"][:2]],
+        "recipients": [{"name": m["name"], "email": m["email"]} for m in built["messages"]],
+    })
+
+
+@app.route("/api/events/<int:event_id>/event-day-email/send", methods=["POST"])
+@require_role("admin")
+def api_event_day_email_send(event_id):
+    """EMAIL PLAYERS, the send. Admin only, and Kerry's own click is the
+    approval rule 3b asks for: the body carries `approve_hash` = the hash of
+    the wording he just read in the preview; when it matches the current
+    template it is stamped as approved (app setting event_day_email_approved)
+    and the module's own guarded send runs (never twice per player per
+    event; held players get nothing)."""
+    from email_parser import event_day_email as ede
+    from email_parser.database import set_app_setting, log_agent_action
+    data = request.get_json(silent=True) or {}
+    tpl = ede.load_template()
+    appr = ede.approval_state(tpl)
+    want = str(data.get("approve_hash") or "").strip()
+    if not want or want != appr.get("template_hash"):
+        return jsonify({"error": "The wording changed or was not approved; reopen the preview."}), 409
+    if data.get("confirm") is not True:
+        return jsonify({"error": "confirm required"}), 400
+    if not appr.get("approved"):
+        set_app_setting(ede.APPROVAL_KEY, want)
+        try:
+            log_agent_action("admin (Email Players)", "event-day-email-approve",
+                             f"event {event_id}: wording {want} approved by an admin click")
+        except Exception:
+            pass
+    res = ede.send_event_day_emails(event_id, confirm=True)
+    try:
+        log_agent_action("admin (Email Players)", "event-day-email-send",
+                         f"event {event_id}: {json.dumps({k: len(v) if isinstance(v, list) else v for k, v in res.items()}, default=str)[:300]}")
+    except Exception:
+        pass
+    code = 200 if not (res.get("refused") or res.get("error")) else 409
+    return jsonify(res), code
+
+
 @app.route("/api/events/<int:event_id>/print-pack/send", methods=["POST"])
 @require_role("manager")
 def api_send_print_pack(event_id):

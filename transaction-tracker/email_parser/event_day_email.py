@@ -58,7 +58,7 @@ PREVIEW_SAMPLES = 3
 
 # Blocks that may be legitimately absent: each renders as a whole
 # paragraph or nothing, so its absence leaves no dangling words.
-OPTIONAL_VARS = {"cart_block", "games_block"}
+OPTIONAL_VARS = {"cart_block", "games_block", "scoring_block"}
 
 _TAG_RE = re.compile(r"\{([A-Za-z_][A-Za-z0-9_]*)\}")
 _BLANK_RE = re.compile(r"\[[A-Z][A-Z0-9 _/\-]*\]")
@@ -265,6 +265,18 @@ def build_event_day_emails(event_id: int, db_path=None) -> dict:
     groups = pack.get("groups") or []
     seats = _seat_index(groups)
     manager = db.get_chapter_manager(ev_info.get("chapter"), db_path=db_path)
+    # Each player's own group scoring link (Kerry 10/8, the practice round:
+    # "send all of tomorrow's info"): only when the event is in Live Scoring
+    # and its round is seeded; READ ONLY, never seeds a round.
+    links = {}
+    try:
+        from email_parser import score_entry as _se
+        if _se.event_enabled(int(event_id), db_path=db_path):
+            for hk in {str(g.get("holes") or "") for g in groups if g.get("holes")}:
+                links[hk] = _se.event_group_links(int(event_id), hk, db_path=db_path)
+    except Exception:
+        logger.exception("event-day email: scoring links unavailable (non-fatal)")
+        links = {}
 
     conn = db.get_connection(db_path)
     try:
@@ -324,6 +336,13 @@ def build_event_day_emails(event_id: int, db_path=None) -> dict:
                     cart_block = (f"<p><strong>Your cart partner:</strong> "
                                   f"{_e(partner[0]['name'])}</p>")
             games_block, _gwhy = _games_block(gctx, r)
+            url = (links.get(str(g.get("holes") or "")) or {}).get(g.get("group_num"))
+            scoring_block = ""
+            if url:
+                from email_parser.score_entry import short_score_url
+                scoring_block = (f'<p><strong>Keep score on your phone:</strong> '
+                                 f'<a href="{_e(short_score_url(url))}">open your group\'s scorecard</a> '
+                                 f'(or scan the QR code on your cart sign).</p>')
             first = nm.get("first_name") or (full.split()[0] if full else "")
             vals_html = {
                 "first_name": _e(first), "player_name": _e(full),
@@ -333,7 +352,7 @@ def build_event_day_emails(event_id: int, db_path=None) -> dict:
                 "start_line": _e(g.get("start_line")),
                 "group_label": _e(g.get("slot_label")),
                 "group_block": group_block, "cart_block": cart_block,
-                "games_block": games_block,
+                "games_block": games_block, "scoring_block": scoring_block,
                 "manager_name": _e(manager.get("name")),
                 "manager_phone": _e(manager.get("phone")),
             }
@@ -343,7 +362,7 @@ def build_event_day_emails(event_id: int, db_path=None) -> dict:
             why = _guard(subject, body, text, used, vals_html)
             msg = {**base, "subject": subject, "html": body, "text": text,
                    "start_line": g.get("start_line"), "group": g.get("slot_label"),
-                   "games_shown": bool(games_block)}
+                   "games_shown": bool(games_block), "scoring_link": bool(scoring_block)}
             if why:
                 held.append({**base, "reason": "; ".join(why)})
                 continue

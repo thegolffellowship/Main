@@ -6091,6 +6091,9 @@
                     + at(`starter-sheet?${q}`, "Starter Sheet", `Print the ${nm} starter sheet`)
                     + at(r.event_id ? `cart-signs` : `cup-cart-signs?${q}`, "Cart Signs", `Print the ${nm} cart signs`)
                     + at(`scorecards?${q}`, "Scorecards", `Print the ${nm} scorecards`)
+                    // a round that is its own event (the practice round) can
+                    // email its players their pairing (Kerry 10/8)
+                    + (r.event_id && currentRole === "admin" ? emailPlayersBtn(r.event_id) : "")
                     + `</div>`;
             });
             h += `</div><div style="font-size:0.75rem;color:var(--text-muted);margin:0 0 0.35rem;">Each round's groups and tee times fill in from <a href="/events/${ev.id}/cup-draw" target="_blank">THE DRAW</a>; every report above reads them.</div>`;
@@ -6110,6 +6113,7 @@
         }
         // Kerry 2026-09-21: "there should be a button to SEND PACK" — the
         // bound PDF mailed now, on demand.
+        if (!perRound && currentRole === "admin") h += emailPlayersBtn(ev.id);
         if (!perRound) h += `<button class="pairings-action-btn send-pack-btn" onclick="sendPrintPack(${ev.id}, this)" title="Email the bound print pack (starter sheet, cart signs, scorecards, games & payouts, divisions & flights, proximity markers) now">&#x2709; Send Pack</button>`;
         h += '</div>';
         h += '<div style="font-size:0.75rem;color:var(--text-muted);margin-top:0.5rem;">Each report opens in a new tab with its own Print and Download PDF buttons.</div>';
@@ -7140,6 +7144,70 @@
         }
     }
     window.sendPrintPack = sendPrintPack;
+
+    // ═══════════ EMAIL PLAYERS (Kerry 2026-10-08) ═══════════════════
+    // "I need to be able to have a way to send all of tomorrow's info for
+    // the practice round to those players playing." Each player gets his
+    // own email from the SAVED pairings: start, group, cart partner and his
+    // group's scoring link (the event-day email). The preview shows who is
+    // ready, who is held and why, and two full samples; the admin's
+    // "Approve & email" click is the approval (rule 3b) and the send runs
+    // once per player per event.
+    function emailPlayersBtn(evId) {
+        return `<button class="pairings-action-btn" onclick="emailPlayers(${evId}, this)" title="Email each player his pairing, start and scoring link (preview first)">&#x2709; Email Players</button>`;
+    }
+    async function emailPlayers(evId, btn) {
+        const was = btn ? btn.innerHTML : "";
+        if (btn) { btn.disabled = true; btn.textContent = "Loading…"; }
+        let d;
+        try {
+            const r = await fetch(`/api/events/${evId}/event-day-email`);
+            d = await r.json();
+            if (!r.ok) throw new Error(d.error || r.statusText);
+        } catch (e) {
+            alert("Could not build the emails: " + e.message);
+            if (btn) { btn.disabled = false; btn.innerHTML = was; }
+            return;
+        }
+        if (btn) { btn.disabled = false; btn.innerHTML = was; }
+        const c = d.counts || {};
+        const ov = document.createElement("div");
+        ov.style.cssText = "position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,.45);display:flex;align-items:flex-start;justify-content:center;overflow:auto;padding:24px 12px;white-space:normal;";
+        const held = (d.held || []).map(h => `<li>${escapeHtml(h.name)}${h.email ? " &lt;" + escapeHtml(h.email) + "&gt;" : ""}: ${escapeHtml(h.reason)}</li>`).join("");
+        const sample = (d.samples || [])[0];
+        ov.innerHTML = `<div style="background:#fff;border-radius:12px;max-width:640px;width:100%;padding:18px 20px;box-shadow:0 10px 40px rgba(0,0,0,.3);">
+            <h3 style="margin:0 0 6px;font-family:Bitter,Georgia,serif;">Email Players · ${escapeHtml((d.event || {}).name || "")}</h3>
+            <p style="margin:0 0 10px;color:#4B5563;font-size:14px;">${c.ready || 0} ready · ${c.held || 0} held · ${c.roster || 0} on the roster. Each player gets his own email; nothing has been sent yet.${d.approved ? "" : " This wording has not been approved before: sending approves it."}</p>
+            ${held ? `<div style="background:#FEF3C7;border:1px solid #FDE68A;border-radius:8px;padding:8px 10px;margin-bottom:10px;font-size:13px;"><b>Held, these players get nothing:</b><ul style="margin:4px 0 0 18px;padding:0;">${held}</ul></div>` : ""}
+            ${sample ? `<div style="font-size:13px;color:#4B5563;margin-bottom:4px;">Sample: to <b>${escapeHtml(sample.name)}</b> &lt;${escapeHtml(sample.email)}&gt; · subject <b>${escapeHtml(sample.subject)}</b></div>
+            <div style="border:1px solid #E5E7EB;border-radius:8px;padding:10px 12px;max-height:320px;overflow:auto;font-size:14px;">${sample.html}</div>` : ""}
+            <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;flex-wrap:wrap;">
+                <button type="button" class="pairings-action-btn" data-x="cancel">Cancel</button>
+                <button type="button" class="pairings-action-btn" data-x="send" ${(c.ready || 0) ? "" : "disabled"} style="background:#E87C3E;color:#fff;border-color:#E87C3E;">Approve &amp; email ${c.ready || 0} player${(c.ready || 0) === 1 ? "" : "s"}</button>
+            </div></div>`;
+        document.body.appendChild(ov);
+        const close = () => ov.remove();
+        ov.addEventListener("click", e => { if (e.target === ov) close(); });
+        ov.querySelector('[data-x="cancel"]').addEventListener("click", close);
+        ov.querySelector('[data-x="send"]').addEventListener("click", async (e) => {
+            if (!confirm(`Email ${c.ready} players their pairing now?`)) return;
+            const b = e.currentTarget; b.disabled = true; b.textContent = "Sending…";
+            try {
+                const r = await fetch(`/api/events/${evId}/event-day-email/send`, {
+                    method: "POST", headers: {"Content-Type": "application/json"},
+                    body: JSON.stringify({approve_hash: d.template_hash, confirm: true})});
+                const res = await r.json().catch(() => ({}));
+                if (!r.ok) throw new Error(res.error || res.refused || r.statusText);
+                const k = res.counts || {};
+                alert(`Sent ${k.sent || 0}. Already sent before: ${k.skipped || 0}. Failed: ${k.failed || 0}. Held: ${(res.held || []).length}.`);
+                close();
+            } catch (err) {
+                alert("Not sent: " + err.message);
+                b.disabled = false; b.textContent = "Try again";
+            }
+        });
+    }
+    window.emailPlayers = emailPlayers;
 
     // ═══════════ SCORE ENTRY TAB (Kerry 2026-10-06) ═══════════════════
     // "Move the SCORE ENTRY section to it's own toggle after REPORTS and

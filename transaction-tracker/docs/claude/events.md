@@ -3035,6 +3035,16 @@ coordinated with the flighting lane (#603), not a server fix.
 
 ## The EVENT-DAY EMAIL — each player's pairing, from the Tracker (CA #829, built 2026-09-28, NOT approved)
 
+**Email Players (v2.528.8, Kerry 2026-10-08, practice round):** an admin
+button on the REPORTS tab (the practice-round row; every single-round
+event) opens the preview: ready / held with reasons / a full sample. Its
+"Approve & email" click stamps `event_day_email_approved` with the hash the
+admin just read and runs `send_event_day_emails(confirm=True)`. Routes
+`GET /api/events/<id>/event-day-email`, `POST …/send` (admin only). The
+message carries `{scoring_block}`, the player's own group scoring link
+(short form), when the event is in Live Scoring. `chapter_managers` has a
+"TGF" entry (Kerry) for national events.
+
 Golf Genius mails every player their pairing on event day and goes away
 after 10/10; from 10/13 the Tracker sends it. `email_parser/event_day_email.py`.
 **Kerry must OK the wording before any member send (rule 3b) — until he

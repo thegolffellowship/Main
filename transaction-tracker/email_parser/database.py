@@ -4595,6 +4595,7 @@ def init_db(db_path: str | Path | None = None) -> None:
                 "<p><strong>Your group:</strong></p>"
                 "{group_block}"
                 "{cart_block}"
+                "{scoring_block}"
                 "{games_block}"
                 "<p>If your plans have changed and you cannot play, reply to this "
                 "email or text {manager_name} at {manager_phone} as soon as you "
@@ -46401,6 +46402,24 @@ def set_app_setting(key: str, value: str, db_path: str | Path | None = None) -> 
 # whenever you change a system template's wording — never edit in place,
 # or the old version stops being recognised as unedited.
 _PRIOR_SYSTEM_TEMPLATE_BODIES = {
+    # v2.528.8: the event-day email carries each player's scoring link
+    # ({scoring_block}, Kerry 2026-10-08 for the practice round). Never
+    # approved for members before this, so the shipped body is replaced.
+    "Event Day — Your Pairing": {
+        "<p>Hi {first_name},</p>"
+        "<p>Here is your pairing for <strong>{event_name}</strong> at "
+        "<strong>{course}</strong> on <strong>{event_date}</strong>.</p>"
+        "<p><strong>Your start:</strong> {start_line}</p>"
+        "<p><strong>Your group:</strong></p>"
+        "{group_block}"
+        "{cart_block}"
+        "{games_block}"
+        "<p>If your plans have changed and you cannot play, reply to this "
+        "email or text {manager_name} at {manager_phone} as soon as you "
+        "can so we can adjust the groups.</p>"
+        "<p>See you out there,<br>{manager_name}<br>"
+        "The Golf Fellowship</p>",
+    },
     # v2.399.0: the payment link becomes a tappable button (Kerry
     # 2026-09-14: "Can you work the payment link in as a button for these
     # messages?"). The seed only INSERTS by name, so without listing the
