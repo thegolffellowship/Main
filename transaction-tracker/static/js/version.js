@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.532.11";
+window.TGF_VERSION = "2.532.12";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.532.12",
+    date: "2026-10-09",
+    title: "Scoring match strip: pairs stacked as first initial + last name",
+    changes: [
+      "Kerry 10/9: \"For team matches on SCORING just show stacked names as first initial and last names.\" On the scoring screen's match strip a Fourball or Foursomes pair now reads one partner per line, \"L. YOUNGS\" over \"C. CANNON\", instead of \"Luke & Chris\" over a cut-off \"YOUNGS & ...\". Singles keep first name over LAST."
+    ]
+  },
   {
     version: "2.532.11",
     date: "2026-10-09",

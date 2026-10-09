@@ -222,5 +222,10 @@ check("Cup player names carry the team colour (Austin orange, San Antonio slate)
       'const TEAM_INK = {austin: "#BF5700", sa: "#4B6274"};' in sep
       and '<span class="nm"${inkStyle(s.cids)}>' in sep and "const c = teamInk(s.cids);" in sep)
 
+# Kerry 10/9: "For team matches on SCORING just show stacked names as first
+# initial and last names"
+check("a pair on the scoring match strip stacks first initial + last, one partner per line",
+      'class="se-mc-name pair' in sep and '(w[0][0] || "") + ". "' in sep)
+
 print("\n" + ("ALL PASS" if not F else f"{len(F)} FAILURE(S): " + "; ".join(F)))
 sys.exit(1 if F else 0)

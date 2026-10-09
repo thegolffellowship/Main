@@ -241,6 +241,7 @@
         .se-mc-mono.a { background: var(--ma); } .se-mc-mono.b { background: var(--mb); }
         .se-mc-name { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; padding: 0 8px; }
         .se-mc-name.r { align-items: flex-end; text-align: right; }
+        .se-mc-name.pair b { font-size: 13px; line-height: 1.2; }
         .se-mc-name em { font-style: normal; font-size: 11px; color: #6B7280; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
         .se-mc-name b { font: 700 14px/1.1 Bitter, Georgia, serif; text-transform: uppercase; white-space: nowrap;
                         overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
@@ -1339,6 +1340,15 @@
             const mono = (side) => side.map((n) => (String(n).trim()[0] || "")).join("")
                 + (side.length === 1 ? (String(side[0]).trim().split(/\s+/).slice(-1)[0] || "")[0] || "" : "");
             const nm = (side, right) => {
+                // A PAIR stacks one partner per line, first initial + LAST
+                // (Kerry 10/9: "For team matches on SCORING just show stacked
+                // names as first initial and last names"): "L. YOUNGS" over
+                // "C. CANNON", never cut to "YOUNGS & ...".
+                if (side.length > 1) {
+                    const one = (n) => { const w = String(n).trim().split(/\s+/);
+                        return (w.length > 1 ? (w[0][0] || "") + ". " : "") + w.slice(w.length > 1 ? 1 : 0).join(" "); };
+                    return `<span class="se-mc-name pair${right ? " r" : ""}">${side.map((n) => `<b>${esc(one(n))}</b>`).join("")}</span>`;
+                }
                 const f = side.map((n) => String(n).trim().split(/\s+/)[0]).join(" & ");
                 // Pairs read "Youngs & Cannon", never a slash (Kerry 10/8, CoS #1449).
                 const l = side.map((n) => String(n).trim().split(/\s+/).slice(1).join(" ")).join(" & ");
