@@ -67,6 +67,8 @@ check("no games: ONE Overall board (Gross + Net, no Pts), landing on totals, hol
       'const tabs = noGames ? [["overall", "Overall"]]' in html
       and "(evlbNoGames(d) ? false : (board && board.game) == null)" in html and "evlbHolesFor(board, d)" in html
       and "let evlbShowHcp = false;" in html and 'gameCol: false,\n                    sort: d.field_complete === false ? "tpn" : "net" }' in html)
+check("the Cup's practice round board heads PRACTICE ROUND (Kerry 10/9)",
+      '{% if SOLO_LSC and not SOLO_CUP %}PRACTICE ROUND{% else %}{{ SOLO_EVENT }}{% endif %}' in open("templates/contests.html").read())
 check("the scorer's board opens before any score is posted, players listed with tee times",
       'el.addEventListener("toggle", () => { if (el.open) evlbLoadEvent(el); });' in html
       and "if (!(d.events || []).length && !window.SOLO_EVENT)" in html

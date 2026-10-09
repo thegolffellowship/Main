@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.533.1";
+window.TGF_VERSION = "2.533.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.533.2",
+    date: "2026-10-09",
+    title: "Practice round leaderboard heads PRACTICE ROUND",
+    changes: [
+      "Kerry 10/9: \"Also just PRACTICE ROUND at top of that page too.\" The scorer's LEADERBOARD for the Cup's practice round now heads \"PRACTICE ROUND\" instead of the event's full name, matching the scoring card. The lone OVERALL tab button is hidden (one board, nothing to choose)."
+    ]
+  },
   {
     version: "2.533.1",
     date: "2026-10-09",

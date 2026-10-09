@@ -2341,7 +2341,9 @@
             {# Kerry 2026-10-02: "It should just have the event showing on a top
                bar and then go straight into the leaderboard toggles, checkboxes
                for viewing and leaderboards themselves." #}
-            <div class="evlb-solo-bar"><span class="nm">{{ SOLO_EVENT }}</span><span class="st" id="evlb-solo-st"></span></div>
+            {# the Cup's practice round reads just PRACTICE ROUND (Kerry 10/9: "Also just
+               PRACTICE ROUND at top of that page too") #}
+            <div class="evlb-solo-bar"><span class="nm">{% if SOLO_LSC and not SOLO_CUP %}PRACTICE ROUND{% else %}{{ SOLO_EVENT }}{% endif %}</span><span class="st" id="evlb-solo-st"></span></div>
             {% endif %}
             <div class="evlb-chips"{% if SOLO_EVENT %} hidden{% endif %}>
                 <div class="evlb-seg" id="evlb-chips">
@@ -4529,7 +4531,7 @@
             prox: proxHtml,
         };
         // one board, no tab bar to choose from (the no-games Overall)
-        return `<div class="evlb-subtabs"><div class="evlb-seg evlb-seg-sub"${tabs.length === 1 ? " hidden" : ""}>` +
+        return `<div class="evlb-subtabs"><div class="evlb-seg evlb-seg-sub"${tabs.length === 1 ? ' style="display:none"' : ""}>` +
             tabs.map(([k, l]) =>
                 `<button class="evlb-subtab${k === first ? " active" : ""}" data-sub="${k}">${l}</button>`).join("") +
             `</div><div class="evlb-hiw-row"><button type="button" class="pr-hiw-link evlb-hiw-btn" data-evlb-hiw>How to read this</button></div></div>` +
