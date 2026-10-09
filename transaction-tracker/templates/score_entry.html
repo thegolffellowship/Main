@@ -728,7 +728,8 @@
             const on = (h) => hole ? (h || {})[hole] > 0 : Object.values(h || {}).some((v) => v > 0);
             const any = (m) => Object.entries(m || {}).some(([c, h]) => solo.has(c) && on(h));
             const a = any(card.strokes), b = any(card.team_strokes), x = any(card.team_par3_ghost);
-            const tm = subjects().some((x) => x.cids.length === 2 && (card.match_status || []).some((m) => (m.card || []).some((h) => (h.p || h.s).some((v) => v > 0))));
+            const tm = subjects().some((x) => x.cids.length === 2 && (card.match_status || []).some((m) =>
+                (m.sides || []).some((sd) => x.cids.every((c) => sd.includes(c))) && (m.card || []).some((h) => (h.p || h.s).some((v) => v > 0))));
             if (!a && !b && !tm && !x) return "";
             // Kerry's words (2026-09-29): "100% Handicap Stroke", "X% Team (or Cart
             // when applicable) Stroke", "No Team Strokes on Par 3s".
@@ -801,7 +802,10 @@
         // Kerry 2026-09-26: "Remove the preview text." A PREVIEW round's label
         // is left off the eyebrow (the admin page still marks it PREVIEW).
         const matchNos = () => {
-            const ids = (card.match_status || []).filter((m) => m.cup).map((m) => String(m.match_id || "").match(/(\d+)\s*$/)).filter(Boolean).map((x) => x[1]);
+            // this card's matches only: the server sends the whole session's
+            const mine = new Set(card.players.map((p) => p.customer_id));
+            const ids = (card.match_status || []).filter((m) => m.cup && (m.sides || []).flat().some((c) => mine.has(c)))
+                .map((m) => String(m.match_id || "").match(/(\d+)\s*$/)).filter(Boolean).map((x) => x[1]);
             return ids.length ? (ids.length > 1 ? "Matches " + ids.join(" & ") : "Match " + ids[0]) : null;
         };
         const eyebrow = () => [card.round_label, card.group_num != null ? "Group " + card.group_num : null, matchNos()].filter(Boolean).join(" · ");
@@ -972,7 +976,7 @@
         // Cart Net: each cart (seats 1-2, 3-4). Anything else: plain rows.
         function teamGroups() {
             const subs = subjects();
-            const m = (card.match_status || []).find((x) => x.format === "fourball" || x.format === "chapman" || x.format === "foursomes");
+            const m = myTeamMatch();
             if (m && m.sides && m.sides.length === 2) {
                 const cols = [["AUSTIN", "#BF5700"], ["SAN ANTONIO", "#4B6274"]];
                 const groups = m.sides.map((sd, i) => ({label: cols[i][0], color: cols[i][1],
@@ -1084,8 +1088,18 @@
         // (the engine's allocation, match_status[].strokes); an X never
         // counts. FOURSOMES: each pair's one ball less the team's strokes.
         // SINGLES: no box. A side with no score yet shows "–".
+        // THIS CARD'S TEAM MATCH. The server sends every match of the session
+        // (the Cup board reads them all), so pick the one whose sides hold this
+        // group's players, never simply the first (Kerry 10/9: "if I entered a
+        // hole score why isn't the team Net score for that hole showing?" -- it
+        // was reading Match 1 on Match 2's card).
+        function myTeamMatch() {
+            const mine = new Set(card.players.map((p) => p.customer_id));
+            return (card.match_status || []).find((x) => (x.format === "fourball" || x.format === "chapman" || x.format === "foursomes")
+                && (x.sides || []).flat().some((c) => mine.has(c))) || null;
+        }
         function teamScoreBox(n) {
-            const m = (card.match_status || []).find((x) => x.format === "fourball" || x.format === "chapman" || x.format === "foursomes");
+            const m = myTeamMatch();
             if (!m) return "";
             const subs = subjects();
             const sideNet = (sd, k) => {

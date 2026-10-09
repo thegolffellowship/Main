@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.532.1";
+window.TGF_VERSION = "2.532.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.532.2",
+    date: "2026-10-09",
+    title: "Cup scoring: the team score and team boxes read this group's own match",
+    changes: [
+      "Kerry 10/9: \"if I entered a hole score why isn't the team Net score for that hole showing?\" The card carries every match of the session, and TEAM SCORE · HOLE took the first one (Match 1), so on any other group's card it looked for players who are not there and showed AUS – SA –. It now reads the match that holds this group's players (myTeamMatch). The same fix applies to the new team boxes, which would only have drawn on Match 1's card, to the eyebrow's Match number (it listed every match of the session), and to the pop legend's team line. Guard: test_se_team_match.js, built on the real card's shape (seven matches, this group in the second)."
+    ]
+  },
   {
     version: "2.532.1",
     date: "2026-10-09",
