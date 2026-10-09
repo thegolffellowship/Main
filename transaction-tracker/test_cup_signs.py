@@ -156,5 +156,13 @@ check("the scorer's board page wires a Cup session to the Cup tab, on his sessio
       'window.SOLO_CUP = {{ SOLO_CUP|tojson }}; window.lscSel = window.SOLO_CUP;' in cts
       and 'hash = window.SOLO_CUP ? "#tab=lsc" : "#tab=events"' in cts)
 
+# Kerry 10/9: "For team games ... each team have a border around the players
+# that are on the same team" (Cup sides in their colours; Cart Net carts)
+sep = open("templates/score_entry.html", encoding="utf-8").read()
+check("the scoring screen boxes each team's players",
+      '<div class="se-stack">${teamWrap(rowsByKey)}</div>' in sep and "function teamGroups()" in sep
+      and '["AUSTIN", "#BF5700"], ["SAN ANTONIO", "#4B6274"]' in sep and 'tg.unit === "cart"' in sep
+      and ".se-teambox {" in sep)
+
 print("\n" + ("ALL PASS" if not F else f"{len(F)} FAILURE(S): " + "; ".join(F)))
 sys.exit(1 if F else 0)

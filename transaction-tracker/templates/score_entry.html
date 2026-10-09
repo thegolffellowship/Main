@@ -494,6 +494,12 @@
            be color coordinated as well." Austin burnt orange, San Antonio slate. */
         .se-x { font-family: Bitter, Georgia, serif; font-weight: 800; }
         @keyframes seChampShine { 0% { left: -60%; } 55% { left: 135%; } 100% { left: 135%; } }
+        /* a team's players boxed in its colour (teamWrap, Kerry 10/9) */
+        .se-teambox { position: relative; border: 2px solid var(--tb); border-radius: 16px; padding: 12px 4px 4px;
+                      display: flex; flex-direction: column; gap: 6px; }
+        .se-teambox + .se-teambox { margin-top: 8px; }
+        .se-teambox .tb-l { position: absolute; top: -8px; left: 14px; padding: 0 6px; background: #FFFFFF; color: var(--tb);
+                            font: 800 10px/14px Bitter, Georgia, serif; letter-spacing: 1.2px; }
         /* THE CUP'S TEAM SCORE in the pinned toggle bar, the Cup tab's look */
         #se-toggle { flex-wrap: wrap; }
         #se-cupbar { flex: 0 0 100%; display: flex; justify-content: center; margin-top: 8px; }
@@ -959,6 +965,38 @@
                   <div class="se-strip" style="margin-top:8px;grid-template-columns:repeat(${Math.min(order.length, 9)}, minmax(0, 1fr))">${cells}</div></div>`;
         }
 
+        // TEAMS BOXED (Kerry 10/9: "For team games the scoring should show a
+        // little different with each team have a border around the players
+        // that are on the same team"). The Cup's Fourball / Foursomes: each
+        // side in its colour (Austin, San Antonio) from the match's sides.
+        // Cart Net: each cart (seats 1-2, 3-4). Anything else: plain rows.
+        function teamGroups() {
+            const subs = subjects();
+            const m = (card.match_status || []).find((x) => x.format === "fourball" || x.format === "chapman" || x.format === "foursomes");
+            if (m && m.sides && m.sides.length === 2) {
+                const cols = [["AUSTIN", "#BF5700"], ["SAN ANTONIO", "#4B6274"]];
+                const groups = m.sides.map((sd, i) => ({label: cols[i][0], color: cols[i][1],
+                    keys: subs.filter((x) => x.cids.some((c) => sd.includes(c))).map((x) => x.key)}));
+                return groups.every((g) => g.keys.length) ? groups : null;
+            }
+            const tg = card.team_game || {};
+            if (tg.unit === "cart" && subs.length > 2 && subs.every((x) => x.cids.length === 1)) {
+                const seat = (x) => byId(x.cid).seat;
+                if (!subs.every((x) => seat(x))) return null;
+                const a = subs.filter((x) => seat(x) <= 2).map((x) => x.key), b = subs.filter((x) => seat(x) > 2).map((x) => x.key);
+                return a.length && b.length ? [{label: "CART A", color: "#94A3B8", keys: a}, {label: "CART B", color: "#94A3B8", keys: b}] : null;
+            }
+            return null;
+        }
+        function teamWrap(rowsByKey) {
+            const groups = teamGroups();
+            const all = subjects().map((x) => rowsByKey[x.key]).join("");
+            if (!groups) return all;
+            const used = new Set(groups.flatMap((g) => g.keys));
+            return groups.map((g) => `<div class="se-teambox" style="--tb:${g.color}"><span class="tb-l">${esc(g.label)}</span>${g.keys.map((k) => rowsByKey[k]).join("")}</div>`).join("")
+                + subjects().filter((x) => !used.has(x.key)).map((x) => rowsByKey[x.key]).join("");
+        }
+
         function holeScreen() {
             const order = holeOrder();
             if (hole == null && store.get(K.hole, null) === "photo") hole = "photo";
@@ -982,6 +1020,7 @@
             const h = info(hole), i = order.indexOf(hole);
             const meta = [h.par ? "Par " + h.par : null, h.yardage ? h.yardage + " yds" : null,
                           h.stroke_index ? "SI " + h.stroke_index : null].filter(Boolean).join(" · ");
+            const rowsByKey = {};
             const rows = subjects().map((s) => {
                 const cur = s.key in draft ? {v: draft[s.key], waiting: false} : value(s.key, hole);
                 const shown = cur.v == null ? (h.par || "–") : cur.v;
@@ -1000,7 +1039,7 @@
                     <div class="se-score" ${popLabel(s.cids, hole) ? `aria-label="${esc(popLabel(s.cids, hole))}"` : ""}>${popDots(s.cids, hole)}<div class="v ${cur.v == null ? "empty" : cur.waiting ? "waiting" : ""}">${xx ? '<span class="se-x">X</span>' : shown}</div><div class="r">${rel}</div></div>
                     <button type="button" class="se-plus" data-act="step" data-d="1" aria-label="One more for ${esc(s.name)}">+</button>
                   </div>`;
-            }).join("");
+            }).map((html, i) => (rowsByKey[subjects()[i].key] = html)).join("");
             const cells = stripCells(order, hole);
             const next = order[i + 1];
             const editing = order.every((n) => n === hole || holeDone(n));   // the rest are in
@@ -1014,7 +1053,7 @@
                 ${matchStrip()}
                 ${hio}
                 ${maxNote ? `<div class="se-warn">${ICON.warn}<span>${esc(maxNote)}</span></div>` : ""}
-                <div class="se-stack">${rows}</div>
+                <div class="se-stack">${teamWrap(rowsByKey)}</div>
                 ${teamScoreBox(hole)}
                 <div class="se-lblrow"><span class="se-lbl">Group card</span><span class="se-keepnote">${ICON.pen}<span>You're keeping score</span></span></div>
                 <div class="se-strip" style="margin-top:6px;grid-template-columns:repeat(${Math.min(order.length, 9)}, minmax(0, 1fr))">${cells}</div>

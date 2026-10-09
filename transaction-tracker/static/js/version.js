@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.532.0";
+window.TGF_VERSION = "2.532.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.532.1",
+    date: "2026-10-09",
+    title: "Scoring: each team's players in a bordered box",
+    changes: [
+      "Kerry 10/9: \"For team games the scoring should show a little different with each team have a border around the players that are on the same team.\" On the hole screen a Cup Fourball or Foursomes card now boxes each side's players in its colour with the team's name on the border (AUSTIN orange, SAN ANTONIO slate), from the match's own sides. A Cart Net event boxes each cart (seats 1-2 and 3-4) in grey. Singles and individual-only rounds are unchanged. Guard: test_cup_signs.py."
+    ]
+  },
   {
     version: "2.532.0",
     date: "2026-10-09",
