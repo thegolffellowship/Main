@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.532.16";
+window.TGF_VERSION = "2.532.17";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.532.17",
+    date: "2026-10-09",
+    title: "Cup print files go out one email per session",
+    changes: [
+      "The Cup's nine print files total about 6 MB, over the mail service's per-message attachment limit, so they now go out one email per session (Sat AM, Sat PM, Sun), three PDFs each. Bridge scoring-print-pack-pdf:<cup>|cup-files=<session>|send."
+    ]
+  },
   {
     version: "2.532.16",
     date: "2026-10-09",

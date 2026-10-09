@@ -5567,13 +5567,16 @@ def _scoring_dispatch_inner(url: str, extract: str):
                                   indent=2)
             parts = [p.strip() for p in (arg or "").split("|")]
             from app import build_print_pack_for_event
-            if len(parts) > 1 and parts[1].lower() == "cup-files":
+            if len(parts) > 1 and parts[1].lower().split("=")[0] == "cup-files":
                 # scoring-print-pack-pdf:<cup id>|cup-files[|send[|<to>]] — the
                 # Cup's own Starter Sheet / Cart Signs / Scorecards (QR) per
                 # session, one PDF each (Kerry 10/9: send Saturday and Sunday)
                 from app import build_cup_print_files
                 from email_parser.print_pack import send_print_pack_files
-                cf = build_cup_print_files(int(parts[0]))
+                # cup-files=sat-am,sat-pm narrows the sessions: one email per
+                # session keeps each under Graph's attachment limit
+                _ss = [x.strip() for x in parts[1].split("=", 1)[1].split(",")] if "=" in parts[1] else None
+                cf = build_cup_print_files(int(parts[0]), sessions=_ss)
                 if cf.get("error"):
                     return json.dumps(cf, default=str)
                 out = {"files": [{"filename": f, "bytes": len(b)} for f, b in cf["files"]],
