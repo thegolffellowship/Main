@@ -628,6 +628,11 @@ the Starter Sheet logo and Proxy logos too."
   (`td.nn`) are solid navy, the Init column (`td.ic`) is centred, the Par
   and SI labels (`td.lbl`) are navy with white text, and the header line
   shrinks to fit beside the QR.
+- **THE DRAW match cards (v2.527.9):** handicaps sit on the outside in
+  their own grid columns (Austin playing | OFF | name; SA name | OFF |
+  playing). The match column is wide (.72fr / 2fr / .72fr). The DRAW
+  reveal rolls through the pool, lights up the entrants, then scrambles
+  each side's names into place.
 - **THE DRAW splash (v2.527.2):** the splash under the logo shows the
   weekend's dates (`lsc_draw.dates_label`, from the practice round and the
   dial's sessions, e.g. OCTOBER 9–11, 2026), sitting closer to the logo.

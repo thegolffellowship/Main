@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.527.8";
+window.TGF_VERSION = "2.527.9";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.527.9",
+    date: "2026-10-08",
+    title: "THE DRAW: handicaps in their own columns, a wider match column, a scramble reveal",
+    changes: [
+      "Kerry 10/8: \"Put the handicaps on the outside of names. Left for Austin and right for SA, but give them their own cell space and make sure the Austin names are left justified while the SA names are right justified.\" Each drawn match is a small grid. Austin reads playing handicap | bold OFF | name, left-justified. San Antonio reads name, right-justified | bold OFF | playing handicap.",
+      "\"Widen the center column and narrow the right and left pool columns ... Maybe text can get bigger too. I know some will be viewing thru Zoom on their mobile.\" The match column is now about 2.8x the width of each pool column. Match names are 19px, OFF figures 20px, so names like Kaleb McDONNELL no longer collide.",
+      "\"Show a little bit more of a graphic scramble when revealing the names.\" Each DRAW rolls both sides through the pool with the entrants lighting up in gold. Austin's names then resolve letter by letter, then San Antonio's, before the match lands. Reduced motion skips the roll."
+    ]
+  },
   {
     version: "2.527.8",
     date: "2026-10-08",

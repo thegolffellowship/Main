@@ -43,7 +43,8 @@ nav.sess button:focus-visible,.btn:focus-visible{outline:2px solid #FFD166;outli
 .btn{font:700 13px/1 var(--display);letter-spacing:1.5px;text-transform:uppercase;padding:12px 18px;border-radius:999px;border:0;cursor:pointer;color:#fff;background:var(--go)}
 .btn.ghost{background:transparent;border:1px solid var(--line);color:var(--muted)}
 .btn:disabled{opacity:.45;cursor:default}
-.grid{display:grid;grid-template-columns:1fr 1.3fr 1fr;gap:12px;align-items:start}
+/* the matches get the room (Kerry 10/8: "widen the center column and narrow the right and left pool columns") */
+.grid{display:grid;grid-template-columns:minmax(0,.72fr) minmax(0,2fr) minmax(0,.72fr);gap:12px;align-items:start}
 .col{display:flex;flex-direction:column;gap:6px;min-width:0}
 .col .lab{font:700 11px/1 var(--display);letter-spacing:1.5px;text-transform:uppercase;padding:4px 0 2px}
 .col.aus .lab{color:#F3A26A}.col.sa .lab{color:#A9BFCF}
@@ -57,7 +58,7 @@ nav.sess button:focus-visible,.btn:focus-visible{outline:2px solid #FFD166;outli
 .m .a,.m .b{font:700 16px/1.15 var(--display);min-width:0;overflow-wrap:anywhere}
 .m .a{color:#F3A26A}.m .b{color:#C9D6E2;text-align:right}
 .m .c{text-align:center;font:600 11px var(--body);color:var(--muted);white-space:nowrap}
-.m .c b{display:block;font:800 15px/1 var(--display);color:var(--fg);margin-bottom:2px}
+.m .c b{display:block;font:800 17px/1 var(--display);color:var(--fg);margin-bottom:2px}
 .m.empty{border-style:dashed;justify-items:center;grid-template-columns:1fr;color:var(--muted);font-size:13px}
 .m.pop{animation:pop .5s ease-out}
 @keyframes pop{0%{transform:scale(.92);opacity:0}60%{transform:scale(1.03);opacity:1}100%{transform:scale(1)}}
@@ -79,16 +80,30 @@ textarea#out{width:100%;min-height:200px;background:var(--panel);color:var(--fg)
 .m:not(.empty){background:linear-gradient(90deg,rgba(191,87,0,.38) 0%,var(--bg) 40%,var(--bg) 60%,rgba(75,98,116,.7) 100%);
   border-left:6px solid var(--aus);border-right:6px solid var(--sa)}
 .m .b{color:#DCE6EF}
-.m .a,.m .b{font-size:15px}
+.m .a,.m .b{font-size:19px}
 .m .nl{white-space:nowrap}
-.m .hc{font:600 12px/1 var(--body);font-style:normal;color:var(--muted);white-space:nowrap;font-variant-numeric:tabular-nums;margin-left:4px}
-.m .mo{font:800 15px/1 var(--display);color:#fff;margin-left:6px;font-variant-numeric:tabular-nums}
-.m .tl{font:800 11px/1.6 var(--display);letter-spacing:1.5px;color:var(--fg);margin-top:3px}
-.m .tl .hc{font-size:13px;color:var(--fg)}
+.m .a,.m .b{display:grid;column-gap:6px;row-gap:1px;align-items:baseline}
+.m .a{grid-template-columns:1.9em 1.5em minmax(0,1fr)}
+.m .b{grid-template-columns:minmax(0,1fr) 1.5em 1.9em}
+.m .n{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.m .a .n{text-align:left}.m .b .n{text-align:right}
+.m .h{font:600 14px/1 var(--body);color:var(--muted);text-align:center;font-variant-numeric:tabular-nums}
+.m .o{font:800 20px/1 var(--display);color:#fff;text-align:center;font-variant-numeric:tabular-nums}
+.m .n.tl{font:800 11px/1.8 var(--display);letter-spacing:1.5px;color:var(--fg)}
+.spin2{display:grid;grid-template-columns:1fr auto 1fr;gap:10px;width:100%;align-items:center}
+.spin2 .sl{display:flex;flex-direction:column;font:700 19px/1.2 var(--display);min-width:0;white-space:nowrap;overflow:hidden;font-variant-numeric:tabular-nums}
+.spin2 .sl.a{color:#F3A26A;text-align:left}.spin2 .sl.b{color:#DCE6EF;text-align:right}
+.spin2 .sl.blur{filter:blur(1.4px);opacity:.7;transform:translateY(-1px)}
+.spin2 .sl.set{text-shadow:0 0 12px rgba(243,162,106,.6)}
+.spin2 .vs{font:800 14px var(--display);color:#FFD166}
+.m.empty.rolling{border-style:solid;border-color:#FFD166;box-shadow:0 0 22px rgba(255,209,102,.28);justify-items:stretch;animation:roll .35s ease-in-out infinite alternate}
+.m.empty.landed{animation:none;box-shadow:0 0 30px rgba(255,209,102,.6)}
+@keyframes roll{from{box-shadow:0 0 10px rgba(255,209,102,.15)}to{box-shadow:0 0 26px rgba(255,209,102,.4)}}
+.ent.hot{opacity:1!important;outline:2px solid #FFD166;outline-offset:-2px;transform:scale(1.03);transition:transform .08s}
 .matches .key{text-align:center;font-size:11px;color:var(--muted);margin:-4px 0 2px}
 .matches .key .mo{font:800 11px var(--display);color:#fff}
-@media (max-width:720px){.grid{grid-template-columns:1fr}.m .a,.m .b{font-size:15px}.hdr img{width:106px;height:88px}}
-@media (prefers-reduced-motion:reduce){.m.pop{animation:none}}
+@media (max-width:720px){.grid{grid-template-columns:1fr}.m .a,.m .b{font-size:16px}.hdr img{width:106px;height:88px}}
+@media (prefers-reduced-motion:reduce){.m.pop{animation:none}.m.empty.rolling{animation:none}}
 </style>
 </head>
 <body>
@@ -175,13 +190,18 @@ const nmk=(arr,k)=>{const e=arr.find(x=>x.key===k);return e?nms(e):esc(k)};
 // for Fourball, 60 or 40 for Foursomes, Singles 100%) followed by the bold OFF
 // LOWEST handicaps which are the actual Playing or Match Handicaps").
 const hv=(v,d)=>v==null?"–":(v<0?"+":"")+Math.abs(v).toFixed(d||0);
-function side(e,sd){
+// Each side is a small grid (Kerry 10/8: "Put the handicaps on the outside of
+// names. Left for Austin and right for SA, but give them their own cell space"):
+// Austin = playing | OFF | name (left-justified); SA = name (right) | OFF | playing.
+function side(e,sd,isA){
   const names=e&&e.names&&e.names.length?e.names:[e?e.label:""];
-  if(!sd)return names.map(n=>`<span class="nl">${esc(n)}</span>`).join("");
+  const row=(h,o,n,cls)=>isA?`<span class="h">${h}</span><b class="o">${o}</b><span class="n ${cls||""}">${n}</span>`
+                             :`<span class="n ${cls||""}">${n}</span><b class="o">${o}</b><span class="h">${h}</span>`;
+  if(!sd)return names.map(n=>row("","",esc(n))).join("");
   if(sd.ph!==undefined)  // Foursomes: each partner's 60 / 40 share, then the TEAM and its OFF
-    return names.map((n,i)=>`<span class="nl">${esc(n)} <i class="hc">${hv(sd.players[i]&&sd.players[i].share,1)}</i></span>`).join("")
-      +`<span class="nl tl">TEAM <i class="hc">${hv(sd.ph)}</i> <b class="mo">${hv(sd.off)}</b></span>`;
-  return names.map((n,i)=>{const p=sd.players[i]||{};return `<span class="nl">${esc(n)} <i class="hc">${hv(p.ph)}</i> <b class="mo">${hv(p.off)}</b></span>`}).join("");
+    return names.map((n,i)=>row(hv(sd.players[i]&&sd.players[i].share,1),"",esc(n))).join("")
+      +row(hv(sd.ph),hv(sd.off),"TEAM","tl");
+  return names.map((n,i)=>{const p=sd.players[i]||{};return row(hv(p.ph),hv(p.off),esc(n))}).join("");
 }
 function tabs(){document.querySelectorAll("nav.sess button").forEach(b=>{const k=b.dataset.s,s=SESS[k];
   const done=s.pools.every(p=>state[k][p.key].length>=p.aus.length&&p.aus.length>0);
@@ -195,16 +215,16 @@ function render(){
   const h=document.createElement("div");h.className="sess-h";h.innerHTML=`<h2>${s.title}</h2><span class="rule">${s.rule}</span>`;b.appendChild(h);
   s.pools.forEach(p=>{
     const done=st[p.key],takenA=new Set(done.map(m=>m[0])),takenS=new Set(done.map(m=>m[1]));
-    const el=document.createElement("section");el.className="pool";
+    const el=document.createElement("section");el.className="pool";el.id="pool-"+p.key;
     const left=done.length<p.aus.length, g=gate(cur,p.key);
     el.innerHTML=`<div class="pool-h"><h3>${p.name}</h3><span class="n">${p.aus.length} v ${p.sa.length} · drawn at random${cur==="fs"?" · no repeat of an AM match":""}</span>
       <button class="btn" data-draw="${p.key}" ${left&&!g?"":"disabled"}>${g?g:done.length===0?"Draw the first match":left?"Draw the next match":"Pool drawn"}</button></div>
       <div class="grid">
-        <div class="col aus"><div class="lab">Austin</div>${p.aus.map(e=>`<div class="ent ${takenA.has(e.key)?"taken":""}"><span>${nms(e)}</span><small>${idx(e.idx)}</small></div>`).join("")}</div>
+        <div class="col aus"><div class="lab">Austin</div>${p.aus.map(e=>`<div class="ent ${takenA.has(e.key)?"taken":""}" data-k="${esc(e.key)}"><span>${nms(e)}</span><small>${idx(e.idx)}</small></div>`).join("")}</div>
         <div class="matches"><div class="lab">Matches</div>${done.length?`<div class="key">${cur==="fs"?"60% low / 40% high → TEAM":cur==="fb"?"90% playing handicap":"100% playing handicap"} · <b class="mo">bold</b> = off the lowest (match handicap)</div>`:""}${
-          done.map((m,i)=>{const n=matchNo(s,p.key,i),mm=((math[cur]||{})[p.key]||[])[i];return `<div class="m"><div class="a">${side(p.aus.find(x=>x.key===m[0]),mm&&mm.a)}</div><div class="c"><b>Match ${n+1}</b>${tee(s,n)}</div><div class="b">${side(p.sa.find(x=>x.key===m[1]),mm&&mm.s)}</div></div>`}).join("")
+          done.map((m,i)=>{const n=matchNo(s,p.key,i),mm=((math[cur]||{})[p.key]||[])[i];return `<div class="m"><div class="a">${side(p.aus.find(x=>x.key===m[0]),mm&&mm.a,true)}</div><div class="c"><b>Match ${n+1}</b>${tee(s,n)}</div><div class="b">${side(p.sa.find(x=>x.key===m[1]),mm&&mm.s,false)}</div></div>`}).join("")
         }${left?`<div class="m empty" id="next-${p.key}">${done.length?"Next match…":"Tap DRAW to start"}</div>`:""}</div>
-        <div class="col sa"><div class="lab">San Antonio</div>${p.sa.map(e=>`<div class="ent ${takenS.has(e.key)?"taken":""}"><span>${nms(e)}</span><small>${idx(e.idx)}</small></div>`).join("")}</div>
+        <div class="col sa"><div class="lab">San Antonio</div>${p.sa.map(e=>`<div class="ent ${takenS.has(e.key)?"taken":""}" data-k="${esc(e.key)}"><span>${nms(e)}</span><small>${idx(e.idx)}</small></div>`).join("")}</div>
       </div>`;
     b.appendChild(el);
   });
@@ -237,15 +257,39 @@ function draw(poolKey){
   const okS=remS.filter(sEnt=>!forbid.has(a.key+"|"+sEnt.key)&&canComplete(remA.filter(x=>x.key!==a.key).map(x=>x.key),remS.filter(x=>x.key!==sEnt.key).map(x=>x.key),forbid));
   if(!okS.length)return;
   const slot=document.getElementById("next-"+poolKey);const btn=document.querySelector(`[data-draw="${poolKey}"]`);if(btn)btn.disabled=true;
-  const sess=cur;
-  let t=0;const reduce=matchMedia("(prefers-reduced-motion: reduce)").matches;
-  const spin=setInterval(async()=>{if(slot)slot.innerHTML=`<span class="spin">${esc(a.label)} &nbsp;v&nbsp; ${esc(pick(okS).label)}</span>`;t++;if(t>(reduce?1:14)){clearInterval(spin);
-    const sEnt=pick(okS);
+  const sess=cur,sEnt=pick(okS);
+  const reduce=matchMedia("(prefers-reduced-motion: reduce)").matches;
+  // THE REVEAL (Kerry 10/8: "a little bit more of a graphic scramble"): both
+  // sides roll through the pool with the entrants lighting up, then Austin's
+  // name and then San Antonio's resolve letter by letter.
+  const CH="ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  const nm=e=>e.names&&e.names.length?e.names:[e.label];
+  const scr=(t,k)=>t.split("").map((c,i)=>i<k||c===" "||c==="&"?c:CH[Math.floor(Math.random()*26)]).join("");
+  const lines=(arr,cls)=>`<div class="sl ${cls}">${arr.map(n=>`<span>${esc(n)}</span>`).join("")}</div>`;
+  const hot=(team,key)=>document.querySelectorAll(`#pool-${poolKey} .col.${team} .ent`).forEach(x=>x.classList.toggle("hot",x.dataset.k===key));
+  if(slot)slot.classList.add("rolling");
+  const R1=16,R2=12,R3=14;let f=0;
+  async function finish(){
+    hot("aus",null);hot("sa",null);
     try{
       const j=await api("/land",{session:sess,pool:poolKey,a:a.key,s:sEnt.key});
       state=j.state;math=j.math||math;window.__fresh=true;toast(`Match ${j.match.draw.n} is live on the Cup board.`);
     }catch(e){toast(`Not saved: ${e.message}. Reloaded the draw from the Tracker.`,true);await resync();return;}
-    render();}},90);
+    render();
+  }
+  if(reduce){finish();return;}
+  const spin=setInterval(()=>{
+    let A,S;
+    if(f<R1){const ra=pick(remA),rs=pick(remS);hot("aus",ra.key);hot("sa",rs.key);
+      A=lines(nm(ra),"a blur");S=lines(nm(rs),"b blur");}
+    else if(f<R1+R2){const k=(f-R1+1)/R2,rs=pick(remS);hot("aus",a.key);hot("sa",rs.key);
+      A=lines(nm(a).map(n=>scr(n,Math.ceil(k*n.length))),"a");S=lines(nm(rs),"b blur");}
+    else if(f<R1+R2+R3){const k=(f-R1-R2+1)/R3;hot("sa",sEnt.key);
+      A=lines(nm(a),"a set");S=lines(nm(sEnt).map(n=>scr(n,Math.ceil(k*n.length))),"b");}
+    else{clearInterval(spin);if(slot){slot.classList.add("landed");}setTimeout(finish,350);return;}
+    if(slot)slot.innerHTML=`<div class="spin2">${A}<div class="vs">v</div>${S}</div>`;
+    f++;
+  },75);
 }
 document.querySelectorAll("nav.sess button").forEach(b=>b.addEventListener("click",()=>{cur=b.dataset.s;document.querySelectorAll("nav.sess button").forEach(x=>x.setAttribute("aria-selected",x===b));toast("");render()}));
 document.getElementById("reset").addEventListener("click",async()=>{
