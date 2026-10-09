@@ -5744,10 +5744,11 @@ def _print_pack_render(template, **ctx):
         return render_template(template, **ctx)
 
 
-def build_print_pack_for_event(event_id: int, allow_gaps: bool = False) -> dict | None:
+def build_print_pack_for_event(event_id: int, allow_gaps: bool = False,
+                               force_scorecards: bool = False) -> dict | None:
     from email_parser.print_pack import build_event_print_pack
     return build_event_print_pack(_print_pack_render, event_id, app.static_folder,
-                                  allow_gaps=allow_gaps)
+                                  allow_gaps=allow_gaps, force_scorecards=force_scorecards)
 
 
 @app.route("/events/<int:event_id>/print-pack.pdf")

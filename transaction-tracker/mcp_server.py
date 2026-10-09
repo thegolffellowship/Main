@@ -5567,6 +5567,20 @@ def _scoring_dispatch_inner(url: str, extract: str):
                                   indent=2)
             parts = [p.strip() for p in (arg or "").split("|")]
             from app import build_print_pack_for_event
+            if len(parts) > 1 and parts[1].lower() == "files":
+                # scoring-print-pack-pdf:<id>|files[|send[|<to>]] — every
+                # report as its OWN PDF, scorecards included (Kerry 10/9:
+                # "separate PDF files ... to send to course for printing")
+                from email_parser.print_pack import split_print_pack, send_print_pack_files
+                built = build_print_pack_for_event(int(parts[0]), force_scorecards=True)
+                if not built or built.get("error"):
+                    return json.dumps({"error": (built or {}).get("error") or "event not found or nothing to print"})
+                out = {"parts": built.get("parts"), "scorecards": built.get("scorecards"),
+                       "files": [{"filename": f, "bytes": len(b)} for f, b in split_print_pack(built)]}
+                if len(parts) > 2 and parts[2].lower() == "send":
+                    db.log_agent_action("mcp-claude", "scoring-print-pack-pdf", arg)
+                    out["send"] = send_print_pack_files(built, to_address=(parts[3] if len(parts) > 3 else None))
+                return json.dumps(out, indent=2, default=str)
             built = build_print_pack_for_event(int(parts[0]))
             if not built:
                 return json.dumps({"error": "event not found or nothing to print"})

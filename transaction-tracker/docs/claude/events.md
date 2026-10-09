@@ -2973,6 +2973,15 @@ emailed to me."
 - **On demand:** `scoring-print-pack-pdf:<event_id>` builds and reports parts,
   page counts, hash and size; `|send[|<to>]` mails it and records the
   hash; `scoring-print-pack-pdf:due` lists tomorrow's events.
+- **Separate files** (v2.532.9, Kerry 10/9: "Can you have the practice round
+  reports sent to me in separate PDF files right now? I need to send to course
+  for printing"). `scoring-print-pack-pdf:<event_id>|files` builds the pack with
+  the scorecards forced in, then cuts it into one PDF per report by each part's
+  page count (`print_pack.split_print_pack`). Files are named
+  `<stub>-StarterSheet.pdf`, `-CartSigns.pdf`, `-Scorecards.pdf` and so on.
+  `|files|send[|<to>]` mails them as separate attachments in one email
+  (`send_print_pack_files`). It leaves the evening-before sent hash alone.
+  Guard: `test_print_pack_files.py`.
 - **Deploy:** `nixpacks.toml` installs `chromium` from Nix beside
   Python (`nixPkgs`), the WeasyPrint libraries via `nixLibs` (apt libs
   are invisible to the Nix Python — "cannot load library gobject-2.0-0"

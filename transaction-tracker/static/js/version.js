@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.532.8";
+window.TGF_VERSION = "2.532.9";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.532.9",
+    date: "2026-10-09",
+    title: "Print files: each report as its own PDF, by email",
+    changes: [
+      "Kerry 10/9: \"Can you have the practice round reports sent to me in separate PDF files right now? I need to send to course for printing.\" The print pack can now go out as separate PDFs, one per report (Starter Sheet, Cart Signs, Scorecards, and Games & Payouts, Flights or Proximity when the event has games), attached to one email ready to forward to the course. The scorecards are always included in this mode. Bridge scoring-print-pack-pdf:<event>|files|send."
+    ]
+  },
   {
     version: "2.532.8",
     date: "2026-10-09",

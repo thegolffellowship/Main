@@ -74,7 +74,8 @@ def scorecards_in_pack(event_id: int, db_path=None) -> bool:
 
 
 def build_event_print_pack(render, event_id: int, static_dir: str,
-                           db_path=None, allow_gaps: bool = False) -> dict | None:
+                           db_path=None, allow_gaps: bool = False,
+                           force_scorecards: bool = False) -> dict | None:
     """Render every part and bind them into one PDF.
 
     `render(template_name, **context) -> str` is the caller's template
@@ -134,7 +135,7 @@ def build_event_print_pack(render, event_id: int, static_dir: str,
     # dials, the saved GGID codes. A named gap does not print a guessed
     # card: the part is the gap sheet, and `scorecards.gaps` says why.
     sc_info = None
-    if htmls and scorecards_in_pack(int(event_id), db_path=db_path):
+    if htmls and (force_scorecards or scorecards_in_pack(int(event_id), db_path=db_path)):
         try:
             from email_parser.scorecards import build_scorecards
             unit = (sheet_pack or {}).get("team_unit")
@@ -442,6 +443,64 @@ def print_pack_email_body(built: dict) -> str:
     out.append(f'<p style="margin:0 0 1em;font-size:12px;color:#6B7280;">Attached: {_esc(parts)}, bound in print order. '
                f'Sent the evening before; sent again only if the sheet changes. Print from the attachment.</p>')
     return "".join(out)
+
+
+PART_FILE_NAMES = {"starter-sheet": "StarterSheet", "cart-signs": "CartSigns",
+                   "scorecards": "Scorecards", "games-payouts": "GamesPayouts",
+                   "divisions-flights": "DivisionsFlights", "proximity-markers": "Proximity"}
+
+
+def split_print_pack(built: dict) -> list[tuple[str, bytes]]:
+    """The bound pack cut back into one PDF per report, by the page count
+    each part printed (Kerry 2026-10-09: "Can you have the practice round
+    reports sent to me in separate PDF files right now? I need to send to
+    course for printing"). [(filename, pdf bytes)] in print order, named
+    <stub>-<Report>.pdf like the per-report downloads."""
+    import io
+    from pypdf import PdfReader, PdfWriter
+    from email_parser.database import print_file_stub as _pfs
+    reader = PdfReader(io.BytesIO(built["pdf"]))
+    stub = _pfs(built.get("event") or {}) or f"event-{(built.get('event') or {}).get('id')}"
+    out, at = [], 0
+    for part in built.get("parts") or []:
+        n = int(part.get("pages") or 0)
+        if n <= 0:
+            continue
+        w = PdfWriter()
+        for pg in reader.pages[at:at + n]:
+            w.add_page(pg)
+        at += n
+        buf = io.BytesIO(); w.write(buf)
+        name = PART_FILE_NAMES.get(part["slug"]) or part["slug"].title().replace("-", "")
+        out.append((f"{stub}-{name}.pdf", buf.getvalue()))
+    if at != len(reader.pages):
+        raise ValueError(f"page counts {at} do not match the pack's {len(reader.pages)} pages")
+    return out
+
+
+def send_print_pack_files(built: dict, to_address: str | None = None, db_path=None) -> dict:
+    """Mail every report of a built pack as its OWN PDF attachment, one
+    email. Does not touch the evening-before pack's sent hash."""
+    from email_parser.fetcher import send_mail_graph
+    files = split_print_pack(built)
+    to_address = to_address or print_pack_recipient(built.get("event"), db_path=db_path)
+    creds = {k: os.getenv(k) for k in ("AZURE_TENANT_ID", "AZURE_CLIENT_ID",
+                                       "AZURE_CLIENT_SECRET", "EMAIL_ADDRESS")}
+    listing = [{"filename": f, "bytes": len(b)} for f, b in files]
+    if not to_address or not all(creds.values()):
+        return {"sent": False, "why": "mail credentials or recipient not set", "files": listing}
+    ev = built["event"]
+    rows = "".join(f"<li>{_esc(f)}</li>" for f, _ in files)
+    html = (f'<p style="margin:0 0 1em;">Print files for <b>{_esc(ev.get("item_name"))}</b>, '
+            f'{_esc(ev.get("event_date"))}: one PDF per report, ready to forward to the course.</p>'
+            f'<ul style="margin:0 0 1em;">{rows}</ul>')
+    ok = send_mail_graph(tenant_id=creds["AZURE_TENANT_ID"], client_id=creds["AZURE_CLIENT_ID"],
+                         client_secret=creds["AZURE_CLIENT_SECRET"],
+                         from_address=creds["EMAIL_ADDRESS"], to_address=to_address,
+                         subject=f"Print files — {ev.get('item_name')} — {ev.get('event_date')}",
+                         html_body=html,
+                         attachments=[(f, b, "application/pdf") for f, b in files])
+    return {"sent": bool(ok), "to": to_address, "files": listing}
 
 
 def send_event_print_pack(built: dict, to_address: str | None = None,
