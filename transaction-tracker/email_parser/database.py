@@ -14272,6 +14272,33 @@ def get_events_leaderboard(chapter: str | None = None,
                WHERE COALESCE(sr.source, 'gg') NOT LIKE 'gg_history%'
                GROUP BY e.id
                ORDER BY e.event_date DESC, e.id DESC""")]
+        # An event on its live day reads its ENTERED cards (entry mode, the
+        # same overlay the event board uses), so it is listed as soon as a
+        # card has a score, Golf Genius import or not (Kerry 10/8: the
+        # practice round never goes through GG, and the scorer's board
+        # showed "No scores posted" with four holes in).
+        _have = {r["id"] for r in rows}
+        try:
+            from email_parser import score_entry as _se
+            _live_ids = sorted(int(x) for x in _se.enabled_events(db_path) if int(x) not in _have)
+        except Exception:
+            _live_ids = []
+        for _eid in _live_ids:
+            _tees = _entry_mode_overlay(conn, _eid, db_path)
+            try:
+                if not _tees:
+                    continue
+                _ev = conn.execute(
+                    """SELECT e.id, e.item_name, e.event_date, e.course, e.chapter, e.format,
+                              COUNT(DISTINCT sr.customer_id) AS field
+                       FROM events e JOIN scoring_rounds sr ON sr.event_id = e.id
+                       WHERE e.id = ? GROUP BY e.id""", (_eid,)).fetchone()
+                if _ev:
+                    rows.append({**dict(_ev), "live_entry": True})
+            finally:
+                conn.execute("DROP TABLE IF EXISTS temp.scoring_rounds")
+                conn.execute("DROP TABLE IF EXISTS temp.scoring_holes")
+        rows.sort(key=lambda r: (str(r.get("event_date") or ""), r["id"]), reverse=True)
         if codes:
             low = [c.strip().lower() for c in codes if c and c.strip()]
             rows = [r for r in rows
@@ -14304,10 +14331,21 @@ def get_events_leaderboard(chapter: str | None = None,
             r["money_visible"] = True
             # EVERY HOLE FOR EVERY PLAYER FIRST (Kerry 2026-09-15). The
             # clock alone let a quiet ten minutes mid-round look like the
-            # end of one; the card is what knows.
-            _fc = _event_field_complete(
-                conn, r["id"],
-                _event_holes_type(r["item_name"], r.get("format")))
+            # end of one; the card is what knows. A live-entry event is
+            # measured on its entered cards.
+            if r.get("live_entry"):
+                _entry_mode_overlay(conn, r["id"], db_path)
+                _lr = conn.execute("SELECT MAX(imported_at) AS t FROM scoring_rounds "
+                                   "WHERE event_id = ?", (r["id"],)).fetchone()
+                r["last_score_at"] = (_lr["t"] if _lr else None) or None
+            try:
+                _fc = _event_field_complete(
+                    conn, r["id"],
+                    _event_holes_type(r["item_name"], r.get("format")))
+            finally:
+                if r.get("live_entry"):
+                    conn.execute("DROP TABLE IF EXISTS temp.scoring_rounds")
+                    conn.execute("DROP TABLE IF EXISTS temp.scoring_holes")
             r["field_complete"] = _fc["complete"]
             r["players_pending"] = len(_fc["pending"])
             if not _fc["complete"]:

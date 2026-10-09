@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.529.0";
+window.TGF_VERSION = "2.529.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.529.1",
+    date: "2026-10-08",
+    title: "Live scoring leaderboard: shows entered scores for an event Golf Genius never scores, and for a round tested ahead of its day",
+    changes: [
+      "Kerry 10/8: \"Why isn't the leaderboard showing anything when I've entered scores for the practice round? I'm just testing it tonight before tomorrow.\" Two causes. (1) The scorer's LEADERBOARD lists events from the scoring record first, and the practice round has no Golf Genius import, so it was never listed, even on its own day. The events list now includes a score-entry event whose entered cards are on the board (marked live_entry, shown In play until every hole is in). (2) The board reads entered scores only on the round's own date; a round dated in the future now counts too, since nothing official exists for a day not yet played. A past day's board still reads the record and never changes after the fact.",
+      "Guard: test_board_entry_mode.py (a round dated tomorrow with no Golf Genius rows is listed, in play, read from entered cards, and listing writes nothing)."
+    ]
+  },
   {
     version: "2.529.0",
     date: "2026-10-08",

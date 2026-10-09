@@ -456,14 +456,20 @@ def entry_mode(event_id: int, db_path=None, _read: dict | None = None) -> bool:
     parity) and is never shown. The next day the board reads the record
     again (Golf Genius until it retires, published entries after the
     cutover), so a closed event's board never changes after the fact and a
-    past event whose beta testers entered a few cards is not rewritten."""
+    past event whose beta testers entered a few cards is not rewritten.
+
+    A round dated AFTER today counts too (Kerry 10/8, testing Friday's
+    practice round on Thursday night: "Why isn't the leaderboard showing
+    anything when I've entered scores"). Nothing official exists for a day
+    not yet played, so its entered cards are all there is; only a PAST
+    day's board is frozen to the record."""
     try:
         if not se.event_enabled(event_id, db_path):
             return False
         from email_parser.timezone_utils import today_central_str
         today = today_central_str()
         read = _read if _read is not None else se.get_entered_scores(int(event_id), db_path=db_path)
-        return any(not _is_preview(r) and str(r.get("date") or "")[:10] == today
+        return any(not _is_preview(r) and str(r.get("date") or "")[:10] >= today
                    for r in (read.get("rounds") or []))
     except Exception:
         logger.exception("entry_mode check failed for event %s", event_id)

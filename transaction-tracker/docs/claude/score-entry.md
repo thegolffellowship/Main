@@ -980,6 +980,16 @@ Events board on Olympia Hills (event 3308) had read Golf Genius imports.
   rows stay stored for parity. Synthetic ids are negative; the team-pops
   helper's second connection reads their tee by tee_id.
 - `event.score_source` on the board payload: `entry` or `record`.
+- **v2.529.1 (Kerry 10/8, testing Friday's practice round Thursday night:
+  "Why isn't the leaderboard showing anything when I've entered scores"):**
+  a round dated AFTER today is entry mode too (only a PAST day is frozen to
+  the record; nothing official exists for a day not yet played). And the
+  events LIST (`get_events_leaderboard`, which the scorer's board reads
+  first) now carries a score-entry event in entry mode even with no
+  `scoring_rounds` rows (`live_entry: true`; field, last score and
+  "in play" measured on the overlay, temp tables dropped after each event).
+  Before this an event Golf Genius never scored (the practice round) never
+  reached the scorer's board at all.
 - Not affected: the Lone Star Cup board (`lsc_cup`) already reads entries
   (`get_entered_scores` → `merge_entry_feed`).
 - Guard: `test_board_entry_mode.py`.

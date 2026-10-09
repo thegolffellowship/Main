@@ -175,5 +175,38 @@ try:
 except Exception as e:  # noqa: BLE001
     check("preview round fixture", False, repr(e))
 
+print("a round dated TOMORROW with no GG import (Kerry 10/8, testing Friday's practice round Thursday night)")
+import datetime as _dt
+TOMORROW = (_dt.date.fromisoformat(TODAY) + _dt.timedelta(days=1)).isoformat()
+EV3, NAME3 = 932, "LSC PRACTICE ROUND | Entry Links"
+c = sqlite3.connect(DB)
+c.execute("INSERT INTO events (id, item_name, event_date, course_id, format) VALUES (?,?,?,?,?)",
+          (EV3, NAME3, TOMORROW, course_id, "9 Holes"))
+c.commit()
+c.close()
+db.set_app_setting("score_entry_events", json.dumps([EV, EV2, EV3]), db_path=DB)
+r3 = se.create_round(EV3, 9, round_date=TOMORROW, label="practice", course_holes=COURSE,
+                     course_id=course_id, db_path=DB)["round_id"]
+g3id = se.upsert_group(r3, 1, players=[
+    {"customer_id": 301, "display_name": "Kerry N", "tee": "50-64", "playing_handicap": 5},
+    {"customer_id": 303, "display_name": "Pat Y", "tee": "50-64", "playing_handicap": 0}], db_path=DB)["group_id"]
+lst = lambda: {e["id"]: e for e in db.get_events_leaderboard(db_path=DB)["events"]}
+check("no score yet: not listed", EV3 not in lst())
+se.claim_group(g3id, "dev3", 301, db_path=DB)
+se.write_scores(g3id, "dev3", 301, [{"op_id": f"p{h}-{cid}", "hole": h, "gross": 4, "customer_id": cid}
+                                     for h in (1, 2, 3, 4) for cid in (301, 303)], db_path=DB)
+check("a future-dated round with scores is entry mode", ep.entry_mode(EV3, db_path=DB))
+L = lst()
+check("the events list carries it (no Golf Genius rows needed)", EV3 in L and L[EV3]["field"] == 2, L.get(EV3))
+check("it is in play, not final (holes still to post)", L.get(EV3, {}).get("money_visible") is False
+      and L.get(EV3, {}).get("money_reason") == "scores", L.get(EV3))
+d3 = db.get_event_leaderboard(NAME3, db_path=DB) or {}
+check("its board reads the entered cards", (d3.get("event") or {}).get("score_source") == "entry",
+      (d3.get("event") or {}).get("score_source"))
+check("the list leaves no temp tables behind (the record reads normally after)",
+      lst().get(EV, {}).get("field") is not None)
+before3 = counts()
+check("listing wrote nothing to the record", before3 == counts())
+
 print(f"\n{'ALL PASS' if not FAILURES else str(len(FAILURES)) + ' FAILED: ' + str(FAILURES)}")
 sys.exit(1 if FAILURES else 0)
