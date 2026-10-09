@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.528.2";
+window.TGF_VERSION = "2.528.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.528.3",
+    date: "2026-10-08",
+    title: "THE DRAW: a SUMMARY tab with every match in three columns; bigger small text",
+    changes: [
+      "Kerry 10/8: \"Can you create a summary page that shows all MATCHES in 3 columns side by side? FOURBALL | FOURSOMES | SINGLES?\" and \"once all are selected, a fourth toggle appears next to the others called SUMMARY\". Once all three sessions are fully drawn, a SUMMARY button appears beside them. It shows FOURBALL | FOURSOMES | SINGLES side by side, every match in tee order with its number and tee time, Austin over San Antonio, and each side's playing handicap and bold OFF (Foursomes: the 60 / 40 shares and the TEAM total). Clear this session hides on the summary.",
+      "\"Some of that text, like the note text is super small. Should be at least 2 pixels bigger.\" Every font of 14px or smaller on THE DRAW is 2px bigger: notes, keys, tee times, the handicap figures, buttons and the footer."
+    ]
+  },
   {
     version: "2.528.2",
     date: "2026-10-08",

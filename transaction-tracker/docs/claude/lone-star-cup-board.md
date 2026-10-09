@@ -628,6 +628,10 @@ the Starter Sheet logo and Proxy logos too."
   (`td.nn`) are solid navy, the Init column (`td.ic`) is centred, the Par
   and SI labels (`td.lbl`) are navy with white text, and the header line
   shrinks to fit beside the QR.
+- **THE DRAW summary (v2.528.3):** a SUMMARY tab (`data-s="sum"`) appears
+  once all three sessions are drawn. It shows FOURBALL | FOURSOMES |
+  SINGLES, every match in tee order, from `state` + `math`. All small text
+  on the page is +2px.
 - **Phone splash (v2.528.0):** `score_entry.group_is_cup` is true for a
   round in any LSC event (the practice round too), plus the `lsc:` and
   `lscprev:` session rounds. It holds 3 s (Kerry 10/8).
