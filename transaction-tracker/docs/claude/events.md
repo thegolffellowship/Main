@@ -1431,6 +1431,11 @@ event showed default amounts ($8/$7) in Withdraw Player / Partial Refund.
   'Winnings for <MONTH> Points' memos ONLY to the month account, and the
   false-match repair skips legitimate month-account links. Monthly rows
   flow into Customers → Winnings automatically via /api/customers/winnings.
+- **Lone Star Cup daily skins (v2.532.15, built, not yet applied):**
+  `scoring-lsc-skins-payouts[:apply]` (`email_parser/lsc_skins_payouts.py`)
+  writes one `skins` row per Cup skins winner per final day on event 3329's
+  row, description `LSC SAT Skins — …`; unpaid rows follow a changed result,
+  paid rows are never touched. Details: lone-star-cup-board.md.
 - **Data** from `tgf_events` and `tgf_payouts` tables; golfer identity is the `customers` table (tgf_golfers was eliminated)
 - **Where a `tgf_events` row comes from (v2.505.3, CA #786 GO 2):** from the Tracker event, never from Golf Genius. `_ensure_tgf_event_row` (database.py) matches the stamped `events_id` first, then the code convention (full event name, bare code as a legacy fallback), and creates the row with `events_id` set at birth. The Games-tab payout recorder uses it; `scoring-tgf-event-ensure:<id>[,<id>…][|apply]` creates rows ahead of time (dry run by default). Guard `test_tgf_event_ensure.py`.
 - **API:** `GET /api/tgf` returns `{customers, events, winnings}` where customers is the list of payout recipients

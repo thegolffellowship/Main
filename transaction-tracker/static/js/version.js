@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.532.14";
+window.TGF_VERSION = "2.532.15";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.532.15",
+    date: "2026-10-09",
+    title: "Cup SKINS view = the event leaderboard's skins board; daily skins winners can go to PAYOUTS",
+    changes: [
+      "Kerry 10/9: \"Skins leaderboard should look just like the event leaderboard.\" The Lone Star Cup tab's SKINS view is now drawn by the EVENTS leaderboard's own renderer: the same table, a row per skins entry (a team on Saturday, a player on Sunday, one band per flight), hole-by-hole scores with each won skin circled in its flight colour, pops on the ball that counted, the # (skins won) column, the PAR row, sortable headers and the Hole by hole / Handicaps boxes. Saturday team skins show the NET total, Sunday the GROSS total. The engine now publishes each entry's counting ball per hole (compute_skins `cards`) so the board can draw it; scores only, no money.",
+      "Money stays as ruled for the Cup (CA #726): members never see a dollar on the Cup's skins (the event leaderboard shows members the Won column once every card is in; the Cup does not). Staff see the pot, and the Won column once every card in that session is in.",
+      "Kerry 10/9: \"Daily Winner Amounts should go to PAYOUTS so I can easily pay them per normal.\" New `email_parser/lsc_skins_payouts.py` and bridge `scoring-lsc-skins-payouts[:apply]`: one tgf_payouts row per winner per day (Saturday = AM + PM, Sunday = both flights) on the Cup's tgf_events row, category skins, \"LSC SAT Skins — Fourball ×2 (holes 3, 7) $41.67 · ...\", with the usual pending ledger placeholder so the PAYOUTS page shows its Pay link. A day is written only when every card that day is in and every session that day is scored from entered cards (never the mock dial). Dry run by default; re-running changes nothing; a changed result updates or removes UNPAID rows only and never touches a PAID one. NOT applied: Kerry ratifies before any money row is written."
+    ]
+  },
   {
     version: "2.532.14",
     date: "2026-10-09",
