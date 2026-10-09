@@ -1,5 +1,16 @@
-window.TGF_VERSION = "2.530.2";
+window.TGF_VERSION = "2.530.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.530.3",
+    date: "2026-10-08",
+    title: "Lone Star Cup on a phone: screen-wide, bigger logo, the orange bar scrolls away",
+    changes: [
+      "Kerry 10/8, on the phone view of the Cup tab: \"allow the enter events and contests bar to hide\": on a phone the ENTER EVENTS & CONTESTS bar now scrolls away with the page instead of pinning; the tabs pin straight under the header.",
+      "\"the lone Star cup banner team scores and session toggles need to go screen wide\": on a phone the Cup banner, the team scores and the session buttons run edge to edge.",
+      "\"too much space between session bar and matches skins info\": the gap under the pinned block is closed up (all screen sizes).",
+      "\"LSC banner is really busy. The logo says the name so LONE STAR CUP doesn't need repeating. Plus the logo is the coolest part but it's little.\": on a phone the title text is gone and the logo is half again as big (66 px); the dates and venue stack beside it."
+    ]
+  },
   {
     version: "2.530.2",
     date: "2026-10-08",

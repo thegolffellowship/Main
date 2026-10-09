@@ -1714,7 +1714,27 @@
         #lsc-board.joined .lsc-sess-seg { margin: 0; border-radius: 0 0 14px 14px; background: #E4E9F1; }
         /* scores + session toggles pinned under the Cup header; the opaque
            strip below them keeps the matches from showing through the gap */
-        .lsc-bd-pin { position: sticky; z-index: 87; background: var(--bg, #F8F8F8); padding-bottom: 10px; }
+        .lsc-bd-pin { position: sticky; z-index: 87; background: var(--bg, #F8F8F8); padding-bottom: 6px; }
+        /* Kerry 10/8: "too much space between session bar and matches skins
+           info" */
+        #lsc-board .lsc-bd-pin + .lsc-bd-sess { margin-top: 0; }
+        #lsc-board .lsc-bd-sess > .lsc-bd-seg.sm:first-child { margin-top: 0; }
+        @media (max-width: 560px) {
+            /* Kerry 10/8, the phone view: "the lone Star cup banner team
+               scores and session toggles need to go screen wide" and "LSC
+               banner is really busy. The logo says the name so LONE STAR CUP
+               doesn't need repeating. Plus the logo is the coolest part but
+               it's little." Banner + scores + toggles bleed to both edges;
+               the title goes, the logo grows. */
+            #section-lone-star-cup .lsc-event.joined,
+            #lsc-board.joined .lsc-bd-pin { margin-left: calc(50% - 50vw); margin-right: calc(50% - 50vw); }
+            #lsc-board.joined .lsc-sess-seg { border-radius: 0; }
+            #section-lone-star-cup .lsc-event.joined { padding: 6px 14px; gap: 12px; }
+            .lsc-event .t { display: none; }
+            .lsc-event .lsc-ev-logo { height: 66px; }
+            .lsc-event .meta { margin-top: 0; font-size: 13px; line-height: 1.35; }
+            .lsc-event .meta .v { display: block; margin-left: 0; font-size: 12.5px; }
+        }
         .lsc-event .ic { flex: 0 0 auto; line-height: 0; }
         .lsc-event .t { font: 700 20px/1.2 'Bitter', serif; color: #fff; }
         .lsc-event .meta { margin-top: 3px; font: 700 14px/1.3 'Bitter', serif; color: #fff; }
@@ -2662,12 +2682,16 @@
         if (!hdr) return;
         const h = hdr.offsetHeight;
         const cta = document.querySelector(".contest-cta-row");
+        // On a phone the ENTER EVENTS & CONTESTS bar scrolls away with the
+        // page instead of pinning (Kerry 10/8: "allow the enter events and
+        // contests bar to hide"); the tabs then pin straight under the header.
+        const phone = window.matchMedia("(max-width: 560px)").matches;
         if (cta) {
-            cta.style.position = "sticky";
-            cta.style.top = h + "px";
+            cta.style.position = phone ? "relative" : "sticky";
+            cta.style.top = phone ? "" : h + "px";
             cta.style.zIndex = "90";
         }
-        const ctaH = cta ? cta.offsetHeight : 0;
+        const ctaH = (cta && !phone) ? cta.offsetHeight : 0;
         const tabs = document.querySelector(".top-tabs-wrap");
         if (tabs) {
             tabs.style.position = "sticky";
