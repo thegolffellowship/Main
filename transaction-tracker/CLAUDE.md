@@ -795,6 +795,18 @@ obviously they have to go to the right places. Horizon is NOT TGF. No connection
 - Rule 3b still applies: a change that needs Kerry's ratification is merged
   only after he gives it.
 
+## Untethered from Golf Genius (Kerry 2026-10-08, standing rule)
+
+Kerry: "Golf Genius is not the ruler on this or from now on. We need to
+untether for this event and all future events unless I say." Every path that
+pulls from Golf Genius or lets it decide something for an event goes through
+`email_parser/gg_untether.py` (`gg_allowed(event_date)`, app setting
+`gg_untether_from`, default 2026-10-07): an event on/after that date gets no
+GG scorecards, results, flights, MVPs, tee sheets, RSVPs, auto payouts or
+monthly money. Events before it keep their GG walks (the 10/6 points). A NEW
+Golf Genius path must call the same rule. Move the date only on Kerry's word.
+Guard `test_gg_untether.py`.
+
 ## No-push window during live events (CA #829, 2026-09-28, standing rule)
 
 Every push to `main` restarts the Tracker and drops requests in flight

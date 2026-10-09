@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.529.8";
+window.TGF_VERSION = "2.530.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.530.0",
+    date: "2026-10-08",
+    title: "Untethered from Golf Genius: the Cup weekend and every future event",
+    changes: [
+      "Kerry 10/8: \"Golf Genius is not the ruler on this or from now on. We need to untether for this event and all future events unless I say.\" One rule (email_parser/gg_untether.py, app setting gg_untether_from, default 2026-10-07): an event dated on or after it gets nothing from Golf Genius. Events through Tue 10/6 keep their Golf Genius walks, so last Tuesday's results and points still post.",
+      "Gated by that rule: the 5-minute live scorecard poll; the hourly results sync's scorecard, game-winner, flight and MVP walks (an untethered event's GG code is dropped whole, so a 2026 code can never fall back onto last year's event); the hourly job's automatic payout re-record and flight freeze/settle (an untethered event is settled at its own closeout); a manual Golf Genius scorecard import, a forced game-results walk and a Golf Genius tee-sheet pull (each refuses with the reason); the monthly points money (October 2026 on is not auto-recorded from Golf Genius); and Golf Genius RSVPs, which no longer appear on an untethered event's Players tab or join its roster (pairings, print pack, event-day email, live-scoring seed). RSVPs are filtered on read, nothing is deleted, so moving the date brings them back.",
+      "The staff Live Scoring page now says \"These cards are the record.\" Guard test_gg_untether.py."
+    ]
+  },
   {
     version: "2.529.8",
     date: "2026-10-08",

@@ -17392,6 +17392,8 @@ def import_gg_event_mvps(widget_url: str, db_path: str | Path = DB_PATH,
             if m:
                 code_map.setdefault(m.group(1).lower(),
                                     (r["id"], r["item_name"], r["event_date"]))
+        for _c in _gg_untethered_codes(conn, db_path):
+            code_map.pop(_c, None)
         from .timezone_utils import today_central
         _today = today_central()
 
@@ -18716,6 +18718,8 @@ def import_gg_game_results(widget_url: str, db_path: str | Path = DB_PATH,
             if m:
                 code_map.setdefault(m.group(1).lower(),
                                     (r["id"], r["item_name"], r["event_date"]))
+        for _c in _gg_untethered_codes(conn, db_path):
+            code_map.pop(_c, None)
         forced = None
         if force_event:
             fr = conn.execute(
@@ -18725,6 +18729,9 @@ def import_gg_game_results(widget_url: str, db_path: str | Path = DB_PATH,
             if not fr:
                 return {"error": f"force_event {force_event!r} matches no "
                                  "event"}
+            from email_parser.gg_untether import gg_allowed, refusal
+            if not gg_allowed(fr["event_date"], db_path):
+                return {"error": refusal(db_path), "event": fr["item_name"]}
             forced = (fr["id"], fr["item_name"], fr["event_date"])
         _today = today_central()
 
@@ -19140,6 +19147,8 @@ def import_gg_game_flights(widget_url: str, db_path: str | Path = DB_PATH,
             if m:
                 code_map.setdefault(m.group(1).lower(),
                                     (r["id"], r["item_name"], r["event_date"]))
+        for _c in _gg_untethered_codes(conn, db_path):
+            code_map.pop(_c, None)
         from .timezone_utils import today_central
         _today = today_central()
 
@@ -19277,6 +19286,24 @@ _GG_RESULT_PORTALS = [
 ]
 
 
+def _gg_untethered_codes(conn, db_path=None) -> set:
+    """GG event codes ([sa]N.N) that belong to an event dated on or after
+    the Golf Genius untether date (Kerry 10/8: "Golf Genius is not the
+    ruler on this or from now on"). Every GG walk drops these codes whole,
+    so a GG round can never land on an untethered event, nor fall back to
+    last year's event with the same code. Undated events are left as they
+    were."""
+    from email_parser.gg_untether import untether_from
+    cut = untether_from(db_path)
+    out = set()
+    for r in conn.execute("SELECT item_name, event_date FROM events").fetchall():
+        m = _GG_EVENT_CODE_COMPOUND_RE.match((r[0] or "").strip())
+        d = str(r[1] or "").strip()[:10]
+        if m and d and d >= cut:
+            out.add(m.group(1).lower())
+    return out
+
+
 def auto_gg_results_sync(db_path: str | Path = DB_PATH,
                          scorecard_rounds: int = 2,
                          rewalk_recent: int = 2,
@@ -19355,6 +19382,8 @@ def auto_gg_results_sync(db_path: str | Path = DB_PATH,
                         m = _GG_EVENT_CODE_COMPOUND_RE.match((r["item_name"] or "").strip())
                         if m:
                             code_map.setdefault(m.group(1).lower(), r["item_name"])
+                    for _c in _gg_untethered_codes(conn, db_path):
+                        code_map.pop(_c, None)
                 for rid, _lbl in options[:scorecard_rounds]:
                     round_url = f"{widget}&round={rid}"
                     try:
@@ -19428,10 +19457,14 @@ def auto_gg_results_sync(db_path: str | Path = DB_PATH,
     try:
         with _connect(db_path) as conn:
             played = [dict(r) for r in conn.execute(
-                """SELECT e.id, e.item_name FROM events e
+                """SELECT e.id, e.item_name, e.event_date FROM events e
                     WHERE e.event_date IN (?, ?)
                       AND EXISTS (SELECT 1 FROM scoring_rounds r WHERE r.event_id = e.id)""",
                 tuple(sorted(_days))).fetchall()]
+        # an untethered event's flights settle at its own closeout, not
+        # on this GG-results clock (Kerry 10/8)
+        from email_parser.gg_untether import gg_allowed
+        played = [ev for ev in played if gg_allowed(ev.get("event_date"), db_path)]
         for ev in played:
             try:
                 res = close_event_flights(ev["id"], by="closeout", db_path=db_path)
@@ -24450,6 +24483,12 @@ def import_gg_scorecards(tournament_url: str, event_code: str | None = None,
                         "codes can collide with store codes). Pass the "
                         "correct event_code, or an explicit round_date to "
                         "override.")}
+                # UNTETHERED (Kerry 10/8: "Golf Genius is not the ruler on
+                # this or from now on"): no GG card lands on an event dated
+                # on or after gg_untether_from, by any path.
+                from email_parser.gg_untether import gg_allowed, refusal
+                if ev["event_date"] and not gg_allowed(ev["event_date"], db_path):
+                    return {"error": refusal(db_path), "event": ev["item_name"]}
                 # An EXPLICIT round_date outranks the event's own date —
                 # multi-DAY events (2026 TGF CHAMPIONSHIP, 8/15+8/16)
                 # carry one event_date, so a Round 2 import must be able
@@ -35885,6 +35924,13 @@ def record_monthly_points_payouts(force: bool = False, db_path=None) -> dict:
         if not m.get("complete") or not m.get("winners"):
             skipped.append({"month": m.get("month"), "reason": "incomplete or no winners"})
             continue
+        # UNTETHERED (Kerry 10/8): a month that runs into gg_untether_from
+        # (October 2026 on) is not Golf Genius's to settle; its money is
+        # the Tracker's, settled from the Tracker's own results.
+        from email_parser.gg_untether import gg_allowed_month
+        if not gg_allowed_month(m.get("month"), db_path):
+            skipped.append({"month": m.get("month"), "reason": "untethered from Golf Genius"})
+            continue
         year, mnum = int(m["month"][:4]), int(m["month"][5:7])
         code = f"{_cal.month_name[mnum].upper()} Points {year}"
         with _connect(db_path) as conn:
@@ -38606,6 +38652,29 @@ def save_rsvps(rsvps: list[dict], db_path: str | Path | None = None) -> int:
     return inserted
 
 
+def _gg_untethered_event(conn, event_name: str, db_path=None) -> bool:
+    """Is this event (by name) dated on/after the Golf Genius untether date?
+    (Kerry 10/8: "Golf Genius is not the ruler on this or from now on.")
+    Golf Genius RSVPs for such an event are left out on READ: nothing is
+    deleted, so moving gg_untether_from brings them straight back."""
+    try:
+        from email_parser.gg_untether import gg_allowed
+        r = conn.execute("SELECT event_date FROM events WHERE LOWER(item_name) = LOWER(?) "
+                         "AND event_date IS NOT NULL ORDER BY event_date DESC LIMIT 1",
+                         (str(event_name or "").strip(),)).fetchone()
+        return bool(r) and not gg_allowed(r[0], db_path)
+    except Exception:
+        return False
+
+
+def _gg_untethered_event_names(conn, db_path=None) -> set:
+    from email_parser.gg_untether import untether_from
+    cut = untether_from(db_path)
+    return {(r[0] or "").strip().lower() for r in conn.execute(
+        "SELECT item_name FROM events WHERE event_date IS NOT NULL "
+        "AND substr(event_date, 1, 10) >= ?", (cut,)).fetchall()}
+
+
 def get_rsvps_for_event(event_name: str, db_path: str | Path | None = None) -> list[dict]:
     """
     Return the latest RSVP for each player for the given event.
@@ -38615,6 +38684,8 @@ def get_rsvps_for_event(event_name: str, db_path: str | Path | None = None) -> l
     by matching on player_email, and flags whether a player card was found.
     """
     with _connect(db_path) as conn:
+        if _gg_untethered_event(conn, event_name, db_path):
+            return []            # untethered: no Golf Genius RSVPs (Kerry 10/8)
         return _rsvps_for_event(conn, event_name)
 
 
@@ -38712,6 +38783,9 @@ def get_all_rsvps_bulk(db_path: str | Path | None = None) -> dict:
                     AND r1.received_at = r2.max_date
                ORDER BY r1.matched_event, r1.player_name ASC"""
         ).fetchall()
+        # untethered events carry no Golf Genius RSVPs (Kerry 10/8)
+        _unt = _gg_untethered_event_names(conn, db_path)
+        rows = [r for r in rows if (r["matched_event"] or "").strip().lower() not in _unt]
 
         # Resolve player names from items table (bulk)
         emails = {(r["player_email"] or "").strip().lower() for r in rows if r["player_email"]}
@@ -38952,6 +39026,9 @@ def audit_upcoming_event_rsvps(db_path: str | Path | None = None) -> dict:
                ORDER BY event_date""",
             (today_central_str(),),
         ).fetchall()]
+        # untethered events take no Golf Genius RSVPs (Kerry 10/8)
+        _unt = _gg_untethered_event_names(conn, db_path)
+        names = [n for n in names if (n or "").strip().lower() not in _unt]
     out = {"events_audited": 0, "cleared": 0, "rematched": 0, "by_event": {}}
     for nm in names:
         try:
@@ -59302,6 +59379,13 @@ def record_all_event_game_payouts(db_path=None, time_budget: float = 42.0,
             out["events_left"] = len(events) - i
             break
         name = ev["item_name"]
+        # UNTETHERED (Kerry 10/8): the automatic GG-era payout re-record
+        # leaves an event on/after gg_untether_from alone; its payouts are
+        # the Tracker's, recorded at its closeout.
+        from email_parser.gg_untether import gg_allowed
+        if not gg_allowed(ev.get("event_date"), db_path):
+            out["skipped"].append({"event": name, "why": "untethered from Golf Genius"})
+            continue
         with _connect(db_path) as conn:
             m = _GG_EVENT_CODE_COMPOUND_RE.match(name.strip())
             bare = m.group(1).lower() if m else name.strip().lower()
@@ -63889,6 +63973,13 @@ def poll_live_events(force: bool = False, db_path=None) -> dict:
             state = {"event": ev["item_name"], "event_id": ev["id"],
                      "code": code, "portal": portal}
             out["checked"].append(state)
+            # UNTETHERED (Kerry 10/8): no Golf Genius pull for an event on
+            # or after gg_untether_from; the Tracker's own cards score it.
+            from email_parser.gg_untether import gg_allowed
+            if not gg_allowed(ev.get("event_date"), db_path):
+                state["skipped"] = "untethered from Golf Genius (Tracker scores this event)"
+                out["skipped"].append(state)
+                continue
             if not code or not portal:
                 state["skipped"] = "no event code or chapter portal"
                 out["skipped"].append(state)
@@ -67203,6 +67294,12 @@ def import_gg_teesheet_round(portal: str, round_id: str, apply: bool = False,
             return out
         out["event"] = {"id": ev["id"], "name": ev["item_name"],
                         "date": ev["event_date"]}
+        # UNTETHERED (Kerry 10/8): no GG tee sheet replaces the pairings or
+        # the pairing history of an event on/after gg_untether_from.
+        from email_parser.gg_untether import gg_allowed, refusal
+        if not gg_allowed(ev["event_date"], db_path):
+            out["error"] = refusal(db_path)
+            return out
         resolved_groups = []
         unresolved = []
         for g in parsed["groups"]:
@@ -68309,11 +68406,17 @@ def _event_rsvp_only_players(conn, event_id: int) -> list[dict]:
     Cancelled/postponed events return nobody, as the page does.
     """
     ev = conn.execute(
-        "SELECT id, item_name, status FROM events WHERE id = ?",
+        "SELECT id, item_name, status, event_date FROM events WHERE id = ?",
         (event_id,)).fetchone()
     if not ev or not ev["item_name"]:
         return []
     if (ev["status"] or "active") != "active":
+        return []
+    # UNTETHERED (Kerry 10/8): a Golf Genius RSVP never puts anyone on the
+    # roster of an event on/after gg_untether_from (pairings, print pack,
+    # event-day email and the live-scoring seed all read this roster).
+    from email_parser.gg_untether import gg_allowed
+    if ev["event_date"] and not gg_allowed(ev["event_date"]):
         return []
     event_name = ev["item_name"]
     ph = ",".join("?" * len(PAIRING_INACTIVE_STATUSES))
