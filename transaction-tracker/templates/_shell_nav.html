@@ -70,15 +70,28 @@
         // header is sticky too, so the bar's top is the header's measured
         // height, re-measured whenever the header's size changes.
         var hdr = document.querySelector("header.shell-nav");
+        // MEASURED, not computed (Kerry 10/9: the leaderboard showed a band
+        // of empty space between the header and this bar on his iPhone): once
+        // the page has scrolled the sticky header sits where it pins, so the
+        // bar goes exactly at its rendered bottom, whatever the phone reports
+        // for the notch inset. At the top of the page the CSS sum is used.
         var place = function () {
             if (!hdr) return;
             var cs = getComputedStyle(hdr);
             var stuck = cs.position === "sticky" || cs.position === "fixed";
-            nav.style.top = (stuck ? hdr.offsetHeight + (parseFloat(cs.top) || 0) : 0) + "px";
+            if (!stuck) { nav.style.top = "0px"; return; }
+            var top = (window.scrollY || 0) > 0 ? Math.round(hdr.getBoundingClientRect().bottom)
+                                                : hdr.offsetHeight + (parseFloat(cs.top) || 0);
+            if (nav.style.top !== top + "px") nav.style.top = top + "px";
         };
         place();
         if (window.ResizeObserver && hdr) new ResizeObserver(place).observe(hdr);
         window.addEventListener("resize", place);
+        var tick = false;
+        window.addEventListener("scroll", function () {
+            if (tick) return; tick = true;
+            requestAnimationFrame(function () { tick = false; place(); });
+        }, {passive: true});
         var a = document.getElementById("se-tg-score"), b = document.getElementById("se-tg-board");
         a.href = "/member/score?t=" + encodeURIComponent(t);
         b.href = "/member/score/board?t=" + encodeURIComponent(t);

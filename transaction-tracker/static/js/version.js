@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.532.3";
+window.TGF_VERSION = "2.532.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.532.4",
+    date: "2026-10-09",
+    title: "Scorer's LEADERBOARD: no gap between the header and the SCORING | LEADERBOARD bar",
+    changes: [
+      "Kerry 10/9: \"This is how it displays when I click leaderboard. Creates all that space between header and toggles.\" The pinned bar's position was computed from the header's height plus its CSS offset, and on his iPhone that sum came out one notch-inset (47px) too low on the leaderboard page. Once the page scrolls the bar now sits at the header's measured bottom edge, re-measured as he scrolls, so it is flush whatever the phone reports. The scoring page is unchanged."
+    ]
+  },
   {
     version: "2.532.3",
     date: "2026-10-09",
