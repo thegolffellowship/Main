@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <meta name="theme-color" content="#E87C3E">
+    <meta name="theme-color" content="{{ '#002855' if cup_splash else '#E87C3E' }}">
     <meta name="robots" content="noindex">
-    <title>Scorecard · The Golf Fellowship</title>
+    <title>Scorecard · {{ 'Lone Star Cup' if cup_splash else 'The Golf Fellowship' }}</title>
     <link rel="icon" href="/static/tgf-icon.svg">
     <link href="https://fonts.googleapis.com/css2?family=Bitter:wght@600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/css/dashboard.css?v={{ app_version }}">
@@ -22,9 +22,19 @@
         breakpoint: 560px. #}
     <style>
     /* Standard Cup navy (Kerry 10/8 via CoS #1456: "let's make the 002855 the standard Cup navy"): PMS 281 C, RGB 0/40/85. Cup surfaces only. */
-    :root { --lsc-navy: #002855; }
+    :root { --lsc-navy: #002855; --se-ink: #1B1B1B; }
+    /* THE CUP LOOK (Kerry 2026-10-08: "swap the standard TGF Mobile scoring to a
+       Lone Star Cup live scoring look? So everything LSC navy. The top logo the
+       LSC logo. But just for the Lone Star Cup"): on a Cup event's link every
+       black on the page reads the Cup navy, the header is navy and carries the
+       Cup logo. */
+    body.lsc { --se-ink: var(--lsc-navy); }
+    body.lsc header.shell-nav { background: var(--lsc-navy); }
+    body.lsc .se-toggle a.active { background: var(--lsc-navy); border-color: var(--lsc-navy); }
+    body.lsc header.shell-nav.shell-member.shell-slim .shell-brand img { width: auto; height: 64px; }
+    body.lsc.se-tight header.shell-nav.shell-slim .shell-brand img { width: auto; height: 26px; }
         body { background: #FFFFFF; }
-        .se-wrap { max-width: 480px; margin: 0 auto; padding: 20px 20px 40px; color: #1B1B1B;
+        .se-wrap { max-width: 480px; margin: 0 auto; padding: 20px 20px 40px; color: var(--se-ink);
                    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; }
         .se-eyebrow { font-size: 12px; font-weight: 700; letter-spacing: 1.2px; color: #B45A22;
                       text-transform: uppercase; }
@@ -46,7 +56,7 @@
                        border-radius: 9999px; cursor: pointer; color: #fff; text-decoration: none;
                        font: 700 11px/1 Bitter, Georgia, serif; letter-spacing: 1px; text-transform: uppercase; }
         .pr-hiw-link:hover { background: #D06B2E; }
-        .se-pill.dark { border: none; background: #1B1B1B; color: #FFFFFF; }
+        .se-pill.dark { border: none; background: var(--se-ink); color: #FFFFFF; }
         .se-pill.back { height: 50px; font-size: 15px; }
         /* THE CUP SPLASH: the plate is the standard Cup navy (was the sampled #021A34
            from static/lsc-logo.png, Kerry: "match the navy in the logo"), so
@@ -87,11 +97,11 @@
         .se-grp .t { font: 700 11px Bitter, Georgia, serif; text-transform: uppercase; letter-spacing: .5px; }
         .se-grp .t.aus { color: #BF5700; } .se-grp .t.sa { color: #4B6274; }
         .se-grp .nm { font: 600 16px Bitter, Georgia, serif; line-height: 1.3; }
-        .se-pill.line { border: 1px solid #1B1B1B; background: transparent; color: #1B1B1B; }
+        .se-pill.line { border: 1px solid var(--se-ink); background: transparent; color: var(--se-ink); }
         .se-pill:disabled { opacity: .45; }
         .se-name-btn { height: 60px; border-radius: 12px; border: 1px solid #E5E7EB; background: #F8F8F8;
                        display: flex; align-items: center; justify-content: space-between; padding: 0 18px;
-                       font-size: 18px; font-weight: 600; color: #1B1B1B; font-family: inherit; width: 100%;
+                       font-size: 18px; font-weight: 600; color: var(--se-ink); font-family: inherit; width: 100%;
                        cursor: pointer; }
         .se-name-btn span.m { font-size: 13px; font-weight: 500; color: #4B5563; }
         .se-box { padding: 16px; border-radius: 12px; border: 1px solid #E5E7EB; background: #F8F8F8; }
@@ -110,11 +120,11 @@
            sheet; no tee on file is neutral grey. */
         .se-tee { position: absolute; left: 0; top: 0; bottom: 0; width: 16px;   /* Kerry 2026-09-26: twice as wide */
                   border-radius: 12px 0 0 12px; }
-        .se-tee.ring, .se-tee.light { box-shadow: inset 0 0 0 2px #1B1B1B; }
+        .se-tee.ring, .se-tee.light { box-shadow: inset 0 0 0 2px var(--se-ink); }
         .se-tee.ring { background: #FFFFFF !important; }
         .se-tee-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%;
                       margin-right: 6px; vertical-align: 0; }
-        .se-tee-dot.ring, .se-tee-dot.light { box-shadow: inset 0 0 0 2px #1B1B1B; }
+        .se-tee-dot.ring, .se-tee-dot.light { box-shadow: inset 0 0 0 2px var(--se-ink); }
         .se-row { position: relative; padding-left: 30px !important; }
         .se-row { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 12px;
                   background: #F8F8F8; border: 1px solid #E5E7EB; }
@@ -123,8 +133,8 @@
         .se-meta { font-size: 13px; color: #4B5563; white-space: normal; }
         .se-minus, .se-plus { width: 48px; height: 48px; border-radius: 24px; font-size: 24px; line-height: 1;
                               font-family: inherit; cursor: pointer; flex: none; }
-        .se-minus { border: 1px solid #1B1B1B; background: #FFFFFF; color: #1B1B1B; }
-        .se-plus { border: none; background: #1B1B1B; color: #FFFFFF; }
+        .se-minus { border: 1px solid var(--se-ink); background: #FFFFFF; color: var(--se-ink); }
+        .se-plus { border: none; background: var(--se-ink); color: #FFFFFF; }
         .se-score { width: 52px; display: flex; flex-direction: column; align-items: center; gap: 1px; flex: none; }
         .se-score .v { font-family: Bitter, Georgia, serif; font-size: 32px; font-weight: 700; line-height: 1;
                        font-variant-numeric: tabular-nums; }
@@ -150,7 +160,7 @@
                    display: flex; flex-direction: column; justify-content: space-between; }
         .se-pops .g { display: flex; flex-direction: column; gap: 2px; }
 
-        .se-pop { width: 7px; height: 7px; border-radius: 50%; background: #1B1B1B; display: block; }
+        .se-pop { width: 7px; height: 7px; border-radius: 50%; background: var(--se-ink); display: block; }
         .se-pop.t { background: #E87C3E; }
         /* Par-3 ×: the team stroke the no-strokes-on-par-3s rule removed
            (Kerry 2026-09-29), in the team-pop position, as on the print. */
@@ -234,7 +244,7 @@
         .se-mc-grid table { width: 100%; border-collapse: collapse; table-layout: fixed; font-variant-numeric: tabular-nums; margin-bottom: 6px; }
         .se-mc-grid th, .se-mc-grid td { text-align: center; font-size: 13px; padding: 4px 0; position: relative; }
         .se-mc-grid th:first-child { width: 36px; }
-        .se-mc-grid tr.h td, .se-mc-grid tr.h th { background: #1B1B1B; color: #FFFFFF; font-size: 11px; font-weight: 700; }
+        .se-mc-grid tr.h td, .se-mc-grid tr.h th { background: var(--se-ink); color: #FFFFFF; font-size: 11px; font-weight: 700; }
         .se-mc-grid tr.p td, .se-mc-grid tr.p th { color: #6B7280; font-size: 11px; }
         .se-mc-grid td.dim { color: #C4C4C4; }
         .se-mc-grid .w { display: inline-block; min-width: 22px; line-height: 20px; border-radius: 11px; color: #FFFFFF; font-weight: 700; }
@@ -242,7 +252,7 @@
         .se-mc-grid .pu { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px;
                           border-radius: 50%; box-shadow: inset 0 0 0 1.5px #E87C3E; }
         .se-mc-grid .pp { position: absolute; top: 1px; left: 0; right: 0; display: flex; justify-content: center; gap: 1px; }
-        .se-mc-grid .pp i { width: 4px; height: 4px; border-radius: 50%; background: #1B1B1B; display: block; }
+        .se-mc-grid .pp i { width: 4px; height: 4px; border-radius: 50%; background: var(--se-ink); display: block; }
         .se-mc-chip { display: inline-block; min-width: 24px; padding: 2px 3px; border-radius: 4px; color: #FFFFFF; font: 700 10px Bitter, Georgia, serif; }
         .se-mc-chip.a { background: var(--ma); } .se-mc-chip.b { background: var(--mb); }
         .se-mc-note { font-size: 11px; color: #6B7280; text-align: center; }
@@ -325,7 +335,7 @@
         .se-strip { display: grid; gap: 4px; }
         .se-cell { height: 44px; border-radius: 8px; display: flex; flex-direction: column; align-items: center;
                    justify-content: center; background: #F8F8F8; border: 1px solid #E5E7EB; cursor: pointer;
-                   font-family: inherit; color: #1B1B1B; padding: 0; }
+                   font-family: inherit; color: var(--se-ink); padding: 0; }
         /* GROUP CARD (Kerry 2026-09-26: "Numbers ... should be bigger and centered
            ... turn the same green and have the little checkmark in the upper
            right"). */
@@ -334,7 +344,7 @@
         .se-cell .k { position: absolute; top: 2px; right: 4px; font-size: 10px; font-weight: 800; line-height: 1; }
         .se-cell.saved { background: #d1f4e0; border-color: #d1f4e0; color: #0d7556; }
         .se-cell.saved .n, .se-cell.saved .k { color: #0d7556; }
-        .se-cell.cur .n { color: #1B1B1B; }
+        .se-cell.cur .n { color: var(--se-ink); }
         .se-cell.waiting { background: #FEF3C7; border-color: #FEF3C7; }
         .se-cell.cur { background: #FFFFFF; border: 2px solid #E87C3E; }
         .se-status { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #15803D; margin: 14px 0 10px; }
@@ -349,10 +359,10 @@
         .se-card { border-radius: 12px; border: 1px solid #E5E7EB; overflow-x: auto; }
         .se-card table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
         .se-card th, .se-card td { text-align: center; padding: 8px 2px; font-size: 13px; }
-        .se-card thead th { background: #1B1B1B; color: #FFFFFF; font-weight: 700; font-size: 12px; }
+        .se-card thead th { background: var(--se-ink); color: #FFFFFF; font-weight: 700; font-size: 12px; }
         .se-card tr.par td { background: #F8F8F8; color: #4B5563; border-bottom: 1px solid #E5E7EB; }
         .se-card td.nm { text-align: left; padding-left: 8px; color: #4B5563; white-space: nowrap; }
-        .se-card tr.me td { font-size: 16px; font-weight: 700; color: #1B1B1B; }
+        .se-card tr.me td { font-size: 16px; font-weight: 700; color: var(--se-ink); }
         .se-card td.flagged { background: #FEE2E2; }
         .se-card button.hole { width: 100%; background: none; border: none; font: inherit; color: inherit;
                                padding: 0; cursor: pointer; text-decoration: underline dotted #B45A22;
@@ -373,15 +383,15 @@
         .se-help:hover, .se-help.on { background: #D06B2E; }
         .se-helptext { margin-top: 8px; padding: 10px 12px; border-radius: 10px; background: #F8F8F8;
                        font-size: 14px; line-height: 1.45; color: #4B5563; white-space: normal; }
-        .se-seg { display: flex; border: 1px solid #1B1B1B; border-radius: 24px; overflow: hidden; margin: 12px 0 10px; }
-        .se-seg button { flex: 1; height: 40px; border: none; background: #FFFFFF; color: #1B1B1B; cursor: pointer;
+        .se-seg { display: flex; border: 1px solid var(--se-ink); border-radius: 24px; overflow: hidden; margin: 12px 0 10px; }
+        .se-seg button { flex: 1; height: 40px; border: none; background: #FFFFFF; color: var(--se-ink); cursor: pointer;
                          font: 700 13px 'Helvetica Neue', Helvetica, Arial, sans-serif; letter-spacing: 1px; }
-        .se-seg button.on { background: #1B1B1B; color: #FFFFFF; }
+        .se-seg button.on { background: var(--se-ink); color: #FFFFFF; }
         .se-check td { padding: 4px 0; vertical-align: middle; }
-        .se-check td.nm { font-weight: 600; color: #1B1B1B; font-size: 14px; }
+        .se-check td.nm { font-weight: 600; color: var(--se-ink); font-size: 14px; }
         .se-check td.tot { font-weight: 700; background: #F8F8F8; font-size: 15px; }
         .se-check button.cell { width: 100%; min-height: 40px; border: none; background: none; cursor: pointer; padding: 0;
-                                font: 700 17px 'Helvetica Neue', Helvetica, Arial, sans-serif; color: #1B1B1B;
+                                font: 700 17px 'Helvetica Neue', Helvetica, Arial, sans-serif; color: var(--se-ink);
                                 font-variant-numeric: tabular-nums; border-radius: 8px; }
         .se-check button.cell.changed { background: #FEF3C7; }
         .se-check button.cell.picked { background: #E87C3E; color: #FFFFFF; }
@@ -390,14 +400,14 @@
         .se-picker .h { font-size: 15px; font-weight: 700; margin-bottom: 8px; }
         .se-picker .row { display: flex; gap: 6px; }
         .se-picker .row button { flex: 1; height: 48px; border-radius: 10px; border: 1px solid #E5E7EB; background: #F8F8F8;
-                                 font: 700 20px Bitter, Georgia, serif; color: #1B1B1B; cursor: pointer; padding: 0; }
-        .se-picker .row button.on { background: #1B1B1B; border-color: #1B1B1B; color: #FFFFFF; }
+                                 font: 700 20px Bitter, Georgia, serif; color: var(--se-ink); cursor: pointer; padding: 0; }
+        .se-picker .row button.on { background: var(--se-ink); border-color: var(--se-ink); color: #FFFFFF; }
         .se-tots { display: grid; grid-template-columns: repeat(auto-fit, minmax(72px, 1fr)); gap: 6px; }
         .se-tots div { background: #F8F8F8; border: 1px solid #E5E7EB; border-radius: 10px; padding: 6px 4px;
                        text-align: center; font-size: 12px; color: #4B5563; white-space: nowrap; overflow: hidden; }
-        .se-tots b { display: block; font: 700 22px Bitter, Georgia, serif; color: #1B1B1B; }
+        .se-tots b { display: block; font: 700 22px Bitter, Georgia, serif; color: var(--se-ink); }
         .se-cam { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
-                  height: 180px; border-radius: 12px; background: #1B1B1B; color: #FFFFFF; font-size: 15px; cursor: pointer; }
+                  height: 180px; border-radius: 12px; background: var(--se-ink); color: #FFFFFF; font-size: 15px; cursor: pointer; }
         .se-cam input, .se-retake input { display: none; }
         .se-shot { width: 100%; max-height: 260px; object-fit: contain; border-radius: 12px; background: #F8F8F8;
                    border: 1px solid #E5E7EB; display: block; }
@@ -405,8 +415,8 @@
                      text-decoration: underline; cursor: pointer; }
         .se-chips { display: flex; flex-wrap: wrap; gap: 8px; }
         .se-chip { padding: 10px 16px; border-radius: 24px; border: 1px solid #E5E7EB; background: #F8F8F8; cursor: pointer;
-                   font: 600 15px 'Helvetica Neue', Helvetica, Arial, sans-serif; color: #1B1B1B; }
-        .se-chip.on { background: #1B1B1B; border-color: #1B1B1B; color: #FFFFFF; }
+                   font: 600 15px 'Helvetica Neue', Helvetica, Arial, sans-serif; color: var(--se-ink); }
+        .se-chip.on { background: var(--se-ink); border-color: var(--se-ink); color: #FFFFFF; }
         .se-input { width: 100%; height: 48px; border-radius: 8px; border: 1px solid #E5E7EB; padding: 0 12px;
                     font-size: 16px; font-family: inherit; box-sizing: border-box; margin-top: 8px; }
         .se-input:focus { outline: none; border-color: #E87C3E; box-shadow: 0 0 0 3px rgba(232,124,62,.2); }
@@ -425,7 +435,7 @@
                  box-shadow: inset 0 0 0 2px #E87C3E; }
         .se-pu-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 10px; }
         .se-pu.sm { min-width: 18px; line-height: 18px; border-radius: 9px; text-align: center; font-weight: 700;
-                    font-size: 12px; color: #1B1B1B; }
+                    font-size: 12px; color: var(--se-ink); }
         .se-pukey { margin-top: 4px; }
         .se-pukey .se-pu.sm { display: inline-flex; align-items: center; justify-content: center; gap: 0;
                               width: 20px; height: 20px; min-width: 0; line-height: 1; }
@@ -480,7 +490,7 @@
         .se-mini { display: grid; grid-template-columns: repeat(9, minmax(0, 1fr)); gap: 3px; margin-top: 6px; width: 100%; }
         .se-mini button { height: 32px; border-radius: 7px; border: 1px solid #E5E7EB; background: #FFFFFF; cursor: pointer;
                           display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 0;
-                          font: 700 15px 'Helvetica Neue', Helvetica, Arial, sans-serif; color: #1B1B1B;
+                          font: 700 15px 'Helvetica Neue', Helvetica, Arial, sans-serif; color: var(--se-ink);
                           font-variant-numeric: tabular-nums; }
         .se-mini button .n { font-size: 8px; font-weight: 600; color: #9CA3AF; line-height: 1; }
         /* THE TURN, compact (Kerry 2026-09-26: "could definitely take up less
@@ -502,8 +512,9 @@
         }
     </style>
 </head>
-<body>
+<body{% if cup_splash %} class="lsc"{% endif %}>
     {% set SHELL_TITLE = 'Scorecard' %}{% set SHELL_ACTIVE = '' %}{% set SHELL_SLIM = True %}
+    {% set SHELL_LOGO = '/static/lsc-logo-dark.png' if cup_splash else '' %}
     {% include '_shell_nav.html' %}
     {% if cup_splash %}
     {# THE CUP SPLASH (Kerry 2026-10-08, verbatim: "a Lonestar cup logo on a
@@ -578,8 +589,8 @@
         let photo = store.get(K.photo, null);        // {op_id, data, submitted, sent}
 
         const ICON = {
-            back: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#1B1B1B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>',
-            fwd: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#1B1B1B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>',
+            back: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>',
+            fwd: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>',
             pen: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#B45A22" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>',
             check: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#15803D" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>',
             warn: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#78350F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8v4"/><path d="M12 16h.01"/><circle cx="12" cy="12" r="9"/></svg>',

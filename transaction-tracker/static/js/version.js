@@ -1,5 +1,17 @@
-window.TGF_VERSION = "2.528.8";
+window.TGF_VERSION = "2.528.9";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.528.9",
+    date: "2026-10-08",
+    title: "Mobile scoring wears the Lone Star Cup look on Cup links",
+    changes: [
+      "Kerry 10/8: \"Can you swap the standard TGF Mobile scoring to a Lone Star Cup live scoring look? So everything LSC navy. The top logo the LSC logo. But just for the Lone Star Cup.\" On a scoring link for any Lone Star Cup round (the three Cup sessions and the Friday practice round, the same rule as the splash):
+- every black on the page (text, buttons, toggles, card headers, pops, arrows) reads the Cup navy #002855;
+- the header is navy and carries the Cup logo;
+- the browser bar is navy and the tab reads Scorecard · Lone Star Cup.
+Every other event's scoring page is unchanged. score_entry.html reads one colour token (--se-ink) that body.lsc turns navy; the shared header takes an optional SHELL_LOGO."
+    ]
+  },
   {
     version: "2.528.8",
     date: "2026-10-08",

@@ -653,6 +653,10 @@ the Starter Sheet logo and Proxy logos too."
   intro, tabs or controls; the SUMMARY once all three sessions are drawn,
   otherwise "The Draw is coming". The Cup is the event in
   `lsc_matches.event_id`.
+- **Cup look on mobile scoring (v2.528.9):** when `group_is_cup` is true,
+  `score_entry.html` sets `body.lsc`. That turns `--se-ink` (every former
+  #1B1B1B) navy, makes the header navy, and passes
+  `SHELL_LOGO=/static/lsc-logo-dark.png` to `_shell_nav.html`.
 - **Phone splash (v2.528.0):** `score_entry.group_is_cup` is true for a
   round in any LSC event (the practice round too), plus the `lsc:` and
   `lscprev:` session rounds. It holds 3 s (Kerry 10/8).
