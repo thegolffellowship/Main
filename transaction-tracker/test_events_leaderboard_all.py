@@ -46,9 +46,9 @@ for role, want in (("admin", 200), ("manager", 200), ("member", 200)):
     ok = (r1.status_code == 200 and r2.status_code not in (401, 403)) if want == 200 else (r1.status_code in (401, 403) and r2.status_code in (401, 403))
     check(f"{role}: list + event routes {'open' if want == 200 else 'refused'}", ok, f"{r1.status_code} {r2.status_code}")
 html = open("templates/contests.html", encoding="utf-8").read()
-check("the EVENTS tab: manager-only on the staff page, a plain tab on /member (v2.523.4, #1146-1), marked BETA",
+check("the EVENTS tab: manager-only on the staff page, a plain tab on /member (v2.523.4, #1146-1), no BETA badge (Kerry 2026-10-08)",
       '{% if member_mode %}<button class="top-tab" data-top="events">' in html
-      and '<button class="top-tab manager-only" data-top="events"' in html and 'class="evlb-beta">BETA' in html)
+      and '<button class="top-tab manager-only" data-top="events"' in html and 'class="evlb-beta">BETA' not in html)
 check("every board carries the Unofficial / GG-official line, money as computed",
       'Golf Genius is the official scorer' in html and 'Money shown as computed, not as paid.' in html)
 d = db.get_events_leaderboard(db_path=tmp)

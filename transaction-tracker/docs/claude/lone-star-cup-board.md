@@ -641,6 +641,13 @@ the Starter Sheet logo and Proxy logos too."
   `hole_pars`. A session whose round isn't seeded takes the event's course
   (`lsc_cup._fill_event_course`). Matches are numbered 1-28. The Cup tab
   is navy where it was black.
+- **Cup tab layout (v2.528.7, Kerry 10/8):**
+  - LONE STAR CUP is the first leaderboard tab; EVENTS has no BETA.
+  - HOW IT WORKS sits in the navy header. The Final Rosters chip is gone.
+  - The intro (`#lsc-intro-p`) and the cup-status line (`#lsc-hiw-cupline`)
+    now live in the HIW popup.
+  - The selected session's score flanks the session toggle
+    (`.lsc-bd-segrow`).
 - **Members' draw page (v2.528.5):** `/member/cup-draw` is public (member
   tier, no login). It renders `cup_draw.html` with `member_view=True`: no
   intro, tabs or controls; the SUMMARY once all three sessions are drawn,

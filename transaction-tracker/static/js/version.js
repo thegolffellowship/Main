@@ -1,5 +1,16 @@
-window.TGF_VERSION = "2.528.6";
+window.TGF_VERSION = "2.528.7";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.528.7",
+    date: "2026-10-08",
+    title: "The Lone Star Cup tab, cleaned up",
+    changes: [
+      "Kerry 10/8: \"Move the LONE STAR CUP toggle to the left on the nav bar. Remove BETA badge from EVENTS.\" LONE STAR CUP is now the first tab on LEADERBOARD, and EVENTS no longer carries BETA.",
+      "\"Move the HOW IT WORKS button into the LONE STAR CUP header. Remove the Final Rosters button. Remove the text rows for Austin vs San Antonio and San Antonio holds the cup. Put those things in how it works.\" HOW IT WORKS sits in the navy Cup header. The Final Rosters chip is gone. The Austin-vs-San-Antonio intro and the who-holds-the-Cup line now open the How It Works popup under THE CUP.",
+      "\"Remove the FOURBALL 2026-10-10 row and score. Put the session scores left and right of the SESSION toggles.\" The session title row is gone. The selected session's score sits beside the FOURBALL | FOURSOMES | SINGLES toggle, Austin on the left and San Antonio on the right.",
+      "On a phone the session toggle and the stacked match names fit; a long name scales down instead of cutting off."
+    ]
+  },
   {
     version: "2.528.6",
     date: "2026-10-08",

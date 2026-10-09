@@ -254,6 +254,20 @@
                              font: 700 13px/1 'Bitter', serif; letter-spacing: .04em; text-transform: uppercase; }
         .lsc-bd-seg button.on { background: var(--lsc-navy, #002855); color: #fff; }
         .lsc-bd-seg.sm button { min-height: 34px; font-size: 12px; }
+        .lsc-bd-segrow { display: flex; align-items: center; gap: 10px; }
+        .lsc-bd-segrow .lsc-bd-seg { flex: 1 1 auto; }
+        .lsc-bd-segrow .ss { flex: 0 0 auto; min-width: 2.2em; text-align: center; font: 800 26px/1 'Bitter', Georgia, serif; }
+        .lsc-bd-segrow .ss.au { color: #BF5700; } .lsc-bd-segrow .ss.sa { color: #4B6274; }
+        @media (max-width: 560px) {
+            .lsc-bd-segrow { gap: 6px; }
+            .lsc-bd-segrow .ss { font-size: 20px; min-width: 1.3em; }
+            .lsc-bd-segrow .lsc-bd-seg button { font-size: 11px; letter-spacing: 0; padding: 0 4px; }
+            /* the stacked names keep whole on a phone: smaller type, a
+               narrower VS block, smaller chips */
+            #lsc-board .mp-strip-name.lscn { padding-left: 0.45rem; padding-right: 0.45rem; }
+            #lsc-board .mp-strip-bar { flex: 0 0 44px; min-width: 44px; width: 44px; }
+            #lsc-board .mp-strip-mono { width: 28px; }
+        }
         .lsc-bd-seg.sm button.on { background: #1B1B1B; }
         .lsc-bd-seg .lv { font-style: normal; font-size: 10px; color: #E87C3E; margin-left: 4px; }
         .lsc-bd-seg button.on .lv { color: #FFD7BC; }
@@ -1713,6 +1727,7 @@
         #section-lone-star-cup .lsc-legend .li .ic { color: var(--lsc-navy, #002855); }
         /* stacked "First LAST" names on the Cup's match strips */
         .mpv2 .mp-strip-name.lscn b { text-transform: none; font: 700 0.95rem/1.25 'Bitter', Georgia, serif; }
+        @media (max-width: 560px) { #lsc-board .mp-strip-name.lscn b { font-size: calc(0.8rem * var(--k, 1)); } }
         .mpv2 .mp-strip-name.lscn { padding-top: 6px; padding-bottom: 6px; }
         /* the pops grid (before a ball is struck) */
         .lsc-pops-wrap { padding: 10px 10px 12px; display: flex; flex-direction: column; gap: 8px; }
@@ -2027,10 +2042,12 @@
                 {# Kerry 2026-09-23: admin + manager, still BETA. Kerry 2026-10-02
                    (CoS #1146-1, "Go" 10/3): released to members, both chapters;
                    visible, not announced; still BETA and labelled Unofficial. #}
-                {% if member_mode %}<button class="top-tab" data-top="events">Events <span class="evlb-beta">BETA</span></button>{% else %}<button class="top-tab manager-only" data-top="events" style="display:none;">Events <span class="evlb-beta">BETA</span></button>{% endif %}
-                <button class="top-tab active" data-top="points-race">Points Races</button>
-                {# Lone Star Cup sits LEFT of Match Play (Kerry 2026-09-12) #}
+                {# Lone Star Cup sits FIRST, at the left (Kerry 2026-10-08: "Move the
+                   LONE STAR CUP toggle to the left on the nav bar"); EVENTS
+                   drops its BETA badge (same message). #}
                 <button class="top-tab" data-top="lone-star-cup">Lone Star Cup</button>
+                {% if member_mode %}<button class="top-tab" data-top="events">Events</button>{% else %}<button class="top-tab manager-only" data-top="events" style="display:none;">Events</button>{% endif %}
+                <button class="top-tab active" data-top="points-race">Points Races</button>
                 <button class="top-tab" data-top="match-play">Match Play</button>
                 <button class="top-tab manager-only" data-top="enrollment">Enrollment</button>
             </div>
@@ -2340,21 +2357,11 @@
                         <div class="t">The Lone Star Cup</div>
                         <div class="meta"><b id="lsc-ev-dates"></b><span class="v" id="lsc-ev-venue"></span></div>
                     </div>
+                    <!-- HOW IT WORKS lives in the header; the Final Rosters chip
+                         and the intro lines are gone from the page (Kerry
+                         2026-10-08), the intro now opens the HIW popup -->
+                    <button id="lsc-hiw-btn" class="pr-hiw-link" type="button" style="margin-left:auto;">How It Works</button>
                 </div>
-                <!-- HIW left, badges right (Kerry 2026-08-06) -->
-                <div style="margin-top:0.7rem; display:flex; align-items:center; gap:0.6rem; flex-wrap:wrap;">
-                    <button id="lsc-hiw-btn" class="pr-hiw-link" type="button">How It Works</button>
-                    <!-- Status chip: static default reads PROJECTED; lscLoad
-                         flips it to FINAL ROSTERS when the payload carries
-                         roster_final (Kerry 2026-09-11: "Should have FINAL
-                         ROSTERS badge now") -->
-                    <span class="lsc-chip" id="lsc-status-chip" style="margin-left:auto;">&#9679;&nbsp;Projected Rosters &middot; Live from today's standings</span>
-                </div>
-                <p class="lsc-intro" id="lsc-intro-p">Austin vs San Antonio — each chapter fields a
-                12-player team earned through the season's contests. Rosters are
-                decided after the City and TGF Championships; until then, every
-                seat below is projected live from the current standings, just
-                like the projected payouts.</p>
                 <!-- LIVE CUP BOARD (Track B, #654/#659): Ryder Cup-style team
                      points + match cards, rendered by lscBoardLoad() from
                      /api/lsc/board. Hidden until the lsc_matches dial exists
@@ -2381,6 +2388,14 @@
                     <div class="pr-hiw-title">How <span class="hiw-name">The Lone Star Cup</span> Works</div>
                     <div class="pr-hiw-chips"><span>Austin vs San Antonio</span><span>14 Seats Per Chapter</span><span id="lsc-hiw-venue-chip">The Hideout &middot; Brownwood, TX</span></div>
                     <div class="pr-hiw-secs">
+                        <div>
+                            <div class="pr-hiw-sec-h">The Cup</div>
+                            <div class="pr-hiw-sec-b">
+                                <p class="lsc-intro" id="lsc-intro-p" style="margin-top:0;">Austin vs San Antonio — each chapter fields a
+                                team earned through the season's contests.</p>
+                                <p class="lsc-intro" id="lsc-hiw-cupline" style="display:none;"></p>
+                            </div>
+                        </div>
                         <div>
                             <div class="pr-hiw-sec-h">The Weekend</div>
                             <div class="lsc-sched">
@@ -3078,7 +3093,7 @@
             <div class="t sa"><span class="p">${lscFmtPts(S.points)}</span><span class="nm">SAN ANTONIO</span></div>
         </div>` + (showProj
             ? `<div class="lsc-bd-proj">With matches on the course: Austin ${lscFmtPts(A.projected)} &mdash; ${lscFmtPts(S.projected)} San Antonio</div>`
-            : "") + (needsTxt ? `<div class="lsc-bd-proj">${escapeHtml(needsTxt)}</div>` : "")
+            : "")
             + (d.source === "mock"
             // Staff-preview disclosure — mock scores never reach members
             // (the board_live gate), but the preview must say what it is.
@@ -3088,6 +3103,9 @@
         // THE DRAW summary (Kerry 10/8)
         const sessOff = [];
         (d.sessions || []).reduce((t, x, i) => { sessOff[i] = t; return t + (x.matches || []).length; }, 0);
+        // "San Antonio holds the Cup ..." moves into HOW IT WORKS (Kerry 10/8)
+        const cupLine = document.getElementById("lsc-hiw-cupline");
+        if (cupLine) { cupLine.textContent = needsTxt; cupLine.style.display = needsTxt ? "" : "none"; }
         const sessions = (d.sessions || []).map((sess, si) => {
             let au = 0, sa = 0;
             (sess.matches || []).forEach(m => {
@@ -3157,8 +3175,11 @@
         }
         window.lscView = window.lscView || "matches";
         const cur = sessions.find(x => x.id === window.lscSel) || sessions[0];
-        const segS = sessions.length > 1 ? `<div class="lsc-bd-seg" role="tablist">${sessions.map(x =>
-            `<button type="button" role="tab" aria-selected="${x.id === (cur || {}).id}" class="${x.id === (cur || {}).id ? "on" : ""}" data-lscsess="${escapeHtml(x.id)}">${escapeHtml(FMT_TAB[x.format] || x.label)}${x.live ? ' <i class="lv">LIVE</i>' : ""}</button>`).join("")}</div>` : "";
+        // the selected session's score sits left (Austin) and right (SA) of the
+        // session toggles (Kerry 10/8: "Put the session scores left and right
+        // of the SESSION toggles")
+        const segS = sessions.length > 1 ? `<div class="lsc-bd-segrow"><span class="ss au" title="Austin, this session">${lscFmtPts((cur || {}).au)}</span><div class="lsc-bd-seg" role="tablist">${sessions.map(x =>
+            `<button type="button" role="tab" aria-selected="${x.id === (cur || {}).id}" class="${x.id === (cur || {}).id ? "on" : ""}" data-lscsess="${escapeHtml(x.id)}">${escapeHtml(FMT_TAB[x.format] || x.label)}${x.live ? ' <i class="lv">LIVE</i>' : ""}</button>`).join("")}</div><span class="ss sa" title="San Antonio, this session">${lscFmtPts((cur || {}).sa)}</span></div>` : "";
         let body = "";
         if (cur) {
             const segV = `<div class="lsc-bd-seg sm" role="tablist">${["matches", "skins"].map(v =>
@@ -3179,7 +3200,7 @@
                 ? ((skinsAll ? skinsAll + '<div class="lsc-sk-hiw"><a class="pr-hiw-link" href="/member/lonestarcup/info' + (new URLSearchParams(location.search).get("preview") === "1" ? "?preview=1" : "") + '#skins">How skins work</a></div>' : "")
                    || '<div class="lsc-bd-proj">No skins yet.</div>')
                 : cur.cards;
-            body = `<div class="lsc-bd-sess">${sessScore}${segV}${inner}</div>`;
+            body = `<div class="lsc-bd-sess">${sessions.length > 1 ? "" : sessScore}${segV}${inner}</div>`;
         }
         // Cards the reader had open stay open across the 20 s live refresh,
         // and ?match=<dial id> opens that match's card the first time and
@@ -5329,7 +5350,8 @@
         else { barCls = 'tie'; barTxt = o.margin || 'vs'; }
         // The Lone Star Cup passes each side's players as their own lines,
         // "First LAST" in Bitter (Kerry 10/8: "Stack full names rather than wrap").
-        const stack = (L, right) => `<span class="mp-strip-name lscn${right ? ' right' : ''}">${L.map(n => `<b>${escapeHtml(n)}</b>`).join('')}</span>`;
+        // a long name scales down instead of cutting off (--k, 12 characters fit)
+        const stack = (L, right) => `<span class="mp-strip-name lscn${right ? ' right' : ''}">${L.map(n => `<b style="--k:${Math.min(1, 12 / Math.max(String(n).length, 1)).toFixed(2)}">${escapeHtml(n)}</b>`).join('')}</span>`;
         const aName = o.aLines ? stack(o.aLines, false) : `<span class="mp-strip-name"><em>${escapeHtml(A.first)}</em><b>${escapeHtml(A.last)}</b></span>`;
         const bName = o.bLines ? stack(o.bLines, true) : `<span class="mp-strip-name right"><em>${escapeHtml(B.first)}</em><b>${escapeHtml(B.last)}</b></span>`;
         return `<div class="mp-strip">${aMono}${aName}<span class="mp-strip-bar ${barCls}">${escapeHtml(barTxt)}</span>${bName}${bMono}</div>`;
