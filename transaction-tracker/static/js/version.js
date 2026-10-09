@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.527.4";
+window.TGF_VERSION = "2.527.5";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.527.5",
+    date: "2026-10-08",
+    title: "THE DRAW shows each match's head-to-head handicaps",
+    changes: [
+      "Kerry 10/8: \"Can we also calculate what the head to head handicaps will be when the matches are drawn. All calculations considered for the formats? Perhaps a Full Handicap / Playing Handicap Number besides either player (FOURBALL & SINGLES) or team (FOURSOMES)\". Every drawn match on THE DRAW shows each player's FULL course handicap from the locked table, then the PLAYING handicap after the format's allowance: Fourball 90%, Singles 100%, and Foursomes as one TEAM figure of 60% low + 40% high. A green +n shows the strokes off the low in the match. The figures come from the same engine as the Cup scorecards (lsc_draw.match_math over lsc_cup.lsc_card_math), so the board and the cards agree. Guard: test_lsc_draw.py.",
+      "THE DRAW splash: the logo and dates sit a little higher above the Start The Draw button."
+    ]
+  },
   {
     version: "2.527.4",
     date: "2026-10-08",

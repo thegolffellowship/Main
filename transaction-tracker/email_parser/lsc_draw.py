@@ -184,6 +184,61 @@ def state(event_id: int, db_path=None) -> dict:
     return out
 
 
+FORMATS = {"fb": "fourball", "fs": "chapman", "sg": "singles"}
+
+
+def match_math(event_id: int, db_path=None) -> dict:
+    """THE HEAD-TO-HEAD HANDICAPS of every drawn match (Kerry 10/8: "calculate
+    what the head to head handicaps will be when the matches are drawn. All
+    calculations considered for the formats ... a Full Handicap / Playing
+    Handicap Number besides either player (FOURBALL & SINGLES) or team
+    (FOURSOMES)"). Same order as `state`. Per side, each player's FULL course
+    handicap (the lock's ch) and, from the cards' own engine
+    (`lsc_cup.lsc_card_math`, so the board and the cards can't disagree),
+    the PLAYING handicap after the format's allowance (Fourball 90%, Singles
+    100%, Foursomes one team figure, 60% low + 40% high) and the strokes OFF
+    the low in the match. {sess: {pool: [{"a": side, "s": side}]}}, side =
+    {"players": [{"cid", "ch"}], "ph", "off"} for Foursomes (team) or
+    {"players": [{"cid", "ch", "ph", "off"}]} otherwise. A player with no
+    locked ch leaves that match's numbers out (None)."""
+    from email_parser.lsc_cup import lsc_card_math
+    lock = _lock_players(event_id, db_path)
+    pl = pools(event_id, db_path)
+    st = state(event_id, db_path)
+
+    def ch(c):
+        v = (lock.get(str(c)) or {}).get("ch")
+        return None if v is None else float(v)
+
+    out = {k: {p: [] for p in POOLS} for k in SESSIONS}
+    for k, fmt in FORMATS.items():
+        for pool in POOLS:
+            ents = {t: {e["key"]: e for e in pl[k][pool][t]} for t in ("austin", "sa")}
+            for a_key, s_key in st[k][pool]:
+                a, b = ents["austin"].get(a_key), ents["sa"].get(s_key)
+                if not a or not b:
+                    out[k][pool].append(None)
+                    continue
+                rows = ([{"cid": c, "ph": ch(c), "team": "austin"} for c in a["cids"]]
+                        + [{"cid": c, "ph": ch(c), "team": "sa"} for c in b["cids"]])
+                if any(r["ph"] is None for r in rows):
+                    out[k][pool].append(None)
+                    continue
+                m = lsc_card_math(fmt, rows)
+                sides = {}
+                for side, team in (("a", "austin"), ("s", "sa")):
+                    idx = [i for i, r in enumerate(rows) if r["team"] == team]
+                    players = [{"cid": rows[i]["cid"], "ch": rows[i]["ph"]} for i in idx]
+                    if fmt == "chapman":
+                        sides[side] = {"players": players, "ph": m[idx[0]]["hcp"], "off": m[idx[0]]["off"]}
+                    else:
+                        for p_, i in zip(players, idx):
+                            p_.update(ph=m[i]["hcp"], off=m[i]["off"])
+                        sides[side] = {"players": players}
+                out[k][pool].append(sides)
+    return out
+
+
 def _can_complete(a_keys, s_keys, forbid) -> bool:
     """The page's canComplete: can the remaining Austin entrants each still
     get an SA opponent with no forbidden (AM-repeat) pairing?"""

@@ -144,4 +144,30 @@ with db._connect(DB) as _c:
 db.set_app_setting("oneoff_charges", json.dumps({"3329": {"addons": [{"key": "friday", "event_id": 3330}]}}), db_path=DB)
 check("the Friday practice round opens the dates", lsc_draw.dates_label(3329, db_path=DB) == "OCTOBER 9\u201311, 2026",
       lsc_draw.dates_label(3329, db_path=DB))
+# HEAD-TO-HEAD HANDICAPS (Kerry 10/8), from the cards' engine
+_lk = {str(c): {"name": n, "team": t, "index": 1.0, "ch": ch} for c, n, t, ch in
+       ((109, "Neal Cloer", "austin", 4), (4, "John Wade", "austin", 9), (18, "Kerry Niester", "sa", 1), (703, "Michael Mesa", "sa", 0))}
+_full = json.loads(db.get_app_setting("lsc_handicap_lock", db_path=DB))
+_full["3329"]["players"].update(_lk)
+db.set_app_setting("lsc_handicap_lock", json.dumps(_full), db_path=DB)
+lsc_draw.clear(3329, "fb", db_path=DB); lsc_draw.clear(3329, "sg", db_path=DB)
+lsc_draw.land(3329, "fb", "low", "AUS-P2", "SA-P2", db_path=DB)
+_m = lsc_draw.match_math(3329, db_path=DB)["fb"]["low"][0]
+check("FOURBALL: full / 90% playing / strokes off the low player",
+      [(p["ch"], p["ph"], p["off"]) for p in _m["a"]["players"] + _m["s"]["players"]] == [(4, 4, 4), (9, 8, 8), (1, 1, 1), (0, 0, 0)], _m)
+for _pool in ("low", "high"):   # finish Saturday AM so a Foursomes match can land
+    _P = lsc_draw.pools(3329, db_path=DB)["fb"][_pool]
+    for _ in range(8):
+        _st = lsc_draw.state(3329, db_path=DB)["fb"][_pool]
+        _ra = [e["key"] for e in _P["austin"] if all(x[0] != e["key"] for x in _st)]
+        _rs = [e["key"] for e in _P["sa"] if all(x[1] != e["key"] for x in _st)]
+        if not _ra:
+            break
+        any(lsc_draw.land(3329, "fb", _pool, _ra[0], _s, db_path=DB).get("ok") for _s in _rs)
+_fs = lsc_draw.pools(3329, db_path=DB)["fs"]["low"]
+_a = next(e for e in _fs["austin"] if e["key"] == "AUS-P2")
+_ok = next((s_["key"] for s_ in _fs["sa"] if lsc_draw.land(3329, "fs", "low", "AUS-P2", s_["key"], db_path=DB).get("ok")), None)
+_mf = lsc_draw.match_math(3329, db_path=DB)["fs"]["low"][0]
+check("FOURSOMES: one team figure, 60% low + 40% high, off the low team",
+      _mf["a"]["ph"] == 6 and [p["ch"] for p in _mf["a"]["players"]] == [4, 9] and min(_mf["a"]["off"], _mf["s"]["off"]) == 0, _mf)
 print("ALL PASS" if not F else f"{len(F)} FAILED: {F}"); sys.exit(1 if F else 0)

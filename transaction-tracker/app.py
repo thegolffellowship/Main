@@ -5587,7 +5587,7 @@ def cup_signs_page(event_id):
 def _cup_draw_payload(event_id):
     from email_parser import lsc_draw
     return {"pools": lsc_draw.pools(event_id), "state": lsc_draw.state(event_id),
-            "dates": lsc_draw.dates_label(event_id)}
+            "dates": lsc_draw.dates_label(event_id), "math": lsc_draw.match_math(event_id)}
 
 
 @app.route("/events/<int:event_id>/cup-draw")
@@ -5617,6 +5617,7 @@ def api_cup_draw_land(event_id):
     if res.get("error"):
         return jsonify(res), 409
     res["state"] = lsc_draw.state(event_id)
+    res["math"] = lsc_draw.match_math(event_id)
     return jsonify(res)
 
 
@@ -5629,6 +5630,7 @@ def api_cup_draw_clear(event_id):
     if res.get("error"):
         return jsonify(res), 409
     res["state"] = lsc_draw.state(event_id)
+    res["math"] = lsc_draw.match_math(event_id)
     return jsonify(res)
 
 

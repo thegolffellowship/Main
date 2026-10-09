@@ -608,6 +608,11 @@ the Starter Sheet logo and Proxy logos too."
   `lsc_draw._display_names`: the lock's spelling with the LAST name in
   capitals for members and alumni. Every entrant carries `names`, one per
   line on the board.
+- **Head-to-head handicaps on THE DRAW (v2.527.5):** each drawn match comes
+  from `lsc_draw.match_math` (served as `math` with the payload and every
+  land/clear). It shows FULL = the lock's ch, and PLAYING plus OFF from
+  `lsc_cup.lsc_card_math`, the cards' own engine: Fourball 90% per player,
+  Singles 100%, Foursomes one TEAM figure (60/40).
 - **THE DRAW splash (v2.527.2):** the splash under the logo shows the
   weekend's dates (`lsc_draw.dates_label`, from the practice round and the
   dial's sessions, e.g. OCTOBER 9–11, 2026), sitting closer to the logo.
