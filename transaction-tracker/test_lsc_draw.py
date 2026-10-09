@@ -175,5 +175,5 @@ _ok = next((s_["key"] for s_ in _fs["sa"] if lsc_draw.land(3329, "fs", "low", "A
 _mf = lsc_draw.match_math(3329, db_path=DB)["fs"]["low"][0]
 check("FOURSOMES: one team figure, 60% low + 40% high, off the low team",
       _mf["a"]["ph"] == 6 and [p["ch"] for p in _mf["a"]["players"]] == [4, 9] and min(_mf["a"]["off"], _mf["s"]["off"]) == 0
-      and [(p["pct"], p["share"]) for p in _mf["a"]["players"]] == [(60, 2.4), (40, 3.6)], _mf)
+      and [(p["pct"], p["share"]) for p in _mf["a"]["players"]] == [(60, 2.4), (40, 3.6)] and _mf["a"]["sum"] == 6.0, _mf)
 print("ALL PASS" if not F else f"{len(F)} FAILED: {F}"); sys.exit(1 if F else 0)

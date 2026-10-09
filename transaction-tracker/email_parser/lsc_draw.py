@@ -232,7 +232,9 @@ def match_math(event_id: int, db_path=None) -> dict:
                         lo, hi = sorted(players, key=lambda p_: (p_["ch"], p_["cid"]))
                         lo.update(pct=60, share=round(lo["ch"] * CHAPMAN_LOW_SHARE, 1))
                         hi.update(pct=40, share=round(hi["ch"] * CHAPMAN_HIGH_SHARE, 1))
-                        sides[side] = {"players": players, "ph": m[idx[0]]["hcp"], "off": m[idx[0]]["off"]}
+                        # the TEAM shows the exact sum to a tenth (Kerry 10/8); OFF stays off the rounded team
+                        sides[side] = {"players": players, "ph": m[idx[0]]["hcp"], "off": m[idx[0]]["off"],
+                                       "sum": round(lo["ch"] * CHAPMAN_LOW_SHARE + hi["ch"] * CHAPMAN_HIGH_SHARE, 1)}
                     else:
                         for p_, i in zip(players, idx):
                             p_.update(ph=m[i]["hcp"], off=m[i]["off"])

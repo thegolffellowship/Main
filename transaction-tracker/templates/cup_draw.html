@@ -200,7 +200,7 @@ function side(e,sd,isA){
   if(!sd)return names.map(n=>row("","",esc(n))).join("");
   if(sd.ph!==undefined)  // Foursomes: each partner's 60 / 40 share, then the TEAM and its OFF
     return names.map((n,i)=>row(hv(sd.players[i]&&sd.players[i].share,1),"",esc(n))).join("")
-      +row(hv(sd.ph),hv(sd.off),"TEAM","tl");
+      +row(hv(sd.sum!=null?sd.sum:sd.ph,1),hv(sd.off),"TEAM","tl");   // the unrounded total, to a tenth (Kerry 10/8)
   return names.map((n,i)=>{const p=sd.players[i]||{};return row(hv(p.ph),hv(p.off),esc(n))}).join("");
 }
 function tabs(){document.querySelectorAll("nav.sess button").forEach(b=>{const k=b.dataset.s,s=SESS[k];

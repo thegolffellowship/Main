@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.528.0";
+window.TGF_VERSION = "2.528.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.528.1",
+    date: "2026-10-08",
+    title: "THE DRAW: the Foursomes TEAM figure shows the unrounded total",
+    changes: [
+      "Kerry 10/8: \"That's good for FOURSOMES, but show the total of the two playing handicaps to the decimal tenth rather than rounded.\" A Foursomes match's TEAM line now shows the 60% + 40% total to one decimal (e.g. 3.2), as the starter sheet does. The bold OFF is still counted from the rounded team handicap. Guard: test_lsc_draw.py."
+    ]
+  },
   {
     version: "2.528.0",
     date: "2026-10-08",
