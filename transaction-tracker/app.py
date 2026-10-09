@@ -5586,7 +5586,8 @@ def cup_signs_page(event_id):
 
 def _cup_draw_payload(event_id):
     from email_parser import lsc_draw
-    return {"pools": lsc_draw.pools(event_id), "state": lsc_draw.state(event_id)}
+    return {"pools": lsc_draw.pools(event_id), "state": lsc_draw.state(event_id),
+            "dates": lsc_draw.dates_label(event_id)}
 
 
 @app.route("/events/<int:event_id>/cup-draw")

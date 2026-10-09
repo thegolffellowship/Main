@@ -1,5 +1,17 @@
-window.TGF_VERSION = "2.527.1";
+window.TGF_VERSION = "2.527.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.527.2",
+    date: "2026-10-08",
+    title: "Lone Star Cup scorecards: bigger logo, team bars, locked and shaded 18-hole columns; THE DRAW splash shows the dates",
+    changes: [
+      "Kerry 10/8: \"Can the Lone Star Cup logo get a little bigger on the scorecards?\" The Cup logo on the scorecard header is about a third larger.",
+      "\"Can we add chapter color bars to the left of each player?\" The practice round's player rows now carry the Austin / San Antonio team bar from the Cup handicap lock, as the Cup rounds already do.",
+      "\"HOLE columns should be equal width 1 thru 18. OUT, IN columns should be equal and slightly larger and same as TOT column and NET column. PH column can be same width as HOLE columns. Lock those values.\" Every 18-hole scorecard, TGF and Cup, at 3-up, 2-up and 2-up landscape, uses the locked widths COLS_18 in email_parser/scorecards.py: holes 1-18 and PH 3.07%, OUT / IN / TOT / NET 4.10%. The front and back panels split by their column count, so hole 1 and hole 18 are the same width. On 2-up the header row drops to 0.8em so OUT, TOT and NET fit. Guards: test_scorecards.py and test_lsc_scorecards.py.",
+      "Kerry 10/8: \"Add a light shade to OUT, IN, INIT, TOT & NET columns.\" On every 18-hole card those columns are lightly shaded (#ECEFF3) in the Par, SI and player rows. The tee rows keep their tee colours.",
+      "Kerry 10/8, on THE DRAW splash: \"Change 2026 - THE DRAW on the landing screen to the dates of the event and move a little closer to the logo.\" The line under the Cup logo now reads OCTOBER 9–11, 2026, taken from the Friday practice round and the Cup's rounds, and sits closer to the logo. Guard: test_lsc_draw.py."
+    ]
+  },
   {
     version: "2.527.1",
     date: "2026-10-08",

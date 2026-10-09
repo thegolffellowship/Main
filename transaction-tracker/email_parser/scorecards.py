@@ -36,6 +36,26 @@ LAYOUTS = {
 }
 GROUPINGS = ("team", "cart")
 
+# THE 18-HOLE COLUMN WIDTHS, LOCKED (Kerry 2026-10-08: "HOLE columns should
+# be equal width 1 thru 18. OUT, IN, columns should be equal and slightly
+# larger and same as TOT column and NET column. PH column can be same width
+# as HOLE columns. Lock those values."). Shares of the whole card (both
+# panels), so the front and back nines' holes are one width (they were
+# 6.28% of the front panel vs 7.23% of the back: unequal), and OUT fits.
+COLS_18 = {"lead": 21.57, "init": 3.70, "hole": 3.07, "wide": 4.10}
+
+
+def cols_18() -> dict:
+    """The locked widths as each panel's own percentages (table-layout:
+    fixed reads a col's % of its OWN table)."""
+    c = COLS_18
+    front = c["lead"] + 9 * c["hole"] + c["wide"]                 # name, 1-9, OUT
+    back = c["init"] + 9 * c["hole"] + 3 * c["wide"] + c["hole"]  # init, 10-18, IN, TOT, PH, NET
+    f = lambda v, t: round(v / t * 100, 3)
+    return {"front_share": round(front / (front + back), 4),
+            "f_lead": f(c["lead"], front), "f_hole": f(c["hole"], front), "f_wide": f(c["wide"], front),
+            "b_init": f(c["init"], back), "b_hole": f(c["hole"], back), "b_wide": f(c["wide"], back)}
+
 # Scorecard tee-row colours by MASTER tee name (#890 §4; CA #898-6: a token
 # map, no colour column). Unknown names print black-on-white and are logged.
 TEE_TOKENS = {
@@ -228,8 +248,20 @@ def build_scorecards(event_id: int, layout: str = "3up", grouping: str = "team",
             gaps.append("The Cup has no drawn matches" + (f" for {session}" if session else "")
                         + " yet. Draw them on the Cup Draw page, or print the staff preview.")
     elif lsc and lsc["kind"] == "practice":
+        # the team bar on the practice round too (Kerry 10/8: "can we add
+        # chapter color bars to the left of each player?"), each player's
+        # Cup team from the lock
+        try:
+            import json as _json
+            _lk = (_json.loads(db.get_app_setting("lsc_handicap_lock", db_path=db_path) or "{}")
+                   .get(str(lsc["cup_event_id"])) or {}).get("players") or {}
+        except Exception:
+            _lk = {}
         for g in pack["groups"]:
             g["lsc_format"], g["lsc_title"] = "practice", "PRACTICE ROUND"
+            for p in g["players"]:
+                if p.get("customer_id") and not p.get("team"):
+                    p["team"] = (_lk.get(str(p["customer_id"])) or {}).get("team")
     with db._connect(db_path) as conn:
         ev = dict(conn.execute("SELECT * FROM events WHERE id = ?", (int(event_id),)).fetchone())
         course_name = None
@@ -550,7 +582,7 @@ def build_scorecards(event_id: int, layout: str = "3up", grouping: str = "team",
             # the singles "M1  " prefix takes ~4 characters of the cell
             fit = r["name"] + ("    " if r.get("mprefix") else "")
             r["name_em"] = _name_em(fit, 0.24 * _w)
-            r["name_em_18"] = _name_em(fit, 0.372 * (_w - 6) / 2)
+            r["name_em_18"] = _name_em(fit, COLS_18["lead"] / 100 * (_w - 6))
     if layout == "3up" and len(tees) >= 5:
         gaps.append("This event has 5+ tees; the 3-per-sheet card cannot hold them. "
                     "Use a 2-per-sheet layout.")
@@ -566,6 +598,7 @@ def build_scorecards(event_id: int, layout: str = "3up", grouping: str = "team",
                   "event_date": ev.get("event_date"), "shotgun": shotgun,
                   "file_stub": pack["event"].get("file_stub")},
         "layout": layout, "layout_meta": lay, "grouping": grouping, "qr": qr,
+        "cols18": cols_18(),
         "lsc": ({**lsc, "navy": _lc.LSC_NAVY, "sessions": lsc_sessions, "session": session,
                  "preview": bool(preview), "course": (course_name or "").upper()}
                 if lsc else None),
@@ -635,6 +668,7 @@ def _lsc_rows(fmt: str, rows: list[dict], g: dict, gaps: list) -> None:
     if fmt == "practice":
         for r in rows:
             r["net"], r["net_dots"], r["net_ghost"] = "", {}, {}
+            r["team_bar"] = LSC_TEAM_COLORS.get(r.get("team") or "")
         return
     for r in rows:
         r["team_bar"] = LSC_TEAM_COLORS.get(r.get("team") or "")

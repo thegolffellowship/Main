@@ -470,5 +470,19 @@ for _h in range(1, 19):
                ((2 * _h - 1) if _h <= 9 else 2 * (_h - 9), tee_ids["Forward"], _h))
 _c.commit(); _c.close()
 
+# THE LOCKED 18-HOLE WIDTHS (Kerry 2026-10-08: "HOLE columns should be equal
+# width 1 thru 18. OUT, IN, columns should be equal and slightly larger and
+# same as TOT column and NET column. PH column can be same width as HOLE
+# columns. Lock those values.")
+c18 = scm.COLS_18
+check("the locked 18-hole widths: holes and PH one width, OUT/IN/TOT/NET one wider width",
+      c18 == {"lead": 21.57, "init": 3.70, "hole": 3.07, "wide": 4.10} and c18["wide"] > c18["hole"])
+cc = scm.cols_18()
+_front = cc["front_share"]
+check("a hole is the same width on both nines",
+      abs(cc["f_hole"] * _front - cc["b_hole"] * (1 - _front)) < 0.01, cc)
+check("OUT on the front equals IN/TOT/NET on the back",
+      abs(cc["f_wide"] * _front - cc["b_wide"] * (1 - _front)) < 0.01, cc)
+
 print(f"\n{len(FAILURES)} failure(s)")
 sys.exit(1 if FAILURES else 0)

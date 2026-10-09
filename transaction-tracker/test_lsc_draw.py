@@ -134,4 +134,12 @@ check("a refused draw is a 409 with the reason", r.status_code == 409 and r.get_
 h = cl.get("/events/3329/cup-draw").get_data(as_text=True)
 check("the page opens on the Cup intro and waits for Start The Draw (Kerry 10/8)",
       'id="intro"' in h and 'id="startDraw"' in h and "Start The Draw" in h and "lsc-logo-dark.png" in h)
+check("the splash carries the Cup's dates from its rounds (Kerry 10/8)",
+      lsc_draw.dates_label(3329, db_path=DB) == "OCTOBER 10\u201311, 2026" and "OCTOBER 10\u201311, 2026" in h
+      and "2026 \u00b7 THE DRAW" not in h, lsc_draw.dates_label(3329, db_path=DB))
+with db._connect(DB) as _c:
+    _c.execute("INSERT INTO events (id, item_name, event_date) VALUES (3330, 'LSC practice', '2026-10-09')"); _c.commit()
+db.set_app_setting("oneoff_charges", json.dumps({"3329": {"addons": [{"key": "friday", "event_id": 3330}]}}), db_path=DB)
+check("the Friday practice round opens the dates", lsc_draw.dates_label(3329, db_path=DB) == "OCTOBER 9\u201311, 2026",
+      lsc_draw.dates_label(3329, db_path=DB))
 print("ALL PASS" if not F else f"{len(F)} FAILED: {F}"); sys.exit(1 if F else 0)

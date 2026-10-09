@@ -566,6 +566,16 @@ the Starter Sheet logo and Proxy logos too."
     has no format"), a broken seat pattern, or an undrawn Cup.
   - The practice round keeps its saved pairings, a single PH and black dots.
   - No GGID on any LSC card; no QR on the Cup's cards (it's on the cart signs).
+  - **Locked 18-hole columns (v2.527.2, Kerry 10/8: "Lock those values"):**
+    `scorecards.COLS_18` sets holes 1-18 and PH to 3.07% each and
+    OUT / IN / TOT / NET to 4.10% each. Every 18-hole card (TGF and Cup, 3-up /
+    2-up / 2-up landscape) uses it, and the front and back panels split by
+    column count, so all 18 holes are the same width. Don't change these
+    numbers without Kerry's say-so. The 2-up header row drops to 0.8em so OUT
+    fits. OUT / IN / Init / TOT / NET carry a light shade (`td.sh` #ECEFF3);
+    the tee rows keep their tee colours.
+  - The Cup logo on the card header is 7.6em. The practice round's player
+    rows carry the team bar from the lock, as the Cup's do.
 - **Logos:** `database.report_brand(event_id)` covers `pack.brand`,
   `rep.brand` and the Jinja global `report_brand()`. The Starter Sheet,
   Proximity, Cart Signs, Divisions & Flights and Games & Payouts print
@@ -583,6 +593,9 @@ the Starter Sheet logo and Proxy logos too."
   course alias.
 - **Report header (v2.526.7):** every Cup round's Starter Sheet reads ROUND
   NAME, then COURSE · DATE (`database.report_heading`, Kerry 10/8).
+- **THE DRAW splash (v2.527.2):** the splash under the logo shows the
+  weekend's dates (`lsc_draw.dates_label`, from the practice round and the
+  dial's sessions, e.g. OCTOBER 9–11, 2026), sitting closer to the logo.
 - **Open:** the Cup's Starter Sheet still reads saved pairings. The Cup has
   none, so it prints empty; its groups would come from the draw.
 - Guard: `test_lsc_scorecards.py`.

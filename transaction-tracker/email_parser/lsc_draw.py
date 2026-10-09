@@ -56,6 +56,38 @@ def _lock_players(event_id, db_path=None) -> dict:
     return ((_get(LOCK, db_path).get(str(event_id)) or {}).get("players") or {})
 
 
+def dates_label(event_id: int, db_path=None) -> str:
+    """THE CUP'S DATES for the draw splash (Kerry 10/8: "Change 2026 - THE
+    DRAW on the landing screen to the dates of the event"): every round of
+    the weekend, the Friday practice round (oneoff_charges addon friday)
+    and the dial's sessions, as "OCTOBER 9–11, 2026"."""
+    import datetime as _dt
+    from email_parser.database import _connect
+    dial = _get(DIAL, db_path)
+    days = []
+    if int(dial.get("event_id") or 0) == int(event_id):
+        days += [s.get("date") for s in dial.get("sessions") or [] if isinstance(s, dict)]
+    ids = [int(event_id)] + [int(a["event_id"]) for a in
+                             (_get("oneoff_charges", db_path).get(str(event_id)) or {}).get("addons") or []
+                             if isinstance(a, dict) and a.get("key") == "friday" and a.get("event_id")]
+    with _connect(db_path) as conn:
+        for i in ids:
+            r = conn.execute("SELECT event_date FROM events WHERE id = ?", (i,)).fetchone()
+            if r and r[0]:
+                days.append(r[0])
+    ds = sorted({_dt.date.fromisoformat(str(d)[:10]) for d in days if d and len(str(d)) >= 10})
+    if not ds:
+        return ""
+    a, b = ds[0], ds[-1]
+    if a == b:
+        return f"{a:%B} {a.day}, {a.year}".upper()
+    if (a.year, a.month) == (b.year, b.month):
+        return f"{a:%B} {a.day}\u2013{b.day}, {a.year}".upper()
+    if a.year == b.year:
+        return f"{a:%B} {a.day} \u2013 {b:%B} {b.day}, {a.year}".upper()
+    return f"{a:%B} {a.day}, {a.year} \u2013 {b:%B} {b.day}, {b.year}".upper()
+
+
 def pools(event_id: int, db_path=None) -> dict:
     """{"fb"|"fs"|"sg": {"low"|"high": {"austin": [...], "sa": [...]}}}; an
     entrant is {key, label, idx, cids}. Saturday AM and PM draw from the same

@@ -74,6 +74,14 @@
     /* Grid (#891-C/D) */
     .panels { display: flex; gap: 6px; }
     .panels table { flex: 1; min-width: 0; }
+    /* the locked 18-hole split (Kerry 10/8): the front panel's share of the card */
+    .card.h18 .panels table.front { flex: 0 0 calc((100% - 6px) * {{ sc.cols18.front_share }}); }
+    /* OUT / IN / TOT / NET: the header word fits its (wider) column */
+    th.wide { padding: 0 0.1em; letter-spacing: -0.2px; }
+    /* 2-up portrait: the biggest font on the narrowest columns; the header
+       words step down so OUT / IN / TOT / NET / Init / PH fit (Kerry 10/8) */
+    .card.l-2up.h18 tr.hd th.wide, .card.l-2up.h18 tr.hd th.init-h,
+    .card.l-2up.h18 tr.hd th.ph1 { font-size: 0.8em; padding: 0; letter-spacing: -0.3px; }
     table { table-layout: fixed; border-collapse: collapse; width: 100%; }
     /* ONE GRID (Kerry 2026-09-28: "Borders and lineweights are not
        consistent and don't extend all the way thru"): every cell border
@@ -110,6 +118,10 @@
     tr.par td.lead, tr.hcp td.lead { text-align: left; }
     tr.pl td { height: 2.3em; position: relative; }
     tr.pl.rider td { background: #F5F6F7; }
+    /* Kerry 10/8: "Add a light shade to OUT, IN, INIT, TOT & NET columns"
+       (18-hole cards; the tee rows keep their tee colours). */
+    td.sh { background: #ECEFF3; }
+    tr.pl.rider td.sh { background: #E4E8ED; }
     tr.pl.split td { border-top: 2px solid #374151; }
     tr.hd th { border-bottom: 2px solid #374151; }
     tr.par td { border-top: 2px solid #374151; }
@@ -217,7 +229,8 @@
        Cup's navy is the logo's own (#002855). */
     :root { --lsc-navy: #002855; }
     .card.lsc .brand { flex: none; border-right-color: var(--lsc-navy); }
-    .card.lsc .brand img { height: 6.6em; margin: -0.95em -0.4em; }
+    /* a little bigger (Kerry 10/8); margins scale with it */
+    .card.lsc .brand img { height: 7.6em; margin: -1.1em -0.46em; }
     .card.lsc .mid .course { color: var(--lsc-navy); letter-spacing: 1.5px; }
     .card.lsc .lsc-sub { font-size: 1.3em; white-space: nowrap; overflow: hidden; }
     .card.lsc .lsc-sub b { font-family: "Bitter", Georgia, serif; font-weight: 700; color: var(--lsc-navy); }
@@ -348,7 +361,7 @@
   {% set grid = sc.grids[c.holes] %}
   {% set is18 = c.holes == '18' %}
   {% set L = c.lsc %}
-  <div class="card{{ ' h18' if is18 else '' }}{{ ' si2' if c.si_extra else '' }}{{ ' lsc' if L else '' }}">
+  <div class="card l-{{ sc.layout }}{{ ' h18' if is18 else '' }}{{ ' si2' if c.si_extra else '' }}{{ ' lsc' if L else '' }}">
     <div class="head">
       {% if L %}
       <div class="brand"><img src="/static/lsc-logo.png" alt="Lone Star Cup"></div>
@@ -379,10 +392,10 @@
     {% set back = grid.holes[9:] %}
     <div class="panels">
     {# ---- panel 1: the 9-hole card, or the 18's front nine ---- #}
-    <table>
+    <table class="front">
       <colgroup>
         {% if is18 %}
-          <col style="width:37.2%">{% for h in front %}<col style="width:6.28%">{% endfor %}<col style="width:6.28%">
+          <col style="width:{{ sc.cols18.f_lead }}%">{% for h in front %}<col style="width:{{ sc.cols18.f_hole }}%">{% endfor %}<col style="width:{{ sc.cols18.f_wide }}%">
         {% else %}
           {# Kerry 9/29: Total and Net are hole-width; PH/TEAM is an info
              column only and narrows to fit its two numbers. #}
@@ -393,7 +406,7 @@
       <tr class="hd">
         <th class="lead thick">{% if L %}<span class="fl">{{ L.lead }}</span>{% elif c.ggid %}<span class="gl">GGID</span><span class="gc">{{ c.ggid }}</span>{% endif %}</th>
         {% for h in front %}<th class="{{ 'hl' if c.hl_hole == h else '' }} {{ 'thick' if loop.last else '' }}">{{ h }}</th>{% endfor %}
-        {% if is18 %}<th>OUT</th>{% else %}
+        {% if is18 %}<th class="wide">OUT</th>{% else %}
           <th class="thick">TOTAL</th>
           {% if L and L.single %}<th>PH</th>{% else %}
           <th class="split-c"><svg class="diag" viewBox="0 0 100 100" preserveAspectRatio="none"><line x1="0" y1="100" x2="100" y2="0" vector-effect="non-scaling-stroke"/></svg><span class="ul">{{ L.ul if L else 'PH' }}</span><span class="lr">{{ L.lr if L else sc.net.word }}</span></th>{% endif %}
@@ -409,17 +422,17 @@
       {% endfor %}
       <tr class="par"><td class="lead thick">Par</td>
         {% for h in front %}<td class="{{ 'hl' if c.hl_hole == h else '' }} {{ 'thick' if loop.last else '' }}">{{ grid.par.get(h, '') }}</td>{% endfor %}
-        {% if is18 %}<td>{{ grid.par_out }}</td>{% else %}<td class="thick">{{ grid.par_total }}</td><td></td><td></td>{% endif %}
+        {% if is18 %}<td class="sh">{{ grid.par_out }}</td>{% else %}<td class="thick">{{ grid.par_total }}</td><td></td><td></td>{% endif %}
       </tr>
       <tr class="hcp"><td class="lead thick">{% if c.si_main_label %}SI · {{ c.si_main_label }}{% else %}Stroke Index{% endif %}</td>
         {% for h in front %}<td class="{{ 'hl' if c.hl_hole == h else '' }} {{ 'thick' if loop.last else '' }}">{{ grid.si.get(h, '') }}</td>{% endfor %}
-        {% if is18 %}<td></td>{% else %}<td class="thick"></td><td></td><td></td>{% endif %}
+        {% if is18 %}<td class="sh"></td>{% else %}<td class="thick"></td><td></td><td></td>{% endif %}
       </tr>
       {# The players' own tees' stroke index where it differs (Kerry 10/6). #}
       {% for x in c.si_extra or [] %}
       <tr class="hcp si-extra"><td class="lead thick">SI · {{ x.label }}{% if x.band_text %} <span class="age">{{ x.band_text }}</span>{% endif %}</td>
         {% for h in front %}<td class="{{ 'hl' if c.hl_hole == h else '' }} {{ 'thick' if loop.last else '' }}">{{ x.si.get(h, '') }}</td>{% endfor %}
-        {% if is18 %}<td></td>{% else %}<td class="thick"></td><td></td><td></td>{% endif %}
+        {% if is18 %}<td class="sh"></td>{% else %}<td class="thick"></td><td></td><td></td>{% endif %}
       </tr>
       {% endfor %}
       {% for r in c.rows %}
@@ -428,7 +441,7 @@
         <td class="lead thick{{ ' fs-a' if r.get("fs_span") == 2 else '' }}{{ ' fs-b' if r.get("fs_skip") else '' }}"{% if r.get("team_bar") %} style="border-left:0.45em solid {{ r.get("team_bar") }}"{% endif %}><div class="ln"><span class="nm" style="font-size:{{ r.name_em_18 if is18 else r.name_em }}em">{% if r.get("mprefix") %}<span class="mp">{{ r.get("mprefix") }}</span>&nbsp;&nbsp;{% endif %}{{ r.name }}</span><span class="tc" title="{{ r.tee_code }}" style="{% if r.chip_ladies %}background:#fff;border:2px solid {{ r.chip }};{% elif (r.chip or '')|lower in ['#ffffff', '#fff'] %}background:#fff;border:1.5px solid #1B1B1B;{% else %}background:{{ r.chip or '#fff' }};border:1px solid {{ r.chip or '#1B1B1B' }};{% endif %}"></span></div></td>
         {% if not r.get("fs_skip") %}
         {% for h in front %}<td{{ rs|safe }} class="{{ 'hl' if c.hl_hole == h else '' }} {{ 'thick' if loop.last else '' }}"><span class="dk">{{ dots(r.ph_dots.get(h)) }}</span><span class="do">{{ dots(r.net_dots.get(h)) }}{{ ghosts((r.net_ghost or {}).get(h)) }}</span></td>{% endfor %}
-        {% if is18 %}<td{{ rs|safe }}></td>{% else %}
+        {% if is18 %}<td{{ rs|safe }} class="sh"></td>{% else %}
           <td{{ rs|safe }} class="thick"></td>
           {% if L and L.single %}<td style="font-family:Bitter,Georgia,serif;font-weight:700">{{ r.ph }}</td>{% else %}
           <td{{ rs|safe }} class="split-c"><svg class="diag" viewBox="0 0 100 100" preserveAspectRatio="none"><line x1="0" y1="100" x2="100" y2="0" vector-effect="non-scaling-stroke"/></svg><span class="ul">{{ r.ph }}</span><span class="lr">{{ r.net }}</span></td>{% endif %}
@@ -441,15 +454,15 @@
     {# ---- panel 2: the 18's back nine ---- #}
     <table>
       <colgroup>
-        <col style="width:6.7%">{% for h in back %}<col style="width:7.23%">{% endfor %}
-        <col style="width:7.23%"><col style="width:7.23%"><col style="width:6.54%"><col style="width:7.23%">
+        <col style="width:{{ sc.cols18.b_init }}%">{% for h in back %}<col style="width:{{ sc.cols18.b_hole }}%">{% endfor %}
+        <col style="width:{{ sc.cols18.b_wide }}%"><col style="width:{{ sc.cols18.b_wide }}%"><col style="width:{{ sc.cols18.b_hole }}%"><col style="width:{{ sc.cols18.b_wide }}%">
       </colgroup>
       <tr class="hd">
-        <th class="lead thick">Init</th>
+        <th class="lead thick init-h">Init</th>
         {% for h in back %}<th class="{{ 'hl' if c.hl_hole == h else '' }} {{ 'thick' if loop.last else '' }}">{{ h }}</th>{% endfor %}
-        <th class="thick">IN</th><th class="thick">TOT</th>
-        {% if L and L.single %}<th>PH</th>{% else %}
-        <th class="split-c"><svg class="diag" viewBox="0 0 100 100" preserveAspectRatio="none"><line x1="0" y1="100" x2="100" y2="0" vector-effect="non-scaling-stroke"/></svg><span class="ul">{{ L.ul if L else 'PH' }}</span><span class="lr">{{ L.lr if L else sc.net.short }}</span></th>{% endif %}<th>NET</th>
+        <th class="thick wide">IN</th><th class="thick wide">TOT</th>
+        {% if L and L.single %}<th class="ph1">PH</th>{% else %}
+        <th class="split-c"><svg class="diag" viewBox="0 0 100 100" preserveAspectRatio="none"><line x1="0" y1="100" x2="100" y2="0" vector-effect="non-scaling-stroke"/></svg><span class="ul">{{ L.ul if L else 'PH' }}</span><span class="lr">{{ L.lr if L else sc.net.short }}</span></th>{% endif %}<th class="wide">NET</th>
       </tr>
       {% for t in sc.tees %}
       <tr class="tee">
@@ -459,29 +472,29 @@
         <td class="thick" style="background:{{ t.bg }};color:{{ t.fg }}">{{ t.totals[c.holes].total }}</td><td></td><td></td>
       </tr>
       {% endfor %}
-      <tr class="par"><td class="lead thick">Par</td>
+      <tr class="par"><td class="lead thick sh">Par</td>
         {% for h in back %}<td class="{{ 'hl' if c.hl_hole == h else '' }} {{ 'thick' if loop.last else '' }}">{{ grid.par.get(h, '') }}</td>{% endfor %}
-        <td class="thick">{{ grid.par_in }}</td><td class="thick">{{ grid.par_total }}</td><td></td><td></td>
+        <td class="thick sh">{{ grid.par_in }}</td><td class="thick sh">{{ grid.par_total }}</td><td></td><td class="sh"></td>
       </tr>
-      <tr class="hcp"><td class="lead thick">SI</td>
+      <tr class="hcp"><td class="lead thick sh">SI</td>
         {% for h in back %}<td class="{{ 'hl' if c.hl_hole == h else '' }} {{ 'thick' if loop.last else '' }}">{{ grid.si.get(h, '') }}</td>{% endfor %}
-        <td class="thick"></td><td class="thick"></td><td></td><td></td>
+        <td class="thick sh"></td><td class="thick sh"></td><td></td><td class="sh"></td>
       </tr>
       {% for x in c.si_extra or [] %}
-      <tr class="hcp si-extra"><td class="lead thick">SI</td>
+      <tr class="hcp si-extra"><td class="lead thick sh">SI</td>
         {% for h in back %}<td class="{{ 'hl' if c.hl_hole == h else '' }} {{ 'thick' if loop.last else '' }}">{{ x.si.get(h, '') }}</td>{% endfor %}
-        <td class="thick"></td><td class="thick"></td><td></td><td></td>
+        <td class="thick sh"></td><td class="thick sh"></td><td></td><td class="sh"></td>
       </tr>
       {% endfor %}
       {% for r in c.rows %}
       {% set rs = ' rowspan="2"' if r.get("fs_span") == 2 else '' %}
       <tr class="pl {{ 'rider' if r.rider else '' }} {{ 'split' if c.split_after is not none and loop.index0 == c.split_after else '' }}">
-        <td class="lead thick init{{ ' fs-a' if r.get("fs_span") == 2 else '' }}{{ ' fs-b' if r.get("fs_skip") else '' }}" style="text-align:center">{{ r.initials }}</td>
+        <td class="lead thick init sh{{ ' fs-a' if r.get("fs_span") == 2 else '' }}{{ ' fs-b' if r.get("fs_skip") else '' }}" style="text-align:center">{{ r.initials }}</td>
         {% if not r.get("fs_skip") %}
         {% for h in back %}<td{{ rs|safe }} class="{{ 'hl' if c.hl_hole == h else '' }} {{ 'thick' if loop.last else '' }}"><span class="dk">{{ dots(r.ph_dots.get(h)) }}</span><span class="do">{{ dots(r.net_dots.get(h)) }}{{ ghosts((r.net_ghost or {}).get(h)) }}</span></td>{% endfor %}
-        <td{{ rs|safe }} class="thick"></td><td{{ rs|safe }} class="thick"></td>
+        <td{{ rs|safe }} class="thick sh"></td><td{{ rs|safe }} class="thick sh"></td>
         {% if L and L.single %}<td style="font-family:Bitter,Georgia,serif;font-weight:700">{{ r.ph }}</td>{% else %}
-        <td{{ rs|safe }} class="split-c"><svg class="diag" viewBox="0 0 100 100" preserveAspectRatio="none"><line x1="0" y1="100" x2="100" y2="0" vector-effect="non-scaling-stroke"/></svg><span class="ul">{{ r.ph }}</span><span class="lr">{{ r.net }}</span></td>{% endif %}<td{{ rs|safe }}></td>
+        <td{{ rs|safe }} class="split-c"><svg class="diag" viewBox="0 0 100 100" preserveAspectRatio="none"><line x1="0" y1="100" x2="100" y2="0" vector-effect="non-scaling-stroke"/></svg><span class="ul">{{ r.ph }}</span><span class="lr">{{ r.net }}</span></td>{% endif %}<td{{ rs|safe }} class="sh"></td>
         {% endif %}
       </tr>
       {% endfor %}

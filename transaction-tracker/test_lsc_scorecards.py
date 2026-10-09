@@ -184,9 +184,10 @@ check("?session=sun prints Sunday only", [c["lsc"]["title"] for c in one["cards"
 print("practice round")
 pr = scm.build_scorecards(3330, "3up", "team", qr="off", db_path=DB)
 pc = pr["cards"][0]
-check("PRACTICE ROUND title, single PH, black dots only, no team bars, no GGID",
+check("PRACTICE ROUND title, single PH, black dots only, team bars (Kerry 10/8), no GGID",
       pc["lsc"]["title"] == "PRACTICE ROUND" and pc["lsc"]["single"] and pc["ggid"] is None
-      and all(not r["net_dots"] and not r["net"] and not r.get("team_bar") for r in pc["rows"])
+      and all(not r["net_dots"] and not r["net"] for r in pc["rows"])
+      and [r.get("team_bar") for r in pc["rows"]] == ["#BF5700", None, "#BF5700"]
       and sum(pc["rows"][1]["ph_dots"].values()) == 8, pc["rows"][1])
 check("practice lead + key", pc["lsc"]["lead"] == "PRACTICE · INDIVIDUAL"
       and pc["lsc"]["key"] == [("lk", "PH — Playing Handicap (100%)")])
