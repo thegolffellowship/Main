@@ -956,6 +956,20 @@ def upsert_group(round_id: int, group_num: int, *, label=None, start_hole=1,
                 "seat = excluded.seat",
                 (round_id, gid, int(cid), p.get("display_name"), p.get("tee"),
                  p.get("playing_handicap"), p.get("seat")))
+        # A one-ball (Foursomes) pair whose two players now both sit in this
+        # group takes its team row and the team's scores with it, the same
+        # rule as a player's own rows above (Kerry 10/8 re-sequenced
+        # Saturday after the rounds were seeded).
+        here = {r[0] for r in conn.execute("SELECT customer_id FROM se_players WHERE group_id = ?",
+                                          (gid,))}
+        for tid, a_, b_, tg in conn.execute(
+                "SELECT id, customer_id_a, customer_id_b, group_id FROM se_teams "
+                "WHERE round_id = ?", (round_id,)).fetchall():
+            if tg != gid and a_ in here and b_ in here:
+                conn.execute("UPDATE se_teams SET group_id = ? WHERE id = ?", (gid, tid))
+                for tbl in ("se_hole_scores", "se_hole_marks"):
+                    conn.execute(f"UPDATE {tbl} SET group_id = ? WHERE round_id = ? AND subject_key = ?",
+                                 (gid, round_id, f"t:{tid}"))
         _bump(conn, ev[0])
         conn.commit()
     out = {"group_id": gid}
@@ -1553,6 +1567,80 @@ def close_round(round_id: int, db_path=None) -> dict:
         _bump(conn, r[0])
         conn.commit()
     return {"closed": round_id}
+
+
+def clear_group(group_id: int, *, apply: bool = False, db_path=None) -> dict:
+    """START ONE GROUP'S CARD OVER (Kerry 2026-10-08: "Can you also clear
+    scoring for my group tomorrow?" after testing the practice-round card).
+    Takes the group back to an untouched card: its hole scores and marks
+    go, live signatures are voided, CTP answers go, HIO claims are
+    withdrawn, open card flags are resolved and the scorer's lock is
+    released, so the first phone to open the link claims it fresh. The
+    players, the group and its link stay. One se_audit row ('admin_clear')
+    keeps every cleared score and the lock holder, so nothing is lost from
+    the record. Open rounds only; dry run by default."""
+    with _closing(_conn(db_path)) as conn:
+        g = conn.execute(
+            "SELECT g.id, g.round_id, g.label, r.status, r.event_id FROM se_groups g "
+            "JOIN se_rounds r ON r.id = g.round_id WHERE g.id = ?", (group_id,)).fetchone()
+        if not g:
+            return {"error": "no such group"}
+        if g["status"] != "open":
+            return {"error": f"round {g['round_id']} is {g['status']}; only an open round's card can be cleared"}
+        scores = [dict(r) for r in conn.execute(
+            "SELECT subject_key, hole_number, gross FROM se_hole_scores WHERE group_id = ? "
+            "ORDER BY hole_number, subject_key", (group_id,))]
+        marks = conn.execute("SELECT COUNT(*) FROM se_hole_marks WHERE group_id = ?",
+                             (group_id,)).fetchone()[0]
+        signs = conn.execute("SELECT COUNT(*) FROM se_signoffs WHERE group_id = ? AND voided_at IS NULL",
+                             (group_id,)).fetchone()[0]
+        ctp = conn.execute("SELECT COUNT(*) FROM se_ctp_claims WHERE group_id = ?",
+                           (group_id,)).fetchone()[0]
+        hio = conn.execute("SELECT COUNT(*) FROM se_hio_claims WHERE group_id = ? AND status "
+                           "NOT IN ('withdrawn', 'rejected')", (group_id,)).fetchone()[0]
+        flags = conn.execute("SELECT COUNT(*) FROM se_card_flags WHERE group_id = ? AND resolved_at IS NULL",
+                             (group_id,)).fetchone()[0]
+        checks = conn.execute("SELECT COUNT(*) FROM se_card_checks WHERE group_id = ?",
+                              (group_id,)).fetchone()[0]
+        lock = conn.execute("SELECT device_id, holder_customer_id FROM se_group_locks WHERE group_id = ?",
+                            (group_id,)).fetchone()
+        out = {"dry_run": not apply, "group_id": group_id, "round_id": g["round_id"],
+               "label": g["label"],
+               "scores": sum(1 for x in scores if x["gross"] is not None),
+               "holes": sorted({x["hole_number"] for x in scores if x["gross"] is not None}),
+               "marks": marks, "signatures": signs, "ctp_answers": ctp, "hio_claims": hio,
+               "open_flags": flags, "card_checks": checks,
+               "scorer_lock": ({"holder_customer_id": lock["holder_customer_id"]} if lock else None)}
+        if checks:
+            # A checked card was submitted with a photo: that is a record,
+            # not a test. Say so instead of clearing it.
+            out["refused"] = "this card was checked and submitted; it is not cleared"
+            return out
+        if not apply:
+            return out
+        now = _now()
+        conn.execute("BEGIN IMMEDIATE")
+        conn.execute("DELETE FROM se_hole_scores WHERE group_id = ?", (group_id,))
+        conn.execute("DELETE FROM se_hole_marks WHERE group_id = ?", (group_id,))
+        conn.execute("UPDATE se_signoffs SET voided_at = ?, void_reason = 'card cleared by admin' "
+                     "WHERE group_id = ? AND voided_at IS NULL", (now, group_id))
+        conn.execute("DELETE FROM se_ctp_claims WHERE group_id = ?", (group_id,))
+        conn.execute("UPDATE se_hio_claims SET status = 'withdrawn' WHERE group_id = ? "
+                     "AND status NOT IN ('withdrawn', 'rejected')", (group_id,))
+        conn.execute("UPDATE se_card_flags SET resolved_at = ?, resolution = 'card cleared by admin' "
+                     "WHERE group_id = ? AND resolved_at IS NULL", (now, group_id))
+        conn.execute("DELETE FROM se_group_locks WHERE group_id = ?", (group_id,))
+        conn.execute(
+            "INSERT INTO se_audit (round_id, group_id, kind, device_id, result, detail, at) "
+            "VALUES (?,?,?,?,?,?,?)",
+            (g["round_id"], group_id, "admin_clear", lock["device_id"] if lock else None, "ok",
+             json.dumps({"scores": scores, "lock_holder": lock["holder_customer_id"] if lock else None,
+                         **{k: out[k] for k in ("marks", "signatures", "ctp_answers", "hio_claims",
+                                                "open_flags")}}), now))
+        _bump(conn, g["event_id"])
+        conn.commit()
+    out["cleared"] = True
+    return out
 
 
 def _base_url(base_url: str | None = None) -> str:

@@ -115,6 +115,15 @@ on the page — green means bought in.
   PREVIEW round (`PREVIEW_LABEL`) with one group, reused on repeat calls,
   never the round `seed_round_from_pairings` builds. Dry run by default.
 - `scoring-se-links:<round_id>` — one link per group, for Kerry to hand out.
+- `scoring-se-clear-group:<group_id>[|apply]` (v2.528.14, Kerry 10/8) —
+  start ONE group's card over: hole scores and marks removed, signatures
+  voided, CTP answers removed, HIO claims withdrawn, open flags resolved,
+  scorer lock released (the next phone claims it with no take-over). The
+  group, its players and its link stay; one `se_audit` row `admin_clear`
+  holds every cleared score and the lock holder. Open rounds only; a card
+  checked and submitted with a photo is refused. A re-seed (`upsert_group`)
+  now also moves a Foursomes pair's `se_teams` row and `t:` scores when both
+  players move. Guard `test_se_clear_group.py`.
 - `scoring-se-close:<round_id>|apply` — status closed; the links stop
   opening; nothing is deleted.
 - While `score_entry_live` is off, a link opens only for an admin session.

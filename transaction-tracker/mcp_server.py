@@ -1813,6 +1813,7 @@ def _scoring_dispatch_inner(url: str, extract: str):
       scoring-se-status:<event_id>  read-only: every score-entry round on the event, holes in, signatures, checks, marks, matches
       scoring-se-links:<round_id>  one score-entry link per group
       scoring-se-close:<round_id>|apply  close a score-entry round (links stop opening; nothing deleted)
+      scoring-se-clear-group:<group_id>[|apply]  start one group's card over: scores, marks, CTP answers and the scorer lock go, signatures voided; the cleared scores stay in se_audit (dry run by default; open rounds only)
       scoring-se-keeper-signs:<event_id>[|on|off]  the dial: the scorekeeper's submit signs every card in the group
       scoring-mvp-import           import_gg_event_mvps(widget_url)
       scoring-mvp-determine:<event> City/TGF MVP winners, read-only (runs on the rehearsal copy)
@@ -3521,6 +3522,16 @@ def _scoring_dispatch_inner(url: str, extract: str):
                 return json.dumps({"event_id": _ev, "keeper_signs": _se.keeper_signs(_ev)})
             _res = _se.set_keeper_signs(_ev, _flag == "on")
             _audit("scoring-se-keeper-signs", f"event {_ev} {_flag}")
+            return json.dumps(_res)
+        if cmd == "scoring-se-clear-group":
+            # scoring-se-clear-group:<group_id>[|apply] — start one group's
+            # card over (Kerry 10/8, his practice-round test card).
+            from email_parser import score_entry as _se
+            _gid, _, _flag = arg.partition("|")
+            _apply = _flag.strip().lower() == "apply"
+            _res = _se.clear_group(int(_gid.strip()), apply=_apply)
+            if _apply and _res.get("cleared"):
+                _audit("scoring-se-clear-group", f"group {_gid.strip()}")
             return json.dumps(_res)
         if cmd == "scoring-se-close":
             # scoring-se-close:<round_id>|apply — close a round; its links stop opening.

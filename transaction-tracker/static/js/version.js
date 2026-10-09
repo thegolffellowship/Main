@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.528.13";
+window.TGF_VERSION = "2.528.14";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.528.14",
+    date: "2026-10-08",
+    title: "Live scoring: start one group's card over; a re-seed moves a Foursomes pair's team row",
+    changes: [
+      "Kerry 10/8: \"Can you also clear scoring for my group tomorrow?\" New score_entry.clear_group (bridge scoring-se-clear-group:<group_id>[|apply], dry run by default, open rounds only) takes one group back to an untouched card: hole scores and marks removed, signatures voided, CTP answers removed, HIO claims withdrawn, open flags resolved, and the scorer lock released so the first phone to open the link claims it without a take-over. The players, the group and its link stay, and one se_audit row (admin_clear) keeps every cleared score and who held the card. A card that was checked and submitted with a photo is refused.",
+      "Saturday was re-sequenced after the Cup rounds were seeded (Kerry 10/8). upsert_group already moved a player's own scores when a re-seed moved him; a Foursomes pair's team row and the team's scores now move with the pair too, so no team card is left behind in its old group. Guard test_se_clear_group.py."
+    ]
+  },
   {
     version: "2.528.13",
     date: "2026-10-08",
