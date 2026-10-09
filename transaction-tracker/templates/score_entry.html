@@ -700,6 +700,14 @@
         let ctpHole = null, turnNext = null, lostMsg = "", errMsg = "", flagging = false, flagPick = null, flagVal = null, busy = false;
         // Card check + photo (Kerry 2026-09-25).
         let checkNine = 0, checkPick = null, help = {}, noPhoto = false, psCid = null, psName = "", psOther = false;
+        // THE CAMERA IS OPEN (Kerry 10/9: "The photo of scorecard is not taking"):
+        // the 15-second refresh and the return-to-page reload rebuilt the screen
+        // while iOS's camera was up, so the file input that receives the photo
+        // was gone by "Use Photo" and the photo was dropped. While picking, no
+        // reload rebuilds the screen, and the input carries its own handler so
+        // even a replaced input still delivers the photo.
+        let picking = 0;
+        const pickingNow = () => picking && Date.now() - picking < 180000;
         // Match play pickup prompt + the max-triple notice (Kerry 2026-09-25).
         let draftX = {}, closedGate = false, pinMsg = "";
         let pickupHole = null, pickupKeys = [], pickupAns = {}, maxNote = "";
@@ -2003,6 +2011,7 @@
             }).catch(() => { photo.sending = false; });
         }
         function takePhoto(file) {
+            picking = 0;
             // Shrink to 1600 px on the long side, JPEG ~0.7: about 300 KB.
             const url = URL.createObjectURL(file), img = new Image();
             img.onload = () => {
@@ -2270,7 +2279,22 @@
             if (act === "hio") { post("/api/score-entry/hio/confirm", {hio_id: Number(b.dataset.id), customer_id: who}); return; }
         });
 
+        app.addEventListener("click", (e) => {
+            const t = e.target;
+            const inp = t && t.matches && t.matches("input[data-photo]") ? t
+                : (t && t.closest && t.closest("label") || {querySelector: () => null}).querySelector("input[data-photo]");
+            if (!inp) return;
+            picking = Date.now();
+            if (inp._direct) return;
+            inp._direct = true;
+            inp.addEventListener("change", () => {
+                picking = 0;
+                if (inp.files && inp.files[0]) takePhoto(inp.files[0]);
+            });
+            inp.addEventListener("cancel", () => { picking = 0; });
+        }, true);
         app.addEventListener("change", (e) => {
+            if (e.target._direct) return;      // its own handler took it
             if (e.target.matches && e.target.matches("input[data-photo]") && e.target.files && e.target.files[0]) takePhoto(e.target.files[0]);
         });
         app.addEventListener("input", (e) => {
@@ -2282,9 +2306,9 @@
         if (!T) { errMsg = "This page needs your group's scoring link."; render(); return; }
         load();
         setInterval(() => { flush(); sendPhoto(); }, 5000);
-        setInterval(() => { if (!queue.length && !busy) load(); }, 15000);
+        setInterval(() => { if (!queue.length && !busy && !pickingNow()) load(); }, 15000);
         window.addEventListener("online", flush);
-        document.addEventListener("visibilitychange", () => { if (!document.hidden) { flush(); load(); } });
+        document.addEventListener("visibilitychange", () => { if (!document.hidden) { flush(); if (!pickingNow()) load(); } });
     })();
     </script>
 </body>

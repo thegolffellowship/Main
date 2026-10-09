@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.535.2";
+window.TGF_VERSION = "2.535.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.535.3",
+    date: "2026-10-09",
+    title: "Card photo takes on the phone; live-round leaderboard cards open",
+    changes: [
+      "Kerry 10/9 (practice round): \"The photo of scorecard is not taking when I try to add it with the tracker.\" The scoring page refreshed every 15 seconds (and again on returning to the page), rebuilding the screen while the phone's camera was open, so the file input waiting for the photo was gone by \"Use Photo\" and the photo was dropped. Now no reload rebuilds the screen while the camera is up (up to 3 minutes, cleared by the photo or a cancel), and the input carries its own handler so even a replaced input delivers the photo. Reproduced and proven in Chromium against the old and new page.",
+      "Kerry 10/9: tapping a player on the scorer's LEADERBOARD during the practice round read \"Couldn't load the card (The string did not match the expected pattern.)\". Live-entry rows carry a negative id (the card is still on the phones), so the page asked /api/scoring/scorecard/<negative> and got a page, not data. Those cards now render from the board's own payload (par, gross, pops per hole) in the standard card. Guard test_photo_pick_live_card.py."
+    ]
+  },
   {
     version: "2.535.2",
     date: "2026-10-09",

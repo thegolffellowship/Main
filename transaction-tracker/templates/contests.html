@@ -4794,6 +4794,29 @@
                     b._evlbFitKeys && requestAnimationFrame(b._evlbFitKeys));
             }));
     }
+    // The scorecard of a live-entry row, from the board payload alone
+    // (d.cards[rid] = [[hole, gross, pops], ...], d.hole_par), in the shape
+    // tgfRenderScorecard reads; rows it can't fill stay blank.
+    function evlbLiveCard(d, rid) {
+        const hs = ((d && d.cards) || {})[String(rid)] || [];
+        const par = (d && d.hole_par) || {};
+        const row = [].concat((d && d.overall_board) || [], (d && d.net_board) || [],
+                              (d && d.gross_board) || [])
+            .find(r => String(r.scoring_round_id) === String(rid)) || {};
+        const by = {};
+        hs.forEach(h => { by[h[0]] = h; });
+        const nums = Object.keys(par).map(Number).filter(n => !isNaN(n)).sort((a, b) => a - b);
+        const holes = (nums.length ? nums : hs.map(h => h[0])).map(n => {
+            const h = by[n], p = par[n] ?? par[String(n)];
+            const g = h ? h[1] : null, pops = h ? (h[2] || 0) : 0;
+            return {hole_number: n, par: p ?? null, strokes: g, strokes_received: pops,
+                    vs_par: g != null && p != null ? g - p : null,
+                    net_vs_par: g != null && p != null ? g - pops - p : null};
+        });
+        if (!holes.some(h => h.strokes != null)) return null;
+        return {holes, round: {playing_handicap: row.hcp ?? null, first_hole: 1},
+                derived_totals: {net: row.net ?? null}};
+    }
     function evlbWireEvent(body, d) {
         body.querySelectorAll(".evlb-subtab").forEach(btn =>
             btn.addEventListener("click", () => {
@@ -4889,9 +4912,19 @@
                 cardRow.innerHTML = `<td colspan="${cols}" style="white-space:normal;">Loading card&hellip;</td>`;
                 host.after(cardRow);
                 try {
-                    const res = await fetch("/api/scoring/scorecard/" + rid);
-                    const c = await res.json();
-                    if (!res.ok || c.error) throw new Error(c.error || res.statusText);
+                    // A LIVE-ENTRY row (negative id: the card is still on the
+                    // phones, not a posted round) has no /api/scoring/scorecard
+                    // record, so asking for one 404'd into "The string did not
+                    // match the expected pattern" (Kerry 10/9 practice round).
+                    // Its card is already in the board payload: hole, gross, pops.
+                    const live = Number(rid) < 0 || isNaN(Number(rid));
+                    let c;
+                    if (live) c = evlbLiveCard(d, rid) || {holes: []};
+                    else {
+                        const res = await fetch("/api/scoring/scorecard/" + rid);
+                        c = await res.json();
+                        if (!res.ok || c.error) throw new Error(c.error || res.statusText);
+                    }
                     // THE universal card standard — same renderer as the
                     // Handicaps + Points Race expands (Kerry 2026-09-11);
                     // it renders only the nine(s) actually played
