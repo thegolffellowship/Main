@@ -13131,7 +13131,8 @@ def member_lonestarcup_info():
     to see that info page quickly"; mockup EventInfo.dc.html): SCHEDULE |
     TEAMS | FORMATS with anchors #schedule #teams #formats #fourball
     #foursomes #singles #skins. Public like the rest of the member Cup page;
-    no dollars. Track A's HOW IT WORKS pill on the hole screens links here."""
+    no dollars. The scoring page's HOW IT WORKS opens ?embed=1 in a popup
+    (Kerry 10/9: no link leaves the scorer's SCORING / LEADERBOARD)."""
     try:
         teams = _lsc_info_teams()
     except Exception:

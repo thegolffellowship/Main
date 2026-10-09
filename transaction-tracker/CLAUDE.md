@@ -440,6 +440,7 @@ No Python or local install needed — Claude Desktop connects directly to Railwa
   Unpaid work queue, and the **REFUNDS console** (admin, v2.108.0 —
   OUTSTANDING/IN FLIGHT/COMPLETED credit refunds via
   `GET /api/refunds/overview` → `get_refunds_overview`; see `docs/claude/events.md`)
+- `templates/lsc_teams.html` — Lone Star Cup Teams (admin, `/admin/lsc-teams`, Kerry 2026-10-09): the Cup rosters, alternates, deposits, lodging and declined invitations, moved off the LEADERBOARD's Cup tab (they flashed on every load); reads `/api/season-contests/lone-star-cup`
 - `templates/health.html` — Tracker Health (admin, `/admin/health`): cards, findings, route / job / bridge p50·p95·max tables, the slow list, Preview / Post digest
 - `templates/traffic.html` — Member Traffic (admin): anonymous open/click
   counters from the pinless member pages (`member_analytics` table; beacon in

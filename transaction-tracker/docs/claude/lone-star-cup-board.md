@@ -874,3 +874,20 @@ On `/member/score/board?t=` for a Cup round (`window.SOLO_CUP`):
 - The colors come from `teamInk(cids)` in score_entry.html, which reads the player's side from `card.matches`.
 - The tee bar on the left of each row is unchanged.
 
+**Team management off LEADERBOARD; nothing leaves the scorer's interface (v2.532.11, Kerry 10/9).**
+
+1. The panel moved to an admin page.
+   - Kerry: "Can you remove all that hidden team management stuff from the leaderboard page altogether? Put it on its own separate admin only page. I see it pop up for a second each time when the page loads."
+   - The rosters / alternates / deposits / lodging / declined panel (`#lsc-rosters`, `#lsc-foot-p`) is gone from contests.html.
+   - It now lives at `/admin/lsc-teams` (`templates/lsc_teams.html`, admin only; others redirect to /events), linked as "Cup Teams" in every admin subnav.
+   - contests.html still reads `/api/season-contests/lone-star-cup`, but only for the banner's dates/venue.
+2. HOW IT WORKS opens a popup.
+   - Kerry: "For how it works buttons they should only pop up a modal that can easily be closed. Make sure no links take you outside the scorer's interface of the SCORING and LEADERBOARD."
+   - The scoring page's HOW IT WORKS is a button. It opens the EVENT INFO body (`/member/lonestarcup/info?embed=1`, wired by `static/js/lsc-info.js`) in a popup on that session's format.
+   - The popup closes with ✕, Got it, a tap outside or Esc.
+   - Links inside the popup are held, and its Download PDF / Share are hidden.
+3. FOLLOW opens the scorer's own leaderboard.
+   - The landing page's FOLLOW THE CUP opens `/member/score/board?t=...&match=<id>`, the scorer's LEADERBOARD with the match open. It used to open the public `/member/lonestarcup`.
+   - On the scorer's LEADERBOARD, the EVENT INFO pane's Download PDF / Share are hidden.
+4. Guards: `test_cup_signs.py` fails on any `href="/..."` page link in score_entry.html.
+

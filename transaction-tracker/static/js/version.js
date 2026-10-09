@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.532.10";
+window.TGF_VERSION = "2.532.11";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.532.11",
+    date: "2026-10-09",
+    title: "Cup Teams moves to its own admin page; HOW IT WORKS pops up; nothing leaves the scorer's screens",
+    changes: [
+      "Kerry 10/9: \"Can you remove all that hidden team management stuff from the leaderboard page altogether? Put it on its own separate admin only page. I see it pop up for a second each time when the page loads.\" The Lone Star Cup rosters, alternates, deposit badges, lodging and declined invitations are gone from LEADERBOARD (so nothing flashes on load) and live on a new admin-only page, Admin > Cup Teams (/admin/lsc-teams).",
+      "Kerry 10/9: \"For how it works buttons they should only pop up a modal that can easily be closed. Make sure no links take you outside the scorer's interface of the SCORING and LEADERBOARD.\" HOW IT WORKS on the scoring screen now opens the Cup's How It Works in a popup on that session's format, closed with the X, Got it, or a tap outside, and the card is right where it was. FOLLOW THE CUP on the landing screen now opens the scorer's own LEADERBOARD with the match open instead of the public Cup page, and the Download PDF / Share links that open outside are hidden on both scorer screens."
+    ]
+  },
   {
     version: "2.532.10",
     date: "2026-10-09",
