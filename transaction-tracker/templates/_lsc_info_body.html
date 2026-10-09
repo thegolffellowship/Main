@@ -54,7 +54,7 @@
     <a class="pill dark" data-lsc-info-pdf href="/member/lonestarcup/info?print=1{{ '&preview=1' if preview else '' }}"{% if embed %} target="_blank" rel="noopener"{% endif %}>Download PDF</a>
   </div>
   <nav class="seg" data-lsc-info-seg>
-    <a href="#schedule" data-s="schedule">Schedule</a><a href="#teams" data-s="teams">Teams</a><a href="#formats" data-s="formats">Formats</a>
+    <a href="#schedule" data-s="schedule">Schedule</a><a href="#teams" data-s="teams">Teams</a><a href="#formats" data-s="formats">Formats</a>{% if scorer_notes %}<a href="#scoring" data-s="scoring">Scoring</a>{% endif %}
   </nav>
 
   <section data-sec="schedule"{{ ID('schedule') }}>
@@ -120,4 +120,15 @@
     </dl>
     <p class="note">Saturday net uses the full session allowance (90% Fourball; 60/40 Chapman), not off-lowest. A pair with one buyer: the buyer takes the whole skin. A pair with no buyer is out of the hole and cannot tie one out.</p>
   </section>
+
+  {% if scorer_notes %}
+  {# THE SCORER NOTES (Kerry 10/9: "Add these scorer notes in that email, also
+     include on the event info in tracker"): one copy, lsc_weekend_email.SCORER_NOTES #}
+  <section data-sec="scoring"{{ ID('scoring') }}>
+    <h4>Scoring on your phone</h4>
+    <ul>
+      {% for n in scorer_notes %}<li>{{ n }}</li>{% endfor %}
+    </ul>
+  </section>
+  {% endif %}
 </div>

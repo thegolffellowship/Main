@@ -13203,7 +13203,8 @@ def member_lonestarcup_info():
     from email_parser.score_entry import _json_setting
     dial = _json_setting("lsc_matches")
     drawn = any(len(s.get("matches") or []) >= 7 for s in (dial.get("sessions") or []))
-    ctx = dict(teams=teams, preview=request.args.get("preview") == "1",
+    from email_parser.lsc_weekend_email import SCORER_NOTES
+    ctx = dict(teams=teams, preview=request.args.get("preview") == "1", scorer_notes=SCORER_NOTES,
                draw_note="on the board" if drawn else "posted after Thursday's draw",
                practice_n=_lsc_practice_count(dial.get("event_id")))
     # ?embed=1 is the bare body for the EVENT INFO view on LEADERBOARD >

@@ -936,3 +936,16 @@ On `/member/score/board?t=` for a Cup round (`window.SOLO_CUP`):
 - `qr="off"` still prints none.
 - Guard: `test_lsc_scorecards.py`.
 
+**The weekend email + scorer notes (v2.533.0, Kerry 10/9).**
+- `email_parser/lsc_weekend_email.py` builds one email per Cup player from the `lsc_matches` dial:
+  - the Friday practice group (via the Cup's `friday` add-on);
+  - per session: match number 1–28, tee time, partner and opponents, and Sunday's other match in the group;
+  - per round: the group's scorecard link (from `cup_sign_sheets`);
+  - the formats, the points line, `SCORER_NOTES`, and the board and Event Info links.
+- How a send runs:
+  - `send_preview` mails staff only, with the batch's approval code (a hash of every message).
+  - `send(approval, confirm)` refuses unless both match. It records each player in the app setting `lsc_weekend_email_sent` before the Graph call, so nobody is mailed twice.
+  - Bridge: `scoring-lsc-weekend-email[:preview|show|<cid>|send|<code>|confirm]`.
+- EVENT INFO has a SCORING tab that renders the same `SCORER_NOTES`.
+- Guard: `test_lsc_weekend_email.py`.
+

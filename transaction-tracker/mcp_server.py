@@ -5569,6 +5569,26 @@ def _scoring_dispatch_inner(url: str, extract: str):
                                "ggid": {f"{g['holes']}:{g['group_num']}": g["ggid"]
                                         for g in sc["groups"]}},
                               indent=2, default=str)
+        if cmd == "scoring-lsc-weekend-email":
+            # scoring-lsc-weekend-email            dry run: counts, held, approval code
+            # scoring-lsc-weekend-email:preview[|<staff addr>]   samples to staff
+            # scoring-lsc-weekend-email:send|<code>|confirm      THE MEMBER SEND,
+            #   only on Kerry's word for that exact batch (code from the preview)
+            from email_parser import lsc_weekend_email as lwe
+            bits = [b.strip() for b in (arg or "").split("|") if b.strip()]
+            if bits and bits[0] == "preview":
+                db.log_agent_action("mcp-claude", "scoring-lsc-weekend-email", arg)
+                return json.dumps(lwe.send_preview(to=bits[1] if len(bits) > 1 else
+                                                   "kerry@thegolffellowship.com"), indent=2, default=str)
+            if bits and bits[0] == "send":
+                db.log_agent_action("mcp-claude", "scoring-lsc-weekend-email", arg)
+                return json.dumps(lwe.send(approval=bits[1] if len(bits) > 1 else "",
+                                           confirm=len(bits) > 2 and bits[2] == "confirm"), indent=2, default=str)
+            if bits and bits[0] == "show":
+                b = lwe.build()
+                m = next((x for x in b.get("messages") or [] if str(x["customer_id"]) == (bits[1] if len(bits) > 1 else "18")), None)
+                return json.dumps({**lwe.summary(b), "sample": m}, indent=2, default=str)
+            return json.dumps(lwe.summary(lwe.build()), indent=2, default=str)
         if cmd == "scoring-print-pack-pdf":
             # scoring-print-pack-pdf:<event_id>[|send[|<to>]] — build the bound
             # PDF (parts + page counts + hash); "send" mails it as an

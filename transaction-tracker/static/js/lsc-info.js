@@ -5,7 +5,8 @@
    window.lscInfoWire(root, {key, onPick, shareUrl}) -> show(key) */
 (function () {
   var SEC = { schedule: "schedule", teams: "teams", formats: "formats",
-              fourball: "formats", foursomes: "formats", singles: "formats", skins: "formats" };
+              fourball: "formats", foursomes: "formats", singles: "formats", skins: "formats",
+              scoring: "scoring" };
   window.lscInfoSection = function (key) { return SEC[key] || "schedule"; };
   window.lscInfoWire = function (root, opts) {
     opts = opts || {};

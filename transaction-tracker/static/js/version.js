@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.532.18";
+window.TGF_VERSION = "2.533.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.533.0",
+    date: "2026-10-09",
+    title: "Lone Star Cup weekend email (each player's own schedule) + scorer notes on Event Info",
+    changes: [
+      "Kerry 10/9: \"It would be nice to be able to send emails today with a full directive for the weekend, everyone's individual times and pairings customized. Not just one round like today's practice round but the full overview.\" New email_parser/lsc_weekend_email.py builds one email per Cup player from THE DRAW: their Friday practice tee time when they play it, then each session's match number (1-28), tee time, partner and opponents (and on Sunday the other match in their group), their group's scorecard link per round, how each format works, the points line, the scorer notes, and the links to the live board and Event Info.",
+      "The send is gated: a staff-only preview carries an approval code for that exact batch; the member send refuses without confirm and that code, and records each player so nobody is mailed twice. Bridge scoring-lsc-weekend-email[:preview|send|<code>|confirm].",
+      "Kerry 10/9: \"Add these scorer notes in that email, also include on the event info in tracker.\" EVENT INFO gains a SCORING tab with the same notes (one copy, SCORER_NOTES), so the scoring screen's HOW IT WORKS popup and the member Cup tab show them too."
+    ]
+  },
   {
     version: "2.532.18",
     date: "2026-10-09",
