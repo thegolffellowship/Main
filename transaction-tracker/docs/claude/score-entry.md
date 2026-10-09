@@ -996,6 +996,12 @@ Events board on Olympia Hills (event 3308) had read Golf Genius imports.
   score counts for both), with their group's tee time; `get_event_leaderboard`
   returns it as `waiting` and every board but Team appends them with the tee
   time across the hole columns.
+- **CTP can't be skipped (v2.530.5, Kerry 10/9):** `render()` asks any CTP /
+  Longest Putt hole that is `holeDone` for the group and not `answered`,
+  whatever route left the hole (Save, arrows, card tap, reload). `ctpAsked`
+  holds this phone's answers until the next fresh card (an offline answer
+  re-asks once the card reloads). 10/6 Olympia Hills: every group answered;
+  Tracker CTP winners don't reach payouts/leaderboard yet (GG-only reader).
 - **No games, no team pops (v2.529.8, Kerry 10/8):** `_team_strokes`
   returns nothing when the round's event is `database.event_games_off`
   (included-games price $0), and the pairings seed and preview skip

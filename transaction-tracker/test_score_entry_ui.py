@@ -81,6 +81,18 @@ threading.Thread(target=lambda: appmod.app.run(port=PORT, use_reloader=False), d
 time.sleep(2)
 
 
+def answer_ctps(page, limit=6):
+    """Answer "No one" to every CTP question the card asks on open (Kerry 10/8:
+    an unanswered CTP hole can't be skipped). Returns how many were asked."""
+    page.wait_for_timeout(900)
+    n = 0
+    while page.locator("button[data-act=ctp][data-cid='']").count() and n < limit:
+        n += 1
+        page.click("button[data-act=ctp][data-cid='']")
+        page.wait_for_timeout(700)
+    return n
+
+
 def play(page, n):
     """Save n holes, answering any CTP prompt and the turn along the way."""
     for _ in range(n):
@@ -542,7 +554,16 @@ with sync_playwright() as p:
     se.write_scores(gf, fdev, 101, [{"op_id": f"fit{c_}-{h}", "customer_id": c_, "hole": h, "gross": PARS[h - 1]}
                                     for h in range(1, 19) for c_ in (101, 102, 107, 108)])
     fpg.evaluate("localStorage.removeItem('se_hole_' + new URLSearchParams(location.search).get('t').slice(0,24))")
-    fpg.reload(); fpg.wait_for_selector("text=Check the card"); fpg.wait_for_timeout(500)
+    fpg.reload(); fpg.wait_for_timeout(1500)
+    # THE CTP QUESTION CANNOT BE SKIPPED (Kerry 10/8): holes scored somewhere
+    # else (here: written server-side) and never answered are asked on open,
+    # one after another, before the card can be checked.
+    asked = 0
+    while fpg.locator("button[data-act=ctp][data-cid='']").count() and asked < 6:
+        asked += 1
+        fpg.click("button[data-act=ctp][data-cid='']"); fpg.wait_for_timeout(700)
+    check("an unanswered CTP hole is asked on open, not skipped", asked >= 1, asked)
+    fpg.wait_for_selector("text=Check the card"); fpg.wait_for_timeout(500)
     fh = fpg.evaluate("document.documentElement.scrollHeight")
     check("Check the card fits without scrolling", fh <= 660, fh)
     swipe_js = """(dx) => { const el = document.querySelector('.se-vp'); const r = el.getBoundingClientRect();
@@ -598,7 +619,7 @@ with sync_playwright() as p:
                                      "gross": PARS[h - 1] - 1 if c_ == 101 else PARS[h - 1] + 1}
                                     for h in range(1, 6) for c_ in (101, 102)])
     pk.evaluate("localStorage.setItem('se_hole_' + new URLSearchParams(location.search).get('t').slice(0,24), '6')")
-    pk.reload(); pk.wait_for_selector("h1:has-text('Hole 6')")
+    pk.reload(); answer_ctps(pk); pk.wait_for_selector("h1:has-text('Hole 6')")
     check("the match reads final (5&4) on hole 6", "5&4" in pk.inner_text(".se-mcard") and "final" in pk.inner_text(".se-mcard").lower())
     check("hole 6 still has its steppers and Save after the close-out",
           pk.locator(".se-plus").count() == 2 and pk.locator("[data-act=save]").is_enabled())

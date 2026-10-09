@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.530.4";
+window.TGF_VERSION = "2.530.5";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.530.5",
+    date: "2026-10-09",
+    title: "Live scoring: the closest-to-the-pin question can't be skipped",
+    changes: [
+      "Kerry 10/9: \"we never ended up with any CTP winners from the tracker live scoring. Did that function work? It shouldn't allow you to move onto the next hole without tapping a player name or no one was closer.\" It did work at Olympia Hills on 10/6 (all six groups answered both CTP holes; Luke Mazanec held holes 5 and 7). The winners never surfaced because payouts and the leaderboard read CTP winners from Golf Genius only; that wiring is the open Tracker-payouts work. The question itself was asked only by Save & Go, so the arrows, a tap on the group card or reopening the link went past it. Now any CTP / Longest Putt hole that is scored for the whole group and not yet answered by that group is asked again, on any screen, until a name or No one is tapped. If the answer can't be sent (no signal), the phone moves on and asks again once the card refreshes. Guard: test_score_entry_ui.py."
+    ]
+  },
   {
     version: "2.530.4",
     date: "2026-10-08",

@@ -597,6 +597,10 @@
             el.addEventListener("touchstart", done, {passive: true});
             setTimeout(done, reduced ? 700 : 3000);   // Kerry 10/8: "Extend to 3 seconds"
         })();
+        // CTP holes this phone has answered (or tried to, offline) since the
+        // last fresh card; cleared on every successful load, when the server's
+        // own "answered" flag takes over again.
+        const ctpAsked = new Set();
         let ctpHole = null, turnNext = null, lostMsg = "", errMsg = "", flagging = false, flagPick = null, busy = false;
         // Card check + photo (Kerry 2026-09-25).
         let checkNine = 0, checkPick = null, help = {}, noPhoto = false, psCid = null, psName = "", psOther = false;
@@ -818,14 +822,28 @@
             if (!who && !store.get(K.gate, false)) body = gateScreen();
             else if (!who) body = joinScreen();
             else if (card.lock.state === "held" && !following) body = heldScreen();
-            else if (keeping() && pickupHole != null) body = pickupScreen(pickupHole);
-            else if (keeping() && ctpHole != null) body = ctpScreen(ctpHole);
-            else if (keeping() && turnNext != null) body = turnScreen(turnNext);
             else {
-                // A submitted card reopens on the finished card, not the check.
-                if (keeping() && hole == null && allDone() && signed(who, "scorekeeper")
-                    && store.get(K.hole, null) == null) hole = "done";
-                body = keeping() && !(allDone() && hole === "done") ? holeScreen() : cardScreen();
+                // THE CTP QUESTION CANNOT BE SKIPPED (Kerry 10/8: "It shouldn't
+                // allow you to move onto the next hole without tapping a player
+                // name or no one was closer"). It used to be asked only by Save &
+                // Go; the arrows, a tap on the group card or reopening the link
+                // went past it. Now any CTP / Longest Putt hole that is scored for
+                // the whole group and not answered by this group comes back until
+                // a name or "No one" is tapped.
+                if (keeping() && ctpHole == null && pickupHole == null) {
+                    const due = Object.entries(card.ctp || {}).map(([h, c]) => [Number(h), c])
+                        .find(([h, c]) => !c.answered && !ctpAsked.has(h) && holeDone(h));
+                    if (due) ctpHole = due[0];
+                }
+                if (keeping() && pickupHole != null) body = pickupScreen(pickupHole);
+                else if (keeping() && ctpHole != null) body = ctpScreen(ctpHole);
+                else if (keeping() && turnNext != null) body = turnScreen(turnNext);
+                else {
+                    // A submitted card reopens on the finished card, not the check.
+                    if (keeping() && hole == null && allDone() && signed(who, "scorekeeper")
+                        && store.get(K.hole, null) == null) hole = "done";
+                    body = keeping() && !(allDone() && hole === "done") ? holeScreen() : cardScreen();
+                }
             }
             app.innerHTML = banner + body;
             const focus = !!app.querySelector(".se-hole, .se-chk");
@@ -1523,7 +1541,7 @@
                     // ("not open for this event", app._se_event_gate).
                     closedGate = status === 404 && /not open (yet|for this event)/.test(j.error || "");
                     if (status !== 200) { errMsg = j.error || "This scoring link isn't working."; card = null; render(); return; }
-                    card = j; errMsg = "";
+                    card = j; errMsg = ""; ctpAsked.clear();
                     if (who && !card.players.some((p) => p.customer_id === who)) who = null;
                     if (who && card.lock.state === "free" && !following) return claim(false);
                     render();
@@ -1763,7 +1781,7 @@
             }
             if (act === "turn") { turnNext = null; render(); return; }
             if (act === "ctp") {
-                const n = ctpHole; ctpHole = null;
+                const n = ctpHole; ctpHole = null; ctpAsked.add(n);
                 post("/api/score-entry/ctp", {hole: n, customer_id: b.dataset.cid ? Number(b.dataset.cid) : null, claimed_by: who});
                 return;
             }
