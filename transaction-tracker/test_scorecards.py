@@ -347,7 +347,7 @@ check("the circle's edge is its own colour, not a darker ring",
       "border:1px solid {{ r.chip or '#1B1B1B' }}" in _tpl and "rgba(0,0,0,.25)" not in _tpl)
 
 check("column heads read TOTAL and NET (Kerry 9/29: \"Capitalize TOTAL and NET\")",
-      '<th class="thick">TOTAL</th>' in _tpl and "<th>NET</th>" in _tpl and ">Total<" not in _tpl and ">Net<" not in _tpl)
+      '<th class="thick wide">TOTAL</th>' in _tpl and "<th>NET</th>" in _tpl and ">Total<" not in _tpl and ">Net<" not in _tpl)
 check("the GGID code prints large (1.75em; 1.4em on the 18's half-width column)",
       "font-size: 1.75em" in _tpl and ".card.h18 tr.hd th.lead .gc { font-size: 1.4em" in _tpl)
 

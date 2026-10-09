@@ -576,6 +576,15 @@ the Starter Sheet logo and Proxy logos too."
     the tee rows keep their tee colours.
   - The Cup logo on the card header is 7.6em. The practice round's player
     rows carry the team bar from the lock, as the Cup's do.
+  - **Cup card theme (v2.527.3, Kerry 10/8):** `.card.lsc` prints in the Cup
+    navy: QR (`qr_svg(dark="#002855")`), text, header row, heavy lines and
+    dots. Thin lines use `--lsc-line`. Par and SI rows are shaded, with their
+    labels right-justified. The team bar is 0.9em, an inset box-shadow inside
+    the name cell (a wide border would push a blank strip down the whole
+    column); `_name_em` leaves room for it. The upper-left header box is
+    empty, with no GGID or format label. Each panel sits in a `.tw` wrapper
+    with the outline and the rounded outer corners; the inner corners stay
+    square.
 - **Logos:** `database.report_brand(event_id)` covers `pack.brand`,
   `rep.brand` and the Jinja global `report_brand()`. The Starter Sheet,
   Proximity, Cart Signs, Divisions & Flights and Games & Payouts print
@@ -593,6 +602,12 @@ the Starter Sheet logo and Proxy logos too."
   course alias.
 - **Report header (v2.526.7):** every Cup round's Starter Sheet reads ROUND
   NAME, then COURSE · DATE (`database.report_heading`, Kerry 10/8).
+- **THE DRAW board (v2.527.3, Kerry 10/8):** the header is just the logo
+  with THE DRAW, centred. The session tabs are centred; a fully drawn session
+  turns green with "✓ LOCKED". Entrant names come from
+  `lsc_draw._display_names`: the lock's spelling with the LAST name in
+  capitals for members and alumni. Every entrant carries `names`, one per
+  line on the board.
 - **THE DRAW splash (v2.527.2):** the splash under the logo shows the
   weekend's dates (`lsc_draw.dates_label`, from the practice round and the
   dial's sessions, e.g. OCTOBER 9–11, 2026), sitting closer to the logo.

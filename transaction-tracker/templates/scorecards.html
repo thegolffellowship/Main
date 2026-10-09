@@ -73,15 +73,16 @@
 
     /* Grid (#891-C/D) */
     .panels { display: flex; gap: 6px; }
-    .panels table { flex: 1; min-width: 0; }
+    .panels .tw { flex: 1; min-width: 0; }
     /* the locked 18-hole split (Kerry 10/8): the front panel's share of the card */
-    .card.h18 .panels table.front { flex: 0 0 calc((100% - 6px) * {{ sc.cols18.front_share }}); }
+    .card.h18 .panels .tw.front { flex: 0 0 calc((100% - 6px) * {{ sc.cols18.front_share }}); }
     /* OUT / IN / TOT / NET: the header word fits its (wider) column */
     th.wide { padding: 0 0.1em; letter-spacing: -0.2px; }
     /* 2-up portrait: the biggest font on the narrowest columns; the header
        words step down so OUT / IN / TOT / NET / Init / PH fit (Kerry 10/8) */
     .card.l-2up.h18 tr.hd th.wide, .card.l-2up.h18 tr.hd th.init-h,
     .card.l-2up.h18 tr.hd th.ph1 { font-size: 0.8em; padding: 0; letter-spacing: -0.3px; }
+    .card.l-2up:not(.h18) tr.hd th.wide { font-size: 0.9em; padding: 0; letter-spacing: -0.3px; }
     table { table-layout: fixed; border-collapse: collapse; width: 100%; }
     /* ONE GRID (Kerry 2026-09-28: "Borders and lineweights are not
        consistent and don't extend all the way thru"): every cell border
@@ -243,6 +244,35 @@
       letter-spacing: 0.3px; }
     .card.lsc tr.pl td.lead .mp { font-family: "Bitter", Georgia, serif; font-weight: 800;
       font-size: 0.72em; color: var(--lsc-navy); }
+    /* Kerry 10/8, on the practice card: "make scorecard QR code the Navy and
+       all the black text and lines, navy as well. Add a shade to the PAR and
+       Stroke Index rows and right justify PAR and STROKE INDEX"; "Make the
+       chapter bars twice as wide"; "No GGID needed, and PRACTICE - INDIVIDUAL
+       is not needed, or anything else in that upper left box"; "round the
+       outer corners of the scorecard grid? Not the inside corners between
+       OUT and INIT". */
+    .card.lsc { color: var(--lsc-navy); --lsc-line: #8C9AB3; }
+    .card.lsc .brand { border-right-color: var(--lsc-navy); }
+    .card.lsc td, .card.lsc th { border-color: var(--lsc-line); }
+    .card.lsc tr.hd th { background: var(--lsc-navy); border-color: #4A6285;
+      border-bottom: 2px solid var(--lsc-navy); }
+    .card.lsc tr.pl.split td { border-top-color: var(--lsc-navy); }
+    .card.lsc tr.par td { border-top: 2px solid var(--lsc-navy); }
+    .card.lsc tr.hcp td { border-bottom: 2px solid var(--lsc-navy); color: #4A5F80; }
+    .card.lsc td.thick, .card.lsc th.thick { border-right: 2px solid var(--lsc-navy); }
+    .card.lsc .split-c svg.diag line { stroke: var(--lsc-line); }
+    .card.lsc .dk i, .card.lsc .decode i.lk { background: var(--lsc-navy); }
+    .card.lsc .decode { color: var(--lsc-navy); }
+    .card.lsc tr.par td, .card.lsc tr.hcp td { background: #ECEFF3; }
+    .card.lsc tr.par td.hl, .card.lsc tr.hcp td.hl { background: #FFF176; }
+    .card.lsc tr.par td.lead, .card.lsc tr.hcp td.lead { text-align: right; }
+    /* the rounded grid: each panel's box carries the heavy outline; the
+       table sits 1px outside it so its own edge lines are clipped */
+    .card.lsc .tw { border: 2px solid var(--lsc-navy); overflow: hidden; }
+    .card.lsc .tw table { border: 0; margin: -1px; width: calc(100% + 2px); }
+    .card.lsc .tw.front { border-radius: 0.7em; }
+    .card.lsc.h18 .tw.front { border-radius: 0.7em 0 0 0.7em; }
+    .card.lsc .tw.back { border-radius: 0 0.7em 0.7em 0; }
     .card.lsc tr.pl td.fs-a { border-bottom: 1px dashed #C7CBD1; }
     .card.lsc tr.pl td.fs-b { border-top: 1px dashed #C7CBD1; }
     .lsc-pick { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
@@ -392,7 +422,7 @@
     {% set back = grid.holes[9:] %}
     <div class="panels">
     {# ---- panel 1: the 9-hole card, or the 18's front nine ---- #}
-    <table class="front">
+    <div class="tw front"><table class="front">
       <colgroup>
         {% if is18 %}
           <col style="width:{{ sc.cols18.f_lead }}%">{% for h in front %}<col style="width:{{ sc.cols18.f_hole }}%">{% endfor %}<col style="width:{{ sc.cols18.f_wide }}%">
@@ -404,10 +434,10 @@
         {% endif %}
       </colgroup>
       <tr class="hd">
-        <th class="lead thick">{% if L %}<span class="fl">{{ L.lead }}</span>{% elif c.ggid %}<span class="gl">GGID</span><span class="gc">{{ c.ggid }}</span>{% endif %}</th>
+        <th class="lead thick">{% if L %}{% elif c.ggid %}<span class="gl">GGID</span><span class="gc">{{ c.ggid }}</span>{% endif %}</th>
         {% for h in front %}<th class="{{ 'hl' if c.hl_hole == h else '' }} {{ 'thick' if loop.last else '' }}">{{ h }}</th>{% endfor %}
         {% if is18 %}<th class="wide">OUT</th>{% else %}
-          <th class="thick">TOTAL</th>
+          <th class="thick wide">TOTAL</th>
           {% if L and L.single %}<th>PH</th>{% else %}
           <th class="split-c"><svg class="diag" viewBox="0 0 100 100" preserveAspectRatio="none"><line x1="0" y1="100" x2="100" y2="0" vector-effect="non-scaling-stroke"/></svg><span class="ul">{{ L.ul if L else 'PH' }}</span><span class="lr">{{ L.lr if L else sc.net.word }}</span></th>{% endif %}
           <th>NET</th>{% endif %}
@@ -438,7 +468,7 @@
       {% for r in c.rows %}
       {% set rs = ' rowspan="2"' if r.get("fs_span") == 2 else '' %}
       <tr class="pl {{ 'rider' if r.rider else '' }} {{ 'split' if c.split_after is not none and loop.index0 == c.split_after else '' }}">
-        <td class="lead thick{{ ' fs-a' if r.get("fs_span") == 2 else '' }}{{ ' fs-b' if r.get("fs_skip") else '' }}"{% if r.get("team_bar") %} style="border-left:0.45em solid {{ r.get("team_bar") }}"{% endif %}><div class="ln"><span class="nm" style="font-size:{{ r.name_em_18 if is18 else r.name_em }}em">{% if r.get("mprefix") %}<span class="mp">{{ r.get("mprefix") }}</span>&nbsp;&nbsp;{% endif %}{{ r.name }}</span><span class="tc" title="{{ r.tee_code }}" style="{% if r.chip_ladies %}background:#fff;border:2px solid {{ r.chip }};{% elif (r.chip or '')|lower in ['#ffffff', '#fff'] %}background:#fff;border:1.5px solid #1B1B1B;{% else %}background:{{ r.chip or '#fff' }};border:1px solid {{ r.chip or '#1B1B1B' }};{% endif %}"></span></div></td>
+        <td class="lead thick{{ ' fs-a' if r.get("fs_span") == 2 else '' }}{{ ' fs-b' if r.get("fs_skip") else '' }}"{% if r.get("team_bar") %} style="box-shadow:inset 0.9em 0 0 {{ r.get("team_bar") }};padding-left:1.15em"{% endif %}><div class="ln"><span class="nm" style="font-size:{{ r.name_em_18 if is18 else r.name_em }}em">{% if r.get("mprefix") %}<span class="mp">{{ r.get("mprefix") }}</span>&nbsp;&nbsp;{% endif %}{{ r.name }}</span><span class="tc" title="{{ r.tee_code }}" style="{% if r.chip_ladies %}background:#fff;border:2px solid {{ r.chip }};{% elif (r.chip or '')|lower in ['#ffffff', '#fff'] %}background:#fff;border:1.5px solid #1B1B1B;{% else %}background:{{ r.chip or '#fff' }};border:1px solid {{ r.chip or '#1B1B1B' }};{% endif %}"></span></div></td>
         {% if not r.get("fs_skip") %}
         {% for h in front %}<td{{ rs|safe }} class="{{ 'hl' if c.hl_hole == h else '' }} {{ 'thick' if loop.last else '' }}"><span class="dk">{{ dots(r.ph_dots.get(h)) }}</span><span class="do">{{ dots(r.net_dots.get(h)) }}{{ ghosts((r.net_ghost or {}).get(h)) }}</span></td>{% endfor %}
         {% if is18 %}<td{{ rs|safe }} class="sh"></td>{% else %}
@@ -449,10 +479,10 @@
         {% endif %}
       </tr>
       {% endfor %}
-    </table>
+    </table></div>
     {% if is18 %}
     {# ---- panel 2: the 18's back nine ---- #}
-    <table>
+    <div class="tw back"><table>
       <colgroup>
         <col style="width:{{ sc.cols18.b_init }}%">{% for h in back %}<col style="width:{{ sc.cols18.b_hole }}%">{% endfor %}
         <col style="width:{{ sc.cols18.b_wide }}%"><col style="width:{{ sc.cols18.b_wide }}%"><col style="width:{{ sc.cols18.b_hole }}%"><col style="width:{{ sc.cols18.b_wide }}%">
@@ -498,7 +528,7 @@
         {% endif %}
       </tr>
       {% endfor %}
-    </table>
+    </table></div>
     {% endif %}
     </div>
     {# ONE line, the words Kerry chose (9/29: "we need to maintain terminology.

@@ -20,18 +20,17 @@
 html,body{background:var(--bg);color:var(--fg)}
 body{font-family:var(--body);font-size:16px;line-height:1.4;padding-block:0 40px;padding-inline:16px;max-width:1180px;margin:0 auto}
 *{box-sizing:border-box}
-.hdr{display:flex;align-items:center;gap:22px;padding:18px 0 10px;border-bottom:1px solid var(--line);flex-wrap:wrap}
-.hdr img{width:150px;height:124px;flex:none;object-fit:contain}
-.hdr h1{font:800 clamp(28px,4.6vw,46px)/1 var(--display);margin:0;letter-spacing:.5px;text-wrap:balance}
-.hdr .sub{color:var(--muted);font-size:15px;margin-top:6px}
-.hdr .sub b{color:var(--fg);font-weight:600}
-.teams{display:flex;gap:10px;margin-left:auto;align-items:center;flex-wrap:wrap}
-.tm{font:800 14px/1 var(--display);letter-spacing:2px;text-transform:uppercase;padding:10px 16px;border-radius:6px;color:#fff}
-.tm.aus{background:var(--aus)}.tm.sa{background:var(--sa)}
-.vs{font:700 13px var(--display);color:var(--muted)}
-nav.sess{display:flex;gap:6px;margin:16px 0 10px;flex-wrap:wrap}
+.hdr{display:flex;flex-direction:column;align-items:center;gap:6px;padding:18px 0 14px;border-bottom:1px solid var(--line);text-align:center}
+.hdr img{width:190px;height:157px;flex:none;object-fit:contain;filter:drop-shadow(0 8px 24px rgba(0,0,0,.35))}
+.hdr h1{font:800 clamp(24px,3.6vw,36px)/1 var(--display);margin:0;letter-spacing:8px;color:#9DB4D6}
+nav.sess{display:flex;gap:6px;margin:16px 0 10px;flex-wrap:wrap;justify-content:center}
 nav.sess button{font:700 13px/1 var(--display);letter-spacing:1.5px;text-transform:uppercase;padding:12px 18px;border-radius:999px;border:1px solid var(--line);background:transparent;color:var(--muted);cursor:pointer}
 nav.sess button[aria-selected="true"]{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+/* a fully drawn session (Kerry 10/8: "change color and add check ... maybe LOCKED") */
+nav.sess button.locked{background:var(--go);border-color:var(--go);color:#fff}
+nav.sess button.locked[aria-selected="true"]{box-shadow:0 0 0 3px var(--fg)}
+nav.sess button .lk{margin-left:8px;font-size:11px;letter-spacing:2px;opacity:.9}
+.nl{display:block}
 nav.sess button:focus-visible,.btn:focus-visible{outline:2px solid #FFD166;outline-offset:2px}
 .sess-h{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;margin:8px 0 12px}
 .sess-h h2{font:800 clamp(22px,3vw,32px)/1.1 var(--display);margin:0}
@@ -88,8 +87,8 @@ textarea#out{width:100%;min-height:200px;background:var(--panel);color:var(--fg)
 #intro{position:fixed;inset:0;z-index:1000;background:var(--lsc-navy);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:28px;overflow:hidden;transition:opacity .5s ease}
 #intro.out{opacity:0;pointer-events:none}
 #intro .in-logo{width:min(70vw,560px);aspect-ratio:2000/1651;position:relative;z-index:1}
-#intro .in-logo img{width:100%;height:100%;object-fit:contain;display:block}
-#intro .in-k{margin-top:-18px;font:800 clamp(16px,2vw,22px)/1 var(--display);letter-spacing:8px;color:#9DB4D6;position:relative;z-index:1}
+#intro .in-logo img{width:100%;height:100%;object-fit:contain;display:block;filter:drop-shadow(0 8px 24px rgba(0,0,0,.35))}
+#intro .in-k{margin-top:calc(-28px - min(70vw,560px) * .028);font:800 clamp(16px,2vw,22px)/1 var(--display);letter-spacing:8px;color:#9DB4D6;position:relative;z-index:1}
 #intro .in-go{position:relative;z-index:1;font:800 clamp(16px,1.8vw,20px)/1 var(--display);letter-spacing:3px;text-transform:uppercase;padding:18px 40px;border-radius:999px;border:0;background:#E87C3E;color:#fff;cursor:pointer;box-shadow:0 8px 24px rgba(0,0,0,.35)}
 #intro .in-go:hover{background:#D06B2E}
 #intro .in-go:focus-visible{outline:3px solid #FFD166;outline-offset:3px}
@@ -105,20 +104,17 @@ document.getElementById("startDraw").addEventListener("click",function(){
   setTimeout(function(){el.hidden=true},550);
 });
 </script>
+<!-- Kerry 10/8: "Remove everything up top besides the Logo. Center it. Add
+     The Draw below it centered. Center the toggles for each session as well." -->
 <header class="hdr">
   <img src="/static/lsc-logo-dark.png" alt="Lone Star Cup 2026">
-  <div>
-    <h1>Lone Star Cup 2026 · The Draw</h1>
-    <div class="sub">The Hideout Golf Club, Brownwood · Sat–Sun Oct 10–11 · <b>28 points</b> · San Antonio holds the Cup and retains at 14–14</div>
-    <div class="sub">Pools cut on handicap index (locked 10/7). Strokes in play use course handicap: Fourball 90% · Foursomes 60/40 · Singles 100%, off the low in the match.</div>
-  </div>
-  <div class="teams"><span class="tm aus">Austin · Matt Jenkins</span><span class="vs">v</span><span class="tm sa">San Antonio · Rob Callaway</span></div>
+  <h1>THE DRAW</h1>
 </header>
 
 <nav class="sess" role="tablist" aria-label="Sessions">
-  <button role="tab" aria-selected="true" data-s="fb">Sat AM · Fourball</button>
-  <button role="tab" aria-selected="false" data-s="fs">Sat PM · Foursomes</button>
-  <button role="tab" aria-selected="false" data-s="sg">Sun · Singles</button>
+  <button role="tab" aria-selected="true" data-s="fb" data-l="Sat AM · Fourball">Sat AM · Fourball</button>
+  <button role="tab" aria-selected="false" data-s="fs" data-l="Sat PM · Foursomes">Sat PM · Foursomes</button>
+  <button role="tab" aria-selected="false" data-s="sg" data-l="Sun · Singles">Sun · Singles</button>
 </nav>
 
 <main id="board"></main>
@@ -149,11 +145,17 @@ let cur="fb";
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const idx=v=>v<0?"+"+Math.abs(v).toFixed(1):v.toFixed(1);
 const lab=(arr,k)=>{const e=arr.find(x=>x.key===k);return e?e.label:k};
+// one name per line (Kerry 10/8: "show names on separate rows")
+const nms=e=>(e.names&&e.names.length?e.names:[e.label]).map(n=>`<span class="nl">${esc(n)}</span>`).join("");
+const nmk=(arr,k)=>{const e=arr.find(x=>x.key===k);return e?nms(e):esc(k)};
+function tabs(){document.querySelectorAll("nav.sess button").forEach(b=>{const k=b.dataset.s,s=SESS[k];
+  const done=s.pools.every(p=>state[k][p.key].length>=p.aus.length&&p.aus.length>0);
+  b.classList.toggle("locked",done);b.innerHTML=esc(b.dataset.l)+(done?'<span class="lk">\u2713 LOCKED</span>':"");});}
 function tee(s,n){const d=new Date(2026,9,10,s.start[0],s.start[1]+10*Math.floor(n/s.perTee));let h=d.getHours(),m=d.getMinutes();const ap=h>=12?"PM":"AM";h=h%12||12;return `${h}:${String(m).padStart(2,"0")} ${ap}`}
 function matchNo(s,poolKey,i){const off=poolKey==="high"?s.pools[0].aus.length:0;return off+i}
 function toast(msg,err){const t=document.getElementById("toast");t.textContent=msg||"";t.classList.toggle("err",!!err)}
 function render(){
-  const s=SESS[cur],st=state[cur];
+  const s=SESS[cur],st=state[cur];tabs();
   const b=document.getElementById("board");b.innerHTML="";
   const h=document.createElement("div");h.className="sess-h";h.innerHTML=`<h2>${s.title}</h2><span class="rule">${s.rule}</span>`;b.appendChild(h);
   s.pools.forEach(p=>{
@@ -163,11 +165,11 @@ function render(){
     el.innerHTML=`<div class="pool-h"><h3>${p.name}</h3><span class="n">${p.aus.length} v ${p.sa.length} · drawn at random${cur==="fs"?" · no repeat of an AM match":""}</span>
       <button class="btn" data-draw="${p.key}" ${left&&!g?"":"disabled"}>${g?g:done.length===0?"Draw the first match":left?"Draw the next match":"Pool drawn"}</button></div>
       <div class="grid">
-        <div class="col aus"><div class="lab">Austin</div>${p.aus.map(e=>`<div class="ent ${takenA.has(e.key)?"taken":""}"><span>${esc(e.label)}</span><small>${idx(e.idx)}</small></div>`).join("")}</div>
+        <div class="col aus"><div class="lab">Austin</div>${p.aus.map(e=>`<div class="ent ${takenA.has(e.key)?"taken":""}"><span>${nms(e)}</span><small>${idx(e.idx)}</small></div>`).join("")}</div>
         <div class="matches"><div class="lab">Matches</div>${
-          done.map((m,i)=>{const n=matchNo(s,p.key,i);return `<div class="m"><div class="a">${esc(lab(p.aus,m[0]))}</div><div class="c"><b>Match ${n+1}</b>${tee(s,n)}</div><div class="b">${esc(lab(p.sa,m[1]))}</div></div>`}).join("")
+          done.map((m,i)=>{const n=matchNo(s,p.key,i);return `<div class="m"><div class="a">${nmk(p.aus,m[0])}</div><div class="c"><b>Match ${n+1}</b>${tee(s,n)}</div><div class="b">${nmk(p.sa,m[1])}</div></div>`}).join("")
         }${left?`<div class="m empty" id="next-${p.key}">${done.length?"Next match…":"Tap DRAW to start"}</div>`:""}</div>
-        <div class="col sa"><div class="lab">San Antonio</div>${p.sa.map(e=>`<div class="ent ${takenS.has(e.key)?"taken":""}"><span>${esc(e.label)}</span><small>${idx(e.idx)}</small></div>`).join("")}</div>
+        <div class="col sa"><div class="lab">San Antonio</div>${p.sa.map(e=>`<div class="ent ${takenS.has(e.key)?"taken":""}"><span>${nms(e)}</span><small>${idx(e.idx)}</small></div>`).join("")}</div>
       </div>`;
     b.appendChild(el);
   });

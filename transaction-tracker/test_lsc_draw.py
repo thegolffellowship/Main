@@ -60,7 +60,7 @@ check("Sunday Low 7 Austin by locked raw index (Track B #1412)",
       [e["label"] for e in P["sg"]["low"]["austin"]] == ["Luke Youngs", "Matt Jenkins", "Neal Cloer", "Chris Cannon",
                                                        "David Wetz", "John Wade", "Walter Hogue"], [e["label"] for e in P["sg"]["low"]["austin"]])
 check("Sunday Low 7 SA by locked raw index",
-      [e["label"] for e in P["sg"]["low"]["sa"]] == ["Pat Youngs", "Michael Mesa", "Kerry Niester", "Jeff Young",
+      [e["label"].title() for e in P["sg"]["low"]["sa"]] == ["Pat Youngs", "Michael Mesa", "Kerry Niester", "Jeff Young",
                                                    "Adam Baker", "Luke Mazanec", "Daniel South"])
 
 r = lsc_draw.land(3329, "fs", "low", "AUS-P1", "SA-P1", db_path=DB)
@@ -126,7 +126,9 @@ check("the page is admin only", cl.get("/events/3329/cup-draw").status_code in (
 check("the write is admin only", cl.post("/api/events/3329/cup-draw/land", json={}).status_code in (401, 302, 403))
 cl.post("/api/auth/login", json={"pin": "4242"})
 h = cl.get("/events/3329/cup-draw")
-check("the page renders for admin with the live entrants", h.status_code == 200 and "Kerry Niester" in h.get_data(as_text=True))
+_k = next(e for e in P["sg"]["low"]["sa"] if e["key"] == "18")
+check("members and alumni print a capital LAST name (Kerry 10/8)", _k["label"] == "Kerry NIESTER" and _k["names"] == ["Kerry NIESTER"], _k)
+check("the page renders for admin with the live entrants", h.status_code == 200 and "Kerry NIESTER" in h.get_data(as_text=True))
 r = cl.post("/api/events/3329/cup-draw/land", json={"session": "fb", "pool": "low", "a": "AUS-P2", "s": "SA-P2"})
 check("POST land writes and returns the new state", r.status_code == 200 and r.get_json()["state"]["fb"]["low"] == [["AUS-P2", "SA-P2"]], r.get_json())
 r = cl.post("/api/events/3329/cup-draw/land", json={"session": "fb", "pool": "low", "a": "AUS-P2", "s": "SA-P1"})

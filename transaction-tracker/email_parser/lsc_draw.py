@@ -88,6 +88,44 @@ def dates_label(event_id: int, db_path=None) -> str:
     return f"{a:%B} {a.day}, {a.year} \u2013 {b:%B} {b.day}, {b.year}".upper()
 
 
+def _display_names(cids, lock, db_path=None) -> dict:
+    """cid -> the lock's name with the LAST name in capitals for members and
+    alumni (Kerry 10/8: "Make last names capitals for all members/alumni per
+    standard", the #1481 §5D rule). The lock stays the Cup's spelling; the
+    customer record's last name says which word(s) are the surname."""
+    import re
+    from email_parser import database as db
+    out = {}
+    if not cids:
+        return out
+    try:
+        with db._connect(db_path) as conn:
+            q = ",".join("?" * len(cids))
+            lasts = {int(r[0]): (r[1] or "").strip() for r in conn.execute(
+                f"SELECT customer_id, last_name FROM customers WHERE customer_id IN ({q})", tuple(cids))}
+            try:
+                status = db.derive_member_financial_status_bulk(conn, list(cids))
+            except Exception:
+                status = {}
+    except Exception:
+        return out
+    for c in cids:
+        name = ((lock.get(str(c)) or {}).get("name") or "").strip()
+        if not name or status.get(int(c)) not in ("member", "alumni"):
+            continue
+        last = lasts.get(int(c)) or ""
+        if last and re.search(r"\b" + re.escape(last) + r"\b", name, re.I):
+            out[int(c)] = re.sub(r"\b" + re.escape(last) + r"\b", last.upper(), name, count=1, flags=re.I)
+            continue
+        parts = name.split()
+        i = len(parts) - 1
+        if i > 1 and parts[i].rstrip(".").lower() in ("jr", "sr", "ii", "iii", "iv"):
+            i -= 1
+        if i >= 1:
+            parts[i] = parts[i].upper()
+            out[int(c)] = " ".join(parts)
+    return out
+
 def pools(event_id: int, db_path=None) -> dict:
     """{"fb"|"fs"|"sg": {"low"|"high": {"austin": [...], "sa": [...]}}}; an
     entrant is {key, label, idx, cids}. Saturday AM and PM draw from the same
@@ -95,8 +133,10 @@ def pools(event_id: int, db_path=None) -> dict:
     dial = _get(DIAL, db_path)
     lock = _lock_players(event_id, db_path)
 
+    shown = _display_names([int(c) for c in lock], lock, db_path)
+
     def nm(c):
-        return (lock.get(str(c)) or {}).get("name") or f"#{c}"
+        return shown.get(int(c)) or (lock.get(str(c)) or {}).get("name") or f"#{c}"
 
     raw = dial.get("pairs") or {}
     sat = {p: {"austin": [], "sa": []} for p in POOLS}
@@ -110,7 +150,7 @@ def pools(event_id: int, db_path=None) -> dict:
             if idx is None:
                 idx = round(sum(float((lock.get(str(c)) or {}).get("index") or 0) for c in cids), 1)
             sat[pool][team].append({"key": str(pr.get("id")), "label": " & ".join(nm(c) for c in cids),
-                                    "idx": float(idx), "cids": cids})
+                                    "names": [nm(c) for c in cids], "idx": float(idx), "cids": cids})
         for pool in POOLS:
             sat[pool][team].sort(key=lambda e: (e["idx"], e["key"]))
     sun = {p: {"austin": [], "sa": []} for p in POOLS}
@@ -120,7 +160,7 @@ def pools(event_id: int, db_path=None) -> dict:
         half = (len(players) + 1) // 2
         for i, (c, v) in enumerate(players):
             sun["low" if i < half else "high"][team].append(
-                {"key": str(c), "label": v.get("name") or f"#{c}",
+                {"key": str(c), "label": nm(c), "names": [nm(c)],
                  "idx": float(v.get("index") if v.get("index") is not None else 0), "cids": [c]})
     return {"fb": sat, "fs": sat, "sg": sun}
 

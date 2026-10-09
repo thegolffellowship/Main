@@ -230,7 +230,7 @@ for eid, kw in ((3329, {}), (3330, {}), (3304, {})):
             s = scm.build_scorecards(eid, lay, "team", qr="off", db_path=DB, holes_override=holes, **kw)
             html = env.get_template("scorecards.html").render(sc=s)
             if eid == 3329:
-                ok = "lsc-logo.png" in html and "FOURSOMES · 1 BALL PER TEAM" in html and 'rowspan="2"' in html \
+                ok = "lsc-logo.png" in html and "FOURSOMES · 1 BALL PER TEAM" not in html and 'rowspan="2"' in html \
                     and "tgf-logo-r.svg" not in html.split("<body>")[1].split("class=\"sheet\"")[1]
             elif eid == 3330:
                 ok = "PRACTICE ROUND" in html and "GGID codes" not in html

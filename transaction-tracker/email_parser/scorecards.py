@@ -515,7 +515,8 @@ def build_scorecards(event_id: int, layout: str = "3up", grouping: str = "team",
         url = (links.get(g["holes"]) or {}).get(g["group_num"]) if qr_on else None
         if url:
             from email_parser.score_entry import qr_svg
-            base["qr"] = {"url": url, "svg": qr_svg(url)}
+            # the Cup's cards print the QR in its navy (Kerry 10/8)
+            base["qr"] = {"url": url, "svg": qr_svg(url, dark="#002855") if lsc else qr_svg(url)}
         elif qr in ("preview", "on") and qr_on:
             log.append(f"Group {g['group_num']}: no scorer link (no open round) — QR slot empty.")
         if grouping == "cart":
@@ -574,15 +575,17 @@ def build_scorecards(event_id: int, layout: str = "3up", grouping: str = "team",
     # of half the card); ~0.62 em per Bitter-bold character is the estimate.
     _w = 1008 if lay["orient"] == "landscape" else 768
     _base = lay["font"]
-    def _name_em(name: str, lead_px: float) -> float:
-        avail = lead_px - 1.75 * _base
+    def _name_em(name: str, lead_px: float, bar: bool = False) -> float:
+        # the Cup's team bar (0.9em, Kerry 10/8 "twice as wide") is inside the cell
+        avail = lead_px - 1.75 * _base - (0.9 * _base if bar else 0)
         return round(max(0.7, min(1.35, avail / (0.62 * _base * max(len(name), 1)))), 2)
     for c in cards:
         for r in c["rows"]:
             # the singles "M1  " prefix takes ~4 characters of the cell
             fit = r["name"] + ("    " if r.get("mprefix") else "")
-            r["name_em"] = _name_em(fit, 0.24 * _w)
-            r["name_em_18"] = _name_em(fit, COLS_18["lead"] / 100 * (_w - 6))
+            bar = bool(r.get("team_bar"))
+            r["name_em"] = _name_em(fit, 0.24 * _w, bar)
+            r["name_em_18"] = _name_em(fit, COLS_18["lead"] / 100 * (_w - 6), bar)
     if layout == "3up" and len(tees) >= 5:
         gaps.append("This event has 5+ tees; the 3-per-sheet card cannot hold them. "
                     "Use a 2-per-sheet layout.")

@@ -1,5 +1,18 @@
-window.TGF_VERSION = "2.527.2";
+window.TGF_VERSION = "2.527.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.527.3",
+    date: "2026-10-08",
+    title: "Lone Star Cup scorecards in navy with a rounded grid; THE DRAW board tidied for the Zoom",
+    changes: [
+      "Kerry 10/8, on the Cup scorecards: \"make scorecard QR code the Navy and all the black text and lines, navy as well. Add a shade to the PAR and Stroke Index rows and right justify PAR and STROKE INDEX\". On the Cup's and the practice round's cards, the QR, text, header row, heavy lines and dots are the Cup navy #002855, the thin lines a navy grey, and the Par and SI rows are shaded with their labels right-justified.",
+      "\"Make the chapter bars twice as wide.\" The team bar is 0.9em, drawn inside the name cell; long names shrink to clear it.",
+      "\"No GGID needed, and PRACTICE - INDIVIDUAL is not needed, or anything else in that upper left box.\" The upper-left box on Cup cards is empty.",
+      "\"Can you round the outer corners of the scorecard grid? Not the inside corners between OUT and INIT.\" The grid's four outer corners are rounded; the corners where the front and back panels meet stay square.",
+      "THE DRAW (Kerry 10/8): the top shows only the Cup logo, centred, with THE DRAW beneath it. The session buttons are centred, and a fully drawn session turns green with a check and LOCKED. Members' and alumni's LAST names print in capitals (the #1481 standard). Each pair's names sit on their own lines in the lists and the drawn matches. On the splash, the dates sit closer to the logo, which has the same drop shadow as the Start The Draw button.",
+      "Every 9-hole 2-up card: the TOTAL header now fits its column."
+    ]
+  },
   {
     version: "2.527.2",
     date: "2026-10-08",
