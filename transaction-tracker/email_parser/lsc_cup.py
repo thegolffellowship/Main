@@ -1173,8 +1173,13 @@ def compute_board(dial: dict, session_data: dict,
                                      "state": state, "points": pts})
         all_sess = dial.get("sessions") or []
         next_tag = (tags[i_sess + 1] if i_sess + 1 < len(all_sess) else None)
+        # a card finished after its match (merge_entry_feed: finished)
+        # holds no skins hole open, exactly as a withdrawn player
+        fin = [int(c) for c in data.get("finished") or []]
+        sk_sess = ({**sess, "withdrawn": list(sess.get("withdrawn") or []) + fin}
+                   if fin else sess)
         sk = compute_skins_payout(
-            sess, course, phs, scores, marks, names,
+            sk_sess, course, phs, scores, marks, names,
             buyers=skins_ctx.get("buyers"), index=skins_ctx.get("index"),
             si_by_player=si_by_player, tee_gender=tee_gender,
             carry_in_cents=0 if carry["pending"] else carry["cents"],
@@ -1298,9 +1303,19 @@ def merge_entry_feed(dial: dict, feed: dict) -> dict:
                 marks.setdefault(int(cids[0]), {}).update(t["marks"])
         tees = {int(p["customer_id"]): p.get("tee")
                 for p in r.get("players") or [] if p.get("customer_id") and p.get("tee")}
+        # A card SUBMITTED with holes still blank (finished after its match
+        # was decided, Kerry 2026-10-09) holds no hole open for the field's
+        # skins: its players count like a withdrawn player's (scores they
+        # posted still count; a blank hole is simply not theirs).
+        checked = {c.get("group_id") for c in r.get("card_checks") or []}
+        n_course = len(r.get("course") or []) or int(sess.get("n_holes") or 18)
+        finished = sorted({int(p["customer_id"]) for p in r.get("players") or []
+                           if p.get("customer_id") and p.get("group_id") in checked
+                           and len(scores.get(int(p["customer_id"])) or {}) < n_course})
         out[sess.get("id")] = {"course": r.get("course") or [],
                                "phs": phs, "scores": scores, "marks": marks,
-                               "tees": tees, "course_id": r.get("course_id")}
+                               "tees": tees, "course_id": r.get("course_id"),
+                               "finished": finished}
     return out
 
 

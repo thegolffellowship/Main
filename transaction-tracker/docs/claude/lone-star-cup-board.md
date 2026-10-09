@@ -964,6 +964,29 @@ This applies to any event with no games (`evlbNoGames`):
 - The GG "official scorer" line is hidden there.
 
 
+## Cup clinched pop-up; finishing a card after its match — v2.535.1 (Kerry 10/9)
+
+Kerry: "When the cup is clinched a pop up congratulations message needs to pop up
+on the scorers site to say which chapter has clinched/retained the cup."
+- `static/js/lsc-clinch.js` (`window.lscClinchPopup`) is the one pop-up for both
+  scorer pages: the SCORING card (from `cup_standings.cup`, score-entry.md) and the
+  scorer's Cup LEADERBOARD (`SOLO_CUP`: `lscBoardRender` passes the board's `d.cup`).
+- It shows on `cup_status` `won` ("AUSTIN WINS THE LONE STAR CUP") or `retained`
+  ("SAN ANTONIO RETAINS THE LONE STAR CUP"), in the chapter colour on Cup navy with
+  `static/lsc-logo-dark.png` and the points; `tied_pending` and `open` show nothing.
+- Once per device, both pages together: localStorage `lsc_clinch_seen_<event_id>`
+  (`_preview` on the staff demo board). The member Cup tab does not show it.
+- The scorer's LEADERBOARD polls only while a match is live; the render that sees
+  the clinching match go final is the one that pops it.
+
+Kerry: "when match ends scorecard needs to congratulate winner(s) and ask if you
+want to continue the round (for skins) or complete and confirm with scorecard".
+A card may now be submitted with the holes after its matches blank (score-entry.md,
+"Play on, the match-won moment ..."). For skins, `merge_entry_feed` returns
+`finished` (players of a submitted card with blank holes) and `compute_board`
+treats them as `withdrawn` for skins only: their blank holes hold no hole open for
+the field; holes they posted still count. The match engine is untouched.
+
 ## Link preview card (2026-10-09)
 
 Kerry: "Need to change the link image view to show new logo and remove the

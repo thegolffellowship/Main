@@ -343,6 +343,12 @@ def _cup_standings(round_id: int) -> dict | None:
            "austin_projected": (t.get("austin") or {}).get("projected", 0.0),
            "sa_projected": (t.get("sa") or {}).get("projected", 0.0),
            "points_to_win": b.get("points_to_win")}
+    # WHO HOLDS THE CUP (Kerry 2026-10-09: "When the cup is clinched a pop up
+    # congratulations message needs to pop up on the scorers site"): the
+    # board's own cup_status, so the phone's pop-up and the board agree.
+    cup = b.get("cup") or {}
+    out["cup"] = {"status": cup.get("status"), "winner": cup.get("winner"),
+                  "event_id": b.get("event_id"), "preview": preview}
     # THIS SESSION's points (Kerry 2026-10-07, #1398-C1 / #1394: the Team
     # Score box under the rows carries the label and the two numbers; the
     # strip keeps the overall). Summed from the board's own per-match
@@ -2495,7 +2501,14 @@ def sign_card(group_id: int, device_id: str, customer_id: int, kind: str = "play
             card = {"subjects": {k: v for k, v in _group_scores(conn, group_id).items()}}
         else:
             card = _player_card(conn, g, group_id, customer_id)
-            if not card["complete"]:
+            # a Cup card finished after its matches were decided (submitted
+            # with the holes after it blank, Kerry 2026-10-09) signs as it is
+            early_ok = (not card["complete"]
+                        and conn.execute("SELECT 1 FROM se_card_checks WHERE group_id = ?",
+                                         (group_id,)).fetchone() is not None
+                        and card_matches_decided(conn, g, [r[0] for r in conn.execute(
+                            "SELECT customer_id FROM se_players WHERE group_id = ?", (group_id,))]))
+            if not card["complete"] and not early_ok:
                 conn.rollback()
                 return {"error": "the card isn't complete yet"}
             if conn.execute("SELECT 1 FROM se_card_flags WHERE group_id = ? AND customer_id = ? "
@@ -2564,8 +2577,18 @@ def _photo_dir(db_path=None) -> Path:
     return Path(str(db_path or DB_PATH)).parent / "se_photos"
 
 
+def card_matches_decided(conn, g, players) -> bool:
+    """True when this card carries at least one Lone Star Cup match and
+    every Cup match with a player on it is decided (closed out, or all its
+    holes played: a halve after 18 is decided too)."""
+    mine = {int(c) for c in players}
+    ms = [m for m in _match_status(conn, g)
+          if m.get("cup") and any(int(c) in mine for sd in m["sides"] for c in sd)]
+    return bool(ms) and all(m.get("final") for m in ms)
+
+
 def submit_card(group_id: int, device_id: str, keeper: int, *, print_scorer_customer_id=None,
-                print_scorer_name=None, photo_op_id=None, db_path=None) -> dict:
+                print_scorer_name=None, photo_op_id=None, finish_early=False, db_path=None) -> dict:
     """The scorekeeper's "Card matches paper" -> Submit. Attests the group,
     records who kept the paper card, and signs every player's card for him
     when the event's keeper-signs dial is on (never over a player's own
@@ -2595,9 +2618,18 @@ def submit_card(group_id: int, device_id: str, keeper: int, *, print_scorer_cust
             conn.rollback()
             return {"error": "the print scorer is not in this group; use their name"}
         cards = {c: _player_card(conn, g, group_id, c) for c in players}
+        early = False
         if not all(cd["complete"] for cd in cards.values()):
-            conn.rollback()
-            return {"error": "the card isn't complete yet"}
+            # FINISH AFTER THE MATCH (Kerry 2026-10-09: "when match ends
+            # scorecard needs to congratulate winner(s) and ask if you want to
+            # continue the round (for skins) or complete and confirm with
+            # scorecard"). A Cup card whose every match is decided may be
+            # submitted with the holes after it blank; those holes simply
+            # don't count for this card's skins (merge_entry_feed: finished).
+            if not (finish_early and card_matches_decided(conn, g, players)):
+                conn.rollback()
+                return {"error": "the card isn't complete yet"}
+            early = True
         now = _now()
         conn.execute("UPDATE se_signoffs SET voided_at = ?, void_reason = 'submitted again' "
                      "WHERE group_id = ? AND kind = 'scorekeeper' AND voided_at IS NULL",
@@ -2607,7 +2639,7 @@ def submit_card(group_id: int, device_id: str, keeper: int, *, print_scorer_cust
             "device_id, card, note, at) VALUES (?,?,?,?,?,?,?,?,?)",
             (g["round_id"], group_id, keeper, "scorekeeper", keeper, device_id,
              json.dumps({"subjects": _group_scores(conn, group_id)}, sort_keys=True),
-             "card matches paper", now))
+             "card matches paper" + ("; finished after the match was decided" if early else ""), now))
         signed_for, skipped = [], []
         on = keeper_signs(g["event_id"], db_path)
         if on:
@@ -2643,7 +2675,7 @@ def submit_card(group_id: int, device_id: str, keeper: int, *, print_scorer_cust
         _bump(conn, g["event_id"])
         conn.commit()
     return {"submitted": True, "check_id": check_id, "keeper_signs": on,
-            "signed_for": signed_for, "skipped": skipped}
+            "signed_for": signed_for, "skipped": skipped, "finished_early": early}
 
 
 def attach_card_photo(group_id: int, device_id: str, photo_op_id: str, data: bytes,
