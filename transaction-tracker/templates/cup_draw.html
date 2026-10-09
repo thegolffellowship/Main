@@ -58,6 +58,9 @@ nav.sess button:focus-visible,.btn:focus-visible{outline:2px solid #FFD166;outli
 /* the column heads sit in one row above the grid, so the matches start level
    with the entrants and grow less far down the screen (Kerry 10/8) */
 .grid.ghd{align-items:center;margin-bottom:6px}
+.sess-h.center{justify-content:center;text-align:center}
+.pending{text-align:center;padding:48px 16px;color:var(--muted)}
+.pending h2{font:800 clamp(24px,4vw,34px)/1.1 var(--display);color:var(--fg);margin:0 0 10px}
 .sumgrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;align-items:stretch}
 .sumcol{background:var(--panel);border-radius:14px;padding:12px;display:flex;flex-direction:column;gap:6px}
 .sumcol h3{font:800 16px/1 var(--display);letter-spacing:2px;text-transform:uppercase;margin:0 0 4px;text-align:center}
@@ -127,6 +130,7 @@ textarea#out{width:100%;min-height:200px;background:var(--panel);color:var(--fg)
 </style>
 </head>
 <body>
+{% if not member_view %}
 <!-- THE INTRO for the Zoom (Kerry 10/8: "I want the landing page to be that
      logo shimmer page, but I want it to stay there until I click a 'Start
      The Draw' button"). The Cup splash from the scoring links (navy plate,
@@ -160,6 +164,7 @@ document.getElementById("startDraw").addEventListener("click",function(){
   setTimeout(function(){el.hidden=true},550);
 });
 </script>
+{% endif %}
 <!-- Kerry 10/8: "Remove everything up top besides the Logo. Center it. Add
      The Draw below it centered. Center the toggles for each session as well." -->
 <header class="hdr">
@@ -167,15 +172,17 @@ document.getElementById("startDraw").addEventListener("click",function(){
   <h1>THE DRAW</h1>
 </header>
 
+{% if not member_view %}
 <nav class="sess" role="tablist" aria-label="Sessions">
   <button role="tab" aria-selected="true" data-s="fb" data-l="Sat AM · Fourball">Sat AM · Fourball</button>
   <button role="tab" aria-selected="false" data-s="fs" data-l="Sat PM · Foursomes">Sat PM · Foursomes</button>
   <button role="tab" aria-selected="false" data-s="sg" data-l="Sun · Singles">Sun · Singles</button>
   <button role="tab" aria-selected="false" data-s="sum" data-l="Summary" hidden>Summary</button>
 </nav>
+{% endif %}
 
 <main id="board"></main>
-
+{% if not member_view %}
 <div class="foot">
   <div class="note">Sessions are drawn in order, and a Saturday PM match is never a repeat of a Saturday AM match. Draw order sets the tee sheet: match 1 goes off first, every 10 minutes from the session start. Sunday pairs two matches per tee time. <b>Each match goes live on the Cup board the moment it lands.</b></div>
   <button class="btn ghost" id="reset">Clear this session</button>
@@ -183,9 +190,14 @@ document.getElementById("startDraw").addEventListener("click",function(){
   <span class="toast" id="toast"></span>
 </div>
 <textarea id="out" readonly aria-label="Draw as text" hidden></textarea>
+{% endif %}
 
 <script>
 const EVENT_ID = {{ event_id|int }};
+// THE MEMBERS' PAGE (Kerry 10/8: "it also needs to write to a member visible
+// page so I can immediately send them the link to view the matches"):
+// /member/cup-draw, read-only, the SUMMARY once every session is drawn.
+const MEMBER = {{ 'true' if member_view else 'false' }};
 const DATA = {{ data|tojson }};          // {pools: {fb|fs|sg: {low|high: {austin, sa}}}, state}
 const P = DATA.pools;
 const SESS={
@@ -230,7 +242,7 @@ function tabs(){
   // selected, a fourth toggle appears next to the others called SUMMARY")
   const all=["fb","fs","sg"].every(sessDone);
   document.querySelectorAll("nav.sess button").forEach(b=>{const k=b.dataset.s;
-    if(k==="sum"){b.hidden=!all;if(!all&&cur==="sum")cur="fb";return;}
+    if(k==="sum"){b.hidden=!all;if(!all&&cur==="sum"&&!MEMBER)cur="fb";return;}
     const done=sessDone(k);
     b.classList.toggle("locked",done);b.innerHTML=esc(b.dataset.l)+(done?'<span class="lk">\u2713 LOCKED</span>':"");});
   document.querySelectorAll("nav.sess button").forEach(x=>x.setAttribute("aria-selected",x.dataset.s===cur));
@@ -254,7 +266,7 @@ function sideSum(e,sd){
 // matches numbered through the weekend 1-28 (1-7 / 8-14 / 15-28, as the
 // starter sheets), every column stretched to the same height.
 function renderSummary(b){
-  const h=document.createElement("div");h.className="sess-h";h.innerHTML=`<h2>The Draw · Summary</h2><span class="rule">28 matches · 28 points · Austin over San Antonio · <b class="mo">bold</b> = strokes off the lowest (match handicap)</span>`;b.appendChild(h);
+  const h=document.createElement("div");h.className="sess-h center";h.innerHTML=`<h2>The Draw · Summary</h2><span class="rule">28 matches · 28 points · Austin over San Antonio · <b class="mo">bold</b> = strokes off the lowest (match handicap)</span>`;b.appendChild(h);
   const g=document.createElement("div");g.className="sumgrid";
   ["fb","fs","sg"].forEach(k=>{const s=SESS[k];
     const off=k==="fs"?SESS.fb.pools.reduce((t,p)=>t+p.aus.length,0):k==="sg"?SESS.fb.pools.reduce((t,p)=>t+p.aus.length,0)*2:0;
@@ -273,6 +285,10 @@ function toast(msg,err){const t=document.getElementById("toast");t.textContent=m
 function render(){
   tabs();
   const b=document.getElementById("board");b.innerHTML="";
+  if(MEMBER){
+    if(["fb","fs","sg"].every(sessDone))renderSummary(b);
+    else b.innerHTML=`<div class="pending"><h2>The Draw is coming</h2><p>The matches post here the moment THE DRAW is complete. Check back soon.</p></div>`;
+    return;}
   if(cur==="sum"){renderSummary(b);return;}
   const s=SESS[cur],st=state[cur];
   const h=document.createElement("div");h.className="sess-h";h.innerHTML=`<h2>${s.title}</h2><span class="rule">${s.rule}</span>`;b.appendChild(h);
@@ -355,6 +371,7 @@ function draw(poolKey){
     f++;
   },75);
 }
+if(!MEMBER){
 document.querySelectorAll("nav.sess button").forEach(b=>b.addEventListener("click",()=>{cur=b.dataset.s;document.querySelectorAll("nav.sess button").forEach(x=>x.setAttribute("aria-selected",x===b));toast("");render()}));
 document.getElementById("reset").addEventListener("click",async()=>{
   if(cur==="sum")return;
@@ -370,6 +387,8 @@ function text(){
 }
 document.getElementById("copy").addEventListener("click",()=>{const ta=document.getElementById("out");ta.value=text();ta.hidden=false;
   navigator.clipboard.writeText(ta.value).then(()=>{toast("Copied. Paste it to the mailbox.")},()=>{ta.focus();ta.select();toast("Select-all and copy from the box below.")});});
+}
+if(MEMBER)cur="sum";
 render();
 </script>
 </body>

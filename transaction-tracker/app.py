@@ -5598,7 +5598,28 @@ def cup_draw_page(event_id):
     ported as is; entrants from the live pairs and the handicap lock, every
     landed match written into lsc_matches (email_parser/lsc_draw.py). Admin
     only; screen-shared on the draw Zoom."""
-    return render_template("cup_draw.html", event_id=event_id, data=_cup_draw_payload(event_id))
+    return render_template("cup_draw.html", event_id=event_id, data=_cup_draw_payload(event_id),
+                           member_view=False)
+
+
+@app.route("/member/cup-draw")
+def member_cup_draw_page():
+    """THE DRAW for the members (Kerry 10/8: "When this is done, it also needs
+    to write to a member visible page so I can immediately send them the
+    link to view the matches"). Public (the pinless member tier), read-only:
+    the same page with no intro, no tabs, no controls, showing the SUMMARY
+    once every session is drawn and a "check back" note until then. The
+    Cup is the event the lsc_matches dial names."""
+    import json as _json
+    from email_parser.database import get_app_setting
+    try:
+        eid = int((_json.loads(get_app_setting("lsc_matches") or "{}") or {}).get("event_id") or 0)
+    except (ValueError, TypeError):
+        eid = 0
+    if not eid:
+        return "The Lone Star Cup draw isn't set up yet.", 404
+    return render_template("cup_draw.html", event_id=eid, data=_cup_draw_payload(eid),
+                           member_view=True)
 
 
 @app.route("/api/events/<int:event_id>/cup-draw")

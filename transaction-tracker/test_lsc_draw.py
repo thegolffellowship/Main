@@ -176,4 +176,12 @@ _mf = lsc_draw.match_math(3329, db_path=DB)["fs"]["low"][0]
 check("FOURSOMES: one team figure, 60% low + 40% high, off the low team",
       _mf["a"]["ph"] == 6 and [p["ch"] for p in _mf["a"]["players"]] == [4, 9] and min(_mf["a"]["off"], _mf["s"]["off"]) == 0
       and [(p["pct"], p["share"]) for p in _mf["a"]["players"]] == [(60, 2.4), (40, 3.6)] and _mf["a"]["sum"] == 6.0, _mf)
+# THE MEMBERS' PAGE (Kerry 10/8): public, read-only, no intro or controls
+_mc = appmod.app.test_client()
+_mh = _mc.get("/member/cup-draw")
+_mt = _mh.get_data(as_text=True)
+check("/member/cup-draw opens without a login, read-only",
+      _mh.status_code == 200 and "const MEMBER = true" in _mt and 'id="intro"' not in _mt
+      and 'id="reset"' not in _mt and 'data-s="fb"' not in _mt, _mh.status_code)
+check("the staff draw page is not the member view", "const MEMBER = false" in cl.get("/events/3329/cup-draw").get_data(as_text=True))
 print("ALL PASS" if not F else f"{len(F)} FAILED: {F}"); sys.exit(1 if F else 0)

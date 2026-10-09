@@ -634,6 +634,11 @@ the Starter Sheet logo and Proxy logos too."
   on the page is +2px. v2.528.4: OFF only (`sideSum`), a Foursomes OFF
   centred on the pair, equal-height columns, and weekend numbering
   1-7 / 8-14 / 15-28.
+- **Members' draw page (v2.528.5):** `/member/cup-draw` is public (member
+  tier, no login). It renders `cup_draw.html` with `member_view=True`: no
+  intro, tabs or controls; the SUMMARY once all three sessions are drawn,
+  otherwise "The Draw is coming". The Cup is the event in
+  `lsc_matches.event_id`.
 - **Phone splash (v2.528.0):** `score_entry.group_is_cup` is true for a
   round in any LSC event (the practice round too), plus the `lsc:` and
   `lscprev:` session rounds. It holds 3 s (Kerry 10/8).

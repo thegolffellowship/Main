@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.528.4";
+window.TGF_VERSION = "2.528.5";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.528.5",
+    date: "2026-10-08",
+    title: "THE DRAW for the members: /member/cup-draw",
+    changes: [
+      "Kerry 10/8: \"When this is done, it also needs to write to a member visible page so I can immediately send them the link to view the matches.\" New public page /member/cup-draw (no login): the Cup logo, THE DRAW, and the SUMMARY of all 28 matches. It reads the live draw, so the matches appear the moment the last session is drawn. Until then it says the draw is coming. It is read-only: no splash, no session tabs, no DRAW or Clear buttons. Guard: test_lsc_draw.py.",
+      "\"Center The Draw - Summary line\": the summary's heading and key are centred."
+    ]
+  },
   {
     version: "2.528.4",
     date: "2026-10-08",
