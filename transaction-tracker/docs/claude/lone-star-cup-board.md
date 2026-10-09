@@ -689,6 +689,9 @@ the Starter Sheet logo and Proxy logos too."
   games shows no money notices. v2.529.4: such an event (`evlbNoGames`)
   also skips the buyers-only filter, the green/grey rows and the Show All
   Players box, so every player shows.
+  v2.529.5: the full explanation is back, behind a "How to read this" pill
+  under the subtabs (`data-evlb-hiw` → `evlbReadGuide(d, tab)` in the
+  page-level `#evlb-hiw-modal`, styled like HOW IT WORKS).
 - **Toggle size (v2.529.3):** the SCORING | LEADERBOARD buttons keep 40 px /
   12 px on a tight card (only the strip around them thins), so both pages
   match; the hole card closes up its rows instead (one-screen rule kept,

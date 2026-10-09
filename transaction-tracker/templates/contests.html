@@ -353,6 +353,11 @@
             color: #9CA3AF; letter-spacing: 0.5px; }
         .evlb-body { border-top: 1px solid #F0EEE9; padding: 10px 14px 14px; }
         .evlb-subtabs { margin-bottom: 10px; }
+        .evlb-hiw-row { display: flex; justify-content: flex-end; margin-top: 8px; }
+        .evlb-hiw-btn { height: 26px !important; padding: 0 12px !important; font-size: 10px !important; }
+        body.lsc-solo .evlb-hiw-btn { background: var(--lsc-navy, #002855); }
+        body.lsc-solo .pr-hiw-title .hiw-name { color: var(--lsc-navy, #002855); }
+        body.lsc-solo #evlb-hiw-gotit { background: var(--lsc-navy, #002855); }
         /* Kerry 2026-10-02: "not all toggles for the leaderboard views:
            OVERALL | TEAM | NET etc fit on the mobile screen". On a
            phone the seven game tabs wrap into two rows of equal-width cells
@@ -2495,7 +2500,15 @@
                 <div id="enr-removals-container" style="margin-top:1.5rem;"></div>
             </div>
         </div>
-    </main>
+        <!-- HOW TO READ THIS BOARD (Kerry 10/8): page level, so it opens from any tab -->
+                <div class="pr-hiw-scrim" id="evlb-hiw-scrim" style="display:none;"></div>
+                <div class="pr-hiw-modal" id="evlb-hiw-modal" style="display:none;" role="dialog" aria-modal="true" aria-label="How to read this board">
+                    <button id="evlb-hiw-close" class="pr-hiw-close" type="button" aria-label="Close">&#10005;</button>
+                    <div class="pr-hiw-title" id="evlb-hiw-title">How to read this board</div>
+                    <div class="pr-hiw-secs" id="evlb-hiw-secs"></div>
+                    <div class="pr-hiw-cta"><button type="button" id="evlb-hiw-gotit">Got it</button></div>
+                </div>
+</main>
 
     <footer>
         <p>TGF Transaction Tracker &mdash; Powered by Claude AI</p>
@@ -3508,6 +3521,58 @@
     // say so. The colour is the COURSE's own tee colour, the same map
     // the starter sheet prints, so the two can never disagree. Rendered
     // in the ONE shared name cell rather than per tab.
+    // HOW TO READ THIS BOARD (Kerry 10/8: "You don't have to necessarily
+    // get rid of all that text but you do need to put it in a button that
+    // would pop up kind of like the HOW IT WORKS buttons. An only if curious
+    // thing"). The board itself shows only colour chips; the full
+    // explanation for the tab on screen lives here.
+    function evlbReadGuide(d, game) {
+        const noGames = evlbNoGames(d);
+        const sec = (h, b) => `<div><div class="pr-hiw-sec-h">${h}</div><div class="pr-hiw-sec-b">${b}</div></div>`;
+        const out = [];
+        const what = {
+            overall: `The whole field in one table: hole-by-hole gross with the totals. A tinted <b>N</b> (net) or <b>G</b> (gross) total won that game in that flight; a circled hole score is a skin won in that flight; <span class="lg w-mvp">Pts</span> marks the Event MVP. <b>Won</b> = everything collected at this event, all games (team &amp; proxies included).`,
+            net: `Individual Net. A tinted <b>N</b> total won Individual Net in that flight. <b>Won</b> = Individual Net money only; OVERALL shows everything collected at this event.`,
+            gross: `Individual Gross. A tinted <b>G</b> total won Individual Gross in that flight. <b>Won</b> = Individual Gross money only; OVERALL shows everything collected at this event.`,
+            skins: `A circled hole score is a skin won in that flight. <b>Won</b> = Skins money only; OVERALL shows everything collected at this event.`,
+            points: `<span class="lg w-mvp">Pts</span> marks the Event MVP, and a <b>PTS</b> row under each player shows the NET points that score earned on every hole. <b>Won</b> = MVP money only.`,
+            team: `Hole scores are each player's GROSS with their pops marked; gross less pops is the net the team played, and the green cell is the ball that counted. The TEAM NET row closes each band with the team's holes, total and whole purse; a player row's <b>Won</b> is that player's share.`,
+            prox: `Closest-to-the-pin and other proximity winners, hole by hole.`,
+        };
+        if (noGames) out.push(sec("This event", "No games at this event, so the boards are just the scores: Net ranks by net total, Gross by gross total. Nobody bought in and nothing is paid."));
+        else if (what[game]) out.push(sec("This tab", what[game]));
+        if (!noGames) out.push(sec("Colors",
+            `Money winners are colour-coded by FLIGHT: ${[1, 2, 3].map(f => `<span class="lg" style="${evlbFlightTint(f)}">Flight ${f}</span>`).join(" ")}. `
+            + `On the Net, Gross, Skins and MVP/Points tabs a <span class="lg" style="background:var(--buyin-green,#bbf7d0);color:var(--buyin-green-text,#15803D);">green</span> row bought into that game and a <span class="lg" style="background:var(--buyin-grey,#FAFAFA);color:#9CA3AF;">grey</span> row did not; non-buyers are placed in the flight their handicap would have flighted them. Show All Players brings the non-buyers back onto a Net or Gross board.`));
+        out.push(sec("Tapping", "Tap a player for their scorecard, or a team for its best-ball card. Tap a column header to sort and re-rank. Dots in the corner of a hole are the strokes received there. Hole by hole and Handicaps add those columns."));
+        const ev = d.event || {};
+        out.push(sec("Where the scores come from", ev.score_source === "entry"
+            ? "Straight from the players' live scoring on their phones, hole by hole as each group posts."
+            : "From the event's scorecards on record." + (noGames ? "" : " Money is shown as computed, not as paid, and only once every hole is in for every player (then 10 minutes after the last score).")));
+        return out.join("");
+    }
+    function evlbOpenGuide(btn) {
+        const body = btn.closest(".evlb-body");
+        const d = body && body._evlbD;
+        if (!d) return;
+        const act = body.querySelector(".evlb-subtab.active");
+        const game = act ? act.dataset.sub : "overall";
+        const label = act ? act.textContent.trim() : "";
+        $("evlb-hiw-title").innerHTML = `How to read <span class="hiw-name">${escapeHtml(label || "this board")}</span>`;
+        $("evlb-hiw-secs").innerHTML = evlbReadGuide(d, game);
+        $("evlb-hiw-scrim").style.display = "block";
+        $("evlb-hiw-modal").style.display = "block";
+    }
+    function evlbCloseGuide() {
+        $("evlb-hiw-scrim").style.display = "none";
+        $("evlb-hiw-modal").style.display = "none";
+    }
+    document.addEventListener("click", (e) => {
+        const b = e.target.closest && e.target.closest("[data-evlb-hiw]");
+        if (b) { e.preventDefault(); evlbOpenGuide(b); return; }
+        if (e.target.closest && e.target.closest("#evlb-hiw-close, #evlb-hiw-gotit, #evlb-hiw-scrim")) evlbCloseGuide();
+    });
+    document.addEventListener("keydown", (e) => { if (e.key === "Escape") evlbCloseGuide(); });
     function evlbMoneyNotice(d) {
         if (!d || !d._moneyHeld) return "";
         const mins = d.money_hold_minutes || 10;
@@ -3556,6 +3621,7 @@
             // scores still read live.
             if (d.money_visible === false) evlbBlankMoney(d);
             body.innerHTML = evlbEventHtml(d);
+            body._evlbD = d;
             evlbWireEvent(body, d);
         } catch (err) {
             EVLB_LOADED_EVENTS[name] = false;
@@ -4432,7 +4498,7 @@
         return `<div class="evlb-subtabs"><div class="evlb-seg evlb-seg-sub">` +
             tabs.map(([k, l]) =>
                 `<button class="evlb-subtab${k === first ? " active" : ""}" data-sub="${k}">${l}</button>`).join("") +
-            `</div></div>` +
+            `</div><div class="evlb-hiw-row"><button type="button" class="pr-hiw-link evlb-hiw-btn" data-evlb-hiw>How to read this</button></div></div>` +
             tabs.map(([k]) =>
                 `<div class="evlb-panel" data-panel="${k}"${k === first ? "" : " hidden"}>${panels[k]}</div>`).join("") +
             `<p style="font-size:11px;color:#9CA3AF;margin:8px 0 0;">Tap a player for their scorecard.</p>`;

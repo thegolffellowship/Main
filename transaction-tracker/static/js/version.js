@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.529.4";
+window.TGF_VERSION = "2.529.5";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.529.5",
+    date: "2026-10-08",
+    title: "Leaderboards: the full explanation behind a How to read this button",
+    changes: [
+      "Kerry 10/8: \"You don't have to necessarily get rid of all that text but you do need to put it in a button that would pop up kind of like the HOW IT WORKS buttons. An only if curious thing.\" Every EVENTS board (and the scorer's leaderboard) has a small How to read this button under its tabs. It opens a pop-up for the tab on screen: what the tab shows and what Won means, the flight and bought-in colours, what tapping does, and where the scores come from (live scoring, or the scorecards on record with the money rule). An event with no games gets a short no-games note instead. The board itself keeps only the colour chips."
+    ]
+  },
   {
     version: "2.529.4",
     date: "2026-10-08",

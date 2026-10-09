@@ -52,9 +52,12 @@ check("the EVENTS tab: manager-only on the staff page, a plain tab on /member (v
 check("every board carries the short Unofficial / GG-official line (Kerry 10/8: less text)",
       'Unofficial &middot; Golf Genius is the official scorer' in html and 'Money shown as computed, not as paid.' not in html)
 check("legends are chips, not prose (Kerry 10/8: \"Nobody is going to read all that\")",
-      'Money winners color-code by FLIGHT' not in html and 'non-buyers are placed in the flight' not in html
-      and 'Tap a player for their scorecard.</p>' in html)
+      'Money winners color-code by FLIGHT: ${' not in html and 'Tap a player for their scorecard.</p>' in html)
 check("the solo board drops the GG line on an event GG never scores", "off.hidden = !!ev.live_entry" in html)
+check("the long explanation lives behind a How to read this button (Kerry 10/8: \"An only if curious thing\")",
+      'data-evlb-hiw>How to read this</button>' in html and 'id="evlb-hiw-modal"' in html
+      and 'function evlbReadGuide(d, game)' in html and 'non-buyers are placed in the flight their handicap' in html
+      and html.index('id="evlb-hiw-modal"') > html.index('id="section-lone-star-cup"'))
 check("no games, no buyers filter: every player shows, no Show All box, no green/grey rows (Kerry 10/8)",
       "!evlbShowAll && EVLB_BUYIN_GAMES.includes(game) && !evlbNoGames(d)" in html
       and "EVLB_BUYIN_GAMES.includes(board.game || null) && !evlbNoGames(d)" in html
