@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.529.3";
+window.TGF_VERSION = "2.529.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.529.4",
+    date: "2026-10-08",
+    title: "Leaderboard: an event with no games shows every player",
+    changes: [
+      "Kerry's practice-round screenshot (10/8) showed the Net board with only the PAR row. The Net and Gross boards open on the players who bought into that game, and the practice round has no games, so nobody showed until Show All Players was ticked. An event whose games are all included now shows every player, with no green / grey buy-in rows and no Show All Players box."
+    ]
+  },
   {
     version: "2.529.3",
     date: "2026-10-08",

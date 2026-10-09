@@ -55,6 +55,10 @@ check("legends are chips, not prose (Kerry 10/8: \"Nobody is going to read all t
       'Money winners color-code by FLIGHT' not in html and 'non-buyers are placed in the flight' not in html
       and 'Tap a player for their scorecard.</p>' in html)
 check("the solo board drops the GG line on an event GG never scores", "off.hidden = !!ev.live_entry" in html)
+check("no games, no buyers filter: every player shows, no Show All box, no green/grey rows (Kerry 10/8)",
+      "!evlbShowAll && EVLB_BUYIN_GAMES.includes(game) && !evlbNoGames(d)" in html
+      and "EVLB_BUYIN_GAMES.includes(board.game || null) && !evlbNoGames(d)" in html
+      and 'typeof r._buyer === "boolean" && !evlbNoGames(d)' in html)
 d = db.get_events_leaderboard(db_path=tmp)
 check("the list API carries gg_official_through (None until set)", "gg_official_through" in d and d["gg_official_through"] is None)
 db.set_app_setting("gg_official_through", "Oct 6", db_path=tmp)

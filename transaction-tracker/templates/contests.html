@@ -3645,6 +3645,10 @@
     // default: the board opens on the people actually in the game, and
     // the box invites you to bring the rest back in.
     let evlbShowAll = false;
+    // An event with no games (the LSC practice round, Kerry 10/8) has no
+    // buy-in to be in or out of: every player is on the board, no green /
+    // grey rows, no Show All Players box.
+    const evlbNoGames = d => (d && d.games_off || []).some(g => g.game === "included");
     const evlbHolesFor = board => evlbHolesTouched
         ? evlbShowHoles : (board && board.game) == null;
     // handicap columns (Idx + PH) start HIDDEN (Kerry 2026-09-13:
@@ -3859,7 +3863,7 @@
         // replaces the zebra stripe there — two competing washes on one
         // row reads as neither. OVERALL and Team keep the stripe and
         // never identify buy-ins.
-        const bi = EVLB_BUYIN_GAMES.includes(game) && typeof r._buyer === "boolean"
+        const bi = EVLB_BUYIN_GAMES.includes(game) && typeof r._buyer === "boolean" && !evlbNoGames(d)
             ? (r._buyer ? " bought" : " nobuy") : (i % 2 ? " alt" : "");
         return `<tr class="evlb-plr${bi}" data-rid="${r.scoring_round_id || ""}">` +
             `<td>${r._rank ?? ""}</td>` +
@@ -4024,7 +4028,7 @@
         // the # column ranks within the band, so a CSS hide would leave
         // gaps in the numbering (1, 3, 6…) and the board would read as
         // broken rather than filtered.
-        const buyersOnly = !evlbShowAll && EVLB_BUYIN_GAMES.includes(game);
+        const buyersOnly = !evlbShowAll && EVLB_BUYIN_GAMES.includes(game) && !evlbNoGames(d);
         let i = 0, html = "";
         board.sections.forEach((sec, si) => {
             const src = buyersOnly
@@ -4127,7 +4131,7 @@
             `<div class="evlb-togs">` +
             `<label class="evlb-holetog"><input type="checkbox" data-ovr-holes${showHoles ? " checked" : ""}> Hole by hole</label>` +
             `<label class="evlb-holetog"><input type="checkbox" data-ovr-hcp${evlbShowHcp ? " checked" : ""}> Handicaps</label>` +
-            (EVLB_BUYIN_GAMES.includes(board.game || null)
+            (EVLB_BUYIN_GAMES.includes(board.game || null) && !evlbNoGames(d)
                 ? `<label class="evlb-holetog"><input type="checkbox" data-ovr-all${evlbShowAll ? " checked" : ""}> Show All Players</label>`
                 : "") +
             `</div>` + evlbTeeLegend(d) + `</div>` +
@@ -4155,7 +4159,7 @@
     function evlbEventHtml(d) {
         // No games at the event (Kerry 10/8, the LSC practice round: "Just
         // show NET & GROSS leaderboards per our standards"): Net and Gross only.
-        const noGames = (d.games_off || []).some(g => g.game === "included");
+        const noGames = evlbNoGames(d);
         const tabs = noGames ? [["net", "Net"], ["gross", "Gross"]]
             : [["overall", "Overall"], ["team", "Team"], ["net", "Net"],
                ["gross", "Gross"], ["skins", "Skins"],

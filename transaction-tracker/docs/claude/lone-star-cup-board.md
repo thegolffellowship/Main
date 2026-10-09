@@ -686,7 +686,9 @@ the Starter Sheet logo and Proxy logos too."
   event has no games; the footer is "Tap a player for their scorecard.";
   the official line is "Unofficial · Golf Genius is the official scorer"
   and the scorer's board hides it on a `live_entry` event; an event with no
-  games shows no money notices.
+  games shows no money notices. v2.529.4: such an event (`evlbNoGames`)
+  also skips the buyers-only filter, the green/grey rows and the Show All
+  Players box, so every player shows.
 - **Toggle size (v2.529.3):** the SCORING | LEADERBOARD buttons keep 40 px /
   12 px on a tight card (only the strip around them thins), so both pages
   match; the hole card closes up its rows instead (one-screen rule kept,
