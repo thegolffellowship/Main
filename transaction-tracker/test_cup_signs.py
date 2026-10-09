@@ -164,5 +164,13 @@ check("the scoring screen boxes each team's players",
       and '["AUSTIN", "#BF5700"], ["SAN ANTONIO", "#4B6274"]' in sep and 'tg.unit === "cart"' in sep
       and ".se-teambox {" in sep)
 
+# Kerry 10/9: "Reduce that text to the MATCH # | FORMAT" -- the weekend's numbers
+rmx = se.round_matches(rid, db_path=tmp)
+check("each Cup match carries its weekend number (1-28, as the board and sheets)",
+      rmx.get(7, {}).get("match_no") == 1 and rmx.get(13, {}).get("match_no") == 2, rmx.get(7))
+check("a Cup card's heading is MATCH # | FORMAT on every screen",
+      "const cupEyebrow = () =>" in sep and '" | " + sx.title' in sep
+      and "const eyebrow = () => cupEyebrow() ||" in sep and "const eyebrowGroup = () => cupEyebrow() ||" in sep)
+
 print("\n" + ("ALL PASS" if not F else f"{len(F)} FAILURE(S): " + "; ".join(F)))
 sys.exit(1 if F else 0)

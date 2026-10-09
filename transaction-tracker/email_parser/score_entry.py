@@ -90,14 +90,17 @@ def round_matches(round_id: int, db_path=None) -> dict:
                           "format": m.get("format") or "singles", "side": ("a", "b")[i],
                           "partners": [x for x in side if x != c], "opponents": sides[1 - i]}
     for is_preview, d in ((False, dial), (True, preview)):
+        before = 0          # matches number through the weekend, 1-28 (the board, the sheets)
         for sess in d.get("sessions") or []:
+            n_before, before = before, before + len(sess.get("matches") or [])
             if sess.get("se_round") is None or int(sess["se_round"]) != int(round_id):
                 continue
-            for m in sess.get("matches") or []:
+            for mi, m in enumerate(sess.get("matches") or []):
                 sides = [[int(c) for c in (m.get(k) or [])] for k in ("austin", "sa")]
                 for i, side in enumerate(sides):
                     for c in side:
                         out[c] = {"match_id": m.get("id"), "session": sess.get("id"),
+                                  "match_no": n_before + mi + 1,
                                   "format": sess.get("format") or "singles",
                                   "n_holes": int(sess.get("n_holes") or 18),   # the cup engine's default
                                   "side": ("austin", "sa")[i],
@@ -403,7 +406,8 @@ def _match_status(conn, g) -> list:
     for cid, m in rm.items():
         e = matches.setdefault(m["match_id"], {"format": m["format"], "sides": {},
                                                 "n_holes": m.get("n_holes") or g["holes"],
-                                                "cup": m.get("session") is not None})
+                                                "cup": m.get("session") is not None,
+                                                "match_no": m.get("match_no")})
         e["sides"].setdefault(m["side"], []).append(cid)
     course = [dict(h) for h in conn.execute(
         "SELECT hole_number AS hole, par, stroke_index FROM se_round_holes WHERE round_id = ? "
@@ -436,7 +440,7 @@ def _match_status(conn, g) -> list:
                                  {"format": e["format"], "n_holes": e["n_holes"]},
                                  course, phs, scores, names, marks)
         w = d.get("gg_winner_idx")
-        out.append({"match_id": mid, "format": e["format"], "sides": sides,
+        out.append({"match_id": mid, "match_no": e.get("match_no"), "format": e["format"], "sides": sides,
                     # Lone Star Cup: a tie is HALVED. Anything else follows the
                     # regular-season rulings (game-engine.md, 2026-07-20): pool
                     # may halve, knockout goes to extra holes (NH) or a putt-off.

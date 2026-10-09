@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.532.2";
+window.TGF_VERSION = "2.532.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.532.3",
+    date: "2026-10-09",
+    title: "Cup scoring heading: MATCH # | FORMAT",
+    changes: [
+      "Kerry 10/9: \"Reduce that text to the MATCH # | FORMAT\". A Lone Star Cup scoring card's heading now reads e.g. MATCH 2 | FOURBALL (Singles cards: MATCHES 15 & 16 | SINGLES) on every screen (QR landing, who are you, hole, check, the turn, keeping-score, finished card), instead of LONE STAR CUP | THE HIDEOUT · FOURBALL · GROUP 2 cut off with an ellipsis. The number is the weekend's 1-28, the same as the board, the starter sheets and the cart signs: round_matches now carries match_no. Other events keep their heading. Guard: test_cup_signs.py."
+    ]
+  },
   {
     version: "2.532.2",
     date: "2026-10-09",
