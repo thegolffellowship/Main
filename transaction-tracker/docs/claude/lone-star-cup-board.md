@@ -610,9 +610,11 @@ the Starter Sheet logo and Proxy logos too."
   line on the board.
 - **Head-to-head handicaps on THE DRAW (v2.527.5):** each drawn match comes
   from `lsc_draw.match_math` (served as `math` with the payload and every
-  land/clear). It shows FULL = the lock's ch, and PLAYING plus OFF from
-  `lsc_cup.lsc_card_math`, the cards' own engine: Fourball 90% per player,
-  Singles 100%, Foursomes one TEAM figure (60/40).
+  land/clear), using `lsc_cup.lsc_card_math`, the cards' own engine. The
+  board shows the PLAYING handicap (Fourball 90%, Singles 100%; Foursomes
+  each partner's 60 / 40 share, then TEAM), then the bold OFF the lowest.
+  Kerry 10/8 (v2.527.7): only those two figures, no full handicap or green
+  pills.
 - **Capital LAST names (v2.527.6):** `lsc_cup.member_or_alumni(event_id,
   cids)` adds the derived member/alumni status to the dial
   `lsc_member_ruling` = {"3329": {"guests": [834]}}. Kerry 10/8: every Cup

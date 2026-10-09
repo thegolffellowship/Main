@@ -196,10 +196,10 @@ def match_math(event_id: int, db_path=None) -> dict:
     the PLAYING handicap after the format's allowance (Fourball 90%, Singles
     100%, Foursomes one team figure, 60% low + 40% high) and the strokes OFF
     the low in the match. {sess: {pool: [{"a": side, "s": side}]}}, side =
-    {"players": [{"cid", "ch"}], "ph", "off"} for Foursomes (team) or
+    {"players": [{"cid", "ch", "pct", "share"}], "ph", "off"} for Foursomes (team) or
     {"players": [{"cid", "ch", "ph", "off"}]} otherwise. A player with no
     locked ch leaves that match's numbers out (None)."""
-    from email_parser.lsc_cup import lsc_card_math
+    from email_parser.lsc_cup import lsc_card_math, CHAPMAN_LOW_SHARE, CHAPMAN_HIGH_SHARE
     lock = _lock_players(event_id, db_path)
     pl = pools(event_id, db_path)
     st = state(event_id, db_path)
@@ -228,6 +228,10 @@ def match_math(event_id: int, db_path=None) -> dict:
                     idx = [i for i, r in enumerate(rows) if r["team"] == team]
                     players = [{"cid": rows[i]["cid"], "ch": rows[i]["ph"]} for i in idx]
                     if fmt == "chapman":
+                        # each partner's share, as the starter sheet: 60% of the lower, 40% of the higher
+                        lo, hi = sorted(players, key=lambda p_: (p_["ch"], p_["cid"]))
+                        lo.update(pct=60, share=round(lo["ch"] * CHAPMAN_LOW_SHARE, 1))
+                        hi.update(pct=40, share=round(hi["ch"] * CHAPMAN_HIGH_SHARE, 1))
                         sides[side] = {"players": players, "ph": m[idx[0]]["hcp"], "off": m[idx[0]]["off"]}
                     else:
                         for p_, i in zip(players, idx):

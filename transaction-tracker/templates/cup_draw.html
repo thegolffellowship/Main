@@ -81,12 +81,12 @@ textarea#out{width:100%;min-height:200px;background:var(--panel);color:var(--fg)
 .m .b{color:#DCE6EF}
 .m .a,.m .b{font-size:15px}
 .m .nl{white-space:nowrap}
-.m .hc{font:600 11px/1 var(--body);font-style:normal;color:var(--muted);white-space:nowrap;font-variant-numeric:tabular-nums}
-.m .off{font:800 12px/1 var(--body);color:#fff;background:#1E8E5A;border-radius:999px;padding:2px 6px;margin-left:5px;white-space:nowrap}
+.m .hc{font:600 12px/1 var(--body);font-style:normal;color:var(--muted);white-space:nowrap;font-variant-numeric:tabular-nums;margin-left:4px}
+.m .mo{font:800 15px/1 var(--display);color:#fff;margin-left:6px;font-variant-numeric:tabular-nums}
 .m .tl{font:800 11px/1.6 var(--display);letter-spacing:1.5px;color:var(--fg);margin-top:3px}
 .m .tl .hc{font-size:13px;color:var(--fg)}
 .matches .key{text-align:center;font-size:11px;color:var(--muted);margin:-4px 0 2px}
-.matches .key .off{font:800 11px/1 var(--body);color:#fff;background:#1E8E5A;border-radius:999px;padding:1px 5px}
+.matches .key .mo{font:800 11px var(--display);color:#fff}
 @media (max-width:720px){.grid{grid-template-columns:1fr}.m .a,.m .b{font-size:15px}.hdr img{width:106px;height:88px}}
 @media (prefers-reduced-motion:reduce){.m.pop{animation:none}}
 </style>
@@ -171,18 +171,17 @@ const lab=(arr,k)=>{const e=arr.find(x=>x.key===k);return e?e.label:k};
 // one name per line (Kerry 10/8: "show names on separate rows")
 const nms=e=>(e.names&&e.names.length?e.names:[e.label]).map(n=>`<span class="nl">${esc(n)}</span>`).join("");
 const nmk=(arr,k)=>{const e=arr.find(x=>x.key===k);return e?nms(e):esc(k)};
-// HEAD-TO-HEAD HANDICAPS (Kerry 10/8): FULL / PLAYING beside each player
-// (Fourball, Singles) or the team (Foursomes), and the strokes OFF the low.
-const hv=v=>v==null?"–":(v<0?"+"+Math.abs(v):String(Math.round(v*10)/10));
-const offb=o=>o>0?`<b class="off">+${o}</b>`:"";
-function side(e,sd,team){
-  if(!e)return "";
-  const names=e.names&&e.names.length?e.names:[e.label];
+// HEAD-TO-HEAD HANDICAPS (Kerry 10/8: "Only show Full Playing Handicaps (90%
+// for Fourball, 60 or 40 for Foursomes, Singles 100%) followed by the bold OFF
+// LOWEST handicaps which are the actual Playing or Match Handicaps").
+const hv=(v,d)=>v==null?"–":(v<0?"+":"")+Math.abs(v).toFixed(d||0);
+function side(e,sd){
+  const names=e&&e.names&&e.names.length?e.names:[e?e.label:""];
   if(!sd)return names.map(n=>`<span class="nl">${esc(n)}</span>`).join("");
-  if(sd.ph!==undefined)  // Foursomes: one ball, one team figure
-    return names.map((n,i)=>`<span class="nl">${esc(n)} <i class="hc">${hv(sd.players[i]&&sd.players[i].ch)}</i></span>`).join("")
-      +`<span class="nl tl">TEAM <i class="hc">${hv(sd.ph)}</i>${offb(sd.off)}</span>`;
-  return names.map((n,i)=>{const p=sd.players[i]||{};return `<span class="nl">${esc(n)} <i class="hc">${hv(p.ch)} / ${hv(p.ph)}</i>${offb(p.off)}</span>`}).join("");
+  if(sd.ph!==undefined)  // Foursomes: each partner's 60 / 40 share, then the TEAM and its OFF
+    return names.map((n,i)=>`<span class="nl">${esc(n)} <i class="hc">${hv(sd.players[i]&&sd.players[i].share,1)}</i></span>`).join("")
+      +`<span class="nl tl">TEAM <i class="hc">${hv(sd.ph)}</i> <b class="mo">${hv(sd.off)}</b></span>`;
+  return names.map((n,i)=>{const p=sd.players[i]||{};return `<span class="nl">${esc(n)} <i class="hc">${hv(p.ph)}</i> <b class="mo">${hv(p.off)}</b></span>`}).join("");
 }
 function tabs(){document.querySelectorAll("nav.sess button").forEach(b=>{const k=b.dataset.s,s=SESS[k];
   const done=s.pools.every(p=>state[k][p.key].length>=p.aus.length&&p.aus.length>0);
@@ -202,7 +201,7 @@ function render(){
       <button class="btn" data-draw="${p.key}" ${left&&!g?"":"disabled"}>${g?g:done.length===0?"Draw the first match":left?"Draw the next match":"Pool drawn"}</button></div>
       <div class="grid">
         <div class="col aus"><div class="lab">Austin</div>${p.aus.map(e=>`<div class="ent ${takenA.has(e.key)?"taken":""}"><span>${nms(e)}</span><small>${idx(e.idx)}</small></div>`).join("")}</div>
-        <div class="matches"><div class="lab">Matches</div>${done.length?`<div class="key">${cur==="fs"?"FULL handicap each · TEAM playing handicap (60% low + 40% high)":cur==="fb"?"FULL / PLAYING handicap (90%)":"FULL / PLAYING handicap (100%)"} · <b class="off">+n</b> strokes off the low</div>`:""}${
+        <div class="matches"><div class="lab">Matches</div>${done.length?`<div class="key">${cur==="fs"?"60% low / 40% high → TEAM":cur==="fb"?"90% playing handicap":"100% playing handicap"} · <b class="mo">bold</b> = off the lowest (match handicap)</div>`:""}${
           done.map((m,i)=>{const n=matchNo(s,p.key,i),mm=((math[cur]||{})[p.key]||[])[i];return `<div class="m"><div class="a">${side(p.aus.find(x=>x.key===m[0]),mm&&mm.a)}</div><div class="c"><b>Match ${n+1}</b>${tee(s,n)}</div><div class="b">${side(p.sa.find(x=>x.key===m[1]),mm&&mm.s)}</div></div>`}).join("")
         }${left?`<div class="m empty" id="next-${p.key}">${done.length?"Next match…":"Tap DRAW to start"}</div>`:""}</div>
         <div class="col sa"><div class="lab">San Antonio</div>${p.sa.map(e=>`<div class="ent ${takenS.has(e.key)?"taken":""}"><span>${nms(e)}</span><small>${idx(e.idx)}</small></div>`).join("")}</div>

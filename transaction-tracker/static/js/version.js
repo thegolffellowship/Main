@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.527.6";
+window.TGF_VERSION = "2.527.7";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.527.7",
+    date: "2026-10-08",
+    title: "THE DRAW: match handicaps read playing handicap, then the bold OFF the lowest",
+    changes: [
+      "Kerry 10/8: \"Only show Full Playing Handicaps (90% for Fourball, 60 or 40 for Foursomes, Singles 100%) followed by the bold OFF LOWEST handicaps which are the actual Playing or Match Handicaps. The + numbers in Green don't make any sense to me and it's too busy.\" Each drawn match now shows just two figures per player. Fourball shows 90% of the course handicap, Singles 100%, then the bold strokes off the lowest in the match. Foursomes shows each partner's share (60% of the lower, 40% of the higher, to one decimal, as on the starter sheet), then TEAM and its bold OFF. The green pills and the full-handicap figure are gone. Guard: test_lsc_draw.py."
+    ]
+  },
   {
     version: "2.527.6",
     date: "2026-10-08",
