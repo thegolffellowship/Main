@@ -1464,6 +1464,45 @@ def refresh_round_yardage(round_id: int, apply: bool = False) -> dict:
                 "changes": changes, "applied": bool(apply and changes)}
 
 
+def refresh_round_stroke_index(round_id: int, apply: bool = False, db_path=None) -> dict:
+    """Re-read each hole's STROKE INDEX (and par) from the course record's
+    <50 tee for a round already seeded (Kerry 2026-10-09: the Hideout's
+    printed 07/26 card carries a different stroke-index order than the
+    card loaded 9/28). Writes par / stroke_index only; groups, players,
+    scores, links and each player's own tee SI (read live from the course
+    record) are untouched. Dry run by default."""
+    from email_parser import database as db
+    with _closing(_conn(db_path)) as conn:
+        r = conn.execute("SELECT id, event_id, holes, course_id FROM se_rounds WHERE id = ?",
+                         (int(round_id),)).fetchone()
+        if not r:
+            return {"error": f"round {round_id} not found"}
+        ev = conn.execute("SELECT * FROM events WHERE id = ?", (r["event_id"],)).fetchone()
+        ev = {**(dict(ev) if ev else {}), "course_id": r["course_id"] or (ev["course_id"] if ev else None)}
+        have = {h["hole_number"]: (h["par"], h["stroke_index"]) for h in conn.execute(
+            "SELECT hole_number, par, stroke_index FROM se_round_holes WHERE round_id = ?",
+            (r["id"],))}
+        changes = []
+        for h in _event_course_holes(conn, ev, int(r["holes"])):
+            n = h["hole"]
+            if n not in have:
+                continue
+            p0, s0 = have[n]
+            p1 = h.get("par") if h.get("par") is not None else p0
+            s1 = h.get("stroke_index") if h.get("stroke_index") is not None else s0
+            if (p1, s1) != (p0, s0):
+                changes.append({"hole": n, "par": [p0, p1], "stroke_index": [s0, s1]})
+        if apply and changes:
+            for c in changes:
+                conn.execute("UPDATE se_round_holes SET par = ?, stroke_index = ? "
+                             "WHERE round_id = ? AND hole_number = ?",
+                             (c["par"][1], c["stroke_index"][1], r["id"], c["hole"]))
+            _bump(conn, r["event_id"])
+            conn.commit()
+        return {"round_id": r["id"], "event_id": r["event_id"],
+                "changes": changes, "applied": bool(apply and changes)}
+
+
 def _event_course_holes(conn, ev: dict, n_holes: int) -> list[dict]:
     """Par / stroke index / yardage for the event's course, merged across the
     tee's per-nine ratings (database._ls_tee_holes). A nine picks its side."""

@@ -1866,6 +1866,7 @@ def _scoring_dispatch_inner(url: str, extract: str):
       scoring-lsc-check  read-only check of the lsc_matches pairings (per session matches, points total, problems) before a change goes live
       scoring-lsc-skins-payouts[:apply]  Cup skins winners -> PAYOUTS, PER SESSION: one tgf_payouts row per winner per final session (category skins, "LSC SAT AM Skins — ...", "LSC SAT PM Skins — ...", "LSC SUN Skins — Flight 1 ..."). CARRYOVER (Kerry 10/9 ruling 5): a final session where no skin was won carries its whole pot to the next (sat-am -> sat-pm -> sun; into Sunday split evenly between the flights); a session whose predecessor is not final is held. AUTOMATIC (Kerry 10/9: "Ok to write payouts 15 minutes after all sessions are final"): scheduler job lsc_skins_payouts_auto every 5 min writes each session once final 15+ min, Cup dates only, setting lsc_skins_auto (default on, 0/off stops it). Dry run by default and reports the auto state (setting, final_seen, payable_at per session); apply creates / updates UNPAID / removes UNPAID rows (incl. any old per-day "LSC SAT Skins" row), never a PAID one
       scoring-lsc-recap:<saturday|final>[|send[|force]]  Cup recap DRAFT from the board (Kerry 10/9): dry run = plain text + guard (refused until the sessions are final); send = DRAFT to Kerry only, once per kind (lsc_recap_sent); force re-runs. No dollars
+      scoring-se-round-si:<round_id>[|apply]  re-read a seeded round's par + stroke index from the course record's <50 tee (holes only; scores, groups, links untouched); dry run default
       scoring-course-card:<course_id>[|<card json>[|apply]]  read a course's card as held, or validate/plan/load one from the printed card (tees, bands, rating/slope incl. front/back nines, par/SI/yardage), source course_card (CA #786 GO 3)
       scoring-membership-price:<term_id>|<amount>[|apply]  set price_paid on one membership term (dry run by default, audited)
       scoring-alias-delete:<alias id>[|confirm]  remove ONE customer_aliases row; preview first, |confirm deletes and audits
@@ -3430,6 +3431,22 @@ def _scoring_dispatch_inner(url: str, extract: str):
             _res = _se.refresh_round_yardage(_r, apply=_apply)
             if _res.get("applied"):
                 _audit("scoring-se-yardage", f"round {_r} yardage from the <50 tee "
+                       f"({len(_res.get('changes') or [])} holes)")
+            return json.dumps(_res, default=str)
+        if cmd == "scoring-se-round-si":
+            # scoring-se-round-si:<round_id>[|apply] — re-read par + stroke index
+            # from the course record's <50 tee for a seeded round (Kerry 10/9:
+            # the Hideout's printed card). Holes only; scores/groups/links
+            # untouched. Dry run default.
+            from email_parser import score_entry as _se
+            _r_s, _, _flag = arg.partition("|")
+            try:
+                _r = int(_r_s.strip())
+            except ValueError:
+                return json.dumps({"error": "usage: scoring-se-round-si:<round_id>[|apply]"})
+            _res = _se.refresh_round_stroke_index(_r, apply=_flag.strip().lower() == "apply")
+            if _res.get("applied"):
+                _audit("scoring-se-round-si", f"round {_r} par/SI from the course record "
                        f"({len(_res.get('changes') or [])} holes)")
             return json.dumps(_res, default=str)
         if cmd == "scoring-se-cup-seed":

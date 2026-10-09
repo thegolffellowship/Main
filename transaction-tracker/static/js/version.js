@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.535.1";
+window.TGF_VERSION = "2.535.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.535.2",
+    date: "2026-10-09",
+    title: "Seeded rounds can re-read their stroke indexes from the course card",
+    changes: [
+      "Kerry 10/9: \"Check this course scorecard against our tracker card for hideout.\" The Hideout's printed card (dated 07/26) matches the Tracker's on every yardage, par and rating, but its stroke-index order (M handicap 5 17 3 7 15 11 1 12 4 | 18 14 16 6 10 8 2 13 9; W handicap 3 17 7 5 11 9 1 10 2 | 18 14 12 6 8 16 4 13 15) differs from the card loaded 9/28 from Golf Genius screenshots. New score_entry.refresh_round_stroke_index + bridge scoring-se-round-si:<round_id>[|apply] re-reads a seeded round's par and stroke index from the course record's <50 tee (dry run default; scores, groups and links untouched), so the Cup rounds can follow the corrected card once it is loaded with scoring-course-card. Guard test_se_round_si.py."
+    ]
+  },
   {
     version: "2.535.1",
     date: "2026-10-09",
