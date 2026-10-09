@@ -527,6 +527,21 @@ with sync_playwright() as p:
     check("the check card shows X, not a ringed 7",
           pc.locator("button.cell[data-key='c:102'][data-h='1'] .se-x").count() == 1
           and pc.locator("button.cell.pu").count() == 0)
+    # the match is decided over the last hole: the scorer is congratulated
+    # once (Kerry 2026-10-09), in Austin's colour, and taken to the card
+    pc.wait_for_selector("#se-mw", timeout=5000)
+    check("the match-won moment names the winner for his chapter",
+          "wins for AUSTIN" in pc.locator("#se-mw").inner_text()
+          and "Check the card" in pc.locator("#se-mw").inner_text(), pc.locator("#se-mw").inner_text())
+    pc.click("#se-mw [data-mw=close]")
+    pc.wait_for_timeout(300)
+    check("it closes and does not come back on the next render", pc.locator("#se-mw").count() == 0)
+    # one match, Austin's: the Cup is decided, so the clinch pop-up follows
+    pc.wait_for_selector("#lsc-cl", timeout=20000)
+    check("the Cup clinched pop-up follows on the scoring page",
+          "AUSTIN WINS THE LONE STAR CUP" in pc.locator("#lsc-cl").inner_text())
+    pc.click("#lsc-cl .lsc-cl-ok")
+    pc.wait_for_timeout(300)
     pc.click("button.cell[data-key='c:102'][data-h='2']")
     check("the check picker offers X for a cup player", pc.locator(".se-picker [data-v='X']").count() == 1)
     pc.click(".se-picker [data-v='X']")
@@ -645,7 +660,17 @@ with sync_playwright() as p:
                                      "gross": PARS[h - 1] - 1 if c_ == 101 else PARS[h - 1] + 1}
                                     for h in range(1, 6) for c_ in (101, 102)])
     pk.evaluate("localStorage.setItem('se_hole_' + new URLSearchParams(location.search).get('t').slice(0,24), '6')")
-    pk.reload(); answer_ctps(pk); pk.wait_for_selector("h1:has-text('Hole 6')")
+    pk.reload()
+    # Kerry 2026-10-09: the decided match is congratulated once, with the
+    # choice to play on for skins or finish and confirm the card
+    pk.wait_for_selector("#se-mw", timeout=5000)
+    mwt = pk.locator("#se-mw").inner_text()
+    check("the match-won moment offers Keep playing for skins / Finish and confirm the card",
+          "Keep playing for skins" in mwt and "Finish and confirm the card" in mwt and "5&4" in mwt, mwt)
+    pk.click("#se-mw [data-mw=close]"); pk.wait_for_timeout(300)
+    if pk.locator("#lsc-cl").count():
+        pk.click("#lsc-cl .lsc-cl-ok")
+    answer_ctps(pk); pk.wait_for_selector("h1:has-text('Hole 6')")
     check("the match reads final (5&4) on hole 6", "5&4" in pk.inner_text(".se-mcard") and "final" in pk.inner_text(".se-mcard").lower())
     check("hole 6 still has its steppers and Save after the close-out",
           pk.locator(".se-plus").count() == 2 and pk.locator("[data-act=save]").is_enabled())

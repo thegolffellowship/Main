@@ -12118,7 +12118,8 @@ def api_se_submit():
         res = submit_card(gid, str(b.get("device_id") or ""), int(b["keeper"]),
                           print_scorer_customer_id=b.get("print_scorer_customer_id"),
                           print_scorer_name=b.get("print_scorer_name"),
-                          photo_op_id=b.get("photo_op_id"))
+                          photo_op_id=b.get("photo_op_id"),
+                          finish_early=bool(b.get("finish_early")))
     except (KeyError, TypeError, ValueError):
         return jsonify({"error": "keeper is required"}), 400
     return (jsonify(res), 400) if "error" in res else jsonify(res)

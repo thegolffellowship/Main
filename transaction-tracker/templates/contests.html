@@ -2686,6 +2686,7 @@
     <script src="/static/js/points-render.js?v={{ app_version }}"></script>
     <script src="/static/js/scorecard-render.js?v={{ app_version }}"></script>
     <script src="/static/js/lsc-info.js?v={{ app_version }}"></script>
+    {% if SOLO_CUP %}<script src="/static/js/lsc-clinch.js?v={{ app_version }}"></script>{% endif %}
     <script>
     // ═══════════ Contests Page ═══════════
 
@@ -3320,6 +3321,13 @@
             evlbWireBoards(box);
         }
         lscSoloPinHead(box);
+        // THE CUP IS DECIDED, on the scorer's LEADERBOARD (Kerry 2026-10-09:
+        // "When the cup is clinched a pop up congratulations message needs to
+        // pop up on the scorers site"): the board's own cup_status, once per
+        // device, shared with the SCORING page (static/js/lsc-clinch.js).
+        if (window.SOLO_CUP && window.lscClinchPopup && cup.status)
+            window.lscClinchPopup({ status: cup.status, winner: cup.winner, austin: A.points, sa: S.points,
+                                    event_id: d.event_id, preview: !!d.preview });
         requestAnimationFrame(() => { if (window.prPinBars) window.prPinBars(); });
         box.querySelectorAll("[data-lscsess]").forEach(b => b.addEventListener("click", () => {
             window.lscSel = b.dataset.lscsess; lscBoardRender(box, d); }));

@@ -263,6 +263,53 @@
         /* The gold frame is a real border inside the card's own edge, so
            nothing bleeds past the rounded corners (Kerry 2026-09-26). */
         .se-mcard.won { border: 2px solid #D4A017; }
+        /* A DECIDED CUP MATCH SHIMMERS IN THE WINNER'S CHAPTER COLOUR (Kerry
+           2026-10-09: "Match should highlight shimmer in scoring when complete
+           but should shimmer with chapter color for who won"): Austin burnt
+           orange, San Antonio slate, frame + glow + a tinted sweep. A HALVED
+           match: a frame running orange into slate, the plain white sweep. The
+           gold plate stays for a regular-season (non-Cup) match. */
+        .se-mcard.won.lead-austin { border-color: #BF5700; background: #FFF8F3;
+            box-shadow: 0 0 0 1px rgba(191, 87, 0, .18), 0 4px 16px rgba(191, 87, 0, .30); }
+        .se-mcard.won.lead-sa { border-color: #4B6274; background: #F5F8FA;
+            box-shadow: 0 0 0 1px rgba(75, 98, 116, .18), 0 4px 16px rgba(75, 98, 116, .32); }
+        .se-mcard.won.lead-austin::after { width: 46%;
+            background: linear-gradient(75deg, transparent 0%, rgba(191, 87, 0, .16) 30%, rgba(255, 255, 255, .7) 50%, rgba(191, 87, 0, .16) 70%, transparent 100%); }
+        .se-mcard.won.lead-sa::after { width: 46%;
+            background: linear-gradient(75deg, transparent 0%, rgba(75, 98, 116, .16) 30%, rgba(255, 255, 255, .7) 50%, rgba(75, 98, 116, .16) 70%, transparent 100%); }
+        .se-mcard.halved { border: 2px solid transparent;
+            background: linear-gradient(#FFFFFF, #FFFFFF) padding-box, linear-gradient(90deg, #BF5700, #4B6274) border-box; }
+        .se-mcard.halved::after { content: ""; position: absolute; top: 0; bottom: 0; width: 36%; left: -60%;
+            transform: skewX(-20deg); pointer-events: none;
+            background: linear-gradient(75deg, transparent, rgba(255, 255, 255, .55), transparent);
+            animation: seChampShine 3.4s ease-in-out infinite; }
+        @media (prefers-reduced-motion: reduce) {
+            .se-mcard.won::after, .se-mcard.halved::after { animation: none; display: none; }
+        }
+        /* THE MATCH-WON MOMENT (Kerry 2026-10-09: "when match ends scorecard
+           needs to congratulate winner(s) and ask if you want to continue the
+           round (for skins) or complete and confirm with scorecard"). */
+        .se-mw-scrim { position: fixed; inset: 0; background: rgba(0, 0, 0, .5); z-index: 400; }
+        .se-mw { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 401;
+                 width: min(380px, calc(100% - 32px)); max-height: calc(100% - 32px); overflow: hidden auto;
+                 background: #FFFFFF; border-radius: 16px; text-align: center; box-shadow: 0 16px 48px rgba(0, 0, 0, .35); }
+        .se-mw-band { position: relative; overflow: hidden; background: var(--win, #002855); color: #FFFFFF; padding: 18px 16px 16px; }
+        .se-mw-band.halved { background: linear-gradient(90deg, #BF5700, #4B6274); }
+        .se-mw-band::after { content: ""; position: absolute; top: -40%; bottom: -40%; width: 40%; left: -70%;
+            transform: skewX(-18deg); pointer-events: none;
+            background: linear-gradient(75deg, transparent, rgba(255, 255, 255, .35), transparent);
+            animation: seChampShine 3s ease-in-out .3s infinite; }
+        .se-mw-eb { font: 700 11px/1.2 Bitter, Georgia, serif; letter-spacing: 1.6px; text-transform: uppercase; opacity: .92; }
+        .se-mw-h { font: 800 27px/1.1 Bitter, Georgia, serif; letter-spacing: .5px; margin-top: 6px; }
+        .se-mw-b { padding: 16px 18px 4px; }
+        .se-mw-line { font: 700 18px/1.35 Bitter, Georgia, serif; color: var(--se-ink, #1B1B1B); }
+        .se-mw-line .ch { color: var(--win, #002855); }
+        .se-mw-note { margin-top: 10px; font-size: 13.5px; line-height: 1.45; color: #4B5563; }
+        .se-mw-f { padding: 14px 16px 18px; display: flex; flex-direction: column; gap: 10px; }
+        .se-mw-f .se-pill { width: 100%; }
+        .se-mw-f .se-pill.win { border: none; background: var(--win, #002855); color: #FFFFFF; }
+        .se-early { margin: 10px 0 4px; }
+        @media (prefers-reduced-motion: reduce) { .se-mw-band::after { animation: none; display: none; } }
         .se-mc-grid { border-top: 1px solid #E5E7EB; padding: 6px 6px 8px; }
         .se-mc-grid table { width: 100%; border-collapse: collapse; table-layout: fixed; font-variant-numeric: tabular-nums; margin-bottom: 6px; }
         .se-mc-grid th, .se-mc-grid td { text-align: center; font-size: 13px; padding: 4px 0; position: relative; }
@@ -599,6 +646,7 @@
     <script>window.MEMBER_MODE = true;</script>
     <script src="/static/js/auth.js"></script>
     <script src="/static/js/lsc-info.js"></script>
+    <script src="/static/js/lsc-clinch.js"></script>
     <script>
     (function () {
         "use strict";
@@ -615,7 +663,7 @@
         }
         const tk = T.slice(0, 24);
         const K = {q: "se_queue_" + tk, who: "se_who_" + tk, hole: "se_hole_" + tk, follow: "se_follow_" + tk,
-                   photo: "se_photo_" + tk, gate: "se_gate_" + tk};
+                   photo: "se_photo_" + tk, gate: "se_gate_" + tk, fin: "se_fin_" + tk};
         let card = null, queue = store.get(K.q, []), who = store.get(K.who, null);
         let following = store.get(K.follow, false), hole = null, draft = {}, flushing = false;
         // THE CUP SPLASH, on a FRESH scan only (Kerry 2026-10-08; FD #1442):
@@ -713,6 +761,22 @@
         const holeWaiting = (n) => queue.some((o) => o.hole === n);
         const allDone = () => holeOrder().every(holeDone);
         const keeping = () => card.lock.state === "mine" && !following;
+        // PLAY ON AFTER THE MATCH (Kerry 2026-10-09: "Players need to be able
+        // to continue playing holes even after a match is determined if there
+        // are holes that remain. They can still play for skins"). Every hole
+        // stays open after a close-out (CA #717). The card may also FINISH
+        // EARLY: once every Cup match on it is decided, "Finish and confirm
+        // the card" (K.fin) opens Check the card with the rest blank, and the
+        // server takes that submit (submit_card finish_early). A card already
+        // submitted that way (card_check) reads as finished on every phone.
+        const myCupMatches = () => {
+            if (!card) return [];
+            const mine = new Set(card.players.map((p) => p.customer_id));
+            return (card.match_status || []).filter((m) => m.cup && (m.sides || []).flat().some((c) => mine.has(c)));
+        };
+        const matchesDecided = () => { const ms = myCupMatches(); return ms.length > 0 && ms.every((m) => m.final); };
+        const finishedEarly = () => !allDone() && matchesDecided() && (!!store.get(K.fin, false) || !!card.card_check);
+        const roundOver = () => allDone() || finishedEarly();
         // Dots, not words: k PH pops (black) + t team pops (orange).
         function popsOf(cid, n) {
             const g = (m) => Math.max(0, Number(((m || {})[String(cid)] || {})[String(n)]) || 0);
@@ -918,13 +982,15 @@
                 else if (keeping() && turnNext != null) body = turnScreen(turnNext);
                 else {
                     // A submitted card reopens on the finished card, not the check.
-                    if (keeping() && hole == null && allDone() && signed(who, "scorekeeper")
+                    if (keeping() && hole == null && roundOver() && signed(who, "scorekeeper")
                         && store.get(K.hole, null) == null) hole = "done";
-                    body = keeping() && !(allDone() && hole === "done") ? holeScreen() : cardScreen();
+                    body = keeping() && !(roundOver() && hole === "done") ? holeScreen() : cardScreen();
                 }
             }
             app.innerHTML = banner + body;
             placeCupBar();
+            wonModal();
+            clinchCheck();
             const focus = !!app.querySelector(".se-hole, .se-chk");
             // The SCORING | LEADERBOARD toggle on the scorer's board page
             // reads this (v2.523.0): the hole he is on and how many holes
@@ -1083,7 +1149,7 @@
         function holeScreen() {
             const order = holeOrder();
             if (hole == null && store.get(K.hole, null) === "photo") hole = "photo";
-            if (hole === "photo") { if (allDone()) return photoScreen(); hole = null; }
+            if (hole === "photo") { if (roundOver()) return photoScreen(); hole = null; }
             if (hole == null || order.indexOf(hole) < 0) {
                 // An EMPTY card opens on its starting hole, whatever hole this
                 // phone last showed (Kerry 10/9: "Make sure all scorecards are
@@ -1092,7 +1158,7 @@
                 const saved = empty ? null : store.get(K.hole, null);
                 // A fresh open of a finished card lands on the review, even if
                 // this phone remembers the last hole it showed.
-                hole = allDone() ? "review"
+                hole = roundOver() ? "review"
                      : order.indexOf(saved) >= 0 ? saved : (order.find((n) => !holeDone(n)) ?? "review");
             }
             // EVERY HOLE IN (Kerry 2026-09-25: "Save last hole shouldn't be
@@ -1101,7 +1167,7 @@
             // to adjust"). The review view: all cells mint, no current hole,
             // one primary action. A tap on a cell opens that hole to adjust.
             if (hole === "review") {
-                if (allDone()) return checkScreen();
+                if (roundOver()) return checkScreen();
                 hole = order.find((n) => !holeDone(n)) ?? order[0];
             }
             const h = info(hole), i = order.indexOf(hole);
@@ -1369,6 +1435,8 @@
             else { bar = m.lead_side === 0 ? "a" : "b"; sub = m.margin || ""; }
             const thru = m.thru && !m.final ? `<small>thru ${m.thru}</small>` : m.final && m.thru ? `<small>final</small>` : "";
             const won = m.final && m.lead_side != null;
+            // a Cup match halved after its last hole is decided too
+            const halved = !!(cup && m.final && m.thru && m.lead_side == null);
             const holes = (m.card || []).slice().sort((x, y) => (x.order || 0) - (y.order || 0));
             const dead = (h) => m.closed_at != null && h.order > m.closed_at;
             const dots = holes.map((h) => {
@@ -1380,7 +1448,8 @@
             const st = !m.thru ? "Not started" : m.lead_side == null
                 ? (m.final ? (m.tie_rule === "halve" ? "Halved" : `All square after ${m.thru}`) : `All square thru ${m.thru}`)
                 : `${esc(m.names[m.lead_side])} ${m.final ? "wins " + esc(m.margin) : esc(m.margin) + " thru " + m.thru}`;
-            return `<div class="se-mcard${won ? " won" : ""}${m.cup && m.lead_team ? " lead-" + m.lead_team : ""}" style="--ma:${col[0]};--mb:${col[1]}">
+            const result = won ? (m.lead_team || "won") : halved ? "halved" : "";
+            return `<div class="se-mcard${won ? " won" : ""}${halved ? " halved" : ""}${m.cup && m.lead_team ? " lead-" + m.lead_team : ""}"${result ? ` data-result="${result}"` : ""} style="--ma:${col[0]};--mb:${col[1]}">
                 <button type="button" class="se-mc-head" data-act="mtoggle" data-m="${esc(m.match_id)}" aria-expanded="${open}" aria-label="${vs}: ${st}. Tap for the match card.">
                   <span class="se-mc-strip">
                     <span class="se-mc-mono a">${esc(mono(fn[0]))}</span>${nm(fn[0], false)}
@@ -1474,6 +1543,7 @@
                 ${helpText("check", "Read the card hole by hole with whoever kept the paper card. Tap any number to change it; the right score is in the row that opens under the card." + (nines.length > 1 ? " FRONT and BACK switch nines." : "") + " When every hole matches, tap Card matches paper.")}
                 ${hioForKeeper()}
                 ${matchStrip()}
+                ${earlyNote()}
                 ${seg}
                 ${cardHtml}
                 ${popKey()}
@@ -1482,6 +1552,15 @@
                 <div class="se-tots">${tots}</div>
                 ${queue.length ? statusLine() : ""}
                 <button type="button" class="se-pill go" data-act="matches">Card matches paper</button></div>`;
+        }
+
+        // FINISHING AFTER THE MATCH: the blank holes are named, they don't
+        // count for this card's skins, and the scorer can still go back.
+        function earlyNote() {
+            if (!finishedEarly() || card.card_check) return "";
+            const left = holeOrder().filter((n) => !holeDone(n));
+            return `<div class="se-warn se-early">${ICON.warn}<span>Finishing after the match: ${left.length === 1 ? "hole " + left[0] + " stays" : "holes " + left[0] + "&ndash;" + left[left.length - 1] + " stay"} blank and won't count for skins on this card.</span></div>
+                <button type="button" class="se-link" data-act="unfinish">Keep playing for skins instead</button>`;
         }
 
         // PHOTO + PRINT SCORER (Kerry 2026-09-25: "The live scorer with the
@@ -1634,7 +1713,7 @@
             // Your own row is tappable on the sign-off screen: tap a hole to
             // flag it for the scorekeeper (Kerry 2026-09-25: "that's not
             // obvious" — so the cells are underlined and say so above).
-            const canTap = allDone() && !signedSelf(who) && !flagsMine.length;
+            const canTap = roundOver() && !signedSelf(who) && !flagsMine.length;
             const rows = subs.map((s) => {
                 const isMe = s === mine;
                 let sub = 0;
@@ -1680,7 +1759,7 @@
             const me = byId(who);
             const subs = subjects();
             const mine = subs.find((s) => s.cids.includes(who));
-            const done = allDone();
+            const done = roundOver();
             const kept = card.lock.holder_name;
             const flagsMine = openFlags(who);
             // 18 holes: OUT and IN blocks like a paper card (one 20-column
@@ -1762,6 +1841,98 @@
             // weekend." The signed card here is the record.)
         }
 
+        // THE MATCH-WON MOMENT (Kerry 2026-10-09: "when match ends scorecard
+        // needs to congratulate winner(s) and ask if you want to continue the
+        // round (for skins) or complete and confirm with scorecard"). The
+        // first time this card shows one of its Cup matches decided (a
+        // close-out, or a result after the last hole, halves included), the
+        // scorekeeper's phone congratulates the winners in their chapter's
+        // colour. Once per match per card on this phone (se_mwon_<card>_<match>,
+        // set when shown, so a reload never repeats it); never on a follower's
+        // or a player's read-only view; a two-match Singles card gets one per
+        // match, each as it is decided.
+        const CHAPTER = {austin: {name: "AUSTIN", color: "#BF5700"}, sa: {name: "SAN ANTONIO", color: "#4B6274"}};
+        const wonKey = (m) => "se_mwon_" + tk + "_" + m.match_id;
+        const firstLAST = (n) => {
+            const w = String(n || "").trim().split(/\s+/).filter(Boolean);
+            return w.length > 1 ? w.slice(0, -1).join(" ") + " " + w[w.length - 1].toUpperCase() : (w[0] || "").toUpperCase();
+        };
+        // the words, pinned by test_lsc_match_won.py
+        function wonWords(m) {
+            if (m.lead_side == null) return {halved: true, title: "Match halved", line: "Match halved, \u00BD point each"};
+            const team = m.lead_team || (m.lead_side === 0 ? "austin" : "sa");
+            const ns = ((m.full_names || [])[m.lead_side] || [m.names[m.lead_side]]).map(firstLAST);
+            const ch = CHAPTER[team] || {name: "", color: "#002855"};
+            return {team, color: ch.color, chapter: ch.name, names: ns.join(" & "), verb: ns.length > 1 ? "win" : "wins",
+                    margin: m.margin || "", title: ns.length > 1 ? "Winners!" : "Winner!"};
+        }
+        function closeWon() {
+            ["se-mw", "se-mw-scrim"].forEach((id) => { const el = document.getElementById(id); if (el) el.remove(); });
+            render();
+        }
+        function wonModal() {
+            if (!card || !keeping() || card.card_check || document.getElementById("se-mw") || document.getElementById("se-splash")) return;
+            const m = myCupMatches().find((x) => x.final && x.thru && !store.get(wonKey(x), false));
+            if (!m) return;
+            store.set(wonKey(m), true);
+            const w = wonWords(m);
+            const left = holeOrder().filter((n) => !holeDone(n));
+            const others = myCupMatches().filter((x) => x !== m && !x.final);
+            const fmt = {fourball: "Fourball", foursomes: "Foursomes", chapman: "Foursomes", singles: "Singles"}[m.format] || "";
+            const eb = ["Match" + (m.match_no ? " " + m.match_no : ""), fmt].filter(Boolean).join(" \u00B7 ");
+            const line = w.halved ? esc(w.line)
+                : `${esc(w.names)} ${w.verb} for <span class="ch">${esc(w.chapter)}</span>${w.margin ? ", " + esc(w.margin) : ""}`;
+            let note, btns;
+            if (!left.length) {
+                note = "Every hole is in. Check the card with the paper card, then submit.";
+                btns = `<button type="button" class="se-pill win" data-mw="close">Check the card</button>`;
+            } else if (others.length) {
+                note = `${others.map((x) => "Match" + (x.match_no ? " " + x.match_no : "")).join(" & ")} ${others.length > 1 ? "are" : "is"} still being played. Keep entering every hole; they all count for skins too.`;
+                btns = `<button type="button" class="se-pill win" data-mw="close">Keep scoring</button>`;
+            } else {
+                note = `${left.length} ${left.length === 1 ? "hole is" : "holes are"} left. They still count for skins. Or finish now and confirm the card; the blank holes won't count for skins on this card.`;
+                btns = `<button type="button" class="se-pill win" data-mw="close">Keep playing for skins</button>
+                        <button type="button" class="se-pill line" data-mw="finish">Finish and confirm the card</button>`;
+            }
+            const scrim = document.createElement("div");
+            scrim.className = "se-mw-scrim"; scrim.id = "se-mw-scrim";
+            const el = document.createElement("div");
+            el.className = "se-mw"; el.id = "se-mw";
+            el.setAttribute("role", "dialog"); el.setAttribute("aria-modal", "true"); el.setAttribute("aria-label", w.halved ? w.line : w.title);
+            el.dataset.match = m.match_id;
+            if (!w.halved) el.style.setProperty("--win", w.color);
+            el.innerHTML = `<div class="se-mw-band${w.halved ? " halved" : ""}"><div class="se-mw-eb">${esc(eb)}</div>
+                    <div class="se-mw-h">${w.halved ? "Match halved" : "Congratulations!"}</div></div>
+                <div class="se-mw-b"><div class="se-mw-line">${line}</div><div class="se-mw-note">${esc(note)}</div></div>
+                <div class="se-mw-f">${btns}</div>`;
+            document.body.append(scrim, el);
+            scrim.addEventListener("click", closeWon);
+            el.addEventListener("click", (e) => {
+                const b = e.target.closest("[data-mw]");
+                if (!b) return;
+                if (b.dataset.mw === "finish") {
+                    // Finish and confirm: Check the card with the rest blank,
+                    // then the photo and Submit as usual (finish_early).
+                    store.set(K.fin, true);
+                    commitDraft(); flush();
+                    hole = "review"; store.set(K.hole, null);
+                }
+                closeWon();
+            });
+        }
+        document.addEventListener("keydown", (e) => { if (e.key === "Escape" && document.getElementById("se-mw")) closeWon(); });
+        // THE CUP IS DECIDED (Kerry 2026-10-09: "When the cup is clinched a pop
+        // up congratulations message needs to pop up on the scorers site to say
+        // which chapter has clinched/retained the cup"): the board's own
+        // cup_status, carried on the card's cup_standings and re-read on every
+        // 15 s poll; static/js/lsc-clinch.js shows it once per device.
+        function clinchCheck() {
+            const cs = card && card.cup_standings, c = cs && cs.cup;
+            if (!c || !window.lscClinchPopup || document.getElementById("se-mw")) return;
+            window.lscClinchPopup({status: c.status, winner: c.winner, austin: cs.austin, sa: cs.sa,
+                                   event_id: c.event_id, preview: !!c.preview});
+        }
+
         // ── network ─────────────────────────────────────────────────────
         function api(path, body) {
             const opts = body ? {method: "POST", headers: {"Content-Type": "application/json"},
@@ -1807,7 +1978,8 @@
             if (busy || !submitReady()) return;
             busy = true;
             if (queue.length) flush();
-            const body = {keeper: who, photo_op_id: photo && (photo.data || photo.sent) ? photo.op_id : null};
+            const body = {keeper: who, photo_op_id: photo && (photo.data || photo.sent) ? photo.op_id : null,
+                          finish_early: !allDone()};
             if (psCid != null) body.print_scorer_customer_id = psCid; else body.print_scorer_name = psName.trim();
             api("/api/score-entry/submit", body).then(({j}) => {
                 busy = false;
@@ -2064,6 +2236,11 @@
             }
             if (act === "matches") { commitDraft(); flush(); checkPick = null; hole = "photo"; store.set(K.hole, "photo"); render(); return; }
             if (act === "tocheck") { hole = "review"; store.set(K.hole, null); render(); return; }
+            if (act === "unfinish") {
+                store.set(K.fin, false);
+                hole = holeOrder().find((n) => !holeDone(n)) ?? "review";
+                store.set(K.hole, hole); render(); return;
+            }
             if (act === "ps") {
                 if (b.dataset.cid) { psCid = Number(b.dataset.cid); psOther = false; }
                 else { psCid = null; psOther = true; }

@@ -492,6 +492,55 @@ frozen at `closed_at` (the engine's `closed_at_order`). Guards: test_score_entry
 "CA #717" (holes 6-9 accepted after 5&4, result unchanged, card still held) and
 test_score_entry_ui.py (hole 6 keeps its steppers and Save, and saves).
 
+## Play on, the match-won moment, the winner's shimmer, the Cup clinched (v2.535.0, Kerry 2026-10-09)
+
+Kerry: "Players need to be able to continue playing holes even after a match is
+determined if there are holes that remain. They can still play for skins even
+though match is determined. Match should highlight shimmer in scoring when complete
+but should shimmer with chapter color for who won." / "when match ends scorecard
+needs to congratulate winner(s) and ask if you want to continue the round (for
+skins) or complete and confirm with scorecard" / "When the cup is clinched a pop up
+congratulations message needs to pop up on the scorers site to say which chapter
+has clinched/retained the cup."
+
+- **Play on.** Unchanged from CA #717 above, re-verified on a phone: after a 4&3
+  close-out holes 16-18 keep steppers and Save, save, post, and the card checks and
+  submits after 18. A match halved after its last hole is `final` too.
+- **Shimmer in the winner's colour.** `matchCard` adds `won` + `lead-austin` /
+  `lead-sa` (and `data-result`), or `halved` for a Cup match halved at the end. CSS:
+  `.se-mcard.won.lead-austin` / `.lead-sa` (chapter frame, glow, tinted sweep),
+  `.se-mcard.halved` (orange-to-slate frame, white sweep); reduced motion stops it.
+  The gold `.won` plate stays for non-Cup matches.
+- **The match-won moment** (`wonModal`, `#se-mw`): the first render where one of
+  this card's Cup matches (`myCupMatches`) is `final`. Scorekeeper only
+  (`keeping()`), not after the card is submitted, never over the splash. Words:
+  "<First LAST> & <First LAST> win for <CHAPTER>, <margin>" (one player: "wins");
+  halved: "Match halved, ½ point each". Buttons: holes left and every Cup match
+  decided → Keep playing for skins / Finish and confirm the card; another match on
+  the card still live → Keep scoring; no holes left → Check the card. Key
+  `se_mwon_<card token[:24]>_<match_id>` is set when it is SHOWN.
+- **Finish early.** Finish sets `se_fin_<card>` and opens Check the card;
+  `roundOver()` = `allDone()` or (`matchesDecided()` and the flag or a
+  `card_check`) drives the screens in place of `allDone()`. Check the card names the
+  blank holes and offers "Keep playing for skins instead" (`unfinish`). The submit
+  sends `finish_early`; `submit_card` accepts an incomplete card only with it AND
+  `card_matches_decided` (every Cup match with a player on the card is final), notes
+  "finished after the match was decided" on the attestation and returns
+  `finished_early`; `sign_card` lets a player sign such a submitted card.
+- **Skins.** `lsc_cup.merge_entry_feed` lists `finished`: players of a submitted
+  card (`card_checks`) with fewer holes than the course; `compute_board` adds them
+  to the session's `withdrawn` for skins only, so their blank holes hold nothing
+  open and the holes they did post still count. Their own blank holes win nothing.
+- **Cup clinched.** `_cup_standings` adds `cup: {status, winner, event_id,
+  preview}` from the board's `cup_status`; `clinchCheck` hands it to
+  `static/js/lsc-clinch.js` (`window.lscClinchPopup`) on every render (the 15 s
+  poll). Shown for won / retained only, once per device (`lsc_clinch_seen_<event>`,
+  `_preview` for a demo board), never over the splash or the match-won pop-up.
+- Guards: `test_lsc_match_won.py`, `test_score_entry_ui.py` (the pop-ups on the
+  CA #717 and Cup cards). Screenshots in the scratchpad of the 10/9 lane
+  (`mw-modal-fourball.png`, `mw-shimmer-strip.png`, `mw-finish-check.png`,
+  `mw-clinch-scoring.png`, `mw-clinch-leaderboard.png`).
+
 ## Admin PIN box on the closed page (v2.500.2)
 
 Kerry 2026-09-26: "Yes, add the PIN box." While `score_entry_live` is off, the card
