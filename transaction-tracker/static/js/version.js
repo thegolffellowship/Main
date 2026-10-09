@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.532.5";
+window.TGF_VERSION = "2.532.6";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.532.6",
+    date: "2026-10-09",
+    title: "Cup scoring: team score above the toggles; hole details beside the hole number",
+    changes: [
+      "Kerry 10/9: \"I'd like to see the team scores pinned up underneath the header above the scoring leaderboard toggles and full width.\" The pinned Cup team score bar (AUSTIN | session | SAN ANTONIO) now sits directly under the header, above SCORING | LEADERBOARD, edge to edge on a phone. Both stay pinned while the card scrolls.",
+      "Kerry 10/9: \"Place hole details inline with the hole #.\" Every scoring card's hole screen reads \"Hole 7  Par 4 · 412 yds · SI 3\" on one line, saving a line above the players."
+    ]
+  },
   {
     version: "2.532.5",
     date: "2026-10-09",

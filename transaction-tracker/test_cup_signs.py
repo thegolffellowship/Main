@@ -172,5 +172,13 @@ check("a Cup card's heading is MATCH # | FORMAT on every screen",
       "const cupEyebrow = () =>" in sep and '" | " + sx.title' in sep
       and "const eyebrow = () => cupEyebrow() ||" in sep and "const eyebrowGroup = () => cupEyebrow() ||" in sep)
 
+# Kerry 10/9: the Cup's team score pinned under the header ABOVE the toggles,
+# full width; the hole's Par / yds / SI inline with its number
+check("the Cup team bar sits first in the pinned bar, above SCORING | LEADERBOARD",
+      'nav.insertBefore(slot, nav.firstChild)' in sep and "#se-cupbar { margin: -8px -16px 8px;" in sep)
+check("the hole details sit on the hole number's line",
+      '<div class="se-hl"><h1 class="se-h1 big">Hole ${hole}</h1><div class="se-sub">' in sep
+      and ".se-hole .se-hl { display: flex; align-items: baseline;" in sep)
+
 print("\n" + ("ALL PASS" if not F else f"{len(F)} FAILURE(S): " + "; ".join(F)))
 sys.exit(1 if F else 0)

@@ -279,6 +279,11 @@
         .se-hole .se-top { align-items: center; }
         .se-hole .se-h1.big { font-size: 30px; line-height: 1.05; }
         .se-hole .se-sub { font-size: 14px; margin-top: 2px; }
+        /* the hole's Par · yds · SI on the same line as its number (Kerry
+           10/9: "Place hole details inline with the hole #") */
+        .se-hole .se-hl { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+        .se-hole .se-hl .se-h1 { flex: none; }
+        .se-hole .se-hl .se-sub { margin-top: 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .se-hole .se-eyebrow, .se-chk .se-eyebrow { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .se-hole .se-nav { padding-top: 0; }
         .se-hole .se-mstrip { margin: 8px 0 2px; }
@@ -502,7 +507,7 @@
                             font: 800 10px/14px Bitter, Georgia, serif; letter-spacing: 1.2px; }
         /* THE CUP'S TEAM SCORE in the pinned toggle bar, the Cup tab's look */
         #se-toggle { flex-wrap: wrap; }
-        #se-cupbar { flex: 0 0 100%; display: flex; justify-content: center; margin-top: 8px; }
+        #se-cupbar { flex: 0 0 100%; display: flex; justify-content: center; margin-bottom: 8px; }
         .se-cupbar { display: flex; align-items: stretch; width: 100%; max-width: 448px; border-radius: 10px; overflow: hidden; color: #FFFFFF; }
         .se-cupbar .t { flex: 1 1 0; display: flex; align-items: center; gap: 8px; padding: 6px 10px; min-width: 0; }
         .se-cupbar .t.austin { background: #BF5700; justify-content: flex-start; }
@@ -515,10 +520,13 @@
         .se-cupbar .mid .v { font: 800 13px/1.2 Bitter, Georgia, serif; }
         /* FULL WIDTH ON A PHONE, as the member LEADERBOARD's Cup bar (Kerry 10/9:
            "Make the team score up top full width for mobile similar to the
-           member LEADERBOARD view"): edge to edge, square, flush with the
-           bottom of the pinned bar, the points as big as the Cup tab's. */
+           member LEADERBOARD view"), and ABOVE the toggles, flush under the
+           header (Kerry 10/9: "I'd like to see the team scores pinned up
+           underneath the header above the scoring leaderboard toggles and
+           full width"): edge to edge, square, the points as big as the Cup
+           tab's. */
         @media (max-width: 560px) {
-            #se-cupbar { margin: 8px -16px -8px; flex-basis: calc(100% + 32px); }
+            #se-cupbar { margin: -8px -16px 8px; flex-basis: calc(100% + 32px); }
             .se-cupbar { max-width: none; border-radius: 0; }
             .se-cupbar .t { padding: 8px 14px; }
             .se-cupbar .p { font-size: 26px; }
@@ -1075,7 +1083,7 @@
             const hio = hioForKeeper();
             return `<div class="se-hole"><div class="se-top"><div style="min-width:0">
                     <div class="se-eyebrow">${esc(eyebrow())}</div>
-                    <h1 class="se-h1 big">Hole ${hole}</h1><div class="se-sub">${esc(meta)}</div></div>
+                    <div class="se-hl"><h1 class="se-h1 big">Hole ${hole}</h1><div class="se-sub">${esc(meta)}</div></div></div>
                   </div>
                 ${matchStrip()}
                 ${hio}
@@ -1225,7 +1233,8 @@
             let slot = document.getElementById("se-cupbar");
             const html = cupBar();
             if (!html) { if (slot) slot.remove(); return; }
-            if (!slot) { slot = document.createElement("div"); slot.id = "se-cupbar"; nav.appendChild(slot); }
+            // first in the pinned bar: under the header, above the toggles
+            if (!slot) { slot = document.createElement("div"); slot.id = "se-cupbar"; nav.insertBefore(slot, nav.firstChild); }
             if (slot.innerHTML !== html) slot.innerHTML = html;
         }
         // THE STANDARD MATCH VIEW (Kerry 2026-09-26: "like the other match play
