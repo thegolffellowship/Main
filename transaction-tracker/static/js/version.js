@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.529.7";
+window.TGF_VERSION = "2.529.8";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.529.8",
+    date: "2026-10-08",
+    title: "Live scoring: no team / cart pops on an event with no games",
+    changes: [
+      "Kerry 10/8, on the practice-round card showing \"85% Cart Stroke\": \"The only thing we should be showing is 100% PH pops. No Cart/Team Net pops because there's no games in the practice round.\" The phone card now asks the same no-games rule the GAMES tab, starter sheet, CTP report and leaderboard already use (database.event_games_off: the event's included-games price is $0). Such an event draws only the 100% handicap pops: no team or cart dots, no par-3 marks, no Cart Stroke legend, including a round whose team handicaps were stored before tonight. Seeding a no-games round no longer stores team handicaps at all. Events with games are unchanged. Guard test_se_no_games_pops.py."
+    ]
+  },
   {
     version: "2.529.7",
     date: "2026-10-08",

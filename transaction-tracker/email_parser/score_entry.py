@@ -1109,11 +1109,13 @@ def seed_round_from_pairings(event_id: int, holes: str = "9", *, round_date=None
                       "seat": p.get("cart_pos")} for p in g.get("players") or []],
             db_path=db_path)
         skipped += res.get("skipped_no_customer_id", [])
-    set_game_handicaps(rid, {p["customer_id"]: p.get("team_handicap")
-                             for g in groups for p in g.get("players") or []
-                             if p.get("customer_id")},
-                       unit=pack.get("team_unit"), basis=pack.get("team_basis"),
-                       db_path=db_path)
+    from email_parser.database import event_games_off
+    if not event_games_off(evrow):        # no games, no team handicap (Kerry 10/8)
+        set_game_handicaps(rid, {p["customer_id"]: p.get("team_handicap")
+                                 for g in groups for p in g.get("players") or []
+                                 if p.get("customer_id")},
+                           unit=pack.get("team_unit"), basis=pack.get("team_basis"),
+                           db_path=db_path)
     out = {"round_id": rid, "groups": len(groups),
            "course_holes": len(course_holes)}
     if skipped:
@@ -1437,7 +1439,9 @@ def create_preview_round(event_id: int, customer_ids: list[int], db_path=None,
                                "playing_handicap": (hc["ph"] or {}).get(c),
                                **({"tee": tees[c]} if tees and tees.get(c) else {})}
                               for i, c in enumerate(ids)], db_path=db_path)
-    set_game_handicaps(rid, hc["team"], unit=hc["unit"], basis=hc["basis"], db_path=db_path)
+    from email_parser.database import event_games_off
+    if not event_games_off(ev):
+        set_game_handicaps(rid, hc["team"], unit=hc["unit"], basis=hc["basis"], db_path=db_path)
     out = {"round_id": rid, "group_id": g["group_id"], "reused": bool(existing),
            "course_holes": len(course), "holes": holes,
            "handicaps": {"ph": hc["ph"], "team": hc["team"], "unit": hc["unit"],
@@ -2900,10 +2904,19 @@ def _team_strokes(conn, round_id: int, course, tees=None, si_by_band=None) -> di
     """Team/Cart Net pops per hole off the snapshotted team handicap, the
     same allocation as the PH pops (full card, by stroke index; the
     player's own tee's since v2.525.5, ``tees`` = {customer_id: band})."""
+    none = {"team_strokes": {}, "team_par3_ghost": {}, "team_game": None}
+    # NO GAMES, NO TEAM POPS (Kerry 10/8, the LSC practice round card showed
+    # "85% Cart Stroke": "The only thing we should be showing is 100% PH
+    # pops. No Cart/Team Net pops because there's no games"). The same
+    # event_games_off rule the GAMES tab, starter sheet, CTP report and
+    # leaderboard read, so a team handicap snapshotted before the rule
+    # existed never draws a dot either.
+    if _round_games_off(conn, round_id):
+        return none
     rows = conn.execute("SELECT customer_id, handicap, unit, basis FROM se_game_handicaps "
                         "WHERE round_id = ? AND game = 'team_net'", (round_id,)).fetchall()
     if not rows:
-        return {"team_strokes": {}, "team_par3_ghost": {}, "team_game": None}
+        return none
     alloc = _strokes_by_player([{"customer_id": r[0], "playing_handicap": r[1],
                                  "tee": (tees or {}).get(r[0])} for r in rows],
                                course, si_by_band)
@@ -2936,6 +2949,17 @@ def _team_strokes(conn, round_id: int, course, tees=None, si_by_band=None) -> di
                           # The allowance the phone's legend names ("X% Team Stroke",
                           # Kerry 2026-09-29); the basis text carries it.
                           "pct": _basis_pct(rows[0][3])}}
+
+
+def _round_games_off(conn, round_id: int) -> bool:
+    """Has this round's event no games (database.event_games_off)?"""
+    try:
+        from email_parser.database import event_games_off
+        ev = conn.execute("SELECT e.* FROM events e JOIN se_rounds r ON r.event_id = e.id "
+                          "WHERE r.id = ?", (round_id,)).fetchone()
+        return bool(ev) and event_games_off(dict(ev))
+    except Exception:
+        return False
 
 
 def _basis_pct(basis) -> int | None:

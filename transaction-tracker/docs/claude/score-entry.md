@@ -990,6 +990,11 @@ Events board on Olympia Hills (event 3308) had read Golf Genius imports.
   "in play" measured on the overlay, temp tables dropped after each event).
   Before this an event Golf Genius never scored (the practice round) never
   reached the scorer's board at all.
+- **No games, no team pops (v2.529.8, Kerry 10/8):** `_team_strokes`
+  returns nothing when the round's event is `database.event_games_off`
+  (included-games price $0), and the pairings seed and preview skip
+  `set_game_handicaps` for such an event. Only 100% PH pops show. Guard
+  `test_se_no_games_pops.py`.
 - Not affected: the Lone Star Cup board (`lsc_cup`) already reads entries
   (`get_entered_scores` → `merge_entry_feed`).
 - Guard: `test_board_entry_mode.py`.
