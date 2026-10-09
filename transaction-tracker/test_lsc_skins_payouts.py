@@ -84,10 +84,11 @@ def session_data(am_hole1_low=True, sun_complete=False, pm_complete=True):
             "sun": {"course": COURSE, "phs": zero, "scores": sun}}
 
 
-def board(entry=("sat-am", "sat-pm", "sun"), **kw):
+def board(entry=("sat-am", "sat-pm", "sun"), sd=None, buyers=None, **kw):
     from email_parser.lsc_cup import compute_board
-    b = compute_board(dial(), session_data(**kw), NAMES,
-                      {"buyers": set(BUYERS), "index": dict(INDEX)})
+    b = compute_board(dial(), sd if sd is not None else session_data(**kw), NAMES,
+                      {"buyers": set(BUYERS if buyers is None else buyers),
+                       "index": dict(INDEX)})
     b.update({"configured": True, "source": "entry", "entry_sessions": list(entry)})
     return b
 
@@ -305,11 +306,275 @@ def main():
             os.remove(f)
         except OSError:
             pass
+    carryover_and_teams()
+    auto_apply_and_visibility()
     print("\nFAILED: " + ", ".join(FAILURES) if FAILURES else "\nALL PASS")
     sys.exit(1 if FAILURES else 0)
 
 
+
+
+
+def _tied_sd(am_tied=True, pm_tied=False, sun_f2_win=True):
+    """session_data with chosen sessions all-tied (no skin won)."""
+    sd = session_data(sun_complete=True)
+    if am_tied:
+        sd["sat-am"]["scores"] = flat(range(1, 9))
+    if pm_tied:
+        sd["sat-pm"]["scores"] = flat([1, 2, 5, 6])
+    if not sun_f2_win:
+        sd["sun"]["scores"][3][1] = 4          # Flight 2: every hole tied
+    return sd
+
+
+def carryover_and_teams():
+    """Kerry 2026-10-09, ruling 5: "If no skins are awarded in a session the
+    pot moves to the next session. If foursomes moves to singles then it is
+    evenly distributed to the flights." And ruling 2 / CA #759: a buyer
+    makes his team eligible to WIN, only buyers are PAID."""
+    from email_parser.lsc_skins_payouts import plan_session_skins
+    from email_parser.lsc_cup import strip_money
+    print("\nCarryover between sessions:")
+    POT = 7 * 2500
+
+    # AM no skin -> PM pot doubles
+    b = board(sd=_tied_sd(am_tied=True))
+    plan = plan_session_skins(b)
+    am, pm, sun = (sess(plan, s) for s in ("sat-am", "sat-pm", "sun"))
+    check("AM no skin: final, nothing paid, its whole pot carried out (not unallocated)",
+          am["final"] and am["rows"] == [] and am["carried_out_cents"] == POT
+          and am["unallocated_cents"] == 0 and am["carries_to"] == "SAT PM", am)
+    check("PM pot = its own $175 + $175 carried from SAT AM",
+          pm["pot_cents"] == 2 * POT and pm["own_pot_cents"] == POT
+          and pm["carry_in_cents"] == POT and pm["carried_from"] == ["SAT AM"], pm)
+    a_pm = {r["customer_id"]: r["amount"] for r in pm["rows"]}
+    check("PM: Al and Cy split the doubled pot ($175 each)", a_pm == {1: 175.0, 3: 175.0}, a_pm)
+    check("Sunday keeps its own standalone pot", sun["pot_cents"] == POT and sun["carry_in_cents"] == 0, sun)
+    skam = b["sessions"][0]["skins"]
+    check("staff flag on AM: the pot carries to SAT PM",
+          any("carries to SAT PM" in f for f in skam["flags"]), skam["flags"])
+    m = strip_money(b)
+    msk = m["sessions"][1]["skins"]
+    check("member board: PM names SAT AM as carried in, and no dollar anywhere",
+          msk.get("carried_from") == ["SAT AM"] and m["sessions"][0]["skins"]["carries_to"] == "SAT PM"
+          and "$" not in json.dumps(m) and "cents" not in json.dumps(msk), msk)
+
+    # AM and PM no skin -> Sunday flights each + half of the carried pots
+    b = board(sd=_tied_sd(am_tied=True, pm_tied=True))
+    plan = plan_session_skins(b)
+    pm, sun = sess(plan, "sat-pm"), sess(plan, "sun")
+    check("PM no skin: carries AM + PM ($350) to SUN", pm["carried_out_cents"] == 2 * POT
+          and pm["carries_to"] == "SUN" and pm["rows"] == [], pm)
+    check("SUN pot = own $175 + $350 carried from SAT AM + SAT PM",
+          sun["pot_cents"] == 3 * POT and sun["carry_in_cents"] == 2 * POT
+          and sun["carried_from"] == ["SAT AM", "SAT PM"], sun)
+    g = b["sessions"][2]["skins"]["groups"]
+    check("each flight: its own half ($87.50) + half the carry ($175) = $262.50",
+          [x["pot_cents"] for x in g] == [26250, 26250], [x["pot_cents"] for x in g])
+    a_sun = sorted((r["customer_id"], r["amount"]) for r in sun["rows"])
+    check("Sunday winners: Fi (Flight 1) and Cy (Flight 2) $262.50 each",
+          a_sun == [(3, 262.5), (6, 262.5)], a_sun)
+    check("every dollar of the weekend is paid: 3 pots, $525",
+          sum(sp["paid_cents"] for sp in plan["sessions"]) == 3 * POT, plan)
+
+    # an odd carry splits to the cent: largest remainder, sums exactly
+    from email_parser.lsc_cup import compute_skins_payout
+    sun_sess = dial()["sessions"][2]
+    sd = session_data(sun_complete=True)["sun"]
+    r = compute_skins_payout(sun_sess, COURSE, sd["phs"], sd["scores"], names=NAMES,
+                             buyers=set(BUYERS), index=dict(INDEX), carry_in_cents=12345)
+    check("an odd carry splits to the cent and the flights sum to the pot",
+          sorted(x["pot_cents"] for x in r["groups"]) == [8750 + 6172, 8750 + 6173]
+          and sum(x["pot_cents"] for x in r["groups"]) == r["pot_cents"] == POT + 12345, r["groups"])
+
+    # Sunday flight with no skin: unallocated, flagged for Kerry, not invented
+    b = board(sd=_tied_sd(am_tied=False, sun_f2_win=False))
+    sun = sess(plan_session_skins(b), "sun")
+    flags = b["sessions"][2]["skins"]["flags"]
+    check("a Sunday flight with no skin: its $87.50 unallocated, nothing carried",
+          sun["final"] and sun["unallocated_cents"] == 8750 and sun["carried_out_cents"] == 0
+          and [r["customer_id"] for r in sun["rows"]] == [6], sun)
+    check("...and flagged for Kerry (no rule given)",
+          any("Flight 2" in f and "Kerry decides" in f for f in flags), flags)
+
+    # AM not final -> PM can't be paid (its carry-in isn't known)
+    sd = _tied_sd(am_tied=True)
+    del sd["sat-am"]["scores"][1][3]        # A1:austin hasn't posted hole 3
+    del sd["sat-am"]["scores"][2][3]
+    b = board(sd=sd)
+    plan = plan_session_skins(b)
+    pm = sess(plan, "sat-pm")
+    check("AM cards out: PM is held, its carry-in not known yet",
+          not pm["final"] and any("SAT AM isn't final yet" in x for x in pm["blockers"])
+          and pm["carry_in_cents"] == 0, pm)
+    check("...and so is Sunday (the chain waits on SAT AM)",
+          any("SAT AM isn't final yet" in x for x in sess(plan, "sun")["blockers"]), sess(plan, "sun"))
+
+    # a pot carried from a MOCK-scored session is never paid from
+    b = board(sd=_tied_sd(am_tied=True), entry=("sat-pm", "sun"))
+    pm = sess(plan_session_skins(b), "sat-pm")
+    check("a carry from a mock-scored session holds the receiving session",
+          not pm["final"] and any("carried from sat-am" in x for x in pm["blockers"]), pm)
+
+    print("\nMixed teams (ruling 2, CA #759):")
+    # Hal (8, NOT a buyer) is Gus's (7, buyer) partner on A2:sa. Hal's ball
+    # wins hole 2 for the team; Gus is paid the FULL team skin, Hal nothing.
+    sd = session_data()
+    sd["sat-am"]["scores"][7][2] = 4
+    sd["sat-am"]["scores"][8][2] = 3
+    am = sess(plan_session_skins(board(sd=sd)), "sat-am")
+    a_am = {r["customer_id"]: r["amount"] for r in am["rows"]}
+    check("the NON-buyer's ball wins the hole for the mixed team; the buyer gets the full team skin",
+          a_am == {1: 43.75, 2: 43.75, 7: 87.5} and 8 not in a_am, a_am)
+    # a team with NO buyer (7 and 8 both out) is out entirely: its 3s can
+    # neither win a hole nor tie one out
+    sd = session_data(am_hole1_low=True)
+    sd["sat-am"]["scores"][8][1] = 3        # ties A1:austin's 3 on hole 1
+    sd["sat-am"]["scores"][7][2] = 3        # would win hole 2 alone
+    b = board(sd=sd, buyers={1, 2, 3, 4, 5, 6})
+    g = b["sessions"][0]["skins"]["groups"][0]
+    hs = {h["hole"]: h for h in g["holes"]}
+    check("no-buyer team: can't tie out hole 1 (A1:austin still wins it)",
+          hs[1]["status"] == "won" and hs[1]["winner"] == "A1:austin", hs[1])
+    check("no-buyer team: can't win hole 2 (nobody wins it)", hs[2]["status"] != "won", hs[2])
+    check("no-buyer team is not an entry and is listed as excluded",
+          "A2:sa" not in {t["key"] for t in g["totals"]}
+          and any(x["team"] == "sa" and x["reason"] == "not bought in"
+                  for x in b["sessions"][0]["skins"]["excluded"]), g["totals"])
+    am = sess(plan_session_skins(b), "sat-am")
+    check("only A1:austin is paid, the whole $150 pot (6 buyers)",
+          {r["customer_id"]: r["amount"] for r in am["rows"]} == {1: 75.0, 2: 75.0}, am["rows"])
+
+    print("\nSunday non-buyers, display only (Show All Players):")
+    sd = session_data(sun_complete=True)
+    sd["sun"]["scores"][8][2] = 3           # Hal (non-buyer, Flight 2 by index 20)
+    b = board(sd=sd)
+    g2 = b["sessions"][2]["skins"]["groups"][1]
+    hal = [o for o in g2.get("others") or [] if o["customer_id"] == 8]
+    check("Hal is listed in Flight 2's others with his gross card",
+          hal and hal[0]["card"]["2"] == [3, 0] and hal[0]["index"] == 20.0, g2.get("others"))
+    check("...but never an entry: his 3 doesn't win hole 2",
+          8 not in {int(k.split(":")[-1]) for k in (t["key"] for t in g2["totals"])}
+          and next(h for h in g2["holes"] if h["hole"] == 2)["status"] != "won", g2["holes"])
+    m = strip_money(b)
+    mo = m["sessions"][2]["skins"]["groups"][1]["others"]
+    check("members get the others (names, index, gross) and still no money",
+          mo and mo[0]["name"] == "Hal Sa" and "$" not in json.dumps(m), mo)
+
+
+def auto_apply_and_visibility():
+    """Kerry 10/9: "Ok to write payouts 15 minutes after all sessions are
+    final" / "Yes when rounds complete" / "3. Yes definitely" (Winnings)."""
+    from datetime import datetime, timedelta
+    from email_parser import database as db
+    from email_parser.lsc_skins_payouts import (lsc_skins_auto_check, auto_state,
+                                                lsc_skins_payouts)
+    print("\nAuto-apply:")
+    p = _db()
+    sat = datetime(2026, 10, 10, 12, 0, 0)
+    b = board()                                   # AM + PM final, Sunday out
+    r = lsc_skins_auto_check(db_path=p, now=sat, board=b)
+    check("first sight of final: stamped, nothing written", r.get("status") == "waiting"
+          and set(r["final_seen"]) == {"sat-am", "sat-pm"} and rows(p) == [], r)
+    r = lsc_skins_auto_check(db_path=p, now=sat + timedelta(minutes=14), board=b)
+    check("14 minutes: still nothing", r.get("status") == "waiting" and rows(p) == [], r)
+    st = auto_state(db_path=p, board=b, now=sat + timedelta(minutes=14))
+    am_st = next(x for x in st["sessions"] if x["session"] == "sat-am")
+    check("auto_state reports the setting, final_seen and payable_at",
+          st["enabled"] and st["in_window"] and am_st["final_seen"] == "2026-10-10 12:00:00"
+          and am_st["payable_at"] == "2026-10-10 12:15:00" and not am_st["payable_now"], st)
+    r = lsc_skins_auto_check(db_path=p, now=sat + timedelta(minutes=15), board=b)
+    check("15 minutes: AM + PM applied (5 rows), Sunday not", r.get("status") == "applied"
+          and r["writes"] == 5 and len(rows(p)) == 5
+          and not any(x["description"].startswith("LSC SUN") for x in rows(p)), r)
+    conn = sqlite3.connect(p)
+    logs = conn.execute("SELECT agent_name, action_type FROM agent_action_log").fetchall()
+    conn.close()
+    check("the auto-apply is in the agent action log",
+          ("scheduler", "lsc-skins-payouts-auto") in logs, logs)
+    r = lsc_skins_auto_check(db_path=p, now=sat + timedelta(minutes=20), board=b)
+    check("re-run: idempotent, writes nothing", r.get("status") == "up to date"
+          and r["writes"] == 0 and len(rows(p)) == 5, r)
+
+    # a corrected AM card after apply: the UNPAID rows it owns follow
+    b2 = board(am_hole1_low=False)
+    r = lsc_skins_auto_check(db_path=p, now=sat + timedelta(minutes=30), board=b2)
+    by = {(x["customer_id"], x["description"].split(" — ")[0]): x["amount"] for x in rows(p)}
+    check("a correction after apply updates the unpaid AM rows (Gus now $175)",
+          r.get("status") == "applied" and by.get((7, "LSC SAT AM Skins")) == 175.0
+          and (1, "LSC SAT AM Skins") not in by, by)
+    # a session that stops being final restarts its clock
+    r = lsc_skins_auto_check(db_path=p, now=sat + timedelta(minutes=35),
+                             board=board(am_hole1_low=False, pm_complete=False))
+    check("PM reopened: its final stamp is dropped (the 15 minutes restart)",
+          "sat-pm" not in r["final_seen"] and "sat-am" in r["final_seen"], r)
+
+    # Sunday pays 15 min after Sunday is final
+    sun_t = datetime(2026, 10, 11, 15, 0, 0)
+    b3 = board(am_hole1_low=False, sun_complete=True)
+    lsc_skins_auto_check(db_path=p, now=sun_t, board=b3)
+    r = lsc_skins_auto_check(db_path=p, now=sun_t + timedelta(minutes=10), board=b3)
+    check("Sunday final 10 min: not yet", not any(x["description"].startswith("LSC SUN") for x in rows(p)), r)
+    r = lsc_skins_auto_check(db_path=p, now=sun_t + timedelta(minutes=16), board=b3)
+    check("Sunday final 16 min: Sunday rows written",
+          sorted((x["customer_id"], x["amount"]) for x in rows(p) if x["description"].startswith("LSC SUN"))
+          == [(3, 87.5), (6, 87.5)], r)
+
+    # a PAID row is never touched by the auto job
+    conn = sqlite3.connect(p)
+    conn.execute("UPDATE tgf_payouts SET paid_at = '2026-10-11' WHERE customer_id = 6")
+    conn.commit()
+    conn.close()
+    sd = session_data(am_hole1_low=False, sun_complete=True)
+    sd["sun"]["scores"][6][3] = 4                 # Fi's skin corrected away
+    sd["sun"]["scores"][5][3] = 3                 # Ed wins it instead
+    r = lsc_skins_auto_check(db_path=p, now=sun_t + timedelta(minutes=40), board=board(sd=sd))
+    fi = [x for x in rows(p) if x["customer_id"] == 6]
+    check("auto never touches a PAID row (Fi's paid Sunday row stays)",
+          len(fi) == 1 and fi[0]["paid_at"] == "2026-10-11" and fi[0]["amount"] == 87.5, fi)
+
+    # setting off = nothing; outside the dates = nothing
+    q = _db()
+    db.set_app_setting("lsc_skins_auto", "0", db_path=q)
+    r = lsc_skins_auto_check(db_path=q, now=sat + timedelta(hours=2), board=b)
+    r2 = lsc_skins_auto_check(db_path=q, now=sat + timedelta(hours=3), board=b)
+    check("lsc_skins_auto=0: nothing stamped, nothing written",
+          "off" in (r.get("skipped") or "") and "off" in (r2.get("skipped") or "") and rows(q) == []
+          and not db.get_app_setting("lsc_skins_final_seen", db_path=q), r)
+    db.set_app_setting("lsc_skins_auto", "", db_path=q)
+    for when in (datetime(2026, 10, 9, 23, 0), datetime(2026, 10, 13, 9, 0)):
+        r = lsc_skins_auto_check(db_path=q, now=when, board=b)
+        check(f"outside the Cup's dates ({when.date()}): nothing",
+              "outside" in (r.get("skipped") or "") and rows(q) == [], r)
+
+    print("\nMember visibility (Winnings / Spotlight):")
+    w = db.get_customer_winnings("", db_path=p, customer_id=7)
+    gus = [x for x in w["payouts"] if (x["description"] or "").startswith("LSC SAT AM Skins")]
+    check("Winnings (get_customer_winnings, Spotlight's source) lists the Cup skins row",
+          gus and gus[0]["category"] == "skins" and gus[0]["amount"] == 175.0
+          and gus[0]["event_name"] == "2026 LONE STAR CUP"
+          and str(gus[0]["event_date"]).startswith("2026-10-10"), w)
+    wbg = db._winnings_by_game(w["payouts"], db.get_winnings_bundles(p), 2026)
+    gross = next(x for x in wbg["by_year"]["2026"] if x["key"] == "gross")
+    check("Spotlight Winnings by Game: in the 2026 season, Skins under GROSS Games",
+          any(gm["category"] == "skins" and gm["total"] >= 175.0 for gm in gross["games"]), gross)
+    # a found tgf_events row with no date is healed on apply (season scope)
+    conn = sqlite3.connect(p)
+    conn.execute("UPDATE tgf_events SET event_date = ''")
+    conn.commit()
+    conn.close()
+    lsc_skins_payouts(apply=True, db_path=p, board=board(sd=sd))
+    conn = sqlite3.connect(p)
+    d = conn.execute("SELECT event_date FROM tgf_events").fetchone()[0]
+    conn.close()
+    check("apply heals a dateless tgf_events row so Winnings' season view keeps it",
+          str(d).startswith("2026-10-10"), d)
+    for f in (p, q):
+        try:
+            os.remove(f)
+        except OSError:
+            pass
+
+
 if __name__ == "__main__":
     main()
-
-

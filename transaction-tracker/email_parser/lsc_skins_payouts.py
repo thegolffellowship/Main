@@ -7,8 +7,14 @@ The rule of record is lsc_cup.compute_skins_payout (CA #725/#726): each
 session is its own pot ($25 x the players in that session who bought the
 weekend skins), Saturday team NET skins in two sessions (AM Fourball, PM
 Foursomes) at the full session allowance off zero, Sunday individual GROSS
-skins in two flights split 50/50, no carryover, money held until every
-entry posts every hole. This module does not re-decide any of that. It
+skins in two flights split 50/50, money held until every entry posts every
+hole. CARRYOVER BETWEEN SESSIONS (Kerry 2026-10-09, ruling 5): a final
+session where no skin was won carries its whole pot to the next session
+(sat-am -> sat-pm -> sun; a carry into Sunday is split evenly between the
+flights), computed in lsc_cup.compute_board so the board, the staff pot note
+and this writer read one number. A session whose predecessor isn't final
+yet is held here (its carry-in isn't known). This module does not re-decide
+any of that. It
 reads the staff board the Cup tab already computes and writes each
 SESSION's winners on their own, never added up across a day.
 
@@ -25,6 +31,14 @@ written, rule 3b):
     The "LSC <SESSION> Skins" prefix is how a re-run finds its own rows. It
     is not "auto:", so the GG auto-recorder's force path and
     scoring-payouts-clear-auto never delete these.
+
+AUTOMATIC (Kerry 10/9: "Ok to write payouts 15 minutes after all sessions
+are final" / "Yes when rounds complete"): lsc_skins_auto_check(), the
+scheduler's `lsc_skins_payouts_auto` job every 5 min, applies each session
+once it has been final for 15 minutes (first seen final stamped in app
+setting `lsc_skins_final_seen`), only during the Cup's dates, and only while
+app setting `lsc_skins_auto` is on (default ON; 0/off stops it). It goes
+through the same safe apply below.
 
 A session is written as soon as IT is final: every skins group with
 entrants in it is complete (every card posted) and it is scored from REAL
@@ -116,6 +130,15 @@ def plan_session_skins(board: dict) -> dict:
             if sid not in entry:
                 blockers.append(f"{sid}: not scored from entered cards "
                                 "(mock or no scores), never paid from")
+            if sk.get("carry_pending_from"):
+                blockers.append(f"{sid}: {sk['carry_pending_from']} isn't final "
+                                "yet, so whether its pot carries into this "
+                                "session isn't known")
+            for fid in sk.get("carried_from_ids") or []:
+                if fid not in entry:
+                    blockers.append(f"{sid}: the pot carried from {fid} was "
+                                    "not scored from entered cards, never "
+                                    "paid from")
             for g in sk.get("groups") or []:
                 if not g.get("entrants"):
                     continue
@@ -151,7 +174,13 @@ def plan_session_skins(board: dict) -> dict:
         out.append({"session": sid, "date": s.get("date"), "tag": tag,
                     "day": _day_tag(s.get("date")), "format": s.get("format"),
                     "final": not blockers, "blockers": blockers,
-                    "pot_cents": pot, "unallocated_cents": unallocated,
+                    "pot_cents": pot,
+                    "own_pot_cents": int(sk.get("own_pot_cents") or pot),
+                    "carry_in_cents": int(sk.get("carry_in_cents") or 0),
+                    "carried_from": list(sk.get("carried_from") or []),
+                    "carried_out_cents": int(sk.get("carry_out_cents") or 0),
+                    "carries_to": sk.get("carries_to"),
+                    "unallocated_cents": unallocated,
                     "paid_cents": sum(r["cents"] for r in rows),
                     "rows": rows})
     return {"event_id": board.get("event_id"), "source": board.get("source"),
@@ -175,12 +204,15 @@ def _starts(desc, prefix: str) -> bool:
     return (desc or "").lower().startswith(prefix.lower() + " ")
 
 
-def lsc_skins_payouts(apply: bool = False, db_path=None, board: dict | None = None) -> dict:
+def lsc_skins_payouts(apply: bool = False, db_path=None, board: dict | None = None,
+                      only: set | None = None, actor: str = "mcp-claude") -> dict:
     """Dry run by default: what the PAYOUTS page would get for each final
     SESSION of Cup skins, against what is already there. apply=True writes
     (creates / updates unpaid / removes unpaid rows a changed result no
     longer pays). Never touches a paid row. `board` lets a test hand in a
-    staff board; normally it is the live (or frozen) Cup board."""
+    staff board; normally it is the live (or frozen) Cup board. `only`
+    (a set of session ids) limits writing to those sessions (the auto job
+    passes the ones final for 15 minutes); the rest read "held"."""
     from email_parser import database as db
     from email_parser import lsc_cup
     if board is None:
@@ -222,10 +254,18 @@ def lsc_skins_payouts(apply: bool = False, db_path=None, board: dict | None = No
         todo = []          # (kind, payload)
         for sp in plan["sessions"]:
             s_out = {k: sp[k] for k in ("session", "date", "tag", "final",
-                                        "blockers", "pot_cents",
+                                        "blockers", "pot_cents", "own_pot_cents",
+                                        "carry_in_cents", "carried_from",
+                                        "carried_out_cents", "carries_to",
                                         "unallocated_cents", "paid_cents")}
             s_out["blockers"] = list(s_out["blockers"])
             s_out["actions"] = []
+            if only is not None and sp["session"] not in only:
+                s_out["actions"].append({"action": "held",
+                                         "why": "not in this run's sessions "
+                                                "(auto: not final for 15 minutes yet)"})
+                out["sessions"].append(s_out)
+                continue
             legacy = []
             day = sp.get("day")
             if sp["tag"] and day and sp["tag"] != day:
@@ -315,6 +355,13 @@ def lsc_skins_payouts(apply: bool = False, db_path=None, board: dict | None = No
                         todo.append(("delete", x))
             out["sessions"].append(s_out)
         out["writes"] = len(todo)
+        if apply and tgf_id:
+            # Spotlight's Winnings scope payouts by the tgf_events date: a
+            # found row with no date would drop out of the season view
+            conn.execute("UPDATE tgf_events SET event_date = ? WHERE id = ? "
+                         "AND COALESCE(event_date, '') = ''",
+                         (ev.get("event_date") or "", tgf_id))
+            conn.commit()
         if not apply or not todo:
             return out
 
@@ -364,9 +411,150 @@ def lsc_skins_payouts(apply: bool = False, db_path=None, board: dict | None = No
                      (st["total"], st["winners"], st["cnt"], tgf_id))
         conn.commit()
     try:
-        db.log_agent_action("mcp-claude", "scoring-lsc-skins-payouts",
+        db.log_agent_action(actor, "scoring-lsc-skins-payouts",
                             f"event {eid}: {out['writes']} write(s) on tgf_event {tgf_id}",
                             db_path=db_path)
     except Exception:
         logger.exception("lsc skins payouts: action log failed")
+    return out
+
+
+# ---------------------------------------------------------------------------
+# AUTO-APPLY (Kerry 2026-10-09: "1. Ok to write payouts 15 minutes after all
+# sessions are final." / "4. Yes when rounds complete.")
+# ---------------------------------------------------------------------------
+
+AUTO_KEY = "lsc_skins_auto"
+SEEN_KEY = "lsc_skins_final_seen"
+AUTO_DELAY_MIN = 15
+_TS = "%Y-%m-%d %H:%M:%S"
+
+
+def auto_enabled(db_path=None) -> bool:
+    """`lsc_skins_auto` is ON unless set to 0 / off / false / no."""
+    from email_parser.database import get_app_setting
+    v = (get_app_setting(AUTO_KEY, db_path=db_path) or "").strip().lower()
+    return v not in ("0", "off", "false", "no")
+
+
+def _seen_all(db_path=None) -> dict:
+    import json
+    from email_parser.database import get_app_setting
+    try:
+        v = json.loads(get_app_setting(SEEN_KEY, db_path=db_path) or "{}")
+        return v if isinstance(v, dict) else {}
+    except (TypeError, ValueError):
+        return {}
+
+
+def auto_state(db_path=None, board: dict | None = None, now=None,
+               plan: dict | None = None) -> dict:
+    """Read-only: the auto job's view (the bridge dry run reports it): the
+    setting, the Cup window, and per session when it was first seen final
+    and when it becomes payable. Never writes."""
+    from datetime import datetime, timedelta
+    from email_parser.lsc_recap import cup_window
+    if now is None:
+        from email_parser.timezone_utils import now_central
+        now = now_central()
+    if board is None:
+        from email_parser import lsc_cup
+        board = lsc_cup._board_payload(db_path, use_frozen=True)
+    plan = plan or plan_session_skins(board)
+    win = cup_window(board)
+    seen = (_seen_all(db_path).get(str(board.get("event_id"))) or {})
+    sessions = []
+    for sp in plan["sessions"]:
+        ts = seen.get(sp["session"])
+        at = None
+        if ts:
+            try:
+                at = datetime.strptime(ts, _TS) + timedelta(minutes=AUTO_DELAY_MIN)
+            except ValueError:
+                at = None
+        sessions.append({"session": sp["session"], "tag": sp["tag"],
+                         "final": sp["final"], "final_seen": ts,
+                         "payable_at": at.strftime(_TS) if at else None,
+                         "payable_now": bool(sp["final"] and at and now >= at)})
+    return {"setting": AUTO_KEY, "enabled": auto_enabled(db_path),
+            "window": [str(d) for d in win] if win else None,
+            "in_window": bool(win and win[0] <= now.date() <= win[1]),
+            "delay_minutes": AUTO_DELAY_MIN, "now_central": now.strftime(_TS),
+            "sessions": sessions}
+
+
+def lsc_skins_auto_check(db_path=None, now=None, board: dict | None = None) -> dict:
+    """The 5-minute scheduler job. During the Cup's dates, while the setting
+    is on: stamp each session the first time it is seen final (Central),
+    forget the stamp if it stops being final (a card reopened: the 15
+    minutes restart), and once a session has been final for 15 minutes run
+    the SAFE apply for those sessions only (never a PAID row; idempotent:
+    a re-run writes nothing new; a later score correction updates the UNPAID
+    rows it owns). Each run that writes is logged (log_agent_action)."""
+    import json
+    from datetime import datetime, timedelta
+    from email_parser import database as db
+    from email_parser.lsc_recap import cup_window
+    if not auto_enabled(db_path):
+        return {"skipped": f"{AUTO_KEY} is off"}
+    if now is None:
+        from email_parser.timezone_utils import now_central
+        now = now_central()
+    if board is None:
+        from email_parser import lsc_cup
+        board = lsc_cup._board_payload(db_path, use_frozen=True)
+    if not board or not board.get("configured"):
+        return {"skipped": "no Cup dial"}
+    win = cup_window(board)
+    if not win or not (win[0] <= now.date() <= win[1]):
+        return {"skipped": f"outside the Cup's dates {win}"}
+    plan = plan_session_skins(board)
+    allseen = _seen_all(db_path)
+    ek = str(board.get("event_id"))
+    seen = dict(allseen.get(ek) or {})
+    changed = False
+    payable = set()
+    for sp in plan["sessions"]:
+        sid = sp["session"]
+        if not sp["final"]:
+            if sid in seen:
+                seen.pop(sid)
+                changed = True
+            continue
+        if sid not in seen:
+            seen[sid] = now.strftime(_TS)
+            changed = True
+        try:
+            first = datetime.strptime(seen[sid], _TS)
+        except ValueError:
+            seen[sid] = now.strftime(_TS)
+            changed = True
+            continue
+        if now - first >= timedelta(minutes=AUTO_DELAY_MIN):
+            payable.add(sid)
+    if changed:
+        allseen[ek] = seen
+        db.set_app_setting(SEEN_KEY, json.dumps(allseen), db_path=db_path)
+    out = {"final_seen": seen, "payable": sorted(payable), "writes": 0}
+    if not payable:
+        out["status"] = "waiting"
+        return out
+    dry = lsc_skins_payouts(apply=False, db_path=db_path, board=board, only=payable)
+    if dry.get("error"):
+        out["error"] = dry["error"]
+        return out
+    if not dry.get("writes"):
+        out["status"] = "up to date"
+        return out
+    res = lsc_skins_payouts(apply=True, db_path=db_path, board=board,
+                            only=payable, actor="scheduler")
+    out.update(status="applied", writes=res.get("writes", 0))
+    try:
+        db.log_agent_action(
+            "scheduler", "lsc-skins-payouts-auto",
+            f"event {board.get('event_id')}: auto-applied {res.get('writes', 0)} "
+            f"write(s) for {', '.join(sorted(payable))} (final 15+ min)",
+            db_path=db_path)
+    except Exception:
+        logger.exception("lsc skins auto: action log failed")
     return out

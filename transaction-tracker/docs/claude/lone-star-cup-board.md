@@ -1072,3 +1072,114 @@ divides Sunday pot evenly between high and low flights."
   Flight 1 (< 12.0) 15 (Austin 7, SA 8), Flight 2 (>= 12.0) 13 (Austin 7, SA
   6). Who of them bought the skins decides the real split (the 10/7 note read
   11 v 11 among 22 buyers; there are 23 buyers now).
+
+## Skins: carryover between sessions, automatic payouts, Sunday Show All Players (Kerry 10/9) — v2.535.0
+
+KERRY'S RULINGS 2026-10-09 (verbatim; rule 3b ratification of the payout rules):
+- "Go - skins pot is only calculated from those who bought in right? Payouts go
+  to every skin won per session…could be from 0-18 winners per session"
+- "1. Ok to write payouts 15 minutes after all sessions are final."
+- "2. Per round/session. Follow rules for payouts per buyins like a player who's
+  in but who's teammate is not. Full share goes to the buy in. And one players
+  buyin makes the whole team eligible for scoring skins but not the whole team
+  eligible for payout."
+- "3. Yes definitely" (skins winnings visible to members in Winnings / Spotlight)
+- "4. Yes when rounds complete." (automatic, not manual)
+- "5. If no skins are awarded in a session the pot moves to the next session. If
+  foursomes moves to singles then it is evenly distributed to the flights."
+- "Each sessions % allowance for skins, just not applying off lowest. Of course
+  with singles it's gross so no handicaps because it's flighted. So singles
+  skins board needs to show the flights. Green for those in the game but have
+  button to show all players."
+
+**Carryover between SESSIONS** (`lsc_cup.compute_board` threads it through
+`compute_skins_payout(carry_in_cents, carried_from, next_tag, upstream_pending)`,
+so the board, the staff pot note and the payout writer read one number):
+- A session that is FINAL for skins (every group with an entrant has every
+  card in) and won NO skin at all carries its whole pot, anything carried into
+  it included, to the next session in dial order: sat-am -> sat-pm -> sun.
+  Holes inside a session still never carry (`SKINS_CARRYOVER = False`);
+  `SKINS_SESSION_CARRYOVER = True` is the session rule.
+- A one-flight session adds the carry to its pot. A carry into Sunday is split
+  EVENLY between the two flights (`allocate_cents`, exact cents, largest
+  remainder) on top of each flight's own half.
+- The LAST session has nowhere to carry: a Sunday flight that wins no skin
+  stays unallocated and is flagged ("no rule for this yet: Kerry decides").
+  A flight with no skin in a session where the other flight won one is also
+  unallocated + flagged (no rule given; nothing invented).
+- A session can't carry until it is final, and a later session's carry-in
+  isn't known until every earlier session is settled: the skins payload says
+  `carry_pending_from: "SAT AM"`, the staff flags say so, and the payout
+  writer HOLDS that session ("... isn't final yet, so whether its pot carries
+  into this session isn't known"). A pot carried from a MOCK-scored session
+  holds the receiving session too.
+- Skins payload adds `own_pot_cents`, `carry_in_cents`, `carried_from` (tags),
+  `carried_from_ids`, `carry_out_cents`, `carries_to`, `final`, `settled`,
+  `tag`; `pot_cents` is now own + carried. A carrying group keeps
+  `carried_cents` instead of `unpaid_cents`.
+- Staff pot note: "Staff · pot $1150.00 ($575.00 + $575.00 carried from SAT
+  AM)", and "no skin won, the pot carries to SAT PM" on the session that
+  carries. Members get the session TAGS only (`carried_from`, `carries_to`),
+  never a dollar (`strip_money`); the member note reads "A session where no
+  skin is won carries its pot to the next session."
+
+**Automatic payouts** (`lsc_skins_payouts.lsc_skins_auto_check`, scheduler job
+`lsc_skins_payouts_auto` in `app.py start_scheduler()`, every 5 min Central):
+- Acts only during the Cup's dates (first session date .. day after the last,
+  `lsc_recap.cup_window`) and while app setting `lsc_skins_auto` is on
+  (default ON; `0`/`off`/`false`/`no` stops it).
+- Each session pays on its own: the first time the job sees a session final
+  (the writer's plan: entered cards, every group complete, predecessor
+  settled) it stamps `lsc_skins_final_seen` `{event_id: {session: "YYYY-MM-DD
+  HH:MM:SS" Central}}`; once a session has been final for 15 minutes it runs
+  the SAFE apply for those sessions only (`lsc_skins_payouts(apply=True,
+  only={...}, actor="scheduler")`). A session that stops being final (a card
+  reopened) loses its stamp and its 15 minutes restart.
+- Idempotent (a re-run finds nothing to write and writes nothing). A later
+  score correction to a final session updates / removes the UNPAID rows the
+  writer owns on the next run; a PAID row is never touched (reported for
+  Kerry). Each write is logged (`agent_action_log`: `scheduler` /
+  `lsc-skins-payouts-auto`, plus the writer's own `scoring-lsc-skins-payouts`).
+- The bridge dry run `scoring-lsc-skins-payouts` now carries `auto`:
+  `auto_state()` = setting on/off, window, now (Central) and per session
+  `final_seen`, `payable_at`, `payable_now`.
+
+**Member visibility** (ruling 3): the rows are ordinary `tgf_payouts` rows,
+category `skins`, `customer_id` set, on event 3329's `tgf_events` row.
+Spotlight (member `/member/spotlight`) reads them through
+`get_customer_winnings` (tgf_payouts JOIN tgf_events by customer_id, every
+row, paid or not): Recent Winnings lists the Cup event with "Skins —
+Hole(s) ..." parsed from the description, and Winnings by Game counts them
+under the GROSS Games bundle (`skins` is in that bundle's categories, the
+same as every event's skins) in the season of the tgf_events `event_date`.
+What makes them visible: `customer_id`, category `skins`, the JOIN to a
+`tgf_events` row, and a dated tgf_events row for the season view. Apply now
+heals a found tgf_events row with an empty `event_date` from the Tracker
+event (a dateless row would drop out of the 2026 season scope).
+
+**Mixed teams pinned** (ruling 2 / CA #759): a team with one buyer plays (its
+non-buyer's ball can win the hole) and the buyer is paid the FULL team skin;
+the non-buyer gets nothing; a team with no buyer is out entirely (can't win
+or tie out a hole). `test_lsc_skins_payouts.py` `carryover_and_teams`.
+
+**Allowances confirmed** (Kerry 10/9, the last quote above): team skins at
+each session's own allowance (Fourball 90% each, Chapman 60/40 team) off
+ZERO, never off the lowest; singles GROSS. No change: ratified.
+
+**Sunday singles board** (`templates/contests.html` `lscSkinsEvlbData` /
+`lscSkinsBoard`): the two flight bands stay ("Flight 1 · index under 12.0 ·
+N players"; N = players in the skins). Players in the skins are the event
+board's green `bought` rows. The event board's own **Show All Players** box
+(`evlbShowAll`, `data-ovr-all`) is on the singles board (team boards still
+have none: every entry is a team in the game). Toggled on, the Sunday players
+who did NOT buy skins appear grey (`nobuy`, "not in the skins") in the flight
+their frozen index puts them in, with their gross hole scores, never circled,
+no #, no money. Server side `compute_skins_payout` returns them as
+`groups[].others` [{customer_id, name, index, card {hole: [gross, 0]}}],
+DISPLAY ONLY: never an entry, no hole result / pot / payout reads them;
+`strip_money` keeps them (names and scores only). A non-buyer with no index
+on record can't be placed in a flight and is not listed. Gross only: the
+singles board has no Handicaps box and its Idx / PH stay hidden
+(`board.noHcp`, `data-nohcp`; the shared Handicaps handler skips such
+tables). As on every event board, Show All Players ranks the grey rows inside
+their band.
