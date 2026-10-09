@@ -1796,17 +1796,8 @@
         #lsc-board .mp-strip-mono.two { line-height: 1.25; font-size: 0.78em; }
         #lsc-board table.mp-sc .mp-sc-rowlabel { width: 2.6rem; }
         #lsc-board table.mp-sc.pair .mp-sc-rowlabel { width: 3.5rem; }   /* "KN·MM", Foursomes */
-        /* SCREEN WIDE ON A PHONE (Kerry 10/9: "These scorecards on match
-           expansion really need to be screen wide for mobile"): an opened
-           card runs edge to edge, its grid with only a hair of padding. */
-        @media (max-width: 560px) {
-            #lsc-board .mp-match-card:has(> .mp-card-head.open) {
-                margin-left: calc(50% - 50vw); margin-right: calc(50% - 50vw);
-                border-radius: 0; border-left: 0; border-right: 0;
-            }
-            #lsc-board .mp-match-card:has(> .mp-card-head.open) .mp-scorecard { padding: 0.6rem 4px 0.7rem; }
-            #lsc-board .mp-match-card:has(> .mp-card-head.open) .mp-sc-strokebar { padding: 0 6px; }
-        }
+        /* Opened cards keep the page margins, as City Match Play does
+           (Kerry 10/9: "Add the margins back in to match City Match Play"). */
         /* Kerry 10/8: "for the Lone Star Cup pages, make everything that is
            BLACK, LSC Navy" */
         #section-lone-star-cup { --text: var(--lsc-navy, #002855); color: var(--lsc-navy, #002855); }
@@ -3195,6 +3186,20 @@
             else ids.forEach((c, i) => rows.push({ side: si, cids: [c], mono: mono(L[i]),
                                                    last: mpFirstLast(L[i] || "").last }));
         });
+        // two players with the same initials or last name (Matt and Mike
+        // JENKINS) are told apart: MaJ / MiJ, Matt JENKINS / Mike JENKINS
+        const dupM = {}, dupL = {};
+        rows.forEach(r => { dupM[r.mono] = (dupM[r.mono] || 0) + 1; dupL[r.last] = (dupL[r.last] || 0) + 1; });
+        (m.players || []).forEach((p, si) => {
+            if (chap) return;
+            (p.lines || []).forEach((nm, i) => {
+                const r = rows.find(x => x.side === si && x.cids[0] === String((p.customer_ids || [])[i]));
+                if (!r) return;
+                const fl = mpFirstLast(String(nm || ""));
+                if (dupM[r.mono] > 1 && fl.first) r.mono = fl.first.slice(0, 1).toUpperCase() + fl.first.slice(1, 2).toLowerCase() + (fl.last[0] || "").toUpperCase();
+                if (dupL[r.last] > 1 && fl.first) r.last = fl.first + " " + fl.last;
+            });
+        });
         const grossOf = (r, h) => {
             for (const c of r.cids) { const g = (sc[c] || {})[String(h)]; if (g != null) return { g, c }; }
             return null;
@@ -3226,8 +3231,11 @@
                 let tot = 0;
                 const cells = hs.map(h => {
                     const x = grossOf(r, h.hole);
+                    // only a hole played AFTER the close-out greys out; a hole
+                    // still to play stays clear, so its pops read at full
+                    // strength (Kerry 10/9: "Why are the pops so faded?")
                     const dead = !o.live && closedAt != null && (h.order || 0) > closedAt;
-                    const dim = (x && !dead) ? "" : " dim";
+                    const dim = (x && dead) ? " dim" : "";
                     let v = "";
                     if (x) {
                         tot += x.g;

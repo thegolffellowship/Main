@@ -832,7 +832,7 @@ centred, two nines side by side on desktop and stacked on a phone. The one
 departure from the 1-v-1 grid is ONE ROW PER PLAYER (monochip initials), so a
 four-ball card shows both partners; Foursomes is one row per pair. The server
 detail carries `scores` and `picked_up` per player for it. On a phone an opened
-card is full-bleed (`margin: calc(50% - 50vw)`). The old `lscPopsGrid` is gone.
+card keeps the page margins (v2.531.7, Kerry: "Add the margins back in to match City Match Play"); only a hole played after a close-out dims, so pops on holes still to play are full strength; same initials read MaJ / MiJ. The old `lscPopsGrid` is gone.
 Guard `test_lsc_cup_card.js`.
 - v2.531.3: the strip's initials squares follow the City card. A pair stacks
   both partners' initials (`mpStripHtml` reads `o.aLines` / `o.bLines`, class

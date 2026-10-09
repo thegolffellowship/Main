@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.531.6";
+window.TGF_VERSION = "2.531.7";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.531.7",
+    date: "2026-10-09",
+    title: "Cup match card: City Match Play margins, full-strength pops, twins told apart",
+    changes: [
+      "Kerry 10/9: \"Add the margins back in to match City Match Play.\" An opened Cup card keeps the page margins on a phone, as City Match Play does (the edge-to-edge rule from v2.531.2 is gone).",
+      "Kerry 10/9: \"Why are the pops so faded?\" The City grid greys every hole not yet played, so before a ball was struck every pop dot sat at a third of its strength. Only a hole played after the match is decided greys now; a hole still to play keeps its pops at full strength.",
+      "Two players with the same initials or last name in one match (Matt and Mike JENKINS) read MaJ / MiJ on the card and Matt JENKINS / Mike JENKINS under Strokes off low. Guard: test_lsc_cup_card.js."
+    ]
+  },
   {
     version: "2.531.6",
     date: "2026-10-09",

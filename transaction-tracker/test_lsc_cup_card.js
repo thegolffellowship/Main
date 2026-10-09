@@ -40,8 +40,17 @@ check("Foursomes is one ball: one row per pair",
       (chap.match(/<tr class="mp-sc-strokes">/g) || []).length === 2 && /LY·CC/.test(chap));
 check("the Cup card is used for every match state (before and during play)",
       /cardHtml: lscCupGrid\(m, o\)/.test(src) && /const grid = opts\.cardHtml \|\| mpScorecardGridHtml\(gen, o\)/.test(src));
-check("an opened card runs screen wide on a phone",
-      /@media \(max-width: 560px\) \{\s*#lsc-board \.mp-match-card:has\(> \.mp-card-head\.open\) \{\s*margin-left: calc\(50% - 50vw\); margin-right: calc\(50% - 50vw\);/.test(src));
+check("an opened card keeps the page margins, as City Match Play (Kerry 10/9)",
+      !/#lsc-board \.mp-match-card:has\(> \.mp-card-head\.open\) \{\s*margin-left: calc\(50% - 50vw\)/.test(src));
+// Kerry 10/9: "Why are the pops so faded?" -- a hole still to play is not dimmed
+const pre = lscCupGrid({ ...m, scores: {}, holes: m.holes.map(h => ({ ...h, winner: null })) }, { live: false });
+check("pops on holes still to play are full strength (no dim)", /mp-sc-pop/.test(pre) && !/class="strk dim"/.test(pre), pre.slice(0, 300));
+const dead = lscCupGrid({ ...m, closed_at_order: 1 }, { live: false });
+check("a hole played after the close-out still greys", /class="strk dim"/.test(dead));
+// Matt and Mike JENKINS on one side
+const tw = lscCupGrid({ ...m, players: [{ customer_ids: [1, 2], lines: ["Matt JENKINS", "Mike JENKINS"] }, m.players[1]] }, { live: false });
+check("same initials are told apart (MaJ / MiJ) and so are same last names",
+      /monochip a">MaJ</.test(tw) && /monochip a">MiJ</.test(tw) && /Matt JENKINS&nbsp;/.test(tw) && /Mike JENKINS&nbsp;/.test(tw), tw.slice(0, 400));
 // the strip's initials square (City Match Play): a Cup pair stacks both
 // partners' initials, never one made-up pair of letters
 eval(grab("mpStripHtml"));
