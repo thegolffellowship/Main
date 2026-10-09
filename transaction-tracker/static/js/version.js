@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.527.3";
+window.TGF_VERSION = "2.527.4";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.527.4",
+    date: "2026-10-08",
+    title: "THE DRAW: more team colour",
+    changes: [
+      "Kerry 10/8: \"Can we color code more per chapter?\" On THE DRAW board, the AUSTIN and SAN ANTONIO column heads are team-colour pills. Each entrant card is tinted in its team colour, with its bar on the outside edge. Each drawn match is shaded burnt orange on the Austin side and slate on the San Antonio side, with a team bar at each end."
+    ]
+  },
   {
     version: "2.527.3",
     date: "2026-10-08",

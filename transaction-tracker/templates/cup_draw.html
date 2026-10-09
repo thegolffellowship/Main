@@ -68,6 +68,17 @@ textarea#out{width:100%;min-height:200px;background:var(--panel);color:var(--fg)
 .toast{font-size:13px;color:#9FE3BF}
 .toast.err{color:#FFB4A9}
 .live{font:700 11px/1 var(--display);letter-spacing:1.5px;text-transform:uppercase;color:#9FE3BF;border:1px solid rgba(159,227,191,.4);border-radius:999px;padding:6px 10px}
+/* MORE TEAM COLOUR (Kerry 10/8: "Can we color code more per chapter?"):
+   team pills over the columns, entrants tinted in their team colour with the
+   bar on the outside edge, and each drawn match shaded Austin-left / SA-right. */
+.col .lab{align-self:flex-start;color:#fff!important;padding:6px 10px;border-radius:999px}
+.col.aus .lab{background:var(--aus)}
+.col.sa .lab{background:var(--sa);align-self:flex-end}
+.col.aus .ent{background:linear-gradient(90deg,rgba(191,87,0,.42),rgba(191,87,0,.14));border-left:6px solid var(--aus)}
+.col.sa .ent{background:linear-gradient(270deg,rgba(75,98,116,.75),rgba(75,98,116,.3));border-left:0;border-right:6px solid var(--sa)}
+.m:not(.empty){background:linear-gradient(90deg,rgba(191,87,0,.38) 0%,var(--bg) 40%,var(--bg) 60%,rgba(75,98,116,.7) 100%);
+  border-left:6px solid var(--aus);border-right:6px solid var(--sa)}
+.m .b{color:#DCE6EF}
 @media (max-width:720px){.grid{grid-template-columns:1fr}.m .a,.m .b{font-size:15px}.hdr img{width:106px;height:88px}}
 @media (prefers-reduced-motion:reduce){.m.pop{animation:none}}
 </style>
