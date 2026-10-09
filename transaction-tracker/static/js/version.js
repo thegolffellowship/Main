@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.530.1";
+window.TGF_VERSION = "2.530.2";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.530.2",
+    date: "2026-10-08",
+    title: "Fix: the Golf Genius scorecard-import refusal no longer errors",
+    changes: [
+      "The untether refusal in import_gg_scorecards (2.530.0) read a column its query does not select, so a refused import raised an error instead of returning the reason. It now returns the refusal with the event code and date. test_entry_publish.py keeps the entered-record gate covered (with the untether date moved aside) and checks the untether refusal itself."
+    ]
+  },
   {
     version: "2.530.1",
     date: "2026-10-08",

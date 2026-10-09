@@ -24497,7 +24497,8 @@ def import_gg_scorecards(tournament_url: str, event_code: str | None = None,
                 # on or after gg_untether_from, by any path.
                 from email_parser.gg_untether import gg_allowed, refusal
                 if ev["event_date"] and not gg_allowed(ev["event_date"], db_path):
-                    return {"error": refusal(db_path), "event": ev["item_name"]}
+                    return {"error": refusal(db_path), "event_code": event_code,
+                            "event_date": ev["event_date"]}
                 # An EXPLICIT round_date outranks the event's own date —
                 # multi-DAY events (2026 TGF CHAMPIONSHIP, 8/15+8/16)
                 # carry one event_date, so a Round 2 import must be able

@@ -279,11 +279,19 @@ golf_genius_sync.fetch_tournament_scorecards = \
     lambda url: {"players": [gg_card("NIESTER, Kerry", "X1"), gg_card("STRANGER, Sam", "X2")],
                  "raw": []}
 n0 = q("SELECT COUNT(*) AS n FROM scoring_rounds")[0]["n"]
+# the untether rule (Kerry 10/8) refuses an event on/after gg_untether_from
+# before the entered-record gate is reached; move it aside to keep that gate
+# covered, then check the untether refusal itself
+db.set_app_setting("gg_untether_from", "2099-01-01", db_path=DB)
 gi = db.import_gg_scorecards("https://x/t/9", event_code="s10.13 Test Links",
                              round_date="2026-10-13", db_path=DB)
 check("event-level gate: nothing imported, reason given",
       gi.get("skipped_entry_record") and gi.get("imported") == 0
       and "entered scores are the record" in gi.get("reason", ""), gi)
+db.set_app_setting("gg_untether_from", "", db_path=DB)
+gu_ = db.import_gg_scorecards("https://x/t/9", event_code="s10.13 Test Links",
+                              round_date="2026-10-13", db_path=DB)
+check("untethered: Golf Genius refused outright", "untethered" in (gu_.get("error") or ""), gu_)
 check("no GG rows added to the entered event",
       q("SELECT COUNT(*) AS n FROM scoring_rounds")[0]["n"] == n0)
 gi2 = db.import_gg_scorecards("https://x/t/10", round_date="2026-10-13", db_path=DB)
