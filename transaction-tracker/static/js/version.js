@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.528.12";
+window.TGF_VERSION = "2.528.13";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.528.13",
+    date: "2026-10-08",
+    title: "Lone Star Cup: scorer's leaderboard keeps the Cup look, Net and Gross only for the practice round, team scores and session buttons pinned",
+    changes: [
+      "Kerry 10/8: \"When I click leaderboard on the live scoring, it loses the branding and colors from the Lone Star Cup. It needs to maintain that.\" The scorer's LEADERBOARD page (/member/score/board) now carries the same Cup look as the scoring page for any round of a Lone Star Cup event: navy header with the Cup logo, navy toggle, navy text.",
+      "\"Just show NET & GROSS leaderboards per our standards for the PRACTICE ROUND.\" An event whose games are all included (no side-game buy-ins, the practice round) shows only the Net and Gross boards, Net first; events with games keep the full tab list.",
+      "\"Pin the team score and session toggles too, so everything else scrolls under it. Make sure you don't hide anything.\" On the LEADERBOARD Lone Star Cup tab the team scores and the session buttons pin under the Cup header, and the matches scroll under them. The page's scroll padding follows the whole pinned stack, so a match opened from a link stops below it instead of under it."
+    ]
+  },
   {
     version: "2.528.12",
     date: "2026-10-08",

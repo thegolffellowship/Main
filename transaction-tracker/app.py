@@ -11913,9 +11913,14 @@ def score_entry_board_page():
     ev_id = event_of("group", gid)
     with get_connection() as conn:
         row = conn.execute("SELECT item_name FROM events WHERE id = ?", (ev_id,)).fetchone()
+    # the Cup look carries over from the scorecard (Kerry 10/8: "When I click
+    # leaderboard on the live scoring, it loses the branding and colors from
+    # the Lone Star Cup. It needs to maintain that.")
+    from email_parser.score_entry import group_is_cup
     return render_template("contests.html", member_mode=True,
                            MATCHPLAY_V2=_matchplay_v2_flag(),
-                           SOLO_EVENT=(row["item_name"] if row else ""), SOLO_T=tok)
+                           SOLO_EVENT=(row["item_name"] if row else ""), SOLO_T=tok,
+                           SOLO_LSC=group_is_cup(gid))
 
 
 def _board_read_ok():

@@ -657,6 +657,15 @@ the Starter Sheet logo and Proxy logos too."
     `::before` bar.
   - The Cup logo replaces the trophy.
   - Members don't see `#lsc-rosters` / `#lsc-foot-p` once the board shows.
+- **Pinned scores + session buttons (v2.528.13, Kerry 10/8):** the team
+  scores and session toggle render inside `.lsc-bd-pin`, sticky under the
+  Cup header (`prPinBars` sets its `top`). `prPinBars` also sets
+  `scroll-padding-top` on the page to the whole pinned stack, so a match
+  scrolled into view lands below it. Matches/Skins stays unpinned.
+- **Scorer's leaderboard (v2.528.13):** `/member/score/board` passes
+  `SOLO_LSC=group_is_cup(gid)`; `contests.html` adds `body.lsc-solo` (navy
+  header, Cup logo, navy toggle and text). An event whose games are all
+  "included" (the practice round) shows only Net and Gross, Net first.
 - **Members' draw page (v2.528.5):** `/member/cup-draw` is public (member
   tier, no login). It renders `cup_draw.html` with `member_view=True`: no
   intro, tabs or controls; the SUMMARY once all three sessions are drawn,

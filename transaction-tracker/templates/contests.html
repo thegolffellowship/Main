@@ -307,6 +307,14 @@
         .evlb-solo-bar .st { font: 700 10.5px/1 'Bitter', serif; letter-spacing: .06em; text-transform: uppercase; color: #92400E; white-space: nowrap; }
         .evlb-solo-bar .st.posted { color: #1B7F4B; }
         body.evlb-solo main { padding-top: 0; }
+        /* the Cup look on a Cup scorer's leaderboard (Kerry 10/8): navy where
+           it was black, a navy header with the Cup logo */
+        body.lsc-solo { --text: var(--lsc-navy, #002855); color: var(--lsc-navy, #002855); }
+        body.lsc-solo header.shell-nav { background: var(--lsc-navy, #002855); }
+        body.lsc-solo header.shell-nav.shell-member.shell-slim .shell-brand img { width: auto; height: 64px; }
+        body.lsc-solo .se-toggle a.active { background: var(--lsc-navy, #002855); border-color: var(--lsc-navy, #002855); }
+        body.lsc-solo .evlb-solo-bar .nm { color: var(--lsc-navy, #002855); }
+        body.lsc-solo .mpv2 .mp-match-meta { background: var(--lsc-navy, #002855); }
         body.evlb-solo details.evlb-ev { border: 0; border-radius: 0; margin-top: 0; background: transparent; }
         body.evlb-solo details.evlb-ev > summary { display: none; }
         body.evlb-solo .evlb-body { border-top: 0; padding: 0; }
@@ -1694,7 +1702,10 @@
         #section-lone-star-cup .lsc-event.joined { border-top-left-radius: 0; border-top-right-radius: 0; }
         .lsc-event.joined + #lsc-board, #lsc-board.joined { margin-top: 0 !important; }
         #lsc-board.joined .lsc-bd-head { border-radius: 0; border-top: 0; }
-        #lsc-board.joined .lsc-sess-seg { margin: 0 0 10px; border-radius: 0 0 14px 14px; background: #E4E9F1; }
+        #lsc-board.joined .lsc-sess-seg { margin: 0; border-radius: 0 0 14px 14px; background: #E4E9F1; }
+        /* scores + session toggles pinned under the Cup header; the opaque
+           strip below them keeps the matches from showing through the gap */
+        .lsc-bd-pin { position: sticky; z-index: 87; background: var(--bg, #F8F8F8); padding-bottom: 10px; }
         .lsc-event .ic { flex: 0 0 auto; line-height: 0; }
         .lsc-event .t { font: 700 20px/1.2 'Bitter', serif; color: #fff; }
         .lsc-event .meta { margin-top: 3px; font: 700 14px/1.3 'Bitter', serif; color: #fff; }
@@ -1992,7 +2003,7 @@
         @keyframes tgfChampShine { 0% { left: -60%; } 55% { left: 135%; } 100% { left: 135%; } }
     </style>
 </head>
-<body{% if SOLO_EVENT %} class="evlb-solo"{% endif %}>
+<body{% if SOLO_EVENT %} class="evlb-solo{{ ' lsc-solo' if SOLO_LSC else '' }}"{% endif %}>
     {% if shell_v2 %}
     {# The mobile bar follows the nav label (Kerry 2026-09-14) — tapping
        "Leaderboard" must not land on a page headed "Season Contests". #}
@@ -2002,6 +2013,7 @@
        (the mark, the SCORING | LEADERBOARD toggle, no tabs, no way off the
        round). See docs/claude/score-entry.md "Scorer navigation". #}
     {% if SOLO_EVENT %}{% set SHELL_SLIM = True %}{% endif %}
+    {% if SOLO_LSC %}{% set SHELL_LOGO = '/static/lsc-logo-dark.png' %}{% endif %}
     {% include '_shell_nav.html' %}
     {% else %}
     <header>
@@ -2652,6 +2664,15 @@
             lscEv.style.top = (h + ctaH + (tabs ? tabs.offsetHeight : 0)) + "px";
             lscEv.style.zIndex = "88";
         }
+        // ...and the team scores + session toggles under that. Anything
+        // scrolled into view (a match opened from a link, a card) stops
+        // below the whole pinned stack, so nothing lands hidden under it.
+        const pin = document.querySelector("#lsc-board .lsc-bd-pin");
+        let below = h + ctaH + (tabs ? tabs.offsetHeight : 0);
+        if (lscEv && lscEv.offsetParent) below += lscEv.offsetHeight;
+        if (pin) pin.style.top = below + "px";
+        if (pin && pin.offsetParent) below += pin.offsetHeight;
+        document.documentElement.style.scrollPaddingTop = (below + 8) + "px";
     }
     window.prPinBars = prPinBars;
     document.addEventListener("DOMContentLoaded", prPinBars);
@@ -3261,7 +3282,11 @@
         const wasOpen = new Set(Array.from(box.querySelectorAll(".mp-match-card[data-lsc-match] .mp-card-head.open"))
             .map((h) => h.closest(".mp-match-card").dataset.lscMatch));
         if (wantM && !box.dataset.lscMatchOpened) wasOpen.add(wantM);
-        box.innerHTML = head + segS + body;
+        // the team scores and session toggles pin under the Cup header
+        // (Kerry 10/8: "Pin the team score and session toggles too, so
+        // everything else scrolls under it"); prPinBars sets the offsets
+        box.innerHTML = `<div class="lsc-bd-pin">${head}${segS}</div>` + body;
+        requestAnimationFrame(() => { if (window.prPinBars) window.prPinBars(); });
         box.querySelectorAll("[data-lscsess]").forEach(b => b.addEventListener("click", () => {
             window.lscSel = b.dataset.lscsess; lscBoardRender(box, d); }));
         box.querySelectorAll("[data-lscview]").forEach(b => b.addEventListener("click", () => {
@@ -4088,9 +4113,14 @@
             `<tbody>${evlbBoardBody(id)}</tbody></table></div>`;
     }
     function evlbEventHtml(d) {
-        const tabs = [["overall", "Overall"], ["team", "Team"], ["net", "Net"],
-                      ["gross", "Gross"], ["skins", "Skins"],
-                      ["points", "MVP/Points"], ["prox", "Proxies"]];
+        // No games at the event (Kerry 10/8, the LSC practice round: "Just
+        // show NET & GROSS leaderboards per our standards"): Net and Gross only.
+        const noGames = (d.games_off || []).some(g => g.game === "included");
+        const tabs = noGames ? [["net", "Net"], ["gross", "Gross"]]
+            : [["overall", "Overall"], ["team", "Team"], ["net", "Net"],
+               ["gross", "Gross"], ["skins", "Skins"],
+               ["points", "MVP/Points"], ["prox", "Proxies"]];
+        const first = tabs[0][0];
         const offNotes = evlbMoneyNotice(d) + (d.games_off || []).map(g =>
             `<div class="evlb-note">${escapeHtml(g.note)}</div>`).join("");
         // OVERALL (Kerry 2026-09-11): the whole field in ONE table —
@@ -4372,10 +4402,10 @@
         };
         return `<div class="evlb-subtabs"><div class="evlb-seg evlb-seg-sub">` +
             tabs.map(([k, l]) =>
-                `<button class="evlb-subtab${k === "overall" ? " active" : ""}" data-sub="${k}">${l}</button>`).join("") +
+                `<button class="evlb-subtab${k === first ? " active" : ""}" data-sub="${k}">${l}</button>`).join("") +
             `</div></div>` +
             tabs.map(([k]) =>
-                `<div class="evlb-panel" data-panel="${k}"${k === "overall" ? "" : " hidden"}>${panels[k]}</div>`).join("") +
+                `<div class="evlb-panel" data-panel="${k}"${k === first ? "" : " hidden"}>${panels[k]}</div>`).join("") +
             `<p style="font-size:11px;color:#9CA3AF;margin:8px 0 0;">Tap a player for their scorecard, or a team for its best-ball card. On the Net, Gross, Skins and MVP/Points tabs a <b>green</b> row bought into that game and a <b>grey</b> row did not &mdash; non-buyers are placed in the flight their handicap would have flighted them. Dots in the corner of a hole are the strokes received there.</p>`;
     }
     // Team net card in THE card standard's family: each member's NET
