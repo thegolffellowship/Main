@@ -958,3 +958,15 @@ This applies to any event with no games (`evlbNoGames`):
 - On the scorer's board (`SOLO_EVENT`), an event that isn't in the list yet (no score posted) gets its own details element, loaded directly.
 - The GG "official scorer" line is hidden there.
 
+
+## Link preview card (2026-10-09)
+
+Kerry: "Need to change the link image view to show new logo and remove the
+qualifiers text. Make it square. Keep the golf fellowship band over top."
+`/member/lonestarcup` sets `og_image` to `static/og-lone-star-cup-sq.png`
+(1200x1200: the TGF orange band over the dark-background Cup logo on navy)
+with `og_image_w`/`og_image_h`, so `_og_meta.html` writes
+`og:image:width/height` and keeps a square card on `twitter:card summary`.
+Title "The Lone Star Cup". The old wide `og-lone-star-cup.png` (trophy +
+QUALIFIERS) is no longer referenced. iMessage caches previews per URL, so an
+already-sent link may keep the old card. Test: `test_og_lsc_card.py`.

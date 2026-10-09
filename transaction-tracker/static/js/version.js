@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.533.2";
+window.TGF_VERSION = "2.533.3";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.533.3",
+    date: "2026-10-09",
+    title: "Lone Star Cup link preview: square card with the new logo",
+    changes: [
+      "Kerry 10/9: \"Need to change the link image view to show new logo and remove the qualifiers text. Make it square. Keep the golf fellowship band over top.\" A texted /member/lonestarcup link now previews a square card: the orange THE GOLF FELLOWSHIP band on top, the new Lone Star Cup logo on navy below (static/og-lone-star-cup-sq.png, 1200x1200). The title reads \"The Lone Star Cup\" (no \"Qualifiers\"). The page states the image's size so iMessage shows it square."
+    ]
+  },
   {
     version: "2.533.2",
     date: "2026-10-09",

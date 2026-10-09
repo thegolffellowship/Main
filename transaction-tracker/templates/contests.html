@@ -17,13 +17,15 @@
     {# Per-URL link-preview cards (Kerry 2026-08-21: the LSC card "should
        be unique to that. It shouldn't be the same for other URLs") —
        hash fragments (#tab=mp) never reach the server, so each landing
-       ROUTE carries its own card: /member/lonestarcup keeps the navy
-       trophy, /member/matchplay/<chapter> gets the dark VS card, and
+       ROUTE carries its own card: /member/lonestarcup gets the square
+       Cup logo card, /member/matchplay/<chapter> gets the dark VS card, and
        plain /member/contests falls back to the generic TGF card. #}
     {% if lsc_landing %}
-    {% set og_title = "The Lone Star Cup Qualifiers" %}
-    {% set og_desc = "Austin vs San Antonio — projected rosters live from today's standings, plus points races and Match Play." %}
-    {% set og_image = "/static/og-lone-star-cup.png?v=405" %}
+    {# Kerry 2026-10-09: square card, the new Cup logo under the TGF band, no "Qualifiers". #}
+    {% set og_title = "The Lone Star Cup" %}
+    {% set og_desc = "Austin vs San Antonio at The Hideout — live match scores, the draw and the points." %}
+    {% set og_image = "/static/og-lone-star-cup-sq.png?v=2533" %}
+    {% set og_image_w = 1200 %}{% set og_image_h = 1200 %}
     {% elif mp_landing %}
     {% set og_title = "City Match Play — " ~ mp_landing %}
     {% set og_desc = "Follow the matches live — hole-by-hole scorecards, running margins, and the bracket." %}

@@ -10,7 +10,9 @@
 {# Optional per-page card art (Kerry 2026-08-17): set og_image to a
    ROOT-RELATIVE static path (e.g. "/static/og-lone-star-cup.png") to
    replace the default app icon. A wide custom image also upgrades the
-   twitter card to summary_large_image so it renders full-bleed. #}
+   twitter card to summary_large_image so it renders full-bleed; a square
+   one (og_image_w == og_image_h, Kerry 2026-10-09) stays on summary and
+   states its size so iMessage doesn't wait to measure it. #}
 {# Force https: Railway terminates TLS at the proxy, so Flask sees http
    and url_root renders http:// — some preview scrapers refuse non-https
    card images. Public traffic is always https. #}
@@ -21,8 +23,10 @@
 <meta property="og:title" content="{{ og_title|default('The Golf Fellowship') }}">
 <meta property="og:description" content="{{ og_desc|default('Golf, fellowship, and friendly competition — San Antonio & Austin.') }}">
 <meta property="og:image" content="{{ _og_img }}">
+{% if og_image_w is defined and og_image_h is defined %}<meta property="og:image:width" content="{{ og_image_w }}">
+<meta property="og:image:height" content="{{ og_image_h }}">{% endif %}
 {% if request is defined and request %}<meta property="og:url" content="{{ request.base_url|replace('http://', 'https://') }}">{% endif %}
-<meta name="twitter:card" content="{{ 'summary_large_image' if og_image is defined and og_image else 'summary' }}">
+<meta name="twitter:card" content="{{ 'summary_large_image' if og_image is defined and og_image and not (og_image_w is defined and og_image_w == og_image_h) else 'summary' }}">
 <meta name="twitter:title" content="{{ og_title|default('The Golf Fellowship') }}">
 <meta name="twitter:description" content="{{ og_desc|default('Golf, fellowship, and friendly competition — San Antonio & Austin.') }}">
 <meta name="twitter:image" content="{{ _og_img }}">
