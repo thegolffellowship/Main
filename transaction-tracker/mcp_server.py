@@ -6512,7 +6512,7 @@ def _scoring_dispatch_inner(url: str, extract: str):
                 _a = _r[0]
             return json.dumps(db.get_event_financial_summary(_a), indent=2, default=str)
         if cmd == "scoring-event-day-email":
-            # "<event_id>[|preview[|<staff addr>]]" — CA #829. The dry build
+            # "<event_id>[|preview[|<staff addr>[|cids=1,2]]]" — CA #829. The dry build
             # sends nothing; |preview mails one combined preview to staff
             # (@thegolffellowship.com or recap_draft_allow) and refuses any
             # other address. The MEMBER send is deliberately not bridged:
@@ -6523,8 +6523,13 @@ def _scoring_dispatch_inner(url: str, extract: str):
             from email_parser import event_day_email as _ede
             if len(_p) > 1 and _p[1].lower() == "preview":
                 db.log_agent_action("mcp-claude", "scoring-event-day-email", arg)
+                # optional 4th part "cids=18,136": preview exactly those players
+                _only = None
+                if len(_p) > 3 and _p[3].lower().startswith("cids="):
+                    _only = [int(x) for x in _p[3][5:].split(",") if x.strip().isdigit()]
                 return json.dumps(_ede.send_event_day_preview(
-                    int(_p[0]), to_address=(_p[2] if len(_p) > 2 and _p[2] else None)),
+                    int(_p[0]), to_address=(_p[2] if len(_p) > 2 and _p[2] else None),
+                    only=_only),
                     indent=2, default=str)
             if len(_p) > 1 and _p[1]:
                 return json.dumps({"error": f"unknown option {_p[1]!r}; only |preview"})

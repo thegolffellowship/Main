@@ -417,7 +417,7 @@ def _graph_send(creds, to, subject, html_body) -> bool:
                                    to_address=to, subject=subject, html_body=html_body)
 
 
-def send_event_day_preview(event_id: int, to_address=None, db_path=None) -> dict:
+def send_event_day_preview(event_id: int, to_address=None, db_path=None, only=None) -> dict:
     """ONE combined preview (first few rendered messages + the held list +
     counts) to STAFF ONLY. A non-staff address is refused."""
     from email_parser import database as db
@@ -447,7 +447,11 @@ def send_event_day_preview(event_id: int, to_address=None, db_path=None) -> dict
     ]
     if built.get("games_note"):
         parts.append(f"<p><em>{_e(built['games_note'])}</em></p>")
-    for m in built["messages"][:PREVIEW_SAMPLES]:
+    # `only` (customer_ids): the preview shows exactly those players' messages,
+    # all of them (Kerry 10/8: "send me an email for me and my group").
+    picked = ([m for m in built["messages"] if m["customer_id"] in set(only)] if only
+              else built["messages"][:PREVIEW_SAMPLES])
+    for m in picked:
         parts.append('<hr style="border:0;border-top:2px solid #E87C3E">'
                      f"<p><strong>To:</strong> {_e(m['name'])} &lt;{_e(m['email'])}&gt;<br>"
                      f"<strong>Subject:</strong> {_e(m['subject'])}</p>" + m["html"])

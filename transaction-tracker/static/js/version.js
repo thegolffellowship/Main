@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.528.10";
+window.TGF_VERSION = "2.528.11";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.528.11",
+    date: "2026-10-08",
+    title: "Event-day email preview can show chosen players",
+    changes: [
+      "Kerry 10/8: \"Can you send me an email for me and my group?\" The staff preview bridge takes an optional cids=… list (scoring-event-day-email:<id>|preview|<staff>|cids=18,136) and then shows exactly those players' messages, all of them. It still goes to staff only."
+    ]
+  },
   {
     version: "2.528.10",
     date: "2026-10-08",
