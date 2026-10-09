@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.527.9";
+window.TGF_VERSION = "2.528.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.528.0",
+    date: "2026-10-08",
+    title: "The practice round's scoring QR opens on the Cup splash, held three seconds",
+    changes: [
+      "Kerry 10/8: \"Opening QR codes for the mobile scoring tomorrow's practice round does not land on the shimmer LSC page first. Extend to 3 seconds too.\" The phone's Cup splash only fired for the Cup's session rounds. It now fires for any round of a Lone Star Cup event, the Friday practice round included (score_entry.group_is_cup reads lsc_report_context). On a fresh scan it holds three seconds, and the shimmer sweep is slowed to match; a tap still skips it. Guard: test_cup_signs.py."
+    ]
+  },
   {
     version: "2.527.9",
     date: "2026-10-08",

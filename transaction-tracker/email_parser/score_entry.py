@@ -1790,9 +1790,17 @@ def group_is_cup(group_id: int, db_path=None) -> bool:
     try:
         with _closing(_conn(db_path)) as conn:
             row = conn.execute(
-                "SELECT lower(COALESCE(r.pairings_holes, '')) AS pk FROM se_groups g "
+                "SELECT lower(COALESCE(r.pairings_holes, '')) AS pk, r.event_id FROM se_groups g "
                 "JOIN se_rounds r ON r.id = g.round_id WHERE g.id = ?", (int(group_id),)).fetchone()
-        return bool(row) and (row["pk"].startswith("lsc:") or row["pk"].startswith("lscprev:"))
+        if not row:
+            return False
+        if row["pk"].startswith("lsc:") or row["pk"].startswith("lscprev:"):
+            return True
+        # the Cup's Friday PRACTICE ROUND too (Kerry 10/8: "Opening QR codes for
+        # the mobile scoring tomorrow's practice round does not land on the
+        # shimmer LSC page first"): any round of an LSC event, read from the dials
+        from email_parser.lsc_cup import lsc_report_context
+        return bool(row["event_id"]) and bool(lsc_report_context(int(row["event_id"]), db_path=db_path))
     except Exception:
         return False
 

@@ -101,11 +101,17 @@ check("it carries the session, the match, the tee time and the QR",
 check("SCORE THIS GROUP / FOLLOW THE CUP is what the sign promises", "score this group or follow the Cup" in body)
 check("?round_id= narrows to one session", tc.get(f"/events/{EV}/cup-signs?round_id=999999").get_data(as_text=True).count("<svg") == 0)
 # the phone page: a Cup link carries the splash markup, a plain event's link does not
-g_plain = se.upsert_group(se.create_round(EV, 18, label="plain", course_holes=course, pairings_holes="18", db_path=tmp)["round_id"],
+g_plain = se.upsert_group(se.create_round(4242, 18, label="plain", course_holes=course, pairings_holes="18", db_path=tmp)["round_id"],
                           1, players=[{"customer_id": 7, "display_name": "Matthew Jenkins", "seat": 1}], db_path=tmp)["group_id"]
 pc = A.app.test_client()
 check("a Cup scoring link opens on the SPLASH markup (route reads the round, not the card)",
       'id="se-splash"' in pc.get(f"/member/score?t={se.make_group_token(g1)}").get_data(as_text=True))
+# the Cup's Friday practice round opens on the splash too (Kerry 10/8)
+db.set_app_setting("oneoff_charges", json.dumps({str(EV): {"addons": [{"key": "friday", "event_id": 3330}]}}), db_path=tmp)
+g_prac = se.upsert_group(se.create_round(3330, 18, label="practice", course_holes=course, pairings_holes="18", db_path=tmp)["round_id"],
+                         1, players=[{"customer_id": 7, "display_name": "Matthew Jenkins", "seat": 1}], db_path=tmp)["group_id"]
+check("the practice round's link opens on the SPLASH (Kerry 10/8)",
+      'id="se-splash"' in pc.get(f"/member/score?t={se.make_group_token(g_prac)}").get_data(as_text=True))
 check("a plain event's link carries no Cup splash", 'id="se-splash"' not in pc.get(f"/member/score?t={se.make_group_token(g_plain)}").get_data(as_text=True))
 check("a bad link carries no splash and still renders", 'id="se-splash"' not in pc.get("/member/score?t=nope").get_data(as_text=True))
 check("group_is_cup never raises", se.group_is_cup(999999, db_path=tmp) is False and se.group_is_cup(g1, db_path=tmp) is True)

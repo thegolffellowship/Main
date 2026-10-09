@@ -628,6 +628,9 @@ the Starter Sheet logo and Proxy logos too."
   (`td.nn`) are solid navy, the Init column (`td.ic`) is centred, the Par
   and SI labels (`td.lbl`) are navy with white text, and the header line
   shrinks to fit beside the QR.
+- **Phone splash (v2.528.0):** `score_entry.group_is_cup` is true for a
+  round in any LSC event (the practice round too), plus the `lsc:` and
+  `lscprev:` session rounds. It holds 3 s (Kerry 10/8).
 - **THE DRAW match cards (v2.527.9):** handicaps sit on the outside in
   their own grid columns (Austin playing | OFF | name; SA name | OFF |
   playing). The match column is wide (.72fr / 2fr / .72fr). The DRAW
