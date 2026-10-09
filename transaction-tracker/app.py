@@ -13050,9 +13050,18 @@ def _lsc_info_teams() -> list:
         finally:
             conn.close()
     lasts = [n[1].lower() for n in names.values()]
+    # members and alumni print a capital LAST name (the Cup standard, #1481
+    # §5D; Kerry 10/8 "Make last names capitals for all members/alumni")
+    try:
+        from email_parser.lsc_cup import member_or_alumni
+        caps = member_or_alumni(int(dial.get("event_id") or 0), cids) if dial.get("event_id") else set()
+    except Exception:
+        caps = set()
 
     def nm(c):
         f, l = names.get(int(c), ("", f"#{c}"))
+        if int(c) in caps:
+            l = l.upper()
         return f"{f} {l}".strip() if lasts.count(l.lower()) > 1 else l
 
     out = []
@@ -13085,10 +13094,37 @@ def member_lonestarcup_info():
         app.logger.exception("lsc info teams")
         teams = []
     from email_parser.score_entry import _json_setting
-    drawn = any(len(s.get("matches") or []) >= 7 for s in (_json_setting("lsc_matches").get("sessions") or []))
-    return render_template("lsc_info.html", teams=teams,
-                           preview=request.args.get("preview") == "1",
-                           draw_note="on the board" if drawn else "posted after Thursday's draw")
+    dial = _json_setting("lsc_matches")
+    drawn = any(len(s.get("matches") or []) >= 7 for s in (dial.get("sessions") or []))
+    ctx = dict(teams=teams, preview=request.args.get("preview") == "1",
+               draw_note="on the board" if drawn else "posted after Thursday's draw",
+               practice_n=_lsc_practice_count(dial.get("event_id")))
+    # ?embed=1 is the bare body for the EVENT INFO view on LEADERBOARD >
+    # Lone Star Cup (Kerry 10/8: "I need that added to the Lone Star cup
+    # Members page under the Lone Star cup"): the same template, one copy.
+    if request.args.get("embed") == "1":
+        return render_template("_lsc_info_body.html", embed=True, **ctx)
+    return render_template("lsc_info.html", embed=False, **ctx)
+
+
+def _lsc_practice_count(cup_event_id) -> int | None:
+    """Players on the Friday practice round (the event the Cup's 'friday'
+    add-on points at), from the one roster builder; None if unknown."""
+    try:
+        cfg = json.loads(get_app_setting("oneoff_charges") or "{}").get(str(cup_event_id)) or {}
+        eid = next((int(a["event_id"]) for a in cfg.get("addons") or []
+                    if isinstance(a, dict) and a.get("key") == "friday" and a.get("event_id")), None)
+        if not eid:
+            return None
+        from email_parser.database import _event_roster_rows
+        conn = get_connection()
+        try:
+            return len(_event_roster_rows(conn, eid)) or None
+        finally:
+            conn.close()
+    except Exception:
+        app.logger.exception("lsc practice count")
+        return None
 
 
 @app.route("/member/matchplay/<chapter_slug>")

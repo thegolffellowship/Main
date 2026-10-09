@@ -1,0 +1,123 @@
+{#- LONE STAR CUP EVENT INFO body (mockup EventInfo.dc.html; CoS #1398 /
+    #1428). ONE copy, two homes (Kerry 10/8: "I need that added to the Lone
+    Star cup Members page under the Lone Star cup"):
+      * /member/lonestarcup/info, the standalone page (lsc_info.html), which
+        keeps the anchors Track A's HOW IT WORKS pill links to;
+      * the EVENT INFO view on LEADERBOARD > Lone Star Cup, which fetches
+        this fragment from /member/lonestarcup/info?embed=1.
+    Sections and highlightable rows are found by data-sec / data-a, so the
+    embedded copy needs no ids; the standalone page also gets the ids.
+    Everything here is scoped under .lsc-info. Cup pages print navy where
+    TGF prints black (Kerry 10/8). Members never see dollars. -#}
+{%- macro ID(k) -%}{% if not embed %} id="{{ k }}"{% endif %}{%- endmacro -%}
+<style>
+  .lsc-info { --ink: var(--lsc-navy, #002855); color: var(--ink); display: flex; flex-direction: column; gap: 10px;
+              font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; }
+  .lsc-info .acts { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .lsc-info .pill { display: inline-flex; height: 30px; align-items: center; padding: 0 14px; border-radius: 99px; border: 0;
+                    background: #E87C3E; color: #FFFFFF; font: 700 11px/1 Bitter, Georgia, serif; letter-spacing: 1px;
+                    text-transform: uppercase; text-decoration: none; white-space: nowrap; cursor: pointer; }
+  .lsc-info .pill.dark { background: var(--ink); }
+  .lsc-info .seg { display: flex; border: 1px solid #E5E7EB; border-radius: 99px; overflow: hidden; background: #FFFFFF; padding: 2px; }
+  .lsc-info .seg a { flex: 1; text-align: center; font: 700 11px/1 Bitter, Georgia, serif; text-transform: uppercase; letter-spacing: .5px;
+                     color: #6B7280; padding: 9px 0; border-radius: 99px; text-decoration: none; }
+  .lsc-info .seg a.on { background: var(--ink); color: #FFFFFF; }
+  .lsc-info section { display: none; flex-direction: column; gap: 10px; margin: 0; }
+  .lsc-info section.on { display: flex; }
+  .lsc-info .sched { border: 1px solid #E5E7EB; border-radius: 12px; overflow: hidden; background: #FFFFFF; margin: 0; }
+  .lsc-info .sched .d { display: flex; justify-content: space-between; gap: 10px; padding: 9px 12px; font-size: 13.5px; }
+  .lsc-info .sched .d:nth-child(even) { background: #FBFAF8; }
+  .lsc-info .sched dt { font: 700 13.5px Bitter, Georgia, serif; margin: 0; color: var(--ink); }
+  .lsc-info .sched dd { margin: 0; text-align: right; color: #4B5563; }
+  .lsc-info .sched .d.hl { box-shadow: inset 4px 0 0 #E87C3E; }
+  .lsc-info h4 { font: 700 16px/1.2 Bitter, Georgia, serif; margin: 10px 0 0; color: var(--ink); }
+  .lsc-info h4 .tag { font: 700 11px 'Helvetica Neue', Helvetica, Arial, sans-serif; letter-spacing: 1px; color: #6B7280;
+                      text-transform: uppercase; margin-left: 6px; }
+  .lsc-info p { font-size: 13.5px; line-height: 1.5; margin: 0; color: var(--ink); }
+  .lsc-info p.note { color: #4B5563; font-size: 12.5px; }
+  .lsc-info ol { margin: 0; padding-left: 18px; font-size: 13.5px; line-height: 1.5; color: var(--ink); }
+  .lsc-info .teams { display: flex; gap: 12px; }
+  .lsc-info .teams > div { flex: 1; min-width: 0; }
+  .lsc-info .th { font: 700 12px Bitter, Georgia, serif; text-transform: uppercase; letter-spacing: .5px; padding-bottom: 4px;
+                  margin-bottom: 6px; border-bottom: 2px solid currentColor; }
+  .lsc-info .th.aus { color: #BF5700; } .lsc-info .th.sa { color: #4B6274; }
+  .lsc-info .pairs { font-size: 13px; line-height: 1.55; }
+  .lsc-info .pairs .pool { font: 700 10.5px Bitter, Georgia, serif; text-transform: uppercase; letter-spacing: .5px; color: #6B7280; margin-top: 4px; }
+  @media print {
+    .lsc-info .acts, .lsc-info .seg { display: none; }
+    .lsc-info section { display: flex !important; break-inside: avoid; }
+  }
+</style>
+<div class="lsc-info{{ ' embed' if embed else '' }}">
+  <div class="acts">
+    <button type="button" class="pill" data-lsc-info-share>Share link</button>
+    <a class="pill dark" data-lsc-info-pdf href="/member/lonestarcup/info?print=1{{ '&preview=1' if preview else '' }}"{% if embed %} target="_blank" rel="noopener"{% endif %}>Download PDF</a>
+  </div>
+  <nav class="seg" data-lsc-info-seg>
+    <a href="#schedule" data-s="schedule">Schedule</a><a href="#teams" data-s="teams">Teams</a><a href="#formats" data-s="formats">Formats</a>
+  </nav>
+
+  <section data-sec="schedule"{{ ID('schedule') }}>
+    <dl class="sched">
+      <div class="d"><dt>Fri · practice round</dt><dd>1:30–2:00 PM{% if practice_n %} · {{ practice_n }} players{% endif %}</dd></div>
+      <div class="d"><dt>Fri · dinner</dt><dd>Shirts issued · draw review</dd></div>
+      <div class="d"><dt>Sat AM · Fourball</dt><dd>8:30 AM · every 10 min · 7 matches</dd></div>
+      <div class="d"><dt>Sat PM · Foursomes</dt><dd>1:30 PM · every 10 min · 7 matches</dd></div>
+      <div class="d"><dt>Sun · Singles</dt><dd>8:30 AM · every 10 min · 14 matches</dd></div>
+      <div class="d"><dt>Sun · Cup presentation</dt><dd>After play</dd></div>
+    </dl>
+    <h4>Shirts <span class="tag">issued Friday dinner</span></h4>
+    <dl class="sched">
+      <div class="d"><dt>Sat · Austin</dt><dd>White / light violet · grey bottoms</dd></div>
+      <div class="d"><dt>Sat · San Antonio</dt><dd>Grey · navy bottoms</dd></div>
+      <div class="d"><dt>Sun · Austin</dt><dd>Blue · khaki bottoms</dd></div>
+      <div class="d"><dt>Sun · San Antonio</dt><dd>Purple · grey bottoms</dd></div>
+    </dl>
+    <p class="note">Course: The Hideout, par 72 (37 / 35) on every tee · Blue · White · Red (65+) · Teal. Each group's scorecard and cart sign carry a QR code: one player scores, everyone else follows.</p>
+  </section>
+
+  <section data-sec="teams"{{ ID('teams') }}>
+    <div class="teams">
+      {% for t in teams %}
+      <div>
+        <div class="th {{ t.key }}">{{ t.name }}{% if t.captain %} · {{ t.captain }} (C){% endif %}</div>
+        <div class="pairs">
+          {% for pool in t.pools %}
+            {% if pool.pairs %}<div class="pool">{{ pool.label }}</div>{% endif %}
+            {% for p in pool.pairs %}{{ p }}<br>{% endfor %}
+          {% endfor %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    <p class="note">Saturday pairs play both sessions. Pools are cut on handicap INDEX, not course handicap: low pool = the three lowest pairs on each team by combined index, drawn against each other; high pool = the other four. Sunday singles: low 7 and high 7 per team by locked index, drawn within each pool. Course handicap still sets the strokes in play. Match draws: {{ draw_note }}</p>
+  </section>
+
+  <section data-sec="formats"{{ ID('formats') }}>
+    <dl class="sched">
+      <div class="d" data-a="fourball"{{ ID('fourball') }}><dt>Fourball</dt><dd>90% · off the low player in the match</dd></div>
+      <div class="d" data-a="foursomes"{{ ID('foursomes') }}><dt>Foursomes (Chapman)</dt><dd>60% low + 40% high · off the low team</dd></div>
+      <div class="d" data-a="singles"{{ ID('singles') }}><dt>Singles</dt><dd>100% · off the low player</dd></div>
+      <div class="d"><dt>Points</dt><dd>1 per match · ½ each for a half · 28 total</dd></div>
+      <div class="d"><dt>Ties</dt><dd>All square after 18 · no extra holes</dd></div>
+      <div class="d"><dt>The Cup</dt><dd>14½ wins · SA retains at 14–14</dd></div>
+    </dl>
+    <h4>Chapman relief rule</h4>
+    <p>Both partners tee off, then each plays one shot with the partner's ball. Only after those second shots does the team choose one ball and alternate. If a tee shot is lost, out of bounds, in a penalty area, or unplayable, the team may abandon that ball, or the partner may take TGF line-of-flight relief on it (one-stroke penalty, drop anywhere on the line of flight going back as far as desired) and play his shot with it; that shot is the team's third stroke on that ball. The ball carries the penalty, not the player.</p>
+    <ol>
+      <li>Both partners tee off (ball A, ball B).</li>
+      <li>A lost, OB, penalty-area or unplayable tee ball: abandon it, or the partner drops it on its line of flight, one-stroke penalty.</li>
+      <li>Each partner plays one shot with the other's ball: stroke 2 on a clean ball, stroke 3 on a dropped one.</li>
+      <li>After both shots, pick one ball to finish the hole, whatever each lies.</li>
+      <li>The partner who did not hit the chosen ball's last stroke plays next; alternate from there.</li>
+      <li>Later lost or unplayable balls: same relief, played by whoever is up. The penalty never changes the order of play.</li>
+    </ol>
+    <h4 data-a="skins"{{ ID('skins') }}>Skins</h4>
+    <dl class="sched">
+      <div class="d"><dt>Sat AM &amp; PM</dt><dd>Team · net · one flight · partners share</dd></div>
+      <div class="d"><dt>Sunday</dt><dd>Individual · gross · two flights at 12.0</dd></div>
+      <div class="d"><dt>Ties</dt><dd>No carryover · a tied low wins nothing</dd></div>
+    </dl>
+    <p class="note">Saturday net uses the full session allowance (90% Fourball; 60/40 Chapman), not off-lowest. A pair with one buyer: the buyer takes the whole skin. A pair with no buyer is out of the hole and cannot tie one out.</p>
+  </section>
+</div>

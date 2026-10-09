@@ -14,9 +14,9 @@
        A's HOW IT WORKS pill links here). Teams are read from the live Cup
        dial; the rest is the mockup's text. Members never see dollars. */
     * { box-sizing: border-box; }
-    body { margin: 0; background: #FFFFFF; color: #1B1B1B;
+    body { margin: 0; background: #FFFFFF; color: var(--lsc-navy);
            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; }
-    .bar { background: #1B1B1B; padding: 10px 16px; display: flex; align-items: center; gap: 10px; }
+    .bar { background: var(--lsc-navy); padding: 10px 16px; display: flex; align-items: center; gap: 10px; }
     .bar img { width: 34px; height: 34px; }
     .bar a.back { margin-left: auto; color: #FFFFFF; text-decoration: none; background: var(--lsc-navy);
                   border-radius: 99px; padding: 7px 12px; font: 600 13px/1 'Helvetica Neue', Helvetica, Arial, sans-serif;
@@ -28,40 +28,10 @@
     .lsc-event .lbl { font-size: 11px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; opacity: .85; }
     .lsc-event .ttl { font: 700 20px/1.1 Bitter, Georgia, serif; }
     .lsc-event .sub { font-size: 12.5px; opacity: .9; }
-    .acts { display: flex; justify-content: space-between; align-items: center; }
-    .pill { display: inline-flex; height: 30px; align-items: center; padding: 0 14px; border-radius: 99px; border: 0;
-            background: #E87C3E; color: #FFFFFF; font: 700 11px/1 Bitter, Georgia, serif; letter-spacing: 1px;
-            text-transform: uppercase; text-decoration: none; white-space: nowrap; cursor: pointer; }
-    .pill.dark { background: #1B1B1B; }
-    .seg { display: flex; border: 1px solid #E5E7EB; border-radius: 99px; overflow: hidden; background: #FFFFFF; padding: 2px;
-           position: sticky; top: 0; z-index: 2; }
-    .seg a { flex: 1; text-align: center; font: 700 11px/1 Bitter, Georgia, serif; text-transform: uppercase; letter-spacing: .5px;
-             color: #6B7280; padding: 9px 0; border-radius: 99px; text-decoration: none; }
-    .seg a.on { background: #1B1B1B; color: #FFFFFF; }
-    section { display: none; flex-direction: column; gap: 10px; }
-    section.on { display: flex; }
-    .sched { border: 1px solid #E5E7EB; border-radius: 12px; overflow: hidden; background: #FFFFFF; margin: 0; }
-    .sched .d { display: flex; justify-content: space-between; gap: 10px; padding: 9px 12px; font-size: 13.5px; }
-    .sched .d:nth-child(even) { background: #FBFAF8; }
-    .sched dt { font: 700 13.5px Bitter, Georgia, serif; margin: 0; }
-    .sched dd { margin: 0; text-align: right; color: #4B5563; }
-    .sched .d.hl { box-shadow: inset 4px 0 0 #E87C3E; }
-    h4 { font: 700 16px/1.2 Bitter, Georgia, serif; margin: 10px 0 0; }
-    h4 .tag { font: 700 11px 'Helvetica Neue', Helvetica, Arial, sans-serif; letter-spacing: 1px; color: #6B7280;
-              text-transform: uppercase; margin-left: 6px; }
-    p { font-size: 13.5px; line-height: 1.5; margin: 0; }
-    p.note { color: #4B5563; font-size: 12.5px; }
-    ol { margin: 0; padding-left: 18px; font-size: 13.5px; line-height: 1.5; }
-    .teams { display: flex; gap: 12px; }
-    .teams > div { flex: 1; min-width: 0; }
-    .th { font: 700 12px Bitter, Georgia, serif; text-transform: uppercase; letter-spacing: .5px; padding-bottom: 4px;
-          margin-bottom: 6px; border-bottom: 2px solid currentColor; }
-    .th.aus { color: #BF5700; } .th.sa { color: #4B6274; }
-    .pairs { font-size: 13px; line-height: 1.55; }
-    .pairs .pool { font: 700 10.5px Bitter, Georgia, serif; text-transform: uppercase; letter-spacing: .5px; color: #6B7280; margin-top: 4px; }
+    /* the in-page tab bar stays in view (the body's own .seg) */
+    .wrap .lsc-info .seg { position: sticky; top: 0; z-index: 2; }
     @media print {
-      .bar, .acts, .seg { display: none; }
-      section { display: flex !important; break-inside: avoid; }
+      .bar { display: none; }
       .wrap { max-width: none; }
     }
   </style>
@@ -80,107 +50,19 @@
         <div class="sub">Austin v San Antonio · October 9–11 · The Hideout Golf Club, Brownwood</div>
       </div>
     </div>
-    <div class="acts">
-      <button type="button" class="pill" id="share">Share link</button>
-      <button type="button" class="pill dark" onclick="window.print()">Download PDF</button>
-    </div>
-    <nav class="seg" id="seg">
-      <a href="#schedule" data-s="schedule">Schedule</a><a href="#teams" data-s="teams">Teams</a><a href="#formats" data-s="formats">Formats</a>
-    </nav>
-
-    <section id="schedule">
-      <dl class="sched">
-        <div class="d"><dt>Fri · practice round</dt><dd>1:30–2:00 PM · 14 players</dd></div>
-        <div class="d"><dt>Fri · dinner</dt><dd>Shirts issued · draw review</dd></div>
-        <div class="d"><dt>Sat AM · Fourball</dt><dd>8:30 AM · every 10 min · 7 matches</dd></div>
-        <div class="d"><dt>Sat PM · Foursomes</dt><dd>1:30 PM · every 10 min · 7 matches</dd></div>
-        <div class="d"><dt>Sun · Singles</dt><dd>8:30 AM · every 10 min · 14 matches</dd></div>
-        <div class="d"><dt>Sun · Cup presentation</dt><dd>After play</dd></div>
-      </dl>
-      <h4>Shirts <span class="tag">issued Friday dinner</span></h4>
-      <dl class="sched">
-        <div class="d"><dt>Sat · Austin</dt><dd>White / light violet · grey bottoms</dd></div>
-        <div class="d"><dt>Sat · San Antonio</dt><dd>Grey · navy bottoms</dd></div>
-        <div class="d"><dt>Sun · Austin</dt><dd>Blue · khaki bottoms</dd></div>
-        <div class="d"><dt>Sun · San Antonio</dt><dd>Purple · grey bottoms</dd></div>
-      </dl>
-      <p class="note">Course: The Hideout, par 72 (37 / 35) on every tee · Blue · White · Red (65+) · Teal. Each group's scorecard and cart sign carry a QR code: one player scores, everyone else follows.</p>
-    </section>
-
-    <section id="teams">
-      <div class="teams">
-        {% for t in teams %}
-        <div>
-          <div class="th {{ t.key }}">{{ t.name }}{% if t.captain %} · {{ t.captain }} (C){% endif %}</div>
-          <div class="pairs">
-            {% for pool in t.pools %}
-              {% if pool.pairs %}<div class="pool">{{ pool.label }}</div>{% endif %}
-              {% for p in pool.pairs %}{{ p }}<br>{% endfor %}
-            {% endfor %}
-          </div>
-        </div>
-        {% endfor %}
-      </div>
-      <p class="note">Saturday pairs play both sessions. Pools are cut on handicap INDEX, not course handicap: low pool = the three lowest pairs on each team by combined index, drawn against each other; high pool = the other four. Sunday singles: low 7 and high 7 per team by locked index, drawn within each pool. Course handicap still sets the strokes in play. Match draws: {{ draw_note }}</p>
-    </section>
-
-    <section id="formats">
-      <dl class="sched">
-        <div class="d" id="fourball"><dt>Fourball</dt><dd>90% · off the low player in the match</dd></div>
-        <div class="d" id="foursomes"><dt>Foursomes (Chapman)</dt><dd>60% low + 40% high · off the low team</dd></div>
-        <div class="d" id="singles"><dt>Singles</dt><dd>100% · off the low player</dd></div>
-        <div class="d"><dt>Points</dt><dd>1 per match · ½ each for a half · 28 total</dd></div>
-        <div class="d"><dt>Ties</dt><dd>All square after 18 · no extra holes</dd></div>
-        <div class="d"><dt>The Cup</dt><dd>14½ wins · SA retains at 14–14</dd></div>
-      </dl>
-      <h4>Chapman relief rule</h4>
-      <p>Both partners tee off, then each plays one shot with the partner's ball. Only after those second shots does the team choose one ball and alternate. If a tee shot is lost, out of bounds, in a penalty area, or unplayable, the team may abandon that ball, or the partner may take TGF line-of-flight relief on it (one-stroke penalty, drop anywhere on the line of flight going back as far as desired) and play his shot with it; that shot is the team's third stroke on that ball. The ball carries the penalty, not the player.</p>
-      <ol>
-        <li>Both partners tee off (ball A, ball B).</li>
-        <li>A lost, OB, penalty-area or unplayable tee ball: abandon it, or the partner drops it on its line of flight, one-stroke penalty.</li>
-        <li>Each partner plays one shot with the other's ball: stroke 2 on a clean ball, stroke 3 on a dropped one.</li>
-        <li>After both shots, pick one ball to finish the hole, whatever each lies.</li>
-        <li>The partner who did not hit the chosen ball's last stroke plays next; alternate from there.</li>
-        <li>Later lost or unplayable balls: same relief, played by whoever is up. The penalty never changes the order of play.</li>
-      </ol>
-      <h4 id="skins">Skins</h4>
-      <dl class="sched">
-        <div class="d"><dt>Sat AM &amp; PM</dt><dd>Team · net · one flight · partners share</dd></div>
-        <div class="d"><dt>Sunday</dt><dd>Individual · gross · two flights at 12.0</dd></div>
-        <div class="d"><dt>Ties</dt><dd>No carryover · a tied low wins nothing</dd></div>
-      </dl>
-      <p class="note">Saturday net uses the full session allowance (90% Fourball; 60/40 Chapman), not off-lowest. A pair with one buyer: the buyer takes the whole skin. A pair with no buyer is out of the hole and cannot tie one out.</p>
-    </section>
+    {% include "_lsc_info_body.html" %}
   </div>
+  <script src="/static/js/lsc-info.js"></script>
   <script>
     (function () {
-      const SEC = { schedule: "schedule", teams: "teams", formats: "formats",
-                    fourball: "formats", foursomes: "formats", singles: "formats", skins: "formats" };
-      function show(hash, scroll) {
-        const key = (hash || "").replace("#", "");
-        const sec = SEC[key] || "schedule";
-        document.querySelectorAll("section").forEach(s => s.classList.toggle("on", s.id === sec));
-        document.querySelectorAll("#seg a").forEach(a => a.classList.toggle("on", a.dataset.s === sec));
-        document.querySelectorAll(".d.hl").forEach(d => d.classList.remove("hl"));
-        const el = key && key !== sec ? document.getElementById(key) : null;
-        if (el) {
-          if (el.classList.contains("d")) el.classList.add("hl");
-          if (scroll) setTimeout(() => el.scrollIntoView({ block: "center" }), 30);
-        }
-      }
-      document.getElementById("seg").addEventListener("click", (e) => {
-        const a = e.target.closest("a"); if (!a) return;
-        e.preventDefault(); history.replaceState(null, "", "#" + a.dataset.s); show(a.dataset.s, false);
+      const show = window.lscInfoWire(document.querySelector(".wrap"), {
+        key: location.hash, scroll: true,
+        onPick: (k) => history.replaceState(null, "", "#" + k),
       });
       window.addEventListener("hashchange", () => show(location.hash, true));
-      show(location.hash, true);
-      document.getElementById("share").addEventListener("click", async () => {
-        const url = location.origin + location.pathname;
-        try {
-          if (navigator.share) await navigator.share({ title: "Lone Star Cup 2026", url });
-          else { await navigator.clipboard.writeText(url); document.getElementById("share").textContent = "Link copied"; }
-        } catch (e) { /* cancelled */ }
-      });
+      // Download PDF from the Cup tab opens this page with ?print=1
+      if (new URLSearchParams(location.search).get("print") === "1")
+        window.addEventListener("load", () => setTimeout(() => window.print(), 300));
     })();
   </script>
 </body>

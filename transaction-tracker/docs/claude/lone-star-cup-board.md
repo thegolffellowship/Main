@@ -442,6 +442,19 @@ mockup's (`LSC_CAPTAINS`). "Match draws" reads "posted after Thursday's
 draw" until every session has its 7+ matches. Share link / Download PDF
 (print CSS shows all three sections). Guard `test_lsc_info.py`.
 
+**On the Cup tab (v2.529.0, Kerry 10/8: "I need that added to the Lone Star
+cup Members page under the Lone Star cup"):** the body is ONE partial,
+`templates/_lsc_info_body.html` (scoped `.lsc-info`, navy ink, sections by
+`data-sec`, rows by `data-a`; ids only when not embedded), wired by
+`static/js/lsc-info.js` (`lscInfoWire`). `lsc_info.html` includes it; the
+route's `?embed=1` returns the bare partial, which LEADERBOARD > Lone Star
+Cup loads into its third view (Matches | Skins | **Event Info**, cached in
+`window.lscInfoHtml` across the 20 s refresh). `?info=<section|row>` opens
+it there; "How skins work" opens Skins in place; Download PDF opens
+`/member/lonestarcup/info?print=1`. TEAMS caps members/alumni LAST names via
+`lsc_cup.member_or_alumni`; the practice row's head count is
+`_lsc_practice_count` (roster of the Cup's `friday` add-on event).
+
 The staff preview header is one slim line that folds to a "PREVIEW ▾" tab
 after the first jump (Kerry 10/8: "the preview header is really in the
 way"); Event Info is its first stop. Logo: `static/lsc-logo.png` (sha256

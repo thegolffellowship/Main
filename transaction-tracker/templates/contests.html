@@ -2620,6 +2620,7 @@
     <script src="/static/js/tgf-standards.js?v={{ app_version }}"></script>
     <script src="/static/js/points-render.js?v={{ app_version }}"></script>
     <script src="/static/js/scorecard-render.js?v={{ app_version }}"></script>
+    <script src="/static/js/lsc-info.js?v={{ app_version }}"></script>
     <script>
     // ═══════════ Contests Page ═══════════
 
@@ -3242,7 +3243,14 @@
                          || sessions[sessions.length - 1];
             window.lscSel = pick ? pick.id : null;
         }
-        window.lscView = window.lscView || "matches";
+        // EVENT INFO is the third view (Kerry 10/8: "I need that added to the
+        // Lone Star cup Members page under the Lone Star cup"). A link opens
+        // it with ?info=<schedule|teams|formats|fourball|...|skins>.
+        if (!window.lscView) {
+            const wantInfo = new URLSearchParams(location.search).get("info");
+            window.lscView = wantInfo ? "info" : "matches";
+            if (wantInfo && wantInfo !== "1") { window.lscInfoKey = wantInfo; window.lscInfoScroll = true; }
+        }
         const cur = sessions.find(x => x.id === window.lscSel) || sessions[0];
         // the selected session's score sits left (Austin) and right (SA) of the
         // session toggles (Kerry 10/8: "Put the session scores left and right
@@ -3256,8 +3264,9 @@
             `<button type="button" role="tab" aria-selected="${x.id === (cur || {}).id}" class="${x.id === (cur || {}).id ? "on" : ""}" data-lscsess="${escapeHtml(x.id)}">${x.started ? `<span class="ss au" title="Austin">${lscFmtPts(x.au)}</span>` : ""}<span class="nm">${escapeHtml(FMT_TAB[x.format] || x.label)}${x.live ? ' <i class="lv">LIVE</i>' : ""}</span>${x.started ? `<span class="ss sa" title="San Antonio">${lscFmtPts(x.sa)}</span>` : ""}</button>`).join("")}</div>` : "";
         let body = "";
         if (cur) {
-            const segV = `<div class="lsc-bd-seg sm" role="tablist">${["matches", "skins"].map(v =>
-                `<button type="button" role="tab" aria-selected="${window.lscView === v}" class="${window.lscView === v ? "on" : ""}" data-lscview="${v}">${v === "matches" ? "Matches" : "Skins"}</button>`).join("")}</div>`;
+            const VIEW = { matches: "Matches", skins: "Skins", info: "Event Info" };
+            const segV = `<div class="lsc-bd-seg sm" role="tablist">${Object.keys(VIEW).map(v =>
+                `<button type="button" role="tab" aria-selected="${window.lscView === v}" class="${window.lscView === v ? "on" : ""}" data-lscview="${v}">${VIEW[v]}</button>`).join("")}</div>`;
             const sessScore = `<div class="lsc-bd-sess-h"><b>${escapeHtml(cur.label)}</b>
                     ${cur.date ? `<span class="dt">${escapeHtml(cur.date)}</span>` : ""}
                     <span class="sc"><span class="au">${lscFmtPts(cur.au)}</span> &mdash; <span class="sa">${lscFmtPts(cur.sa)}</span></span>
@@ -3268,10 +3277,14 @@
                 // the allowance note shows once, under the first session
                 .map((x, i) => (x.skinsHtml || "").replace(i === 0 ? /^$/ : /<div class="lsc-sk-note" data-note>[^<]*<\/div>/, ""))
                 .filter(Boolean).join("");
-            const inner = window.lscView === "skins"
+            const inner = window.lscView === "info"
+                // the shared Event Info body (_lsc_info_body.html), fetched
+                // once and kept across the 20 s live refresh
+                ? `<div class="lsc-info-host">${window.lscInfoHtml || '<div class="lsc-bd-proj">Loading&hellip;</div>'}</div>`
+                : window.lscView === "skins"
                 // The mockup's "How skins work" pill opens Event Info's
-                // Skins section (CoS #1450: the #skins anchor exists).
-                ? ((skinsAll ? skinsAll + '<div class="lsc-sk-hiw"><a class="pr-hiw-link" href="/member/lonestarcup/info' + (new URLSearchParams(location.search).get("preview") === "1" ? "?preview=1" : "") + '#skins">How skins work</a></div>' : "")
+                // Skins section, now in place on this tab.
+                ? ((skinsAll ? skinsAll + '<div class="lsc-sk-hiw"><a class="pr-hiw-link" href="?info=skins" data-lscinfo="skins">How skins work</a></div>' : "")
                    || '<div class="lsc-bd-proj">No skins yet.</div>')
                 : cur.cards;
             body = `<div class="lsc-bd-sess">${sessions.length > 1 ? "" : sessScore}${segV}${inner}</div>`;
@@ -3291,6 +3304,29 @@
             window.lscSel = b.dataset.lscsess; lscBoardRender(box, d); }));
         box.querySelectorAll("[data-lscview]").forEach(b => b.addEventListener("click", () => {
             window.lscView = b.dataset.lscview; lscBoardRender(box, d); }));
+        box.querySelectorAll("[data-lscinfo]").forEach(a => a.addEventListener("click", (e) => {
+            e.preventDefault();
+            window.lscView = "info"; window.lscInfoKey = a.dataset.lscinfo; window.lscInfoScroll = true;
+            lscBoardRender(box, d); }));
+        const infoHost = box.querySelector(".lsc-info-host");
+        if (infoHost && !window.lscInfoHtml) {
+            if (!window.lscInfoLoading) {
+                window.lscInfoLoading = true;
+                const pv = new URLSearchParams(location.search).get("preview") === "1" ? "&preview=1" : "";
+                fetch("/member/lonestarcup/info?embed=1" + pv)
+                    .then(r => r.ok ? r.text() : Promise.reject(r.status))
+                    .then(html => { window.lscInfoHtml = html; })
+                    .catch(() => { window.lscInfoHtml = '<div class="lsc-bd-proj">Event info could not load. Pull down to refresh.</div>'; })
+                    .finally(() => { window.lscInfoLoading = false; lscBoardRender(box, d); });
+            }
+        } else if (infoHost && window.lscInfoWire) {
+            window.lscInfoWire(infoHost, {
+                key: window.lscInfoKey || "schedule", scroll: !!window.lscInfoScroll,
+                onPick: (k) => { window.lscInfoKey = k; },
+                shareUrl: () => location.origin + "/member/lonestarcup?info=" + window.lscInfoSection(window.lscInfoKey || "schedule"),
+            });
+            window.lscInfoScroll = false;
+        }
         wasOpen.forEach((id) => {
             const el = Array.from(box.querySelectorAll(".mp-match-card[data-lsc-match]")).find((c) => c.dataset.lscMatch === id);
             const hd = el && el.querySelector(".mp-card-head");

@@ -42,4 +42,34 @@ check("captains", "Matt Jenkins (C)" in h and "Rob Callaway (C)" in h)
 check("before the draw it says so", "posted after Thursday" in h)
 check("no dollars", "$" not in h)
 check("the Cup logo, white-border version on the navy banner", "/static/lsc-logo-dark.png" in h and os.path.exists(os.path.join(os.path.dirname(os.path.abspath(__file__)), "static", "lsc-logo-dark.png")))
+check("the standalone page wires the shared script", "/static/js/lsc-info.js" in h and "Share link" in h and "Download PDF" in h)
+check("?print=1 prints", "print" in h)
+
+# The same body is the EVENT INFO view on LEADERBOARD > Lone Star Cup
+# (Kerry 10/8: "I need that added to the Lone Star cup Members page").
+r = cl.get("/member/lonestarcup/info?embed=1")
+e = r.get_data(as_text=True)
+check("the embed is public and bare", r.status_code == 200 and "<html" not in e.lower() and 'class="lsc-info embed"' in e, r.status_code)
+check("the embed carries every section and row hook", all(f'data-sec="{k}"' in e for k in ("schedule", "teams", "formats"))
+      and all(f'data-a="{k}"' in e for k in ("fourball", "foursomes", "singles", "skins")))
+check("the embed adds no page ids (no clash on the Cup tab)", 'id="teams"' not in e and 'id="skins"' not in e)
+check("the embed has the same pairs", "Cloer &amp; John Wade" in e and "no dollars" and "$" not in e)
+check("Download PDF opens the printable page", "/member/lonestarcup/info?print=1" in e)
+check("Cup ink is navy, not black", "#1B1B1B" not in e)
+
+# members and alumni print a capital LAST name (Kerry 10/8 standard)
+db.set_app_setting("lsc_handicap_lock", json.dumps({"3329": {"players": {str(c): {"ch": 5} for c in
+    (9001, 9002, 9003, 9004, 9011, 9012, 9013, 9014)}}}), db_path=DB)
+db.set_app_setting("lsc_member_ruling", json.dumps({"3329": {"guests": [9014]}}), db_path=DB)
+e = cl.get("/member/lonestarcup/info?embed=1").get_data(as_text=True)
+check("members/alumni LAST in caps, the guest not", "CLOER &amp; John WADE" in e and "Matt JENKINS &amp; Mike JENKINS" in e
+      and "NIESTER &amp; MESA" in e and "South &amp; Mary WADE" in e, e[e.find("Low pool"):e.find("Saturday pairs")])
+
+# the practice-round head count comes from the roster of the Friday add-on event
+check("no practice event, no count", "players</dd>" not in e)
+
+# the Cup tab offers the view and loads it from the embed
+ct = cl.get("/member/lonestarcup").get_data(as_text=True)
+check("Cup tab: Event Info view + shared script", '"Event Info"' in ct and "/member/lonestarcup/info?embed=1" in ct
+      and "/static/js/lsc-info.js" in ct and "?info=" in ct)
 print("ALL PASS" if not F else f"{len(F)} FAILED: {F}"); sys.exit(1 if F else 0)

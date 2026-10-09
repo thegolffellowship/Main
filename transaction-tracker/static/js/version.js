@@ -1,5 +1,16 @@
-window.TGF_VERSION = "2.528.14";
+window.TGF_VERSION = "2.529.0";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.529.0",
+    date: "2026-10-08",
+    title: "Lone Star Cup: Event Info lives on the member Cup tab",
+    changes: [
+      "Kerry 10/8: \"remember the Lone Star Cup info page and stuff we mocked up and discussed? I need that added to the Lone Star cup Members page under the Lone Star cup.\" LEADERBOARD > Lone Star Cup now has a third view beside Matches and Skins: EVENT INFO, with the mockup's Schedule | Teams | Formats (shirts, pools, the Chapman relief rule, skins rules), Share link and Download PDF.",
+      "One copy, two homes: the body is templates/_lsc_info_body.html and its toggle is static/js/lsc-info.js. The standalone /member/lonestarcup/info page includes it (its anchors #fourball, #skins ... keep working for the HOW IT WORKS links on the scoring screens) and the Cup tab loads the same body from /member/lonestarcup/info?embed=1, so the two can never drift apart.",
+      "Links: /member/lonestarcup?info=teams (or schedule, formats, fourball, foursomes, singles, skins) opens the Cup tab on that part of Event Info; Share link shares that link. The Skins view's \"How skins work\" now opens the Skins rules in place instead of leaving the page. Download PDF opens the printable page and prints it.",
+      "Per the Cup standards: navy where the page printed black, and a capital LAST name for members and alumni in TEAMS (the guest keeps his). The practice-round row counts its players from the practice event's roster instead of a fixed number."
+    ]
+  },
   {
     version: "2.528.14",
     date: "2026-10-08",
