@@ -47,7 +47,7 @@ check("the bridge takes |files and builds with the scorecards forced in",
 
 app_src = open("app.py", encoding="utf-8").read()
 check("the Cup prints its own per-session files (starter sheet, 3e cart signs, QR scorecards)",
-      'parts[1].lower() == "cup-files"' in src and "def build_cup_print_files(" in app_src
+      'parts[1].lower().split("=")[0] == "cup-files"' in src and "def build_cup_print_files(" in app_src
       and '"lsc_starter_sheet.html"' in app_src and 'cup_cart_signs_data(int(event_id), session_id=sid)' in app_src
       and 'build_scorecards(int(event_id), "3up", "team", qr="on", session=sid)' in app_src)
 

@@ -578,6 +578,12 @@ def compute_skins(session: dict, course: list[dict], phs: dict,
 
     strokes = {e["key"]: _strokes_for(e) for e in entries}
     totals = {e["key"]: 0 for e in entries}
+    # The ball each entry played for skins on each hole, for the Skins
+    # board (Kerry 10/9: "Skins leaderboard should look just like the event
+    # leaderboard"): {key: {hole: [gross, pops]}} — the counting ball's
+    # gross and the strokes it got (team net: the best net ball; gross
+    # skins: no pops). Scores only, no money: members get it too.
+    cards = {e["key"]: {} for e in entries}
     holes_out = []
     carry = 0
     for hn in _hole_numbers(course, n_holes):
@@ -586,19 +592,26 @@ def compute_skins(session: dict, course: list[dict], phs: dict,
         for e in entries:
             posted = False
             best = None
+            shown = None                # [gross, pops] of the ball shown
             for c in e["cids"]:
                 g = sc.get(c, {}).get(hn)
                 if g is None:
                     continue
                 posted = True
+                pops = strokes[e["key"]].get(c, {}).get(hn, 0)
                 if hn in picked.get(c, set()):
+                    if shown is None:
+                        shown = [g, pops]
                     continue            # a picked-up ball can't win a skin
-                v = g - strokes[e["key"]].get(c, {}).get(hn, 0)
+                v = g - pops
                 if best is None or v < best:
                     best = v
+                    shown = [g, pops]
             if not posted and not all(c in withdrawn for c in e["cids"]):
                 posted_all = False
             best_by_entry[e["key"]] = best
+            if shown is not None:
+                cards[e["key"]][hn] = shown
         if not entries or not posted_all:
             holes_out.append({"hole": hn, "status": "pending",
                               "winner": None, "score": None, "value": 0})
@@ -623,9 +636,15 @@ def compute_skins(session: dict, course: list[dict], phs: dict,
               "team": by_key[k]["team"], "skins": v}
              for k, v in totals.items()]
     board.sort(key=lambda r: (-r["skins"], r["label"]))
+    par = {int(h["hole"]): h.get("par") for h in course
+           if h.get("hole") is not None and h.get("par") is not None}
     return {"kind": "team" if team_game else "individual",
             "basis": basis, "carryover": bool(carryover),
-            "carried": carry, "holes": holes_out, "totals": board}
+            "carried": carry, "holes": holes_out, "totals": board,
+            "cards": {k: {str(h): v for h, v in hs.items()}
+                      for k, hs in cards.items()},
+            "par": {str(h): p for h, p in par.items()},
+            "entry_cids": {e["key"]: e["cids"] for e in entries}}
 
 
 # Kerry's ratified skins rules (CA #725/#726, 2026-09-26, rule 3b).
@@ -819,13 +838,33 @@ def compute_skins_payout(session: dict, course: list[dict], phs: dict,
         elif complete and won == 0:
             flags.append(f"{lbl}: no skin was won, so ${gpot / 100:.2f} "
                          "is unallocated (no carryovers).")
+        # Per entry: the index and the handicap the skin was played off,
+        # for the board's Idx / PH columns (no money, members get it).
+        meta = {}
+        for k, cids in (sk.get("entry_cids") or {}).items():
+            if team_game:
+                ph = None
+                if fmt == "chapman":
+                    vals = [phs.get(c) if phs.get(c) is not None
+                            else phs.get(str(c)) for c in cids]
+                    if vals and all(v is not None for v in vals):
+                        ph = chapman_team_handicap(vals)
+                meta[k] = {"index": None, "ph": ph}
+            else:
+                c = cids[0]
+                ix = index.get(c) if index.get(c) is not None else index.get(str(c))
+                ph = phs.get(c) if phs.get(c) is not None else phs.get(str(c))
+                meta[k] = {"index": ix, "ph": ph}
         out_groups.append({"flight": flight, "label": lbl,
                            "members": flight_members.get(flight),
                            "pot_cents": gpot, "entrants": entrants,
                            "complete": complete, "held": not complete,
                            "skins_won": won, "holes": sk["holes"],
                            "totals": sk["totals"], "payouts": payouts,
-                           "unpaid_cents": unpaid})
+                           "unpaid_cents": unpaid,
+                           "cards": sk.get("cards") or {},
+                           "par": sk.get("par") or {},
+                           "entries": meta})
     return {"kind": "team" if team_game else "individual",
             "basis": basis, "carryover": SKINS_CARRYOVER,
             "buyers_in_round": len(in_round), "pot_cents": pot_cents,
@@ -861,7 +900,12 @@ def strip_money(board: dict) -> dict:
                                                for h in g.get("holes") or []],
                                      "members": g.get("members"),
                                      "entrants": g.get("entrants"),
-                                     "complete": g.get("complete")}
+                                     "complete": g.get("complete"),
+                                     # the Skins board's hole scores +
+                                     # Idx/PH (Kerry 10/9): scores only
+                                     "cards": g.get("cards"),
+                                     "par": g.get("par"),
+                                     "entries": g.get("entries")}
                                     for g in sk.get("groups") or []]}
     return b
 
@@ -1428,6 +1472,7 @@ def _board_from_dial(conn, dial: dict, db_path=None, use_mock: bool = True,
     # the rounds-plural event feed; unbound sessions keep the mock
     # dial (staging) or stay empty (upcoming).
     entry_used = False
+    entry_sids: list = []
     bound = any(s.get("se_round") is not None
                 for s in dial.get("sessions") or [])
     if bound and dial.get("event_id"):
@@ -1439,6 +1484,7 @@ def _board_from_dial(conn, dial: dict, db_path=None, use_mock: bool = True,
             if overrides:
                 session_data = {**session_data, **overrides}
                 entry_used = True
+                entry_sids = sorted(overrides)
         except Exception:
             logger.exception("lsc_cup: entered-scores feed read "
                              "failed — board falls back to the "
@@ -1456,6 +1502,9 @@ def _board_from_dial(conn, dial: dict, db_path=None, use_mock: bool = True,
     # board_live in the dial (after his phone OK). Admin/manager
     # sessions preview it regardless — the route enforces this.
     board["board_live"] = bool(dial.get("board_live"))
+    # which sessions are scored from REAL entered cards (not the mock
+    # dial): the skins payout writer pays from these and nothing else
+    board["entry_sessions"] = entry_sids
     board["dial_warnings"] = validate_matches(dial)
     _attach_display_lines(conn, dial, board, db_path)
     return board

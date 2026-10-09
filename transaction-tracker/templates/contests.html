@@ -2871,49 +2871,92 @@
                 lscBoardLoad();
         }, 20000);
     }
-    // ── SKINS PANE (Side Games, #1398; mockup Skins.dc.html) ─────────
-    // One box per session: a row per hole a skin was won on (who, and the
-    // count), then the tied holes on one line and the holes still open on
-    // one line. Sunday singles show the two flights (players, lowest index
-    // to highest) and, once play starts, each flight's won holes. Members
-    // never see a dollar (strip_money on the server); staff see the pot,
-    // each winner's amount and the flags.
-    function lscHolesTxt(list) {
-        if (!list.length) return "";
-        const run = list.every((h, i) => i === 0 || h === list[i - 1] + 1);
-        if (list.length > 1 && run) return `Holes ${list[0]}–${list[list.length - 1]}`;
-        return "Hole " + list.join(" · ");          // mockup: "Hole 1 · 3 · 5"
+    // ── SKINS PANE (Side Games, #1398) ────────────────────────────────
+    // Every session, the selected one first. Until v2.529.x this was the
+    // Skins.dc.html mockup's own list (a row per won hole); Kerry 10/9 asked
+    // for the event leaderboard's look instead, below.
+    // THE CUP'S SKINS = THE EVENT LEADERBOARD'S SKINS BOARD (Kerry 10/9:
+    // "Skins leaderboard should look just like the event leaderboard").
+    // One Cup skins session becomes the event board's own data shape and is
+    // drawn by the event board's own renderer (evlbStdBoard): the same
+    // table, the same circled winning holes in their flight colour, the
+    // same # (skins won) column beside Won, the same Hole by hole /
+    // Handicaps toggles, sortable headers and PAR row. Each row is an
+    // ENTRY: a team on Saturday (team NET: the ball that counted, its pops
+    // marked), a player on Sunday (individual GROSS, one band per flight).
+    // MONEY: the event board shows members the Won column once every card
+    // is in; the Cup does not. Cup skins are staff-only money (CA #726,
+    // strip_money on the server), so members never get a Won column here,
+    // and staff get it only once the session's cards are all in.
+    function lscSkinsEvlbData(sess) {
+        const sk = sess.skins || {};
+        const staff = sk.pot_cents != null;
+        const groups = sk.groups || [];
+        const holeSet = new Set(), par = {};
+        groups.forEach(g => {
+            (g.holes || []).forEach(h => holeSet.add(+h.hole));
+            Object.keys(g.par || {}).forEach(k => { par[k] = g.par[k]; });
+        });
+        const cols = [...holeSet].sort((a, b) => a - b);
+        const TEAM = { austin: "Austin", sa: "San Antonio" };
+        const complete = groups.every(g => !g.entrants || g.complete);
+        const d = { cards: {}, skin_cells: {}, hole_cols: cols, hole_par: par,
+                    overall_board: [], sections: [],
+                    // a hole circled before every card is in says so
+                    field_complete: complete,
+                    // members never; staff once the round is in
+                    _moneyHeld: !staff || !complete };
+        groups.forEach(g => {
+            const won = {}, pay = {};
+            (g.holes || []).forEach(h => {
+                if (h.status === "won") (won[h.winner] = won[h.winner] || []).push(+h.hole);
+            });
+            (g.payouts || []).forEach(p => { pay[p.key] = p.cents; });
+            const rows = (g.totals || []).map(t => {
+                const rid = "lsc:" + (sess.id || "") + ":" + t.key;
+                const card = (g.cards || {})[t.key] || {};
+                const hs = cols.filter(n => card[n] != null).map(n => [n, card[n][0], card[n][1] || 0]);
+                d.cards[rid] = hs;
+                d.skin_cells[rid] = won[t.key] || [];
+                let gross = 0, pops = 0, parT = 0, parOk = hs.length > 0;
+                hs.forEach(h => {
+                    gross += h[1]; pops += h[2];
+                    if (par[h[0]] == null) parOk = false; else parT += par[h[0]];
+                });
+                const meta = (g.entries || {})[t.key] || {};
+                const cents = staff ? (pay[t.key] || 0) : 0;
+                const r = { scoring_round_id: rid, player_name: t.label || "",
+                    index: meta.index ?? null, hcp: meta.ph ?? "",
+                    gross: hs.length ? gross : null, net: hs.length ? gross - pops : null,
+                    to_par_gross: parOk ? gross - parT : null,
+                    to_par_net: parOk ? gross - pops - parT : null,
+                    skins_flight: g.flight || 1,
+                    won_by_cat: cents ? { skins: cents / 100 } : {}, won_total: cents / 100,
+                    // every entry bought in: no buyer, no entry
+                    _buyer: true, _note: TEAM[t.team] || "" };
+                d.overall_board.push(r);
+                return r;
+            });
+            const n = (g.members || []).length || g.entrants || rows.length;
+            const lbl = g.flight === 1 ? "Flight 1 · index under 12.0"
+                : (g.flight === 2 ? "Flight 2 · index 12.0 and up" : (g.label || ""));
+            d.sections.push({ label: groups.length > 1 ? `${lbl} · ${n} player${n === 1 ? "" : "s"}` : null,
+                              rows });
+        });
+        return d;
     }
-    function lscSkinsGroupRows(g, staff, liveGroups, upcoming, teeTime) {
-        const $c = (c) => "$" + (c / 100).toFixed(2);
-        const byKey = {};
-        (g.totals || []).forEach(t => { byKey[t.key] = t; });
-        const pay = {};
-        (g.payouts || []).forEach(p => { pay[p.key] = p.cents; });
-        const holes = g.holes || [];
-        const won = holes.filter(h => h.status === "won");
-        const tied = holes.filter(h => h.status === "tied").map(h => h.hole);
-        const open = holes.filter(h => h.status === "pending").map(h => h.hole);
-        let rows = won.map(h => {
-            const t = byKey[h.winner] || {};
-            const team = t.team === "austin" ? "au" : "sa";
-            return `<div class="lsc-bd-skins"><span class="h">Hole ${h.hole}</span><span class="sk ${team}">${escapeHtml(t.label || "")} <b>${h.value || 1}</b></span></div>`;
-        }).join("");
-        if (tied.length) rows += `<div class="lsc-bd-skins"><span class="h">${lscHolesTxt(tied)}</span><span class="lsc-sk-mute">Tied · no skin</span></div>`;
-        if (open.length && (won.length || tied.length)) {
-            const onCourse = liveGroups ? ` · ${liveGroups} group${liveGroups === 1 ? "" : "s"} still on the course` : "";
-            rows += `<div class="lsc-bd-skins"><span class="h">${lscHolesTxt(open)}</span><span class="lsc-sk-faint">Open${onCourse}</span></div>`;
-        } else if (open.length) {
-            rows += `<div class="lsc-bd-skins"><span class="h">${upcoming ? "Not started" : "On the course"}</span><span class="lsc-sk-faint">${upcoming && teeTime ? "First tee " + escapeHtml(teeTime) : "No hole decided yet"}</span></div>`;
-        }
-        if (staff) {
-            const paid = (g.payouts || []).map(p => {
-                const t = byKey[p.key] || {};
-                return `<span class="sk ${t.team === "austin" ? "au" : "sa"}">${escapeHtml(t.label || "")} <i>${$c(p.cents)}</i></span>`;
-            }).join("");
-            rows += `<div class="lsc-bd-skins lsc-sk-staff"><span class="h">Staff · pot ${$c(g.pot_cents || 0)}${g.held ? " · held until every card is in" : ""}</span>${paid}</div>`;
-        }
-        return rows.replace('class="lsc-bd-skins"', 'class="lsc-bd-skins first"');
+    function lscSkinsBoard(sess) {
+        const team = (sess.skins || {}).kind === "team";
+        return { game: "skins", sort: "gamecol",
+            gameCol: { key: "skins", label: "#", title: "Skins won",
+                       value: (dd, r) => ((dd.skin_cells || {})[String(r.scoring_round_id)] || []).length },
+            gameColAfterWon: true,
+            // the game's own currency only: team skins are NET, Sunday GROSS
+            grossCol: team ? false : undefined, netCol: team ? undefined : false,
+            // the holes ARE the skins board, so it lands hole by hole
+            holesOnLanding: true,
+            // nobody outside the skins is on it, so no Show All Players
+            noAllToggle: true };
     }
     function lscSkinsPane(sess) {
         const sk = sess.skins;
@@ -2921,7 +2964,6 @@
         const staff = sk.pot_cents != null;
         const ms = sess.matches || [];
         const live = ms.filter(m => m.state === "live").length;
-        const upcoming = ms.length > 0 && ms.every(m => m.state === "upcoming");
         const allFinal = ms.length > 0 && ms.every(m => m.state === "final")
             && (sk.groups || []).every(g => (g.holes || []).every(h => h.status !== "pending"));
         const tee = (ms.find(m => m.tee_time) || {}).tee_time || "";
@@ -2933,31 +2975,22 @@
         const dt = [sk.basis || (team ? "net" : "gross"), team ? "one flight" : "two flights", state]
             .filter(Boolean).join(" · ");
         let html = `<div class="lsc-bd-sess-h lsc-sk-h"><b>${title}</b><span class="dt">${dt}</span></div>`;
-        if (team) {
-            const g = sk.groups[0];
-            html += `<div class="lsc-sk-box">${lscSkinsGroupRows(g, staff, live, upcoming, tee)}</div>`;
-            const allow = sess.format === "fourball" ? "Team net, best ball at the Fourball 90% allowance."
-                : "Team net on the one ball at the Chapman 60/40 allowance.";
-            html += `<div class="lsc-sk-note" data-note>Skins show as counts; TGF settles after the round. ${allow}</div>`;
-        } else {
-            const cells = sk.groups.map(g => {
-                const mem = g.members || [];
-                const n = mem.length || g.entrants || 0;
-                const range = mem.length > 1 ? ` · ${escapeHtml(mem[0].name)} to ${escapeHtml(mem[mem.length - 1].name)}`
-                    : (mem.length === 1 ? ` · ${escapeHtml(mem[0].name)}` : "");
-                const lbl = g.flight === 1 ? "Flight 1 · under 12.0" : (g.flight === 2 ? "Flight 2 · 12.0 and up" : escapeHtml(g.label || ""));
-                return `<div class="lsc-sk-fl"><div class="lsc-sk-lbl">${lbl}</div><div class="lsc-sk-flp">${n} player${n === 1 ? "" : "s"}${range}</div></div>`;
-            }).join("");
-            html += `<div class="lsc-sk-box lsc-sk-flights">${cells}</div>`;
-            if (!upcoming) {
-                sk.groups.forEach(g => {
-                    const lbl = g.flight === 1 ? "Flight 1" : (g.flight === 2 ? "Flight 2" : escapeHtml(g.label || ""));
-                    html += `<div class="lsc-sk-sub">${lbl}</div><div class="lsc-sk-box">${lscSkinsGroupRows(g, staff, live, upcoming, tee)}</div>`;
-                });
-            } else if (staff) {
-                html += `<div class="lsc-sk-box">${sk.groups.map(g => lscSkinsGroupRows(g, staff, 0, true, tee)).join("")}</div>`;
-            }
-        }
+        const d = lscSkinsEvlbData(sess);
+        const $c = (c) => "$" + (c / 100).toFixed(2);
+        const held = (sk.groups || []).some(g => g.entrants && !g.complete);
+        const note = staff
+            ? `<div class="evlb-note lsc-sk-staff">Staff · pot ${$c(sk.pot_cents || 0)}`
+              + (held ? " · Won shows once every card is in" : "") + `</div>` : "";
+        html += evlbStdBoard(d, Object.assign({ sections: d.sections }, lscSkinsBoard(sess)), note);
+        // the event board's legend: a chip per flight once a skin is won
+        const nF = (sk.groups || []).length;
+        if (nF > 1 && Object.values(d.skin_cells).some(x => x.length))
+            html += `<p class="evlb-legend">${[1, 2].slice(0, nF).map(f =>
+                `<span class="lg" style="${evlbFlightTint(f)}">Flight ${f}</span>`).join(" ")}</p>`;
+        const allow = !team ? "Individual gross, two flights on the frozen TGF index."
+            : sess.format === "fourball" ? "Team net, best ball at the Fourball 90% allowance."
+            : "Team net on the one ball at the Chapman 60/40 allowance.";
+        html += `<div class="lsc-sk-note" data-note>A circled score won a skin; # is skins won; no carryovers. ${allow}${staff ? "" : " TGF settles after the round."}</div>`;
         if (staff && (sk.flags || []).length)
             html += `<div class="lsc-bd-skflags">${sk.flags.map(f => `<div>${escapeHtml(f)}</div>`).join("")}</div>`;
         return `<div class="lsc-sk-sess">${html}</div>`;
@@ -3253,7 +3286,14 @@
         // the team scores and session toggles pin under the Cup header
         // (Kerry 10/8: "Pin the team score and session toggles too, so
         // everything else scrolls under it"); prPinBars sets the offsets
+        // the Skins view's boards are the event leaderboard's (evlbStdBoard):
+        // drop the last render's registrations, then wire the new ones
+        box.querySelectorAll("table[data-board]").forEach(t => { delete EVLB_BOARDS[t.dataset.board]; });
         box.innerHTML = `<div class="lsc-bd-pin">${head}${segS}</div>` + body;
+        if (box.querySelector("table.evlb-ovr[data-board]")) {
+            box.dataset.evlbRoot = "1";
+            evlbWireBoards(box);
+        }
         lscSoloPinHead(box);
         requestAnimationFrame(() => { if (window.prPinBars) window.prPinBars(); });
         box.querySelectorAll("[data-lscsess]").forEach(b => b.addEventListener("click", () => {
@@ -3665,8 +3705,11 @@
     // An event with no games opens hole by hole on every board (Kerry 10/8:
     // "I want Net and gross to load automatically with all players and hole
     // by hole scores for the practice round").
+    // A board may ask to land hole by hole too (the Cup's Skins board, Kerry
+    // 10/9: its circled holes ARE the board).
     const evlbHolesFor = (board, d) => evlbHolesTouched
-        ? evlbShowHoles : ((board && board.game) == null || evlbNoGames(d));
+        ? evlbShowHoles : (((board && board.game) == null || evlbNoGames(d))
+                           || !!(board && board.holesOnLanding));
     // handicap columns (Idx + PH) start HIDDEN (Kerry 2026-09-13:
     // "make the default not show them") — they are reference, not
     // result, and they cost two columns on a phone
@@ -4160,7 +4203,7 @@
             `<div class="evlb-togs">` +
             `<label class="evlb-holetog"><input type="checkbox" data-ovr-holes${showHoles ? " checked" : ""}> Hole by hole</label>` +
             `<label class="evlb-holetog"><input type="checkbox" data-ovr-hcp${evlbShowHcp ? " checked" : ""}> Handicaps</label>` +
-            (EVLB_BUYIN_GAMES.includes(board.game || null) && !evlbNoGames(d)
+            (EVLB_BUYIN_GAMES.includes(board.game || null) && !evlbNoGames(d) && !board.noAllToggle
                 ? `<label class="evlb-holetog"><input type="checkbox" data-ovr-all${evlbShowAll ? " checked" : ""}> Show All Players</label>`
                 : "") +
             `</div>` + evlbTeeLegend(d) + `</div>` +
@@ -4558,13 +4601,12 @@
             });
         });
     }
-    function evlbWireEvent(body, d) {
-        body.querySelectorAll(".evlb-subtab").forEach(btn =>
-            btn.addEventListener("click", () => {
-                body.querySelectorAll(".evlb-subtab").forEach(b => b.classList.toggle("active", b === btn));
-                body.querySelectorAll(".evlb-panel").forEach(p =>
-                    p.hidden = p.dataset.panel !== btn.dataset.sub);
-            }));
+    // The standard board's own wiring (sortable headers, the Hole by hole /
+    // Handicaps / Show All Players boxes, the tee key's fit) for any root
+    // holding evlbStdBoard tables: an event's body, and the Cup's Skins view
+    // (Kerry 10/9: "Skins leaderboard should look just like the event
+    // leaderboard").
+    function evlbWireBoards(body) {
         // OVERALL column sorting (Kerry 2026-09-11: "Allow columns to
         // sort") — every header sorts; second tap flips direction; the
         // net-rank travels with the player. Rows re-render from the
@@ -4590,7 +4632,9 @@
                 row.style.maxWidth = w > 0 ? w + "px" : "";
             });
         requestAnimationFrame(fitKeys);
-        window.addEventListener("resize", fitKeys);
+        // once per root: a root re-wired after a re-render (the Cup's 20 s
+        // live refresh) swaps its fitKeys rather than stacking listeners
+        if (!body._evlbFitKeys) window.addEventListener("resize", () => body._evlbFitKeys());
         body._evlbFitKeys = fitKeys;
         body.querySelectorAll("table.evlb-ovr[data-board]").forEach(tbl => {
             const st = EVLB_BOARDS[tbl.dataset.board];
@@ -4607,6 +4651,52 @@
                     th.classList.add(st.sortDir === 1 ? "asc" : "desc");
                 }));
         });
+        body.querySelectorAll("input[data-ovr-holes]").forEach(cb =>
+            cb.addEventListener("change", () => {
+                evlbShowHoles = cb.checked;
+                evlbHolesTouched = true;
+                // every OVERALL table already on the page follows, so
+                // two open events never disagree
+                document.querySelectorAll("table.evlb-ovr").forEach(t =>
+                    t.classList.toggle("no-holes", !evlbShowHoles));
+                document.querySelectorAll("input[data-ovr-holes]").forEach(o =>
+                    { o.checked = evlbShowHoles; });
+                document.querySelectorAll(".evlb-body, [data-evlb-root]").forEach(b =>
+                    b._evlbFitKeys && requestAnimationFrame(b._evlbFitKeys));
+            }));
+        body.querySelectorAll("input[data-ovr-all]").forEach(cb =>
+            cb.addEventListener("change", () => {
+                evlbShowAll = cb.checked;
+                // every board on the page re-renders, so the ranks are
+                // right on all of them and two open events agree
+                document.querySelectorAll("table.evlb-ovr[data-board]").forEach(t => {
+                    const tb = t.querySelector("tbody");
+                    if (tb) tb.innerHTML = evlbBoardBody(t.dataset.board);
+                });
+                document.querySelectorAll("input[data-ovr-all]").forEach(o =>
+                    { o.checked = evlbShowAll; });
+                document.querySelectorAll(".evlb-body, [data-evlb-root]").forEach(b =>
+                    b._evlbFitKeys && requestAnimationFrame(b._evlbFitKeys));
+            }));
+        body.querySelectorAll("input[data-ovr-hcp]").forEach(cb =>
+            cb.addEventListener("change", () => {
+                evlbShowHcp = cb.checked;
+                document.querySelectorAll("table.evlb-ovr").forEach(t =>
+                    t.classList.toggle("no-hcp", !evlbShowHcp));
+                document.querySelectorAll("input[data-ovr-hcp]").forEach(o =>
+                    { o.checked = evlbShowHcp; });
+                document.querySelectorAll(".evlb-body, [data-evlb-root]").forEach(b =>
+                    b._evlbFitKeys && requestAnimationFrame(b._evlbFitKeys));
+            }));
+    }
+    function evlbWireEvent(body, d) {
+        body.querySelectorAll(".evlb-subtab").forEach(btn =>
+            btn.addEventListener("click", () => {
+                body.querySelectorAll(".evlb-subtab").forEach(b => b.classList.toggle("active", b === btn));
+                body.querySelectorAll(".evlb-panel").forEach(p =>
+                    p.hidden = p.dataset.panel !== btn.dataset.sub);
+            }));
+        evlbWireBoards(body);
         // TEAM board: a band IS a team — tap it for EVERY PLAYER'S OWN
         // CARD (Kerry 2026-09-15: "The Team chevron should not do what
         // it's doing. It should expand each player in the group to see
@@ -4672,43 +4762,6 @@
                     "Couldn't load the cards (" + (err.message || err) + ").";
             }
         });
-        body.querySelectorAll("input[data-ovr-holes]").forEach(cb =>
-            cb.addEventListener("change", () => {
-                evlbShowHoles = cb.checked;
-                evlbHolesTouched = true;
-                // every OVERALL table already on the page follows, so
-                // two open events never disagree
-                document.querySelectorAll("table.evlb-ovr").forEach(t =>
-                    t.classList.toggle("no-holes", !evlbShowHoles));
-                document.querySelectorAll("input[data-ovr-holes]").forEach(o =>
-                    { o.checked = evlbShowHoles; });
-                document.querySelectorAll(".evlb-body").forEach(b =>
-                    b._evlbFitKeys && requestAnimationFrame(b._evlbFitKeys));
-            }));
-        body.querySelectorAll("input[data-ovr-all]").forEach(cb =>
-            cb.addEventListener("change", () => {
-                evlbShowAll = cb.checked;
-                // every board on the page re-renders, so the ranks are
-                // right on all of them and two open events agree
-                document.querySelectorAll("table.evlb-ovr[data-board]").forEach(t => {
-                    const tb = t.querySelector("tbody");
-                    if (tb) tb.innerHTML = evlbBoardBody(t.dataset.board);
-                });
-                document.querySelectorAll("input[data-ovr-all]").forEach(o =>
-                    { o.checked = evlbShowAll; });
-                document.querySelectorAll(".evlb-body").forEach(b =>
-                    b._evlbFitKeys && requestAnimationFrame(b._evlbFitKeys));
-            }));
-        body.querySelectorAll("input[data-ovr-hcp]").forEach(cb =>
-            cb.addEventListener("change", () => {
-                evlbShowHcp = cb.checked;
-                document.querySelectorAll("table.evlb-ovr").forEach(t =>
-                    t.classList.toggle("no-hcp", !evlbShowHcp));
-                document.querySelectorAll("input[data-ovr-hcp]").forEach(o =>
-                    { o.checked = evlbShowHcp; });
-                document.querySelectorAll(".evlb-body").forEach(b =>
-                    b._evlbFitKeys && requestAnimationFrame(b._evlbFitKeys));
-            }));
         // Player-row scorecard expansion — DELEGATED so rows re-rendered
         // by a sort (or any future re-paint) keep the behavior
         body.addEventListener("click", async (e) => {

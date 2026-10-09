@@ -72,13 +72,51 @@ tap-open hole-by-hole scorecards.
   left over or redistributed. A pair where neither bought is out of the
   hole entirely: its score neither wins nor ties out a skin (#1357-2).
   Staff see who is paid on a mixed team (`mixed`); members never do.
-  **SKINS PANE (v2.525.32, #1398, mockup `docs/claude/lsc-mockups/Skins.dc.html`):**
-  `lscSkinsPane` in contests.html, every session with the selected one first:
-  a row per won hole (team/player + count), tied holes on one line, open
-  holes on one line; Sunday shows each flight's size and lowest-to-highest
-  index range (`groups[].members` from `compute_skins_payout`). `strip_money`
-  keeps holes/members/entrants for members (no money); pot, payouts, flags
-  stay staff only. Guard `test_lsc_skins_pane.js`.
+  **SKINS PANE (v2.525.32, #1398) — since v2.532.15 THE EVENT LEADERBOARD'S
+  SKINS BOARD** (Kerry 10/9: "Skins leaderboard should look just like the
+  event leaderboard"): `lscSkinsPane` in contests.html, every session with
+  the selected one first, each drawn by the EVENTS leaderboard's own
+  `evlbStdBoard` from an adapter (`lscSkinsEvlbData` → the evlb `d` shape,
+  `lscSkinsBoard` → the board spec): a row per skins ENTRY (a team on
+  Saturday, a player on Sunday, one band per flight with its size), hole by
+  hole on landing (`holesOnLanding`), each won skin circled in its flight
+  colour, pops on the ball that counted, # = skins won beside Won, the PAR
+  row, sortable headers, Hole by hole / Handicaps boxes (no Show All
+  Players: `noAllToggle`), team skins NET total only, Sunday GROSS only.
+  Wiring is the shared `evlbWireBoards(root)` (an event body uses it too);
+  `lscBoardRender` drops the previous render's `EVLB_BOARDS` entries on the
+  20 s refresh. Data: `compute_skins` now returns `cards` ({entry key:
+  {hole: [gross, pops]}}, the counting ball), `par` and `entry_cids`;
+  `compute_skins_payout` adds `cards`, `par` and `entries` ({key: {index,
+  ph}}) per group. `strip_money` keeps holes/members/entrants/cards/par/
+  entries for members (scores, no money); pot, payouts, flags stay staff
+  only. **Money differs from the event leaderboard on purpose:** the event
+  board shows members its Won column once every card is in; the Cup never
+  shows members a dollar (CA #726), and staff get Won only once that
+  session's cards are all in (`_moneyHeld`). Guard `test_lsc_skins_pane.js`.
+  **DAILY WINNERS → PAYOUTS (v2.532.15, Kerry 10/9: "Daily Winner Amounts
+  should go to PAYOUTS so I can easily pay them per normal") — BUILT, NOT
+  APPLIED (Kerry ratifies first, rule 3b):** `email_parser/lsc_skins_payouts.py`
+  `lsc_skins_payouts(apply=False)`, bridge `scoring-lsc-skins-payouts[:apply]`.
+  Reads the staff board (live, or the frozen `lsc_results` snapshot),
+  `plan_daily_skins` adds each winner's `per_player` cents up PER DAY (by
+  session `date`: Saturday = AM Fourball + PM Foursomes pots, Sunday = both
+  flights) and writes one `tgf_payouts` row per winner per day on event
+  3329's `tgf_events` row (`_ensure_tgf_event_row`), category `skins`,
+  description `LSC SAT Skins — Fourball ×2 (holes 3, 7) $41.67 · Foursomes
+  ×1 (hole 12) $20.83`, plus the usual pending ledger placeholder
+  (`_reconcile_payouts_with_venmo`) so the PAYOUTS page shows the Pay link
+  and the Venmo matcher can mark it PAID; `lsc_skins_pot` drains from it.
+  A day writes only when FINAL: every skins group with entrants that day is
+  `complete` AND every session that day is in `board.entry_sessions`
+  (scored from entered cards, never `lsc_mock_scores`). Idempotent on the
+  `LSC <DAY> Skins` description prefix + customer_id; a changed result
+  updates (amount, description, pending placeholder) or removes UNPAID rows
+  only; a PAID row is never touched (`paid_ok`, or `paid_differs` /
+  `paid_no_longer_wins` reported for Kerry). The prefix is not `auto:`, so
+  the GG auto-recorder's force path and `scoring-payouts-clear-auto` leave
+  these rows alone. Not scheduled: run by bridge. Guard
+  `test_lsc_skins_payouts.py`.
   Sunday:
   individual gross skins flighted on the TGF 18-hole index FROZEN at the
   event (`_event_index_as_of` → `_handicap_index_18_by_customer`):

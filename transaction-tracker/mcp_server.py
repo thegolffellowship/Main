@@ -1864,6 +1864,7 @@ def _scoring_dispatch_inner(url: str, extract: str):
       scoring-lsc-results[:freeze[|force]|:clear]  Lone Star Cup final-results snapshot (lsc_results): status, freeze (refused while anything is open unless force), clear
       scoring-lsc-preview[:seed[|apply]|:teardown]  the Cup STAFF PREVIEW demo rounds (own dial, PREVIEW rounds; /events/3329/cup-preview)
       scoring-lsc-check  read-only check of the lsc_matches pairings (per session matches, points total, problems) before a change goes live
+      scoring-lsc-skins-payouts[:apply]  Cup DAILY skins winners -> PAYOUTS (Kerry 10/9): one tgf_payouts row per winner per final day (category skins, "LSC SAT Skins — ..."); dry run by default; apply creates / updates UNPAID / removes UNPAID rows, never a PAID one (Kerry ratifies before apply)
       scoring-course-card:<course_id>[|<card json>[|apply]]  read a course's card as held, or validate/plan/load one from the printed card (tees, bands, rating/slope incl. front/back nines, par/SI/yardage), source course_card (CA #786 GO 3)
       scoring-membership-price:<term_id>|<amount>[|apply]  set price_paid on one membership term (dry run by default, audited)
       scoring-alias-delete:<alias id>[|confirm]  remove ONE customer_aliases row; preview first, |confirm deletes and audits
@@ -3804,6 +3805,20 @@ def _scoring_dispatch_inner(url: str, extract: str):
             return json.dumps({"sessions": _sess, "points_total": _tot,
                                "defending_champion": _dial.get("defending_champion"),
                                "warnings": _lc.validate_matches(_dial)}, indent=2)
+        if cmd == "scoring-lsc-skins-payouts":
+            # Lone Star Cup DAILY skins winner amounts -> the PAYOUTS page
+            # (Kerry 10/9: "Daily Winner Amounts should go to PAYOUTS so I
+            # can easily pay them per normal"). "" = dry run (what each
+            # final day would write against what is there); "apply" writes.
+            # A day that isn't final (cards out, or not scored from entered
+            # cards) writes nothing; a PAID row is never touched. Money:
+            # Kerry ratifies before the first apply (rule 3b).
+            from email_parser import lsc_skins_payouts as _lsp
+            _a = [x.strip().lower() for x in (arg or "").split("|") if x.strip()]
+            if _a and _a != ["apply"]:
+                return json.dumps({"error": "use '' (dry run) or 'apply'"})
+            res = _lsp.lsc_skins_payouts(apply=_a == ["apply"])
+            return json.dumps(res, indent=2, default=str)
         if cmd == "scoring-oneoff-addon":
             # "<event_id>|<customer_id>|<key>|<on|off>" — toggle a
             # player's add-on buy-in on a one-off event, same path the
