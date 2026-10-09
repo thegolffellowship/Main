@@ -648,6 +648,15 @@ the Starter Sheet logo and Proxy logos too."
     now live in the HIW popup.
   - The selected session's score flanks the session toggle
     (`.lsc-bd-segrow`).
+- **Cup tab round 3 (v2.528.12, Kerry 10/8):**
+  - Session scores sit on each session button (`.lsc-sess-seg`) once that
+    session has started (`started`).
+  - With the board on, the header (`.lsc-event.joined`), the team scores and
+    the session toggle form one block.
+  - `prPinBars` pins the Cup header under the sub nav, which has a full-width
+    `::before` bar.
+  - The Cup logo replaces the trophy.
+  - Members don't see `#lsc-rosters` / `#lsc-foot-p` once the board shows.
 - **Members' draw page (v2.528.5):** `/member/cup-draw` is public (member
   tier, no login). It renders `cup_draw.html` with `member_view=True`: no
   intro, tabs or controls; the SUMMARY once all three sessions are drawn,

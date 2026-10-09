@@ -221,7 +221,13 @@
             font: 700 1.5rem/1.15 'Bitter', serif; letter-spacing: 0.5px;
             text-transform: uppercase; color: var(--text);
         }
-        .top-tabs-wrap { position: relative; }
+        .top-tabs-wrap { position: relative; isolation: isolate; }
+        /* the sub nav runs full width; its tabs stay with the centred page
+           (Kerry 10/8: "The sub nav could be full width, but the pages still
+           centered with the rest of the page") */
+        .top-tabs-wrap::before { content: ""; position: absolute; top: 0; bottom: 0; left: 50%; width: 100vw;
+            transform: translateX(-50%); background: var(--surface, #fff); border-bottom: 2px solid var(--border);
+            z-index: -1; pointer-events: none; }
         .top-tabs {
             display: flex; gap: 0; margin-bottom: 0;
             border-bottom: 2px solid var(--border);
@@ -254,14 +260,15 @@
                              font: 700 13px/1 'Bitter', serif; letter-spacing: .04em; text-transform: uppercase; }
         .lsc-bd-seg button.on { background: var(--lsc-navy, #002855); color: #fff; }
         .lsc-bd-seg.sm button { min-height: 34px; font-size: 12px; }
-        .lsc-bd-segrow { display: flex; align-items: center; gap: 10px; }
-        .lsc-bd-segrow .lsc-bd-seg { flex: 1 1 auto; }
-        .lsc-bd-segrow .ss { flex: 0 0 auto; min-width: 2.2em; text-align: center; font: 800 26px/1 'Bitter', Georgia, serif; }
-        .lsc-bd-segrow .ss.au { color: #BF5700; } .lsc-bd-segrow .ss.sa { color: #4B6274; }
+        /* session buttons carry their own score (Kerry 10/8) */
+        .lsc-sess-seg button { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 0 10px; }
+        .lsc-sess-seg button .ss { font: 800 17px/1 'Bitter', Georgia, serif; min-width: 1.1em; }
+        .lsc-sess-seg button .ss.au { color: #BF5700; } .lsc-sess-seg button .ss.sa { color: #4B6274; }
+        .lsc-sess-seg button.on .ss.au { color: #F6A86A; } .lsc-sess-seg button.on .ss.sa { color: #B9CAD8; }
+        .lsc-sess-seg button .nm { flex: 0 1 auto; }
         @media (max-width: 560px) {
-            .lsc-bd-segrow { gap: 6px; }
-            .lsc-bd-segrow .ss { font-size: 20px; min-width: 1.3em; }
-            .lsc-bd-segrow .lsc-bd-seg button { font-size: 11px; letter-spacing: 0; padding: 0 4px; }
+            .lsc-sess-seg button { font-size: 11px; letter-spacing: 0; padding: 0 4px; gap: 4px; }
+            .lsc-sess-seg button .ss { font-size: 14px; }
             /* the stacked names keep whole on a phone: smaller type, a
                narrower VS block, smaller chips */
             #lsc-board .mp-strip-name.lscn { padding-left: 0.45rem; padding-right: 0.45rem; }
@@ -1668,6 +1675,26 @@
         .lsc-event { margin-top: 0.25rem; background: var(--lsc-navy, #002855); color: #fff;
                      border-top: 3px solid #E87C3E; border-radius: 12px; padding: 14px 18px;
                      display: flex; align-items: center; gap: 15px; }
+        .lsc-event .lsc-ev-logo { height: 58px; width: auto; display: block; }
+        /* pinned on a phone: a slimmer bar */
+        @media (max-width: 560px) {
+            .lsc-event { padding: 8px 12px; gap: 10px; }
+            .lsc-event .lsc-ev-logo { height: 42px; }
+            .lsc-event .t { font-size: 17px; }
+            .lsc-event .meta { font-size: 12px; }
+            .lsc-event #lsc-hiw-btn { height: 28px; padding: 0 10px; font-size: 10px; white-space: nowrap; }
+        }
+        /* Kerry 10/8: "lose white space between lone star cup header and team
+           scores and session toggles by connecting them directly under the
+           others" + "move the lone star cup header up under the sub nav bar"
+           (pinned by prPinBars). With the board on, the three read as one
+           block: header, team scores, session toggle. */
+        #section-lone-star-cup > .standings-section { padding-top: 0 !important; }
+        .lsc-event.joined { margin-top: 0; border-radius: 0 0 0 0; padding-top: 8px; padding-bottom: 8px; }
+        #section-lone-star-cup .lsc-event.joined { border-top-left-radius: 0; border-top-right-radius: 0; }
+        .lsc-event.joined + #lsc-board, #lsc-board.joined { margin-top: 0 !important; }
+        #lsc-board.joined .lsc-bd-head { border-radius: 0; border-top: 0; }
+        #lsc-board.joined .lsc-sess-seg { margin: 0 0 10px; border-radius: 0 0 14px 14px; background: #E4E9F1; }
         .lsc-event .ic { flex: 0 0 auto; line-height: 0; }
         .lsc-event .t { font: 700 20px/1.2 'Bitter', serif; color: #fff; }
         .lsc-event .meta { margin-top: 3px; font: 700 14px/1.3 'Bitter', serif; color: #fff; }
@@ -2352,7 +2379,7 @@
                      mark + The Lone Star Cup title + date/venue from the
                      lsc_event_info dial; the rosters chip sits below -->
                 <div class="lsc-event">
-                    <span class="ic"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="38" height="38" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/><polygon points="12 3.4 13.0 5.42 15.23 5.75 13.62 7.33 14.0 9.55 12 8.5 10.0 9.55 10.38 7.33 8.77 5.75 11.0 5.42" fill="#FFFFFF" stroke="none"/></svg></span>
+                    <span class="ic"><img src="/static/lsc-logo-dark.png" alt="Lone Star Cup" class="lsc-ev-logo"></span>
                     <div>
                         <div class="t">The Lone Star Cup</div>
                         <div class="meta"><b id="lsc-ev-dates"></b><span class="v" id="lsc-ev-venue"></span></div>
@@ -2618,7 +2645,15 @@
             tabs.style.zIndex = "89";
             tabs.style.background = "var(--surface, #fff)";
         }
+        // the Lone Star Cup header pins under the sub nav (Kerry 10/8)
+        const lscEv = document.querySelector("#section-lone-star-cup .lsc-event");
+        if (lscEv) {
+            lscEv.style.position = "sticky";
+            lscEv.style.top = (h + ctaH + (tabs ? tabs.offsetHeight : 0)) + "px";
+            lscEv.style.zIndex = "88";
+        }
     }
+    window.prPinBars = prPinBars;
     document.addEventListener("DOMContentLoaded", prPinBars);
     window.addEventListener("load", prPinBars);
     window.addEventListener("resize", prPinBars);
@@ -2924,7 +2959,19 @@
             const res = await fetch(pv ? "/api/lsc/board?preview=1" : "/api/lsc/board");
             d = await res.json();
         } catch (e) { return; }                    // quiet: board is optional
-        if (!d || !d.configured) { box.style.display = "none"; return; }
+        const evBanner = document.querySelector("#section-lone-star-cup .lsc-event");
+        if (!d || !d.configured) {
+            box.style.display = "none";
+            box.classList.remove("joined"); if (evBanner) evBanner.classList.remove("joined");
+            return;
+        }
+        // header + team scores + session toggle read as one block, and on the
+        // member page nothing shows below the matches (Kerry 10/8: "Remove
+        // everything below the matches from member view")
+        box.classList.add("joined"); if (evBanner) evBanner.classList.add("joined");
+        if (window.MEMBER_MODE) {
+            ["lsc-rosters", "lsc-foot-p"].forEach(id => { const el = $(id); if (el) el.style.display = "none"; });
+        }
         if (d.preview && !$("lsc-preview-band")) {
             const band = document.createElement("div");
             band.id = "lsc-preview-band";
@@ -3158,6 +3205,7 @@
                      label: sess.label || sess.id || "", date: sess.date || "",
                      live: (sess.matches || []).some(m => m.state === "live"),
                      upcoming: (sess.matches || []).some(m => m.state === "upcoming"),
+                     started: (sess.matches || []).some(m => m.state && m.state !== "upcoming"),
                      matchIds: (sess.matches || []).map(m => String(m.match_id ?? m.id)) };
         });
         // D3 (Kerry 2026-10-07, CoS #1351): one session at a time behind a
@@ -3178,8 +3226,13 @@
         // the selected session's score sits left (Austin) and right (SA) of the
         // session toggles (Kerry 10/8: "Put the session scores left and right
         // of the SESSION toggles")
-        const segS = sessions.length > 1 ? `<div class="lsc-bd-segrow"><span class="ss au" title="Austin, this session">${lscFmtPts((cur || {}).au)}</span><div class="lsc-bd-seg" role="tablist">${sessions.map(x =>
-            `<button type="button" role="tab" aria-selected="${x.id === (cur || {}).id}" class="${x.id === (cur || {}).id ? "on" : ""}" data-lscsess="${escapeHtml(x.id)}">${escapeHtml(FMT_TAB[x.format] || x.label)}${x.live ? ' <i class="lv">LIVE</i>' : ""}</button>`).join("")}</div><span class="ss sa" title="San Antonio, this session">${lscFmtPts((cur || {}).sa)}</span></div>` : "";
+        // each session's own score sits on its button, Austin left and SA
+        // right, once that session has started, and stays when it is done
+        // (Kerry 10/8: "session scoring would go left and right of FOURBALL
+        // and would persist once completed, but FOURSOMES score wouldn't
+        // show until that session was started")
+        const segS = sessions.length > 1 ? `<div class="lsc-bd-seg lsc-sess-seg" role="tablist">${sessions.map(x =>
+            `<button type="button" role="tab" aria-selected="${x.id === (cur || {}).id}" class="${x.id === (cur || {}).id ? "on" : ""}" data-lscsess="${escapeHtml(x.id)}">${x.started ? `<span class="ss au" title="Austin">${lscFmtPts(x.au)}</span>` : ""}<span class="nm">${escapeHtml(FMT_TAB[x.format] || x.label)}${x.live ? ' <i class="lv">LIVE</i>' : ""}</span>${x.started ? `<span class="ss sa" title="San Antonio">${lscFmtPts(x.sa)}</span>` : ""}</button>`).join("")}</div>` : "";
         let body = "";
         if (cur) {
             const segV = `<div class="lsc-bd-seg sm" role="tablist">${["matches", "skins"].map(v =>

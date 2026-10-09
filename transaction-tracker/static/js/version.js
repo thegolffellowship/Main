@@ -1,5 +1,17 @@
-window.TGF_VERSION = "2.528.11";
+window.TGF_VERSION = "2.528.12";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.528.12",
+    date: "2026-10-08",
+    title: "Lone Star Cup tab: scores on the session buttons, one joined header block, pinned under a full-width sub nav, Cup logo",
+    changes: [
+      "Kerry 10/8: \"session scoring would go left and right of FOURBALL and would persist once completed, but FOURSOMES score wouldn't show until that session was started.\" Each session button carries its own score, Austin left and San Antonio right, once a match in that session has started; it stays after the session is done.",
+      "\"Lose white space between lone star cup header and team scores and session toggles by connecting them directly under the others.\" With the board on, the Cup header, the team scores and the session toggle read as one block with no gaps.",
+      "\"Move the lone star cup header up under the sub nav bar and the sub nav bar under the top nav bar ... The sub nav could be full width, but the pages still centered.\" The Cup header now pins under the sub nav, which pins under the top bar (prPinBars). The sub nav's bar runs the full window width while its tabs and the page stay centred. On a phone the pinned header is slimmer.",
+      "\"I'd also like to introduce the new logo rather than the trophy.\" The Cup logo replaces the trophy icon in the header.",
+      "\"Remove everything below the matches from member view.\" On the member page, once the board is showing, the team rosters and the seat notes below the matches are hidden."
+    ]
+  },
   {
     version: "2.528.11",
     date: "2026-10-08",
