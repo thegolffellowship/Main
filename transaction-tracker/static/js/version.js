@@ -1,5 +1,14 @@
-window.TGF_VERSION = "2.531.0";
+window.TGF_VERSION = "2.531.1";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.531.1",
+    date: "2026-10-09",
+    title: "Leaderboard: no WON column without games; the field isn't complete while anyone is still to tee off",
+    changes: [
+      "Kerry 10/9: \"Won column shouldn't show at all if there aren't any side games\". An event with no games (the practice round) shows no WON column and no 'money shows after…' notice.",
+      "Kerry 10/9: the WON column shouldn't appear \"until all scores are completed\". The board counted only players who had posted a score, so his group finishing all 18 made the field look complete while 11 players hadn't teed off. A player still to tee off now counts as every hole outstanding, on the event board and on the events list, so money, win tints and WON stay held until the whole roster is in. Guards: test_board_entry_mode.py, test_events_board.js."
+    ]
+  },
   {
     version: "2.531.0",
     date: "2026-10-09",

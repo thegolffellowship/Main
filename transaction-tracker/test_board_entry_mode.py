@@ -216,6 +216,19 @@ check("players with no score yet are listed with their tee time",
       [(x["customer_id"], x["tee_time"]) for x in w] == [(302, "1:50 PM")], w)
 check("a player who has posted is not waiting", all(x["customer_id"] not in (301, 303) for x in w))
 check("the name is the customer's own", w and w[0]["player_name"] == "Adam Baker", w)
+# Kerry 10/9: the WON column "should[n't] appear anyway until all scores are
+# completed" -- a finished card is not a finished field while anyone on the
+# roster hasn't teed off
+se.write_scores(g3id, "dev3", 301, [{"op_id": f"q{h}-{cid}", "hole": h, "gross": 4, "customer_id": cid}
+                                     for h in range(1, 19) for cid in (301, 303)], db_path=DB)
+d3c = db.get_event_leaderboard(NAME3, db_path=DB) or {}
+check("every posted card done but a player still to tee off: the field is NOT complete",
+      d3c.get("field_complete") is False and d3c.get("money_visible") is False
+      and any(p.get("player") == "Adam Baker" and p.get("holes") == 0 for p in d3c.get("scores_pending") or []),
+      (d3c.get("field_complete"), d3c.get("scores_pending")))
+check("...and the events list agrees", lst().get(EV3, {}).get("field_complete") is False, lst().get(EV3))
+check("...and only because of him (the posted cards are complete)",
+      [p.get("player") for p in d3c.get("scores_pending") or []] == ["Adam Baker"], d3c.get("scores_pending"))
 check("a Tracker-only event is not marked Golf Genius scored", L.get(EV3, {}).get("gg_scored") is False, L.get(EV3))
 check("an event with GG cards is", lst().get(EV, {}).get("gg_scored") is True, lst().get(EV))
 

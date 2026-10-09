@@ -14354,6 +14354,16 @@ def get_events_leaderboard(chapter: str | None = None,
                 if r.get("live_entry"):
                     conn.execute("DROP TABLE IF EXISTS temp.scoring_rounds")
                     conn.execute("DROP TABLE IF EXISTS temp.scoring_holes")
+            # players still to tee off are out too (Kerry 10/9)
+            if r.get("live_entry"):
+                try:
+                    from email_parser import entry_publish as _ep_w
+                    _wt = _ep_w.live_waiting(conn, r["id"], db_path=db_path)
+                except Exception:
+                    logger.exception("Non-fatal: waiting list unavailable for %s", r["id"])
+                    _wt = []
+                if _wt:
+                    _fc = {**_fc, "complete": False, "pending": _fc["pending"] + _wt}
             r["field_complete"] = _fc["complete"]
             r["players_pending"] = len(_fc["pending"])
             if not _fc["complete"]:
@@ -14665,6 +14675,16 @@ def get_event_leaderboard(event_name: str,
 
         money_visible, money_at, money_reason = True, None, None
         field_state = _event_field_complete(conn, ev["id"], ev["holes"])
+        # A PLAYER WHO HASN'T TEED OFF IS STILL OUT (Kerry 10/9: the WON
+        # column "should[n't] appear anyway until all scores are completed").
+        # The field above counts only players with a card; the waiting rows
+        # are the rest of the roster, every hole still to come.
+        if waiting:
+            _want = field_state.get("holes_wanted") or int(ev["holes"] or 0) or 9
+            field_state["pending"] = field_state["pending"] + [
+                {"player": w.get("player_name"), "holes": 0, "of": _want} for w in waiting]
+            field_state["holes_needed"] += len(waiting) * _want
+            field_state["complete"] = False
         if not field_state["complete"]:
             money_visible, money_reason = False, "scores"
         elif last_score_at and _hold > 0:

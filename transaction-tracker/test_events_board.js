@@ -614,5 +614,8 @@ const sorted = evlbBoardBody(nid);
 ck('re-sorted body still has both bands', (sorted.match(/class="evlb-band"/g)||[]).length===2);
 ck('blank Won rows sink (rank blank)', /<td><\/td>/.test(sorted));
 
+// Kerry 10/9: "Won column shouldn't show at all if there aren't any side games"
+ck('no WON column on a no-games event', /d\._moneyHeld \|\| evlbNoGames\(d\) \? " no-won"/.test(src));
+ck('no money notice on a no-games event', /function evlbMoneyNotice\(d\) \{\s*if \(!d \|\| !d\._moneyHeld \|\| evlbNoGames\(d\)\) return ""/.test(src));
 console.log(fails ? `\n${fails} FAILURE(S)` : '\nALL PASS');
 process.exit(fails?1:0);

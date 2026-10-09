@@ -806,3 +806,13 @@ feed payouts yet (task: Tracker-only payouts before the 10/13 closeouts).
   (`score_entry.html` teeOf) outlines a woman only when `t.ring`.
 - The leaderboard's tee key adds the band tees of players still waiting, so
   every dot has a key.
+
+## WON column and the field — v2.531.1 (Kerry 10/9)
+
+- No WON column (and no money notice) on an event with no games
+  (`evlbNoGames(d)` adds `no-won`). Kerry: "Won column shouldn't show at all if
+  there aren't any side games".
+- `field_complete` counts the waiting rows (`entry_publish.live_waiting`): a
+  rostered player with no score is a player with every hole outstanding, on
+  `get_event_leaderboard` and on the `get_events_leaderboard` list. Before
+  this, one finished group made a live field look complete.

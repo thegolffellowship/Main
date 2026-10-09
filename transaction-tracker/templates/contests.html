@@ -3613,7 +3613,7 @@
     });
     document.addEventListener("keydown", (e) => { if (e.key === "Escape") evlbCloseGuide(); });
     function evlbMoneyNotice(d) {
-        if (!d || !d._moneyHeld) return "";
+        if (!d || !d._moneyHeld || evlbNoGames(d)) return "";   // no games, no money to wait for
         const mins = d.money_hold_minutes || 10;
         // TWO reasons the money is held, and the manager needs to know
         // which (Kerry 2026-09-15: "Not all scores are in. Every hole
@@ -4256,7 +4256,9 @@
                 ? `<label class="evlb-holetog"><input type="checkbox" data-ovr-all${evlbShowAll ? " checked" : ""}> Show All Players</label>`
                 : "") +
             `</div>` + evlbTeeLegend(d) + `</div>` +
-            `<div class="evlb-scroll"><table class="evlb-holes evlb-ovr${showHoles ? "" : " no-holes"}${evlbShowHcp ? "" : " no-hcp"}${d._moneyHeld ? " no-won" : ""}" data-board="${id}"><thead>` +
+            // no WON column on an event with no games (Kerry 10/9: "Won
+            // column shouldn't show at all if there aren't any side games")
+            `<div class="evlb-scroll"><table class="evlb-holes evlb-ovr${showHoles ? "" : " no-holes"}${evlbShowHcp ? "" : " no-hcp"}${d._moneyHeld || evlbNoGames(d) ? " no-won" : ""}" data-board="${id}"><thead>` +
             `<tr><th data-k="${board.netCol === false ? "gross" : "net"}" class="sortable">#</th>` +
             `<th data-k="player" class="nm sortable">Player</th>` +
             // Won sits right of the name (Kerry 2026-09-13) — the money
