@@ -146,7 +146,28 @@ check("no gaps", sc["gaps"] == [], sc["gaps"])
 check("one card per fourball/foursomes match, singles two matches a card",
       [c["lsc"]["title"] for c in sc["cards"]] == ["FOURBALL", "FOURSOMES", "SINGLES", "SINGLES"]
       and [len(c["rows"]) for c in sc["cards"]] == [4, 4, 4, 2], [len(c["rows"]) for c in sc["cards"]])
-check("the Cup prints no QR and no GGID", all(c["qr"] is None and c["ggid"] is None for c in sc["cards"]))
+check("the Cup prints no GGID", all(c["ggid"] is None for c in sc["cards"]))
+check("with no scoring groups seeded, a Cup card prints no QR (and says so)",
+      all(c["qr"] is None for c in sc["cards"]) and any("Cup QR: no live-scoring groups" in x for x in sc["log"]), sc["log"])
+# Kerry 10/9: "The cup scorecards have to carry qr codes" -- each card the
+# QR of the live-scoring group its players sit in (the cart sign's link)
+from email_parser import score_entry as _se
+_cg = lsc_cup.cup_print_groups(3329, db_path=DB)["groups"]
+def _fake_signs(eid, base_url=None, db_path=None, round_key_prefix="lsc:"):
+    by = {}
+    for g in _cg:
+        by.setdefault(g["session"], []).append({"url": f"https://x/member/score?t=G{g['group_num']}",
+            "players": [{"customer_id": p["customer_id"]} for p in g["players"]]})
+    return {"rounds": [{"session": k, "groups": v} for k, v in by.items()]}
+_orig_signs, _se.cup_sign_sheets = _se.cup_sign_sheets, _fake_signs
+sq = scm.build_scorecards(3329, "3up", "team", qr="on", db_path=DB)
+_se.cup_sign_sheets = _orig_signs
+check("every Cup card carries its own group's scorer QR, in Cup navy",
+      [((c["qr"] or {}).get("url") or "").split("t=")[-1] for c in sq["cards"]]
+      == [f"G{g['group_num']}" for g in _cg] and all("002855" in ((c["qr"] or {}).get("svg") or "") for c in sq["cards"]),
+      [(c["qr"] or {}).get("url") for c in sq["cards"]])
+sq_off = scm.build_scorecards(3329, "3up", "team", qr="off", db_path=DB)
+check("qr=off still prints none", all(c["qr"] is None for c in sq_off["cards"]))
 f4 = sc["cards"][0]
 check("fourball seats: Austin rows 1-2, SA rows 3-4, team bars in the team colours",
       [r["team"] for r in f4["rows"]] == ["austin", "austin", "sa", "sa"]

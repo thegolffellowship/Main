@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.532.14";
+window.TGF_VERSION = "2.532.15";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.532.15",
+    date: "2026-10-09",
+    title: "Cup scorecards carry the group's scorer QR",
+    changes: [
+      "Kerry 10/9: \"The cup scorecards have to carry qr codes.\" Every Lone Star Cup scorecard now prints its group's live-scoring QR (in Cup navy), the same link as that group's cart sign: each card is matched to the scoring group its players sit in (Sunday's two-match cards included). Before, the Cup cards printed no code at all. A card whose players can't be matched prints no code and the print log says why."
+    ]
+  },
   {
     version: "2.532.14",
     date: "2026-10-09",

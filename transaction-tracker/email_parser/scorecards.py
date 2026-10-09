@@ -234,6 +234,7 @@ def build_scorecards(event_id: int, layout: str = "3up", grouping: str = "team",
     except Exception:  # noqa: BLE001
         lsc = None
     lsc_sessions = []
+    cup_links: dict = {}
     if lsc:
         grouping = "team"   # one card per group in every LSC format (#1467 §4)
     if lsc and lsc["kind"] == "cup":
@@ -243,7 +244,22 @@ def build_scorecards(event_id: int, layout: str = "3up", grouping: str = "team",
         gaps += cg["gaps"]
         log += cg["log"]
         lsc_sessions = cg["sessions"]
-        qr = "off"   # the Cup's scorer QR is on its cart signs
+        # THE CUP'S CARDS CARRY THE SCORER QR (Kerry 10/9: "The cup scorecards
+        # have to carry qr codes"), the same link as the group's cart sign:
+        # each card maps to the live-scoring group its players sit in.
+        if qr != "off":
+            try:
+                from email_parser.score_entry import cup_sign_sheets
+                _sh = cup_sign_sheets(int(event_id), db_path=db_path,
+                                      round_key_prefix="lscprev:" if preview else "lsc:")
+                for _r in _sh.get("rounds") or []:
+                    for _g in _r.get("groups") or []:
+                        for _p in _g.get("players") or []:
+                            cup_links[(_r.get("session"), int(_p["customer_id"]))] = _g.get("url")
+            except Exception as e:  # noqa: BLE001
+                log.append(f"Cup QR unavailable: {str(e)[:120]}")
+            if not cup_links:
+                log.append("Cup QR: no live-scoring groups for these matches yet; the cards print no code.")
         if not cg["groups"] and not cg["gaps"]:
             gaps.append("The Cup has no drawn matches" + (f" for {session}" if session else "")
                         + " yet. Draw them on the Cup Draw page, or print the staff preview.")
@@ -513,6 +529,16 @@ def build_scorecards(event_id: int, layout: str = "3up", grouping: str = "team",
                 "qr": None, "ggid": None if lsc else g.get("ggid"),
                 "lsc": _lsc_card(fmt, g, ev, hk == "18") if (lsc and fmt) else None}
         url = (links.get(g["holes"]) or {}).get(g["group_num"]) if qr_on else None
+        if cup_links and g.get("session"):
+            # a Cup card: its players' live-scoring group (all on one card share it)
+            _urls = {cup_links.get((g["session"], int(p["customer_id"]))) for p in g.get("players") or []
+                     if p.get("customer_id")}
+            _urls.discard(None)
+            url = _urls.pop() if len(_urls) == 1 else None
+            if len(_urls) > 0:
+                log.append(f"Group {g['group_num']}: players sit in more than one scoring group; QR left off.")
+            elif not url:
+                log.append(f"Group {g['group_num']}: no scorer link found for this card.")
         if url:
             from email_parser.score_entry import qr_svg
             # the Cup's cards print the QR in its navy (Kerry 10/8)

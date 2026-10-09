@@ -891,3 +891,10 @@ On `/member/score/board?t=` for a Cup round (`window.SOLO_CUP`):
    - On the scorer's LEADERBOARD, the EVENT INFO pane's Download PDF / Share are hidden.
 4. Guards: `test_cup_signs.py` fails on any `href="/..."` page link in score_entry.html.
 
+**Cup scorecards carry the scorer QR (v2.532.15, Kerry 10/9: "The cup scorecards have to carry qr codes").**
+- `scorecards.build_scorecards` no longer forces `qr="off"` for the Cup.
+- It reads `score_entry.cup_sign_sheets` (the cart signs' own links) and gives each card the URL of the live-scoring group its players sit in, keyed by (session, customer_id). The QR prints in Cup navy.
+- A card whose players span groups, or that has no group, prints no code, with a log line.
+- `qr="off"` still prints none.
+- Guard: `test_lsc_scorecards.py`.
+
