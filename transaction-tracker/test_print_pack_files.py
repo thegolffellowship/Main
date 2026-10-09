@@ -45,5 +45,11 @@ src = open("mcp_server.py", encoding="utf-8").read()
 check("the bridge takes |files and builds with the scorecards forced in",
       'parts[1].lower() == "files"' in src and "force_scorecards=True" in src)
 
+app_src = open("app.py", encoding="utf-8").read()
+check("the Cup prints its own per-session files (starter sheet, 3e cart signs, QR scorecards)",
+      'parts[1].lower() == "cup-files"' in src and "def build_cup_print_files(" in app_src
+      and '"lsc_starter_sheet.html"' in app_src and 'cup_cart_signs_data(int(event_id), session_id=sid)' in app_src
+      and 'build_scorecards(int(event_id), "3up", "team", qr="on", session=sid)' in app_src)
+
 print("\n" + ("ALL PASS" if not F else f"{len(F)} FAILURE(S): " + "; ".join(F)))
 sys.exit(1 if F else 0)

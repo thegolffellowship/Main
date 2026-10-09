@@ -5744,6 +5744,68 @@ def _print_pack_render(template, **ctx):
         return render_template(template, **ctx)
 
 
+CUP_FILE_SESSIONS = (("sat-am", "SatAM-Fourball"), ("sat-pm", "SatPM-Foursomes"), ("sun", "Sun-Singles"))
+
+
+def build_cup_print_files(event_id: int, sessions=None) -> dict:
+    """THE CUP'S PRINT FILES, one PDF per report per session (Kerry 10/9:
+    Saturday and Sunday "Yes send them", separate files for the course).
+    Each session gets the Cup's own Starter Sheet (lsc_starter), its design
+    3e Cart Signs (cup_cart_signs_data) and its Scorecards with the group
+    QR (build_scorecards, session=). The general print pack prints the
+    regular TGF sheets for the Cup, so it is not used here.
+    {"files": [(filename, pdf bytes)], "parts", "problems", "event"}."""
+    from email_parser import lsc_starter
+    from email_parser.scorecards import build_scorecards
+    from email_parser.print_pack import _render_pdf_chromium
+    from email_parser.database import print_file_stub, get_all_events
+    ev = next((e for e in get_all_events() if e["id"] == int(event_id)), None)
+    if not ev:
+        return {"error": "event not found"}
+    stub = print_file_stub(ev) or f"event-{event_id}"
+    want = [s for s in CUP_FILE_SESSIONS if not sessions or s[0] in sessions]
+    htmls, names, problems = [], [], []
+    for sid, label in want:
+        s = lsc_starter.build(int(event_id), session_id=sid)
+        if s:
+            htmls.append((f"{sid}-starter", _print_pack_render("lsc_starter_sheet.html", s=s)))
+            names.append(f"{stub}-{label}-StarterSheet.pdf")
+        else:
+            problems.append(f"{sid}: no starter sheet")
+        cs = cup_cart_signs_data(int(event_id), session_id=sid)
+        if cs.get("error") or not cs.get("count"):
+            problems.append(f"{sid}: no cart signs ({cs.get('error') or 'none drawn'})")
+        else:
+            problems += [f"{sid} cart signs: {p}" for p in cs.get("problems") or []]
+            if not cs.get("qr_on"):
+                problems.append(f"{sid} cart signs: QR off (score_entry_qr dial)")
+            htmls.append((f"{sid}-signs", _print_pack_render("cup_cart_signs.html", d=cs)))
+            names.append(f"{stub}-{label}-CartSigns.pdf")
+        sc = build_scorecards(int(event_id), "3up", "team", qr="on", session=sid)
+        if not sc or sc.get("gaps"):
+            problems.append(f"{sid}: scorecards not printed ({(sc or {}).get('gaps')})")
+        else:
+            nq = sum(1 for c in sc["cards"] if c.get("qr"))
+            if nq != len(sc["cards"]):
+                problems.append(f"{sid} scorecards: {len(sc['cards']) - nq} card(s) without a QR")
+            htmls.append((f"{sid}-scorecards", _print_pack_render("scorecards.html", sc=sc)))
+            names.append(f"{stub}-{label}-Scorecards.pdf")
+    if not htmls:
+        return {"error": "nothing to print", "problems": problems}
+    import io
+    from pypdf import PdfReader, PdfWriter
+    pdf, parts, _engine = _render_pdf_chromium(htmls, app.static_folder)
+    reader, at, files = PdfReader(io.BytesIO(pdf)), 0, []
+    for name, part in zip(names, parts):
+        w = PdfWriter()
+        for pg in reader.pages[at:at + part["pages"]]:
+            w.add_page(pg)
+        at += part["pages"]
+        buf = io.BytesIO(); w.write(buf)
+        files.append((name, buf.getvalue()))
+    return {"files": files, "parts": parts, "problems": problems, "event": ev}
+
+
 def build_print_pack_for_event(event_id: int, allow_gaps: bool = False,
                                force_scorecards: bool = False) -> dict | None:
     from email_parser.print_pack import build_event_print_pack

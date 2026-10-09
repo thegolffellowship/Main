@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.532.15";
+window.TGF_VERSION = "2.532.16";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.532.16",
+    date: "2026-10-09",
+    title: "Cup print files: each session's starter sheet, cart signs and QR scorecards as separate PDFs",
+    changes: [
+      "Kerry 10/9, on the Saturday and Sunday print files: \"Yes send them.\" The Cup's print files now come out per session (Sat AM Fourball, Sat PM Foursomes, Sun Singles), each as three PDFs: the Cup Starter Sheet, the design 3e Cart Signs with the group QR, and the Scorecards with the group QR. The general print pack would have printed the regular TGF sheets for the Cup. Bridge scoring-print-pack-pdf:<cup>|cup-files|send."
+    ]
+  },
   {
     version: "2.532.15",
     date: "2026-10-09",

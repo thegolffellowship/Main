@@ -5567,6 +5567,22 @@ def _scoring_dispatch_inner(url: str, extract: str):
                                   indent=2)
             parts = [p.strip() for p in (arg or "").split("|")]
             from app import build_print_pack_for_event
+            if len(parts) > 1 and parts[1].lower() == "cup-files":
+                # scoring-print-pack-pdf:<cup id>|cup-files[|send[|<to>]] — the
+                # Cup's own Starter Sheet / Cart Signs / Scorecards (QR) per
+                # session, one PDF each (Kerry 10/9: send Saturday and Sunday)
+                from app import build_cup_print_files
+                from email_parser.print_pack import send_print_pack_files
+                cf = build_cup_print_files(int(parts[0]))
+                if cf.get("error"):
+                    return json.dumps(cf, default=str)
+                out = {"files": [{"filename": f, "bytes": len(b)} for f, b in cf["files"]],
+                       "problems": cf["problems"]}
+                if len(parts) > 2 and parts[2].lower() == "send":
+                    db.log_agent_action("mcp-claude", "scoring-print-pack-pdf", arg)
+                    out["send"] = send_print_pack_files({"event": cf["event"]}, files=cf["files"],
+                                                        to_address=(parts[3] if len(parts) > 3 else None))
+                return json.dumps(out, indent=2, default=str)
             if len(parts) > 1 and parts[1].lower() == "files":
                 # scoring-print-pack-pdf:<id>|files[|send[|<to>]] — every
                 # report as its OWN PDF, scorecards included (Kerry 10/9:

@@ -478,11 +478,13 @@ def split_print_pack(built: dict) -> list[tuple[str, bytes]]:
     return out
 
 
-def send_print_pack_files(built: dict, to_address: str | None = None, db_path=None) -> dict:
+def send_print_pack_files(built: dict, to_address: str | None = None, db_path=None,
+                          files: list | None = None) -> dict:
     """Mail every report of a built pack as its OWN PDF attachment, one
-    email. Does not touch the evening-before pack's sent hash."""
+    email. Does not touch the evening-before pack's sent hash. ``files``
+    ([(name, bytes)]) sends those instead of splitting a bound pack."""
     from email_parser.fetcher import send_mail_graph
-    files = split_print_pack(built)
+    files = files if files is not None else split_print_pack(built)
     to_address = to_address or print_pack_recipient(built.get("event"), db_path=db_path)
     creds = {k: os.getenv(k) for k in ("AZURE_TENANT_ID", "AZURE_CLIENT_ID",
                                        "AZURE_CLIENT_SECRET", "EMAIL_ADDRESS")}
