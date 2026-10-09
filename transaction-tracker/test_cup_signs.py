@@ -233,5 +233,10 @@ check("an empty card opens on its starting hole; a cleared card drops holes queu
       "const saved = empty ? null : store.get(K.hole, null);" in sep
       and "Date.parse(o.client_ts) <= cut" in sep and "(card.cleared_at || null) !== prevClr" in sep)
 
+# Kerry 10/9: "The orange text up top should just have PRACTICE ROUND | DATE"
+check("the Cup's practice-round card heads PRACTICE ROUND (| date on the landing)",
+      'const practiceEyebrow = () => document.body.classList.contains("lsc") && !cupSession() ? "Practice Round" : null;' in sep
+      and 'cupEyebrow() || practiceEyebrow() ||' in sep and '"Practice Round" + (card.round_date ? " | " + dt(card.round_date) : "")' in sep)
+
 print("\n" + ("ALL PASS" if not F else f"{len(F)} FAILURE(S): " + "; ".join(F)))
 sys.exit(1 if F else 0)

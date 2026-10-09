@@ -1,5 +1,13 @@
-window.TGF_VERSION = "2.532.13";
+window.TGF_VERSION = "2.532.14";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.532.14",
+    date: "2026-10-09",
+    title: "Practice round card: heading reads PRACTICE ROUND | date",
+    changes: [
+      "Kerry 10/9: \"The orange text up top should just have PRACTICE ROUND | DATE.\" The Lone Star Cup practice round's scoring card no longer shows the event name and course in its orange heading: the landing screen reads \"PRACTICE ROUND | OCT 9, 2026\" and the scoring screens read \"PRACTICE ROUND\". Cup cards keep MATCH # | FORMAT; other events are unchanged."
+    ]
+  },
   {
     version: "2.532.13",
     date: "2026-10-09",
