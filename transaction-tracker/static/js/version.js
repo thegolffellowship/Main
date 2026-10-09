@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.527.5";
+window.TGF_VERSION = "2.527.6";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.527.6",
+    date: "2026-10-08",
+    title: "Cup scorecards: navy Par / SI labels and PH / NET corner, centred Init; capital LAST names on every Cup player but Walter",
+    changes: [
+      "Kerry 10/8, on the practice-round scorecard: \"Fill in the top right cells for PH/NET in Navy. Not needed. Center the INIT cell contents. Turn the PAR & STROKE INDEX cells (4 of them) to navy with white text.\" On Cup cards, the PH / NET cells above the players are solid navy. The Init column (tee codes, Par, SI) is centred. The Par and Stroke Index label cells are navy with white text.",
+      "The Cup card header line (COURSE · DATE) shrinks to fit beside the QR, so \"The Hideout Golf Club & Resort\" and the date print whole.",
+      "Kerry 10/8: \"BARSTOW, J JENKINS and WETZ are all either members or alumni and should be last name caps. Only player not either member or alumni is Walter Hogue.\" New dial lsc_member_ruling (guests: Walter Hogue): THE DRAW and the Cup / practice starter sheets print a capital LAST name for every Cup player except the guests named (lsc_cup.member_or_alumni). Guard: test_lsc_draw.py."
+    ]
+  },
   {
     version: "2.527.5",
     date: "2026-10-08",

@@ -160,10 +160,8 @@ def build(event_id: int, session_id: str | None = None, preview: bool = False,
     cids = sorted({int(p["customer_id"]) for g in groups for p in g["players"] if p.get("customer_id")})
     with db._connect(db_path) as conn:
         names = _names(conn, cids)
-        try:
-            status = db.derive_member_financial_status_bulk(conn, cids) if cids else {}
-        except Exception:
-            status = {}
+    from email_parser.lsc_cup import member_or_alumni
+    caps_set = member_or_alumni(event_id, cids, db_path)
     for g in groups:
         for p in g["players"]:
             first, last = names.get(int(p["customer_id"]), ("", "")) if p.get("customer_id") else ("", "")
@@ -171,7 +169,8 @@ def build(event_id: int, session_id: str | None = None, preview: bool = False,
                 parts = (p.get("name") or "").split()
                 first, last = (" ".join(parts[:-1]), parts[-1]) if len(parts) > 1 else ("", p.get("name") or "")
             # #1481 §5D: members and alumni get an uppercase LAST name
-            caps = status.get(int(p["customer_id"])) in ("member", "alumni") if p.get("customer_id") else False
+            # (+ Kerry's Cup roster ruling, lsc_cup.member_or_alumni)
+            caps = int(p["customer_id"]) in caps_set if p.get("customer_id") else False
             p["first"], p["last"] = first, (last.upper() if caps else last)
             p["team_color"] = TEAM_COLOR.get(p.get("team") or "")
             if fmt and fmt != "practice" and not p["team_color"]:

@@ -1610,6 +1610,42 @@ def cup_print_groups(event_id: int, session_id: str | None = None, preview: bool
     return {"groups": groups, "gaps": gaps, "log": log, "sessions": sessions}
 
 
+def member_or_alumni(event_id: int, cids, db_path=None) -> set:
+    """WHO PRINTS A CAPITAL LAST NAME on the Cup's pages (the #1481 §5D
+    standard: members and alumni). The derived status
+    (`derive_member_financial_status_bulk`), plus Kerry's roster ruling in
+    the `lsc_member_ruling` dial: {"<cup event>": {"guests": [cid, ...]}},
+    meaning every player in the Cup's handicap lock is a member or alumni
+    except the guests named. Kerry 10/8: "BARSTOW, J JENKINS and WETZ are all
+    either members or alumni and should be last name caps. Only player not
+    either member or alumni is Walter Hogue" (some are dormant-DFW players
+    with no membership on file). Works for the Cup and its practice round."""
+    from email_parser import database as db
+    cids = [int(c) for c in cids if c]
+    out = set()
+    if not cids:
+        return out
+    try:
+        with db._connect(db_path) as conn:
+            st = db.derive_member_financial_status_bulk(conn, cids)
+        out = {c for c in cids if st.get(c) in ("member", "alumni")}
+    except Exception:
+        pass
+    ctx = lsc_report_context(int(event_id), db_path=db_path)
+    if not ctx:
+        return out
+    cup = str(ctx["cup_event_id"])
+    try:
+        ruling = (json.loads(db.get_app_setting("lsc_member_ruling", db_path=db_path) or "{}").get(cup)) or {}
+        lock = ((json.loads(db.get_app_setting("lsc_handicap_lock", db_path=db_path) or "{}").get(cup)) or {}).get("players") or {}
+    except (ValueError, TypeError):
+        return out
+    if "guests" in ruling:
+        guests = {int(g) for g in ruling.get("guests") or []}
+        out |= {c for c in cids if str(c) in lock and c not in guests}
+    return out
+
+
 def lsc_card_math(fmt: str, rows: list[dict]) -> list[dict]:
     """The handicap cell for one Cup card (#1467 §4/§5), from the engine's
     own allowance math (`session_handicaps`, so the card and the board

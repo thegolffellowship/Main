@@ -613,6 +613,16 @@ the Starter Sheet logo and Proxy logos too."
   land/clear). It shows FULL = the lock's ch, and PLAYING plus OFF from
   `lsc_cup.lsc_card_math`, the cards' own engine: Fourball 90% per player,
   Singles 100%, Foursomes one TEAM figure (60/40).
+- **Capital LAST names (v2.527.6):** `lsc_cup.member_or_alumni(event_id,
+  cids)` adds the derived member/alumni status to the dial
+  `lsc_member_ruling` = {"3329": {"guests": [834]}}. Kerry 10/8: every Cup
+  player is a member or alumni except Walter Hogue; Wetz, Barstow and Julius
+  Jenkins have no membership on file. THE DRAW and the LSC starter sheet
+  read it.
+- **Cup card details (v2.527.6):** the PH / NET cells above the players
+  (`td.nn`) are solid navy, the Init column (`td.ic`) is centred, the Par
+  and SI labels (`td.lbl`) are navy with white text, and the header line
+  shrinks to fit beside the QR.
 - **THE DRAW splash (v2.527.2):** the splash under the logo shows the
   weekend's dates (`lsc_draw.dates_label`, from the practice round and the
   dial's sessions, e.g. OCTOBER 9–11, 2026), sitting closer to the logo.

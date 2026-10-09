@@ -128,6 +128,11 @@ cl.post("/api/auth/login", json={"pin": "4242"})
 h = cl.get("/events/3329/cup-draw")
 _k = next(e for e in P["sg"]["low"]["sa"] if e["key"] == "18")
 check("members and alumni print a capital LAST name (Kerry 10/8)", _k["label"] == "Kerry NIESTER" and _k["names"] == ["Kerry NIESTER"], _k)
+db.set_app_setting("lsc_member_ruling", json.dumps({"3329": {"guests": [834]}}), db_path=DB)
+_sg = {e["key"]: e["label"] for t in ("austin", "sa") for pl_ in ("low", "high")
+       for e in lsc_draw.pools(3329, db_path=DB)["sg"][pl_][t]}
+check("Kerry's ruling: every Cup player is a member or alumni except Walter Hogue",
+      _sg["672"] == "David WETZ" and _sg["834"] == "Walter Hogue" and _sg["18"] == "Kerry NIESTER", _sg)
 check("the page renders for admin with the live entrants", h.status_code == 200 and "Kerry NIESTER" in h.get_data(as_text=True))
 r = cl.post("/api/events/3329/cup-draw/land", json={"session": "fb", "pool": "low", "a": "AUS-P2", "s": "SA-P2"})
 check("POST land writes and returns the new state", r.status_code == 200 and r.get_json()["state"]["fb"]["low"] == [["AUS-P2", "SA-P2"]], r.get_json())

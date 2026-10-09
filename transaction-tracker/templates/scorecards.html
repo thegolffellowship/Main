@@ -266,6 +266,13 @@
     .card.lsc tr.par td, .card.lsc tr.hcp td { background: #ECEFF3; }
     .card.lsc tr.par td.hl, .card.lsc tr.hcp td.hl { background: #FFF176; }
     .card.lsc tr.par td.lead, .card.lsc tr.hcp td.lead { text-align: right; }
+    /* Kerry 10/8: the PH / NET cells above the players "Not needed" (navy
+       fill); "Center the INIT cell contents"; "Turn the PAR & STROKE INDEX
+       cells (4 of them) to navy with white text". */
+    .card.lsc tr td.nn { background: var(--lsc-navy); border-color: var(--lsc-navy); }
+    .card.lsc tr td.lead.ic { text-align: center; padding-left: 0; padding-right: 0; }
+    .card.lsc tr.par td.lbl, .card.lsc tr.hcp td.lbl { background: var(--lsc-navy); color: #fff;
+      border-color: #4A6285; }
     /* the rounded grid: each panel's box carries the heavy outline; the
        table sits 1px outside it so its own edge lines are clipped */
     .card.lsc .tw { border: 2px solid var(--lsc-navy); overflow: hidden; }
@@ -397,7 +404,8 @@
       <div class="brand"><img src="/static/lsc-logo.png" alt="Lone Star Cup"></div>
       <div class="mid">
         <div class="course">{{ L.title }}</div>
-        <div class="lsc-sub"><b>{{ sc.lsc.course }}</b><span class="sep"> &middot; </span><span class="d">{{ L.date }}</span></div>
+        {% set _sl = (sc.lsc.course|length) + (L.date|length) + 3 %}{% set _cap = 44 if c.qr else 56 %}
+        <div class="lsc-sub"{% if _sl > _cap %} style="font-size:{{ '%.2f'|format(1.3 * _cap / _sl) }}em"{% endif %}><b>{{ sc.lsc.course }}</b><span class="sep"> &middot; </span><span class="d">{{ L.date }}</span></div>
       </div>
       {% else %}
       <div class="brand">
@@ -447,22 +455,22 @@
         <td class="lead thick" style="background:{{ t.bg }};color:{{ t.fg }}">{{ t.master }} ({{ t.rating }}/{{ t.slope }}{% if t.rating_extra %} · {{ t.rating_extra }}{% endif %})<span class="age">{{ t.band_text }}</span></td>
         {% for h in front %}<td class="{{ 'thick' if loop.last else '' }}" style="background:{{ t.bg }};color:{{ t.fg }}">{{ grid.yards.get(t.band, {}).get(h) or '' }}</td>{% endfor %}
         {% if is18 %}<td style="background:{{ t.bg }};color:{{ t.fg }}">{{ t.totals[c.holes].out }}</td>
-        {% else %}<td class="thick" style="background:{{ t.bg }};color:{{ t.fg }}">{{ t.totals[c.holes].total }}</td><td></td><td></td>{% endif %}
+        {% else %}<td class="thick" style="background:{{ t.bg }};color:{{ t.fg }}">{{ t.totals[c.holes].total }}</td><td class="nn"></td><td class="nn"></td>{% endif %}
       </tr>
       {% endfor %}
-      <tr class="par"><td class="lead thick">Par</td>
+      <tr class="par"><td class="lead thick lbl">Par</td>
         {% for h in front %}<td class="{{ 'hl' if c.hl_hole == h else '' }} {{ 'thick' if loop.last else '' }}">{{ grid.par.get(h, '') }}</td>{% endfor %}
-        {% if is18 %}<td class="sh">{{ grid.par_out }}</td>{% else %}<td class="thick">{{ grid.par_total }}</td><td></td><td></td>{% endif %}
+        {% if is18 %}<td class="sh">{{ grid.par_out }}</td>{% else %}<td class="thick">{{ grid.par_total }}</td><td class="nn"></td><td class="nn"></td>{% endif %}
       </tr>
-      <tr class="hcp"><td class="lead thick">{% if c.si_main_label %}SI · {{ c.si_main_label }}{% else %}Stroke Index{% endif %}</td>
+      <tr class="hcp"><td class="lead thick lbl">{% if c.si_main_label %}SI · {{ c.si_main_label }}{% else %}Stroke Index{% endif %}</td>
         {% for h in front %}<td class="{{ 'hl' if c.hl_hole == h else '' }} {{ 'thick' if loop.last else '' }}">{{ grid.si.get(h, '') }}</td>{% endfor %}
-        {% if is18 %}<td class="sh"></td>{% else %}<td class="thick"></td><td></td><td></td>{% endif %}
+        {% if is18 %}<td class="sh"></td>{% else %}<td class="thick"></td><td class="nn"></td><td class="nn"></td>{% endif %}
       </tr>
       {# The players' own tees' stroke index where it differs (Kerry 10/6). #}
       {% for x in c.si_extra or [] %}
-      <tr class="hcp si-extra"><td class="lead thick">SI · {{ x.label }}{% if x.band_text %} <span class="age">{{ x.band_text }}</span>{% endif %}</td>
+      <tr class="hcp si-extra"><td class="lead thick lbl">SI · {{ x.label }}{% if x.band_text %} <span class="age">{{ x.band_text }}</span>{% endif %}</td>
         {% for h in front %}<td class="{{ 'hl' if c.hl_hole == h else '' }} {{ 'thick' if loop.last else '' }}">{{ x.si.get(h, '') }}</td>{% endfor %}
-        {% if is18 %}<td class="sh"></td>{% else %}<td class="thick"></td><td></td><td></td>{% endif %}
+        {% if is18 %}<td class="sh"></td>{% else %}<td class="thick"></td><td class="nn"></td><td class="nn"></td>{% endif %}
       </tr>
       {% endfor %}
       {% for r in c.rows %}
@@ -496,24 +504,24 @@
       </tr>
       {% for t in sc.tees %}
       <tr class="tee">
-        <td class="lead thick" style="background:{{ t.bg }};color:{{ t.fg }}">{{ t.code }}</td>
+        <td class="lead thick ic" style="background:{{ t.bg }};color:{{ t.fg }}">{{ t.code }}</td>
         {% for h in back %}<td class="{{ 'thick' if loop.last else '' }}" style="background:{{ t.bg }};color:{{ t.fg }}">{{ grid.yards.get(t.band, {}).get(h) or '' }}</td>{% endfor %}
         <td class="thick" style="background:{{ t.bg }};color:{{ t.fg }}">{{ t.totals[c.holes]['in'] }}</td>
-        <td class="thick" style="background:{{ t.bg }};color:{{ t.fg }}">{{ t.totals[c.holes].total }}</td><td></td><td></td>
+        <td class="thick" style="background:{{ t.bg }};color:{{ t.fg }}">{{ t.totals[c.holes].total }}</td><td class="nn"></td><td class="nn"></td>
       </tr>
       {% endfor %}
-      <tr class="par"><td class="lead thick sh">Par</td>
+      <tr class="par"><td class="lead thick sh lbl ic">Par</td>
         {% for h in back %}<td class="{{ 'hl' if c.hl_hole == h else '' }} {{ 'thick' if loop.last else '' }}">{{ grid.par.get(h, '') }}</td>{% endfor %}
-        <td class="thick sh">{{ grid.par_in }}</td><td class="thick sh">{{ grid.par_total }}</td><td></td><td class="sh"></td>
+        <td class="thick sh">{{ grid.par_in }}</td><td class="thick sh">{{ grid.par_total }}</td><td class="nn"></td><td class="sh nn"></td>
       </tr>
-      <tr class="hcp"><td class="lead thick sh">SI</td>
+      <tr class="hcp"><td class="lead thick sh lbl ic">SI</td>
         {% for h in back %}<td class="{{ 'hl' if c.hl_hole == h else '' }} {{ 'thick' if loop.last else '' }}">{{ grid.si.get(h, '') }}</td>{% endfor %}
-        <td class="thick sh"></td><td class="thick sh"></td><td></td><td class="sh"></td>
+        <td class="thick sh"></td><td class="thick sh"></td><td class="nn"></td><td class="sh nn"></td>
       </tr>
       {% for x in c.si_extra or [] %}
-      <tr class="hcp si-extra"><td class="lead thick sh">SI</td>
+      <tr class="hcp si-extra"><td class="lead thick sh lbl ic">SI</td>
         {% for h in back %}<td class="{{ 'hl' if c.hl_hole == h else '' }} {{ 'thick' if loop.last else '' }}">{{ x.si.get(h, '') }}</td>{% endfor %}
-        <td class="thick sh"></td><td class="thick sh"></td><td></td><td class="sh"></td>
+        <td class="thick sh"></td><td class="thick sh"></td><td class="nn"></td><td class="sh nn"></td>
       </tr>
       {% endfor %}
       {% for r in c.rows %}
@@ -550,5 +558,12 @@
 </div>
 {% endif %}
 {{ sc_bar('margin-bottom:24px') }}
+<script>
+// the Cup header line (COURSE · DATE) shrinks until it fits beside the QR
+document.querySelectorAll('.lsc-sub').forEach(function (e) {
+  var f = parseFloat(getComputedStyle(e).fontSize), n = 0;
+  while (e.scrollWidth > e.clientWidth + 1 && n++ < 40) { f *= 0.97; e.style.fontSize = f + 'px'; }
+});
+</script>
 </body>
 </html>

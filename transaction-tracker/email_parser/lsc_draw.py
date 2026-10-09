@@ -88,7 +88,7 @@ def dates_label(event_id: int, db_path=None) -> str:
     return f"{a:%B} {a.day}, {a.year} \u2013 {b:%B} {b.day}, {b.year}".upper()
 
 
-def _display_names(cids, lock, db_path=None) -> dict:
+def _display_names(event_id, cids, lock, db_path=None) -> dict:
     """cid -> the lock's name with the LAST name in capitals for members and
     alumni (Kerry 10/8: "Make last names capitals for all members/alumni per
     standard", the #1481 §5D rule). The lock stays the Cup's spelling; the
@@ -103,15 +103,13 @@ def _display_names(cids, lock, db_path=None) -> dict:
             q = ",".join("?" * len(cids))
             lasts = {int(r[0]): (r[1] or "").strip() for r in conn.execute(
                 f"SELECT customer_id, last_name FROM customers WHERE customer_id IN ({q})", tuple(cids))}
-            try:
-                status = db.derive_member_financial_status_bulk(conn, list(cids))
-            except Exception:
-                status = {}
     except Exception:
         return out
+    from email_parser.lsc_cup import member_or_alumni
+    caps = member_or_alumni(event_id, cids, db_path)
     for c in cids:
         name = ((lock.get(str(c)) or {}).get("name") or "").strip()
-        if not name or status.get(int(c)) not in ("member", "alumni"):
+        if not name or int(c) not in caps:
             continue
         last = lasts.get(int(c)) or ""
         if last and re.search(r"\b" + re.escape(last) + r"\b", name, re.I):
@@ -133,7 +131,7 @@ def pools(event_id: int, db_path=None) -> dict:
     dial = _get(DIAL, db_path)
     lock = _lock_players(event_id, db_path)
 
-    shown = _display_names([int(c) for c in lock], lock, db_path)
+    shown = _display_names(event_id, [int(c) for c in lock], lock, db_path)
 
     def nm(c):
         return shown.get(int(c)) or (lock.get(str(c)) or {}).get("name") or f"#{c}"
