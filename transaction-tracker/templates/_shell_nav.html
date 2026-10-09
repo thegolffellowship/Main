@@ -70,28 +70,45 @@
         // header is sticky too, so the bar's top is the header's measured
         // height, re-measured whenever the header's size changes.
         var hdr = document.querySelector("header.shell-nav");
-        // MEASURED, not computed (Kerry 10/9: the leaderboard showed a band
-        // of empty space between the header and this bar on his iPhone): once
-        // the page has scrolled the sticky header sits where it pins, so the
-        // bar goes exactly at its rendered bottom, whatever the phone reports
-        // for the notch inset. At the top of the page the CSS sum is used.
+        // MEASURED AND SELF-CORRECTING (Kerry 10/9: the leaderboard showed a
+        // band of empty space, one notch inset tall, between the header and
+        // this bar on his iPhone, twice). The phone's sticky offsets and its
+        // safe-area inset do not always agree, so no sum of CSS values is
+        // trusted: the bar's top starts at the header's rendered bottom, then
+        // the bar's own rendered top is compared with that bottom and the
+        // difference is taken out. In the page's flow the bar already sits
+        // right under the header (difference 0), so this only ever moves a
+        // pinned bar. Pages that pin more below read window.SE_TOGGLE_BOTTOM
+        // and re-pin on the "se-toggle-placed" event.
         var place = function () {
-            if (!hdr) return;
+            if (!hdr || nav.hidden) return;
             var cs = getComputedStyle(hdr);
             var stuck = cs.position === "sticky" || cs.position === "fixed";
-            if (!stuck) { nav.style.top = "0px"; return; }
-            var top = (window.scrollY || 0) > 0 ? Math.round(hdr.getBoundingClientRect().bottom)
-                                                : hdr.offsetHeight + (parseFloat(cs.top) || 0);
+            var top;
+            if (!stuck) { top = 0; }
+            else {
+                var want = Math.round(hdr.getBoundingClientRect().bottom);
+                var cur = parseFloat(nav.style.top);
+                if (isNaN(cur)) { nav.style.top = want + "px"; cur = want; }
+                var off = Math.round(nav.getBoundingClientRect().top) - want;
+                top = Math.max(0, cur - off);
+            }
             if (nav.style.top !== top + "px") nav.style.top = top + "px";
+            var bottom = top + nav.offsetHeight;
+            if (window.SE_TOGGLE_BOTTOM !== bottom) {
+                window.SE_TOGGLE_BOTTOM = bottom;
+                try { window.dispatchEvent(new Event("se-toggle-placed")); } catch (e) {}
+            }
         };
-        place();
-        if (window.ResizeObserver && hdr) new ResizeObserver(place).observe(hdr);
+        if (window.ResizeObserver && hdr) { var ro = new ResizeObserver(place); ro.observe(hdr); ro.observe(nav); }
         window.addEventListener("resize", place);
+        window.addEventListener("load", place);
         var tick = false;
-        window.addEventListener("scroll", function () {
+        // capture: the page may scroll inside body or a wrapper, not the window
+        document.addEventListener("scroll", function () {
             if (tick) return; tick = true;
             requestAnimationFrame(function () { tick = false; place(); });
-        }, {passive: true});
+        }, {passive: true, capture: true});
         var a = document.getElementById("se-tg-score"), b = document.getElementById("se-tg-board");
         a.href = "/member/score?t=" + encodeURIComponent(t);
         b.href = "/member/score/board?t=" + encodeURIComponent(t);
@@ -103,6 +120,7 @@
             if (q) a.classList.add("amber");
         }
         nav.hidden = false;
+        place();
     } catch (e) {}
 })();
 </script>

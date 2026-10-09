@@ -1,5 +1,15 @@
-window.TGF_VERSION = "2.532.6";
+window.TGF_VERSION = "2.532.7";
 window.TGF_CHANGELOG = [
+  {
+    version: "2.532.7",
+    date: "2026-10-09",
+    title: "Cup Sunday: one scoring card per tee time (both singles matches); the leaderboard toggle sits flush under the header",
+    changes: [
+      "Kerry 10/9: \"Singles match live scoring needs to have all four players from the group still in one interface so one person can score the group even though there's two matches.\" The Cup seed now puts two singles matches that share a tee time on ONE card (\"SUN-1 + SUN-2\"), so Sunday is seven 4-player cards and one person scores the group. The card shows both matches' strips, then each match's two players boxed under MATCH 15, MATCH 16 and so on.",
+      "Re-seeding a round that was one match per card moves each player (and any score) to their tee time's card. A card number that now holds different players gets a new link and its scorer's seat is freed; the emptied leftover cards are dropped (only when they hold nothing at all). Sunday's QR signs and scorecards need reprinting after the re-seed.",
+      "Kerry's iPhone again showed a notch-tall gap between the header and SCORING | LEADERBOARD on the leaderboard. Cause found: that page scrolls inside a box whose padding is the notch inset, and a pinned bar's offset counts from inside that padding, so the old sum put the bar 47px low. The bar now pins to where the header's bottom actually renders and corrects itself against where it lands; the Cup header below it pins from the same measurement."
+    ]
+  },
   {
     version: "2.532.6",
     date: "2026-10-09",

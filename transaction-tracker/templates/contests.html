@@ -2683,7 +2683,10 @@
         if (!hdr) return;
         // the scorer's SCORING | LEADERBOARD bar pins under the header too
         const tgl = document.getElementById("se-toggle");
-        const h = hdr.offsetHeight + (tgl && !tgl.hidden ? tgl.offsetHeight : 0);
+        // under the scorer's toggle, from where the toggle measured itself
+        // pinned (_shell_nav.html, Kerry 10/9's iPhone gap), not a CSS sum
+        const h = tgl && !tgl.hidden && window.SE_TOGGLE_BOTTOM ? window.SE_TOGGLE_BOTTOM
+                : hdr.offsetHeight + (tgl && !tgl.hidden ? tgl.offsetHeight : 0);
         const cta = document.querySelector(".contest-cta-row");
         // On a phone the ENTER EVENTS & CONTESTS bar scrolls away with the
         // page instead of pinning (Kerry 10/8: "allow the enter events and
@@ -2733,6 +2736,7 @@
     document.addEventListener("DOMContentLoaded", prPinBars);
     window.addEventListener("load", prPinBars);
     window.addEventListener("resize", prPinBars);
+    window.addEventListener("se-toggle-placed", prPinBars);
 
     // ── Top tabs ──
     // ── LONE STAR CUP projected rosters (spec: mailbox #85–#88) ──

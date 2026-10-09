@@ -849,3 +849,13 @@ contests.html then opens `#tab=lsc` with `window.lscSel` on that session instead
 of the EVENTS board. The practice round keeps its Net / Gross board. The Cup page
 lands on MATCHES, on the live session, else the next one still to play.
 `prPinBars` counts the scorer's pinned `#se-toggle`. Guard `test_cup_signs.py`.
+
+**Sunday singles cards (v2.532.7, Kerry 10/9).** The Sunday round is seven cards, one per tee time:
+- Each card holds two singles matches (matches 15 & 16 at 8:30 … 27 & 28 at 9:30), so one scorer keeps all four players.
+- The seed merges same-tee-time singles matches. Re-seeding relinks the regrouped cards and drops the emptied ones (score-entry.md, "Singles: one card per tee time").
+- Reprint Sunday's QR signs and scorecards after the re-seed.
+
+**The toggle pins where it actually lands (v2.532.7).** On Kerry's iPhone the scorer's SCORING | LEADERBOARD bar sat one notch inset (47px) below the header:
+- Cause: the page scrolls inside a box whose padding is the safe-area inset, and a sticky `top` counts from inside that padding, so the old header-height-plus-header-top sum came out 47px too low.
+- Fix: `_shell_nav.html` now sets the bar's `top` from the header's rendered bottom, then takes out any difference between where the bar lands and that bottom. Scroll is captured from any scroller.
+- It publishes `window.SE_TOGGLE_BOTTOM` and fires `se-toggle-placed`. `prPinBars` in contests.html pins the Cup header under that bottom.

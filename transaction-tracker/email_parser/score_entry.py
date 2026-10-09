@@ -1187,14 +1187,28 @@ def cup_seed(event_id: int, *, apply: bool = False, db_path=None,
             key = f"{round_key_prefix}{sess.get('id')}"
             r = conn.execute("SELECT id, status FROM se_rounds WHERE event_id = ? AND pairings_holes = ? "
                              "ORDER BY id LIMIT 1", (event_id, key)).fetchone()
-            groups, seat_of = [], {}
+            groups, seat_of, at_tee = [], {}, {}
+            # ONE CARD PER TEE TIME IN SINGLES (Kerry 10/9: "Singles match live
+            # scoring needs to have all four players from the group still in
+            # one interface so one person can score the group even though
+            # there's two matches"): Sunday sends two singles matches off each
+            # tee time, so the two share one 4-player card, "SUN-1 + SUN-2".
+            singles = str(sess.get("format") or "").lower() == "singles"
             for m in sess.get("matches") or []:
                 cids = [int(c) for side in ("austin", "sa") for c in (m.get(side) or []) if c]
                 hit = next((seat_of[c] for c in cids if c in seat_of), None)
-                if hit is None:
-                    groups.append({"label": m.get("id"), "tee_time": m.get("tee_time"),
+                tt = m.get("tee_time")
+                if (hit is None and singles and tt and tt in at_tee
+                        and len(groups[at_tee[tt]]["cids"]) + len(cids) <= 4):
+                    hit = at_tee[tt]
+                    groups[hit]["matches"].append(m.get("id"))
+                    groups[hit]["label"] = " + ".join(groups[hit]["matches"])
+                elif hit is None:
+                    groups.append({"label": m.get("id"), "tee_time": tt,
                                    "matches": [m.get("id")], "cids": []})
                     hit = len(groups) - 1
+                    if tt and tt not in at_tee:
+                        at_tee[tt] = hit
                 else:
                     groups[hit]["matches"].append(m.get("id"))
                     groups[hit]["label"] = " + ".join(groups[hit]["matches"])
@@ -1259,16 +1273,73 @@ def cup_seed(event_id: int, *, apply: bool = False, db_path=None,
                 db_path=db_path)["round_id"]
             if so["existing_round"] and course:
                 set_course_holes(rid, course, db_path=db_path)
+            before = _group_rosters(rid, db_path)
             for n, g in enumerate(so["groups"], 1):
                 upsert_group(rid, n, label=g["label"], start_hole=1, tee_time=g["tee_time"],
                              players=[{"customer_id": c, "display_name": names.get(c),
                                        "tee": bands.get(c), "playing_handicap": phs.get(c),
                                        "seat": i + 1} for i, c in enumerate(g["cids"])],
                              db_path=db_path)
+            view.update(_settle_regrouped(rid, before, len(so["groups"]), db_path))
             # The matches come from the dial once Track B binds this round
             # (session se_round = round_id); round_matches reads them there.
             view["round_id"] = rid
         out["sessions"].append(view)
+    return out
+
+
+def _group_rosters(round_id: int, db_path=None) -> dict:
+    """{group_num: (group_id, frozenset of customer_ids)} for a round."""
+    with _closing(_conn(db_path)) as conn:
+        out = {}
+        for gid, num in conn.execute("SELECT id, group_num FROM se_groups WHERE round_id = ?",
+                                     (round_id,)).fetchall():
+            out[num] = (gid, frozenset(r[0] for r in conn.execute(
+                "SELECT customer_id FROM se_players WHERE group_id = ?", (gid,))))
+        return out
+
+
+def _settle_regrouped(round_id: int, before: dict, n_groups: int, db_path=None) -> dict:
+    """After a re-seed changed who plays together (Sunday's singles went to
+    one card per tee time, Kerry 10/9): a group number now holding different
+    players gets a NEW link (the old QR or link would open someone else's
+    card) and its scorer's seat is freed; a group number past the new count
+    that the moves left with nobody, no scores and no marks is dropped, so
+    no blank card shows on Live Scoring or the signs. A leftover group that
+    still holds anything is kept and reported."""
+    after = _group_rosters(round_id, db_path)
+    relinked, dropped, kept = [], [], []
+    with _closing(_conn(db_path)) as conn:
+        for num, (gid, cids) in sorted(after.items()):
+            old = before.get(num)
+            if num > n_groups:
+                busy = cids or any(conn.execute(f"SELECT 1 FROM {t} WHERE group_id = ? LIMIT 1",
+                                                (gid,)).fetchone()
+                                   for t in ("se_hole_scores", "se_hole_marks", "se_teams",
+                                             "se_signoffs", "se_card_flags", "se_ctp_claims",
+                                             "se_hio_claims", "se_card_checks"))
+                if busy:
+                    kept.append(gid)
+                    continue
+                conn.execute("DELETE FROM se_group_locks WHERE group_id = ?", (gid,))
+                conn.execute("DELETE FROM se_groups WHERE id = ?", (gid,))
+                dropped.append(gid)
+            elif old and old[1] and old[1] != cids:
+                conn.execute("UPDATE se_groups SET token_version = token_version + 1 WHERE id = ?", (gid,))
+                conn.execute("DELETE FROM se_group_locks WHERE group_id = ?", (gid,))
+                relinked.append(gid)
+        if relinked or dropped:
+            ev = conn.execute("SELECT event_id FROM se_rounds WHERE id = ?", (round_id,)).fetchone()
+            if ev:
+                _bump(conn, ev[0])
+        conn.commit()
+    out = {}
+    if relinked:
+        out["relinked_groups"] = relinked
+    if dropped:
+        out["dropped_empty_groups"] = dropped
+    if kept:
+        out["leftover_groups_kept"] = kept
     return out
 
 

@@ -841,6 +841,25 @@ and apply refuses while any player isn't a customer. Track B binds each session'
 `se_round` to the returned round id. Seed after Kerry's real pairings are in the
 dial; the staged demo should not be applied.
 
+**Singles: one card per tee time** (v2.532.7, Kerry 10/9: "Singles match live
+scoring needs to have all four players from the group still in one interface so
+one person can score the group even though there's two matches"). In a `singles`
+session, matches sharing a `tee_time` share one group (up to 4 players), labelled
+"SUN-1 + SUN-2". Players are seated match by match. On the phone, a card that holds
+two singles matches boxes each match's pair under "MATCH #" (`teamGroups` in
+score_entry.html). Re-seeding a round that was seeded one match per card is
+settled by `_settle_regrouped`:
+- A group number that now holds different players gets a new link
+  (`token_version` + 1; the old QR and link stop working) and its scorer's seat is
+  freed.
+- A group number past the new count that the moves left with no players, scores,
+  marks, teams, sign-offs, flags, claims or checks is dropped.
+- A leftover that still holds anything is kept and reported (`leftover_groups_kept`).
+- Players' scores move with them (`upsert_group`).
+
+The apply result names `relinked_groups` / `dropped_empty_groups`. After a relink,
+reprint that session's QR signs and scorecards. Guard: `test_cup_singles_card.py`.
+
 The G-0 publish dry run (`scoring-entry-publish`) resolves EVERY player's tee,
 held or not, and returns `tees: {tee value: {tee_id, players[, why]}}` per round.
 Use it to prove tees after seeding, before anyone plays.
