@@ -60,6 +60,24 @@
                        border-radius: 9999px; cursor: pointer; color: #fff; text-decoration: none;
                        font: 700 11px/1 Bitter, Georgia, serif; letter-spacing: 1px; text-transform: uppercase; }
         .pr-hiw-link:hover { background: #D06B2E; }
+        /* HOW IT WORKS opens IN PLACE, a popup that closes back to the card
+           (Kerry 10/9: "For how it works buttons they should only pop up a
+           modal that can easily be closed. Make sure no links take you
+           outside the scorer's interface"). The Cup's info body, embedded. */
+        .se-hiwm-scrim { position: fixed; inset: 0; background: rgba(0, 0, 0, .45); z-index: 300; }
+        .se-hiwm { position: fixed; left: 50%; transform: translateX(-50%); z-index: 301;
+                   top: calc(env(safe-area-inset-top, 0px) + 20px); bottom: calc(env(safe-area-inset-bottom, 0px) + 20px);
+                   width: min(560px, calc(100% - 24px)); background: #FFFFFF; border-radius: 14px; overflow: hidden;
+                   display: flex; flex-direction: column; box-shadow: 0 12px 40px rgba(0, 0, 0, .3); }
+        .se-hiwm-h { flex: none; display: flex; align-items: center; justify-content: space-between; padding: 8px 10px 8px 16px;
+                     background: var(--lsc-navy, #002855); color: #FFFFFF; font: 800 13px/1 Bitter, Georgia, serif;
+                     letter-spacing: 1.2px; text-transform: uppercase; }
+        .se-hiwm-x { width: 38px; height: 38px; border-radius: 50%; border: 0; background: rgba(255, 255, 255, .16);
+                     color: #FFFFFF; font-size: 18px; line-height: 1; cursor: pointer; }
+        .se-hiwm-b { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 12px 14px 16px; }
+        .se-hiwm-f { flex: none; padding: 10px 14px calc(10px + env(safe-area-inset-bottom, 0px)); border-top: 1px solid #E5E7EB; }
+        .se-hiwm-f .se-pill { width: 100%; }
+        .se-hiwm [data-lsc-info-pdf], .se-hiwm [data-lsc-info-share] { display: none !important; }
         .se-pill.dark { border: none; background: var(--se-ink); color: #FFFFFF; }
         .se-pill.back { height: 50px; font-size: 15px; }
         /* THE CUP SPLASH: the plate is the standard Cup navy (was the sampled #021A34
@@ -579,6 +597,7 @@
     <script src="/static/js/version.js"></script>
     <script>window.MEMBER_MODE = true;</script>
     <script src="/static/js/auth.js"></script>
+    <script src="/static/js/lsc-info.js"></script>
     <script>
     (function () {
         "use strict";
@@ -934,8 +953,12 @@
             // (/api/lsc/board?preview=1), not the member board: FOLLOW carries
             // preview=1 so the card can open there. Live rounds are unchanged.
             const pv = !!(card.cup_standings && card.cup_standings.preview);
-            const follow = cup ? "/member/lonestarcup?" + (pv ? "preview=1&" : "") + "match=" + encodeURIComponent(cupIds[0])
-                               : "/member/score/board?t=" + encodeURIComponent(T);
+            // Both stay inside the scorer's interface (Kerry 10/9: "Make sure
+            // no links take you outside the scorer's interface of the SCORING
+            // and LEADERBOARD"): the Cup follows on the scorer's LEADERBOARD
+            // with this match open, never the public Cup page.
+            const follow = "/member/score/board?t=" + encodeURIComponent(T)
+                         + (cup ? (pv ? "&preview=1" : "") + "&match=" + encodeURIComponent(cupIds[0]) : "");
             // Mockup QRLanding: "Group 2 · Match 2 · 18 holes", then a THIS
             // GROUP box, San Antonio left and Austin right in the Cup, one
             // list otherwise.
@@ -1185,8 +1208,46 @@
         function hiwPill() {
             const sx = cupSession();
             if (!sx) return "";
-            return `<div class="se-hiw"><a class="pr-hiw-link" href="/member/lonestarcup/info#${sx.anchor}">How it works · ${sx.title}</a></div>`;
+            return `<div class="se-hiw"><button type="button" class="pr-hiw-link" data-act="hiw" data-k="${esc(sx.anchor)}">How it works · ${esc(sx.title)}</button></div>`;
         }
+        // The popup: the Cup's EVENT INFO body (/member/lonestarcup/info?embed=1),
+        // opened on this session's format; every link inside stays inside.
+        let hiwHtml = null;
+        function closeHiw() {
+            ["se-hiwm", "se-hiwm-scrim"].forEach((id) => { const el = document.getElementById(id); if (el) el.remove(); });
+            document.body.style.overflow = "";
+        }
+        function openHiw(k) {
+            closeHiw();
+            const scrim = document.createElement("div");
+            scrim.className = "se-hiwm-scrim"; scrim.id = "se-hiwm-scrim";
+            const m = document.createElement("div");
+            m.className = "se-hiwm"; m.id = "se-hiwm";
+            m.setAttribute("role", "dialog"); m.setAttribute("aria-modal", "true"); m.setAttribute("aria-label", "How it works");
+            m.innerHTML = `<div class="se-hiwm-h"><span>How it works</span><button type="button" class="se-hiwm-x" aria-label="Close">&#10005;</button></div>
+                <div class="se-hiwm-b"><p style="color:#6B7280">Loading&hellip;</p></div>
+                <div class="se-hiwm-f"><button type="button" class="se-pill dark">Got it</button></div>`;
+            document.body.append(scrim, m);
+            document.body.style.overflow = "hidden";
+            scrim.addEventListener("click", closeHiw);
+            m.querySelector(".se-hiwm-x").addEventListener("click", closeHiw);
+            m.querySelector(".se-hiwm-f button").addEventListener("click", closeHiw);
+            const body = m.querySelector(".se-hiwm-b");
+            // nothing in here navigates away: the section tabs are wired in
+            // place by lscInfoWire, any other link is held
+            body.addEventListener("click", (e) => { if (e.target.closest("a[href]")) e.preventDefault(); });
+            const fill = (html) => {
+                body.innerHTML = html;
+                if (window.lscInfoWire) window.lscInfoWire(body, {key: k, scroll: true});
+            };
+            if (hiwHtml) { fill(hiwHtml); return; }
+            const pv = card && card.cup_standings && card.cup_standings.preview ? "&preview=1" : "";
+            fetch("/member/lonestarcup/info?embed=1" + pv)
+                .then((r) => r.ok ? r.text() : Promise.reject(r.status))
+                .then((h) => { hiwHtml = h; if (document.getElementById("se-hiwm")) fill(h); })
+                .catch(() => { body.innerHTML = '<p style="color:#6B7280">Couldn\'t load. Check your connection, then tap How it works again.</p>'; });
+        }
+        document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeHiw(); });
 
         // A pair's row carries the TEAM's handicap after the session allowance
         // (mockup ScoringFoursomes "Team PH 9"), from the engine's side_hcp.
@@ -1877,6 +1938,7 @@
             if (act === "gate-score") { store.set(K.gate, true); render(); return; }
             if (act === "gate-back") { store.set(K.gate, false); render(); return; }
             if (act === "gate-follow") { location.href = b.dataset.href; return; }
+            if (act === "hiw") { openHiw(b.dataset.k); return; }
             if (act === "pick") { who = Number(b.dataset.cid); store.set(K.who, who); claim(false); return; }
             if (act === "follow") { following = true; store.set(K.follow, true); render(); return; }
             if (act === "takeover") { claim(true); return; }

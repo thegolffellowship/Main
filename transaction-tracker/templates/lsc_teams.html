@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+    <title>TGF — Lone Star Cup Teams</title>
+    <link href="https://fonts.googleapis.com/css2?family=Bitter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/dashboard.css">
+    <link rel="stylesheet" href="/static/css/shell.css">
+    <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+    <style>
+        /* LONE STAR CUP TEAMS, admin only (Kerry 2026-10-09: "Can you remove
+           all that hidden team management stuff from the leaderboard page
+           altogether? Put it on its own separate admin only page. I see it
+           pop up for a second each time when the page loads."). The rosters,
+           alternates, deposits, lodging and declined invitations that lived
+           under the Cup board on LEADERBOARD, moved here whole. */
+        .lsct-head { display:flex; align-items:baseline; gap:12px; flex-wrap:wrap; margin:4px 0 4px; }
+        .lsct-head h2 { font-family:'Bitter',serif; font-size:1.5rem; margin:0; }
+        .lsct-head .sub { color:var(--text-muted,#6B7280); font-size:.85rem; }
+        /* chapter-branded team cards (Kerry 2026-08-06: "each team branded
+           by their chapter colors" — Austin burnt orange, SA steel) */
+        .lsc-card.austin { border-color: #BF5700; border-top: 4px solid #BF5700; }
+        .lsc-card.austin .lsc-card-head { background: #BF5700; color: #fff; }
+        .lsc-card.austin .lsc-card-head span { color: #F6DFCB; }
+        .lsc-card.austin .lsc-alt-head { background: #BF5700; }
+        .lsc-card.sa { border-color: #8FA8B8; border-top: 4px solid #8FA8B8; }
+        /* steel-DARK head (Kerry 2026-08-19: "update Team SAN ANTONIO
+           header to be that same dark color" as the section bands) */
+        .lsc-card.sa .lsc-card-head { background: #4B6274; color: #fff; }
+        .lsc-card.sa .lsc-card-head span { color: #D3DDE4; }
+        .lsc-card.sa .lsc-alt-head { background: #4B6274; }
+        .lsc-card.sa .lsc-seat.captain { background: #EEF3F6; }
+        .lsc-card.sa .lsc-seat.captain .lsc-seat-label { color: #4B6274; }
+        .lsc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 1.1rem; }
+        .lsc-card { border: 1px solid var(--border); border-radius: 12px; overflow: hidden; background: #fff; }
+        .lsc-card-head {
+            background: var(--surface-dark, #1B1B1B); color: #fff; padding: 11px 14px;
+            font: 700 12.5px/1 'Bitter', serif; letter-spacing: 1.2px;
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        /* SECURED seats (Kerry 2026-08-06): chapter-bold row + trailing
+           SOLID padlock in the TEAM color, 1.5x the old emoji size —
+           inline SVG so it tints (emoji can't) */
+        .lsc-seat.secured .lsc-player { font-weight: 800; }
+        .lsc-lock { margin-left: auto; align-self: center; padding-left: 8px; line-height: 0; }
+        .lsc-card.austin .lsc-lock { color: #BF5700; }
+        .lsc-card.sa .lsc-lock { color: #4B6274; }
+        .lsc-card.austin .lsc-seat.secured { background: #F7E0CC; border-left: 4px solid #BF5700; }
+        .lsc-card.austin .lsc-seat.secured .lsc-player { color: #8C3F00; }
+        .lsc-card.austin .lsc-seat.secured .lsc-seat-label { color: #BF5700; }
+        .lsc-card.sa .lsc-seat.secured { background: #DCE6EC; border-left: 4px solid #4B6274; }
+        .lsc-card.sa .lsc-seat.secured .lsc-player { color: #33505F; }
+        .lsc-card.sa .lsc-seat.secured .lsc-seat-label { color: #4B6274; }
+        .lsc-card-head span { color: #9CA3AF; font: 600 10px/1 'Bitter', serif; letter-spacing: 0.8px; }
+        .lsc-seat { display: flex; gap: 10px; padding: 8px 14px; border-top: 1px solid #F1F1EF; align-items: baseline; }
+        /* Narrow, wrapping seat label (Kerry 2026-08-17: "wrap the first
+           column and make it narrower so names can fit without wrapping")
+           — the label folds to two lines so the name column stays wide
+           enough for one-line First Last names. */
+        .lsc-seat-label { flex: 0 0 112px; font: 700 9.5px/1.45 'Bitter', serif; letter-spacing: 0.8px; color: #6B7280; text-transform: uppercase; }
+        .lsc-seat.captain { background: #FCF6EF; }
+        .lsc-seat.captain .lsc-seat-label { color: #BF5700; }
+        /* CAPTAIN chip (Kerry 2026-09-11: "Captains need to be set apart
+           visually" — the seat label shows how they qualified, the chip
+           carries the title). Chapter-colored like the card bands. */
+        .lsc-cap-chip { display: inline-block; margin-left: 8px;
+            padding: 1px 8px; border-radius: 9px; font-size: 0.62rem;
+            font-weight: 800; letter-spacing: 0.06em; background: #BF5700;
+            color: #fff; vertical-align: 2px; }
+        .lsc-card.sa .lsc-cap-chip { background: #4B6274; }
+        .lsc-player { font-size: 14px; color: #1B1B1B; font-weight: 600; }
+        /* Qualification sub-detail folds behind a chevron (Kerry
+           2026-08-17: "provide chevrons that are collapsed hiding the
+           subdetail for how they qualified") — collapsed by default,
+           tap the row to expand. */
+        .lsc-earn { display: none; font-size: 11px; color: #9CA3AF; font-weight: 400; }
+        .lsc-seat.open .lsc-earn { display: block; }
+        .lsc-seat.has-earn { cursor: pointer; }
+        /* Chevron is the app-standard .tgf-exp glyph (Kerry 2026-08-14
+           ratified 0.75rem TGF-orange triangle) — only positioning lives
+           here; ▶ rotates to ▼ when open. Lock rides just left of it
+           (Kerry 2026-08-17: "Move lock further right"). */
+        .lsc-chev { flex: 0 0 auto; align-self: center; margin-left: auto; }
+        .lsc-seat.open .lsc-chev { transform: rotate(90deg); }
+        .lsc-seat .lsc-lock + .lsc-chev, .lsc-seat.secured .lsc-chev { margin-left: 6px; }
+        /* Lodging status icons on roster rows (Kerry 2026-08-19,
+           staff-only — driven by the lodging payload the API only
+           sends staff): green house = lodging through TGF, red
+           slashed house = no lodging needed, nothing = no response.
+           The icon takes over the right-push when it precedes the
+           lock/chevron, which then space normally. */
+        .lsc-lodge-ic { flex: 0 0 auto; align-self: center; margin-left: auto; line-height: 0; }
+        .lsc-hoy { color: #15803D; }
+        .lsc-hon { color: #B91C1C; }
+        .lsc-lodge-ic + .lsc-lock { margin-left: 8px; }
+        .lsc-lodge-ic + .lsc-chev { margin-left: 6px; }
+        .lsc-tbd { color: #9CA3AF; font-style: italic; font-weight: 500; font-size: 13px; }
+        .lsc-pool-chip {
+            display: inline-flex; margin-left: 6px; padding: 2px 7px; background: #FDF0E6;
+            color: #BF5700; border-radius: 9999px; font: 700 8.5px/1.3 'Bitter', serif;
+            letter-spacing: 0.8px; text-transform: uppercase; vertical-align: 1px;
+        }
+        /* Section bands FILL in each team's dark color with white text
+           (Kerry 2026-08-19: "I'd like the fill colors to match the
+           dark colors from each team with white text") — Austin burnt
+           orange, SA steel-dark (the lock/secured accent; the light
+           #D3DDE4 head steel can't carry white text). */
+        .lsc-alt-head {
+            padding: 9px 14px 7px; background: var(--surface-dark, #1B1B1B);
+            font: 700 10px/1.3 'Bitter', serif; letter-spacing: 1.2px; color: #fff; text-transform: uppercase;
+        }
+        /* Alternates split into their OWN rounded card with a small
+           break below the roster (Kerry 2026-08-19: "create a small
+           break between rosters and Next Players Up... curved corners
+           above and below the breaks"). */
+        .lsc-alt-card { margin-top: 10px; }
+        /* DFW/HOUSTON bonus block (Kerry 2026-08-19: "highlight the
+           DFW/HOUSTON slots slightly differently — a group boundary
+           for each of those last two slots"): same band treatment as
+           the alternates header opens the group, and unfilled bonus
+           rows sit on a parchment tint with a national-gray label.
+           SECURED bonus rows keep the full chapter-color treatment —
+           the card-scoped .secured rules outrank .bonus. */
+        .lsc-bonus-head {
+            padding: 9px 14px 7px; background: var(--surface-dark, #1B1B1B);
+            font: 700 10px/1.3 'Bitter', serif; letter-spacing: 1.2px; color: #fff; text-transform: uppercase;
+        }
+        .lsc-card.austin .lsc-bonus-head { background: #BF5700; }
+        .lsc-card.sa .lsc-bonus-head { background: #4B6274; }
+        .lsc-seat.bonus { background: #FBFAF8; }
+        .lsc-seat.bonus .lsc-seat-label { color: #374151; }
+        .lsc-alt { display: flex; gap: 8px; padding: 6px 14px; border-top: 1px solid #F1F1EF; font-size: 12.5px; align-items: baseline; }
+        .lsc-alt .n { flex: 0 0 18px; font-weight: 700; color: #9CA3AF; font-variant-numeric: tabular-nums; }
+        /* Name never wraps, check rides right after it; the DETAILS
+           column is the one that folds (Kerry 2026-08-18: "Put names
+           all on one row with check after. Then you can wrap the
+           details column."), and it starts at the SAME x on every row
+           (Kerry, same day: "Left align details evenly in its own
+           column") — the name column has a fixed width sized to the
+           longest bench name + check. */
+        .lsc-alt .who { flex: 0 0 158px; font-weight: 600; color: #1B1B1B; white-space: nowrap; }
+        .lsc-alt .ctx { flex: 1; min-width: 0; color: #9CA3AF; font-size: 11px; text-align: left; }
+        /* pre-confirmed bench player: green check after the name */
+        .lsc-ok { color: #15803D; font-weight: 800; font-size: 12px; }
+        /* Deposit-paid pill (Kerry 2026-08-19, staff-only — the API only
+           sends `deposits` to manager/admin sessions): money-green
+           amount badge next to the name, linking to the transaction */
+        .lsc-dep { display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 999px; background: #DCFCE7; color: #15803D; font-weight: 700; font-size: 10.5px; line-height: 1.5; text-decoration: none; vertical-align: 1px; font-variant-numeric: tabular-nums; }
+        .lsc-dep:hover { background: #BBF7D0; text-decoration: none; }
+        .lsc-alt .ctx .lsc-dep { margin-left: 0; margin-right: 6px; }
+        /* partial-payment variant of the money pill (lodging tracker) */
+        .lsc-dep-part { background: #FEF3C7; color: #92400E; }
+        .lsc-dep-part:hover { background: #FDE68A; }
+        /* Lodging tracker (Kerry 2026-08-19, staff-only card): unit
+           header rows — cabin name left, occupancy right */
+        .lsc-lodge-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; padding: 8px 14px 6px; background: #FBFAF8; border-top: 1px solid #E5E7EB; font: 700 10px/1.3 'Bitter', serif; letter-spacing: 1px; color: #1B1B1B; text-transform: uppercase; }
+        .lsc-lodge-head span { color: #6B7280; font-weight: 600; letter-spacing: 0.4px; }
+        .lsc-foot { margin-top: 0.9rem; font-size: 12px; line-height: 1.55; color: #9CA3AF; }
+        @media (max-width: 560px) {
+            .lsc-grid { grid-template-columns: 1fr; }
+            .standings-section h4.lsc-title { font-size: 1.22rem; }
+            .lsc-seat-label { flex-basis: 90px; }
+            /* Full-bleed cards on phones (Kerry 2026-08-17: "There's
+               room to widen the whole table… names are wrapping") — the
+               section's desktop 2rem gutters gave ~50px back to the
+               name column; row padding tightens too. !important beats
+               the section's inline desktop padding. */
+            #section-lone-star-cup .standings-section {
+                padding-left: 4px !important;      /* 12px from the edge, as City (Kerry 10/9) */
+                padding-right: 4px !important;
+            }
+            .lsc-seat { padding: 8px 10px; gap: 8px; }
+            .lsc-alt { padding: 6px 10px; }
+    </style>
+</head>
+<body>
+    {% if shell_v2 %}
+    {% set SHELL_TITLE = 'Cup Teams' %}{% set SHELL_ACTIVE = 'admin' %}
+    {% include '_shell_nav.html' %}
+    {% endif %}
+    <main>
+        <nav class="admin-subnav">
+            <a href="/accounting">Accounting</a>
+            <a href="/coo">COO</a>
+            <a href="/audit">Audit Log</a>
+            <a href="/matrix">Matrix</a>
+            <a href="/courses">Courses</a>
+            <a href="/traffic">Traffic</a>
+            <a href="/admin/health">Health</a>
+            <a href="/spotlight">Spotlight</a>
+            <a href="/admin/gg-history">GG History</a>
+            <a href="/admin/test-center">Test Center</a>
+            <a href="/admin/lsc-teams" class="active">Cup Teams</a>
+        </nav>
+        <div class="lsct-head"><h2>Lone Star Cup Teams</h2><span class="sub" id="lsct-sub">Rosters, alternates, deposits, lodging and declined invitations. Staff only.</span></div>
+        <div id="lsc-rosters"><p style="color:var(--text-muted);margin-top:1rem;">Loading rosters&hellip;</p></div>
+    </main>
+    <script src="/static/js/version.js"></script>
+    <script src="/static/js/auth.js"></script>
+    <script src="/static/js/shell.js"></script>
+    <script>
+    const $ = id => document.getElementById(id);
+    function escapeHtml(s) {
+        if (s == null) return '';
+        return String(s)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    function prFirstLast(nm) {
+        nm = String(nm || "").trim();
+        const m = nm.match(/^([^,]+),\s*(.+)$/);
+        if (!m) return nm;
+        let last = m[1].trim();
+        const first = m[2].trim();
+        if (last === last.toUpperCase()) {
+            last = last.toLowerCase()
+                .replace(/(^|[\s\-'])([a-z])/g, (x, a, b) => a + b.toUpperCase())
+                .replace(/\bMc([a-z])/g, (x, c) => "Mc" + c.toUpperCase())
+                .replace(/\bMac([a-z])/g, (x, c) => "Mac" + c.toUpperCase());
+        }
+        return `${first} ${last}`;
+    }
+
+    // LSC standard case (Kerry 2026-08-18: "standard case for names
+    // everywhere for Lone Star Cup"): GG surnames with interior caps
+    // runs (McCRARY, DelCARMEN) survive prFirstLast's all-caps-only
+    // normalizer — recase any such word, Mc/Mac and roman numerals aware.
+    function prNiceName(nm) {
+        const fixWord = w => {
+            if (/^[IVX]+\.?$/.test(w)) return w;          // suffixes: III, IV
+            if (!/[A-Z]{2}/.test(w.slice(1))) return w;   // already normal
+            let x = w.toLowerCase();
+            x = x.charAt(0).toUpperCase() + x.slice(1);
+            return x.replace(/^(Ma?c)([a-z])/, (m, a, b) => a + b.toUpperCase())
+                    .replace(/(['-])([a-z])/g, (m, a, b) => a + b.toUpperCase());
+        };
+        return prFirstLast(nm).split(" ").map(fixWord).join(" ");
+    }
+
+    const LSC_LOCK_SVG = '<svg viewBox="0 0 24 24" width="22" height="22" aria-label="Secured"><path d="M8 10V7a4 4 0 0 1 8 0v3" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/><path fill="currentColor" fill-rule="evenodd" d="M6.2 10h11.6c1.2 0 2.2 1 2.2 2.2v7.6c0 1.2-1 2.2-2.2 2.2H6.2C5 22 4 21 4 19.8v-7.6C4 11 5 10 6.2 10zm5.8 3.2a1.9 1.9 0 0 0-1 3.5V19a1 1 0 0 0 2 0v-2.3a1.9 1.9 0 0 0-1-3.5z"/></svg>';
+
+    async function lscTeamsLoad() {
+        const box = $("lsc-rosters");
+        try {
+            const res = await fetch("/api/season-contests/lone-star-cup", { cache: "no-store" });
+            const d = await res.json();
+            if (!res.ok || d.error) throw new Error(d.error || res.statusText);
+            // Deposit badge (Kerry 2026-08-19: "add an amount paid badge
+            // like '$150' … Ideally a link to the actual transactions").
+            // d.deposits is present ONLY for manager/admin sessions —
+            // {customer_id: {amount, txns:[{id,…}]}} — so members simply
+            // never render this. Links to /accounting?exp=<expense id>;
+            // stopPropagation keeps the tap from toggling the chevron.
+            const depBadge = (cid) => {
+                const dep = cid != null && d.deposits && d.deposits[cid];
+                if (!dep || !(dep.txns || []).length) return "";
+                const amt = dep.amount % 1 === 0
+                    ? `$${dep.amount}` : `$${dep.amount.toFixed(2)}`;
+                return `<a class="lsc-dep" href="/accounting?exp=${dep.txns[0].id}"` +
+                       ` title="Deposit received — tap to view the transaction"` +
+                       ` onclick="event.stopPropagation()">${amt}</a>`;
+            };
+            // Lodging status icons (Kerry 2026-08-19): map cid -> yes/no
+            // from the staff-only lodging payload; members get no icons
+            // because d.lodging never reaches them. Staying (assigned OR
+            // waiting on a room) = green house; own arrangements / not
+            // staying = red slashed house; not in the dial = nothing.
+            const lodgeMap = {};
+            if (d.lodging) {
+                (d.lodging.units || []).forEach(u =>
+                    (u.players || []).forEach(p => { lodgeMap[p.cid] = "yes"; }));
+                (d.lodging.unassigned || []).forEach(p => { lodgeMap[p.cid] = "yes"; });
+                (d.lodging.own_arrangements || []).forEach(p => { lodgeMap[p.cid] = "no"; });
+                (d.lodging.not_staying || []).forEach(p => { lodgeMap[p.cid] = "no"; });
+            }
+            const LODGE_YES = '<span class="lsc-lodge-ic lsc-hoy" title="Lodging through TGF">' +
+                '<svg viewBox="0 0 24 24" width="16" height="16" aria-label="Lodging"><path d="M3 11.5 12 4l9 7.5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/><path d="M5.5 10.5V20h13v-9.5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"/><path d="M10 20v-5h4v5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"/></svg></span>';
+            const LODGE_NO = '<span class="lsc-lodge-ic lsc-hon" title="No lodging needed">' +
+                '<svg viewBox="0 0 24 24" width="16" height="16" aria-label="No lodging"><circle cx="12" cy="12" r="9.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M8 11.2 12 8l4 3.2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M9.3 11v4.8h5.4V11" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M5.3 5.3 18.7 18.7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></span>';
+            const lodgeIc = (cid) => lodgeMap[cid] === "yes" ? LODGE_YES
+                : lodgeMap[cid] === "no" ? LODGE_NO : "";
+            box.innerHTML = `<div class="lsc-grid">${(d.chapters || []).map(ch => {
+                // Group boundary before the DFW/HOUSTON bonus block
+                // (Kerry 2026-08-19) — header band opens the group once,
+                // and every bonus row carries the .bonus tint.
+                let bonusHead = false;
+                const seats = ch.seats.map(seat => {
+                    // Captaincy is a FLAG since the final-roster freeze
+                    // (Kerry 2026-09-11: seat label shows how they
+                    // qualified, captains set apart visually) — the
+                    // regex keeps live-projection payloads working.
+                    const cap = seat.captain === true || /CAPTAIN/.test(seat.seat || "");
+                    const bonus = /^DFW\/HOUSTON/.test(seat.seat || "");
+                    // SECURED (Kerry 2026-08-01, idea 5): a declared-final
+                    // City NET champion's captaincy is settled, not
+                    // projected — gold chip, gold edge. Co-captains (T1,
+                    // ratified rule) show as two secured CO-CAPTAIN seats.
+                    // SECURED rows (Kerry 2026-08-06: "bolder colors for a
+                    // little more fanfare and just show a LOCK icon on the
+                    // far right") — chapter-bold row via .secured on the
+                    // chapter-classed card, trailing lock, no chip.
+                    const secured = seat.status === "secured";
+                    let who;
+                    if (seat.player_name) {
+                        // First Last display (Kerry 2026-08-17) via the
+                        // shared prFirstLast converter. No POOL badge
+                        // (Kerry, same day) — the pool origin still
+                        // reads in the folded qualification line.
+                        who = `<span class="lsc-player">${escapeHtml(prNiceName(seat.player_name))}` +
+                              (cap ? '<span class="lsc-cap-chip">CAPTAIN</span>' : '') +
+                              depBadge(seat.customer_id) +
+                              `<span class="lsc-earn">${escapeHtml(seat.earned_as || "")}</span></span>`;
+                    } else {
+                        who = `<span class="lsc-tbd">To be decided` +
+                              `<span class="lsc-earn">${escapeHtml(seat.note || "")}</span></span>`;
+                    }
+                    // Chevron fold (Kerry 2026-08-17): qualification
+                    // sub-detail is collapsed by default; the row toggles.
+                    const hasEarn = !!(seat.earned_as || seat.note);
+                    const groupHead = bonus && !bonusHead
+                        ? (bonusHead = true,
+                           '<div class="lsc-bonus-head">Bonus Spots &mdash; DFW &amp; Houston</div>')
+                        : "";
+                    return groupHead +
+                           `<div class="lsc-seat${cap ? " captain" : ""}${bonus ? " bonus" : ""}${secured ? " secured" : ""}${hasEarn ? " has-earn" : ""}">` +
+                           `<span class="lsc-seat-label">${escapeHtml(seat.seat)}</span>${who}` +
+                           lodgeIc(seat.customer_id) +
+                           (secured ? `<span class="lsc-lock">${LSC_LOCK_SVG}</span>` : "") +
+                           (hasEarn ? `<span class="lsc-chev tgf-exp">&#9654;</span>` : "") +
+                           `</div>`;
+                }).join("");
+                // Green check = pre-confirmed available if a seat falls
+                // to them (Kerry 2026-08-17: "mark them different somehow")
+                const alts = (ch.alternates || []).map((a, i) =>
+                    `<div class="lsc-alt"><span class="n">${i + 1}</span>` +
+                    `<span class="who">${escapeHtml(prNiceName(a.player_name))}${a.accepted ? ' <span class="lsc-ok" title="Confirmed available if a seat opens">&#10003;</span>' : ''}</span>` +
+                    `<span class="ctx">${depBadge(a.customer_id)}${escapeHtml(a.context)} &middot; ${a.events} event${a.events === 1 ? "" : "s"}</span></div>`
+                ).join("") || '<div class="lsc-alt"><span class="ctx">No eligible alternates yet.</span></div>';
+                // Roster and alternates render as SEPARATE rounded cards
+                // with a small break between them (Kerry 2026-08-19:
+                // "create a small break between rosters and Next Men Up
+                // ... curved corners above and below the breaks"); the
+                // .lsc-col wrapper keeps both in one grid cell.
+                const cls = /austin/i.test(ch.chapter || "") ? "austin" : "sa";
+                return `<div class="lsc-col">` +
+                       `<div class="lsc-card ${cls}">` +
+                       `<div class="lsc-card-head">Team ${escapeHtml((ch.chapter || "").toUpperCase())}<span>${
+                           // Member payload carries no projected/secured
+                           // counts (Kerry 2026-09-11: member view is
+                           // Teams + Players + qualification only) —
+                           // plain player count there; ops counts for
+                           // staff, or FINAL once the roster is frozen.
+                           ch.n_projected == null
+                               ? `${(ch.seats || []).length} players`
+                               : (d.roster_final
+                                   ? `FINAL &middot; ${(ch.seats || []).length} players`
+                                   : `${ch.n_projected} of ${ch.n_seats || 12} projected${ch.n_secured ? ` &middot; ${ch.n_secured} secured` : ""}`)
+                       }</span></div>` +
+                       seats +
+                       `</div>` +
+                       // Alternates are STAFF-ONLY (Kerry 2026-08-24:
+                       // "hide the alternates lists from members") — the
+                       // member API strips the key entirely, so the whole
+                       // Next Players Up card is skipped when it's absent
+                       // (an empty-but-present array still renders the
+                       // "No eligible alternates yet" card for staff).
+                       (Array.isArray(ch.alternates)
+                        ? `<div class="lsc-card ${cls} lsc-alt-card">` +
+                          `<div class="lsc-alt-head">Next Players Up &mdash; Alternates Pool</div>` + alts +
+                          `</div>`
+                        : "") +
+                       `</div>`;
+            }).join("")}</div>` + (() => {
+                // LODGING tracker (Kerry 2026-08-19, staff-only — the
+                // API attaches `lodging` only for manager/admin
+                // sessions). Data lives in the lsc_lodging dial and is
+                // Claude-maintained; this card just displays it: units
+                // with bed occupancy, per-player nights, payment state
+                // (linked to the transaction like the deposit badges),
+                // own-arrangements / not-staying lists, per-night
+                // headcounts, and money collected vs expected.
+                const L = d.lodging;
+                if (!L) return "";
+                const payBadge = (p) => {
+                    if (!p.cost && !p.paid) return "";
+                    const full = p.cost && p.paid >= p.cost;
+                    const cls = full ? "lsc-dep" : "lsc-dep lsc-dep-part";
+                    const txt = full ? `$${p.cost}`
+                        : `$${p.paid || 0} of $${p.cost || 0}`;
+                    return p.txn
+                        ? `<a class="${cls}" href="/accounting?exp=${p.txn}" title="Tap to view the transaction" onclick="event.stopPropagation()">${txt}</a>`
+                        : `<span class="${cls}">${txt}</span>`;
+                };
+                const prow = (p, ctx) =>
+                    `<div class="lsc-alt"><span class="who">${escapeHtml(prNiceName(p.name || ""))}</span>` +
+                    `<span class="ctx">${escapeHtml(ctx !== undefined ? ctx : (p.nights || []).join(" · "))}` +
+                    `${p.note ? ` &middot; ${escapeHtml(p.note)}` : ""} ${payBadge(p)}</span></div>`;
+                const units = (L.units || []).map(u =>
+                    `<div class="lsc-lodge-head">${escapeHtml(u.name)}<span>${u.used}${u.beds ? ` of ${u.beds} beds` : ` assigned`}${u.note ? ` &middot; ${escapeHtml(u.note)}` : ""}</span></div>` +
+                    ((u.players || []).map(p => prow(p)).join("")
+                        || `<div class="lsc-alt"><span class="ctx">Empty</span></div>`)
+                ).join("");
+                const counts = (L.nights || []).map(n =>
+                    `${escapeHtml(n)}: <b>${(L.night_counts || {})[n] || 0}</b>`).join(" &middot; ");
+                const m = L.money || {};
+                const moneyTxt = (m.expected || m.collected)
+                    ? `Collected <b>$${m.collected || 0}</b> of $${m.expected || 0}` : "";
+                const foot = [counts, moneyTxt].filter(Boolean).join(" &nbsp;&middot;&nbsp; ");
+                const empty = !(L.units || []).length && !(L.unassigned || []).length
+                    && !(L.own_arrangements || []).length && !(L.not_staying || []).length;
+                const venue = L.venue
+                    ? (L.url
+                        ? ` &mdash; <a href="${escapeHtml(L.url)}" style="color:inherit;">${escapeHtml(L.venue)}</a>`
+                        : ` &mdash; ${escapeHtml(L.venue)}`)
+                    : "";
+                // SEPARATE rounded cards per section (Kerry 2026-08-19:
+                // "Lodging AirBNB should be it's own card. Staying - No
+                // room yet it's own card and own arrangements it's own
+                // card") — same split-card break pattern as the
+                // roster/alternates. Title + venue link wrapped in ONE
+                // flex item (inline font:inherit beats the muted
+                // .lsc-card-head span rule) so space-between doesn't
+                // strand the link mid-band.
+                const card = (headHtml, right, body, first) =>
+                    `<div class="lsc-card" style="margin-top:${first ? 16 : 10}px;">` +
+                    `<div class="lsc-card-head"><span style="font:inherit;color:inherit;letter-spacing:inherit;">${headHtml}</span><span>${right}</span></div>` +
+                    body + `</div>`;
+                const grpCard = (list, title, ctx) => (list || []).length
+                    ? card(title, `${list.length}`,
+                           list.map(p => prow(p, ctx)).join(""))
+                    : "";
+                return card(`Lodging${venue}`, "Staff view only",
+                           (empty
+                               ? `<div class="lsc-alt"><span class="ctx">No lodging set up yet &mdash; tell Claude to add cabins, assignments, nights, and payments.</span></div>`
+                               : units) +
+                           (foot ? `<div class="lsc-alt" style="background:#FBFAF8;"><span class="ctx">${foot}</span></div>` : ""),
+                           true) +
+                       grpCard(L.unassigned, "Staying &mdash; No Room Yet") +
+                       grpCard(L.own_arrangements, "Own Arrangements", "arranged own lodging") +
+                       grpCard(L.not_staying, "Not Staying Overnight", "");
+            })() + (() => {
+                // DECLINED invitations (Kerry 2026-08-17, widened same
+                // day to managers): the API includes `declined` ONLY
+                // for manager/admin sessions, so this card simply never
+                // renders for members — no client-side role check needed.
+                const dec = (d.chapters || []).flatMap(ch =>
+                    (ch.declined || []).map(p => ({ ...p, chapter: ch.chapter })));
+                if (!dec.length) return "";
+                return `<div class="lsc-card" style="margin-top:16px;border-top:4px solid #B91C1C;">` +
+                       `<div class="lsc-card-head" style="background:#B91C1C;">Declined Invitations<span style="color:#FECACA;">Staff view only</span></div>` +
+                       dec.map(p =>
+                           `<div class="lsc-seat open"><span class="lsc-seat-label" style="color:#B91C1C;">${escapeHtml((p.chapter || "").toUpperCase())}</span>` +
+                           `<span class="lsc-player">${escapeHtml(prNiceName(p.player_name))}` +
+                           `<span class="lsc-earn">${escapeHtml(p.context || "")} &mdash; declined, removed from roster &amp; pool</span></span></div>`
+                       ).join("") + `</div>`;
+            })() + (d.gg_error
+                ? `<p style="color:var(--text-muted);font-size:12px;margin-top:0.5rem;">Standings feed note: ${escapeHtml(d.gg_error)}</p>`
+                : "") + (d.frozen_at
+                // Staff-only breadcrumb (frozen_at is stripped from
+                // member payloads): the page is serving the hardened
+                // final-roster snapshot, not the live projection.
+                ? `<p style="color:var(--text-muted);font-size:12px;margin-top:0.5rem;">Final roster snapshot (frozen ${escapeHtml(d.frozen_at)}) &mdash; deposits stay live; ask Claude to re-freeze after a roster change (scoring-lsc-freeze).</p>`
+                : "");
+            // chevron fold: tap a seat row to reveal how they qualified
+            box.querySelectorAll(".lsc-seat.has-earn").forEach(el =>
+                el.addEventListener("click", () => el.classList.toggle("open")));
+        } catch (err) {
+            box.innerHTML = `<p style="color:var(--text-muted);margin-top:1rem;">Couldn't load the rosters (${escapeHtml(err.message || String(err))}). Reload to retry.</p>`;
+        }
+    }
+    document.addEventListener("DOMContentLoaded", () => {
+        initAuth();
+        lscTeamsLoad();
+    });
+    </script>
+</body>
+</html>

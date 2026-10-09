@@ -13794,6 +13794,16 @@ def api_member_metric():
 # page is /admin/health. The digest job posts the same report to the
 # mailbox once a day and files findings as COO action items.
 # ---------------------------------------------------------------------------
+@app.route("/admin/lsc-teams")
+def lsc_teams_page():
+    """LONE STAR CUP TEAMS, admin only (Kerry 2026-10-09): the rosters,
+    alternates, deposits, lodging and declined invitations that used to sit
+    under the Cup board on LEADERBOARD. Reads /api/season-contests/lone-star-cup."""
+    if session.get("role") != "admin":
+        return redirect("/events")
+    return render_template("lsc_teams.html")
+
+
 @app.route("/admin/health")
 def health_page():
     if session.get("role") != "admin":

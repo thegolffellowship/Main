@@ -124,11 +124,38 @@ check("the phone page lands on the two buttons before Who are you?",
       'data-act="gate-score"' in tpl and 'data-act="gate-follow"' in tpl
       and tpl.index("function gateScreen()") < tpl.index("function joinScreen()")
       and 'if (!who && !store.get(K.gate, false)) body = gateScreen();' in tpl)
-check("FOLLOW THE CUP opens the Cup board with the match expanded; a plain event opens the one-event board",
-      '"/member/lonestarcup?" + (pv ? "preview=1&" : "") + "match="' in tpl and '/member/score/board?t=' in tpl)
+# Kerry 10/9: "Make sure no links take you outside the scorer's interface of
+# the SCORING and LEADERBOARD": FOLLOW THE CUP opens the scorer's LEADERBOARD
+# with the match open, never the public Cup page
+check("FOLLOW opens the scorer's LEADERBOARD (the Cup with the match expanded), never the public Cup page",
+      'const follow = "/member/score/board?t=" + encodeURIComponent(T)' in tpl
+      and '"&match=" + encodeURIComponent(cupIds[0])' in tpl and '"/member/lonestarcup?"' not in tpl)
 check("the hole screen carries the Team score · hole box (label + two numbers) and the HOW IT WORKS pill (#1398-C1/C2)",
       "function teamScoreBox(n)" in tpl and 'class="se-box se-tscore"' in tpl and "pr-hiw-link" in tpl
-      and "/member/lonestarcup/info#" in tpl and "Team PH " in tpl)
+      and 'data-act="hiw"' in tpl and "Team PH " in tpl)
+# Kerry 10/9: "For how it works buttons they should only pop up a modal that
+# can easily be closed" -- the scoring page's HOW IT WORKS is a popup with a
+# close, never a link out; the info body's PDF/share links are hidden in it
+check("HOW IT WORKS on the scoring page opens a closable popup, not a page",
+      "function openHiw(k)" in tpl and "function closeHiw()" in tpl and 'if (act === "hiw") { openHiw(b.dataset.k); return; }' in tpl
+      and "/member/lonestarcup/info#" not in tpl and '<script src="/static/js/lsc-info.js"></script>' in tpl
+      and ".se-hiwm [data-lsc-info-pdf], .se-hiwm [data-lsc-info-share] { display: none !important; }" in tpl)
+import re as _re
+_links = [m for m in _re.findall(r'href="(/[^"$]*)', tpl) if not m.startswith("/static/")]
+check("the scoring page carries no link to another page", not _links, _links)
+_cts = open("templates/contests.html", encoding="utf-8").read()
+check("the scorer's LEADERBOARD hides the EVENT INFO links that open outside it",
+      "body.evlb-solo [data-lsc-info-pdf], body.evlb-solo [data-lsc-info-share] { display: none !important; }" in _cts)
+# Kerry 10/9: "remove all that hidden team management stuff from the leaderboard
+# page altogether? Put it on its own separate admin only page"
+_teams = open("templates/lsc_teams.html", encoding="utf-8").read()
+check("the Cup rosters / deposits / lodging panel is gone from LEADERBOARD and lives on /admin/lsc-teams",
+      'id="lsc-rosters"' not in _cts and "depBadge" not in _cts and "lodgeIc" not in _cts
+      and 'id="lsc-rosters"' in _teams and "depBadge" in _teams and "Lodging" in _teams)
+_app = open("app.py", encoding="utf-8").read()
+check("/admin/lsc-teams is admin only",
+      '@app.route("/admin/lsc-teams")' in _app
+      and 'if session.get("role") != "admin":\n        return redirect("/events")\n    return render_template("lsc_teams.html")' in _app)
 check("player rows carry name + tee + PH only: no 'vs' and no 'Team · one ball' on the hole screen",
       'replace(/^Match vs/, "vs")' not in tpl and "s.team ? s.meta : null" not in tpl)
 check("the landing carries THIS GROUP by side, Who are you? carries Back, Held carries SAVED SO FAR (mockups QRLanding / WhoAreYou / Held)",
